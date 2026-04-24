@@ -423,6 +423,35 @@ describe('HeaderFooterSessionManager', () => {
     expect(activeEditor.view.dom.getAttribute('aria-readonly')).toBe('false');
   });
 
+  it('renders and clears the active header/footer divider while editing', async () => {
+    await setupWithZoom(1, 'suggesting');
+
+    const border = painterHost.querySelector('.superdoc-header-footer-border') as HTMLElement | null;
+    expect(border).toBeTruthy();
+    expect(border?.style.top).toBe('90px');
+
+    manager.exitMode();
+    expect(painterHost.querySelector('.superdoc-header-footer-border')).toBeNull();
+  });
+
+  it('reapplies the initial story selection after focus when entering edit mode', async () => {
+    await setupWithZoom(1, 'suggesting');
+
+    const activeEditor = manager.activeEditor as unknown as {
+      commands: {
+        setTextSelection: ReturnType<typeof vi.fn>;
+      };
+      view: {
+        focus: ReturnType<typeof vi.fn>;
+      };
+    };
+
+    expect(activeEditor.commands.setTextSelection.mock.calls.length).toBeGreaterThanOrEqual(2);
+    expect(activeEditor.commands.setTextSelection).toHaveBeenNthCalledWith(1, { from: 9, to: 9 });
+    expect(activeEditor.commands.setTextSelection).toHaveBeenNthCalledWith(2, { from: 9, to: 9 });
+    expect(activeEditor.view.focus.mock.calls.length).toBeGreaterThanOrEqual(2);
+  });
+
   it('updates the active header editor when the document mode changes to suggesting', async () => {
     await setupWithZoom(1);
 

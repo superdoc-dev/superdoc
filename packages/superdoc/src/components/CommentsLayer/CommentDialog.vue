@@ -30,6 +30,22 @@ const props = defineProps({
     type: Object,
     required: false,
   },
+  floatingInstanceId: {
+    type: String,
+    default: null,
+  },
+  floatingPageIndex: {
+    type: Number,
+    default: null,
+  },
+  floatingPositionEntry: {
+    type: Object,
+    default: null,
+  },
+  isFloatingInstanceActive: {
+    type: Boolean,
+    default: undefined,
+  },
 });
 
 const { proxy } = getCurrentInstance();
@@ -47,11 +63,13 @@ const {
   requestInstantSidebarAlignment,
   resolveCommentPositionEntry,
   clearInstantSidebarAlignment,
+  setActiveFloatingCommentInstance,
 } = commentsStore;
 const {
   suppressInternalExternal,
   getConfig,
   activeComment,
+  activeFloatingCommentInstanceId,
   floatingCommentsOffset,
   pendingComment,
   currentCommentText,
@@ -233,7 +251,25 @@ const isDialogAlreadyAlignedWithTarget = (dialogElement, targetClientY, toleranc
   return Number.isFinite(dialogTop) && Math.abs(dialogTop - targetClientY) <= tolerancePx;
 };
 
-const isActiveComment = computed(() => activeComment.value === props.comment.commentId);
+const currentFloatingInstanceId = computed(() => {
+  return props.floatingInstanceId ?? props.comment.commentId ?? null;
+});
+
+const isDialogActive = computed(() => {
+  if (typeof props.isFloatingInstanceActive === 'boolean') {
+    return props.isFloatingInstanceActive;
+  }
+
+  if (activeComment.value !== props.comment.commentId) {
+    return false;
+  }
+
+  if (props.floatingInstanceId == null) {
+    return true;
+  }
+
+  return activeFloatingCommentInstanceId.value === props.floatingInstanceId;
+});
 
 /* ── Step 1: Resolved badge ── */
 const resolvedBadgeLabel = computed(() => {
@@ -253,7 +289,7 @@ const showSeparator = computed(() => (index) => {
 });
 
 const showInputSection = computed(() => {
-  return !getConfig.readOnly && isActiveComment.value && !props.comment.resolvedTime && !isEditingAnyComment.value;
+  return !getConfig.readOnly && isDialogActive.value && !props.comment.resolvedTime && !isEditingAnyComment.value;
 });
 
 // Reply pill → expanded editor toggle
@@ -349,7 +385,7 @@ watch(parentBodyRef, () => {
   nextTick(checkOverflow);
 });
 // Reset truncation, thread collapse, and reply state when card becomes inactive
-watch(isActiveComment, (active) => {
+watch(isDialogActive, (active) => {
   if (!active) {
     textExpanded.value = false;
     threadExpanded.value = false;
@@ -417,10 +453,12 @@ const isInternalDropdownDisabled = computed(() => {
   return getConfig.value.readOnly;
 });
 
-const isEditingThisComment = computed(() => (comment) => editingCommentId.value === comment.commentId);
+const isEditingThisComment = computed(() => (comment) => {
+  return isDialogActive.value && editingCommentId.value === comment.commentId;
+});
 
 const isEditingAnyComment = computed(() => {
-  if (!editingCommentId.value) return false;
+  if (!editingCommentId.value || !isDialogActive.value) return false;
   return comments.value.some((c) => c.commentId === editingCommentId.value);
 });
 
@@ -437,16 +475,25 @@ const setFocus = () => {
   const editor = proxy.$superdoc.activeEditor;
   const isTrackedChange = Boolean(props.comment?.trackedChange);
   const targetClientY = getPreferredCommentFocusTargetClientY();
-  const willChangeActiveThread = !props.comment.resolvedTime && activeComment.value !== props.comment.commentId;
+  const isInstanceScopedDialog = props.floatingInstanceId != null;
+  const willChangeActiveDialog =
+    !props.comment.resolvedTime &&
+    (activeComment.value !== props.comment.commentId ||
+      (isInstanceScopedDialog && currentFloatingInstanceId.value !== activeFloatingCommentInstanceId.value));
   let instantAlignmentTargetY = targetClientY;
 
   // Move cursor to the comment location and set active comment in a single PM
   // transaction. This prevents a race where position-based comment detection in the
   // plugin clears the activeThreadId before the setActiveComment meta is processed.
   if (editor) {
-    const { entry: focusEntry } = resolveCommentPositionEntry(props.comment);
+    const { entry: resolvedFocusEntry } = resolveCommentPositionEntry(props.comment);
+    const focusEntry = props.floatingPositionEntry ?? resolvedFocusEntry;
+    const usePageScopedAnchorOnly =
+      Number.isFinite(props.floatingPageIndex) && props.comment?.trackedChangeStory?.storyType === 'headerFooterPart';
     const visibleAnchorTargetY = getVisibleThreadAnchorClientY(props.parent, focusEntry);
-    const visibleHighlightTargetY = getVisibleThreadHighlightClientY(getThreadHighlightLookupIds(props.comment));
+    const visibleHighlightTargetY = usePageScopedAnchorOnly
+      ? null
+      : getVisibleThreadHighlightClientY(getThreadHighlightLookupIds(props.comment));
     const visibleThreadTargetY = Number.isFinite(visibleHighlightTargetY)
       ? visibleHighlightTargetY
       : visibleAnchorTargetY;
@@ -463,6 +510,7 @@ const setFocus = () => {
             entityType: 'trackedChange',
             entityId: cursorId,
             story: props.comment.trackedChangeStory,
+            ...(Number.isFinite(props.floatingPageIndex) ? { pageIndex: props.floatingPageIndex } : {}),
           }
         : {
             kind: 'entity',
@@ -510,8 +558,12 @@ const setFocus = () => {
   // actually reach. Near scroll boundaries the preferred focus Y may be impossible
   // to achieve, and using that impossible target would visibly separate the bubble
   // from its highlight.
-  if (willChangeActiveThread) {
-    requestInstantSidebarAlignment(instantAlignmentTargetY, props.comment.commentId);
+  if (willChangeActiveDialog) {
+    if (props.floatingInstanceId) {
+      requestInstantSidebarAlignment(instantAlignmentTargetY, props.comment.commentId, props.floatingInstanceId);
+    } else {
+      requestInstantSidebarAlignment(instantAlignmentTargetY, props.comment.commentId);
+    }
   } else {
     clearInstantSidebarAlignment();
   }
@@ -520,6 +572,9 @@ const setFocus = () => {
   // floating sidebar can react to both state changes in the same flush.
   if (!props.comment.resolvedTime) {
     activeComment.value = props.comment.commentId;
+    if (props.floatingInstanceId) {
+      setActiveFloatingCommentInstance(props.floatingInstanceId);
+    }
   }
 };
 
@@ -546,10 +601,10 @@ const handleClickOutside = (e) => {
     return;
   }
 
-  if (activeComment.value === props.comment.commentId) {
-    floatingCommentsOffset.value = 0;
-    emit('dialog-exit');
-  }
+  if (!isDialogActive.value) return;
+
+  floatingCommentsOffset.value = 0;
+  emit('dialog-exit');
   activeComment.value = null;
   commentsStore.setActiveComment(proxy.$superdoc, activeComment.value);
   isCommentHighlighted.value = false;
@@ -644,6 +699,9 @@ const handleOverflowSelect = (value, comment) => {
     case 'edit':
       currentCommentText.value = comment?.commentText?.value ?? comment?.commentText ?? '';
       activeComment.value = props.comment.commentId;
+      if (props.floatingInstanceId) {
+        setActiveFloatingCommentInstance(props.floatingInstanceId);
+      }
       editingCommentId.value = comment.commentId;
       commentsStore.setActiveComment(proxy.$superdoc, activeComment.value);
       nextTick(() => {
@@ -673,7 +731,7 @@ const handleInternalExternalSelect = (value) => {
 const getSidebarCommentStyle = computed(() => {
   const style = {};
 
-  if (isActiveComment.value || isPendingNewComment.value || isEditingAnyComment.value) {
+  if (isDialogActive.value || isPendingNewComment.value || isEditingAnyComment.value) {
     style.zIndex = 50;
   }
 
@@ -714,7 +772,9 @@ onMounted(() => {
   }
 
   nextTick(() => {
-    const commentId = props.comment.importedId !== undefined ? props.comment.importedId : props.comment.commentId;
+    const commentId =
+      props.floatingInstanceId ??
+      (props.comment.importedId !== undefined ? props.comment.importedId : props.comment.commentId);
     emit('ready', { commentId, elementRef: commentDialogElement });
     checkOverflow();
   });
@@ -732,7 +792,7 @@ watch(
 );
 
 watch(editingCommentId, (commentId) => {
-  if (!commentId) return;
+  if (!commentId || !isDialogActive.value) return;
   const entry = comments.value.find((comment) => comment.commentId === commentId);
   if (!entry || entry.trackedChange) return;
   nextTick(() => {
@@ -744,13 +804,17 @@ watch(editingCommentId, (commentId) => {
 <template>
   <div
     class="comments-dialog"
-    :class="{ 'is-active': isActiveComment || isPendingNewComment, 'is-resolved': props.comment.resolvedTime }"
+    :class="{ 'is-active': isDialogActive || isPendingNewComment, 'is-resolved': props.comment.resolvedTime }"
     v-click-outside="handleClickOutside"
     @click.stop.prevent="setFocus"
     :style="getSidebarCommentStyle"
     ref="commentDialogElement"
     role="dialog"
     data-editor-ui-surface
+    :data-comment-instance-id="props.floatingInstanceId ?? ''"
+    :data-comment-thread-id="props.comment.commentId ?? ''"
+    :data-comment-position-key="props.comment.trackedChangeAnchorKey ?? ''"
+    :data-comment-page-index="Number.isFinite(props.floatingPageIndex) ? props.floatingPageIndex : ''"
   >
     <!-- ── New comment card (pending) ── -->
     <template v-if="isPendingNewComment">
@@ -812,7 +876,7 @@ watch(editingCommentId, (commentId) => {
           :config="getConfig"
           :timestamp="getProcessedDate(comment.createdTime)"
           :comment="comment"
-          :is-active="isActiveComment"
+          :is-active="isDialogActive"
           @resolve="handleResolve"
           @reject="handleReject"
           @overflow-select="handleOverflowSelect($event, comment)"

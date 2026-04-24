@@ -162,6 +162,30 @@ describe('buildFootnotesInput', () => {
       expect(options?.storyKey).toBe('fn:1');
     });
 
+    it('prefers the active note render override over stale converter content', () => {
+      const editorState = createMockEditorState([{ id: '1', pos: 10 }]);
+      const converter = createMockConverter([
+        {
+          id: '1',
+          content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Stale note' }] }],
+        },
+      ]);
+
+      buildFootnotesInput(editorState, converter, undefined, undefined, {
+        noteId: '1',
+        docJson: {
+          type: 'doc',
+          content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Live note' }] }],
+        },
+      });
+
+      const docArg = (toFlowBlocks as unknown as { mock: { calls: Array<[any]> } }).mock.calls.at(-1)?.[0];
+      expect(docArg).toEqual({
+        type: 'doc',
+        content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Live note' }] }],
+      });
+    });
+
     it('only includes footnotes that are referenced in the document', () => {
       const editorState = createMockEditorState([{ id: '1', pos: 10 }]); // Only ref 1 in doc
       const converter = createMockConverter([

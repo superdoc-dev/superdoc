@@ -447,6 +447,7 @@ export class HeaderFooterSessionManager {
   #hoverOverlay: HTMLElement | null = null;
   #hoverTooltip: HTMLElement | null = null;
   #modeBanner: HTMLElement | null = null;
+  #activeBorderLine: HTMLElement | null = null;
   #hoverRegion: HeaderFooterRegion | null = null;
 
   // Document mode
@@ -817,6 +818,8 @@ export class HeaderFooterSessionManager {
         if (!region.sectionId) console.error('[HeaderFooterSessionManager] Footer region missing sectionId', region);
       }
     }
+
+    this.#syncActiveBorder();
   }
 
   /**
@@ -1154,20 +1157,13 @@ export class HeaderFooterSessionManager {
         return null;
       }
 
+      const shouldRestoreInitialSelection = options?.initialSelection !== 'defer';
+
       try {
         this.#applyChildEditorDocumentMode(editor, this.#documentMode);
 
-        if (options?.initialSelection !== 'defer') {
-          try {
-            const doc = editor.state?.doc;
-            if (doc) {
-              const endPos = doc.content.size - 1;
-              const pos = Math.max(1, endPos);
-              editor.commands?.setTextSelection?.({ from: pos, to: pos });
-            }
-          } catch (cursorError) {
-            console.warn('[HeaderFooterSessionManager] Could not set cursor to end:', cursorError);
-          }
+        if (shouldRestoreInitialSelection) {
+          this.#applyDefaultSelectionAtStoryEnd(editor, 'Could not set cursor to end');
         }
       } catch (editableError) {
         console.error('[HeaderFooterSessionManager] Error setting editor editable:', editableError);
@@ -1196,6 +1192,19 @@ export class HeaderFooterSessionManager {
         editor.view?.focus();
       } catch (focusError) {
         console.warn('[HeaderFooterSessionManager] Could not focus editor:', focusError);
+      }
+
+      if (shouldRestoreInitialSelection) {
+        // WebKit can keep a stale DOM selection when the hidden story editor
+        // receives focus. Re-applying the PM selection after focus keeps the
+        // first keyboard event aligned with the intended caret position.
+        this.#applyDefaultSelectionAtStoryEnd(editor, 'Could not restore cursor after focus');
+        try {
+          editor.view?.focus();
+        } catch (focusError) {
+          console.warn('[HeaderFooterSessionManager] Could not refocus editor after restoring selection:', focusError);
+        }
+        this.#scheduleSelectionRestoreAfterFocus(editor);
       }
 
       this.#emitModeChanged();
@@ -1250,6 +1259,47 @@ export class HeaderFooterSessionManager {
     }
   }
 
+  #getDefaultSelectionAtStoryEnd(editor: Editor): { from: number; to: number } | null {
+    const doc = editor.state?.doc;
+    if (!doc) return null;
+
+    const endPos = doc.content.size - 1;
+    const pos = Math.max(1, endPos);
+    return { from: pos, to: pos };
+  }
+
+  #applyEditorTextSelection(editor: Editor, selection: { from: number; to: number }, warningMessage: string): void {
+    try {
+      editor.commands?.setTextSelection?.(selection);
+    } catch (error) {
+      console.warn(`[HeaderFooterSessionManager] ${warningMessage}:`, error);
+    }
+  }
+
+  #applyDefaultSelectionAtStoryEnd(editor: Editor, warningMessage: string): void {
+    const selection = this.#getDefaultSelectionAtStoryEnd(editor);
+    if (!selection) return;
+    this.#applyEditorTextSelection(editor, selection, warningMessage);
+  }
+
+  #scheduleSelectionRestoreAfterFocus(editor: Editor): void {
+    const win = editor.view?.dom?.ownerDocument?.defaultView;
+    if (!win) return;
+
+    win.requestAnimationFrame(() => {
+      if (this.#activeEditor !== editor || this.#session.mode === 'body') {
+        return;
+      }
+
+      this.#applyDefaultSelectionAtStoryEnd(editor, 'Could not restore cursor on the next frame');
+      try {
+        editor.view?.focus();
+      } catch (focusError) {
+        console.warn('[HeaderFooterSessionManager] Could not refocus editor on the next frame:', focusError);
+      }
+    });
+  }
+
   #validateEditPermission(): { allowed: boolean; reason?: string } {
     if (this.#deps?.isViewLocked()) {
       return { allowed: false, reason: 'documentMode' };
@@ -1286,6 +1336,7 @@ export class HeaderFooterSessionManager {
     this.#callbacks.onModeChanged?.(this.#session);
     this.#callbacks.onUpdateAwarenessSession?.(this.#session);
     this.#updateModeBanner();
+    this.#syncActiveBorder();
   }
 
   #emitEditingContext(editor: Editor): void {
@@ -1417,6 +1468,55 @@ export class HeaderFooterSessionManager {
   /** Get current hover region */
   get hoverRegion(): HeaderFooterRegion | null {
     return this.#hoverRegion;
+  }
+
+  #getActiveRegion(): HeaderFooterRegion | null {
+    if (this.#session.mode === 'header') {
+      return this.#headerRegions.get(this.#session.pageIndex ?? -1) ?? null;
+    }
+
+    if (this.#session.mode === 'footer') {
+      return this.#footerRegions.get(this.#session.pageIndex ?? -1) ?? null;
+    }
+
+    return null;
+  }
+
+  #hideActiveBorder(): void {
+    if (this.#activeBorderLine) {
+      this.#activeBorderLine.remove();
+      this.#activeBorderLine = null;
+    }
+  }
+
+  #syncActiveBorder(): void {
+    this.#hideActiveBorder();
+
+    const region = this.#getActiveRegion();
+    if (!region || this.#session.mode === 'body') {
+      return;
+    }
+
+    const pageElement = this.#deps?.getPageElement(region.pageIndex);
+    if (!pageElement) {
+      return;
+    }
+
+    const borderLine = pageElement.ownerDocument.createElement('div');
+    borderLine.className = 'superdoc-header-footer-border';
+    Object.assign(borderLine.style, {
+      position: 'absolute',
+      left: '0',
+      right: '0',
+      top: `${region.kind === 'header' ? region.localY + region.height : region.localY}px`,
+      height: '1px',
+      backgroundColor: '#4472c4',
+      pointerEvents: 'none',
+      zIndex: '8',
+    });
+
+    pageElement.appendChild(borderLine);
+    this.#activeBorderLine = borderLine;
   }
 
   // ===========================================================================
@@ -2435,6 +2535,7 @@ export class HeaderFooterSessionManager {
     this.#activeEditor = null;
 
     // Clear UI references
+    this.#hideActiveBorder();
     this.#hoverOverlay = null;
     this.#hoverTooltip = null;
     this.#modeBanner = null;

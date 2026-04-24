@@ -127,6 +127,8 @@ export type TrackedChangeAddress = {
   entityId: string;
   /** Story containing this tracked change. Omit for body (backward compatible). */
   story?: StoryLocator;
+  /** Preferred rendered page instance for repeated stories such as headers and footers. */
+  pageIndex?: number;
 };
 
 export type EntityAddress = CommentAddress | TrackedChangeAddress;

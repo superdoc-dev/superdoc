@@ -188,9 +188,9 @@ export async function waitForActiveStory(
 
 export async function exitActiveStory(page: Page): Promise<void> {
   await page.evaluate(() => {
-    (window as any).editor?.presentationEditor?.getStorySessionManager?.()?.exit?.();
+    (window as any).editor?.presentationEditor?.exitActiveStorySurface?.();
   });
-  await waitForActiveStory(page, null);
+  await expect.poll(() => getActiveStorySession(page)).toBeNull();
 }
 
 export async function getActiveStoryText(page: Page): Promise<string | null> {
@@ -203,6 +203,21 @@ export async function getActiveStoryText(page: Page): Promise<string | null> {
     const activeEditor = (window as any).editor?.presentationEditor?.getActiveEditor?.();
     if (!activeEditor) return null;
     return activeEditor.state?.doc?.textBetween?.(0, activeEditor.state.doc.content.size, '\n', '\n') ?? null;
+  });
+}
+
+export async function moveActiveStoryCursorToEnd(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const activeEditor = (window as any).editor?.presentationEditor?.getActiveEditor?.();
+    const bodyEditor = (window as any).editor;
+    if (!activeEditor || activeEditor === bodyEditor) return;
+
+    const doc = activeEditor.state?.doc;
+    if (!doc) return;
+
+    const pos = Math.max(1, doc.content.size - 1);
+    activeEditor.commands?.setTextSelection?.({ from: pos, to: pos });
+    activeEditor.view?.focus?.();
   });
 }
 

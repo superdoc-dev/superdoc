@@ -19,6 +19,7 @@ import type { Node as ProseMirrorNode } from 'prosemirror-model';
 import type { Mapping } from 'prosemirror-transform';
 import { Editor } from '../Editor.js';
 import { EventEmitter } from '../EventEmitter.js';
+import type { ProseMirrorJSON } from '../types/EditorTypes.js';
 import { EpochPositionMapper } from './layout/EpochPositionMapper.js';
 import { DomPositionIndex } from '../../dom-observer/DomPositionIndex.js';
 import { DomPositionIndexObserverManager } from '../../dom-observer/DomPositionIndexObserverManager.js';
@@ -42,7 +43,7 @@ import {
 import { getPageElementByIndex } from '../../dom-observer/PageDom.js';
 import { inchesToPx, parseColumns } from './layout/LayoutOptionParsing.js';
 import { createLayoutMetrics as createLayoutMetricsFromHelper } from './layout/PresentationLayoutMetrics.js';
-import { buildFootnotesInput } from './layout/FootnotesBuilder.js';
+import { buildFootnotesInput, type NoteRenderOverride } from './layout/FootnotesBuilder.js';
 import { safeCleanup } from './utils/SafeCleanup.js';
 import { createHiddenHost } from './dom/HiddenHost.js';
 import { RemoteCursorManager, type RenderDependencies } from './remote-cursors/RemoteCursorManager.js';
@@ -472,6 +473,10 @@ export class PresentationEditor extends EventEmitter {
   #storySessionSelectionHandler: ((...args: unknown[]) => void) | null = null;
   #storySessionTransactionHandler: ((...args: unknown[]) => void) | null = null;
   #storySessionEditor: Editor | null = null;
+  #activeSurfaceUiEventEditor: Editor | null = null;
+  #activeSurfaceUiUpdateHandler: ((...args: unknown[]) => void) | null = null;
+  #activeSurfaceUiContextMenuOpenHandler: ((...args: unknown[]) => void) | null = null;
+  #activeSurfaceUiContextMenuCloseHandler: ((...args: unknown[]) => void) | null = null;
   #lastSelectedFieldAnnotation: {
     element: HTMLElement;
     pmStart: number;
@@ -1230,6 +1235,33 @@ export class PresentationEditor extends EventEmitter {
     return session as NoteStorySession;
   }
 
+  #buildActiveNoteRenderOverride(storyType: 'footnote' | 'endnote'): NoteRenderOverride | null {
+    const session = this.#getActiveNoteStorySession();
+    if (!session || session.locator.storyType !== storyType) {
+      return null;
+    }
+
+    const storyEditor = session.editor as Editor & {
+      getJSON?: () => ProseMirrorJSON;
+      getUpdatedJson?: () => ProseMirrorJSON;
+    };
+    const docJson =
+      typeof storyEditor.getUpdatedJson === 'function'
+        ? storyEditor.getUpdatedJson()
+        : typeof storyEditor.getJSON === 'function'
+          ? storyEditor.getJSON()
+          : null;
+
+    if (!docJson || typeof docJson !== 'object') {
+      return null;
+    }
+
+    return {
+      noteId: session.locator.noteId,
+      docJson,
+    };
+  }
+
   #getActiveTrackedChangeStorySurface(): { storyKey: string; editor: Editor } | null {
     const storySession = this.#getActiveStorySession();
     if (storySession) {
@@ -1267,6 +1299,24 @@ export class PresentationEditor extends EventEmitter {
    */
   getStorySessionManager(): StoryPresentationSessionManager | null {
     return this.#storySessionManager;
+  }
+
+  /**
+   * Exit any active non-body editing surface and restore the body editor.
+   *
+   * This gives tests and editor-integrated helpers a single public entry point
+   * that does not need to know whether the current surface is managed by the
+   * generic story-session bridge, the header/footer session manager, or both.
+   */
+  exitActiveStorySurface(): void {
+    const sessionMode = this.#headerFooterSession?.session?.mode ?? 'body';
+    if (sessionMode !== 'body') {
+      this.#exitHeaderFooterMode();
+    }
+
+    if (this.#getActiveStorySession()) {
+      this.#exitActiveStorySession();
+    }
   }
 
   // -------------------------------------------------------------------
@@ -2268,7 +2318,10 @@ export class PresentationEditor extends EventEmitter {
       return null;
     }
 
-    const bounds = this.#aggregateLayoutBounds(rects);
+    const groupedRects = this.#groupRangeRectsByPage(rects);
+    const preferredPageIndex = this.#getPreferredRenderedTrackedChangePageIndex(storyKey, groupedRects, relativeTo);
+    const anchorRects = groupedRects.get(preferredPageIndex) ?? rects;
+    const bounds = this.#aggregateLayoutBounds(anchorRects);
     if (!bounds) {
       return null;
     }
@@ -2276,7 +2329,7 @@ export class PresentationEditor extends EventEmitter {
     return {
       bounds,
       rects,
-      pageIndex: rects[0]?.pageIndex ?? 0,
+      pageIndex: preferredPageIndex,
     };
   }
 
@@ -2287,8 +2340,117 @@ export class PresentationEditor extends EventEmitter {
     }
 
     const baseSelector = `[data-track-change-id="${escapeAttrValue(rawId)}"]`;
-    const selector = storyKey ? `${baseSelector}[data-story-key="${escapeAttrValue(storyKey)}"]` : baseSelector;
-    return Array.from(host.querySelectorAll<HTMLElement>(selector));
+    if (!storyKey) {
+      return Array.from(host.querySelectorAll<HTMLElement>(baseSelector));
+    }
+
+    const storySelector = `${baseSelector}[data-story-key="${escapeAttrValue(storyKey)}"]`;
+    const exactMatches = Array.from(host.querySelectorAll<HTMLElement>(storySelector));
+    const allMatches = Array.from(host.querySelectorAll<HTMLElement>(baseSelector));
+
+    if (exactMatches.length > 1 || exactMatches.length === allMatches.length || allMatches.length === 0) {
+      return exactMatches;
+    }
+
+    return allMatches;
+  }
+
+  #groupRangeRectsByPage(rects: RangeRect[]): Map<number, RangeRect[]> {
+    const grouped = new Map<number, RangeRect[]>();
+
+    rects.forEach((rect) => {
+      const pageIndex = Number.isFinite(rect.pageIndex) ? rect.pageIndex : 0;
+      const pageRects = grouped.get(pageIndex);
+      if (pageRects) {
+        pageRects.push(rect);
+        return;
+      }
+      grouped.set(pageIndex, [rect]);
+    });
+
+    return grouped;
+  }
+
+  #getPreferredRenderedTrackedChangePageIndex(
+    storyKey: string,
+    groupedRects: Map<number, RangeRect[]>,
+    relativeTo?: HTMLElement,
+  ): number {
+    const activeHeaderFooterSession = this.#headerFooterSession?.session;
+    const activeHeaderFooterStoryKey =
+      activeHeaderFooterSession?.mode !== 'body' && activeHeaderFooterSession?.headerFooterRefId
+        ? buildStoryKey({
+            kind: 'story',
+            storyType: 'headerFooterPart',
+            refId: activeHeaderFooterSession.headerFooterRefId,
+          })
+        : null;
+
+    const activePageIndex =
+      activeHeaderFooterStoryKey === storyKey && Number.isFinite(activeHeaderFooterSession?.pageIndex)
+        ? Number(activeHeaderFooterSession?.pageIndex)
+        : null;
+    if (activePageIndex != null && groupedRects.has(activePageIndex)) {
+      return activePageIndex;
+    }
+
+    const scrollViewport =
+      this.#scrollContainer instanceof Window
+        ? {
+            top: 0,
+            bottom: this.#scrollContainer.innerHeight,
+          }
+        : this.#scrollContainer instanceof Element
+          ? this.#scrollContainer.getBoundingClientRect()
+          : this.#visibleHost?.ownerDocument?.defaultView
+            ? {
+                top: 0,
+                bottom: this.#visibleHost.ownerDocument.defaultView.innerHeight,
+              }
+            : this.#visibleHost?.getBoundingClientRect?.();
+    const viewportRect = scrollViewport ?? null;
+    if (viewportRect) {
+      const relativeRect = relativeTo?.getBoundingClientRect?.();
+      const visibleTop = viewportRect.top - (relativeRect?.top ?? 0);
+      const visibleBottom = viewportRect.bottom - (relativeRect?.top ?? 0);
+      const viewportCenter = visibleTop + (visibleBottom - visibleTop) / 2;
+
+      let bestPageIndex: number | null = null;
+      let bestIntersection = -1;
+      let bestDistance = Number.POSITIVE_INFINITY;
+
+      groupedRects.forEach((pageRects, pageIndex) => {
+        const pageBounds = this.#aggregateLayoutBounds(pageRects);
+        if (!pageBounds) {
+          return;
+        }
+
+        const intersection = Math.max(
+          0,
+          Math.min(pageBounds.bottom, visibleBottom) - Math.max(pageBounds.top, visibleTop),
+        );
+        const pageCenter = pageBounds.top + pageBounds.height / 2;
+        const distance = Math.abs(pageCenter - viewportCenter);
+
+        if (
+          intersection > bestIntersection ||
+          (intersection === bestIntersection && distance < bestDistance) ||
+          (intersection === bestIntersection &&
+            distance === bestDistance &&
+            (bestPageIndex == null || pageIndex < bestPageIndex))
+        ) {
+          bestPageIndex = pageIndex;
+          bestIntersection = intersection;
+          bestDistance = distance;
+        }
+      });
+
+      if (bestPageIndex != null) {
+        return bestPageIndex;
+      }
+    }
+
+    return [...groupedRects.keys()].sort((left, right) => left - right)[0] ?? 0;
   }
 
   /**
@@ -3532,6 +3694,7 @@ export class PresentationEditor extends EventEmitter {
     }
 
     this.#teardownStorySessionEventBridge();
+    this.#teardownActiveSurfaceUiEventBridge();
 
     // Unregister from static registry
     if (this.#registryKey) {
@@ -3944,6 +4107,7 @@ export class PresentationEditor extends EventEmitter {
       event: 'stylesDefaultsChanged',
       handler: handleStylesDefaultsChanged as (...args: unknown[]) => void,
     });
+    this.#syncActiveSurfaceUiEventBridge(this.#editor);
 
     // Listen for footnote/endnote part mutations (e.g., insert via document API).
     // These modify the OOXML part and derived cache but don't change the PM document,
@@ -4471,6 +4635,8 @@ export class PresentationEditor extends EventEmitter {
           this.#scheduleSelectionUpdate({ immediate: true });
           this.#scheduleA11ySelectionAnnouncement({ immediate: true });
         }
+
+        this.#syncActiveSurfaceUiEventBridge();
       },
       onEditBlocked: (reason) => {
         this.emit('headerFooterEditBlocked', { reason });
@@ -4539,6 +4705,58 @@ export class PresentationEditor extends EventEmitter {
     this.#storySessionTransactionHandler = null;
   }
 
+  #teardownActiveSurfaceUiEventBridge(): void {
+    if (this.#activeSurfaceUiEventEditor) {
+      if (this.#activeSurfaceUiUpdateHandler) {
+        this.#activeSurfaceUiEventEditor.off?.('update', this.#activeSurfaceUiUpdateHandler);
+      }
+      if (this.#activeSurfaceUiContextMenuOpenHandler) {
+        this.#activeSurfaceUiEventEditor.off?.('contextMenu:open', this.#activeSurfaceUiContextMenuOpenHandler);
+      }
+      if (this.#activeSurfaceUiContextMenuCloseHandler) {
+        this.#activeSurfaceUiEventEditor.off?.('contextMenu:close', this.#activeSurfaceUiContextMenuCloseHandler);
+      }
+    }
+
+    this.#activeSurfaceUiEventEditor = null;
+    this.#activeSurfaceUiUpdateHandler = null;
+    this.#activeSurfaceUiContextMenuOpenHandler = null;
+    this.#activeSurfaceUiContextMenuCloseHandler = null;
+  }
+
+  #syncActiveSurfaceUiEventBridge(editor: Editor | null = this.getActiveEditor()): void {
+    const nextEditor = editor ?? null;
+    if (nextEditor === this.#activeSurfaceUiEventEditor) {
+      return;
+    }
+
+    this.#teardownActiveSurfaceUiEventBridge();
+    if (!nextEditor) {
+      return;
+    }
+
+    const updateHandler = (event?: { transaction?: Transaction }) => {
+      this.emit('update', {
+        ...(event ?? {}),
+        editor: this,
+      });
+    };
+    const contextMenuOpenHandler = (event?: { menuPosition?: { left?: string; top?: string } }) => {
+      this.emit('contextMenu:open', event ?? {});
+    };
+    const contextMenuCloseHandler = () => {
+      this.emit('contextMenu:close');
+    };
+
+    nextEditor.on?.('update', updateHandler);
+    nextEditor.on?.('contextMenu:open', contextMenuOpenHandler);
+    nextEditor.on?.('contextMenu:close', contextMenuCloseHandler);
+    this.#activeSurfaceUiEventEditor = nextEditor;
+    this.#activeSurfaceUiUpdateHandler = updateHandler;
+    this.#activeSurfaceUiContextMenuOpenHandler = contextMenuOpenHandler;
+    this.#activeSurfaceUiContextMenuCloseHandler = contextMenuCloseHandler;
+  }
+
   #syncStorySessionEventBridge(session: StoryPresentationSession | null): void {
     this.#teardownStorySessionEventBridge();
 
@@ -4558,7 +4776,6 @@ export class PresentationEditor extends EventEmitter {
 
       if (session.kind === 'note') {
         this.#invalidateTrackedChangesForStory(session.locator);
-        this.#flowBlockCache.setHasExternalChanges(true);
         this.#pendingDocChange = true;
         this.#selectionSync.onLayoutStart();
         this.#scheduleRerender();
@@ -4572,6 +4789,7 @@ export class PresentationEditor extends EventEmitter {
     this.#storySessionTransactionHandler = transactionHandler;
     this.#scheduleSelectionUpdate({ immediate: true });
     this.#scheduleA11ySelectionAnnouncement({ immediate: true });
+    this.#syncActiveSurfaceUiEventBridge();
   }
 
   #syncActiveStorySessionDocumentMode(session: StoryPresentationSession | null): void {
@@ -4642,6 +4860,7 @@ export class PresentationEditor extends EventEmitter {
         }
         this.#syncActiveStorySessionDocumentMode(activeSession);
         this.#syncStorySessionEventBridge(activeSession);
+        this.#syncActiveSurfaceUiEventBridge();
         this.#inputBridge?.notifyTargetChanged();
       },
     });
@@ -5002,20 +5221,24 @@ export class PresentationEditor extends EventEmitter {
       const isSemanticFlow = this.#isSemanticFlowMode();
 
       const baseLayoutOptions = this.#resolveLayoutOptions(blocks, sectionMetadata);
+      const activeFootnoteOverride = this.#buildActiveNoteRenderOverride('footnote');
       const footnotesLayoutInput = buildFootnotesInput(
         this.#editor?.state,
         (this.#editor as EditorWithConverter)?.converter,
         converterContext,
         this.#editor?.converter?.themeColors ?? undefined,
+        activeFootnoteOverride,
       );
       const semanticFootnoteBlocks = isSemanticFlow
         ? buildSemanticFootnoteBlocks(footnotesLayoutInput, this.#layoutOptions.semanticOptions?.footnotesMode)
         : [];
+      const activeEndnoteOverride = this.#buildActiveNoteRenderOverride('endnote');
       const endnoteBlocks = buildEndnoteBlocks(
         this.#editor?.state,
         (this.#editor as EditorWithConverter)?.converter,
         converterContext,
         this.#editor?.converter?.themeColors ?? undefined,
+        activeEndnoteOverride,
       );
       const blocksForLayout =
         semanticFootnoteBlocks.length > 0 || endnoteBlocks.length > 0
@@ -5168,41 +5391,6 @@ export class PresentationEditor extends EventEmitter {
         );
       }
 
-      // Extract header/footer blocks and measures from layout results
-      const headerBlocks: FlowBlock[] = [];
-      const headerMeasures: Measure[] = [];
-      if (headerLayouts) {
-        for (const headerResult of headerLayouts) {
-          headerBlocks.push(...headerResult.blocks);
-          headerMeasures.push(...headerResult.measures);
-        }
-      }
-      // Also include per-rId header blocks for multi-section support
-      const headerLayoutsByRId = this.#headerFooterSession?.headerLayoutsByRId;
-      if (headerLayoutsByRId) {
-        for (const rIdResult of headerLayoutsByRId.values()) {
-          headerBlocks.push(...rIdResult.blocks);
-          headerMeasures.push(...rIdResult.measures);
-        }
-      }
-
-      const footerBlocks: FlowBlock[] = [];
-      const footerMeasures: Measure[] = [];
-      if (footerLayouts) {
-        for (const footerResult of footerLayouts) {
-          footerBlocks.push(...footerResult.blocks);
-          footerMeasures.push(...footerResult.measures);
-        }
-      }
-      // Also include per-rId footer blocks for multi-section support
-      const footerLayoutsByRId = this.#headerFooterSession?.footerLayoutsByRId;
-      if (footerLayoutsByRId) {
-        for (const rIdResult of footerLayoutsByRId.values()) {
-          footerBlocks.push(...rIdResult.blocks);
-          footerMeasures.push(...rIdResult.measures);
-        }
-      }
-
       // Avoid MutationObserver overhead while repainting large DOM trees.
       this.#domIndexObserverManager?.pause();
       // Pass the transaction mapping for efficient position attribute updates.
@@ -5213,12 +5401,6 @@ export class PresentationEditor extends EventEmitter {
       const paintInput: DomPainterInput = {
         resolvedLayout,
         sourceLayout: layout,
-        blocks: bodyBlocksForPaint,
-        measures: bodyMeasuresForPaint,
-        headerBlocks: headerBlocks.length > 0 ? headerBlocks : undefined,
-        headerMeasures: headerMeasures.length > 0 ? headerMeasures : undefined,
-        footerBlocks: footerBlocks.length > 0 ? footerBlocks : undefined,
-        footerMeasures: footerMeasures.length > 0 ? footerMeasures : undefined,
       };
       this.#painterAdapter.paint(paintInput, this.#painterHost, mapping ?? undefined);
       const painterPaintEnd = perfNow();
@@ -6662,9 +6844,9 @@ export class PresentationEditor extends EventEmitter {
         noteId: target.noteId,
       },
       {
-        // Notes need to repaint while the user types; otherwise the hidden-host
-        // editor is active but the rendered footnote appears frozen until exit.
-        commitPolicy: 'continuous',
+        // Render from the active note session locally while typing, then persist
+        // the canonical notes part once when the session exits.
+        commitPolicy: 'onExit',
         preferHiddenHost: true,
         hostWidthPx: targetContext?.hostWidthPx ?? this.#visibleHost.clientWidth ?? 1,
         editorContext: {
@@ -7014,7 +7196,11 @@ export class PresentationEditor extends EventEmitter {
           return await this.#navigateToComment(target.entityId);
         }
         if (target.entityType === 'trackedChange') {
-          return await this.#navigateToTrackedChange(target.entityId, resolveStoryKeyFromAddress(target.story));
+          return await this.#navigateToTrackedChange(
+            target.entityId,
+            resolveStoryKeyFromAddress(target.story),
+            target.pageIndex,
+          );
         }
       }
 
@@ -7096,7 +7282,7 @@ export class PresentationEditor extends EventEmitter {
     return true;
   }
 
-  async #navigateToTrackedChange(entityId: string, storyKey?: string): Promise<boolean> {
+  async #navigateToTrackedChange(entityId: string, storyKey?: string, preferredPageIndex?: number): Promise<boolean> {
     const editor = this.#editor;
     if (!editor) return false;
 
@@ -7105,13 +7291,13 @@ export class PresentationEditor extends EventEmitter {
         return true;
       }
 
-      if (await this.#activateTrackedChangeStorySurface(entityId, storyKey)) {
+      if (await this.#activateTrackedChangeStorySurface(entityId, storyKey, preferredPageIndex)) {
         if (this.#navigateToActiveStoryTrackedChange(entityId, storyKey)) {
           return true;
         }
       }
 
-      return this.#scrollToRenderedTrackedChange(entityId, storyKey);
+      return this.#scrollToRenderedTrackedChange(entityId, storyKey, preferredPageIndex);
     }
 
     const setCursorById = editor.commands?.setCursorById;
@@ -7125,7 +7311,7 @@ export class PresentationEditor extends EventEmitter {
     // Fall back to resolving the tracked change position and scrolling.
     const resolved = resolveTrackedChange(editor, entityId);
     if (!resolved) {
-      return this.#scrollToRenderedTrackedChange(entityId);
+      return this.#scrollToRenderedTrackedChange(entityId, undefined, preferredPageIndex);
     }
 
     // Try with the raw ID (tracked changes may use a different internal ID).
@@ -7148,7 +7334,11 @@ export class PresentationEditor extends EventEmitter {
     return true;
   }
 
-  async #activateTrackedChangeStorySurface(entityId: string, storyKey: string): Promise<boolean> {
+  async #activateTrackedChangeStorySurface(
+    entityId: string,
+    storyKey: string,
+    preferredPageIndex?: number,
+  ): Promise<boolean> {
     let locator: StoryLocator | null = null;
     try {
       locator = parseStoryKey(storyKey);
@@ -7160,7 +7350,7 @@ export class PresentationEditor extends EventEmitter {
       return false;
     }
 
-    const candidate = this.#findRenderedTrackedChangeElements(entityId, storyKey)[0] ?? null;
+    const candidate = this.#findRenderedTrackedChangeElement(entityId, storyKey, preferredPageIndex);
     if (!candidate) {
       return false;
     }
@@ -7261,14 +7451,39 @@ export class PresentationEditor extends EventEmitter {
     this.#scheduleSelectionUpdate({ immediate: true });
   }
 
-  async #scrollToRenderedTrackedChange(entityId: string, storyKey?: string): Promise<boolean> {
+  #findRenderedTrackedChangeElement(
+    entityId: string,
+    storyKey?: string,
+    preferredPageIndex?: number,
+  ): HTMLElement | null {
     const candidates = this.#findRenderedTrackedChangeElements(entityId, storyKey);
     if (!candidates.length) {
+      return null;
+    }
+
+    if (!Number.isFinite(preferredPageIndex)) {
+      return candidates[0] ?? null;
+    }
+
+    return (
+      candidates.find((candidate) => this.#resolveRenderedPageIndexForElement(candidate) === preferredPageIndex) ??
+      candidates[0] ??
+      null
+    );
+  }
+
+  async #scrollToRenderedTrackedChange(
+    entityId: string,
+    storyKey?: string,
+    preferredPageIndex?: number,
+  ): Promise<boolean> {
+    const candidate = this.#findRenderedTrackedChangeElement(entityId, storyKey, preferredPageIndex);
+    if (!candidate) {
       return false;
     }
 
     try {
-      candidates[0]?.scrollIntoView({ behavior: 'auto', block: 'center', inline: 'nearest' });
+      candidate.scrollIntoView({ behavior: 'auto', block: 'center', inline: 'nearest' });
       return true;
     } catch {
       return false;

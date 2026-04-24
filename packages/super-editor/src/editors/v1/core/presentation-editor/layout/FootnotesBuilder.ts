@@ -23,6 +23,7 @@ import type { FlowBlock } from '@superdoc/contracts';
 import { toFlowBlocks, type ConverterContext } from '@superdoc/pm-adapter';
 import { SUBSCRIPT_SUPERSCRIPT_SCALE } from '@superdoc/pm-adapter/constants.js';
 
+import type { ProseMirrorJSON } from '../../types/EditorTypes.js';
 import type { FootnoteReference, FootnotesLayoutInput } from '../types.js';
 import { findNoteEntryById } from '../../../document-api-adapters/helpers/note-entry-lookup.js';
 import { normalizeNotePmJson } from '../../../document-api-adapters/helpers/note-pm-json.js';
@@ -38,6 +39,11 @@ export type { FootnoteReference, FootnotesLayoutInput };
 /** Minimal shape of a converter object containing footnote data. */
 export type ConverterLike = {
   footnotes?: Array<{ id?: unknown; content?: unknown[] }>;
+};
+
+export type NoteRenderOverride = {
+  noteId: string;
+  docJson: ProseMirrorJSON;
 };
 
 /** A text run within a paragraph block. */
@@ -91,6 +97,7 @@ export function buildFootnotesInput(
   converter: ConverterLike | null | undefined,
   converterContext: ConverterContext | undefined,
   themeColors: unknown,
+  renderOverride: NoteRenderOverride | null = null,
 ): FootnotesLayoutInput | null {
   if (!editorState) return null;
 
@@ -121,14 +128,10 @@ export function buildFootnotesInput(
   const blocksById = new Map<string, FlowBlock[]>();
 
   idsInUse.forEach((id) => {
-    const entry = findNoteEntryById(importedFootnotes, id);
-    const content = entry?.content;
-    if (!Array.isArray(content) || content.length === 0) return;
-
     try {
-      // Deep clone to prevent mutation of the original converter data
-      const clonedContent = JSON.parse(JSON.stringify(content));
-      const footnoteDoc = normalizeNotePmJson({ type: 'doc', content: clonedContent });
+      const footnoteDoc = resolveNoteDocJson(id, importedFootnotes, renderOverride);
+      if (!footnoteDoc) return;
+
       const result = toFlowBlocks(footnoteDoc, {
         blockIdPrefix: `footnote-${id}-`,
         storyKey: buildStoryKey({ kind: 'story', storyType: 'footnote', noteId: id }),
@@ -230,6 +233,35 @@ function buildMarkerRun(markerText: string, firstTextRun: Run | undefined): Run 
   if (firstTextRun?.color != null) markerRun.color = firstTextRun.color;
 
   return markerRun;
+}
+
+function cloneJsonValue<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
+}
+
+function cloneNoteContentJson(content: unknown[]): ProseMirrorJSON[] {
+  return cloneJsonValue(content) as ProseMirrorJSON[];
+}
+
+function resolveNoteDocJson(
+  id: string,
+  importedFootnotes: Array<{ id?: unknown; content?: unknown[] }>,
+  renderOverride: NoteRenderOverride | null,
+): ProseMirrorJSON | null {
+  if (renderOverride && renderOverride.noteId === id) {
+    return normalizeNotePmJson(cloneJsonValue(renderOverride.docJson));
+  }
+
+  const entry = findNoteEntryById(importedFootnotes, id);
+  const content = entry?.content;
+  if (!Array.isArray(content) || content.length === 0) {
+    return null;
+  }
+
+  return normalizeNotePmJson({
+    type: 'doc',
+    content: cloneNoteContentJson(content),
+  });
 }
 
 function syncMarkerRun(target: Run, source: Run): void {

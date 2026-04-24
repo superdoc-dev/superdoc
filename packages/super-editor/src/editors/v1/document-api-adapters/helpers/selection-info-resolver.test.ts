@@ -19,6 +19,8 @@ type NodeOptions = {
   inlineContent?: boolean;
   nodeSize?: number;
   attrs?: Record<string, unknown>;
+  /** Mark names applied to this node (only used for text nodes). */
+  markNames?: string[];
 };
 
 function createNode(typeName: string, children: ProseMirrorNode[] = [], options: NodeOptions = {}): ProseMirrorNode {
@@ -48,7 +50,7 @@ function createNode(typeName: string, children: ProseMirrorNode[] = [], options:
     child(index: number) {
       return children[index]!;
     },
-    marks: [],
+    marks: (options.markNames ?? []).map((name) => ({ type: { name } })),
     // `nodesBetween` walks the whole subtree. A minimal correct
     // implementation for our test shapes: visit self first, then recurse
     // into children with the right child-position accounting.
@@ -91,6 +93,20 @@ function createNode(typeName: string, children: ProseMirrorNode[] = [], options:
 function textBlock(blockId: string, text: string): ProseMirrorNode {
   const textNode = createNode('text', [], { text });
   return createNode('paragraph', [textNode], {
+    isBlock: true,
+    inlineContent: true,
+    attrs: { sdBlockId: blockId },
+  });
+}
+
+/**
+ * Build a paragraph whose body is a sequence of text nodes with different
+ * marks. `runs` is an array of `{ text, marks }` tuples; each becomes one
+ * text child in order.
+ */
+function markedTextBlock(blockId: string, runs: Array<{ text: string; marks: string[] }>): ProseMirrorNode {
+  const children = runs.map((r) => createNode('text', [], { text: r.text, markNames: r.marks }));
+  return createNode('paragraph', children, {
     isBlock: true,
     inlineContent: true,
     attrs: { sdBlockId: blockId },
@@ -220,6 +236,63 @@ describe('resolveCurrentSelectionInfo', () => {
 
     const info = resolveCurrentSelectionInfo(editor, {});
     expect(info.activeMarks).toEqual([]);
+  });
+
+  it('reports marks shared by every text node in a range selection', () => {
+    // Both runs carry `bold`; only the first carries `italic`. The shared
+    // active mark across the whole selection is `bold` alone.
+    const docNode = doc([
+      markedTextBlock('p1', [
+        { text: 'Bold and italic ', marks: ['bold', 'italic'] },
+        { text: 'bold only', marks: ['bold'] },
+      ]),
+    ]);
+    // Select across both runs.
+    const editor = makeEditor(docNode, { from: 2, to: 26 });
+
+    const info = resolveCurrentSelectionInfo(editor, {});
+    expect([...info.activeMarks].sort()).toEqual(['bold']);
+  });
+
+  it('returns no marks when any text node in the selection is unmarked', () => {
+    const docNode = doc([
+      markedTextBlock('p1', [
+        { text: 'Bold ', marks: ['bold'] },
+        { text: 'plain', marks: [] },
+      ]),
+    ]);
+    const editor = makeEditor(docNode, { from: 2, to: 11 });
+
+    const info = resolveCurrentSelectionInfo(editor, {});
+    expect(info.activeMarks).toEqual([]);
+  });
+
+  it('does not allocate per-character when the selection spans thousands of chars', () => {
+    // Regression: the original `perCharMarks.push(names)` loop allocated one
+    // Set reference per selected character. For a 10k-character selection
+    // that produced noticeable jank on every selection.onChange event.
+    // The per-node intersection should stay fast and return the correct
+    // shared-mark set regardless of selection length.
+    const runs = Array.from({ length: 200 }, (_, i) => ({
+      text: 'x'.repeat(50),
+      // Every run carries `bold`; half also carry `italic`, so italic is
+      // NOT universally present and must drop out of the intersection.
+      marks: i % 2 === 0 ? ['bold', 'italic'] : ['bold'],
+    }));
+    const docNode = doc([markedTextBlock('p1', runs)]);
+    // Select the entire 10,000-char block.
+    const textLen = 200 * 50;
+    const editor = makeEditor(docNode, { from: 2, to: 2 + textLen });
+
+    const t0 = performance.now();
+    const info = resolveCurrentSelectionInfo(editor, {});
+    const elapsed = performance.now() - t0;
+
+    expect([...info.activeMarks].sort()).toEqual(['bold']);
+    // Generous bound — the old path for 10k chars allocated 10k Set refs
+    // and iterated them again to intersect. Even on a slow CI, the
+    // per-node implementation completes in a few ms.
+    expect(elapsed).toBeLessThan(50);
   });
 });
 

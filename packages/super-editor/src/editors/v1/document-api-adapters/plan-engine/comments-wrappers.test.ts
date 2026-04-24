@@ -642,4 +642,39 @@ describe('comments-wrappers: addCommentHandler multi-segment targets', () => {
     expect(editor.commands!.setTextSelection).toHaveBeenCalledWith({ from: 10, to: 30 });
     expect(receipt.success).toBe(true);
   });
+
+  it('treats a TextAddress with an undefined `segments` field as TextAddress, not TextTarget', () => {
+    // Regression: a plain structural `'segments' in target` check misclassifies
+    // a TextAddress carrying an extra undefined `segments` field (e.g. from
+    // object spread) as a TextTarget, then crashes on `segments[0]`. The
+    // runtime guard must reject a non-array `segments` before the spread.
+    const editor = makeWriteEditor();
+    vi.mocked(resolveTextTarget).mockReturnValue({ from: 5, to: 12 });
+    vi.mocked(executeDomainCommand).mockReturnValue({
+      steps: [{ effect: 'changed' }],
+    } as unknown as ReturnType<typeof executeDomainCommand>);
+
+    const wrapper = createCommentsWrapper(editor);
+    const receipt = wrapper.add({
+      text: 'comment',
+      target: {
+        kind: 'text',
+        blockId: 'pA',
+        range: { start: 0, end: 5 },
+        // A TextAddress with a stray `segments` property (from spreading) —
+        // must fall through to the single-block branch.
+        segments: undefined as unknown as never,
+      } as unknown as Parameters<typeof wrapper.add>[0]['target'],
+    });
+
+    expect(receipt.success).toBe(true);
+    expect(editor.commands!.setTextSelection).toHaveBeenCalledWith({ from: 5, to: 12 });
+    // Single resolve call, using the TextAddress blockId + range.
+    expect(resolveTextTarget).toHaveBeenCalledTimes(1);
+    expect(resolveTextTarget).toHaveBeenCalledWith(editor, {
+      kind: 'text',
+      blockId: 'pA',
+      range: { start: 0, end: 5 },
+    });
+  });
 });

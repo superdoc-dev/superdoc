@@ -82,13 +82,29 @@ function isSameTarget(
 }
 
 /**
+ * Check whether an arbitrary value looks like a runtime-valid TextTarget.
+ * Mirrors the `isTextTarget` guard used by the document-api validator, so
+ * we route only well-formed TextTargets through the multi-segment path.
+ * A `TextAddress` that happens to carry an extra `segments` field (e.g.
+ * from object spreading) falls through to the single-block branch and
+ * produces a clean `INVALID_TARGET` response rather than an internal
+ * crash on `segments[0]` dereference.
+ */
+function isTextTargetShape(target: unknown): target is TextTarget {
+  if (!target || typeof target !== 'object') return false;
+  const { kind, segments } = target as { kind?: unknown; segments?: unknown };
+  if (kind !== 'text') return false;
+  return Array.isArray(segments) && segments.length > 0;
+}
+
+/**
  * Normalize a TextAddress | TextTarget comment target into an array of
  * segments. For TextAddress, the result is a single-entry array.
  */
 function targetToSegments(
   target: { kind: 'text'; blockId: string; range: { start: number; end: number } } | TextTarget,
 ): TextSegment[] {
-  if ('segments' in target) return [...target.segments];
+  if (isTextTargetShape(target)) return [...target.segments];
   return [{ blockId: target.blockId, range: target.range }];
 }
 

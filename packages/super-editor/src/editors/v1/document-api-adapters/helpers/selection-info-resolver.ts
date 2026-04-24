@@ -154,24 +154,39 @@ export function subscribeToSelection(editor: Editor, listener: SelectionChangeLi
 }
 
 function markTypesPresentEverywhere(doc: ProseMirrorNode, from: number, to: number): Set<string> {
-  const perCharMarks: Set<string>[] = [];
+  // Intersect mark-name sets per text node, not per character. `selection.
+  // onChange` fires frequently during editing, so allocating one Set per
+  // character of a large selection (and iterating them again to intersect)
+  // produced noticeable jank. A running intersection over text nodes is
+  // equivalent and runs in O(number of text nodes) with bounded allocation.
+  let common: Set<string> | null = null;
+  let aborted = false;
+
   doc.nodesBetween(from, to, (node, pos) => {
+    if (aborted) return false;
     if (!node.isText) return true;
+    // Skip text nodes that don't actually overlap the selection. This can
+    // happen at block boundaries where nodesBetween visits the adjacent
+    // textblock but the intersection is empty.
     const start = Math.max(pos, from);
     const end = Math.min(pos + node.nodeSize, to);
-    const len = end - start;
+    if (end <= start) return false;
+
     const names = new Set<string>();
     for (const m of node.marks) names.add(m.type.name);
-    for (let i = 0; i < len; i++) perCharMarks.push(names);
+
+    if (common === null) {
+      common = names;
+    } else {
+      for (const name of common) {
+        if (!names.has(name)) common.delete(name);
+      }
+      // Once the running intersection is empty it can never grow again —
+      // stop descending and return the empty result.
+      if (common.size === 0) aborted = true;
+    }
     return false;
   });
-  if (perCharMarks.length === 0) return new Set();
-  const first = perCharMarks[0]!;
-  const common = new Set<string>(first);
-  for (const set of perCharMarks.slice(1)) {
-    for (const name of common) {
-      if (!set.has(name)) common.delete(name);
-    }
-  }
-  return common;
+
+  return common ?? new Set<string>();
 }

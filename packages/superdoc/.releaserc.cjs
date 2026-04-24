@@ -10,7 +10,6 @@ const SUPERDOC_PACKAGES = [
   'packages/superdoc',
   'packages/super-editor',
   'packages/layout-engine',
-  'packages/ai',
   'packages/word-layout',
   'packages/preset-geometry',
   'shared',

@@ -1,24 +1,11 @@
 /* eslint-env node */
 /*
- * Commit filter: react wraps superdoc, so git log must include
- * commits touching superdoc's sub-packages. This shared helper patches
- * git-log-parser to expand path coverage. It REPLACES
- * semantic-release-commit-filter — do not use both (the filter restricts
- * to CWD, which undoes the expansion).
- *
- * Keep in sync with .github/workflows/release-react.yml paths: trigger.
+ * Release narrow: react externalizes `superdoc` in its build, so a core
+ * change does not alter the published react tarball (consumers get the new
+ * core via their own peerDependencies install). Only commits touching
+ * packages/react/** should trigger a react release. See
+ * .github/package-impact-map.md.
  */
-require('../../scripts/semantic-release/patch-commit-filter.cjs')([
-  'packages/react',
-  'packages/superdoc',
-  'packages/super-editor',
-  'packages/layout-engine',
-  'packages/ai',
-  'packages/word-layout',
-  'packages/preset-geometry',
-  'shared',
-  'pnpm-workspace.yaml',
-]);
 
 const branch = process.env.GITHUB_REF_NAME || process.env.CI_COMMIT_BRANCH;
 
@@ -40,21 +27,8 @@ const config = {
   branches,
   tagFormat: 'react-v${version}',
   plugins: [
-    [
-      '@semantic-release/commit-analyzer',
-      {
-        // Cap at minor — react wraps superdoc, so upstream breaking
-        // changes don't break react's own public API.
-        // Prevents accidental major bumps from superdoc feat!/BREAKING CHANGE commits.
-        releaseRules: [
-          { breaking: true, release: 'minor' },
-          { type: 'feat', release: 'minor' },
-          { type: 'fix', release: 'patch' },
-          { type: 'perf', release: 'patch' },
-          { type: 'revert', release: 'patch' },
-        ],
-      },
-    ],
+    'semantic-release-commit-filter',
+    '@semantic-release/commit-analyzer',
     notesPlugin,
     ['semantic-release-pnpm', { npmPublish: false }],
     '../../scripts/publish-react.cjs',

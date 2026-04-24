@@ -980,6 +980,39 @@ describe('donor font propagation in applyTemplateToAbstract', () => {
     // L1 remains bullet → normalizer doesn't strip → Wingdings is preserved.
     expect(getLevelFontAscii(editor, 1, 1)).toBe('Wingdings');
   });
+
+  it('does not inject donor font into bare levels that were not stripped this call', () => {
+    const editor = makeEditor();
+    // L0 already ordered with a legitimate font — serves as a potential donor.
+    replaceLevel(editor, 1, 0, { numFmt: 'decimal', fontFamily: 'Courier New' });
+    // L2 is bare — user's intent is "inherit from paragraph style cascade."
+    // L2 was not changed from any prior state in this call; no rFonts gets stripped.
+
+    // Partial update: touch only indents/start at L2, leaving numFmt/lvlText alone.
+    const template = {
+      version: 1,
+      levels: [{ level: 2, start: 5, indents: { left: 1000, hanging: 200 } }],
+    };
+
+    LevelFormattingHelpers.applyTemplateToAbstract(editor, 1, template, [2]);
+
+    // L2 must remain bare — the normalizer stripped nothing, so donor propagation
+    // must not synthesize a font onto it.
+    expect(getLevelFontAscii(editor, 1, 2)).toBeUndefined();
+  });
+
+  it('does not inject donor font onto already-ordered levels keeping their rFonts', () => {
+    const editor = makeEditor();
+    replaceLevel(editor, 1, 0, { numFmt: 'decimal', fontFamily: 'Courier New' });
+    // L2 already ordered with its own legitimate font. Re-applying a template
+    // must not overwrite it with L0's donor font.
+    replaceLevel(editor, 1, 2, { numFmt: 'decimal', fontFamily: 'Arial' });
+
+    LevelFormattingHelpers.applyTemplateToAbstract(editor, 1, LevelFormattingHelpers.getPresetTemplate('decimal'));
+
+    expect(getLevelFontAscii(editor, 1, 0)).toBe('Courier New');
+    expect(getLevelFontAscii(editor, 1, 2)).toBe('Arial');
+  });
 });
 
 // ──────────────────────────────────────────────────────────────────────────────

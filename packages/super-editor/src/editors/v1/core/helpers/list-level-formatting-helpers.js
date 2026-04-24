@@ -860,26 +860,32 @@ function applyTemplateToAbstract(editor, abstractNumId, template, levels) {
   }
 
   let anyChanged = false;
+  // Track the levels whose rFonts the normalizer strips during this call.
+  // Only these are eligible for donor propagation — we must not inject a font
+  // onto levels that were already bare (partial-update intent) or that kept a
+  // legitimate text-font rFonts through the transition.
+  const strippedLevels = [];
 
   for (const ilvl of targetLevels) {
     const entry = templateByLevel.get(ilvl);
     const lvlEl = findLevelElement(abstract, ilvl);
+    const hadRFontsBefore = levelHasRFonts(lvlEl);
     anyChanged = applyLevelPropertiesToElement(lvlEl, entry) || anyChanged;
+    if (hadRFontsBefore && !levelHasRFonts(lvlEl)) {
+      strippedLevels.push({ ilvl, lvlEl });
+    }
   }
 
-  // Propagate a surviving legitimate marker font onto ordered levels whose
-  // symbol-font rFonts the normalizer just stripped. Without this, nested
-  // ordered markers fall back to the paragraph body font and end up mismatched
-  // with the top-level marker (e.g., "1." in Courier New, nested "2." in Arial).
-  const donorFont = findDonorMarkerFont(abstract);
-  if (donorFont) {
-    for (const ilvl of targetLevels) {
-      const entry = templateByLevel.get(ilvl);
-      if (entry.numFmt === 'bullet') continue;
-      if (entry.markerFont != null) continue;
-      const lvlEl = findLevelElement(abstract, ilvl);
-      if (levelHasRFonts(lvlEl)) continue;
-      anyChanged = mutateLevelMarkerFont(lvlEl, donorFont) || anyChanged;
+  // Propagate a surviving legitimate marker font onto levels whose symbol-font
+  // rFonts the normalizer just stripped. Without this, nested ordered markers
+  // fall back to the paragraph body font and end up mismatched with the top-level
+  // marker (e.g., "1." in Courier New, nested "2." in Arial).
+  if (strippedLevels.length > 0) {
+    const donorFont = findDonorMarkerFont(abstract);
+    if (donorFont) {
+      for (const { lvlEl } of strippedLevels) {
+        anyChanged = mutateLevelMarkerFont(lvlEl, donorFont) || anyChanged;
+      }
     }
   }
 

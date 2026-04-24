@@ -274,6 +274,31 @@ module.exports.usesCreateAction = (output, context) => {
   return { pass: true, score: 1, reason: `superdoc_create with action "${expectedAction}"` };
 };
 
+module.exports.usesListAction = (output, context) => {
+  const expectedAction = context?.vars?.expectedListAction;
+  // Fail loudly on malformed input — Promptfoo's matrix-expansion of array vars
+  // can turn `[a, b]` into a string, which would silently bypass this check.
+  if (expectedAction === undefined || expectedAction === null) return true;
+  if (typeof expectedAction !== 'string' || expectedAction.length === 0) {
+    return {
+      pass: false,
+      score: 0,
+      reason: `expectedListAction var must be a non-empty string; got ${typeof expectedAction} (${JSON.stringify(expectedAction)})`,
+    };
+  }
+  const calls = findTools(output, LIST);
+  if (calls.length === 0) return { pass: false, score: 0, reason: 'superdoc_list not called' };
+  const actions = calls.map((c) => getArgs(c).action).filter(Boolean);
+  if (!actions.includes(expectedAction)) {
+    return {
+      pass: false,
+      score: 0,
+      reason: `superdoc_list called with actions [${actions.join(', ')}], expected "${expectedAction}"`,
+    };
+  }
+  return { pass: true, score: 1, reason: `superdoc_list with action "${expectedAction}"` };
+};
+
 module.exports.usesCommentCreate = (output) => {
   const call = findTool(output, COMMENT);
   if (!call) return { pass: false, score: 0, reason: 'superdoc_comment not called' };
@@ -747,4 +772,133 @@ console.log(JSON.stringify(diff));
   }
 
   return { pass: true, score: diff.ratio, reason: diff.reason };
+};
+
+// ---------------------------------------------------------------------------
+// OOXML numbering-consistency check (symbol-font-on-ordered-level regression guard)
+//
+// After a list mutation that converts bullet → ordered (e.g. lists.set_type),
+// Word-level fidelity requires that no level ends up with an ordered numFmt
+// paired with a symbol font (Wingdings, Symbol, Webdings, Zapf Dingbats).
+// Symbol fonts have no numeric/alphabetic glyphs at ASCII codepoints — Word
+// then renders "1.", "2.", etc. through the symbol font and shows unrelated
+// pictographic glyphs (envelopes, scissors, folders, etc.) instead of digits.
+// SuperDoc's internal projection hides the bug because it normalizes markers
+// to logical strings. Only visible when real OOXML is rendered.
+// ---------------------------------------------------------------------------
+
+const ORDERED_NUM_FMTS = new Set([
+  'decimal',
+  'decimalZero',
+  'decimalEnclosedCircle',
+  'decimalEnclosedFullstop',
+  'decimalEnclosedParen',
+  'lowerLetter',
+  'upperLetter',
+  'lowerRoman',
+  'upperRoman',
+  'ordinal',
+  'ordinalText',
+  'cardinalText',
+  'chicago',
+]);
+
+const SYMBOL_MARKER_FONTS = new Set([
+  'Wingdings',
+  'Wingdings 2',
+  'Wingdings 3',
+  'Symbol',
+  'Webdings',
+  'ZapfDingbats',
+  'Zapf Dingbats',
+]);
+
+/** Read just `word/numbering.xml` out of a `.docx` via `unzip -p`. */
+function readNumberingXml(docxPath) {
+  try {
+    return execSync(`unzip -p ${JSON.stringify(docxPath)} word/numbering.xml`, {
+      encoding: 'utf8',
+      timeout: 10000,
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+  } catch (_) {
+    return null;
+  }
+}
+
+/** Regex-scan numbering.xml for <w:lvl> nodes that pair an ordered numFmt with a symbol font. */
+function scanNumberingXmlForSymbolFontsOnOrderedLevels(xml) {
+  if (!xml) return [];
+  const violations = [];
+  const absRegex = /<w:abstractNum\b[^>]*w:abstractNumId="(\d+)"[^>]*>([\s\S]*?)<\/w:abstractNum>/g;
+  let absMatch;
+  while ((absMatch = absRegex.exec(xml)) !== null) {
+    const abstractId = Number(absMatch[1]);
+    const body = absMatch[2];
+    const lvlRegex = /<w:lvl\b[^>]*w:ilvl="(\d+)"[^>]*>([\s\S]*?)<\/w:lvl>/g;
+    let lvlMatch;
+    while ((lvlMatch = lvlRegex.exec(body)) !== null) {
+      const ilvl = Number(lvlMatch[1]);
+      const lvlBody = lvlMatch[2];
+      const numFmtMatch = lvlBody.match(/<w:numFmt\b[^/]*w:val="([^"]*)"/);
+      const numFmt = numFmtMatch?.[1];
+      if (!numFmt || !ORDERED_NUM_FMTS.has(numFmt)) continue;
+      const fontMatch =
+        lvlBody.match(/<w:rFonts\b[^/]*w:ascii="([^"]*)"/) ||
+        lvlBody.match(/<w:rFonts\b[^/]*w:hAnsi="([^"]*)"/) ||
+        lvlBody.match(/<w:rFonts\b[^/]*w:cs="([^"]*)"/) ||
+        lvlBody.match(/<w:rFonts\b[^/]*w:eastAsia="([^"]*)"/);
+      const font = fontMatch?.[1];
+      if (font && SYMBOL_MARKER_FONTS.has(font)) {
+        violations.push({ abstractId, ilvl, numFmt, font });
+      }
+    }
+  }
+  return violations;
+}
+
+/**
+ * Assertion for Level 2 execution tests that convert a bullet list into an
+ * ordered list. Requires the test to set `vars.keepFile: true` so the provider
+ * exposes `outputFile` in its JSON response. Reads the saved `.docx`, scans
+ * `word/numbering.xml`, and fails if any level has an ordered `numFmt` paired
+ * with a symbol-family `rFonts` — the bug signature where Word renders
+ * digits as pictographic glyphs (folder, envelope, scissors, etc.) because
+ * the marker character is drawn through a font with no numeric codepoints.
+ *
+ * Returns a skip (`true`) when the output isn't a keepFile path, so adding
+ * this assertion to a test that doesn't produce a file is a no-op rather
+ * than a spurious failure.
+ */
+module.exports.checkNoSymbolFontsOnOrderedLevels = (output) => {
+  let parsed;
+  try {
+    parsed = JSON.parse(output);
+  } catch {
+    return { pass: false, score: 0, reason: 'output is not JSON' };
+  }
+  const outputFile = parsed?.outputFile;
+  if (!outputFile || typeof outputFile !== 'string') {
+    return true; // No keepFile → nothing to inspect; skip rather than fail.
+  }
+  const xml = readNumberingXml(outputFile);
+  if (!xml) {
+    return {
+      pass: false,
+      score: 0,
+      reason: `Could not read word/numbering.xml from ${outputFile} (unzip failed or file absent)`,
+    };
+  }
+  const violations = scanNumberingXmlForSymbolFontsOnOrderedLevels(xml);
+  if (violations.length === 0) {
+    return { pass: true, score: 1, reason: 'No ordered-format levels with symbol-font rFonts' };
+  }
+  return {
+    pass: false,
+    score: 0,
+    reason:
+      `Found ${violations.length} ordered-format level(s) with symbol-font rFonts. ` +
+      `Word will render these as pictograph glyphs instead of digits. ` +
+      `Violations: ${JSON.stringify(violations)}`,
+  };
 };

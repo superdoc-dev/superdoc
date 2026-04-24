@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import process from 'node:process';
-import { execFile as execFileCb } from 'node:child_process';
+import { execFile as execFileCb, execFileSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 import { createRequire } from 'node:module';
@@ -466,6 +466,83 @@ export function ensureVisualTestDataSymlink(corpusRoot) {
   fs.mkdirSync(path.dirname(visualDataPath), { recursive: true });
   fs.symlinkSync(symlinkTarget, visualDataPath, 'dir');
   return { linked: true, changed: true, backupPath: null };
+}
+
+/**
+ * If the current repo is a git worktree, return the primary repo's root path.
+ * Uses `git rev-parse --git-common-dir`: in a worktree this resolves to
+ * `<primary>/.git/worktrees/<name>/..` pointing inside the primary's .git dir,
+ * while in a non-worktree checkout it resolves to the local `.git`.
+ * Returns null if we're not in a worktree, not in git, or git isn't available.
+ */
+export function findPrimaryRepoRoot() {
+  try {
+    const commonDir = execFileSync('git', ['rev-parse', '--git-common-dir'], {
+      cwd: REPO_ROOT,
+      stdio: ['ignore', 'pipe', 'ignore'],
+      encoding: 'utf8',
+    }).trim();
+    const absoluteCommonDir = path.resolve(REPO_ROOT, commonDir);
+    const ownGitDir = path.resolve(REPO_ROOT, '.git');
+
+    // Non-worktree: common dir IS our own .git
+    if (absoluteCommonDir === ownGitDir) return null;
+
+    // Worktree: common dir is the primary's .git (or a file pointer); its parent is the primary repo
+    const primaryRoot = path.dirname(absoluteCommonDir);
+    if (primaryRoot === REPO_ROOT) return null;
+    return primaryRoot;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Seed the worktree's corpus from the primary repo using hardlinks (falling
+ * back to copy across filesystems). Skips files that already exist at the
+ * destination and files the primary doesn't have. Returns the count seeded.
+ *
+ * Only runs when we're in a worktree AND the primary has corpus files.
+ */
+export function seedCorpusFromPrimary(destinationRoot, selectedDocs, { quiet = false } = {}) {
+  const primaryRoot = findPrimaryRepoRoot();
+  if (!primaryRoot) return 0;
+
+  // Follow the primary's default corpus layout. This is intentionally a fixed
+  // path — users with custom --dest in the primary can still fall back to R2.
+  const primaryCorpus = path.join(primaryRoot, path.basename(DEFAULT_CORPUS_ROOT));
+  if (!fs.existsSync(primaryCorpus)) return 0;
+
+  let seeded = 0;
+  let copyFallback = 0;
+
+  for (const doc of selectedDocs) {
+    const relativePath = normalizePath(doc.relative_path);
+    if (!relativePath) continue;
+
+    const primaryPath = path.join(primaryCorpus, relativePath);
+    const destinationPath = path.join(destinationRoot, relativePath);
+
+    if (fs.existsSync(destinationPath)) continue;
+    if (!fs.existsSync(primaryPath)) continue;
+
+    fs.mkdirSync(path.dirname(destinationPath), { recursive: true });
+    try {
+      fs.linkSync(primaryPath, destinationPath);
+    } catch {
+      // Hardlink fails across filesystems or for special files — copy instead
+      fs.copyFileSync(primaryPath, destinationPath);
+      copyFallback += 1;
+    }
+    seeded += 1;
+  }
+
+  if (seeded > 0 && !quiet) {
+    const relPrimary = path.relative(REPO_ROOT, primaryRoot) || primaryRoot;
+    const method = copyFallback === seeded ? 'copied' : copyFallback > 0 ? 'hardlinked (with copy fallback)' : 'hardlinked';
+    console.log(`[corpus] Seeded ${seeded} file(s) ${method} from primary repo: ${relPrimary}`);
+  }
+  return seeded;
 }
 
 export function applyPathFilters(paths, { filters = [], matches = [], excludes = [] } = {}) {

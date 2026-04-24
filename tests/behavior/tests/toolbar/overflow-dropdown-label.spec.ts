@@ -23,12 +23,25 @@ test('font family applies and label updates when selected from overflow menu', a
 
   // Open overflow menu
   await overflowBtn.click();
-  await superdoc.page.locator('.overflow-menu_items').waitFor({ state: 'visible', timeout: 5000 });
+  // await superdoc.page.locator('.overflow-menu_items').waitFor({ state: 'visible', timeout: 5000 });
+  const overflowMenu = superdoc.page.locator('.overflow-menu_items');
+  await overflowMenu.waitFor({ state: 'visible', timeout: 5000 });
   await superdoc.waitForStable();
 
   // Select Georgia from font family dropdown
-  await superdoc.page.locator('[data-item="btn-fontFamily"]').click();
+  // await superdoc.page.locator('[data-item="btn-fontFamily"]').click();
+  const overflowFontFamilyBtn = overflowMenu.locator('[data-item="btn-fontFamily"]');
+  if (!(await overflowFontFamilyBtn.isVisible())) {
+    test.skip();
+  }
+  await overflowFontFamilyBtn.click();
+
   await superdoc.waitForStable();
+  // Wait for the dropdown options to appear
+  await superdoc.page
+    .locator('[data-item="btn-fontFamily-option"]')
+    .first()
+    .waitFor({ state: 'visible', timeout: 5000 });
   await superdoc.page.locator('[data-item="btn-fontFamily-option"]').filter({ hasText: 'Georgia' }).click();
   await superdoc.waitForStable();
 

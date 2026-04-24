@@ -1,7 +1,17 @@
 <script setup>
-import { ref, getCurrentInstance, onMounted, onDeactivated, nextTick, computed } from 'vue';
+import {
+  ref,
+  getCurrentInstance,
+  onMounted,
+  onActivated,
+  onDeactivated,
+  onBeforeUnmount,
+  nextTick,
+  computed,
+} from 'vue';
 import { throttle } from './helpers.js';
 import ButtonGroup from './ButtonGroup.vue';
+import { RESPONSIVE_BREAKPOINTS } from './constants.js';
 
 /**
  * The default font-family to use for toolbar UI surfaces when no custom font is configured.
@@ -14,6 +24,8 @@ const { proxy } = getCurrentInstance();
 const emit = defineEmits(['command', 'toggle', 'select']);
 
 let toolbarKey = ref(1);
+const compactSideGroups = ref(false);
+let containerResizeObserver = null;
 
 /**
  * Computed property that determines the font-family to use for toolbar UI surfaces.
@@ -40,16 +52,9 @@ const getFilteredItems = (position) => {
   return proxy.$toolbar.getToolbarItemByGroup(position).filter((item) => !excludeButtonsList.includes(item.name.value));
 };
 
-onMounted(() => {
-  window.addEventListener('resize', onResizeThrottled);
-  window.addEventListener('keydown', onKeyDown);
-});
-
-onDeactivated(() => {
-  window.removeEventListener('resize', onResizeThrottled);
-  window.removeEventListener('keydown', onKeyDown);
-});
-
+const updateCompactSideGroups = () => {
+  compactSideGroups.value = proxy.$toolbar.getAvailableWidth() <= RESPONSIVE_BREAKPOINTS.lg;
+};
 const onKeyDown = async (e) => {
   if (e.metaKey && e.key === 'f') {
     const searchItem = proxy.$toolbar.getToolbarItemByName('search');
@@ -66,16 +71,49 @@ const onKeyDown = async (e) => {
 
 const onWindowResized = async () => {
   await proxy.$toolbar.onToolbarResize();
+  updateCompactSideGroups();
   toolbarKey.value += 1;
 };
 const onResizeThrottled = throttle(onWindowResized, 300);
+
+function teardownWindowListeners() {
+  window.removeEventListener('resize', onResizeThrottled);
+  window.removeEventListener('keydown', onKeyDown);
+  containerResizeObserver?.disconnect();
+  containerResizeObserver = null;
+}
+
+function setupWindowListeners() {
+  teardownWindowListeners();
+  window.addEventListener('resize', onResizeThrottled);
+  window.addEventListener('keydown', onKeyDown);
+  if (
+    typeof ResizeObserver !== 'undefined' &&
+    proxy.$toolbar.config?.responsiveToContainer &&
+    proxy.$toolbar.toolbarContainer
+  ) {
+    containerResizeObserver = new ResizeObserver(() => {
+      onResizeThrottled();
+    });
+    containerResizeObserver.observe(proxy.$toolbar.toolbarContainer);
+  }
+  updateCompactSideGroups();
+}
+
+onMounted(setupWindowListeners);
+onActivated(setupWindowListeners);
+onDeactivated(teardownWindowListeners);
+onBeforeUnmount(teardownWindowListeners);
 
 const handleCommand = ({ item, argument, option }) => {
   proxy.$toolbar.emitCommand({ item, argument, option });
 };
 
 const restoreSelection = () => {
-  proxy.$toolbar.activeEditor?.commands?.restoreSelection();
+  const editor = proxy.$toolbar.activeEditor;
+  if (!editor) return;
+  if (editor.options?.isHeaderOrFooter) return;
+  editor.commands?.restoreSelection();
 };
 
 /**
@@ -107,6 +145,7 @@ const handleToolbarMousedown = (e) => {
       tabindex="0"
       v-if="showLeftSide"
       :toolbar-items="getFilteredItems('left')"
+      :compact-side-groups="compactSideGroups"
       :ui-font-family="uiFontFamily"
       position="left"
       @command="handleCommand"
@@ -117,6 +156,7 @@ const handleToolbarMousedown = (e) => {
       tabindex="0"
       :toolbar-items="getFilteredItems('center')"
       :overflow-items="proxy.$toolbar.overflowItems"
+      :compact-side-groups="compactSideGroups"
       :ui-font-family="uiFontFamily"
       position="center"
       @command="handleCommand"
@@ -126,6 +166,7 @@ const handleToolbarMousedown = (e) => {
       tabindex="0"
       v-if="showRightSide"
       :toolbar-items="getFilteredItems('right')"
+      :compact-side-groups="compactSideGroups"
       :ui-font-family="uiFontFamily"
       position="right"
       @command="handleCommand"
@@ -146,12 +187,6 @@ const handleToolbarMousedown = (e) => {
   font-family: var(--sd-ui-font-family, Arial, Helvetica, sans-serif);
   position: relative;
   z-index: var(--sd-ui-toolbar-z-index, 10);
-}
-
-@media (max-width: 1280px) {
-  .superdoc-toolbar-group-side {
-    min-width: auto !important;
-  }
 }
 
 @media (max-width: 768px) {

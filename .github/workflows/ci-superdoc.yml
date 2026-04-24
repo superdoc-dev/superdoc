@@ -5,7 +5,7 @@ permissions:
 
 on:
   pull_request:
-    branches: [main, 'release/**']
+    branches: [main, stable, 'release/**']
     paths-ignore:
       - 'apps/docs/**'
       - 'apps/mcp/**'
@@ -16,6 +16,7 @@ on:
       - 'packages/sdk/**'
       - 'packages/template-builder/**'
       - 'packages/esign/**'
+      - 'packages/ai/**'
       - 'evals/**'
       - '**/*.md'
   merge_group:
@@ -232,12 +233,14 @@ jobs:
           flags: superdoc
 
   validate:
+    name: CI SuperDoc / validate
     if: always()
     needs: [build, unit-tests, cli-tests, coverage]
     runs-on: ubuntu-latest
     steps:
       - name: Check results
         run: |
-          if [[ "${{ contains(needs.*.result, 'failure') }}" == "true" ]]; then
+          if [[ "${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped') }}" == "true" ]]; then
+            echo "One or more required jobs did not succeed."
             exit 1
           fi

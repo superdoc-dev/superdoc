@@ -253,19 +253,43 @@ export const broadcastEditorEvents = (editor, sectionEditor) => {
   });
 };
 
+const applyHeaderFooterEditorDocumentMode = (editor, documentMode) => {
+  if (!editor) return;
+
+  if (documentMode === 'viewing') {
+    editor.commands?.enableTrackChangesShowOriginal?.();
+    editor.setOptions?.({ documentMode: 'viewing' });
+    editor.setEditable(false, false);
+  } else if (documentMode === 'suggesting') {
+    editor.commands?.disableTrackChangesShowOriginal?.();
+    editor.commands?.enableTrackChanges?.();
+    editor.setOptions?.({ documentMode: 'suggesting' });
+    editor.setEditable(true, false);
+  } else {
+    editor.commands?.disableTrackChangesShowOriginal?.();
+    editor.commands?.disableTrackChanges?.();
+    editor.setOptions?.({ documentMode: 'editing' });
+    editor.setEditable(true, false);
+  }
+
+  if (editor.view?.dom) {
+    editor.view.dom.setAttribute('aria-readonly', documentMode === 'viewing' ? 'true' : 'false');
+    editor.view.dom.setAttribute('documentmode', documentMode);
+    editor.view.dom.classList.toggle('view-mode', documentMode === 'viewing');
+  }
+};
+
 export const toggleHeaderFooterEditMode = ({ editor, focusedSectionEditor, isEditMode, documentMode }) => {
   if (isHeadless(editor)) return;
 
+  const targetMode = isEditMode ? documentMode : 'viewing';
+
   editor.converter.headerEditors.forEach((item) => {
-    item.editor.setEditable(isEditMode, false);
-    item.editor.view.dom.setAttribute('aria-readonly', !isEditMode);
-    item.editor.view.dom.setAttribute('documentmode', documentMode);
+    applyHeaderFooterEditorDocumentMode(item.editor, targetMode);
   });
 
   editor.converter.footerEditors.forEach((item) => {
-    item.editor.setEditable(isEditMode, false);
-    item.editor.view.dom.setAttribute('aria-readonly', !isEditMode);
-    item.editor.view.dom.setAttribute('documentmode', documentMode);
+    applyHeaderFooterEditorDocumentMode(item.editor, targetMode);
   });
 
   if (isEditMode) {

@@ -49,6 +49,15 @@ _No fields._
     {
       "headingLevel": 1,
       "nodeId": "node-def456",
+      "tableContext": {
+        "colspan": 1,
+        "columnIndex": 1,
+        "parentRowIndex": 1,
+        "parentTableOrdinal": 1,
+        "rowIndex": 1,
+        "rowspan": 1,
+        "tableOrdinal": 1
+      },
       "text": "Hello, world.",
       "type": "example"
     }
@@ -110,12 +119,57 @@ _No fields._
             "description": "Stable block ID — pass to scrollToElement() for navigation.",
             "type": "string"
           },
+          "tableContext": {
+            "additionalProperties": false,
+            "properties": {
+              "colspan": {
+                "description": "Number of columns the cell spans.",
+                "type": "integer"
+              },
+              "columnIndex": {
+                "description": "0-based logical grid column, not the row child order.",
+                "type": "integer"
+              },
+              "parentColumnIndex": {
+                "description": "Column index in the parent table. Set with parentTableOrdinal.",
+                "type": "integer"
+              },
+              "parentRowIndex": {
+                "description": "Row index in the parent table. Set with parentTableOrdinal.",
+                "type": "integer"
+              },
+              "parentTableOrdinal": {
+                "description": "Ordinal of the parent table when the containing table is nested.",
+                "type": "integer"
+              },
+              "rowIndex": {
+                "description": "0-based row index of the containing cell.",
+                "type": "integer"
+              },
+              "rowspan": {
+                "description": "Number of rows the cell spans.",
+                "type": "integer"
+              },
+              "tableOrdinal": {
+                "description": "0-based table ordinal, unique within one extract() result.",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "tableOrdinal",
+              "rowIndex",
+              "columnIndex",
+              "rowspan",
+              "colspan"
+            ],
+            "type": "object"
+          },
           "text": {
             "description": "Full plain text content of the block.",
             "type": "string"
           },
           "type": {
-            "description": "Block type: paragraph, heading, listItem, table, image, etc.",
+            "description": "Block type: paragraph, heading, listItem, image, tableOfContents.",
             "type": "string"
           }
         },

@@ -23,6 +23,13 @@ const runCapture = (command, args, cwd) => {
   return execFileSync(command, args, { cwd, encoding: 'utf8' }).trim();
 };
 
+const isVersionLookupNotFoundError = (error) => {
+  const details = [error?.stderr, error?.stdout, error?.message]
+    .filter(Boolean)
+    .join('\n');
+  return /E404|Not found|not found|No match found/i.test(details);
+};
+
 const isVersionPublished = (packageName, version) => {
   try {
     execFileSync(
@@ -32,7 +39,7 @@ const isVersionPublished = (packageName, version) => {
     );
     return true;
   } catch (error) {
-    if (error.status === 1) {
+    if (isVersionLookupNotFoundError(error)) {
       return false;
     }
     throw error;
@@ -59,7 +66,7 @@ const publishScopedMirror = (packageJson, distTag, logger = console) => {
 
   if (isVersionPublished(scopedName, packageJson.version)) {
     logger.log(`${scopedName}@${packageJson.version} already published, ensuring dist-tag "${distTag}" and skipping.`);
-    run('pnpm', ['dist-tag', 'add', `${scopedName}@${packageJson.version}`, distTag], rootDir);
+    run('pnpm', ['dist-tag', 'add', `${scopedName}@${packageJson.version}`, distTag, '--registry', defaultRegistry], rootDir);
     return;
   }
 
@@ -115,7 +122,7 @@ const publishPackages = ({
   if (publishUnscoped) {
     if (isVersionPublished(packageJson.name, packageJson.version)) {
       logger.log(`superdoc@${packageJson.version} already published, ensuring dist-tag "${distTag}" and skipping.`);
-      run('pnpm', ['dist-tag', 'add', `${packageJson.name}@${packageJson.version}`, distTag], rootDir);
+      run('pnpm', ['dist-tag', 'add', `${packageJson.name}@${packageJson.version}`, distTag, '--registry', defaultRegistry], rootDir);
     } else {
       logger.log(`Publishing superdoc with dist-tag "${distTag}"...`);
       run('pnpm', ['publish', '--access', 'public', '--tag', distTag, '--no-git-checks'], superdocDir);

@@ -19,6 +19,7 @@ import { TOKEN_INLINE_TYPES } from '../../constants.js';
 export function tokenNodeToRun({
   node,
   positions,
+  storyKey,
   defaultFont,
   defaultSize,
   inheritedMarks,
@@ -58,7 +59,7 @@ export function tokenNodeToRun({
   const effectiveMarks = nodeMarks.length > 0 ? nodeMarks : marksAsAttrs;
 
   const marks = [...effectiveMarks, ...(inheritedMarks ?? [])];
-  applyMarksToRun(run, marks, hyperlinkConfig, themeColors);
+  applyMarksToRun(run, marks, hyperlinkConfig, themeColors, undefined, true, storyKey);
 
   applyInlineRunProperties(run, runProperties, converterContext);
 

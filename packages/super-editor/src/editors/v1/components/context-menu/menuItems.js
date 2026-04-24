@@ -4,6 +4,7 @@ import TableActions from '../toolbar/TableActions.vue';
 import LinkInput from '../toolbar/LinkInput.vue';
 import CellBackgroundPicker from './CellBackgroundPicker.vue';
 import { TEXTS, ICONS, TRIGGERS } from './constants.js';
+import { resolveContextMenuCommandEditor } from './utils.js';
 import { isTrackedChangeActionAllowed } from '@extensions/track-changes/permission-helpers.js';
 import { readClipboardRaw } from '../../core/utilities/clipboardUtils.js';
 import { handleClipboardPaste } from '../../core/InputRule.js';
@@ -377,7 +378,8 @@ export function getItems(context, customItems = [], includeDefaultItems = true) 
           icon: ICONS.paste,
           isDefault: true,
           action: async (editor) => {
-            const { view } = editor ?? {};
+            const targetEditor = resolveContextMenuCommandEditor(editor);
+            const { view } = targetEditor ?? {};
             if (!view) return;
             // Save the current selection before focusing. When the context menu
             // is open, its hidden search input holds focus, so the PM editor's
@@ -404,7 +406,7 @@ export function getItems(context, customItems = [], includeDefaultItems = true) 
                 view.dispatch(tr.setSelection(SelectionType.create(doc, safeFrom, safeTo)));
               }
             }
-            const handled = handleClipboardPaste({ editor, view }, html, text);
+            const handled = handleClipboardPaste({ editor: targetEditor, view }, html, text);
             if (!handled) {
               const pasteEvent = createPasteEventShim({ html, text });
 
@@ -418,8 +420,8 @@ export function getItems(context, customItems = [], includeDefaultItems = true) 
                 return;
               }
 
-              if (text && editor.commands?.insertContent) {
-                editor.commands.insertContent(text, { contentType: 'text' });
+              if (text && targetEditor.commands?.insertContent) {
+                targetEditor.commands.insertContent(text, { contentType: 'text' });
               }
             }
           },

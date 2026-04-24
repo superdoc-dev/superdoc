@@ -1,4 +1,5 @@
 import { getResolvedParagraphProperties } from '@extensions/paragraph/resolvedPropertiesCache.js';
+import { buildTextWithTabs } from '../../document-api-adapters/helpers/text-with-tabs.js';
 
 /**
  * Insert a list-item paragraph before/after a target list paragraph position.
@@ -42,12 +43,12 @@ export const insertListItemAt =
     };
 
     const normalizedText = typeof text === 'string' ? text : '';
-    const textNode = normalizedText.length > 0 ? state.schema.text(normalizedText) : undefined;
+    // buildTextWithTabs splits '\t' into real tab nodes so exports emit <w:tab/>.
+    const content = normalizedText.length > 0 ? buildTextWithTabs(state.schema, normalizedText, undefined) : undefined;
 
     let paragraphNode;
     try {
-      paragraphNode =
-        paragraphType.createAndFill(attrs, textNode) ?? paragraphType.create(attrs, textNode ? [textNode] : undefined);
+      paragraphNode = paragraphType.createAndFill(attrs, content) ?? paragraphType.create(attrs, content ?? undefined);
     } catch {
       return false;
     }

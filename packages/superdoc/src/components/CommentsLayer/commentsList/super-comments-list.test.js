@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { defineComponent, h } from 'vue';
+import { createPinia } from 'pinia';
 
 vi.mock('./commentsList.vue', () => ({
   default: defineComponent({
@@ -42,6 +43,29 @@ describe('SuperComments', () => {
   it('exposes the superdoc reference as $superdoc on the Vue app', () => {
     const instance = new SuperComments({ element }, superdocStub);
     expect(instance.app.config.globalProperties.$superdoc).toBe(superdocStub);
+  });
+
+  it('reuses the parent SuperDoc pinia instance when available', () => {
+    const pinia = createPinia();
+    const instance = new SuperComments({ element }, { ...superdocStub, pinia });
+    expect(instance.app.config.globalProperties.$pinia).toBe(pinia);
+  });
+
+  it('inherits parent app provides when mounting inside an existing SuperDoc app', () => {
+    const parentProvides = { theme: 'shared-theme' };
+    const instance = new SuperComments(
+      { element },
+      {
+        ...superdocStub,
+        app: {
+          _context: {
+            provides: parentProvides,
+          },
+        },
+      },
+    );
+
+    expect(Object.getPrototypeOf(instance.app._context.provides)).toBe(parentProvides);
   });
 
   it('resolves element via selector when no element is provided', () => {

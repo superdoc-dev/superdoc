@@ -1,19 +1,12 @@
-import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { test, expect } from '../../fixtures/superdoc.js';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DOC_PATH = path.resolve(__dirname, '../../test-data/pagination/longer-header.docx');
-
-test.skip(!fs.existsSync(DOC_PATH), 'Test document not available — run pnpm corpus:pull');
+import { H_F_NORMAL_DOC_PATH as DOC_PATH } from '../../helpers/story-fixtures.js';
 
 test('search and navigate to results in document', async ({ superdoc }) => {
   await superdoc.loadDocument(DOC_PATH);
   await superdoc.waitForStable();
 
   // Search for text that spans across content
-  const query = 'works of the Licensed Material';
+  const query = 'NetHack';
   const matches = await superdoc.page.evaluate((q: string) => {
     return (window as any).editor?.commands?.search?.(q) ?? [];
   }, query);

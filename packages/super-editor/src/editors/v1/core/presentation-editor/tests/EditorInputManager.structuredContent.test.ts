@@ -6,6 +6,9 @@ const { mockTextSelectionCreate, mockNodeSelectionCreate } = vi.hoisted(() => ({
   mockTextSelectionCreate: vi.fn(),
   mockNodeSelectionCreate: vi.fn(),
 }));
+const { mockApplyEditableSlotAtInlineBoundary } = vi.hoisted(() => ({
+  mockApplyEditableSlotAtInlineBoundary: vi.fn(),
+}));
 
 vi.mock('../input/PositionHitResolver.js', () => ({
   resolvePointerPositionHit: vi.fn(() => ({
@@ -20,6 +23,10 @@ vi.mock('../input/PositionHitResolver.js', () => ({
 
 vi.mock('@superdoc/layout-bridge', () => ({
   getFragmentAtPosition: vi.fn(() => null),
+}));
+
+vi.mock('@helpers/ensure-editable-slot-inline-boundary.js', () => ({
+  applyEditableSlotAtInlineBoundary: mockApplyEditableSlotAtInlineBoundary,
 }));
 
 vi.mock('prosemirror-state', async (importOriginal) => {
@@ -51,7 +58,7 @@ function getPointerEventImpl(): typeof PointerEvent | typeof MouseEvent {
   );
 }
 
-function createMockDoc(mode: 'tableInSdt' | 'plainSdt') {
+function createMockDoc(mode: 'tableInSdt' | 'plainSdt' | 'inlineSdtAfterBoundary') {
   return {
     content: { size: 200 },
     nodeAt: vi.fn(() => ({ nodeSize: 20 })),
@@ -67,6 +74,19 @@ function createMockDoc(mode: 'tableInSdt' | 'plainSdt') {
           before: (depth: number) => (depth === 1 ? 10 : 11),
           start: (depth: number) => (depth === 1 ? 11 : 12),
           end: (depth: number) => (depth === 1 ? 30 : 29),
+        };
+      }
+      if (mode === 'inlineSdtAfterBoundary') {
+        return {
+          depth: 2,
+          node: (depth: number) => {
+            if (depth === 2) return { type: { name: 'structuredContent' }, nodeSize: 3 };
+            if (depth === 1) return { type: { name: 'paragraph' } };
+            return { type: { name: 'doc' } };
+          },
+          before: (depth: number) => (depth === 2 ? 10 : 0),
+          start: (depth: number) => (depth === 2 ? 11 : 1),
+          end: (depth: number) => (depth === 2 ? 12 : 199),
         };
       }
       return {
@@ -126,12 +146,20 @@ describe('EditorInputManager structuredContentBlock table exception', () => {
   beforeEach(async () => {
     mockTextSelectionCreate.mockReset();
     mockNodeSelectionCreate.mockReset();
+    mockApplyEditableSlotAtInlineBoundary.mockReset();
     mockTextSelectionCreate.mockReturnValue({
       empty: true,
       $from: { parent: { inlineContent: true } },
     });
     mockNodeSelectionCreate.mockReturnValue({
       empty: false,
+    });
+    mockApplyEditableSlotAtInlineBoundary.mockImplementation((tr) => {
+      tr.selection = {
+        empty: true,
+        $from: { parent: { inlineContent: true } },
+      };
+      return tr;
     });
 
     viewportHost = document.createElement('div');
@@ -251,5 +279,28 @@ describe('EditorInputManager structuredContentBlock table exception', () => {
 
     expect(resolvePointerPositionHit as unknown as Mock).toHaveBeenCalled();
     expect(mockNodeSelectionCreate).toHaveBeenCalled();
+  });
+
+  it('applies inline structured content boundary handling when the click lands at the trailing edge', () => {
+    mountWithDoc('inlineSdtAfterBoundary');
+    const target = document.createElement('span');
+    viewportHost.appendChild(target);
+
+    const PointerEventImpl = getPointerEventImpl();
+    target.dispatchEvent(
+      new PointerEventImpl('pointerdown', {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        buttons: 1,
+        clientX: 28,
+        clientY: 28,
+      } as PointerEventInit),
+    );
+
+    expect(resolvePointerPositionHit as unknown as Mock).toHaveBeenCalled();
+    expect(mockTextSelectionCreate).toHaveBeenCalledWith(mockEditor.state.doc, 13);
+    expect(mockApplyEditableSlotAtInlineBoundary).toHaveBeenCalledWith(mockEditor.state.tr, 13, 'after');
+    expect(mockNodeSelectionCreate).not.toHaveBeenCalled();
   });
 });

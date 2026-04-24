@@ -107,6 +107,12 @@ import { getSchemaIntrospection } from './helpers/schema-introspection.js';
  * @typedef {import('@superdoc/super-editor').SelectionHandle} SelectionHandle
  * @typedef {import('@superdoc/super-editor').SelectionCommandContext} SelectionCommandContext
  * @typedef {import('@superdoc/super-editor').ResolveRangeOutput} ResolveRangeOutput
+ * @typedef {import('@superdoc/super-editor').ScrollIntoViewInput} ScrollIntoViewInput
+ * @typedef {import('@superdoc/super-editor').ScrollIntoViewOutput} ScrollIntoViewOutput
+ * @typedef {import('@superdoc/super-editor').TextAddress} TextAddress
+ * @typedef {import('@superdoc/super-editor').TextTarget} TextTarget
+ * @typedef {import('@superdoc/super-editor').TextSegment} TextSegment
+ * @typedef {import('@superdoc/super-editor').EntityAddress} EntityAddress
  * @typedef {import('@superdoc/super-editor').LayoutUpdatePayload} LayoutUpdatePayload
  * @typedef {import('@superdoc/super-editor').CoreCommandMap} CoreCommandMap
  * @deprecated Editor commands will be removed in a future version. Use the Document API instead.

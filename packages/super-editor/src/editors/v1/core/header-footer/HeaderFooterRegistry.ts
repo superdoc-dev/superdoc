@@ -1,11 +1,12 @@
 import { toFlowBlocks } from '@superdoc/pm-adapter';
 import { getAtomNodeTypes as getAtomNodeTypesFromSchema } from '../presentation-editor/utils/SchemaNodeTypes.js';
-import type { FlowBlock } from '@superdoc/contracts';
+import type { FlowBlock, TrackedChangesMode } from '@superdoc/contracts';
 import type { HeaderFooterBatch } from '@superdoc/layout-bridge';
 import type { Editor } from '@core/Editor.js';
 import { EventEmitter } from '@core/EventEmitter.js';
 import { createHeaderFooterEditor, onHeaderFooterDataUpdate } from '@extensions/pagination/pagination-helpers.js';
 import type { ConverterContext } from '@superdoc/pm-adapter/converter-context.js';
+import { buildStoryKey } from '../../document-api-adapters/story-runtime/story-key.js';
 
 const HEADER_FOOTER_VARIANTS = ['default', 'first', 'even', 'odd'] as const;
 const DEFAULT_HEADER_FOOTER_HEIGHT = 100;
@@ -78,7 +79,13 @@ export interface HeaderFooterDocument {
 
 type HeaderFooterLayoutCacheEntry = {
   docRef: unknown;
+  renderConfigKey: string;
   blocks: FlowBlock[];
+};
+
+export type HeaderFooterTrackedChangesRenderConfig = {
+  mode: TrackedChangesMode;
+  enabled: boolean;
 };
 
 type HeaderFooterEditorEntry = {
@@ -323,39 +330,7 @@ export class HeaderFooterEditorManager extends EventEmitter {
         console.error('[HeaderFooterEditorManager] Editor initialization failed:', error);
         this.emit('error', { descriptor, error });
       });
-
-      // Move editor container to the new editorHost if provided
-      // This is necessary because cached editors may have been appended elsewhere
-      if (existing.container && options?.editorHost) {
-        // Only move if not already in the target host
-        if (existing.container.parentElement !== options.editorHost) {
-          options.editorHost.appendChild(existing.container);
-        }
-      }
-
-      // Update editor options if provided
-      if (existing.editor && options) {
-        const updateOptions: Record<string, unknown> = {};
-        if (options.currentPageNumber !== undefined) {
-          updateOptions.currentPageNumber = options.currentPageNumber;
-        }
-        if (options.totalPageCount !== undefined) {
-          updateOptions.totalPageCount = options.totalPageCount;
-        }
-        if (options.availableWidth !== undefined) {
-          updateOptions.availableWidth = options.availableWidth;
-        }
-        if (options.availableHeight !== undefined) {
-          updateOptions.availableHeight = options.availableHeight;
-        }
-        if (Object.keys(updateOptions).length > 0) {
-          existing.editor.setOptions(updateOptions);
-          // Refresh page number display after option changes.
-          // NodeViews read editor.options but PM doesn't re-render them
-          // when only options change (no document transaction).
-          this.#refreshPageNumberDisplay(existing.editor);
-        }
-      }
+      this.#mountAndUpdateEntry(existing, options);
 
       return existing.editor;
     }
@@ -373,7 +348,7 @@ export class HeaderFooterEditorManager extends EventEmitter {
     // Start creation and track the promise
     const creationPromise = (async () => {
       try {
-        const entry = await this.#createEditor(descriptor, options);
+        const entry = this.#createEditorEntry(descriptor, options);
         if (!entry) return null;
 
         this.#editorEntries.set(descriptor.id, entry);
@@ -397,6 +372,44 @@ export class HeaderFooterEditorManager extends EventEmitter {
 
     this.#pendingCreations.set(descriptor.id, creationPromise);
     return creationPromise;
+  }
+
+  /**
+   * Synchronously returns the cached editor for a descriptor, creating it on demand.
+   *
+   * Presentation-mode story activation needs a stable editor instance and DOM
+   * target immediately so input can be forwarded into the hidden host without
+   * waiting for the async `create` event. The normal lifecycle hooks still run
+   * through the returned entry's `ready` promise.
+   */
+  ensureEditorSync(
+    descriptor: HeaderFooterDescriptor,
+    options?: {
+      editorHost?: HTMLElement;
+      availableWidth?: number;
+      availableHeight?: number;
+      currentPageNumber?: number;
+      totalPageCount?: number;
+    },
+  ): Editor | null {
+    if (!descriptor?.id) return null;
+
+    const existing = this.#editorEntries.get(descriptor.id);
+    if (existing) {
+      this.#cacheHits += 1;
+      this.#updateAccessOrder(descriptor.id);
+      this.#mountAndUpdateEntry(existing, options);
+      return existing.editor;
+    }
+
+    const entry = this.#createEditorEntry(descriptor, options);
+    if (!entry) return null;
+
+    this.#cacheMisses += 1;
+    this.#editorEntries.set(descriptor.id, entry);
+    this.#updateAccessOrder(descriptor.id);
+    this.#enforceCacheSizeLimit();
+    return entry.editor;
   }
 
   /**
@@ -664,7 +677,7 @@ export class HeaderFooterEditorManager extends EventEmitter {
     this.#editorEntries.clear();
   }
 
-  async #createEditor(
+  #createEditorEntry(
     descriptor: HeaderFooterDescriptor,
     options?: {
       editorHost?: HTMLElement;
@@ -673,7 +686,7 @@ export class HeaderFooterEditorManager extends EventEmitter {
       currentPageNumber?: number;
       totalPageCount?: number;
     },
-  ): Promise<HeaderFooterEditorEntry | null> {
+  ): HeaderFooterEditorEntry | null {
     const json = this.getDocumentJson(descriptor);
     if (!json) return null;
 
@@ -790,6 +803,45 @@ export class HeaderFooterEditorManager extends EventEmitter {
       disposer,
       ready,
     };
+  }
+
+  #mountAndUpdateEntry(
+    entry: HeaderFooterEditorEntry,
+    options?: {
+      editorHost?: HTMLElement;
+      availableWidth?: number;
+      availableHeight?: number;
+      currentPageNumber?: number;
+      totalPageCount?: number;
+    },
+  ): void {
+    if (entry.container && options?.editorHost && entry.container.parentElement !== options.editorHost) {
+      options.editorHost.appendChild(entry.container);
+    }
+
+    if (!options) {
+      return;
+    }
+
+    const updateOptions: Record<string, unknown> = {};
+    if (options.currentPageNumber !== undefined) {
+      updateOptions.currentPageNumber = options.currentPageNumber;
+    }
+    if (options.totalPageCount !== undefined) {
+      updateOptions.totalPageCount = options.totalPageCount;
+    }
+    if (options.availableWidth !== undefined) {
+      updateOptions.availableWidth = options.availableWidth;
+    }
+    if (options.availableHeight !== undefined) {
+      updateOptions.availableHeight = options.availableHeight;
+    }
+    if (Object.keys(updateOptions).length > 0) {
+      entry.editor.setOptions(updateOptions);
+      // NodeViews that render PAGE / NUMPAGES read editor.options, so refresh
+      // them when the presentation context changes without a document step.
+      this.#refreshPageNumberDisplay(entry.editor);
+    }
   }
 
   #createEditorContainer(): HTMLElement {
@@ -1006,6 +1058,10 @@ export class HeaderFooterLayoutAdapter {
   #manager: HeaderFooterEditorManager;
   #mediaFiles?: Record<string, string>;
   #blockCache: Map<string, HeaderFooterLayoutCacheEntry> = new Map();
+  #trackedChangesRenderConfig: HeaderFooterTrackedChangesRenderConfig = {
+    mode: 'review',
+    enabled: true,
+  };
 
   /**
    * Creates a new HeaderFooterLayoutAdapter.
@@ -1016,6 +1072,23 @@ export class HeaderFooterLayoutAdapter {
   constructor(manager: HeaderFooterEditorManager, mediaFiles?: Record<string, string>) {
     this.#manager = manager;
     this.#mediaFiles = mediaFiles;
+  }
+
+  setTrackedChangesRenderConfig(config: HeaderFooterTrackedChangesRenderConfig): void {
+    const nextConfig: HeaderFooterTrackedChangesRenderConfig = {
+      mode: config.mode,
+      enabled: config.enabled,
+    };
+
+    if (
+      this.#trackedChangesRenderConfig.mode === nextConfig.mode &&
+      this.#trackedChangesRenderConfig.enabled === nextConfig.enabled
+    ) {
+      return;
+    }
+
+    this.#trackedChangesRenderConfig = nextConfig;
+    this.invalidateAll();
   }
 
   /**
@@ -1159,8 +1232,9 @@ export class HeaderFooterLayoutAdapter {
     const doc = this.#manager.getDocumentJson(descriptor);
     if (!doc) return undefined;
 
+    const renderConfigKey = this.#serializeRenderConfig();
     const cacheEntry = this.#blockCache.get(descriptor.id);
-    if (cacheEntry?.docRef === doc) {
+    if (cacheEntry?.docRef === doc && cacheEntry.renderConfigKey === renderConfigKey) {
       return cacheEntry.blocks;
     }
 
@@ -1186,12 +1260,19 @@ export class HeaderFooterLayoutAdapter {
       converterContext,
       defaultFont,
       defaultSize,
+      trackedChangesMode: this.#trackedChangesRenderConfig.mode,
+      enableTrackedChanges: this.#trackedChangesRenderConfig.enabled,
+      storyKey: buildStoryKey({ kind: 'story', storyType: 'headerFooterPart', refId: descriptor.id }),
       ...(atomNodeTypes.length > 0 ? { atomNodeTypes } : {}),
     });
     const blocks = result.blocks;
 
-    this.#blockCache.set(descriptor.id, { docRef: doc, blocks });
+    this.#blockCache.set(descriptor.id, { docRef: doc, renderConfigKey, blocks });
     return blocks;
+  }
+
+  #serializeRenderConfig(): string {
+    return `${this.#trackedChangesRenderConfig.mode}|${this.#trackedChangesRenderConfig.enabled ? '1' : '0'}`;
   }
   /**
    * Extracts converter context needed for FlowBlock conversion.

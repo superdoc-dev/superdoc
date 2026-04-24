@@ -1,4 +1,20 @@
-import type { DrawingBlock, FlowMode, Fragment, ImageBlock, Line, TableBlock, TableMeasure } from './index.js';
+import type {
+  DrawingBlock,
+  FlowMode,
+  Fragment,
+  ImageBlock,
+  ImageFragmentMetadata,
+  Line,
+  ListBlock,
+  ListMeasure,
+  PageMargins,
+  ParagraphBlock,
+  ParagraphBorders,
+  ParagraphMeasure,
+  SectionVerticalAlign,
+  TableBlock,
+  TableMeasure,
+} from './index.js';
 
 /** A fully resolved layout ready for the next-generation paint pipeline. */
 export type ResolvedLayout = {
@@ -8,8 +24,12 @@ export type ResolvedLayout = {
   flowMode: FlowMode;
   /** Gap between pages in pixels (0 when unset). */
   pageGap: number;
+  /** Pre-computed block versions for painter-side cache invalidation. */
+  blockVersions?: Record<string, string>;
   /** Resolved pages with normalized dimensions. */
   pages: ResolvedPage[];
+  /** Document epoch identifier from the source layout. Used for change tracking in the painter. */
+  layoutEpoch?: number;
 };
 
 /** A single resolved page with stable identity and normalized dimensions. */
@@ -26,6 +46,25 @@ export type ResolvedPage = {
   height: number;
   /** Resolved paint items for this page. */
   items: ResolvedPaintItem[];
+  /** Page margins from the source page. Used for ruler rendering and header/footer positioning. */
+  margins?: PageMargins;
+  /** Extra bottom space reserved for footnotes (px). Used for footer space calculation. */
+  footnoteReserved?: number;
+  /** Formatted page number text (e.g. "i", "ii" for Roman numeral sections). */
+  numberText?: string;
+  /** Vertical alignment of content within this page. */
+  vAlign?: SectionVerticalAlign;
+  /** Base section margins before header/footer inflation. Used for vAlign centering calculations. */
+  baseMargins?: { top: number; bottom: number };
+  /** 0-based index of the section this page belongs to. */
+  sectionIndex?: number;
+  /** Header/footer reference IDs for this page's section. */
+  sectionRefs?: {
+    headerRefs?: { default?: string; first?: string; even?: string; odd?: string };
+    footerRefs?: { default?: string; first?: string; even?: string; odd?: string };
+  };
+  /** Page orientation. */
+  orientation?: 'portrait' | 'landscape';
 };
 
 /** Union of all resolved paint item kinds. */
@@ -74,8 +113,30 @@ export type ResolvedFragmentItem = {
   blockId: string;
   /** Index within page.fragments — bridge to legacy content rendering. */
   fragmentIndex: number;
+  /** ProseMirror start position for click-to-position mapping. */
+  pmStart?: number;
+  /** ProseMirror end position for click-to-position mapping. */
+  pmEnd?: number;
+  /** Whether this fragment continues from a previous page. */
+  continuesFromPrev?: boolean;
+  /** Whether this fragment continues on the next page. */
+  continuesOnNext?: boolean;
+  /** List marker box width in pixels (para/list-item only). */
+  markerWidth?: number;
   /** Pre-resolved paragraph content for non-table paragraph fragments. */
   content?: ResolvedParagraphContent;
+  /** Pre-computed SDT container key for boundary grouping (`structuredContent:<id>` or `documentSection:<id>`). */
+  sdtContainerKey?: string | null;
+  /** Pre-computed hash of paragraph borders for between-border grouping. */
+  paragraphBorderHash?: string;
+  /** Pre-extracted paragraph borders for between-border rendering. */
+  paragraphBorders?: ParagraphBorders;
+  /** Pre-computed change-detection signature (blockVersion + fragment-specific data). */
+  version?: string;
+  /** Pre-extracted block for paragraph (ParagraphBlock) or list-item (ListBlock) fragments. */
+  block?: ParagraphBlock | ListBlock;
+  /** Pre-extracted measure for paragraph (ParagraphMeasure) or list-item (ListMeasure) fragments. */
+  measure?: ParagraphMeasure | ListMeasure;
 };
 
 /** Resolved paragraph content for non-table paragraph/list-item fragments. */
@@ -174,6 +235,14 @@ export type ResolvedTableItem = {
   blockId: string;
   /** Index within page.fragments — bridge to legacy rendering. */
   fragmentIndex: number;
+  /** ProseMirror start position for click-to-position mapping. */
+  pmStart?: number;
+  /** ProseMirror end position for click-to-position mapping. */
+  pmEnd?: number;
+  /** Whether this table fragment continues from a previous page. */
+  continuesFromPrev?: boolean;
+  /** Whether this table fragment continues on the next page. */
+  continuesOnNext?: boolean;
   /** Pre-extracted TableBlock (replaces blockLookup.get()). */
   block: TableBlock;
   /** Pre-extracted TableMeasure (replaces blockLookup.get()). */
@@ -182,6 +251,10 @@ export type ResolvedTableItem = {
   cellSpacingPx: number;
   /** Pre-computed effective column widths: fragment.columnWidths ?? measure.columnWidths. */
   effectiveColumnWidths: number[];
+  /** Pre-computed SDT container key for boundary grouping (`structuredContent:<id>` or `documentSection:<id>`). */
+  sdtContainerKey?: string | null;
+  /** Pre-computed change-detection signature (blockVersion + fragment-specific data). */
+  version?: string;
 };
 
 /**
@@ -210,8 +283,18 @@ export type ResolvedImageItem = {
   blockId: string;
   /** Index within page.fragments — bridge to legacy rendering. */
   fragmentIndex: number;
+  /** ProseMirror start position for click-to-position mapping. */
+  pmStart?: number;
+  /** ProseMirror end position for click-to-position mapping. */
+  pmEnd?: number;
   /** Pre-extracted ImageBlock (replaces blockLookup.get()). */
   block: ImageBlock;
+  /** Image metadata for interactive resizing (original dimensions, aspect ratio). */
+  metadata?: ImageFragmentMetadata;
+  /** Pre-computed SDT container key for boundary grouping (typically null for images). */
+  sdtContainerKey?: string | null;
+  /** Pre-computed change-detection signature (blockVersion + fragment-specific data). */
+  version?: string;
 };
 
 /**
@@ -240,8 +323,16 @@ export type ResolvedDrawingItem = {
   blockId: string;
   /** Index within page.fragments — bridge to legacy rendering. */
   fragmentIndex: number;
+  /** ProseMirror start position for click-to-position mapping. */
+  pmStart?: number;
+  /** ProseMirror end position for click-to-position mapping. */
+  pmEnd?: number;
   /** Pre-extracted DrawingBlock (replaces blockLookup.get()). */
   block: DrawingBlock;
+  /** Pre-computed SDT container key for boundary grouping (typically null for drawings). */
+  sdtContainerKey?: string | null;
+  /** Pre-computed change-detection signature (blockVersion + fragment-specific data). */
+  version?: string;
 };
 
 /** Type guard: checks whether a resolved paint item is a ResolvedTableItem. */
@@ -258,6 +349,22 @@ export function isResolvedImageItem(item: ResolvedPaintItem): item is ResolvedIm
 export function isResolvedDrawingItem(item: ResolvedPaintItem): item is ResolvedDrawingItem {
   return item.kind === 'fragment' && 'fragmentKind' in item && item.fragmentKind === 'drawing' && 'block' in item;
 }
+
+/** A resolved header/footer page — mirrors HeaderFooterPage but with resolved items. */
+export type ResolvedHeaderFooterPage = {
+  number: number;
+  numberText?: string;
+  items: ResolvedPaintItem[];
+};
+
+/** A resolved header/footer layout — mirrors HeaderFooterLayout but with resolved pages. */
+export type ResolvedHeaderFooterLayout = {
+  height: number;
+  minY?: number;
+  maxY?: number;
+  renderHeight?: number;
+  pages: ResolvedHeaderFooterPage[];
+};
 
 /** Resolved list marker rendering data with pre-computed positioning. */
 export type ResolvedListMarkerItem = {

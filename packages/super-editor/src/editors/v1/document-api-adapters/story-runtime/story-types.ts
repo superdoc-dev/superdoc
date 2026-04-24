@@ -67,4 +67,18 @@ export interface StoryRuntime {
    * @param hostEditor - The host (body) editor, needed for parts runtime access.
    */
   commit?: (hostEditor: Editor) => void;
+
+  /**
+   * Persists the provided editor state back to the canonical OOXML part.
+   *
+   * This is the session-aware variant of {@link commit}. It is used when the
+   * interactive editing session mounts a different editor instance than the
+   * runtime originally resolved (for example, a hidden-host editor created from
+   * a cached headless runtime). When omitted, callers may fall back to
+   * {@link commit}, which commits the runtime's own editor.
+   *
+   * @param hostEditor - The host (body) editor.
+   * @param storyEditor - The editor whose state should be exported.
+   */
+  commitEditor?: (hostEditor: Editor, storyEditor: Editor) => void;
 }

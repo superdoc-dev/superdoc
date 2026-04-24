@@ -145,7 +145,7 @@ describe('insertHeadingAt', () => {
 
     insertHeadingAt({ pos: 0, level: 1, text: 'Hello' })({ state, dispatch });
 
-    expect(state.schema.text).toHaveBeenCalledWith('Hello');
+    expect(state.schema.text).toHaveBeenCalledWith('Hello', undefined);
   });
 
   // --- tracked mode ---

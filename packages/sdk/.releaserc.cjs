@@ -13,9 +13,9 @@ require('../../scripts/semantic-release/patch-commit-filter.cjs')([
   'packages/superdoc',
   'packages/super-editor',
   'packages/layout-engine',
-  'packages/ai',
   'packages/word-layout',
   'packages/preset-geometry',
+  'shared',
   'pnpm-workspace.yaml',
 ]);
 

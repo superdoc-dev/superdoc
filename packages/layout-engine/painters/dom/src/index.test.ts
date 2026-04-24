@@ -1,6 +1,7 @@
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
 import { createDomPainter, sanitizeUrl, linkMetrics, applyRunDataAttributes } from './index.js';
 import { DomPainter } from './renderer.js';
+import { resolveLayout } from '@superdoc/layout-resolved';
 import type { DomPainterOptions, DomPainterInput, PaintSnapshot } from './index.js';
 import { resolveListMarkerGeometry } from '../../../../../shared/common/list-marker-utils.js';
 import type {
@@ -26,14 +27,9 @@ const emptyResolved: ResolvedLayout = { version: 1, flowMode: 'paginated', pageG
  * rewriting every call site.
  */
 function createTestPainter(opts: { blocks?: FlowBlock[]; measures?: Measure[] } & DomPainterOptions) {
-  const { blocks: initBlocks, measures: initMeasures, ...painterOpts } = opts;
+  const { blocks: initBlocks, measures: initMeasures, headerProvider, footerProvider, ...painterOpts } = opts;
   let lastPaintSnapshot: PaintSnapshot | null = null;
-  const painter = createDomPainter({
-    ...painterOpts,
-    onPaintSnapshot: (snapshot) => {
-      lastPaintSnapshot = snapshot;
-    },
-  });
+
   let currentBlocks: FlowBlock[] = initBlocks ?? [];
   let currentMeasures: Measure[] = initMeasures ?? [];
   let currentResolved: ResolvedLayout = emptyResolved;
@@ -41,18 +37,75 @@ function createTestPainter(opts: { blocks?: FlowBlock[]; measures?: Measure[] } 
   let headerMeasures: Measure[] | undefined;
   let footerBlocks: FlowBlock[] | undefined;
   let footerMeasures: Measure[] | undefined;
+  let resolvedLayoutOverridden = false;
+
+  /**
+   * Resolve decoration items from the currently-registered decoration blocks/measures
+   * (plus body blocks, which historically also carry decoration block ids in tests).
+   * This lets tests keep using providers that return `{ fragments, height }` without items:
+   * the wrapper synthesizes `items` by running the fragments through `resolveLayout`.
+   */
+  const resolveDecorationItems = (
+    fragments: readonly import('@superdoc/contracts').Fragment[],
+    kind: 'header' | 'footer',
+  ): import('@superdoc/contracts').ResolvedPaintItem[] | undefined => {
+    const decorationBlocks = kind === 'header' ? headerBlocks : footerBlocks;
+    const decorationMeasures = kind === 'header' ? headerMeasures : footerMeasures;
+    const mergedBlocks = [...(currentBlocks ?? []), ...(decorationBlocks ?? [])];
+    const mergedMeasures = [...(currentMeasures ?? []), ...(decorationMeasures ?? [])];
+    if (mergedBlocks.length !== mergedMeasures.length || mergedBlocks.length === 0) {
+      return undefined;
+    }
+    const fakeLayout: Layout = { pageSize: { w: 400, h: 500 }, pages: [{ number: 1, fragments: [...fragments] }] };
+    try {
+      const resolved = resolveLayout({
+        layout: fakeLayout,
+        flowMode: opts.flowMode ?? 'paginated',
+        blocks: mergedBlocks,
+        measures: mergedMeasures,
+      });
+      return resolved.pages[0]?.items;
+    } catch {
+      return undefined;
+    }
+  };
+
+  const wrapProvider = (
+    provider: import('./renderer.js').PageDecorationProvider | undefined,
+    kind: 'header' | 'footer',
+  ): import('./renderer.js').PageDecorationProvider | undefined => {
+    if (!provider) return undefined;
+    return (pageNumber, pageMargins, page) => {
+      const payload = provider(pageNumber, pageMargins, page);
+      if (!payload) return payload;
+      if (payload.items) return payload;
+      const items = resolveDecorationItems(payload.fragments, kind);
+      return items ? { ...payload, items } : payload;
+    };
+  };
+
+  const painter = createDomPainter({
+    ...painterOpts,
+    headerProvider: wrapProvider(headerProvider, 'header'),
+    footerProvider: wrapProvider(footerProvider, 'footer'),
+    onPaintSnapshot: (snapshot) => {
+      lastPaintSnapshot = snapshot;
+    },
+  });
 
   return {
     paint(layout: Layout, mount: HTMLElement, mapping?: unknown) {
+      const effectiveResolved = resolvedLayoutOverridden
+        ? currentResolved
+        : resolveLayout({
+            layout,
+            flowMode: opts.flowMode ?? 'paginated',
+            blocks: currentBlocks,
+            measures: currentMeasures,
+          });
       const input: DomPainterInput = {
-        resolvedLayout: currentResolved,
+        resolvedLayout: effectiveResolved,
         sourceLayout: layout,
-        blocks: currentBlocks,
-        measures: currentMeasures,
-        headerBlocks,
-        headerMeasures,
-        footerBlocks,
-        footerMeasures,
       };
       painter.paint(input, mount, mapping as any);
     },
@@ -73,6 +126,7 @@ function createTestPainter(opts: { blocks?: FlowBlock[]; measures?: Measure[] } 
     },
     setResolvedLayout(rl: ResolvedLayout | null) {
       currentResolved = rl ?? emptyResolved;
+      resolvedLayoutOverridden = true;
     },
     setProviders: painter.setProviders,
     setVirtualizationPins: painter.setVirtualizationPins,
@@ -1357,7 +1411,10 @@ describe('DomPainter', () => {
     expect(lines[1].style.wordSpacing).toBe('');
   });
 
-  it('renders an error placeholder when a legacy table fragment is missing its lookup entry', () => {
+  it('surfaces a missing-block error from resolveLayout when a table fragment references an unknown block', () => {
+    // Previous behavior: painter rendered a placeholder for missing lookup entries.
+    // New behavior: resolveLayout validates block/measure integrity upstream and throws
+    // before the painter runs. Missing-block bugs are now caught at the resolved stage.
     const missingTableLayout: Layout = {
       pageSize: { w: 300, h: 300 },
       pages: [
@@ -1379,19 +1436,8 @@ describe('DomPainter', () => {
       ],
     };
 
-    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {
-      // Intentionally empty - suppress expected error logging during this regression test.
-    });
-
     const painter = createTestPainter({ blocks: [], measures: [] });
-    expect(() => painter.paint(missingTableLayout, mount)).not.toThrow();
-
-    const placeholder = mount.querySelector('.render-error-placeholder') as HTMLElement | null;
-    expect(placeholder).toBeTruthy();
-    expect(placeholder?.textContent).toContain('[Render Error: missing-table]');
-    expect(consoleErrorSpy).toHaveBeenCalled();
-
-    consoleErrorSpy.mockRestore();
+    expect(() => painter.paint(missingTableLayout, mount)).toThrow(/Missing block\/measure/);
   });
 
   it('renders an error placeholder when table-cell line rendering throws', () => {
@@ -1680,8 +1726,9 @@ describe('DomPainter', () => {
   });
 
   it('throws if blocks and measures length mismatch', () => {
+    // Block/measure integrity is now validated at the resolve-layout stage.
     const painter = createTestPainter({ blocks: [block], measures: [] });
-    expect(() => painter.paint(layout, mount)).toThrow(/same number of blocks/);
+    expect(() => painter.paint(layout, mount)).toThrow();
   });
 
   it('renders placeholder content for empty lines', () => {
@@ -1787,6 +1834,130 @@ describe('DomPainter', () => {
     const emptySpan = mount.querySelector('.superdoc-line span.superdoc-empty-run') as HTMLElement | null;
     expect(emptySpan?.dataset.pmStart).toBe('1');
     expect(emptySpan?.dataset.pmEnd).toBe('1');
+    // Empty-run must set explicit fontSize so it doesn't inherit fontSize:0 from the line
+    expect(emptySpan?.style.fontSize).toBe('18px');
+  });
+
+  it('sets fallback fontSize on field annotation without explicit fontSize', () => {
+    const block: FlowBlock = {
+      kind: 'paragraph',
+      id: 'fa-no-fontsize',
+      runs: [
+        {
+          kind: 'fieldAnnotation',
+          variant: 'text',
+          displayLabel: 'Client Name',
+          fieldId: 'F1',
+          fieldType: 'text',
+          fieldColor: '#980043',
+          pmStart: 0,
+          pmEnd: 1,
+        },
+      ],
+    };
+    const measure: Measure = {
+      kind: 'paragraph',
+      lines: [{ fromRun: 0, fromChar: 0, toRun: 0, toChar: 0, width: 100, ascent: 12, descent: 4, lineHeight: 20 }],
+      totalHeight: 20,
+    };
+    const testLayout: Layout = {
+      pageSize: layout.pageSize,
+      pages: [
+        {
+          number: 1,
+          fragments: [{ kind: 'para', blockId: 'fa-no-fontsize', fromLine: 0, toLine: 1, x: 10, y: 10, width: 200 }],
+        },
+      ],
+    };
+    const painter = createTestPainter({ blocks: [block], measures: [measure] });
+    painter.paint(testLayout, mount);
+
+    const annotation = mount.querySelector('.annotation') as HTMLElement | null;
+    // Must always set fontSize so it doesn't inherit fontSize:0 from the line.
+    // Falls back to 16px (browser default) when run has no explicit fontSize.
+    expect(annotation?.style.fontSize).toBe('16px');
+  });
+
+  it('converts numeric fontSize to pt on field annotation', () => {
+    const block: FlowBlock = {
+      kind: 'paragraph',
+      id: 'fa-numeric-fontsize',
+      runs: [
+        {
+          kind: 'fieldAnnotation',
+          variant: 'text',
+          displayLabel: 'Client Name',
+          fieldId: 'F1',
+          fieldType: 'text',
+          fieldColor: '#980043',
+          fontSize: 14,
+          pmStart: 0,
+          pmEnd: 1,
+        },
+      ],
+    };
+    const measure: Measure = {
+      kind: 'paragraph',
+      lines: [{ fromRun: 0, fromChar: 0, toRun: 0, toChar: 0, width: 100, ascent: 12, descent: 4, lineHeight: 20 }],
+      totalHeight: 20,
+    };
+    const testLayout: Layout = {
+      pageSize: layout.pageSize,
+      pages: [
+        {
+          number: 1,
+          fragments: [
+            { kind: 'para', blockId: 'fa-numeric-fontsize', fromLine: 0, toLine: 1, x: 10, y: 10, width: 200 },
+          ],
+        },
+      ],
+    };
+    const painter = createTestPainter({ blocks: [block], measures: [measure] });
+    painter.paint(testLayout, mount);
+
+    const annotation = mount.querySelector('.annotation') as HTMLElement | null;
+    // Numeric fontSize is converted to pt units.
+    expect(annotation?.style.fontSize).toBe('14pt');
+  });
+
+  it('sets explicit fontSize on math run wrapper', () => {
+    const block: FlowBlock = {
+      kind: 'paragraph',
+      id: 'math-block',
+      runs: [
+        {
+          kind: 'math',
+          ommlJson: {},
+          textContent: 'x+1',
+          width: 40,
+          height: 14,
+          pmStart: 0,
+          pmEnd: 1,
+        },
+      ],
+    };
+    const measure: Measure = {
+      kind: 'paragraph',
+      lines: [{ fromRun: 0, fromChar: 0, toRun: 0, toChar: 0, width: 40, ascent: 10, descent: 4, lineHeight: 18 }],
+      totalHeight: 18,
+    };
+    const testLayout: Layout = {
+      pageSize: layout.pageSize,
+      pages: [
+        {
+          number: 1,
+          fragments: [{ kind: 'para', blockId: 'math-block', fromLine: 0, toLine: 1, x: 10, y: 10, width: 200 }],
+        },
+      ],
+    };
+    const painter = createTestPainter({ blocks: [block], measures: [measure] });
+    painter.paint(testLayout, mount);
+
+    const mathWrapper = mount.querySelector('.sd-math') as HTMLElement | null;
+    // Must set fontSize so fallback text doesn't inherit fontSize:0 from the line.
+    // Uses browser default (16px) rather than run.height, which would render tall
+    // expressions at 80–100px for the plain-text fallback path.
+    expect(mathWrapper?.style.fontSize).toBe('16px');
   });
 
   it('renders image fragments', () => {
@@ -2905,7 +3076,7 @@ describe('DomPainter', () => {
     expect(appliedWordSpacing).toBeCloseTo(expectedWordSpacing, 5);
   });
 
-  it('reuses fragment DOM nodes when layout geometry changes', () => {
+  it('rebuilds fragment DOM nodes when layout geometry changes to keep line epochs in sync', () => {
     const painter = createTestPainter({ blocks: [block], measures: [measure] });
     painter.paint(layout, mount);
 
@@ -2927,9 +3098,12 @@ describe('DomPainter', () => {
 
     painter.paint(movedLayout, mount);
     const fragmentAfter = mount.querySelector('.superdoc-fragment') as HTMLElement;
+    const lineAfter = fragmentAfter.querySelector('.superdoc-line') as HTMLElement;
 
-    expect(fragmentAfter).toBe(fragmentBefore);
+    expect(fragmentAfter).not.toBe(fragmentBefore);
     expect(fragmentAfter.style.left).toBe('60px');
+    expect(fragmentAfter.dataset.layoutEpoch).toBeTruthy();
+    expect(lineAfter.dataset.layoutEpoch).toBe(fragmentAfter.dataset.layoutEpoch);
   });
 
   it('rebuilds fragment DOM when block content changes via setData', () => {
@@ -4843,6 +5017,8 @@ describe('DomPainter', () => {
               fragmentKind: 'list-item',
               blockId: 'list-1',
               fragmentIndex: 0,
+              block: listBlock as import('@superdoc/contracts').ListBlock,
+              measure: listMeasure as import('@superdoc/contracts').ListMeasure,
             },
           ],
         },
@@ -4872,6 +5048,8 @@ describe('DomPainter', () => {
               fragmentKind: 'list-item',
               blockId: 'list-1',
               fragmentIndex: 0,
+              block: listBlock as import('@superdoc/contracts').ListBlock,
+              measure: listMeasure as import('@superdoc/contracts').ListMeasure,
             },
           ],
         },
@@ -4892,10 +5070,13 @@ describe('DomPainter', () => {
     painter.paint(updatedLayout, mount);
 
     const updatedWrapper = mount.querySelector('.superdoc-fragment-list-item') as HTMLElement;
-    expect(updatedWrapper).toBe(initialWrapper);
+    const updatedLine = updatedWrapper.querySelector('.superdoc-line') as HTMLElement;
+    expect(updatedWrapper).not.toBe(initialWrapper);
     expect(updatedWrapper.style.left).toBe('90px');
     expect(updatedWrapper.style.top).toBe('55px');
     expect(updatedWrapper.style.width).toBe('310px');
+    expect(updatedWrapper.dataset.layoutEpoch).toBeTruthy();
+    expect(updatedLine.dataset.layoutEpoch).toBe(updatedWrapper.dataset.layoutEpoch);
   });
 
   it('applies resolved zIndex only to anchored media fragments', () => {
@@ -4986,6 +5167,7 @@ describe('DomPainter', () => {
               fragmentKind: 'drawing',
               blockId: 'drawing-anchored',
               fragmentIndex: 0,
+              block: anchoredDrawingBlock as import('@superdoc/contracts').DrawingBlock,
             },
             {
               kind: 'fragment',
@@ -4999,6 +5181,7 @@ describe('DomPainter', () => {
               fragmentKind: 'drawing',
               blockId: 'drawing-inline',
               fragmentIndex: 1,
+              block: inlineDrawingBlock as import('@superdoc/contracts').DrawingBlock,
             },
           ],
         },
@@ -5137,6 +5320,8 @@ describe('DomPainter', () => {
         fragmentKind: 'para',
         blockId: 'resolved-indent',
         fragmentIndex: 0,
+        block: paragraphBlock as import('@superdoc/contracts').ParagraphBlock,
+        measure: paragraphMeasure as import('@superdoc/contracts').ParagraphMeasure,
         content: {
           lines: [
             {
@@ -5230,6 +5415,8 @@ describe('DomPainter', () => {
         fragmentKind: 'para',
         blockId: 'resolved-marker',
         fragmentIndex: 0,
+        block: paragraphBlock as import('@superdoc/contracts').ParagraphBlock,
+        measure: paragraphMeasure as import('@superdoc/contracts').ParagraphMeasure,
         content: {
           lines: [
             {
@@ -5323,6 +5510,8 @@ describe('DomPainter', () => {
         fragmentKind: 'para',
         blockId: 'resolved-drop-cap',
         fragmentIndex: 0,
+        block: paragraphBlock as import('@superdoc/contracts').ParagraphBlock,
+        measure: paragraphMeasure as import('@superdoc/contracts').ParagraphMeasure,
         content: {
           lines: [
             {
@@ -11166,6 +11355,95 @@ describe('applyRunDataAttributes', () => {
       expect(() => {
         painter.paint(lineBreakLayout, mount);
       }).not.toThrow();
+    });
+
+    it('renders all lines when measure indices come from inline-newline expansion', () => {
+      const inlineNewlineBlock: FlowBlock = {
+        kind: 'paragraph',
+        id: 'inline-newline-slice',
+        runs: [{ text: 'first\nsecond\nthird', fontFamily: 'Arial', fontSize: 16, pmStart: 0, pmEnd: 18 }],
+      };
+
+      // Measurer expands inline '\n' into: text, break, text, break, text.
+      const inlineNewlineMeasure: ParagraphMeasure = {
+        kind: 'paragraph',
+        lines: [
+          {
+            fromRun: 0,
+            fromChar: 0,
+            toRun: 0,
+            toChar: 5,
+            width: 40,
+            ascent: 12,
+            descent: 4,
+            lineHeight: 20,
+          },
+          {
+            fromRun: 2,
+            fromChar: 0,
+            toRun: 2,
+            toChar: 6,
+            width: 50,
+            ascent: 12,
+            descent: 4,
+            lineHeight: 20,
+          },
+          {
+            fromRun: 4,
+            fromChar: 0,
+            toRun: 4,
+            toChar: 5,
+            width: 40,
+            ascent: 12,
+            descent: 4,
+            lineHeight: 20,
+          },
+        ],
+        totalHeight: 60,
+      };
+
+      const inlineNewlineLayout: Layout = {
+        pageSize: { w: 400, h: 500 },
+        pages: [
+          {
+            number: 1,
+            fragments: [
+              {
+                kind: 'para',
+                blockId: 'inline-newline-slice',
+                fromLine: 0,
+                toLine: 3,
+                x: 20,
+                y: 20,
+                width: 300,
+              },
+            ],
+          },
+        ],
+      };
+
+      const painter = createTestPainter({
+        blocks: [inlineNewlineBlock],
+        measures: [inlineNewlineMeasure],
+      });
+
+      expect(() => {
+        painter.paint(inlineNewlineLayout, mount);
+      }).not.toThrow();
+
+      const fragment = mount.querySelector<HTMLElement>('.superdoc-fragment');
+      expect(fragment).not.toBeNull();
+      expect(fragment?.textContent).toContain('first');
+      expect(fragment?.textContent).toContain('second');
+      expect(fragment?.textContent).toContain('third');
+      const lines = fragment?.querySelectorAll<HTMLElement>('.superdoc-line');
+      expect(lines?.length).toBe(3);
+      expect(lines?.[0].dataset.pmStart).toEqual('0');
+      expect(lines?.[0].dataset.pmEnd).toEqual('5');
+      expect(lines?.[1].dataset.pmStart).toEqual('6');
+      expect(lines?.[1].dataset.pmEnd).toEqual('12');
+      expect(lines?.[2].dataset.pmStart).toEqual('13');
+      expect(lines?.[2].dataset.pmEnd).toEqual('18');
     });
 
     it('preserves PM positions for lineBreak runs', () => {

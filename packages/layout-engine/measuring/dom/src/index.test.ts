@@ -1133,6 +1133,34 @@ describe('measureBlock', () => {
       expect(measure.lines[0].lineHeight).toBeCloseTo(baseLineHeight, 1);
     });
 
+    it('honours auto lineRule with a sub-baseline multiplier (no silent min-clamp) per ECMA-376 §17.18.48', async () => {
+      // SD-2735 regression: `auto` explicitly has "no predetermined minimum
+      // or maximum" per spec. A multiplier of 0.5 should tighten lines,
+      // not be silently inflated to the baseline 1.15 × fontSize as the
+      // pre-fix code did (it reused the atLeast max-clamp branch for auto).
+      const fontSize = 16;
+      const block: FlowBlock = {
+        kind: 'paragraph',
+        id: 'tight-spacing',
+        runs: [
+          {
+            text: 'Tight auto spacing',
+            fontFamily: 'Arial',
+            fontSize,
+          },
+        ],
+        attrs: {
+          spacing: { line: 0.5, lineUnit: 'multiplier', lineRule: 'auto' },
+        },
+      };
+
+      const measure = expectParagraphMeasure(await measureBlock(block, 400));
+      // 0.5 × 16 = 8 px. Previously the `auto` path max-clamped this up to
+      // 18.4, eating the author's explicit half-spacing intent.
+      expect(measure.lines[0].lineHeight).toBeCloseTo(0.5 * fontSize, 1);
+      expect(measure.lines[0].lineHeight).toBeLessThan(fontSize);
+    });
+
     it('ensures line height is never smaller than glyph bounds to prevent clipping', async () => {
       // This test verifies the clamp: Math.max(fontSize * 1.15, ascent + descent)
       // For any font, line height must be >= ascent + descent to prevent glyph overlap

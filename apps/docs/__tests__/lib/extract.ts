@@ -20,7 +20,6 @@ const SKIP_FILE_PATTERNS = [
   /document-api\//,
   /solutions\/esign\//,
   /solutions\/template-builder\//,
-  /ai\/ai-builder\//,
   /getting-started\/frameworks\//,
   /snippets\//,
 ];

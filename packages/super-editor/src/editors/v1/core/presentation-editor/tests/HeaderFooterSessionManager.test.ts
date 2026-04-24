@@ -388,7 +388,7 @@ describe('HeaderFooterSessionManager', () => {
         refId: 'rId-header-default',
       },
       expect.objectContaining({
-        commitPolicy: 'continuous',
+        commitPolicy: 'onExit',
         preferHiddenHost: true,
         hostWidthPx: 480,
         editorContext: expect.objectContaining({

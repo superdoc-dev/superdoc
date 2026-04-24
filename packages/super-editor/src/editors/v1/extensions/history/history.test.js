@@ -68,7 +68,8 @@ describe('History extension', () => {
     const result = runner(editor);
 
     expect(result).toBe(true);
-    expect(tr.setMeta).toHaveBeenCalledWith('inputType', inputType);
+    expect(historyTr.setMeta).toHaveBeenCalledWith('inputType', inputType);
+    expect(tr.setMeta).not.toHaveBeenCalledWith('inputType', inputType);
     expect(editor.setOptions).toHaveBeenCalledWith({
       preservedSelection: null,
       lastSelection: null,

@@ -27,10 +27,13 @@ function applySelectionCleanup(editor, tr) {
   return cleaned;
 }
 
-function createHistoryDispatch(editor, dispatch) {
+function createHistoryDispatch(editor, dispatch, inputType) {
   if (!dispatch) return dispatch;
   return (historyTr) => {
-    const cleaned = applySelectionCleanup(editor, historyTr);
+    let cleaned = applySelectionCleanup(editor, historyTr);
+    if (inputType) {
+      cleaned = cleaned.setMeta('inputType', inputType);
+    }
     dispatch(cleaned);
   };
 }
@@ -67,6 +70,7 @@ export function runEditorUndo(editor, options = {}) {
   const state = editor?.state;
   const tr = state?.tr;
   const allowDispatch = options.allowDispatch !== false;
+  const inputType = 'historyUndo';
   if (!state || !tr) {
     return false;
   }
@@ -81,10 +85,7 @@ export function runEditorUndo(editor, options = {}) {
     return result;
   }
 
-  if (allowDispatch) {
-    tr.setMeta('inputType', 'historyUndo');
-  }
-  const wrappedDispatch = createHistoryDispatch(editor, dispatch);
+  const wrappedDispatch = createHistoryDispatch(editor, dispatch, allowDispatch ? inputType : undefined);
   return originalUndo(state, wrappedDispatch);
 }
 
@@ -92,6 +93,7 @@ export function runEditorRedo(editor, options = {}) {
   const state = editor?.state;
   const tr = state?.tr;
   const allowDispatch = options.allowDispatch !== false;
+  const inputType = 'historyRedo';
   if (!state || !tr) {
     return false;
   }
@@ -106,10 +108,7 @@ export function runEditorRedo(editor, options = {}) {
     return result;
   }
 
-  if (allowDispatch) {
-    tr.setMeta('inputType', 'historyRedo');
-  }
-  const wrappedDispatch = createHistoryDispatch(editor, dispatch);
+  const wrappedDispatch = createHistoryDispatch(editor, dispatch, allowDispatch ? inputType : undefined);
   return originalRedo(state, wrappedDispatch);
 }
 

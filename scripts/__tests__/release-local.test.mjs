@@ -3,7 +3,15 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { inferDryRunWouldRelease } from '../release-local.mjs';
+import {
+  buildSemanticReleaseArgs,
+  buildSemanticReleaseEnv,
+  detectPreviewTargetFromBranchName,
+  getRepositoryUrlCandidates,
+  inferPreviewTargetBranch,
+  inferDryRunWouldRelease,
+  splitPreviewArgs,
+} from '../release-local.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '../../');
@@ -31,6 +39,93 @@ test('inferDryRunWouldRelease detects pending release previews', () => {
   );
 });
 
+test('release-local helper does not inject semantic-release branch overrides', () => {
+  assert.deepEqual(
+    buildSemanticReleaseArgs({
+      packageCwd: 'packages/superdoc',
+      extraArgs: ['--dry-run'],
+    }),
+    [
+      '--prefix',
+      'packages/superdoc',
+      'exec',
+      'semantic-release',
+      '--no-ci',
+      '--dry-run',
+    ],
+  );
+});
+
+test('release-local helper strips custom preview-branch flags before forwarding args', () => {
+  assert.deepEqual(
+    splitPreviewArgs(['--dry-run', '--preview-branch', 'stable', '--debug']),
+    {
+      semanticReleaseArgs: ['--dry-run', '--debug'],
+      previewBranchOverride: 'stable',
+    },
+  );
+});
+
+test('release-local helper supports equals-style preview branch overrides', () => {
+  assert.deepEqual(
+    splitPreviewArgs(['--dry-run', '--preview-branch=main']),
+    {
+      semanticReleaseArgs: ['--dry-run'],
+      previewBranchOverride: 'main',
+    },
+  );
+});
+
+test('release-local helper marks dry runs as local preview mode', () => {
+  const env = buildSemanticReleaseEnv({
+    branch: 'stable',
+    extraArgs: ['--dry-run'],
+    baseEnv: {},
+  });
+
+  assert.equal(env.GITHUB_REF_NAME, 'stable');
+  assert.equal(env.SUPERDOC_RELEASE_PREVIEW, '1');
+  assert.equal(env.LEFTHOOK, '0');
+});
+
+test('release-local helper infers preview target from merge-branch names', () => {
+  assert.equal(
+    detectPreviewTargetFromBranchName('merge/main-into-stable-2026-04-24', ['stable', 'main']),
+    'stable',
+  );
+  assert.equal(
+    detectPreviewTargetFromBranchName('hotfix/to-0.29.x-urgent', ['stable', 'main', '0.29.x']),
+    '0.29.x',
+  );
+});
+
+test('release-local helper honors explicit preview-branch overrides', () => {
+  assert.equal(
+    inferPreviewTargetBranch({
+      currentBranch: 'merge/main-into-stable-2026-04-24',
+      releaseBranches: ['stable', 'main'],
+      previewBranchOverride: 'main',
+    }),
+    'main',
+  );
+});
+
+test('release-local helper rewrites both ssh and https repository urls for previews', () => {
+  const candidates = getRepositoryUrlCandidates('packages/superdoc');
+  assert.ok(
+    candidates.includes('git+https://github.com/superdoc-dev/superdoc.git'),
+    'packages/superdoc/package.json repository url must be included',
+  );
+  assert.ok(
+    candidates.includes('https://github.com/superdoc-dev/superdoc.git'),
+    'git+https package repository urls must normalize to https for git rewrites',
+  );
+  assert.ok(
+    candidates.includes('git@github.com:superdoc-dev/superdoc.git'),
+    'origin ssh urls must also be rewritten for preview remotes',
+  );
+});
+
 test('release-local helper prunes local-only tags across all release namespaces', async () => {
   const content = await readRepoFile('scripts/release-local.mjs');
   assert.ok(
@@ -45,6 +140,34 @@ test('release-local helper prunes local-only tags across all release namespaces'
   assert.ok(
     content.includes("'v[0-9]*'"),
     'scripts/release-local.mjs: superdoc tag matching must not also match vscode release tags',
+  );
+  assert.ok(
+    content.includes('pruneLocalOnlyReleaseTags({ allowRemoteFailure: isDryRunEnabled(semanticReleaseArgs) })'),
+    'scripts/release-local.mjs: dry-run previews must treat remote tag pruning as best-effort',
+  );
+});
+
+test('root release:dry-run script uses the local preview helper', async () => {
+  const content = await readRepoFile('package.json');
+  assert.ok(
+    content.includes('"release:dry-run": "pnpm run build:superdoc && pnpm run type-check && node scripts/release-local-superdoc.mjs --dry-run"'),
+    'package.json: release:dry-run must delegate to the local preview helper',
+  );
+});
+
+test('superdoc releaserc uses preview mode to avoid AI notes and side-effect plugins', async () => {
+  const content = await readRepoFile('packages/superdoc/.releaserc.cjs');
+  assert.ok(
+    content.includes("const isLocalPreview = process.env.SUPERDOC_RELEASE_PREVIEW === '1'"),
+    'packages/superdoc/.releaserc.cjs: must detect local preview mode',
+  );
+  assert.ok(
+    content.includes("const notesPlugin = isLocalPreview || isPrerelease"),
+    'packages/superdoc/.releaserc.cjs: preview mode must fall back to conventional release notes',
+  );
+  assert.ok(
+    content.includes('if (!isLocalPreview) {'),
+    'packages/superdoc/.releaserc.cjs: preview mode must gate side-effect plugins',
   );
 });
 

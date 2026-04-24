@@ -7,11 +7,14 @@ on:
     branches:
       - main
     paths:
+      # React declares `superdoc` in dependencies (not peerDependencies), so
+      # existing consumers with lockfiles won't pick up a new core version
+      # until react republishes. Keep release broad until the peer-dep
+      # migration lands (tracked separately). See .github/package-impact-map.md.
       - 'packages/react/**'
       - 'packages/superdoc/**'
       - 'packages/layout-engine/**'
       - 'packages/super-editor/**'
-      - 'packages/ai/**'
       - 'packages/word-layout/**'
       - 'packages/preset-geometry/**'
       - 'shared/**'

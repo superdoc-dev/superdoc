@@ -19,14 +19,12 @@ export const continueNumbering = ({ editor, tr, state, dispatch }) => {
 
   ListHelpers.removeLvlOverride(editor, numId, ilvl);
 
-  // removeLvlOverride mutates numbering, which triggers handleNumberingInvalidation
-  // synchronously. That handler dispatches an empty tr, causing appendTransaction
-  // to recompute listRendering and change the doc. By the time we return, the
-  // original tr (captured by CommandService before this command ran) is stale.
-  // Marking it with preventDispatch stops CommandService from dispatching it.
-  // For callers that pass a real dispatch (tests, direct use), we dispatch a
-  // fresh tr so they still observe the update.
-  if (typeof tr?.setMeta === 'function') tr.setMeta('preventDispatch', true);
+  // removeLvlOverride synchronously triggers handleNumberingInvalidation, which
+  // dispatches a fresh tr that runs through appendTransaction and updates the doc.
+  // The `tr` captured by CommandService before this command ran is now stale, so
+  // flag it with preventDispatch. `dispatch` receives a fresh tr from the updated
+  // state so direct callers still see the update.
+  tr.setMeta('preventDispatch', true);
   if (dispatch) dispatch(editor.state.tr);
   return true;
 };

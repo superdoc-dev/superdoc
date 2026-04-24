@@ -1286,21 +1286,6 @@ export class EditorInputManager {
     // Skip ruler handle clicks
     if (target?.closest?.('.superdoc-ruler-handle') != null) return;
 
-    // Detect left-clicks on list markers — emit a custom event for highlight coordination
-    // and let position resolution continue below to move the cursor to the paragraph.
-    const markerEl = target?.closest?.('.superdoc-list-marker') as HTMLElement | null;
-    if (markerEl) {
-      const fragmentEl = markerEl.closest('[data-item-id]') as HTMLElement | null;
-      const itemId = fragmentEl?.dataset?.itemId ?? null;
-      if (itemId) {
-        const viewportHost = this.#deps?.getViewportHost();
-        viewportHost?.dispatchEvent(
-          new CustomEvent('superdoc-list-marker-click', { bubbles: true, detail: { itemId } }),
-        );
-      }
-      // Fall through to generic position resolution so the cursor moves to the paragraph.
-    }
-
     // Handle link clicks - dispatch custom event on pointerdown for immediate UI response
     // Navigation prevention happens in #handleClick (on 'click' event)
     const linkEl = target?.closest?.('a.superdoc-link') as HTMLAnchorElement | null;

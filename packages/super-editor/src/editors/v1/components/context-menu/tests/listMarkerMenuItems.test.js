@@ -50,52 +50,12 @@ function flatItems(sections) {
 
 describe('list-marker menu section', () => {
   describe('visibility when isOnListMarker is true', () => {
-    it('shows restart-numbering item', () => {
-      const context = makeListMarkerContext();
-      const sections = getItems(context);
-      const ids = flatItems(sections).map((i) => i.id);
-      expect(ids).toContain('list-restart-numbering');
-    });
-
-    it('shows continue-numbering item', () => {
-      const context = makeListMarkerContext();
-      const sections = getItems(context);
-      const ids = flatItems(sections).map((i) => i.id);
-      expect(ids).toContain('list-continue-numbering');
-    });
-
-    it('shows decrease-list-indent item', () => {
-      const context = makeListMarkerContext();
-      const sections = getItems(context);
-      const ids = flatItems(sections).map((i) => i.id);
-      expect(ids).toContain('list-decrease-indent');
-    });
-
-    it('shows increase-list-indent item', () => {
-      const context = makeListMarkerContext();
-      const sections = getItems(context);
-      const ids = flatItems(sections).map((i) => i.id);
-      expect(ids).toContain('list-increase-indent');
-    });
-
-    it('returns all four list-marker items together', () => {
-      const context = makeListMarkerContext();
-      const sections = getItems(context);
-      const ids = flatItems(sections).map((i) => i.id);
-      LIST_MARKER_ITEM_IDS.forEach((id) => {
-        expect(ids).toContain(id);
-      });
-    });
-
-    it('groups list-marker items into their own section', () => {
+    it('exposes all four items, grouped in the list-marker section', () => {
       const context = makeListMarkerContext();
       const sections = getItems(context);
       const markerSection = sections.find((s) => s.id === 'list-marker');
       expect(markerSection).toBeDefined();
-      const ids = markerSection.items.map((i) => i.id);
-      LIST_MARKER_ITEM_IDS.forEach((id) => {
-        expect(ids).toContain(id);
-      });
+      expect(markerSection.items.map((i) => i.id)).toEqual(LIST_MARKER_ITEM_IDS);
     });
   });
 
@@ -129,7 +89,14 @@ describe('list-marker menu section', () => {
   });
 
   describe('item actions', () => {
-    it('restart-numbering calls editor.commands.restartNumbering()', () => {
+    const ACTION_CASES = [
+      { itemId: 'list-restart-numbering', command: 'restartNumbering' },
+      { itemId: 'list-continue-numbering', command: 'continueNumbering' },
+      { itemId: 'list-decrease-indent', command: 'decreaseListIndent' },
+      { itemId: 'list-increase-indent', command: 'increaseListIndent' },
+    ];
+
+    it.each(ACTION_CASES)('$itemId calls editor.commands.$command()', ({ itemId, command }) => {
       const editor = createMockEditor({
         commands: {
           restartNumbering: vi.fn(() => true),
@@ -139,66 +106,11 @@ describe('list-marker menu section', () => {
         },
       });
       const context = makeListMarkerContext({ editor });
-      const sections = getItems(context);
-      const item = flatItems(sections).find((i) => i.id === 'list-restart-numbering');
+      const item = flatItems(getItems(context)).find((i) => i.id === itemId);
 
       expect(item).toBeDefined();
       item.action(editor, context);
-      expect(editor.commands.restartNumbering).toHaveBeenCalled();
-    });
-
-    it('continue-numbering calls editor.commands.continueNumbering()', () => {
-      const editor = createMockEditor({
-        commands: {
-          restartNumbering: vi.fn(() => true),
-          continueNumbering: vi.fn(() => true),
-          decreaseListIndent: vi.fn(() => true),
-          increaseListIndent: vi.fn(() => true),
-        },
-      });
-      const context = makeListMarkerContext({ editor });
-      const sections = getItems(context);
-      const item = flatItems(sections).find((i) => i.id === 'list-continue-numbering');
-
-      expect(item).toBeDefined();
-      item.action(editor, context);
-      expect(editor.commands.continueNumbering).toHaveBeenCalled();
-    });
-
-    it('decrease-list-indent calls editor.commands.decreaseListIndent()', () => {
-      const editor = createMockEditor({
-        commands: {
-          restartNumbering: vi.fn(() => true),
-          continueNumbering: vi.fn(() => true),
-          decreaseListIndent: vi.fn(() => true),
-          increaseListIndent: vi.fn(() => true),
-        },
-      });
-      const context = makeListMarkerContext({ editor });
-      const sections = getItems(context);
-      const item = flatItems(sections).find((i) => i.id === 'list-decrease-indent');
-
-      expect(item).toBeDefined();
-      item.action(editor, context);
-      expect(editor.commands.decreaseListIndent).toHaveBeenCalled();
-    });
-
-    it('increase-list-indent calls editor.commands.increaseListIndent()', () => {
-      const editor = createMockEditor({
-        commands: {
-          restartNumbering: vi.fn(() => true),
-          continueNumbering: vi.fn(() => true),
-          decreaseListIndent: vi.fn(() => true),
-          increaseListIndent: vi.fn(() => true),
-        },
-      });
-      const context = makeListMarkerContext({ editor });
-      const sections = getItems(context);
-      const item = flatItems(sections).find((i) => i.id === 'list-increase-indent');
-
-      expect(item).toBeDefined();
-      item.action(editor, context);
-      expect(editor.commands.increaseListIndent).toHaveBeenCalled();
+      expect(editor.commands[command]).toHaveBeenCalled();
     });
   });
 });

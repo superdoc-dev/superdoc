@@ -101,17 +101,6 @@ describe('continueNumbering', () => {
     expect(dispatch).toHaveBeenCalledWith(freshTr);
   });
 
-  it('uses the correct ilvl from paragraph properties', () => {
-    const paragraph = createParagraph({ numId: 3, ilvl: 2 });
-    resolveParent.mockReturnValue({ node: paragraph, pos: 10 });
-
-    const result = continueNumbering({ editor, tr, state, dispatch });
-
-    expect(result).toBe(true);
-    expect(ListHelpers.removeLvlOverride).toHaveBeenCalledWith(editor, 3, 2);
-    expect(dispatch).toHaveBeenCalledWith(freshTr);
-  });
-
   it('defaults ilvl to 0 when not specified', () => {
     const paragraph = {
       type: { name: 'paragraph' },

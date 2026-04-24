@@ -42,7 +42,7 @@ export const restartNumbering = ({ editor, tr, state, dispatch }) => {
     // the doc synchronously. Prevent CommandService from dispatching the now-
     // stale captured tr; dispatch a fresh one for non-CommandService callers.
     ListHelpers.setLvlOverride(editor, numId, ilvl, { startOverride: 1 });
-    if (typeof tr?.setMeta === 'function') tr.setMeta('preventDispatch', true);
+    tr.setMeta('preventDispatch', true);
     if (dispatch) dispatch(editor.state.tr);
     return true;
   }

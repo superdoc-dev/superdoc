@@ -144,10 +144,6 @@ export type { FallbackReason, SafetyConfig } from './safety-net';
 export { FocusWatchdog } from './focus-watchdog';
 export type { FocusWatchdogConfig } from './focus-watchdog';
 
-// Benchmarks
-export { TypingPerfBenchmark } from './benchmarks';
-export type { BenchmarkResult, BenchmarkScenario } from './benchmarks';
-
 // Paragraph Hash Utilities
 export {
   hashParagraphBorder,

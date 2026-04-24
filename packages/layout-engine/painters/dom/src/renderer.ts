@@ -112,12 +112,7 @@ import {
   resolvePainterListMarkerGeometry,
   resolvePainterListTextStartPx,
 } from './utils/marker-helpers.js';
-import {
-  applySdtContainerStyling,
-  getSdtContainerKey,
-  shouldRebuildForSdtBoundary,
-  type SdtBoundaryOptions,
-} from './utils/sdt-helpers.js';
+import { applySdtContainerStyling, shouldRebuildForSdtBoundary, type SdtBoundaryOptions } from './utils/sdt-helpers.js';
 import {
   computeBetweenBorderFlags,
   createParagraphDecorationLayers,
@@ -126,7 +121,7 @@ import {
 } from './features/paragraph-borders/index.js';
 import { applyRtlStyles, shouldUseSegmentPositioning } from './features/rtl-paragraph/index.js';
 import { convertOmmlToMathml } from './features/math/index.js';
-import { isTextRun, expandRunsForInlineNewlines } from '@superdoc/pm-adapter';
+import { expandRunsForInlineNewlines } from '@superdoc/pm-adapter';
 import { sliceRunsForLine } from '@superdoc/layout-bridge';
 
 /**
@@ -6875,11 +6870,7 @@ export class DomPainter {
       return true;
     }
 
-    return (
-      section === 'header' &&
-      fragment.kind === 'drawing' &&
-      this.isHeaderWordArtWatermark(resolvedItem?.block)
-    );
+    return section === 'header' && fragment.kind === 'drawing' && this.isHeaderWordArtWatermark(resolvedItem?.block);
   }
 
   private isHeaderWordArtWatermark(block: DrawingBlock | undefined): boolean {

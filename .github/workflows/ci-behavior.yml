@@ -17,6 +17,21 @@ on:
       - 'shared/**'
       - '.github/workflows/ci-behavior.yml'
       - '!**/*.md'
+  # Post-merge safety net: run the full 3-browser matrix on main/stable so
+  # Firefox/WebKit regressions surface quickly even though they don't gate PRs.
+  push:
+    branches: [main, stable]
+    paths:
+      - 'packages/superdoc/**'
+      - 'packages/layout-engine/**'
+      - 'packages/super-editor/**'
+      - 'packages/ai/**'
+      - 'packages/word-layout/**'
+      - 'packages/preset-geometry/**'
+      - 'tests/behavior/**'
+      - 'shared/**'
+      - '.github/workflows/ci-behavior.yml'
+      - '!**/*.md'
   merge_group:
   workflow_dispatch:
 

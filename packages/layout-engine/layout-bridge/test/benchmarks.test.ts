@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import { TypingPerfBenchmark } from '../src/benchmarks';
+import { TypingPerfBenchmark } from './benchmarks';
 
 describe('TypingPerfBenchmark', () => {
   let benchmark: TypingPerfBenchmark;

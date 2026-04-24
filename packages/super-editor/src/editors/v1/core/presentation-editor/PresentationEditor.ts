@@ -125,6 +125,7 @@ import type {
 import { extractHeaderFooterSpace as _extractHeaderFooterSpace } from '@superdoc/contracts';
 // TrackChangesBasePluginKey is used by #syncTrackedChangesPreferences and getTrackChangesPluginState.
 import { TrackChangesBasePluginKey } from '@extensions/track-changes/plugins/index.js';
+import { runEditorRedo, runEditorUndo } from '@extensions/history/history.js';
 
 // Collaboration cursor imports
 import { ySyncPluginKey } from 'y-prosemirror';
@@ -169,6 +170,45 @@ type NoteLayoutContext = {
   firstPageIndex: number;
   hostWidthPx: number;
 };
+
+const VOLATILE_HISTORY_ATTR_KEYS = new Set(['sdBlockId', 'sdBlockRev']);
+
+function stripVolatileHistoryAttrs(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item) => stripVolatileHistoryAttrs(item));
+  }
+
+  if (!value || typeof value !== 'object') {
+    return value;
+  }
+
+  const result: Record<string, unknown> = {};
+  for (const [key, entryValue] of Object.entries(value as Record<string, unknown>)) {
+    if (VOLATILE_HISTORY_ATTR_KEYS.has(key)) {
+      continue;
+    }
+    result[key] = stripVolatileHistoryAttrs(entryValue);
+  }
+  return result;
+}
+
+function docsEqualIgnoringVolatileHistoryAttrs(
+  before: ProseMirrorNode | null | undefined,
+  after: ProseMirrorNode | null | undefined,
+): boolean {
+  if (!before || !after) {
+    return false;
+  }
+
+  if (typeof before.eq === 'function' && before.eq(after)) {
+    return true;
+  }
+
+  const beforeJson = typeof before.toJSON === 'function' ? before.toJSON() : before;
+  const afterJson = typeof after.toJSON === 'function' ? after.toJSON() : after;
+
+  return JSON.stringify(stripVolatileHistoryAttrs(beforeJson)) === JSON.stringify(stripVolatileHistoryAttrs(afterJson));
+}
 
 type RenderedNoteFragmentHit = {
   fragmentElement: HTMLElement;
@@ -473,6 +513,8 @@ export class PresentationEditor extends EventEmitter {
   #storySessionSelectionHandler: ((...args: unknown[]) => void) | null = null;
   #storySessionTransactionHandler: ((...args: unknown[]) => void) | null = null;
   #storySessionEditor: Editor | null = null;
+  #persistentStorySessionEditors = new WeakSet<Editor>();
+  #lastPersistentStoryHistoryEditor: Editor | null = null;
   #activeSurfaceUiEventEditor: Editor | null = null;
   #activeSurfaceUiUpdateHandler: ((...args: unknown[]) => void) | null = null;
   #activeSurfaceUiContextMenuOpenHandler: ((...args: unknown[]) => void) | null = null;
@@ -1442,13 +1484,119 @@ export class PresentationEditor extends EventEmitter {
     };
   }
 
+  #runEditorHistoryCommand(
+    editor: Editor | null,
+    command: 'undo' | 'redo',
+  ): { didRun: boolean; didChangeDoc: boolean } {
+    if (!editor) {
+      return { didRun: false, didChangeDoc: false };
+    }
+
+    const beforeDoc = editor.state?.doc ?? null;
+
+    try {
+      const didRun = command === 'undo' ? runEditorUndo(editor) : runEditorRedo(editor);
+      const rawDidChangeDoc =
+        beforeDoc && editor.state?.doc && typeof editor.state.doc.eq === 'function'
+          ? !editor.state.doc.eq(beforeDoc)
+          : didRun;
+      const didChangeDoc =
+        editor === this.#editor &&
+        rawDidChangeDoc &&
+        docsEqualIgnoringVolatileHistoryAttrs(beforeDoc, editor.state?.doc)
+          ? false
+          : rawDidChangeDoc;
+
+      if (didRun && this.#persistentStorySessionEditors.has(editor)) {
+        this.#lastPersistentStoryHistoryEditor = editor;
+      }
+
+      return { didRun, didChangeDoc };
+    } catch {
+      return { didRun: false, didChangeDoc: false };
+    }
+  }
+
+  #runPersistentStoryHistoryCommand(command: 'undo' | 'redo'): boolean {
+    const editor = this.#lastPersistentStoryHistoryEditor;
+    if (!editor || !this.#persistentStorySessionEditors.has(editor)) {
+      return false;
+    }
+
+    const handler = command === 'undo' ? editor.commands?.undo : editor.commands?.redo;
+    if (typeof handler !== 'function') {
+      return false;
+    }
+
+    try {
+      const didRun = Boolean(handler());
+      if (didRun) {
+        this.#lastPersistentStoryHistoryEditor = editor;
+      }
+      return didRun;
+    } catch {
+      return false;
+    }
+  }
+
+  #canRunEditorHistoryCommand(editor: Editor | null, command: 'undo' | 'redo'): boolean {
+    if (!editor) {
+      return false;
+    }
+
+    try {
+      return Boolean(
+        command === 'undo'
+          ? runEditorUndo(editor, { allowDispatch: false })
+          : runEditorRedo(editor, { allowDispatch: false }),
+      );
+    } catch {
+      return false;
+    }
+  }
+
+  #canRunPersistentStoryHistoryCommand(command: 'undo' | 'redo'): boolean {
+    const editor = this.#lastPersistentStoryHistoryEditor;
+    if (!editor || !this.#persistentStorySessionEditors.has(editor)) {
+      return false;
+    }
+
+    return this.#canRunEditorHistoryCommand(editor, command);
+  }
+
+  canUndo(): boolean {
+    const editor = this.getActiveEditor();
+    if (this.#canRunEditorHistoryCommand(editor, 'undo')) {
+      return true;
+    }
+    if (editor === this.#editor) {
+      return this.#canRunPersistentStoryHistoryCommand('undo');
+    }
+    return false;
+  }
+
+  canRedo(): boolean {
+    const editor = this.getActiveEditor();
+    if (this.#canRunEditorHistoryCommand(editor, 'redo')) {
+      return true;
+    }
+    if (editor === this.#editor) {
+      return this.#canRunPersistentStoryHistoryCommand('redo');
+    }
+    return false;
+  }
+
   /**
    * Undo the last action in the active editor.
    */
   undo(): boolean {
     const editor = this.getActiveEditor();
-    if (editor?.commands?.undo) {
-      return Boolean(editor.commands.undo());
+    const { didRun, didChangeDoc } = this.#runEditorHistoryCommand(editor, 'undo');
+    if (didRun && (editor !== this.#editor || didChangeDoc)) {
+      return true;
+    }
+    if (editor === this.#editor) {
+      return this.#runPersistentStoryHistoryCommand('undo');
     }
     return false;
   }
@@ -1458,8 +1606,12 @@ export class PresentationEditor extends EventEmitter {
    */
   redo(): boolean {
     const editor = this.getActiveEditor();
-    if (editor?.commands?.redo) {
-      return Boolean(editor.commands.redo());
+    const { didRun, didChangeDoc } = this.#runEditorHistoryCommand(editor, 'redo');
+    if (didRun && (editor !== this.#editor || didChangeDoc)) {
+      return true;
+    }
+    if (editor === this.#editor) {
+      return this.#runPersistentStoryHistoryCommand('redo');
     }
     return false;
   }
@@ -2703,44 +2855,6 @@ export class PresentationEditor extends EventEmitter {
       return null;
     }
 
-    const sessionMode = this.#headerFooterSession?.session?.mode ?? 'body';
-    if (sessionMode !== 'body') {
-      const context = this.#getHeaderFooterContext();
-      if (!context) {
-        return null;
-      }
-      const headerPageHeight = context.layout.pageSize?.h ?? context.region.height ?? 1;
-      const bodyPageHeight = this.#getBodyPageHeight();
-      const pageIndex = Math.max(0, Math.floor(normalized.y / bodyPageHeight));
-      if (pageIndex !== context.region.pageIndex) {
-        return null;
-      }
-      const localX = normalized.x - context.region.localX;
-      const localY = normalized.y - context.region.pageIndex * bodyPageHeight - context.region.localY;
-      if (localX < 0 || localY < 0 || localX > context.region.width || localY > context.region.height) {
-        return null;
-      }
-      const headerPageIndex = Math.floor(localY / headerPageHeight);
-      const headerPoint = {
-        x: localX,
-        y: headerPageIndex * headerPageHeight + (localY - headerPageIndex * headerPageHeight),
-      };
-      const hit = clickToPositionGeometry(context.layout, context.blocks, context.measures, headerPoint) ?? null;
-      if (!hit) {
-        return null;
-      }
-
-      const doc = this.getActiveEditor().state?.doc;
-      if (!doc) {
-        return hit;
-      }
-
-      return {
-        ...hit,
-        pos: Math.max(0, Math.min(hit.pos, doc.content.size)),
-      };
-    }
-
     const noteContext = this.#buildActiveNoteLayoutContext();
     if (noteContext) {
       const rawHit =
@@ -2760,6 +2874,44 @@ export class PresentationEditor extends EventEmitter {
       return {
         ...rawHit,
         pos: Math.max(0, Math.min(rawHit.pos, doc.content.size)),
+      };
+    }
+
+    const sessionMode = this.#headerFooterSession?.session?.mode ?? 'body';
+    if (sessionMode !== 'body') {
+      const context = this.#getHeaderFooterContext();
+      if (!context) {
+        return null;
+      }
+      const pageGap = this.#layoutState.layout?.pageGap ?? this.#getEffectivePageGap();
+      const bodyPageHeight = this.#getBodyPageHeight();
+      const pageIndex = normalized.pageIndex ?? Math.max(0, Math.floor(normalized.y / (bodyPageHeight + pageGap)));
+      if (pageIndex !== context.region.pageIndex) {
+        return null;
+      }
+      const localX = normalized.x - context.region.localX;
+      const pageLocalY = normalized.pageLocalY ?? normalized.y - context.region.pageIndex * (bodyPageHeight + pageGap);
+      const localY = pageLocalY - context.region.localY;
+      if (localX < 0 || localY < 0 || localX > context.region.width || localY > context.region.height) {
+        return null;
+      }
+      const headerPoint = {
+        x: localX,
+        y: localY,
+      };
+      const hit = clickToPositionGeometry(context.layout, context.blocks, context.measures, headerPoint) ?? null;
+      if (!hit) {
+        return null;
+      }
+
+      const doc = this.getActiveEditor().state?.doc;
+      if (!doc) {
+        return hit;
+      }
+
+      return {
+        ...hit,
+        pos: Math.max(0, Math.min(hit.pos, doc.content.size)),
       };
     }
 
@@ -4774,6 +4926,10 @@ export class PresentationEditor extends EventEmitter {
         return;
       }
 
+      if (this.#persistentStorySessionEditors.has(session.editor)) {
+        this.#lastPersistentStoryHistoryEditor = session.editor;
+      }
+
       if (session.kind === 'note') {
         this.#invalidateTrackedChangesForStory(session.locator);
         this.#pendingDocChange = true;
@@ -4830,9 +4986,28 @@ export class PresentationEditor extends EventEmitter {
         return doc?.body ?? this.#visibleHost ?? null;
       },
       editorFactory: ({ runtime, hostElement, activationOptions }) => {
+        const editorContext = activationOptions.editorContext ?? {};
+
+        if (runtime.kind === 'headerFooter' && runtime.locator.storyType === 'headerFooterPart') {
+          const descriptor = this.#headerFooterSession?.manager?.getDescriptorById(runtime.locator.refId) ?? null;
+          const persisted = descriptor
+            ? (this.#headerFooterSession?.manager?.ensureEditorSync(descriptor, {
+                editorHost: hostElement,
+                availableWidth: editorContext.availableWidth,
+                availableHeight: editorContext.availableHeight,
+                currentPageNumber: editorContext.currentPageNumber,
+                totalPageCount: editorContext.totalPageCount,
+              }) ?? null)
+            : null;
+
+          if (persisted) {
+            this.#persistentStorySessionEditors.add(persisted);
+            return { editor: persisted };
+          }
+        }
+
         const existing = runtime.editor;
         const pmJson = existing.getJSON() as unknown as Record<string, unknown>;
-        const editorContext = activationOptions.editorContext ?? {};
         const fresh = createStoryEditor(this.#editor, pmJson, {
           documentId: runtime.storyKey,
           isHeaderOrFooter: runtime.kind === 'headerFooter',
@@ -6827,6 +7002,10 @@ export class PresentationEditor extends EventEmitter {
     target: RenderedNoteTarget,
     options: { clientX: number; clientY: number; pageIndex?: number },
   ): boolean {
+    if ((this.#headerFooterSession?.session?.mode ?? 'body') !== 'body') {
+      this.#headerFooterSession?.exitMode();
+    }
+
     const storySessionManager = this.#ensureStorySessionManager();
 
     if (target.storyType !== 'footnote' && target.storyType !== 'endnote') {

@@ -4,7 +4,7 @@ import type { LayoutOptions } from '@superdoc/layout-engine';
 import { measureBlock } from '@superdoc/measuring-dom';
 import { createDomPainter } from '@superdoc/painter-dom';
 import { layoutDocument } from '@superdoc/layout-engine';
-import { incrementalLayout, measureCache, resolveMeasurementConstraints } from '../incrementalLayout';
+import { incrementalLayout, measureCache, resolveMeasurementConstraints } from '../../src/incrementalLayout';
 
 const LETTER_LAYOUT: LayoutOptions = {
   pageSize: { w: 612, h: 792 },

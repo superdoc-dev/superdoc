@@ -400,8 +400,11 @@ export const prepareCommentsXmlFilesForExport = ({
   relationships.push(generateRelationship('comments.xml'));
   emittedTargets.add('comments.xml');
 
+  // Key off the file-set capability, not exportStrategy: the importer tags
+  // every file missing commentsExtended.xml as origin='google-docs', including
+  // legacy Word range-based files, so exportStrategy can't distinguish them.
   const forceWordThreadingProfile =
-    threadingProfile?.defaultStyle === 'range-based' && exportStrategy !== 'google-docs';
+    threadingProfile?.defaultStyle === 'range-based' && threadingProfile?.fileSet?.hasCommentsExtended === false;
   const effectiveThreadingProfile = forceWordThreadingProfile ? 'word' : threadingProfile || exportStrategy;
 
   const commentsExtendedXml = updateCommentsExtendedXml(

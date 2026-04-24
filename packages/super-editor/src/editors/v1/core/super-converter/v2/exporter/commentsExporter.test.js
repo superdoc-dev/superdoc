@@ -383,7 +383,7 @@ describe('prepareCommentsXmlFilesForExport', () => {
   });
 
   describe('threading profile overrides', () => {
-    it('forces Word-style threading when export strategy is Word but profile is range-based', () => {
+    it('forces Word-style threading when profile is range-based and the import lacks commentsExtended.xml', () => {
       const threadingProfile = {
         defaultStyle: 'range-based',
         mixed: false,
@@ -431,7 +431,12 @@ describe('prepareCommentsXmlFilesForExport', () => {
       expect(paraIds.size).toBe(unthreadedComments.length);
     });
 
-    it('still honors Google Docs export strategy when all comments originate from Google Docs', () => {
+    it('emits commentsExtended.xml for range-based files with no original extended part, even when every comment is tagged origin=google-docs', () => {
+      // Regression case: detectDocumentOrigin stamps every comment in a
+      // comments.xml-only file as origin='google-docs', including legacy Word
+      // range-based files. Without the fileSet-based guard, the exporter
+      // silently dropped commentsExtended.xml here and re-import rebuilt
+      // threads from range overlaps.
       const threadingProfile = {
         defaultStyle: 'range-based',
         mixed: false,
@@ -442,19 +447,58 @@ describe('prepareCommentsXmlFilesForExport', () => {
         },
       };
 
-      const googleComments = [makeComment({ origin: 'google-docs' })];
+      const importedAsGoogleDocs = [
+        makeComment({ commentId: 'c1', commentParaId: '126B0C7F', origin: 'google-docs' }),
+        makeComment({ commentId: 'c2', commentParaId: '126B0C80', origin: 'google-docs' }),
+      ];
+      const importedDefs = [makeCommentDef('0', '126B0C7F'), makeCommentDef('1', '126B0C80')];
 
       const result = prepareCommentsXmlFilesForExport({
         convertedXml: makeConvertedXml(),
-        defs,
-        commentsWithParaIds: googleComments,
+        defs: importedDefs,
+        commentsWithParaIds: importedAsGoogleDocs,
         exportType: 'external',
         threadingProfile,
       });
 
-      expect(result.documentXml['word/commentsExtended.xml']).toBeUndefined();
+      const extendedXml = result.documentXml['word/commentsExtended.xml'];
+      expect(extendedXml).toBeDefined();
+
+      const entries = extendedXml.elements[0].elements;
+      expect(entries).toHaveLength(2);
+      for (const entry of entries) {
+        expect(entry.attributes['w15:paraId']).toBeDefined();
+        expect(entry.attributes['w15:paraIdParent']).toBeUndefined();
+      }
+
       const rel = result.relationships.find((r) => r.attributes.Target === 'commentsExtended.xml');
-      expect(rel).toBeUndefined();
+      expect(rel).toBeDefined();
+    });
+
+    it('leaves existing commentsExtended profile untouched when the import already ships commentsExtended.xml', () => {
+      // The override keys off fileSet.hasCommentsExtended === false. When the
+      // import already carries commentsExtended.xml the importer classifies
+      // the profile as 'commentsExtended' and the existing export path owns
+      // it; the override must not re-enter.
+      const threadingProfile = {
+        defaultStyle: 'commentsExtended',
+        mixed: false,
+        fileSet: {
+          hasCommentsExtended: true,
+          hasCommentsExtensible: false,
+          hasCommentsIds: false,
+        },
+      };
+
+      const result = prepareCommentsXmlFilesForExport({
+        convertedXml: makeConvertedXml(),
+        defs,
+        commentsWithParaIds,
+        exportType: 'external',
+        threadingProfile,
+      });
+
+      expect(result.documentXml['word/commentsExtended.xml']).toBeDefined();
     });
   });
 });

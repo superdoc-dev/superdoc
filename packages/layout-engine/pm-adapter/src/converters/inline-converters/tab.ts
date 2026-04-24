@@ -15,6 +15,7 @@ import { type InlineConverterParams } from './common.js';
 export function tabNodeToRun({
   node,
   positions,
+  storyKey,
   tabOrdinal,
   paragraphAttrs,
   inheritedMarks,
@@ -42,7 +43,7 @@ export function tabNodeToRun({
   // Apply marks (e.g., underline) to the tab run
   const marks = [...(node.marks ?? []), ...(inheritedMarks ?? [])];
   if (marks.length > 0) {
-    applyMarksToRun(run, marks);
+    applyMarksToRun(run, marks, undefined, undefined, undefined, true, storyKey);
   }
 
   return run;

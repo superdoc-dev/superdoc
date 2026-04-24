@@ -9,8 +9,20 @@ const HARNESS_URL = 'http://localhost:9990';
 interface HarnessConfig {
   layout?: boolean;
   toolbar?: 'none' | 'full';
+  /**
+   * Forwards `modules.toolbar.responsiveToContainer` to SuperDoc when true.
+   * Default is false (viewport-driven). Set true to drive overflow/compaction
+   * off the toolbar container's width instead of the viewport.
+   */
+  responsiveToContainer?: boolean;
   comments?: 'off' | 'on' | 'panel' | 'readonly' | 'disabled';
   trackChanges?: boolean;
+  /**
+   * Forwards `modules.trackChanges.replacements` to SuperDoc when set.
+   * Default (unset) leaves the replacement model at its built-in `'paired'`.
+   * Use `'independent'` to exercise Word / ECMA-376-style separate revisions.
+   */
+  replacements?: 'paired' | 'independent';
   showCaret?: boolean;
   showSelection?: boolean;
   allowSelectionInViewMode?: boolean;
@@ -43,8 +55,10 @@ function buildHarnessUrl(config: HarnessConfig = {}): string {
   const params = new URLSearchParams();
   if (config.layout !== undefined) params.set('layout', config.layout ? '1' : '0');
   if (config.toolbar) params.set('toolbar', config.toolbar);
+  if (config.responsiveToContainer) params.set('responsiveToContainer', '1');
   if (config.comments) params.set('comments', config.comments);
   if (config.trackChanges) params.set('trackChanges', '1');
+  if (config.replacements) params.set('replacements', config.replacements);
   if (config.showCaret !== undefined) params.set('showCaret', config.showCaret ? '1' : '0');
   if (config.showSelection !== undefined) params.set('showSelection', config.showSelection ? '1' : '0');
   if (config.allowSelectionInViewMode) params.set('allowSelectionInViewMode', '1');
@@ -53,7 +67,7 @@ function buildHarnessUrl(config: HarnessConfig = {}): string {
   return qs ? `${HARNESS_URL}?${qs}` : HARNESS_URL;
 }
 
-async function waitForReady(page: Page, timeout = 30_000): Promise<void> {
+async function waitForReady(page: Page, timeout = 60_000): Promise<void> {
   // Vite may trigger a dep-optimization reload on WebKit after the initial load event,
   // which destroys the execution context and resets `superdocReady`. Retry across
   // navigations until the flag is set or the overall deadline is reached.

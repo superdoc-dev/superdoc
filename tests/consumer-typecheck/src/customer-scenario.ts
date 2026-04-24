@@ -120,6 +120,14 @@ import type {
   SelectionCommandContext,
   ResolveRangeOutput,
 
+  // Ranges — scrollIntoView
+  ScrollIntoViewInput,
+  ScrollIntoViewOutput,
+  TextAddress,
+  TextTarget,
+  TextSegment,
+  EntityAddress,
+
   // Proofing
   ProofingProvider,
   ProofingCapabilities,
@@ -466,6 +474,60 @@ function testSelectionAPI(pe: PresentationEditor) {
 
   pe.releaseSelectionHandle(handle);
   pe.releaseSelectionHandle(effectiveHandle);
+}
+
+// ============================================
+// SECTION 8b: Document API — ranges.scrollIntoView
+// ============================================
+
+/**
+ * Smoke test for `editor.doc.ranges.scrollIntoView`. Consumers need to
+ * construct all three target shapes (TextAddress, TextTarget, EntityAddress)
+ * and await the returned Promise. The function is type-checked only —
+ * it is not called at runtime.
+ */
+async function testRangesScrollIntoView(editor: Editor) {
+  const api = (editor as any).doc.ranges as {
+    scrollIntoView(input: ScrollIntoViewInput): Promise<ScrollIntoViewOutput>;
+  };
+
+  // TextAddress — single-block target.
+  const textAddress: TextAddress = { kind: 'text', blockId: 'p1', range: { start: 0, end: 10 } };
+  const resTextAddr: ScrollIntoViewOutput = await api.scrollIntoView({ target: textAddress });
+  const successA: boolean = resTextAddr.success;
+  void successA;
+
+  // TextTarget — multi-segment (e.g. from `selection.current().target`).
+  const seg: TextSegment = { blockId: 'p1', range: { start: 0, end: 5 } };
+  const textTarget: TextTarget = {
+    kind: 'text',
+    segments: [seg, { blockId: 'p2', range: { start: 0, end: 3 } }],
+  };
+  const resTextTarget: ScrollIntoViewOutput = await api.scrollIntoView({
+    target: textTarget,
+    block: 'start',
+    behavior: 'auto',
+  });
+  void resTextTarget;
+
+  // EntityAddress — scroll to a comment or tracked change by id.
+  const commentAddr: EntityAddress = { kind: 'entity', entityType: 'comment', entityId: 'c_1' };
+  const trackedAddr: EntityAddress = {
+    kind: 'entity',
+    entityType: 'trackedChange',
+    entityId: 'tc_1',
+  };
+  await api.scrollIntoView({ target: commentAddr, behavior: 'smooth' });
+  await api.scrollIntoView({ target: trackedAddr, block: 'center' });
+
+  // Construct a full input object and pass it through — verifies the
+  // combined type compiles for consumers who build inputs programmatically.
+  const fullInput: ScrollIntoViewInput = {
+    target: textAddress,
+    block: 'nearest',
+    behavior: 'auto',
+  };
+  await api.scrollIntoView(fullInput);
 }
 
 // ============================================

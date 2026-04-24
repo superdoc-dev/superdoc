@@ -1,7 +1,8 @@
 {
   "name": "@superdoc-dev/ai",
   "version": "0.1.6",
-  "description": "AI integration package for SuperDoc",
+  "description": "Deprecated: use SuperDoc MCP/SDK and Document API tooling. @superdoc-dev/ai is no longer maintained.",
+  "private": true,
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -16,19 +17,7 @@
     "build": "tsup",
     "dev": "tsup --watch",
     "test": "vitest run",
-    "lint": "eslint src --ext .ts",
-    "prepublishOnly": "pnpm run build",
-    "version:next": "pnpm version prerelease --preid=next --no-git-tag-version",
-    "version:beta": "pnpm version prerelease --preid=beta --no-git-tag-version",
-    "version:patch": "pnpm version patch --no-git-tag-version",
-    "version:minor": "pnpm version minor --no-git-tag-version",
-    "version:major": "pnpm version major --no-git-tag-version",
-    "publish:next": "pnpm run build && pnpm run test && pnpm publish --tag next --access public",
-    "publish:beta": "pnpm run build && pnpm run test && pnpm publish --tag beta --access public",
-    "publish:latest": "pnpm run build && pnpm run test && pnpm publish --tag latest --access public",
-    "release:next": "pnpm run version:next && pnpm run publish:next",
-    "release:beta": "pnpm run version:beta && pnpm run publish:beta",
-    "info": "pnpm view @superdoc-dev/ai dist-tags && pnpm view @superdoc-dev/ai versions"
+    "lint": "eslint src --ext .ts"
   },
   "keywords": [
     "superdoc",

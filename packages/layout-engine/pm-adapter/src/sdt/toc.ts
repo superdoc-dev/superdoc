@@ -17,6 +17,7 @@ import type {
   ConverterContext,
   ThemeColorPalette,
 } from '../types.js';
+import { emitPendingSectionBreakForParagraph } from '../sections/index.js';
 import { applySdtMetadataToParagraphBlocks, getNodeInstruction } from './metadata.js';
 
 /**
@@ -38,8 +39,10 @@ export function applyTocMetadata(
     if (block.kind === 'paragraph') {
       if (!block.attrs) block.attrs = {};
       block.attrs.isTocEntry = true;
-      // Store TOC metadata as SDT for proper typing
-      if (!block.attrs.sdt) {
+      // Only fabricate SDT metadata when the TOC came from a w:sdt/w:docPartObj
+      // wrapper (gallery is set). A direct `tableOfContents` PM node has no
+      // enclosing SDT, so inventing one here would mislead downstream consumers.
+      if (!block.attrs.sdt && metadata.gallery) {
         block.attrs.sdt = {
           type: 'docPartObject',
           gallery: metadata.gallery,
@@ -86,7 +89,9 @@ export function applyTocMetadata(
 export function processTocChildren(
   children: readonly PMNode[],
   metadata: {
-    docPartGallery: string;
+    // Optional: only set when the TOC is wrapped in a w:sdt/w:docPartObj.
+    // Direct `tableOfContents` PM nodes omit this — no SDT metadata is fabricated.
+    docPartGallery?: string;
     docPartObjectId?: string;
     tocInstruction?: string;
     sdtMetadata?: SdtMetadata;
@@ -101,6 +106,7 @@ export function processTocChildren(
     converters: NestedConverters;
     converterContext: ConverterContext;
     themeColors?: ThemeColorPalette;
+    sectionState?: NodeHandlerContext['sectionState'];
   },
   outputArrays: {
     blocks: FlowBlock[];
@@ -113,6 +119,16 @@ export function processTocChildren(
 
   children.forEach((child) => {
     if (child.type === 'paragraph') {
+      // SD-2557: emit any pending section break before this child. `findParagraphsWithSectPr`
+      // recurses into documentPartObject, so TOC child paragraph indices are part of the
+      // section-range counting — advance the counter after processing to stay in sync.
+      emitPendingSectionBreakForParagraph({
+        sectionState: context.sectionState,
+        nextBlockId: context.nextBlockId,
+        blocks,
+        recordBlockKind,
+      });
+
       // Direct paragraph child - convert and tag
       const paragraphBlocks = paragraphConverter({
         para: child,
@@ -121,6 +137,7 @@ export function processTocChildren(
         trackedChangesConfig: context.trackedChangesConfig,
         bookmarks: context.bookmarks,
         hyperlinkConfig: context.hyperlinkConfig,
+        themeColors: context.themeColors,
         converters: context.converters,
         enableComments: context.enableComments,
         converterContext: context.converterContext,
@@ -140,6 +157,8 @@ export function processTocChildren(
         blocks.push(block);
         recordBlockKind?.(block.kind);
       });
+
+      if (context.sectionState) context.sectionState.currentParagraphIndex++;
     } else if (child.type === 'tableOfContents' && Array.isArray(child.content)) {
       // Nested tableOfContents - recurse with potentially different instruction
       const childInstruction = getNodeInstruction(child);
@@ -156,8 +175,13 @@ export function processTocChildren(
 }
 
 /**
- * Handle table of contents nodes.
- * Processes child paragraphs and marks them as TOC entries.
+ * Handle direct `tableOfContents` PM nodes (not wrapped in a `documentPartObject`
+ * SDT). Delegates to `processTocChildren` — the single code path that also
+ * services `handleDocumentPartObjectNode`. This keeps the section-range
+ * counting contract intact: `findParagraphsWithSectPr` counts every
+ * `tableOfContents` child, and `processTocChildren` advances
+ * `sectionState.currentParagraphIndex` per child so deferred section breaks
+ * fire at the right paragraph boundary (SD-2557).
  *
  * @param node - Table of contents node to process
  * @param context - Shared handler context
@@ -165,45 +189,25 @@ export function processTocChildren(
 export function handleTableOfContentsNode(node: PMNode, context: NodeHandlerContext): void {
   if (!Array.isArray(node.content)) return;
 
-  const {
-    blocks,
-    recordBlockKind,
-    nextBlockId,
-    positions,
-    trackedChangesConfig,
-    bookmarks,
-    hyperlinkConfig,
-    converters,
-    converterContext,
-    themeColors,
-    enableComments,
-  } = context;
-  const tocInstruction = getNodeInstruction(node);
-  const paragraphToFlowBlocks = converters.paragraphToFlowBlocks;
-
-  node.content.forEach((child) => {
-    if (child.type === 'paragraph') {
-      const paragraphBlocks = paragraphToFlowBlocks({
-        para: child,
-        nextBlockId,
-        positions,
-        trackedChangesConfig,
-        bookmarks,
-        themeColors,
-        hyperlinkConfig,
-        converters,
-        enableComments,
-        converterContext,
-      });
-      paragraphBlocks.forEach((block) => {
-        if (block.kind === 'paragraph') {
-          if (!block.attrs) block.attrs = {};
-          block.attrs.isTocEntry = true;
-          if (tocInstruction) block.attrs.tocInstruction = tocInstruction;
-        }
-        blocks.push(block);
-        recordBlockKind?.(block.kind);
-      });
-    }
-  });
+  processTocChildren(
+    node.content,
+    {
+      // No enclosing SDT — omit gallery so applyTocMetadata does not fabricate
+      // a docPartObject sdt entry on each TOC paragraph.
+      tocInstruction: getNodeInstruction(node),
+    },
+    {
+      nextBlockId: context.nextBlockId,
+      positions: context.positions,
+      bookmarks: context.bookmarks,
+      trackedChangesConfig: context.trackedChangesConfig,
+      hyperlinkConfig: context.hyperlinkConfig,
+      enableComments: context.enableComments,
+      themeColors: context.themeColors,
+      converters: context.converters,
+      converterContext: context.converterContext,
+      sectionState: context.sectionState,
+    },
+    { blocks: context.blocks, recordBlockKind: context.recordBlockKind },
+  );
 }

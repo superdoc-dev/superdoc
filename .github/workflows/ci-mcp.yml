@@ -16,6 +16,7 @@ concurrency:
 
 jobs:
   validate:
+    name: CI MCP / validate
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

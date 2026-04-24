@@ -328,21 +328,24 @@ The toolbar dropdown lists only what you register in `fonts`. Imported documents
 <ParamField path="fonts" type="Array">
   <Expandable title="Font object properties">
     <ParamField path="label" type="string" required>
-      Display name shown in the dropdown
+      Display name shown in the dropdown, and the value applied to the selected text. Must match the first family name in `key` — otherwise the dropdown won't light up the current font when the cursor is inside a run that uses it.
     </ParamField>
     <ParamField path="key" type="string" required>
-      Font-family CSS value applied to text
+      Stable identity for the option. Also used as the row's preview `font-family` so each row renders in its own typeface. Typically a full CSS stack (e.g. `'Cambria, serif'`).
     </ParamField>
     <ParamField path="fontWeight" type="number">
       Font weight
+    </ParamField>
+    <ParamField path="props" type="object">
+      Optional. Overrides per-row rendering. Use `props.style.fontFamily` to preview the row in a different font than `key`.
     </ParamField>
   </Expandable>
 </ParamField>
 
 ```javascript
 fonts: [
-  { label: 'Arial', key: 'Arial' },
-  { label: 'Times', key: 'Times New Roman' },
+  { label: 'Arial', key: 'Arial, sans-serif' },
+  { label: 'Times New Roman', key: 'Times New Roman, serif' },
   { label: 'Brand Font', key: 'BrandFont, sans-serif', fontWeight: 400 }
 ]
 ```

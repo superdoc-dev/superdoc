@@ -6,7 +6,7 @@
  * into a contiguous `SelectionTarget` + mutation-ready `ref`.
  */
 
-import type { SelectionTarget, SelectionPoint } from '../types/address.js';
+import type { SelectionTarget, SelectionPoint, TextAddress, TextTarget, EntityAddress } from '../types/address.js';
 import type { BlockNodeType } from '../types/base.js';
 import type { StoryLocator } from '../types/story.types.js';
 
@@ -119,4 +119,45 @@ export interface ResolveRangeOutput {
  */
 export interface RangeResolverAdapter {
   resolve(input: ResolveRangeInput): ResolveRangeOutput;
+}
+
+// ---------------------------------------------------------------------------
+// scrollIntoView
+// ---------------------------------------------------------------------------
+
+/**
+ * Input for `ranges.scrollIntoView` — scrolls the editor viewport so the
+ * given text target is visible. Handles paginated, virtualized layouts by
+ * mounting the target page if it isn't yet in the DOM.
+ */
+export interface ScrollIntoViewInput {
+  /**
+   * The target to scroll to. Accepts:
+   * - {@link TextAddress} — single-block text range
+   * - {@link TextTarget} — multi-segment text target
+   * - {@link EntityAddress} — reference to a comment or tracked change by id
+   *   (e.g. `{ kind: 'entity', entityType: 'trackedChange', entityId: 'tc_123' }`)
+   */
+  target: TextAddress | TextTarget | EntityAddress;
+  /** Alignment within the viewport. Defaults to `'center'`. */
+  block?: 'start' | 'center' | 'end' | 'nearest';
+  /** Scroll behavior. Defaults to `'smooth'`. */
+  behavior?: 'auto' | 'smooth';
+}
+
+/**
+ * Result of `ranges.scrollIntoView`.
+ * `success: false` when the target couldn't be resolved or a page failed to
+ * mount within the navigation timeout.
+ */
+export interface ScrollIntoViewOutput {
+  success: boolean;
+}
+
+/**
+ * Adapter method for `ranges.scrollIntoView`. Async because virtualized
+ * pages may need to mount before the scroll completes.
+ */
+export interface RangeScrollAdapter {
+  scrollIntoView(input: ScrollIntoViewInput): Promise<ScrollIntoViewOutput>;
 }

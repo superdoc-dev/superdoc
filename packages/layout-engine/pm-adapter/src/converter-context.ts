@@ -54,6 +54,23 @@ export type ConverterContext = {
    * Used by table creation paths to determine which style to apply to new tables.
    */
   defaultTableStyleId?: string;
+  /**
+   * When true, emit visible gray `[` and `]` marker TextRuns at bookmarkStart
+   * and bookmarkEnd positions — matching Word's "Show bookmarks" feature
+   * (File > Options > Advanced). Off by default because bookmarks are a
+   * structural concept, not a visual one. SD-2454.
+   */
+  showBookmarks?: boolean;
+
+  /**
+   * Populated by the bookmark-start inline converter during conversion: the
+   * set of bookmark numeric ids (as strings) that actually rendered a start
+   * marker. The bookmark-end converter reads this set to suppress emitting
+   * an orphan `]` for a start it also suppressed (e.g. `_Toc…` / `_Ref…`
+   * auto-generated bookmarks filtered out by the `showBookmarks` feature).
+   * SD-2454.
+   */
+  renderedBookmarkIds?: Set<string>;
 };
 
 /**

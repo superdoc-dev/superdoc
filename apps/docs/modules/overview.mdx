@@ -29,6 +29,9 @@ const superdoc = new SuperDoc({
   <Card title="Comments" icon="message-square" href="/modules/comments">
     Threaded discussions and annotations
   </Card>
+  <Card title="Track Changes" icon="git-compare" href="/modules/track-changes">
+    Word-style revision tracking with accept/reject
+  </Card>
   <Card title="Toolbar" icon="palette" href="/modules/toolbar">
     Customizable formatting controls
   </Card>
@@ -53,9 +56,6 @@ Each module is configured via `modules.<name>` in the [SuperDoc configuration](/
 These features are configured at the top level rather than through `modules`, but are commonly used alongside modules.
 
 <CardGroup cols={3}>
-  <Card title="Track Changes" icon="git-compare" href="/extensions/track-changes">
-    Accept/reject workflow with `documentMode: 'suggesting'`
-  </Card>
   <Card title="Proofing" icon="check-check" href="/guides/general/proofing">
     Provider-based spell check on the layout-engine editor surface
   </Card>

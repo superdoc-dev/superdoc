@@ -157,6 +157,8 @@ export function resolveHeaderFooterSlotRuntime(
 
     return createOwnedHeaderFooterRuntime(locator, storyKey, isolatedEditor, {
       commit: buildSlotCommit(locator, isolatedEditor, effectiveRefId, true),
+      commitEditor: (hostEditor: Editor, sessionEditor: Editor) =>
+        buildSlotCommit(locator, sessionEditor, effectiveRefId, true)(hostEditor),
     });
   }
 
@@ -170,6 +172,8 @@ export function resolveHeaderFooterSlotRuntime(
       editor: liveEditor,
       kind: 'headerFooter',
       commit: buildSlotCommit(locator, liveEditor, effectiveRefId, false),
+      commitEditor: (hostEditor: Editor, sessionEditor: Editor) =>
+        buildSlotCommit(locator, sessionEditor, effectiveRefId, false)(hostEditor),
     };
   }
 
@@ -179,6 +183,8 @@ export function resolveHeaderFooterSlotRuntime(
 
   return createOwnedHeaderFooterRuntime(locator, storyKey, storyEditor, {
     commit: buildSlotCommit(locator, storyEditor, effectiveRefId, false),
+    commitEditor: (hostEditor: Editor, sessionEditor: Editor) =>
+      buildSlotCommit(locator, sessionEditor, effectiveRefId, false)(hostEditor),
   });
 }
 
@@ -293,6 +299,9 @@ export function resolveHeaderFooterPartRuntime(
       commit: (hostEditor: Editor) => {
         exportAndSyncCache(hostEditor, liveEditor, locator.refId, hfType);
       },
+      commitEditor: (hostEditor: Editor, sessionEditor: Editor) => {
+        exportAndSyncCache(hostEditor, sessionEditor, locator.refId, hfType);
+      },
     };
   }
 
@@ -301,6 +310,9 @@ export function resolveHeaderFooterPartRuntime(
   return createOwnedHeaderFooterRuntime(locator, storyKey, storyEditor, {
     commit: (hostEditor: Editor) => {
       exportAndSyncCache(hostEditor, storyEditor, locator.refId, hfType);
+    },
+    commitEditor: (hostEditor: Editor, sessionEditor: Editor) => {
+      exportAndSyncCache(hostEditor, sessionEditor, locator.refId, hfType);
     },
   });
 }
@@ -314,10 +326,8 @@ export function resolveHeaderFooterPartRuntime(
  * converter's PM JSON cache.
  *
  * The OOXML write goes through `exportSubEditorToPart` → `mutatePart`.
- * The PM cache update is needed because the part descriptor's afterCommit
- * hook skips re-import for `SOURCE_HEADER_FOOTER_LOCAL` (it assumes the
- * UI blur path already refreshed the cache). The headless document-api
- * path bypasses that handler, so we must update the cache explicitly.
+ * The PM cache update keeps the converter's header/footer collections in sync
+ * immediately for the in-memory runtime that performed the export.
  */
 function exportAndSyncCache(hostEditor: Editor, subEditor: Editor, refId: string, hfType: 'header' | 'footer'): void {
   exportSubEditorToPart(hostEditor, subEditor, refId, hfType);
@@ -364,6 +374,7 @@ function createOwnedHeaderFooterRuntime(
   editor: Editor,
   options: {
     commit: (hostEditor: Editor) => void;
+    commitEditor?: (hostEditor: Editor, storyEditor: Editor) => void;
   },
 ): StoryRuntime {
   return {
@@ -374,6 +385,7 @@ function createOwnedHeaderFooterRuntime(
     cacheable: false,
     dispose: () => editor.destroy(),
     commit: options.commit,
+    commitEditor: options.commitEditor,
   };
 }
 
@@ -408,6 +420,8 @@ function createMissingSlotWriteRuntime(
 
   return createOwnedHeaderFooterRuntime(locator, storyKey, pendingEditor, {
     commit: buildSlotCommit(locator, pendingEditor, null, true),
+    commitEditor: (hostEditor: Editor, sessionEditor: Editor) =>
+      buildSlotCommit(locator, sessionEditor, null, true)(hostEditor),
   });
 }
 

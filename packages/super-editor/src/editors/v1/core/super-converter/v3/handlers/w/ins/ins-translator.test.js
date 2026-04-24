@@ -29,7 +29,7 @@ describe('w:ins translator', () => {
   describe('encode', () => {
     const mockNode = { elements: [{ text: 'added text' }] };
 
-    function encodeWith({ converter, id = '123' } = {}) {
+    function encodeWith({ converter, id = '123', filename } = {}) {
       const mockSubNodes = [{ content: [{ type: 'text', text: 'added text' }] }];
       const mockNodeListHandler = { handler: vi.fn().mockReturnValue(mockSubNodes) };
 
@@ -45,6 +45,7 @@ describe('w:ins translator', () => {
           nodeListHandler: mockNodeListHandler,
           extraParams: { node: mockNode },
           converter,
+          filename,
           path: [],
         },
         { ...encodedAttrs },
@@ -95,6 +96,19 @@ describe('w:ins translator', () => {
       const attrs = getMarkAttrs(result);
 
       expect(attrs.id).toBe('shared-uuid-abc');
+      expect(attrs.sourceId).toBe('123');
+    });
+
+    it('prefers the per-part trackedChangeIdMapsByPart entry when filename is provided', () => {
+      const converter = {
+        trackedChangeIdMap: new Map([['123', 'body-uuid']]),
+        trackedChangeIdMapsByPart: new Map([['word/header1.xml', new Map([['123', 'header-uuid']])]]),
+      };
+
+      const { result } = encodeWith({ converter, filename: 'header1.xml' });
+      const attrs = getMarkAttrs(result);
+
+      expect(attrs.id).toBe('header-uuid');
       expect(attrs.sourceId).toBe('123');
     });
   });

@@ -10,6 +10,7 @@ import { clickToPositionDom, findPageElement, readLayoutEpochFromDom } from './D
 
 type MutableElementsFromPointDocument = Document & {
   elementsFromPoint?: (x: number, y: number) => Element[];
+  caretRangeFromPoint?: (x: number, y: number) => Range | null;
 };
 
 /**
@@ -67,6 +68,27 @@ function buildPageDom(
 
   page.appendChild(fragment);
   return page;
+}
+
+function mockRect(element: Element, rect: { left: number; top: number; width: number; height: number }): void {
+  const value = {
+    x: rect.left,
+    y: rect.top,
+    left: rect.left,
+    top: rect.top,
+    width: rect.width,
+    height: rect.height,
+    right: rect.left + rect.width,
+    bottom: rect.top + rect.height,
+    toJSON() {
+      return this;
+    },
+  };
+
+  Object.defineProperty(element, 'getBoundingClientRect', {
+    configurable: true,
+    value: () => value,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -189,6 +211,77 @@ describe('DomPointerMapping', () => {
       expect(result).toBeGreaterThanOrEqual(0);
       expect(result).toBeLessThanOrEqual(10);
     });
+
+    it('maps the right half of a tracked-change span to the next rendered span start when PM has hidden gaps', () => {
+      container.innerHTML = `
+        <div class="superdoc-page" data-page-index="0">
+          <div class="superdoc-fragment" data-block-id="block1">
+            <div class="superdoc-line" data-pm-start="2" data-pm-end="33">
+              <span data-pm-start="2" data-pm-end="16"> This is a sim</span>
+              <span data-pm-start="18" data-pm-end="19" class="track-insert-dec">Z</span>
+              <span data-pm-start="21" data-pm-end="33">ple footnote</span>
+            </div>
+          </div>
+        </div>
+      `;
+
+      const page = container.querySelector('.superdoc-page') as HTMLElement;
+      const fragment = container.querySelector('.superdoc-fragment') as HTMLElement;
+      const line = container.querySelector('.superdoc-line') as HTMLElement;
+      const spans = Array.from(container.querySelectorAll('span')) as HTMLElement[];
+      const insertedSpan = spans[1];
+      const insertedTextNode = insertedSpan.firstChild as Text;
+
+      mockRect(page, { left: 100, top: 10, width: 240, height: 30 });
+      mockRect(fragment, { left: 100, top: 10, width: 240, height: 30 });
+      mockRect(line, { left: 110, top: 10, width: 160, height: 20 });
+      mockRect(spans[0], { left: 110, top: 10, width: 77, height: 20 });
+      mockRect(spans[1], { left: 187, top: 10, width: 8, height: 20 });
+      mockRect(spans[2], { left: 195, top: 10, width: 70, height: 20 });
+
+      const doc = document as MutableElementsFromPointDocument;
+      const originalElementsFromPoint = doc.elementsFromPoint;
+      const originalCaretRangeFromPoint = doc.caretRangeFromPoint;
+
+      doc.elementsFromPoint = () => [
+        insertedSpan,
+        line,
+        fragment,
+        page,
+        container,
+        document.body,
+        document.documentElement,
+      ];
+      doc.caretRangeFromPoint = (x: number) => {
+        if (x < 191) {
+          return {
+            startContainer: insertedTextNode,
+            startOffset: 0,
+          } as Range;
+        }
+
+        return {
+          startContainer: insertedTextNode,
+          startOffset: 1,
+        } as Range;
+      };
+
+      try {
+        expect(clickToPositionDom(container, 194, 18)).toBe(21);
+      } finally {
+        if (originalElementsFromPoint) {
+          doc.elementsFromPoint = originalElementsFromPoint;
+        } else {
+          delete doc.elementsFromPoint;
+        }
+
+        if (originalCaretRangeFromPoint) {
+          doc.caretRangeFromPoint = originalCaretRangeFromPoint;
+        } else {
+          delete doc.caretRangeFromPoint;
+        }
+      }
+    });
   });
 
   // -----------------------------------------------------------------------
@@ -274,7 +367,54 @@ describe('DomPointerMapping', () => {
 
       expect(result).not.toBeNull();
       expect(result).toBeGreaterThanOrEqual(0);
-      expect(result).toBeLessThanOrEqual(20);
+      expect(result).toBeLessThanOrEqual(21);
+    });
+
+    it('returns the position after a terminal inline SDT when clicking to its visual right', () => {
+      container.innerHTML = `
+        <div class="superdoc-page" data-page-index="0">
+          <div class="superdoc-fragment" data-block-id="block1">
+            <div class="superdoc-line" data-pm-start="2" data-pm-end="25">
+              <span data-pm-start="2" data-pm-end="8">Date: </span>
+              <span class="superdoc-structured-content-inline" data-pm-start="11" data-pm-end="25">
+                <span class="superdoc-structured-content-inline__label">Agreement Date</span>
+                <span data-pm-start="11" data-pm-end="25">Agreement Date</span>
+              </span>
+            </div>
+          </div>
+        </div>
+      `;
+
+      const lineRect = container.querySelector('.superdoc-line')!.getBoundingClientRect();
+      const textSpan = container.querySelector(
+        '.superdoc-structured-content-inline span[data-pm-start]',
+      ) as HTMLElement;
+      const spanRect = textSpan.getBoundingClientRect();
+
+      expect(clickToPositionDom(container, spanRect.right + 10, lineRect.top + 5)).toBe(26);
+    });
+
+    it('returns the position before a leading inline SDT when clicking to its visual left', () => {
+      container.innerHTML = `
+        <div class="superdoc-page" data-page-index="0">
+          <div class="superdoc-fragment" data-block-id="block1">
+            <div class="superdoc-line" data-pm-start="11" data-pm-end="25">
+              <span class="superdoc-structured-content-inline" data-pm-start="11" data-pm-end="25">
+                <span class="superdoc-structured-content-inline__label">Agreement Date</span>
+                <span data-pm-start="11" data-pm-end="25">Agreement Date</span>
+              </span>
+            </div>
+          </div>
+        </div>
+      `;
+
+      const lineRect = container.querySelector('.superdoc-line')!.getBoundingClientRect();
+      const textSpan = container.querySelector(
+        '.superdoc-structured-content-inline span[data-pm-start]',
+      ) as HTMLElement;
+      const spanRect = textSpan.getBoundingClientRect();
+
+      expect(clickToPositionDom(container, spanRect.left - 10, lineRect.top + 5)).toBe(10);
     });
   });
 

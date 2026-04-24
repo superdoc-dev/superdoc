@@ -67,14 +67,23 @@ const { mockCreateHeaderFooterEditor, mockOnHeaderFooterDataUpdate, mockToFlowBl
       return editorStub;
     };
 
-    const mockCreateHeaderFooterEditor = vi.fn(() => {
-      const editor = createSectionEditor();
-      editors.push({ editor, emit: editor.emit });
-      queueMicrotask(() => {
-        editor.emit('create');
-      });
-      return editor;
-    });
+    const mockCreateHeaderFooterEditor = vi.fn(
+      (input?: { editorContainer?: HTMLElement; editorHost?: HTMLElement }) => {
+        const editor = createSectionEditor();
+        if (input?.editorContainer instanceof HTMLElement) {
+          if (input.editorHost instanceof HTMLElement) {
+            input.editorHost.appendChild(input.editorContainer);
+          } else {
+            document.body.appendChild(input.editorContainer);
+          }
+        }
+        editors.push({ editor, emit: editor.emit });
+        queueMicrotask(() => {
+          editor.emit('create');
+        });
+        return editor;
+      },
+    );
 
     return {
       mockCreateHeaderFooterEditor,
@@ -190,6 +199,39 @@ describe('HeaderFooterEditorManager', () => {
     expect(editor.converter.headerEditors).toEqual(
       expect.arrayContaining([expect.objectContaining({ id: 'rId-header-default', editor: first })]),
     );
+  });
+
+  it('ensureEditorSync creates a reusable editor instance immediately for presentation activation', () => {
+    const editor = createMockEditor();
+    const manager = new HeaderFooterEditorManager(editor);
+    const descriptor = { id: 'rId-header-default', kind: 'header' } as const;
+    const host = document.createElement('div');
+
+    const first = manager.ensureEditorSync(descriptor, { editorHost: host });
+    const second = manager.ensureEditorSync(descriptor, { editorHost: host });
+
+    expect(first).toBeDefined();
+    expect(second).toBe(first);
+    expect(mockCreateHeaderFooterEditor).toHaveBeenCalledTimes(1);
+    expect(host.children).toHaveLength(1);
+  });
+
+  it('ensureEditorSync reattaches the cached editor container to a new host', () => {
+    const editor = createMockEditor();
+    const manager = new HeaderFooterEditorManager(editor);
+    const descriptor = { id: 'rId-header-default', kind: 'header' } as const;
+    const firstHost = document.createElement('div');
+    const secondHost = document.createElement('div');
+
+    const sectionEditor = manager.ensureEditorSync(descriptor, { editorHost: firstHost });
+    expect(sectionEditor).toBeDefined();
+    expect(firstHost.children).toHaveLength(1);
+
+    const sameEditor = manager.ensureEditorSync(descriptor, { editorHost: secondHost });
+
+    expect(sameEditor).toBe(sectionEditor);
+    expect(firstHost.children).toHaveLength(0);
+    expect(secondHost.children).toHaveLength(1);
   });
 
   it('emits contentChanged and syncs converter/Yjs data when section editor updates', async () => {
@@ -519,6 +561,86 @@ describe('HeaderFooterLayoutAdapter', () => {
 
     const [, options] = mockToFlowBlocks.mock.calls[0] || [];
     expect(options?.mediaFiles).toEqual(manager.rootEditor.converter.media);
+  });
+
+  it('stamps header/footer FlowBlocks with the part story key', () => {
+    const descriptor = { id: 'rId-header-default', kind: 'header', variant: 'default' };
+    const doc = { type: 'doc', content: [{ type: 'paragraph' }] };
+
+    const manager = {
+      rootEditor: {
+        converter: {
+          convertedXml: {},
+          numbering: {},
+          linkedStyles: {},
+        },
+      },
+      getDescriptors: (kind: string) => (kind === 'header' ? [descriptor] : []),
+      getDocumentJson: vi.fn(() => doc),
+    } as unknown as HeaderFooterEditorManager;
+
+    const adapter = new HeaderFooterLayoutAdapter(manager);
+
+    mockToFlowBlocks.mockClear();
+    adapter.getBatch('header');
+
+    const [, options] = mockToFlowBlocks.mock.calls[0] || [];
+    expect(options?.storyKey).toBe('hf:part:rId-header-default');
+  });
+
+  it('passes tracked change render config through to header/footer flow blocks', () => {
+    const descriptor = { id: 'rId-header-default', kind: 'header', variant: 'default' };
+    const doc = { type: 'doc', content: [{ type: 'paragraph' }] };
+
+    const manager = {
+      rootEditor: {
+        converter: {
+          convertedXml: {},
+          numbering: {},
+          linkedStyles: {},
+        },
+      },
+      getDescriptors: (kind: string) => (kind === 'header' ? [descriptor] : []),
+      getDocumentJson: vi.fn(() => doc),
+    } as unknown as HeaderFooterEditorManager;
+
+    const adapter = new HeaderFooterLayoutAdapter(manager);
+    adapter.setTrackedChangesRenderConfig({ mode: 'final', enabled: false });
+
+    mockToFlowBlocks.mockClear();
+    adapter.getBatch('header');
+
+    const [, options] = mockToFlowBlocks.mock.calls[0] || [];
+    expect(options?.trackedChangesMode).toBe('final');
+    expect(options?.enableTrackedChanges).toBe(false);
+  });
+
+  it('invalidates cached header/footer flow blocks when tracked change render config changes', () => {
+    const descriptor = { id: 'rId-header-default', kind: 'header', variant: 'default' };
+    const doc = { type: 'doc', content: [{ type: 'paragraph' }] };
+
+    const manager = {
+      rootEditor: {
+        converter: {
+          convertedXml: {},
+          numbering: {},
+          linkedStyles: {},
+        },
+      },
+      getDescriptors: (kind: string) => (kind === 'header' ? [descriptor] : []),
+      getDocumentJson: vi.fn(() => doc),
+    } as unknown as HeaderFooterEditorManager;
+
+    const adapter = new HeaderFooterLayoutAdapter(manager);
+
+    mockToFlowBlocks.mockClear();
+    adapter.getBatch('header');
+    adapter.getBatch('header');
+    expect(mockToFlowBlocks).toHaveBeenCalledTimes(1);
+
+    adapter.setTrackedChangesRenderConfig({ mode: 'final', enabled: true });
+    adapter.getBatch('header');
+    expect(mockToFlowBlocks).toHaveBeenCalledTimes(2);
   });
 
   it('returns undefined when no descriptors have FlowBlocks', () => {

@@ -1987,25 +1987,23 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
 
       if (isEmpty) {
         const isSectPrMarker = paraBlock.attrs?.sectPrMarker === true;
-        // Check if previous block was pageBreak and next block is sectionBreak
         const prevBlock = index > 0 ? blocks[index - 1] : null;
         const nextBlock = index < blocks.length - 1 ? blocks[index + 1] : null;
+        const nextIsSectionBreak = nextBlock?.kind === 'sectionBreak';
 
-        const nextSectionBreak = nextBlock?.kind === 'sectionBreak' ? (nextBlock as SectionBreakBlock) : null;
-        const nextBreakType =
-          nextSectionBreak?.type ?? (nextSectionBreak?.attrs?.source === 'sectPr' ? 'nextPage' : undefined);
-        const nextBreakForcesPage =
-          nextSectionBreak &&
-          (nextBreakType === 'nextPage' ||
-            nextBreakType === 'evenPage' ||
-            nextBreakType === 'oddPage' ||
-            nextSectionBreak.attrs?.requirePageBoundary === true);
-
-        if (isSectPrMarker && nextBreakForcesPage) {
+        // A section-break marker paragraph (`<w:pPr><w:sectPr/></w:pPr>` with
+        // no runs) carries only section metadata in Word — it's not a visible
+        // paragraph. Skip it regardless of break type (nextPage/continuous/
+        // evenPage/oddPage) so intro spacing matches Word for all section
+        // transitions. Per ECMA-376 §17.6.17 the sectPr defines where the
+        // section ends, not a rendered paragraph.
+        if (isSectPrMarker && nextIsSectionBreak) {
           continue;
         }
 
-        if (prevBlock?.kind === 'pageBreak' && nextBlock?.kind === 'sectionBreak') {
+        // Pre-sectPrMarker path: empty paragraph sandwiched between an
+        // explicit page break and a section break — same "pure marker" shape.
+        if (prevBlock?.kind === 'pageBreak' && nextIsSectionBreak) {
           continue;
         }
       }

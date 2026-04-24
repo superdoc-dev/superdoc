@@ -2420,6 +2420,48 @@ describe('layoutDocument', () => {
       expect(layout.pages[1].fragments[0].blockId).toBe('p2');
     });
 
+    it('skips empty sectPr marker paragraph before continuous section break (SD-2735)', () => {
+      // IT-945 shape: "This is my first section" + empty sectPr-marker +
+      // continuous break into 2-col section. The marker is logically a
+      // section-properties container, not a visible paragraph. Rendering it
+      // at docDefaults height would cost a row per column on page 1.
+      const blocks: FlowBlock[] = [
+        { kind: 'paragraph', id: 'p1', runs: [{ text: 'First section', fontFamily: 'Arial', fontSize: 12 }] },
+        {
+          kind: 'paragraph',
+          id: 'p-marker',
+          runs: [{ text: '', fontFamily: 'Arial', fontSize: 12 }],
+          attrs: { sectPrMarker: true },
+        },
+        {
+          kind: 'sectionBreak',
+          id: 'sb1',
+          type: 'continuous',
+          margins: {},
+          pageSize: { w: 612, h: 792 },
+          columns: { count: 2, gap: 36 },
+          attrs: { source: 'sectPr' },
+        },
+        { kind: 'paragraph', id: 'p2', runs: [{ text: 'In 2-col section', fontFamily: 'Arial', fontSize: 12 }] },
+      ];
+      const measures: Measure[] = [
+        { kind: 'paragraph', lines: [makeLine(20)], totalHeight: 20 },
+        { kind: 'paragraph', lines: [makeLine(16)], totalHeight: 16 },
+        { kind: 'sectionBreak' },
+        { kind: 'paragraph', lines: [makeLine(20)], totalHeight: 20 },
+      ];
+
+      const layout = layoutDocument(blocks, measures, {
+        pageSize: { w: 612, h: 792 },
+        margins: { top: 72, right: 72, bottom: 72, left: 72 },
+      });
+
+      // Both visible paragraphs land on page 1; the marker does not appear.
+      expect(layout.pages).toHaveLength(1);
+      const fragmentIds = layout.pages[0].fragments.map((f) => f.blockId);
+      expect(fragmentIds).toEqual(['p1', 'p2']);
+    });
+
     it('skips empty sectPr marker paragraph before forced section break', () => {
       const blocks: FlowBlock[] = [
         { kind: 'paragraph', id: 'p1', runs: [{ text: 'Content', fontFamily: 'Arial', fontSize: 12 }] },

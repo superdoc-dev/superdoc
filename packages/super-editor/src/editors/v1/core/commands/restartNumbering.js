@@ -23,16 +23,16 @@ export const restartNumbering = ({ editor, tr, state }) => {
   const { numId, ilvl = 0 } = getResolvedParagraphProperties(paragraph).numberingProperties || {};
   if (numId == null) return false;
 
-  // Check if any list items with the same numId appear before the current position
+  // Check if any list items with the same numId appear before the current position.
+  // Non-paragraph nodes are skipped (not matched directly, but we still descend
+  // into block containers to find paragraphs inside tables/sections).
   let hasPrecedingItems = false;
   state.doc.nodesBetween(0, paragraphPos, (node) => {
     if (hasPrecedingItems) return false;
+    if (node.type.name !== 'paragraph') return true;
     const props = getResolvedParagraphProperties(node)?.numberingProperties;
-    if (props?.numId === numId) {
-      hasPrecedingItems = true;
-      return false;
-    }
-    return true;
+    if (props?.numId === numId) hasPrecedingItems = true;
+    return false;
   });
 
   if (!hasPrecedingItems) {

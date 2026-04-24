@@ -102,16 +102,11 @@ export const getLinkedSectionEditor = (id, options, editor) => {
   const section = sections.find((s) => s.node.attrs.id === id);
   if (!section) return null;
 
-  // Reentrance guards: transaction meta alone is unreliable because appendTransaction
-  // plugins (e.g. numbering) may produce a new effective transaction that lacks the
-  // original meta, causing the feedback-loop checks to miss and recurse infinitely.
-  let syncingToParent = false;
-  let syncingToChild = false;
-
   const child = editor.createChildEditor({
     ...options,
-    onUpdate: ({ editor: childEditor }) => {
-      if (syncingToParent || syncingToChild) return;
+    onUpdate: ({ editor: childEditor, transaction }) => {
+      const isFromLinkedParent = transaction.getMeta('fromLinkedParent');
+      if (isFromLinkedParent) return; // Prevent feedback loop
 
       // 1. Get updated content from child editor, converted to parent schema
       const childDocJson = childEditor.state.doc.toJSON();
@@ -131,25 +126,23 @@ export const getLinkedSectionEditor = (id, options, editor) => {
 
       // 4. Replace the old node with the new node in the parent editor
       const tr = editor.state.tr.replaceWith(pos, pos + node.nodeSize, newNode);
+      tr.setMeta('fromLinkedChild', true); // Prevent feedback loop
       const dispatch =
         typeof editor.view?.dispatch === 'function'
           ? editor.view.dispatch.bind(editor.view)
           : editor.dispatch.bind(editor);
-      syncingToParent = true;
-      try {
-        dispatch(tr);
-      } finally {
-        syncingToParent = false;
-      }
+      dispatch(tr);
     },
   });
 
-  editor.on('update', () => {
-    if (syncingToParent || syncingToChild) return;
+  editor.on('update', ({ transaction }) => {
+    const isFromLinkedChild = transaction.getMeta('fromLinkedChild');
+    if (isFromLinkedChild) return; // Prevent feedback loop
 
     const sectionNode = getAllSections(editor)?.find((s) => s.node.attrs.id === id);
     if (!sectionNode) return;
 
+    // Only update if content is actually different
     const sectionContent = sectionNode.node.content;
 
     const json = {
@@ -158,15 +151,11 @@ export const getLinkedSectionEditor = (id, options, editor) => {
     };
 
     const childTr = child.state.tr;
+    childTr.setMeta('fromLinkedParent', true); // Prevent feedback loop
     childTr.replaceWith(0, child.state.doc.content.size, child.schema.nodeFromJSON(json));
     const dispatch =
       typeof child.view?.dispatch === 'function' ? child.view.dispatch.bind(child.view) : child.dispatch.bind(child);
-    syncingToChild = true;
-    try {
-      dispatch(childTr);
-    } finally {
-      syncingToChild = false;
-    }
+    dispatch(childTr);
   });
 
   return child;

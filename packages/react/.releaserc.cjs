@@ -1,19 +1,18 @@
 /* eslint-env node */
 /*
- * Commit filter: react wraps superdoc, so git log must include
- * commits touching superdoc's sub-packages. This shared helper patches
- * git-log-parser to expand path coverage. It REPLACES
- * semantic-release-commit-filter — do not use both (the filter restricts
- * to CWD, which undoes the expansion).
+ * Commit filter: react declares `superdoc` in dependencies (not
+ * peerDependencies), so existing consumers with lockfiles won't pick up a
+ * new core version until react republishes. Expand commit analysis into
+ * core paths so semantic-release triggers a react release on core changes.
  *
- * Keep in sync with .github/workflows/release-react.yml paths: trigger.
+ * When react migrates `superdoc` to peerDependencies, narrow this to
+ * packages/react only. See .github/package-impact-map.md.
  */
 require('../../scripts/semantic-release/patch-commit-filter.cjs')([
   'packages/react',
   'packages/superdoc',
   'packages/super-editor',
   'packages/layout-engine',
-  'packages/ai',
   'packages/word-layout',
   'packages/preset-geometry',
   'shared',
@@ -43,8 +42,8 @@ const config = {
     [
       '@semantic-release/commit-analyzer',
       {
-        // Cap at minor — react wraps superdoc, so upstream breaking
-        // changes don't break react's own public API.
+        // Cap at minor — react declares superdoc in dependencies, so
+        // upstream breaking changes don't break react's own public API.
         // Prevents accidental major bumps from superdoc feat!/BREAKING CHANGE commits.
         releaseRules: [
           { breaking: true, release: 'minor' },

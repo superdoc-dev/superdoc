@@ -28,6 +28,7 @@ jobs:
               - 'packages/preset-geometry/**'
               - 'shared/**'
               - 'pnpm-workspace.yaml'
+              - 'pnpm-lock.yaml'
               - '.github/workflows/ci-examples.yml'
 
   build:
@@ -196,7 +197,8 @@ jobs:
   validate:
     name: CI Examples / validate
     needs: [gate, getting-started, collaboration, features, advanced-headless-toolbar, headless]
-    if: needs.gate.outputs.should_run == 'true'
+    # always() is load-bearing - see ci-superdoc.yml for the rationale.
+    if: always() && needs.gate.outputs.should_run == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Check results

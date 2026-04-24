@@ -42,6 +42,7 @@ jobs:
               - 'tests/**'
               - 'scripts/**'
               - 'pnpm-workspace.yaml'
+              - 'pnpm-lock.yaml'
               - 'package.json'
               - '.nvmrc'
               - 'tsconfig*.json'
@@ -263,7 +264,13 @@ jobs:
   validate:
     name: CI SuperDoc / validate
     needs: [gate, build, unit-tests, cli-tests, coverage]
-    if: needs.gate.outputs.should_run == 'true'
+    # always() is load-bearing: without it, GitHub implicitly requires success()
+    # on every needed job, so a failing unit-tests job would cause validate to
+    # skip instead of run - and skipped jobs count as success for required
+    # status checks, so the PR would merge despite a failure. always() forces
+    # the job to run even when a dependency failed, so the script below gets
+    # to evaluate each needs.*.result and fail explicitly.
+    if: always() && needs.gate.outputs.should_run == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Check results

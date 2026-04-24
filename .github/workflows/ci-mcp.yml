@@ -35,6 +35,7 @@ jobs:
               - 'packages/preset-geometry/**'
               - 'shared/**'
               - 'pnpm-workspace.yaml'
+              - 'pnpm-lock.yaml'
               - '.github/workflows/ci-mcp.yml'
 
   validate:

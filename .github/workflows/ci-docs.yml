@@ -25,6 +25,7 @@ jobs:
               - 'scripts/generate-all.mjs'
               - 'package.json'
               - 'pnpm-workspace.yaml'
+              - 'pnpm-lock.yaml'
               - '.github/workflows/ci-docs.yml'
 
   validate:

@@ -33,6 +33,7 @@ jobs:
               - 'tests/behavior/**'
               - 'shared/**'
               - 'pnpm-workspace.yaml'
+              - 'pnpm-lock.yaml'
               - '.github/workflows/ci-behavior.yml'
 
   test:
@@ -89,7 +90,8 @@ jobs:
   validate:
     name: Behavior Tests / validate
     needs: [gate, test]
-    if: needs.gate.outputs.should_run == 'true'
+    # always() is load-bearing - see ci-superdoc.yml for the rationale.
+    if: always() && needs.gate.outputs.should_run == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Check results

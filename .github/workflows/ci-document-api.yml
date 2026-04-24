@@ -27,6 +27,7 @@ jobs:
               - 'packages/document-api/**'
               - 'apps/docs/document-api/**'
               - 'package.json'
+              - 'pnpm-lock.yaml'
               - '.github/workflows/ci-document-api.yml'
 
   validate:

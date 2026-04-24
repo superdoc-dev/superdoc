@@ -42,6 +42,7 @@ jobs:
               - 'scripts/generate-all.mjs'
               - 'scripts/semantic-release/**'
               - 'pnpm-workspace.yaml'
+              - 'pnpm-lock.yaml'
               - 'package.json'
               - '.github/workflows/ci-sdk.yml'
 

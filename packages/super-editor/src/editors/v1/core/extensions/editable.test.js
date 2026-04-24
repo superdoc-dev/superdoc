@@ -88,7 +88,7 @@ describe('Editable extension insertText beforeinput handling', () => {
     expect(editor.state.doc.textContent).toBe('Z');
   });
 
-  it('inserts text at a collapsed selection on beforeinput insertText', () => {
+  it('does not intercept collapsed beforeinput insertText', () => {
     ({ editor } = initTestEditor({
       mode: 'text',
       content: '<p>QA</p>',
@@ -106,9 +106,10 @@ describe('Editable extension insertText beforeinput handling', () => {
       bubbles: true,
       cancelable: true,
     });
-    editor.view.dom.dispatchEvent(beforeInputEvent);
+    const prevented = !editor.view.dom.dispatchEvent(beforeInputEvent);
 
-    expect(editor.state.doc.textContent).toBe('QA!');
+    expect(prevented).toBe(false);
+    expect(editor.state.doc.textContent).toBe('QA');
   });
 });
 

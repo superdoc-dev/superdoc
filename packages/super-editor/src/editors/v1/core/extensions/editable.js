@@ -12,6 +12,10 @@ const handleInsertTextBeforeInput = (view, event) => {
   }
 
   const selection = view.state.selection;
+  if (selection.empty) {
+    return false;
+  }
+
   const tr = view.state.tr.insertText(event.data, selection.from, selection.to);
   tr.setMeta('inputType', 'insertText');
   view.dispatch(tr);
@@ -96,9 +100,10 @@ export const Editable = Extension.create({
               __endComposition(view);
             }
 
-            // Browser-native text input can widen the replace range around hidden
-            // inline content in story editors. Apply insertText against the PM
-            // selection directly before the browser mutates the DOM.
+            // When typing over an existing selection, browser-native text input
+            // can widen the replace range around hidden inline content in story
+            // editors. Apply the replacement against the PM selection directly
+            // before the browser mutates the DOM.
             if (handleInsertTextBeforeInput(view, event)) {
               return true;
             }

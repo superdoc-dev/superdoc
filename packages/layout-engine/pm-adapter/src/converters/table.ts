@@ -202,6 +202,38 @@ const normalizeRowHeight = (rowProps?: Record<string, unknown>): NormalizedRowHe
 };
 
 /**
+ * Apply Word's TableGrid pPr cascade to table-cell paragraphs (ECMA-376
+ * §17.3.1.33).
+ *
+ * The super-converter resolves paragraph attrs at DOCX-import time before the
+ * table context is known, so paragraphs inside table cells inherit spacing
+ * from docDefaults (`w:line="278"` ≈ 1.15 multiplier) instead of TableGrid's
+ * `w:line="240"` (= 1.0 multiplier). We rewrite the line multiplier here
+ * where the table context is available.
+ *
+ * Only paragraphs whose source PM node had no explicit `<w:spacing>` are
+ * adjusted — explicit spacing is the author's intent. Only the auto-multiplier
+ * form is touched; atLeast/exact are absolute values.
+ *
+ * TODO(SD-2735 cascade): move this to super-converter / style-engine so the
+ * cascade is applied once at DOCX-import time for all consumers.
+ */
+const applyTableGridSpacingCascade = (paragraphBlocks: FlowBlock[], sourceChildNode?: PMNode): void => {
+  if (!sourceChildNode) return;
+  const sourceParaProps = (sourceChildNode.attrs as { paragraphProperties?: { spacing?: unknown } } | undefined)
+    ?.paragraphProperties;
+  if (sourceParaProps?.spacing) return;
+
+  for (const block of paragraphBlocks) {
+    if (block.kind !== 'paragraph' || !block.attrs) continue;
+    const spacing = block.attrs.spacing;
+    if (spacing?.lineUnit === 'multiplier' && spacing.lineRule === 'auto') {
+      block.attrs.spacing = { ...spacing, line: 1.0 };
+    }
+  }
+};
+
+/**
  * Parse a ProseMirror table cell node into a TableCell block.
  *
  * Converts a PM table cell node (tableCell, table_cell, tableHeader, or table_header)
@@ -307,17 +339,6 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
   const paragraphToFlowBlocks = context.converters.paragraphToFlowBlocks;
   const tableNodeToBlock = context.converters?.tableNodeToBlock;
 
-  /**
-   * Appends converted paragraph blocks to the cell's blocks array.
-   *
-   * This helper:
-   * 1. Applies SDT metadata to paragraph blocks (for structured content inheritance)
-   * 2. Filters to only include supported block types (paragraph, image, drawing)
-   * 3. Appends the filtered blocks to the cell's blocks array
-   *
-   * @param paragraphBlocks - The converted flow blocks from a paragraph node
-   * @param sdtMetadata - Optional SDT metadata to apply (from parent structuredContentBlock)
-   */
   const appendParagraphBlocks = (
     paragraphBlocks: FlowBlock[],
     sdtMetadata?: ReturnType<typeof resolveNodeSdtMetadata>,
@@ -327,38 +348,8 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
       paragraphBlocks.filter((block) => block.kind === 'paragraph') as ParagraphBlock[],
       sdtMetadata,
     );
-    // Apply TableGrid pPr cascade for table-cell paragraphs (ECMA-376
-    // §17.3.1.33). The super-converter resolves paragraph attrs at DOCX-import
-    // time before the table context is known, so paragraphs inside table cells
-    // currently inherit spacing from docDefaults (`w:line="278"` ≈ 1.15
-    // multiplier) instead of TableGrid's `w:line="240"` (= 1.0 multiplier).
-    //
-    // We rewrite the line multiplier here where the table context is
-    // available. Only paragraphs that did NOT carry an explicit `<w:spacing>`
-    // in their pPr are adjusted — those that did are preserved as-is because
-    // the author's intent was explicit. We detect "no explicit spacing" by
-    // the absence of `paragraphProperties.spacing` on the source PM node.
-    //
-    // TODO(SD-2735 cascade): move this to super-converter / style-engine so
-    // the cascade is applied once at DOCX-import time for all consumers.
-    const tableStyleId = tableInfo?.tableProperties?.tableStyleId;
-    if (tableStyleId && sourceChildNode) {
-      const sourceParaProps = (sourceChildNode.attrs as { paragraphProperties?: { spacing?: unknown } } | undefined)
-        ?.paragraphProperties;
-      const hasExplicitSpacing = !!sourceParaProps?.spacing;
-      if (!hasExplicitSpacing) {
-        for (const block of paragraphBlocks) {
-          if (block.kind !== 'paragraph') continue;
-          const attrs = (block as ParagraphBlock).attrs as
-            | { spacing?: { line?: number; lineUnit?: string; lineRule?: string } }
-            | undefined;
-          // Only adjust when the inherited spacing is the auto-multiplier
-          // form. atLeast/exact are absolute and shouldn't be overridden.
-          if (attrs?.spacing && attrs.spacing.lineUnit === 'multiplier' && attrs.spacing.lineRule === 'auto') {
-            attrs.spacing = { ...attrs.spacing, line: 1.0 };
-          }
-        }
-      }
+    if (tableInfo?.tableProperties?.tableStyleId) {
+      applyTableGridSpacingCascade(paragraphBlocks, sourceChildNode);
     }
     paragraphBlocks.forEach((block) => {
       if (block.kind === 'paragraph' || block.kind === 'image' || block.kind === 'drawing') {

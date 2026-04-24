@@ -3537,77 +3537,36 @@ const appendSegment = (
 };
 
 /**
- * Resolve the effective line height for a paragraph per ECMA-376 §17.18.48
- * (ST_LineSpacingRule).
+ * Resolve paragraph line height per ECMA-376 §17.18.48 (ST_LineSpacingRule).
  *
- * Previous implementation conflated `auto` with `atLeast` — both took the
- * max-clamp branch, which meant the author's intent with `w:lineRule="auto"
- * w:line="120"` (half-spacing) was silently inflated up to the natural
- * single-line height. Per spec, `auto` has "no predetermined minimum or
- * maximum" — only `atLeast` is max-clamped.
+ * | lineRule | Result                                                  |
+ * |----------|---------------------------------------------------------|
+ * | auto     | `target` — no min, no max                               |
+ * | atLeast  | `max(target, naturalSingle)`                            |
+ * | exact    | `target` (clipped by caller if content taller)          |
  *
- * | lineRule | Formula                                                                |
- * |----------|------------------------------------------------------------------------|
- * | auto     | `lineHeight = target` (no floor, no ceiling)                           |
- * | atLeast  | `lineHeight = max(target, naturalSingle)`                              |
- * | exact    | `lineHeight = target` (clipped by caller if content taller)            |
+ * For `lineUnit='multiplier'`, `target = line × naturalSingle` — the adapter
+ * has already divided `w:line` by 240, so `line` is the dimensionless ratio.
  *
- * This change is the minimal spec correction: the `target` computation
- * below preserves the adapter's existing `lineUnit='multiplier'` convention
- * (multiplier × fontSize) even though strict spec would multiply by natural
- * single-line height. Migrating that convention is tracked as a follow-up
- * (see SD-2735 description) because it requires coordinated changes across
- * the adapter + many baseline tests.
- *
- * @param spacing Paragraph spacing from the resolved style cascade.
- * @param fontSize Font size in px (used for unit-less and multiplier paths).
- * @param naturalSingleLine Natural single-line height in px (ascent + descent
- *                          from Canvas measurement). When not provided,
- *                          falls back to `WORD_SINGLE_LINE_SPACING_MULTIPLIER × fontSize`.
- * @returns Effective line height in px.
- *
- * @see ECMA-376 Part 1 §17.18.48 ST_LineSpacingRule; §17.3.1.33 spacing.
+ * `naturalSingleLine` is floored at `WORD_SINGLE_LINE_SPACING_MULTIPLIER ×
+ * fontSize` because many text fonts measure smaller than Word's Normal-style
+ * baseline; without the floor, unspaced paragraphs would render tighter than
+ * users expect.
  */
 const resolveLineHeight = (
   spacing: ParagraphSpacing | undefined,
   fontSize: number,
   naturalSingleLine: number = -1,
 ): number => {
-  // Natural single-line height. The caller passes ascent + descent from the
-  // Canvas measurement when available. We floor it at the historical
-  // `WORD_SINGLE_LINE_SPACING_MULTIPLIER × fontSize` approximation so fonts
-  // whose actualBoundingBox is smaller than that (many text fonts) still
-  // render with the comfortable default spacing Word uses for its Normal
-  // style. This preserves pre-SD-2735 behaviour for unspaced paragraphs.
   const fallbackFloor = WORD_SINGLE_LINE_SPACING_MULTIPLIER * fontSize;
   const naturalSingle = naturalSingleLine > 0 ? Math.max(naturalSingleLine, fallbackFloor) : fallbackFloor;
 
-  // No explicit spacing → single-spacing (spec default).
-  if (!spacing || spacing.line == null) {
-    return naturalSingle;
-  }
+  if (!spacing || spacing.line == null) return naturalSingle;
 
-  // Compute the target per the adapter's unit convention + ECMA-376 §17.18.48.
-  //
-  // For `lineUnit='multiplier'`, the adapter has already divided `w:line` by
-  // 240 (so `line` is the dimensionless ratio). Per spec, auto rule's result
-  // is `(line/240) × naturalSingle = line × naturalSingle`. We now multiply
-  // by the natural single-line height (font-calibrated when available) — this
-  // replaces the prior `line × fontSize` approximation, which coincidentally
-  // worked for fonts where naturalSingle ≈ fontSize × 1.0 (the `× 1.15` floor
-  // tricks the arithmetic out for the Normal-style case) but was wrong for
-  // Aptos/Calibri where naturalSingle ≈ fontSize × 1.218.
-  let target = spacing.line;
-  if (spacing.lineUnit === 'multiplier') {
-    target = target * naturalSingle;
-  }
-
+  const target = spacing.lineUnit === 'multiplier' ? spacing.line * naturalSingle : spacing.line;
   const rule = spacing.lineRule ?? 'auto';
-  if (rule === 'atLeast') {
-    return Math.max(target, naturalSingle);
-  }
-  // `auto` and `exact`: no min-clamp (auto has "no predetermined minimum"
-  // per §17.18.48; exact is explicitly "shall be exactly the value specified").
+
+  if (rule === 'atLeast') return Math.max(target, naturalSingle);
   return target;
 };
 

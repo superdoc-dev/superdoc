@@ -5,11 +5,6 @@ permissions:
 
 on:
   pull_request:
-    paths:
-      - 'packages/document-api/**'
-      - 'apps/docs/document-api/**'
-      - 'package.json'
-      - '.github/workflows/ci-document-api.yml'
   merge_group:
   workflow_dispatch:
 
@@ -18,8 +13,26 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  gate:
+    runs-on: ubuntu-latest
+    outputs:
+      should_run: ${{ steps.filter.outputs.relevant }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            relevant:
+              - 'packages/document-api/**'
+              - 'apps/docs/document-api/**'
+              - 'package.json'
+              - '.github/workflows/ci-document-api.yml'
+
   validate:
     name: CI Document API / validate
+    needs: gate
+    if: needs.gate.outputs.should_run == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

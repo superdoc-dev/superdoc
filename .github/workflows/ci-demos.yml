@@ -2,19 +2,36 @@ name: CI Demos
 
 on:
   pull_request:
-    paths:
-      - 'demos/**'
-      - 'packages/superdoc/**'
-      - 'packages/react/**'
-      - 'packages/super-editor/**'
-      - 'packages/layout-engine/**'
-      - 'shared/**'
-      - 'package.json'
   merge_group:
   workflow_dispatch:
 
 jobs:
+  gate:
+    runs-on: ubuntu-latest
+    outputs:
+      should_run: ${{ steps.filter.outputs.relevant }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            relevant:
+              - 'demos/**'
+              - 'packages/superdoc/**'
+              - 'packages/react/**'
+              - 'packages/super-editor/**'
+              - 'packages/layout-engine/**'
+              - 'packages/word-layout/**'
+              - 'packages/preset-geometry/**'
+              - 'shared/**'
+              - 'package.json'
+              - 'pnpm-workspace.yaml'
+              - '.github/workflows/ci-demos.yml'
+
   build:
+    needs: gate
+    if: needs.gate.outputs.should_run == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -46,7 +63,8 @@ jobs:
           key: demos-workspace-${{ github.sha }}
 
   smoke-test:
-    needs: build
+    needs: [gate, build]
+    if: needs.gate.outputs.should_run == 'true'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -85,8 +103,8 @@ jobs:
 
   validate:
     name: CI Demos / validate
-    if: always()
-    needs: [smoke-test]
+    needs: [gate, smoke-test]
+    if: needs.gate.outputs.should_run == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Check results

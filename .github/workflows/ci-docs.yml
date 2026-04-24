@@ -2,20 +2,35 @@ name: CI Docs
 
 on:
   pull_request:
-    paths:
-      - 'apps/docs/**'
-      - 'packages/superdoc/**'
-      - 'packages/super-editor/**'
-      - 'packages/document-api/src/contract/**'
-      - 'packages/document-api/scripts/**'
-      - 'scripts/generate-all.mjs'
-      - 'package.json'
   merge_group:
   workflow_dispatch:
 
 jobs:
+  gate:
+    runs-on: ubuntu-latest
+    outputs:
+      should_run: ${{ steps.filter.outputs.relevant }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            relevant:
+              - 'apps/docs/**'
+              - 'packages/superdoc/**'
+              - 'packages/super-editor/**'
+              - 'packages/document-api/src/contract/**'
+              - 'packages/document-api/scripts/**'
+              - 'scripts/generate-all.mjs'
+              - 'package.json'
+              - 'pnpm-workspace.yaml'
+              - '.github/workflows/ci-docs.yml'
+
   validate:
     name: CI Docs / validate
+    needs: gate
+    if: needs.gate.outputs.should_run == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6

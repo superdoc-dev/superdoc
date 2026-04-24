@@ -5,8 +5,6 @@ permissions:
 
 on:
   pull_request:
-    paths:
-      - 'apps/mcp/**'
   merge_group:
   workflow_dispatch:
 
@@ -15,8 +13,34 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  gate:
+    runs-on: ubuntu-latest
+    outputs:
+      should_run: ${{ steps.filter.outputs.relevant }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            relevant:
+              - 'apps/mcp/**'
+              - 'packages/sdk/**'
+              - 'apps/cli/**'
+              - 'packages/document-api/**'
+              - 'packages/superdoc/**'
+              - 'packages/super-editor/**'
+              - 'packages/layout-engine/**'
+              - 'packages/word-layout/**'
+              - 'packages/preset-geometry/**'
+              - 'shared/**'
+              - 'pnpm-workspace.yaml'
+              - '.github/workflows/ci-mcp.yml'
+
   validate:
     name: CI MCP / validate
+    needs: gate
+    if: needs.gate.outputs.should_run == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

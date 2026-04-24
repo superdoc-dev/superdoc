@@ -5,14 +5,6 @@ permissions:
 
 on:
   pull_request:
-    paths:
-      - 'packages/document-api/src/contract/**'
-      - 'packages/document-api/scripts/**'
-      - 'apps/cli/**'
-      - 'packages/sdk/**'
-      - 'scripts/generate-all.mjs'
-      - 'package.json'
-      - '.github/workflows/ci-sdk.yml'
   merge_group:
   workflow_dispatch:
 
@@ -21,8 +13,42 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Path filtering lives in the gate job (not at the trigger level) so the
+  # workflow always produces check runs for every PR. When gate says the
+  # change does not affect this workflow, downstream jobs skip via if:
+  # condition — skipped jobs count as success for required status checks,
+  # while trigger-level path skips leave required checks pending forever.
+  # See .github/package-impact-map.md for the canonical per-package paths.
+  gate:
+    runs-on: ubuntu-latest
+    outputs:
+      should_run: ${{ steps.filter.outputs.relevant }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            relevant:
+              - 'packages/sdk/**'
+              - 'apps/cli/**'
+              - 'packages/document-api/**'
+              - 'packages/superdoc/**'
+              - 'packages/super-editor/**'
+              - 'packages/layout-engine/**'
+              - 'packages/word-layout/**'
+              - 'packages/preset-geometry/**'
+              - 'shared/**'
+              - 'scripts/generate-all.mjs'
+              - 'scripts/semantic-release/**'
+              - 'pnpm-workspace.yaml'
+              - 'package.json'
+              - '.github/workflows/ci-sdk.yml'
+
   validate:
     name: CI SDK / validate
+    needs: gate
+    if: needs.gate.outputs.should_run == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

@@ -5,18 +5,39 @@ permissions:
 
 on:
   pull_request:
-    paths:
-      - 'packages/template-builder/**'
   merge_group:
   workflow_dispatch:
 
 concurrency:
-  group: ci-template-builder-${{ github.event.pull_request.number }}
+  group: ci-template-builder-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: true
 
 jobs:
+  gate:
+    runs-on: ubuntu-latest
+    outputs:
+      should_run: ${{ steps.filter.outputs.relevant }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            relevant:
+              - 'packages/template-builder/**'
+              - 'packages/superdoc/**'
+              - 'packages/super-editor/**'
+              - 'packages/layout-engine/**'
+              - 'packages/word-layout/**'
+              - 'packages/preset-geometry/**'
+              - 'shared/**'
+              - 'pnpm-workspace.yaml'
+              - '.github/workflows/ci-template-builder.yml'
+
   validate:
     name: CI Template Builder / validate
+    needs: gate
+    if: needs.gate.outputs.should_run == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6

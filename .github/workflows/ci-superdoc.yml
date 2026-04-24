@@ -16,6 +16,7 @@ on:
       - 'packages/sdk/**'
       - 'packages/template-builder/**'
       - 'packages/esign/**'
+      - 'packages/ai/**'
       - 'evals/**'
       - '**/*.md'
   merge_group:

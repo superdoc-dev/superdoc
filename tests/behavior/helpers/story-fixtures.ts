@@ -244,6 +244,23 @@ function trackedFooterXml(): string {
 `;
 }
 
+function inlinePageFieldFooterXml(): string {
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:ftr xmlns:w="${NS_W}" xmlns:r="${NS_R}">
+  <w:p>
+    <w:pPr>
+      <w:pStyle w:val="Footer"/>
+      <w:jc w:val="center"/>
+    </w:pPr>
+    <w:r><w:t xml:space="preserve">Finance QA </w:t></w:r>
+    <w:r><w:fldChar w:fldCharType="begin"/></w:r>
+    <w:r><w:instrText xml:space="preserve"> PAGE </w:instrText></w:r>
+    <w:r><w:fldChar w:fldCharType="end"/></w:r>
+  </w:p>
+</w:ftr>
+`;
+}
+
 function trackedFootnotesXml(): string {
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:footnotes xmlns:w="${NS_W}" xmlns:r="${NS_R}">
@@ -311,6 +328,13 @@ export const MULTI_PAGE_HEADER_FOOTER_DOC_PATH = ensureGeneratedFixture(
   'h_f-normal.docx',
   {
     'word/document.xml': multiPageHeaderFooterDocumentXml(),
+  },
+);
+export const FOOTER_INLINE_PAGE_FIELD_DOC_PATH = ensureGeneratedFixture(
+  'footer-inline-page-field.docx',
+  'h_f-normal.docx',
+  {
+    'word/footer2.xml': inlinePageFieldFooterXml(),
   },
 );
 export const STORY_ONLY_TRACKED_CHANGES_DOC_PATH = ensureGeneratedFixture(

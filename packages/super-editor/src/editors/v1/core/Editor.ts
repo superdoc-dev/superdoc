@@ -1928,7 +1928,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
       }
     }
 
-    if (emitUpdate) {
+    if (emitUpdate && this.state) {
       this.emit('update', { editor: this, transaction: this.state.tr });
     }
   }

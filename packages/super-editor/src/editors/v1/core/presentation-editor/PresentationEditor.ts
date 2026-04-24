@@ -2703,44 +2703,6 @@ export class PresentationEditor extends EventEmitter {
       return null;
     }
 
-    const sessionMode = this.#headerFooterSession?.session?.mode ?? 'body';
-    if (sessionMode !== 'body') {
-      const context = this.#getHeaderFooterContext();
-      if (!context) {
-        return null;
-      }
-      const headerPageHeight = context.layout.pageSize?.h ?? context.region.height ?? 1;
-      const bodyPageHeight = this.#getBodyPageHeight();
-      const pageIndex = Math.max(0, Math.floor(normalized.y / bodyPageHeight));
-      if (pageIndex !== context.region.pageIndex) {
-        return null;
-      }
-      const localX = normalized.x - context.region.localX;
-      const localY = normalized.y - context.region.pageIndex * bodyPageHeight - context.region.localY;
-      if (localX < 0 || localY < 0 || localX > context.region.width || localY > context.region.height) {
-        return null;
-      }
-      const headerPageIndex = Math.floor(localY / headerPageHeight);
-      const headerPoint = {
-        x: localX,
-        y: headerPageIndex * headerPageHeight + (localY - headerPageIndex * headerPageHeight),
-      };
-      const hit = clickToPositionGeometry(context.layout, context.blocks, context.measures, headerPoint) ?? null;
-      if (!hit) {
-        return null;
-      }
-
-      const doc = this.getActiveEditor().state?.doc;
-      if (!doc) {
-        return hit;
-      }
-
-      return {
-        ...hit,
-        pos: Math.max(0, Math.min(hit.pos, doc.content.size)),
-      };
-    }
-
     const noteContext = this.#buildActiveNoteLayoutContext();
     if (noteContext) {
       const rawHit =
@@ -2760,6 +2722,44 @@ export class PresentationEditor extends EventEmitter {
       return {
         ...rawHit,
         pos: Math.max(0, Math.min(rawHit.pos, doc.content.size)),
+      };
+    }
+
+    const sessionMode = this.#headerFooterSession?.session?.mode ?? 'body';
+    if (sessionMode !== 'body') {
+      const context = this.#getHeaderFooterContext();
+      if (!context) {
+        return null;
+      }
+      const pageGap = this.#layoutState.layout?.pageGap ?? this.#getEffectivePageGap();
+      const bodyPageHeight = this.#getBodyPageHeight();
+      const pageIndex = normalized.pageIndex ?? Math.max(0, Math.floor(normalized.y / (bodyPageHeight + pageGap)));
+      if (pageIndex !== context.region.pageIndex) {
+        return null;
+      }
+      const localX = normalized.x - context.region.localX;
+      const pageLocalY = normalized.pageLocalY ?? normalized.y - context.region.pageIndex * (bodyPageHeight + pageGap);
+      const localY = pageLocalY - context.region.localY;
+      if (localX < 0 || localY < 0 || localX > context.region.width || localY > context.region.height) {
+        return null;
+      }
+      const headerPoint = {
+        x: localX,
+        y: localY,
+      };
+      const hit = clickToPositionGeometry(context.layout, context.blocks, context.measures, headerPoint) ?? null;
+      if (!hit) {
+        return null;
+      }
+
+      const doc = this.getActiveEditor().state?.doc;
+      if (!doc) {
+        return hit;
+      }
+
+      return {
+        ...hit,
+        pos: Math.max(0, Math.min(hit.pos, doc.content.size)),
       };
     }
 
@@ -6827,6 +6827,10 @@ export class PresentationEditor extends EventEmitter {
     target: RenderedNoteTarget,
     options: { clientX: number; clientY: number; pageIndex?: number },
   ): boolean {
+    if ((this.#headerFooterSession?.session?.mode ?? 'body') !== 'body') {
+      this.#headerFooterSession?.exitMode();
+    }
+
     const storySessionManager = this.#ensureStorySessionManager();
 
     if (target.storyType !== 'footnote' && target.storyType !== 'endnote') {

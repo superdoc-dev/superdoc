@@ -350,6 +350,43 @@ const MULTI_CLICK_DISTANCE_THRESHOLD_PX = 5;
 const layoutDebugEnabled =
   typeof process !== 'undefined' && typeof process.env !== 'undefined' && Boolean(process.env.SD_DEBUG_LAYOUT);
 
+const isTruthyDebugValue = (value: unknown): boolean =>
+  value === true || value === 1 || value === '1' || value === 'true';
+
+/**
+ * Runtime debug flag resolver for initial render instrumentation.
+ *
+ * Supports:
+ * - process.env.SD_DEBUG_DOC_LOAD
+ * - globalThis.SD_DEBUG_DOC_LOAD
+ * - localStorage['SD_DEBUG_DOC_LOAD']
+ */
+const isDocLoadDebugEnabled = (): boolean => {
+  if (typeof process !== 'undefined' && typeof process.env !== 'undefined') {
+    if (isTruthyDebugValue(process.env.SD_DEBUG_DOC_LOAD)) {
+      return true;
+    }
+  }
+
+  const globalValue = (globalThis as { SD_DEBUG_DOC_LOAD?: unknown }).SD_DEBUG_DOC_LOAD;
+  if (isTruthyDebugValue(globalValue)) {
+    return true;
+  }
+
+  try {
+    if (typeof localStorage !== 'undefined') {
+      const stored = localStorage.getItem('SD_DEBUG_DOC_LOAD');
+      if (isTruthyDebugValue(stored)) {
+        return true;
+      }
+    }
+  } catch {
+    // Ignore storage access errors (SSR/sandbox/privacy mode).
+  }
+
+  return false;
+};
+
 /** Log performance metrics when debug is enabled */
 const perfLog = (...args: unknown[]): void => {
   if (!layoutDebugEnabled) return;
@@ -466,6 +503,10 @@ export class PresentationEditor extends EventEmitter {
   #shouldScrollSelectionIntoView = false;
   #epochMapper = new EpochPositionMapper();
   #layoutEpoch = 0;
+  /** Start time for first-render measurement (instance lifecycle). */
+  #initialRenderPerfStartMs = GLOBAL_PERFORMANCE?.now ? GLOBAL_PERFORMANCE.now() : Date.now();
+  /** Ensures initial render metrics are logged only once per PresentationEditor instance. */
+  #hasLoggedInitialRenderPerf = false;
   #htmlAnnotationHeights: Map<string, number> = new Map();
   #htmlAnnotationMeasureEpoch = -1;
   #htmlAnnotationMeasureAttempts = 0;
@@ -492,6 +533,8 @@ export class PresentationEditor extends EventEmitter {
   #trackedChangesMode: TrackedChangesMode = 'review';
   #trackedChangesEnabled = true;
   #trackedChangesOverrides: TrackedChangesOverrides | undefined;
+  /** Cached detection for the block-node PM plugin presence. */
+  #hasBlockNodePlugin: boolean | null = null;
   // Header/footer session management
   #headerFooterSession: HeaderFooterSessionManager | null = null;
   /**
@@ -4115,6 +4158,25 @@ export class PresentationEditor extends EventEmitter {
     });
   }
 
+  /**
+   * Returns true when the block-node plugin is attached to the current PM state.
+   * The result is cached because plugin lists are stable for an editor instance.
+   */
+  #isBlockNodePluginEnabled(): boolean {
+    if (this.#hasBlockNodePlugin != null) {
+      return this.#hasBlockNodePlugin;
+    }
+
+    const plugins = this.#editor?.state?.plugins ?? [];
+    const enabled = plugins.some((plugin) => {
+      const key = (plugin as { key?: unknown })?.key;
+      return typeof key === 'string' && (key === 'blockNodePlugin' || key.startsWith('blockNodePlugin$'));
+    });
+
+    this.#hasBlockNodePlugin = enabled;
+    return enabled;
+  }
+
   #setupEditorListeners() {
     const handleUpdate = ({ transaction }: { transaction?: Transaction }) => {
       const trackedChangesChanged = this.#syncTrackedChangesPreferences();
@@ -4130,9 +4192,13 @@ export class PresentationEditor extends EventEmitter {
         // cannot be trusted. History undo/redo can also restore tracked-mark-only
         // changes where visible text stays the same, so use the same JSON fallback.
         const ySyncMeta = transaction.getMeta?.(ySyncPluginKey);
+        const blockNodePluginMissing = !this.#isBlockNodePluginEnabled();
         const shouldBypassFastRevision =
           transaction.docChanged &&
-          (ySyncMeta?.isChangeOrigin || inputType === 'historyUndo' || inputType === 'historyRedo');
+          (blockNodePluginMissing ||
+            ySyncMeta?.isChangeOrigin ||
+            inputType === 'historyUndo' ||
+            inputType === 'historyRedo');
         if (shouldBypassFastRevision) {
           this.#flowBlockCache?.setHasExternalChanges(true);
         }
@@ -5605,6 +5671,14 @@ export class PresentationEditor extends EventEmitter {
       this.#applyZoom();
 
       const metrics = createLayoutMetricsFromHelper(perf, startMark, layout, blocksForLayout);
+      if (isDocLoadDebugEnabled() && !this.#hasLoggedInitialRenderPerf) {
+        const initialRenderTotalMs = Math.max(0, perfNow() - this.#initialRenderPerfStartMs);
+        const layoutMs = typeof metrics?.durationMs === 'number' ? metrics.durationMs : null;
+        console.info(
+          `[Perf][doc-load] first-render: total=${initialRenderTotalMs.toFixed(2)}ms, layout=${layoutMs?.toFixed(2) ?? 'n/a'}ms, blocks=${blocksForLayout.length}, pages=${layout.pages.length}`,
+        );
+        this.#hasLoggedInitialRenderPerf = true;
+      }
       const payload = { layout, blocks: blocksForLayout, measures, metrics };
       this.emit('layoutUpdated', payload);
       this.emit('paginationUpdate', payload);

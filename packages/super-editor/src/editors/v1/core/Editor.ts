@@ -93,6 +93,43 @@ declare const version: string | undefined;
 const CURRENT_APP_VERSION =
   (typeof __APP_VERSION__ === 'string' && __APP_VERSION__) || (typeof version === 'string' && version) || '0.0.0';
 
+const isTruthyDebugValue = (value: unknown): boolean =>
+  value === true || value === 1 || value === '1' || value === 'true';
+
+/**
+ * Runtime debug flag resolver for DOCX load instrumentation.
+ *
+ * Supports:
+ * - process.env.SD_DEBUG_DOC_LOAD
+ * - globalThis.SD_DEBUG_DOC_LOAD
+ * - localStorage['SD_DEBUG_DOC_LOAD']
+ */
+const isDocLoadDebugEnabled = (): boolean => {
+  if (typeof process !== 'undefined' && typeof process.env !== 'undefined') {
+    if (isTruthyDebugValue(process.env.SD_DEBUG_DOC_LOAD)) {
+      return true;
+    }
+  }
+
+  const globalValue = (globalThis as { SD_DEBUG_DOC_LOAD?: unknown }).SD_DEBUG_DOC_LOAD;
+  if (isTruthyDebugValue(globalValue)) {
+    return true;
+  }
+
+  try {
+    if (typeof localStorage !== 'undefined') {
+      const stored = localStorage.getItem('SD_DEBUG_DOC_LOAD');
+      if (isTruthyDebugValue(stored)) {
+        return true;
+      }
+    }
+  } catch {
+    // Ignore storage access errors (SSR/sandbox/privacy mode).
+  }
+
+  return false;
+};
+
 /**
  * Constants for layout calculations
  */
@@ -2279,11 +2316,25 @@ export class Editor extends EventEmitter<EditorEventMap> {
   > {
     if (!fileSource) return;
 
+    const now = () =>
+      typeof performance !== 'undefined' && typeof performance.now === 'function' ? performance.now() : Date.now();
+    const debugEnabled = isDocLoadDebugEnabled();
+    const parseStart = debugEnabled ? now() : 0;
+
     const zipper = new DocxZipper();
     const xmlFiles = await zipper.getDocxData(fileSource, isNode, {
       password: options?.password,
     });
     const mediaFiles = zipper.media;
+
+    if (debugEnabled) {
+      const parseMs = now() - parseStart;
+      const mediaCount = Object.keys(zipper.mediaFiles ?? {}).length;
+      const fontCount = Object.keys(zipper.fonts ?? {}).length;
+      console.info(
+        `[Perf][doc-load] xml-parse: ${parseMs.toFixed(2)}ms, xmlFiles=${xmlFiles.length}, media=${mediaCount}, fonts=${fontCount}`,
+      );
+    }
 
     // Return decrypted file data (if any) so callers can store the decrypted
     // bytes instead of the original encrypted source for later export.

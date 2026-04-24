@@ -142,7 +142,7 @@ const getRichTextExtensions = () => {
 const getStarterExtensions = () => {
   return [
     Bold,
-    BlockNode,
+    // BlockNode,
     Color,
     CommentRangeStart,
     CommentRangeEnd,

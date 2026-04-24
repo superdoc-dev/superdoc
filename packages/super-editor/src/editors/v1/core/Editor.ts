@@ -2763,18 +2763,13 @@ export class Editor extends EventEmitter<EditorEventMap> {
       });
     }
 
-    // Find the effective doc-changing transaction: the original one, or the last
-    // appendTransaction result that introduced doc changes (e.g. numberingPlugin
-    // updating listRendering attrs from an otherwise empty transaction).
-    let effectiveDocTr: Transaction = transactionToApply;
-    if (appliedTransactions) {
-      for (let i = appliedTransactions.length - 1; i >= 0; i--) {
-        if (appliedTransactions[i].docChanged) {
-          effectiveDocTr = appliedTransactions[i];
-          break;
-        }
-      }
-    }
+    // Pick the tr that actually carries the doc delta so consumers (notably
+    // PresentationEditor.handleUpdate) see the right `docChanged` / `mapping`.
+    // Normally this is `transactionToApply` (which sits at index 0 of the
+    // applied chain); when a plugin rewrites attrs via appendTransaction from
+    // an empty user tr (e.g. numberingPlugin recomputing listRendering), it's
+    // the appended tr.
+    const effectiveDocTr: Transaction = appliedTransactions?.find((t) => t.docChanged) ?? transactionToApply;
 
     if (effectiveDocTr.docChanged) {
       // Track document modifications and promote to GUID if needed.

@@ -190,3 +190,43 @@ export function shouldRequirePageBoundary(current: SectionRange, next: SectionRa
 export function hasIntrinsicBoundarySignals(_: SectionRange): boolean {
   return false;
 }
+
+/**
+ * Emit the next section's sectionBreak block if the dispatch loop has reached
+ * that section's starting top-level node index.
+ *
+ * ECMA-376 §17.6.17: a section is defined by its end-tagged `<w:sectPr>`. All
+ * body children preceding that tag — paragraphs, tables, top-level drawings —
+ * belong to the section that ENDS at the tag. This helper fires BEFORE any
+ * such node so the appropriate section config is active by the time the node
+ * is laid out.
+ *
+ * This centralises the check that previously lived (duplicated) inside
+ * `handleParagraphNode` and the SDT handlers. Calling it from the main
+ * dispatch loop covers every top-level node type — present and future —
+ * with no per-handler opt-in.
+ */
+export function maybeEmitNextSectionBreakForNode(args: {
+  sectionState: {
+    ranges: SectionRange[];
+    currentSectionIndex: number;
+    currentNodeIndex: number;
+  };
+  nextBlockId: BlockIdGenerator;
+  pushBlock: (block: SectionBreakBlock) => void;
+}): void {
+  const { sectionState, nextBlockId, pushBlock } = args;
+  if (sectionState.ranges.length === 0) return;
+  if (sectionState.currentSectionIndex >= sectionState.ranges.length - 1) return;
+
+  const nextSection = sectionState.ranges[sectionState.currentSectionIndex + 1];
+  if (!nextSection) return;
+  if (sectionState.currentNodeIndex !== nextSection.startNodeIndex) return;
+
+  const currentSection = sectionState.ranges[sectionState.currentSectionIndex];
+  const requiresPageBoundary =
+    shouldRequirePageBoundary(currentSection, nextSection) || hasIntrinsicBoundarySignals(nextSection);
+  const extraAttrs = requiresPageBoundary ? { requirePageBoundary: true } : undefined;
+  pushBlock(createSectionBreakBlock(nextSection, nextBlockId, extraAttrs));
+  sectionState.currentSectionIndex++;
+}

@@ -1021,7 +1021,11 @@ export class HeaderFooterSessionManager {
 
     const bodyPageCount = this.#deps?.getBodyPageCount() ?? 1;
     const session = storySessionManager.activate(locator, {
-      commitPolicy: 'continuous',
+      // Presentation-mode header/footer sessions now reuse the manager-backed
+      // per-refId editor, which already exports on update. Commit once on exit
+      // to avoid double-syncing every keystroke while still flushing the final
+      // state if the session closes mid-batch.
+      commitPolicy: 'onExit',
       preferHiddenHost: true,
       hostWidthPx: Math.max(1, region.width),
       editorContext: {
@@ -1063,6 +1067,7 @@ export class HeaderFooterSessionManager {
           sectionId: region.sectionId,
           kind: region.kind,
           variant: normalizeVariant(region.sectionType ?? 'default'),
+          addToHistory: false,
         });
         if (materializationResult) {
           // Refresh registry so the new refId is discoverable

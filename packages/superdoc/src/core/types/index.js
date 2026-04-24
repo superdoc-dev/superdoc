@@ -673,6 +673,7 @@
  * @property {boolean} [isDev] Whether the SuperDoc is in development mode
  * @property {boolean} [disablePiniaDevtools=false] Disable Pinia/Vue devtools plugin setup for this SuperDoc instance (useful in non-Vue hosts)
  * @property {SuperDocLayoutEngineOptions} [layoutEngineOptions] Layout engine overrides passed through to PresentationEditor (page size, margins, virtualization, zoom, debug label, etc.)
+ * @property {{ unifiedHistory?: boolean }} [experimental] Advanced PresentationEditor feature toggles. `unifiedHistory` is enabled by default; set it to `false` to force legacy active-surface undo routing.
  * @property {(editor: Editor) => void} [onEditorBeforeCreate] Callback before an editor is created
  * @property {(editor: Editor) => void} [onEditorCreate] Callback after an editor is created
  * @property {(params: EditorTransactionEvent) => void} [onTransaction] Callback when a transaction is made

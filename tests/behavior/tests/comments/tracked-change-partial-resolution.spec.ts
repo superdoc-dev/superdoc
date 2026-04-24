@@ -8,6 +8,8 @@ test.use({ config: { toolbar: 'full', comments: 'panel', trackChanges: true, sho
 const TRACK_TEXT = 'ABCDE';
 const PARTIAL_TEXT = 'BC';
 const ACCEPT_TRACKED_CHANGES_BUTTON = 'Accept tracked changes';
+const TRACKED_CHANGE_DIALOGS = '.comment-placeholder .comments-dialog, #comments-panel .comments-dialog';
+const TRACKED_CHANGE_TEXT = `${TRACKED_CHANGE_DIALOGS} .tracked-change-text`;
 
 test('toolbar accept partially resolves a tracked insertion and updates the bubble text', async ({ superdoc }) => {
   await insertTrackedChange(superdoc.page, { from: 1, to: 1, text: TRACK_TEXT });
@@ -17,7 +19,7 @@ test('toolbar accept partially resolves a tracked insertion and updates the bubb
   await superdoc.setTextSelection(selectionStart, selectionStart + PARTIAL_TEXT.length);
   await superdoc.waitForStable();
 
-  const trackedDialog = superdoc.page.locator('.comment-placeholder .comments-dialog', {
+  const trackedDialog = superdoc.page.locator(TRACKED_CHANGE_DIALOGS, {
     has: superdoc.page.locator('.tracked-change-text.is-inserted', { hasText: TRACK_TEXT }),
   });
   await expect(trackedDialog).toBeVisible();
@@ -29,7 +31,7 @@ test('toolbar accept partially resolves a tracked insertion and updates the bubb
 
   await expect.poll(() => getDocumentText(superdoc.page)).toBe(TRACK_TEXT);
   await expect.poll(() => getMarkedText(superdoc.page, 'trackInsert')).toBe('ADE');
-  await expect(superdoc.page.locator('.comment-placeholder .comments-dialog .tracked-change-text')).toBeVisible();
+  await expect(superdoc.page.locator(TRACKED_CHANGE_TEXT)).toBeVisible();
 
   await superdoc.snapshot('tracked-change-partial-insert-after-accept');
 });
@@ -49,7 +51,7 @@ test('context menu reject partially resolves a tracked insertion and updates the
 
   await expect.poll(() => getSelectedText(superdoc.page)).toBe(PARTIAL_TEXT);
 
-  const trackedDialog = superdoc.page.locator('.comment-placeholder .comments-dialog', {
+  const trackedDialog = superdoc.page.locator(TRACKED_CHANGE_DIALOGS, {
     has: superdoc.page.locator('.tracked-change-text.is-inserted', { hasText: TRACK_TEXT }),
   });
   await expect(trackedDialog).toBeVisible();
@@ -66,7 +68,7 @@ test('context menu reject partially resolves a tracked insertion and updates the
 
   await expect.poll(() => getDocumentText(superdoc.page)).toBe('ADE');
   await expect.poll(() => getMarkedText(superdoc.page, 'trackInsert')).toBe('ADE');
-  await expect(superdoc.page.locator('.comment-placeholder .comments-dialog .tracked-change-text')).toBeVisible();
+  await expect(superdoc.page.locator(TRACKED_CHANGE_TEXT)).toBeVisible();
 
   await superdoc.snapshot('tracked-change-partial-insert-after-context-reject');
 });

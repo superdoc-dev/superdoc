@@ -2,21 +2,17 @@ import { Plugin, PluginKey } from 'prosemirror-state';
 import { __endComposition } from 'prosemirror-view';
 import { Extension } from '../Extension.js';
 
-const handleBackwardReplaceInsertText = (view, event) => {
+const handleInsertTextBeforeInput = (view, event) => {
   const isInsertTextInput = event?.inputType === 'insertText';
   const hasTextData = typeof event?.data === 'string' && event.data.length > 0;
-  const hasNonEmptySelection = !view.state.selection.empty;
+  const isComposing = event?.isComposing === true;
 
-  if (!isInsertTextInput || !hasTextData || !hasNonEmptySelection) {
+  if (!isInsertTextInput || !hasTextData || isComposing) {
     return false;
   }
 
   const selection = view.state.selection;
-  const anchor = selection.anchor ?? selection.from;
-  const head = selection.head ?? selection.to;
-  const isBackwardSelection = anchor > head;
-
-  if (!isBackwardSelection) {
+  if (selection.empty) {
     return false;
   }
 
@@ -104,9 +100,11 @@ export const Editable = Extension.create({
               __endComposition(view);
             }
 
-            // Backward (right-to-left) replacement can be misinterpreted downstream as
-            // deleteContentBackward. Handle this narrow case explicitly at beforeinput level.
-            if (handleBackwardReplaceInsertText(view, event)) {
+            // When typing over an existing selection, browser-native text input
+            // can widen the replace range around hidden inline content in story
+            // editors. Apply the replacement against the PM selection directly
+            // before the browser mutates the DOM.
+            if (handleInsertTextBeforeInput(view, event)) {
               return true;
             }
             return false;

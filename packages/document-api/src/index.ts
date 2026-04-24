@@ -26,8 +26,11 @@ export type {
   RangeBlockPreview,
   RangePreview,
   RangeResolverAdapter,
+  ScrollIntoViewInput,
+  ScrollIntoViewOutput,
+  RangeScrollAdapter,
 } from './ranges/index.js';
-export { executeResolveRange } from './ranges/index.js';
+export { executeResolveRange, executeScrollIntoView } from './ranges/index.js';
 export type { HeaderFootersAdapter, HeaderFootersApi } from './header-footers/header-footers.js';
 export * from './header-footers/header-footers.types.js';
 export type { ClearContentAdapter, ClearContentInput } from './clear-content/clear-content.js';
@@ -125,7 +128,14 @@ import {
 import type { InsertInput } from './insert/insert.js';
 import { executeDelete } from './delete/delete.js';
 import { executeResolveRange } from './ranges/resolve.js';
-import type { RangeResolverAdapter, ResolveRangeInput, ResolveRangeOutput } from './ranges/ranges.types.js';
+import { executeScrollIntoView } from './ranges/scroll-into-view.js';
+import type {
+  RangeResolverAdapter,
+  ResolveRangeInput,
+  ResolveRangeOutput,
+  ScrollIntoViewInput,
+  ScrollIntoViewOutput,
+} from './ranges/ranges.types.js';
 import { executeInsert } from './insert/insert.js';
 import type { ListsAdapter, ListsApi } from './lists/lists.js';
 import type {
@@ -1471,10 +1481,19 @@ export interface MutationsApi {
 
 export interface RangesApi {
   resolve(input: ResolveRangeInput): ResolveRangeOutput;
+  /**
+   * Scroll the editor viewport so the target range is visible. Handles
+   * paginated, virtualized layouts by mounting the target page on demand.
+   * Async — resolves once the scroll settles (or the page-mount timeout
+   * expires). Target accepts `TextAddress`, `TextTarget`, or `EntityAddress`
+   * (comment / tracked change by id).
+   */
+  scrollIntoView(input: ScrollIntoViewInput): Promise<ScrollIntoViewOutput>;
 }
 
 export interface RangesAdapter {
   resolve(input: ResolveRangeInput): ResolveRangeOutput;
+  scrollIntoView(input: ScrollIntoViewInput): Promise<ScrollIntoViewOutput>;
 }
 
 export interface QueryAdapter {
@@ -3119,6 +3138,9 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
     ranges: {
       resolve(input: ResolveRangeInput): ResolveRangeOutput {
         return executeResolveRange(adapters.ranges, input);
+      },
+      scrollIntoView(input: ScrollIntoViewInput): Promise<ScrollIntoViewOutput> {
+        return executeScrollIntoView(adapters.ranges, input);
       },
     },
     mutations: {

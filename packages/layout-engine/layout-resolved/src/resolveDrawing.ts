@@ -17,7 +17,7 @@ export function resolveDrawingItem(
 ): ResolvedDrawingItem {
   const { block } = requireResolvedBlockAndMeasure(blockMap, fragment.blockId, 'drawing', 'drawing', 'drawing');
 
-  return {
+  const item: ResolvedDrawingItem = {
     kind: 'fragment',
     fragmentKind: 'drawing',
     id: resolveDrawingFragmentId(fragment),
@@ -31,4 +31,7 @@ export function resolveDrawingItem(
     fragmentIndex,
     block,
   };
+  if (fragment.pmStart != null) item.pmStart = fragment.pmStart;
+  if (fragment.pmEnd != null) item.pmEnd = fragment.pmEnd;
+  return item;
 }

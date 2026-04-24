@@ -74,6 +74,7 @@ describe('textNodeToRun', () => {
       undefined,
       undefined,
       false,
+      undefined,
     );
   });
 
@@ -125,6 +126,7 @@ describe('textNodeToRun', () => {
       undefined,
       undefined,
       false,
+      undefined,
     );
   });
 
@@ -147,6 +149,7 @@ describe('textNodeToRun', () => {
       undefined,
       undefined,
       false,
+      undefined,
     );
   });
 
@@ -171,6 +174,7 @@ describe('textNodeToRun', () => {
       undefined,
       undefined,
       false,
+      undefined,
     );
   });
 
@@ -220,6 +224,7 @@ describe('textNodeToRun', () => {
       undefined,
       undefined,
       false,
+      undefined,
     );
   });
 
@@ -298,6 +303,7 @@ describe('textNodeToRun', () => {
       undefined,
       undefined,
       false,
+      undefined,
     );
   });
 
@@ -337,6 +343,7 @@ describe('textNodeToRun', () => {
       undefined,
       undefined,
       false,
+      undefined,
     );
   });
 });

@@ -165,6 +165,15 @@ export type LayoutEngineOptions = {
   ruler?: RulerOptions;
   /** Proofing / spellcheck configuration. */
   proofing?: ProofingConfig;
+  /**
+   * Render visible gray `[` / `]` bracket markers at bookmark start/end
+   * positions — matching Word's opt-in "Show bookmarks" (File > Options >
+   * Advanced). Off by default because bookmarks are a structural concept,
+   * not a visual one. Auto-generated bookmarks (names starting with `_`,
+   * such as `_Toc…` or `_Ref…`) are hidden even when enabled, mirroring
+   * Word's behavior. SD-2454.
+   */
+  showBookmarks?: boolean;
 };
 
 export type PresentationEditorOptions = ConstructorParameters<typeof Editor>[0] & {
@@ -343,6 +352,10 @@ export interface EditorWithConverter extends Editor {
       id: string;
       content?: unknown[];
     }>;
+    endnotes?: Array<{
+      id: string;
+      content?: unknown[];
+    }>;
   };
 }
 
@@ -425,7 +438,7 @@ export type PendingMarginClick =
  * to prevent unwanted scroll behavior when the hidden editor receives focus.
  *
  * @remarks
- * This flag is set by {@link PresentationEditor#wrapHiddenEditorFocus} to ensure
+ * This flag is set by {@link PresentationEditor#wrapOffscreenEditorFocus} to ensure
  * the wrapping is idempotent (applied only once per view instance).
  */
 export interface EditorViewWithScrollFlag {

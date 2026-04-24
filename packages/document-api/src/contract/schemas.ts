@@ -390,6 +390,7 @@ const SHARED_DEFS: Record<string, JsonSchema> = {
       kind: { const: 'entity' },
       entityType: { const: 'trackedChange' },
       entityId: { type: 'string' },
+      story: ref('StoryLocator'),
     },
     ['kind', 'entityType', 'entityId'],
   ),
@@ -2962,9 +2963,40 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
           items: objectSchema(
             {
               nodeId: { type: 'string', description: 'Stable block ID — pass to scrollToElement() for navigation.' },
-              type: { type: 'string', description: 'Block type: paragraph, heading, listItem, table, image, etc.' },
+              type: {
+                type: 'string',
+                description: 'Block type: paragraph, heading, listItem, image, tableOfContents.',
+              },
               text: { type: 'string', description: 'Full plain text content of the block.' },
               headingLevel: { type: 'integer', description: 'Heading level (1–6). Only present for headings.' },
+              tableContext: objectSchema(
+                {
+                  tableOrdinal: {
+                    type: 'integer',
+                    description: '0-based table ordinal, unique within one extract() result.',
+                  },
+                  parentTableOrdinal: {
+                    type: 'integer',
+                    description: 'Ordinal of the parent table when the containing table is nested.',
+                  },
+                  parentRowIndex: {
+                    type: 'integer',
+                    description: 'Row index in the parent table. Set with parentTableOrdinal.',
+                  },
+                  parentColumnIndex: {
+                    type: 'integer',
+                    description: 'Column index in the parent table. Set with parentTableOrdinal.',
+                  },
+                  rowIndex: { type: 'integer', description: '0-based row index of the containing cell.' },
+                  columnIndex: {
+                    type: 'integer',
+                    description: '0-based logical grid column, not the row child order.',
+                  },
+                  rowspan: { type: 'integer', description: 'Number of rows the cell spans.' },
+                  colspan: { type: 'integer', description: 'Number of columns the cell spans.' },
+                },
+                ['tableOrdinal', 'rowIndex', 'columnIndex', 'rowspan', 'colspan'],
+              ),
             },
             ['nodeId', 'type', 'text'],
           ),
@@ -4707,11 +4739,16 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
         enum: ['insert', 'delete', 'format'],
         description: "Filter by change type: 'insert', 'delete', or 'format'.",
       },
+      in: {
+        oneOf: [storyLocatorSchema, { const: 'all' }],
+        description:
+          "Story scope. Omit for body only, pass a StoryLocator for a single story, or 'all' for body + every revision-capable non-body story.",
+      },
     }),
     output: trackChangesListResultSchema,
   },
   'trackChanges.get': {
-    input: objectSchema({ id: { type: 'string' } }, ['id']),
+    input: objectSchema({ id: { type: 'string' }, story: storyLocatorSchema }, ['id']),
     output: trackChangeInfoSchema,
   },
   'trackChanges.decide': {
@@ -4721,7 +4758,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
         decision: { enum: ['accept', 'reject'] },
         target: {
           oneOf: [
-            objectSchema({ id: { type: 'string' } }, ['id']),
+            objectSchema({ id: { type: 'string' }, story: storyLocatorSchema }, ['id']),
             objectSchema({ scope: { enum: ['all'] } }, ['scope']),
           ],
         },

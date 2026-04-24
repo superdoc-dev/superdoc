@@ -1,0 +1,173 @@
+# Sequential stable release orchestrator.
+# This is the only workflow that auto-releases on push to stable.
+name: 📦 Release stable
+
+on:
+  push:
+    branches:
+      - stable
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  packages: write
+  id-token: write
+
+concurrency:
+  # Keep [skip ci] writeback runs out of the shared stable queue so they cannot
+  # replace a real pending stable push while the orchestrator is active.
+  group: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[skip ci]') && format('release-stable-skip-{0}', github.run_id) || 'release-stable' }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    if: github.event_name == 'workflow_dispatch' || !contains(github.event.head_commit.message, '[skip ci]')
+    runs-on: ubuntu-24.04
+    environment: pypi
+    steps:
+      - name: Generate token
+        id: generate_token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          ref: stable
+          token: ${{ steps.generate_token.outputs.token }}
+
+      - name: Refresh stable branch head
+        run: |
+          git fetch origin stable --tags
+          git checkout -B stable origin/stable
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+          registry-url: 'https://registry.npmjs.org'
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.12
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Cache apt packages
+        uses: actions/cache@v5
+        with:
+          path: ~/apt-cache
+          key: apt-canvas-${{ runner.os }}-v1
+
+      - name: Install canvas system dependencies
+        run: |
+          mkdir -p ~/apt-cache
+          sudo apt-get update
+          sudo apt-get install -y -o Dir::Cache::Archives="$HOME/apt-cache" \
+            build-essential \
+            libcairo2-dev \
+            libpango1.0-dev \
+            libjpeg-dev \
+            libgif-dev \
+            librsvg2-dev \
+            libpixman-1-dev
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Python build tools
+        run: pip install build
+
+      - name: Build packages
+        run: pnpm run build
+
+      - name: Test vscode-ext
+        run: pnpm --prefix apps/vscode-ext run test
+
+      - name: Snapshot SDK tags before release
+        id: sdk_tags_before
+        run: echo "tags=$(git tag --list 'sdk-v*' | sort | tr '\n' ',')" >> "$GITHUB_OUTPUT"
+
+      - name: Release stable packages sequentially
+        id: stable_release
+        env:
+          GITHUB_TOKEN: ${{ steps.generate_token.outputs.token }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          LINEAR_TOKEN: ${{ secrets.LINEAR_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+          GITHUB_REF_NAME: stable
+        run: node scripts/release-local-stable.mjs
+
+      - name: Detect SDK release tag at HEAD
+        id: sdk_release
+        run: |
+          BEFORE="${{ steps.sdk_tags_before.outputs.tags }}"
+          AFTER=$(git tag --list 'sdk-v*' | sort | tr '\n' ',')
+          RELEASE_TAG=$(git tag --points-at HEAD --list 'sdk-v*' --sort=-version:refname | head -n 1)
+          if [ -z "$RELEASE_TAG" ]; then
+            echo "release_present=false" >> "$GITHUB_OUTPUT"
+            echo "released=false" >> "$GITHUB_OUTPUT"
+            echo "version=" >> "$GITHUB_OUTPUT"
+            echo "dist_tag=" >> "$GITHUB_OUTPUT"
+            echo "No SDK release tag at HEAD."
+          else
+            echo "release_present=true" >> "$GITHUB_OUTPUT"
+            if [ "$BEFORE" = "$AFTER" ]; then
+              echo "released=false" >> "$GITHUB_OUTPUT"
+            else
+              echo "released=true" >> "$GITHUB_OUTPUT"
+            fi
+            VERSION="${RELEASE_TAG#sdk-v}"
+            if [[ "$VERSION" == *-next.* ]]; then
+              DIST_TAG="next"
+            else
+              DIST_TAG="latest"
+            fi
+            echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+            echo "dist_tag=$DIST_TAG" >> "$GITHUB_OUTPUT"
+            if [ "$BEFORE" = "$AFTER" ]; then
+              echo "SDK release tag already present at HEAD: $RELEASE_TAG"
+            else
+              echo "Released SDK v$VERSION"
+            fi
+          fi
+
+      - name: Publish recovered SDK companion Python packages to PyPI
+        if: steps.stable_release.outputs.sdk_python_snapshot_companion_dir != ''
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: ${{ steps.stable_release.outputs.sdk_python_snapshot_companion_dir }}
+          skip-existing: true
+
+      - name: Publish recovered SDK main Python package to PyPI
+        if: steps.stable_release.outputs.sdk_python_snapshot_main_dir != ''
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: ${{ steps.stable_release.outputs.sdk_python_snapshot_main_dir }}
+          skip-existing: true
+
+      - name: Build and verify Python SDK
+        if: steps.sdk_release.outputs.release_present == 'true'
+        run: node packages/sdk/scripts/build-python-sdk.mjs
+
+      - name: Publish companion Python packages to PyPI
+        if: steps.sdk_release.outputs.release_present == 'true'
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: packages/sdk/langs/python/companion-dist/
+          skip-existing: true
+
+      - name: Publish main Python SDK to PyPI
+        if: steps.sdk_release.outputs.release_present == 'true'
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: packages/sdk/langs/python/dist/
+          skip-existing: true

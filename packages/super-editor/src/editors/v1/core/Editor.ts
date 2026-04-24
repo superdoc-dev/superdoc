@@ -84,6 +84,8 @@ import { syncPackageMetadata } from './opc/sync-package-metadata.js';
 import { readSettingsRoot, parseProtectionState } from '../document-api-adapters/document-settings.js';
 import { applyEffectiveEditability, getProtectionStorage } from '../extensions/protection/editability.js';
 import { getViewModeSelectionWithoutStructuredContent } from './helpers/getViewModeSelectionWithoutStructuredContent.js';
+import { resolveMainBodyEditor } from '../document-api-adapters/helpers/word-statistics.js';
+import { commitLiveStorySessionRuntimes } from '../document-api-adapters/story-runtime/live-story-session-runtime-registry.js';
 
 declare const __APP_VERSION__: string | undefined;
 declare const version: string | undefined;
@@ -1864,10 +1866,27 @@ export class Editor extends EventEmitter<EditorEventMap> {
    * Set editor options and update state.
    */
   setOptions(options: Partial<EditorOptions> = {}): void {
-    this.options = {
-      ...this.options,
+    const previousOptions = this.options ?? {};
+    const nextOptions = {
+      ...previousOptions,
       ...options,
     };
+
+    // Preserve non-enumerable option metadata (for example the story editor's
+    // `parentEditor` getter) across option updates. Plain object spreading drops
+    // those descriptors, which breaks commit routing for child/story editors.
+    const previousDescriptors = Object.getOwnPropertyDescriptors(previousOptions);
+    for (const [key, descriptor] of Object.entries(previousDescriptors)) {
+      if (descriptor.enumerable) {
+        continue;
+      }
+      if (Object.prototype.hasOwnProperty.call(options, key)) {
+        continue;
+      }
+      Object.defineProperty(nextOptions, key, descriptor);
+    }
+
+    this.options = nextOptions;
 
     if ((this.options.isNewFile || !this.options.ydoc) && this.options.isCommentsEnabled) {
       this.options.shouldLoadComments = true;
@@ -1909,7 +1928,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
       }
     }
 
-    if (emitUpdate) {
+    if (emitUpdate && this.state) {
       this.emit('update', { editor: this, transaction: this.state.tr });
     }
   }
@@ -3132,6 +3151,9 @@ export class Editor extends EventEmitter<EditorEventMap> {
     compression,
   }: ExportDocxParams = {}): Promise<Blob | Buffer | Record<string, string | null> | string | undefined> {
     try {
+      const exportHostEditor = resolveMainBodyEditor(this);
+      commitLiveStorySessionRuntimes(exportHostEditor);
+
       // Use provided comments, or fall back to imported comments from converter
       const effectiveComments = comments ?? this.converter.comments ?? [];
 

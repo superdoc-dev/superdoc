@@ -68,6 +68,19 @@ describe('generateParagraphProperties', () => {
     expect(result.elements[1]).toBe(sectPr);
   });
 
+  it('inserts sectPr before pPrChange to satisfy CT_PPr ordering', () => {
+    const jc = { name: 'w:jc' };
+    const pPrChange = { name: 'w:pPrChange' };
+    const sectPr = { name: 'w:sectPr' };
+    const decoded = { type: 'element', name: 'w:pPr', elements: [jc, pPrChange] };
+    wPPrNodeTranslator.decode.mockReturnValue(decoded);
+    const node = { type: 'paragraph', attrs: { paragraphProperties: { sectPr } } };
+
+    const result = generateParagraphProperties({ node });
+
+    expect(result.elements).toEqual([jc, sectPr, pPrChange]);
+  });
+
   it('creates paragraph properties when decoder returns nothing but sectPr exists', () => {
     wPPrNodeTranslator.decode.mockReturnValue(undefined);
     const sectPr = { name: 'w:sectPr', elements: [] };

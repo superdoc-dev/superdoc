@@ -34,7 +34,7 @@ const isKeyBlocked = (editor, key, opts = {}) => {
   return blocked === true;
 };
 
-describe('Editable extension backward replace handling', () => {
+describe('Editable extension insertText beforeinput handling', () => {
   let editor = null;
 
   afterEach(() => {
@@ -63,6 +63,53 @@ describe('Editable extension backward replace handling', () => {
     editor.view.dom.dispatchEvent(beforeInputEvent);
 
     expect(editor.state.doc.textContent).toBe('Z');
+  });
+
+  it('replaces forward non-empty selection on beforeinput insertText', () => {
+    ({ editor } = initTestEditor({
+      mode: 'text',
+      content: '<p>PREAMBLE</p>',
+    }));
+
+    const range = findTextRange(editor.state.doc, 'PREAMBLE');
+    expect(range).not.toBeNull();
+
+    const forwardSelection = TextSelection.create(editor.state.doc, range.from, range.to);
+    editor.view.dispatch(editor.state.tr.setSelection(forwardSelection));
+
+    const beforeInputEvent = new InputEvent('beforeinput', {
+      data: 'Z',
+      inputType: 'insertText',
+      bubbles: true,
+      cancelable: true,
+    });
+    editor.view.dom.dispatchEvent(beforeInputEvent);
+
+    expect(editor.state.doc.textContent).toBe('Z');
+  });
+
+  it('does not intercept collapsed beforeinput insertText', () => {
+    ({ editor } = initTestEditor({
+      mode: 'text',
+      content: '<p>QA</p>',
+    }));
+
+    const range = findTextRange(editor.state.doc, 'QA');
+    expect(range).not.toBeNull();
+
+    const cursor = TextSelection.create(editor.state.doc, range.to, range.to);
+    editor.view.dispatch(editor.state.tr.setSelection(cursor));
+
+    const beforeInputEvent = new InputEvent('beforeinput', {
+      data: '!',
+      inputType: 'insertText',
+      bubbles: true,
+      cancelable: true,
+    });
+    const prevented = !editor.view.dom.dispatchEvent(beforeInputEvent);
+
+    expect(prevented).toBe(false);
+    expect(editor.state.doc.textContent).toBe('QA');
   });
 });
 

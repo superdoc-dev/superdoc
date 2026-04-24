@@ -338,7 +338,9 @@ export function imageNodeToBlock(
 export function handleImageNode(node: PMNode, context: NodeHandlerContext): ImageBlock | void {
   const { blocks, recordBlockKind, nextBlockId, positions, trackedChangesConfig } = context;
 
-  const trackedMeta = trackedChangesConfig.enabled ? collectTrackedChangeFromMarks(node.marks ?? []) : undefined;
+  const trackedMeta = trackedChangesConfig.enabled
+    ? collectTrackedChangeFromMarks(node.marks ?? [], context.storyKey)
+    : undefined;
   if (shouldHideTrackedNode(trackedMeta, trackedChangesConfig)) {
     return;
   }

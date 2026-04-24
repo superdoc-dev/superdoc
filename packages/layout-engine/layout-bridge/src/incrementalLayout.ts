@@ -25,6 +25,10 @@ import { remeasureParagraph } from './remeasure';
 import { computeDirtyRegions } from './diff';
 import { MeasureCache } from './cache';
 import { layoutHeaderFooterWithCache, HeaderFooterLayoutCache, type HeaderFooterBatch } from './layoutHeaderFooter';
+import {
+  buildSectionAwareHeaderFooterLayoutKey,
+  buildSectionAwareHeaderFooterMeasurementGroups,
+} from './sectionAwareHeaderFooter';
 import { FeatureFlags } from './featureFlags';
 import { PageTokenLogger, HeaderFooterCacheLogger, globalMetrics } from './instrumentation';
 import { HeaderFooterCacheState, invalidateHeaderFooterCache } from './cacheInvalidation';
@@ -886,10 +890,83 @@ export async function incrementalLayout(
    * Values are the actual content heights in pixels.
    */
   let headerContentHeightsByRId: Map<string, number> | undefined;
+  let headerContentHeightsBySectionRef: Map<string, number> | undefined;
 
   // Check if we have headers via either headerBlocks (by variant) or headerBlocksByRId (by relationship ID)
   const hasHeaderBlocks = headerFooter?.headerBlocks && Object.keys(headerFooter.headerBlocks).length > 0;
   const hasHeaderBlocksByRId = headerFooter?.headerBlocksByRId && headerFooter.headerBlocksByRId.size > 0;
+  const sectionMetadata = options.sectionMetadata ?? [];
+
+  const measureHeightsByReference = async (
+    kind: 'header' | 'footer',
+    blocksByRId: Map<string, FlowBlock[]> | undefined,
+    constraints: HeaderFooterConstraints,
+    measureFn: HeaderFooterMeasureFn,
+  ): Promise<{
+    heightsByRId?: Map<string, number>;
+    heightsBySectionRef?: Map<string, number>;
+  }> => {
+    if (!blocksByRId || blocksByRId.size === 0) {
+      return {};
+    }
+
+    const heightsByRId = new Map<string, number>();
+    const heightsBySectionRef = new Map<string, number>();
+    const sectionAwareGroups = buildSectionAwareHeaderFooterMeasurementGroups(
+      kind,
+      blocksByRId,
+      sectionMetadata,
+      constraints,
+    );
+
+    if (sectionAwareGroups.length > 0) {
+      for (const group of sectionAwareGroups) {
+        const blocks = blocksByRId.get(group.rId);
+        if (!blocks || blocks.length === 0) continue;
+
+        const measureConstraints = {
+          maxWidth: group.sectionConstraints.width,
+          maxHeight: group.sectionConstraints.height,
+        };
+        const measures = await Promise.all(blocks.map((block) => measureFn(block, measureConstraints)));
+        const layout = layoutHeaderFooter(blocks, measures, group.sectionConstraints, kind);
+        if (!(layout.height > 0)) continue;
+
+        const nextHeight = Math.max(0, layout.height);
+        const currentHeight = heightsByRId.get(group.rId) ?? 0;
+        if (nextHeight > currentHeight) {
+          heightsByRId.set(group.rId, nextHeight);
+        }
+
+        for (const sectionIndex of group.sectionIndices) {
+          heightsBySectionRef.set(buildSectionAwareHeaderFooterLayoutKey(group.rId, sectionIndex), nextHeight);
+        }
+      }
+
+      return {
+        heightsByRId: heightsByRId.size > 0 ? heightsByRId : undefined,
+        heightsBySectionRef: heightsBySectionRef.size > 0 ? heightsBySectionRef : undefined,
+      };
+    }
+
+    for (const [rId, blocks] of blocksByRId) {
+      if (!blocks || blocks.length === 0) continue;
+
+      const measureConstraints = {
+        maxWidth: constraints.width,
+        maxHeight: constraints.height,
+      };
+      const measures = await Promise.all(blocks.map((block) => measureFn(block, measureConstraints)));
+      const layout = layoutHeaderFooter(blocks, measures, constraints, kind);
+      if (layout.height > 0) {
+        heightsByRId.set(rId, layout.height);
+      }
+    }
+
+    return {
+      heightsByRId: heightsByRId.size > 0 ? heightsByRId : undefined,
+    };
+  };
 
   if (headerFooter?.constraints && (hasHeaderBlocks || hasHeaderBlocksByRId)) {
     const hfPreStart = performance.now();
@@ -953,22 +1030,14 @@ export async function incrementalLayout(
     // Also extract heights from headerBlocksByRId (for multi-section documents)
     // Store each rId's height separately for per-page margin calculation
     if (hasHeaderBlocksByRId && headerFooter.headerBlocksByRId) {
-      headerContentHeightsByRId = new Map<string, number>();
-      for (const [rId, blocks] of headerFooter.headerBlocksByRId) {
-        if (!blocks || blocks.length === 0) continue;
-        // Measure blocks to get height
-        const measureConstraints = {
-          maxWidth: headerFooter.constraints.width,
-          maxHeight: headerFooter.constraints.height,
-        };
-        const measures = await Promise.all(blocks.map((block) => measureFn(block, measureConstraints)));
-        // Layout to get actual height — pass full constraints for page-relative normalization
-        const layout = layoutHeaderFooter(blocks, measures, headerFooter.constraints, 'header');
-        if (layout.height > 0) {
-          // Store height by rId for per-page margin calculation
-          headerContentHeightsByRId.set(rId, layout.height);
-        }
-      }
+      const measuredHeights = await measureHeightsByReference(
+        'header',
+        headerFooter.headerBlocksByRId,
+        headerFooter.constraints,
+        measureFn,
+      );
+      headerContentHeightsByRId = measuredHeights.heightsByRId;
+      headerContentHeightsBySectionRef = measuredHeights.heightsBySectionRef;
     }
 
     const hfPreEnd = performance.now();
@@ -993,6 +1062,7 @@ export async function incrementalLayout(
    * Values are the actual content heights in pixels.
    */
   let footerContentHeightsByRId: Map<string, number> | undefined;
+  let footerContentHeightsBySectionRef: Map<string, number> | undefined;
 
   // Check if we have footers via either footerBlocks (by variant) or footerBlocksByRId (by relationship ID)
   const hasFooterBlocks = headerFooter?.footerBlocks && Object.keys(headerFooter.footerBlocks).length > 0;
@@ -1064,22 +1134,14 @@ export async function incrementalLayout(
       // Also extract heights from footerBlocksByRId (for multi-section documents)
       // Store each rId's height separately for per-page margin calculation
       if (hasFooterBlocksByRId && headerFooter.footerBlocksByRId) {
-        footerContentHeightsByRId = new Map<string, number>();
-        for (const [rId, blocks] of headerFooter.footerBlocksByRId) {
-          if (!blocks || blocks.length === 0) continue;
-          // Measure blocks to get height
-          const measureConstraints = {
-            maxWidth: headerFooter.constraints.width,
-            maxHeight: headerFooter.constraints.height,
-          };
-          const measures = await Promise.all(blocks.map((block) => measureFn(block, measureConstraints)));
-          // Layout to get actual height — pass full constraints for page-relative normalization
-          const layout = layoutHeaderFooter(blocks, measures, headerFooter.constraints, 'footer');
-          if (layout.height > 0) {
-            // Store height by rId for per-page margin calculation
-            footerContentHeightsByRId.set(rId, layout.height);
-          }
-        }
+        const measuredHeights = await measureHeightsByReference(
+          'footer',
+          headerFooter.footerBlocksByRId,
+          headerFooter.constraints,
+          measureFn,
+        );
+        footerContentHeightsByRId = measuredHeights.heightsByRId;
+        footerContentHeightsBySectionRef = measuredHeights.heightsBySectionRef;
       }
     } catch (error) {
       console.error('[Layout] Footer pre-layout failed:', error);
@@ -1095,7 +1157,9 @@ export async function incrementalLayout(
     ...options,
     headerContentHeights, // Pass header heights to prevent overlap (per-variant)
     footerContentHeights, // Pass footer heights to prevent overlap (per-variant)
+    headerContentHeightsBySectionRef, // Pass header heights by rId+section for exact page-specific margin calculation
     headerContentHeightsByRId, // Pass header heights by rId for per-page margin calculation
+    footerContentHeightsBySectionRef, // Pass footer heights by rId+section for exact page-specific margin calculation
     footerContentHeightsByRId, // Pass footer heights by rId for per-page margin calculation
     remeasureParagraph: (block: FlowBlock, maxWidth: number, firstLineIndent?: number) =>
       remeasureParagraph(block as ParagraphBlock, maxWidth, firstLineIndent),
@@ -1179,7 +1243,9 @@ export async function incrementalLayout(
         ...options,
         headerContentHeights, // Pass header heights to prevent overlap (per-variant)
         footerContentHeights, // Pass footer heights to prevent overlap (per-variant)
+        headerContentHeightsBySectionRef, // Pass header heights by rId+section for exact page-specific margin calculation
         headerContentHeightsByRId, // Pass header heights by rId for per-page margin calculation
+        footerContentHeightsBySectionRef, // Pass footer heights by rId+section for exact page-specific margin calculation
         footerContentHeightsByRId, // Pass footer heights by rId for per-page margin calculation
         remeasureParagraph: (block: FlowBlock, maxWidth: number, firstLineIndent?: number) =>
           remeasureParagraph(block as ParagraphBlock, maxWidth, firstLineIndent),
@@ -1771,6 +1837,10 @@ export async function incrementalLayout(
           footnoteReservedByPageIndex,
           headerContentHeights,
           footerContentHeights,
+          headerContentHeightsBySectionRef,
+          headerContentHeightsByRId,
+          footerContentHeightsBySectionRef,
+          footerContentHeightsByRId,
           remeasureParagraph: (block: FlowBlock, maxWidth: number, firstLineIndent?: number) =>
             remeasureParagraph(block as ParagraphBlock, maxWidth, firstLineIndent),
         });

@@ -6,13 +6,18 @@ import type {
   Fragment,
   DrawingFragment,
   ImageFragment,
+  ListItemFragment,
+  ParaFragment,
   TableFragment,
   Line,
+  ParagraphBorders,
   ResolvedLayout,
   ResolvedPage,
   ResolvedPaintItem,
+  ResolvedFragmentItem,
   ResolvedParagraphContent,
   ListMeasure,
+  ListBlock,
   ParagraphBlock,
   ParagraphMeasure,
 } from '@superdoc/contracts';
@@ -21,6 +26,9 @@ import { resolveTableItem } from './resolveTable.js';
 import { resolveImageItem } from './resolveImage.js';
 import { resolveDrawingItem } from './resolveDrawing.js';
 import type { BlockMapEntry } from './resolvedBlockLookup.js';
+import { computeSdtContainerKey } from './sdtContainerKey.js';
+import { hashParagraphBorders } from './paragraphBorderHash.js';
+import { deriveBlockVersion, fragmentSignature } from './versionSignature.js';
 
 export type ResolveLayoutInput = {
   layout: Layout;
@@ -29,7 +37,7 @@ export type ResolveLayoutInput = {
   measures: Measure[];
 };
 
-function buildBlockMap(blocks: FlowBlock[], measures: Measure[]): Map<string, BlockMapEntry> {
+export function buildBlockMap(blocks: FlowBlock[], measures: Measure[]): Map<string, BlockMapEntry> {
   const map = new Map<string, BlockMapEntry>();
   for (let i = 0; i < blocks.length; i++) {
     map.set(blocks[i].id, { block: blocks[i], measure: measures[i] });
@@ -122,23 +130,100 @@ function resolveParagraphContentIfApplicable(
   return resolveParagraphContent(fragment, entry.block as ParagraphBlock, entry.measure as ParagraphMeasure);
 }
 
-function resolveFragmentItem(
+function resolveFragmentParagraphBorders(
+  fragment: Fragment,
+  blockMap: Map<string, BlockMapEntry>,
+): ParagraphBorders | undefined {
+  const entry = blockMap.get(fragment.blockId);
+  if (!entry) return undefined;
+
+  if (fragment.kind === 'para' && entry.block.kind === 'paragraph') {
+    return (entry.block as ParagraphBlock).attrs?.borders;
+  }
+
+  if (fragment.kind === 'list-item' && entry.block.kind === 'list') {
+    const block = entry.block as ListBlock;
+    const item = block.items.find((listItem) => listItem.id === fragment.itemId);
+    return item?.paragraph.attrs?.borders;
+  }
+
+  return undefined;
+}
+
+function resolveFragmentSdtContainerKey(fragment: Fragment, blockMap: Map<string, BlockMapEntry>): string | null {
+  const entry = blockMap.get(fragment.blockId);
+  if (!entry) return null;
+  const block = entry.block;
+
+  if (fragment.kind === 'para' && block.kind === 'paragraph') {
+    return computeSdtContainerKey(block.attrs?.sdt, block.attrs?.containerSdt);
+  }
+
+  if (fragment.kind === 'list-item' && block.kind === 'list') {
+    const listBlock = block as ListBlock;
+    const item = listBlock.items.find((listItem) => listItem.id === fragment.itemId);
+    return computeSdtContainerKey(item?.paragraph.attrs?.sdt, item?.paragraph.attrs?.containerSdt);
+  }
+
+  if (fragment.kind === 'table' && block.kind === 'table') {
+    return computeSdtContainerKey(block.attrs?.sdt, block.attrs?.containerSdt);
+  }
+
+  // image, drawing — no SDT container keys
+  return null;
+}
+
+function computeBlockVersion(
+  blockId: string,
+  blockMap: Map<string, BlockMapEntry>,
+  cache: Map<string, string>,
+): string {
+  const cached = cache.get(blockId);
+  if (cached !== undefined) return cached;
+  const entry = blockMap.get(blockId);
+  if (!entry) {
+    cache.set(blockId, 'missing');
+    return 'missing';
+  }
+  const version = deriveBlockVersion(entry.block);
+  cache.set(blockId, version);
+  return version;
+}
+
+export function resolveFragmentItem(
   fragment: Fragment,
   fragmentIndex: number,
   pageIndex: number,
   blockMap: Map<string, BlockMapEntry>,
+  blockVersionCache: Map<string, string>,
 ): ResolvedPaintItem {
+  const sdtContainerKey = resolveFragmentSdtContainerKey(fragment, blockMap);
+  const blockVer = computeBlockVersion(fragment.blockId, blockMap, blockVersionCache);
+  const version = fragmentSignature(fragment, blockVer);
+
   // Route to kind-specific resolvers for types that carry extracted block/measure data.
   switch (fragment.kind) {
-    case 'table':
-      return resolveTableItem(fragment as TableFragment, fragmentIndex, pageIndex, blockMap);
-    case 'image':
-      return resolveImageItem(fragment as ImageFragment, fragmentIndex, pageIndex, blockMap);
-    case 'drawing':
-      return resolveDrawingItem(fragment as DrawingFragment, fragmentIndex, pageIndex, blockMap);
-    default:
+    case 'table': {
+      const item = resolveTableItem(fragment as TableFragment, fragmentIndex, pageIndex, blockMap);
+      if (sdtContainerKey != null) item.sdtContainerKey = sdtContainerKey;
+      item.version = version;
+      return item;
+    }
+    case 'image': {
+      const item = resolveImageItem(fragment as ImageFragment, fragmentIndex, pageIndex, blockMap);
+      if (sdtContainerKey != null) item.sdtContainerKey = sdtContainerKey;
+      item.version = version;
+      return item;
+    }
+    case 'drawing': {
+      const item = resolveDrawingItem(fragment as DrawingFragment, fragmentIndex, pageIndex, blockMap);
+      if (sdtContainerKey != null) item.sdtContainerKey = sdtContainerKey;
+      item.version = version;
+      return item;
+    }
+    default: {
       // para, list-item — existing generic resolution
-      return {
+      const item: ResolvedFragmentItem = {
         kind: 'fragment',
         id: resolveFragmentId(fragment),
         pageIndex,
@@ -152,12 +237,51 @@ function resolveFragmentItem(
         fragmentIndex,
         content: resolveParagraphContentIfApplicable(fragment, blockMap),
       };
+      if (sdtContainerKey != null) item.sdtContainerKey = sdtContainerKey;
+
+      // Pre-extract block/measure for para and list-item fragments so the painter
+      // can prefer resolved data over a blockLookup read.
+      const entry = blockMap.get(fragment.blockId);
+      if (entry) {
+        if (fragment.kind === 'para' && entry.block.kind === 'paragraph' && entry.measure.kind === 'paragraph') {
+          item.block = entry.block as ParagraphBlock;
+          item.measure = entry.measure as ParagraphMeasure;
+        } else if (fragment.kind === 'list-item' && entry.block.kind === 'list' && entry.measure.kind === 'list') {
+          item.block = entry.block as ListBlock;
+          item.measure = entry.measure as ListMeasure;
+        }
+      }
+
+      // Pre-compute paragraph border data for between-border grouping
+      const borders = resolveFragmentParagraphBorders(fragment, blockMap);
+      if (borders) {
+        item.paragraphBorders = borders;
+        item.paragraphBorderHash = hashParagraphBorders(borders);
+      }
+
+      if (fragment.kind === 'para') {
+        const para = fragment as ParaFragment;
+        if (para.pmStart != null) item.pmStart = para.pmStart;
+        if (para.pmEnd != null) item.pmEnd = para.pmEnd;
+        if (para.continuesFromPrev != null) item.continuesFromPrev = para.continuesFromPrev;
+        if (para.continuesOnNext != null) item.continuesOnNext = para.continuesOnNext;
+        if (para.markerWidth != null) item.markerWidth = para.markerWidth;
+      } else if (fragment.kind === 'list-item') {
+        const listItem = fragment as ListItemFragment;
+        if (listItem.continuesFromPrev != null) item.continuesFromPrev = listItem.continuesFromPrev;
+        if (listItem.continuesOnNext != null) item.continuesOnNext = listItem.continuesOnNext;
+        if (listItem.markerWidth != null) item.markerWidth = listItem.markerWidth;
+      }
+      item.version = version;
+      return item;
+    }
   }
 }
 
 export function resolveLayout(input: ResolveLayoutInput): ResolvedLayout {
   const { layout, flowMode, blocks, measures } = input;
   const blockMap = buildBlockMap(blocks, measures);
+  const blockVersionCache = new Map<string, string>();
 
   const pages: ResolvedPage[] = layout.pages.map((page, pageIndex) => ({
     id: `page-${pageIndex}`,
@@ -166,14 +290,33 @@ export function resolveLayout(input: ResolveLayoutInput): ResolvedLayout {
     width: page.size?.w ?? layout.pageSize.w,
     height: page.size?.h ?? layout.pageSize.h,
     items: page.fragments.map((fragment, fragmentIndex) =>
-      resolveFragmentItem(fragment, fragmentIndex, pageIndex, blockMap),
+      resolveFragmentItem(fragment, fragmentIndex, pageIndex, blockMap, blockVersionCache),
     ),
+    margins: page.margins,
+    footnoteReserved: page.footnoteReserved,
+    numberText: page.numberText,
+    vAlign: page.vAlign,
+    baseMargins: page.baseMargins,
+    sectionIndex: page.sectionIndex,
+    sectionRefs: page.sectionRefs,
+    orientation: page.orientation,
   }));
 
-  return {
+  const resolved: ResolvedLayout = {
     version: 1,
     flowMode,
     pageGap: layout.pageGap ?? 0,
     pages,
   };
+
+  if (blocks.length > 0) {
+    resolved.blockVersions = Object.fromEntries(
+      blocks.map((block) => [block.id, computeBlockVersion(block.id, blockMap, blockVersionCache)]),
+    );
+  }
+  if (layout.layoutEpoch != null) {
+    resolved.layoutEpoch = layout.layoutEpoch;
+  }
+
+  return resolved;
 }

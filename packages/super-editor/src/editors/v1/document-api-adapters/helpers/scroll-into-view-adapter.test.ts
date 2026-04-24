@@ -110,6 +110,35 @@ describe('scrollRangeIntoView — TextAddress / TextTarget', () => {
 
     expect(out).toEqual({ success: false });
   });
+
+  it('returns { success: false } when resolveTextTarget throws (ambiguous block id)', async () => {
+    // Production resolver throws `DocumentApiAdapterError` for ambiguous
+    // block IDs. The adapter must catch and convert to success: false
+    // rather than leak the error to the caller.
+    vi.mocked(resolveTextTarget).mockImplementation(() => {
+      throw new Error('Ambiguous block id');
+    });
+    const editor = makeEditor();
+
+    const out = await scrollRangeIntoView(editor, {
+      target: { kind: 'text', blockId: 'duplicated', range: { start: 0, end: 5 } },
+    });
+
+    expect(out).toEqual({ success: false });
+  });
+
+  it('returns { success: false } when scrollToPositionAsync rejects', async () => {
+    vi.mocked(resolveTextTarget).mockReturnValue({ from: 10, to: 15 });
+    const editor = makeEditor({
+      scrollToPositionAsync: vi.fn().mockRejectedValue(new Error('layout not ready')),
+    });
+
+    const out = await scrollRangeIntoView(editor, {
+      target: { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } },
+    });
+
+    expect(out).toEqual({ success: false });
+  });
 });
 
 describe('scrollRangeIntoView — EntityAddress', () => {

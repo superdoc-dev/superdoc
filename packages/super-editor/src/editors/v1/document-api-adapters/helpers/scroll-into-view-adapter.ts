@@ -17,6 +17,19 @@ import { resolveTextTarget } from './adapter-utils.js';
  *   `block` / `behavior` options. This path is body-only today; text
  *   targets that reference non-body stories are out of scope for this
  *   operation.
+ *
+ * Both paths honor the `{ success: boolean }` contract:
+ * thrown errors from resolvers (e.g. ambiguous block IDs) and rejected
+ * scroll promises are caught and converted into `{ success: false }`
+ * rather than propagating to the caller.
+ *
+ * Known limitation: for a tracked change that lives in a non-body story
+ * (header, footer, footnote, endnote) on a page that is not currently
+ * mounted in the DOM (virtualized), `presentation.navigateTo` returns
+ * `false` — the non-body navigation path activates the story surface via
+ * rendered DOM candidates, and offscreen pages have none. This returns
+ * `{ success: false }`. A fix needs body-side reference resolution so the
+ * containing page can be pre-mounted; tracked as a follow-up.
  */
 export async function scrollRangeIntoView(editor: Editor, input: ScrollIntoViewInput): Promise<ScrollIntoViewOutput> {
   const presentation = editor.presentationEditor;
@@ -45,22 +58,30 @@ export async function scrollRangeIntoView(editor: Editor, input: ScrollIntoViewI
     return { success: false };
   }
 
-  const firstSegment =
-    'segments' in input.target
-      ? input.target.segments[0]
-      : { blockId: input.target.blockId, range: input.target.range };
-  if (!firstSegment) return { success: false };
+  try {
+    const firstSegment =
+      'segments' in input.target
+        ? input.target.segments[0]
+        : { blockId: input.target.blockId, range: input.target.range };
+    if (!firstSegment) return { success: false };
 
-  const resolved = resolveTextTarget(editor, {
-    kind: 'text',
-    blockId: firstSegment.blockId,
-    range: firstSegment.range,
-  });
-  if (!resolved) return { success: false };
+    const resolved = resolveTextTarget(editor, {
+      kind: 'text',
+      blockId: firstSegment.blockId,
+      range: firstSegment.range,
+    });
+    if (!resolved) return { success: false };
 
-  const ok = await presentation.scrollToPositionAsync(resolved.from, {
-    block: input.block ?? 'center',
-    behavior: input.behavior ?? 'smooth',
-  });
-  return { success: ok };
+    const ok = await presentation.scrollToPositionAsync(resolved.from, {
+      block: input.block ?? 'center',
+      behavior: input.behavior ?? 'smooth',
+    });
+    return { success: ok };
+  } catch {
+    // `resolveTextTarget` throws `DocumentApiAdapterError` for ambiguous
+    // block IDs; `scrollToPositionAsync` can reject on layout or mount
+    // failures. Convert either into `{ success: false }` so the caller
+    // sees a single predictable result type.
+    return { success: false };
+  }
 }

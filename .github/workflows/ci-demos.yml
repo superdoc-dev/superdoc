@@ -84,12 +84,14 @@ jobs:
         run: DEMO=${{ matrix.demo }} npx playwright test
 
   validate:
+    name: CI Demos / validate
     if: always()
     needs: [smoke-test]
     runs-on: ubuntu-latest
     steps:
       - name: Check results
         run: |
-          if [[ "${{ contains(needs.*.result, 'failure') }}" == "true" ]]; then
+          if [[ "${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped') }}" == "true" ]]; then
+            echo "One or more required jobs did not succeed."
             exit 1
           fi

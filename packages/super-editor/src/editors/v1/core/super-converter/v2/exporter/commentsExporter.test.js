@@ -394,17 +394,41 @@ describe('prepareCommentsXmlFilesForExport', () => {
         },
       };
 
+      // Multiple unthreaded comments — exercises the scenario where the
+      // importer would otherwise guess thread parents from overlapping ranges.
+      const unthreadedComments = [
+        makeComment({ commentId: 'c1', commentParaId: 'AAAAAAA1' }),
+        makeComment({ commentId: 'c2', commentParaId: 'AAAAAAA2' }),
+        makeComment({ commentId: 'c3', commentParaId: 'AAAAAAA3' }),
+      ];
+      const unthreadedDefs = unthreadedComments.map((c, i) => makeCommentDef(String(i), c.commentParaId));
+
       const result = prepareCommentsXmlFilesForExport({
         convertedXml: makeConvertedXml(),
-        defs,
-        commentsWithParaIds,
+        defs: unthreadedDefs,
+        commentsWithParaIds: unthreadedComments,
         exportType: 'external',
         threadingProfile,
       });
 
-      expect(result.documentXml['word/commentsExtended.xml']).toBeDefined();
+      const extXml = result.documentXml['word/commentsExtended.xml'];
+      expect(extXml).toBeDefined();
       const rel = result.relationships.find((r) => r.attributes.Target === 'commentsExtended.xml');
       expect(rel).toBeDefined();
+
+      // One w15:commentEx entry per comment, each with w15:paraId and NO
+      // w15:paraIdParent — the missing parent ids are what prevents the
+      // importer from reconstructing threads from overlapping ranges.
+      const entries = extXml.elements[0].elements;
+      expect(entries).toHaveLength(unthreadedComments.length);
+      const paraIds = new Set();
+      for (const entry of entries) {
+        expect(entry.name).toBe('w15:commentEx');
+        expect(entry.attributes['w15:paraId']).toBeDefined();
+        expect(entry.attributes['w15:paraIdParent']).toBeUndefined();
+        paraIds.add(entry.attributes['w15:paraId']);
+      }
+      expect(paraIds.size).toBe(unthreadedComments.length);
     });
 
     it('still honors Google Docs export strategy when all comments originate from Google Docs', () => {

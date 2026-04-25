@@ -21,6 +21,13 @@ let measurementCtx: CanvasRenderingContext2D | null = null;
 const TAB_CHAR_LENGTH = 1;
 const FOOTNOTE_MARKER_DATA_ATTR = 'data-sd-footnote-number';
 
+const getRunDataAttrs = (run: Run | undefined): Record<string, string> | undefined => {
+  if (!run || !('dataAttrs' in run)) {
+    return undefined;
+  }
+  return run.dataAttrs;
+};
+
 const getRunCharacterLength = (run: Run | undefined): number => {
   if (!run) return 0;
   if (isTabRun(run)) return TAB_CHAR_LENGTH;
@@ -37,7 +44,7 @@ const getRunCharacterLength = (run: Run | undefined): number => {
 };
 
 const isVisualOnlyRun = (run: Run | undefined): boolean => {
-  return run?.dataAttrs?.[FOOTNOTE_MARKER_DATA_ATTR] === 'true';
+  return getRunDataAttrs(run)?.[FOOTNOTE_MARKER_DATA_ATTR] === 'true';
 };
 
 /**

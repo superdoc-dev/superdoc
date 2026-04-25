@@ -1592,10 +1592,12 @@ export class EditorInputManager {
       handledByDepth = this.#callbacks.selectWordAt?.(selectionPos) ?? false;
     }
 
-    const hasFocus = editor.view?.hasFocus?.() ?? false;
-    if (!hasFocus) {
-      this.#focusEditor();
-    }
+    // `EditorView.hasFocus()` is not strong enough here for hidden story
+    // surfaces. A reused note editor can keep an internal "focused" state even
+    // after its DOM host was torn down and remounted elsewhere. The actual
+    // browser `activeElement` still decides where native selection and keyboard
+    // input go, so always let `#focusEditor()` reconcile real DOM focus.
+    this.#focusEditor();
 
     // Set selection for single click
     if (!handledByDepth) {
@@ -1870,11 +1872,7 @@ export class EditorInputManager {
       return;
     }
 
-    try {
-      this.#deps.getActiveEditor().view?.focus();
-    } catch {
-      // Ignore focus failures
-    }
+    this.#focusEditorView(this.#deps.getActiveEditor().view);
     this.#callbacks.scheduleSelectionUpdate?.();
   }
 
@@ -2696,7 +2694,7 @@ export class EditorInputManager {
     }
 
     editorDom.focus();
-    editor?.view?.focus();
+    this.#focusEditorView(editor?.view);
     this.#callbacks.scheduleSelectionUpdate?.();
   }
 
@@ -2715,9 +2713,12 @@ export class EditorInputManager {
 
     const active = document.activeElement as HTMLElement | null;
     const activeIsEditor = active === editorDom || (!!active && editorDom.contains?.(active));
-    const hasFocus = typeof view.hasFocus === 'function' && view.hasFocus();
 
-    if (activeIsEditor || hasFocus) {
+    // In presentation mode the hidden editor can keep an in-DOM selection while
+    // native focus still sits on a stale body editor or a layout surface. The
+    // actual activeElement decides where keyboard input goes, so only skip the
+    // focus handoff when the browser is already focused inside this editor.
+    if (activeIsEditor) {
       return;
     }
 
@@ -2726,7 +2727,19 @@ export class EditorInputManager {
     }
 
     editorDom.focus();
-    view?.focus();
+    this.#focusEditorView(view);
+  }
+
+  #focusEditorView(view: { focus?: (() => void) | undefined } | null | undefined): void {
+    if (typeof view?.focus !== 'function') {
+      return;
+    }
+
+    try {
+      view.focus();
+    } catch {
+      // Ignore focus failures from stale or test-only views.
+    }
   }
 
   #handleRepeatClickOnActiveComment(event: PointerEvent, target: HTMLElement | null, editor: Editor): boolean {

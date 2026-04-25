@@ -387,6 +387,37 @@ describe('PresentationEditor', () => {
     }
   });
 
+  describe('unified history defaults', () => {
+    it('enables the coordinator by default', async () => {
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'unified-history-default-doc',
+        content: { type: 'doc', content: [{ type: 'paragraph' }] },
+        mode: 'docx',
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(editor.historyCoordinator).not.toBeNull();
+    });
+
+    it('allows callers to disable the coordinator explicitly', async () => {
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'unified-history-disabled-doc',
+        content: { type: 'doc', content: [{ type: 'paragraph' }] },
+        mode: 'docx',
+        experimental: {
+          unifiedHistory: false,
+        },
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(editor.historyCoordinator).toBeNull();
+    });
+  });
+
   describe('scrollToPosition', () => {
     let originalScrollIntoView: unknown;
 

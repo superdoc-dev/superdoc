@@ -19,6 +19,14 @@ let measurementCanvas: HTMLCanvasElement | null = null;
 let measurementCtx: CanvasRenderingContext2D | null = null;
 
 const TAB_CHAR_LENGTH = 1;
+const FOOTNOTE_MARKER_DATA_ATTR = 'data-sd-footnote-number';
+
+const getRunDataAttrs = (run: Run | undefined): Record<string, string> | undefined => {
+  if (!run || !('dataAttrs' in run)) {
+    return undefined;
+  }
+  return run.dataAttrs;
+};
 
 const getRunCharacterLength = (run: Run | undefined): number => {
   if (!run) return 0;
@@ -33,6 +41,10 @@ const getRunCharacterLength = (run: Run | undefined): number => {
     return 0;
   }
   return run.text?.length ?? 0;
+};
+
+const isVisualOnlyRun = (run: Run | undefined): boolean => {
+  return getRunDataAttrs(run)?.[FOOTNOTE_MARKER_DATA_ATTR] === 'true';
 };
 
 /**
@@ -703,20 +715,11 @@ export function charOffsetToPm(block: FlowBlock, line: Line, charOffset: number,
   let cursor = 0;
   let lastPm = fallbackPmStart;
 
-  for (const run of runs) {
-    const isTab = isTabRun(run);
-    const text =
-      'src' in run ||
-      run.kind === 'lineBreak' ||
-      run.kind === 'break' ||
-      run.kind === 'fieldAnnotation' ||
-      run.kind === 'math'
-        ? ''
-        : (run.text ?? '');
-    const runLength = isTab ? TAB_CHAR_LENGTH : text.length;
-
-    const runPmStart = typeof run.pmStart === 'number' ? run.pmStart : null;
-    const runPmEnd = typeof run.pmEnd === 'number' ? run.pmEnd : runPmStart != null ? runPmStart + runLength : null;
+  for (let runIndex = 0; runIndex < runs.length; runIndex += 1) {
+    const run = runs[runIndex];
+    const runLength = getRunCharacterLength(run);
+    const runPmStart = resolveRunPmStart(run, runLength);
+    const runPmEnd = resolveRunPmEnd(run, runLength, runPmStart);
 
     if (runPmStart != null) {
       lastPm = runPmStart;
@@ -724,7 +727,15 @@ export function charOffsetToPm(block: FlowBlock, line: Line, charOffset: number,
 
     if (safeCharOffset <= cursor + runLength) {
       const offsetInRun = Math.max(0, safeCharOffset - cursor);
-      return runPmStart != null ? runPmStart + Math.min(offsetInRun, runLength) : fallbackPmStart + safeCharOffset;
+      if (runPmStart != null) {
+        return runPmStart + Math.min(offsetInRun, runLength);
+      }
+
+      if (isVisualOnlyRun(run)) {
+        return resolveVisualOnlyRunBoundary(runs, runIndex, offsetInRun, runLength, lastPm);
+      }
+
+      return fallbackPmStart + safeCharOffset;
     }
 
     if (runPmEnd != null) {
@@ -736,6 +747,72 @@ export function charOffsetToPm(block: FlowBlock, line: Line, charOffset: number,
 
   return lastPm;
 }
+
+const resolveRunPmStart = (run: Run | undefined, runLength: number): number | null => {
+  if (!run) {
+    return null;
+  }
+
+  if (typeof run.pmStart === 'number') {
+    return run.pmStart;
+  }
+
+  if (typeof run.pmEnd === 'number') {
+    return run.pmEnd - runLength;
+  }
+
+  return null;
+};
+
+const resolveRunPmEnd = (run: Run | undefined, runLength: number, runPmStart: number | null): number | null => {
+  if (!run) {
+    return null;
+  }
+
+  if (typeof run.pmEnd === 'number') {
+    return run.pmEnd;
+  }
+
+  if (runPmStart != null) {
+    return runPmStart + runLength;
+  }
+
+  return null;
+};
+
+const findNextPmBoundary = (runs: readonly Run[], startIndex: number, fallbackPm: number): number => {
+  for (let runIndex = startIndex; runIndex < runs.length; runIndex += 1) {
+    const run = runs[runIndex];
+    const runLength = getRunCharacterLength(run);
+    const nextPmStart = resolveRunPmStart(run, runLength);
+    if (nextPmStart != null) {
+      return nextPmStart;
+    }
+
+    const nextPmEnd = resolveRunPmEnd(run, runLength, nextPmStart);
+    if (nextPmEnd != null) {
+      return nextPmEnd;
+    }
+  }
+
+  return fallbackPm;
+};
+
+const resolveVisualOnlyRunBoundary = (
+  runs: readonly Run[],
+  runIndex: number,
+  offsetInRun: number,
+  runLength: number,
+  previousPmBoundary: number,
+): number => {
+  const nextPmBoundary = findNextPmBoundary(runs, runIndex + 1, previousPmBoundary);
+  if (runLength <= 0 || previousPmBoundary === nextPmBoundary) {
+    return previousPmBoundary;
+  }
+
+  const midpoint = runLength / 2;
+  return offsetInRun < midpoint ? previousPmBoundary : nextPmBoundary;
+};
 
 /**
  * Find the character offset and PM position at a given X coordinate within a line.

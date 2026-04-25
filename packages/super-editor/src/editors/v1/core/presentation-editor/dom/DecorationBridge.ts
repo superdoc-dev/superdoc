@@ -404,6 +404,50 @@ export class DecorationBridge {
   }
 
   /**
+   * Returns true when the current plugin state still contains at least one
+   * inline decoration range before any fallback restoration is applied.
+   *
+   * PresentationEditor uses this to tell "new/updated highlight" apart from an
+   * explicit clear when a transaction listener fires without the original
+   * transaction payload.
+   */
+  hasCurrentRanges(state: EditorState): boolean {
+    this.#refreshEligiblePlugins(state);
+
+    if (this.#eligiblePlugins.length === 0) {
+      return false;
+    }
+
+    const docSize = state.doc.content.size;
+    for (const plugin of this.#eligiblePlugins) {
+      const decorationSet = this.#getDecorationSet(plugin, state);
+      if (decorationSet === DecorationSet.empty) {
+        continue;
+      }
+
+      for (const decoration of decorationSet.find(0, docSize)) {
+        if (!this.#isInlineDecoration(decoration)) {
+          continue;
+        }
+
+        const attrs = this.#extractSafeAttrs(decoration);
+        const hasVisibleAttrs =
+          attrs.classes.length > 0 || attrs.dataEntries.length > 0 || attrs.styleEntries.length > 0;
+        if (!hasVisibleAttrs) {
+          continue;
+        }
+        if (decoration.from >= decoration.to) {
+          continue;
+        }
+
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  /**
    * Collects all decoration ranges from eligible plugins for overlay rendering.
    * Returns an array of {from, to, classes, style} objects representing each
    * inline decoration that should be visually rendered.

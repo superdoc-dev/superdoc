@@ -6,13 +6,20 @@ import type { ResolvedToolbarSources } from './internal-types.js';
 // Normalize raw Editor and PresentationEditor into one toolbar-facing shape.
 // PresentationEditor remains the routing authority whenever it is available.
 
+const resolveSurfaceFromDocumentId = (documentId: string | null | undefined): HeadlessToolbarSurface => {
+  if (typeof documentId !== 'string' || documentId.length === 0) return 'body';
+  if (documentId.startsWith('footnote:') || documentId.startsWith('fn:')) return 'note';
+  if (documentId.startsWith('endnote:') || documentId.startsWith('en:')) return 'endnote';
+  return 'body';
+};
+
 const resolveSurface = (activeEditor: Editor | null | undefined): HeadlessToolbarSurface => {
   if (activeEditor?.options?.isHeaderOrFooter) {
     const headerFooterType = activeEditor.options?.headerFooterType;
     if (headerFooterType === 'footer') return 'footer';
     if (headerFooterType === 'header') return 'header';
   }
-  return 'body';
+  return resolveSurfaceFromDocumentId(activeEditor?.options?.documentId);
 };
 
 const resolveSelectionEmpty = (editor: Editor | PresentationEditor): boolean => {
@@ -35,6 +42,11 @@ const createPresentationToolbarTarget = (editor: PresentationEditor): ToolbarTar
   };
 };
 
+type EditorWithPresentationOwner = Editor & {
+  presentationEditor?: PresentationEditor | null;
+  _presentationEditor?: PresentationEditor | null;
+};
+
 const resolvePresentationEditor = (superdoc: {
   activeEditor?: Editor | null;
   superdocStore?: {
@@ -44,7 +56,12 @@ const resolvePresentationEditor = (superdoc: {
     }>;
   };
 }): PresentationEditor | null => {
-  const activeEditor = superdoc.activeEditor;
+  const activeEditor = (superdoc.activeEditor as EditorWithPresentationOwner | null | undefined) ?? null;
+  const directPresentationEditor = activeEditor?.presentationEditor ?? activeEditor?._presentationEditor ?? null;
+  if (directPresentationEditor) {
+    return directPresentationEditor;
+  }
+
   const documentId = activeEditor?.options?.documentId;
   if (!documentId) return null;
 

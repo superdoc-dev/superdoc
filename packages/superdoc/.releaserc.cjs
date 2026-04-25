@@ -39,6 +39,7 @@ Object.keys(require.cache)
   })
 
 const branch = process.env.GITHUB_REF_NAME || process.env.CI_COMMIT_BRANCH
+const isLocalPreview = process.env.SUPERDOC_RELEASE_PREVIEW === '1'
 
 const branches = [
   {
@@ -62,16 +63,18 @@ const isPrerelease = branches.some(
 )
 
 // Use AI-powered notes for stable releases, conventional generator for prereleases
-const notesPlugin = isPrerelease
+const notesPlugin = isLocalPreview || isPrerelease
   ? '@semantic-release/release-notes-generator'
   : ['semantic-release-ai-notes', { style: 'concise' }]
 
 const config = {
   branches,
   tagFormat: 'v${version}',
-  plugins: [
-    '@semantic-release/commit-analyzer',
-    notesPlugin,
+  plugins: ['@semantic-release/commit-analyzer', notesPlugin],
+}
+
+if (!isLocalPreview) {
+  config.plugins.push(
     // NPM plugin MUST come before git plugin
     [
       'semantic-release-pnpm',
@@ -80,12 +83,12 @@ const config = {
       }
     ],
     '../../scripts/publish-superdoc.cjs'
-  ],
+  )
 }
 
-// Only add changelog and git plugins for non-prerelease branches
+// Only add changelog and git plugins for non-prerelease, non-preview branches
 
-if (!isPrerelease) {
+if (!isLocalPreview && !isPrerelease) {
   // Git plugin commits the version bump back to the branch.
   // No changelog — release notes live on the GitHub release only.
   config.plugins.push([
@@ -99,19 +102,23 @@ if (!isPrerelease) {
 }
 
 // Linear integration - labels issues with version on release
-config.plugins.push(['semantic-release-linear-app', {
-  teamKeys: ['SD'],
-  addComment: true,
-  packageName: 'superdoc',
-  commentTemplate: 'shipped in {package} {releaseLink} {channel}'
-}])
+if (!isLocalPreview) {
+  config.plugins.push(['semantic-release-linear-app', {
+    teamKeys: ['SD'],
+    addComment: true,
+    packageName: 'superdoc',
+    commentTemplate: 'shipped in {package} {releaseLink} {channel}'
+  }])
+}
 
 // GitHub plugin comes last
-config.plugins.push([
-  '@semantic-release/github',
-  {
-    successComment: ':tada: This ${issue.pull_request ? "PR" : "issue"} is included in **superdoc** v${nextRelease.version}\n\nThe release is available on [GitHub release](https://github.com/superdoc-dev/superdoc/releases/tag/${nextRelease.gitTag})',
-  }
-])
+if (!isLocalPreview) {
+  config.plugins.push([
+    '@semantic-release/github',
+    {
+      successComment: ':tada: This ${issue.pull_request ? "PR" : "issue"} is included in **superdoc** v${nextRelease.version}\n\nThe release is available on [GitHub release](https://github.com/superdoc-dev/superdoc/releases/tag/${nextRelease.gitTag})',
+    }
+  ])
+}
 
 module.exports = config

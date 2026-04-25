@@ -99,9 +99,17 @@ describe('EditorHistorySnapshotAdapter — PM-backed editors', () => {
     const listener = vi.fn();
 
     const unsubscribe = adapter.subscribe(listener);
-    expect(on).toHaveBeenCalledWith('transaction', listener);
+    expect(on).toHaveBeenCalledTimes(1);
+    expect(on.mock.calls[0]?.[0]).toBe('transaction');
+
+    const transactionHandler = on.mock.calls[0]?.[1];
+    expect(transactionHandler).toEqual(expect.any(Function));
+
+    transactionHandler?.({ transaction: { docChanged: true, getMeta: () => undefined } });
+    expect(listener).toHaveBeenCalledTimes(1);
+
     unsubscribe();
-    expect(off).toHaveBeenCalledWith('transaction', listener);
+    expect(off).toHaveBeenCalledWith('transaction', transactionHandler);
   });
 });
 

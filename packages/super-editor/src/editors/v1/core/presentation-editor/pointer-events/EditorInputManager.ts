@@ -1872,11 +1872,7 @@ export class EditorInputManager {
       return;
     }
 
-    try {
-      this.#deps.getActiveEditor().view?.focus();
-    } catch {
-      // Ignore focus failures
-    }
+    this.#focusEditorView(this.#deps.getActiveEditor().view);
     this.#callbacks.scheduleSelectionUpdate?.();
   }
 
@@ -2698,7 +2694,7 @@ export class EditorInputManager {
     }
 
     editorDom.focus();
-    editor?.view?.focus();
+    this.#focusEditorView(editor?.view);
     this.#callbacks.scheduleSelectionUpdate?.();
   }
 
@@ -2731,7 +2727,19 @@ export class EditorInputManager {
     }
 
     editorDom.focus();
-    view?.focus();
+    this.#focusEditorView(view);
+  }
+
+  #focusEditorView(view: { focus?: (() => void) | undefined } | null | undefined): void {
+    if (typeof view?.focus !== 'function') {
+      return;
+    }
+
+    try {
+      view.focus();
+    } catch {
+      // Ignore focus failures from stale or test-only views.
+    }
   }
 
   #handleRepeatClickOnActiveComment(event: PointerEvent, target: HTMLElement | null, editor: Editor): boolean {

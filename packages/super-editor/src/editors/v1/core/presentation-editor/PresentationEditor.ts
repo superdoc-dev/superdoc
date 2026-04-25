@@ -4137,6 +4137,14 @@ export class PresentationEditor extends EventEmitter {
     }
   }
 
+  #shouldRestoreEmptyDecorationsAfterTransaction(transaction: Transaction | undefined, state: EditorState): boolean {
+    if (transaction) {
+      return transaction.docChanged === true;
+    }
+
+    return this.#postPaintPipeline.hasCurrentDecorationRanges(state);
+  }
+
   /**
    * Schedules a decoration sync on the next animation frame, coalesced so
    * rapid transactions (cursor movement, selection changes) don't cause
@@ -4257,7 +4265,7 @@ export class PresentationEditor extends EventEmitter {
       // Sync immediately whenever decorations changed so e.g. clearFocus removes
       // highlight-selection in the same tick. Only restore when we had a doc change.
       if (decorationChanged) {
-        const restoreEmpty = tr ? tr.docChanged === true : false;
+        const restoreEmpty = this.#shouldRestoreEmptyDecorationsAfterTransaction(tr, state!);
         this.#postPaintPipeline.syncDecorations(state!, this.#domPositionIndex, {
           restoreEmptyDecorations: restoreEmpty,
         });

@@ -622,6 +622,75 @@ describe('LinkClickHandler', () => {
     expect(mockEditor.dispatch).toHaveBeenCalledTimes(1);
   });
 
+  it('should open linked images directly in editing mode instead of showing the popover', async () => {
+    mount(LinkClickHandler, {
+      props: {
+        editor: mockEditor,
+        openPopover: mockOpenPopover,
+        closePopover: mockClosePopover,
+      },
+    });
+
+    const linkElement = document.createElement('a');
+    linkElement.appendChild(document.createElement('img'));
+
+    const linkClickEvent = new CustomEvent('superdoc-link-click', {
+      bubbles: true,
+      composed: true,
+      detail: {
+        href: 'https://example.com/image-link',
+        target: '_blank',
+        rel: 'noopener noreferrer',
+        element: linkElement,
+        clientX: 250,
+        clientY: 250,
+      },
+    });
+
+    mockSurfaceElement.dispatchEvent(linkClickEvent);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(windowOpenSpy).toHaveBeenCalledWith('https://example.com/image-link', '_blank', 'noopener,noreferrer');
+    expect(mockOpenPopover).not.toHaveBeenCalled();
+    expect(mockEditor.dispatch).not.toHaveBeenCalled();
+    expect(moveCursorToMouseEvent).not.toHaveBeenCalled();
+    expect(selectionHasNodeOrMark).not.toHaveBeenCalled();
+  });
+
+  it('should navigate linked image anchors directly in editing mode', async () => {
+    mount(LinkClickHandler, {
+      props: {
+        editor: mockEditor,
+        openPopover: mockOpenPopover,
+        closePopover: mockClosePopover,
+      },
+    });
+
+    const linkElement = document.createElement('a');
+    linkElement.appendChild(document.createElement('img'));
+
+    const linkClickEvent = new CustomEvent('superdoc-link-click', {
+      bubbles: true,
+      composed: true,
+      detail: {
+        href: '#linked-image-anchor',
+        element: linkElement,
+        clientX: 250,
+        clientY: 250,
+      },
+    });
+
+    mockSurfaceElement.dispatchEvent(linkClickEvent);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(mockPresentationEditor.goToAnchor).toHaveBeenCalledWith('#linked-image-anchor');
+    expect(windowOpenSpy).not.toHaveBeenCalled();
+    expect(mockOpenPopover).not.toHaveBeenCalled();
+    expect(mockEditor.dispatch).not.toHaveBeenCalled();
+    expect(moveCursorToMouseEvent).not.toHaveBeenCalled();
+    expect(selectionHasNodeOrMark).not.toHaveBeenCalled();
+  });
+
   it('should open external hyperlinks in viewing mode instead of showing the popover', async () => {
     mockEditor.options.documentMode = 'viewing';
 

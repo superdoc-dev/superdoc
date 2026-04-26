@@ -14,6 +14,7 @@ export * from './track-changes.types.js';
 export * from './create.types.js';
 export * from './table-operations.types.js';
 export * from './info.types.js';
+export * from './extract.types.js';
 export * from './style-policy.types.js';
 export * from './mutation-plan.types.js';
 export * from './query-match.types.js';

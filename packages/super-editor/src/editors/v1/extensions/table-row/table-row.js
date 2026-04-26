@@ -1,6 +1,8 @@
 // @ts-nocheck
 import { Node } from '@core/Node.js';
 import { Attribute } from '@core/Attribute.js';
+import { pixelsToTwips } from '@core/super-converter/helpers.js';
+import { parseRowHeight } from './helpers/parseRowHeight.js';
 
 /**
  * @typedef {Object} CnfStyle
@@ -118,7 +120,20 @@ export const TableRow = Node.create({
       /**
        * @see {@link https://ecma-international.org/publications-and-standards/standards/ecma-376/} "Fundamentals And Markup Language Reference", page 377-482
        */
-      tableRowProperties: { rendered: false },
+      tableRowProperties: {
+        rendered: false,
+        parseDOM: (element) => {
+          const parsedHeightPx = parseRowHeight(element);
+          if (parsedHeightPx == null) return undefined;
+
+          return {
+            rowHeight: {
+              value: pixelsToTwips(parsedHeightPx),
+              rule: 'atLeast',
+            },
+          };
+        },
+      },
       /**
        * @see {@link https://ecma-international.org/publications-and-standards/standards/ecma-376/} "Fundamentals And Markup Language Reference", page 472
        */

@@ -4,6 +4,7 @@ import { h, defineComponent, ref, shallowRef, reactive, nextTick } from 'vue';
 import { DOCX } from '@superdoc/common';
 import { Schema } from 'prosemirror-model';
 import { EditorState, TextSelection } from 'prosemirror-state';
+import { ySyncPluginKey } from 'y-prosemirror';
 import { Extension } from '../../super-editor/src/editors/v1/core/Extension.js';
 import {
   CommentsPlugin,
@@ -103,10 +104,22 @@ const HrbrFieldsLayerStub = stubComponent('HrbrFieldsLayer');
 const AiLayerStub = stubComponent('AiLayer');
 const HtmlViewerStub = stubComponent('HtmlViewer');
 
+const createTrackedChangeIndexStub = () => ({
+  subscribe: vi.fn(() => () => {}),
+  getAll: vi.fn(() => []),
+  get: vi.fn(() => []),
+  invalidate: vi.fn(),
+  invalidateAll: vi.fn(),
+  dispose: vi.fn(),
+});
+
+const getTrackedChangeIndexMock = vi.fn(() => createTrackedChangeIndexStub());
+
 // Mock @superdoc/super-editor with stubs and PresentationEditor class
 vi.mock('@superdoc/super-editor', () => ({
   SuperEditor: SuperEditorStub,
   AIWriter: AIWriterStub,
+  getTrackedChangeIndex: getTrackedChangeIndexMock,
   PresentationEditor: class PresentationEditorMock {
     static getInstance(documentId) {
       return mockState.instances.get(documentId);
@@ -253,9 +266,28 @@ const buildCommentsStore = () => ({
   isCommentHighlighted: ref(false),
 });
 
-const mountComponent = async (superdocStub, { surfaceManager = null } = {}) => {
-  superdocStoreStub = buildSuperdocStore();
-  commentsStoreStub = buildCommentsStore();
+const createCommentsStoreWithFloatingGetter = () => {
+  const store = buildCommentsStore();
+  const floatingCommentsState = ref([]);
+
+  delete store.getFloatingComments;
+  Object.defineProperty(store, 'getFloatingComments', {
+    configurable: true,
+    enumerable: true,
+    get() {
+      return floatingCommentsState.value;
+    },
+  });
+
+  return { store, floatingCommentsState };
+};
+
+const mountComponent = async (
+  superdocStub,
+  { surfaceManager = null, superdocStore = null, commentsStore = null } = {},
+) => {
+  superdocStoreStub = superdocStore ?? buildSuperdocStore();
+  commentsStoreStub = commentsStore ?? buildCommentsStore();
   superdocStoreStub.modules.ai = { endpoint: '/ai' };
   commentsStoreStub.documentsWithConverations.value = [{ id: 'doc-1' }];
 
@@ -386,6 +418,8 @@ describe('SuperDoc.vue', () => {
     useSelectionMock.mockClear();
     useAiMock.mockClear();
     useSelectedTextMock.mockClear();
+    getTrackedChangeIndexMock.mockClear();
+    getTrackedChangeIndexMock.mockImplementation(() => createTrackedChangeIndexStub());
     mockState.instances.clear();
 
     // Make RAF synchronous in tests — jsdom has no rendering loop, and
@@ -741,9 +775,12 @@ describe('SuperDoc.vue', () => {
       documentId: 'doc-1',
       editor: editorMock,
     });
+    expect(commentsStoreStub.syncTrackedChangeComments).not.toHaveBeenCalled();
+    await Promise.resolve();
     expect(commentsStoreStub.syncTrackedChangeComments).toHaveBeenCalledWith({
       superdoc: superdocStub,
       editor: editorMock,
+      broadcastChanges: true,
     });
 
     commentsStoreStub.syncTrackedChangePositionsWithDocument.mockClear();
@@ -759,10 +796,119 @@ describe('SuperDoc.vue', () => {
       documentId: 'doc-1',
       editor: editorMock,
     });
+    expect(commentsStoreStub.syncTrackedChangeComments).not.toHaveBeenCalled();
+    await Promise.resolve();
     expect(commentsStoreStub.syncTrackedChangeComments).toHaveBeenCalledWith({
       superdoc: superdocStub,
       editor: editorMock,
+      broadcastChanges: true,
     });
+  });
+
+  it('resyncs tracked-change threads on collaboration undo/redo transactions', async () => {
+    const superdocStub = createSuperdocStub();
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    const options = wrapper.findComponent(SuperEditorStub).props('options');
+    const editorMock = { options: { documentId: 'doc-1' } };
+
+    const makeTransaction = ({ inputType, ySyncMeta } = {}) => ({
+      getMeta: vi.fn((key) => {
+        if (key === 'inputType') return inputType;
+        if (key === ySyncPluginKey) return ySyncMeta;
+        return undefined;
+      }),
+    });
+
+    options.onTransaction({
+      editor: editorMock,
+      transaction: makeTransaction({
+        ySyncMeta: { isChangeOrigin: true, isUndoRedoOperation: true },
+      }),
+      duration: 4,
+    });
+
+    expect(commentsStoreStub.syncTrackedChangePositionsWithDocument).toHaveBeenCalledWith({
+      documentId: 'doc-1',
+      editor: editorMock,
+    });
+    expect(commentsStoreStub.syncTrackedChangeComments).not.toHaveBeenCalled();
+    await Promise.resolve();
+    expect(commentsStoreStub.syncTrackedChangeComments).toHaveBeenCalledWith({
+      superdoc: superdocStub,
+      editor: editorMock,
+      broadcastChanges: true,
+    });
+  });
+
+  it('resyncs tracked-change threads on peer collaboration replays', async () => {
+    const superdocStub = createSuperdocStub();
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    const options = wrapper.findComponent(SuperEditorStub).props('options');
+    const editorMock = { options: { documentId: 'doc-1' } };
+
+    const makeTransaction = ({ inputType, ySyncMeta, docChanged = false } = {}) => ({
+      docChanged,
+      getMeta: vi.fn((key) => {
+        if (key === 'inputType') return inputType;
+        if (key === ySyncPluginKey) return ySyncMeta;
+        return undefined;
+      }),
+    });
+
+    options.onTransaction({
+      editor: editorMock,
+      transaction: makeTransaction({
+        docChanged: true,
+        ySyncMeta: { isChangeOrigin: true, isUndoRedoOperation: false },
+      }),
+      duration: 6,
+    });
+
+    expect(commentsStoreStub.syncTrackedChangePositionsWithDocument).toHaveBeenCalledWith({
+      documentId: 'doc-1',
+      editor: editorMock,
+    });
+    expect(commentsStoreStub.syncTrackedChangeComments).not.toHaveBeenCalled();
+    await Promise.resolve();
+    expect(commentsStoreStub.syncTrackedChangeComments).toHaveBeenCalledWith({
+      superdoc: superdocStub,
+      editor: editorMock,
+      broadcastChanges: false,
+    });
+  });
+
+  it('does not resync tracked-change threads on meta-only collaboration updates', async () => {
+    const superdocStub = createSuperdocStub();
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+
+    const options = wrapper.findComponent(SuperEditorStub).props('options');
+    const editorMock = { options: { documentId: 'doc-1' } };
+
+    const makeTransaction = ({ inputType, ySyncMeta, docChanged = false } = {}) => ({
+      docChanged,
+      getMeta: vi.fn((key) => {
+        if (key === 'inputType') return inputType;
+        if (key === ySyncPluginKey) return ySyncMeta;
+        return undefined;
+      }),
+    });
+
+    options.onTransaction({
+      editor: editorMock,
+      transaction: makeTransaction({
+        docChanged: false,
+        ySyncMeta: { isChangeOrigin: true, isUndoRedoOperation: false },
+      }),
+      duration: 7,
+    });
+
+    expect(commentsStoreStub.syncTrackedChangePositionsWithDocument).not.toHaveBeenCalled();
+    expect(commentsStoreStub.syncTrackedChangeComments).not.toHaveBeenCalled();
   });
 
   it('reconciles replay updates by importedId before commentId to avoid duplicate comments', async () => {
@@ -1180,6 +1326,79 @@ describe('SuperDoc.vue', () => {
     expect(doc.setPresentationEditor).toHaveBeenCalledWith(presentationEditor);
     expect(presentationEditor.setContextMenuDisabled).toHaveBeenCalledWith(true);
     expect(presentationEditor.on).toHaveBeenCalledWith('commentPositions', expect.any(Function));
+    expect(getTrackedChangeIndexMock).toHaveBeenCalledWith(editor);
+  });
+
+  it('resyncs tracked-change comments from non-body tracked-changes-changed events', async () => {
+    const superdocStub = createSuperdocStub();
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+    superdocStoreStub.documents.value[0].setPresentationEditor = vi.fn();
+
+    const listeners = {};
+    const presentationEditor = {
+      setContextMenuDisabled: vi.fn(),
+      on: vi.fn((event, handler) => {
+        listeners[event] = handler;
+      }),
+      getCommentBounds: vi.fn(() => ({})),
+    };
+    const bodyEditor = {
+      options: { documentId: 'doc-1' },
+      on: vi.fn((event, handler) => {
+        listeners[`editor:${event}`] = handler;
+      }),
+    };
+    const sourceEditor = { options: { documentId: 'header-doc' } };
+
+    wrapper.findComponent(SuperEditorStub).vm.$emit('editor-ready', {
+      editor: bodyEditor,
+      presentationEditor,
+    });
+    await nextTick();
+
+    listeners['editor:tracked-changes-changed']?.({ editor: sourceEditor, source: 'story-edit' });
+    expect(commentsStoreStub.syncTrackedChangeComments).toHaveBeenCalledWith({
+      superdoc: superdocStub,
+      editor: sourceEditor,
+    });
+
+    commentsStoreStub.syncTrackedChangeComments.mockClear();
+    listeners['editor:tracked-changes-changed']?.({ editor: sourceEditor, source: 'body-edit' });
+    expect(commentsStoreStub.syncTrackedChangeComments).not.toHaveBeenCalled();
+  });
+
+  it('clears tracked-change positions for non-body tracked-change updates when viewing-mode comments are hidden', async () => {
+    const superdocStub = createSuperdocStub();
+    superdocStub.config.documentMode = 'viewing';
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+    superdocStoreStub.documents.value[0].setPresentationEditor = vi.fn();
+
+    const listeners = {};
+    const presentationEditor = {
+      setContextMenuDisabled: vi.fn(),
+      on: vi.fn((event, handler) => {
+        listeners[event] = handler;
+      }),
+      getCommentBounds: vi.fn(() => ({})),
+    };
+    const bodyEditor = {
+      options: { documentId: 'doc-1' },
+      on: vi.fn((event, handler) => {
+        listeners[`editor:${event}`] = handler;
+      }),
+    };
+
+    wrapper.findComponent(SuperEditorStub).vm.$emit('editor-ready', {
+      editor: bodyEditor,
+      presentationEditor,
+    });
+    await nextTick();
+
+    listeners['editor:tracked-changes-changed']?.({ source: 'story-edit' });
+    expect(commentsStoreStub.clearEditorCommentPositions).toHaveBeenCalled();
+    expect(commentsStoreStub.syncTrackedChangeComments).not.toHaveBeenCalled();
   });
 
   it('forwards header/footer presentation events through the public update callbacks', async () => {
@@ -1436,6 +1655,20 @@ describe('SuperDoc.vue', () => {
     );
 
     await nextTick();
+    superdocStoreStub.isReady.value = true;
+    await nextTick();
+
+    expect(wrapper.vm.showCommentsSidebar).toBe(true);
+    expect(wrapper.find('.floating-comments').exists()).toBe(true);
+  });
+
+  it('shows floating comments when the comments store exposes them through a getter', async () => {
+    const superdocStub = createSuperdocStub();
+    const { store, floatingCommentsState } = createCommentsStoreWithFloatingGetter();
+    const wrapper = await mountComponent(superdocStub, { commentsStore: store });
+    await nextTick();
+
+    floatingCommentsState.value = [{ commentId: 'tracked-1' }];
     superdocStoreStub.isReady.value = true;
     await nextTick();
 

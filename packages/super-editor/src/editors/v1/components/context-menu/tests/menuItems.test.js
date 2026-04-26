@@ -781,6 +781,36 @@ describe('menuItems.js', () => {
 
       expect(insertContent).toHaveBeenCalledWith('fallback text', { contentType: 'text' });
     });
+
+    it('should resolve PresentationEditor wrappers to the active editor for paste', async () => {
+      const editor = createMockEditor();
+      editor.view.dom.focus = vi.fn();
+      editor.view.pasteText = vi.fn();
+
+      const presentationEditor = {
+        getActiveEditor: vi.fn(() => editor),
+      };
+
+      clipboardMocks.readClipboardRaw.mockResolvedValue({
+        html: '',
+        text: 'wrapped paste',
+      });
+      clipboardMocks.handleClipboardPaste.mockReturnValue(false);
+
+      const pasteAction = getItems(
+        createMockContext({
+          editor: presentationEditor,
+          trigger: TRIGGERS.click,
+        }),
+      )
+        .find((section) => section.id === 'clipboard')
+        ?.items.find((item) => item.id === 'paste')?.action;
+
+      await pasteAction(presentationEditor);
+
+      expect(presentationEditor.getActiveEditor).toHaveBeenCalled();
+      expect(editor.view.pasteText).toHaveBeenCalledWith('wrapped paste', expect.any(Object));
+    });
   });
 
   describe('getItems - cell selection context', () => {

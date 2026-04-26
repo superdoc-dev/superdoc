@@ -21,8 +21,19 @@ import { OPERATION_DEFINITIONS } from '../src/contract/operation-definitions.js'
 import { OPERATION_REFERENCE_DOC_PATH_MAP } from '../src/contract/reference-doc-map.js';
 import { buildDispatchTable } from '../src/invoke/invoke.js';
 
-/** Meta-methods and helper methods on DocumentApi that are not contract operations. */
-const META_MEMBER_PATHS = ['invoke', ...REFERENCE_OPERATION_ALIASES.map((alias) => alias.memberPath)];
+/**
+ * Meta-methods and helper methods on DocumentApi that are not contract
+ * operations. `ranges.scrollIntoView` is a browser-only UI side-effect
+ * (scrolls the viewport via the presentation editor) — it has no
+ * headless implementation, so it is intentionally excluded from the RPC
+ * dispatch surface and the CLI command catalog. Direct calls through
+ * `editor.doc.ranges.scrollIntoView()` are still supported.
+ */
+const META_MEMBER_PATHS = [
+  'invoke',
+  'ranges.scrollIntoView',
+  ...REFERENCE_OPERATION_ALIASES.map((alias) => alias.memberPath),
+];
 
 function collectFunctionMemberPaths(value: unknown, prefix = ''): string[] {
   if (!value || typeof value !== 'object') return [];

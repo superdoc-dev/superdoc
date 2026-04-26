@@ -27,6 +27,10 @@ Returns a ContentControlMutationResult with the created content control target.
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `alias` | string | no |  |
+| `at` | SelectionTarget | no | SelectionTarget |
+| `at.end` | SelectionPoint | no | SelectionPoint |
+| `at.kind` | `"selection"` | no | Constant: `"selection"` |
+| `at.start` | SelectionPoint | no | SelectionPoint |
 | `content` | string | no |  |
 | `controlType` | string | no |  |
 | `kind` | enum | yes | `"block"`, `"inline"` |
@@ -119,6 +123,9 @@ Returns a ContentControlMutationResult with the created content control target.
   "properties": {
     "alias": {
       "type": "string"
+    },
+    "at": {
+      "$ref": "#/$defs/SelectionTarget"
     },
     "content": {
       "type": "string"

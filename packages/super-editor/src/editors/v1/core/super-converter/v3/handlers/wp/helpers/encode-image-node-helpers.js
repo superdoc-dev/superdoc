@@ -1337,6 +1337,7 @@ export function getVectorShape({
   const textBox = wsp.elements?.find((el) => el.name === 'wps:txbx');
   const textBoxContent = textBox?.elements?.find((el) => el.name === 'w:txbxContent');
   const bodyPr = wsp.elements?.find((el) => el.name === 'wps:bodyPr');
+  const nonVisualShapeProps = wsp.elements?.find((el) => el.name === 'wps:cNvSpPr');
   let textContent = null;
   let textAlign = 'left';
 
@@ -1344,6 +1345,9 @@ export function getVectorShape({
     textContent = extractTextFromTextBox(textBoxContent, bodyPr, params);
     textAlign = textContent?.horizontalAlign || 'left';
   }
+
+  const isWordArt = bodyPr?.attributes?.['fromWordArt'] === '1';
+  const isTextBox = nonVisualShapeProps?.attributes?.['txBox'] === '1';
 
   return {
     type: 'vectorShape',
@@ -1367,6 +1371,8 @@ export function getVectorShape({
       textAlign,
       textVerticalAlign: textContent?.verticalAlign,
       textInsets: textContent?.insets,
+      isWordArt,
+      isTextBox,
       originalAttributes: node?.attributes,
     },
   };

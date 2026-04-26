@@ -97,6 +97,148 @@ describe('compilePlan ref-targeting semantics', () => {
   });
 });
 
+describe('compilePlan block-targeting semantics', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockedDeps.getRevision.mockReturnValue('0');
+    mockedDeps.resolveTextRangeInBlock.mockImplementation(
+      (_node: unknown, pos: number, range: { start: number; end: number }) => ({
+        from: pos + 1 + range.start,
+        to: pos + 1 + range.end,
+      }),
+    );
+  });
+
+  it('resolves where.by="block" to the full text range of the addressed block', () => {
+    mockedDeps.getBlockIndex.mockReturnValue({
+      candidates: [{ nodeId: 'p1', pos: 0, end: 12, node: { inlineContent: true, isTextblock: true } }],
+      byId: new Map([
+        ['paragraph:p1', { nodeId: 'p1', pos: 0, end: 12, node: { inlineContent: true, isTextblock: true } }],
+      ]),
+      ambiguous: new Set(),
+    });
+
+    const editor = makeEditor();
+    const steps: MutationStep[] = [
+      {
+        id: 'rewrite-known-block',
+        op: 'text.rewrite',
+        where: { by: 'block', nodeType: 'paragraph', nodeId: 'p1' },
+        args: { replacement: { text: 'Updated' } },
+      },
+    ];
+
+    const plan = compilePlan(editor, steps);
+    const target = plan.mutationSteps[0].targets[0];
+    expect(target.kind).toBe('range');
+    if (target.kind === 'range') {
+      expect(target.blockId).toBe('p1');
+      expect(target.from).toBe(0);
+      expect(target.to).toBe(10);
+      expect(target.text).toBe('abcdefghij');
+    }
+  });
+
+  it('allows create steps to anchor against non-text blocks via where.by="block"', () => {
+    mockedDeps.getBlockIndex.mockReturnValue({
+      candidates: [{ nodeId: 't1', pos: 20, end: 40, node: { inlineContent: false, isTextblock: false } }],
+      byId: new Map([
+        ['table:t1', { nodeId: 't1', pos: 20, end: 40, node: { inlineContent: false, isTextblock: false } }],
+      ]),
+      ambiguous: new Set(),
+    });
+
+    const editor = makeEditor();
+    const steps: MutationStep[] = [
+      {
+        id: 'create-after-table',
+        op: 'create.heading',
+        where: { by: 'block', nodeType: 'table', nodeId: 't1' },
+        args: { text: 'Summary', level: 2, position: 'after' },
+      } as MutationStep,
+    ];
+
+    expect(() => compilePlan(editor, steps)).not.toThrow();
+  });
+
+  it('rejects non-text blocks for text mutations addressed via where.by="block"', () => {
+    mockedDeps.getBlockIndex.mockReturnValue({
+      candidates: [{ nodeId: 't1', pos: 20, end: 40, node: { inlineContent: false, isTextblock: false } }],
+      byId: new Map([
+        ['table:t1', { nodeId: 't1', pos: 20, end: 40, node: { inlineContent: false, isTextblock: false } }],
+      ]),
+      ambiguous: new Set(),
+    });
+
+    const editor = makeEditor();
+    const steps: MutationStep[] = [
+      {
+        id: 'rewrite-table',
+        op: 'text.rewrite',
+        where: { by: 'block', nodeType: 'table', nodeId: 't1' },
+        args: { replacement: { text: 'Updated' } },
+      },
+    ];
+
+    try {
+      compilePlan(editor, steps);
+    } catch (error) {
+      expect(error).toBeInstanceOf(PlanError);
+      expect((error as PlanError).code).toBe('INVALID_TARGET');
+      expect((error as PlanError).message).toContain('where.by "block"');
+      return;
+    }
+
+    throw new Error('expected compilePlan to reject non-text block target');
+  });
+});
+
+describe('compilePlan selector diagnostics', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockedDeps.getRevision.mockReturnValue('0');
+    mockedDeps.getBlockIndex.mockReturnValue({ candidates: [], byId: new Map(), ambiguous: new Set() });
+    mockedDeps.executeTextSelector.mockReturnValue({ matches: [], context: [], total: 0 });
+  });
+
+  it('reports step and selector evidence on MATCH_NOT_FOUND for select clauses', () => {
+    const editor = makeEditor();
+    const steps: MutationStep[] = [
+      {
+        id: 'find-clause',
+        op: 'text.rewrite',
+        where: {
+          by: 'select',
+          select: { type: 'text', pattern: 'Confidential Information' },
+          require: 'exactlyOne',
+        },
+        args: { replacement: { text: 'Updated' } },
+      },
+    ];
+
+    try {
+      compilePlan(editor, steps);
+    } catch (error) {
+      expect(error).toBeInstanceOf(PlanError);
+      const planError = error as PlanError;
+      expect(planError.code).toBe('MATCH_NOT_FOUND');
+      expect(planError.message).toContain('find-clause');
+      expect(planError.message).toContain('Confidential Information');
+      expect(planError.details).toMatchObject({
+        stepId: 'find-clause',
+        stepOp: 'text.rewrite',
+        whereBy: 'select',
+        selectorType: 'text',
+        selectorPattern: 'Confidential Information',
+        candidateCount: 0,
+      });
+      return;
+    }
+
+    throw new Error('expected compilePlan to throw MATCH_NOT_FOUND');
+  });
+});
+
 describe('compilePlan step-op allowlist', () => {
   beforeEach(() => {
     vi.clearAllMocks();

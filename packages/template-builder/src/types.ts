@@ -7,6 +7,10 @@ export interface FieldDefinition {
   id: string;
   label: string;
   defaultValue?: string;
+  presetContent?: {
+    html?: string;
+    json?: unknown;
+  };
   metadata?: Record<string, any>;
   mode?: 'inline' | 'block';
   group?: string;

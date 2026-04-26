@@ -130,6 +130,7 @@
     "apps/docs/document-api/reference/diff/capture.mdx",
     "apps/docs/document-api/reference/diff/compare.mdx",
     "apps/docs/document-api/reference/diff/index.mdx",
+    "apps/docs/document-api/reference/extract.mdx",
     "apps/docs/document-api/reference/fields/get.mdx",
     "apps/docs/document-api/reference/fields/index.mdx",
     "apps/docs/document-api/reference/fields/insert.mdx",
@@ -436,6 +437,7 @@
         "getHtml",
         "markdownToFragment",
         "info",
+        "extract",
         "clearContent",
         "insert",
         "replace",
@@ -1016,5 +1018,5 @@
     }
   ],
   "marker": "{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}",
-  "sourceHash": "ea6e458d5c1476621d84f5bde9f85df9c3d620d0e226f206c57456f5ed6d20b3"
+  "sourceHash": "c8670fb494b56c19fbd09a7bada35974fbb3c22d938f6a5e01eee6e8467961c0"
 }

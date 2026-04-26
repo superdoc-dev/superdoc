@@ -182,6 +182,29 @@ describe('ensureExplicitHeaderFooterSlot', () => {
     expect(mockApplySectPrToProjection).toHaveBeenCalled();
   });
 
+  it('can materialize without creating an undoable body history step', () => {
+    mockSectionProjections.mockReturnValue([createProjection('section-0', 0)]);
+    mockReadTargetSectPr.mockReturnValue(createSectPr());
+    mockResolveEffectiveRef.mockReturnValue(null);
+    mockCreateHeaderFooterPart.mockReturnValue({
+      refId: 'rId13',
+      relationshipTarget: 'word/header3.xml',
+    });
+    mockApplySectPrToProjection.mockImplementation(() => {});
+
+    const result = ensureExplicitHeaderFooterSlot(editor as any, {
+      sectionId: 'section-0',
+      kind: 'header',
+      variant: 'default',
+      addToHistory: false,
+    });
+
+    expect(result).not.toBeNull();
+    expect(mockApplySectPrToProjection).toHaveBeenCalledWith(editor, expect.anything(), expect.anything(), {
+      addToHistory: false,
+    });
+  });
+
   it('clones from inherited source when available', () => {
     mockSectionProjections.mockReturnValue([createProjection('section-0', 0), createProjection('section-1', 1)]);
     mockReadTargetSectPr.mockReturnValue(createSectPr()); // no refs on section-1

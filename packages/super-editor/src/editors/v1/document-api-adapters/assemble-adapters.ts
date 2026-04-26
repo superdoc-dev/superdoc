@@ -8,6 +8,7 @@ import { getMarkdownAdapter } from './get-markdown-adapter.js';
 import { getHtmlAdapter } from './get-html-adapter.js';
 import { markdownToFragmentAdapter } from './markdown-to-fragment-adapter.js';
 import { infoAdapter } from './info-adapter.js';
+import { extractAdapter } from './extract-adapter.js';
 import { getDocumentApiCapabilities } from './capabilities-adapter.js';
 import { createCommentsWrapper } from './plan-engine/comments-wrappers.js';
 import {
@@ -96,6 +97,7 @@ import { executePlan } from './plan-engine/executor.js';
 import { previewPlan } from './plan-engine/preview.js';
 import { queryMatchAdapter } from './plan-engine/query-match-adapter.js';
 import { resolveRange } from './helpers/range-resolver.js';
+import { scrollRangeIntoView } from './helpers/scroll-into-view-adapter.js';
 import { initRevision, trackRevisions } from './plan-engine/revision-tracker.js';
 import { initStoryRevisionStore } from './story-runtime/story-revision-store.js';
 import { registerBuiltInExecutors } from './plan-engine/register-executors.js';
@@ -382,6 +384,9 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
     },
     info: {
       info: (input) => infoAdapter(editor, input),
+    },
+    extract: {
+      extract: (input) => extractAdapter(editor, input),
     },
     clearContent: {
       clearContent: (input, options) => clearContentWrapper(editor, input, options),
@@ -713,6 +718,7 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
     },
     ranges: {
       resolve: (input) => resolveRange(editor, input),
+      scrollIntoView: (input) => scrollRangeIntoView(editor, input),
     },
     query: {
       match: (input) => queryMatchAdapter(editor, input),

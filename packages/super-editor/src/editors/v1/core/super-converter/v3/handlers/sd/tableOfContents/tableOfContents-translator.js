@@ -33,17 +33,30 @@ const encode = (params) => {
   const { nodes = [], nodeListHandler } = params || {};
   const node = nodes[0];
 
-  const processedContent = nodeListHandler.handler({
+  const rawChildren = nodeListHandler.handler({
     ...params,
     nodes: node.elements || [],
   });
+  // The tableOfContents schema requires paragraph* children. If the handler returned
+  // any non-paragraph children (e.g. stray inline runs from a malformed TOC field),
+  // wrap each inline child into its own paragraph so downstream consumers can rely
+  // on the invariant. This also covers the all-inline case.
+  const normalizedContent = (rawChildren || []).reduce((acc, child) => {
+    if (!child || !child.type) return acc;
+    if (child.type === 'paragraph') {
+      acc.push(child);
+    } else {
+      acc.push({ type: 'paragraph', content: [child] });
+    }
+    return acc;
+  }, []);
   const processedNode = {
     type: 'tableOfContents',
     attrs: {
       instruction: node.attributes?.instruction || '',
-      rightAlignPageNumbers: deriveRightAlignPageNumbers(processedContent),
+      rightAlignPageNumbers: deriveRightAlignPageNumbers(normalizedContent),
     },
-    content: processedContent,
+    content: normalizedContent,
   };
 
   return processedNode;

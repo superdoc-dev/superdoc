@@ -135,6 +135,7 @@ describe('EditorInputManager - Drag Auto Scroll', () => {
       normalizeClientPoint: vi.fn((clientX: number, clientY: number) => ({ x: clientX, y: clientY })),
       updateSelectionVirtualizationPins: vi.fn(),
       scheduleSelectionUpdate: vi.fn(),
+      notifyDragSelectionEnded: vi.fn(),
     };
 
     manager = new EditorInputManager();
@@ -254,6 +255,8 @@ describe('EditorInputManager - Drag Auto Scroll', () => {
 
     // Auto-scroll should be stopped
     expect(rafCallback).toBeNull();
+    // one post-drag hook so PresentationEditor can scroll selection into view after auto-scroll stops
+    expect(mockCallbacks.notifyDragSelectionEnded).toHaveBeenCalledTimes(1);
   });
 
   it('does not auto-scroll in header/footer mode', () => {
@@ -326,6 +329,43 @@ describe('EditorInputManager - Drag Auto Scroll', () => {
       }
 
       expect(scrollContainer.scrollLeft).toBe(0);
+    });
+  });
+
+  describe('notifyDragSelectionEnded (selection scroll after drag)', () => {
+    it('invokes notifyDragSelectionEnded exactly once when a text drag ends after movement', () => {
+      startDrag(10, 10);
+      moveDrag(40, 25);
+      endDrag(40, 25);
+
+      expect(mockCallbacks.notifyDragSelectionEnded).toHaveBeenCalledTimes(1);
+    });
+
+    it('invokes notifyDragSelectionEnded when pointer goes down and up without move (click-hold-release)', () => {
+      startDrag(10, 10);
+      endDrag(10, 10);
+
+      expect(mockCallbacks.notifyDragSelectionEnded).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not invoke notifyDragSelectionEnded on pointer up if no drag was started', () => {
+      endDrag(10, 10);
+
+      expect(mockCallbacks.notifyDragSelectionEnded).not.toHaveBeenCalled();
+    });
+
+    it('invokes notifyDragSelectionEnded once per completed drag gesture', () => {
+      startDrag(10, 10);
+      moveDrag(20, 15);
+      endDrag(20, 15);
+      expect(mockCallbacks.notifyDragSelectionEnded).toHaveBeenCalledTimes(1);
+
+      (mockCallbacks.notifyDragSelectionEnded as ReturnType<typeof vi.fn>).mockClear();
+
+      startDrag(50, 50);
+      moveDrag(60, 55);
+      endDrag(60, 55);
+      expect(mockCallbacks.notifyDragSelectionEnded).toHaveBeenCalledTimes(1);
     });
   });
 });

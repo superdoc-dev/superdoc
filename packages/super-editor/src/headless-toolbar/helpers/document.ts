@@ -4,7 +4,22 @@ import { isCommandDisabled } from './general.js';
 import { resolveStateEditor } from './context.js';
 import type { ToolbarCommandState, ToolbarContext } from '../types.js';
 
+/**
+ * Document-wide history state takes precedence when a PresentationEditor
+ * with an active unified-history coordinator is wired up — it reports the
+ * cross-surface stack depths instead of whichever editor currently holds
+ * focus.
+ */
+const readCoordinatorDepths = (context: ToolbarContext | null): { undoDepth: number; redoDepth: number } | null => {
+  const state = context?.presentationEditor?.getHistoryState?.();
+  if (!state) return null;
+  return { undoDepth: state.undoDepth, redoDepth: state.redoDepth };
+};
+
 export const getCurrentUndoDepth = (context: ToolbarContext | null) => {
+  const coordinatorDepths = readCoordinatorDepths(context);
+  if (coordinatorDepths) return coordinatorDepths.undoDepth;
+
   const stateEditor = resolveStateEditor(context);
 
   if (!stateEditor?.state) {
@@ -24,6 +39,9 @@ export const getCurrentUndoDepth = (context: ToolbarContext | null) => {
 };
 
 export const getCurrentRedoDepth = (context: ToolbarContext | null) => {
+  const coordinatorDepths = readCoordinatorDepths(context);
+  if (coordinatorDepths) return coordinatorDepths.redoDepth;
+
   const stateEditor = resolveStateEditor(context);
 
   if (!stateEditor?.state) {
@@ -101,11 +119,13 @@ export const createRulerExecute =
 export const createZoomExecute =
   () =>
   ({ superdoc, payload }: { context: ToolbarContext | null; superdoc: Record<string, any>; payload?: unknown }) => {
-    if (typeof payload !== 'number' || payload <= 0) {
+    const normalizedPayload = Number.parseInt(String(payload), 10);
+
+    if (!Number.isFinite(normalizedPayload) || normalizedPayload <= 0) {
       return false;
     }
 
-    superdoc.setZoom?.(payload);
+    superdoc.setZoom?.(normalizedPayload);
     return true;
   };
 
@@ -113,16 +133,17 @@ export const createDocumentModeExecute =
   () =>
   ({ superdoc, payload }: { context: ToolbarContext | null; superdoc: Record<string, any>; payload?: unknown }) => {
     const validModes = ['editing', 'suggesting', 'viewing'];
+    const normalizedPayload = typeof payload === 'string' ? payload.toLowerCase() : payload;
 
     if (
       typeof superdoc?.setDocumentMode !== 'function' ||
-      typeof payload !== 'string' ||
-      !validModes.includes(payload)
+      typeof normalizedPayload !== 'string' ||
+      !validModes.includes(normalizedPayload)
     ) {
       return false;
     }
 
-    superdoc.setDocumentMode(payload);
+    superdoc.setDocumentMode(normalizedPayload);
 
     return true;
   };

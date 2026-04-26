@@ -5,6 +5,7 @@ import type {
   LineSegment,
   Run,
   TextRun,
+  TabRun,
   TabStop,
   ParagraphIndent,
   LeaderDecoration,
@@ -29,6 +30,8 @@ type ParagraphBlockAttrs = {
   decimalSeparator?: string;
   wordLayout?: WordParagraphLayoutOutput;
   numberingProperties?: unknown;
+  /** Word quirk: justified paragraphs ignore first-line indent. Set by pm-adapter. */
+  suppressFirstLineIndent?: boolean;
 };
 
 let canvas: HTMLCanvasElement | null = null;
@@ -779,6 +782,33 @@ const applyTabLayoutToLines = (
   indentLeft: number,
   rawFirstLineOffset: number,
 ): void => {
+  const totalTabRuns = runs.reduce((count, run) => (run.kind === 'tab' ? count + 1 : count), 0);
+  const alignmentTabStopsPx = tabStops
+    .map((stop, index) => ({ stop, index }))
+    .filter(({ stop }) => stop.val === 'end' || stop.val === 'center' || stop.val === 'decimal');
+  // Word-compat heuristic (not ECMA-376 17.3.3.32): the last N tab characters in a
+  // paragraph bind to the last N explicit end/center/decimal stops. Needed for TOC
+  // entries where a right-aligned dot-leader stop coexists with default grid stops.
+  // Mirrored in measuring/dom/src/index.ts.
+  const getAlignmentStopForOrdinal = (ordinal: number): { stop: TabStopPx; index: number } | null => {
+    if (alignmentTabStopsPx.length === 0 || totalTabRuns === 0 || !Number.isFinite(ordinal)) return null;
+    if (ordinal < 0 || ordinal >= totalTabRuns) return null;
+    const remainingTabs = totalTabRuns - ordinal - 1;
+    const targetIndex = alignmentTabStopsPx.length - 1 - remainingTabs;
+    if (targetIndex < 0 || targetIndex >= alignmentTabStopsPx.length) return null;
+    return alignmentTabStopsPx[targetIndex];
+  };
+  let sequentialTabIndex = 0;
+  const consumeTabOrdinal = (explicitIndex?: number): number => {
+    if (typeof explicitIndex === 'number' && Number.isFinite(explicitIndex)) {
+      sequentialTabIndex = Math.max(sequentialTabIndex, explicitIndex + 1);
+      return explicitIndex;
+    }
+    const ordinal = sequentialTabIndex;
+    sequentialTabIndex += 1;
+    return ordinal;
+  };
+
   lines.forEach((line, lineIndex) => {
     let cursorX = 0;
     let lineWidth = 0;
@@ -795,11 +825,23 @@ const applyTabLayoutToLines = (
     /**
      * Processes a tab character, calculating position and handling alignment.
      */
-    const applyTab = (startRunIndex: number, startChar: number, run?: Run): void => {
+    const applyTab = (startRunIndex: number, startChar: number, run?: Run, tabOrdinal?: number): void => {
       const originX = cursorX;
       const absCurrentX = cursorX + effectiveIndent;
-      const { target, nextIndex, stop } = getNextTabStopPx(absCurrentX, tabStops, tabStopCursor);
-      tabStopCursor = nextIndex;
+      let stop: TabStopPx | undefined;
+      let target: number;
+      const forcedAlignment =
+        typeof tabOrdinal === 'number' && Number.isFinite(tabOrdinal) ? getAlignmentStopForOrdinal(tabOrdinal) : null;
+      if (forcedAlignment && forcedAlignment.stop.pos > absCurrentX + TAB_EPSILON) {
+        stop = forcedAlignment.stop;
+        target = forcedAlignment.stop.pos;
+        tabStopCursor = forcedAlignment.index + 1;
+      } else {
+        const next = getNextTabStopPx(absCurrentX, tabStops, tabStopCursor);
+        stop = next.stop;
+        target = next.target;
+        tabStopCursor = next.nextIndex;
+      }
       const clampedTarget = Number.isFinite(maxAbsWidth) ? Math.min(target, maxAbsWidth) : target;
       const relativeTarget = clampedTarget - effectiveIndent;
       lineWidth = Math.max(lineWidth, relativeTarget);
@@ -851,7 +893,9 @@ const applyTabLayoutToLines = (
       const run = runs[runIndex];
       if (!run) continue;
       if (run.kind === 'tab') {
-        applyTab(runIndex + 1, 0, run);
+        const tabRun = run as TabRun;
+        const ordinal = consumeTabOrdinal(tabRun.tabIndex);
+        applyTab(runIndex + 1, 0, run, ordinal);
         continue;
       }
 
@@ -887,7 +931,8 @@ const applyTabLayoutToLines = (
           lineWidth = Math.max(lineWidth, cursorX);
           segments.push(segment);
         }
-        applyTab(runIndex, i + 1);
+        const ordinal = consumeTabOrdinal();
+        applyTab(runIndex, i + 1, undefined, ordinal);
         segmentStart = i + 1;
       }
 
@@ -1081,12 +1126,25 @@ export function remeasureParagraph(
   const indentRight = Math.max(0, rawIndentRight);
   const indentFirstLine = Math.max(0, indent?.firstLine ?? 0);
   const indentHanging = Math.max(0, indent?.hanging ?? 0);
-  const baseFirstLineOffset = firstLineIndent || indentFirstLine - indentHanging;
-  const rawFirstLineOffset = baseFirstLineOffset;
+  // Match measuring/dom/src/index.ts: `suppressFirstLineIndent` is a Word quirk where
+  // justified paragraphs ignore their first-line indent. Without honoring it here, the
+  // initial measure and remeasure (triggered by live editing, resize, etc.) produce
+  // different first-line offsets and the first line jumps on redraw.
+  const suppressFirstLine = attrs?.suppressFirstLineIndent === true;
+  const baseFirstLineOffset = suppressFirstLine ? 0 : firstLineIndent || indentFirstLine - indentHanging;
+  // When wordLayout is present, the hanging region is occupied by the list marker/tab,
+  // so keep the same available width as body lines. For normal paragraphs we must honor
+  // negative offsets (hanging indent) so the first line can extend into the hanging region.
   const clampedFirstLineOffset = Math.max(0, baseFirstLineOffset);
-  const hasNegativeIndent = rawIndentLeft < 0 || rawIndentRight < 0;
-  const allowNegativeFirstLineOffset = !wordLayout?.marker && !hasNegativeIndent && baseFirstLineOffset < 0;
-  const effectiveFirstLineOffset = allowNegativeFirstLineOffset ? baseFirstLineOffset : clampedFirstLineOffset;
+  // Avoid widening the first line when a negative LEFT indent already expands the content area.
+  // Negative right indent doesn't cause this problem — it only extends rightward.
+  const hasNegativeLeftIndent = rawIndentLeft < 0;
+  const allowNegativeFirstLineOffset = !wordLayout?.marker && !hasNegativeLeftIndent && baseFirstLineOffset < 0;
+  const effectiveFirstLineOffset = wordLayout?.marker
+    ? 0
+    : allowNegativeFirstLineOffset
+      ? baseFirstLineOffset
+      : clampedFirstLineOffset;
   const contentWidth = Math.max(1, maxWidth - indentLeft - indentRight);
   // Shared helper is the canonical source for list text-start geometry.
   // Keep an explicit top-level fallback for producers that only provide textStartPx.
@@ -1127,7 +1185,7 @@ export function remeasureParagraph(
     const isFirstLine = lines.length === 0;
     // For first line, reduce available width by textStart/first-line offset (e.g., for in-flow list markers)
     const effectiveMaxWidth = Math.max(1, isFirstLine ? firstLineWidth : contentWidth);
-    const effectiveIndent = isFirstLine ? indentLeft + rawFirstLineOffset : indentLeft;
+    const effectiveIndent = isFirstLine ? indentLeft + baseFirstLineOffset : indentLeft;
     const startRun = currentRun;
     const startChar = currentChar;
     let width = 0;
@@ -1322,7 +1380,7 @@ export function remeasureParagraph(
     (run) => run?.kind === 'text' && typeof (run as TextRun).text === 'string' && (run as TextRun).text.includes('\t'),
   );
   if (hasTabRun || hasTextTab) {
-    applyTabLayoutToLines(lines, runs, tabStops, decimalSeparator, indentLeft, rawFirstLineOffset);
+    applyTabLayoutToLines(lines, runs, tabStops, decimalSeparator, indentLeft, baseFirstLineOffset);
   }
 
   const totalHeight = lines.reduce((s, l) => s + l.lineHeight, 0);

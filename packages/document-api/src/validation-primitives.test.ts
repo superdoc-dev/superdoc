@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { isRecord, isInteger, isTextAddress, assertNoUnknownFields } from './validation-primitives.js';
+import { isRecord, isInteger, isTextAddress, isTextTarget, assertNoUnknownFields } from './validation-primitives.js';
 import { DocumentApiValidationError } from './errors.js';
 
 describe('isRecord', () => {
@@ -75,6 +75,62 @@ describe('isTextAddress', () => {
     expect(isTextAddress(null)).toBe(false);
     expect(isTextAddress('text')).toBe(false);
     expect(isTextAddress(42)).toBe(false);
+  });
+});
+
+describe('isTextTarget', () => {
+  it('accepts single-segment targets', () => {
+    expect(isTextTarget({ kind: 'text', segments: [{ blockId: 'p1', range: { start: 0, end: 5 } }] })).toBe(true);
+  });
+
+  it('accepts multi-segment targets', () => {
+    expect(
+      isTextTarget({
+        kind: 'text',
+        segments: [
+          { blockId: 'p1', range: { start: 3, end: 10 } },
+          { blockId: 'p2', range: { start: 0, end: 7 } },
+        ],
+      }),
+    ).toBe(true);
+  });
+
+  it('rejects wrong kind', () => {
+    expect(isTextTarget({ kind: 'block', segments: [{ blockId: 'p1', range: { start: 0, end: 5 } }] })).toBe(false);
+  });
+
+  it('rejects empty segments array', () => {
+    expect(isTextTarget({ kind: 'text', segments: [] })).toBe(false);
+  });
+
+  it('rejects missing segments', () => {
+    expect(isTextTarget({ kind: 'text' })).toBe(false);
+  });
+
+  it('rejects malformed segments', () => {
+    expect(
+      isTextTarget({
+        kind: 'text',
+        segments: [
+          { blockId: 'p1', range: { start: 0, end: 5 } },
+          { blockId: 'p2' }, // missing range
+        ],
+      }),
+    ).toBe(false);
+  });
+
+  it('rejects range with start > end', () => {
+    expect(isTextTarget({ kind: 'text', segments: [{ blockId: 'p1', range: { start: 7, end: 3 } }] })).toBe(false);
+  });
+
+  it('rejects non-integer range values', () => {
+    expect(isTextTarget({ kind: 'text', segments: [{ blockId: 'p1', range: { start: 0, end: 1.5 } }] })).toBe(false);
+  });
+
+  it('rejects non-objects', () => {
+    expect(isTextTarget(null)).toBe(false);
+    expect(isTextTarget('text')).toBe(false);
+    expect(isTextTarget(42)).toBe(false);
   });
 });
 

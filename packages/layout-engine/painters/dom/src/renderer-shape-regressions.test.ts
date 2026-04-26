@@ -157,4 +157,49 @@ describe('DomPainter shape regressions', () => {
     expect(textOverlay?.style.width).toBe('100%');
     expect(textOverlay?.style.height).toBe('100%');
   });
+
+  it('rotates and fits top-level WordArt textboxes with the shared drawing wrapper', () => {
+    const geometry: DrawingGeometry = { width: 240, height: 80, rotation: 320, flipH: false, flipV: false };
+
+    const drawingBlock: DrawingFlowBlock = {
+      kind: 'drawing',
+      id: 'wordart-rotation',
+      drawingKind: 'vectorShape',
+      geometry,
+      shapeKind: 'rect',
+      fillColor: null,
+      strokeColor: null,
+      textAlign: 'center',
+      textContent: {
+        parts: [
+          {
+            text: 'AUTE',
+            formatting: {
+              fontFamily: 'Arial',
+              fontSize: 24,
+              color: 'C0C0C0',
+            },
+          },
+        ],
+      },
+      attrs: { isWordArt: true, isTextBox: true },
+    };
+
+    const { blocks, measures, layout } = createDrawingFixtures(drawingBlock);
+    const painter = createDomPainter({ blocks, measures });
+    painter.paint(layout, mount);
+
+    const drawingInner = mount.querySelector('.superdoc-drawing-inner') as HTMLElement | null;
+    const wordArtSvg = mount.querySelector('.superdoc-wordart-text') as SVGSVGElement | null;
+    const wordArtText = mount.querySelector('.superdoc-wordart-text text') as SVGTextElement | null;
+
+    expect(drawingInner).toBeTruthy();
+    expect(drawingInner?.style.transform).toContain('rotate(320deg)');
+    expect(wordArtSvg).toBeTruthy();
+    expect(wordArtText).toBeTruthy();
+    expect(wordArtText?.textContent).toContain('AUTE');
+    expect(wordArtText?.getAttribute('textLength')).toBe('240');
+    expect(wordArtText?.getAttribute('lengthAdjust')).toBe('spacingAndGlyphs');
+    expect(Number(wordArtText?.getAttribute('font-size'))).toBeGreaterThan(24);
+  });
 });

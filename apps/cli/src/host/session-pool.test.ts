@@ -119,6 +119,31 @@ describe('InMemorySessionPool', () => {
       expect(openCollabCalls.length).toBe(2);
     });
 
+    test('discards collab session when params differ', async () => {
+      const { pool, openCollabCalls } = createPool();
+
+      const profileA = { ...COLLAB_PROFILE, params: { region: 'us' } };
+      await pool.acquire('s1', { ...COLLAB_METADATA, collaboration: profileA }, TEST_IO);
+
+      const profileB = { ...COLLAB_PROFILE, params: { region: 'eu' } };
+      await pool.acquire('s1', { ...COLLAB_METADATA, collaboration: profileB }, TEST_IO);
+
+      expect(openCollabCalls.length).toBe(2);
+    });
+
+    test('reuses collab session when params match (key order independent)', async () => {
+      const { pool, openCollabCalls } = createPool();
+
+      const profileA = { ...COLLAB_PROFILE, params: { region: 'us', tier: 'pro' } };
+      const first = await pool.acquire('s1', { ...COLLAB_METADATA, collaboration: profileA }, TEST_IO);
+      first.dispose();
+
+      const profileB = { ...COLLAB_PROFILE, params: { tier: 'pro', region: 'us' } };
+      await pool.acquire('s1', { ...COLLAB_METADATA, collaboration: profileB }, TEST_IO);
+
+      expect(openCollabCalls.length).toBe(1);
+    });
+
     test('reuses collab session when fingerprint matches', async () => {
       const { pool, openCollabCalls } = createPool();
 

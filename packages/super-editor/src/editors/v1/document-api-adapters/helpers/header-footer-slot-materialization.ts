@@ -34,6 +34,8 @@ export type EnsureExplicitHeaderFooterSlotInput = {
   variant: SectionHeaderFooterVariant;
   /** Optional source part to clone from. If omitted, clones from inherited or creates empty. */
   sourceRefId?: string;
+  /** Whether the sectPr materialization should create an undo step. Defaults to true. */
+  addToHistory?: boolean;
 };
 
 export type EnsureExplicitHeaderFooterSlotResult = {
@@ -110,7 +112,7 @@ export function ensureExplicitHeaderFooterSlot(
   editor: Editor,
   input: EnsureExplicitHeaderFooterSlotInput,
 ): EnsureExplicitHeaderFooterSlotResult | null {
-  const { sectionId, kind, variant, sourceRefId } = input;
+  const { sectionId, kind, variant, sourceRefId, addToHistory = true } = input;
 
   // Step 1–2: Resolve section projections and find the target section.
   // This is done BEFORE any mutations as a pre-validation gate.
@@ -172,7 +174,7 @@ export function ensureExplicitHeaderFooterSlot(
         // Clone/ensure sectPr and add the new reference
         const nextSectPr = ensureSectPrElement(currentSectPr);
         setSectPrHeaderFooterRef(nextSectPr, kind, variant, created.refId);
-        applySectPrToProjection(editor, projection, nextSectPr);
+        applySectPrToProjection(editor, projection, nextSectPr, { addToHistory });
       } catch {
         // createHeaderFooterPart committed parts not tracked by this
         // compoundMutation's snapshot. Clean them up before signalling

@@ -238,6 +238,25 @@ describe('text measurement utility', () => {
     expect(secondTab.pmPosition).toBeLessThanOrEqual(3);
   });
 
+  it('maps clicks through leading visual-only marker runs to editable PM positions', () => {
+    const block = createBlock([
+      { text: '1', fontFamily: 'Arial', fontSize: 16, dataAttrs: { 'data-sd-footnote-number': 'true' } } as Run,
+      { text: 'Hello', fontFamily: 'Arial', fontSize: 16, pmStart: 0, pmEnd: 5 },
+    ]);
+    const line = baseLine({
+      fromRun: 0,
+      toRun: 1,
+      toChar: 6,
+      width: 6 * CHAR_WIDTH,
+    });
+
+    const markerHit = findCharacterAtX(block, line, CHAR_WIDTH / 2, 0);
+    expect(markerHit.pmPosition).toBe(0);
+
+    const textHit = findCharacterAtX(block, line, CHAR_WIDTH * 3.5, 0);
+    expect(textHit.pmPosition).toBe(3);
+  });
+
   describe('charOffsetToPm edge cases', () => {
     it('clamps character offset beyond line bounds to end position', () => {
       const block = createBlock([{ text: 'Hello', fontFamily: 'Arial', fontSize: 16, pmStart: 0, pmEnd: 5 }]);
@@ -379,6 +398,22 @@ describe('text measurement utility', () => {
 
       const result = charOffsetToPm(block, line, 0, 5);
       expect(result).toBe(5);
+    });
+
+    it('does not advance PM positions through visual-only marker runs', () => {
+      const block = createBlock([
+        { text: '1', fontFamily: 'Arial', fontSize: 16, dataAttrs: { 'data-sd-footnote-number': 'true' } } as Run,
+        { text: 'Hello', fontFamily: 'Arial', fontSize: 16, pmStart: 0, pmEnd: 5 },
+      ]);
+      const line = baseLine({
+        fromRun: 0,
+        toRun: 1,
+        toChar: 6,
+      });
+
+      expect(charOffsetToPm(block, line, 0, 0)).toBe(0);
+      expect(charOffsetToPm(block, line, 1, 0)).toBe(0);
+      expect(charOffsetToPm(block, line, 3, 0)).toBe(2);
     });
   });
 
@@ -569,6 +604,25 @@ describe('text measurement utility', () => {
       const lastXNormal = measureCharacterX(block, lastLine, 10, 140);
       // Last line should NOT be justified (same width)
       expect(lastX).toBe(lastXNormal);
+    });
+
+    it('applies justify spacing to wrapped non-last lines within a single text run', () => {
+      const block = createBlock([{ text: 'A B C D E F', fontFamily: 'Arial', fontSize: 16 }]);
+      (block as any).attrs = { alignment: 'justify' };
+
+      const line = baseLine({
+        fromRun: 0,
+        toRun: 0,
+        fromChar: 0,
+        toChar: 9, // Wrapped line consumes only part of the single text run
+        width: 90,
+        maxWidth: 120,
+      });
+
+      const xWithNaturalWidth = measureCharacterX(block, line, 7, 90);
+      const xWithSlack = measureCharacterX(block, line, 7, 120);
+
+      expect(xWithSlack).toBeGreaterThan(xWithNaturalWidth);
     });
 
     it('skips justify spacing for manual tabs without explicit segments', () => {

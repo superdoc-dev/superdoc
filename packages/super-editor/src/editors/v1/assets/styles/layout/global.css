@@ -17,7 +17,7 @@
 }
 
 .presentation-editor__selection-caret {
-  animation: superdoc-caret-blink 1.2s steps(2, start) infinite;
+  animation: superdoc-caret-blink 1.2s ease-in-out infinite;
 }
 
 .presentation-editor__permission-overlay {
@@ -36,6 +36,6 @@
   }
   55%,
   100% {
-    opacity: 0;
+    opacity: 0.55;
   }
 }

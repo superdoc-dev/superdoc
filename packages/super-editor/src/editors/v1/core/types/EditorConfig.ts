@@ -85,17 +85,51 @@ export type LinkPopoverResolution =
 export type LinkPopoverResolver = (ctx: LinkPopoverContext) => LinkPopoverResolution | null | undefined;
 
 /**
+ * Configuration for a font option in the toolbar font picker.
+ *
+ * Each entry represents a selectable font that appears in the toolbar dropdown.
+ * `label` is the value applied to the selected text and used for active-state
+ * matching, so it must equal the first family name in `key`. `key` is the
+ * stable option identity and drives the row's preview `font-family` so each
+ * row renders in its own typeface.
+ */
+export interface FontConfig {
+  /**
+   * Stable identity for the option. Used as the preview font-family for the
+   * dropdown row. Typically a full CSS stack (e.g. `'Cambria, serif'`).
+   */
+  key: string;
+  /**
+   * Display name shown in the dropdown, and the value applied to the selected
+   * text. Must match the first family name in `key` for active-state tracking.
+   */
+  label: string;
+  /** Font weight (e.g. 400 for normal, 700 for bold) */
+  fontWeight?: number;
+  /**
+   * Optional per-row render overrides. `props.style.fontFamily` overrides the
+   * row's preview font independently of `key`.
+   */
+  props?: {
+    style?: {
+      fontFamily?: string;
+    };
+    'data-item'?: string;
+  };
+}
+
+/**
  * User information for collaboration
  */
 export interface User {
   /** The user's name */
-  name: string;
+  name?: string;
 
   /** The user's email */
-  email: string;
+  email?: string;
 
   /** The user's photo URL */
-  image: string | null;
+  image?: string | null;
 
   /**
    * Explicit permission-range principal identifiers for this user.
@@ -330,6 +364,25 @@ export interface EditorOptions {
 
   /** Comment highlight configuration */
   comments?: CommentConfig;
+
+  /**
+   * Track-changes runtime configuration forwarded from the SuperDoc-level
+   * `modules.trackChanges` config. Read by the TrackChanges extension and
+   * by the SuperConverter during import. Fields are all optional; missing
+   * ones fall back to defaults resolved at SuperDoc construction time.
+   */
+  trackedChanges?: {
+    visible?: boolean;
+    mode?: 'review' | 'original' | 'final' | 'off';
+    enabled?: boolean;
+    /**
+     * How a tracked replacement (ins + del) surfaces in the UI and API.
+     * `'paired'` (default) groups both halves under one id and resolves them
+     * together. `'independent'` gives each half its own id, matching the
+     * Microsoft Word / ECMA-376 §17.13.5 revision model.
+     */
+    replacements?: 'paired' | 'independent';
+  };
 
   /** Whether this is a new file */
   isNewFile?: boolean;

@@ -877,22 +877,49 @@ const handleTrackedChangeTransaction = (trackedChangeMeta, trackedChanges, newEd
   }
 
   const newTrackedChanges = { ...trackedChanges };
-  let id = insertedMark?.attrs?.id || deletionMark?.attrs?.id || formatMark?.attrs?.id;
+  const insertedId = insertedMark?.attrs?.id ?? null;
+  const deletionId = deletionMark?.attrs?.id ?? null;
+  const formatId = formatMark?.attrs?.id ?? null;
+  const primaryId = insertedId || deletionId || formatId;
 
-  if (!id) {
+  if (!primaryId) {
     return trackedChanges;
   }
 
-  // Maintain a map of tracked changes with their inserted/deleted ids
-  let isNewChange = false;
-  if (!newTrackedChanges[id]) {
-    newTrackedChanges[id] = {};
-    isNewChange = true;
-  }
+  const registerTrackedChangeId = (changeId, patch) => {
+    if (!changeId) return false;
 
-  if (insertedMark) newTrackedChanges[id].insertion = id;
-  if (deletionMark) newTrackedChanges[id].deletion = deletionMark.attrs?.id;
-  if (formatMark) newTrackedChanges[id].format = formatMark.attrs?.id;
+    const existing = newTrackedChanges[changeId];
+    if (existing) {
+      Object.assign(existing, patch);
+      return false;
+    }
+
+    newTrackedChanges[changeId] = { ...patch };
+    return true;
+  };
+
+  const buildTrackedChangePayload = ({ event, marks, nodes, deletionNodes = [] }) => {
+    if (!marks.insertedMark && !marks.deletionMark && !marks.formatMark) {
+      return null;
+    }
+
+    const trackedMarkId =
+      marks.insertedMark?.attrs?.id ?? marks.deletionMark?.attrs?.id ?? marks.formatMark?.attrs?.id ?? null;
+    if (!trackedMarkId) {
+      return null;
+    }
+
+    return createOrUpdateTrackedChangeComment({
+      documentId: editor.options.documentId,
+      event,
+      marks,
+      deletionNodes,
+      nodes,
+      newEditorState,
+      trackedChangesForId: getTrackChanges(newEditorState, trackedMarkId),
+    });
+  };
 
   const { step } = trackedChangeMeta;
   let nodes = step?.slice?.content?.content || [];
@@ -909,9 +936,54 @@ const handleTrackedChangeTransaction = (trackedChangeMeta, trackedChanges, newEd
   }
 
   const hasCandidateNodes = nodes.length > 0 || Boolean(deletionNodes?.length);
+  const hasIndependentReplacementIds =
+    Boolean(insertedMark && deletionMark) && Boolean(insertedId) && Boolean(deletionId) && insertedId !== deletionId;
+
+  if (hasIndependentReplacementIds) {
+    const isNewInsertion = registerTrackedChangeId(insertedId, { insertion: insertedId });
+    const isNewDeletion = registerTrackedChangeId(deletionId, { deletion: deletionId });
+
+    const insertionPayload = hasCandidateNodes
+      ? buildTrackedChangePayload({
+          event: isNewInsertion ? 'add' : 'update',
+          marks: {
+            insertedMark,
+            deletionMark: null,
+            formatMark: null,
+          },
+          deletionNodes: [],
+          nodes,
+        })
+      : null;
+
+    const deletionPayload =
+      deletionMark && (hasCandidateNodes || getTrackChanges(newEditorState, deletionId).length > 0)
+        ? buildTrackedChangePayload({
+            event: isNewDeletion ? 'add' : 'update',
+            marks: {
+              insertedMark: null,
+              deletionMark,
+              formatMark: null,
+            },
+            deletionNodes,
+            nodes: [],
+          })
+        : null;
+
+    if (emitCommentEvent && insertionPayload) editor.emit('commentsUpdate', insertionPayload);
+    if (emitCommentEvent && deletionPayload) editor.emit('commentsUpdate', deletionPayload);
+    return newTrackedChanges;
+  }
+
+  // Maintain a map of tracked changes with their inserted/deleted ids.
+  const isNewChange = registerTrackedChangeId(primaryId, {
+    ...(insertedMark ? { insertion: primaryId } : {}),
+    ...(deletionMark ? { deletion: deletionId } : {}),
+    ...(formatMark ? { format: formatId } : {}),
+  });
+
   const emitParams = hasCandidateNodes
-    ? createOrUpdateTrackedChangeComment({
-        documentId: editor.options.documentId,
+    ? buildTrackedChangePayload({
         event: isNewChange ? 'add' : 'update',
         marks: {
           insertedMark,
@@ -920,7 +992,6 @@ const handleTrackedChangeTransaction = (trackedChangeMeta, trackedChanges, newEd
         },
         deletionNodes,
         nodes,
-        newEditorState,
       })
     : null;
 
@@ -988,13 +1059,13 @@ const normalizeFormatAttrsForCommentText = (attrs = {}, nodes) => {
   };
 };
 
-const getTrackedChangeText = ({ nodes, mark, trackedChangeType, isDeletionInsertion }) => {
+const getTrackedChangeText = ({ nodes, mark, trackedChangeType, isReplacement }) => {
   let trackedChangeText = '';
   let deletionText = '';
   let trackedChangeDisplayType = null;
 
   // Extract deletion text first
-  if (trackedChangeType === TrackDeleteMarkName || isDeletionInsertion) {
+  if (trackedChangeType === TrackDeleteMarkName || isReplacement) {
     deletionText = nodes.reduce((acc, node) => {
       const hasDeleteMark = node.marks.find((nodeMark) => nodeMark.type.name === TrackDeleteMarkName);
       if (!hasDeleteMark) return acc;
@@ -1004,7 +1075,7 @@ const getTrackedChangeText = ({ nodes, mark, trackedChangeType, isDeletionInsert
     }, '');
   }
 
-  if (trackedChangeType === TrackInsertMarkName || isDeletionInsertion) {
+  if (trackedChangeType === TrackInsertMarkName || isReplacement) {
     trackedChangeText = nodes.reduce((acc, node) => {
       const hasInsertMark = node.marks.find((nodeMark) => nodeMark.type.name === TrackInsertMarkName);
       if (!hasInsertMark) return acc;
@@ -1064,17 +1135,16 @@ const createOrUpdateTrackedChangeComment = ({
   const { author, authorEmail, authorImage, date, importedAuthor } = attrs;
   const id = attrs.id;
 
-  // Check metadata first - this should be set correctly by groupChanges() in createCommentForTrackChanges
-  // for both newly created and imported tracked changes
-  let isDeletionInsertion = !!(marks.insertedMark && marks.deletionMark);
+  const insertedMarkId = marks.insertedMark?.attrs?.id ?? null;
+  const deletionMarkId = marks.deletionMark?.attrs?.id ?? null;
+  let isReplacement = Boolean(insertedMarkId && deletionMarkId && insertedMarkId === deletionMarkId);
 
-  // Fallback: If metadata doesn't indicate replacement (e.g., edge cases during import),
-  // check the document state directly to detect replacements by finding both marks with same ID
-  // This ensures robustness even if groupChanges() misses a replacement or metadata isn't set
-  if (!isDeletionInsertion) {
+  // Fallback: check the document for both mark types under the same ID
+  // (covers edge cases where transaction meta only carries one mark)
+  if (!isReplacement) {
     const hasInsertMark = trackedChangesWithId.some(({ mark }) => mark.type.name === TrackInsertMarkName);
     const hasDeleteMark = trackedChangesWithId.some(({ mark }) => mark.type.name === TrackDeleteMarkName);
-    isDeletionInsertion = hasInsertMark && hasDeleteMark;
+    isReplacement = hasInsertMark && hasDeleteMark;
   }
 
   // Collect nodes from the tracked changes found
@@ -1097,10 +1167,8 @@ const createOrUpdateTrackedChangeComment = ({
     });
   });
 
-  // For replacements, we need both insertion nodes and deletion nodes
-  // When isDeletionInsertion is true, nodesWithMark should contain both types
   let nodesToUse;
-  if (isDeletionInsertion) {
+  if (isReplacement) {
     // For replacements, prefer nodes found in the document to avoid duplicating text
     // when step.slice/deletionNodes include overlapping content.
     const hasInsertNode = nodesWithMark.some((node) =>
@@ -1128,7 +1196,7 @@ const createOrUpdateTrackedChangeComment = ({
     nodes: nodesToUse,
     mark: trackedMark,
     trackedChangeType,
-    isDeletionInsertion,
+    isReplacement,
     deletionNodes,
   });
 
@@ -1141,10 +1209,10 @@ const createOrUpdateTrackedChangeComment = ({
     type: 'trackedChange',
     documentId,
     changeId: id,
-    trackedChangeType: isDeletionInsertion ? 'both' : trackedChangeType,
+    trackedChangeType: isReplacement ? 'both' : trackedChangeType,
     trackedChangeText,
     trackedChangeDisplayType,
-    deletedText: marks.deletionMark ? deletionText : null,
+    deletedText: isReplacement || marks.deletionMark ? deletionText : null,
     author,
     authorEmail,
     ...(authorImage && { authorImage }),

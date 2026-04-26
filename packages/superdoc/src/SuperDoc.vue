@@ -1,6 +1,8 @@
 <script setup>
 import '@superdoc/common/styles/common-styles.css';
-import '@superdoc/super-editor/style.css';
+// In the monorepo dev app, consume the editor stylesheet from source so local
+// CSS edits take effect immediately instead of depending on a rebuilt dist CSS.
+import '../../super-editor/src/style.css';
 
 import { superdocIcons } from './icons.js';
 //prettier-ignore
@@ -8,6 +10,7 @@ import {
   getCurrentInstance,
   inject,
   ref,
+  unref,
   onMounted,
   onBeforeUnmount,
   nextTick,
@@ -30,7 +33,8 @@ import { useSuperdocStore } from '@superdoc/stores/superdoc-store';
 import { useCommentsStore } from '@superdoc/stores/comments-store';
 
 import { DOCX, PDF, HTML } from '@superdoc/common';
-import { SuperEditor, AIWriter, PresentationEditor } from '@superdoc/super-editor';
+import { SuperEditor, AIWriter, PresentationEditor, getTrackedChangeIndex } from '@superdoc/super-editor';
+import { ySyncPluginKey } from 'y-prosemirror';
 import HtmlViewer from './components/HtmlViewer/HtmlViewer.vue';
 import useComment from './components/CommentsLayer/use-comment';
 import AiLayer from './components/AiLayer/AiLayer.vue';
@@ -103,7 +107,6 @@ const {
   isCommentsListVisible,
   isFloatingCommentsReady,
   generalCommentIds,
-  getFloatingComments,
   hasSyncedCollaborationComments,
   editorCommentPositions,
   hasInitializedLocations,
@@ -126,6 +129,11 @@ const {
 } = commentsStore;
 const { proxy } = getCurrentInstance();
 commentsStore.proxy = proxy;
+
+const floatingComments = computed(() => {
+  const currentFloatingComments = unref(commentsStore.getFloatingComments);
+  return Array.isArray(currentFloatingComments) ? currentFloatingComments : [];
+});
 
 const { isHighContrastMode } = useHighContrastMode();
 const { uiFontFamily } = useUiFontFamily();
@@ -238,6 +246,36 @@ const flushPendingReplayTrackedChangeSync = () => {
   if (!pendingReplayTrackedChangeSync.value) return;
   pendingReplayTrackedChangeSync.value = false;
   syncTrackedChangeComments({ superdoc: proxy.$superdoc, editor: proxy.$superdoc?.activeEditor });
+};
+
+let queuedTrackedChangeCommentResync = null;
+let isTrackedChangeCommentResyncQueued = false;
+
+const flushQueuedTrackedChangeCommentResync = () => {
+  isTrackedChangeCommentResyncQueued = false;
+
+  const pendingResync = queuedTrackedChangeCommentResync;
+  queuedTrackedChangeCommentResync = null;
+  if (!pendingResync?.editor) return;
+
+  syncTrackedChangeComments({
+    superdoc: proxy.$superdoc,
+    editor: pendingResync.editor,
+    broadcastChanges: pendingResync.broadcastChanges,
+  });
+};
+
+const queueTrackedChangeCommentResync = ({ editor, broadcastChanges = true } = {}) => {
+  if (!editor) return;
+
+  queuedTrackedChangeCommentResync = {
+    editor,
+    broadcastChanges: Boolean(queuedTrackedChangeCommentResync?.broadcastChanges) || Boolean(broadcastChanges),
+  };
+
+  if (isTrackedChangeCommentResyncQueued) return;
+  isTrackedChangeCommentResyncQueued = true;
+  queueMicrotask(flushQueuedTrackedChangeCommentResync);
 };
 
 const scheduleReplayTrackedChangeSync = () => {
@@ -356,6 +394,7 @@ const onEditorReady = ({ editor, presentationEditor }) => {
     if (doc.password) doc.password = undefined;
   }
   presentationEditor.setContextMenuDisabled?.(proxy.$superdoc.config.disableContextMenu);
+  getTrackedChangeIndex(editor);
 
   // Listen for fresh comment positions from the layout engine.
   // PresentationEditor emits this after every layout with PM positions collected
@@ -379,6 +418,15 @@ const onEditorReady = ({ editor, presentationEditor }) => {
     if (!hasInitializedLocations.value) {
       hasInitializedLocations.value = true;
     }
+  });
+
+  editor.on?.('tracked-changes-changed', ({ editor: sourceEditor, source }) => {
+    if (source === 'body-edit') return;
+    if (!shouldRenderCommentsInViewing.value) {
+      commentsStore.clearEditorCommentPositions?.();
+      return;
+    }
+    syncTrackedChangeComments({ superdoc: proxy.$superdoc, editor: sourceEditor ?? editor });
   });
 
   presentationEditor.on('paginationUpdate', ({ layout }) => {
@@ -688,6 +736,8 @@ const editorOptions = (doc) => {
       highlightColors: commentsModuleConfig.value?.highlightColors,
       highlightOpacity: commentsModuleConfig.value?.highlightOpacity,
     },
+    trackedChanges: proxy.$superdoc.config.modules?.trackChanges,
+    experimental: proxy.$superdoc.config.experimental,
     editorCtor: useLayoutEngine ? PresentationEditor : undefined,
     onBeforeCreate: onEditorBeforeCreate,
     onCreate: onEditorCreate,
@@ -1083,16 +1133,47 @@ const onEditorCommentsUpdate = (params = {}) => {
   }
 };
 
+const isHistoryUndoRedoInput = (inputType) => inputType === 'historyUndo' || inputType === 'historyRedo';
+
+const isCollaborationReplayTransaction = (transaction, ySyncMeta) => {
+  return Boolean(transaction?.docChanged && ySyncMeta?.isChangeOrigin);
+};
+
+const isPeerCollaborationReplayTransaction = (transaction, ySyncMeta) => {
+  const inputType = transaction?.getMeta?.('inputType');
+  return (
+    isCollaborationReplayTransaction(transaction, ySyncMeta) &&
+    !isHistoryUndoRedoInput(inputType) &&
+    !Boolean(ySyncMeta?.isUndoRedoOperation)
+  );
+};
+
+const shouldResyncTrackedChangeThreads = (transaction, ySyncMeta = transaction?.getMeta?.(ySyncPluginKey)) => {
+  const inputType = transaction?.getMeta?.('inputType');
+  const isLocalHistoryUndoRedo = isHistoryUndoRedoInput(inputType);
+  const isLocalCollabUndoRedo = Boolean(ySyncMeta?.isUndoRedoOperation);
+
+  // Peer editors do not retain the local UndoManager flag. A collaborator's
+  // undo/redo arrives as a generic Yjs-origin document replay, so treat those
+  // replays as tracked-change resync points and keep the resync path idempotent.
+  return isLocalHistoryUndoRedo || isLocalCollabUndoRedo || isCollaborationReplayTransaction(transaction, ySyncMeta);
+};
+
 const onEditorTransaction = (payload = {}) => {
   const { editor, transaction } = payload;
-  const inputType = transaction?.getMeta?.('inputType');
+  const ySyncMeta = transaction?.getMeta?.(ySyncPluginKey);
 
-  // Call sync on editor transaction but only if it's undo or redo
-  // This could be extended to other listeners in the future
-  if (inputType === 'historyUndo' || inputType === 'historyRedo') {
+  // Call sync on editor transaction for undo/redo in both local history
+  // and collaboration replay modes.
+  if (shouldResyncTrackedChangeThreads(transaction, ySyncMeta)) {
     const documentId = editor?.options?.documentId;
     syncTrackedChangePositionsWithDocument({ documentId, editor });
-    syncTrackedChangeComments({ superdoc: proxy.$superdoc, editor });
+    queueTrackedChangeCommentResync({
+      editor,
+      // Remote replay should rebuild only local sidebar state. The authoritative
+      // collaboration comment update is already shared through the comments ydoc.
+      broadcastChanges: !isPeerCollaborationReplayTransaction(transaction, ySyncMeta),
+    });
   }
 
   emitEditorTransaction(buildEditorTransactionPayload(payload));
@@ -1103,7 +1184,7 @@ const showCommentsSidebar = computed(() => {
   if (!shouldRenderCommentsInViewing.value) return false;
   return (
     pendingComment.value ||
-    (getFloatingComments.value?.length > 0 &&
+    (floatingComments.value.length > 0 &&
       isReady.value &&
       layers.value &&
       isCommentsEnabled.value &&
@@ -1445,7 +1526,7 @@ watch(
 // Ensure hasInitializedLocations is set when comments arrive (backup for cases
 // where handleDocumentReady hasn't fired yet). Never toggle false→true→false —
 // the virtualized FloatingComments reacts to comment changes via computed properties.
-watch(getFloatingComments, () => {
+watch(floatingComments, () => {
   if (!hasInitializedLocations.value) {
     hasInitializedLocations.value = true;
   }
@@ -1603,7 +1684,7 @@ const getPDFViewer = () => {
     <div class="superdoc__right-sidebar right-sidebar" v-if="showCommentsSidebar">
       <div class="floating-comments">
         <FloatingComments
-          v-if="hasInitializedLocations && (getFloatingComments.length > 0 || pendingComment)"
+          v-if="hasInitializedLocations && (floatingComments.length > 0 || pendingComment)"
           v-for="doc in documentsWithConverations"
           :parent="layers"
           :current-document="doc"
@@ -1642,8 +1723,7 @@ const getPDFViewer = () => {
   min-width: 300px;
   width: 300px;
   height: 100%;
-  overflow-y: hidden;
-  overflow-x: hidden;
+  overflow: visible;
 }
 
 .superdoc__layers {

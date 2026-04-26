@@ -381,12 +381,133 @@ describe('prepareCommentsXmlFilesForExport', () => {
       expect(result.removedTargets).toHaveLength(0);
     });
   });
+
+  describe('threading profile overrides', () => {
+    it('forces Word-style threading when profile is range-based and the import lacks commentsExtended.xml', () => {
+      const threadingProfile = {
+        defaultStyle: 'range-based',
+        mixed: false,
+        fileSet: {
+          hasCommentsExtended: false,
+          hasCommentsExtensible: false,
+          hasCommentsIds: false,
+        },
+      };
+
+      // Multiple unthreaded comments — exercises the scenario where the
+      // importer would otherwise guess thread parents from overlapping ranges.
+      const unthreadedComments = [
+        makeComment({ commentId: 'c1', commentParaId: 'AAAAAAA1' }),
+        makeComment({ commentId: 'c2', commentParaId: 'AAAAAAA2' }),
+        makeComment({ commentId: 'c3', commentParaId: 'AAAAAAA3' }),
+      ];
+      const unthreadedDefs = unthreadedComments.map((c, i) => makeCommentDef(String(i), c.commentParaId));
+
+      const result = prepareCommentsXmlFilesForExport({
+        convertedXml: makeConvertedXml(),
+        defs: unthreadedDefs,
+        commentsWithParaIds: unthreadedComments,
+        exportType: 'external',
+        threadingProfile,
+      });
+
+      const extXml = result.documentXml['word/commentsExtended.xml'];
+      expect(extXml).toBeDefined();
+      const rel = result.relationships.find((r) => r.attributes.Target === 'commentsExtended.xml');
+      expect(rel).toBeDefined();
+
+      // One w15:commentEx entry per comment, each with w15:paraId and NO
+      // w15:paraIdParent — the missing parent ids are what prevents the
+      // importer from reconstructing threads from overlapping ranges.
+      const entries = extXml.elements[0].elements;
+      expect(entries).toHaveLength(unthreadedComments.length);
+      const paraIds = new Set();
+      for (const entry of entries) {
+        expect(entry.name).toBe('w15:commentEx');
+        expect(entry.attributes['w15:paraId']).toBeDefined();
+        expect(entry.attributes['w15:paraIdParent']).toBeUndefined();
+        paraIds.add(entry.attributes['w15:paraId']);
+      }
+      expect(paraIds.size).toBe(unthreadedComments.length);
+    });
+
+    it('emits commentsExtended.xml for range-based files with no original extended part, even when every comment is tagged origin=google-docs', () => {
+      // Regression case: detectDocumentOrigin stamps every comment in a
+      // comments.xml-only file as origin='google-docs', including legacy Word
+      // range-based files. Without the fileSet-based guard, the exporter
+      // silently dropped commentsExtended.xml here and re-import rebuilt
+      // threads from range overlaps.
+      const threadingProfile = {
+        defaultStyle: 'range-based',
+        mixed: false,
+        fileSet: {
+          hasCommentsExtended: false,
+          hasCommentsExtensible: false,
+          hasCommentsIds: false,
+        },
+      };
+
+      const importedAsGoogleDocs = [
+        makeComment({ commentId: 'c1', commentParaId: '126B0C7F', origin: 'google-docs' }),
+        makeComment({ commentId: 'c2', commentParaId: '126B0C80', origin: 'google-docs' }),
+      ];
+      const importedDefs = [makeCommentDef('0', '126B0C7F'), makeCommentDef('1', '126B0C80')];
+
+      const result = prepareCommentsXmlFilesForExport({
+        convertedXml: makeConvertedXml(),
+        defs: importedDefs,
+        commentsWithParaIds: importedAsGoogleDocs,
+        exportType: 'external',
+        threadingProfile,
+      });
+
+      const extendedXml = result.documentXml['word/commentsExtended.xml'];
+      expect(extendedXml).toBeDefined();
+
+      const entries = extendedXml.elements[0].elements;
+      expect(entries).toHaveLength(2);
+      for (const entry of entries) {
+        expect(entry.attributes['w15:paraId']).toBeDefined();
+        expect(entry.attributes['w15:paraIdParent']).toBeUndefined();
+      }
+
+      const rel = result.relationships.find((r) => r.attributes.Target === 'commentsExtended.xml');
+      expect(rel).toBeDefined();
+    });
+
+    it('leaves existing commentsExtended profile untouched when the import already ships commentsExtended.xml', () => {
+      // The override keys off fileSet.hasCommentsExtended === false. When the
+      // import already carries commentsExtended.xml the importer classifies
+      // the profile as 'commentsExtended' and the existing export path owns
+      // it; the override must not re-enter.
+      const threadingProfile = {
+        defaultStyle: 'commentsExtended',
+        mixed: false,
+        fileSet: {
+          hasCommentsExtended: true,
+          hasCommentsExtensible: false,
+          hasCommentsIds: false,
+        },
+      };
+
+      const result = prepareCommentsXmlFilesForExport({
+        convertedXml: makeConvertedXml(),
+        defs,
+        commentsWithParaIds,
+        exportType: 'external',
+        threadingProfile,
+      });
+
+      expect(result.documentXml['word/commentsExtended.xml']).toBeDefined();
+    });
+  });
 });
 
 describe('getCommentDefinition', () => {
   it('preserves tracked change display metadata for exported tracked-change comments', () => {
     const definition = getCommentDefinition(
       makeComment({
+        creatorEmail: 'author@example.com',
         trackedChange: true,
         trackedChangeType: 'trackFormat',
         trackedChangeText: 'https://example.com',
@@ -400,6 +521,8 @@ describe('getCommentDefinition', () => {
     expect(definition.attributes['custom:trackedChangeType']).toBe('trackFormat');
     expect(definition.attributes['custom:trackedChangeText']).toBe('https://example.com');
     expect(definition.attributes['custom:trackedChangeDisplayType']).toBe('hyperlinkAdded');
+    expect(definition.attributes['custom:email']).toBe('author@example.com');
+    expect(definition.attributes['w:email']).toBeUndefined();
   });
 });
 
@@ -609,5 +732,31 @@ describe('updateCommentsXml', () => {
     const lastParagraph = updatedComment.elements[updatedComment.elements.length - 1];
 
     expect(lastParagraph.attributes['w14:paraId']).toBe('ABC12345');
+    expect(updatedComment.attributes['w:email']).toBeUndefined();
+    expect(updatedComment.attributes['custom:email']).toBeUndefined();
+  });
+
+  it('preserves custom author email attribute and omits w:email', () => {
+    const commentDef = {
+      type: 'element',
+      name: 'w:comment',
+      attributes: {
+        'w:id': '1',
+        'w:author': 'Author',
+        'w:initials': 'A',
+        'w15:paraId': 'EMAIL123',
+        'custom:email': 'author@example.com',
+      },
+      elements: [{ type: 'element', name: 'w:p', attributes: {}, elements: [] }],
+    };
+    const commentsXml = {
+      elements: [{ elements: [] }],
+    };
+
+    const result = updateCommentsXml([commentDef], commentsXml);
+    const updatedComment = result.elements[0].elements[0];
+
+    expect(updatedComment.attributes['w:email']).toBeUndefined();
+    expect(updatedComment.attributes['custom:email']).toBe('author@example.com');
   });
 });

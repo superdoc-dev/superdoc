@@ -50,6 +50,17 @@ import { seedEditorStateToYDoc } from './extensions/collaboration/seed-editor-to
 import { onCollaborationProviderSynced } from './core/helpers/collaboration-provider-sync.js';
 import { resolveSelectionTarget } from './document-api-adapters/helpers/selection-target-resolver.js';
 import { resolveDefaultInsertTarget } from './document-api-adapters/helpers/adapter-utils.js';
+import { resolveTrackedChangeInStory } from './document-api-adapters/helpers/tracked-change-resolver.js';
+import { getTrackedChangeIndex } from './document-api-adapters/tracked-changes/tracked-change-index.js';
+import {
+  makeTrackedChangeAnchorKey,
+  makeCommentAnchorKey,
+  isTrackedChangeAnchorKey,
+  isCommentAnchorKey,
+  parseTrackedChangeAnchorKey,
+  TRACKED_CHANGE_ANCHOR_KEY_PREFIX,
+  COMMENT_ANCHOR_KEY_PREFIX,
+} from './document-api-adapters/helpers/tracked-change-runtime-ref.js';
 
 const Extensions = {
   Node,
@@ -145,4 +156,24 @@ export {
   resolveSelectionTarget,
   /** @internal */
   resolveDefaultInsertTarget,
+  /** @internal */
+  resolveTrackedChangeInStory,
+
+  // Story-aware tracked-change service
+  /** @internal */
+  getTrackedChangeIndex,
+  /** @internal */
+  makeTrackedChangeAnchorKey,
+  /** @internal */
+  makeCommentAnchorKey,
+  /** @internal */
+  isTrackedChangeAnchorKey,
+  /** @internal */
+  isCommentAnchorKey,
+  /** @internal */
+  parseTrackedChangeAnchorKey,
+  /** @internal */
+  TRACKED_CHANGE_ANCHOR_KEY_PREFIX,
+  /** @internal */
+  COMMENT_ANCHOR_KEY_PREFIX,
 };

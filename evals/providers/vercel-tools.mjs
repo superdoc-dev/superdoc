@@ -9,7 +9,7 @@
  */
 
 import { generateText, jsonSchema, stepCountIs, tool } from 'ai';
-import { cacheKey, loadSdk, readCache, writeCache } from './utils.mjs';
+import { cacheKey, loadSdk, readCache, writeCache } from '../shared/provider-utils.mjs';
 
 const STOP_CONDITION = stepCountIs(5);
 

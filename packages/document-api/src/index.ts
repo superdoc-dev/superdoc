@@ -26,8 +26,11 @@ export type {
   RangeBlockPreview,
   RangePreview,
   RangeResolverAdapter,
+  ScrollIntoViewInput,
+  ScrollIntoViewOutput,
+  RangeScrollAdapter,
 } from './ranges/index.js';
-export { executeResolveRange } from './ranges/index.js';
+export { executeResolveRange, executeScrollIntoView } from './ranges/index.js';
 export type { HeaderFootersAdapter, HeaderFootersApi } from './header-footers/header-footers.js';
 export * from './header-footers/header-footers.types.js';
 export type { ClearContentAdapter, ClearContentInput } from './clear-content/clear-content.js';
@@ -63,6 +66,7 @@ import type {
   SDMutationReceipt,
   TrackChangeInfo,
   TrackChangesListResult,
+  ExtractResult,
 } from './types/index.js';
 import type { CommentInfo, CommentsListQuery, CommentsListResult } from './comments/comments.types.js';
 import type {
@@ -115,6 +119,7 @@ import {
 } from './markdown-to-fragment/markdown-to-fragment.js';
 import type { SDMarkdownToFragmentResult } from './types/sd-contract.js';
 import { executeInfo, type InfoAdapter, type InfoInput } from './info/info.js';
+import { executeExtract, type ExtractAdapter, type ExtractInput } from './extract/extract.js';
 import {
   executeClearContent,
   type ClearContentAdapter,
@@ -123,7 +128,14 @@ import {
 import type { InsertInput } from './insert/insert.js';
 import { executeDelete } from './delete/delete.js';
 import { executeResolveRange } from './ranges/resolve.js';
-import type { RangeResolverAdapter, ResolveRangeInput, ResolveRangeOutput } from './ranges/ranges.types.js';
+import { executeScrollIntoView } from './ranges/scroll-into-view.js';
+import type {
+  RangeResolverAdapter,
+  ResolveRangeInput,
+  ResolveRangeOutput,
+  ScrollIntoViewInput,
+  ScrollIntoViewOutput,
+} from './ranges/ranges.types.js';
 import { executeInsert } from './insert/insert.js';
 import type { ListsAdapter, ListsApi } from './lists/lists.js';
 import type {
@@ -889,6 +901,7 @@ export type { GetTextAdapter, GetTextInput } from './get-text/get-text.js';
 export type { GetMarkdownAdapter, GetMarkdownInput } from './get-markdown/get-markdown.js';
 export type { GetHtmlAdapter, GetHtmlInput } from './get-html/get-html.js';
 export type { InfoAdapter, InfoInput } from './info/info.js';
+export type { ExtractAdapter, ExtractInput } from './extract/extract.js';
 export type { WriteAdapter, WriteRequest } from './write/write.js';
 export type {
   FormatInlineAliasApi,
@@ -1468,10 +1481,19 @@ export interface MutationsApi {
 
 export interface RangesApi {
   resolve(input: ResolveRangeInput): ResolveRangeOutput;
+  /**
+   * Scroll the editor viewport so the target range is visible. Handles
+   * paginated, virtualized layouts by mounting the target page on demand.
+   * Async — resolves once the scroll settles (or the page-mount timeout
+   * expires). Target accepts `TextAddress`, `TextTarget`, or `EntityAddress`
+   * (comment / tracked change by id).
+   */
+  scrollIntoView(input: ScrollIntoViewInput): Promise<ScrollIntoViewOutput>;
 }
 
 export interface RangesAdapter {
   resolve(input: ResolveRangeInput): ResolveRangeOutput;
+  scrollIntoView(input: ScrollIntoViewInput): Promise<ScrollIntoViewOutput>;
 }
 
 export interface QueryAdapter {
@@ -1531,6 +1553,11 @@ export interface DocumentApi {
    * Return document summary info including document counts and capabilities.
    */
   info(input: InfoInput): DocumentInfo;
+  /**
+   * Extract all document content with stable IDs for RAG pipelines.
+   * Returns blocks with full text, comments, and tracked changes.
+   */
+  extract(input: ExtractInput): ExtractResult;
   /**
    * Clear all document body content, leaving a single empty paragraph.
    */
@@ -1695,6 +1722,7 @@ export interface DocumentApiAdapters {
   getHtml: GetHtmlAdapter;
   markdownToFragment: MarkdownToFragmentAdapter;
   info: InfoAdapter;
+  extract: ExtractAdapter;
   clearContent: ClearContentAdapter;
   capabilities: CapabilitiesAdapter;
   comments: CommentsAdapter;
@@ -1893,6 +1921,9 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
     },
     info(input: InfoInput): DocumentInfo {
       return executeInfo(adapters.info, input);
+    },
+    extract(input: ExtractInput): ExtractResult {
+      return executeExtract(adapters.extract, input);
     },
     clearContent(input: ClearContentInput, options?: RevisionGuardOptions): Receipt {
       return executeClearContent(adapters.clearContent, input, options);
@@ -3107,6 +3138,9 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
     ranges: {
       resolve(input: ResolveRangeInput): ResolveRangeOutput {
         return executeResolveRange(adapters.ranges, input);
+      },
+      scrollIntoView(input: ScrollIntoViewInput): Promise<ScrollIntoViewOutput> {
+        return executeScrollIntoView(adapters.ranges, input);
       },
     },
     mutations: {

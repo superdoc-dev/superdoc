@@ -268,13 +268,27 @@ jobs:
     # on every needed job, so a failing unit-tests job would cause validate to
     # skip instead of run - and skipped jobs count as success for required
     # status checks, so the PR would merge despite a failure. always() forces
-    # the job to run even when a dependency failed, so the script below gets
-    # to evaluate each needs.*.result and fail explicitly.
-    if: always() && needs.gate.outputs.should_run == 'true'
+    # the job to run regardless of upstream results, and the script below
+    # evaluates each needs.*.result explicitly. The gate-result check is the
+    # other half: if the gate itself failed (checkout error, runner blip),
+    # should_run is empty and the previous condition (should_run == 'true')
+    # would have skipped validate - silently green-lighting merge. Always
+    # running validate and failing on a non-success gate closes that gap.
+    if: always()
     runs-on: ubuntu-latest
     steps:
       - name: Check results
         run: |
+          if [[ "${{ needs.gate.result }}" != "success" ]]; then
+            echo "Gate did not succeed (result: ${{ needs.gate.result }})."
+            exit 1
+          fi
+
+          if [[ "${{ needs.gate.outputs.should_run }}" != "true" ]]; then
+            echo "Workflow not required for this PR."
+            exit 0
+          fi
+
           if [[ "${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped') }}" == "true" ]]; then
             echo "One or more required jobs did not succeed."
             exit 1

@@ -41,9 +41,19 @@ jobs:
   validate:
     name: CI MCP / validate
     needs: gate
-    if: needs.gate.outputs.should_run == 'true'
+    # Run when gate succeeded with should_run='true' (do work) OR when the
+    # gate itself failed (so we can fail explicitly below). If gate succeeded
+    # with should_run='false', this job is skipped, which counts as success
+    # for required status checks.
+    if: always() && (needs.gate.result != 'success' || needs.gate.outputs.should_run == 'true')
     runs-on: ubuntu-latest
     steps:
+      - name: Verify gate succeeded
+        if: needs.gate.result != 'success'
+        run: |
+          echo "Gate did not succeed (result: ${{ needs.gate.result }})."
+          exit 1
+
       - uses: actions/checkout@v4
 
       - uses: pnpm/action-setup@v4

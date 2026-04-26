@@ -386,6 +386,7 @@ export type BreakRun = {
   pmStart?: number;
   pmEnd?: number;
   sdt?: SdtMetadata;
+  trackedChange?: TrackedChangeMeta;
 };
 
 /**

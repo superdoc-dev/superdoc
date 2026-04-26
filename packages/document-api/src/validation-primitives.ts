@@ -8,7 +8,7 @@
  * Internal — not exported from the package root.
  */
 
-import type { BlockNodeAddress, TextAddress } from './types/index.js';
+import type { BlockNodeAddress, TextAddress, TextTarget } from './types/index.js';
 import { BLOCK_NODE_TYPES } from './types/base.js';
 import { TABLE_NESTING_POLICY_VALUES } from './types/placement.js';
 import { DocumentApiValidationError } from './errors.js';
@@ -40,6 +40,27 @@ export function isTextAddress(value: unknown): value is TextAddress {
   if (!isRecord(range)) return false;
   if (!isInteger(range.start) || !isInteger(range.end)) return false;
   return range.start <= range.end;
+}
+
+/**
+ * Type guard for TextTarget — multi-segment text target used by read
+ * operations and by scroll/navigation primitives that accept either a
+ * single-block or multi-block anchor.
+ */
+export function isTextTarget(value: unknown): value is TextTarget {
+  if (!isRecord(value)) return false;
+  if (value.kind !== 'text') return false;
+  const segments = value.segments;
+  if (!Array.isArray(segments) || segments.length === 0) return false;
+  for (const seg of segments) {
+    if (!isRecord(seg)) return false;
+    if (typeof seg.blockId !== 'string') return false;
+    const range = seg.range;
+    if (!isRecord(range)) return false;
+    if (!isInteger(range.start) || !isInteger(range.end)) return false;
+    if (range.start > range.end) return false;
+  }
+  return true;
 }
 
 const BLOCK_NODE_TYPES_SET: ReadonlySet<string> = new Set(BLOCK_NODE_TYPES);

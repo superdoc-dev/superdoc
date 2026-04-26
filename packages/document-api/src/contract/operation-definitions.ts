@@ -3317,7 +3317,7 @@ export const OPERATION_DEFINITIONS = {
 
   'history.get': {
     memberPath: 'history.get',
-    description: 'Query the current undo/redo history state of the active editor.',
+    description: 'Query the current undo/redo history state of the document.',
     expectedResult:
       'Returns a HistoryState object with undoDepth, redoDepth, canUndo, canRedo, and a list of history-unsafe operations.',
     requiresDocumentContext: true,
@@ -3330,7 +3330,7 @@ export const OPERATION_DEFINITIONS = {
 
   'history.undo': {
     memberPath: 'history.undo',
-    description: 'Undo the most recent history-safe mutation in the active editor.',
+    description: 'Undo the most recent history-safe mutation in the document.',
     expectedResult:
       'Returns a HistoryActionResult with noop flag, reason (EMPTY_UNDO_STACK | NO_EFFECT when noop), and revision before/after.',
     requiresDocumentContext: true,
@@ -3350,7 +3350,7 @@ export const OPERATION_DEFINITIONS = {
 
   'history.redo': {
     memberPath: 'history.redo',
-    description: 'Redo the most recently undone action in the active editor.',
+    description: 'Redo the most recently undone action in the document.',
     expectedResult:
       'Returns a HistoryActionResult with noop flag, reason (EMPTY_REDO_STACK | NO_EFFECT when noop), and revision before/after.',
     requiresDocumentContext: true,

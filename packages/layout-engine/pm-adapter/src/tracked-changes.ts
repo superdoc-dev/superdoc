@@ -22,6 +22,7 @@ const generateRandomBase36Id = (length: number): string => {
 import type {
   Run,
   TextRun,
+  BreakRun,
   TrackedChangeMeta,
   TrackedChangeKind,
   TrackedChangesMode,
@@ -467,7 +468,7 @@ export const applyTrackedChangesModeToRuns = (
 
   const filtered: Run[] = [];
   runs.forEach((run) => {
-    if (!isTextRun(run)) {
+    if (!isTextRun(run) && run.kind !== 'break') {
       filtered.push(run);
       return;
     }

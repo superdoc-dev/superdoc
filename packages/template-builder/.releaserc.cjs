@@ -1,24 +1,11 @@
 /* eslint-env node */
 /*
- * Commit filter: template-builder depends on superdoc, so git log must include
- * commits touching superdoc's sub-packages. This shared helper patches
- * git-log-parser to expand path coverage. It REPLACES
- * semantic-release-commit-filter — do not use both (the filter restricts
- * to CWD, which undoes the expansion).
- *
- * Keep in sync with .github/workflows/release-template-builder.yml paths: trigger.
+ * Release narrow: template-builder externalizes `superdoc` in its build, so a
+ * core change does not alter the published template-builder tarball
+ * (consumers get the new core via their own peerDependencies install). Only
+ * commits touching packages/template-builder/** should trigger a release.
+ * See .github/package-impact-map.md.
  */
-require('../../scripts/semantic-release/patch-commit-filter.cjs')([
-  'packages/template-builder',
-  'packages/superdoc',
-  'packages/super-editor',
-  'packages/layout-engine',
-  'packages/ai',
-  'packages/word-layout',
-  'packages/preset-geometry',
-  'shared',
-  'pnpm-workspace.yaml',
-]);
 
 const branch = process.env.GITHUB_REF_NAME || process.env.CI_COMMIT_BRANCH;
 
@@ -40,21 +27,8 @@ const config = {
   branches,
   tagFormat: 'template-builder-v${version}',
   plugins: [
-    [
-      '@semantic-release/commit-analyzer',
-      {
-        // Cap at minor — template-builder depends on superdoc, so upstream breaking
-        // changes don't break template-builder's own public API.
-        // Prevents accidental major bumps from superdoc feat!/BREAKING CHANGE commits.
-        releaseRules: [
-          { breaking: true, release: 'minor' },
-          { type: 'feat', release: 'minor' },
-          { type: 'fix', release: 'patch' },
-          { type: 'perf', release: 'patch' },
-          { type: 'revert', release: 'patch' },
-        ],
-      },
-    ],
+    'semantic-release-commit-filter',
+    '@semantic-release/commit-analyzer',
     notesPlugin,
     ['@semantic-release/npm', { npmPublish: true }],
   ],

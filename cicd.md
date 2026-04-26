@@ -69,7 +69,7 @@ main (next) → stable (latest) → X.x (maintenance)
 
 #### 3. Promote to Stable (`promote-stable.yml`)
 
-**Trigger**: Manual workflow dispatch or daily schedule at `07:00 UTC`
+**Trigger**: Manual workflow dispatch or scheduled runs at `05:00 UTC` on Tuesdays and Saturdays
 
 **Input**: Optional candidate branch name (defaults to `merge/main-into-stable-YYYY-MM-DD`)
 

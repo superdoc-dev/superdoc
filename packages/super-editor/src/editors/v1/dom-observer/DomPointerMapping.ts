@@ -313,6 +313,33 @@ function resolveFragment(fragmentEl: HTMLElement, viewX: number, viewY: number):
   return resolveLineAtX(lineEl, viewX);
 }
 
+export type TextBoundaryHit = {
+  node: Text;
+  offset: number;
+};
+
+export function resolveTextBoundaryWithinFragmentDom(
+  fragmentEl: HTMLElement,
+  clientX: number,
+  clientY: number,
+): TextBoundaryHit | null {
+  if (!fragmentEl.classList?.contains?.(CLASS.fragment)) {
+    return null;
+  }
+
+  const lineEls = Array.from(fragmentEl.querySelectorAll(`.${CLASS.line}`)) as HTMLElement[];
+  if (lineEls.length === 0) {
+    return null;
+  }
+
+  const lineEl = findLineAtY(lineEls, clientY);
+  if (!lineEl) {
+    return null;
+  }
+
+  return resolveLineTextBoundaryAtX(lineEl, clientX);
+}
+
 /**
  * Given a known line element, resolves the PM position at the given X
  * coordinate.
@@ -329,6 +356,49 @@ function resolveLineAtX(lineEl: HTMLElement, viewX: number): number | null {
 
   const spanEls = getClickableSpans(lineEl);
   return resolvePositionInLine(lineEl, lineStart, lineEnd, spanEls, viewX);
+}
+
+function resolveLineTextBoundaryAtX(lineEl: HTMLElement, viewX: number): TextBoundaryHit | null {
+  const spanEls = getClickableSpans(lineEl);
+  if (spanEls.length === 0) {
+    return null;
+  }
+
+  const rtl = isRtlLine(lineEl);
+  const allRects = spanEls.map((el) => el.getBoundingClientRect());
+  const visibleRects = allRects.filter(isVisibleRect);
+  const boundsRects = visibleRects.length > 0 ? visibleRects : allRects;
+
+  const visualLeft = Math.min(...boundsRects.map((r) => r.left));
+  const visualRight = Math.max(...boundsRects.map((r) => r.right));
+
+  if (viewX <= visualLeft) {
+    const edgeSpan = rtl ? spanEls[spanEls.length - 1] : spanEls[0];
+    return resolveElementBoundary(edgeSpan, rtl ? 'after' : 'before');
+  }
+
+  if (viewX >= visualRight) {
+    const edgeSpan = rtl ? spanEls[0] : spanEls[spanEls.length - 1];
+    return resolveElementBoundary(edgeSpan, rtl ? 'before' : 'after');
+  }
+
+  const targetEl = findSpanAtX(spanEls, viewX);
+  if (!targetEl) {
+    return null;
+  }
+
+  const textNode = findFirstTextNode(targetEl);
+  if (!textNode || !textNode.textContent) {
+    const targetRect = targetEl.getBoundingClientRect();
+    const closerToLeft = Math.abs(viewX - targetRect.left) <= Math.abs(viewX - targetRect.right);
+    const boundarySide = rtl ? (closerToLeft ? 'after' : 'before') : closerToLeft ? 'before' : 'after';
+    return resolveElementBoundary(targetEl, boundarySide);
+  }
+
+  return {
+    node: textNode,
+    offset: findCharIndexAtX(textNode, viewX, rtl),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -399,6 +469,36 @@ function resolvePositionInLine(
   const textNode = firstChild as Text;
   const charIndex = findCharIndexAtX(textNode, viewX, rtl);
   return mapCharIndexToPm(spanStart, spanEnd, rightCaretBoundary, textNode.length, charIndex);
+}
+
+function resolveElementBoundary(
+  element: HTMLElement | null | undefined,
+  side: 'before' | 'after',
+): TextBoundaryHit | null {
+  if (!(element instanceof HTMLElement)) {
+    return null;
+  }
+
+  const textNode = findFirstTextNode(element);
+  if (!textNode) {
+    return null;
+  }
+
+  return {
+    node: textNode,
+    offset: side === 'before' ? 0 : (textNode.textContent?.length ?? 0),
+  };
+}
+
+function findFirstTextNode(element: HTMLElement): Text | null {
+  const doc = getNodeDocument(element);
+  if (!doc) {
+    return null;
+  }
+
+  const walker = doc.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+  const node = walker.nextNode();
+  return node instanceof Text ? node : null;
 }
 
 /**

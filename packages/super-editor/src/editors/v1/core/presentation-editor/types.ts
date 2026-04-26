@@ -210,6 +210,24 @@ export type PresentationEditorOptions = ConstructorParameters<typeof Editor>[0] 
    * @default false
    */
   allowSelectionInViewMode?: boolean;
+  /**
+   * Opt-in experimental behaviors. These are not part of the stable public
+   * API and may change shape or default without notice.
+   */
+  experimental?: {
+    /**
+     * Route undo/redo through a document-wide history queue so body and
+     * header/footer edits can be undone in the order they happened,
+     * regardless of which surface currently has focus.
+     *
+     * Enabled by default. Set to `false` to fall back to legacy
+     * active-surface undo routing.
+     *
+     * @default true
+     * @see plans/unified-history.md
+     */
+    unifiedHistory?: boolean;
+  };
 };
 
 /**

@@ -8,28 +8,17 @@ on:
 jobs:
   gate:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
     outputs:
-      should_run: ${{ steps.filter.outputs.relevant }}
+      should_run: ${{ steps.gate.outputs.should_run }}
     steps:
       - uses: actions/checkout@v6
-      - uses: dorny/paths-filter@v3
-        id: filter
-        with:
-          filters: |
-            relevant:
-              - 'examples/**'
-              - 'packages/superdoc/**'
-              - 'packages/react/**'
-              - 'packages/super-editor/**'
-              - 'packages/collaboration-yjs/**'
-              - 'packages/sdk/**'
-              - 'packages/layout-engine/**'
-              - 'packages/word-layout/**'
-              - 'packages/preset-geometry/**'
-              - 'shared/**'
-              - 'pnpm-workspace.yaml'
-              - 'pnpm-lock.yaml'
-              - '.github/workflows/ci-examples.yml'
+      - id: gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node .github/scripts/ci-gate.mjs --suite examples
 
   build:
     needs: gate

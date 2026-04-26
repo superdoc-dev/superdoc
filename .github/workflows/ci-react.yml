@@ -15,25 +15,17 @@ concurrency:
 jobs:
   gate:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
     outputs:
-      should_run: ${{ steps.filter.outputs.relevant }}
+      should_run: ${{ steps.gate.outputs.should_run }}
     steps:
       - uses: actions/checkout@v4
-      - uses: dorny/paths-filter@v3
-        id: filter
-        with:
-          filters: |
-            relevant:
-              - 'packages/react/**'
-              - 'packages/superdoc/**'
-              - 'packages/super-editor/**'
-              - 'packages/layout-engine/**'
-              - 'packages/word-layout/**'
-              - 'packages/preset-geometry/**'
-              - 'shared/**'
-              - 'pnpm-workspace.yaml'
-              - 'pnpm-lock.yaml'
-              - '.github/workflows/ci-react.yml'
+      - id: gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node .github/scripts/ci-gate.mjs --suite react
 
   validate:
     name: CI React / validate

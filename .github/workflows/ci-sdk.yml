@@ -21,30 +21,17 @@ jobs:
   # See .github/package-impact-map.md for the canonical per-package paths.
   gate:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
     outputs:
-      should_run: ${{ steps.filter.outputs.relevant }}
+      should_run: ${{ steps.gate.outputs.should_run }}
     steps:
       - uses: actions/checkout@v4
-      - uses: dorny/paths-filter@v3
-        id: filter
-        with:
-          filters: |
-            relevant:
-              - 'packages/sdk/**'
-              - 'apps/cli/**'
-              - 'packages/document-api/**'
-              - 'packages/superdoc/**'
-              - 'packages/super-editor/**'
-              - 'packages/layout-engine/**'
-              - 'packages/word-layout/**'
-              - 'packages/preset-geometry/**'
-              - 'shared/**'
-              - 'scripts/generate-all.mjs'
-              - 'scripts/semantic-release/**'
-              - 'pnpm-workspace.yaml'
-              - 'pnpm-lock.yaml'
-              - 'package.json'
-              - '.github/workflows/ci-sdk.yml'
+      - id: gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node .github/scripts/ci-gate.mjs --suite sdk
 
   validate:
     name: CI SDK / validate

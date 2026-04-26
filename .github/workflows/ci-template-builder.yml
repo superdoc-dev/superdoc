@@ -15,25 +15,17 @@ concurrency:
 jobs:
   gate:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
     outputs:
-      should_run: ${{ steps.filter.outputs.relevant }}
+      should_run: ${{ steps.gate.outputs.should_run }}
     steps:
       - uses: actions/checkout@v6
-      - uses: dorny/paths-filter@v3
-        id: filter
-        with:
-          filters: |
-            relevant:
-              - 'packages/template-builder/**'
-              - 'packages/superdoc/**'
-              - 'packages/super-editor/**'
-              - 'packages/layout-engine/**'
-              - 'packages/word-layout/**'
-              - 'packages/preset-geometry/**'
-              - 'shared/**'
-              - 'pnpm-workspace.yaml'
-              - 'pnpm-lock.yaml'
-              - '.github/workflows/ci-template-builder.yml'
+      - id: gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node .github/scripts/ci-gate.mjs --suite template-builder
 
   validate:
     name: CI Template Builder / validate

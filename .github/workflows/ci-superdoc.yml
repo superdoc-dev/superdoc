@@ -49,6 +49,7 @@ jobs:
               - 'eslint.config.mjs'
               - 'vitest.config.mjs'
               - 'vitest.baseConfig.ts'
+              - 'vite.sourceResolve.ts'
               - '.github/workflows/ci-superdoc.yml'
 
   build:

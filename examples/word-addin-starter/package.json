@@ -1,0 +1,20 @@
+{
+  "name": "superdoc-word-addin-starter",
+  "version": "1.0.0",
+  "description": "Real-time document sync between Microsoft Word and a web-based SuperDoc editor",
+  "private": true,
+  "scripts": {
+    "install:all": "cd server && npm install && cd ../webapp && npm install && cd ../addin && npm install",
+    "start": "concurrently -n server,addin,webapp,word -c blue,green,magenta,cyan \"npm run server\" \"npm run addin:dev\" \"npm run webapp\" \"sleep 3 && npm run addin:start\"",
+    "dev": "concurrently -n server,addin,webapp -c blue,green,magenta \"npm run server\" \"npm run addin:dev\" \"npm run webapp\"",
+    "server": "cd server && npm start",
+    "server:dev": "cd server && npm run dev",
+    "webapp": "cd webapp && npm run dev",
+    "addin:dev": "cd addin && npm run dev",
+    "addin:start": "cd addin && npm start",
+    "addin:stop": "cd addin && npm stop"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.0"
+  }
+}

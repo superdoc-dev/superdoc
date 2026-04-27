@@ -1,0 +1,14 @@
+{
+  "name": "superdoc-sync-server",
+  "version": "1.0.0",
+  "description": "WebSocket server for syncing documents between Word Add-in and web editor",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}

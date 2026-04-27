@@ -1,0 +1,14 @@
+{
+  "name": "superdoc-web-editor",
+  "version": "1.0.0",
+  "description": "Web-based document editor that syncs with Word Add-in",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --port 5173 --strictPort",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "vite": "^5.0.0"
+  }
+}

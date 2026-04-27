@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>SuperDoc</title>
+    <script src="https://appsforoffice.microsoft.com/lib/1.1/hosted/office.js"></script>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            font-family: "Segoe UI", sans-serif;
+            background: #f5f5fa;
+        }
+        .header {
+            background: linear-gradient(135deg, #1255fe 0%, #8968f6 50%, #b785f1 100%);
+            padding: 30px 20px;
+            text-align: center;
+            color: white;
+        }
+        .header img { width: 80px; height: 80px; margin-bottom: 10px; border-radius: 12px; }
+        .header h1 { margin: 0; font-size: 24px; }
+        .header p { margin: 8px 0 0; font-size: 14px; opacity: 0.9; }
+        .main { padding: 20px; }
+        .card {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 16px;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+        }
+        .card h3 { margin: 0 0 12px; font-size: 16px; color: #323130; }
+        .card p { margin: 0 0 16px; font-size: 14px; color: #605e5c; line-height: 1.5; }
+        .btn {
+            display: block;
+            width: 100%;
+            padding: 12px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+        }
+        .btn-primary { background: #1255fe; color: white; }
+        .btn-primary:hover { background: #0d47d9; }
+        .btn-secondary { background: #f0f0f0; color: #323130; margin-top: 10px; }
+        .btn-secondary:hover { background: #e0e0e0; }
+        #status {
+            margin-top: 16px;
+            padding: 12px;
+            background: #f8f9fa;
+            border-radius: 6px;
+            font-size: 13px;
+            color: #605e5c;
+        }
+        .status-dot {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+        .status-dot.disconnected { background: #ccc; }
+        .status-dot.connecting { background: #ffc107; }
+        .status-dot.connected { background: #28a745; }
+        .status-dot.error { background: #dc3545; }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <img src="./logo.png" alt="SuperDoc">
+        <h1>SuperDoc</h1>
+        <p>Real-time document sync</p>
+    </header>
+
+    <div class="main">
+        <div class="card">
+            <button id="startSync" class="btn btn-primary">Start Sync</button>
+            <button id="openWebEditor" class="btn btn-secondary">Open Web Editor</button>
+        </div>
+
+        <div id="status">
+            <span id="statusDot" class="status-dot disconnected"></span>
+            <span id="statusText">Not connected</span>
+        </div>
+    </div>
+
+    <script src="taskpane.js"></script>
+</body>
+</html>

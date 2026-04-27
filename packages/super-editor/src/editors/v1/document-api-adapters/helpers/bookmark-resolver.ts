@@ -2,10 +2,20 @@
  * Bookmark node resolver — finds, resolves, and extracts info from bookmarkStart nodes.
  */
 
+import type { Editor } from '../../core/Editor.js';
 import type { Node as ProseMirrorNode } from 'prosemirror-model';
-import type { BookmarkAddress, BookmarkDomain, BookmarkInfo, DiscoveryItem, Position } from '@superdoc/document-api';
+import type {
+  BookmarkAddress,
+  BookmarkDomain,
+  BookmarkInfo,
+  DiscoveryItem,
+  Position,
+  StoryLocator,
+} from '@superdoc/document-api';
 import { buildDiscoveryItem, buildResolvedHandle } from '@superdoc/document-api';
 import { DocumentApiAdapterError } from '../errors.js';
+import { BODY_STORY_KEY, buildStoryKey } from '../story-runtime/story-key.js';
+import { enumerateEffectiveNoteEntries } from './note-entry-lookup.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -17,6 +27,62 @@ export interface ResolvedBookmark {
   name: string;
   bookmarkId: string;
   endPos: number | null;
+}
+
+export interface DocumentBookmarkEntry {
+  name: string;
+  bookmarkId: string;
+  storyKey: string;
+}
+
+type StoryEditorEntry = {
+  id?: unknown;
+  editor?: Editor;
+};
+
+type NoteEntry = {
+  id?: unknown;
+  content?: unknown[];
+  doc?: Record<string, unknown>;
+};
+
+type ConverterWithStories = {
+  headers?: Record<string, unknown>;
+  footers?: Record<string, unknown>;
+  headerEditors?: StoryEditorEntry[];
+  footerEditors?: StoryEditorEntry[];
+  footnotes?: NoteEntry[];
+  endnotes?: NoteEntry[];
+};
+
+export function normalizeStory(locator?: StoryLocator): StoryLocator | undefined {
+  if (!locator || locator.storyType === 'body') return undefined;
+  return locator;
+}
+
+export function buildBookmarkAddress(name: string, story?: StoryLocator): BookmarkAddress {
+  const normalizedStory = normalizeStory(story);
+  return normalizedStory
+    ? { kind: 'entity', entityType: 'bookmark', name, story: normalizedStory }
+    : { kind: 'entity', entityType: 'bookmark', name };
+}
+
+export function findAllBookmarksInDocument(editor: Editor): DocumentBookmarkEntry[] {
+  const results: DocumentBookmarkEntry[] = [];
+  const seenStoryKeys = new Set<string>();
+  const converter = (editor as unknown as { converter?: ConverterWithStories }).converter;
+
+  seenStoryKeys.add(BODY_STORY_KEY);
+  collectBookmarksFromDoc(editor.state.doc, BODY_STORY_KEY, results);
+
+  collectBookmarksFromHeaderFooterEditors(converter?.headerEditors, results, seenStoryKeys);
+  collectBookmarksFromHeaderFooterEditors(converter?.footerEditors, results, seenStoryKeys);
+  collectBookmarksFromHeaderFooterCache(converter?.headers, results, seenStoryKeys);
+  collectBookmarksFromHeaderFooterCache(converter?.footers, results, seenStoryKeys);
+  collectBookmarksFromNotes(converter?.footnotes, 'footnote', results, seenStoryKeys);
+  collectBookmarksFromNotes(converter?.endnotes, 'endnote', results, seenStoryKeys);
+
+  return results;
 }
 
 // ---------------------------------------------------------------------------
@@ -58,6 +124,121 @@ function collectBookmarkEndPositions(doc: ProseMirrorNode): Map<string, number> 
   return map;
 }
 
+function collectBookmarksFromDoc(doc: ProseMirrorNode, storyKey: string, results: DocumentBookmarkEntry[]): void {
+  doc.descendants((node) => {
+    if (node.type.name === 'bookmarkStart') {
+      results.push({
+        name: (node.attrs?.name as string) ?? '',
+        bookmarkId: (node.attrs?.id as string) ?? '',
+        storyKey,
+      });
+    }
+    return true;
+  });
+}
+
+function collectBookmarksFromHeaderFooterEditors(
+  editors: StoryEditorEntry[] | undefined,
+  results: DocumentBookmarkEntry[],
+  seenStoryKeys: Set<string>,
+): void {
+  if (!Array.isArray(editors)) return;
+
+  for (const entry of editors) {
+    const refId = typeof entry?.id === 'string' && entry.id.length > 0 ? entry.id : null;
+    const storyEditor = entry?.editor;
+    if (!refId || !storyEditor?.state?.doc) continue;
+
+    const storyKey = buildStoryKey({ kind: 'story', storyType: 'headerFooterPart', refId });
+    if (seenStoryKeys.has(storyKey)) continue;
+    seenStoryKeys.add(storyKey);
+    collectBookmarksFromDoc(storyEditor.state.doc, storyKey, results);
+  }
+}
+
+function collectBookmarksFromHeaderFooterCache(
+  collection: Record<string, unknown> | undefined,
+  results: DocumentBookmarkEntry[],
+  seenStoryKeys: Set<string>,
+): void {
+  if (!collection || typeof collection !== 'object') return;
+
+  for (const [refId, pmJson] of Object.entries(collection)) {
+    if (typeof refId !== 'string' || refId.length === 0) continue;
+
+    const storyKey = buildStoryKey({ kind: 'story', storyType: 'headerFooterPart', refId });
+    if (seenStoryKeys.has(storyKey)) continue;
+    seenStoryKeys.add(storyKey);
+    collectBookmarksFromPmJson(pmJson, storyKey, results);
+  }
+}
+
+function collectBookmarksFromNotes(
+  notes: NoteEntry[] | undefined,
+  storyType: 'footnote' | 'endnote',
+  results: DocumentBookmarkEntry[],
+  seenStoryKeys: Set<string>,
+): void {
+  for (const note of enumerateEffectiveNoteEntries(notes)) {
+    const noteId = note?.id != null ? String(note.id) : '';
+    if (!noteId) continue;
+
+    const pmJson = getNotePmJson(note);
+    if (!pmJson) continue;
+
+    const storyKey = buildStoryKey({ kind: 'story', storyType, noteId });
+    if (seenStoryKeys.has(storyKey)) continue;
+    seenStoryKeys.add(storyKey);
+
+    collectBookmarksFromPmJson(pmJson, storyKey, results);
+  }
+}
+
+function getNotePmJson(note: NoteEntry): Record<string, unknown> | null {
+  if (Array.isArray(note.content)) {
+    return {
+      type: 'doc',
+      content: note.content.length > 0 ? note.content : [{ type: 'paragraph' }],
+    };
+  }
+
+  if (note.doc && typeof note.doc === 'object') {
+    return note.doc;
+  }
+
+  return null;
+}
+
+function collectBookmarksFromPmJson(pmJson: unknown, storyKey: string, results: DocumentBookmarkEntry[]): void {
+  if (!isObjectRecord(pmJson)) return;
+
+  visitPmJson(pmJson, (node) => {
+    if (node.type !== 'bookmarkStart') return;
+
+    const attrs = isObjectRecord(node.attrs) ? node.attrs : undefined;
+    const name = typeof attrs?.name === 'string' ? attrs.name : '';
+    const bookmarkId = attrs?.id != null ? String(attrs.id) : '';
+    results.push({ name, bookmarkId, storyKey });
+  });
+}
+
+function visitPmJson(node: Record<string, unknown>, visitor: (node: Record<string, unknown>) => void): void {
+  visitor(node);
+
+  const content = node.content;
+  if (!Array.isArray(content)) return;
+
+  for (const child of content) {
+    if (isObjectRecord(child)) {
+      visitPmJson(child, visitor);
+    }
+  }
+}
+
+function isObjectRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
 /**
  * Resolves a BookmarkAddress to its ProseMirror node and position.
  * @throws DocumentApiAdapterError with code TARGET_NOT_FOUND if not found.
@@ -88,7 +269,11 @@ function nodePositionToPosition(doc: ProseMirrorNode, pos: number): Position {
   return { blockId: '', offset: pos };
 }
 
-export function extractBookmarkInfo(doc: ProseMirrorNode, resolved: ResolvedBookmark): BookmarkInfo {
+export function extractBookmarkInfo(
+  doc: ProseMirrorNode,
+  resolved: ResolvedBookmark,
+  story?: StoryLocator,
+): BookmarkInfo {
   const from = nodePositionToPosition(doc, resolved.pos);
   const to = resolved.endPos !== null ? nodePositionToPosition(doc, resolved.endPos) : from;
 
@@ -96,7 +281,7 @@ export function extractBookmarkInfo(doc: ProseMirrorNode, resolved: ResolvedBook
   const colLast = resolved.node.attrs?.colLast as number | undefined;
 
   const info: BookmarkInfo = {
-    address: { kind: 'entity', entityType: 'bookmark', name: resolved.name },
+    address: buildBookmarkAddress(resolved.name, story),
     name: resolved.name,
     bookmarkId: resolved.bookmarkId,
     range: { from, to },
@@ -117,6 +302,7 @@ export function buildBookmarkDiscoveryItem(
   doc: ProseMirrorNode,
   resolved: ResolvedBookmark,
   evaluatedRevision: string,
+  story?: StoryLocator,
 ): DiscoveryItem<BookmarkDomain> {
   const from = nodePositionToPosition(doc, resolved.pos);
   const to = resolved.endPos !== null ? nodePositionToPosition(doc, resolved.endPos) : from;
@@ -125,7 +311,7 @@ export function buildBookmarkDiscoveryItem(
   const colLast = resolved.node.attrs?.colLast as number | undefined;
 
   const domain: BookmarkDomain = {
-    address: { kind: 'entity', entityType: 'bookmark', name: resolved.name },
+    address: buildBookmarkAddress(resolved.name, story),
     name: resolved.name,
     bookmarkId: resolved.bookmarkId,
     range: { from, to },

@@ -1197,6 +1197,9 @@ export class SuperDoc extends EventEmitter {
   /**
    * Navigate to a block, bookmark, comment, or tracked change target.
    *
+   * Story-aware navigation is currently supported for bookmark and tracked
+   * change targets. Block and comment targets are body-only.
+   *
    * @param {NavigableAddress} target
    * @returns {Promise<boolean>} Whether the target was found and navigated to.
    */

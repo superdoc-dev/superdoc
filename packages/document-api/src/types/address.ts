@@ -119,6 +119,12 @@ export type EntityType = 'comment' | 'trackedChange';
 export type CommentAddress = {
   kind: 'entity';
   entityType: 'comment';
+  /**
+   * Comment navigation is currently body-scoped only.
+   *
+   * Unlike bookmark and tracked-change navigation, `navigateTo()` does not yet
+   * accept a `story` locator for comments.
+   */
   entityId: string;
 };
 
@@ -146,6 +152,10 @@ export type EntityAddress = CommentAddress | TrackedChangeAddress;
  * queries (e.g. `query.match`, `find`, `getNode`) as the `nodeId`.
  *
  * When `nodeType` is omitted, the lookup searches across all block types.
+ *
+ * Block navigation is currently body-scoped only. For non-body stories such
+ * as headers, footers, footnotes, and endnotes, `navigateTo()` currently
+ * supports story-aware bookmark and tracked-change targets instead.
  */
 export type BlockNavigationAddress = {
   kind: 'block';
@@ -157,9 +167,13 @@ export type BlockNavigationAddress = {
  * Union of all address types accepted by `navigateTo()`.
  *
  * Supports navigation to:
- * - Blocks by `nodeId` (paragraphs, headings, tables, images, SDTs)
- * - Bookmarks by `name`
- * - Comments by `entityId`
- * - Tracked changes by `entityId`
+ * - Blocks by `nodeId` in the body story
+ * - Bookmarks by `name`, optionally scoped to a `story`
+ * - Comments by `entityId` in the body story
+ * - Tracked changes by `entityId`, optionally scoped to a `story`
+ *
+ * Story-aware navigation is currently supported for bookmarks and tracked
+ * changes. Block and comment targets remain body-only until the runtime gains
+ * equivalent non-body resolution paths.
  */
 export type NavigableAddress = BlockNavigationAddress | BookmarkAddress | CommentAddress | TrackedChangeAddress;

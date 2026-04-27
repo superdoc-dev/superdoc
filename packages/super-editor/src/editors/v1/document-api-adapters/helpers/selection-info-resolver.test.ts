@@ -201,6 +201,33 @@ describe('resolveCurrentSelectionInfo', () => {
     expect(info.target).toBeNull();
   });
 
+  it('returns null target when the selection touches any non-addressable block', () => {
+    // Regression: a selection that spans an addressable block AND a
+    // block without a stable id used to emit a partial TextTarget,
+    // silently dropping the unaddressable block from comments / scroll
+    // operations. The resolver now bails out and returns null so the
+    // caller can refuse the action rather than act on incomplete data.
+    const textNodeA = createNode('text', [], { text: 'abc' });
+    const addressable = createNode('paragraph', [textNodeA], {
+      isBlock: true,
+      inlineContent: true,
+      attrs: { sdBlockId: 'p1' },
+    });
+    const textNodeB = createNode('text', [], { text: 'def' });
+    const nonAddressable = createNode('paragraph', [textNodeB], {
+      isBlock: true,
+      inlineContent: true,
+      // No sdBlockId / id / blockId.
+    });
+    const docNode = doc([addressable, nonAddressable]);
+    // p1 spans PM [1,5); p2 spans PM [5,10). Select PM [2,8] — touches both.
+    const editor = makeEditor(docNode, { from: 2, to: 8 });
+
+    const info = resolveCurrentSelectionInfo(editor, {});
+
+    expect(info.target).toBeNull();
+  });
+
   it('omits `text` when includeText is not set', () => {
     const docNode = doc([textBlock('p1', 'Hello')]);
     const editor = makeEditor(docNode, { from: 2, to: 5 });
@@ -289,10 +316,12 @@ describe('resolveCurrentSelectionInfo', () => {
     const elapsed = performance.now() - t0;
 
     expect([...info.activeMarks].sort()).toEqual(['bold']);
-    // Generous bound — the old path for 10k chars allocated 10k Set refs
-    // and iterated them again to intersect. Even on a slow CI, the
-    // per-node implementation completes in a few ms.
-    expect(elapsed).toBeLessThan(50);
+    // Loose wall-clock bound just to guard against an accidental
+    // quadratic regression. The functional assertion above is the real
+    // correctness check; this is a smoke check that we're not back to
+    // the per-character loop. A noisy CI worker still completes in well
+    // under a second for 10k chars; pick a bound that won't flake.
+    expect(elapsed).toBeLessThan(500);
   });
 });
 
@@ -345,5 +374,64 @@ describe('subscribeToSelection', () => {
     await Promise.resolve();
 
     expect(listener).not.toHaveBeenCalled();
+  });
+
+  it('dedupes events that produce identical SelectionInfo (typing without moving caret)', async () => {
+    // Regression: the `transaction` subscription is needed to catch
+    // programmatic selection changes that don't emit `selectionUpdate`,
+    // but it ALSO fires on every keystroke. Without content dedupe the
+    // listener ran per character even when the projected SelectionInfo
+    // was unchanged. Multiple ticks emitting the same selection state
+    // should fire the listener exactly once.
+    const docNode = doc([textBlock('p1', 'Hi')]);
+    const editor = makeEditor(docNode, { from: 1, to: 3 }) as Editor & { __fire(event: string): void };
+    const listener = vi.fn();
+
+    const unsubscribe = subscribeToSelection(editor, listener);
+
+    // First tick: a transaction event with the selection at [1, 3].
+    editor.__fire('transaction');
+    await Promise.resolve();
+    expect(listener).toHaveBeenCalledTimes(1);
+
+    // Second tick: another transaction with no selection change.
+    // Without dedupe this would re-fire; with dedupe it skips.
+    editor.__fire('transaction');
+    await Promise.resolve();
+    expect(listener).toHaveBeenCalledTimes(1);
+
+    // Third tick: same again — still one call.
+    editor.__fire('transaction');
+    await Promise.resolve();
+    expect(listener).toHaveBeenCalledTimes(1);
+
+    unsubscribe();
+  });
+
+  it('fires again when SelectionInfo changes after a deduped tick', async () => {
+    // Dedupe must not become sticky: a real selection change after a
+    // deduped tick must still invoke the listener.
+    const docNode = doc([textBlock('p1', 'Hello')]);
+    const editor = makeEditor(docNode, { from: 1, to: 3 }) as Editor & {
+      __fire(event: string): void;
+    };
+    const listener = vi.fn();
+
+    const unsubscribe = subscribeToSelection(editor, listener);
+    editor.__fire('transaction');
+    await Promise.resolve();
+    expect(listener).toHaveBeenCalledTimes(1);
+
+    // Change the selection on the editor stub, then fire again.
+    (editor.state as { selection: { from: number; to: number; empty: boolean } }).selection = {
+      from: 2,
+      to: 4,
+      empty: false,
+    };
+    editor.__fire('transaction');
+    await Promise.resolve();
+    expect(listener).toHaveBeenCalledTimes(2);
+
+    unsubscribe();
   });
 });

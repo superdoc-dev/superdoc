@@ -82,19 +82,25 @@ function isSameTarget(
 }
 
 /**
- * Check whether an arbitrary value looks like a runtime-valid TextTarget.
- * Mirrors the `isTextTarget` guard used by the document-api validator, so
- * we route only well-formed TextTargets through the multi-segment path.
- * A `TextAddress` that happens to carry an extra `segments` field (e.g.
- * from object spreading) falls through to the single-block branch and
- * produces a clean `INVALID_TARGET` response rather than an internal
- * crash on `segments[0]` dereference.
+ * Check whether a payload should be routed through the multi-segment
+ * TextTarget branch. The document-api input validator accepts a payload
+ * if it satisfies *either* `isTextAddress` or `isTextTarget`; neither
+ * validator rejects extra fields, so a hybrid payload (`{ kind: 'text',
+ * blockId, range, segments }`) passes both. To avoid silently dropping
+ * the hybrid's `blockId`/`range` data, we require a *pure* TextTarget
+ * here: `kind: 'text'`, a non-empty `segments` array, AND the absence
+ * of TextAddress-style `blockId`/`range`. Hybrids fall through to the
+ * single-block branch, which is the more specific shape.
  */
 function isTextTargetShape(target: unknown): target is TextTarget {
   if (!target || typeof target !== 'object') return false;
-  const { kind, segments } = target as { kind?: unknown; segments?: unknown };
-  if (kind !== 'text') return false;
-  return Array.isArray(segments) && segments.length > 0;
+  const t = target as { kind?: unknown; segments?: unknown; blockId?: unknown; range?: unknown };
+  if (t.kind !== 'text') return false;
+  if (!Array.isArray(t.segments) || t.segments.length === 0) return false;
+  // Reject hybrid payloads — TextAddress fields take precedence so the
+  // adapter doesn't silently ignore caller-provided block/range data.
+  if (typeof t.blockId === 'string' || (t.range !== undefined && t.range !== null)) return false;
+  return true;
 }
 
 /**
@@ -409,6 +415,25 @@ function addCommentHandler(editor: Editor, input: AddCommentInput, options?: Rev
   }
   const segments = targetToSegments(target);
 
+  // Per-segment collapse check. Without this, two collapsed segments in
+  // different blocks (e.g. caret at end of p1 and caret at start of p2)
+  // pass the order + contiguity checks AND the spanning-range collapse
+  // check (because firstResolved.from < lastResolved.to across the block
+  // boundary), then silently anchor a comment over intervening content.
+  // Each individual segment must represent a non-empty range.
+  for (const seg of segments) {
+    if (seg.range.start === seg.range.end) {
+      return {
+        success: false,
+        failure: {
+          code: 'INVALID_TARGET',
+          message: 'Comment target range must be non-collapsed.',
+          details: { target },
+        },
+      };
+    }
+  }
+
   const resolvedSegments = segments.map((seg) =>
     resolveTextTarget(editor, { kind: 'text', blockId: seg.blockId, range: seg.range }),
   );
@@ -432,13 +457,23 @@ function addCommentHandler(editor: Editor, input: AddCommentInput, options?: Rev
         },
       };
     }
-    const gapText = docForGap ? docForGap.textBetween(prev.to, curr.from, '') : '';
-    if (gapText.length > 0) {
+    // Detect content the caller didn't select sitting between segments.
+    // `textBetween(prev.to, curr.from, '')` returns:
+    //   - '' for true adjacency (same block) or pure block boundaries
+    //     (a legitimate multi-block selection between adjacent blocks);
+    //   - '<text>' if any text node sits in the gap.
+    // The `leafText` 4th argument lets us also surface inline atoms
+    // (images, math, etc) that PM otherwise omits from `textBetween`.
+    // We pass a sentinel for atoms only — keeping `blockSeparator: ''`
+    // so legitimate cross-block adjacency still produces an empty gap.
+    const gap = docForGap ? docForGap.textBetween(prev.to, curr.from, '', () => '\u0001') : '';
+    if (gap.length > 0) {
       return {
         success: false,
         failure: {
           code: 'INVALID_TARGET',
-          message: 'Comment target segments must be contiguous — non-selected text between segments is not supported.',
+          message:
+            'Comment target segments must be contiguous — non-selected text or atoms between segments is not supported.',
           details: { target },
         },
       };

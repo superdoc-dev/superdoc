@@ -28,8 +28,11 @@ export function resolveCurrentSelectionInfo(editor: Editor, input: SelectionCurr
   const sel = state.selection;
   const { from, to, empty } = sel;
 
+  // `collectTextSegments` returns null when any selected block lacks a
+  // stable id — in that case the caller should treat the selection as
+  // unaddressable rather than receive a partial TextTarget.
   const segments = collectTextSegments(state.doc, from, to);
-  const target: TextTarget | null = segments.length > 0 ? buildTextTarget(segments) : null;
+  const target: TextTarget | null = segments && segments.length > 0 ? buildTextTarget(segments) : null;
 
   const activeMarks = collectActiveMarks(state, from, to);
 
@@ -57,15 +60,29 @@ function buildTextTarget(segments: TextSegment[]): TextTarget {
 /**
  * Walk every textblock touched by [from, to] and emit one segment per block
  * with block-relative flattened-text offsets.
+ *
+ * Returns `null` if any selected textblock lacks an addressable id. The
+ * resulting `TextTarget` would silently miss part of the user's selection,
+ * which is worse than reporting no target at all — the caller can then
+ * decide whether to refuse the action or fall back to a different scope.
  */
-function collectTextSegments(doc: ProseMirrorNode, from: number, to: number): TextSegment[] {
+function collectTextSegments(doc: ProseMirrorNode, from: number, to: number): TextSegment[] | null {
   const segments: TextSegment[] = [];
+  let abort = false;
 
   doc.nodesBetween(from, to, (node, pos) => {
+    if (abort) return false;
     if (!node.isTextblock) return true; // descend
 
     const blockId = readBlockId(node);
-    if (!blockId) return false; // skip this block, can't address it
+    if (!blockId) {
+      // A selected textblock has no stable id we can address. Returning
+      // a partial TextTarget would silently drop part of the user's
+      // selection from any downstream operation (comments.create, etc).
+      // Bail out of the walk and surface an empty/null result instead.
+      abort = true;
+      return false;
+    }
 
     const blockStart = pos + 1; // first position inside the block
     const blockEnd = pos + node.nodeSize - 1;
@@ -85,6 +102,7 @@ function collectTextSegments(doc: ProseMirrorNode, from: number, to: number): Te
     return false; // don't descend into a textblock we've already captured
   });
 
+  if (abort) return null;
   return segments;
 }
 
@@ -121,17 +139,27 @@ function collectActiveMarks(
 }
 
 /**
- * Subscribe to selection changes on the editor. Debounced via microtask so
- * multi-step transactions (a single user action that dispatches several PM
- * transactions) fire the listener at most once per tick.
+ * Subscribe to selection changes on the editor.
+ *
+ * - Microtask coalescing so a single user action that dispatches multiple
+ *   PM transactions fires the listener at most once per tick.
+ * - Content dedupe so doc-only transactions (typing without moving the
+ *   caret) don't re-fire the listener with an identical SelectionInfo.
+ *   The transaction event is needed to catch programmatic selection
+ *   changes that don't emit `selectionUpdate`, but it also fires on
+ *   every keystroke; without dedupe the listener runs per character.
  */
 export function subscribeToSelection(editor: Editor, listener: SelectionChangeListener): () => void {
   let scheduled = false;
   let cancelled = false;
+  let lastEmittedKey: string | null = null;
   const flush = () => {
     scheduled = false;
     if (cancelled) return;
     const info = resolveCurrentSelectionInfo(editor, {});
+    const key = selectionInfoKey(info);
+    if (key === lastEmittedKey) return;
+    lastEmittedKey = key;
     listener(info);
   };
   const schedule = () => {
@@ -151,6 +179,23 @@ export function subscribeToSelection(editor: Editor, listener: SelectionChangeLi
     editor.off?.('selectionUpdate', schedule);
     editor.off?.('transaction', schedule);
   };
+}
+
+/**
+ * Build a stable string key from a SelectionInfo for content-dedupe.
+ * Two infos that produce the same key represent the same observable
+ * selection state — the listener can skip the second one.
+ */
+function selectionInfoKey(info: SelectionInfo): string {
+  const target = info.target;
+  let targetKey: string;
+  if (!target) {
+    targetKey = 'null';
+  } else {
+    targetKey = target.segments.map((s) => `${s.blockId}:${s.range.start}-${s.range.end}`).join('|');
+  }
+  const marks = [...info.activeMarks].sort().join(',');
+  return `${info.empty ? '1' : '0'}:${targetKey}:${marks}`;
 }
 
 function markTypesPresentEverywhere(doc: ProseMirrorNode, from: number, to: number): Set<string> {

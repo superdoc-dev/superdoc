@@ -677,4 +677,111 @@ describe('comments-wrappers: addCommentHandler multi-segment targets', () => {
       range: { start: 0, end: 5 },
     });
   });
+
+  it('routes a hybrid TextAddress+segments payload through the TextAddress branch', () => {
+    // Regression: the document-api validator accepts a payload that
+    // satisfies *either* isTextAddress or isTextTarget; neither rejects
+    // extra fields, so a payload carrying both blockId/range AND
+    // segments[] passes validation. The earlier `'segments' in target`
+    // routing then silently dropped blockId/range. The hardened guard
+    // requires the absence of TextAddress fields, so a hybrid falls
+    // through to the explicit-block branch.
+    const editor = makeWriteEditor();
+    vi.mocked(resolveTextTarget).mockReturnValue({ from: 11, to: 17 });
+    vi.mocked(executeDomainCommand).mockReturnValue({
+      steps: [{ effect: 'changed' }],
+    } as unknown as ReturnType<typeof executeDomainCommand>);
+
+    const wrapper = createCommentsWrapper(editor);
+    const receipt = wrapper.add({
+      text: 'comment',
+      target: {
+        kind: 'text',
+        blockId: 'pA',
+        range: { start: 1, end: 7 },
+        // A non-empty segments array carrying DIFFERENT block coordinates.
+        // The hybrid must NOT be routed through this segments path; the
+        // explicit blockId/range take precedence.
+        segments: [{ blockId: 'pZ', range: { start: 99, end: 100 } }],
+      } as unknown as Parameters<typeof wrapper.add>[0]['target'],
+    });
+
+    expect(receipt.success).toBe(true);
+    // resolveTextTarget called once, with pA (not pZ).
+    expect(resolveTextTarget).toHaveBeenCalledTimes(1);
+    expect(resolveTextTarget).toHaveBeenCalledWith(editor, {
+      kind: 'text',
+      blockId: 'pA',
+      range: { start: 1, end: 7 },
+    });
+  });
+
+  it('rejects a TextTarget with collapsed segments in different blocks', () => {
+    // Regression: two collapsed segments in different blocks would slip
+    // both the gap check and the spanning-range collapse check (because
+    // firstResolved.from < lastResolved.to across the block boundary),
+    // silently anchoring a comment over content the caller never selected.
+    const editor = makeWriteEditor();
+    vi.mocked(resolveTextTarget).mockImplementation((_editor, target) => {
+      if (target.blockId === 'pA') return { from: 10, to: 10 };
+      if (target.blockId === 'pB') return { from: 20, to: 20 };
+      return null;
+    });
+
+    const wrapper = createCommentsWrapper(editor);
+    const receipt = wrapper.add({
+      text: 'comment',
+      target: {
+        kind: 'text',
+        segments: [
+          { blockId: 'pA', range: { start: 5, end: 5 } }, // collapsed
+          { blockId: 'pB', range: { start: 0, end: 0 } }, // collapsed
+        ],
+      },
+    });
+
+    expect(receipt.success).toBe(false);
+    expect(receipt.failure?.code).toBe('INVALID_TARGET');
+    expect(receipt.failure?.message).toContain('non-collapsed');
+    expect(editor.commands!.addComment).not.toHaveBeenCalled();
+  });
+
+  it('rejects a multi-segment TextTarget whose gap contains only an inline atom', () => {
+    // Regression: `textBetween(prev.to, curr.from, '')` returns '' when
+    // the gap is composed entirely of inline atoms (images, math, etc),
+    // because PM omits leaves from textBetween by default. The contiguity
+    // check must use a leafText callback so atom-only gaps still reject.
+    const editor = makeWriteEditor();
+    vi.mocked(resolveTextTarget).mockImplementation((_editor, target) => {
+      if (target.blockId === 'p1') return { from: 5, to: 10 };
+      if (target.blockId === 'p1-after-image') return { from: 12, to: 17 };
+      return null;
+    });
+    // Simulate a gap that contains an inline atom: textBetween with
+    // empty blockSeparator but a leafText callback returns the leaf
+    // sentinel for the atom.
+    (editor.state!.doc as { textBetween: ReturnType<typeof vi.fn> }).textBetween = vi.fn(
+      (_from: number, _to: number, blockSep: string, leafText?: () => string) => {
+        if (typeof leafText === 'function') return leafText();
+        return blockSep ?? '';
+      },
+    );
+
+    const wrapper = createCommentsWrapper(editor);
+    const receipt = wrapper.add({
+      text: 'comment',
+      target: {
+        kind: 'text',
+        segments: [
+          { blockId: 'p1', range: { start: 0, end: 5 } },
+          { blockId: 'p1-after-image', range: { start: 0, end: 5 } },
+        ],
+      },
+    });
+
+    expect(receipt.success).toBe(false);
+    expect(receipt.failure?.code).toBe('INVALID_TARGET');
+    expect(receipt.failure?.message).toContain('atoms');
+    expect(editor.commands!.addComment).not.toHaveBeenCalled();
+  });
 });

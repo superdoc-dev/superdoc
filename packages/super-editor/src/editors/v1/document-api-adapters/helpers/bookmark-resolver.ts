@@ -76,10 +76,10 @@ export function findAllBookmarksInDocument(editor: Editor): DocumentBookmarkEntr
   seenStoryKeys.add(BODY_STORY_KEY);
   collectBookmarksFromDoc(editor.state.doc, BODY_STORY_KEY, results);
 
-  collectBookmarksFromHeaderFooterEditors(converter?.headerEditors, results, seenStoryKeys);
-  collectBookmarksFromHeaderFooterEditors(converter?.footerEditors, results, seenStoryKeys);
-  collectBookmarksFromHeaderFooterCache(converter?.headers, results, seenStoryKeys);
-  collectBookmarksFromHeaderFooterCache(converter?.footers, results, seenStoryKeys);
+  collectBookmarksFromHeaderFooterEditors(editor, converter?.headerEditors, results, seenStoryKeys);
+  collectBookmarksFromHeaderFooterEditors(editor, converter?.footerEditors, results, seenStoryKeys);
+  collectBookmarksFromHeaderFooterCache(editor, converter?.headers, results, seenStoryKeys);
+  collectBookmarksFromHeaderFooterCache(editor, converter?.footers, results, seenStoryKeys);
   collectBookmarksFromNotes(editor, converter?.footnotes, 'footnote', results, seenStoryKeys);
   collectBookmarksFromNotes(editor, converter?.endnotes, 'endnote', results, seenStoryKeys);
 
@@ -139,6 +139,7 @@ function collectBookmarksFromDoc(doc: ProseMirrorNode, storyKey: string, results
 }
 
 function collectBookmarksFromHeaderFooterEditors(
+  hostEditor: Editor,
   editors: StoryEditorEntry[] | undefined,
   results: DocumentBookmarkEntry[],
   seenStoryKeys: Set<string>,
@@ -153,11 +154,12 @@ function collectBookmarksFromHeaderFooterEditors(
     const storyKey = buildStoryKey({ kind: 'story', storyType: 'headerFooterPart', refId });
     if (seenStoryKeys.has(storyKey)) continue;
     seenStoryKeys.add(storyKey);
-    collectBookmarksFromDoc(storyEditor.state.doc, storyKey, results);
+    collectBookmarksFromLiveOrDoc(hostEditor, storyKey, storyEditor.state.doc, results);
   }
 }
 
 function collectBookmarksFromHeaderFooterCache(
+  hostEditor: Editor,
   collection: Record<string, unknown> | undefined,
   results: DocumentBookmarkEntry[],
   seenStoryKeys: Set<string>,
@@ -170,7 +172,7 @@ function collectBookmarksFromHeaderFooterCache(
     const storyKey = buildStoryKey({ kind: 'story', storyType: 'headerFooterPart', refId });
     if (seenStoryKeys.has(storyKey)) continue;
     seenStoryKeys.add(storyKey);
-    collectBookmarksFromPmJson(pmJson, storyKey, results);
+    collectBookmarksFromLiveOrPmJson(hostEditor, storyKey, pmJson, results);
   }
 }
 
@@ -192,14 +194,33 @@ function collectBookmarksFromNotes(
     if (seenStoryKeys.has(storyKey)) continue;
     seenStoryKeys.add(storyKey);
 
-    const liveRuntime = resolveLiveStorySessionRuntime(hostEditor, storyKey);
-    if (liveRuntime?.editor?.state?.doc) {
-      collectBookmarksFromDoc(liveRuntime.editor.state.doc, storyKey, results);
-      continue;
-    }
-
-    collectBookmarksFromPmJson(pmJson, storyKey, results);
+    collectBookmarksFromLiveOrPmJson(hostEditor, storyKey, pmJson, results);
   }
+}
+
+function collectBookmarksFromLiveOrDoc(
+  hostEditor: Editor,
+  storyKey: string,
+  fallbackDoc: ProseMirrorNode,
+  results: DocumentBookmarkEntry[],
+): void {
+  const liveDoc = resolveLiveStorySessionRuntime(hostEditor, storyKey)?.editor?.state?.doc;
+  collectBookmarksFromDoc(liveDoc ?? fallbackDoc, storyKey, results);
+}
+
+function collectBookmarksFromLiveOrPmJson(
+  hostEditor: Editor,
+  storyKey: string,
+  fallbackPmJson: unknown,
+  results: DocumentBookmarkEntry[],
+): void {
+  const liveDoc = resolveLiveStorySessionRuntime(hostEditor, storyKey)?.editor?.state?.doc;
+  if (liveDoc) {
+    collectBookmarksFromDoc(liveDoc, storyKey, results);
+    return;
+  }
+
+  collectBookmarksFromPmJson(fallbackPmJson, storyKey, results);
 }
 
 function getNotePmJson(note: NoteEntry): Record<string, unknown> | null {

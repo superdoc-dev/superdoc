@@ -92,6 +92,72 @@ describe('findAllBookmarksInDocument', () => {
     expect(bookmarks).toEqual([{ name: 'live-header-bm', bookmarkId: '10', storyKey: 'hf:part:rIdHeader' }]);
   });
 
+  it('prefers a live header session editor over stale converter header data for the same part', () => {
+    const hostEditor = makeEditor([], {
+      headerEditors: [{ id: 'rIdHeader', editor: makeEditor([{ name: 'stale-editor-bm', id: '11' }]) }],
+      headers: {
+        rIdHeader: {
+          type: 'doc',
+          content: [{ type: 'bookmarkStart', attrs: { name: 'stale-cache-bm', id: '12' } }],
+        },
+      },
+    });
+    const liveHeaderEditor = makeEditor([{ name: 'live-header-session-bm', id: '13' }]);
+    const unregister = registerLiveStorySessionRuntime(
+      hostEditor,
+      {
+        locator: { kind: 'story', storyType: 'headerFooterPart', refId: 'rIdHeader' },
+        storyKey: 'hf:part:rIdHeader',
+        editor: hostEditor,
+        kind: 'headerFooter',
+      },
+      liveHeaderEditor,
+    );
+
+    try {
+      const bookmarks = findAllBookmarksInDocument(hostEditor).filter(
+        (bookmark) => bookmark.storyKey === 'hf:part:rIdHeader',
+      );
+
+      expect(bookmarks).toEqual([{ name: 'live-header-session-bm', bookmarkId: '13', storyKey: 'hf:part:rIdHeader' }]);
+    } finally {
+      unregister();
+    }
+  });
+
+  it('prefers a live footer session editor over stale converter footer data for the same part', () => {
+    const hostEditor = makeEditor([], {
+      footerEditors: [{ id: 'rIdFooter', editor: makeEditor([{ name: 'stale-editor-bm', id: '21' }]) }],
+      footers: {
+        rIdFooter: {
+          type: 'doc',
+          content: [{ type: 'bookmarkStart', attrs: { name: 'stale-cache-bm', id: '22' } }],
+        },
+      },
+    });
+    const liveFooterEditor = makeEditor([{ name: 'live-footer-session-bm', id: '23' }]);
+    const unregister = registerLiveStorySessionRuntime(
+      hostEditor,
+      {
+        locator: { kind: 'story', storyType: 'headerFooterPart', refId: 'rIdFooter' },
+        storyKey: 'hf:part:rIdFooter',
+        editor: hostEditor,
+        kind: 'headerFooter',
+      },
+      liveFooterEditor,
+    );
+
+    try {
+      const bookmarks = findAllBookmarksInDocument(hostEditor).filter(
+        (bookmark) => bookmark.storyKey === 'hf:part:rIdFooter',
+      );
+
+      expect(bookmarks).toEqual([{ name: 'live-footer-session-bm', bookmarkId: '23', storyKey: 'hf:part:rIdFooter' }]);
+    } finally {
+      unregister();
+    }
+  });
+
   it('does not double-count the same concrete header part referenced by multiple slots', () => {
     const editor = makeEditor([], {
       headers: {

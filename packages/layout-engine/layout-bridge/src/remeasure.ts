@@ -1183,7 +1183,7 @@ export function remeasureParagraph(
   let currentChar = 0;
   // Match measuring/dom behavior: explicit line breaks without text should use
   // the most recent text font size (or first text run size for leading breaks).
-  const firstTextRunWithSize = runs.find((run) => isTextRun(run) && typeof run.fontSize === 'number');
+  const firstTextRunWithSize = runs.find((run): run is TextRun => isTextRun(run) && typeof run.fontSize === 'number');
   let lastMeasuredFontSize = firstTextRunWithSize?.fontSize ?? 16;
 
   while (currentRun < runs.length) {

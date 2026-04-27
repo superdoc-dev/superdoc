@@ -83,13 +83,55 @@ function bookmarkExistsAnywhere(
   });
 }
 
+type BookmarkStorySnapshot = {
+  storyKey: string;
+  runtime: ReturnType<typeof resolveStoryRuntime>;
+  revision: string;
+};
+
+function collectBookmarkStorySnapshots(editor: Editor, entries: DocumentBookmarkEntry[]): BookmarkStorySnapshot[] {
+  const storyKeys = [...new Set(entries.map((entry) => entry.storyKey))];
+
+  return storyKeys.flatMap((storyKey) => {
+    const locator = storyKey === BODY_STORY_KEY ? undefined : parseStoryKey(storyKey);
+
+    try {
+      const runtime = resolveStoryRuntime(editor, locator);
+      return [{ storyKey, runtime, revision: getRevision(runtime.editor) }];
+    } catch (error) {
+      if (error instanceof DocumentApiAdapterError && error.code === 'STORY_NOT_FOUND') {
+        return [];
+      }
+      throw error;
+    }
+  });
+}
+
+function buildDocumentBookmarkRevision(hostRevision: string, snapshots: BookmarkStorySnapshot[]): string {
+  if (snapshots.length === 0) {
+    return hostRevision;
+  }
+
+  if (snapshots.length === 1 && snapshots[0]?.storyKey === BODY_STORY_KEY) {
+    return hostRevision;
+  }
+
+  const parts = [...snapshots]
+    .sort((left, right) => left.storyKey.localeCompare(right.storyKey))
+    .map((snapshot) => `${snapshot.storyKey}@${snapshot.revision}`);
+
+  return `bookmark-scan:${parts.join('|')}`;
+}
+
+function getDocumentBookmarkRevision(editor: Editor, preCollected?: DocumentBookmarkEntry[]): string {
+  const hostRevision = getRevision(editor);
+  const entries = preCollected ?? findAllBookmarksInDocument(editor);
+  const snapshots = collectBookmarkStorySnapshots(editor, entries);
+  return buildDocumentBookmarkRevision(hostRevision, snapshots);
+}
+
 function checkBookmarkRevision(hostEditor: Editor, storyEditor: Editor, expectedRevision: string | undefined): void {
   if (expectedRevision === undefined) return;
-
-  if (hostEditor === storyEditor) {
-    checkRevision(storyEditor, expectedRevision);
-    return;
-  }
 
   const storyRevision = getRevision(storyEditor);
   if (expectedRevision === storyRevision) {
@@ -98,6 +140,11 @@ function checkBookmarkRevision(hostEditor: Editor, storyEditor: Editor, expected
 
   const hostRevision = getRevision(hostEditor);
   if (expectedRevision === hostRevision) {
+    return;
+  }
+
+  const documentBookmarkRevision = getDocumentBookmarkRevision(hostEditor);
+  if (expectedRevision === documentBookmarkRevision) {
     return;
   }
 
@@ -126,32 +173,21 @@ export function bookmarksListWrapper(editor: Editor, query?: BookmarkListInput):
     return listBookmarksFromStory(editor, query.in, query);
   }
 
-  const bodyRevision = getRevision(editor);
   const entries = findAllBookmarksInDocument(editor);
-  const storyKeys = [...new Set(entries.map((entry) => entry.storyKey))];
+  const hostRevision = getRevision(editor);
+  const snapshots = collectBookmarkStorySnapshots(editor, entries);
 
-  const allItems = storyKeys.flatMap((storyKey) => {
-    const locator = storyKey === BODY_STORY_KEY ? undefined : parseStoryKey(storyKey);
-
-    try {
-      const runtime = resolveStoryRuntime(editor, locator);
-      const doc = runtime.editor.state.doc;
-      const revision = getRevision(runtime.editor);
-      const bookmarks = findAllBookmarks(doc);
-      return bookmarks.map((bookmark) => buildBookmarkDiscoveryItem(doc, bookmark, revision, runtime.locator));
-    } catch (error) {
-      if (error instanceof DocumentApiAdapterError && error.code === 'STORY_NOT_FOUND') {
-        return [];
-      }
-      throw error;
-    }
+  const allItems = snapshots.flatMap(({ runtime, revision }) => {
+    const doc = runtime.editor.state.doc;
+    const bookmarks = findAllBookmarks(doc);
+    return bookmarks.map((bookmark) => buildBookmarkDiscoveryItem(doc, bookmark, revision, runtime.locator));
   });
 
   const { total, items: paged } = paginate(allItems, query?.offset, query?.limit);
   const effectiveLimit = query?.limit ?? total;
 
   return buildDiscoveryResult({
-    evaluatedRevision: bodyRevision,
+    evaluatedRevision: buildDocumentBookmarkRevision(hostRevision, snapshots),
     total,
     items: paged,
     page: { limit: effectiveLimit, offset: query?.offset ?? 0, returned: paged.length },

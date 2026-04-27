@@ -492,6 +492,53 @@ describe('bookmarksRenameWrapper', () => {
     expect(executeDomainCommand).toHaveBeenCalledWith(storyEditor, expect.any(Function));
   });
 
+  it('accepts a document-wide bookmark list revision token for a non-body rename', () => {
+    const { editor: hostEditor } = makeEditor();
+    const { editor: storyEditor } = makeEditor();
+    const headerLocator = { kind: 'story' as const, storyType: 'headerFooterPart' as const, refId: 'rId7' };
+
+    vi.mocked(resolveWriteStoryRuntime).mockReturnValueOnce({
+      locator: headerLocator,
+      storyKey: 'hf:part:rId7',
+      editor: storyEditor,
+      kind: 'headerFooter',
+      commit: vi.fn(),
+    } as any);
+    vi.mocked(resolveBookmarkTarget).mockReturnValueOnce({
+      pos: 5,
+      name: 'hdr-bm',
+      bookmarkId: '1',
+      endPos: 8,
+      node: { attrs: { name: 'hdr-bm', id: '1' } } as never,
+    });
+    vi.mocked(findAllBookmarksInDocument)
+      .mockReturnValueOnce([{ name: 'hdr-bm', bookmarkId: '1', storyKey: 'hf:part:rId7' }])
+      .mockReturnValueOnce([{ name: 'hdr-bm', bookmarkId: '1', storyKey: 'hf:part:rId7' }]);
+    vi.mocked(resolveStoryRuntime).mockReturnValueOnce({
+      locator: headerLocator,
+      storyKey: 'hf:part:rId7',
+      editor: storyEditor,
+      kind: 'headerFooter',
+    } as any);
+    vi.mocked(getRevision)
+      .mockReturnValueOnce('rev-story')
+      .mockReturnValueOnce('rev-host')
+      .mockReturnValueOnce('rev-host')
+      .mockReturnValueOnce('rev-story');
+
+    bookmarksRenameWrapper(
+      hostEditor,
+      {
+        target: { kind: 'entity', entityType: 'bookmark', name: 'hdr-bm', story: headerLocator },
+        newName: 'hdr-bm-renamed',
+      },
+      { expectedRevision: 'bookmark-scan:hf:part:rId7@rev-story' },
+    );
+
+    expect(checkRevision).not.toHaveBeenCalled();
+    expect(executeDomainCommand).toHaveBeenCalledWith(storyEditor, expect.any(Function));
+  });
+
   it('throws INVALID_INPUT when the new name exists in another story', () => {
     const { editor, tr } = makeEditor();
     vi.mocked(findAllBookmarksInDocument)
@@ -779,6 +826,7 @@ describe('bookmarksListWrapper', () => {
       headerLocator,
     );
     expect(result.total).toBe(2);
+    expect(result.evaluatedRevision).toBe('bookmark-scan:body@rev-body|hf:part:rId7@rev-header');
   });
 
   it('skips a story that resolves to STORY_NOT_FOUND during document-wide listing', () => {
@@ -809,6 +857,7 @@ describe('bookmarksListWrapper', () => {
     expect(buildBookmarkDiscoveryItem).toHaveBeenCalledTimes(1);
     expect(result.total).toBe(1);
     expect(result.items).toEqual([{ id: 'body-item', handle: {}, domain: {} }]);
+    expect(result.evaluatedRevision).toBe('rev-list');
   });
 
   it('resolves a non-body story runtime when query.in is provided', () => {

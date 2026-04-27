@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Editor } from '../../core/Editor.js';
+import { registerLiveStorySessionRuntime } from '../story-runtime/live-story-session-runtime-registry.js';
 import {
   findAllBookmarksInDocument,
   findAllBookmarks,
@@ -126,6 +127,54 @@ describe('findAllBookmarksInDocument', () => {
     expect(findAllBookmarksInDocument(editor)).toEqual(
       expect.arrayContaining([{ name: 'real-note-zero-bm', bookmarkId: '30', storyKey: 'fn:0' }]),
     );
+  });
+
+  it('prefers a live footnote session editor over cached note data for the same note', () => {
+    const hostEditor = makeEditor([], {
+      footnotes: [{ id: 'fn-1', content: [{ type: 'bookmarkStart', attrs: { name: 'stale-footnote-bm', id: '31' } }] }],
+    });
+    const liveFootnoteEditor = makeEditor([{ name: 'live-footnote-bm', id: '32' }]);
+    const unregister = registerLiveStorySessionRuntime(
+      hostEditor,
+      {
+        locator: { kind: 'story', storyType: 'footnote', noteId: 'fn-1' },
+        storyKey: 'fn:fn-1',
+        editor: hostEditor,
+        kind: 'note',
+      },
+      liveFootnoteEditor,
+    );
+
+    try {
+      const bookmarks = findAllBookmarksInDocument(hostEditor).filter((bookmark) => bookmark.storyKey === 'fn:fn-1');
+      expect(bookmarks).toEqual([{ name: 'live-footnote-bm', bookmarkId: '32', storyKey: 'fn:fn-1' }]);
+    } finally {
+      unregister();
+    }
+  });
+
+  it('prefers a live endnote session editor over cached note data for the same note', () => {
+    const hostEditor = makeEditor([], {
+      endnotes: [{ id: 'en-1', content: [{ type: 'bookmarkStart', attrs: { name: 'stale-endnote-bm', id: '41' } }] }],
+    });
+    const liveEndnoteEditor = makeEditor([{ name: 'live-endnote-bm', id: '42' }]);
+    const unregister = registerLiveStorySessionRuntime(
+      hostEditor,
+      {
+        locator: { kind: 'story', storyType: 'endnote', noteId: 'en-1' },
+        storyKey: 'en:en-1',
+        editor: hostEditor,
+        kind: 'note',
+      },
+      liveEndnoteEditor,
+    );
+
+    try {
+      const bookmarks = findAllBookmarksInDocument(hostEditor).filter((bookmark) => bookmark.storyKey === 'en:en-1');
+      expect(bookmarks).toEqual([{ name: 'live-endnote-bm', bookmarkId: '42', storyKey: 'en:en-1' }]);
+    } finally {
+      unregister();
+    }
   });
 });
 

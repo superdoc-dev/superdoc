@@ -15,6 +15,7 @@ import type {
 import { buildDiscoveryItem, buildResolvedHandle } from '@superdoc/document-api';
 import { DocumentApiAdapterError } from '../errors.js';
 import { BODY_STORY_KEY, buildStoryKey } from '../story-runtime/story-key.js';
+import { resolveLiveStorySessionRuntime } from '../story-runtime/live-story-session-runtime-registry.js';
 import { enumerateEffectiveNoteEntries } from './note-entry-lookup.js';
 
 // ---------------------------------------------------------------------------
@@ -79,8 +80,8 @@ export function findAllBookmarksInDocument(editor: Editor): DocumentBookmarkEntr
   collectBookmarksFromHeaderFooterEditors(converter?.footerEditors, results, seenStoryKeys);
   collectBookmarksFromHeaderFooterCache(converter?.headers, results, seenStoryKeys);
   collectBookmarksFromHeaderFooterCache(converter?.footers, results, seenStoryKeys);
-  collectBookmarksFromNotes(converter?.footnotes, 'footnote', results, seenStoryKeys);
-  collectBookmarksFromNotes(converter?.endnotes, 'endnote', results, seenStoryKeys);
+  collectBookmarksFromNotes(editor, converter?.footnotes, 'footnote', results, seenStoryKeys);
+  collectBookmarksFromNotes(editor, converter?.endnotes, 'endnote', results, seenStoryKeys);
 
   return results;
 }
@@ -174,6 +175,7 @@ function collectBookmarksFromHeaderFooterCache(
 }
 
 function collectBookmarksFromNotes(
+  hostEditor: Editor,
   notes: NoteEntry[] | undefined,
   storyType: 'footnote' | 'endnote',
   results: DocumentBookmarkEntry[],
@@ -189,6 +191,12 @@ function collectBookmarksFromNotes(
     const storyKey = buildStoryKey({ kind: 'story', storyType, noteId });
     if (seenStoryKeys.has(storyKey)) continue;
     seenStoryKeys.add(storyKey);
+
+    const liveRuntime = resolveLiveStorySessionRuntime(hostEditor, storyKey);
+    if (liveRuntime?.editor?.state?.doc) {
+      collectBookmarksFromDoc(liveRuntime.editor.state.doc, storyKey, results);
+      continue;
+    }
 
     collectBookmarksFromPmJson(pmJson, storyKey, results);
   }

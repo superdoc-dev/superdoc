@@ -55,6 +55,7 @@ const encode = (params) => {
     attrs: {
       instruction: node.attributes?.instruction || '',
       rightAlignPageNumbers: deriveRightAlignPageNumbers(normalizedContent),
+      fieldInstance: node.attributes?.fieldInstance ?? null,
     },
     content: normalizedContent,
   };

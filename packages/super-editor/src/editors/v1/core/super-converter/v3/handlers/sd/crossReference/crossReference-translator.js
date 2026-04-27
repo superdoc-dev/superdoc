@@ -32,6 +32,7 @@ const encode = (params) => {
       display: parseDisplay(node.attributes?.instruction),
       resolvedText: extractResolvedText(processedText),
       marksAsAttrs: node.marks || [],
+      fieldInstance: node.attributes?.fieldInstance ?? null,
     },
     content: processedText,
   };

@@ -4,6 +4,7 @@
 import { getInstructionPreProcessor } from './fld-preprocessors';
 import { carbonCopy } from '@core/utilities/carbonCopy.js';
 import { buildFieldInstanceFromImport, readFieldFlags } from './build-field-instance.js';
+import { attachFieldInstanceToFieldNodes } from './attach-field-instance.js';
 
 const SKIP_FIELD_PROCESSING_NODE_NAMES = new Set(['w:drawing', 'w:pict']);
 
@@ -89,6 +90,21 @@ export const preProcessNodesForFldChar = (nodes = [], docx) => {
       let outputNodes;
       if (combinedResult.handled) {
         outputNodes = combinedResult.nodes;
+        // Attach the canonical FieldInstance to the typed sd:* element(s)
+        // the family preprocessor emitted. Export still reads legacy typed
+        // attrs in Phase 0; the substrate payload is carried alongside so
+        // Phase 1 / 3 can consume it without changing the import path.
+        const fieldInstance = buildFieldInstanceFromImport({
+          representation: 'complex',
+          instructionText: currentField.instrText.trim(),
+          resultFragments: collectedNodes,
+          originalXml: rawCollectedNodes,
+          dirty: currentField.dirty ?? false,
+          locked: currentField.locked ?? false,
+          part: FIELD_PART,
+          importIndex: importIndex++,
+        });
+        attachFieldInstanceToFieldNodes(outputNodes, fieldInstance);
       } else {
         // Unknown / unsupported field family: wrap the result content in a
         // sd:rawField element holding the canonical FieldInstance payload.
@@ -177,6 +193,19 @@ export const preProcessNodesForFldChar = (nodes = [], docx) => {
         const instructionPreProcessor = getInstructionPreProcessor(instructionType);
         if (instructionPreProcessor) {
           const processed = instructionPreProcessor(node.elements ?? [], instr, docx, null);
+          // Same FieldInstance attachment as the complex-field handled path.
+          const { dirty: simpleDirty, locked: simpleLocked } = readFieldFlags(node);
+          const fieldInstance = buildFieldInstanceFromImport({
+            representation: 'simple',
+            instructionText: instr,
+            resultFragments: node.elements ?? [],
+            originalXml: rawNode,
+            dirty: simpleDirty,
+            locked: simpleLocked,
+            part: FIELD_PART,
+            importIndex: importIndex++,
+          });
+          attachFieldInstanceToFieldNodes(processed, fieldInstance);
           if (collecting) {
             collectedNodesStack[collectedNodesStack.length - 1].push(...processed);
             rawCollectedNodesStack[rawCollectedNodesStack.length - 1].push(...processed);

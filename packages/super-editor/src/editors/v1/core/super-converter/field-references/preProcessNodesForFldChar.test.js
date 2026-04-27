@@ -72,22 +72,22 @@ describe('preProcessNodesForFldChar', () => {
 
     const { processedNodes } = preProcessNodesForFldChar(nodes, mockDocx);
 
-    expect(processedNodes).toEqual([
-      {
-        name: 'w:hyperlink',
-        type: 'element',
-        attributes: { 'w:anchor': 'bookmark' },
-        elements: [
-          { name: 'w:r', elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'See page ' }] }] },
-          {
-            name: 'sd:pageReference',
-            type: 'element',
-            attributes: { instruction: 'PAGEREF bookmark' },
-            elements: [{ name: 'w:r', elements: [{ name: 'w:t', elements: [{ type: 'text', text: '5' }] }] }],
-          },
-        ],
-      },
-    ]);
+    expect(processedNodes).toHaveLength(1);
+    expect(processedNodes[0].name).toBe('w:hyperlink');
+    expect(processedNodes[0].attributes).toEqual({ 'w:anchor': 'bookmark' });
+    expect(processedNodes[0].elements).toHaveLength(2);
+    expect(processedNodes[0].elements[0]).toEqual({
+      name: 'w:r',
+      elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'See page ' }] }],
+    });
+    expect(processedNodes[0].elements[1]).toMatchObject({
+      name: 'sd:pageReference',
+      type: 'element',
+      attributes: { instruction: 'PAGEREF bookmark' },
+      elements: [{ name: 'w:r', elements: [{ name: 'w:t', elements: [{ type: 'text', text: '5' }] }] }],
+    });
+    expect(processedNodes[0].elements[1].attributes.fieldInstance).toBeDefined();
+    expect(processedNodes[0].elements[1].attributes.fieldInstance.family).toBe('PAGEREF');
   });
 
   it('captures w:tab tokens in INDEX instructions', () => {
@@ -134,16 +134,15 @@ describe('preProcessNodesForFldChar', () => {
 
     const { processedNodes } = preProcessNodesForFldChar(nodes, mockDocx);
 
-    expect(processedNodes).toEqual([
-      {
-        name: 'sd:tableOfContents',
-        type: 'element',
-        attributes: {
-          instruction: 'TOC \\o "1-1" \\h \\z \\u',
-        },
-        elements: [],
-      },
-    ]);
+    expect(processedNodes).toHaveLength(1);
+    expect(processedNodes[0]).toMatchObject({
+      name: 'sd:tableOfContents',
+      type: 'element',
+      attributes: { instruction: 'TOC \\o "1-1" \\h \\z \\u' },
+      elements: [],
+    });
+    expect(processedNodes[0].attributes.fieldInstance).toBeDefined();
+    expect(processedNodes[0].attributes.fieldInstance.family).toBe('TOC');
   });
 
   it('wraps unknown fields in sd:rawField when begin, instrText, separate, and end share a single run', () => {
@@ -197,14 +196,14 @@ describe('preProcessNodesForFldChar', () => {
     expect(processedNodes).toHaveLength(2);
     expect(processedNodes[0].name).toBe('sd:rawField');
     expect(processedNodes[0].attributes.fieldInstance.family).toBe('CUSTOMFIELD');
-    expect(processedNodes[1]).toEqual({
+    expect(processedNodes[1]).toMatchObject({
       name: 'sd:tableOfContents',
       type: 'element',
-      attributes: {
-        instruction: 'TOC \\o "1-1" \\h \\z \\u',
-      },
+      attributes: { instruction: 'TOC \\o "1-1" \\h \\z \\u' },
       elements: [],
     });
+    expect(processedNodes[1].attributes.fieldInstance).toBeDefined();
+    expect(processedNodes[1].attributes.fieldInstance.family).toBe('TOC');
   });
 
   it('preserves w:drawing and w:pict nodes while collecting field content', () => {

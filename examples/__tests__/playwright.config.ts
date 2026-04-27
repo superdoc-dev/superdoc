@@ -20,7 +20,7 @@ const examplePath = isGettingStarted
 // These run `npm run dev` which starts both processes — don't append --port.
 const useConcurrently = [
   'ai/streaming-document-api',
-  'features/ai-streaming',
+  'ai/streaming',
   'collaboration/hocuspocus',
   'collaboration/superdoc-yjs',
 ];
@@ -32,7 +32,7 @@ const portMap: Record<string, number> = {
   laravel: 8000,
   'collaboration/hocuspocus': 3000,
   'advanced/headless-toolbar/svelte-shadcn': 5190,
-  'features/ai-streaming': 5180,
+  'ai/streaming': 5180,
 };
 const port = portMap[example] ?? 5173;
 

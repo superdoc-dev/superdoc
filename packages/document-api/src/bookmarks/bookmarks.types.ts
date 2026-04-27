@@ -16,10 +16,12 @@ export interface BookmarkAddress {
    * Story containing this bookmark. Omit for body (backward compatible).
    *
    * When omitted, bookmark operations resolve by `name` across the whole
-   * document. If multiple stories contain the same bookmark name, resolution is
-   * document-order dependent. Prefer the `address` returned by bookmark read
-   * operations (`bookmarks.list`, `bookmarks.get`) because those responses
-   * populate `story` for non-body bookmarks.
+   * document. If multiple stories contain the same bookmark name, omitted-story
+   * lookup resolves to the first match returned by the implementation's
+   * document-wide bookmark scan; callers must not rely on a specific cross-story
+   * ordering rule. Prefer the `address` returned by bookmark read operations
+   * (`bookmarks.list`, `bookmarks.get`) because those responses populate
+   * `story` for non-body bookmarks.
    */
   story?: StoryLocator;
 }

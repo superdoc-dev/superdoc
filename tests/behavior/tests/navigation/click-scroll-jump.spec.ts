@@ -69,6 +69,9 @@ test('@behavior SD-2356: clicking page margin should not jump scroll position', 
   await page.mouse.click(page3Box!.x + page3Box!.width / 2, page3Box!.y + 15);
   await superdoc.waitForStable(1000);
 
+  const selAfter = await superdoc.getSelection();
+  expect(selAfter.from).toBe(selBefore.from);
+
   const scrollAfter = await getScrollTop(page);
   const scrollDelta = Math.abs(scrollAfter - scrollBefore);
   expect(

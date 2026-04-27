@@ -127,6 +127,7 @@ export function useFindReplace({ getSurfaceManager, getActiveEditor, activeEdito
         caseSensitive: caseSensitive.value,
         ignoreDiacritics: ignoreDiacritics.value,
         highlight: true,
+        searchModel: 'visible',
       });
       matchCount.value = result.matches.length;
       activeMatchIndex.value = result.activeMatchIndex;

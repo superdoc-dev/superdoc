@@ -173,6 +173,12 @@ import { getSchemaIntrospection } from './helpers/schema-introspection.js';
  * @typedef {import('./core/types/index.js').ContextMenuItem} ContextMenuItem
  * @typedef {import('./core/types/index.js').ContextMenuSection} ContextMenuSection
  * @typedef {import('./core/types/index.js').ContextMenuConfig} ContextMenuConfig
+ * @typedef {import('./core/types/index.js').StoryLocator} StoryLocator
+ * @typedef {import('./core/types/index.js').BookmarkAddress} BookmarkAddress
+ * @typedef {import('./core/types/index.js').BlockNavigationAddress} BlockNavigationAddress
+ * @typedef {import('./core/types/index.js').CommentAddress} CommentAddress
+ * @typedef {import('./core/types/index.js').TrackedChangeAddress} TrackedChangeAddress
+ * @typedef {import('./core/types/index.js').NavigableAddress} NavigableAddress
  */
 
 // Public exports

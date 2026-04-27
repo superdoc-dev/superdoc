@@ -21,11 +21,17 @@ export type {
   DocumentProtectionState,
   ScrollIntoViewInput,
   ScrollIntoViewOutput,
+  StoryLocator,
   TextAddress,
   TextTarget,
   TextSegment,
   EntityAddress,
+  BlockNavigationAddress,
+  CommentAddress,
+  TrackedChangeAddress,
+  NavigableAddress,
 } from '@superdoc/document-api';
+export type { BookmarkAddress } from '@superdoc/document-api';
 
 // Selection handle types
 export type { SelectionHandle } from './editors/v1/core/selection-state.js';

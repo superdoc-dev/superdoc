@@ -314,6 +314,49 @@ describe('SuperDoc core', () => {
     expect(instance.scrollToComment('nonexistent-id')).toBe(false);
   });
 
+  it('forwards scrollToElement to the first presentation editor', async () => {
+    const { superdocStore } = createAppHarness();
+    const scrollToElement = vi.fn(async () => true);
+
+    superdocStore.documents = [
+      {
+        getPresentationEditor: vi.fn(() => ({ scrollToElement })),
+      },
+    ];
+
+    const instance = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: {}, toolbar: {} },
+      onException: vi.fn(),
+    });
+    await flushMicrotasks();
+
+    await expect(instance.scrollToElement('element-1')).resolves.toBe(true);
+    expect(scrollToElement).toHaveBeenCalledWith('element-1');
+  });
+
+  it('returns false from scrollToElement when presentation navigation is unavailable', async () => {
+    const { superdocStore } = createAppHarness();
+    superdocStore.documents = [
+      {
+        getPresentationEditor: vi.fn(() => null),
+      },
+    ];
+
+    const instance = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: {}, toolbar: {} },
+      onException: vi.fn(),
+    });
+    await flushMicrotasks();
+
+    await expect(instance.scrollToElement('element-1')).resolves.toBe(false);
+  });
+
   it('warns when both document object and documents list provided', async () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     createAppHarness();

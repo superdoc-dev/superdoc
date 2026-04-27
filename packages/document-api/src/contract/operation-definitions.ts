@@ -63,6 +63,7 @@ export type ReferenceGroupKey =
   | 'citations'
   | 'authorities'
   | 'ranges'
+  | 'selection'
   | 'diff'
   | 'protection'
   | 'permissionRanges';
@@ -2422,6 +2423,22 @@ export const OPERATION_DEFINITIONS = {
     referenceGroup: 'ranges',
   },
 
+  'selection.current': {
+    memberPath: 'selection.current',
+    description:
+      "Read the editor's current selection as a portable SelectionInfo with a text-anchored TextTarget. Primitive for building custom comments UIs, floating toolbars, and other selection-driven components without reaching into ProseMirror internals.",
+    expectedResult:
+      'Returns a SelectionInfo with `empty`, `target` (TextTarget or null), `activeMarks`, and optionally `text` when `includeText: true`.',
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      idempotency: 'idempotent',
+      throws: ['INVALID_INPUT', 'INVALID_CONTEXT'],
+      deterministicTargetResolution: true,
+    }),
+    referenceDocPath: 'selection/current.mdx',
+    referenceGroup: 'selection',
+  },
+
   'mutations.preview': {
     memberPath: 'mutations.preview',
     description: 'Dry-run a mutation plan, returning resolved targets without applying changes.',
@@ -3385,7 +3402,7 @@ export const OPERATION_DEFINITIONS = {
 
   'history.get': {
     memberPath: 'history.get',
-    description: 'Query the current undo/redo history state of the active editor.',
+    description: 'Query the current undo/redo history state of the document.',
     expectedResult:
       'Returns a HistoryState object with undoDepth, redoDepth, canUndo, canRedo, and a list of history-unsafe operations.',
     requiresDocumentContext: true,
@@ -3398,7 +3415,7 @@ export const OPERATION_DEFINITIONS = {
 
   'history.undo': {
     memberPath: 'history.undo',
-    description: 'Undo the most recent history-safe mutation in the active editor.',
+    description: 'Undo the most recent history-safe mutation in the document.',
     expectedResult:
       'Returns a HistoryActionResult with noop flag, reason (EMPTY_UNDO_STACK | NO_EFFECT when noop), and revision before/after.',
     requiresDocumentContext: true,
@@ -3418,7 +3435,7 @@ export const OPERATION_DEFINITIONS = {
 
   'history.redo': {
     memberPath: 'history.redo',
-    description: 'Redo the most recently undone action in the active editor.',
+    description: 'Redo the most recently undone action in the document.',
     expectedResult:
       'Returns a HistoryActionResult with noop flag, reason (EMPTY_REDO_STACK | NO_EFFECT when noop), and revision before/after.',
     requiresDocumentContext: true,

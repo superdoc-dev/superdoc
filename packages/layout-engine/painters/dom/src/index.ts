@@ -1,4 +1,13 @@
-import type { FlowBlock, Layout, Measure, PageMargins, ResolvedLayout, Page } from '@superdoc/contracts';
+import type {
+  FlowBlock,
+  Fragment,
+  Layout,
+  Measure,
+  PageMargins,
+  ResolvedLayout,
+  Page,
+  ResolvedPaintItem,
+} from '@superdoc/contracts';
 import { DomPainter } from './renderer.js';
 import { resolveLayout } from '@superdoc/layout-resolved';
 import type { PageStyles } from './styles.js';
@@ -116,7 +125,16 @@ export type DomPainterOptions = {
 type LegacyDomPainterState = {
   blocks: FlowBlock[];
   measures: Measure[];
+  headerBlocks?: FlowBlock[];
+  headerMeasures?: Measure[];
+  footerBlocks?: FlowBlock[];
+  footerMeasures?: Measure[];
   resolvedLayout: ResolvedLayout | null;
+};
+
+type OptionalBlockMeasurePair = {
+  blocks: FlowBlock[];
+  measures: Measure[];
 };
 
 export type DomPainterHandle = {
@@ -125,7 +143,14 @@ export type DomPainterHandle = {
    * Legacy compatibility API.
    * New callers should pass block/measure data via `paint(input, mount)`.
    */
-  setData(blocks: FlowBlock[], measures: Measure[]): void;
+  setData(
+    blocks: FlowBlock[],
+    measures: Measure[],
+    headerBlocks?: FlowBlock[],
+    headerMeasures?: Measure[],
+    footerBlocks?: FlowBlock[],
+    footerMeasures?: Measure[],
+  ): void;
   /**
    * Legacy compatibility API.
    * New callers should pass resolved data via `paint(input, mount)`.
@@ -145,6 +170,29 @@ function assertRequiredBlockMeasurePair(label: string, blocks: FlowBlock[], meas
   }
 }
 
+function normalizeOptionalBlockMeasurePair(
+  label: 'body' | 'header' | 'footer',
+  blocks: FlowBlock[] | undefined,
+  measures: Measure[] | undefined,
+): OptionalBlockMeasurePair | undefined {
+  const hasBlocks = blocks !== undefined;
+  const hasMeasures = measures !== undefined;
+
+  if (hasBlocks !== hasMeasures) {
+    if (label === 'body') {
+      throw new Error('blocks and measures must both be provided or both be omitted.');
+    }
+    throw new Error(`${label}Blocks and ${label}Measures must both be provided or both be omitted.`);
+  }
+
+  if (!hasBlocks || !hasMeasures) {
+    return undefined;
+  }
+
+  assertRequiredBlockMeasurePair(label, blocks, measures);
+  return { blocks, measures };
+}
+
 function createEmptyResolvedLayout(flowMode: FlowMode | undefined, pageGap: number | undefined): ResolvedLayout {
   return {
     version: 1,
@@ -156,6 +204,22 @@ function createEmptyResolvedLayout(flowMode: FlowMode | undefined, pageGap: numb
 
 function isDomPainterInput(value: DomPainterInput | Layout): value is DomPainterInput {
   return 'resolvedLayout' in value && 'sourceLayout' in value;
+}
+
+function normalizeDomPainterInput(input: DomPainterInput): DomPainterInput {
+  const body = normalizeOptionalBlockMeasurePair('body', input.blocks, input.measures);
+  const header = normalizeOptionalBlockMeasurePair('header', input.headerBlocks, input.headerMeasures);
+  const footer = normalizeOptionalBlockMeasurePair('footer', input.footerBlocks, input.footerMeasures);
+
+  return {
+    ...input,
+    blocks: body?.blocks,
+    measures: body?.measures,
+    headerBlocks: header?.blocks,
+    headerMeasures: header?.measures,
+    footerBlocks: footer?.blocks,
+    footerMeasures: footer?.measures,
+  };
 }
 
 function buildLegacyPaintInput(
@@ -184,6 +248,12 @@ function buildLegacyPaintInput(
   return {
     resolvedLayout,
     sourceLayout: layout,
+    blocks: legacyState.blocks,
+    measures: legacyState.measures,
+    headerBlocks: legacyState.headerBlocks,
+    headerMeasures: legacyState.headerMeasures,
+    footerBlocks: legacyState.footerBlocks,
+    footerMeasures: legacyState.footerMeasures,
   };
 }
 
@@ -192,41 +262,108 @@ export const createDomPainter = (options: DomPainterOptions): DomPainterHandle =
     throw new Error('DomPainter requires the same number of blocks and measures');
   }
 
+  const legacyState: LegacyDomPainterState = {
+    blocks: options.blocks ?? [],
+    measures: options.measures ?? [],
+    headerBlocks: undefined,
+    headerMeasures: undefined,
+    footerBlocks: undefined,
+    footerMeasures: undefined,
+    resolvedLayout: null,
+  };
+
+  let currentPaintInput: DomPainterInput | null = null;
+
+  const resolveDecorationItems = (
+    fragments: readonly Fragment[],
+    kind: 'header' | 'footer',
+  ): ResolvedPaintItem[] | undefined => {
+    const input = currentPaintInput;
+    if (!input) return undefined;
+
+    const decorationBlocks = kind === 'header' ? input.headerBlocks : input.footerBlocks;
+    const decorationMeasures = kind === 'header' ? input.headerMeasures : input.footerMeasures;
+    const mergedBlocks = [...(input.blocks ?? []), ...(decorationBlocks ?? [])];
+    const mergedMeasures = [...(input.measures ?? []), ...(decorationMeasures ?? [])];
+    if (mergedBlocks.length === 0 || mergedBlocks.length !== mergedMeasures.length) {
+      return undefined;
+    }
+
+    const fakeLayout: Layout = {
+      pageSize: input.sourceLayout.pageSize,
+      pages: [{ number: 1, fragments: [...fragments] as Fragment[] }] as Page[],
+    } as Layout;
+
+    try {
+      const resolved = resolveLayout({
+        layout: fakeLayout,
+        flowMode: input.resolvedLayout.flowMode,
+        blocks: mergedBlocks,
+        measures: mergedMeasures,
+      });
+      return resolved.pages[0]?.items;
+    } catch {
+      return undefined;
+    }
+  };
+
+  const wrapProvider = (
+    provider: PageDecorationProvider | undefined,
+    kind: 'header' | 'footer',
+  ): PageDecorationProvider | undefined => {
+    if (!provider) return undefined;
+
+    return (pageNumber, pageMargins, page) => {
+      const payload = provider(pageNumber, pageMargins, page);
+      if (!payload || payload.items) return payload;
+      const items = resolveDecorationItems(payload.fragments, kind);
+      return items ? { ...payload, items } : payload;
+    };
+  };
+
   const painter = new DomPainter({
     pageStyles: options.pageStyles,
     layoutMode: options.layoutMode,
     flowMode: options.flowMode,
     pageGap: options.pageGap,
-    headerProvider: options.headerProvider,
-    footerProvider: options.footerProvider,
+    headerProvider: wrapProvider(options.headerProvider, 'header'),
+    footerProvider: wrapProvider(options.footerProvider, 'footer'),
     virtualization: options.virtualization,
     ruler: options.ruler,
     onPaintSnapshot: options.onPaintSnapshot,
   });
 
-  const legacyState: LegacyDomPainterState = {
-    blocks: options.blocks ?? [],
-    measures: options.measures ?? [],
-    resolvedLayout: null,
-  };
-
   return {
     paint(input: DomPainterInput | Layout, mount: HTMLElement, mapping?: PositionMapping) {
       const normalizedInput = isDomPainterInput(input)
-        ? input
+        ? normalizeDomPainterInput(input)
         : buildLegacyPaintInput(input, legacyState, options.flowMode, options.pageGap);
+      currentPaintInput = normalizedInput;
       painter.paint(normalizedInput, mount, mapping);
     },
-    setData(blocks: FlowBlock[], measures: Measure[]) {
+    setData(
+      blocks: FlowBlock[],
+      measures: Measure[],
+      headerBlocks?: FlowBlock[],
+      headerMeasures?: Measure[],
+      footerBlocks?: FlowBlock[],
+      footerMeasures?: Measure[],
+    ) {
       assertRequiredBlockMeasurePair('body', blocks, measures);
+      const normalizedHeader = normalizeOptionalBlockMeasurePair('header', headerBlocks, headerMeasures);
+      const normalizedFooter = normalizeOptionalBlockMeasurePair('footer', footerBlocks, footerMeasures);
       legacyState.blocks = blocks;
       legacyState.measures = measures;
+      legacyState.headerBlocks = normalizedHeader?.blocks;
+      legacyState.headerMeasures = normalizedHeader?.measures;
+      legacyState.footerBlocks = normalizedFooter?.blocks;
+      legacyState.footerMeasures = normalizedFooter?.measures;
     },
     setResolvedLayout(resolvedLayout: ResolvedLayout | null) {
       legacyState.resolvedLayout = resolvedLayout;
     },
     setProviders(header?: PageDecorationProvider, footer?: PageDecorationProvider) {
-      painter.setProviders(header, footer);
+      painter.setProviders(wrapProvider(header, 'header'), wrapProvider(footer, 'footer'));
     },
     setVirtualizationPins(pageIndices: number[] | null | undefined) {
       painter.setVirtualizationPins(pageIndices);

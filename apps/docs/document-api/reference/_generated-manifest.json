@@ -357,6 +357,8 @@
     "apps/docs/document-api/reference/sections/set-section-direction.mdx",
     "apps/docs/document-api/reference/sections/set-title-page.mdx",
     "apps/docs/document-api/reference/sections/set-vertical-align.mdx",
+    "apps/docs/document-api/reference/selection/current.mdx",
+    "apps/docs/document-api/reference/selection/index.mdx",
     "apps/docs/document-api/reference/styles/apply.mdx",
     "apps/docs/document-api/reference/styles/index.mdx",
     "apps/docs/document-api/reference/styles/paragraph/clear-style.mdx",
@@ -992,6 +994,13 @@
       "operationIds": ["ranges.resolve"],
       "pagePath": "apps/docs/document-api/reference/ranges/index.mdx",
       "title": "Ranges"
+    },
+    {
+      "aliasMemberPaths": [],
+      "key": "selection",
+      "operationIds": ["selection.current"],
+      "pagePath": "apps/docs/document-api/reference/selection/index.mdx",
+      "title": "Selection"
     },
     {
       "aliasMemberPaths": [],

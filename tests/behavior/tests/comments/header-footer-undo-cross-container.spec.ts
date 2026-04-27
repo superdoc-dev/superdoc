@@ -79,6 +79,18 @@ async function clickBlankDocumentBody(page: Page) {
   await page.mouse.click(box!.x + 140, box!.y + 180);
 }
 
+async function historyUndoViaDocumentApi(page: Page) {
+  return page.evaluate(() => (window as any).editor.doc.history.undo());
+}
+
+async function historyRedoViaDocumentApi(page: Page) {
+  return page.evaluate(() => (window as any).editor.doc.history.redo());
+}
+
+async function getDocumentText(page: Page) {
+  return page.evaluate(() => (window as any).editor.doc.getText({}));
+}
+
 for (const surface of ['header', 'footer'] as const) {
   test(`undo/redo from the body restores tracked ${surface} edits after leaving the active story`, async ({
     superdoc,
@@ -146,4 +158,172 @@ test('undo from the body removes blank-document tracked header edits after leavi
   await expect(headerSurface).not.toContainText(insertedText);
   await expect.poll(() => getHeaderFooterTrackedChangeCount(superdoc.page, insertedText)).toBe(0);
   await expect.poll(() => getHeaderFooterSidebarCount(superdoc.page, insertedText)).toBe(0);
+});
+
+test('undo from the body targets the most recent header edit before an earlier body edit', async ({ superdoc }) => {
+  const bodyText = 'BODYFIRSTUNDO';
+  const headerText = 'HEADERSECONDUNDO';
+
+  await assertDocumentApiReady(superdoc.page);
+  await superdoc.waitForStable();
+
+  await clickBlankDocumentBody(superdoc.page);
+  await superdoc.page.keyboard.insertText(bodyText);
+  await superdoc.waitForStable();
+
+  const bodyLocator = superdoc.page.locator('.superdoc-line').first();
+  await expect(bodyLocator).toContainText(bodyText);
+
+  const headerSurface = await activateBlankDocumentHeader(superdoc);
+  await moveActiveStoryCursorToEnd(superdoc.page);
+  await superdoc.page.keyboard.insertText(headerText);
+  await superdoc.waitForStable();
+
+  await expect(headerSurface).toContainText(headerText);
+
+  await clickBlankDocumentBody(superdoc.page);
+  await superdoc.waitForStable();
+  await waitForActiveStory(superdoc.page, null);
+
+  await superdoc.undo();
+  await superdoc.waitForStable();
+
+  await expect(headerSurface).not.toContainText(headerText);
+  await expect(bodyLocator).toContainText(bodyText);
+
+  await superdoc.undo();
+  await superdoc.waitForStable();
+
+  await expect(bodyLocator).not.toContainText(bodyText);
+});
+
+test('undo walks back footer edits before earlier header edits after leaving both story surfaces', async ({
+  superdoc,
+}) => {
+  const headerText = 'HEADERCHAINUNDO';
+  const footerText = 'FOOTERCHAINUNDO';
+
+  await assertDocumentApiReady(superdoc.page);
+  await superdoc.loadDocument(HEADER_FOOTER_DOC_PATH);
+  await superdoc.waitForStable();
+
+  const headerSurface = await activateHeader(superdoc);
+  await moveActiveStoryCursorToEnd(superdoc.page);
+  await superdoc.page.keyboard.insertText(headerText);
+  await superdoc.waitForStable();
+  await expect(headerSurface).toContainText(headerText);
+
+  const footerSurface = await activateFooter(superdoc);
+  await moveActiveStoryCursorToEnd(superdoc.page);
+  await superdoc.page.keyboard.insertText(footerText);
+  await superdoc.waitForStable();
+  await expect(footerSurface).toContainText(footerText);
+  await expect(headerSurface).toContainText(headerText);
+
+  await clickBodySurface(superdoc.page);
+  await superdoc.waitForStable();
+  await waitForActiveStory(superdoc.page, null);
+
+  await superdoc.undo();
+  await superdoc.waitForStable();
+
+  await expect(footerSurface).not.toContainText(footerText);
+  await expect(headerSurface).toContainText(headerText);
+
+  await superdoc.undo();
+  await superdoc.waitForStable();
+
+  await expect(headerSurface).not.toContainText(headerText);
+
+  await superdoc.redo();
+  await superdoc.waitForStable();
+  await expect(headerSurface).toContainText(headerText);
+  await expect(footerSurface).not.toContainText(footerText);
+
+  await superdoc.redo();
+  await superdoc.waitForStable();
+  await expect(footerSurface).toContainText(footerText);
+});
+
+test('document history api follows unified order after leaving the header surface', async ({ superdoc }) => {
+  const bodyText = 'BODYAPIGLOBAL';
+  const headerText = 'HEADERAPIGLOBAL';
+
+  await assertDocumentApiReady(superdoc.page);
+  await superdoc.waitForStable();
+
+  await clickBlankDocumentBody(superdoc.page);
+  await superdoc.page.keyboard.insertText(bodyText);
+  await superdoc.waitForStable();
+
+  const bodyLocator = superdoc.page.locator('.superdoc-line').first();
+  await expect(bodyLocator).toContainText(bodyText);
+
+  const headerSurface = await activateBlankDocumentHeader(superdoc);
+  await moveActiveStoryCursorToEnd(superdoc.page);
+  await superdoc.page.keyboard.insertText(headerText);
+  await superdoc.waitForStable();
+  await expect(headerSurface).toContainText(headerText);
+
+  await clickBlankDocumentBody(superdoc.page);
+  await superdoc.waitForStable();
+  await waitForActiveStory(superdoc.page, null);
+
+  const undoResult = await historyUndoViaDocumentApi(superdoc.page);
+  await superdoc.waitForStable();
+
+  expect(undoResult.noop).toBe(false);
+  await expect(headerSurface).not.toContainText(headerText);
+  await expect(bodyLocator).toContainText(bodyText);
+
+  const redoResult = await historyRedoViaDocumentApi(superdoc.page);
+  await superdoc.waitForStable();
+
+  expect(redoResult.noop).toBe(false);
+  await expect(headerSurface).toContainText(headerText);
+  await expect(bodyLocator).toContainText(bodyText);
+});
+
+test('a new body edit clears redo for a previously undone header edit', async ({ superdoc }) => {
+  const originalBodyText = 'BODYBASELINE';
+  const headerText = 'HEADERREDOCLEAR';
+  const newBodyText = 'BODYAFTERUNDO';
+
+  await assertDocumentApiReady(superdoc.page);
+  await superdoc.waitForStable();
+
+  await clickBlankDocumentBody(superdoc.page);
+  await superdoc.page.keyboard.insertText(originalBodyText);
+  await superdoc.waitForStable();
+
+  const bodyLocator = superdoc.page.locator('.superdoc-line').first();
+  await expect(bodyLocator).toContainText(originalBodyText);
+
+  const headerSurface = await activateBlankDocumentHeader(superdoc);
+  await moveActiveStoryCursorToEnd(superdoc.page);
+  await superdoc.page.keyboard.insertText(headerText);
+  await superdoc.waitForStable();
+  await expect(headerSurface).toContainText(headerText);
+
+  await clickBlankDocumentBody(superdoc.page);
+  await superdoc.waitForStable();
+  await waitForActiveStory(superdoc.page, null);
+
+  await superdoc.undo();
+  await superdoc.waitForStable();
+  await expect(headerSurface).not.toContainText(headerText);
+  await expect(bodyLocator).toContainText(originalBodyText);
+
+  await clickBlankDocumentBody(superdoc.page);
+  await superdoc.page.keyboard.insertText(newBodyText);
+  await superdoc.waitForStable();
+  const documentTextBeforeRedo = await getDocumentText(superdoc.page);
+  expect(documentTextBeforeRedo).toContain(newBodyText);
+
+  const redoResult = await historyRedoViaDocumentApi(superdoc.page);
+  await superdoc.waitForStable();
+
+  expect(redoResult.noop).toBe(true);
+  await expect(headerSurface).not.toContainText(headerText);
+  await expect.poll(() => getDocumentText(superdoc.page)).toBe(documentTextBeforeRedo);
 });

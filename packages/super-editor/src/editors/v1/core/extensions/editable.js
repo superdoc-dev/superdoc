@@ -1,25 +1,100 @@
-import { Plugin, PluginKey } from 'prosemirror-state';
+import { Plugin, PluginKey, Selection, TextSelection } from 'prosemirror-state';
 import { __endComposition } from 'prosemirror-view';
 import { Extension } from '../Extension.js';
 
-const handleInsertTextBeforeInput = (view, event) => {
+const appendStoryInputDebugLog = (entry) => {
+  const debugGlobal = globalThis;
+  if (debugGlobal.__SD_DEBUG_STORY_INPUT__ !== true) {
+    return;
+  }
+
+  const existingLog = Array.isArray(debugGlobal.__SD_DEBUG_STORY_INPUT_LOG__)
+    ? debugGlobal.__SD_DEBUG_STORY_INPUT_LOG__
+    : [];
+
+  existingLog.push(entry);
+  if (existingLog.length > 200) {
+    existingLog.splice(0, existingLog.length - 200);
+  }
+
+  debugGlobal.__SD_DEBUG_STORY_INPUT_LOG__ = existingLog;
+};
+
+const isStorySurfaceEditor = (editor) => {
+  const documentId = editor?.options?.documentId ?? '';
+  return (
+    documentId.startsWith('hf:') ||
+    documentId.startsWith('fn:') ||
+    documentId.startsWith('en:') ||
+    editor?.options?.isHeaderOrFooter === true ||
+    editor?.options?.headerFooterType === 'header' ||
+    editor?.options?.headerFooterType === 'footer'
+  );
+};
+
+const recordStoryInputDebug = (view, event, editor, phase, extra = {}) => {
+  if (!isStorySurfaceEditor(editor)) {
+    return;
+  }
+
+  let domAnchorPos = null;
+  const domSelection = view?.dom?.ownerDocument?.getSelection?.() ?? null;
+
+  try {
+    if (view?.dom && domSelection?.anchorNode && view.dom.contains(domSelection.anchorNode)) {
+      domAnchorPos = view.posAtDOM(domSelection.anchorNode, domSelection.anchorOffset, -1);
+    }
+  } catch {
+    domAnchorPos = null;
+  }
+
+  appendStoryInputDebugLog({
+    phase,
+    documentId: editor?.options?.documentId ?? null,
+    inputType: event?.inputType ?? null,
+    data: event?.data ?? null,
+    cancelable: event?.cancelable ?? null,
+    defaultPrevented: event?.defaultPrevented ?? null,
+    selectionFrom: view?.state?.selection?.from ?? null,
+    selectionTo: view?.state?.selection?.to ?? null,
+    domAnchorPos,
+    ...extra,
+  });
+};
+
+const handleInsertTextBeforeInput = (view, event, editor) => {
   const isInsertTextInput = event?.inputType === 'insertText';
   const hasTextData = typeof event?.data === 'string' && event.data.length > 0;
   const isComposing = event?.isComposing === true;
 
+  recordStoryInputDebug(view, event, editor, 'beforeinput:start', {
+    isInsertTextInput,
+    hasTextData,
+    isComposing,
+  });
+
   if (!isInsertTextInput || !hasTextData || isComposing) {
+    recordStoryInputDebug(view, event, editor, 'beforeinput:skip');
     return false;
   }
 
   const selection = view.state.selection;
-  if (selection.empty) {
+  if (selection.empty && !isStorySurfaceEditor(editor)) {
+    recordStoryInputDebug(view, event, editor, 'beforeinput:skip-empty-selection');
     return false;
   }
 
   const tr = view.state.tr.insertText(event.data, selection.from, selection.to);
+  const insertedTo = Math.max(0, Math.min(selection.from + event.data.length, tr.doc.content.size));
+  try {
+    tr.setSelection(TextSelection.create(tr.doc, insertedTo));
+  } catch {
+    tr.setSelection(Selection.near(tr.doc.resolve(insertedTo), 1));
+  }
   tr.setMeta('inputType', 'insertText');
   view.dispatch(tr);
   event.preventDefault();
+  recordStoryInputDebug(view, event, editor, 'beforeinput:handled');
 
   return true;
 };
@@ -91,6 +166,7 @@ export const Editable = Extension.create({
         editable: () => editor.options.editable,
         handleDOMEvents: {
           beforeinput: (view, event) => {
+            recordStoryInputDebug(view, event, editor, 'dom:beforeinput');
             if (!editor.options.editable) {
               event.preventDefault();
               return true;
@@ -104,9 +180,13 @@ export const Editable = Extension.create({
             // can widen the replace range around hidden inline content in story
             // editors. Apply the replacement against the PM selection directly
             // before the browser mutates the DOM.
-            if (handleInsertTextBeforeInput(view, event)) {
+            if (handleInsertTextBeforeInput(view, event, editor)) {
               return true;
             }
+            return false;
+          },
+          input: (view, event) => {
+            recordStoryInputDebug(view, event, editor, 'dom:input');
             return false;
           },
           compositionstart: (view, event) => blockWhenNotEditable(view, event),

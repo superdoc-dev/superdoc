@@ -10542,6 +10542,181 @@ describe('applyRunDataAttributes', () => {
     });
   });
 
+  describe('decoration item synthesis', () => {
+    let mount: HTMLElement;
+
+    beforeEach(() => {
+      mount = document.createElement('div');
+      document.body.appendChild(mount);
+    });
+
+    afterEach(() => {
+      document.body.removeChild(mount);
+    });
+
+    it('synthesizes missing header items from legacy setData bridge data', () => {
+      const mainBlock: FlowBlock = {
+        kind: 'paragraph',
+        id: 'main-block',
+        runs: [{ text: 'Main', fontFamily: 'Arial', fontSize: 16, pmStart: 0, pmEnd: 4 }],
+      };
+      const mainMeasure: Measure = {
+        kind: 'paragraph',
+        lines: [{ fromRun: 0, fromChar: 0, toRun: 0, toChar: 4, width: 40, ascent: 12, descent: 4, lineHeight: 20 }],
+        totalHeight: 20,
+      };
+      const headerBlock: FlowBlock = {
+        kind: 'paragraph',
+        id: 'hf-header-synth',
+        runs: [{ text: 'Synth Header', fontFamily: 'Arial', fontSize: 14, pmStart: 0, pmEnd: 12 }],
+      };
+      const headerMeasure: Measure = {
+        kind: 'paragraph',
+        lines: [{ fromRun: 0, fromChar: 0, toRun: 0, toChar: 12, width: 90, ascent: 10, descent: 3, lineHeight: 16 }],
+        totalHeight: 16,
+      };
+      const layout: Layout = {
+        pageSize: { w: 400, h: 500 },
+        pages: [{ number: 1, fragments: [] }],
+      };
+
+      const painter = createDomPainter({
+        blocks: [mainBlock],
+        measures: [mainMeasure],
+        headerProvider: () => ({
+          height: 16,
+          offset: 0,
+          fragments: [{ kind: 'para', blockId: 'hf-header-synth', fromLine: 0, toLine: 1, x: 0, y: 0, width: 120 }],
+        }),
+      });
+
+      painter.setData([mainBlock], [mainMeasure], [headerBlock], [headerMeasure]);
+      painter.paint(layout, mount);
+
+      expect(mount.querySelector('.superdoc-page-header')?.textContent).toContain('Synth Header');
+      expect(mount.querySelector('.render-error-placeholder')).toBeNull();
+    });
+
+    it('synthesizes missing footer items from direct DomPainterInput bridge data', () => {
+      const footerBlock: FlowBlock = {
+        kind: 'paragraph',
+        id: 'hf-footer-synth',
+        runs: [{ text: 'Synth Footer', fontFamily: 'Arial', fontSize: 14, pmStart: 0, pmEnd: 12 }],
+      };
+      const footerMeasure: Measure = {
+        kind: 'paragraph',
+        lines: [{ fromRun: 0, fromChar: 0, toRun: 0, toChar: 12, width: 88, ascent: 10, descent: 3, lineHeight: 16 }],
+        totalHeight: 16,
+      };
+      const layout: Layout = {
+        pageSize: { w: 400, h: 500 },
+        pages: [{ number: 1, fragments: [] }],
+      };
+
+      const painter = createDomPainter({
+        footerProvider: () => ({
+          height: 16,
+          offset: 460,
+          fragments: [{ kind: 'para', blockId: 'hf-footer-synth', fromLine: 0, toLine: 1, x: 0, y: 0, width: 120 }],
+        }),
+      });
+
+      painter.paint(
+        {
+          resolvedLayout: emptyResolved,
+          sourceLayout: layout,
+          footerBlocks: [footerBlock],
+          footerMeasures: [footerMeasure],
+        },
+        mount,
+      );
+
+      expect(mount.querySelector('.superdoc-page-footer')?.textContent).toContain('Synth Footer');
+      expect(mount.querySelector('.render-error-placeholder')).toBeNull();
+    });
+
+    it('validates optional decoration block/measure pairs on direct input', () => {
+      const painter = createDomPainter({});
+      const layout: Layout = {
+        pageSize: { w: 400, h: 500 },
+        pages: [{ number: 1, fragments: [] }],
+      };
+
+      expect(() =>
+        painter.paint(
+          {
+            resolvedLayout: emptyResolved,
+            sourceLayout: layout,
+            headerBlocks: [
+              {
+                kind: 'paragraph',
+                id: 'hf-header-invalid',
+                runs: [{ text: 'Invalid', fontFamily: 'Arial', fontSize: 12, pmStart: 0, pmEnd: 7 }],
+              },
+            ],
+          },
+          mount,
+        ),
+      ).toThrow('headerBlocks and headerMeasures must both be provided or both be omitted.');
+    });
+
+    it('validates optional decoration block/measure pairs in setData', () => {
+      const painter = createDomPainter({});
+
+      expect(() =>
+        painter.setData(
+          [
+            {
+              kind: 'paragraph',
+              id: 'body',
+              runs: [{ text: 'Body', fontFamily: 'Arial', fontSize: 12, pmStart: 0, pmEnd: 4 }],
+            },
+          ],
+          [
+            {
+              kind: 'paragraph',
+              lines: [
+                { fromRun: 0, fromChar: 0, toRun: 0, toChar: 4, width: 30, ascent: 10, descent: 3, lineHeight: 16 },
+              ],
+              totalHeight: 16,
+            },
+          ],
+          [
+            {
+              kind: 'paragraph',
+              id: 'hf-header-invalid',
+              runs: [{ text: 'Invalid', fontFamily: 'Arial', fontSize: 12, pmStart: 0, pmEnd: 7 }],
+            },
+          ],
+        ),
+      ).toThrow('headerBlocks and headerMeasures must both be provided or both be omitted.');
+    });
+
+    it('uses setResolvedLayout for legacy layout paints', () => {
+      const painter = createDomPainter({});
+      const layout: Layout = {
+        pageSize: { w: 400, h: 500 },
+        pages: [{ number: 1, fragments: [] }],
+      };
+
+      painter.setResolvedLayout(emptyResolved);
+
+      expect(() => painter.paint(layout, mount)).not.toThrow();
+      expect(mount.querySelector('.superdoc-page')).toBeTruthy();
+    });
+
+    it('creates an empty resolved layout for legacy paints without block data', () => {
+      const painter = createDomPainter({});
+      const layout: Layout = {
+        pageSize: { w: 400, h: 500 },
+        pages: [{ number: 1, fragments: [] }],
+      };
+
+      expect(() => painter.paint(layout, mount)).not.toThrow();
+      expect(mount.querySelector('.superdoc-page')).toBeTruthy();
+    });
+  });
+
   describe('footer alignment logic', () => {
     let mount: HTMLElement;
 

@@ -190,6 +190,127 @@ function footerFootnoteTransitionDocumentXml(): string {
 `;
 }
 
+function footerTableAndFootnoteDocumentXml(): string {
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="${NS_W}" xmlns:r="${NS_R}">
+  <w:body>
+    <w:p>
+      <w:r><w:t>Table Sample</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:r><w:t>The summary below references the attached numbers</w:t></w:r>
+      <w:r><w:rPr><w:rStyle w:val="FootnoteReference"/></w:rPr><w:footnoteReference w:id="1"/></w:r>
+      <w:r><w:t>.</w:t></w:r>
+    </w:p>
+    <w:tbl>
+      <w:tblPr>
+        <w:tblW w:w="0" w:type="auto"/>
+        <w:tblBorders>
+          <w:top w:val="single" w:sz="4" w:space="0" w:color="auto"/>
+          <w:left w:val="single" w:sz="4" w:space="0" w:color="auto"/>
+          <w:bottom w:val="single" w:sz="4" w:space="0" w:color="auto"/>
+          <w:right w:val="single" w:sz="4" w:space="0" w:color="auto"/>
+          <w:insideH w:val="single" w:sz="4" w:space="0" w:color="auto"/>
+          <w:insideV w:val="single" w:sz="4" w:space="0" w:color="auto"/>
+        </w:tblBorders>
+      </w:tblPr>
+      <w:tblGrid>
+        <w:gridCol w:w="3200"/>
+        <w:gridCol w:w="3200"/>
+        <w:gridCol w:w="3200"/>
+      </w:tblGrid>
+      <w:tr>
+        <w:tc><w:p><w:r><w:t>Quarter</w:t></w:r></w:p></w:tc>
+        <w:tc><w:p><w:r><w:t>Revenue</w:t></w:r></w:p></w:tc>
+        <w:tc><w:p><w:r><w:t>Status</w:t></w:r></w:p></w:tc>
+      </w:tr>
+      <w:tr>
+        <w:tc><w:p><w:r><w:t>Q1</w:t></w:r></w:p></w:tc>
+        <w:tc><w:p><w:r><w:t>$120,000</w:t></w:r></w:p></w:tc>
+        <w:tc><w:p><w:r><w:t>On track</w:t></w:r></w:p></w:tc>
+      </w:tr>
+      <w:tr>
+        <w:tc><w:p><w:r><w:t>Q2</w:t></w:r></w:p></w:tc>
+        <w:tc><w:p><w:r><w:t>$128,500</w:t></w:r></w:p></w:tc>
+        <w:tc><w:p><w:r><w:t>Ahead</w:t></w:r></w:p></w:tc>
+      </w:tr>
+      <w:tr>
+        <w:tc><w:p><w:r><w:t>Q3</w:t></w:r></w:p></w:tc>
+        <w:tc><w:p><w:r><w:t>$119,300</w:t></w:r></w:p></w:tc>
+        <w:tc><w:p><w:r><w:t>Review</w:t></w:r></w:p></w:tc>
+      </w:tr>
+    </w:tbl>
+    <w:sectPr>
+      <w:headerReference w:type="default" r:id="rId8"/>
+      <w:footerReference w:type="default" r:id="rId10"/>
+      <w:pgSz w:w="12240" w:h="15840"/>
+      <w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/>
+      <w:cols w:space="720"/>
+      <w:docGrid w:linePitch="360"/>
+    </w:sectPr>
+  </w:body>
+</w:document>
+`;
+}
+
+function footerTableAndFootnoteInlinePageFieldDocumentXml(): string {
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:wpc="http://schemas.microsoft.com/office/word/2010/wordprocessingCanvas" xmlns:mo="http://schemas.microsoft.com/office/mac/office/2008/main" xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" xmlns:mv="urn:schemas-microsoft-com:mac:vml" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:r="${NS_R}" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:wp14="http://schemas.microsoft.com/office/word/2010/wordprocessingDrawing" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:w10="urn:schemas-microsoft-com:office:word" xmlns:w="${NS_W}" xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml" xmlns:wpg="http://schemas.microsoft.com/office/word/2010/wordprocessingGroup" xmlns:wpi="http://schemas.microsoft.com/office/word/2010/wordprocessingInk" xmlns:wne="http://schemas.microsoft.com/office/word/2006/wordml" xmlns:wps="http://schemas.microsoft.com/office/word/2010/wordprocessingShape" mc:Ignorable="w14 wp14">
+  <w:body>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Title"/><w:jc w:val="center"/></w:pPr>
+      <w:r><w:t>Table Sample</w:t></w:r>
+    </w:p>
+    <w:p>
+      <w:r><w:t>The summary below references the attached numbers</w:t></w:r>
+      <w:r><w:rPr><w:rStyle w:val="FootnoteReference"/></w:rPr><w:footnoteReference w:id="1"/></w:r>
+      <w:r><w:t>.</w:t></w:r>
+    </w:p>
+    <w:tbl>
+      <w:tblPr>
+        <w:tblStyle w:val="TableGrid"/>
+        <w:tblW w:type="auto" w:w="0"/>
+        <w:tblLook w:firstColumn="1" w:firstRow="1" w:lastColumn="0" w:lastRow="0" w:noHBand="0" w:noVBand="1" w:val="04A0"/>
+      </w:tblPr>
+      <w:tblGrid>
+        <w:gridCol w:w="3216"/>
+        <w:gridCol w:w="3216"/>
+        <w:gridCol w:w="3216"/>
+      </w:tblGrid>
+      <w:tr>
+        <w:tc><w:tcPr><w:tcW w:type="dxa" w:w="3216"/></w:tcPr><w:p><w:r><w:t>Quarter</w:t></w:r></w:p></w:tc>
+        <w:tc><w:tcPr><w:tcW w:type="dxa" w:w="3216"/></w:tcPr><w:p><w:r><w:t>Revenue</w:t></w:r></w:p></w:tc>
+        <w:tc><w:tcPr><w:tcW w:type="dxa" w:w="3216"/></w:tcPr><w:p><w:r><w:t>Status</w:t></w:r></w:p></w:tc>
+      </w:tr>
+      <w:tr>
+        <w:tc><w:tcPr><w:tcW w:type="dxa" w:w="3216"/></w:tcPr><w:p><w:r><w:t>Q1</w:t></w:r></w:p></w:tc>
+        <w:tc><w:tcPr><w:tcW w:type="dxa" w:w="3216"/></w:tcPr><w:p><w:r><w:t>$120,000</w:t></w:r></w:p></w:tc>
+        <w:tc><w:tcPr><w:tcW w:type="dxa" w:w="3216"/></w:tcPr><w:p><w:r><w:t>On track</w:t></w:r></w:p></w:tc>
+      </w:tr>
+      <w:tr>
+        <w:tc><w:tcPr><w:tcW w:type="dxa" w:w="3216"/></w:tcPr><w:p><w:r><w:t>Q2</w:t></w:r></w:p></w:tc>
+        <w:tc><w:tcPr><w:tcW w:type="dxa" w:w="3216"/></w:tcPr><w:p><w:r><w:t>$128,500</w:t></w:r></w:p></w:tc>
+        <w:tc><w:tcPr><w:tcW w:type="dxa" w:w="3216"/></w:tcPr><w:p><w:r><w:t>Ahead</w:t></w:r></w:p></w:tc>
+      </w:tr>
+      <w:tr>
+        <w:tc><w:tcPr><w:tcW w:type="dxa" w:w="3216"/></w:tcPr><w:p><w:r><w:t>Q3</w:t></w:r></w:p></w:tc>
+        <w:tc><w:tcPr><w:tcW w:type="dxa" w:w="3216"/></w:tcPr><w:p><w:r><w:t>$119,300</w:t></w:r></w:p></w:tc>
+        <w:tc><w:tcPr><w:tcW w:type="dxa" w:w="3216"/></w:tcPr><w:p><w:r><w:t>Review</w:t></w:r></w:p></w:tc>
+      </w:tr>
+    </w:tbl>
+    <w:sectPr w:rsidR="00FC693F" w:rsidRPr="0006063C" w:rsidSect="00034616">
+      <w:headerReference w:type="default" r:id="rId9"/>
+      <w:footerReference w:type="default" r:id="rId10"/>
+      <w:pgSz w:w="12240" w:h="15840"/>
+      <w:pgMar w:top="1152" w:right="1296" w:bottom="1152" w:left="1296" w:header="720" w:footer="720" w:gutter="0"/>
+      <w:cols w:space="720"/>
+      <w:docGrid w:linePitch="360"/>
+    </w:sectPr>
+  </w:body>
+</w:document>
+`;
+}
+
 function simpleFootnotesXml(): string {
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:footnotes xmlns:w="${NS_W}" xmlns:r="${NS_R}">
@@ -358,6 +479,21 @@ function inlinePageFieldFooterXml(): string {
 `;
 }
 
+function inlinePageFieldSingleRunFooterXml(): string {
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:ftr xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math" xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" xmlns:mo="http://schemas.microsoft.com/office/mac/office/2008/main" xmlns:mv="urn:schemas-microsoft-com:mac:vml" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:r="${NS_R}" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w10="urn:schemas-microsoft-com:office:word" xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml" xmlns:w="${NS_W}" xmlns:wne="http://schemas.microsoft.com/office/word/2006/wordml" xmlns:wp14="http://schemas.microsoft.com/office/word/2010/wordprocessingDrawing" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:wpc="http://schemas.microsoft.com/office/word/2010/wordprocessingCanvas" xmlns:wpg="http://schemas.microsoft.com/office/word/2010/wordprocessingGroup" xmlns:wpi="http://schemas.microsoft.com/office/word/2010/wordprocessingInk" xmlns:wps="http://schemas.microsoft.com/office/word/2010/wordprocessingShape" mc:Ignorable="w14 wp14">
+  <w:p>
+    <w:pPr>
+      <w:pStyle w:val="Footer"/>
+      <w:jc w:val="center"/>
+    </w:pPr>
+    <w:r><w:t xml:space="preserve">Finance QA </w:t></w:r>
+    <w:r><w:fldChar w:fldCharType="begin"/><w:instrText xml:space="preserve">PAGE</w:instrText><w:fldChar w:fldCharType="end"/></w:r>
+  </w:p>
+</w:ftr>
+`;
+}
+
 function trackedFootnotesXml(): string {
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:footnotes xmlns:w="${NS_W}" xmlns:r="${NS_R}">
@@ -441,11 +577,51 @@ export const FOOTER_FOOTNOTE_TRANSITION_DOC_PATH = ensureGeneratedFixture(
     'word/footer2.xml': simpleFooterXml('Transition footer'),
   },
 );
+export const FOOTER_INLINE_PAGE_FIELD_WITH_FOOTNOTE_DOC_PATH = ensureGeneratedFixture(
+  'footer-inline-page-field-with-footnote.docx',
+  'h_f-normal.docx',
+  {
+    'word/document.xml': footerFootnoteTransitionDocumentXml(),
+    'word/footnotes.xml': simpleFootnotesXml(),
+    'word/footer2.xml': inlinePageFieldFooterXml(),
+  },
+);
 export const FOOTER_INLINE_PAGE_FIELD_DOC_PATH = ensureGeneratedFixture(
   'footer-inline-page-field.docx',
   'h_f-normal.docx',
   {
     'word/footer2.xml': inlinePageFieldFooterXml(),
+  },
+);
+export const FOOTER_SIMPLE_TEXT_WITH_TABLE_AND_FOOTNOTE_DOC_PATH = ensureGeneratedFixture(
+  'footer-simple-text-with-table-and-footnote.docx',
+  'h_f-normal.docx',
+  {
+    'word/document.xml': footerTableAndFootnoteDocumentXml(),
+    'word/footnotes.xml': simpleFootnotesXml(),
+    'word/footer2.xml': simpleFooterXml('Finance QA'),
+  },
+);
+export const FOOTER_INLINE_PAGE_FIELD_SINGLE_RUN_WITH_TABLE_AND_FOOTNOTE_DOC_PATH = ensureGeneratedFixture(
+  'footer-inline-page-field-single-run-with-table-and-footnote.docx',
+  'h_f-normal.docx',
+  {
+    'word/document.xml': footerTableAndFootnoteInlinePageFieldDocumentXml(),
+    'word/footnotes.xml': `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:footnotes xmlns:w="${NS_W}" xmlns:r="${NS_R}">
+  <w:footnote w:type="separator" w:id="-1"><w:p><w:r><w:separator/></w:r></w:p></w:footnote>
+  <w:footnote w:type="continuationSeparator" w:id="0"><w:p><w:r><w:continuationSeparator/></w:r></w:p></w:footnote>
+  <w:footnote w:id="1">
+    <w:p>
+      <w:pPr><w:spacing w:after="0"/></w:pPr>
+      <w:r><w:rPr><w:rStyle w:val="FootnoteReference"/></w:rPr><w:footnoteRef/></w:r>
+      <w:r><w:t xml:space="preserve"> </w:t></w:r>
+      <w:r><w:t>Footnote 1: the associated table is decorative test data only.</w:t></w:r>
+    </w:p>
+  </w:footnote>
+</w:footnotes>
+`,
+    'word/footer2.xml': inlinePageFieldSingleRunFooterXml(),
   },
 );
 export const STORY_ONLY_TRACKED_CHANGES_DOC_PATH = ensureGeneratedFixture(

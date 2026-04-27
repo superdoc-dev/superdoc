@@ -9,6 +9,8 @@ import { initTestEditor } from '../helpers/helpers.js';
 import { createFootnoteElement, prepareFootnotesXmlForExport } from '@converter/v2/exporter/footnotesExporter.js';
 import { importFootnoteData } from '@converter/v2/importer/documentFootnotesImporter.js';
 import { carbonCopy } from '@core/utilities/carbonCopy.js';
+import { resolveNoteRuntime } from '../../document-api-adapters/story-runtime/note-story-runtime.ts';
+import { registerLiveStorySessionRuntime } from '../../document-api-adapters/story-runtime/live-story-session-runtime-registry.ts';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DOCX_FIXTURE_NAME = 'basic-footnotes.docx';
@@ -214,6 +216,49 @@ describe('footnotes import/export roundtrip', () => {
 
       // Verify footnoteReference elements exist in exported XML
       expect(documentXml).toContain('w:footnoteReference');
+    });
+
+    it('flushes active live footnote sessions before host-level DOCX export', async () => {
+      const docxPath = join(__dirname, '../data', DOCX_FIXTURE_NAME);
+      const docxBuffer = await fs.readFile(docxPath);
+
+      const [docx, media, mediaFiles, fonts] = await Editor.loadXmlData(docxBuffer, true);
+      const { editor: testEditor } = initTestEditor({ content: docx, media, mediaFiles, fonts, isHeadless: true });
+      editor = testEditor;
+
+      const liveFootnote = editor.converter.footnotes.find((entry) => {
+        const type = entry?.type;
+        return type !== 'separator' && type !== 'continuationSeparator';
+      });
+      expect(liveFootnote).toBeDefined();
+
+      const noteId = String(liveFootnote.id);
+      const runtime = resolveNoteRuntime(editor, {
+        kind: 'story',
+        storyType: 'footnote',
+        noteId,
+      });
+      const liveText = 'Live export session regression text';
+
+      runtime.editor.commands.selectAll();
+      runtime.editor.commands.insertContent(liveText);
+
+      const unregister = registerLiveStorySessionRuntime(editor, runtime, runtime.editor);
+
+      try {
+        const updatedDocs = await editor.exportDocx({ getUpdatedDocs: true });
+        const exportedFootnotesXml = updatedDocs['word/footnotes.xml'];
+        expect(exportedFootnotesXml).toBeTruthy();
+
+        const exportedFootnotesJson = parseXmlToJson(exportedFootnotesXml);
+        const exportedRoot = findFootnotesRoot(exportedFootnotesJson);
+        const exportedFn = findFootnoteById(exportedRoot, noteId);
+
+        expect(exportedFn).toBeDefined();
+        expect(extractTextContent(exportedFn)).toContain(liveText);
+      } finally {
+        unregister();
+      }
     });
   });
 

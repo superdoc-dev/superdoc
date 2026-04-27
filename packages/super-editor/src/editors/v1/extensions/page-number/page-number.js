@@ -309,7 +309,10 @@ export class AutoPageNumberNodeView {
         marksAsAttrs: newMarks,
       };
 
-      const tr = state.tr.setNodeMarkup(pos, undefined, newAttrs);
+      const tr = state.tr
+        .setNodeMarkup(pos, undefined, newAttrs)
+        .setMeta('skipTrackChanges', true)
+        .setMeta('addToHistory', false);
       dispatch(tr);
     }, 0);
   }

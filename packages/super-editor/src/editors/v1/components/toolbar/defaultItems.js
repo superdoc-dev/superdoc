@@ -1,6 +1,7 @@
 import { h, ref } from 'vue';
 
 import { sanitizeNumber } from './helpers';
+import { normalizeFontOption } from './helpers/font-options.js';
 import { useToolbarItem } from './use-toolbar-item';
 import AIWriter from './AIWriter.vue';
 import AlignmentButtons from './AlignmentButtons.vue';
@@ -16,7 +17,7 @@ import { scrollToElement } from './scroll-helpers.js';
 
 import checkIconSvg from '@superdoc/common/icons/check.svg?raw';
 import SearchInput from './SearchInput.vue';
-import { TOOLBAR_FONTS, TOOLBAR_FONT_SIZES } from './constants.js';
+import { RESPONSIVE_BREAKPOINTS, TOOLBAR_FONTS, TOOLBAR_FONT_SIZES } from './constants.js';
 import { getQuickFormatList } from '@extensions/linked-styles/index.js';
 
 const closeDropdown = (dropdown) => {
@@ -46,7 +47,7 @@ export const makeDefaultItems = ({
   });
 
   // font
-  const fontOptions = [...(toolbarFonts ? toolbarFonts : TOOLBAR_FONTS)];
+  const fontOptions = (toolbarFonts ?? TOOLBAR_FONTS).map(normalizeFontOption);
   const fontButton = useToolbarItem({
     type: 'dropdown',
     name: 'fontFamily',
@@ -1033,18 +1034,33 @@ export const makeDefaultItems = ({
     }),
   });
 
-  // Responsive toolbar calculations
-  const breakpoints = {
-    sm: 768,
-    md: 1024,
-    lg: 1280,
-    xl: 1410,
-  };
+  // Responsive toolbar calculations.
+  // `availableWidth` comes from SuperToolbar and represents either:
+  // - container width when `responsiveToContainer: true`
+  // - viewport/document width when `responsiveToContainer: false`
+
+  // Extra headroom to prevent toolbar jitter at the XL edge.
+  const XL_OVERFLOW_SAFETY_BUFFER = 20;
   const stickyItemsWidth = 120;
   const toolbarPadding = 32;
 
   const itemsToHideXL = ['linkedStyles', 'clearFormatting', 'copyFormat', 'ruler'];
   const itemsToHideSM = ['zoom', 'fontFamily', 'fontSize', 'redo'];
+  const shouldUseLgCompactStyles = availableWidth <= RESPONSIVE_BREAKPOINTS.lg;
+
+  if (shouldUseLgCompactStyles) {
+    documentMode.attributes.value = {
+      ...documentMode.attributes.value,
+      className: `${documentMode.attributes.value.className} toolbar-item--doc-mode-compact`,
+    };
+  }
+
+  if (shouldUseLgCompactStyles) {
+    linkedStyles.attributes.value = {
+      ...linkedStyles.attributes.value,
+      className: `${linkedStyles.attributes.value.className} toolbar-item--linked-styles-compact`,
+    };
+  }
 
   let toolbarItems = [
     undo,
@@ -1091,7 +1107,7 @@ export const makeDefaultItems = ({
   }
 
   // Hide separators on small screens
-  if (availableWidth <= breakpoints.md && hideButtons) {
+  if (availableWidth <= RESPONSIVE_BREAKPOINTS.md && hideButtons) {
     toolbarItems = toolbarItems.filter((item) => item.type !== 'separator');
   }
 
@@ -1126,7 +1142,11 @@ export const makeDefaultItems = ({
   toolbarItems.forEach((item) => {
     const itemWidth = controlSizes.get(item.name.value) || controlSizes.get('default');
 
-    if (availableWidth < breakpoints.xl && itemsToHideXL.includes(item.name.value) && hideButtons) {
+    if (
+      availableWidth < RESPONSIVE_BREAKPOINTS.xl + XL_OVERFLOW_SAFETY_BUFFER &&
+      itemsToHideXL.includes(item.name.value) &&
+      hideButtons
+    ) {
       overflowItems.push(item);
       if (item.name.value === 'linkedStyles') {
         const linkedStylesIdx = toolbarItems.findIndex((item) => item.name.value === 'linkedStyles');
@@ -1135,7 +1155,7 @@ export const makeDefaultItems = ({
       return;
     }
 
-    if (availableWidth < breakpoints.sm && itemsToHideSM.includes(item.name.value) && hideButtons) {
+    if (availableWidth < RESPONSIVE_BREAKPOINTS.sm && itemsToHideSM.includes(item.name.value) && hideButtons) {
       overflowItems.push(item);
       return;
     }

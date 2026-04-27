@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { createDomPainter } from './index.js';
+import { resolveLayout } from '@superdoc/layout-resolved';
 import type { DomPainterOptions, DomPainterInput, PaintSnapshot } from './index.js';
 import type { FlowBlock, Measure, Layout, Fragment, PageMargins, ResolvedLayout } from '@superdoc/contracts';
 
@@ -21,11 +22,18 @@ function createTestPainter(opts: { blocks?: FlowBlock[]; measures?: Measure[] } 
 
   return {
     paint(layout: Layout, mount: HTMLElement, mapping?: unknown) {
+      const effectiveResolved =
+        currentBlocks.length === 0 && currentMeasures.length === 0
+          ? currentResolved
+          : resolveLayout({
+              layout,
+              flowMode: opts.flowMode ?? 'paginated',
+              blocks: currentBlocks,
+              measures: currentMeasures,
+            });
       const input: DomPainterInput = {
-        resolvedLayout: currentResolved,
+        resolvedLayout: effectiveResolved,
         sourceLayout: layout,
-        blocks: currentBlocks,
-        measures: currentMeasures,
       };
       painter.paint(input, mount, mapping as any);
     },

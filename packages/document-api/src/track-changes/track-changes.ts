@@ -1,4 +1,5 @@
 import type { Receipt, TrackChangeInfo, TrackChangesListQuery, TrackChangesListResult } from '../types/index.js';
+import type { StoryLocator } from '../types/story.types.js';
 import type { RevisionGuardOptions } from '../write/write.js';
 import { DocumentApiValidationError } from '../errors.js';
 
@@ -6,14 +7,20 @@ export type TrackChangesListInput = TrackChangesListQuery;
 
 export interface TrackChangesGetInput {
   id: string;
+  /** Story containing the tracked change. Omit for body (backward compatible). */
+  story?: StoryLocator;
 }
 
 export interface TrackChangesAcceptInput {
   id: string;
+  /** Story containing the tracked change. Omit for body (backward compatible). */
+  story?: StoryLocator;
 }
 
 export interface TrackChangesRejectInput {
   id: string;
+  /** Story containing the tracked change. Omit for body (backward compatible). */
+  story?: StoryLocator;
 }
 
 export type TrackChangesAcceptAllInput = Record<string, never>;
@@ -25,8 +32,8 @@ export type TrackChangesRejectAllInput = Record<string, never>;
 // ---------------------------------------------------------------------------
 
 export type ReviewDecideInput =
-  | { decision: 'accept'; target: { id: string } }
-  | { decision: 'reject'; target: { id: string } }
+  | { decision: 'accept'; target: { id: string; story?: StoryLocator } }
+  | { decision: 'reject'; target: { id: string; story?: StoryLocator } }
   | { decision: 'accept'; target: { scope: 'all' } }
   | { decision: 'reject'; target: { scope: 'all' } };
 
@@ -133,11 +140,13 @@ export function executeTrackChangesDecide(
     }
   }
 
+  const story = (target as { story?: StoryLocator }).story;
+
   if (input.decision === 'accept') {
     if (isAll) return adapter.acceptAll({} as TrackChangesAcceptAllInput, options);
-    return adapter.accept({ id: target.id as string }, options);
+    return adapter.accept({ id: target.id as string, ...(story ? { story } : {}) }, options);
   }
 
   if (isAll) return adapter.rejectAll({} as TrackChangesRejectAllInput, options);
-  return adapter.reject({ id: target.id as string }, options);
+  return adapter.reject({ id: target.id as string, ...(story ? { story } : {}) }, options);
 }

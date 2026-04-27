@@ -237,4 +237,131 @@ describe('PresentationInputBridge - Context Menu Handling', () => {
       expect(dispatchSpy).not.toHaveBeenCalled();
     });
   });
+
+  describe('stale hidden-editor rerouting', () => {
+    it('does not double-forward layout-surface composing beforeinput when window fallback is enabled', () => {
+      const event = new InputEvent('beforeinput', {
+        data: 'e',
+        inputType: 'insertCompositionText',
+        bubbles: true,
+        cancelable: true,
+      });
+      Object.defineProperty(event, 'isComposing', { value: true, writable: false });
+
+      const forwardedEvents: string[] = [];
+      targetDom.addEventListener('beforeinput', () => {
+        forwardedEvents.push('beforeinput');
+      });
+
+      bridge.destroy();
+      bridge = new PresentationInputBridge(windowRoot, layoutSurface, getTargetDom, isEditable, undefined, {
+        useWindowFallback: true,
+      });
+      bridge.bind();
+
+      layoutSurface.dispatchEvent(event);
+
+      expect(forwardedEvents).toEqual(['beforeinput']);
+    });
+
+    it('reroutes beforeinput from a stale hidden editor to the active target when window fallback is enabled', () => {
+      const staleBodyEditor = document.createElement('div');
+      staleBodyEditor.className = 'ProseMirror';
+      staleBodyEditor.setAttribute('contenteditable', 'true');
+      document.body.appendChild(staleBodyEditor);
+
+      const staleEvent = new InputEvent('beforeinput', {
+        data: 'a',
+        inputType: 'insertText',
+        bubbles: true,
+        cancelable: true,
+      });
+
+      const targetFocusSpy = vi.spyOn(targetDom, 'focus').mockImplementation(() => {});
+      const targetDispatchSpy = vi.spyOn(targetDom, 'dispatchEvent');
+
+      bridge.destroy();
+      bridge = new PresentationInputBridge(windowRoot, layoutSurface, getTargetDom, isEditable, undefined, {
+        useWindowFallback: true,
+      });
+      bridge.bind();
+
+      staleBodyEditor.dispatchEvent(staleEvent);
+
+      expect(targetFocusSpy).toHaveBeenCalled();
+      expect(targetDispatchSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'beforeinput',
+          data: 'a',
+          inputType: 'insertText',
+        }),
+      );
+      expect(staleEvent.defaultPrevented).toBe(true);
+    });
+
+    it('reroutes non-text keyboard commands from a stale hidden editor to the active target', () => {
+      const staleBodyEditor = document.createElement('div');
+      staleBodyEditor.className = 'ProseMirror';
+      staleBodyEditor.setAttribute('contenteditable', 'true');
+      document.body.appendChild(staleBodyEditor);
+
+      const staleEvent = new KeyboardEvent('keydown', {
+        key: 'Backspace',
+        bubbles: true,
+        cancelable: true,
+      });
+
+      const targetFocusSpy = vi.spyOn(targetDom, 'focus').mockImplementation(() => {});
+      const targetDispatchSpy = vi.spyOn(targetDom, 'dispatchEvent');
+
+      bridge.destroy();
+      bridge = new PresentationInputBridge(windowRoot, layoutSurface, getTargetDom, isEditable, undefined, {
+        useWindowFallback: true,
+      });
+      bridge.bind();
+
+      staleBodyEditor.dispatchEvent(staleEvent);
+
+      expect(targetFocusSpy).toHaveBeenCalled();
+      expect(targetDispatchSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'keydown',
+          key: 'Backspace',
+        }),
+      );
+      expect(staleEvent.defaultPrevented).toBe(true);
+    });
+
+    it('does not reroute keyboard input from a registered UI surface editor', () => {
+      const commentEditor = document.createElement('div');
+      commentEditor.className = 'ProseMirror';
+      commentEditor.setAttribute('contenteditable', 'true');
+
+      const commentDialog = document.createElement('div');
+      commentDialog.setAttribute('data-editor-ui-surface', '');
+      commentDialog.appendChild(commentEditor);
+      document.body.appendChild(commentDialog);
+
+      const staleEvent = new KeyboardEvent('keydown', {
+        key: 'U',
+        bubbles: true,
+        cancelable: true,
+      });
+
+      const targetFocusSpy = vi.spyOn(targetDom, 'focus').mockImplementation(() => {});
+      const targetDispatchSpy = vi.spyOn(targetDom, 'dispatchEvent');
+
+      bridge.destroy();
+      bridge = new PresentationInputBridge(windowRoot, layoutSurface, getTargetDom, isEditable, undefined, {
+        useWindowFallback: true,
+      });
+      bridge.bind();
+
+      commentEditor.dispatchEvent(staleEvent);
+
+      expect(targetFocusSpy).not.toHaveBeenCalled();
+      expect(targetDispatchSpy).not.toHaveBeenCalled();
+      expect(staleEvent.defaultPrevented).toBe(false);
+    });
+  });
 });

@@ -93,4 +93,21 @@ describe('computeNextSectionPropsAtBreak', () => {
     expect(map.get(0)?.columns).toEqual({ count: 2, gap: 48, withSeparator: true });
     expect(map.get(2)?.columns).toEqual({ count: 2, gap: 48, withSeparator: true });
   });
+
+  it('preserves explicit column widths and equalWidth in snapshots', () => {
+    const sourceColumns = { count: 2, gap: 48, widths: [120, 360], equalWidth: false, withSeparator: true };
+    const blocks: FlowBlock[] = [sectionBreak({ id: 'sb-0', columns: sourceColumns })];
+    const map = computeNextSectionPropsAtBreak(blocks);
+    const snapshot = map.get(0);
+
+    expect(snapshot?.columns).toEqual({
+      count: 2,
+      gap: 48,
+      widths: [120, 360],
+      equalWidth: false,
+      withSeparator: true,
+    });
+    expect(snapshot?.columns).not.toBe(sourceColumns);
+    expect(snapshot?.columns?.widths).not.toBe(sourceColumns.widths);
+  });
 });

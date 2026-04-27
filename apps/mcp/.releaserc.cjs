@@ -1,4 +1,28 @@
 /* eslint-env node */
+/*
+ * Commit filter: MCP depends on SDK (workspace:*) and imports engine/session
+ * code directly. Git log must include commits touching those paths so MCP
+ * picks up SDK/core fixes. This shared helper patches git-log-parser to
+ * expand path coverage. It REPLACES semantic-release-commit-filter — do not
+ * use both (the filter restricts to CWD, which undoes the expansion).
+ *
+ * Keep in sync with .github/workflows/release-mcp.yml paths and
+ * .github/package-impact-map.md.
+ */
+require('../../scripts/semantic-release/patch-commit-filter.cjs')([
+  'apps/mcp',
+  'packages/sdk',
+  'apps/cli',
+  'packages/document-api',
+  'packages/superdoc',
+  'packages/super-editor',
+  'packages/layout-engine',
+  'packages/word-layout',
+  'packages/preset-geometry',
+  'shared',
+  'pnpm-workspace.yaml',
+]);
+
 const branch = process.env.GITHUB_REF_NAME || process.env.CI_COMMIT_BRANCH;
 
 const branches = [
@@ -17,7 +41,6 @@ const config = {
   branches,
   tagFormat: 'mcp-v${version}',
   plugins: [
-    'semantic-release-commit-filter',
     '@semantic-release/commit-analyzer',
     notesPlugin,
     ['@semantic-release/npm'],

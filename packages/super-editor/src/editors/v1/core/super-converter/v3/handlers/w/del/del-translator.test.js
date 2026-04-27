@@ -30,7 +30,7 @@ describe('w:del translator', () => {
   describe('encode', () => {
     const mockNode = { elements: [{ text: 'deleted text' }] };
 
-    function encodeWith({ converter, id = '123' } = {}) {
+    function encodeWith({ converter, id = '123', filename } = {}) {
       const mockSubNodes = [{ content: [{ type: 'text', text: 'deleted text' }] }];
       const mockNodeListHandler = { handler: vi.fn().mockReturnValue(mockSubNodes) };
 
@@ -46,6 +46,7 @@ describe('w:del translator', () => {
           nodeListHandler: mockNodeListHandler,
           extraParams: { node: mockNode },
           converter,
+          filename,
           path: [],
         },
         { ...encodedAttrs },
@@ -87,6 +88,19 @@ describe('w:del translator', () => {
       const attrs = getMarkAttrs(result);
 
       expect(attrs.id).toBe('shared-uuid-abc');
+      expect(attrs.sourceId).toBe('123');
+    });
+
+    it('prefers the per-part trackedChangeIdMapsByPart entry when filename is provided', () => {
+      const converter = {
+        trackedChangeIdMap: new Map([['123', 'body-uuid']]),
+        trackedChangeIdMapsByPart: new Map([['word/footnotes.xml', new Map([['123', 'footnote-uuid']])]]),
+      };
+
+      const result = encodeWith({ converter, filename: 'footnotes.xml' });
+      const attrs = getMarkAttrs(result);
+
+      expect(attrs.id).toBe('footnote-uuid');
       expect(attrs.sourceId).toBe('123');
     });
   });

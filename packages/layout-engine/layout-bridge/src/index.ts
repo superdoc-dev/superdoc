@@ -56,13 +56,25 @@ export {
 export type { HeaderFooterBatch, DigitBucket } from './layoutHeaderFooter';
 export { findWordBoundaries, findParagraphBoundaries } from './text-boundaries';
 export type { BoundaryRange } from './text-boundaries';
+export {
+  buildSectionAwareHeaderFooterLayoutKey,
+  buildSectionContentWidth,
+  buildEffectiveHeaderFooterRefsBySection,
+  collectReferencedHeaderFooterRIds,
+  buildSectionAwareHeaderFooterMeasurementGroups,
+} from './sectionAwareHeaderFooter';
+export type {
+  HeaderFooterSectionKind,
+  HeaderFooterRefs,
+  SectionAwareHeaderFooterMeasurementGroup,
+} from './sectionAwareHeaderFooter';
 export { incrementalLayout, measureCache, normalizeMargin } from './incrementalLayout';
 export type { HeaderFooterLayoutResult, IncrementalLayoutResult } from './incrementalLayout';
 // Re-export computeDisplayPageNumber from layout-engine for section-aware page numbering
 export { computeDisplayPageNumber } from '@superdoc/layout-engine';
 export type { DisplayPageInfo, HeaderFooterConstraints } from '@superdoc/layout-engine';
 export { remeasureParagraph } from './remeasure';
-export { measureCharacterX } from './text-measurement';
+export { measureCharacterX, sliceRunsForLine } from './text-measurement';
 export { clickToPositionDom, findPageElement } from './dom-mapping';
 export { isListItem, getWordLayoutConfig, calculateTextStartIndent, extractParagraphIndent } from './list-indent-utils';
 export type { TextIndentCalculationParams } from './list-indent-utils';
@@ -131,10 +143,6 @@ export type { FallbackReason, SafetyConfig } from './safety-net';
 // Focus Watchdog
 export { FocusWatchdog } from './focus-watchdog';
 export type { FocusWatchdogConfig } from './focus-watchdog';
-
-// Benchmarks
-export { TypingPerfBenchmark } from './benchmarks';
-export type { BenchmarkResult, BenchmarkScenario } from './benchmarks';
 
 // Paragraph Hash Utilities
 export {
@@ -576,6 +584,8 @@ export function selectionToRects(
           // (accounts for gaps in PM positions between runs)
           const charOffsetFrom = pmPosToCharOffset(block, line, sliceFrom);
           const charOffsetTo = pmPosToCharOffset(block, line, sliceTo);
+          const visualCharOffsetFrom = pmPosToVisualCharOffset(block, line, sliceFrom);
+          const visualCharOffsetTo = pmPosToVisualCharOffset(block, line, sliceTo);
           // Detect list items by checking for marker presence
           const markerWidth = fragment.markerWidth ?? measure.marker?.markerWidth ?? 0;
           const isListItemFlag = isListItem(markerWidth, block);
@@ -589,7 +599,7 @@ export function selectionToRects(
           const startX = mapPmToX(
             block,
             line,
-            charOffsetFrom,
+            visualCharOffsetFrom,
             fragment.width,
             alignmentOverride,
             isFirstLine,
@@ -598,7 +608,7 @@ export function selectionToRects(
           const endX = mapPmToX(
             block,
             line,
-            charOffsetTo,
+            visualCharOffsetTo,
             fragment.width,
             alignmentOverride,
             isFirstLine,
@@ -676,6 +686,8 @@ export function selectionToRects(
               sliceTo,
               charOffsetFrom,
               charOffsetTo,
+              visualCharOffsetFrom,
+              visualCharOffsetTo,
               startX,
               endX,
               rect: { x: rectX, y: rectY, width: rectWidth, height: line.lineHeight },
@@ -686,8 +698,15 @@ export function selectionToRects(
                 Math.max(charOffsetFrom, charOffsetTo),
               ),
               indent: (block.attrs as { indent?: unknown } | undefined)?.indent,
+              alignment: (block.attrs as { alignment?: unknown } | undefined)?.alignment,
               marker: measure.marker,
+              markerWidth,
+              isListItemFlag,
+              alignmentOverride,
               lineSegments: line.segments,
+              lineSpaceCount: (line as { spaceCount?: unknown }).spaceCount,
+              lineNaturalWidth: (line as { naturalWidth?: unknown }).naturalWidth,
+              lineMaxWidth: (line as { maxWidth?: unknown }).maxWidth,
             });
           }
         });
@@ -903,13 +922,15 @@ export function selectionToRects(
 
                 const charOffsetFrom = pmPosToCharOffset(info.block, line, sliceFrom);
                 const charOffsetTo = pmPosToCharOffset(info.block, line, sliceTo);
+                const visualCharOffsetFrom = pmPosToVisualCharOffset(info.block, line, sliceFrom);
+                const visualCharOffsetTo = pmPosToVisualCharOffset(info.block, line, sliceTo);
                 const availableWidth = Math.max(1, cellMeasure.width - padding.left - padding.right);
                 const isFirstLine = index === 0;
                 const cellMarkerTextWidth = info.measure?.marker?.markerTextWidth ?? undefined;
                 const startX = mapPmToX(
                   info.block,
                   line,
-                  charOffsetFrom,
+                  visualCharOffsetFrom,
                   availableWidth,
                   alignmentOverride,
                   isFirstLine,
@@ -918,7 +939,7 @@ export function selectionToRects(
                 const endX = mapPmToX(
                   info.block,
                   line,
-                  charOffsetTo,
+                  visualCharOffsetTo,
                   availableWidth,
                   alignmentOverride,
                   isFirstLine,
@@ -1325,6 +1346,83 @@ export function pmPosToCharOffset(block: FlowBlock, line: Line, pmPos: number): 
   return charOffset;
 }
 
+/**
+ * Convert a ProseMirror position to a rendered character offset within a line.
+ *
+ * Unlike {@link pmPosToCharOffset}, this helper includes visual-only text runs
+ * that do not carry PM positions. That matters for selection highlighting when
+ * a line starts with rendered chrome such as a synthetic footnote number:
+ * the marker consumes horizontal space in the painter, but it is not part of
+ * the editable PM story. Using a PM-only offset would place the highlight too
+ * far left by the marker's width.
+ *
+ * The returned offset is intended for visual X mapping, not for slicing PM text.
+ */
+export function pmPosToVisualCharOffset(block: FlowBlock, line: Line, pmPos: number): number {
+  if (block.kind !== 'paragraph') return 0;
+
+  let visualOffset = 0;
+
+  for (let runIndex = line.fromRun; runIndex <= line.toRun; runIndex += 1) {
+    const run = block.runs[runIndex];
+    if (!run) continue;
+
+    const text =
+      'src' in run ||
+      run.kind === 'lineBreak' ||
+      run.kind === 'break' ||
+      run.kind === 'fieldAnnotation' ||
+      run.kind === 'math'
+        ? ''
+        : (run.text ?? '');
+    const runTextLength = text.length;
+    if (runTextLength === 0) {
+      continue;
+    }
+
+    const isFirstRun = runIndex === line.fromRun;
+    const isLastRun = runIndex === line.toRun;
+    const lineStartChar = isFirstRun ? line.fromChar : 0;
+    const lineEndChar = isLastRun ? line.toChar : runTextLength;
+    const runSliceCharCount = lineEndChar - lineStartChar;
+    if (runSliceCharCount <= 0) {
+      continue;
+    }
+
+    const runPmStart = run.pmStart ?? null;
+    const runPmEnd = run.pmEnd ?? (runPmStart != null ? runPmStart + runTextLength : null);
+
+    if (runPmStart == null || runPmEnd == null) {
+      visualOffset += runSliceCharCount;
+      continue;
+    }
+
+    const runPmRange = runPmEnd - runPmStart;
+    const runSlicePmStart = runPmStart + (lineStartChar / runTextLength) * runPmRange;
+    const runSlicePmEnd = runPmStart + (lineEndChar / runTextLength) * runPmRange;
+
+    if (pmPos >= runSlicePmStart && pmPos <= runSlicePmEnd) {
+      const runSlicePmRange = runSlicePmEnd - runSlicePmStart;
+      if (runSlicePmRange <= 0) {
+        return visualOffset;
+      }
+
+      const pmOffsetInSlice = pmPos - runSlicePmStart;
+      const visualOffsetInSlice = Math.round((pmOffsetInSlice / runSlicePmRange) * runSliceCharCount);
+      return visualOffset + Math.min(visualOffsetInSlice, runSliceCharCount);
+    }
+
+    if (pmPos > runSlicePmEnd) {
+      visualOffset += runSliceCharCount;
+      continue;
+    }
+
+    return visualOffset;
+  }
+
+  return visualOffset;
+}
+
 // determineColumn, findLineIndexAtY are now in position-hit.ts and re-exported above.
 
 const lineHeightBeforeIndex = (measure: Measure, absoluteLineIndex: number): number => {
@@ -1435,76 +1533,6 @@ const mapPmToX = (
 
   // Use shared text measurement utility for pixel-perfect accuracy
   return measureCharacterX(block, line, offset, availableWidth, alignmentOverride);
-};
-
-const _sliceRunsForLine = (block: FlowBlock, line: Line): Run[] => {
-  const result: Run[] = [];
-
-  if (block.kind !== 'paragraph') return result;
-
-  for (let runIndex = line.fromRun; runIndex <= line.toRun; runIndex += 1) {
-    const run = block.runs[runIndex];
-    if (!run) continue;
-
-    if (run.kind === 'tab') {
-      result.push(run);
-      continue;
-    }
-
-    // FIXED: ImageRun handling - images are atomic units, no slicing needed
-    if ('src' in run) {
-      result.push(run);
-      continue;
-    }
-
-    // LineBreakRun handling - line breaks are atomic units, no slicing needed
-    if (run.kind === 'lineBreak') {
-      result.push(run);
-      continue;
-    }
-
-    // BreakRun handling - breaks are atomic units, no slicing needed
-    if (run.kind === 'break') {
-      result.push(run);
-      continue;
-    }
-
-    // FieldAnnotationRun handling - field annotations are atomic units, no slicing needed
-    if (run.kind === 'fieldAnnotation') {
-      result.push(run);
-      continue;
-    }
-
-    // MathRun handling - math runs are atomic units, no slicing needed
-    if (run.kind === 'math') {
-      result.push(run);
-      continue;
-    }
-
-    const text = run.text ?? '';
-    const isFirstRun = runIndex === line.fromRun;
-    const isLastRun = runIndex === line.toRun;
-
-    if (isFirstRun || isLastRun) {
-      const start = isFirstRun ? line.fromChar : 0;
-      const end = isLastRun ? line.toChar : text.length;
-      const slice = text.slice(start, end);
-      const pmStart =
-        run.pmStart != null ? run.pmStart + start : run.pmEnd != null ? run.pmEnd - (text.length - start) : undefined;
-      const pmEnd =
-        run.pmStart != null ? run.pmStart + end : run.pmEnd != null ? run.pmEnd - (text.length - end) : undefined;
-      result.push({
-        ...run,
-        text: slice,
-        pmStart,
-        pmEnd,
-      });
-    } else {
-      result.push(run);
-    }
-  }
-
-  return result;
 };
 
 // isRtlBlock is now in position-hit.ts and re-exported above.

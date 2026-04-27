@@ -28,6 +28,7 @@ const encode = (params) => {
     attrs: {
       instruction: node.attributes?.instruction || '',
       marksAsAttrs: node.marks || [],
+      fieldInstance: node.attributes?.fieldInstance ?? null,
     },
     content: processedText,
   };

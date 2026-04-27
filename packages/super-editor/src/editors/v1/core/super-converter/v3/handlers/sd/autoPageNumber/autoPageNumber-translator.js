@@ -24,6 +24,7 @@ const encode = (params) => {
     type: 'page-number',
     attrs: {
       marksAsAttrs: marks,
+      fieldInstance: node.attributes?.fieldInstance ?? null,
     },
   };
 

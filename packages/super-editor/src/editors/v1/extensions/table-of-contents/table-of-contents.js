@@ -193,6 +193,10 @@ export const TableOfContents = Node.create({
         default: true,
         rendered: false,
       },
+      fieldInstance: {
+        default: null,
+        rendered: false,
+      },
     };
   },
 });

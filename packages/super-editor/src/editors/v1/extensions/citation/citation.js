@@ -50,6 +50,10 @@ export const Citation = Node.create({
         default: null,
         rendered: false,
       },
+      fieldInstance: {
+        default: null,
+        rendered: false,
+      },
     };
   },
 

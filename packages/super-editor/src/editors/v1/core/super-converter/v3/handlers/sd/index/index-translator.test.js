@@ -76,6 +76,27 @@ describe('sd:index translator', () => {
       expect(result.attrs.instruction).toBe('');
       expect(result.attrs.instructionTokens).toBeNull();
     });
+
+    it('forwards attributes.fieldInstance to attrs.fieldInstance', () => {
+      const mockNodeListHandler = { handler: vi.fn().mockReturnValue([]) };
+      const stubFieldInstance = { family: 'INDEX', rawInstruction: 'INDEX', mutation: { imported: true } };
+
+      const result = config.encode({
+        nodes: [{ name: 'sd:index', attributes: { fieldInstance: stubFieldInstance }, elements: [] }],
+        nodeListHandler: mockNodeListHandler,
+      });
+
+      expect(result.attrs.fieldInstance).toBe(stubFieldInstance);
+    });
+
+    it('defaults attrs.fieldInstance to null when attributes has no fieldInstance', () => {
+      const mockNodeListHandler = { handler: vi.fn().mockReturnValue([]) };
+      const result = config.encode({
+        nodes: [{ name: 'sd:index', attributes: {}, elements: [] }],
+        nodeListHandler: mockNodeListHandler,
+      });
+      expect(result.attrs.fieldInstance).toBeNull();
+    });
   });
 
   describe('decode', () => {

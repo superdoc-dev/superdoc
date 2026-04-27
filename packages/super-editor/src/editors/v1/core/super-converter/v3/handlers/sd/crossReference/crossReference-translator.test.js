@@ -137,4 +137,33 @@ describe('crossReference import resolvedText extraction (SD-2495)', () => {
 
     expect(encoded.attrs.resolvedText).toBe('4(b)(2)');
   });
+
+  it('forwards attributes.fieldInstance to attrs.fieldInstance', () => {
+    const stubFieldInstance = { family: 'REF', rawInstruction: 'REF foo', mutation: { imported: true } };
+    const xmlNode = {
+      name: 'sd:crossReference',
+      type: 'element',
+      attributes: { instruction: 'REF foo', fieldInstance: stubFieldInstance },
+      elements: [],
+    };
+    const encoded = crossReferenceTranslator.encode({
+      nodes: [xmlNode],
+      nodeListHandler: { handler: () => [] },
+    });
+    expect(encoded.attrs.fieldInstance).toBe(stubFieldInstance);
+  });
+
+  it('defaults attrs.fieldInstance to null when attributes has no fieldInstance', () => {
+    const xmlNode = {
+      name: 'sd:crossReference',
+      type: 'element',
+      attributes: { instruction: 'REF foo' },
+      elements: [],
+    };
+    const encoded = crossReferenceTranslator.encode({
+      nodes: [xmlNode],
+      nodeListHandler: { handler: () => [] },
+    });
+    expect(encoded.attrs.fieldInstance).toBeNull();
+  });
 });

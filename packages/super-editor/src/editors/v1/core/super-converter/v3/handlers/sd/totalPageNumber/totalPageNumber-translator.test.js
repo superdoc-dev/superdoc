@@ -61,6 +61,7 @@ describe('sd:totalPageNumber translator', () => {
         attrs: {
           marksAsAttrs: marks,
           importedCachedText: null,
+          fieldInstance: null,
         },
       });
     });

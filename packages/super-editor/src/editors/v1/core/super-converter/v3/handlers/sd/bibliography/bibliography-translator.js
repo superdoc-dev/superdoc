@@ -27,6 +27,7 @@ const encode = (params) => {
     type: SD_NODE_NAME,
     attrs: {
       instruction: node.attributes?.instruction || '',
+      fieldInstance: node.attributes?.fieldInstance ?? null,
     },
     content: processedContent,
   };

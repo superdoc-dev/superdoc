@@ -4,6 +4,7 @@
 import { getInstructionPreProcessor } from './fld-preprocessors';
 import { carbonCopy } from '@core/utilities/carbonCopy.js';
 import { buildFieldInstanceFromImport, readFieldFlags } from './build-field-instance.js';
+import { attachFieldInstanceToFieldNodes, cloneOoxmlWithoutFieldInstance } from './attach-field-instance.js';
 
 const SKIP_FIELD_PROCESSING_NODE_NAMES = new Set(['w:drawing', 'w:pict']);
 
@@ -89,6 +90,21 @@ export const preProcessNodesForFldChar = (nodes = [], docx) => {
       let outputNodes;
       if (combinedResult.handled) {
         outputNodes = combinedResult.nodes;
+        // Attach the canonical FieldInstance to the typed sd:* element(s)
+        // the family preprocessor emitted. Export still reads legacy typed
+        // attrs in Phase 0; the substrate payload is carried alongside so
+        // Phase 1 / 3 can consume it without changing the import path.
+        const fieldInstance = buildFieldInstanceFromImport({
+          representation: 'complex',
+          instructionText: currentField.instrText.trim(),
+          resultFragments: collectedNodes,
+          originalXml: rawCollectedNodes,
+          dirty: currentField.dirty ?? false,
+          locked: currentField.locked ?? false,
+          part: FIELD_PART,
+          importIndex: importIndex++,
+        });
+        attachFieldInstanceToFieldNodes(outputNodes, fieldInstance);
       } else {
         // Unknown / unsupported field family: wrap the result content in a
         // sd:rawField element holding the canonical FieldInstance payload.
@@ -112,7 +128,13 @@ export const preProcessNodesForFldChar = (nodes = [], docx) => {
       } else {
         // We are inside another field, so add the combined nodes to the parent collection.
         collectedNodesStack[collectedNodesStack.length - 1].push(...outputNodes);
-        rawCollectedNodesStack[rawCollectedNodesStack.length - 1].push(...outputNodes);
+        // The parent's source.originalXml capture must not carry the
+        // fieldInstance attribute we just attached (it is a JS object and
+        // would serialize as an invalid XML attribute on passthrough).
+        // Push fieldInstance-stripped clones into the raw stack instead.
+        rawCollectedNodesStack[rawCollectedNodesStack.length - 1].push(
+          ...outputNodes.map((n) => cloneOoxmlWithoutFieldInstance(n)),
+        );
       }
     } else {
       // An unmatched 'end' indicates a field from a parent node is closing.
@@ -177,9 +199,26 @@ export const preProcessNodesForFldChar = (nodes = [], docx) => {
         const instructionPreProcessor = getInstructionPreProcessor(instructionType);
         if (instructionPreProcessor) {
           const processed = instructionPreProcessor(node.elements ?? [], instr, docx, null);
+          // Same FieldInstance attachment as the complex-field handled path.
+          const { dirty: simpleDirty, locked: simpleLocked } = readFieldFlags(node);
+          const fieldInstance = buildFieldInstanceFromImport({
+            representation: 'simple',
+            instructionText: instr,
+            resultFragments: node.elements ?? [],
+            originalXml: rawNode,
+            dirty: simpleDirty,
+            locked: simpleLocked,
+            part: FIELD_PART,
+            importIndex: importIndex++,
+          });
+          attachFieldInstanceToFieldNodes(processed, fieldInstance);
           if (collecting) {
             collectedNodesStack[collectedNodesStack.length - 1].push(...processed);
-            rawCollectedNodesStack[rawCollectedNodesStack.length - 1].push(...processed);
+            // Strip fieldInstance from the parent's source.originalXml capture
+            // (see complex-field handled branch for the same reason).
+            rawCollectedNodesStack[rawCollectedNodesStack.length - 1].push(
+              ...processed.map((n) => cloneOoxmlWithoutFieldInstance(n)),
+            );
           } else {
             processedNodes.push(...processed);
           }
@@ -200,7 +239,10 @@ export const preProcessNodesForFldChar = (nodes = [], docx) => {
         });
         if (collecting) {
           collectedNodesStack[collectedNodesStack.length - 1].push(rawElement);
-          rawCollectedNodesStack[rawCollectedNodesStack.length - 1].push(rawElement);
+          // Strip fieldInstance from the parent's source.originalXml capture
+          // (a nested rawField inside a parent rawField would otherwise
+          // serialize its fieldInstance object as an XML attribute).
+          rawCollectedNodesStack[rawCollectedNodesStack.length - 1].push(cloneOoxmlWithoutFieldInstance(rawElement));
         } else {
           processedNodes.push(rawElement);
         }

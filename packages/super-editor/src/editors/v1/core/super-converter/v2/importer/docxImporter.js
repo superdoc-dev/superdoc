@@ -19,6 +19,11 @@ import { documentStatFieldHandlerEntity } from './documentStatFieldImporter.js';
 import { pageReferenceEntity } from './pageReferenceImporter.js';
 import { crossReferenceEntity } from './crossReferenceImporter.js';
 import { rawFieldEntity } from './rawFieldImporter.js';
+import { sequenceFieldEntity } from './sequenceFieldImporter.js';
+import { citationEntity } from './citationImporter.js';
+import { authorityEntryEntity } from './authorityEntryImporter.js';
+import { tableOfAuthoritiesEntity } from './tableOfAuthoritiesImporter.js';
+import { tableOfContentsEntryEntity } from './tableOfContentsEntryImporter.js';
 import { pictNodeHandlerEntity } from './pictNodeImporter.js';
 import { importCommentData } from './documentCommentsImporter.js';
 import { buildTrackedChangeIdMap, buildTrackedChangeIdMapsByPart } from './trackedChangeIdMapper.js';
@@ -257,6 +262,11 @@ export const defaultNodeListHandler = () => {
     pageReferenceEntity,
     crossReferenceEntity,
     rawFieldEntity,
+    sequenceFieldEntity,
+    citationEntity,
+    authorityEntryEntity,
+    tableOfAuthoritiesEntity,
+    tableOfContentsEntryEntity,
     permStartHandlerEntity,
     permEndHandlerEntity,
     mathNodeHandlerEntity,

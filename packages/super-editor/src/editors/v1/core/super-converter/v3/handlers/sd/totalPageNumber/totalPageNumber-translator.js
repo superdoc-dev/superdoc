@@ -31,6 +31,7 @@ const encode = (params) => {
     attrs: {
       marksAsAttrs: marks,
       importedCachedText,
+      fieldInstance: node.attributes?.fieldInstance ?? null,
     },
   };
 

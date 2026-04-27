@@ -425,7 +425,7 @@ export function getHeaderFooterIdForPage(
   });
   if (!variantType) return null;
 
-  const resolveVariantId = (ids: SectionHeaderFooterIds | undefined): string | null => {
+  const resolveVariantId = (ids: Partial<SectionHeaderFooterIds> | undefined): string | null => {
     if (!ids) return null;
     const direct = ids[variantType];
     if (direct) return direct;

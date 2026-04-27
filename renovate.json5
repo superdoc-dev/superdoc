@@ -8,6 +8,13 @@
   ],
   "schedule": ["before 7am on monday"],
   "prConcurrentLimit": 5,
+  "ignorePaths": [
+    "**/node_modules/**",
+    "**/bower_components/**",
+    "demos/**",
+    "examples/**",
+    "devtools/visual-testing/**"
+  ],
   "ignoreDeps": ["pdfjs-dist", "@hocuspocus/provider"],
   "packageRules": [
     {
@@ -18,12 +25,7 @@
       "groupName": "dev dependencies (patch)"
     },
     {
-      "description": "Ignore demos and examples — not shipped to users",
-      "matchFileNames": ["demos/**", "examples/**"],
-      "enabled": false
-    },
-    {
-      "description": "Don't touch vite — overridden with rolldown-vite",
+      "description": "Don't touch vite - overridden with rolldown-vite",
       "matchPackageNames": ["vite"],
       "enabled": false
     },

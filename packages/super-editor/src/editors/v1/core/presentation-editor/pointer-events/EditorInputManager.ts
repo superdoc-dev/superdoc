@@ -2004,17 +2004,21 @@ export class EditorInputManager {
   #findStructuredContentBlockAtPos(doc: ProseMirrorNode, pos: number): StructuredContentSelection | null {
     if (!Number.isFinite(pos)) return null;
 
-    const $pos = doc.resolve(pos);
-    for (let depth = $pos.depth; depth > 0; depth--) {
-      const node = $pos.node(depth);
-      if (node.type?.name === 'structuredContentBlock') {
-        return {
-          node,
-          pos: $pos.before(depth),
-          start: $pos.start(depth),
-          end: $pos.end(depth),
-        };
+    try {
+      const $pos = doc.resolve(pos);
+      for (let depth = $pos.depth; depth > 0; depth--) {
+        const node = $pos.node(depth);
+        if (node.type?.name === 'structuredContentBlock') {
+          return {
+            node,
+            pos: $pos.before(depth),
+            start: $pos.start(depth),
+            end: $pos.end(depth),
+          };
+        }
       }
+    } catch {
+      return null;
     }
 
     return null;
@@ -2069,17 +2073,21 @@ export class EditorInputManager {
   #findStructuredContentInlineAtPos(doc: ProseMirrorNode, pos: number): StructuredContentSelection | null {
     if (!Number.isFinite(pos)) return null;
 
-    const $pos = doc.resolve(pos);
-    for (let depth = $pos.depth; depth > 0; depth--) {
-      const node = $pos.node(depth);
-      if (node.type?.name === 'structuredContent') {
-        return {
-          node,
-          pos: $pos.before(depth),
-          start: $pos.start(depth),
-          end: $pos.end(depth),
-        };
+    try {
+      const $pos = doc.resolve(pos);
+      for (let depth = $pos.depth; depth > 0; depth--) {
+        const node = $pos.node(depth);
+        if (node.type?.name === 'structuredContent') {
+          return {
+            node,
+            pos: $pos.before(depth),
+            start: $pos.start(depth),
+            end: $pos.end(depth),
+          };
+        }
       }
+    } catch {
+      return null;
     }
 
     return null;

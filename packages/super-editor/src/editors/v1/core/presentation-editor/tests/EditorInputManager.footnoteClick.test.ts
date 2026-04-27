@@ -79,6 +79,15 @@ describe('EditorInputManager - Footnote click selection behavior', () => {
   beforeEach(() => {
     originalElementFromPoint = document.elementFromPoint?.bind(document);
     mockCommentsPluginState.activeThreadId = null;
+    (resolvePointerPositionHit as unknown as Mock).mockReturnValue({
+      pos: 12,
+      layoutEpoch: 1,
+      pageIndex: 0,
+      blockId: 'body-1',
+      column: 0,
+      lineIndex: -1,
+    });
+    (clickToPosition as unknown as Mock).mockReturnValue({ pos: 12, layoutEpoch: 1, pageIndex: 0, blockId: 'body-1' });
     viewportHost = document.createElement('div');
     viewportHost.className = 'presentation-editor__viewport';
     visibleHost = document.createElement('div');

@@ -11,7 +11,7 @@ import type {
   ParagraphMeasure,
   ParagraphBlock,
 } from '@superdoc/contracts';
-import { OOXML_PCT_DIVISOR, rescaleColumnWidths } from '@superdoc/contracts';
+import { OOXML_PCT_DIVISOR, rescaleColumnWidths, resolveTableWidthAttr } from '@superdoc/contracts';
 import type { PageState } from './paginator.js';
 import { computeFragmentPmRange, extractBlockPmRange } from './layout-utils.js';
 import { describeCellRenderBlocks, createCellSliceCursor, computeFullCellContentHeight } from './table-cell-slice.js';
@@ -137,24 +137,6 @@ function applyTableIndent(x: number, width: number, indent: number, columnWidth:
   };
 }
 
-function resolveTableWidthValue(attrs: TableBlock['attrs']): { width: number; type?: string } | null {
-  const tableWidth = attrs?.tableWidth;
-  if (!tableWidth || typeof tableWidth !== 'object') {
-    return null;
-  }
-
-  const width = (tableWidth as Record<string, unknown>).width ?? (tableWidth as Record<string, unknown>).value;
-  if (typeof width !== 'number' || !Number.isFinite(width) || width <= 0) {
-    return null;
-  }
-
-  const type = (tableWidth as Record<string, unknown>).type;
-  return {
-    width,
-    type: typeof type === 'string' ? type : undefined,
-  };
-}
-
 export function resolveRenderedTableWidth(
   columnWidth: number,
   measuredWidth: number,
@@ -162,7 +144,7 @@ export function resolveRenderedTableWidth(
 ): number {
   const safeMeasuredWidth =
     Number.isFinite(measuredWidth) && measuredWidth > 0 ? measuredWidth : Math.max(0, columnWidth);
-  const configuredWidth = resolveTableWidthValue(attrs);
+  const configuredWidth = resolveTableWidthAttr(attrs?.tableWidth);
   if (!configuredWidth) {
     return safeMeasuredWidth;
   }

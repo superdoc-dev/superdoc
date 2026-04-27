@@ -728,6 +728,31 @@ describe('layoutTableBlock', () => {
       expect(rightFragment.x).toBe(300);
     });
 
+    it('keeps left-aligned wide tables at the column origin while preserving overflow width', () => {
+      const measure = createMockTableMeasure([300, 300], [20]);
+      const fragments: TableFragment[] = [];
+      const mockPage = { fragments };
+      const block = createMockTableBlock(1);
+
+      layoutTableBlock({
+        block,
+        measure,
+        columnWidth: 500,
+        ensurePage: () => ({
+          page: mockPage,
+          columnIndex: 0,
+          cursorY: 0,
+          contentBottom: 1000,
+        }),
+        advanceColumn: (state) => state,
+        columnX: () => 0,
+      });
+
+      expect(fragments).toHaveLength(1);
+      expect(fragments[0].x).toBe(0);
+      expect(fragments[0].width).toBe(600);
+    });
+
     it('allows centered wide tables to overflow into both margins', () => {
       const measure = createMockTableMeasure([300, 300], [20]);
       const fragments: TableFragment[] = [];
@@ -4241,6 +4266,36 @@ describe('layoutTableBlock', () => {
   });
 
   describe('column width rescaling (SD-1859)', () => {
+    it('does not rescale auto-width tables whose measured grid exceeds the section width', () => {
+      const block = createMockTableBlock(2);
+      const measure = createMockTableMeasure([250, 200, 250], [30, 30]);
+      // measure.totalWidth = 700, but no tableWidth attr means auto-width semantics
+
+      const fragments: TableFragment[] = [];
+      const mockPage = { fragments };
+
+      layoutTableBlock({
+        block,
+        measure,
+        columnWidth: 450,
+        ensurePage: () => ({
+          page: mockPage,
+          columnIndex: 0,
+          cursorY: 0,
+          contentBottom: 1000,
+        }),
+        advanceColumn: (state) => state,
+        columnX: () => 0,
+      });
+
+      expect(fragments).toHaveLength(1);
+      const fragment = fragments[0];
+
+      expect(fragment.width).toBe(700);
+      expect(fragment.x).toBe(0);
+      expect(fragment.columnWidths).toBeUndefined();
+    });
+
     it('should rescale column widths when table is wider than section content width', () => {
       // Simulate a table measured at landscape width (700px) but rendered in
       // a portrait section (450px). Column widths should be rescaled to fit.

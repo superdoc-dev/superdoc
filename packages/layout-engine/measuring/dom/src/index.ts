@@ -65,6 +65,7 @@ import {
   type TableBorderValue,
   effectiveTableCellSpacing,
   LeaderDecoration,
+  resolveTableWidthAttr,
   resolveBaseFontSizeForVerticalText,
 } from '@superdoc/contracts';
 import type { WordParagraphLayoutOutput } from '@superdoc/word-layout';
@@ -2592,36 +2593,6 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
 }
 
 /**
- * Validates and extracts a numeric value from a table width attribute.
- *
- * Performs runtime validation to ensure the value is a valid, finite number
- * that can be used in calculations. This guards against NaN, Infinity, and
- * invalid numeric values that could break layout calculations.
- *
- * @param attr - Table width attribute object (potentially unsafe)
- * @returns Valid numeric value or undefined if validation fails
- *
- * @example
- * ```typescript
- * validateTableWidthValue({ width: 2500, type: 'pct' }) // Returns: 2500
- * validateTableWidthValue({ value: 300, type: 'px' }) // Returns: 300
- * validateTableWidthValue({ width: NaN, type: 'pct' }) // Returns: undefined
- * validateTableWidthValue({ width: -100, type: 'pct' }) // Returns: undefined
- * validateTableWidthValue({}) // Returns: undefined
- * ```
- */
-function validateTableWidthValue(attr: TableWidthAttr): number | undefined {
-  const value = attr.width ?? attr.value;
-
-  // Must be a number, finite (not NaN/Infinity), and positive
-  if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
-    return value;
-  }
-
-  return undefined;
-}
-
-/**
  * Resolves table width from OOXML attributes to actual pixel width.
  *
  * Handles two types of width specifications:
@@ -2652,27 +2623,19 @@ function validateTableWidthValue(attr: TableWidthAttr): number | undefined {
  * ```
  */
 function resolveTableWidth(attrs: TableBlock['attrs'], maxWidth: number): number | undefined {
-  // Type guard: validate attrs.tableWidth matches TableWidthAttr structure
-  const tableWidthAttr = attrs?.tableWidth;
-  if (!tableWidthAttr || typeof tableWidthAttr !== 'object') {
+  const tableWidthAttr = resolveTableWidthAttr(attrs?.tableWidth);
+  if (!tableWidthAttr) {
     return undefined;
   }
 
-  const typedAttr = tableWidthAttr as TableWidthAttr;
-  const validValue = validateTableWidthValue(typedAttr);
-
-  if (validValue === undefined) {
-    return undefined;
-  }
-
-  if (typedAttr.type === 'pct') {
+  if (tableWidthAttr.type === 'pct') {
     // Convert OOXML percentage to pixels
     // OOXML_PCT_DIVISOR (5000) = 100%
-    return Math.round(maxWidth * (validValue / OOXML_PCT_DIVISOR));
-  } else if (typedAttr.type === 'px' || typedAttr.type === 'pixel' || typedAttr.type === 'dxa') {
+    return Math.round(maxWidth * (tableWidthAttr.width / OOXML_PCT_DIVISOR));
+  } else if (tableWidthAttr.type === 'px' || tableWidthAttr.type === 'pixel' || tableWidthAttr.type === 'dxa') {
     // Explicit pixel width - use directly
     // Note: 'dxa' values are already converted to pixels by tbl-translator during import
-    return validValue;
+    return tableWidthAttr.width;
   }
 
   return undefined;

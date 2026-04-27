@@ -165,6 +165,20 @@ test('@behavior SD-2358: SuperDoc.navigateTo accepts body bookmark targets', asy
   expect(selAfter.from).not.toBe(selBefore.from);
 });
 
+test('@behavior SD-2358: SuperDoc.navigateTo returns false for missing bookmark targets', async ({ superdoc }) => {
+  await loadDocumentAndWait(superdoc, BODY_BOOKMARK_DOC_PATH);
+
+  const result = await superdoc.page.evaluate(() =>
+    (window as any).superdoc.navigateTo({
+      kind: 'entity',
+      entityType: 'bookmark',
+      name: 'sd2358_missing_bookmark',
+    }),
+  );
+
+  expect(result).toBe(false);
+});
+
 test('@behavior SD-2358: header bookmarks support story-aware CRUD and top-level navigation', async ({ superdoc }) => {
   await loadDocumentAndWait(superdoc, LONGER_HEADER_SIGN_AREA_DOC_PATH);
 

@@ -2726,6 +2726,30 @@ describe('PresentationEditor', () => {
       expect(blockedSpy).toHaveBeenCalledWith(expect.objectContaining({ reason: 'missingRegion' }));
     });
 
+    it('returns false without emitting an error when an unqualified bookmark is not found', async () => {
+      mockIncrementalLayout.mockResolvedValueOnce(buildLayoutResult());
+      const errorSpy = vi.fn();
+
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'test-doc',
+      });
+      editor.on('error', errorSpy);
+
+      await vi.waitFor(() => expect(mockIncrementalLayout).toHaveBeenCalled());
+
+      const didNavigate = await editor.navigateTo({
+        kind: 'entity',
+        entityType: 'bookmark',
+        name: 'missing-bm',
+      });
+
+      expect(didNavigate).toBe(false);
+      expect(bookmarkResolverMocks.findAllBookmarksInDocument).toHaveBeenCalled();
+      expect(bookmarkResolverMocks.resolveBookmarkTarget).not.toHaveBeenCalled();
+      expect(errorSpy).not.toHaveBeenCalled();
+    });
+
     it('activates the matching header surface before navigating to a document-wide bookmark', async () => {
       mockIncrementalLayout.mockResolvedValueOnce(buildLayoutResult());
       bookmarkResolverMocks.findAllBookmarksInDocument.mockReturnValueOnce([

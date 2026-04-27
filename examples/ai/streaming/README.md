@@ -31,7 +31,7 @@ function flush() {
 }
 ```
 
-`editor.doc` is the public Document API. With no `target`/`ref`, `insert` appends at the end of the document. Newlines are preserved as paragraph breaks.
+`editor.doc` is the public Document API. With no `target`/`ref`, `insert` appends at the end of the document. Newlines become paragraph breaks.
 
 ## Run
 
@@ -41,7 +41,7 @@ pnpm install
 pnpm dev                   # runs the Node proxy and Vite together
 ```
 
-Open http://localhost:5173.
+Open http://localhost:5180.
 
 ## Notes
 

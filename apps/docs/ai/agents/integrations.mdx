@@ -608,7 +608,7 @@ Use `chooseTools({ provider: 'anthropic' })` and convert to Bedrock's `toolSpec`
 
 ## Streaming generated text into a visible editor
 
-Sometimes you don't need a full agent loop — you just want the model to write into the document while the user watches. Stream the model's output through a small backend proxy and append each delta to the editor:
+Sometimes you don't need a full agent loop. You just want the model to write into the document while the user watches. Stream the output through a small backend proxy and append each delta to the editor:
 
 ```ts
 for await (const chunk of streamFromServer(prompt, signal)) {

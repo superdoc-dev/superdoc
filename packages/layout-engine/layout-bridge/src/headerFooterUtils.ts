@@ -425,21 +425,27 @@ export function getHeaderFooterIdForPage(
   });
   if (!variantType) return null;
 
+  const resolveVariantId = (ids: SectionHeaderFooterIds | undefined): string | null => {
+    if (!ids) return null;
+    const direct = ids[variantType];
+    if (direct) return direct;
+    // Under alternate headers/footers, Word still falls back to section default
+    // when an explicit odd/even ref is not provided.
+    if ((variantType === 'odd' || variantType === 'even') && ids.default) return ids.default;
+    return null;
+  };
+
   // First try to get from page's sectionRefs (most specific, stamped during layout)
   const pageRefs = kind === 'header' ? page.sectionRefs?.headerRefs : page.sectionRefs?.footerRefs;
-  if (pageRefs) {
-    const idFromPage = pageRefs[variantType];
-    if (idFromPage) return idFromPage;
-  }
+  const idFromPage = resolveVariantId(pageRefs);
+  if (idFromPage) return idFromPage;
 
   // Fall back to identifier's section mappings
   const sectionIds =
     kind === 'header' ? identifier.sectionHeaderIds.get(sectionIndex) : identifier.sectionFooterIds.get(sectionIndex);
 
-  if (sectionIds) {
-    const idFromSection = sectionIds[variantType];
-    if (idFromSection) return idFromSection;
-  }
+  const idFromSection = resolveVariantId(sectionIds);
+  if (idFromSection) return idFromSection;
 
   // Final fallback to legacy identifier fields
   const legacyIds = kind === 'header' ? identifier.headerIds : identifier.footerIds;

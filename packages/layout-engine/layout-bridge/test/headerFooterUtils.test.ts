@@ -658,6 +658,35 @@ describe('headerFooterUtils', () => {
       expect(oddPageType).toBe('odd');
     });
 
+    it('falls back to section default content id when alternate header parity ref is missing', () => {
+      const sectionMetadata: SectionMetadata[] = [
+        {
+          sectionIndex: 0,
+          headerRefs: { default: 'h0-default' },
+        },
+      ];
+
+      const identifier = buildMultiSectionIdentifier(sectionMetadata, { alternateHeaders: true });
+      const layout: Layout = {
+        pageSize: { w: 600, h: 800 },
+        pages: [
+          {
+            number: 1,
+            fragments: [],
+            sectionIndex: 0,
+            sectionRefs: { headerRefs: { default: 'h0-default' } },
+          },
+        ],
+        headerFooter: {
+          odd: { pages: [{ number: 1, fragments: [] }] },
+        },
+      };
+
+      const oddPageHeader = resolveHeaderFooterForPageAndSection(layout, 0, identifier, { kind: 'header' });
+      expect(oddPageHeader?.type).toBe('odd');
+      expect(oddPageHeader?.contentId).toBe('h0-default');
+    });
+
     it('keeps parity variant but does not infer default content id for missing alternate refs', () => {
       const sectionMetadata: SectionMetadata[] = [
         {

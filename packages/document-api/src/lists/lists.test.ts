@@ -242,7 +242,7 @@ describe('executeListsJoin validates direction', () => {
 });
 
 describe('executeListsMerge validates direction', () => {
-  it('rejects missing target.kind (planner bug guard from SD-2296)', () => {
+  it('rejects missing target.kind', () => {
     expect(() =>
       executeListsMerge(stubAdapter(), {
         target: { nodeType: 'listItem', nodeId: 'x' },

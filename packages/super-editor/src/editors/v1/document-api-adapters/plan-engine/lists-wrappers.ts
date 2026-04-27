@@ -957,16 +957,19 @@ export function listsMergeWrapper(editor: Editor, input: ListsMergeInput, option
     gapToPos = firstOfAdjacent.candidate.pos;
   }
 
-  const gapEmptyParagraphs =
-    gapFromPos < gapToPos
-      ? getBlockIndex(editor).candidates.filter(
-          (c) =>
-            c.nodeType === 'paragraph' &&
-            c.pos >= gapFromPos &&
-            c.pos + c.node.nodeSize <= gapToPos &&
-            !c.node.textContent.trim(),
-        )
-      : [];
+  // Top-level only (avoid empty paragraphs inside table cells), and require
+  // structural emptiness (a paragraph holding an image/break has empty
+  // textContent but is still meaningful).
+  const gapEmptyParagraphs: Array<{ pos: number; node: (typeof targetSequence)[0]['candidate']['node'] }> = [];
+  if (gapFromPos < gapToPos) {
+    editor.state.doc.forEach((child, offset) => {
+      if (child.type.name !== 'paragraph') return;
+      if (offset < gapFromPos) return;
+      if (offset + child.nodeSize > gapToPos) return;
+      if (child.childCount > 0) return;
+      gapEmptyParagraphs.push({ pos: offset, node: child });
+    });
+  }
 
   const mergedListId = `${absorbingNumId}:${anchorNodeId}`;
 
@@ -1057,7 +1060,11 @@ export function listsSplitWrapper(editor: Editor, input: ListsSplitInput, option
     };
   }
 
-  const setValueResult = listsSetValueWrapper(editor, { target: input.target, value: 1 }, options);
+  // The separate step above bumped the revision; reusing the caller's
+  // expectedRevision here would throw REVISION_MISMATCH and leave the doc
+  // partially-applied.
+  const setValueOptions = options ? { ...options, expectedRevision: undefined } : options;
+  const setValueResult = listsSetValueWrapper(editor, { target: input.target, value: 1 }, setValueOptions);
   if (!setValueResult.success) {
     return setValueResult as ListsSplitResult;
   }

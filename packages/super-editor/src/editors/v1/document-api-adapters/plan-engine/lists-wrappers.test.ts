@@ -374,7 +374,7 @@ describe('lists-wrappers', () => {
   // =========================================================================
 
   describe('listsInsertWrapper', () => {
-    it('passes both sdBlockId and paraId to insertListItemAt (SD-2296: paraId survives OOXML roundtrip)', () => {
+    it('passes both sdBlockId and paraId to insertListItemAt (paraId survives OOXML roundtrip)', () => {
       const target = makeProjection({ numId: 1, level: 0 });
       vi.mocked(resolveListItem).mockReturnValueOnce(target);
       vi.mocked(getBlockIndex).mockReturnValueOnce({ candidates: [], byId: new Map(), ambiguous: new Set() } as any);
@@ -403,9 +403,8 @@ describe('lists-wrappers', () => {
       const result = listsInsertWrapper(editor, { target: target.address, position: 'after', text: 'new' });
       if (!result.success) throw new Error('expected success');
 
-      // Receipt nodeId must be the 8-char paraId, NOT a UUID. The UUID sdBlockId
-      // used to leak into receipts pre-SD-2296 fix and failed to resolve in
-      // subsequent CLI processes after OOXML export/import.
+      // Receipt nodeId must be the 8-char paraId, not a UUID — the UUID
+      // sdBlockId does not survive OOXML export/import.
       expect(result.item.nodeId.length).toBe(8);
       expect(result.item.nodeId).not.toContain('-');
       expect(result.insertionPoint.blockId).toBe(result.item.nodeId);

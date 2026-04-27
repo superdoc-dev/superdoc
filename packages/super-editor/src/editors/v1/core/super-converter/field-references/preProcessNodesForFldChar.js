@@ -3,6 +3,7 @@
  */
 import { getInstructionPreProcessor } from './fld-preprocessors';
 import { carbonCopy } from '@core/utilities/carbonCopy.js';
+import { buildFieldInstanceFromImport, readFieldFlags } from './build-field-instance.js';
 
 const SKIP_FIELD_PROCESSING_NODE_NAMES = new Set(['w:drawing', 'w:pict']);
 
@@ -36,7 +37,37 @@ export const preProcessNodesForFldChar = (nodes = [], docx) => {
   let currentFieldStack = [];
   let unpairedEnd = null;
   let collecting = false;
+  // importIndex is a per-call ordinal incremented each time an unknown field
+  // is wrapped in sd:rawField. This is a best-effort signal until later
+  // chunks of the substrate carry FieldInstance on every typed node and the
+  // round-trip harness assigns a globally-stable ordering.
+  let importIndex = 0;
+  const FIELD_PART = 'body';
   const rawNodeSourceTokens = new WeakMap();
+
+  /**
+   * Wrap an unknown field's result content in a sd:rawField element and
+   * stash the canonical FieldInstance payload on its attributes so the
+   * encoder can forward it to the PM node and the decoder can choose
+   * passthrough vs rebuild on export.
+   */
+  const buildRawFieldElement = ({ representation, instructionText, resultElements, originalXml, dirty, locked }) => {
+    const fieldInstance = buildFieldInstanceFromImport({
+      representation,
+      instructionText,
+      resultFragments: resultElements,
+      originalXml,
+      dirty,
+      locked,
+      part: FIELD_PART,
+      importIndex: importIndex++,
+    });
+    return {
+      name: 'sd:rawField',
+      attributes: { fieldInstance },
+      elements: resultElements,
+    };
+  };
 
   /**
    * Finalizes the current field. If collecting nodes, it processes them.
@@ -55,7 +86,26 @@ export const preProcessNodesForFldChar = (nodes = [], docx) => {
         currentField.instructionTokens,
         fieldRunRPr,
       );
-      const outputNodes = combinedResult.handled ? combinedResult.nodes : rawCollectedNodes;
+      let outputNodes;
+      if (combinedResult.handled) {
+        outputNodes = combinedResult.nodes;
+      } else {
+        // Unknown / unsupported field family: wrap the result content in a
+        // sd:rawField element holding the canonical FieldInstance payload.
+        // The original begin/instr/separate/result/end span is preserved
+        // as source.originalXml so the exporter can passthrough verbatim
+        // when nothing has been edited.
+        outputNodes = [
+          buildRawFieldElement({
+            representation: 'complex',
+            instructionText: currentField.instrText.trim(),
+            resultElements: collectedNodes,
+            originalXml: rawCollectedNodes,
+            dirty: currentField.dirty ?? false,
+            locked: currentField.locked ?? false,
+          }),
+        ];
+      }
       if (collectedNodesStack.length === 0) {
         // We have completed a top-level field, add the combined nodes to the output.
         processedNodes.push(...outputNodes);
@@ -135,6 +185,26 @@ export const preProcessNodesForFldChar = (nodes = [], docx) => {
           }
           return;
         }
+        // Unknown / unsupported family on a simple field: wrap in sd:rawField.
+        // The fldSimple element itself is the source.originalXml; result
+        // content is its children, which the encoder recursively imports
+        // so formatted result runs survive end-to-end.
+        const { dirty, locked } = readFieldFlags(node);
+        const rawElement = buildRawFieldElement({
+          representation: 'simple',
+          instructionText: instr,
+          resultElements: node.elements ?? [],
+          originalXml: rawNode,
+          dirty,
+          locked,
+        });
+        if (collecting) {
+          collectedNodesStack[collectedNodesStack.length - 1].push(rawElement);
+          rawCollectedNodesStack[rawCollectedNodesStack.length - 1].push(rawElement);
+        } else {
+          processedNodes.push(rawElement);
+        }
+        return;
       }
     }
 
@@ -145,7 +215,8 @@ export const preProcessNodesForFldChar = (nodes = [], docx) => {
       rawNodeSourceTokens.set(rawNode, rawSourceToken);
       capturedRawNodes.add(rawNode);
       fieldRunRPrStack.push(extractFieldRunRPr(node));
-      currentFieldStack.push({ instrText: '', instructionTokens: [], afterSeparate: false });
+      const { dirty, locked } = readFieldFlags(fldCharEl);
+      currentFieldStack.push({ instrText: '', instructionTokens: [], afterSeparate: false, dirty, locked });
       return;
     }
 

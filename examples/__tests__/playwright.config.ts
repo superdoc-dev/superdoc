@@ -19,7 +19,6 @@ const examplePath = isGettingStarted
 // Examples that use concurrently (server + client).
 // These run `npm run dev` which starts both processes — don't append --port.
 const useConcurrently = [
-  'ai/streaming-document-api',
   'ai/streaming',
   'collaboration/hocuspocus',
   'collaboration/superdoc-yjs',

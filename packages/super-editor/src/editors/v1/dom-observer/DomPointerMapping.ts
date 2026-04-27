@@ -351,7 +351,6 @@ export function resolveTextBoundaryWithinFragmentDom(
 
   return resolveLineTextBoundaryAtX(lineEl, clientX);
 }
-
 function getLinesInPageFragment(containerEl: HTMLElement, pageEl: HTMLElement, fragmentEl: HTMLElement): HTMLElement[] {
   return (Array.from(containerEl.querySelectorAll(`.${CLASS.line}`)) as HTMLElement[]).filter((lineEl) => {
     if (lineEl.dataset.pmStart === undefined || lineEl.dataset.pmEnd === undefined) {

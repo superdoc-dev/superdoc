@@ -46,12 +46,19 @@ export function createFieldId(): FieldId {
  *
  * Tokens are emitted linearly: a switch and its argument are separate
  * tokens with possible whitespace between them. Switch-to-argument pairing
- * is exposed via {@link ParsedArgs}, derived from the linear stream.
+ * is exposed via {@link ParsedArgs}, derived from the linear stream. A
+ * manually constructed switch token may embed an argument for synthesized
+ * fields; tokenizer output keeps switch arguments as following linear tokens.
  */
 export type InstructionToken =
   | { kind: 'identifier'; text: string }
   | { kind: 'quoted'; text: string; quote: '"' | "'" }
-  | { kind: 'switch'; flag: string; arg?: InstructionToken }
+  | {
+      kind: 'switch';
+      /** Source switch flag, without the leading backslash. Preserves source case. */
+      flag: string;
+      arg?: InstructionToken;
+    }
   | { kind: 'whitespace'; text: string }
   | { kind: 'opaque'; text: string }
   | { kind: 'nestedField'; childFieldId: FieldId };
@@ -83,7 +90,7 @@ export type ParsedArg = {
 };
 
 export type ParsedSwitch = {
-  /** Single-character flag, without the leading backslash. */
+  /** Normalized lowercase single-character flag, without the leading backslash. */
   flag: string;
   /** First non-whitespace token after the switch, if it is identifier|quoted. */
   arg?: ParsedArg;
@@ -165,10 +172,13 @@ export type FieldFamily = string;
  * The canonical field payload. Every field in the document has exactly one,
  * regardless of whether SuperDoc has a typed evaluator for the family.
  *
- * Persisted: `id`, `representation`, `family`, `rawInstruction`,
- * `instructionTokens`, `resultFragments`, `dirty`, `locked`, `mutation`,
- * `familyPayload`, `source`. Other quantities (nestingDepth, supportLevel,
- * cachedResultText) are derived and recomputed on demand.
+ * Stored canonical payload: `id`, `representation`, `family`,
+ * `rawInstruction`, `instructionTokens`, `parsedArgs`, `resultFragments`,
+ * `dirty`, `locked`, `mutation`, `familyPayload`, `source`.
+ *
+ * `parsedArgs` is a cached derivation of `instructionTokens`; recompute it
+ * whenever the instruction stream changes. Other quantities (nestingDepth,
+ * supportLevel, cachedResultText) are derived and recomputed on demand.
  */
 export type FieldInstance = {
   id: FieldId;

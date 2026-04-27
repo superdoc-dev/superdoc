@@ -50,6 +50,16 @@ describe('tokenizeInstruction', () => {
     ]);
   });
 
+  it('preserves switch source case in the linear token stream', () => {
+    const tokens = tokenizeInstruction('REF \\H');
+    expect(tokens).toEqual([
+      { kind: 'identifier', text: 'REF' },
+      { kind: 'whitespace', text: ' ' },
+      { kind: 'switch', flag: 'H' },
+    ]);
+    expect(reconstructInstruction(tokens)).toBe('REF \\H');
+  });
+
   it('tokenizes special-character switches (\\*, \\@, \\#)', () => {
     const tokens = tokenizeInstruction('SEQ \\* \\@ \\#');
     expect(tokens).toEqual([
@@ -250,6 +260,11 @@ describe('deriveParsedArgs', () => {
   it('leaves a trailing switch arg-less when the stream ends', () => {
     const { parsedArgs } = parseInstruction('REF \\h');
     expect(parsedArgs.switches).toEqual([{ flag: 'h' }]);
+  });
+
+  it('normalizes parsed switch flags to lowercase', () => {
+    const { parsedArgs } = parseInstruction('REF \\H \\N');
+    expect(parsedArgs.switches).toEqual([{ flag: 'h' }, { flag: 'n' }]);
   });
 
   it('only counts the first identifier as family; later identifiers are positional', () => {

@@ -7,7 +7,8 @@
  *   - captures order, quoting, and whitespace so the original instruction
  *     can be reconstructed token-by-token;
  *   - derives a best-effort {@link ParsedArgs} view for evaluator
- *     convenience (family, positional args, switches with attached args).
+ *     convenience (family, positional args, normalized switches with attached
+ *     args).
  *
  * What it does NOT do:
  *   - interpret family-specific semantics (no SEQ / REF / TOC / DATE
@@ -189,7 +190,7 @@ export function deriveParsedArgs(tokens: InstructionToken[]): ParsedArgs {
     if (t.kind === 'whitespace' || t.kind === 'opaque' || t.kind === 'nestedField') continue;
 
     if (t.kind === 'switch') {
-      const sw: ParsedSwitch = { flag: t.flag };
+      const sw: ParsedSwitch = { flag: normalizeSwitchFlag(t.flag) };
       if (t.arg && (t.arg.kind === 'identifier' || t.arg.kind === 'quoted')) {
         sw.arg = toParsedArg(t.arg);
       }
@@ -231,6 +232,10 @@ function toParsedArg(t: InstructionToken): ParsedArg {
   if (t.kind === 'quoted') return { kind: 'quoted', text: t.text, quote: t.quote };
   // Unreachable: callers filter to identifier|quoted before calling.
   return { kind: 'identifier', text: '' };
+}
+
+function normalizeSwitchFlag(flag: string): string {
+  return flag.toLowerCase();
 }
 
 // ---------------------------------------------------------------------------

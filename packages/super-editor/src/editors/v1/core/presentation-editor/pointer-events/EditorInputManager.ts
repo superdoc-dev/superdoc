@@ -1273,6 +1273,16 @@ export class EditorInputManager {
   #handlePointerDown(event: PointerEvent): void {
     if (!this.#deps) return;
 
+    // Emit local-only pointer events for external consumers (e.g. debugging trackpad issues)
+    // Emit directly on the Editor instance so consumers can use editor.on('pointerDown', ...)
+    const bodyEditor = this.#deps.getEditor();
+    bodyEditor.emit?.('pointerDown', { editor: bodyEditor, event });
+
+    // Emit rightClick for secondary button (button 2) or Ctrl+Click on Mac
+    if (event.button === 2 || (event.ctrlKey && navigator.platform.includes('Mac'))) {
+      bodyEditor.emit?.('rightClick', { editor: bodyEditor, event });
+    }
+
     // Return early for non-left clicks
     if (event.button !== 0) return;
 
@@ -1304,7 +1314,6 @@ export class EditorInputManager {
       return;
     }
 
-    const bodyEditor = this.#deps.getEditor();
     const layoutState = this.#deps.getLayoutState();
     const clickedNoteTarget = this.#resolveRenderedNoteTargetAtPointer(target, event.clientX, event.clientY);
 
@@ -1675,6 +1684,11 @@ export class EditorInputManager {
 
   #handlePointerUp(event: PointerEvent): void {
     if (!this.#deps) return;
+
+    // Emit local-only pointer event for external consumers (e.g. debugging trackpad issues)
+    // Emit directly on the Editor instance so consumers can use editor.on('pointerUp', ...)
+    const editor = this.#deps.getEditor();
+    editor.emit?.('pointerUp', { editor, event });
 
     this.#suppressFocusInFromDraggable = false;
 

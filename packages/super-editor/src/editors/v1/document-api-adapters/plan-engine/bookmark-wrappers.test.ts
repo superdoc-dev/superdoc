@@ -436,6 +436,35 @@ describe('bookmarksRenameWrapper', () => {
     );
     expect(tr.setNodeMarkup).not.toHaveBeenCalled();
   });
+
+  it('does not ignore a duplicate name in another story when bookmark ids collide', () => {
+    const { editor, tr } = makeEditor();
+
+    vi.mocked(resolveBookmarkTarget).mockReturnValueOnce({
+      pos: 5,
+      name: 'body-name',
+      bookmarkId: '5',
+      endPos: 8,
+      node: { attrs: { name: 'body-name', id: '5' } } as never,
+    });
+
+    vi.mocked(findAllBookmarksInDocument).mockReturnValueOnce([
+      { name: 'shared-name', bookmarkId: '5', storyKey: 'hf:part:rId7' },
+    ]);
+
+    expect(() =>
+      bookmarksRenameWrapper(editor, {
+        target: { kind: 'entity', entityType: 'bookmark', name: 'body-name' },
+        newName: 'shared-name',
+      }),
+    ).toThrowError(
+      expect.objectContaining({
+        name: 'DocumentApiAdapterError',
+        code: 'INVALID_INPUT',
+      }),
+    );
+    expect(tr.setNodeMarkup).not.toHaveBeenCalled();
+  });
 });
 
 describe('bookmarksRemoveWrapper', () => {

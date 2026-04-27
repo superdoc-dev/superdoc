@@ -72,14 +72,14 @@ function allocateBookmarkId(editor: Editor, preCollected?: DocumentBookmarkEntry
 function bookmarkExistsAnywhere(
   editor: Editor,
   name: string,
-  excludeBookmarkId?: string,
+  exclude?: { storyKey: string; bookmarkId: string },
   preCollected?: DocumentBookmarkEntry[],
 ): boolean {
   const entries = preCollected ?? findAllBookmarksInDocument(editor);
   return entries.some((bookmark) => {
     if (bookmark.name !== name) return false;
-    if (!excludeBookmarkId) return true;
-    return bookmark.bookmarkId !== excludeBookmarkId;
+    if (!exclude) return true;
+    return !(bookmark.storyKey === exclude.storyKey && bookmark.bookmarkId === exclude.bookmarkId);
   });
 }
 
@@ -265,7 +265,9 @@ export function bookmarksRenameWrapper(
       return bookmarkFailure('NO_OP', 'New name is identical to current name.');
     }
 
-    if (bookmarkExistsAnywhere(editor, input.newName, resolved.bookmarkId)) {
+    if (
+      bookmarkExistsAnywhere(editor, input.newName, { storyKey: runtime.storyKey, bookmarkId: resolved.bookmarkId })
+    ) {
       throw new DocumentApiAdapterError(
         'INVALID_INPUT',
         `bookmarks.rename: a bookmark with name "${input.newName}" already exists.`,

@@ -8402,16 +8402,8 @@ export class PresentationEditor extends EventEmitter {
     this.#scrollPageIntoView(region.pageIndex);
     await this.#waitForPageMount(region.pageIndex, { timeout: PresentationEditor.ANCHOR_NAV_TIMEOUT_MS });
 
-    const pageElement = this.#getPageElement(region.pageIndex);
-    const pageRect = pageElement?.getBoundingClientRect();
-    const clientX = (pageRect?.left ?? 0) + region.localX + Math.max(region.width / 2, 1);
-    const clientY = (pageRect?.top ?? 0) + region.localY + Math.max(region.height / 2, 1);
-
     const activeEditor = await this.#headerFooterSession?.activateRegion(region, {
-      clientX,
-      clientY,
-      pageIndex: region.pageIndex,
-      source: 'programmatic',
+      initialSelection: 'defer',
     });
     if (!activeEditor) {
       return null;

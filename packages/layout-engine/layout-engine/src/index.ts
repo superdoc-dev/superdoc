@@ -1,5 +1,6 @@
 import type {
   ColumnLayout,
+  ColumnRegion,
   FlowBlock,
   Fragment,
   HeaderFooterLayout,
@@ -35,6 +36,7 @@ import {
   scheduleSectionBreak as scheduleSectionBreakExport,
   type SectionState,
   applyPendingToActive,
+  SINGLE_COLUMN_DEFAULT,
 } from './section-breaks.js';
 import { layoutParagraphBlock } from './layout-paragraph.js';
 import { layoutImageBlock } from './layout-image.js';
@@ -149,6 +151,10 @@ function getMeasureHeight(block: FlowBlock, measure: Measure): number {
       return block.kind === 'paragraph' ? DEFAULT_PARAGRAPH_LINE_HEIGHT_PX : 0;
     }
   }
+}
+
+function buildSectionAwareReferenceKey(refId: string, sectionIndex: number): string {
+  return `${refId}::s${sectionIndex}`;
 }
 
 // ConstraintBoundary and PageState now come from paginator
@@ -502,6 +508,14 @@ export type LayoutOptions = {
    */
   headerContentHeightsByRId?: Map<string, number>;
   /**
+   * Actual measured header content heights per section-specific reference.
+   *
+   * Keys combine the relationship ID and section index using the form
+   * `${rId}::s${sectionIndex}` so the reserve path can distinguish documents
+   * that reuse the same header part across sections with different geometry.
+   */
+  headerContentHeightsBySectionRef?: Map<string, number>;
+  /**
    * Actual measured footer content heights per relationship ID.
    * Used for multi-section documents where each section may have unique
    * footers referenced by their relationship IDs.
@@ -510,6 +524,14 @@ export type LayoutOptions = {
    * Values are the actual content heights in pixels.
    */
   footerContentHeightsByRId?: Map<string, number>;
+  /**
+   * Actual measured footer content heights per section-specific reference.
+   *
+   * Keys combine the relationship ID and section index using the form
+   * `${rId}::s${sectionIndex}` so the reserve path can distinguish documents
+   * that reuse the same footer part across sections with different geometry.
+   */
+  footerContentHeightsBySectionRef?: Map<string, number>;
   /**
    * Allow body layout to synthesize page 1 for anchored tables when a document has
    * no anchor paragraphs and would otherwise render zero pages.
@@ -526,6 +548,17 @@ export type LayoutOptions = {
    * behavior for paragraph-free overlays.
    */
   allowSectionBreakOnlyPageFallback?: boolean;
+  /**
+   * Whether the document has odd/even header/footer differentiation enabled.
+   * Corresponds to the w:evenAndOddHeaders element in OOXML settings.xml.
+   * When true, odd pages use the 'odd' variant and even pages use the 'even' variant.
+   * When false or omitted, all pages use the 'default' variant.
+   *
+   * Must stay in sync with `getHeaderFooterTypeForSection` in
+   * `layout-bridge/src/headerFooterUtils.ts` — both sides read this value
+   * and must agree on variant selection.
+   */
+  alternateHeaders?: boolean;
 };
 
 export type HeaderFooterConstraints = {
@@ -541,6 +574,7 @@ export type HeaderFooterConstraints = {
    * `left`/`right`: horizontal page-relative conversion.
    * `top`/`bottom`: vertical margin-relative conversion and footer band origin.
    * `header`: header distance from page top edge (header band origin).
+   * `footer`: footer distance from page bottom edge (footer band origin).
    */
   margins?: {
     left: number;
@@ -548,6 +582,7 @@ export type HeaderFooterConstraints = {
     top?: number;
     bottom?: number;
     header?: number;
+    footer?: number;
   };
   /**
    * Optional base height used to bound behindDoc overflow handling.
@@ -662,28 +697,36 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
   const headerContentHeights = options.headerContentHeights;
   const footerContentHeights = options.footerContentHeights;
   const headerContentHeightsByRId = options.headerContentHeightsByRId;
+  const headerContentHeightsBySectionRef = options.headerContentHeightsBySectionRef;
   const footerContentHeightsByRId = options.footerContentHeightsByRId;
+  const footerContentHeightsBySectionRef = options.footerContentHeightsBySectionRef;
 
   /**
    * Determines the header/footer variant type for a given page based on section settings.
    *
-   * @param sectionPageNumber - The page number within the current section (1-indexed)
+   * Takes a params object because the two page-number fields have very similar
+   * names and types — a positional call site is easy to get wrong.
+   *
+   * @param sectionPageNumber - The page number within the current section (1-indexed), used for titlePg
+   * @param documentPageNumber - The absolute document page number (1-indexed), used for even/odd
    * @param titlePgEnabled - Whether the section has "different first page" enabled
-   * @param alternateHeaders - Whether the section has odd/even differentiation enabled
+   * @param alternateHeaders - Whether the document has odd/even differentiation enabled
    * @returns The variant type: 'first', 'even', 'odd', or 'default'
    */
-  const getVariantTypeForPage = (
-    sectionPageNumber: number,
-    titlePgEnabled: boolean,
-    alternateHeaders: boolean,
-  ): 'default' | 'first' | 'even' | 'odd' => {
+  const getVariantTypeForPage = (args: {
+    sectionPageNumber: number;
+    documentPageNumber: number;
+    titlePgEnabled: boolean;
+    alternateHeaders: boolean;
+  }): 'default' | 'first' | 'even' | 'odd' => {
     // First page of section with titlePg enabled uses 'first' variant
-    if (sectionPageNumber === 1 && titlePgEnabled) {
+    if (args.sectionPageNumber === 1 && args.titlePgEnabled) {
       return 'first';
     }
-    // Alternate headers (even/odd differentiation)
-    if (alternateHeaders) {
-      return sectionPageNumber % 2 === 0 ? 'even' : 'odd';
+    // Alternate headers: even/odd based on document page number, matching
+    // the rendering side (getHeaderFooterTypeForSection in headerFooterUtils.ts)
+    if (args.alternateHeaders) {
+      return args.documentPageNumber % 2 === 0 ? 'even' : 'odd';
     }
     return 'default';
   };
@@ -697,12 +740,23 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
    * @param headerRef - Optional relationship ID from section's headerRefs
    * @returns The appropriate header content height, or 0 if not found
    */
-  const getHeaderHeightForPage = (variantType: 'default' | 'first' | 'even' | 'odd', headerRef?: string): number => {
-    // Priority 1: Check per-rId heights if we have a specific rId
+  const getHeaderHeightForPage = (
+    variantType: 'default' | 'first' | 'even' | 'odd',
+    headerRef?: string,
+    sectionIndex?: number,
+  ): number => {
+    // Priority 1: Check section-aware heights when the same part is reused across sections.
+    if (headerRef && sectionIndex != null) {
+      const sectionKey = buildSectionAwareReferenceKey(headerRef, sectionIndex);
+      if (headerContentHeightsBySectionRef?.has(sectionKey)) {
+        return validateContentHeight(headerContentHeightsBySectionRef.get(sectionKey));
+      }
+    }
+    // Priority 2: Check per-rId heights if we have a specific rId
     if (headerRef && headerContentHeightsByRId?.has(headerRef)) {
       return validateContentHeight(headerContentHeightsByRId.get(headerRef));
     }
-    // Priority 2: Fall back to per-variant heights
+    // Priority 3: Fall back to per-variant heights
     if (headerContentHeights) {
       return validateContentHeight(headerContentHeights[variantType]);
     }
@@ -718,12 +772,23 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
    * @param footerRef - Optional relationship ID from section's footerRefs
    * @returns The appropriate footer content height, or 0 if not found
    */
-  const getFooterHeightForPage = (variantType: 'default' | 'first' | 'even' | 'odd', footerRef?: string): number => {
-    // Priority 1: Check per-rId heights if we have a specific rId
+  const getFooterHeightForPage = (
+    variantType: 'default' | 'first' | 'even' | 'odd',
+    footerRef?: string,
+    sectionIndex?: number,
+  ): number => {
+    // Priority 1: Check section-aware heights when the same part is reused across sections.
+    if (footerRef && sectionIndex != null) {
+      const sectionKey = buildSectionAwareReferenceKey(footerRef, sectionIndex);
+      if (footerContentHeightsBySectionRef?.has(sectionKey)) {
+        return validateContentHeight(footerContentHeightsBySectionRef.get(sectionKey));
+      }
+    }
+    // Priority 2: Check per-rId heights if we have a specific rId
     if (footerRef && footerContentHeightsByRId?.has(footerRef)) {
       return validateContentHeight(footerContentHeightsByRId.get(footerRef));
     }
-    // Priority 2: Fall back to per-variant heights
+    // Priority 3: Fall back to per-variant heights
     if (footerContentHeights) {
       return validateContentHeight(footerContentHeights[variantType]);
     }
@@ -792,8 +857,8 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
   // Initial effective margins use default variant (will be adjusted per-page)
   const headerDistance = margins.header ?? margins.top;
   const footerDistance = margins.footer ?? margins.bottom;
-  const defaultHeaderHeight = getHeaderHeightForPage('default', undefined);
-  const defaultFooterHeight = getFooterHeightForPage('default', undefined);
+  const defaultHeaderHeight = getHeaderHeightForPage('default', undefined, 0);
+  const defaultFooterHeight = getFooterHeightForPage('default', undefined, 0);
   const effectiveTopMargin = calculateEffectiveTopMargin(defaultHeaderHeight, headerDistance, margins.top);
   const effectiveBottomMargin = calculateEffectiveBottomMargin(defaultFooterHeight, footerDistance, margins.bottom);
 
@@ -1001,14 +1066,18 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
     if (block.orientation) next.pendingOrientation = block.orientation;
     const sectionType = block.type ?? 'continuous';
     // Check if columns are changing: either explicitly to a different config,
-    // or implicitly resetting to single column (undefined = single column in OOXML)
+    // or implicitly resetting to single column (undefined = single column in OOXML).
+    // withSeparator must be compared because a sep-only toggle still needs a new
+    // column region so the renderer can draw (or stop drawing) the separator from
+    // the toggle point onward.
     const isColumnsChanging =
       (block.columns &&
         (block.columns.count !== next.activeColumns.count ||
           block.columns.gap !== next.activeColumns.gap ||
+          Boolean(block.columns.withSeparator) !== Boolean(next.activeColumns.withSeparator) ||
           block.columns.equalWidth !== next.activeColumns.equalWidth ||
           !widthsEqual(block.columns.widths, next.activeColumns.widths))) ||
-      (!block.columns && next.activeColumns.count > 1);
+      (!block.columns && (next.activeColumns.count > 1 || Boolean(next.activeColumns.withSeparator)));
     // Schedule section index change for next page (enables section-aware page numbering)
     const sectionIndexRaw = block.attrs?.sectionIndex;
     const metadataIndex = typeof sectionIndexRaw === 'number' ? sectionIndexRaw : Number(sectionIndexRaw ?? NaN);
@@ -1074,6 +1143,11 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
     if (activeOrientation) {
       page.orientation = activeOrientation;
     }
+
+    if (activeColumns.count > 1) {
+      page.columns = cloneColumnLayout(activeColumns);
+    }
+
     // Set vertical alignment from active section state
     if (activeVAlign && activeVAlign !== 'top') {
       page.vAlign = activeVAlign;
@@ -1284,11 +1358,15 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
         // Get section metadata for titlePg setting
         const sectionMetadata = sectionMetadataList[activeSectionIndex];
         const titlePgEnabled = sectionMetadata?.titlePg ?? false;
-        // TODO: Support alternateHeaders (odd/even) when needed
-        const alternateHeaders = false;
+        const alternateHeaders = options.alternateHeaders ?? false;
 
         // Determine which header/footer variant applies to this page
-        const variantType = getVariantTypeForPage(sectionPageNumber, titlePgEnabled, alternateHeaders);
+        const variantType = getVariantTypeForPage({
+          sectionPageNumber,
+          documentPageNumber: newPageNumber,
+          titlePgEnabled,
+          alternateHeaders,
+        });
 
         // Resolve header/footer refs for margin calculation using OOXML inheritance model.
         // This must match the rendering logic in PresentationEditor to ensure margins
@@ -1333,10 +1411,11 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
 
         // Calculate the actual header/footer heights for this page's variant
         // Use effectiveVariantType for header height lookup to match the fallback
-        const headerHeight = getHeaderHeightForPage(effectiveVariantType, headerRef);
+        const headerHeight = getHeaderHeightForPage(effectiveVariantType, headerRef, activeSectionIndex);
         const footerHeight = getFooterHeightForPage(
           variantType !== 'default' && !activeSectionRefs?.footerRefs?.[variantType] ? 'default' : variantType,
           footerRef,
+          activeSectionIndex,
         );
 
         // Adjust margins based on the actual header/footer for this page.
@@ -1440,9 +1519,16 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
 
   // Start a new mid-page region with different column configuration
   const startMidPageRegion = (state: PageState, newColumns: ColumnLayout): void => {
-    // Record the boundary at current Y position
+    // Use the maximum Y reached across all columns so the new region starts
+    // below ALL column content, not just the current column's cursor position.
+    // This prevents overlap when a multi-column section's columns have unequal heights.
+    const regionStartY = Math.max(state.cursorY, state.maxCursorY);
+    state.cursorY = regionStartY;
+    state.maxCursorY = regionStartY;
+
+    // Record the boundary at the resolved Y position
     const boundary: ConstraintBoundary = {
-      y: state.cursorY,
+      y: regionStartY,
       columns: newColumns,
     };
     state.constraintBoundaries.push(boundary);
@@ -1454,7 +1540,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
     layoutLog(`[Layout] *** COLUMNS CHANGED MID-PAGE ***`);
     layoutLog(`  OLD activeColumns: ${JSON.stringify(activeColumns)}`);
     layoutLog(`  NEW activeColumns: ${JSON.stringify(newColumns)}`);
-    layoutLog(`  Current page: ${state.page.number}, cursorY: ${state.cursorY}`);
+    layoutLog(`  Current page: ${state.page.number}, cursorY: ${state.cursorY}, maxCursorY: ${state.maxCursorY}`);
 
     // Update activeColumns so subsequent pages use this column configuration
     activeColumns = cloneColumnLayout(newColumns);
@@ -1468,9 +1554,6 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
       { left: activeLeftMargin, right: activeRightMargin },
       activePageSize.w,
     );
-
-    // Note: We do NOT reset cursorY - content continues from current position
-    // This creates the mid-page region effect
   };
 
   // Collect anchored drawings mapped to their anchor paragraphs
@@ -2118,6 +2201,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
           }
         }
         state.cursorY = tableBottomY;
+        state.maxCursorY = Math.max(state.maxCursorY, state.cursorY);
       }
       continue;
     }
@@ -2527,6 +2611,39 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
     }
   }
 
+  // Serialize constraint boundaries into page.columnRegions so DomPainter can
+  // draw per-region overlays (e.g. column separator lines) bounded by the
+  // correct Y span. Continuous section breaks with a changed column config
+  // push boundaries into PageState.constraintBoundaries during layout; without
+  // this step the renderer only sees the page-start column config and would
+  // draw a single full-page separator across regions it no longer applies to.
+  for (const state of states) {
+    const boundaries = state.constraintBoundaries;
+    if (boundaries.length === 0) continue;
+
+    const regions: ColumnRegion[] = [];
+    // First region spans from the top of the content area to the first boundary.
+    // Its columns come from page.columns (set at page creation before any
+    // mid-page region change) or fall back to a single-column default so the
+    // contract stays self-describing even when the page starts single-column.
+    const firstRegionColumns: ColumnLayout = state.page.columns ?? { count: 1, gap: 0 };
+    regions.push({
+      yStart: state.topMargin,
+      yEnd: boundaries[0].y,
+      columns: firstRegionColumns,
+    });
+    for (let i = 0; i < boundaries.length; i++) {
+      const start = boundaries[i];
+      const end = boundaries[i + 1];
+      regions.push({
+        yStart: start.y,
+        yEnd: end ? end.y : state.contentBottom,
+        columns: start.columns,
+      });
+    }
+    state.page.columnRegions = regions;
+  }
+
   return {
     pageSize,
     pages,
@@ -2534,7 +2651,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
     // after processing sections. Page/region-specific column changes are encoded
     // implicitly via fragment positions. Consumers should not assume this is
     // a static document-wide value.
-    columns: activeColumns.count > 1 ? { count: activeColumns.count, gap: activeColumns.gap } : undefined,
+    columns: activeColumns.count > 1 ? cloneColumnLayout(activeColumns) : undefined,
   };
 }
 
@@ -2961,3 +3078,5 @@ export type { NumberingContext, ResolvePageTokensResult } from './resolvePageTok
 // Table utilities consumed by layout-bridge and cross-package sync tests
 export { getCellLines, getEmbeddedRowLines } from './layout-table.js';
 export { describeCellRenderBlocks, computeCellSliceContentHeight } from './table-cell-slice.js';
+
+export { SINGLE_COLUMN_DEFAULT } from './section-breaks.js';

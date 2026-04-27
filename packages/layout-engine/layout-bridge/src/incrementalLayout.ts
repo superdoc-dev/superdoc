@@ -19,11 +19,16 @@ import {
   resolvePageNumberTokens,
   type NumberingContext,
   SEMANTIC_PAGE_HEIGHT_PX,
+  SINGLE_COLUMN_DEFAULT,
 } from '@superdoc/layout-engine';
 import { remeasureParagraph } from './remeasure';
 import { computeDirtyRegions } from './diff';
 import { MeasureCache } from './cache';
 import { layoutHeaderFooterWithCache, HeaderFooterLayoutCache, type HeaderFooterBatch } from './layoutHeaderFooter';
+import {
+  buildSectionAwareHeaderFooterLayoutKey,
+  buildSectionAwareHeaderFooterMeasurementGroups,
+} from './sectionAwareHeaderFooter';
 import { FeatureFlags } from './featureFlags';
 import { PageTokenLogger, HeaderFooterCacheLogger, globalMetrics } from './instrumentation';
 import { HeaderFooterCacheState, invalidateHeaderFooterCache } from './cacheInvalidation';
@@ -183,7 +188,7 @@ const resolvePageColumns = (layout: Layout, options: LayoutOptions, blocks?: Flo
     );
     const contentWidth = pageSize.w - (marginLeft + marginRight);
     const sectionIndex = page.sectionIndex ?? 0;
-    const columnsConfig = sectionColumns.get(sectionIndex) ?? options.columns ?? { count: 1, gap: 0 };
+    const columnsConfig = sectionColumns.get(sectionIndex) ?? options.columns ?? SINGLE_COLUMN_DEFAULT;
     const normalized = normalizeColumnsForFootnotes(columnsConfig, contentWidth);
     result.set(pageIndex, { ...normalized, left: marginLeft, contentWidth });
   }
@@ -885,10 +890,83 @@ export async function incrementalLayout(
    * Values are the actual content heights in pixels.
    */
   let headerContentHeightsByRId: Map<string, number> | undefined;
+  let headerContentHeightsBySectionRef: Map<string, number> | undefined;
 
   // Check if we have headers via either headerBlocks (by variant) or headerBlocksByRId (by relationship ID)
   const hasHeaderBlocks = headerFooter?.headerBlocks && Object.keys(headerFooter.headerBlocks).length > 0;
   const hasHeaderBlocksByRId = headerFooter?.headerBlocksByRId && headerFooter.headerBlocksByRId.size > 0;
+  const sectionMetadata = options.sectionMetadata ?? [];
+
+  const measureHeightsByReference = async (
+    kind: 'header' | 'footer',
+    blocksByRId: Map<string, FlowBlock[]> | undefined,
+    constraints: HeaderFooterConstraints,
+    measureFn: HeaderFooterMeasureFn,
+  ): Promise<{
+    heightsByRId?: Map<string, number>;
+    heightsBySectionRef?: Map<string, number>;
+  }> => {
+    if (!blocksByRId || blocksByRId.size === 0) {
+      return {};
+    }
+
+    const heightsByRId = new Map<string, number>();
+    const heightsBySectionRef = new Map<string, number>();
+    const sectionAwareGroups = buildSectionAwareHeaderFooterMeasurementGroups(
+      kind,
+      blocksByRId,
+      sectionMetadata,
+      constraints,
+    );
+
+    if (sectionAwareGroups.length > 0) {
+      for (const group of sectionAwareGroups) {
+        const blocks = blocksByRId.get(group.rId);
+        if (!blocks || blocks.length === 0) continue;
+
+        const measureConstraints = {
+          maxWidth: group.sectionConstraints.width,
+          maxHeight: group.sectionConstraints.height,
+        };
+        const measures = await Promise.all(blocks.map((block) => measureFn(block, measureConstraints)));
+        const layout = layoutHeaderFooter(blocks, measures, group.sectionConstraints, kind);
+        if (!(layout.height > 0)) continue;
+
+        const nextHeight = Math.max(0, layout.height);
+        const currentHeight = heightsByRId.get(group.rId) ?? 0;
+        if (nextHeight > currentHeight) {
+          heightsByRId.set(group.rId, nextHeight);
+        }
+
+        for (const sectionIndex of group.sectionIndices) {
+          heightsBySectionRef.set(buildSectionAwareHeaderFooterLayoutKey(group.rId, sectionIndex), nextHeight);
+        }
+      }
+
+      return {
+        heightsByRId: heightsByRId.size > 0 ? heightsByRId : undefined,
+        heightsBySectionRef: heightsBySectionRef.size > 0 ? heightsBySectionRef : undefined,
+      };
+    }
+
+    for (const [rId, blocks] of blocksByRId) {
+      if (!blocks || blocks.length === 0) continue;
+
+      const measureConstraints = {
+        maxWidth: constraints.width,
+        maxHeight: constraints.height,
+      };
+      const measures = await Promise.all(blocks.map((block) => measureFn(block, measureConstraints)));
+      const layout = layoutHeaderFooter(blocks, measures, constraints, kind);
+      if (layout.height > 0) {
+        heightsByRId.set(rId, layout.height);
+      }
+    }
+
+    return {
+      heightsByRId: heightsByRId.size > 0 ? heightsByRId : undefined,
+    };
+  };
 
   if (headerFooter?.constraints && (hasHeaderBlocks || hasHeaderBlocksByRId)) {
     const hfPreStart = performance.now();
@@ -952,22 +1030,14 @@ export async function incrementalLayout(
     // Also extract heights from headerBlocksByRId (for multi-section documents)
     // Store each rId's height separately for per-page margin calculation
     if (hasHeaderBlocksByRId && headerFooter.headerBlocksByRId) {
-      headerContentHeightsByRId = new Map<string, number>();
-      for (const [rId, blocks] of headerFooter.headerBlocksByRId) {
-        if (!blocks || blocks.length === 0) continue;
-        // Measure blocks to get height
-        const measureConstraints = {
-          maxWidth: headerFooter.constraints.width,
-          maxHeight: headerFooter.constraints.height,
-        };
-        const measures = await Promise.all(blocks.map((block) => measureFn(block, measureConstraints)));
-        // Layout to get actual height — pass full constraints for page-relative normalization
-        const layout = layoutHeaderFooter(blocks, measures, headerFooter.constraints, 'header');
-        if (layout.height > 0) {
-          // Store height by rId for per-page margin calculation
-          headerContentHeightsByRId.set(rId, layout.height);
-        }
-      }
+      const measuredHeights = await measureHeightsByReference(
+        'header',
+        headerFooter.headerBlocksByRId,
+        headerFooter.constraints,
+        measureFn,
+      );
+      headerContentHeightsByRId = measuredHeights.heightsByRId;
+      headerContentHeightsBySectionRef = measuredHeights.heightsBySectionRef;
     }
 
     const hfPreEnd = performance.now();
@@ -992,6 +1062,7 @@ export async function incrementalLayout(
    * Values are the actual content heights in pixels.
    */
   let footerContentHeightsByRId: Map<string, number> | undefined;
+  let footerContentHeightsBySectionRef: Map<string, number> | undefined;
 
   // Check if we have footers via either footerBlocks (by variant) or footerBlocksByRId (by relationship ID)
   const hasFooterBlocks = headerFooter?.footerBlocks && Object.keys(headerFooter.footerBlocks).length > 0;
@@ -1063,22 +1134,14 @@ export async function incrementalLayout(
       // Also extract heights from footerBlocksByRId (for multi-section documents)
       // Store each rId's height separately for per-page margin calculation
       if (hasFooterBlocksByRId && headerFooter.footerBlocksByRId) {
-        footerContentHeightsByRId = new Map<string, number>();
-        for (const [rId, blocks] of headerFooter.footerBlocksByRId) {
-          if (!blocks || blocks.length === 0) continue;
-          // Measure blocks to get height
-          const measureConstraints = {
-            maxWidth: headerFooter.constraints.width,
-            maxHeight: headerFooter.constraints.height,
-          };
-          const measures = await Promise.all(blocks.map((block) => measureFn(block, measureConstraints)));
-          // Layout to get actual height — pass full constraints for page-relative normalization
-          const layout = layoutHeaderFooter(blocks, measures, headerFooter.constraints, 'footer');
-          if (layout.height > 0) {
-            // Store height by rId for per-page margin calculation
-            footerContentHeightsByRId.set(rId, layout.height);
-          }
-        }
+        const measuredHeights = await measureHeightsByReference(
+          'footer',
+          headerFooter.footerBlocksByRId,
+          headerFooter.constraints,
+          measureFn,
+        );
+        footerContentHeightsByRId = measuredHeights.heightsByRId;
+        footerContentHeightsBySectionRef = measuredHeights.heightsBySectionRef;
       }
     } catch (error) {
       console.error('[Layout] Footer pre-layout failed:', error);
@@ -1094,7 +1157,9 @@ export async function incrementalLayout(
     ...options,
     headerContentHeights, // Pass header heights to prevent overlap (per-variant)
     footerContentHeights, // Pass footer heights to prevent overlap (per-variant)
+    headerContentHeightsBySectionRef, // Pass header heights by rId+section for exact page-specific margin calculation
     headerContentHeightsByRId, // Pass header heights by rId for per-page margin calculation
+    footerContentHeightsBySectionRef, // Pass footer heights by rId+section for exact page-specific margin calculation
     footerContentHeightsByRId, // Pass footer heights by rId for per-page margin calculation
     remeasureParagraph: (block: FlowBlock, maxWidth: number, firstLineIndent?: number) =>
       remeasureParagraph(block as ParagraphBlock, maxWidth, firstLineIndent),
@@ -1178,7 +1243,9 @@ export async function incrementalLayout(
         ...options,
         headerContentHeights, // Pass header heights to prevent overlap (per-variant)
         footerContentHeights, // Pass footer heights to prevent overlap (per-variant)
+        headerContentHeightsBySectionRef, // Pass header heights by rId+section for exact page-specific margin calculation
         headerContentHeightsByRId, // Pass header heights by rId for per-page margin calculation
+        footerContentHeightsBySectionRef, // Pass footer heights by rId+section for exact page-specific margin calculation
         footerContentHeightsByRId, // Pass footer heights by rId for per-page margin calculation
         remeasureParagraph: (block: FlowBlock, maxWidth: number, firstLineIndent?: number) =>
           remeasureParagraph(block as ParagraphBlock, maxWidth, firstLineIndent),
@@ -1328,6 +1395,34 @@ export async function incrementalLayout(
           const columns = pageColumns.get(pageIndex);
           const columnCount = Math.max(1, Math.floor(columns?.count ?? 1));
 
+          // SD-1680: cap placement to the footnote demand on this page (capped by maxReserve).
+          // Demand = sum of measured heights of all footnote refs anchored here, plus the
+          // separator/padding/gap overhead they would incur when stacked. Capping placement
+          // at `min(demand, maxReserve)` (rather than `baseReserve`) decouples the plan's
+          // placement from the body's prior-pass reserve: the plan reports how much band
+          // the footnotes actually need, the body grows its reserve to match on the next
+          // pass, and placement never exceeds maxReserve so footnotes cannot render past
+          // the page's bottom margin.
+          let demand = 0;
+          for (let columnIndex = 0; columnIndex < columnCount; columnIndex += 1) {
+            const ids = idsByColumn.get(pageIndex)?.get(columnIndex) ?? [];
+            let columnDemand = 0;
+            ids.forEach((id, idx) => {
+              const ranges = rangesByFootnoteId.get(id) ?? [];
+              let rangesHeight = 0;
+              ranges.forEach((range) => {
+                const spacingAfter = 'spacingAfter' in range ? (range.spacingAfter ?? 0) : 0;
+                rangesHeight += range.height + spacingAfter;
+              });
+              columnDemand += rangesHeight + (idx > 0 ? safeGap : 0);
+            });
+            if (columnDemand > 0) {
+              columnDemand += safeSeparatorSpacingBefore + safeDividerHeight + safeTopPadding;
+            }
+            if (columnDemand > demand) demand = columnDemand;
+          }
+          const placementCeiling = demand > 0 ? Math.min(Math.ceil(demand), maxReserve) : maxReserve;
+
           const pendingForPage = new Map<number, Array<{ id: string; ranges: FootnoteRange[] }>>();
           pendingByColumn.forEach((entries, columnIndex) => {
             const targetIndex = columnIndex < columnCount ? columnIndex : Math.max(0, columnCount - 1);
@@ -1365,7 +1460,7 @@ export async function incrementalLayout(
                 : 0;
               const overhead = isFirstSlice ? separatorBefore + separatorHeight + safeTopPadding : 0;
               const gapBefore = !isFirstSlice ? safeGap : 0;
-              const availableHeight = Math.max(0, maxReserve - usedHeight - overhead - gapBefore);
+              const availableHeight = Math.max(0, placementCeiling - usedHeight - overhead - gapBefore);
               const { slice, remainingRanges } = fitFootnoteContent(
                 id,
                 ranges,
@@ -1374,7 +1469,7 @@ export async function incrementalLayout(
                 columnIndex,
                 isContinuation,
                 measuresById,
-                isFirstSlice && maxReserve > 0,
+                isFirstSlice && placementCeiling > 0,
               );
 
               if (slice.ranges.length === 0) {
@@ -1503,7 +1598,7 @@ export async function incrementalLayout(
           );
           const pageContentWidth = pageSize.w - (marginLeft + marginRight);
           const fallbackColumns = normalizeColumnsForFootnotes(
-            options.columns ?? { count: 1, gap: 0 },
+            options.columns ?? SINGLE_COLUMN_DEFAULT,
             pageContentWidth,
           );
           const columns = pageColumns.get(pageIndex) ?? {
@@ -1742,6 +1837,10 @@ export async function incrementalLayout(
           footnoteReservedByPageIndex,
           headerContentHeights,
           footerContentHeights,
+          headerContentHeightsBySectionRef,
+          headerContentHeightsByRId,
+          footerContentHeightsBySectionRef,
+          footerContentHeightsByRId,
           remeasureParagraph: (block: FlowBlock, maxWidth: number, firstLineIndent?: number) =>
             remeasureParagraph(block as ParagraphBlock, maxWidth, firstLineIndent),
         });
@@ -1756,7 +1855,7 @@ export async function incrementalLayout(
       // so each page gets the correct reserve (avoids "too much" on one page and "not enough" on another).
       if (reserves.some((h) => h > 0)) {
         let reservesStabilized = false;
-        const seenReserveKeys = new Set<string>([reserves.join(',')]);
+        const seenReserveVectors: number[][] = [reserves.slice()];
         for (let pass = 0; pass < MAX_FOOTNOTE_LAYOUT_PASSES; pass += 1) {
           layout = relayout(reserves);
           ({ columns: pageColumns, idsByColumn } = resolveFootnoteAssignments(layout));
@@ -1772,13 +1871,33 @@ export async function incrementalLayout(
             reservesStabilized = true;
             break;
           }
-          // Detect oscillation: if we've produced a reserve vector we already tried,
-          // the loop will never converge. Break early to avoid wasted relayout passes.
+          // SD-1680: when reserves oscillate (typically between a state where all footnotes
+          // fit and a state where body packs tighter with some footnotes pushed off the
+          // page), prefer the element-wise max across all seen states. This matches Word's
+          // bias toward keeping footnotes on their ref's page rather than tight body
+          // packing, and avoids overflow from the body reserving less than the plan places.
           const nextKey = nextReserves.join(',');
-          if (seenReserveKeys.has(nextKey)) {
+          const seen = seenReserveVectors.some((v) => v.join(',') === nextKey);
+          if (seen) {
+            const allVectors = [...seenReserveVectors, nextReserves];
+            const mergedLength = Math.max(...allVectors.map((v) => v.length));
+            const merged = new Array<number>(mergedLength).fill(0);
+            for (const vec of allVectors) {
+              for (let i = 0; i < mergedLength; i += 1) {
+                if ((vec[i] ?? 0) > merged[i]) merged[i] = vec[i];
+              }
+            }
+            reserves = merged;
+            // Relayout with merged reserves so post-loop sees a layout consistent with the
+            // reserves we're about to apply — otherwise pages may collapse to the layout
+            // built with the smaller oscillating reserve.
+            layout = relayout(reserves);
+            ({ columns: pageColumns, idsByColumn } = resolveFootnoteAssignments(layout));
+            ({ measuresById } = await measureFootnoteBlocks(collectFootnoteIdsByColumn(idsByColumn)));
+            plan = computeFootnoteLayoutPlan(layout, idsByColumn, measuresById, reserves, pageColumns);
             break;
           }
-          seenReserveKeys.add(nextKey);
+          seenReserveVectors.push(nextReserves.slice());
           // Only update reserves when we will do another layout pass; otherwise layout
           // would be built with the previous reserves while reserves would be nextReserves,
           // and the plan/injection phase could place footnotes in the wrong band.
@@ -1803,15 +1922,31 @@ export async function incrementalLayout(
           reserves,
           finalPageColumns,
         );
-        const finalReserves = finalPlan.reserves;
         let reservesAppliedToLayout = reserves;
-        const reservesDiffer =
-          finalReserves.length !== reserves.length ||
-          finalReserves.some((h, i) => (reserves[i] ?? 0) !== h) ||
-          reserves.some((h, i) => (finalReserves[i] ?? 0) !== h);
-        if (reservesDiffer) {
-          layout = relayout(finalReserves);
-          reservesAppliedToLayout = finalReserves;
+        // SD-1680: the post-loop can still mismatch the body reserve and plan placement when
+        // relayouting with finalPlan.reserves shifts footnote refs between pages (the newly
+        // relaxed page now holds refs the old reserves didn't account for). Iterate a few
+        // times, each step taking the element-wise max of current reserves and the new plan's
+        // reserves, so the final layout's reservation on every page is at least as large as
+        // the demand from the final ref assignment. This guarantees placements stay inside
+        // the band and cannot render past the page's bottom margin.
+        const MAX_POST_PASSES = 3;
+        for (let postPass = 0; postPass < MAX_POST_PASSES; postPass += 1) {
+          const target = reservesAppliedToLayout.slice();
+          const planReserves = finalPlan.reserves;
+          const len = Math.max(target.length, planReserves.length);
+          let needsRelayout = false;
+          for (let i = 0; i < len; i += 1) {
+            const applied = target[i] ?? 0;
+            const needed = planReserves[i] ?? 0;
+            if (needed > applied) {
+              target[i] = needed;
+              needsRelayout = true;
+            }
+          }
+          if (!needsRelayout) break;
+          layout = relayout(target);
+          reservesAppliedToLayout = target;
           ({ columns: finalPageColumns, idsByColumn: finalIdsByColumn } = resolveFootnoteAssignments(layout));
           ({ blocks: finalBlocks, measuresById: finalMeasuresById } = await measureFootnoteBlocks(
             collectFootnoteIdsByColumn(finalIdsByColumn),

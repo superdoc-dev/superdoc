@@ -155,6 +155,12 @@ export function toFlowBlocks(pmDoc: PMNode | object, options?: AdapterOptions): 
     defaultFont,
     defaultSize,
   );
+  if (options?.showBookmarks !== undefined) {
+    converterContext.showBookmarks = options.showBookmarks;
+  }
+  if (converterContext.showBookmarks) {
+    converterContext.renderedBookmarkIds = new Set<string>();
+  }
 
   const blocks: FlowBlock[] = [];
   const bookmarks = new Map<string, number>();
@@ -189,6 +195,7 @@ export function toFlowBlocks(pmDoc: PMNode | object, options?: AdapterOptions): 
     recordBlockKind,
     nextBlockId,
     blockIdPrefix: idPrefix,
+    storyKey: options?.storyKey,
     positions,
     defaultFont,
     defaultSize,

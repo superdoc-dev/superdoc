@@ -877,22 +877,49 @@ const handleTrackedChangeTransaction = (trackedChangeMeta, trackedChanges, newEd
   }
 
   const newTrackedChanges = { ...trackedChanges };
-  let id = insertedMark?.attrs?.id || deletionMark?.attrs?.id || formatMark?.attrs?.id;
+  const insertedId = insertedMark?.attrs?.id ?? null;
+  const deletionId = deletionMark?.attrs?.id ?? null;
+  const formatId = formatMark?.attrs?.id ?? null;
+  const primaryId = insertedId || deletionId || formatId;
 
-  if (!id) {
+  if (!primaryId) {
     return trackedChanges;
   }
 
-  // Maintain a map of tracked changes with their inserted/deleted ids
-  let isNewChange = false;
-  if (!newTrackedChanges[id]) {
-    newTrackedChanges[id] = {};
-    isNewChange = true;
-  }
+  const registerTrackedChangeId = (changeId, patch) => {
+    if (!changeId) return false;
 
-  if (insertedMark) newTrackedChanges[id].insertion = id;
-  if (deletionMark) newTrackedChanges[id].deletion = deletionMark.attrs?.id;
-  if (formatMark) newTrackedChanges[id].format = formatMark.attrs?.id;
+    const existing = newTrackedChanges[changeId];
+    if (existing) {
+      Object.assign(existing, patch);
+      return false;
+    }
+
+    newTrackedChanges[changeId] = { ...patch };
+    return true;
+  };
+
+  const buildTrackedChangePayload = ({ event, marks, nodes, deletionNodes = [] }) => {
+    if (!marks.insertedMark && !marks.deletionMark && !marks.formatMark) {
+      return null;
+    }
+
+    const trackedMarkId =
+      marks.insertedMark?.attrs?.id ?? marks.deletionMark?.attrs?.id ?? marks.formatMark?.attrs?.id ?? null;
+    if (!trackedMarkId) {
+      return null;
+    }
+
+    return createOrUpdateTrackedChangeComment({
+      documentId: editor.options.documentId,
+      event,
+      marks,
+      deletionNodes,
+      nodes,
+      newEditorState,
+      trackedChangesForId: getTrackChanges(newEditorState, trackedMarkId),
+    });
+  };
 
   const { step } = trackedChangeMeta;
   let nodes = step?.slice?.content?.content || [];
@@ -909,9 +936,54 @@ const handleTrackedChangeTransaction = (trackedChangeMeta, trackedChanges, newEd
   }
 
   const hasCandidateNodes = nodes.length > 0 || Boolean(deletionNodes?.length);
+  const hasIndependentReplacementIds =
+    Boolean(insertedMark && deletionMark) && Boolean(insertedId) && Boolean(deletionId) && insertedId !== deletionId;
+
+  if (hasIndependentReplacementIds) {
+    const isNewInsertion = registerTrackedChangeId(insertedId, { insertion: insertedId });
+    const isNewDeletion = registerTrackedChangeId(deletionId, { deletion: deletionId });
+
+    const insertionPayload = hasCandidateNodes
+      ? buildTrackedChangePayload({
+          event: isNewInsertion ? 'add' : 'update',
+          marks: {
+            insertedMark,
+            deletionMark: null,
+            formatMark: null,
+          },
+          deletionNodes: [],
+          nodes,
+        })
+      : null;
+
+    const deletionPayload =
+      deletionMark && (hasCandidateNodes || getTrackChanges(newEditorState, deletionId).length > 0)
+        ? buildTrackedChangePayload({
+            event: isNewDeletion ? 'add' : 'update',
+            marks: {
+              insertedMark: null,
+              deletionMark,
+              formatMark: null,
+            },
+            deletionNodes,
+            nodes: [],
+          })
+        : null;
+
+    if (emitCommentEvent && insertionPayload) editor.emit('commentsUpdate', insertionPayload);
+    if (emitCommentEvent && deletionPayload) editor.emit('commentsUpdate', deletionPayload);
+    return newTrackedChanges;
+  }
+
+  // Maintain a map of tracked changes with their inserted/deleted ids.
+  const isNewChange = registerTrackedChangeId(primaryId, {
+    ...(insertedMark ? { insertion: primaryId } : {}),
+    ...(deletionMark ? { deletion: deletionId } : {}),
+    ...(formatMark ? { format: formatId } : {}),
+  });
+
   const emitParams = hasCandidateNodes
-    ? createOrUpdateTrackedChangeComment({
-        documentId: editor.options.documentId,
+    ? buildTrackedChangePayload({
         event: isNewChange ? 'add' : 'update',
         marks: {
           insertedMark,
@@ -920,7 +992,6 @@ const handleTrackedChangeTransaction = (trackedChangeMeta, trackedChanges, newEd
         },
         deletionNodes,
         nodes,
-        newEditorState,
       })
     : null;
 
@@ -1064,7 +1135,9 @@ const createOrUpdateTrackedChangeComment = ({
   const { author, authorEmail, authorImage, date, importedAuthor } = attrs;
   const id = attrs.id;
 
-  let isReplacement = !!(marks.insertedMark && marks.deletionMark);
+  const insertedMarkId = marks.insertedMark?.attrs?.id ?? null;
+  const deletionMarkId = marks.deletionMark?.attrs?.id ?? null;
+  let isReplacement = Boolean(insertedMarkId && deletionMarkId && insertedMarkId === deletionMarkId);
 
   // Fallback: check the document for both mark types under the same ID
   // (covers edge cases where transaction meta only carries one mark)

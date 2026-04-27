@@ -35,7 +35,11 @@ Returns a Receipt confirming the decision was applied; reports NO_OP if the chan
 {
   "decision": "accept",
   "target": {
-    "id": "id-001"
+    "id": "id-001",
+    "story": {
+      "kind": "story",
+      "storyType": "body"
+    }
   }
 }
 ```
@@ -114,6 +118,9 @@ Returns a Receipt confirming the decision was applied; reports NO_OP if the chan
           "properties": {
             "id": {
               "type": "string"
+            },
+            "story": {
+              "$ref": "#/$defs/StoryLocator"
             }
           },
           "required": [

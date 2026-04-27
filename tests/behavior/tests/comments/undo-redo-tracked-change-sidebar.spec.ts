@@ -13,10 +13,11 @@ type ChangeType = 'addition' | 'deletion' | 'replacement';
 type Decision = 'accept' | 'reject';
 
 const CHANGE_TYPES: ChangeType[] = ['addition', 'deletion', 'replacement'];
+const trackedChangePanelSelector = '#comments-panel .comment-item .comments-dialog:not(.is-resolved)';
 
 const getUnresolvedTrackedBubbleCount = async (page: Page): Promise<number> =>
   page
-    .locator('.superdoc__right-sidebar .comment-placeholder .comments-dialog:not(.is-resolved)', {
+    .locator(trackedChangePanelSelector, {
       has: page.locator('.tracked-change-text'),
     })
     .count();
@@ -134,8 +135,8 @@ for (const changeType of CHANGE_TYPES) {
 }
 
 test('partial undo updates tracked-change bubble text to match the document (SD-2277)', async ({ superdoc }) => {
-  const sidebar = superdoc.page.locator('.superdoc__right-sidebar');
-  const bubbleText = sidebar.locator('.tracked-change-text.is-inserted');
+  const commentsPanel = superdoc.page.locator('#comments-panel');
+  const bubbleText = commentsPanel.locator('.tracked-change-text.is-inserted');
 
   await assertDocumentApiReady(superdoc.page);
   await superdoc.setDocumentMode('suggesting');
@@ -148,6 +149,7 @@ test('partial undo updates tracked-change bubble text to match the document (SD-
   await superdoc.waitForStable();
 
   await expectTrackedState(superdoc.page, { changes: 1, bubbles: 1 });
+  await expect(commentsPanel).toContainText('hello world');
   await expect(bubbleText).toContainText('hello world');
 
   await superdoc.undo();

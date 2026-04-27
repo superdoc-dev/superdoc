@@ -21,6 +21,7 @@ import { buildTextMutationResolution, readTextAtResolvedRange } from './text-mut
 import type { Transaction } from 'prosemirror-state';
 import type { Editor } from '../../core/Editor.js';
 import { DocumentApiAdapterError } from '../errors.js';
+import { buildTextWithTabs } from './text-with-tabs.js';
 
 export type WithinResult = { ok: true; range: { start: number; end: number } | undefined } | { ok: false };
 export type ResolvedTextTarget = { from: number; to: number };
@@ -228,8 +229,8 @@ export function insertParagraphAtEnd(
   applyMeta?: (tr: Transaction) => Transaction,
 ): void {
   const schema = editor.state.schema;
-  const textNode = schema.text(text);
-  const paragraph = schema.nodes.paragraph.create(null, textNode);
+  const content = buildTextWithTabs(schema, text, undefined);
+  const paragraph = schema.nodes.paragraph.create(null, content);
   const tr = editor.state.tr;
   tr.insert(pos, paragraph);
   if (applyMeta) applyMeta(tr);

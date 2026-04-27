@@ -144,7 +144,39 @@ function makeInput(name = 'bm1'): BookmarkInsertInput {
 }
 
 beforeEach(() => {
-  vi.clearAllMocks();
+  vi.resetAllMocks();
+
+  vi.mocked(executeDomainCommand).mockImplementation((_editor: Editor, handler: () => boolean) => ({
+    steps: [{ effect: handler() ? 'changed' : 'noop' }],
+  }));
+  vi.mocked(resolveWriteStoryRuntime).mockImplementation(
+    (editor: Editor) =>
+      ({
+        locator: { kind: 'story', storyType: 'body' },
+        storyKey: 'story:body',
+        editor,
+        kind: 'body',
+      }) as any,
+  );
+  vi.mocked(getRevision).mockImplementation(() => 'rev-1');
+  vi.mocked(checkRevision).mockImplementation(() => {});
+  vi.mocked(paginate).mockImplementation((items: unknown[], offset = 0, limit?: number) => {
+    const total = items.length;
+    const sliced = items.slice(offset, limit ? offset + limit : undefined);
+    return { total, items: sliced };
+  });
+  vi.mocked(resolveInlineInsertPosition).mockImplementation(() => ({ from: 5, to: 8 }));
+  vi.mocked(findAllBookmarks).mockImplementation(() => []);
+  vi.mocked(findAllBookmarksInDocument).mockImplementation(() => []);
+  vi.mocked(resolveStoryRuntime).mockImplementation(
+    (editor: Editor) =>
+      ({
+        locator: { kind: 'story', storyType: 'body' },
+        storyKey: 'story:body',
+        editor,
+        kind: 'body',
+      }) as any,
+  );
 });
 
 describe('bookmarksInsertWrapper', () => {
@@ -309,6 +341,9 @@ describe('bookmarksInsertWrapper', () => {
 describe('bookmarksRenameWrapper', () => {
   it('renames a body bookmark and returns a plain address without commit', () => {
     const { editor, tr } = makeEditor();
+    vi.mocked(findAllBookmarksInDocument).mockReturnValueOnce([
+      { name: 'old-name', bookmarkId: '1', storyKey: 'body' },
+    ]);
 
     vi.mocked(resolveBookmarkTarget).mockReturnValueOnce({
       pos: 5,
@@ -375,6 +410,54 @@ describe('bookmarksRenameWrapper', () => {
     expect(disposeEphemeralWriteRuntime).toHaveBeenCalled();
   });
 
+  it('resolves an omitted-story rename target document-wide before mutating a non-body bookmark', () => {
+    const { editor: hostEditor } = makeEditor();
+    const { editor: headerEditor } = makeEditor();
+    const commit = vi.fn();
+    const headerLocator = { kind: 'story' as const, storyType: 'headerFooterPart' as const, refId: 'rId7' };
+
+    vi.mocked(findAllBookmarksInDocument).mockReturnValueOnce([
+      { name: 'hdr-bm', bookmarkId: '1', storyKey: 'hf:part:rId7' },
+    ]);
+    vi.mocked(resolveWriteStoryRuntime).mockReturnValueOnce({
+      locator: headerLocator,
+      storyKey: 'hf:part:rId7',
+      editor: headerEditor,
+      kind: 'headerFooter',
+      commit,
+    } as any);
+    vi.mocked(resolveBookmarkTarget).mockReturnValueOnce({
+      pos: 5,
+      name: 'hdr-bm',
+      bookmarkId: '1',
+      endPos: 8,
+      node: { attrs: { name: 'hdr-bm', id: '1' } } as never,
+    });
+    vi.mocked(findAllBookmarksInDocument).mockReturnValueOnce([]);
+
+    const result = bookmarksRenameWrapper(hostEditor, {
+      target: { kind: 'entity', entityType: 'bookmark', name: 'hdr-bm' },
+      newName: 'hdr-bm-renamed',
+    });
+
+    expect(resolveWriteStoryRuntime).toHaveBeenCalledWith(hostEditor, headerLocator);
+    expect(resolveBookmarkTarget).toHaveBeenCalledWith(headerEditor.state.doc, {
+      kind: 'entity',
+      entityType: 'bookmark',
+      name: 'hdr-bm',
+    });
+    expect(result).toEqual({
+      success: true,
+      bookmark: {
+        kind: 'entity',
+        entityType: 'bookmark',
+        name: 'hdr-bm-renamed',
+        story: headerLocator,
+      },
+    });
+    expect(commit).toHaveBeenCalledWith(hostEditor);
+  });
+
   it('checks expectedRevision on the story editor before a non-body rename', () => {
     const { editor: hostEditor } = makeEditor();
     const { editor: storyEditor } = makeEditor();
@@ -411,6 +494,9 @@ describe('bookmarksRenameWrapper', () => {
 
   it('throws INVALID_INPUT when the new name exists in another story', () => {
     const { editor, tr } = makeEditor();
+    vi.mocked(findAllBookmarksInDocument)
+      .mockReturnValueOnce([{ name: 'old-name', bookmarkId: '1', storyKey: 'body' }])
+      .mockReturnValueOnce([{ name: 'taken-name', bookmarkId: '77', storyKey: 'hf:part:rId7' }]);
 
     vi.mocked(resolveBookmarkTarget).mockReturnValueOnce({
       pos: 5,
@@ -419,11 +505,6 @@ describe('bookmarksRenameWrapper', () => {
       endPos: 8,
       node: { attrs: { name: 'old-name', id: '1' } } as never,
     });
-
-    vi.mocked(findAllBookmarksInDocument).mockReturnValueOnce([
-      { name: 'taken-name', bookmarkId: '77', storyKey: 'hf:part:rId7' },
-    ]);
-
     expect(() =>
       bookmarksRenameWrapper(editor, {
         target: { kind: 'entity', entityType: 'bookmark', name: 'old-name' },
@@ -440,6 +521,9 @@ describe('bookmarksRenameWrapper', () => {
 
   it('does not ignore a duplicate name in another story when bookmark ids collide', () => {
     const { editor, tr } = makeEditor();
+    vi.mocked(findAllBookmarksInDocument)
+      .mockReturnValueOnce([{ name: 'body-name', bookmarkId: '5', storyKey: 'body' }])
+      .mockReturnValueOnce([{ name: 'shared-name', bookmarkId: '5', storyKey: 'hf:part:rId7' }]);
 
     vi.mocked(resolveBookmarkTarget).mockReturnValueOnce({
       pos: 5,
@@ -448,11 +532,6 @@ describe('bookmarksRenameWrapper', () => {
       endPos: 8,
       node: { attrs: { name: 'body-name', id: '5' } } as never,
     });
-
-    vi.mocked(findAllBookmarksInDocument).mockReturnValueOnce([
-      { name: 'shared-name', bookmarkId: '5', storyKey: 'hf:part:rId7' },
-    ]);
-
     expect(() =>
       bookmarksRenameWrapper(editor, {
         target: { kind: 'entity', entityType: 'bookmark', name: 'body-name' },
@@ -471,6 +550,9 @@ describe('bookmarksRenameWrapper', () => {
 describe('bookmarksRemoveWrapper', () => {
   it('removes a body bookmark and returns a plain address without commit', () => {
     const { editor, tr } = makeEditor();
+    vi.mocked(findAllBookmarksInDocument).mockReturnValueOnce([
+      { name: 'bm-remove', bookmarkId: '1', storyKey: 'body' },
+    ]);
 
     vi.mocked(resolveBookmarkTarget).mockReturnValueOnce({
       pos: 5,
@@ -529,6 +611,52 @@ describe('bookmarksRemoveWrapper', () => {
     });
     expect(commit).toHaveBeenCalledWith(editor);
     expect(disposeEphemeralWriteRuntime).toHaveBeenCalled();
+  });
+
+  it('resolves an omitted-story remove target document-wide before mutating a non-body bookmark', () => {
+    const { editor: hostEditor } = makeEditor();
+    const { editor: headerEditor } = makeEditor();
+    const commit = vi.fn();
+    const headerLocator = { kind: 'story' as const, storyType: 'headerFooterPart' as const, refId: 'rId7' };
+
+    vi.mocked(findAllBookmarksInDocument).mockReturnValueOnce([
+      { name: 'hdr-bm', bookmarkId: '1', storyKey: 'hf:part:rId7' },
+    ]);
+    vi.mocked(resolveWriteStoryRuntime).mockReturnValueOnce({
+      locator: headerLocator,
+      storyKey: 'hf:part:rId7',
+      editor: headerEditor,
+      kind: 'headerFooter',
+      commit,
+    } as any);
+    vi.mocked(resolveBookmarkTarget).mockReturnValueOnce({
+      pos: 5,
+      name: 'hdr-bm',
+      bookmarkId: '1',
+      endPos: 8,
+      node: { attrs: { name: 'hdr-bm', id: '1' }, nodeSize: 1 } as never,
+    });
+
+    const result = bookmarksRemoveWrapper(hostEditor, {
+      target: { kind: 'entity', entityType: 'bookmark', name: 'hdr-bm' },
+    });
+
+    expect(resolveWriteStoryRuntime).toHaveBeenCalledWith(hostEditor, headerLocator);
+    expect(resolveBookmarkTarget).toHaveBeenCalledWith(headerEditor.state.doc, {
+      kind: 'entity',
+      entityType: 'bookmark',
+      name: 'hdr-bm',
+    });
+    expect(result).toEqual({
+      success: true,
+      bookmark: {
+        kind: 'entity',
+        entityType: 'bookmark',
+        name: 'hdr-bm',
+        story: headerLocator,
+      },
+    });
+    expect(commit).toHaveBeenCalledWith(hostEditor);
   });
 
   it('checks expectedRevision on the story editor before a non-body removal', () => {

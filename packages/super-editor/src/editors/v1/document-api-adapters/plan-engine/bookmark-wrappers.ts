@@ -104,6 +104,19 @@ function checkBookmarkRevision(hostEditor: Editor, storyEditor: Editor, expected
   checkRevision(storyEditor, expectedRevision);
 }
 
+function resolveBookmarkMutationStory(editor: Editor, target: BookmarkAddress): BookmarkAddress['story'] | undefined {
+  if (target.story) {
+    return target.story;
+  }
+
+  const entry = findAllBookmarksInDocument(editor).find((bookmark) => bookmark.name === target.name);
+  if (!entry) {
+    throw new DocumentApiAdapterError('TARGET_NOT_FOUND', `Bookmark with name "${target.name}" not found.`);
+  }
+
+  return entry.storyKey === BODY_STORY_KEY ? undefined : parseStoryKey(entry.storyKey);
+}
+
 // ---------------------------------------------------------------------------
 // Read operations
 // ---------------------------------------------------------------------------
@@ -262,7 +275,7 @@ export function bookmarksRenameWrapper(
   options?: MutationOptions,
 ): BookmarkMutationResult {
   rejectTrackedMode('bookmarks.rename', options);
-  const runtime = resolveWriteStoryRuntime(editor, input.target.story);
+  const runtime = resolveWriteStoryRuntime(editor, resolveBookmarkMutationStory(editor, input.target));
   const storyEditor = runtime.editor;
 
   try {
@@ -316,7 +329,7 @@ export function bookmarksRemoveWrapper(
   options?: MutationOptions,
 ): BookmarkMutationResult {
   rejectTrackedMode('bookmarks.remove', options);
-  const runtime = resolveWriteStoryRuntime(editor, input.target.story);
+  const runtime = resolveWriteStoryRuntime(editor, resolveBookmarkMutationStory(editor, input.target));
   const storyEditor = runtime.editor;
 
   try {

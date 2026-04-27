@@ -167,14 +167,14 @@ describe('typed-node FieldInstance attachment', () => {
     expect(total[0].attrs.fieldInstance.family).toBe('NUMPAGES');
   });
 
-  it("does not leak fieldInstance into the outer rawField's source.originalXml capture", () => {
+  it("captures only original w:* runs in the outer rawField's source.originalXml (no synthetic sd:* wrappers)", () => {
     // Outer unknown CUSTOMFIELD wraps an inner PAGE field. The inner PAGE
     // emits sd:autoPageNumber with a fieldInstance attribute attached. The
-    // outer rawField captures the inner runs as its source.originalXml so
-    // passthrough export can re-emit the original subtree verbatim. The
-    // fieldInstance attribute is a JS object — if it leaks into that
-    // capture, the XML serializer writes an invalid attribute on
-    // passthrough. Verify the capture is strip-cloned.
+    // outer rawField captures runs as its source.originalXml so passthrough
+    // export can re-emit the original subtree verbatim. The capture must
+    // contain the inner field's begin/instr/separate/result/end w:r runs,
+    // not the synthesized sd:autoPageNumber wrapper — emitting the latter
+    // through the XML serializer would produce invalid OOXML on passthrough.
     const paragraph = {
       name: 'w:p',
       elements: [
@@ -206,13 +206,16 @@ describe('typed-node FieldInstance attachment', () => {
     const rawFi = raws[0].attrs.fieldInstance;
     expect(rawFi.family).toBe('CUSTOMFIELD');
 
-    // Walk the captured originalXml and assert no element carries a
-    // fieldInstance attribute. originalXml is a flat array of runs for
-    // complex fields.
+    // Walk the captured originalXml and assert no element is a synthetic
+    // sd:* wrapper and no fieldInstance attribute leaked into the capture.
+    // The capture is a flat array of runs for complex fields.
     const stack = Array.isArray(rawFi.source.originalXml) ? [...rawFi.source.originalXml] : [rawFi.source.originalXml];
     while (stack.length) {
       const node = stack.pop();
       if (!node || typeof node !== 'object') continue;
+      if (typeof node.name === 'string' && node.name.startsWith('sd:')) {
+        throw new Error(`synthetic ${node.name} leaked into source.originalXml — passthrough would emit invalid OOXML`);
+      }
       if (node.attributes && Object.prototype.hasOwnProperty.call(node.attributes, 'fieldInstance')) {
         throw new Error(`fieldInstance leaked into source.originalXml on element ${node.name}`);
       }

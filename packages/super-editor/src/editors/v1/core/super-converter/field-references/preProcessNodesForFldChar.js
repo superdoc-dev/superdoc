@@ -4,7 +4,7 @@
 import { getInstructionPreProcessor } from './fld-preprocessors';
 import { carbonCopy } from '@core/utilities/carbonCopy.js';
 import { buildFieldInstanceFromImport, readFieldFlags } from './build-field-instance.js';
-import { attachFieldInstanceToFieldNodes, cloneOoxmlWithoutFieldInstance } from './attach-field-instance.js';
+import { attachFieldInstanceToFieldNodes } from './attach-field-instance.js';
 
 const SKIP_FIELD_PROCESSING_NODE_NAMES = new Set(['w:drawing', 'w:pict']);
 
@@ -128,13 +128,14 @@ export const preProcessNodesForFldChar = (nodes = [], docx) => {
       } else {
         // We are inside another field, so add the combined nodes to the parent collection.
         collectedNodesStack[collectedNodesStack.length - 1].push(...outputNodes);
-        // The parent's source.originalXml capture must not carry the
-        // fieldInstance attribute we just attached (it is a JS object and
-        // would serialize as an invalid XML attribute on passthrough).
-        // Push fieldInstance-stripped clones into the raw stack instead.
-        rawCollectedNodesStack[rawCollectedNodesStack.length - 1].push(
-          ...outputNodes.map((n) => cloneOoxmlWithoutFieldInstance(n)),
-        );
+        // The parent's source.originalXml capture must hold the original
+        // OOXML runs, not the synthesized sd:* wrappers we just produced.
+        // If the synthesized wrappers leaked into the parent's raw stack,
+        // an unedited parent's passthrough export would emit literal
+        // `<sd:rawField>` / `<sd:sequenceField>` / etc. as XML, breaking
+        // structural fidelity. Push the inner field's begin/instr/separate/
+        // result/end run sequence (rawCollectedNodes) instead.
+        rawCollectedNodesStack[rawCollectedNodesStack.length - 1].push(...rawCollectedNodes);
       }
     } else {
       // An unmatched 'end' indicates a field from a parent node is closing.
@@ -214,11 +215,11 @@ export const preProcessNodesForFldChar = (nodes = [], docx) => {
           attachFieldInstanceToFieldNodes(processed, fieldInstance);
           if (collecting) {
             collectedNodesStack[collectedNodesStack.length - 1].push(...processed);
-            // Strip fieldInstance from the parent's source.originalXml capture
-            // (see complex-field handled branch for the same reason).
-            rawCollectedNodesStack[rawCollectedNodesStack.length - 1].push(
-              ...processed.map((n) => cloneOoxmlWithoutFieldInstance(n)),
-            );
+            // Push the original <w:fldSimple> run into the parent's raw
+            // stack — not the synthesized sd:* wrapper. See the complex-
+            // field branch for the same reasoning: passthrough on the
+            // parent must emit valid OOXML, not an sd:* literal.
+            rawCollectedNodesStack[rawCollectedNodesStack.length - 1].push(rawNode);
           } else {
             processedNodes.push(...processed);
           }
@@ -239,10 +240,10 @@ export const preProcessNodesForFldChar = (nodes = [], docx) => {
         });
         if (collecting) {
           collectedNodesStack[collectedNodesStack.length - 1].push(rawElement);
-          // Strip fieldInstance from the parent's source.originalXml capture
-          // (a nested rawField inside a parent rawField would otherwise
-          // serialize its fieldInstance object as an XML attribute).
-          rawCollectedNodesStack[rawCollectedNodesStack.length - 1].push(cloneOoxmlWithoutFieldInstance(rawElement));
+          // Push the original <w:fldSimple> run into the parent's raw
+          // stack so passthrough export emits valid OOXML, not an
+          // sd:rawField literal.
+          rawCollectedNodesStack[rawCollectedNodesStack.length - 1].push(rawNode);
         } else {
           processedNodes.push(rawElement);
         }

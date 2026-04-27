@@ -63,30 +63,6 @@ export function attachFieldInstanceToFieldNodes<T extends OoxmlNode>(
   return nodes as T[];
 }
 
-/**
- * Recursively deep-clone a parsed-XML subtree, removing any
- * `fieldInstance` entry from element attributes.
- *
- * The substrate stores FieldInstance on PM-bound `sd:*` elements as a
- * convenience for the v3 encoder, but `fieldInstance` is a JavaScript
- * object — not a string — so it must never reach an XML serializer. When
- * a parent field's import captures children for `source.originalXml`,
- * those children may already carry `fieldInstance` from a nested
- * preprocessor; this clone strips it so passthrough export emits a valid
- * subtree (instead of `fieldInstance="[object Object]"`).
- */
-export function cloneOoxmlWithoutFieldInstance<T extends OoxmlNode>(node: T): T {
-  const out: OoxmlNode = { ...node };
-  if (out.attributes && typeof out.attributes === 'object') {
-    const { fieldInstance: _stripped, ...rest } = out.attributes as Record<string, unknown>;
-    out.attributes = rest;
-  }
-  if (Array.isArray(out.elements)) {
-    out.elements = out.elements.map((child) => cloneOoxmlWithoutFieldInstance(child));
-  }
-  return out as T;
-}
-
 function visit(node: OoxmlNode | null | undefined, fieldInstance: FieldInstance): void {
   if (!node || typeof node !== 'object') return;
   if (typeof node.name === 'string' && FIELD_BEARING_XML_NAMES.has(node.name)) {

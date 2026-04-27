@@ -145,8 +145,26 @@ describe('readFieldFlags', () => {
     });
   });
 
-  it('reads "0" / "false" / arbitrary strings as false', () => {
+  it('reads "on" as true (ECMA-376 ST_OnOff form Word commonly emits)', () => {
+    expect(readFieldFlags({ attributes: { 'w:dirty': 'on', 'w:fldLock': 'on' } })).toEqual({
+      dirty: true,
+      locked: true,
+    });
+  });
+
+  it('reads ST_OnOff truthy values case-insensitively', () => {
+    expect(readFieldFlags({ attributes: { 'w:dirty': 'True', 'w:fldLock': 'ON' } })).toEqual({
+      dirty: true,
+      locked: true,
+    });
+  });
+
+  it('reads "0" / "false" / "off" / arbitrary strings as false', () => {
     expect(readFieldFlags({ attributes: { 'w:dirty': '0', 'w:fldLock': 'false' } })).toEqual({
+      dirty: false,
+      locked: false,
+    });
+    expect(readFieldFlags({ attributes: { 'w:dirty': 'off', 'w:fldLock': 'OFF' } })).toEqual({
       dirty: false,
       locked: false,
     });

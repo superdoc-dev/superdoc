@@ -116,7 +116,15 @@ export function readFieldFlags(element: { attributes?: Record<string, string | u
   };
 }
 
+/**
+ * ECMA-376 ST_OnOff truthiness. The spec lists `1`, `true`, and `on` as
+ * truthy and `0`, `false`, `off` as falsy; comparison is case-insensitive
+ * because some Word builds emit `True` / `On`. `w:dirty` and `w:fldLock`
+ * are ST_OnOff attributes, so all three truthy forms must be honored or
+ * documents using the `on` form will round-trip with the flag dropped.
+ */
 function isTruthyOoxmlBoolean(value: string | undefined): boolean {
   if (value == null) return false;
-  return value === '1' || value === 'true';
+  const lower = value.toLowerCase();
+  return lower === '1' || lower === 'true' || lower === 'on';
 }

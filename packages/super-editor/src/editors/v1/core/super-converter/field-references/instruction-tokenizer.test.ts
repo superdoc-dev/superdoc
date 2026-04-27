@@ -110,6 +110,61 @@ describe('tokenizeInstruction', () => {
     ]);
   });
 
+  describe('quoted-string escapes (ECMA-376 §17.16.1)', () => {
+    it('treats \\" as a literal quote inside a double-quoted string', () => {
+      expect(tokenizeInstruction('"He said \\"hi\\""')).toEqual([{ kind: 'quoted', text: 'He said "hi"', quote: '"' }]);
+    });
+
+    it('treats \\\\ as a literal backslash inside a quoted string', () => {
+      expect(tokenizeInstruction('"path\\\\to\\\\file"')).toEqual([
+        { kind: 'quoted', text: 'path\\to\\file', quote: '"' },
+      ]);
+    });
+
+    it("treats \\' as a literal quote inside a single-quoted string", () => {
+      expect(tokenizeInstruction("'O\\'Brien'")).toEqual([{ kind: 'quoted', text: "O'Brien", quote: "'" }]);
+    });
+
+    it('preserves unspecified \\X sequences verbatim inside quoted text', () => {
+      // \n is not a defined ECMA-376 escape; keep both characters so we
+      // do not silently drop or transform data.
+      expect(tokenizeInstruction('"line\\nbreak"')).toEqual([{ kind: 'quoted', text: 'line\\nbreak', quote: '"' }]);
+    });
+
+    it('does not split tokens at an escaped quote', () => {
+      const tokens = tokenizeInstruction('IF a = "He said \\"hi\\""');
+      expect(tokens).toEqual([
+        { kind: 'identifier', text: 'IF' },
+        { kind: 'whitespace', text: ' ' },
+        { kind: 'identifier', text: 'a' },
+        { kind: 'whitespace', text: ' ' },
+        { kind: 'identifier', text: '=' },
+        { kind: 'whitespace', text: ' ' },
+        { kind: 'quoted', text: 'He said "hi"', quote: '"' },
+      ]);
+    });
+
+    it('reconstructs an escaped quote byte-for-byte', () => {
+      const input = '"He said \\"hi\\""';
+      expect(reconstructInstruction(tokenizeInstruction(input))).toBe(input);
+    });
+
+    it('reconstructs an escaped backslash byte-for-byte', () => {
+      const input = '"path\\\\to\\\\file"';
+      expect(reconstructInstruction(tokenizeInstruction(input))).toBe(input);
+    });
+
+    it('canonicalizes a non-spec \\X to \\\\X on round-trip (data preserved, bytes differ)', () => {
+      // Reconstruction always escapes literal backslashes per the spec, so
+      // a source `\n` (not a defined escape) round-trips through the
+      // unescaped text `\n` and back as `\\n`. The two forms are
+      // semantically equivalent under the spec's escape rules.
+      const tokens = tokenizeInstruction('"line\\nbreak"');
+      expect(tokens[0]).toEqual({ kind: 'quoted', text: 'line\\nbreak', quote: '"' });
+      expect(reconstructInstruction(tokens)).toBe('"line\\\\nbreak"');
+    });
+  });
+
   describe('opaque fallback', () => {
     it('emits opaque for an unterminated double-quoted string', () => {
       expect(tokenizeInstruction('REF "unterminated')).toEqual([

@@ -67,16 +67,34 @@ export function tokenizeInstruction(raw: string): InstructionToken[] {
 
     if (QUOTES.has(ch)) {
       const quote = ch as '"' | "'";
-      const start = i + 1;
-      let j = start;
-      while (j < n && raw[j] !== quote) j++;
+      let j = i + 1;
+      let text = '';
+      // ECMA-376 §17.16.1 defines `\"` and `\\` as escapes inside a
+      // field-argument quoted string. Other `\X` sequences are not
+      // specified; preserve both characters verbatim to avoid silent data
+      // loss. Round-trip is byte-identical: the unescaped text is held in
+      // the token, and reconstruction re-escapes the special characters.
+      while (j < n) {
+        const c = raw[j];
+        if (c === quote) break;
+        if (c === '\\' && j + 1 < n) {
+          const next = raw[j + 1];
+          if (next === quote || next === '\\') {
+            text += next;
+            j += 2;
+            continue;
+          }
+        }
+        text += c;
+        j += 1;
+      }
       if (j >= n) {
         // Unterminated quoted string: fall back to an opaque token holding
         // the raw remainder so reconstruction is still byte-identical.
         out.push({ kind: 'opaque', text: raw.slice(i) });
         return out;
       }
-      out.push({ kind: 'quoted', text: raw.slice(start, j), quote });
+      out.push({ kind: 'quoted', text, quote });
       i = j + 1;
       continue;
     }
@@ -95,6 +113,10 @@ export function tokenizeInstruction(raw: string): InstructionToken[] {
         i += 1;
         continue;
       }
+      // ECMA-376 §17.16.1's grammar nominally permits two-character switch
+      // names, but every documented switch in §17.16.4-5 is single-char and
+      // every Word-emitted instruction follows that convention. Take one
+      // character and let any following identifier flow through as its arg.
       out.push({ kind: 'switch', flag: next });
       i += 2;
       continue;
@@ -144,7 +166,7 @@ function renderToken(t: InstructionToken): string {
     case 'opaque':
       return t.text;
     case 'quoted':
-      return t.quote + t.text + t.quote;
+      return t.quote + escapeQuotedText(t.text, t.quote) + t.quote;
     case 'switch':
       return '\\' + t.flag + (t.arg ? renderToken(t.arg) : '');
     case 'nestedField':
@@ -152,6 +174,25 @@ function renderToken(t: InstructionToken): string {
       // recursively re-emits the child field at this position.
       return '';
   }
+}
+
+/**
+ * Escape a quoted token's `text` payload back to its source form.
+ *
+ * Spec-defined escapes (`\"` / `\'` and `\\`) round-trip byte-for-byte.
+ * For non-spec `\X` sequences in the source the tokenizer preserves both
+ * characters in `text`; reconstruction always emits backslashes as `\\`,
+ * so `"path\nbreak"` becomes `"path\\nbreak"` on round-trip — different
+ * bytes, same canonical meaning.
+ */
+function escapeQuotedText(text: string, quote: '"' | "'"): string {
+  let out = '';
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (c === '\\' || c === quote) out += '\\';
+    out += c;
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------------------

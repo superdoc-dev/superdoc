@@ -230,7 +230,7 @@ describe('bookmarksInsertWrapper', () => {
     expect(commit).toHaveBeenCalledWith(editor);
   });
 
-  it('checks expectedRevision on the host editor before a non-body insert', () => {
+  it('checks expectedRevision on the story editor before a non-body insert', () => {
     const { editor: hostEditor } = makeEditor();
     const { editor: storyEditor } = makeEditor();
     const footnoteLocator = { kind: 'story' as const, storyType: 'footnote' as const, noteId: 'fn-1' };
@@ -256,7 +256,7 @@ describe('bookmarksInsertWrapper', () => {
       { expectedRevision: 'rev-host' },
     );
 
-    expect(checkRevision).toHaveBeenCalledWith(hostEditor, 'rev-host');
+    expect(checkRevision).toHaveBeenCalledWith(storyEditor, 'rev-host');
     expect(executeDomainCommand).toHaveBeenCalledWith(storyEditor, expect.any(Function));
   });
 
@@ -374,7 +374,7 @@ describe('bookmarksRenameWrapper', () => {
     expect(disposeEphemeralWriteRuntime).toHaveBeenCalled();
   });
 
-  it('checks expectedRevision on the host editor before a non-body rename', () => {
+  it('checks expectedRevision on the story editor before a non-body rename', () => {
     const { editor: hostEditor } = makeEditor();
     const { editor: storyEditor } = makeEditor();
     const footnoteLocator = { kind: 'story' as const, storyType: 'footnote' as const, noteId: 'fn-1' };
@@ -404,7 +404,7 @@ describe('bookmarksRenameWrapper', () => {
       { expectedRevision: 'rev-host' },
     );
 
-    expect(checkRevision).toHaveBeenCalledWith(hostEditor, 'rev-host');
+    expect(checkRevision).toHaveBeenCalledWith(storyEditor, 'rev-host');
     expect(executeDomainCommand).toHaveBeenCalledWith(storyEditor, expect.any(Function));
   });
 
@@ -501,7 +501,7 @@ describe('bookmarksRemoveWrapper', () => {
     expect(disposeEphemeralWriteRuntime).toHaveBeenCalled();
   });
 
-  it('checks expectedRevision on the host editor before a non-body removal', () => {
+  it('checks expectedRevision on the story editor before a non-body removal', () => {
     const { editor: hostEditor } = makeEditor();
     const { editor: storyEditor } = makeEditor();
     const footnoteLocator = { kind: 'story' as const, storyType: 'footnote' as const, noteId: 'fn-1' };
@@ -529,7 +529,7 @@ describe('bookmarksRemoveWrapper', () => {
       { expectedRevision: 'rev-host' },
     );
 
-    expect(checkRevision).toHaveBeenCalledWith(hostEditor, 'rev-host');
+    expect(checkRevision).toHaveBeenCalledWith(storyEditor, 'rev-host');
     expect(executeDomainCommand).toHaveBeenCalledWith(storyEditor, expect.any(Function));
   });
 });
@@ -639,7 +639,7 @@ describe('bookmarksListWrapper', () => {
     const result = bookmarksListWrapper(editor, { in: headerLocator });
 
     expect(resolveStoryRuntime).toHaveBeenCalledWith(editor, headerLocator);
-    expect(result.evaluatedRevision).toBe('rev-host');
+    expect(result.evaluatedRevision).toBe('rev-story');
   });
 
   it('applies pagination via offset and limit', () => {

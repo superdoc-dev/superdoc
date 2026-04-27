@@ -83,6 +83,27 @@ function bookmarkExistsAnywhere(
   });
 }
 
+function checkBookmarkRevision(hostEditor: Editor, storyEditor: Editor, expectedRevision: string | undefined): void {
+  if (expectedRevision === undefined) return;
+
+  if (hostEditor === storyEditor) {
+    checkRevision(storyEditor, expectedRevision);
+    return;
+  }
+
+  const storyRevision = getRevision(storyEditor);
+  if (expectedRevision === storyRevision) {
+    return;
+  }
+
+  const hostRevision = getRevision(hostEditor);
+  if (expectedRevision === hostRevision) {
+    return;
+  }
+
+  checkRevision(storyEditor, expectedRevision);
+}
+
 // ---------------------------------------------------------------------------
 // Read operations
 // ---------------------------------------------------------------------------
@@ -132,7 +153,7 @@ function listBookmarksFromStory(
   const effectiveLimit = query?.limit ?? total;
 
   return buildDiscoveryResult({
-    evaluatedRevision: getRevision(editor),
+    evaluatedRevision: revision,
     total,
     items: paged,
     page: { limit: effectiveLimit, offset: query?.offset ?? 0, returned: paged.length },
@@ -172,7 +193,7 @@ export function bookmarksInsertWrapper(
   const address: BookmarkAddress = buildBookmarkAddress(input.name, runtime.locator);
 
   try {
-    checkRevision(editor, options?.expectedRevision);
+    checkBookmarkRevision(editor, storyEditor, options?.expectedRevision);
     const allBookmarks = findAllBookmarksInDocument(editor);
 
     if (bookmarkExistsAnywhere(editor, input.name, undefined, allBookmarks)) {
@@ -237,7 +258,7 @@ export function bookmarksRenameWrapper(
   const storyEditor = runtime.editor;
 
   try {
-    checkRevision(editor, options?.expectedRevision);
+    checkBookmarkRevision(editor, storyEditor, options?.expectedRevision);
     const resolved = resolveBookmarkTarget(storyEditor.state.doc, input.target);
 
     if (resolved.name === input.newName) {
@@ -289,7 +310,7 @@ export function bookmarksRemoveWrapper(
   const storyEditor = runtime.editor;
 
   try {
-    checkRevision(editor, options?.expectedRevision);
+    checkBookmarkRevision(editor, storyEditor, options?.expectedRevision);
     const resolved = resolveBookmarkTarget(storyEditor.state.doc, input.target);
     const address: BookmarkAddress = buildBookmarkAddress(resolved.name, runtime.locator);
 

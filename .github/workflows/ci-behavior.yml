@@ -6,16 +6,6 @@ permissions:
 on:
   pull_request:
     branches: [main, stable]
-    paths:
-      - 'packages/superdoc/**'
-      - 'packages/layout-engine/**'
-      - 'packages/super-editor/**'
-      - 'packages/word-layout/**'
-      - 'packages/preset-geometry/**'
-      - 'tests/behavior/**'
-      - 'shared/**'
-      - '.github/workflows/ci-behavior.yml'
-      - '!**/*.md'
   merge_group:
   workflow_dispatch:
 

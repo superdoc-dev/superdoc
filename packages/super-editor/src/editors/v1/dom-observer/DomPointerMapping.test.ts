@@ -352,6 +352,42 @@ describe('DomPointerMapping', () => {
       );
     });
 
+    it('limits nested table wrapper lookup to the current page fragment', () => {
+      container.innerHTML = `
+        <div class="superdoc-page" data-page-index="0">
+          <div class="superdoc-fragment superdoc-table-fragment" data-block-id="table-page-0">
+            <div class="cell-content">
+              <div class="superdoc-line" data-pm-start="5" data-pm-end="15">
+                <span data-pm-start="5" data-pm-end="15">Page 0 line</span>
+              </div>
+              <div class="superdoc-page" data-page-index="1">
+                <div class="superdoc-fragment superdoc-table-fragment" data-block-id="table-page-1">
+                  <div class="superdoc-line" data-pm-start="100" data-pm-end="110">
+                    <span data-pm-start="100" data-pm-end="110">Page 1 line</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+
+      const page = container.querySelector('.superdoc-page[data-page-index="0"]') as HTMLElement;
+      const tableFragment = container.querySelector('[data-block-id="table-page-0"]') as HTMLElement;
+      const content = container.querySelector('.cell-content') as HTMLElement;
+      const line = container.querySelector('.superdoc-line[data-pm-start="5"]') as HTMLElement;
+      const lineRect = line.getBoundingClientRect();
+
+      withMockedElementsFromPoint(
+        [content, tableFragment, page, container, document.body, document.documentElement],
+        () => {
+          const result = clickToPositionDom(container, lineRect.left + 5, lineRect.top + 5);
+          expect(result).toBeGreaterThanOrEqual(5);
+          expect(result).toBeLessThanOrEqual(15);
+        },
+      );
+    });
+
     it('returns a position when a line IS in the hit chain', () => {
       container.innerHTML = `
         <div class="superdoc-page" data-page-index="0">

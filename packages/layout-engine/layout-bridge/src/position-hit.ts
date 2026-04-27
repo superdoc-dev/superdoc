@@ -631,6 +631,7 @@ export const hitTestTableFragment = (
           cellMeasure: paragraphMeasure,
           localX: Math.max(0, cellLocalX),
           localY: Math.max(0, Math.min(unclampedLocalY, Math.max(blockHeight, 0))),
+          blockStartGlobal: blockStartGlobalLines,
           distance: distanceToBlock,
         };
       }
@@ -651,6 +652,7 @@ export const hitTestTableFragment = (
         cellMeasure: nearestParagraphHit.cellMeasure,
         localX: nearestParagraphHit.localX,
         localY: nearestParagraphHit.localY,
+        blockStartGlobal: nearestParagraphHit.blockStartGlobal,
       };
     }
   }

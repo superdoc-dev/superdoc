@@ -1,5 +1,6 @@
 import type { BlockNodeType } from './base.js';
 import type { StoryLocator } from './story.types.js';
+import type { BookmarkAddress } from '../bookmarks/bookmarks.types.js';
 
 export type Range = {
   /** Inclusive start offset (0-based, UTF-16 code units). */
@@ -157,7 +158,8 @@ export type BlockNavigationAddress = {
  *
  * Supports navigation to:
  * - Blocks by `nodeId` (paragraphs, headings, tables, images, SDTs)
+ * - Bookmarks by `name`
  * - Comments by `entityId`
  * - Tracked changes by `entityId`
  */
-export type NavigableAddress = BlockNavigationAddress | CommentAddress | TrackedChangeAddress;
+export type NavigableAddress = BlockNavigationAddress | BookmarkAddress | CommentAddress | TrackedChangeAddress;

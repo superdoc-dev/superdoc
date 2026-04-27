@@ -188,6 +188,11 @@ const {
   };
 });
 
+const bookmarkResolverMocks = vi.hoisted(() => ({
+  findAllBookmarksInDocument: vi.fn(() => []),
+  resolveBookmarkTarget: vi.fn(),
+}));
+
 // Mock PositionHitResolver
 vi.mock('../input/PositionHitResolver.js', () => ({
   resolvePointerPositionHit: (...args: unknown[]) => mockResolvePointerPositionHit(...args),
@@ -345,6 +350,15 @@ vi.mock('../../story-editor-factory.js', () => ({
   createStoryEditor: mockCreateStoryEditor,
 }));
 
+vi.mock('../../../document-api-adapters/helpers/bookmark-resolver.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../document-api-adapters/helpers/bookmark-resolver.js')>();
+  return {
+    ...actual,
+    findAllBookmarksInDocument: bookmarkResolverMocks.findAllBookmarksInDocument,
+    resolveBookmarkTarget: bookmarkResolverMocks.resolveBookmarkTarget,
+  };
+});
+
 vi.mock('../../header-footer/EditorOverlayManager', () => ({
   EditorOverlayManager: mockEditorOverlayManager,
 }));
@@ -373,6 +387,9 @@ describe('PresentationEditor', () => {
     createdSectionEditors.length = 0;
     createdStoryEditors.length = 0;
     mockFlowBlockCacheInstances.length = 0;
+    bookmarkResolverMocks.findAllBookmarksInDocument.mockReset();
+    bookmarkResolverMocks.findAllBookmarksInDocument.mockImplementation(() => []);
+    bookmarkResolverMocks.resolveBookmarkTarget.mockReset();
 
     // Reset static instances
     (PresentationEditor as typeof PresentationEditor & { instances: Map<string, unknown> }).instances = new Map();
@@ -2708,6 +2725,116 @@ describe('PresentationEditor', () => {
 
       expect(blockedSpy).toHaveBeenCalledWith(expect.objectContaining({ reason: 'missingRegion' }));
     });
+
+    it('activates the matching header surface before navigating to a document-wide bookmark', async () => {
+      mockIncrementalLayout.mockResolvedValueOnce(buildLayoutResult());
+      bookmarkResolverMocks.findAllBookmarksInDocument.mockReturnValueOnce([
+        { name: 'hdr-bm', bookmarkId: '5', storyKey: 'hf:part:rId-header-default' },
+      ]);
+      bookmarkResolverMocks.resolveBookmarkTarget.mockReturnValueOnce({
+        pos: 7,
+        name: 'hdr-bm',
+        bookmarkId: '5',
+        endPos: 10,
+        node: { attrs: { name: 'hdr-bm', id: '5' } },
+      });
+
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'test-doc',
+      });
+
+      await vi.waitFor(() => expect(mockIncrementalLayout).toHaveBeenCalled());
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      const pagesHost = container.querySelector('.presentation-editor__pages') as HTMLElement;
+      const mockPage = document.createElement('div');
+      mockPage.setAttribute('data-page-index', '0');
+      pagesHost.appendChild(mockPage);
+
+      const viewport = container.querySelector('.presentation-editor__viewport') as HTMLElement;
+      vi.spyOn(viewport, 'getBoundingClientRect').mockReturnValue({
+        left: 0,
+        top: 0,
+        width: 800,
+        height: 1000,
+        right: 800,
+        bottom: 1000,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      } as DOMRect);
+
+      const didNavigate = await editor.navigateTo({
+        kind: 'entity',
+        entityType: 'bookmark',
+        name: 'hdr-bm',
+      });
+
+      expect(didNavigate).toBe(true);
+      await vi.waitFor(() => expect(createdSectionEditors.length).toBeGreaterThan(0));
+
+      const sessionEditor = editor.getActiveEditor();
+      expect(sessionEditor.commands.setTextSelection).toHaveBeenCalledWith({ from: 7, to: 7 });
+      expect(sessionEditor.view.focus).toHaveBeenCalled();
+    });
+
+    it('navigates successfully for an explicit headerFooterSlot bookmark target', async () => {
+      mockIncrementalLayout.mockResolvedValueOnce(buildLayoutResult());
+      bookmarkResolverMocks.resolveBookmarkTarget.mockReturnValueOnce({
+        pos: 9,
+        name: 'slot-bm',
+        bookmarkId: '6',
+        endPos: 12,
+        node: { attrs: { name: 'slot-bm', id: '6' } },
+      });
+
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'test-doc',
+      });
+
+      await vi.waitFor(() => expect(mockIncrementalLayout).toHaveBeenCalled());
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      const pagesHost = container.querySelector('.presentation-editor__pages') as HTMLElement;
+      const mockPage = document.createElement('div');
+      mockPage.setAttribute('data-page-index', '0');
+      pagesHost.appendChild(mockPage);
+
+      const viewport = container.querySelector('.presentation-editor__viewport') as HTMLElement;
+      vi.spyOn(viewport, 'getBoundingClientRect').mockReturnValue({
+        left: 0,
+        top: 0,
+        width: 800,
+        height: 1000,
+        right: 800,
+        bottom: 1000,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      } as DOMRect);
+
+      const didNavigate = await editor.navigateTo({
+        kind: 'entity',
+        entityType: 'bookmark',
+        name: 'slot-bm',
+        story: {
+          kind: 'story',
+          storyType: 'headerFooterSlot',
+          section: { kind: 'section', sectionId: 'section-0' },
+          headerFooterKind: 'header',
+          variant: 'default',
+        },
+      });
+
+      expect(didNavigate).toBe(true);
+      await vi.waitFor(() => expect(createdSectionEditors.length).toBeGreaterThan(0));
+
+      const sessionEditor = editor.getActiveEditor();
+      expect(sessionEditor.commands.setTextSelection).toHaveBeenCalledWith({ from: 9, to: 9 });
+      expect(sessionEditor.view.focus).toHaveBeenCalled();
+    });
   });
 
   describe('footnote interactions', () => {
@@ -2973,6 +3100,55 @@ describe('PresentationEditor', () => {
       });
       expect(sessionEditor?.view.focus).toHaveBeenCalled();
       expect(renderedChange.scrollIntoView).not.toHaveBeenCalled();
+    });
+
+    it('routes bookmark navigation to the active note session editor', async () => {
+      const { sessionEditor } = await activateFootnoteSession();
+
+      bookmarkResolverMocks.resolveBookmarkTarget.mockReturnValueOnce({
+        pos: 4,
+        name: 'bm-note-1',
+        bookmarkId: '1',
+        endPos: 8,
+        node: { attrs: { name: 'bm-note-1', id: '1' } },
+      });
+
+      const didNavigate = await editor.navigateTo({
+        kind: 'entity',
+        entityType: 'bookmark',
+        name: 'bm-note-1',
+        story: { kind: 'story', storyType: 'footnote', noteId: '1' },
+      });
+
+      expect(didNavigate).toBe(true);
+      expect(sessionEditor?.commands.setTextSelection).toHaveBeenLastCalledWith({ from: 4, to: 4 });
+      expect(sessionEditor?.view.focus).toHaveBeenCalled();
+    });
+
+    it('activates an inactive endnote story before routing bookmark navigation', async () => {
+      await prepareEndnoteEditor();
+
+      bookmarkResolverMocks.resolveBookmarkTarget.mockReturnValueOnce({
+        pos: 6,
+        name: 'bm-endnote-1',
+        bookmarkId: '2',
+        endPos: 9,
+        node: { attrs: { name: 'bm-endnote-1', id: '2' } },
+      });
+
+      const didNavigate = await editor.navigateTo({
+        kind: 'entity',
+        entityType: 'bookmark',
+        name: 'bm-endnote-1',
+        story: { kind: 'story', storyType: 'endnote', noteId: '1' },
+      });
+
+      expect(didNavigate).toBe(true);
+      await vi.waitFor(() => expect(createdStoryEditors.length).toBeGreaterThanOrEqual(1));
+
+      const sessionEditor = createdStoryEditors.at(-1)?.editor;
+      expect(sessionEditor?.commands.setTextSelection).toHaveBeenLastCalledWith({ from: 6, to: 6 });
+      expect(sessionEditor?.view.focus).toHaveBeenCalled();
     });
   });
 

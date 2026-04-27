@@ -436,6 +436,7 @@ function testPresentationEditorMethods(pe: PresentationEditor) {
   pe.scrollToElement('paraId-ABC123');
   pe.navigateTo({ kind: 'block', nodeId: 'paraId-ABC123' });
   pe.navigateTo({ kind: 'block', nodeId: 'paraId-ABC123', nodeType: 'paragraph' });
+  pe.navigateTo({ kind: 'entity', entityType: 'bookmark', name: 'bookmark-1' });
   pe.navigateTo({ kind: 'entity', entityType: 'comment', entityId: 'comment-1' });
   pe.navigateTo({ kind: 'entity', entityType: 'trackedChange', entityId: 'tc-1' });
 

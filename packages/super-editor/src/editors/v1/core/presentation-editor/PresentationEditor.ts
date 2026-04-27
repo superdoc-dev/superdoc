@@ -241,11 +241,16 @@ import type {
   DocumentApi,
   NavigableAddress,
   BlockNavigationAddress,
+  BookmarkAddress,
   StoryLocator,
 } from '@superdoc/document-api';
 import { isStoryLocator } from '@superdoc/document-api';
 import { getBlockIndex } from '../../document-api-adapters/helpers/index-cache.js';
 import { findBlockByNodeIdOnly, findBlockById } from '../../document-api-adapters/helpers/node-address-resolver.js';
+import {
+  findAllBookmarksInDocument,
+  resolveBookmarkTarget,
+} from '../../document-api-adapters/helpers/bookmark-resolver.js';
 import { resolveTrackedChange } from '../../document-api-adapters/helpers/tracked-change-resolver.js';
 import { makeTrackedChangeAnchorKey } from '../../document-api-adapters/helpers/tracked-change-runtime-ref.js';
 import { getTrackedChangeIndex } from '../../document-api-adapters/tracked-changes/tracked-change-index.js';
@@ -8053,7 +8058,7 @@ export class PresentationEditor extends EventEmitter {
   /**
    * Navigate to a typed document element address.
    *
-   * @param target - Typed address: block (nodeId), comment (entityId), or tracked change (entityId).
+   * @param target - Typed address: block, bookmark, comment, or tracked change.
    * @returns Promise resolving to true if navigation succeeded.
    */
   async navigateTo(target: NavigableAddress): Promise<boolean> {
@@ -8065,6 +8070,9 @@ export class PresentationEditor extends EventEmitter {
       }
 
       if (target.kind === 'entity') {
+        if (target.entityType === 'bookmark') {
+          return await this.#navigateToBookmark(target);
+        }
         if (target.entityType === 'comment') {
           return await this.#navigateToComment(target.entityId);
         }
@@ -8153,6 +8161,36 @@ export class PresentationEditor extends EventEmitter {
     // scroll in presentation mode where DomPainter renders the output.
     await this.scrollToPositionAsync(editor.state.selection.from, { behavior: 'auto', block: 'center' });
     return true;
+  }
+
+  async #navigateToBookmark(target: BookmarkAddress): Promise<boolean> {
+    const editor = this.#editor;
+    if (!editor) return false;
+
+    let storyKey = resolveStoryKeyFromAddress(target.story);
+
+    if (!storyKey) {
+      const entry = findAllBookmarksInDocument(editor).find((bookmark) => bookmark.name === target.name);
+      if (!entry) {
+        return false;
+      }
+      storyKey = entry.storyKey;
+    }
+
+    if (!storyKey || storyKey === BODY_STORY_KEY) {
+      return await this.goToAnchor(target.name);
+    }
+
+    if (this.#navigateToActiveStoryBookmark(target.name, storyKey)) {
+      return true;
+    }
+
+    const activatedStoryKey = await this.#activateBookmarkStorySurface(storyKey);
+    if (activatedStoryKey) {
+      return this.#navigateToActiveStoryBookmark(target.name, activatedStoryKey);
+    }
+
+    return false;
   }
 
   async #navigateToTrackedChange(entityId: string, storyKey?: string, preferredPageIndex?: number): Promise<boolean> {
@@ -8287,6 +8325,179 @@ export class PresentationEditor extends EventEmitter {
     return this.#getActiveTrackedChangeStorySurface()?.storyKey === storyKey;
   }
 
+  async #activateBookmarkStorySurface(storyKey: string): Promise<string | null> {
+    let locator: StoryLocator | null = null;
+    try {
+      locator = parseStoryKey(storyKey);
+    } catch {
+      return null;
+    }
+
+    if (!locator || locator.storyType === 'body') {
+      return null;
+    }
+
+    if (locator.storyType === 'footnote' || locator.storyType === 'endnote') {
+      return this.#activateBookmarkNoteStorySurface(locator);
+    }
+
+    if (locator.storyType === 'headerFooterPart' || locator.storyType === 'headerFooterSlot') {
+      return this.#activateBookmarkHeaderFooterSurface(locator);
+    }
+
+    return null;
+  }
+
+  async #activateBookmarkNoteStorySurface(
+    locator: Extract<StoryLocator, { storyType: 'footnote' | 'endnote' }>,
+  ): Promise<string | null> {
+    const targetContext = this.#buildNoteLayoutContext({
+      storyType: locator.storyType,
+      noteId: locator.noteId,
+    });
+
+    if ((this.#headerFooterSession?.session?.mode ?? 'body') !== 'body') {
+      this.#headerFooterSession?.exitMode();
+    }
+
+    const firstPageIndex = targetContext?.firstPageIndex ?? 0;
+    const hostWidthPx = targetContext?.hostWidthPx ?? Math.max(1, this.#visibleHost?.clientWidth ?? 1);
+
+    this.#scrollPageIntoView(firstPageIndex);
+
+    const totalPageCount = this.#layoutState.layout?.pages?.length ?? 1;
+    const pageNumber = Math.max(1, firstPageIndex + 1);
+
+    this.#ensureStorySessionManager().activate(locator, {
+      commitPolicy: 'onExit',
+      preferHiddenHost: true,
+      hostWidthPx,
+      editorContext: {
+        currentPageNumber: pageNumber,
+        totalPageCount: Math.max(1, totalPageCount),
+        surfaceKind: locator.storyType === 'endnote' ? 'endnote' : 'note',
+      },
+    });
+
+    const storyKey = buildStoryKey(locator);
+    return (await this.#waitForTrackedChangeStorySurface(storyKey)) ? storyKey : null;
+  }
+
+  async #activateBookmarkHeaderFooterSurface(
+    locator: Extract<StoryLocator, { storyType: 'headerFooterPart' | 'headerFooterSlot' }>,
+  ): Promise<string | null> {
+    const region = this.#findHeaderFooterRegionForBookmarkLocator(locator);
+    const expectedRefId =
+      locator.storyType === 'headerFooterPart' ? locator.refId : (region?.headerFooterRefId ?? null);
+
+    if (!region || !expectedRefId) {
+      return null;
+    }
+
+    this.#scrollPageIntoView(region.pageIndex);
+    await this.#waitForPageMount(region.pageIndex, { timeout: PresentationEditor.ANCHOR_NAV_TIMEOUT_MS });
+
+    const pageElement = this.#getPageElement(region.pageIndex);
+    const pageRect = pageElement?.getBoundingClientRect();
+    const clientX = (pageRect?.left ?? 0) + region.localX + Math.max(region.width / 2, 1);
+    const clientY = (pageRect?.top ?? 0) + region.localY + Math.max(region.height / 2, 1);
+
+    const activeEditor = await this.#headerFooterSession?.activateRegion(region, {
+      clientX,
+      clientY,
+      pageIndex: region.pageIndex,
+      source: 'programmatic',
+    });
+    if (!activeEditor) {
+      return null;
+    }
+
+    return buildStoryKey({
+      kind: 'story',
+      storyType: 'headerFooterPart',
+      refId: expectedRefId,
+    });
+  }
+
+  #findHeaderFooterRegionForBookmarkLocator(
+    locator: Extract<StoryLocator, { storyType: 'headerFooterPart' | 'headerFooterSlot' }>,
+  ): HeaderFooterRegion | null {
+    const manager = this.#headerFooterSession;
+    if (!manager) {
+      return null;
+    }
+
+    const searchRegions =
+      locator.storyType === 'headerFooterSlot'
+        ? locator.headerFooterKind === 'header'
+          ? manager.headerRegions
+          : manager.footerRegions
+        : new Map([...manager.headerRegions.entries(), ...manager.footerRegions.entries()]);
+
+    for (const region of searchRegions.values()) {
+      if (locator.storyType === 'headerFooterPart') {
+        if (region.headerFooterRefId === locator.refId) {
+          return region;
+        }
+        continue;
+      }
+
+      if (region.sectionId !== locator.section.sectionId) {
+        continue;
+      }
+
+      if (region.sectionType && region.sectionType !== locator.variant) {
+        continue;
+      }
+
+      return region;
+    }
+
+    if (locator.storyType === 'headerFooterPart') {
+      const layout = this.#layoutState.layout;
+      if (!layout) {
+        return null;
+      }
+
+      for (let pageIndex = 0; pageIndex < layout.pages.length; pageIndex += 1) {
+        const page = layout.pages[pageIndex];
+        const headerRefs = Object.values(page.sectionRefs?.headerRefs ?? {});
+        if (headerRefs.includes(locator.refId)) {
+          return manager.getRegionForPage('header', pageIndex) ?? manager.findRegionForPage('header', pageIndex);
+        }
+
+        const footerRefs = Object.values(page.sectionRefs?.footerRefs ?? {});
+        if (footerRefs.includes(locator.refId)) {
+          return manager.getRegionForPage('footer', pageIndex) ?? manager.findRegionForPage('footer', pageIndex);
+        }
+      }
+    }
+
+    return null;
+  }
+
+  #navigateToActiveStoryBookmark(name: string, storyKey: string): boolean {
+    const activeSurface = this.#getActiveTrackedChangeStorySurface();
+    if (!activeSurface || activeSurface.storyKey !== storyKey) {
+      return false;
+    }
+
+    let resolved;
+    try {
+      resolved = resolveBookmarkTarget(activeSurface.editor.state.doc, {
+        kind: 'entity',
+        entityType: 'bookmark',
+        name,
+      });
+    } catch {
+      return false;
+    }
+
+    activeSurface.editor.commands?.setTextSelection?.({ from: resolved.pos, to: resolved.pos });
+    this.#focusAndRevealActiveStorySelection(activeSurface.editor);
+    return true;
+  }
+
   #navigateToActiveStoryTrackedChange(entityId: string, storyKey: string): boolean {
     const activeSurface = this.#getActiveTrackedChangeStorySurface();
     if (!activeSurface || activeSurface.storyKey !== storyKey) {
@@ -8398,6 +8609,17 @@ export class PresentationEditor extends EventEmitter {
         blocks: this.#layoutState.blocks,
         measures: this.#layoutState.measures,
         bookmarks: this.#layoutState.bookmarks,
+        resolveAnchorPosition: (name) => {
+          try {
+            return resolveBookmarkTarget(this.#editor.state.doc, {
+              kind: 'entity',
+              entityType: 'bookmark',
+              name,
+            }).pos;
+          } catch {
+            return null;
+          }
+        },
         pageGeometryHelper: this.#pageGeometryHelper ?? undefined,
         painterHost: this.#painterHost,
         scrollContainer: this.#scrollContainer ?? this.#visibleHost,

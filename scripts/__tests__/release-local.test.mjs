@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
@@ -15,6 +16,8 @@ import {
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '../../');
+const require = createRequire(import.meta.url);
+const { strictBreakingParserOpts } = require('../semantic-release/strict-breaking-parser.cjs');
 
 async function readRepoFile(relativePath) {
   return readFile(path.join(REPO_ROOT, relativePath), 'utf8');
@@ -29,14 +32,8 @@ function assertOrder(content, first, second, context) {
 }
 
 test('inferDryRunWouldRelease detects pending release previews', () => {
-  assert.equal(
-    inferDryRunWouldRelease('[semantic-release] › ℹ  The next release version is 1.2.3'),
-    true,
-  );
-  assert.equal(
-    inferDryRunWouldRelease('There are no relevant changes, so no new version is released.'),
-    false,
-  );
+  assert.equal(inferDryRunWouldRelease('[semantic-release] › ℹ  The next release version is 1.2.3'), true);
+  assert.equal(inferDryRunWouldRelease('There are no relevant changes, so no new version is released.'), false);
 });
 
 test('release-local helper does not inject semantic-release branch overrides', () => {
@@ -45,35 +42,22 @@ test('release-local helper does not inject semantic-release branch overrides', (
       packageCwd: 'packages/superdoc',
       extraArgs: ['--dry-run'],
     }),
-    [
-      '--prefix',
-      'packages/superdoc',
-      'exec',
-      'semantic-release',
-      '--no-ci',
-      '--dry-run',
-    ],
+    ['--prefix', 'packages/superdoc', 'exec', 'semantic-release', '--no-ci', '--dry-run'],
   );
 });
 
 test('release-local helper strips custom preview-branch flags before forwarding args', () => {
-  assert.deepEqual(
-    splitPreviewArgs(['--dry-run', '--preview-branch', 'stable', '--debug']),
-    {
-      semanticReleaseArgs: ['--dry-run', '--debug'],
-      previewBranchOverride: 'stable',
-    },
-  );
+  assert.deepEqual(splitPreviewArgs(['--dry-run', '--preview-branch', 'stable', '--debug']), {
+    semanticReleaseArgs: ['--dry-run', '--debug'],
+    previewBranchOverride: 'stable',
+  });
 });
 
 test('release-local helper supports equals-style preview branch overrides', () => {
-  assert.deepEqual(
-    splitPreviewArgs(['--dry-run', '--preview-branch=main']),
-    {
-      semanticReleaseArgs: ['--dry-run'],
-      previewBranchOverride: 'main',
-    },
-  );
+  assert.deepEqual(splitPreviewArgs(['--dry-run', '--preview-branch=main']), {
+    semanticReleaseArgs: ['--dry-run'],
+    previewBranchOverride: 'main',
+  });
 });
 
 test('release-local helper marks dry runs as local preview mode', () => {
@@ -89,14 +73,8 @@ test('release-local helper marks dry runs as local preview mode', () => {
 });
 
 test('release-local helper infers preview target from merge-branch names', () => {
-  assert.equal(
-    detectPreviewTargetFromBranchName('merge/main-into-stable-2026-04-24', ['stable', 'main']),
-    'stable',
-  );
-  assert.equal(
-    detectPreviewTargetFromBranchName('hotfix/to-0.29.x-urgent', ['stable', 'main', '0.29.x']),
-    '0.29.x',
-  );
+  assert.equal(detectPreviewTargetFromBranchName('merge/main-into-stable-2026-04-24', ['stable', 'main']), 'stable');
+  assert.equal(detectPreviewTargetFromBranchName('hotfix/to-0.29.x-urgent', ['stable', 'main', '0.29.x']), '0.29.x');
 });
 
 test('release-local helper honors explicit preview-branch overrides', () => {
@@ -126,6 +104,16 @@ test('release-local helper rewrites both ssh and https repository urls for previ
   );
 });
 
+test('semantic-release breaking parser ignores prose and requires explicit footer syntax', () => {
+  const regex = strictBreakingParserOpts.notesPattern('BREAKING CHANGE|BREAKING-CHANGE');
+
+  assert.match('BREAKING CHANGE: external adapters must register SelectionAdapter', regex);
+  assert.match('BREAKING-CHANGE: external adapters must register SelectionAdapter', regex);
+  assert.doesNotMatch('   breaking change for external adapter constructors', regex);
+  assert.doesNotMatch('* breaking change for external adapter constructors', regex);
+  assert.doesNotMatch('BREAKING CHANGE external adapters must register SelectionAdapter', regex);
+});
+
 test('release-local helper prunes local-only tags across all release namespaces', async () => {
   const content = await readRepoFile('scripts/release-local.mjs');
   assert.ok(
@@ -133,7 +121,7 @@ test('release-local helper prunes local-only tags across all release namespaces'
     'scripts/release-local.mjs: must iterate every known release tag pattern',
   );
   assert.equal(
-    content.includes("filter((p) => p !== ownTagPrefix)"),
+    content.includes('filter((p) => p !== ownTagPrefix)'),
     false,
     'scripts/release-local.mjs: must not skip the current package tag namespace',
   );
@@ -150,7 +138,9 @@ test('release-local helper prunes local-only tags across all release namespaces'
 test('root release:dry-run script uses the local preview helper', async () => {
   const content = await readRepoFile('package.json');
   assert.ok(
-    content.includes('"release:dry-run": "pnpm run build:superdoc && pnpm run type-check && node scripts/release-local-superdoc.mjs --dry-run"'),
+    content.includes(
+      '"release:dry-run": "pnpm run build:superdoc && pnpm run type-check && node scripts/release-local-superdoc.mjs --dry-run"',
+    ),
     'package.json: release:dry-run must delegate to the local preview helper',
   );
 });
@@ -162,7 +152,8 @@ test('superdoc releaserc uses preview mode to avoid AI notes and side-effect plu
     'packages/superdoc/.releaserc.cjs: must detect local preview mode',
   );
   assert.ok(
-    content.includes("const notesPlugin = isLocalPreview || isPrerelease"),
+    content.includes('const notesPlugin =') &&
+      content.includes('isLocalPreview || isPrerelease ? createReleaseNotesGenerator()'),
     'packages/superdoc/.releaserc.cjs: preview mode must fall back to conventional release notes',
   );
   assert.ok(
@@ -187,18 +178,8 @@ test('stable orchestrator prunes before snapshot and reports would-release previ
 
 test('stable orchestrator releases superdoc, cli, then sdk in order', async () => {
   const content = await readRepoFile('scripts/release-local-stable.mjs');
-  assertOrder(
-    content,
-    "name: 'superdoc'",
-    "name: 'cli'",
-    'scripts/release-local-stable.mjs (superdoc before cli)',
-  );
-  assertOrder(
-    content,
-    "name: 'cli'",
-    "name: 'sdk'",
-    'scripts/release-local-stable.mjs (cli before sdk)',
-  );
+  assertOrder(content, "name: 'superdoc'", "name: 'cli'", 'scripts/release-local-stable.mjs (superdoc before cli)');
+  assertOrder(content, "name: 'cli'", "name: 'sdk'", 'scripts/release-local-stable.mjs (cli before sdk)');
 });
 
 test('stable workflow isolates skip-ci writebacks from the shared stable queue', async () => {
@@ -217,7 +198,9 @@ test('stable workflow isolates skip-ci writebacks from the shared stable queue',
     '.github/workflows/release-stable.yml: skip-ci writebacks must use a separate concurrency group',
   );
   assert.ok(
-    content.includes("if: github.event_name == 'workflow_dispatch' || !contains(github.event.head_commit.message, '[skip ci]')"),
+    content.includes(
+      "if: github.event_name == 'workflow_dispatch' || !contains(github.event.head_commit.message, '[skip ci]')",
+    ),
     '.github/workflows/release-stable.yml: skip-ci writeback runs must still no-op when they start',
   );
 });
@@ -261,7 +244,7 @@ test('stable orchestrator recovers incomplete merged tags and defers stale check
     'scripts/release-local-stable.mjs: recovered tagged releases must be reported as resumed when no new release is cut',
   );
   assert.ok(
-    content.includes("listMergedTags(pkg.tagPattern, branchRef)[0]"),
+    content.includes('listMergedTags(pkg.tagPattern, branchRef)[0]'),
     'scripts/release-local-stable.mjs: recovery must inspect the latest merged tag for each package, not only tags at HEAD',
   );
   assert.ok(

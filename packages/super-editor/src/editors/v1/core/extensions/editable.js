@@ -1,4 +1,4 @@
-import { Plugin, PluginKey } from 'prosemirror-state';
+import { Plugin, PluginKey, Selection, TextSelection } from 'prosemirror-state';
 import { __endComposition } from 'prosemirror-view';
 import { Extension } from '../Extension.js';
 
@@ -22,7 +22,14 @@ const appendStoryInputDebugLog = (entry) => {
 
 const isStorySurfaceEditor = (editor) => {
   const documentId = editor?.options?.documentId ?? '';
-  return documentId.startsWith('hf:') || documentId.startsWith('fn:') || documentId.startsWith('en:');
+  return (
+    documentId.startsWith('hf:') ||
+    documentId.startsWith('fn:') ||
+    documentId.startsWith('en:') ||
+    editor?.options?.isHeaderOrFooter === true ||
+    editor?.options?.headerFooterType === 'header' ||
+    editor?.options?.headerFooterType === 'footer'
+  );
 };
 
 const recordStoryInputDebug = (view, event, editor, phase, extra = {}) => {
@@ -78,6 +85,12 @@ const handleInsertTextBeforeInput = (view, event, editor) => {
   }
 
   const tr = view.state.tr.insertText(event.data, selection.from, selection.to);
+  const insertedTo = Math.max(0, Math.min(selection.from + event.data.length, tr.doc.content.size));
+  try {
+    tr.setSelection(TextSelection.create(tr.doc, insertedTo));
+  } catch {
+    tr.setSelection(Selection.near(tr.doc.resolve(insertedTo), 1));
+  }
   tr.setMeta('inputType', 'insertText');
   view.dispatch(tr);
   event.preventDefault();

@@ -111,6 +111,33 @@ describe('Editable extension insertText beforeinput handling', () => {
     expect(prevented).toBe(false);
     expect(editor.state.doc.textContent).toBe('QA');
   });
+
+  it('intercepts collapsed beforeinput insertText for active footer editors', () => {
+    ({ editor } = initTestEditor({
+      mode: 'text',
+      content: '<p>QA</p>',
+      documentId: 'rId10',
+      isHeaderOrFooter: true,
+      headerFooterType: 'footer',
+    }));
+
+    const range = findTextRange(editor.state.doc, 'QA');
+    expect(range).not.toBeNull();
+
+    const cursor = TextSelection.create(editor.state.doc, range.to, range.to);
+    editor.view.dispatch(editor.state.tr.setSelection(cursor));
+
+    const beforeInputEvent = new InputEvent('beforeinput', {
+      data: '!',
+      inputType: 'insertText',
+      bubbles: true,
+      cancelable: true,
+    });
+    const prevented = !editor.view.dom.dispatchEvent(beforeInputEvent);
+
+    expect(prevented).toBe(true);
+    expect(editor.state.doc.textContent).toBe('QA!');
+  });
 });
 
 describe('Editable extension – allowSelectionInViewMode', () => {

@@ -231,6 +231,7 @@ const SHARED_DEFS: Record<string, JsonSchema> = {
     {
       kind: { const: 'text' },
       segments: { type: 'array', items: ref('TextSegment'), minItems: 1 },
+      story: ref('StoryLocator'),
     },
     ['kind', 'segments'],
   ),

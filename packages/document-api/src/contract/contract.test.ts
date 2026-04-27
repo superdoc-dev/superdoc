@@ -145,6 +145,26 @@ describe('document-api contract catalog', () => {
     ).toEqual(['forbid', 'allow']);
   });
 
+  it('allows story-scoped text targets for bookmark inserts', () => {
+    const schemas = buildInternalContractSchemas();
+    const bookmarkInsertInput = schemas.operations['bookmarks.insert'].input as {
+      properties?: {
+        at?: { $ref?: string };
+      };
+    };
+    const textTarget = schemas.$defs?.TextTarget as {
+      properties?: Record<string, unknown>;
+      required?: string[];
+      additionalProperties?: boolean;
+    };
+
+    expect(bookmarkInsertInput.properties?.at?.$ref).toBe('#/$defs/TextTarget');
+    expect(textTarget.properties).toHaveProperty('story');
+    expect((textTarget.properties?.story as { $ref?: string }).$ref).toBe('#/$defs/StoryLocator');
+    expect(textTarget.required).toEqual(['kind', 'segments']);
+    expect(textTarget.additionalProperties).toBe(false);
+  });
+
   it('accepts both object and array SDFragment in structural insert content schema', () => {
     const schemas = buildInternalContractSchemas();
     const insertInput = schemas.operations.insert.input as { oneOf?: Array<{ properties?: Record<string, unknown> }> };

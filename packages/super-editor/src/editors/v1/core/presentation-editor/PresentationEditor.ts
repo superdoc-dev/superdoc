@@ -254,7 +254,7 @@ import {
 import { resolveTrackedChange } from '../../document-api-adapters/helpers/tracked-change-resolver.js';
 import { makeTrackedChangeAnchorKey } from '../../document-api-adapters/helpers/tracked-change-runtime-ref.js';
 import { getTrackedChangeIndex } from '../../document-api-adapters/tracked-changes/tracked-change-index.js';
-import { normalizeVariant } from '../../document-api-adapters/helpers/header-footer-slot-materialization.js';
+import { normalizeVariant } from './header-footer/header-footer-variant.js';
 import type { SelectionHandle } from '../selection-state.js';
 
 const DOCUMENT_RELS_PART_ID = 'word/_rels/document.xml.rels';

@@ -59,10 +59,8 @@ import { selectionToRects } from '@superdoc/layout-bridge';
 import { deduplicateOverlappingRects } from '../../../dom-observer/DomSelectionGeometry.js';
 import { resolveSectionProjections } from '../../../document-api-adapters/helpers/sections-resolver.js';
 import { computeCaretLayoutRectGeometry as computeCaretLayoutRectGeometryFromHelper } from '../selection/CaretGeometry.js';
-import {
-  ensureExplicitHeaderFooterSlot,
-  normalizeVariant,
-} from '../../../document-api-adapters/helpers/header-footer-slot-materialization.js';
+import { ensureExplicitHeaderFooterSlot } from '../../../document-api-adapters/helpers/header-footer-slot-materialization.js';
+import { normalizeVariant } from './header-footer-variant.js';
 
 // =============================================================================
 // Types

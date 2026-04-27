@@ -592,6 +592,60 @@ describe('EditorInputManager - Footnote click selection behavior', () => {
     expect(activeHeaderEditor.view.focus).toHaveBeenCalled();
   });
 
+  it('replays active header editor focus when native focus is already inside the hidden editor', () => {
+    const activeHeaderEditor = createActiveSessionEditor();
+    const pageContainer = document.createElement('div');
+    pageContainer.className = 'superdoc-page';
+    viewportHost.appendChild(pageContainer);
+
+    activeHeaderEditor.view.dom.tabIndex = -1;
+    document.body.appendChild(activeHeaderEditor.view.dom);
+    activeHeaderEditor.view.dom.focus();
+
+    (mockDeps.getActiveEditor as Mock).mockReturnValue(activeHeaderEditor);
+    (mockDeps.getHeaderFooterSession as Mock).mockReturnValue({
+      session: { mode: 'header' },
+    });
+    mockCallbacks.hitTest = vi.fn(() => ({
+      pos: 18,
+      layoutEpoch: 3,
+      pageIndex: 0,
+      blockId: 'header-1',
+      column: 0,
+      lineIndex: -1,
+    }));
+    mockCallbacks.hitTestHeaderFooterRegion = vi.fn(() => ({
+      kind: 'header',
+      pageIndex: 0,
+      pageNumber: 1,
+      sectionType: 'default',
+      localX: 0,
+      localY: 0,
+      width: 200,
+      height: 40,
+    }));
+    stubElementsFromPoint([pageContainer]);
+
+    expect(document.activeElement).toBe(activeHeaderEditor.view.dom);
+
+    const target = document.createElement('span');
+    viewportHost.appendChild(target);
+
+    const PointerEventImpl = getPointerEventImpl();
+    target.dispatchEvent(
+      new PointerEventImpl('pointerdown', {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        buttons: 1,
+        clientX: 24,
+        clientY: 12,
+      } as PointerEventInit),
+    );
+
+    expect(activeHeaderEditor.view.focus).toHaveBeenCalled();
+  });
+
   it('keeps active header editing when the pointer stack only exposes the page container', () => {
     const activeHeaderEditor = createActiveSessionEditor();
     const exitHeaderFooterMode = vi.fn();

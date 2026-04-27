@@ -11,6 +11,11 @@
   "ignorePaths": [
     "**/node_modules/**",
     "**/bower_components/**",
+    "**/vendor/**",
+    "**/__tests__/**",
+    "**/test/**",
+    "**/tests/**",
+    "**/__fixtures__/**",
     "demos/**",
     "examples/**",
     "devtools/visual-testing/**"

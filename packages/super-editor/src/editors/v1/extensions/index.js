@@ -57,6 +57,7 @@ import { TableOfContentsEntry } from './table-of-contents-entry/index.js';
 import { CrossReference } from './cross-reference/index.js';
 import { SequenceField } from './sequence-field/index.js';
 import { DocumentStatField } from './document-stat-field/index.js';
+import { RawField } from './raw-field/index.js';
 import { FieldUpdate } from './field-update/index.js';
 import { Citation } from './citation/index.js';
 import { Bibliography } from './bibliography/index.js';
@@ -205,6 +206,7 @@ const getStarterExtensions = () => {
     CrossReference,
     SequenceField,
     DocumentStatField,
+    RawField,
     FieldUpdate,
     Citation,
     Bibliography,
@@ -323,6 +325,7 @@ export {
   CrossReference,
   SequenceField,
   DocumentStatField,
+  RawField,
   FieldUpdate,
   Citation,
   Bibliography,

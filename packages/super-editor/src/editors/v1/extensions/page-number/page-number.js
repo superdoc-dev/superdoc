@@ -48,6 +48,10 @@ export const PageNumber = Node.create({
         default: null,
         rendered: false,
       },
+      fieldInstance: {
+        default: null,
+        rendered: false,
+      },
     };
   },
 
@@ -171,6 +175,10 @@ export const TotalPageCount = Node.create({
        * over the original imported value.
        */
       resolvedText: {
+        default: null,
+        rendered: false,
+      },
+      fieldInstance: {
         default: null,
         rendered: false,
       },

@@ -72,22 +72,22 @@ describe('preProcessNodesForFldChar', () => {
 
     const { processedNodes } = preProcessNodesForFldChar(nodes, mockDocx);
 
-    expect(processedNodes).toEqual([
-      {
-        name: 'w:hyperlink',
-        type: 'element',
-        attributes: { 'w:anchor': 'bookmark' },
-        elements: [
-          { name: 'w:r', elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'See page ' }] }] },
-          {
-            name: 'sd:pageReference',
-            type: 'element',
-            attributes: { instruction: 'PAGEREF bookmark' },
-            elements: [{ name: 'w:r', elements: [{ name: 'w:t', elements: [{ type: 'text', text: '5' }] }] }],
-          },
-        ],
-      },
-    ]);
+    expect(processedNodes).toHaveLength(1);
+    expect(processedNodes[0].name).toBe('w:hyperlink');
+    expect(processedNodes[0].attributes).toEqual({ 'w:anchor': 'bookmark' });
+    expect(processedNodes[0].elements).toHaveLength(2);
+    expect(processedNodes[0].elements[0]).toEqual({
+      name: 'w:r',
+      elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'See page ' }] }],
+    });
+    expect(processedNodes[0].elements[1]).toMatchObject({
+      name: 'sd:pageReference',
+      type: 'element',
+      attributes: { instruction: 'PAGEREF bookmark' },
+      elements: [{ name: 'w:r', elements: [{ name: 'w:t', elements: [{ type: 'text', text: '5' }] }] }],
+    });
+    expect(processedNodes[0].elements[1].attributes.fieldInstance).toBeDefined();
+    expect(processedNodes[0].elements[1].attributes.fieldInstance.family).toBe('PAGEREF');
   });
 
   it('captures w:tab tokens in INDEX instructions', () => {
@@ -134,19 +134,18 @@ describe('preProcessNodesForFldChar', () => {
 
     const { processedNodes } = preProcessNodesForFldChar(nodes, mockDocx);
 
-    expect(processedNodes).toEqual([
-      {
-        name: 'sd:tableOfContents',
-        type: 'element',
-        attributes: {
-          instruction: 'TOC \\o "1-1" \\h \\z \\u',
-        },
-        elements: [],
-      },
-    ]);
+    expect(processedNodes).toHaveLength(1);
+    expect(processedNodes[0]).toMatchObject({
+      name: 'sd:tableOfContents',
+      type: 'element',
+      attributes: { instruction: 'TOC \\o "1-1" \\h \\z \\u' },
+      elements: [],
+    });
+    expect(processedNodes[0].attributes.fieldInstance).toBeDefined();
+    expect(processedNodes[0].attributes.fieldInstance.family).toBe('TOC');
   });
 
-  it('preserves unknown fields when begin, instrText, separate, and end share a single run', () => {
+  it('wraps unknown fields in sd:rawField when begin, instrText, separate, and end share a single run', () => {
     const nodes = [
       {
         name: 'w:r',
@@ -162,7 +161,16 @@ describe('preProcessNodesForFldChar', () => {
 
     const { processedNodes } = preProcessNodesForFldChar(nodes, mockDocx);
 
-    expect(processedNodes).toEqual(nodes);
+    expect(processedNodes).toHaveLength(1);
+    expect(processedNodes[0].name).toBe('sd:rawField');
+    const fi = processedNodes[0].attributes.fieldInstance;
+    expect(fi.representation).toBe('complex');
+    expect(fi.family).toBe('CUSTOMFIELD');
+    expect(fi.rawInstruction).toBe('CUSTOMFIELD foo');
+    expect(fi.dirty).toBe(false);
+    expect(fi.locked).toBe(false);
+    expect(fi.mutation.imported).toBe(true);
+    expect(fi.source.originalXml).toBeDefined();
   });
 
   it('does not duplicate later fields when an unknown field and a TOC share one run', () => {
@@ -185,26 +193,17 @@ describe('preProcessNodesForFldChar', () => {
 
     const { processedNodes } = preProcessNodesForFldChar(nodes, mockDocx);
 
-    expect(processedNodes).toEqual([
-      {
-        name: 'w:r',
-        elements: [
-          { name: 'w:fldChar', attributes: { 'w:fldCharType': 'begin' } },
-          { name: 'w:instrText', elements: [{ type: 'text', text: 'CUSTOMFIELD foo' }] },
-          { name: 'w:fldChar', attributes: { 'w:fldCharType': 'separate' } },
-          { name: 'w:t', elements: [{ type: 'text', text: 'value' }] },
-          { name: 'w:fldChar', attributes: { 'w:fldCharType': 'end' } },
-        ],
-      },
-      {
-        name: 'sd:tableOfContents',
-        type: 'element',
-        attributes: {
-          instruction: 'TOC \\o "1-1" \\h \\z \\u',
-        },
-        elements: [],
-      },
-    ]);
+    expect(processedNodes).toHaveLength(2);
+    expect(processedNodes[0].name).toBe('sd:rawField');
+    expect(processedNodes[0].attributes.fieldInstance.family).toBe('CUSTOMFIELD');
+    expect(processedNodes[1]).toMatchObject({
+      name: 'sd:tableOfContents',
+      type: 'element',
+      attributes: { instruction: 'TOC \\o "1-1" \\h \\z \\u' },
+      elements: [],
+    });
+    expect(processedNodes[1].attributes.fieldInstance).toBeDefined();
+    expect(processedNodes[1].attributes.fieldInstance.family).toBe('TOC');
   });
 
   it('preserves w:drawing and w:pict nodes while collecting field content', () => {
@@ -328,6 +327,8 @@ describe('preProcessNodesForFldChar', () => {
             { type: 'text', text: ' ' },
           ],
           afterSeparate: true,
+          dirty: false,
+          locked: false,
         },
       },
     ]);
@@ -354,7 +355,7 @@ describe('preProcessNodesForFldChar', () => {
     expect(processedNodes).toEqual(nodes);
   });
 
-  it('preserves fldChar runs when instruction type is unknown', () => {
+  it('wraps unknown fields spanning multiple runs in sd:rawField', () => {
     const nodes = [
       { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'begin' } }] },
       {
@@ -367,7 +368,13 @@ describe('preProcessNodesForFldChar', () => {
     ];
 
     const { processedNodes } = preProcessNodesForFldChar(nodes, mockDocx);
-    expect(processedNodes).toEqual(nodes);
+    expect(processedNodes).toHaveLength(1);
+    expect(processedNodes[0].name).toBe('sd:rawField');
+    const fi = processedNodes[0].attributes.fieldInstance;
+    expect(fi.representation).toBe('complex');
+    expect(fi.family).toBe('CUSTOMFIELD');
+    expect(fi.rawInstruction).toBe('CUSTOMFIELD foo');
+    expect(Array.isArray(fi.source.originalXml)).toBe(true);
   });
 
   it('processes fldSimple XE fields into indexEntry nodes', () => {

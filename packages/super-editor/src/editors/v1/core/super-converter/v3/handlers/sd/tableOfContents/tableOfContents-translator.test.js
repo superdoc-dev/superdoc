@@ -48,7 +48,7 @@ describe('sd:tableOfContents translator', () => {
       });
       expect(result).toEqual({
         type: 'tableOfContents',
-        attrs: { instruction: 'TOC \\o "1-3"', rightAlignPageNumbers: true },
+        attrs: { instruction: 'TOC \\o "1-3"', rightAlignPageNumbers: true, fieldInstance: null },
         content: [{ type: 'paragraph', content: [] }],
       });
     });
@@ -109,7 +109,7 @@ describe('sd:tableOfContents translator', () => {
       const result = config.encode(params);
       expect(result).toEqual({
         type: 'tableOfContents',
-        attrs: { instruction: 'TOC \\h', rightAlignPageNumbers: true },
+        attrs: { instruction: 'TOC \\h', rightAlignPageNumbers: true, fieldInstance: null },
         content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Inline content' }] }],
       });
     });

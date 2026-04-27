@@ -3,6 +3,8 @@
  */
 import { getInstructionPreProcessor } from './fld-preprocessors';
 import { carbonCopy } from '@core/utilities/carbonCopy.js';
+import { buildFieldInstanceFromImport, readFieldFlags } from './build-field-instance.js';
+import { attachFieldInstanceToFieldNodes } from './attach-field-instance.js';
 
 const SKIP_FIELD_PROCESSING_NODE_NAMES = new Set(['w:drawing', 'w:pict']);
 
@@ -36,7 +38,37 @@ export const preProcessNodesForFldChar = (nodes = [], docx) => {
   let currentFieldStack = [];
   let unpairedEnd = null;
   let collecting = false;
+  // importIndex is a per-call ordinal incremented each time an unknown field
+  // is wrapped in sd:rawField. This is a best-effort signal until later
+  // chunks of the substrate carry FieldInstance on every typed node and the
+  // round-trip harness assigns a globally-stable ordering.
+  let importIndex = 0;
+  const FIELD_PART = 'body';
   const rawNodeSourceTokens = new WeakMap();
+
+  /**
+   * Wrap an unknown field's result content in a sd:rawField element and
+   * stash the canonical FieldInstance payload on its attributes so the
+   * encoder can forward it to the PM node and the decoder can choose
+   * passthrough vs rebuild on export.
+   */
+  const buildRawFieldElement = ({ representation, instructionText, resultElements, originalXml, dirty, locked }) => {
+    const fieldInstance = buildFieldInstanceFromImport({
+      representation,
+      instructionText,
+      resultFragments: resultElements,
+      originalXml,
+      dirty,
+      locked,
+      part: FIELD_PART,
+      importIndex: importIndex++,
+    });
+    return {
+      name: 'sd:rawField',
+      attributes: { fieldInstance },
+      elements: resultElements,
+    };
+  };
 
   /**
    * Finalizes the current field. If collecting nodes, it processes them.
@@ -55,14 +87,55 @@ export const preProcessNodesForFldChar = (nodes = [], docx) => {
         currentField.instructionTokens,
         fieldRunRPr,
       );
-      const outputNodes = combinedResult.handled ? combinedResult.nodes : rawCollectedNodes;
+      let outputNodes;
+      if (combinedResult.handled) {
+        outputNodes = combinedResult.nodes;
+        // Attach the canonical FieldInstance to the typed sd:* element(s)
+        // the family preprocessor emitted. Export still reads legacy typed
+        // attrs in Phase 0; the substrate payload is carried alongside so
+        // Phase 1 / 3 can consume it without changing the import path.
+        const fieldInstance = buildFieldInstanceFromImport({
+          representation: 'complex',
+          instructionText: currentField.instrText.trim(),
+          resultFragments: collectedNodes,
+          originalXml: rawCollectedNodes,
+          dirty: currentField.dirty ?? false,
+          locked: currentField.locked ?? false,
+          part: FIELD_PART,
+          importIndex: importIndex++,
+        });
+        attachFieldInstanceToFieldNodes(outputNodes, fieldInstance);
+      } else {
+        // Unknown / unsupported field family: wrap the result content in a
+        // sd:rawField element holding the canonical FieldInstance payload.
+        // The original begin/instr/separate/result/end span is preserved
+        // as source.originalXml so the exporter can passthrough verbatim
+        // when nothing has been edited.
+        outputNodes = [
+          buildRawFieldElement({
+            representation: 'complex',
+            instructionText: currentField.instrText.trim(),
+            resultElements: collectedNodes,
+            originalXml: rawCollectedNodes,
+            dirty: currentField.dirty ?? false,
+            locked: currentField.locked ?? false,
+          }),
+        ];
+      }
       if (collectedNodesStack.length === 0) {
         // We have completed a top-level field, add the combined nodes to the output.
         processedNodes.push(...outputNodes);
       } else {
         // We are inside another field, so add the combined nodes to the parent collection.
         collectedNodesStack[collectedNodesStack.length - 1].push(...outputNodes);
-        rawCollectedNodesStack[rawCollectedNodesStack.length - 1].push(...outputNodes);
+        // The parent's source.originalXml capture must hold the original
+        // OOXML runs, not the synthesized sd:* wrappers we just produced.
+        // If the synthesized wrappers leaked into the parent's raw stack,
+        // an unedited parent's passthrough export would emit literal
+        // `<sd:rawField>` / `<sd:sequenceField>` / etc. as XML, breaking
+        // structural fidelity. Push the inner field's begin/instr/separate/
+        // result/end run sequence (rawCollectedNodes) instead.
+        rawCollectedNodesStack[rawCollectedNodesStack.length - 1].push(...rawCollectedNodes);
       }
     } else {
       // An unmatched 'end' indicates a field from a parent node is closing.
@@ -127,14 +200,54 @@ export const preProcessNodesForFldChar = (nodes = [], docx) => {
         const instructionPreProcessor = getInstructionPreProcessor(instructionType);
         if (instructionPreProcessor) {
           const processed = instructionPreProcessor(node.elements ?? [], instr, docx, null);
+          // Same FieldInstance attachment as the complex-field handled path.
+          const { dirty: simpleDirty, locked: simpleLocked } = readFieldFlags(node);
+          const fieldInstance = buildFieldInstanceFromImport({
+            representation: 'simple',
+            instructionText: instr,
+            resultFragments: node.elements ?? [],
+            originalXml: rawNode,
+            dirty: simpleDirty,
+            locked: simpleLocked,
+            part: FIELD_PART,
+            importIndex: importIndex++,
+          });
+          attachFieldInstanceToFieldNodes(processed, fieldInstance);
           if (collecting) {
             collectedNodesStack[collectedNodesStack.length - 1].push(...processed);
-            rawCollectedNodesStack[rawCollectedNodesStack.length - 1].push(...processed);
+            // Push the original <w:fldSimple> run into the parent's raw
+            // stack — not the synthesized sd:* wrapper. See the complex-
+            // field branch for the same reasoning: passthrough on the
+            // parent must emit valid OOXML, not an sd:* literal.
+            rawCollectedNodesStack[rawCollectedNodesStack.length - 1].push(rawNode);
           } else {
             processedNodes.push(...processed);
           }
           return;
         }
+        // Unknown / unsupported family on a simple field: wrap in sd:rawField.
+        // The fldSimple element itself is the source.originalXml; result
+        // content is its children, which the encoder recursively imports
+        // so formatted result runs survive end-to-end.
+        const { dirty, locked } = readFieldFlags(node);
+        const rawElement = buildRawFieldElement({
+          representation: 'simple',
+          instructionText: instr,
+          resultElements: node.elements ?? [],
+          originalXml: rawNode,
+          dirty,
+          locked,
+        });
+        if (collecting) {
+          collectedNodesStack[collectedNodesStack.length - 1].push(rawElement);
+          // Push the original <w:fldSimple> run into the parent's raw
+          // stack so passthrough export emits valid OOXML, not an
+          // sd:rawField literal.
+          rawCollectedNodesStack[rawCollectedNodesStack.length - 1].push(rawNode);
+        } else {
+          processedNodes.push(rawElement);
+        }
+        return;
       }
     }
 
@@ -145,7 +258,8 @@ export const preProcessNodesForFldChar = (nodes = [], docx) => {
       rawNodeSourceTokens.set(rawNode, rawSourceToken);
       capturedRawNodes.add(rawNode);
       fieldRunRPrStack.push(extractFieldRunRPr(node));
-      currentFieldStack.push({ instrText: '', instructionTokens: [], afterSeparate: false });
+      const { dirty, locked } = readFieldFlags(fldCharEl);
+      currentFieldStack.push({ instrText: '', instructionTokens: [], afterSeparate: false, dirty, locked });
       return;
     }
 

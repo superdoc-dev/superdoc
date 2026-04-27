@@ -32,6 +32,10 @@ export const PageReference = Node.create({
         default: '',
         rendered: false,
       },
+      fieldInstance: {
+        default: null,
+        rendered: false,
+      },
     };
   },
 

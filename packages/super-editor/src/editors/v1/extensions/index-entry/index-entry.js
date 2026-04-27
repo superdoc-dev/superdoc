@@ -41,6 +41,10 @@ export const IndexEntry = Node.create({
         default: null,
         rendered: false,
       },
+      fieldInstance: {
+        default: null,
+        rendered: false,
+      },
     };
   },
 

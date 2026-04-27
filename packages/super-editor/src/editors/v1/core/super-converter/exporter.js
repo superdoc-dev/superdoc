@@ -28,6 +28,7 @@ import { translator as sdBibliographyTranslator } from '@converter/v3/handlers/s
 import { translator as sdAuthorityEntryTranslator } from '@converter/v3/handlers/sd/authorityEntry/authorityEntry-translator.js';
 import { translator as sdTableOfAuthoritiesTranslator } from '@converter/v3/handlers/sd/tableOfAuthorities/tableOfAuthorities-translator.js';
 import { translator as sdSequenceFieldTranslator } from '@converter/v3/handlers/sd/sequenceField/sequenceField-translator.js';
+import { translator as sdRawFieldTranslator } from '@converter/v3/handlers/sd/rawField/rawField-translator.js';
 import { translator as sdTableOfContentsTranslator } from '@converter/v3/handlers/sd/tableOfContents';
 import { translator as sdIndexTranslator } from '@converter/v3/handlers/sd/index';
 import { translator as sdIndexEntryTranslator } from '@converter/v3/handlers/sd/indexEntry';
@@ -207,6 +208,7 @@ export function exportSchemaToJson(params) {
     authorityEntry: sdAuthorityEntryTranslator,
     tableOfAuthorities: sdTableOfAuthoritiesTranslator,
     sequenceField: sdSequenceFieldTranslator,
+    rawField: sdRawFieldTranslator,
     documentStatField: sdDocumentStatFieldTranslator,
     tableOfContents: sdTableOfContentsTranslator,
     index: sdIndexTranslator,

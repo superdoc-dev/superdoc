@@ -59,6 +59,7 @@ describe('sd:autoPageNumber translator', () => {
         type: 'page-number',
         attrs: {
           marksAsAttrs: marks,
+          fieldInstance: null,
         },
       });
     });

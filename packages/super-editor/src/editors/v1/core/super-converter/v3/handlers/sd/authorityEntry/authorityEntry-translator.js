@@ -37,6 +37,7 @@ const encode = (params) => {
       bold,
       italic,
       marksAsAttrs: node.marks || [],
+      fieldInstance: node.attributes?.fieldInstance ?? null,
     },
     content: processedText,
   };

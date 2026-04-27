@@ -35,6 +35,7 @@ const encode = (params) => {
       instruction,
       resolvedText,
       marksAsAttrs: marks,
+      fieldInstance: node.attributes?.fieldInstance ?? null,
     },
   };
 };

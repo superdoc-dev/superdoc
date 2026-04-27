@@ -80,6 +80,10 @@ export const preProcessNodesForFldChar = (nodes = [], docx) => {
       const rawCollectedNodes = rawCollectedNodesStack.pop().filter((n) => n !== null);
       const fieldRunRPr = fieldRunRPrStack.pop() ?? null;
       const currentField = currentFieldStack.pop();
+      // .trim() normalizes leading/trailing whitespace from the source
+      // <w:instrText xml:space="preserve">. Passthrough export is unaffected
+      // (it re-emits source.originalXml verbatim); rebuildEnvelope, when
+      // a field has been edited, emits the trimmed form. Word is tolerant.
       const combinedResult = _processCombinedNodesForFldChar(
         collectedNodes,
         currentField.instrText.trim(),

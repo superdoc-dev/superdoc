@@ -19,11 +19,13 @@
  * `instructionTokens`, `parsedArgs`, `resultFragments`, `dirty`, `locked`,
  * `familyPayload`, `source.part`.
  *
- * Whitespace token normalization: tokens of kind `whitespace` collapse
- * into a single canonical token. The substrate's import pipeline already
- * preserves whitespace as a single run, but synthesized fixtures may
- * produce equivalent token sequences with different whitespace boundaries
- * (e.g. one run of `'  '` vs. two runs of `' '`). We treat them as equal.
+ * Whitespace token normalization: each whitespace token is reduced to
+ * `{ kind: 'whitespace' }` so two snapshots agree regardless of the
+ * original run's text. The tokenizer always coalesces a whitespace run
+ * into a single token, so this is sufficient for any tokenizer-produced
+ * stream. Manually-synthesized streams with adjacent whitespace tokens
+ * are left as-is — equality holds 1:1 across reimports of the same
+ * fixture, which is the property the harness exercises.
  */
 
 import type { FieldInstance, InstructionToken, OpenXmlFragment } from './field-instance.js';

@@ -142,18 +142,19 @@ function rebuildEnvelope(fi, contentNodes, outputMarks) {
   if (dirty) beginAttrs['w:dirty'] = dirty;
   if (locked) beginAttrs['w:fldLock'] = locked;
 
+  // Only emit a w:rPr wrapper when there are marks to carry; an empty
+  // w:rPr is a no-op for Word but adds noise to rebuilt fields.
+  const rPr = outputMarks.length ? [{ name: 'w:rPr', elements: outputMarks }] : [];
+
   return [
     {
       name: 'w:r',
-      elements: [
-        { name: 'w:rPr', elements: outputMarks },
-        { name: 'w:fldChar', attributes: beginAttrs },
-      ],
+      elements: [...rPr, { name: 'w:fldChar', attributes: beginAttrs }],
     },
     {
       name: 'w:r',
       elements: [
-        { name: 'w:rPr', elements: outputMarks },
+        ...rPr,
         {
           name: 'w:instrText',
           attributes: { 'xml:space': 'preserve' },
@@ -163,18 +164,12 @@ function rebuildEnvelope(fi, contentNodes, outputMarks) {
     },
     {
       name: 'w:r',
-      elements: [
-        { name: 'w:rPr', elements: outputMarks },
-        { name: 'w:fldChar', attributes: { 'w:fldCharType': 'separate' } },
-      ],
+      elements: [...rPr, { name: 'w:fldChar', attributes: { 'w:fldCharType': 'separate' } }],
     },
     ...contentNodes,
     {
       name: 'w:r',
-      elements: [
-        { name: 'w:rPr', elements: outputMarks },
-        { name: 'w:fldChar', attributes: { 'w:fldCharType': 'end' } },
-      ],
+      elements: [...rPr, { name: 'w:fldChar', attributes: { 'w:fldCharType': 'end' } }],
     },
   ];
 }

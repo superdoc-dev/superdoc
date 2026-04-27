@@ -36,6 +36,12 @@ export const FIELD_BEARING_XML_NAMES: ReadonlySet<string> = new Set([
   'sd:index',
   'sd:autoPageNumber',
   'sd:totalPageNumber',
+  'sd:citation',
+  'sd:bibliography',
+  'sd:authorityEntry',
+  'sd:tableOfAuthorities',
+  'sd:indexEntry',
+  'sd:tableOfContentsEntry',
 ]);
 
 /**

@@ -31,7 +31,7 @@ describe('attachFieldInstanceToFieldNodes', () => {
     const fi = baseFi();
     const nodes: any[] = [
       { name: 'sd:hyperlink', attributes: {}, elements: [] },
-      { name: 'sd:authorityEntry', attributes: {}, elements: [] },
+      { name: 'sd:rawField', attributes: {}, elements: [] },
       { name: 'w:r', attributes: {}, elements: [] },
       { name: 'unknown', attributes: {}, elements: [] },
     ];

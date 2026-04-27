@@ -34,6 +34,7 @@ const encode = (params) => {
       sourceIds,
       resolvedText: extractResolvedText(processedText),
       marksAsAttrs: node.marks || [],
+      fieldInstance: node.attributes?.fieldInstance ?? null,
     },
     content: processedText,
   };

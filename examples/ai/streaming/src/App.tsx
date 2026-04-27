@@ -36,6 +36,10 @@ export default function App() {
   }, []);
 
   const generate = async () => {
+    // Guard against re-entry. setStreaming is React-batched, so a fast
+    // double-click would otherwise fire generate twice before the button
+    // swaps to Stop, racing two streams and orphaning the first abort.
+    if (abortRef.current) return;
     const editor = superdocRef.current?.activeEditor;
     if (!editor || !prompt.trim()) return;
 

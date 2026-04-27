@@ -1459,7 +1459,10 @@ export class EditorInputManager {
       }
     }
 
-    if (isOutsidePageBodyContent(layoutState.layout, x, normalizedPoint.pageIndex, normalizedPoint.pageLocalY)) {
+    if (
+      !useActiveSurfaceHitTest &&
+      isOutsidePageBodyContent(layoutState.layout, x, normalizedPoint.pageIndex, normalizedPoint.pageLocalY)
+    ) {
       event.preventDefault();
       this.#focusEditor();
       return;

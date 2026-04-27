@@ -2733,6 +2733,10 @@ export class EditorInputManager {
     // actual activeElement decides where keyboard input goes, so only skip the
     // focus handoff when the browser is already focused inside this editor.
     if (activeIsEditor) {
+      // Hidden story editors still need ProseMirror to replay the current PM
+      // selection into the off-screen DOM after pointer-driven selection
+      // updates on the rendered surface.
+      this.#focusEditorView(view);
       return;
     }
 

@@ -1,4 +1,9 @@
 /* eslint-env node */
+const {
+  createCommitAnalyzer,
+  createReleaseNotesGenerator,
+} = require('../../scripts/semantic-release/strict-breaking-parser.cjs');
+
 /*
  * Release narrow: esign externalizes `superdoc` in its build, so a core
  * change does not alter the published esign tarball (consumers get the new
@@ -14,21 +19,17 @@ const branches = [
   { name: 'main', prerelease: 'next', channel: 'next' },
 ];
 
-const isPrerelease = branches.some(
-  (b) => typeof b === 'object' && b.name === branch && b.prerelease
-);
+const isPrerelease = branches.some((b) => typeof b === 'object' && b.name === branch && b.prerelease);
 
 // Use AI-powered notes for stable releases, conventional generator for prereleases
-const notesPlugin = isPrerelease
-  ? '@semantic-release/release-notes-generator'
-  : ['semantic-release-ai-notes', { style: 'concise' }];
+const notesPlugin = isPrerelease ? createReleaseNotesGenerator() : ['semantic-release-ai-notes', { style: 'concise' }];
 
 const config = {
   branches,
   tagFormat: 'esign-v${version}',
   plugins: [
     'semantic-release-commit-filter',
-    '@semantic-release/commit-analyzer',
+    createCommitAnalyzer(),
     notesPlugin,
     ['@semantic-release/npm', { npmPublish: true }],
   ],
@@ -39,25 +40,28 @@ if (!isPrerelease) {
     '@semantic-release/git',
     {
       assets: ['package.json'],
-      message:
-        'chore(esign): ${nextRelease.version} [skip ci]\n\n${nextRelease.notes}',
+      message: 'chore(esign): ${nextRelease.version} [skip ci]\n\n${nextRelease.notes}',
     },
   ]);
 }
 
 // Linear integration - labels issues with version on release
-config.plugins.push(['semantic-release-linear-app', {
-  teamKeys: ['SD'],
-  addComment: true,
-  packageName: 'esign',
-  commentTemplate: 'shipped in {package} {releaseLink} {channel}'
-}]);
+config.plugins.push([
+  'semantic-release-linear-app',
+  {
+    teamKeys: ['SD'],
+    addComment: true,
+    packageName: 'esign',
+    commentTemplate: 'shipped in {package} {releaseLink} {channel}',
+  },
+]);
 
 config.plugins.push([
   '@semantic-release/github',
   {
-    successComment: ':tada: This ${issue.pull_request ? "PR" : "issue"} is included in **esign** v${nextRelease.version}\n\nThe release is available on [GitHub release](https://github.com/superdoc-dev/superdoc/releases/tag/${nextRelease.gitTag})',
-  }
+    successComment:
+      ':tada: This ${issue.pull_request ? "PR" : "issue"} is included in **esign** v${nextRelease.version}\n\nThe release is available on [GitHub release](https://github.com/superdoc-dev/superdoc/releases/tag/${nextRelease.gitTag})',
+  },
 ]);
 
 module.exports = config;

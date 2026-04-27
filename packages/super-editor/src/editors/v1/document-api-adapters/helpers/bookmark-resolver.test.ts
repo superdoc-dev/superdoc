@@ -7,6 +7,7 @@ import {
   resolveBookmarkTarget,
   extractBookmarkInfo,
   buildBookmarkAddress,
+  buildBookmarkDiscoveryItem,
   normalizeStory,
 } from './bookmark-resolver.js';
 
@@ -381,6 +382,29 @@ describe('extractBookmarkInfo', () => {
     const info = extractBookmarkInfo(doc, resolved, story);
 
     expect(info.address.story).toEqual(story);
+  });
+});
+
+describe('buildBookmarkDiscoveryItem', () => {
+  it('includes story in address for non-body bookmarks', () => {
+    const doc = makePmDoc([]);
+    const resolved = {
+      node: { type: { name: 'bookmarkStart' }, attrs: { name: 'hdr-bm', id: '3' } },
+      pos: 1,
+      name: 'hdr-bm',
+      bookmarkId: '3',
+      endPos: 2,
+    } as any;
+    const story = { kind: 'story' as const, storyType: 'headerFooterPart' as const, refId: 'rId7' };
+
+    const item = buildBookmarkDiscoveryItem(doc, resolved, 'rev-1', story);
+
+    expect(item.address).toEqual({
+      kind: 'entity',
+      entityType: 'bookmark',
+      name: 'hdr-bm',
+      story,
+    });
   });
 });
 

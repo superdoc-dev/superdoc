@@ -254,6 +254,7 @@ import {
 import { resolveTrackedChange } from '../../document-api-adapters/helpers/tracked-change-resolver.js';
 import { makeTrackedChangeAnchorKey } from '../../document-api-adapters/helpers/tracked-change-runtime-ref.js';
 import { getTrackedChangeIndex } from '../../document-api-adapters/tracked-changes/tracked-change-index.js';
+import { normalizeVariant } from '../../document-api-adapters/helpers/header-footer-slot-materialization.js';
 import type { SelectionHandle } from '../selection-state.js';
 
 const DOCUMENT_RELS_PART_ID = 'word/_rels/document.xml.rels';
@@ -8388,7 +8389,11 @@ export class PresentationEditor extends EventEmitter {
   ): Promise<string | null> {
     const region = this.#findHeaderFooterRegionForBookmarkLocator(locator);
     const expectedRefId =
-      locator.storyType === 'headerFooterPart' ? locator.refId : (region?.headerFooterRefId ?? null);
+      locator.storyType === 'headerFooterPart'
+        ? locator.refId
+        : region
+          ? this.#resolveBookmarkHeaderFooterRefId(region, locator)
+          : null;
 
     if (!region || !expectedRefId) {
       return null;
@@ -8419,6 +8424,40 @@ export class PresentationEditor extends EventEmitter {
     });
   }
 
+  #resolveBookmarkHeaderFooterRefId(
+    region: HeaderFooterRegion,
+    locator: Extract<StoryLocator, { storyType: 'headerFooterSlot' }>,
+  ): string | null {
+    if (region.headerFooterRefId) {
+      return region.headerFooterRefId;
+    }
+
+    const page = this.#layoutState.layout?.pages?.[region.pageIndex];
+    if (!page) {
+      return null;
+    }
+
+    const refCollection =
+      locator.headerFooterKind === 'header' ? page.sectionRefs?.headerRefs : page.sectionRefs?.footerRefs;
+    if (!refCollection) {
+      return null;
+    }
+
+    const normalizedRegionVariant = region.sectionType ? normalizeVariant(region.sectionType) : null;
+    const candidates = [region.sectionType, normalizedRegionVariant, locator.variant].filter(
+      (variant): variant is string => typeof variant === 'string' && variant.length > 0,
+    );
+
+    for (const variant of candidates) {
+      const refId = refCollection[variant as keyof typeof refCollection];
+      if (typeof refId === 'string' && refId.length > 0) {
+        return refId;
+      }
+    }
+
+    return null;
+  }
+
   #findHeaderFooterRegionForBookmarkLocator(
     locator: Extract<StoryLocator, { storyType: 'headerFooterPart' | 'headerFooterSlot' }>,
   ): HeaderFooterRegion | null {
@@ -8446,7 +8485,7 @@ export class PresentationEditor extends EventEmitter {
         continue;
       }
 
-      if (region.sectionType && region.sectionType !== locator.variant) {
+      if (region.sectionType && normalizeVariant(region.sectionType) !== locator.variant) {
         continue;
       }
 

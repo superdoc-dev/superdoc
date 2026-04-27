@@ -2227,7 +2227,7 @@ describe('PresentationEditor', () => {
               fragments: [],
               margins: { top: 72, bottom: 72, left: 72, right: 72, header: 36, footer: 36 },
               sectionRefs: {
-                headerRefs: { default: 'rId-header-default' },
+                headerRefs: { odd: 'rId-header-default' },
                 footerRefs: { default: 'rId-footer-default' },
               },
             },
@@ -2833,6 +2833,105 @@ describe('PresentationEditor', () => {
 
       const sessionEditor = editor.getActiveEditor();
       expect(sessionEditor.commands.setTextSelection).toHaveBeenCalledWith({ from: 9, to: 9 });
+      expect(sessionEditor.view.focus).toHaveBeenCalled();
+    });
+
+    it('normalizes odd-page default header regions for explicit headerFooterSlot bookmark targets', async () => {
+      mockIncrementalLayout.mockResolvedValueOnce({
+        layout: {
+          pageSize: { w: 612, h: 792 },
+          pages: [
+            {
+              number: 1,
+              numberText: '1',
+              size: { w: 612, h: 792 },
+              fragments: [],
+              margins: { top: 72, bottom: 72, left: 72, right: 72, header: 36, footer: 36 },
+              sectionRefs: {
+                headerRefs: { default: 'rId-header-default' },
+                footerRefs: { default: 'rId-footer-default' },
+              },
+            },
+          ],
+        },
+        measures: [],
+        headers: [
+          {
+            kind: 'header',
+            type: 'odd',
+            layout: {
+              height: 36,
+              pages: [{ number: 1, fragments: [] }],
+            },
+            blocks: [],
+            measures: [],
+          },
+        ],
+        footers: [
+          {
+            kind: 'footer',
+            type: 'default',
+            layout: {
+              height: 36,
+              pages: [{ number: 1, fragments: [] }],
+            },
+            blocks: [],
+            measures: [],
+          },
+        ],
+      });
+      bookmarkResolverMocks.resolveBookmarkTarget.mockReturnValueOnce({
+        pos: 11,
+        name: 'slot-odd-bm',
+        bookmarkId: '7',
+        endPos: 14,
+        node: { attrs: { name: 'slot-odd-bm', id: '7' } },
+      });
+
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'test-doc',
+      });
+
+      await vi.waitFor(() => expect(mockIncrementalLayout).toHaveBeenCalled());
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      const pagesHost = container.querySelector('.presentation-editor__pages') as HTMLElement;
+      const mockPage = document.createElement('div');
+      mockPage.setAttribute('data-page-index', '0');
+      pagesHost.appendChild(mockPage);
+
+      const viewport = container.querySelector('.presentation-editor__viewport') as HTMLElement;
+      vi.spyOn(viewport, 'getBoundingClientRect').mockReturnValue({
+        left: 0,
+        top: 0,
+        width: 800,
+        height: 1000,
+        right: 800,
+        bottom: 1000,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      } as DOMRect);
+
+      const didNavigate = await editor.navigateTo({
+        kind: 'entity',
+        entityType: 'bookmark',
+        name: 'slot-odd-bm',
+        story: {
+          kind: 'story',
+          storyType: 'headerFooterSlot',
+          section: { kind: 'section', sectionId: 'section-0' },
+          headerFooterKind: 'header',
+          variant: 'default',
+        },
+      });
+
+      expect(didNavigate).toBe(true);
+      await vi.waitFor(() => expect(createdSectionEditors.length).toBeGreaterThan(0));
+
+      const sessionEditor = editor.getActiveEditor();
+      expect(sessionEditor.commands.setTextSelection).toHaveBeenCalledWith({ from: 11, to: 11 });
       expect(sessionEditor.view.focus).toHaveBeenCalled();
     });
   });

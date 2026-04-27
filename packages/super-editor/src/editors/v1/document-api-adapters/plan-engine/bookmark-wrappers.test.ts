@@ -77,6 +77,7 @@ import {
 import { executeDomainCommand, resolveWriteStoryRuntime, disposeEphemeralWriteRuntime } from './plan-wrappers.js';
 import { resolveStoryRuntime } from '../story-runtime/resolve-story-runtime.js';
 import { getRevision, checkRevision } from './revision-tracker.js';
+import { DocumentApiAdapterError } from '../errors.js';
 
 type BookmarkNode = {
   type: { name: string };
@@ -650,6 +651,36 @@ describe('bookmarksListWrapper', () => {
       headerLocator,
     );
     expect(result.total).toBe(2);
+  });
+
+  it('skips a story that resolves to STORY_NOT_FOUND during document-wide listing', () => {
+    const { editor: bodyEditor } = makeEditor();
+
+    vi.mocked(findAllBookmarksInDocument).mockReturnValueOnce([
+      { name: 'body-bm', bookmarkId: '0', storyKey: 'body' },
+      { name: 'stale-header-bm', bookmarkId: '1', storyKey: 'hf:part:rId7' },
+    ]);
+    vi.mocked(resolveStoryRuntime)
+      .mockReturnValueOnce({
+        locator: { kind: 'story', storyType: 'body' },
+        storyKey: 'body',
+        editor: bodyEditor,
+        kind: 'body',
+      } as any)
+      .mockImplementationOnce(() => {
+        throw new DocumentApiAdapterError('STORY_NOT_FOUND', 'No header/footer part found for refId "rId7".');
+      });
+    vi.mocked(findAllBookmarks).mockReturnValueOnce([
+      { node: {}, pos: 5, name: 'body-bm', bookmarkId: '0', endPos: 10 },
+    ] as never);
+    vi.mocked(buildBookmarkDiscoveryItem).mockReturnValueOnce({ id: 'body-item', handle: {}, domain: {} } as never);
+    vi.mocked(getRevision).mockReturnValueOnce('rev-list').mockReturnValueOnce('rev-body');
+
+    const result = bookmarksListWrapper(bodyEditor);
+
+    expect(buildBookmarkDiscoveryItem).toHaveBeenCalledTimes(1);
+    expect(result.total).toBe(1);
+    expect(result.items).toEqual([{ id: 'body-item', handle: {}, domain: {} }]);
   });
 
   it('resolves a non-body story runtime when query.in is provided', () => {

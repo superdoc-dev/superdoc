@@ -119,11 +119,19 @@ export function bookmarksListWrapper(editor: Editor, query?: BookmarkListInput):
 
   const allItems = storyKeys.flatMap((storyKey) => {
     const locator = storyKey === BODY_STORY_KEY ? undefined : parseStoryKey(storyKey);
-    const runtime = resolveStoryRuntime(editor, locator);
-    const doc = runtime.editor.state.doc;
-    const revision = getRevision(runtime.editor);
-    const bookmarks = findAllBookmarks(doc);
-    return bookmarks.map((bookmark) => buildBookmarkDiscoveryItem(doc, bookmark, revision, runtime.locator));
+
+    try {
+      const runtime = resolveStoryRuntime(editor, locator);
+      const doc = runtime.editor.state.doc;
+      const revision = getRevision(runtime.editor);
+      const bookmarks = findAllBookmarks(doc);
+      return bookmarks.map((bookmark) => buildBookmarkDiscoveryItem(doc, bookmark, revision, runtime.locator));
+    } catch (error) {
+      if (error instanceof DocumentApiAdapterError && error.code === 'STORY_NOT_FOUND') {
+        return [];
+      }
+      throw error;
+    }
   });
 
   const { total, items: paged } = paginate(allItems, query?.offset, query?.limit);

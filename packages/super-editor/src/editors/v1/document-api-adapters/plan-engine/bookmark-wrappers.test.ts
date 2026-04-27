@@ -458,6 +458,28 @@ describe('bookmarksRenameWrapper', () => {
     expect(commit).toHaveBeenCalledWith(hostEditor);
   });
 
+  it('throws INVALID_INPUT when an omitted-story rename target matches multiple stories', () => {
+    const { editor } = makeEditor();
+
+    vi.mocked(findAllBookmarksInDocument).mockReturnValueOnce([
+      { name: 'shared-bm', bookmarkId: '1', storyKey: 'body' },
+      { name: 'shared-bm', bookmarkId: '2', storyKey: 'fn:fn-1' },
+    ]);
+
+    expect(() =>
+      bookmarksRenameWrapper(editor, {
+        target: { kind: 'entity', entityType: 'bookmark', name: 'shared-bm' },
+        newName: 'renamed-bm',
+      }),
+    ).toThrowError(
+      expect.objectContaining({
+        name: 'DocumentApiAdapterError',
+        code: 'INVALID_INPUT',
+      }),
+    );
+    expect(resolveWriteStoryRuntime).not.toHaveBeenCalled();
+  });
+
   it('checks expectedRevision on the story editor before a non-body rename', () => {
     const { editor: hostEditor } = makeEditor();
     const { editor: storyEditor } = makeEditor();
@@ -704,6 +726,27 @@ describe('bookmarksRemoveWrapper', () => {
       },
     });
     expect(commit).toHaveBeenCalledWith(hostEditor);
+  });
+
+  it('throws INVALID_INPUT when an omitted-story remove target matches multiple stories', () => {
+    const { editor } = makeEditor();
+
+    vi.mocked(findAllBookmarksInDocument).mockReturnValueOnce([
+      { name: 'shared-bm', bookmarkId: '1', storyKey: 'body' },
+      { name: 'shared-bm', bookmarkId: '2', storyKey: 'fn:fn-1' },
+    ]);
+
+    expect(() =>
+      bookmarksRemoveWrapper(editor, {
+        target: { kind: 'entity', entityType: 'bookmark', name: 'shared-bm' },
+      }),
+    ).toThrowError(
+      expect.objectContaining({
+        name: 'DocumentApiAdapterError',
+        code: 'INVALID_INPUT',
+      }),
+    );
+    expect(resolveWriteStoryRuntime).not.toHaveBeenCalled();
   });
 
   it('checks expectedRevision on the story editor before a non-body removal', () => {

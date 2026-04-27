@@ -156,7 +156,15 @@ function resolveBookmarkMutationStory(editor: Editor, target: BookmarkAddress): 
     return target.story;
   }
 
-  const entry = findAllBookmarksInDocument(editor).find((bookmark) => bookmark.name === target.name);
+  const matches = findAllBookmarksInDocument(editor).filter((bookmark) => bookmark.name === target.name);
+  if (matches.length > 1) {
+    throw new DocumentApiAdapterError(
+      'INVALID_INPUT',
+      `Bookmark name "${target.name}" exists in multiple stories. Pass target.story to disambiguate the mutation.`,
+    );
+  }
+
+  const entry = matches[0];
   if (!entry) {
     throw new DocumentApiAdapterError('TARGET_NOT_FOUND', `Bookmark with name "${target.name}" not found.`);
   }

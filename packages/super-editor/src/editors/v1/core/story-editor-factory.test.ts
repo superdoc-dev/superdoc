@@ -91,4 +91,31 @@ describe('createStoryEditor', () => {
     expect(child.presentationEditor).toBe(presentationEditor);
     expect((child as Editor & { _presentationEditor?: unknown })._presentationEditor).toBe(presentationEditor);
   });
+
+  it('disables telemetry on story editors regardless of isHeaderOrFooter', () => {
+    const parent = trackEditor(
+      initTestEditor({
+        mode: 'text',
+        content: '<p>parent</p>',
+      }).editor as Editor,
+    );
+
+    const headerFooter = trackEditor(
+      createStoryEditor(
+        parent,
+        { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'h/f' }] }] },
+        { documentId: 'hf:part:rId1', isHeaderOrFooter: true, headless: true },
+      ),
+    );
+    const note = trackEditor(
+      createStoryEditor(
+        parent,
+        { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'footnote' }] }] },
+        { documentId: 'footnote:1', isHeaderOrFooter: false, headless: true },
+      ),
+    );
+
+    expect(headerFooter.options.telemetry).toEqual({ enabled: false });
+    expect(note.options.telemetry).toEqual({ enabled: false });
+  });
 });

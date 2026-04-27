@@ -170,6 +170,9 @@ export function createStoryEditor(
     isCommentsEnabled: false,
     fragment: null,
 
+    // Sub-editors must never emit document-open telemetry.
+    telemetry: { enabled: false },
+
     // Caller-provided overrides (e.g. onCreate, onBlur)
     ...editorOptions,
   } as Partial<EditorOptions>);

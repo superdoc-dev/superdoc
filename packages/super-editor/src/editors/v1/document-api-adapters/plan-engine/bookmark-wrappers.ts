@@ -39,6 +39,8 @@ import { parseStoryKey, BODY_STORY_KEY } from '../story-runtime/story-key.js';
 // Result helpers
 // ---------------------------------------------------------------------------
 
+export const BOOKMARK_SCAN_REVISION_PREFIX = 'bookmark-scan:';
+
 function bookmarkSuccess(address: BookmarkAddress): BookmarkMutationResult {
   return { success: true, bookmark: address };
 }
@@ -120,7 +122,7 @@ function buildDocumentBookmarkRevision(hostRevision: string, snapshots: Bookmark
     .sort((left, right) => left.storyKey.localeCompare(right.storyKey))
     .map((snapshot) => `${snapshot.storyKey}@${snapshot.revision}`);
 
-  return `bookmark-scan:${parts.join('|')}`;
+  return `${BOOKMARK_SCAN_REVISION_PREFIX}${parts.join('|')}`;
 }
 
 function getDocumentBookmarkRevision(editor: Editor, preCollected?: DocumentBookmarkEntry[]): string {
@@ -133,18 +135,21 @@ function getDocumentBookmarkRevision(editor: Editor, preCollected?: DocumentBook
 function checkBookmarkRevision(hostEditor: Editor, storyEditor: Editor, expectedRevision: string | undefined): void {
   if (expectedRevision === undefined) return;
 
+  if (hostEditor === storyEditor) {
+    checkRevision(storyEditor, expectedRevision);
+    return;
+  }
+
   const storyRevision = getRevision(storyEditor);
   if (expectedRevision === storyRevision) {
     return;
   }
 
-  const hostRevision = getRevision(hostEditor);
-  if (expectedRevision === hostRevision) {
-    return;
-  }
-
   const documentBookmarkRevision = getDocumentBookmarkRevision(hostEditor);
-  if (expectedRevision === documentBookmarkRevision) {
+  if (
+    documentBookmarkRevision.startsWith(BOOKMARK_SCAN_REVISION_PREFIX) &&
+    expectedRevision === documentBookmarkRevision
+  ) {
     return;
   }
 

@@ -59,6 +59,7 @@ vi.mock('../story-runtime/resolve-story-runtime.js', () => ({
 }));
 
 import {
+  BOOKMARK_SCAN_REVISION_PREFIX,
   bookmarksListWrapper,
   bookmarksGetWrapper,
   bookmarksInsertWrapper,
@@ -263,7 +264,7 @@ describe('bookmarksInsertWrapper', () => {
     expect(commit).toHaveBeenCalledWith(editor);
   });
 
-  it('checks expectedRevision on the story editor before a non-body insert', () => {
+  it('rejects a host expectedRevision for a non-body insert', () => {
     const { editor: hostEditor } = makeEditor();
     const { editor: storyEditor } = makeEditor();
     const footnoteLocator = { kind: 'story' as const, storyType: 'footnote' as const, noteId: 'fn-1' };
@@ -275,22 +276,27 @@ describe('bookmarksInsertWrapper', () => {
       kind: 'note',
       commit: vi.fn(),
     } as any);
+    vi.mocked(checkRevision).mockImplementationOnce(() => {
+      throw new Error('REVISION_MISMATCH');
+    });
 
-    bookmarksInsertWrapper(
-      hostEditor,
-      {
-        name: 'bm-footnote',
-        at: {
-          kind: 'text',
-          story: footnoteLocator,
-          segments: [{ blockId: 'p1', range: { start: 0, end: 3 } }],
+    expect(() =>
+      bookmarksInsertWrapper(
+        hostEditor,
+        {
+          name: 'bm-footnote',
+          at: {
+            kind: 'text',
+            story: footnoteLocator,
+            segments: [{ blockId: 'p1', range: { start: 0, end: 3 } }],
+          },
         },
-      },
-      { expectedRevision: 'rev-host' },
-    );
+        { expectedRevision: 'rev-host' },
+      ),
+    ).toThrow();
 
     expect(checkRevision).toHaveBeenCalledWith(storyEditor, 'rev-host');
-    expect(executeDomainCommand).toHaveBeenCalledWith(storyEditor, expect.any(Function));
+    expect(executeDomainCommand).not.toHaveBeenCalled();
   });
 
   it('returns NO_OP when a bookmark with the same name already exists', () => {
@@ -480,7 +486,7 @@ describe('bookmarksRenameWrapper', () => {
     expect(resolveWriteStoryRuntime).not.toHaveBeenCalled();
   });
 
-  it('checks expectedRevision on the story editor before a non-body rename', () => {
+  it('rejects a host expectedRevision for a non-body rename', () => {
     const { editor: hostEditor } = makeEditor();
     const { editor: storyEditor } = makeEditor();
     const footnoteLocator = { kind: 'story' as const, storyType: 'footnote' as const, noteId: 'fn-1' };
@@ -500,18 +506,23 @@ describe('bookmarksRenameWrapper', () => {
       node: { attrs: { name: 'old-name', id: '1' } } as never,
     });
     vi.mocked(findAllBookmarksInDocument).mockReturnValueOnce([]);
+    vi.mocked(checkRevision).mockImplementationOnce(() => {
+      throw new Error('REVISION_MISMATCH');
+    });
 
-    bookmarksRenameWrapper(
-      hostEditor,
-      {
-        target: { kind: 'entity', entityType: 'bookmark', name: 'old-name', story: footnoteLocator },
-        newName: 'new-name',
-      },
-      { expectedRevision: 'rev-host' },
-    );
+    expect(() =>
+      bookmarksRenameWrapper(
+        hostEditor,
+        {
+          target: { kind: 'entity', entityType: 'bookmark', name: 'old-name', story: footnoteLocator },
+          newName: 'new-name',
+        },
+        { expectedRevision: 'rev-host' },
+      ),
+    ).toThrow();
 
     expect(checkRevision).toHaveBeenCalledWith(storyEditor, 'rev-host');
-    expect(executeDomainCommand).toHaveBeenCalledWith(storyEditor, expect.any(Function));
+    expect(executeDomainCommand).not.toHaveBeenCalled();
   });
 
   it('accepts a document-wide bookmark list revision token for a non-body rename', () => {
@@ -545,7 +556,6 @@ describe('bookmarksRenameWrapper', () => {
     vi.mocked(getRevision)
       .mockReturnValueOnce('rev-story')
       .mockReturnValueOnce('rev-host')
-      .mockReturnValueOnce('rev-host')
       .mockReturnValueOnce('rev-story');
 
     bookmarksRenameWrapper(
@@ -554,11 +564,62 @@ describe('bookmarksRenameWrapper', () => {
         target: { kind: 'entity', entityType: 'bookmark', name: 'hdr-bm', story: headerLocator },
         newName: 'hdr-bm-renamed',
       },
-      { expectedRevision: 'bookmark-scan:hf:part:rId7@rev-story' },
+      { expectedRevision: `${BOOKMARK_SCAN_REVISION_PREFIX}hf:part:rId7@rev-story` },
     );
 
     expect(checkRevision).not.toHaveBeenCalled();
     expect(executeDomainCommand).toHaveBeenCalledWith(storyEditor, expect.any(Function));
+  });
+
+  it('rejects a stale document-wide bookmark list revision token for a non-body rename', () => {
+    const { editor: hostEditor } = makeEditor();
+    const { editor: storyEditor } = makeEditor();
+    const headerLocator = { kind: 'story' as const, storyType: 'headerFooterPart' as const, refId: 'rId7' };
+
+    vi.mocked(resolveWriteStoryRuntime).mockReturnValueOnce({
+      locator: headerLocator,
+      storyKey: 'hf:part:rId7',
+      editor: storyEditor,
+      kind: 'headerFooter',
+      commit: vi.fn(),
+    } as any);
+    vi.mocked(resolveBookmarkTarget).mockReturnValueOnce({
+      pos: 5,
+      name: 'hdr-bm',
+      bookmarkId: '1',
+      endPos: 8,
+      node: { attrs: { name: 'hdr-bm', id: '1' } } as never,
+    });
+    vi.mocked(findAllBookmarksInDocument)
+      .mockReturnValueOnce([{ name: 'hdr-bm', bookmarkId: '1', storyKey: 'hf:part:rId7' }])
+      .mockReturnValueOnce([{ name: 'hdr-bm', bookmarkId: '1', storyKey: 'hf:part:rId7' }]);
+    vi.mocked(resolveStoryRuntime).mockReturnValueOnce({
+      locator: headerLocator,
+      storyKey: 'hf:part:rId7',
+      editor: storyEditor,
+      kind: 'headerFooter',
+    } as any);
+    vi.mocked(getRevision)
+      .mockReturnValueOnce('rev-current')
+      .mockReturnValueOnce('rev-host')
+      .mockReturnValueOnce('rev-current');
+    vi.mocked(checkRevision).mockImplementationOnce(() => {
+      throw new Error('REVISION_MISMATCH');
+    });
+
+    expect(() =>
+      bookmarksRenameWrapper(
+        hostEditor,
+        {
+          target: { kind: 'entity', entityType: 'bookmark', name: 'hdr-bm', story: headerLocator },
+          newName: 'hdr-bm-renamed',
+        },
+        { expectedRevision: `${BOOKMARK_SCAN_REVISION_PREFIX}hf:part:rId7@rev-stale` },
+      ),
+    ).toThrow();
+
+    expect(checkRevision).toHaveBeenCalledWith(storyEditor, `${BOOKMARK_SCAN_REVISION_PREFIX}hf:part:rId7@rev-stale`);
+    expect(executeDomainCommand).not.toHaveBeenCalled();
   });
 
   it('throws INVALID_INPUT when the new name exists in another story', () => {
@@ -749,7 +810,7 @@ describe('bookmarksRemoveWrapper', () => {
     expect(resolveWriteStoryRuntime).not.toHaveBeenCalled();
   });
 
-  it('checks expectedRevision on the story editor before a non-body removal', () => {
+  it('rejects a host expectedRevision for a non-body removal', () => {
     const { editor: hostEditor } = makeEditor();
     const { editor: storyEditor } = makeEditor();
     const footnoteLocator = { kind: 'story' as const, storyType: 'footnote' as const, noteId: 'fn-1' };
@@ -768,17 +829,22 @@ describe('bookmarksRemoveWrapper', () => {
       endPos: 8,
       node: { attrs: { name: 'bm-remove', id: '1' }, nodeSize: 1 } as never,
     });
+    vi.mocked(checkRevision).mockImplementationOnce(() => {
+      throw new Error('REVISION_MISMATCH');
+    });
 
-    bookmarksRemoveWrapper(
-      hostEditor,
-      {
-        target: { kind: 'entity', entityType: 'bookmark', name: 'bm-remove', story: footnoteLocator },
-      },
-      { expectedRevision: 'rev-host' },
-    );
+    expect(() =>
+      bookmarksRemoveWrapper(
+        hostEditor,
+        {
+          target: { kind: 'entity', entityType: 'bookmark', name: 'bm-remove', story: footnoteLocator },
+        },
+        { expectedRevision: 'rev-host' },
+      ),
+    ).toThrow();
 
     expect(checkRevision).toHaveBeenCalledWith(storyEditor, 'rev-host');
-    expect(executeDomainCommand).toHaveBeenCalledWith(storyEditor, expect.any(Function));
+    expect(executeDomainCommand).not.toHaveBeenCalled();
   });
 });
 
@@ -869,7 +935,7 @@ describe('bookmarksListWrapper', () => {
       headerLocator,
     );
     expect(result.total).toBe(2);
-    expect(result.evaluatedRevision).toBe('bookmark-scan:body@rev-body|hf:part:rId7@rev-header');
+    expect(result.evaluatedRevision).toBe(`${BOOKMARK_SCAN_REVISION_PREFIX}body@rev-body|hf:part:rId7@rev-header`);
   });
 
   it('skips a story that resolves to STORY_NOT_FOUND during document-wide listing', () => {

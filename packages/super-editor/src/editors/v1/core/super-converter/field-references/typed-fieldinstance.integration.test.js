@@ -114,6 +114,38 @@ describe('typed-node FieldInstance attachment', () => {
     expect(fi.rawInstruction).toBe('TOC \\o "1-3"');
   });
 
+  // NOTE: sequenceField has no V2 importer entity registered, so a SEQ
+  // integration test through defaultNodeListHandler currently drops the
+  // node before reaching the V3 translator. The unit-level forwarding for
+  // sequenceField is covered by attach-field-instance.test.ts. Wiring a
+  // sequenceFieldEntity (mirroring rawFieldEntity / crossReferenceEntity)
+  // is a separate follow-up.
+
+  it('attaches FieldInstance to a totalPageNumber (NUMPAGES) on the complex-field path', () => {
+    const paragraph = {
+      name: 'w:p',
+      elements: [
+        { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'begin' } }] },
+        { name: 'w:r', elements: [{ name: 'w:instrText', elements: [{ type: 'text', text: 'NUMPAGES' }] }] },
+        { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'separate' } }] },
+        { name: 'w:r', elements: [{ name: 'w:t', elements: [{ type: 'text', text: '10' }] }] },
+        { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'end' } }] },
+      ],
+    };
+    const { processedNodes } = preProcessNodesForFldChar([paragraph], {});
+    const nodeListHandler = defaultNodeListHandler();
+    const result = nodeListHandler.handler({
+      nodes: processedNodes,
+      docx: {},
+      nodeListHandler,
+      converter: {},
+      path: [],
+    });
+    const total = findByType(result[0], 'total-page-number');
+    expect(total).toHaveLength(1);
+    expect(total[0].attrs.fieldInstance.family).toBe('NUMPAGES');
+  });
+
   it('preserves dirty / locked flags on the FieldInstance attached to a typed node', () => {
     const paragraph = {
       name: 'w:p',

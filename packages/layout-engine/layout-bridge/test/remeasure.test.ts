@@ -899,6 +899,18 @@ describe('remeasureParagraph', () => {
       expect(measure.lines[1].toRun).toBe(2);
     });
 
+    it('creates an empty line for leading lineBreak at start of paragraph', () => {
+      const block = createBlock([{ kind: 'lineBreak' } as Run, textRun('Text')]);
+      const measure = remeasureParagraph(block, 200);
+
+      expect(measure.lines).toHaveLength(2);
+      expect(measure.lines[0].fromRun).toBe(0);
+      expect(measure.lines[0].toRun).toBe(0);
+      expect(measure.lines[0].toChar).toBe(0);
+      expect(measure.lines[1].fromRun).toBe(1);
+      expect(measure.lines[1].toRun).toBe(1);
+    });
+
     it('preserves multiple explicit lineBreak boundaries', () => {
       const block = createBlock([
         textRun('One'),
@@ -931,6 +943,28 @@ describe('remeasureParagraph', () => {
       expect(measure.lines[1].toChar).toBe(0);
     });
 
+    it('handles a single explicit lineBreak run as the only paragraph content', () => {
+      const block = createBlock([{ kind: 'lineBreak' } as Run]);
+      const measure = remeasureParagraph(block, 200);
+
+      expect(measure.lines).toHaveLength(1);
+      expect(measure.lines[0].fromRun).toBe(0);
+      expect(measure.lines[0].toRun).toBe(0);
+      expect(measure.lines[0].fromChar).toBe(0);
+      expect(measure.lines[0].toChar).toBe(0);
+    });
+
+    it('uses previous text font size for trailing explicit lineBreak empty line height', () => {
+      const block = createBlock([textRun('Heading', { fontSize: 24 }), { kind: 'lineBreak' } as Run]);
+      const measure = remeasureParagraph(block, 200);
+
+      expect(measure.lines).toHaveLength(2);
+      expect(measure.lines[0].lineHeight).toBe(24 * 1.2);
+      expect(measure.lines[1].fromRun).toBe(1);
+      expect(measure.lines[1].toRun).toBe(1);
+      expect(measure.lines[1].lineHeight).toBe(24 * 1.2);
+    });
+
     it('preserves multiple trailing explicit lineBreak runs as multiple empty lines', () => {
       const block = createBlock([textRun('Hello'), { kind: 'lineBreak' } as Run, { kind: 'lineBreak' } as Run]);
       const measure = remeasureParagraph(block, 200);
@@ -944,6 +978,25 @@ describe('remeasureParagraph', () => {
       expect(measure.lines[2].fromRun).toBe(2);
       expect(measure.lines[2].toRun).toBe(2);
       expect(measure.lines[2].toChar).toBe(0);
+    });
+
+    it('matches measureParagraphBlock for text + break + break + text', () => {
+      const block = createBlock([
+        textRun('A'),
+        { kind: 'lineBreak' } as Run,
+        { kind: 'lineBreak' } as Run,
+        textRun('B'),
+      ]);
+      const measure = remeasureParagraph(block, 200);
+
+      expect(measure.lines).toHaveLength(3);
+      expect(measure.lines[0].fromRun).toBe(0);
+      expect(measure.lines[0].toRun).toBe(0);
+      expect(measure.lines[1].fromRun).toBe(2);
+      expect(measure.lines[1].toRun).toBe(2);
+      expect(measure.lines[1].toChar).toBe(0);
+      expect(measure.lines[2].fromRun).toBe(3);
+      expect(measure.lines[2].toRun).toBe(3);
     });
 
     it('handles tabs followed immediately by line break', () => {

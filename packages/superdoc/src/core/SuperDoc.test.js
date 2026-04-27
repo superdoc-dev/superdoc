@@ -314,6 +314,56 @@ describe('SuperDoc core', () => {
     expect(instance.scrollToComment('nonexistent-id')).toBe(false);
   });
 
+  it('forwards navigateTo to the first presentation editor', async () => {
+    const { superdocStore } = createAppHarness();
+    const navigateTo = vi.fn(async () => true);
+
+    superdocStore.documents = [
+      {
+        getPresentationEditor: vi.fn(() => ({ navigateTo })),
+      },
+    ];
+
+    const instance = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: {}, toolbar: {} },
+      onException: vi.fn(),
+    });
+    await flushMicrotasks();
+
+    const target = {
+      kind: 'entity',
+      entityType: 'bookmark',
+      name: 'bookmark-1',
+      story: { kind: 'story', storyType: 'body' },
+    };
+
+    await expect(instance.navigateTo(target)).resolves.toBe(true);
+    expect(navigateTo).toHaveBeenCalledWith(target);
+  });
+
+  it('returns false from navigateTo when presentation navigation is unavailable', async () => {
+    const { superdocStore } = createAppHarness();
+    superdocStore.documents = [
+      {
+        getPresentationEditor: vi.fn(() => null),
+      },
+    ];
+
+    const instance = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: {}, toolbar: {} },
+      onException: vi.fn(),
+    });
+    await flushMicrotasks();
+
+    await expect(instance.navigateTo({ kind: 'block', nodeId: 'node-1' })).resolves.toBe(false);
+  });
+
   it('forwards scrollToElement to the first presentation editor', async () => {
     const { superdocStore } = createAppHarness();
     const scrollToElement = vi.fn(async () => true);

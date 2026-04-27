@@ -54,6 +54,7 @@ const AUTO_SCROLL_EDGE_PX = 32;
 const AUTO_SCROLL_MAX_SPEED_PX = 24;
 /** Tolerance for detecting scrollability to handle sub-pixel rounding in browsers */
 const SCROLL_DETECTION_TOLERANCE_PX = 1;
+const DEFAULT_PAGE_MARGIN_PX = 72;
 const COMMENT_HIGHLIGHT_SELECTOR = '.superdoc-comment-highlight';
 const TRACK_CHANGE_SELECTOR = '[data-track-change-id]';
 const PM_TRACK_CHANGE_SELECTOR = '.track-insert[data-id], .track-delete[data-id], .track-format[data-id]';
@@ -123,6 +124,40 @@ function isSameRenderedNoteTarget(
   }
 
   return left.storyType === right.storyType && left.noteId === right.noteId;
+}
+
+function isOutsidePageBodyContent(layout: Layout, x: number, pageIndex?: number, pageLocalY?: number): boolean {
+  if (!Number.isFinite(x) || !Number.isFinite(pageIndex) || !Number.isFinite(pageLocalY)) {
+    return false;
+  }
+
+  const page = layout.pages[pageIndex];
+  if (!page) {
+    return false;
+  }
+
+  const pageWidth = page.size?.w ?? layout.pageSize.w;
+  const pageHeight = page.size?.h ?? layout.pageSize.h;
+  if (!Number.isFinite(pageWidth) || pageWidth <= 0 || !Number.isFinite(pageHeight) || pageHeight <= 0) {
+    return false;
+  }
+
+  const margins = page.margins ?? null;
+  const marginLeft = Number.isFinite(margins?.left) ? (margins!.left as number) : DEFAULT_PAGE_MARGIN_PX;
+  const marginRight = Number.isFinite(margins?.right) ? (margins!.right as number) : DEFAULT_PAGE_MARGIN_PX;
+  const marginTop = Number.isFinite(margins?.top) ? (margins!.top as number) : DEFAULT_PAGE_MARGIN_PX;
+  const marginBottom = Number.isFinite(margins?.bottom) ? (margins!.bottom as number) : DEFAULT_PAGE_MARGIN_PX;
+
+  const bodyLeft = Math.max(0, marginLeft);
+  const bodyRight = Math.min(pageWidth, pageWidth - Math.max(0, marginRight));
+  const bodyTop = Math.max(0, marginTop);
+  const bodyBottom = Math.min(pageHeight, pageHeight - Math.max(0, marginBottom));
+
+  if (bodyLeft >= bodyRight || bodyTop >= bodyBottom) {
+    return false;
+  }
+
+  return x < bodyLeft || x > bodyRight || pageLocalY < bodyTop || pageLocalY > bodyBottom;
 }
 
 function getCommentHighlightThreadIds(target: EventTarget | null): string[] {
@@ -1422,6 +1457,12 @@ export class EditorInputManager {
         event.preventDefault(); // Prevent native selection before double-click handles it
         return; // Will be handled by double-click
       }
+    }
+
+    if (isOutsidePageBodyContent(layoutState.layout, x, normalizedPoint.pageIndex, normalizedPoint.pageLocalY)) {
+      event.preventDefault();
+      this.#focusEditor();
+      return;
     }
 
     const { rawHit, hit } = this.#resolveSelectionPointerHit({

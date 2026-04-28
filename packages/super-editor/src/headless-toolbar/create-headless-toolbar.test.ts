@@ -528,6 +528,67 @@ describe('createHeadlessToolbar', () => {
     controller.destroy();
   });
 
+  // PR-2873 (SD-2527): registry rename has compatibility implications.
+  // Hosts that wrap or mock the OLD command names (toggleBulletList,
+  // toggleOrderedList) without exposing the new style-aware ones now silently
+  // fail — this test documents that contract.
+  it('returns false for bullet-list when only the old toggleBulletList exists on the host', () => {
+    const toggleBulletList = vi.fn(() => true);
+    const superdoc = createActiveEditorHost({
+      commands: {
+        // legacy command only — no toggleBulletListStyle
+        toggleBulletList,
+      },
+      state: createSelectionState({
+        empty: true,
+        $from: {
+          depth: 1,
+          node: vi.fn(() => ({ type: { name: 'doc' } })),
+          before: vi.fn(() => 0),
+          start: vi.fn(() => 0),
+        },
+      }),
+    });
+
+    const controller = createHeadlessToolbar({
+      superdoc,
+      commands: ['bullet-list'],
+    });
+
+    expect(controller.execute?.('bullet-list')).toBe(false);
+    expect(toggleBulletList).not.toHaveBeenCalled();
+
+    controller.destroy();
+  });
+
+  it('returns false for numbered-list when only the old toggleOrderedList exists on the host', () => {
+    const toggleOrderedList = vi.fn(() => true);
+    const superdoc = createActiveEditorHost({
+      commands: {
+        toggleOrderedList,
+      },
+      state: createSelectionState({
+        empty: true,
+        $from: {
+          depth: 1,
+          node: vi.fn(() => ({ type: { name: 'doc' } })),
+          before: vi.fn(() => 0),
+          start: vi.fn(() => 0),
+        },
+      }),
+    });
+
+    const controller = createHeadlessToolbar({
+      superdoc,
+      commands: ['numbered-list'],
+    });
+
+    expect(controller.execute?.('numbered-list')).toBe(false);
+    expect(toggleOrderedList).not.toHaveBeenCalled();
+
+    controller.destroy();
+  });
+
   it('executes indent-increase via list indent first', () => {
     const increaseListIndent = vi.fn(() => true);
     const increaseTextIndent = vi.fn(() => true);

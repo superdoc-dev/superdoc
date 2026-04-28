@@ -1564,3 +1564,80 @@ describe('createNewList', () => {
     });
   });
 });
+
+describe('markerTextToBulletStyle', () => {
+  const { markerTextToBulletStyle } = listHelpers;
+
+  it.each([
+    ['•', 'disc'],
+    ['◦', 'circle'],
+    ['▪', 'square'],
+  ])('maps %s to %s', (markerText, expected) => {
+    expect(markerTextToBulletStyle(markerText)).toBe(expected);
+  });
+
+  it.each([
+    ['·', 'legacy Symbol-font middle dot (U+00B7)'],
+    ['●', 'filled circle (U+25CF)'],
+    ['', 'empty string'],
+    ['1.', 'ordered marker'],
+    ['•1', 'multi-char string starting with bullet'],
+  ])('returns null for unrecognized input %s (%s)', (markerText) => {
+    expect(markerTextToBulletStyle(markerText)).toBeNull();
+  });
+
+  it.each([[null], [undefined]])('returns null for %s', (markerText) => {
+    expect(markerTextToBulletStyle(markerText)).toBeNull();
+  });
+});
+
+describe('numberingInfoToOrderedStyle', () => {
+  const { numberingInfoToOrderedStyle } = listHelpers;
+
+  // The mapper checks `numberingType` (numFmt) plus the LAST character of markerText
+  // to disambiguate suffix variants (e.g. "1." vs "1)").
+  it.each([
+    ['decimal', '1.', 'decimal'],
+    ['decimal', '1)', 'decimal-paren'],
+    ['decimal', '23.', 'decimal'],
+    ['decimal', '99)', 'decimal-paren'],
+    ['upperRoman', 'I.', 'upper-roman'],
+    ['upperRoman', 'XIV.', 'upper-roman'],
+    ['lowerRoman', 'i.', 'lower-roman'],
+    ['lowerRoman', 'iv.', 'lower-roman'],
+    ['upperLetter', 'A.', 'upper-alpha'],
+    ['upperLetter', 'C.', 'upper-alpha'],
+    ['lowerLetter', 'a.', 'lower-alpha'],
+    ['lowerLetter', 'a)', 'lower-alpha-paren'],
+    ['lowerLetter', 'z)', 'lower-alpha-paren'],
+  ])('maps (%s, %s) to %s', (numberingType, markerText, expected) => {
+    expect(numberingInfoToOrderedStyle(numberingType, markerText)).toBe(expected);
+  });
+
+  it('returns null for upperLetter + ")" (PR omits upper-alpha-paren)', () => {
+    // This documents an intentional gap: A) B) C) is valid OOXML but the PR's
+    // dropdown does not expose it, so the mapper returns null.
+    expect(numberingInfoToOrderedStyle('upperLetter', 'A)')).toBeNull();
+  });
+
+  it.each([
+    ['upperRoman', 'I)', 'upperRoman with ")" suffix not in map'],
+    ['lowerRoman', 'i)', 'lowerRoman with ")" suffix not in map'],
+    ['decimalZero', '01.', 'decimalZero numFmt not in map'],
+    ['ordinal', '1st', 'ordinal numFmt not in map'],
+    ['decimal', 'Step 1:', 'unrecognized suffix ":"'],
+    ['decimal', '1', 'no suffix at all'],
+    ['', '1.', 'empty numberingType'],
+  ])('returns null for unrecognized combo (%s, %s) (%s)', (numberingType, markerText) => {
+    expect(numberingInfoToOrderedStyle(numberingType, markerText)).toBeNull();
+  });
+
+  it.each([
+    [null, '1.'],
+    ['decimal', null],
+    [undefined, undefined],
+    [null, null],
+  ])('returns null for nullish inputs (%s, %s)', (numberingType, markerText) => {
+    expect(numberingInfoToOrderedStyle(numberingType, markerText)).toBeNull();
+  });
+});

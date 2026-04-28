@@ -12,6 +12,22 @@ vi.mock('@helpers/list-numbering-helpers.js', () => ({
     generateNewListDefinition: vi.fn(),
     getListDefinitionDetails: vi.fn(() => null),
   },
+  // Standalone exports added in PR-2873 — toggleList.js imports these directly
+  markerTextToBulletStyle: vi.fn((markerText) => {
+    const map = { '•': 'disc', '◦': 'circle', '▪': 'square' };
+    return map[markerText] ?? null;
+  }),
+  numberingInfoToOrderedStyle: vi.fn((numberingType, markerText) => {
+    const suffix = markerText?.slice(-1);
+    const map = {
+      decimal: { '.': 'decimal', ')': 'decimal-paren' },
+      upperRoman: { '.': 'upper-roman' },
+      lowerRoman: { '.': 'lower-roman' },
+      upperLetter: { '.': 'upper-alpha' },
+      lowerLetter: { '.': 'lower-alpha', ')': 'lower-alpha-paren' },
+    };
+    return map[numberingType]?.[suffix] ?? null;
+  }),
 }));
 
 vi.mock('@extensions/paragraph/resolvedPropertiesCache.js', () => ({
@@ -341,5 +357,141 @@ describe('toggleList', () => {
     expect(result).toBe(true);
     expect(updateNumberingProperties).not.toHaveBeenCalled();
     expect(ListHelpers.generateNewListDefinition).not.toHaveBeenCalled();
+  });
+
+  // -------------------------------------------------------------------------
+  // PR-2873 (SD-2527): style param threading
+  //
+  // toggleList now accepts (listType, bulletStyle, orderedStyle) and passes
+  // them through to ListHelpers.generateNewListDefinition. These tests verify
+  // that thread-through for every style the PR claims to support.
+  // -------------------------------------------------------------------------
+  describe('style parameter threading (PR-2873)', () => {
+    it.each(['disc', 'circle', 'square'])(
+      'passes bulletStyle="%s" through to generateNewListDefinition',
+      (bulletStyle) => {
+        ListHelpers.getNewListId.mockReturnValue(7);
+        const paragraphs = [createParagraph({ paragraphProperties: {} }, 3)];
+        const state = createState(paragraphs);
+        const handler = toggleList('bulletList', bulletStyle);
+
+        const result = handler({ editor, state, tr, dispatch });
+
+        expect(result).toBe(true);
+        expect(ListHelpers.generateNewListDefinition).toHaveBeenCalledWith({
+          numId: 7,
+          listType: 'bulletList',
+          editor,
+          bulletStyle,
+          orderedStyle: undefined,
+        });
+      },
+    );
+
+    it.each([
+      'decimal',
+      'decimal-paren',
+      'upper-roman',
+      'lower-roman',
+      'upper-alpha',
+      'lower-alpha',
+      'lower-alpha-paren',
+    ])('passes orderedStyle="%s" through to generateNewListDefinition', (orderedStyle) => {
+      ListHelpers.getNewListId.mockReturnValue(11);
+      const paragraphs = [createParagraph({ paragraphProperties: {} }, 3)];
+      const state = createState(paragraphs);
+      const handler = toggleList('orderedList', null, orderedStyle);
+
+      const result = handler({ editor, state, tr, dispatch });
+
+      expect(result).toBe(true);
+      expect(ListHelpers.generateNewListDefinition).toHaveBeenCalledWith({
+        numId: 11,
+        listType: 'orderedList',
+        editor,
+        bulletStyle: null,
+        orderedStyle,
+      });
+    });
+
+    it('matches existing same-style paragraphs and skips creating a new list', () => {
+      // Cursor is in a paragraph already using 'disc'. Toggling with bulletStyle='disc'
+      // should remove the list (toggle off), not allocate a new numId.
+      const sharedNumbering = { numId: 3, ilvl: 0 };
+      const paragraphs = [
+        createParagraph(
+          {
+            paragraphProperties: { numberingProperties: sharedNumbering },
+            listRendering: { numberingType: 'bullet', markerText: '•' },
+          },
+          1,
+        ),
+      ];
+      const state = createState(paragraphs);
+      const handler = toggleList('bulletList', 'disc');
+
+      const result = handler({ editor, state, tr, dispatch });
+
+      expect(result).toBe(true);
+      // Predicate matched (kind=bullet, style=disc) → mode is 'remove', not 'create'
+      expect(ListHelpers.generateNewListDefinition).not.toHaveBeenCalled();
+    });
+
+    it('does NOT match when the existing paragraph has a different bullet style', () => {
+      // Cursor is in a 'disc' paragraph but caller asks for 'square' → predicate fails,
+      // a NEW square list is created (this is the partial-selection fragmentation
+      // behavior — also covered by the behavior test).
+      ListHelpers.getNewListId.mockReturnValue(15);
+      const paragraphs = [
+        createParagraph(
+          {
+            paragraphProperties: { numberingProperties: { numId: 3, ilvl: 0 } },
+            listRendering: { numberingType: 'bullet', markerText: '•' },
+          },
+          1,
+        ),
+      ];
+      const state = createState(paragraphs);
+      const handler = toggleList('bulletList', 'square');
+
+      const result = handler({ editor, state, tr, dispatch });
+
+      expect(result).toBe(true);
+      expect(ListHelpers.generateNewListDefinition).toHaveBeenCalledWith({
+        numId: 15,
+        listType: 'bulletList',
+        editor,
+        bulletStyle: 'square',
+        orderedStyle: undefined,
+      });
+    });
+
+    it('does NOT match when the existing ordered paragraph has a different style', () => {
+      // Cursor is on a 'decimal' paragraph (1.) but caller asks for 'upper-roman'.
+      // The predicate uses numberingInfoToOrderedStyle to compare; a new list is created.
+      ListHelpers.getNewListId.mockReturnValue(20);
+      const paragraphs = [
+        createParagraph(
+          {
+            paragraphProperties: { numberingProperties: { numId: 5, ilvl: 0 } },
+            listRendering: { numberingType: 'decimal', markerText: '1.' },
+          },
+          1,
+        ),
+      ];
+      const state = createState(paragraphs);
+      const handler = toggleList('orderedList', null, 'upper-roman');
+
+      const result = handler({ editor, state, tr, dispatch });
+
+      expect(result).toBe(true);
+      expect(ListHelpers.generateNewListDefinition).toHaveBeenCalledWith({
+        numId: 20,
+        listType: 'orderedList',
+        editor,
+        bulletStyle: null,
+        orderedStyle: 'upper-roman',
+      });
+    });
   });
 });

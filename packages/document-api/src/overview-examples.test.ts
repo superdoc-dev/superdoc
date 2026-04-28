@@ -199,6 +199,7 @@ function makeCommentsAdapter() {
       ],
       page: { limit: 1, offset: 0, returned: 1 },
     })),
+    onChange: mock(() => () => {}),
   };
 }
 

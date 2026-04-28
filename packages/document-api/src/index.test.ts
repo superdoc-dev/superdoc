@@ -102,6 +102,7 @@ function makeCommentsAdapter(): CommentsAdapter {
       status: 'open' as const,
     })),
     list: mock(() => ({ evaluatedRevision: 'r1', total: 0, items: [], page: { limit: 0, offset: 0, returned: 0 } })),
+    onChange: mock(() => () => {}),
   };
 }
 
@@ -2184,6 +2185,44 @@ describe('createDocumentApi', () => {
         expect(e.name).toBe('DocumentApiValidationError');
         expect(e.code).toBe('SELECTION_ADAPTER_UNAVAILABLE');
       }
+    });
+  });
+
+  describe('comments.onChange wiring', () => {
+    function makeApiWithCommentsOnChange() {
+      const commentsAdpt = makeCommentsAdapter();
+      const api = createDocumentApi({
+        find: makeFindAdapter(FIND_RESULT),
+        get: makeGetAdapter(),
+        getNode: makeGetNodeAdapter(PARAGRAPH_NODE_RESULT),
+        getText: makeGetTextAdapter(),
+        info: makeInfoAdapter(),
+        capabilities: makeCapabilitiesAdapter(),
+        comments: commentsAdpt,
+        write: makeWriteAdapter(),
+        selectionMutation: makeSelectionMutationAdapter(),
+        trackChanges: makeTrackChangesAdapter(),
+        create: makeCreateAdapter(),
+        lists: makeListsAdapter(),
+      });
+      return { api, commentsAdpt };
+    }
+
+    it('forwards listener registration to the comments adapter and returns its unsubscribe', () => {
+      const { api, commentsAdpt } = makeApiWithCommentsOnChange();
+      const unsubFromAdapter = mock(() => {});
+      // Override the default stub so we can assert the returned unsubscribe identity.
+      commentsAdpt.onChange = mock(() => unsubFromAdapter);
+
+      const listener = () => {};
+      const unsub = api.comments.onChange(listener);
+
+      expect(commentsAdpt.onChange).toHaveBeenCalledTimes(1);
+      // The listener passed through to the adapter should be the same identity
+      // — not a wrapped function — so adapter implementations can dedupe.
+      expect((commentsAdpt.onChange as any).mock.calls[0][0]).toBe(listener);
+      // The unsubscribe handle returned to the caller should be the adapter's.
+      expect(unsub).toBe(unsubFromAdapter);
     });
   });
 

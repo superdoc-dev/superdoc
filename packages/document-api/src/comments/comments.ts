@@ -119,6 +119,13 @@ export interface CommentsDeleteInput {
 }
 
 /**
+ * Listener invoked when the comments collection changes (create, patch,
+ * delete, document reload). Receives no payload — call `list()` to read
+ * fresh state.
+ */
+export type CommentsChangeListener = () => void;
+
+/**
  * Engine-specific adapter that the comments API delegates to.
  */
 export interface CommentsAdapter {
@@ -144,6 +151,12 @@ export interface CommentsAdapter {
   get(input: GetCommentInput): CommentInfo;
   /** List comments matching the given query. */
   list(query?: CommentsListQuery): CommentsListResult;
+  /**
+   * Subscribe to comments-collection changes. Returns an unsubscribe
+   * function. Implementations should debounce to at most once per tick
+   * so multi-step transactions and document load don't storm consumers.
+   */
+  onChange(listener: CommentsChangeListener): () => void;
 }
 
 /**
@@ -161,6 +174,15 @@ export interface CommentsApi {
   delete(input: CommentsDeleteInput, options?: RevisionGuardOptions): Receipt;
   get(input: GetCommentInput): CommentInfo;
   list(query?: CommentsListQuery): CommentsListResult;
+  /**
+   * Subscribe to comments-collection changes. Listener fires whenever
+   * a comment is created, patched, deleted, or the document reloads.
+   *
+   * Listener receives no payload — call `comments.list()` inside the
+   * callback to read fresh state. Returns an unsubscribe function;
+   * call it in cleanup (React `useEffect` return, Vue `onUnmounted`).
+   */
+  onChange(listener: CommentsChangeListener): () => void;
 }
 
 const CREATE_COMMENT_ALLOWED_KEYS = new Set(['target', 'text', 'parentCommentId']);

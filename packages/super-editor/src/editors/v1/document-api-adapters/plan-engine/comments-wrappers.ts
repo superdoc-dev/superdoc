@@ -12,6 +12,7 @@ import type {
   AddCommentInput,
   CommentInfo,
   CommentsAdapter,
+  CommentsChangeListener,
   CommentsListQuery,
   CommentsListResult,
   EditCommentInput,
@@ -977,6 +978,42 @@ function listCommentsHandler(editor: Editor, query?: CommentsListQuery): Comment
 // Adapter factory
 // ---------------------------------------------------------------------------
 
+/**
+ * Subscribe to comments-collection changes. Forwards the editor's
+ * `commentsUpdate` event to the listener with no payload — consumers
+ * call `comments.list()` to read fresh state.
+ *
+ * Coalesces bursts to one notification per microtask so multi-step
+ * transactions and DOCX reload don't storm consumers. Returns an
+ * unsubscribe function.
+ */
+function subscribeToCommentsChanges(editor: Editor, listener: CommentsChangeListener): () => void {
+  let scheduled = false;
+  let active = true;
+  const handler = () => {
+    if (scheduled || !active) return;
+    scheduled = true;
+    queueMicrotask(() => {
+      scheduled = false;
+      if (!active) return;
+      try {
+        listener();
+      } catch {
+        // Listener errors are not propagated. Subscribers manage their
+        // own error handling; we don't want one buggy listener to wedge
+        // the editor's event loop or block other listeners.
+      }
+    });
+  };
+
+  editor.on?.('commentsUpdate', handler);
+
+  return () => {
+    active = false;
+    editor.off?.('commentsUpdate', handler);
+  };
+}
+
 export function createCommentsWrapper(editor: Editor): CommentsAdapter {
   return {
     add: (input: AddCommentInput, options?: RevisionGuardOptions) => addCommentHandler(editor, input, options),
@@ -994,5 +1031,6 @@ export function createCommentsWrapper(editor: Editor): CommentsAdapter {
     goTo: (input: GoToCommentInput) => goToCommentHandler(editor, input),
     get: (input: GetCommentInput) => getCommentHandler(editor, input),
     list: (query?: CommentsListQuery) => listCommentsHandler(editor, query),
+    onChange: (listener: CommentsChangeListener) => subscribeToCommentsChanges(editor, listener),
   };
 }

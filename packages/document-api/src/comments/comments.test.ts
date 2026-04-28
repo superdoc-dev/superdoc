@@ -20,6 +20,7 @@ const stubAdapter = () =>
     goTo: mock(() => ({ success: true })),
     get: mock(() => ({ commentId: 'c1', status: 'open' })),
     list: mock(() => ({ items: [], total: 0 })),
+    onChange: mock(() => () => {}),
   }) as any;
 
 describe('executeCommentsCreate validation', () => {

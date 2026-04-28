@@ -77,6 +77,7 @@ function makeAdapters() {
       status: 'open' as const,
     })),
     list: mock(() => ({ evaluatedRevision: '', total: 0, items: [], page: { limit: 50, offset: 0, returned: 0 } })),
+    onChange: mock(() => () => {}),
   };
   const writeAdapter: WriteAdapter = {
     write: mock(() => ({

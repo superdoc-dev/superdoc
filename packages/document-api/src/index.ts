@@ -80,6 +80,7 @@ import type { CommentInfo, CommentsListQuery, CommentsListResult } from './comme
 import type {
   CommentsAdapter,
   CommentsApi,
+  CommentsChangeListener,
   CommentsCreateInput,
   CommentsPatchInput,
   CommentsDeleteInput,
@@ -1981,6 +1982,9 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
       },
       list(query?: CommentsListQuery): CommentsListResult {
         return executeListComments(adapters.comments, query);
+      },
+      onChange(listener: CommentsChangeListener): () => void {
+        return adapters.comments.onChange(listener);
       },
     },
     insert(input: InsertInput, options?: MutationOptions): SDMutationReceipt {

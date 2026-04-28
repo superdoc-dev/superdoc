@@ -23,15 +23,23 @@ import { buildDispatchTable } from '../src/invoke/invoke.js';
 
 /**
  * Meta-methods and helper methods on DocumentApi that are not contract
- * operations. `ranges.scrollIntoView` is a browser-only UI side-effect
- * (scrolls the viewport via the presentation editor) — it has no
- * headless implementation, so it is intentionally excluded from the RPC
- * dispatch surface and the CLI command catalog. Direct calls through
- * `editor.doc.ranges.scrollIntoView()` are still supported.
+ * operations:
+ *
+ * - `ranges.scrollIntoView` is a browser-only UI side-effect (scrolls
+ *   the viewport via the presentation editor). It has no headless
+ *   implementation, so it is intentionally excluded from the RPC
+ *   dispatch surface and the CLI command catalog. Direct calls through
+ *   `editor.doc.ranges.scrollIntoView()` are still supported.
+ * - `selection.onChange` is a subscription primitive (push-based, no
+ *   request/response shape) rather than a request-response operation,
+ *   so it is not represented in `OPERATION_DEFINITIONS` / schemas /
+ *   dispatch. Direct calls through `editor.doc.selection.onChange()`
+ *   are still supported.
  */
 const META_MEMBER_PATHS = [
   'invoke',
   'ranges.scrollIntoView',
+  'selection.onChange',
   ...REFERENCE_OPERATION_ALIASES.map((alias) => alias.memberPath),
 ];
 

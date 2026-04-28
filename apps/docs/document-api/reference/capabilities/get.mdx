@@ -1645,6 +1645,11 @@ _No fields._
 | `operations.lists.list.dryRun` | boolean | yes |  |
 | `operations.lists.list.reasons` | enum[] | no |  |
 | `operations.lists.list.tracked` | boolean | yes |  |
+| `operations.lists.merge` | object | yes |  |
+| `operations.lists.merge.available` | boolean | yes |  |
+| `operations.lists.merge.dryRun` | boolean | yes |  |
+| `operations.lists.merge.reasons` | enum[] | no |  |
+| `operations.lists.merge.tracked` | boolean | yes |  |
 | `operations.lists.outdent` | object | yes |  |
 | `operations.lists.outdent.available` | boolean | yes |  |
 | `operations.lists.outdent.dryRun` | boolean | yes |  |
@@ -1735,6 +1740,11 @@ _No fields._
 | `operations.lists.setValue.dryRun` | boolean | yes |  |
 | `operations.lists.setValue.reasons` | enum[] | no |  |
 | `operations.lists.setValue.tracked` | boolean | yes |  |
+| `operations.lists.split` | object | yes |  |
+| `operations.lists.split.available` | boolean | yes |  |
+| `operations.lists.split.dryRun` | boolean | yes |  |
+| `operations.lists.split.reasons` | enum[] | no |  |
+| `operations.lists.split.tracked` | boolean | yes |  |
 | `operations.markdownToFragment` | object | yes |  |
 | `operations.markdownToFragment.available` | boolean | yes |  |
 | `operations.markdownToFragment.dryRun` | boolean | yes |  |
@@ -1895,6 +1905,11 @@ _No fields._
 | `operations.sections.setVerticalAlign.dryRun` | boolean | yes |  |
 | `operations.sections.setVerticalAlign.reasons` | enum[] | no |  |
 | `operations.sections.setVerticalAlign.tracked` | boolean | yes |  |
+| `operations.selection.current` | object | yes |  |
+| `operations.selection.current.available` | boolean | yes |  |
+| `operations.selection.current.dryRun` | boolean | yes |  |
+| `operations.selection.current.reasons` | enum[] | no |  |
+| `operations.selection.current.tracked` | boolean | yes |  |
 | `operations.styles.apply` | object | yes |  |
 | `operations.styles.apply.available` | boolean | yes |  |
 | `operations.styles.apply.dryRun` | boolean | yes |  |
@@ -3866,6 +3881,11 @@ _No fields._
       "dryRun": false,
       "tracked": false
     },
+    "lists.merge": {
+      "available": true,
+      "dryRun": true,
+      "tracked": false
+    },
     "lists.outdent": {
       "available": true,
       "dryRun": true,
@@ -3952,6 +3972,11 @@ _No fields._
       "tracked": false
     },
     "lists.setValue": {
+      "available": true,
+      "dryRun": true,
+      "tracked": false
+    },
+    "lists.split": {
       "available": true,
       "dryRun": true,
       "tracked": false
@@ -4114,6 +4139,11 @@ _No fields._
     "sections.setVerticalAlign": {
       "available": true,
       "dryRun": true,
+      "tracked": false
+    },
+    "selection.current": {
+      "available": true,
+      "dryRun": false,
       "tracked": false
     },
     "styles.apply": {
@@ -15719,6 +15749,41 @@ _No fields._
           ],
           "type": "object"
         },
+        "lists.merge": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
         "lists.outdent": {
           "additionalProperties": false,
           "properties": {
@@ -16315,6 +16380,41 @@ _No fields._
           "type": "object"
         },
         "lists.setValue": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "lists.split": {
           "additionalProperties": false,
           "properties": {
             "available": {
@@ -17435,6 +17535,41 @@ _No fields._
           "type": "object"
         },
         "sections.setVerticalAlign": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "selection.current": {
           "additionalProperties": false,
           "properties": {
             "available": {
@@ -19721,6 +19856,8 @@ _No fields._
         "lists.join",
         "lists.canJoin",
         "lists.separate",
+        "lists.merge",
+        "lists.split",
         "lists.setLevel",
         "lists.setValue",
         "lists.continuePrevious",
@@ -19756,6 +19893,7 @@ _No fields._
         "trackChanges.decide",
         "query.match",
         "ranges.resolve",
+        "selection.current",
         "mutations.preview",
         "mutations.apply",
         "capabilities.get",

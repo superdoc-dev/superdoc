@@ -368,6 +368,11 @@ type TabStopPx = {
   leader?: TabStop['leader'];
 };
 
+type PendingTabAlignStart = {
+  layoutX: number;
+  paintX: number;
+};
+
 /**
  * Type definition for minimal marker run formatting properties.
  *
@@ -822,7 +827,7 @@ const applyTabLayoutToLines = (
     let cursorX = 0;
     let lineWidth = 0;
     let tabStopCursor = 0;
-    let pendingTabAlignStartX: { layoutX: number; paintX: number } | null = null;
+    let pendingTabAlignStartX: PendingTabAlignStart | null = null;
     const segments: NonNullable<Line['segments']> = [];
     const leaders: NonNullable<Line['leaders']> = [];
     const effectiveIndent = lineIndex === 0 ? indentLeft + rawFirstLineOffset : indentLeft;
@@ -941,9 +946,10 @@ const applyTabLayoutToLines = (
             toChar: i,
             width: segmentWidth,
           };
-          if (pendingTabAlignStartX != null) {
-            segment.x = pendingTabAlignStartX.paintX;
-            cursorX = pendingTabAlignStartX.layoutX + segmentWidth;
+          const pendingTabAlign = pendingTabAlignStartX as PendingTabAlignStart | null;
+          if (pendingTabAlign != null) {
+            segment.x = pendingTabAlign.paintX;
+            cursorX = pendingTabAlign.layoutX + segmentWidth;
             pendingTabAlignStartX = null;
           } else {
             cursorX += segmentWidth;
@@ -964,9 +970,10 @@ const applyTabLayoutToLines = (
           toChar: sliceEnd,
           width: segmentWidth,
         };
-        if (pendingTabAlignStartX != null) {
-          segment.x = pendingTabAlignStartX.paintX;
-          cursorX = pendingTabAlignStartX.layoutX + segmentWidth;
+        const pendingTabAlign = pendingTabAlignStartX as PendingTabAlignStart | null;
+        if (pendingTabAlign != null) {
+          segment.x = pendingTabAlign.paintX;
+          cursorX = pendingTabAlign.layoutX + segmentWidth;
           pendingTabAlignStartX = null;
         } else {
           cursorX += segmentWidth;

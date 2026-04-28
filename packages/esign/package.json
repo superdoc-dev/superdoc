@@ -1,10 +1,6 @@
 {
   "name": "@superdoc-dev/esign",
-<<<<<<< HEAD
   "version": "2.5.0",
-=======
-  "version": "2.3.0",
->>>>>>> main
   "description": "React eSignature component for SuperDoc",
   "type": "module",
   "main": "./dist/index.js",

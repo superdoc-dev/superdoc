@@ -7,11 +7,11 @@ import { buildTextWithTabs } from '../../document-api-adapters/helpers/text-with
  * This command preserves numbering metadata (numId/ilvl) from the target item,
  * and always leaves marker rendering to the numbering plugin.
  *
- * @param {{ pos: number; position: 'before' | 'after'; text?: string; sdBlockId?: string; tracked?: boolean }} options
+ * @param {{ pos: number; position: 'before' | 'after'; text?: string; sdBlockId?: string; paraId?: string; tracked?: boolean }} options
  * @returns {import('./types/index.js').Command}
  */
 export const insertListItemAt =
-  ({ pos, position, text = '', sdBlockId, tracked }) =>
+  ({ pos, position, text = '', sdBlockId, paraId, tracked }) =>
   ({ state, dispatch }) => {
     if (!Number.isInteger(pos) || pos < 0 || pos > state.doc.content.size) return false;
     if (position !== 'before' && position !== 'after') return false;
@@ -35,7 +35,7 @@ export const insertListItemAt =
     const attrs = {
       ...(targetNode.attrs ?? {}),
       sdBlockId: sdBlockId ?? null,
-      paraId: null,
+      paraId: paraId ?? null,
       textId: null,
       listRendering: null,
       paragraphProperties: newParagraphProperties,

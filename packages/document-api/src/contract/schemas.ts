@@ -4193,6 +4193,72 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     ]),
     failure: listsFailureSchemaFor('lists.separate'),
   },
+  'lists.merge': {
+    input: objectSchema(
+      {
+        target: listItemAddressSchema,
+        direction: { enum: ['withPrevious', 'withNext'] },
+      },
+      ['target', 'direction'],
+    ),
+    output: {
+      oneOf: [
+        objectSchema(
+          {
+            success: { const: true },
+            listId: { type: 'string' },
+            absorbedCount: { type: 'integer' },
+            removedEmptyBlocks: { type: 'integer' },
+          },
+          ['success', 'listId', 'absorbedCount', 'removedEmptyBlocks'],
+        ),
+        listsFailureSchemaFor('lists.merge'),
+      ],
+    },
+    success: objectSchema(
+      {
+        success: { const: true },
+        listId: { type: 'string' },
+        absorbedCount: { type: 'integer' },
+        removedEmptyBlocks: { type: 'integer' },
+      },
+      ['success', 'listId', 'absorbedCount', 'removedEmptyBlocks'],
+    ),
+    failure: listsFailureSchemaFor('lists.merge'),
+  },
+  'lists.split': {
+    input: objectSchema(
+      {
+        target: listItemAddressSchema,
+        restartNumbering: { type: 'boolean' },
+      },
+      ['target'],
+    ),
+    output: {
+      oneOf: [
+        objectSchema(
+          {
+            success: { const: true },
+            listId: { type: 'string' },
+            numId: { type: 'integer' },
+            restartedAt: { type: ['integer', 'null'] },
+          },
+          ['success', 'listId', 'numId', 'restartedAt'],
+        ),
+        listsFailureSchemaFor('lists.split'),
+      ],
+    },
+    success: objectSchema(
+      {
+        success: { const: true },
+        listId: { type: 'string' },
+        numId: { type: 'integer' },
+        restartedAt: { type: ['integer', 'null'] },
+      },
+      ['success', 'listId', 'numId', 'restartedAt'],
+    ),
+    failure: listsFailureSchemaFor('lists.split'),
+  },
   'lists.setLevel': {
     input: objectSchema(
       {

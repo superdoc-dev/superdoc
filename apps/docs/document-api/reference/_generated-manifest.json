@@ -299,6 +299,7 @@
     "apps/docs/document-api/reference/lists/insert.mdx",
     "apps/docs/document-api/reference/lists/join.mdx",
     "apps/docs/document-api/reference/lists/list.mdx",
+    "apps/docs/document-api/reference/lists/merge.mdx",
     "apps/docs/document-api/reference/lists/outdent.mdx",
     "apps/docs/document-api/reference/lists/restart-at.mdx",
     "apps/docs/document-api/reference/lists/separate.mdx",
@@ -317,6 +318,7 @@
     "apps/docs/document-api/reference/lists/set-level.mdx",
     "apps/docs/document-api/reference/lists/set-type.mdx",
     "apps/docs/document-api/reference/lists/set-value.mdx",
+    "apps/docs/document-api/reference/lists/split.mdx",
     "apps/docs/document-api/reference/markdown-to-fragment.mdx",
     "apps/docs/document-api/reference/mutations/apply.mdx",
     "apps/docs/document-api/reference/mutations/index.mdx",
@@ -576,6 +578,8 @@
         "lists.join",
         "lists.canJoin",
         "lists.separate",
+        "lists.merge",
+        "lists.split",
         "lists.setLevel",
         "lists.setValue",
         "lists.continuePrevious",
@@ -1027,5 +1031,5 @@
     }
   ],
   "marker": "{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}",
-  "sourceHash": "f5c0786256e77432e9b9a58bc2009e39e2e832f6b0b2b625ee6dbeb3a762bdd6"
+  "sourceHash": "0bb50c2977e652d32a4c3dd591c774e7d164c013b53f2c951de8573911ecdef6"
 }

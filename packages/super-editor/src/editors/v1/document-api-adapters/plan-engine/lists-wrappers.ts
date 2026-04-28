@@ -29,6 +29,10 @@ import type {
   ListsCanJoinResult,
   ListsSeparateInput,
   ListsSeparateResult,
+  ListsMergeInput,
+  ListsMergeResult,
+  ListsSplitInput,
+  ListsSplitResult,
   ListsSetLevelInput,
   ListsSetValueInput,
   ListsContinuePreviousInput,
@@ -85,6 +89,7 @@ type InsertListItemAtCommand = (options: {
   position: 'before' | 'after';
   text?: string;
   sdBlockId?: string;
+  paraId?: string;
   tracked?: boolean;
 }) => boolean;
 
@@ -170,6 +175,13 @@ function resolveInsertedListItem(editor: Editor, sdBlockId: string): ListItemPro
     'TARGET_NOT_FOUND',
     `Inserted list item with sdBlockId "${sdBlockId}" could not be resolved after insertion.`,
   );
+}
+
+// paraId survives OOXML roundtrips (written as w14:paraId on export); sdBlockId
+// does not. Generate an 8-char hex paraId alongside sdBlockId so newly-inserted
+// items have a stable public identity that persists across save/reload cycles.
+function generateRuntimeParaId(): string {
+  return uuidv4().replace(/-/g, '').slice(0, 8).toUpperCase();
 }
 
 function withListTarget(editor: Editor, input: ListTargetInput): ListItemProjection {
@@ -324,6 +336,7 @@ export function listsInsertWrapper(
   }
 
   const createdId = uuidv4();
+  const createdParaId = generateRuntimeParaId();
   let created: ListItemProjection | null = null;
 
   const receipt = executeDomainCommand(
@@ -334,6 +347,7 @@ export function listsInsertWrapper(
         position: input.position,
         text: input.text ?? '',
         sdBlockId: createdId,
+        paraId: createdParaId,
         tracked: mode === 'tracked',
       });
       if (didApply) {
@@ -360,12 +374,13 @@ export function listsInsertWrapper(
   const resolved = created as ListItemProjection | null;
 
   if (!resolved) {
+    // paraId (not sdBlockId) survives OOXML roundtrips, so the caller can reuse it.
     return {
       success: true,
-      item: { kind: 'block', nodeType: 'listItem', nodeId: createdId },
+      item: { kind: 'block', nodeType: 'listItem', nodeId: createdParaId },
       insertionPoint: {
         kind: 'text',
-        blockId: createdId,
+        blockId: createdParaId,
         range: { start: 0, end: 0 },
       },
     };
@@ -885,6 +900,183 @@ export function listsSeparateWrapper(
   }
 
   return { success: true, listId: `${newNumId!}:${target.address.nodeId}`, numId: newNumId! };
+}
+
+/**
+ * Compound merge: structurally merge two adjacent list sequences into one.
+ *
+ * Unlike lists.join, merge does NOT require identical abstractNumId — absorbed
+ * items adopt the absorbing sequence's numbering definition. Additionally,
+ * empty paragraphs between the two sequences are removed so numbering flows
+ * continuously.
+ */
+export function listsMergeWrapper(editor: Editor, input: ListsMergeInput, options?: MutationOptions): ListsMergeResult {
+  rejectTrackedMode('lists.merge', options);
+
+  const target = resolveListItem(editor, input.target);
+  if (target.numId == null) {
+    return toListsFailure('INVALID_TARGET', 'Target must have numbering metadata.', { target: input.target });
+  }
+
+  const adjacent = findAdjacentSequence(editor, target, input.direction);
+  if (!adjacent) {
+    return toListsFailure('NO_ADJACENT_SEQUENCE', 'No adjacent list sequence found in the given direction.', {
+      target: input.target,
+      direction: input.direction,
+    });
+  }
+
+  const targetSequence = getContiguousSequence(editor, target);
+  if (adjacent.numId === target.numId) {
+    return toListsFailure('NO_OP', 'Target and adjacent items already belong to the same sequence.', {
+      target: input.target,
+    });
+  }
+
+  let absorbingNumId: number;
+  let absorbedItems: ListItemProjection[];
+  let anchorNodeId: string;
+  let gapFromPos: number;
+  let gapToPos: number;
+
+  if (input.direction === 'withPrevious') {
+    absorbingNumId = adjacent.numId;
+    absorbedItems = targetSequence;
+    anchorNodeId = adjacent.sequence[0]?.address.nodeId ?? target.address.nodeId;
+    const lastOfAdjacent = adjacent.sequence[adjacent.sequence.length - 1]!;
+    const firstOfTarget = targetSequence[0]!;
+    gapFromPos = lastOfAdjacent.candidate.pos + lastOfAdjacent.candidate.node.nodeSize;
+    gapToPos = firstOfTarget.candidate.pos;
+  } else {
+    absorbingNumId = target.numId;
+    absorbedItems = adjacent.sequence;
+    anchorNodeId = targetSequence[0]?.address.nodeId ?? target.address.nodeId;
+    const lastOfTarget = targetSequence[targetSequence.length - 1]!;
+    const firstOfAdjacent = adjacent.sequence[0]!;
+    gapFromPos = lastOfTarget.candidate.pos + lastOfTarget.candidate.node.nodeSize;
+    gapToPos = firstOfAdjacent.candidate.pos;
+  }
+
+  // Top-level only (avoid empty paragraphs inside table cells), and require
+  // structural emptiness (a paragraph holding an image/break has empty
+  // textContent but is still meaningful).
+  const gapEmptyParagraphs: Array<{ pos: number; node: (typeof targetSequence)[0]['candidate']['node'] }> = [];
+  if (gapFromPos < gapToPos) {
+    editor.state.doc.forEach((child, offset) => {
+      if (child.type.name !== 'paragraph') return;
+      if (offset < gapFromPos) return;
+      if (offset + child.nodeSize > gapToPos) return;
+      if (child.childCount > 0) return;
+      gapEmptyParagraphs.push({ pos: offset, node: child });
+    });
+  }
+
+  const mergedListId = `${absorbingNumId}:${anchorNodeId}`;
+
+  if (options?.dryRun) {
+    return {
+      success: true,
+      listId: mergedListId,
+      absorbedCount: absorbedItems.length,
+      removedEmptyBlocks: gapEmptyParagraphs.length,
+    };
+  }
+
+  const receipt = executeDomainCommand(
+    editor,
+    () => {
+      const { tr } = editor.state;
+      for (const item of absorbedItems) {
+        const currentLevel = item.level ?? 0;
+        updateNumberingProperties(
+          { numId: absorbingNumId, ilvl: currentLevel },
+          item.candidate.node,
+          item.candidate.pos,
+          editor,
+          tr,
+        );
+      }
+      // Delete empty gap paragraphs in descending position order so earlier
+      // deletions do not shift subsequent positions.
+      const sorted = [...gapEmptyParagraphs].sort((a, b) => b.pos - a.pos);
+      for (const gap of sorted) {
+        tr.delete(gap.pos, gap.pos + gap.node.nodeSize);
+      }
+      dispatchEditorTransaction(editor, tr);
+      clearIndexCache(editor);
+      return true;
+    },
+    { expectedRevision: options?.expectedRevision },
+  );
+
+  if (receipt.steps[0]?.effect !== 'changed') {
+    return toListsFailure('INVALID_TARGET', 'List merge could not be applied.', {
+      target: input.target,
+      direction: input.direction,
+    });
+  }
+
+  return {
+    success: true,
+    listId: mergedListId,
+    absorbedCount: absorbedItems.length,
+    removedEmptyBlocks: gapEmptyParagraphs.length,
+  };
+}
+
+/**
+ * Compound split: separate a list sequence at the target and restart the new
+ * half's numbering at 1 (by default).
+ *
+ * Runs as two sequential steps (separate, then setValue). If the second step
+ * fails after the first succeeds, the doc is left split without the renumber
+ * and the caller gets a failure result. Pass restartNumbering: false to skip
+ * the second step and get raw separate semantics.
+ */
+export function listsSplitWrapper(editor: Editor, input: ListsSplitInput, options?: MutationOptions): ListsSplitResult {
+  rejectTrackedMode('lists.split', options);
+
+  const separateResult = listsSeparateWrapper(editor, { target: input.target }, options);
+  if (!separateResult.success) {
+    // Failure shape (ListsFailureResult) is shared between Separate and Split,
+    // but TS can't infer that from the union narrowing alone — cast through.
+    return separateResult as ListsSplitResult;
+  }
+
+  const restartNumbering = input.restartNumbering !== false;
+  if (!restartNumbering) {
+    return {
+      success: true,
+      listId: separateResult.listId,
+      numId: separateResult.numId,
+      restartedAt: null,
+    };
+  }
+
+  if (options?.dryRun) {
+    return {
+      success: true,
+      listId: separateResult.listId,
+      numId: separateResult.numId,
+      restartedAt: 1,
+    };
+  }
+
+  // The separate step above bumped the revision; reusing the caller's
+  // expectedRevision here would throw REVISION_MISMATCH and leave the doc
+  // partially-applied.
+  const setValueOptions = options ? { ...options, expectedRevision: undefined } : options;
+  const setValueResult = listsSetValueWrapper(editor, { target: input.target, value: 1 }, setValueOptions);
+  if (!setValueResult.success) {
+    return setValueResult as ListsSplitResult;
+  }
+
+  return {
+    success: true,
+    listId: separateResult.listId,
+    numId: separateResult.numId,
+    restartedAt: 1,
+  };
 }
 
 export function listsSetLevelWrapper(

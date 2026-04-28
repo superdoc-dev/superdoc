@@ -20,7 +20,15 @@
 import { defineConfig } from 'rollup';
 
 export default defineConfig({
-  input: 'dist/index.js',
+  // Each subpath export needs its own entry so rollup walks it and emits a
+  // .cjs counterpart. `preserveModules` keeps the directory layout intact
+  // so the published `exports` map's `require` keys resolve correctly.
+  input: {
+    index: 'dist/index.js',
+    'helpers/index': 'dist/helpers/index.js',
+    'helpers/extract': 'dist/helpers/extract.js',
+    'helpers/format': 'dist/helpers/format.js',
+  },
 
   output: {
     dir: 'dist',

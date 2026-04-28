@@ -12,6 +12,24 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "require": "./dist/index.cjs"
+    },
+    "./helpers": {
+      "bun": "./dist/helpers/index.js",
+      "types": "./dist/helpers/index.d.ts",
+      "import": "./dist/helpers/index.js",
+      "require": "./dist/helpers/index.cjs"
+    },
+    "./helpers/extract": {
+      "bun": "./dist/helpers/extract.js",
+      "types": "./dist/helpers/extract.d.ts",
+      "import": "./dist/helpers/extract.js",
+      "require": "./dist/helpers/extract.cjs"
+    },
+    "./helpers/format": {
+      "bun": "./dist/helpers/format.js",
+      "types": "./dist/helpers/format.d.ts",
+      "import": "./dist/helpers/format.js",
+      "require": "./dist/helpers/format.cjs"
     }
   },
   "files": [

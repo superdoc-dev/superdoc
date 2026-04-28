@@ -333,32 +333,83 @@ for (const tc of content.trackedChanges) {
 }
 ```
 
-### RAG pipeline pattern
+### Working with tracked changes
 
-Extract content, chunk it, store the IDs, and navigate back on click:
+When a document has tracked changes, `block.text` concatenates inserted and deleted text together — the word "Report" deleted next to "Captain's Log" inserted reads as `ReportCaptain's Log`, which is meaningless to an embedder. Each block in the result also carries a `textSpans` array tagged with the tracked-change marks per run, so consumers can render `<ins>` / `<del>` markers around each half before embedding.
+
+The SDK ships a small set of helpers for this. They're pure data transforms, importable as either ESM or CommonJS:
 
 ```ts
-// 1. Extract all content
-const { blocks } = editor.doc.extract();
+import {
+  renderBlockText,
+  summarizeTrackedChange,
+  getBlocksForTrackedChange,
+  getTrackedChangeTextParts,
+} from '@superdoc-dev/sdk/helpers/extract';
+```
 
-// 2. Chunk and embed (your pipeline)
-const chunks = blocks
-  .filter((b) => b.text.length > 0)
+`renderBlockText(block, { trackedChanges })` returns the block's text with markers around each tracked-change run. The `'html'` format (default) wraps inserts in `<ins data-tc-id="...">` and deletes in `<del data-tc-id="...">`, and HTML-escapes the span text and entity ids so the output is safe for direct DOM rendering. `'markdown'` produces CriticMarkup (`{+inserted+}` / `{-deleted-}`) for embedders that prefer prose over HTML. `'plain'` returns `block.text` unchanged.
+
+```ts
+const block = content.blocks.find((b) => b.text.includes('Captain'));
+renderBlockText(block, { trackedChanges: 'html' });
+// → 'A Simple <del data-tc-id="...">Report</del><ins data-tc-id="...">Captain’s Log</ins>'
+```
+
+`summarizeTrackedChange(change, content)` returns a one-line display string suitable for a citation chunk or review-queue row. For non-paired changes it uses the SDK-provided `excerpt`; for paired replacements (where the SDK suppresses `excerpt` to avoid concatenating both halves) it derives `deleted "X", inserted "Y"` from the spans of the change's anchor block:
+
+```ts
+for (const change of content.trackedChanges) {
+  console.log(summarizeTrackedChange(change, content));
+  // → 'deleted "Report", inserted "Captain’s Log"'
+}
+```
+
+`getTrackedChangeTextParts(change, content)` exposes the same data structurally as `{ inserted, deleted, formatted, summary }` for callers that want the per-half text directly. `getBlocksForTrackedChange(change, blocks)` returns the block objects a change anchors to, reading `change.blockIds` first and falling back to scanning spans.
+
+### RAG pipeline pattern
+
+Extract content, render markers around tracked-change runs, chunk it, store the IDs, and navigate back on click:
+
+```ts
+import { renderBlockText, summarizeTrackedChange } from '@superdoc-dev/sdk/helpers/extract';
+
+// 1. Extract all content
+const content = await editor.doc.extract();
+
+// 2. Build chunks. Body blocks embed marker-rendered text so retrieval
+//    can distinguish deleted "Report" from inserted "Captain's Log"
+//    instead of seeing the concatenated string.
+const bodyChunks = content.blocks
+  .filter((b) => b.text.trim().length > 0)
   .map((b) => ({
     id: b.nodeId,
-    text: b.text,
-    type: b.type,
-    headingLevel: b.headingLevel,
+    targetType: 'block',
+    text: renderBlockText(b, { trackedChanges: 'html' }),
+    metadata: { headingLevel: b.headingLevel, hasTrackedChanges: !!b.textSpans },
   }));
-const embeddings = await embedChunks(chunks);
 
-// 3. Store embeddings with nodeIds
+// 3. One citation chunk per tracked change so retrieval can return
+//    "John changed X to Y" alongside the body chunk that contains the
+//    full marker-rendered context.
+const changeChunks = content.trackedChanges.map((change) => ({
+  id: change.entityId,
+  targetType: 'tracked-change',
+  text: `[change by ${change.author ?? 'unknown'}]: ${summarizeTrackedChange(change, content)}`,
+  metadata: { blockIds: change.blockIds, type: change.type },
+}));
+
+const embeddings = await embedChunks([...bodyChunks, ...changeChunks]);
 await vectorStore.upsert(embeddings);
 
 // 4. Later — user clicks a citation
 const citation = await vectorStore.query(userQuestion);
 await superdoc.scrollToElement(citation.id);
 ```
+
+<Info>
+The helpers handle the universal transforms (rendering, per-half summarization, anchor lookup). Chunking strategy itself — chunk size, overlap, table-row vs cell grouping, what to filter — is application-specific and stays in your code. Use the helpers as building blocks; pick the chunking policy that matches your retrieval needs.
+</Info>
 
 <Info>
 All IDs from `doc.extract()` work directly with `scrollToElement()` — no conversion needed. For DOCX-imported content, block `nodeId` values are stable across sessions.

@@ -1686,6 +1686,34 @@ describe('measureBlock', () => {
       expect((textSegment?.x ?? 0) + leftIndentPx).toBeCloseTo(Math.abs(leftIndentPx), 1);
     });
 
+    it('preserves compensated tab geometry when the following text starts with a space', async () => {
+      const leftIndentPx = -40;
+      const block: FlowBlock = {
+        kind: 'paragraph',
+        id: 'negative-left-hanging-body-tab-leading-space',
+        runs: [
+          { text: 'First', fontFamily: 'Arial', fontSize: 16 },
+          { kind: 'lineBreak' },
+          { kind: 'tab', text: '\t', tabIndex: 0 },
+          { text: ' Body', fontFamily: 'Arial', fontSize: 16 },
+        ],
+        attrs: {
+          indent: { left: leftIndentPx, hanging: 20 },
+        },
+      };
+
+      const measure = expectParagraphMeasure(await measureBlock(block, 200));
+
+      expect(measure.lines).toHaveLength(2);
+      const leadingSpaceSegment = measure.lines[1].segments?.find(
+        (segment) => segment.runIndex === 3 && segment.fromChar === 0 && segment.toChar === 1,
+      );
+
+      expect(leadingSpaceSegment?.x).toBeCloseTo(Math.abs(leftIndentPx) * 2, 1);
+      expect(leadingSpaceSegment?.precedingTabEndX).toBeCloseTo(Math.abs(leftIndentPx), 1);
+      expect((leadingSpaceSegment?.x ?? 0) + leftIndentPx).toBeCloseTo(Math.abs(leftIndentPx), 1);
+    });
+
     it('maps three trailing tabs to two explicit alignment stops (asymmetric case)', async () => {
       const centerStopTwips = 5000;
       const endStopTwips = 10000;

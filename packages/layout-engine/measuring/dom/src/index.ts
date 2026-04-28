@@ -2038,7 +2038,12 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
           segmentStartX = currentLine.width;
         }
       }
-      const segmentPrecedingTabEndX = segmentStartX !== undefined ? consumePendingPrecedingTabEndX() : undefined;
+      let hasPendingSegmentTabGeometry = segmentStartX !== undefined;
+      const consumeSegmentPrecedingTabEndX = (): number | undefined => {
+        if (!hasPendingSegmentTabGeometry) return undefined;
+        hasPendingSegmentTabGeometry = false;
+        return consumePendingPrecedingTabEndX();
+      };
 
       for (let wordIndex = 0; wordIndex < words.length; wordIndex++) {
         const word = words[wordIndex];
@@ -2120,9 +2125,13 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
               currentLine.maxFontSize = Math.max(currentLine.maxFontSize, lineHeightFontSize(run));
               // If in an active tab alignment group, use explicit X positioning
               let spaceExplicitX: number | undefined;
+              let spacePrecedingTabEndX: number | undefined;
               if (inActiveTabGroup && activeTabGroup) {
                 spaceExplicitX = activeTabGroup.currentX;
                 activeTabGroup.currentX = roundValue(activeTabGroup.currentX + singleSpaceWidth);
+              } else if (wordIndex === 0 && segmentStartX !== undefined) {
+                spaceExplicitX = segmentStartX;
+                spacePrecedingTabEndX = consumeSegmentPrecedingTabEndX();
               }
               appendSegment(
                 currentLine.segments,
@@ -2131,6 +2140,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
                 spaceEndChar,
                 singleSpaceWidth,
                 spaceExplicitX,
+                spacePrecedingTabEndX,
               );
               currentLine.spaceCount += 1;
             }
@@ -2453,7 +2463,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
               wordEndNoSpace,
               wordOnlyWidth,
               explicitXHere,
-              wordIndex === 0 ? segmentPrecedingTabEndX : undefined,
+              wordIndex === 0 ? consumeSegmentPrecedingTabEndX() : undefined,
             );
             // finish current line and start a new one on next iteration
             trimTrailingWrapSpaces(currentLine);
@@ -2503,7 +2513,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
             newToChar,
             wordCommitWidth,
             explicitX,
-            wordIndex === 0 ? segmentPrecedingTabEndX : undefined,
+            wordIndex === 0 ? consumeSegmentPrecedingTabEndX() : undefined,
           );
           if (shouldIncludeDelimiterSpace) {
             currentLine.spaceCount += 1;
@@ -3655,6 +3665,8 @@ const appendSegment = (
     last &&
     last.runIndex === runIndex &&
     last.toChar === fromChar &&
+    last.x === undefined &&
+    last.precedingTabEndX === undefined &&
     x === undefined &&
     precedingTabEndX === undefined
   ) {

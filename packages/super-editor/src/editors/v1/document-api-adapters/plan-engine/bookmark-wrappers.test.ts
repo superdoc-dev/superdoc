@@ -875,10 +875,16 @@ describe('bookmarksListWrapper', () => {
 
     expect(findAllBookmarks).toHaveBeenCalledWith(editor.state.doc);
     expect(buildBookmarkDiscoveryItem).toHaveBeenCalledTimes(2);
-    expect(buildBookmarkDiscoveryItem).toHaveBeenCalledWith(editor.state.doc, mockBookmarks[0], 'rev-story', {
-      kind: 'story',
-      storyType: 'body',
-    });
+    expect(buildBookmarkDiscoveryItem).toHaveBeenCalledWith(
+      editor.state.doc,
+      mockBookmarks[0],
+      'rev-story',
+      {
+        kind: 'story',
+        storyType: 'body',
+      },
+      'body',
+    );
     expect(result.total).toBe(2);
     expect(result.evaluatedRevision).toBe('rev-list');
   });
@@ -926,6 +932,7 @@ describe('bookmarksListWrapper', () => {
       { node: {}, pos: 5, name: 'body-bm', bookmarkId: '0', endPos: 10 },
       'rev-body',
       { kind: 'story', storyType: 'body' },
+      'body',
     );
     expect(buildBookmarkDiscoveryItem).toHaveBeenNthCalledWith(
       2,
@@ -933,9 +940,68 @@ describe('bookmarksListWrapper', () => {
       { node: {}, pos: 3, name: 'header-bm', bookmarkId: '1', endPos: 8 },
       'rev-header',
       headerLocator,
+      'hf:part:rId7',
     );
     expect(result.total).toBe(2);
     expect(result.evaluatedRevision).toBe(`${BOOKMARK_SCAN_REVISION_PREFIX}body@rev-body|hf:part:rId7@rev-header`);
+  });
+
+  it('scopes document-wide discovery IDs by story key for duplicate bookmark names', () => {
+    const { editor: bodyEditor } = makeEditor();
+    const { editor: headerEditor } = makeEditor();
+    const headerLocator = { kind: 'story' as const, storyType: 'headerFooterPart' as const, refId: 'rId7' };
+
+    vi.mocked(findAllBookmarksInDocument).mockReturnValueOnce([
+      { name: 'shared', bookmarkId: '0', storyKey: 'body' },
+      { name: 'shared', bookmarkId: '1', storyKey: 'hf:part:rId7' },
+    ]);
+    vi.mocked(resolveStoryRuntime)
+      .mockReturnValueOnce({
+        locator: { kind: 'story', storyType: 'body' },
+        storyKey: 'body',
+        editor: bodyEditor,
+        kind: 'body',
+      } as any)
+      .mockReturnValueOnce({
+        locator: headerLocator,
+        storyKey: 'hf:part:rId7',
+        editor: headerEditor,
+        kind: 'headerFooter',
+      } as any);
+    vi.mocked(findAllBookmarks)
+      .mockReturnValueOnce([{ node: {}, pos: 5, name: 'shared', bookmarkId: '0', endPos: 10 }] as never)
+      .mockReturnValueOnce([{ node: {}, pos: 3, name: 'shared', bookmarkId: '1', endPos: 8 }] as never);
+    vi.mocked(buildBookmarkDiscoveryItem).mockImplementation(
+      (_doc, bookmark, revision, _story, storyKey) =>
+        ({ id: `bookmark:${storyKey}:${bookmark.name}:${revision}`, handle: {}, domain: {} }) as never,
+    );
+    vi.mocked(getRevision)
+      .mockReturnValueOnce('rev-list')
+      .mockReturnValueOnce('rev-same')
+      .mockReturnValueOnce('rev-same');
+
+    const result = bookmarksListWrapper(bodyEditor);
+
+    expect(buildBookmarkDiscoveryItem).toHaveBeenNthCalledWith(
+      1,
+      bodyEditor.state.doc,
+      { node: {}, pos: 5, name: 'shared', bookmarkId: '0', endPos: 10 },
+      'rev-same',
+      { kind: 'story', storyType: 'body' },
+      'body',
+    );
+    expect(buildBookmarkDiscoveryItem).toHaveBeenNthCalledWith(
+      2,
+      headerEditor.state.doc,
+      { node: {}, pos: 3, name: 'shared', bookmarkId: '1', endPos: 8 },
+      'rev-same',
+      headerLocator,
+      'hf:part:rId7',
+    );
+    expect(result.items.map((item) => item.id)).toEqual([
+      'bookmark:body:shared:rev-same',
+      'bookmark:hf:part:rId7:shared:rev-same',
+    ]);
   });
 
   it('skips a story that resolves to STORY_NOT_FOUND during document-wide listing', () => {

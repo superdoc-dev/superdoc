@@ -190,10 +190,10 @@ export function bookmarksListWrapper(editor: Editor, query?: BookmarkListInput):
   const hostRevision = getRevision(editor);
   const snapshots = collectBookmarkStorySnapshots(editor, entries);
 
-  const allItems = snapshots.flatMap(({ runtime, revision }) => {
+  const allItems = snapshots.flatMap(({ storyKey, runtime, revision }) => {
     const doc = runtime.editor.state.doc;
     const bookmarks = findAllBookmarks(doc);
-    return bookmarks.map((bookmark) => buildBookmarkDiscoveryItem(doc, bookmark, revision, runtime.locator));
+    return bookmarks.map((bookmark) => buildBookmarkDiscoveryItem(doc, bookmark, revision, runtime.locator, storyKey));
   });
 
   const { total, items: paged } = paginate(allItems, query?.offset, query?.limit);

@@ -332,6 +332,7 @@ export function buildBookmarkDiscoveryItem(
   resolved: ResolvedBookmark,
   evaluatedRevision: string,
   story?: StoryLocator,
+  idScope?: string,
 ): DiscoveryItem<BookmarkDomain> {
   const from = nodePositionToPosition(doc, resolved.pos);
   const to = resolved.endPos !== null ? nodePositionToPosition(doc, resolved.endPos) : from;
@@ -351,6 +352,7 @@ export function buildBookmarkDiscoveryItem(
   }
 
   const handle = buildResolvedHandle(resolved.name, 'stable', 'node');
-  const id = `bookmark:${resolved.name}:${evaluatedRevision}`;
+  const idPrefix = idScope ? `bookmark:${encodeURIComponent(idScope)}:` : 'bookmark:';
+  const id = `${idPrefix}${encodeURIComponent(resolved.name)}:${encodeURIComponent(evaluatedRevision)}`;
   return buildDiscoveryItem(id, handle, domain);
 }

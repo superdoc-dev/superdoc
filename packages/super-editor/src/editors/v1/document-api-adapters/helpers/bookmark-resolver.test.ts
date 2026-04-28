@@ -406,6 +406,22 @@ describe('buildBookmarkDiscoveryItem', () => {
       story,
     });
   });
+
+  it('includes an encoded story scope in discovery IDs when provided', () => {
+    const doc = makePmDoc([]);
+    const resolved = {
+      node: { type: { name: 'bookmarkStart' }, attrs: { name: 'shared bm', id: '3' } },
+      pos: 1,
+      name: 'shared bm',
+      bookmarkId: '3',
+      endPos: 2,
+    } as any;
+    const story = { kind: 'story' as const, storyType: 'headerFooterPart' as const, refId: 'rId7' };
+
+    const item = buildBookmarkDiscoveryItem(doc, resolved, 'rev:1', story, 'hf:part:rId7');
+
+    expect(item.id).toBe('bookmark:hf%3Apart%3ArId7:shared%20bm:rev%3A1');
+  });
 });
 
 describe('normalizeStory', () => {

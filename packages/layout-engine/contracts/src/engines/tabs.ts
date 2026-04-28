@@ -130,8 +130,21 @@ export function computeTabStops(context: TabContext): TabStop[] {
   // Find the rightmost explicit stop (use original stops for this calculation)
   const maxExplicit = filteredExplicitStops.reduce((max, stop) => Math.max(max, stop.pos), 0);
   // Collect all stops: start with filtered explicit stops
-  const stops = [...filteredExplicitStops];
+  const stops: TabStop[] = [...filteredExplicitStops];
   const hasStartAlignedExplicit = filteredExplicitStops.some((stop) => stop.val === 'start');
+  const hasExplicitStops = filteredExplicitStops.length > 0;
+
+  // Word treats the body text start of a hanging-indent paragraph as an implicit
+  // tab target. This is what lets manual numbering like "1.\tText" align the
+  // first-line text with wrapped body lines even when the left indent is not on
+  // the document's default tab grid.
+  if (!hasExplicitStops && hanging > 0 && leftIndent > effectiveMinIndent) {
+    stops.push({
+      val: 'start',
+      pos: leftIndent,
+      leader: 'none',
+    });
+  }
 
   // Generate default stops at regular intervals.
   // - When no explicit start tabs exist (e.g., TOC paragraphs with only right-aligned tabs),
@@ -145,14 +158,14 @@ export function computeTabStops(context: TabContext): TabStop[] {
   while (pos < targetLimit) {
     pos += defaultTabInterval;
 
-    // Don't add if there's already an explicit stop OR a cleared position at this position
-    const hasExplicitStop = filteredExplicitStops.some((s) => Math.abs(s.pos - pos) < 20);
+    // Don't add if there's already a stop OR a cleared position at this position
+    const hasExistingStop = stops.some((s) => Math.abs(s.pos - pos) < 20);
     const hasClearStop = clearPositions.some((clearPos) => Math.abs(clearPos - pos) < 20);
 
     // Default stops must be >= leftIndent (for body text alignment)
     const isValidDefault = pos >= leftIndent;
 
-    if (!hasExplicitStop && !hasClearStop && isValidDefault) {
+    if (!hasExistingStop && !hasClearStop && isValidDefault) {
       stops.push({
         val: 'start',
         pos,

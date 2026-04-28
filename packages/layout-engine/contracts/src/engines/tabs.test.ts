@@ -145,6 +145,33 @@ describe('engines-tabs computeTabStops', () => {
     expect(stops.find((stop) => stop.pos === 4320)).toBeDefined(); // Second default at 4320
   });
 
+  it('adds an implicit stop at the hanging-indent body text start', () => {
+    const stops = computeTabStops({
+      explicitStops: [],
+      defaultTabInterval: 720,
+      paragraphIndent: { left: 1000, hanging: 500 },
+    });
+
+    const implicitBodyStop = stops.find((stop) => stop.pos === 1000);
+    expect(implicitBodyStop).toMatchObject({
+      val: 'start',
+      leader: 'none',
+    });
+    expect(stops[0]?.pos).toBe(1000);
+    expect(stops.find((stop) => stop.pos === 720)).toBeUndefined();
+    expect(stops.find((stop) => stop.pos === 1440)).toBeDefined();
+  });
+
+  it('does not duplicate the implicit hanging stop when it lands on the default grid', () => {
+    const stops = computeTabStops({
+      explicitStops: [],
+      defaultTabInterval: 720,
+      paragraphIndent: { left: 3600, hanging: 3600 },
+    });
+
+    expect(stops.filter((stop) => stop.pos === 3600)).toHaveLength(1);
+  });
+
   it('combines explicit stops in hanging range with defaults starting at leftIndent', () => {
     // When explicit stops exist in the hanging indent range AND there's a gap before leftIndent,
     // explicit stops should be preserved, but defaults should start from leftIndent.

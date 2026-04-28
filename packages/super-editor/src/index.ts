@@ -162,3 +162,16 @@ export type {
   ToolbarTarget,
   ToolbarValueMap,
 } from './headless-toolbar/types.js';
+
+// superdoc/ui public types (browser UI controller)
+export type {
+  EqualityFn,
+  SelectorFn,
+  SelectionSlice,
+  Subscribable,
+  SuperDocEditorLike,
+  SuperDocLike,
+  SuperDocUI,
+  SuperDocUIOptions,
+  SuperDocUIState,
+} from './ui/types.js';

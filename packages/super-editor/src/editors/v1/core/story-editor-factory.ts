@@ -172,6 +172,10 @@ export function createStoryEditor(
 
     // Caller-provided overrides (e.g. onCreate, onBlur)
     ...editorOptions,
+
+    // Document opens are tracked by the parent editor. Force off after
+    // caller overrides so sub-editors never emit telemetry.
+    telemetry: { enabled: false },
   } as Partial<EditorOptions>);
 
   const inheritedPresentationEditor =

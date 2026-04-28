@@ -53,9 +53,9 @@ function computeFooterBandOrigin(constraints: RegionConstraints): number {
   const pageHeight = constraints.pageHeight ?? 0;
   const footerDistance = constraints.margins?.footer;
   if (typeof footerDistance === 'number' && Number.isFinite(footerDistance)) {
-    return pageHeight - Math.max(0, footerDistance);
+    return Math.max(0, pageHeight - Math.max(0, footerDistance));
   }
-  return pageHeight - (constraints.margins?.bottom ?? 0);
+  return Math.max(0, pageHeight - (constraints.margins?.bottom ?? 0));
 }
 
 function isAnchoredFragment(fragment: Fragment): boolean {

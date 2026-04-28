@@ -334,6 +334,74 @@ describe('extract-adapter consumer simulation (SD-2766)', () => {
     }
   });
 
+  it("disambiguates the customer-reported pirates fixture's paired replacements", async () => {
+    // Real Word-authored DOCX shared by the customer who reported this issue
+    // (~22 KB, 74 deletes + 104 inserts, classic paired replacements like
+    // "Report" -> "Captain's Log"). Their pipeline saw concatenated strings
+    // such as "ReportCaptain's Log" and "your/yer" with no boundaries; this
+    // test confirms the same fixture now extracts as ordered spans with the
+    // per-mark type preserved.
+    const piratesFixture = await loadTestDataForEditorTests('sd-2766-pirates-tracked-changes.docx');
+    const ctx = (await initTestEditor({
+      content: piratesFixture.docx,
+      media: piratesFixture.media,
+      mediaFiles: piratesFixture.mediaFiles,
+      fonts: piratesFixture.fonts,
+    })) as { editor: Editor };
+    editor = ctx.editor;
+
+    const result = extractAdapter(editor, {});
+
+    // Title paragraph: "A Simple Report" -> "A Simple Captain's Log".
+    // Customer's pipeline reported "A Simple ReportCaptain's Log".
+    const titleBlock = result.blocks.find((b) => b.text.includes('Captain') && b.text.includes('Simple'))!;
+    expect(titleBlock).toBeDefined();
+    expect(titleBlock.textSpans).toBeDefined();
+    expect(titleBlock.textSpans!.map((s) => s.text).join('')).toBe(titleBlock.text);
+
+    const titleTaggedSpans = titleBlock.textSpans!.filter((s) => s.trackedChanges && s.trackedChanges.length > 0);
+    const titleDelete = titleTaggedSpans.find((s) => s.trackedChanges!.some((c) => c.type === 'delete'))!;
+    const titleInserts = titleTaggedSpans.filter((s) => s.trackedChanges!.some((c) => c.type === 'insert'));
+    expect(titleDelete.text).toBe('Report');
+    expect(titleInserts.map((s) => s.text).join('')).toContain('Captain');
+    expect(titleInserts.map((s) => s.text).join('')).toContain('Log');
+
+    // Body paragraph with the documented "get started" -> "set sail" swap.
+    const bodyBlock = result.blocks.find((b) => b.text.includes('set sail') || b.text.includes('get started'))!;
+    expect(bodyBlock).toBeDefined();
+    expect(bodyBlock.textSpans).toBeDefined();
+    const bodyDelete = bodyBlock.textSpans!.find((s) => s.trackedChanges?.some((c) => c.type === 'delete'));
+    const bodyInsert = bodyBlock.textSpans!.find(
+      (s) => s.trackedChanges?.some((c) => c.type === 'insert') && s.text === 'set sail',
+    );
+    expect(bodyDelete?.text).toBe('get started');
+    expect(bodyInsert).toBeDefined();
+
+    // Aggregate sanity: every tracked change reports a blockId, and every
+    // multi-type entity (paired replacement) has its excerpt suppressed.
+    expect(result.trackedChanges.length).toBeGreaterThan(50);
+    const blockIdSet = new Set(result.blocks.map((b) => b.nodeId));
+    for (const tc of result.trackedChanges) {
+      expect(tc.blockIds, `tc ${tc.entityId} should have blockIds`).toBeDefined();
+      expect(tc.blockIds!.every((id) => blockIdSet.has(id))).toBe(true);
+    }
+
+    if (process.env.DEBUG_EXTRACT_SAMPLE) {
+      const sample = result.blocks
+        .filter((b) => b.textSpans)
+        .slice(0, 5)
+        .map((b) => ({ text: b.text, rendered: renderMarkedText(b) }));
+      // eslint-disable-next-line no-console
+      console.log('[SD-2766 pirates fixture] first 5 blocks with tracked changes:');
+      for (const s of sample) {
+        // eslint-disable-next-line no-console
+        console.log(`  raw     : ${s.text}`);
+        // eslint-disable-next-line no-console
+        console.log(`  rendered: ${s.rendered}`);
+      }
+    }
+  });
+
   it('logs a sample of the new extract output for visual inspection', async () => {
     // Not a strict assertion — produces a snapshot of the shape so a human
     // reviewing the PR or running tests locally can confirm the new fields

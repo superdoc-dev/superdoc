@@ -138,6 +138,9 @@ catalogs:
     lib0:
       specifier: ^0.2.114
       version: 0.2.117
+    node-stdlib-browser:
+      specifier: ^1.3.1
+      version: 1.3.1
     nodemon:
       specifier: ^3.1.10
       version: 3.1.14
@@ -3072,6 +3075,9 @@ importers:
       jszip:
         specifier: 'catalog:'
         version: 3.10.1
+      node-stdlib-browser:
+        specifier: 'catalog:'
+        version: 1.3.1
       nodemon:
         specifier: 'catalog:'
         version: 3.1.14

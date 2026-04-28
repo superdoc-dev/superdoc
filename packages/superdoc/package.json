@@ -156,6 +156,7 @@
     "@vue/test-utils": "catalog:",
     "concurrently": "catalog:",
     "jszip": "catalog:",
+    "node-stdlib-browser": "catalog:",
     "nodemon": "catalog:",
     "pdfjs-dist": "catalog:",
     "postcss-nested": "catalog:",

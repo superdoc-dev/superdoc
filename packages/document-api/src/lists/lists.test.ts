@@ -8,6 +8,8 @@ import {
   executeListsAttach,
   executeListsSeparate,
   executeListsJoin,
+  executeListsMerge,
+  executeListsSplit,
   executeListsSetLevel,
   executeListsSetValue,
   executeListsConvertToText,
@@ -40,6 +42,8 @@ const stubAdapter = () =>
     join: mock(() => ({ success: true })),
     canJoin: mock(() => ({ canJoin: true })),
     separate: mock(() => ({ success: true })),
+    merge: mock(() => ({ success: true, listId: 'l1', absorbedCount: 1, removedEmptyBlocks: 0 })),
+    split: mock(() => ({ success: true, listId: 'l2', numId: 2, restartedAt: 1 })),
     setLevel: mock(() => ({ success: true })),
     setValue: mock(() => ({ success: true })),
     continuePrevious: mock(() => ({ success: true })),
@@ -234,6 +238,64 @@ describe('executeListsJoin validates direction', () => {
     const adapter = stubAdapter();
     executeListsJoin(adapter, { target: validTarget, direction: 'withPrevious' });
     expect(adapter.join).toHaveBeenCalled();
+  });
+});
+
+describe('executeListsMerge validates direction', () => {
+  it('rejects missing target.kind', () => {
+    expect(() =>
+      executeListsMerge(stubAdapter(), {
+        target: { nodeType: 'listItem', nodeId: 'x' },
+        direction: 'withPrevious',
+      } as any),
+    ).toThrow(/target\.kind/);
+  });
+
+  it('rejects invalid direction', () => {
+    expect(() => executeListsMerge(stubAdapter(), { target: validTarget, direction: 'sideways' } as any)).toThrow(
+      /direction must be one of/,
+    );
+  });
+
+  it('accepts valid withPrevious / withNext', () => {
+    const adapter = stubAdapter();
+    executeListsMerge(adapter, { target: validTarget, direction: 'withPrevious' });
+    executeListsMerge(adapter, { target: validTarget, direction: 'withNext' });
+    expect(adapter.merge).toHaveBeenCalledTimes(2);
+  });
+
+  it('forwards mutation options to the adapter', () => {
+    const adapter = stubAdapter();
+    executeListsMerge(adapter, { target: validTarget, direction: 'withPrevious' }, { dryRun: true });
+    const [, options] = adapter.merge.mock.calls[0];
+    expect(options).toMatchObject({ dryRun: true });
+  });
+});
+
+describe('executeListsSplit validates restartNumbering', () => {
+  it('rejects missing target.kind', () => {
+    expect(() => executeListsSplit(stubAdapter(), { target: { nodeType: 'listItem', nodeId: 'x' } } as any)).toThrow(
+      /target\.kind/,
+    );
+  });
+
+  it('rejects non-boolean restartNumbering', () => {
+    expect(() => executeListsSplit(stubAdapter(), { target: validTarget, restartNumbering: 'yes' } as any)).toThrow(
+      /restartNumbering must be a boolean/,
+    );
+  });
+
+  it('accepts omitted restartNumbering (defaults to restart-on at the wrapper layer)', () => {
+    const adapter = stubAdapter();
+    executeListsSplit(adapter, { target: validTarget });
+    expect(adapter.split).toHaveBeenCalled();
+  });
+
+  it('accepts explicit restartNumbering:true and restartNumbering:false', () => {
+    const adapter = stubAdapter();
+    executeListsSplit(adapter, { target: validTarget, restartNumbering: true });
+    executeListsSplit(adapter, { target: validTarget, restartNumbering: false });
+    expect(adapter.split).toHaveBeenCalledTimes(2);
   });
 });
 

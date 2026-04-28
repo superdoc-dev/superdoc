@@ -109,12 +109,24 @@ export function encodeMarksFromRPr(runProperties, docx) {
         const fontFamily = resolveDocxFontFamily(value, docx, getToCssFontFamily());
         textStyleAttrs[key] = fontFamily;
         // value can be a string (from resolveRunPropertiesFromParagraphStyle) or an object
-        const eastAsiaFamily = typeof value === 'object' && value !== null ? value['eastAsia'] : undefined;
-
-        if (eastAsiaFamily) {
-          const eastAsiaCss = getFontFamilyValue({ 'w:ascii': eastAsiaFamily }, docx);
-          if (!fontFamily || eastAsiaCss !== textStyleAttrs.fontFamily) {
-            textStyleAttrs.eastAsiaFontFamily = eastAsiaCss;
+        // Preserve per-script fonts when they differ from ascii (ECMA-376 §17.3.2.26:
+        // ascii, hAnsi, eastAsia, cs are independent font slots). Without this, the mark
+        // round-trip flattens all scripts to the ascii font, causing false-positive inline
+        // detection and w:rFonts injection on export. (SD-2517)
+        if (typeof value === 'object' && value !== null) {
+          const eastAsiaFamily = value['eastAsia'];
+          if (eastAsiaFamily) {
+            const eastAsiaCss = getFontFamilyValue({ 'w:ascii': eastAsiaFamily }, docx);
+            if (!fontFamily || eastAsiaCss !== textStyleAttrs.fontFamily) {
+              textStyleAttrs.eastAsiaFontFamily = eastAsiaCss;
+            }
+          }
+          const csFamily = value['cs'];
+          if (csFamily) {
+            const csCss = getFontFamilyValue({ 'w:ascii': csFamily }, docx);
+            if (!fontFamily || csCss !== textStyleAttrs.fontFamily) {
+              textStyleAttrs.csFontFamily = csCss;
+            }
           }
         }
         break;
@@ -597,6 +609,20 @@ export function decodeRPrFromMarks(marks) {
                   result[attr] = cleanValue;
                 });
                 runProperties.fontFamily = result;
+              }
+              break;
+            case 'eastAsiaFontFamily':
+              // Restore per-script East Asian font from the mark attribute preserved
+              // during encode. Without this, decodeRPrFromMarks flattens all scripts
+              // to the ascii font, causing false-positive inline detection. (SD-2517)
+              if (value != null && runProperties.fontFamily) {
+                runProperties.fontFamily.eastAsia = value.split(',')[0].trim();
+              }
+              break;
+            case 'csFontFamily':
+              // Restore per-script Complex Script font (same pattern as eastAsia).
+              if (value != null && runProperties.fontFamily) {
+                runProperties.fontFamily.cs = value.split(',')[0].trim();
               }
               break;
             case 'vertAlign':

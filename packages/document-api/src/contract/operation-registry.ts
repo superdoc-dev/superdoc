@@ -35,6 +35,8 @@ import type { GetMarkdownInput } from '../get-markdown/get-markdown.js';
 import type { GetHtmlInput } from '../get-html/get-html.js';
 import type { MarkdownToFragmentInput } from '../markdown-to-fragment/markdown-to-fragment.js';
 import type { InfoInput } from '../info/info.js';
+import type { ExtractInput } from '../extract/extract.js';
+import type { ExtractResult } from '../types/extract.types.js';
 import type { ClearContentInput } from '../clear-content/clear-content.js';
 import type { InsertInput } from '../insert/insert.js';
 import type { ReplaceInput } from '../replace/replace.js';
@@ -100,6 +102,10 @@ import type {
   ListsCanJoinResult,
   ListsSeparateInput,
   ListsSeparateResult,
+  ListsMergeInput,
+  ListsMergeResult,
+  ListsSplitInput,
+  ListsSplitResult,
   ListsSetLevelInput,
   ListsSetValueInput,
   ListsContinuePreviousInput,
@@ -182,6 +188,7 @@ import type {
 } from '../sections/sections.types.js';
 import type { QueryMatchInput, QueryMatchOutput } from '../types/query-match.types.js';
 import type { ResolveRangeInput, ResolveRangeOutput } from '../ranges/ranges.types.js';
+import type { SelectionCurrentInput, SelectionInfo } from '../selection/selection.js';
 import type {
   CreateImageInput,
   CreateImageResult,
@@ -527,6 +534,7 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
   getHtml: { input: GetHtmlInput; options: never; output: string };
   markdownToFragment: { input: MarkdownToFragmentInput; options: never; output: SDMarkdownToFragmentResult };
   info: { input: InfoInput; options: never; output: DocumentInfo };
+  extract: { input: ExtractInput; options: never; output: ExtractResult };
 
   // --- Singleton mutations ---
   clearContent: { input: ClearContentInput; options: RevisionGuardOptions; output: Receipt };
@@ -670,6 +678,8 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
   'lists.join': { input: ListsJoinInput; options: MutationOptions; output: ListsJoinResult };
   'lists.canJoin': { input: ListsCanJoinInput; options: never; output: ListsCanJoinResult };
   'lists.separate': { input: ListsSeparateInput; options: MutationOptions; output: ListsSeparateResult };
+  'lists.merge': { input: ListsMergeInput; options: MutationOptions; output: ListsMergeResult };
+  'lists.split': { input: ListsSplitInput; options: MutationOptions; output: ListsSplitResult };
   'lists.setLevel': { input: ListsSetLevelInput; options: MutationOptions; output: ListsMutateItemResult };
   'lists.setValue': { input: ListsSetValueInput; options: MutationOptions; output: ListsMutateItemResult };
   'lists.continuePrevious': {
@@ -842,6 +852,9 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
 
   // --- ranges.* ---
   'ranges.resolve': { input: ResolveRangeInput; options: never; output: ResolveRangeOutput };
+
+  // --- selection.* ---
+  'selection.current': { input: SelectionCurrentInput | undefined; options: never; output: SelectionInfo };
 
   // --- mutations.* ---
   'mutations.preview': { input: MutationsPreviewInput; options: never; output: MutationsPreviewOutput };

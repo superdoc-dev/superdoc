@@ -120,8 +120,10 @@ jobs:
           git commit -m "docs: add $AUTHOR to community contributors"
           git push origin "$BRANCH"
 
-          gh pr create \
+          PR_URL=$(gh pr create \
             --base main \
             --head "$BRANCH" \
             --title "docs: add $AUTHOR to community contributors" \
-            --body "Auto-generated: adds $AUTHOR to the README community contributors section."
+            --body "Auto-generated: adds $AUTHOR to the README community contributors section.")
+
+          gh pr merge "$PR_URL" --squash --auto

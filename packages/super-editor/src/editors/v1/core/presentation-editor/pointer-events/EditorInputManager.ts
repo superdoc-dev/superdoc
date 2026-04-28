@@ -23,6 +23,7 @@ import type { PositionHit, PageGeometryHelper, TableHitResult } from '@superdoc/
 import type { SelectionDebugHudState } from '../selection/SelectionDebug.js';
 import type { EpochPositionMapper } from '../layout/EpochPositionMapper.js';
 import type { HeaderFooterSessionManager } from '../header-footer/HeaderFooterSessionManager.js';
+import type { StoryPresentationSession } from '../story-session/types.js';
 
 import { getFragmentAtPosition } from '@superdoc/layout-bridge';
 import { resolvePointerPositionHit } from '../input/PositionHitResolver.js';
@@ -39,6 +40,7 @@ import {
 } from '../tables/TableSelectionUtilities.js';
 import { debugLog } from '../selection/SelectionDebug.js';
 import { DOM_CLASS_NAMES, buildAnnotationSelector, DRAGGABLE_SELECTOR } from '@superdoc/dom-contract';
+import { applyEditableSlotAtInlineBoundary } from '@helpers/ensure-editable-slot-inline-boundary.js';
 import { isSemanticFootnoteBlockId } from '../semantic-flow-constants.js';
 import { CommentsPluginKey } from '@extensions/comment/comments-plugin.js';
 
@@ -54,6 +56,9 @@ const AUTO_SCROLL_MAX_SPEED_PX = 24;
 const SCROLL_DETECTION_TOLERANCE_PX = 1;
 const COMMENT_HIGHLIGHT_SELECTOR = '.superdoc-comment-highlight';
 const TRACK_CHANGE_SELECTOR = '[data-track-change-id]';
+const PM_TRACK_CHANGE_SELECTOR = '.track-insert[data-id], .track-delete[data-id], .track-format[data-id]';
+const VISIBLE_HEADER_FOOTER_SELECTOR = '.superdoc-page-header, .superdoc-page-footer';
+const VISIBLE_BODY_CONTENT_SELECTOR = '.superdoc-line, .superdoc-fragment, [data-block-id]';
 const COMMENT_THREAD_HIT_TOLERANCE_PX = 3;
 const COMMENT_THREAD_HIT_SAMPLE_OFFSETS: ReadonlyArray<readonly [number, number]> = [
   [0, 0],
@@ -62,7 +67,6 @@ const COMMENT_THREAD_HIT_SAMPLE_OFFSETS: ReadonlyArray<readonly [number, number]
   [0, -COMMENT_THREAD_HIT_TOLERANCE_PX],
   [0, COMMENT_THREAD_HIT_TOLERANCE_PX],
 ];
-
 const clamp = (value: number, min: number, max: number): number => Math.max(min, Math.min(max, value));
 
 type CommentThreadHit = {
@@ -71,12 +75,54 @@ type CommentThreadHit = {
 };
 
 /**
- * Block IDs for footnote content use prefix "footnote-{id}-" (see FootnotesBuilder).
+ * Block IDs for note content use `footnote-{id}-` / `endnote-{id}-` prefixes.
  * Semantic footnote blocks use the {@link isSemanticFootnoteBlockId} helper from
  * shared constants — it matches both heading and body footnote block IDs.
  */
-function isFootnoteBlockId(blockId: string): boolean {
-  return typeof blockId === 'string' && (blockId.startsWith('footnote-') || isSemanticFootnoteBlockId(blockId));
+function isRenderedNoteBlockId(blockId: string): boolean {
+  return (
+    typeof blockId === 'string' &&
+    (blockId.startsWith('footnote-') || blockId.startsWith('endnote-') || isSemanticFootnoteBlockId(blockId))
+  );
+}
+
+type RenderedNoteTarget = {
+  storyType: 'footnote' | 'endnote';
+  noteId: string;
+};
+
+function parseRenderedNoteTarget(blockId: string): RenderedNoteTarget | null {
+  if (typeof blockId !== 'string' || blockId.length === 0) {
+    return null;
+  }
+
+  if (blockId.startsWith('footnote-')) {
+    const noteId = blockId.slice('footnote-'.length).split('-')[0] ?? '';
+    return noteId ? { storyType: 'footnote', noteId } : null;
+  }
+
+  if (blockId.startsWith('__sd_semantic_footnote-')) {
+    const noteId = blockId.slice('__sd_semantic_footnote-'.length).split('-')[0] ?? '';
+    return noteId ? { storyType: 'footnote', noteId } : null;
+  }
+
+  if (blockId.startsWith('endnote-')) {
+    const noteId = blockId.slice('endnote-'.length).split('-')[0] ?? '';
+    return noteId ? { storyType: 'endnote', noteId } : null;
+  }
+
+  return null;
+}
+
+function isSameRenderedNoteTarget(
+  left: RenderedNoteTarget | null | undefined,
+  right: RenderedNoteTarget | null | undefined,
+): boolean {
+  if (!left || !right) {
+    return false;
+  }
+
+  return left.storyType === right.storyType && left.noteId === right.noteId;
 }
 
 function getCommentHighlightThreadIds(target: EventTarget | null): string[] {
@@ -97,13 +143,24 @@ function getCommentHighlightThreadIds(target: EventTarget | null): string[] {
     .filter(Boolean);
 }
 
+function isDirectSingleCommentHighlightHit(target: EventTarget | null): boolean {
+  return getCommentHighlightThreadIds(target).length === 1;
+}
+
+function isDirectTrackedChangeHit(target: EventTarget | null): boolean {
+  if (!(target instanceof Element)) return false;
+  return target.closest(TRACK_CHANGE_SELECTOR) != null;
+}
+
 function resolveTrackChangeThreadId(target: EventTarget | null): string | null {
   if (!(target instanceof Element)) {
     return null;
   }
 
-  const trackedChangeElement = target.closest(TRACK_CHANGE_SELECTOR);
-  const threadId = trackedChangeElement?.getAttribute('data-track-change-id')?.trim();
+  const trackedChangeElement = target.closest(`${TRACK_CHANGE_SELECTOR}, ${PM_TRACK_CHANGE_SELECTOR}`);
+  const threadId =
+    trackedChangeElement?.getAttribute('data-track-change-id')?.trim() ??
+    trackedChangeElement?.getAttribute('data-id')?.trim();
 
   return threadId ? threadId : null;
 }
@@ -168,6 +225,54 @@ function collectElementsNearPointerTarget(target: EventTarget | null, clientX: n
   return candidates;
 }
 
+function elementContainsPointerSample(element: Element, clientX: number, clientY: number): boolean {
+  const rect = element.getBoundingClientRect();
+  if (![rect.left, rect.top, rect.right, rect.bottom].every(Number.isFinite) || rect.width <= 0 || rect.height <= 0) {
+    return false;
+  }
+
+  for (const [offsetX, offsetY] of COMMENT_THREAD_HIT_SAMPLE_OFFSETS) {
+    const sampleX = clientX + offsetX;
+    const sampleY = clientY + offsetY;
+    if (sampleX >= rect.left && sampleX <= rect.right && sampleY >= rect.top && sampleY <= rect.bottom) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function resolveCommentThreadIdFromGeometry(
+  elements: Iterable<HTMLElement>,
+  clientX: number,
+  clientY: number,
+): string | null {
+  let resolvedThreadId: string | null = null;
+
+  for (const element of elements) {
+    if (!elementContainsPointerSample(element, clientX, clientY)) {
+      continue;
+    }
+
+    const hit = resolveCommentThreadHit(element);
+    if (hit.isAmbiguous) {
+      return null;
+    }
+
+    if (!hit.threadId) {
+      continue;
+    }
+
+    if (resolvedThreadId && resolvedThreadId !== hit.threadId) {
+      return null;
+    }
+
+    resolvedThreadId = hit.threadId;
+  }
+
+  return resolvedThreadId;
+}
+
 function resolveCommentThreadIdNearPointer(
   target: EventTarget | null,
   clientX: number,
@@ -195,6 +300,45 @@ function resolveCommentThreadIdNearPointer(
   return null;
 }
 
+type VisiblePointerSurfaceHit = { kind: 'headerFooter'; surface: HTMLElement } | { kind: 'bodyContent' };
+
+function resolveVisibleSurfaceAtPointer(
+  target: EventTarget | null,
+  clientX: number,
+  clientY: number,
+): VisiblePointerSurfaceHit | null {
+  const ownerDocument = target instanceof Element ? target.ownerDocument : document;
+  const ownerWindow = ownerDocument.defaultView;
+
+  if (typeof ownerDocument.elementFromPoint !== 'function' || !ownerWindow) {
+    return null;
+  }
+
+  const sampleX = clamp(clientX, 0, Math.max(ownerWindow.innerWidth - 1, 0));
+  const sampleY = clamp(clientY, 0, Math.max(ownerWindow.innerHeight - 1, 0));
+  const sampledElements =
+    typeof ownerDocument.elementsFromPoint === 'function'
+      ? ownerDocument.elementsFromPoint(sampleX, sampleY)
+      : [ownerDocument.elementFromPoint(sampleX, sampleY)];
+
+  for (const element of sampledElements) {
+    if (!(element instanceof HTMLElement)) {
+      continue;
+    }
+
+    const visibleHeaderFooterSurface = element.closest(VISIBLE_HEADER_FOOTER_SELECTOR) as HTMLElement | null;
+    if (visibleHeaderFooterSurface) {
+      return { kind: 'headerFooter', surface: visibleHeaderFooterSurface };
+    }
+
+    if (element.closest(VISIBLE_BODY_CONTENT_SELECTOR)) {
+      return { kind: 'bodyContent' };
+    }
+  }
+
+  return null;
+}
+
 function getActiveCommentThreadId(editor: Editor): string | null {
   const pluginState = CommentsPluginKey.getState(editor.state) as { activeThreadId?: unknown } | null;
   const activeThreadId = pluginState?.activeThreadId;
@@ -213,6 +357,14 @@ function shouldIgnoreRepeatClickOnActiveComment(
   activeThreadId: string | null,
 ): boolean {
   if (!activeThreadId) {
+    return false;
+  }
+
+  // Direct clicks on single-thread comment text or tracked-change text should
+  // place a caret at the clicked position and let comment/thread activation be
+  // inferred from the resulting selection. Only preserve the pointerdown
+  // short-circuit for nearby non-text surfaces, such as split-run gaps.
+  if (isDirectSingleCommentHighlightHit(target) || isDirectTrackedChangeHit(target)) {
     return false;
   }
 
@@ -271,6 +423,8 @@ export type EditorInputDependencies = {
   getPageElement: (pageIndex: number) => HTMLElement | null;
   /** Check if selection-aware virtualization is enabled */
   isSelectionAwareVirtualizationEnabled: () => boolean;
+  /** Get the currently active non-body story session, if any */
+  getActiveStorySession?: () => StoryPresentationSession | null;
 };
 
 /**
@@ -307,7 +461,10 @@ export type EditorInputCallbacks = {
   /** Exit header/footer mode */
   exitHeaderFooterMode?: () => void;
   /** Activate header/footer region */
-  activateHeaderFooterRegion?: (region: HeaderFooterRegion) => void;
+  activateHeaderFooterRegion?: (
+    region: HeaderFooterRegion,
+    options?: { clientX: number; clientY: number; pageIndex?: number; source?: 'pointerDoubleClick' | 'programmatic' },
+  ) => void;
   /** Emit header/footer edit blocked */
   emitHeaderFooterEditBlocked?: (reason: string) => void;
   /** Find region for page */
@@ -342,8 +499,23 @@ export type EditorInputCallbacks = {
     dragAnchor: number,
     dragMode: 'char' | 'word' | 'para',
   ) => void;
+  /**
+   * Called when a pointer text-drag selection ends.
+   * Used to scroll the selection into view once after auto-scroll stops; during drag,
+   * selection-driven scroll is suppressed to avoid fighting edge auto-scroll.
+   */
+  notifyDragSelectionEnded?: () => void;
   /** Hit test table at coordinates */
   hitTestTable?: (x: number, y: number) => TableHitResult | null;
+  /** Hit test the currently active editing surface */
+  hitTest?: (clientX: number, clientY: number) => PositionHit | null;
+  /** Activate a rendered note session from a visible note block click */
+  activateRenderedNoteSession?: (
+    target: RenderedNoteTarget,
+    options: { clientX: number; clientY: number; pageIndex?: number },
+  ) => boolean;
+  /** Exit the active generic story session */
+  exitActiveStorySession?: () => void;
 };
 
 // =============================================================================
@@ -582,6 +754,18 @@ export class EditorInputManager {
     return this.#lastSelectedImageBlockId;
   }
 
+  /**
+   * Resets click-derived interaction state when the active editing surface
+   * changes (for example body -> footnote or footnote -> header).
+   *
+   * Without this, a single click in the previous surface can be mistaken for
+   * the first click of a double/triple click in the next surface.
+   */
+  notifyTargetChanged(): void {
+    this.#resetMultiClickTracking();
+    this.#pendingMarginClick = null;
+  }
+
   /** Drag anchor page index */
   get dragAnchorPageIndex(): number | null {
     return this.#dragAnchorPageIndex;
@@ -636,6 +820,12 @@ export class EditorInputManager {
     this.#cellDragMode = 'none';
   }
 
+  #resetMultiClickTracking(): void {
+    this.#clickCount = 0;
+    this.#lastClickTime = 0;
+    this.#lastClickPosition = null;
+  }
+
   #registerPointerClick(event: MouseEvent): number {
     const nextState = registerPointerClickFromHelper(
       event,
@@ -659,8 +849,84 @@ export class EditorInputManager {
   }
 
   #getFirstTextPosition(): number {
-    const editor = this.#deps?.getEditor();
+    const editor = this.#deps?.getActiveEditor() ?? this.#deps?.getEditor();
     return getFirstTextPositionFromHelper(editor?.state?.doc ?? null);
+  }
+
+  #resolveBodyPointerHit(
+    layoutState: ReturnType<EditorInputDependencies['getLayoutState']>,
+    normalized: { x: number; y: number },
+    clientX: number,
+    clientY: number,
+  ): PositionHit | null {
+    const viewportHost = this.#deps?.getViewportHost();
+    const pageGeometryHelper = this.#deps?.getPageGeometryHelper();
+    if (!viewportHost) {
+      return null;
+    }
+
+    return (
+      resolvePointerPositionHit({
+        layout: layoutState.layout,
+        blocks: layoutState.blocks,
+        measures: layoutState.measures,
+        containerPoint: normalized,
+        domContainer: viewportHost,
+        clientX,
+        clientY,
+        geometryHelper: pageGeometryHelper ?? undefined,
+      }) ?? null
+    );
+  }
+
+  #resolveSelectionPointerHit(options: {
+    layoutState: ReturnType<EditorInputDependencies['getLayoutState']>;
+    normalized: { x: number; y: number };
+    clientX: number;
+    clientY: number;
+    editor: Editor;
+    useActiveSurfaceHitTest: boolean;
+  }): { rawHit: PositionHit | null; hit: PositionHit | null } {
+    const { layoutState, normalized, clientX, clientY, editor, useActiveSurfaceHitTest } = options;
+    const doc = editor.state?.doc;
+    const rawHit =
+      useActiveSurfaceHitTest && this.#callbacks.hitTest
+        ? this.#callbacks.hitTest(clientX, clientY)
+        : this.#resolveBodyPointerHit(layoutState, normalized, clientX, clientY);
+
+    if (!rawHit || !doc) {
+      return { rawHit, hit: null };
+    }
+
+    if (useActiveSurfaceHitTest) {
+      return {
+        rawHit,
+        hit: {
+          ...rawHit,
+          pos: clamp(rawHit.pos, 0, doc.content.size),
+        },
+      };
+    }
+
+    const epochMapper = this.#deps?.getEpochMapper();
+    if (!epochMapper) {
+      return { rawHit, hit: null };
+    }
+
+    const mapped = epochMapper.mapPosFromLayoutToCurrentDetailed(rawHit.pos, rawHit.layoutEpoch, 1);
+    if (!mapped.ok) {
+      debugLog('warn', 'pointer mapping failed', mapped);
+      return { rawHit, hit: null };
+    }
+
+    return {
+      rawHit,
+      hit: {
+        ...rawHit,
+        pos: clamp(mapped.pos, 0, doc.content.size),
+        layoutEpoch: mapped.toEpoch,
+      },
+    };
   }
 
   #calculateExtendedSelection(
@@ -1007,6 +1273,16 @@ export class EditorInputManager {
   #handlePointerDown(event: PointerEvent): void {
     if (!this.#deps) return;
 
+    // Emit local-only pointer events for external consumers (e.g. debugging trackpad issues)
+    // Emit directly on the Editor instance so consumers can use editor.on('pointerDown', ...)
+    const bodyEditor = this.#deps.getEditor();
+    bodyEditor.emit?.('pointerDown', { editor: bodyEditor, event });
+
+    // Emit rightClick for secondary button (button 2) or Ctrl+Click on Mac
+    if (event.button === 2 || (event.ctrlKey && navigator.platform.includes('Mac'))) {
+      bodyEditor.emit?.('rightClick', { editor: bodyEditor, event });
+    }
+
     // Return early for non-left clicks
     if (event.button !== 0) return;
 
@@ -1038,17 +1314,49 @@ export class EditorInputManager {
       return;
     }
 
-    const editor = this.#deps.getEditor();
-    if (this.#handleSingleCommentHighlightClick(event, target, editor)) {
-      return;
-    }
-
-    if (this.#handleRepeatClickOnActiveComment(event, target, editor)) {
-      return;
-    }
-
     const layoutState = this.#deps.getLayoutState();
+    const clickedNoteTarget = this.#resolveRenderedNoteTargetAtPointer(target, event.clientX, event.clientY);
+
+    // Check header/footer session state
+    const sessionMode = this.#deps.getHeaderFooterSession()?.session?.mode ?? 'body';
+    let activeStorySession = this.#deps.getActiveStorySession?.() ?? null;
+    let activeNoteSession = activeStorySession?.kind === 'note' ? activeStorySession : null;
+    const activeNoteTarget = this.#getActiveRenderedNoteTarget();
+
     if (!layoutState.layout) {
+      if (clickedNoteTarget && !isSameRenderedNoteTarget(activeNoteTarget, clickedNoteTarget)) {
+        if (!isDraggableAnnotation) {
+          event.preventDefault();
+        }
+        const activated = this.#callbacks.activateRenderedNoteSession?.(clickedNoteTarget, {
+          clientX: event.clientX,
+          clientY: event.clientY,
+        });
+        if (activated) {
+          this.#syncNonBodyCommentActivation(event, target, bodyEditor);
+          return;
+        }
+        this.#focusEditor();
+        return;
+      }
+
+      if (!clickedNoteTarget && activeNoteSession) {
+        this.#callbacks.exitActiveStorySession?.();
+      }
+
+      const isActiveStorySurface = sessionMode !== 'body' || activeNoteSession != null;
+      if (!isActiveStorySurface) {
+        if (this.#handleSingleCommentHighlightClick(event, target, bodyEditor)) {
+          return;
+        }
+
+        if (this.#handleRepeatClickOnActiveComment(event, target, bodyEditor)) {
+          return;
+        }
+      } else {
+        this.#syncNonBodyCommentActivation(event, target, bodyEditor);
+      }
+
       this.#handleClickWithoutLayout(event, isDraggableAnnotation);
       return;
     }
@@ -1059,17 +1367,44 @@ export class EditorInputManager {
     const { x, y } = normalizedPoint;
     this.#debugLastPointer = { clientX: event.clientX, clientY: event.clientY, x, y };
 
-    // Disallow cursor placement in footnote lines: keep current selection and only focus editor.
-    const fragmentEl = target?.closest?.('[data-block-id]') as HTMLElement | null;
-    const clickedBlockId = fragmentEl?.getAttribute?.('data-block-id') ?? '';
-    if (isFootnoteBlockId(clickedBlockId)) {
-      if (!isDraggableAnnotation) event.preventDefault();
-      this.#focusEditor();
-      return;
+    if (clickedNoteTarget) {
+      const isSameActiveNote = isSameRenderedNoteTarget(activeNoteTarget, clickedNoteTarget);
+      if (!isSameActiveNote) {
+        if (!isDraggableAnnotation) event.preventDefault();
+        const activated = this.#callbacks.activateRenderedNoteSession?.(clickedNoteTarget, {
+          clientX: event.clientX,
+          clientY: event.clientY,
+          pageIndex: normalizedPoint.pageIndex,
+        });
+        if (activated) {
+          this.#syncNonBodyCommentActivation(event, target, bodyEditor);
+          return;
+        }
+        this.#focusEditor();
+        return;
+      }
+    } else if (activeNoteSession) {
+      this.#callbacks.exitActiveStorySession?.();
+      activeStorySession = null;
+      activeNoteSession = null;
     }
 
-    // Check header/footer session state
-    const sessionMode = this.#deps.getHeaderFooterSession()?.session?.mode ?? 'body';
+    const isActiveStorySurface = sessionMode !== 'body' || activeStorySession != null;
+    if (!isActiveStorySurface) {
+      if (this.#handleSingleCommentHighlightClick(event, target, bodyEditor)) {
+        return;
+      }
+
+      if (this.#handleRepeatClickOnActiveComment(event, target, bodyEditor)) {
+        return;
+      }
+    } else {
+      this.#syncNonBodyCommentActivation(event, target, bodyEditor);
+    }
+
+    const isNoteEditing = activeNoteSession != null;
+    const useActiveSurfaceHitTest = sessionMode !== 'body' || activeStorySession != null;
+    const editor = sessionMode === 'body' && !isNoteEditing ? bodyEditor : this.#deps.getActiveEditor();
     if (sessionMode !== 'body') {
       if (this.#handleClickInHeaderFooterMode(event, x, y, normalizedPoint.pageIndex, normalizedPoint.pageLocalY))
         return;
@@ -1083,37 +1418,21 @@ export class EditorInputManager {
       normalizedPoint.pageLocalY,
     );
     if (headerFooterRegion) {
-      event.preventDefault(); // Prevent native selection before double-click handles it
-      return; // Will be handled by double-click
+      if (sessionMode === 'body') {
+        event.preventDefault(); // Prevent native selection before double-click handles it
+        return; // Will be handled by double-click
+      }
     }
 
-    // Get hit position
-    const viewportHost = this.#deps.getViewportHost();
-    const pageGeometryHelper = this.#deps.getPageGeometryHelper();
-    const rawHit = resolvePointerPositionHit({
-      layout: layoutState.layout,
-      blocks: layoutState.blocks,
-      measures: layoutState.measures,
-      containerPoint: { x, y },
-      domContainer: viewportHost,
+    const { rawHit, hit } = this.#resolveSelectionPointerHit({
+      layoutState,
+      normalized: { x, y },
       clientX: event.clientX,
       clientY: event.clientY,
-      geometryHelper: pageGeometryHelper ?? undefined,
+      editor,
+      useActiveSurfaceHitTest,
     });
-
     const doc = editor.state?.doc;
-    const epochMapper = this.#deps.getEpochMapper();
-    const mapped =
-      rawHit && doc ? epochMapper.mapPosFromLayoutToCurrentDetailed(rawHit.pos, rawHit.layoutEpoch, 1) : null;
-
-    if (mapped && !mapped.ok) {
-      debugLog('warn', 'pointerdown mapping failed', mapped);
-    }
-
-    const hit =
-      rawHit && doc && mapped?.ok
-        ? { ...rawHit, pos: Math.max(0, Math.min(mapped.pos, doc.content.size)), layoutEpoch: mapped.toEpoch }
-        : null;
 
     this.#debugLastHit = hit
       ? { source: 'dom', pos: rawHit?.pos ?? null, layoutEpoch: rawHit?.layoutEpoch ?? null, mappedPos: hit.pos }
@@ -1168,9 +1487,19 @@ export class EditorInputManager {
       return;
     }
 
-    // Disallow cursor placement in footnote lines (footnote content is read-only in the layout).
-    // Keep the current selection unchanged instead of moving caret to document start.
-    if (isFootnoteBlockId(rawHit.blockId)) {
+    // Guard against stale note hits after a session switch or partial rerender.
+    if (
+      isNoteEditing &&
+      activeNoteTarget &&
+      parseRenderedNoteTarget(rawHit.blockId)?.noteId !== activeNoteTarget.noteId
+    ) {
+      this.#callbacks.exitActiveStorySession?.();
+      this.#focusEditor();
+      return;
+    }
+
+    // Disallow entering read-only note content unless it has been activated into a story session.
+    if (isRenderedNoteBlockId(rawHit.blockId) && !isNoteEditing) {
       this.#focusEditor();
       return;
     }
@@ -1182,11 +1511,16 @@ export class EditorInputManager {
     }
 
     // Check for image/fragment hit
-    const fragmentHit = getFragmentAtPosition(layoutState.layout, layoutState.blocks, layoutState.measures, rawHit.pos);
+    const fragmentHit = useActiveSurfaceHitTest
+      ? null
+      : getFragmentAtPosition(layoutState.layout, layoutState.blocks, layoutState.measures, rawHit.pos);
 
     // Handle inline image click
     const targetImg = (event.target as HTMLElement | null)?.closest?.('img') as HTMLImageElement | null;
-    if (this.#handleInlineImageClick(event, targetImg, rawHit, doc, epochMapper)) return;
+    if (!useActiveSurfaceHitTest) {
+      const epochMapper = this.#deps.getEpochMapper();
+      if (this.#handleInlineImageClick(event, targetImg, rawHit, doc, epochMapper)) return;
+    }
 
     // Handle atomic fragment (image/drawing) click
     if (this.#handleFragmentClick(event, fragmentHit, hit, doc)) return;
@@ -1252,43 +1586,65 @@ export class EditorInputManager {
     }
 
     // Capture pointer for reliable drag tracking
+    const viewportHost = this.#deps.getViewportHost();
     if (typeof viewportHost.setPointerCapture === 'function') {
       viewportHost.setPointerCapture(event.pointerId);
     }
 
     // Handle double/triple click selection
     let handledByDepth = false;
-    const sessionModeForDepth = this.#deps.getHeaderFooterSession()?.session?.mode ?? 'body';
-    if (sessionModeForDepth === 'body') {
-      const selectionPos = clickDepth >= 2 && this.#dragAnchor !== null ? this.#dragAnchor : hit.pos;
+    const selectionPos = clickDepth >= 2 && this.#dragAnchor !== null ? this.#dragAnchor : hit.pos;
 
-      if (clickDepth >= 3) {
-        handledByDepth = this.#callbacks.selectParagraphAt?.(selectionPos) ?? false;
-      } else if (clickDepth === 2) {
-        handledByDepth = this.#callbacks.selectWordAt?.(selectionPos) ?? false;
-      }
+    if (clickDepth >= 3) {
+      handledByDepth = this.#callbacks.selectParagraphAt?.(selectionPos) ?? false;
+    } else if (clickDepth === 2) {
+      handledByDepth = this.#callbacks.selectWordAt?.(selectionPos) ?? false;
     }
 
-    const hasFocus = editor.view?.hasFocus?.() ?? false;
-    if (!hasFocus) {
-      this.#focusEditor();
-    }
+    // `EditorView.hasFocus()` is not strong enough here for hidden story
+    // surfaces. A reused note editor can keep an internal "focused" state even
+    // after its DOM host was torn down and remounted elsewhere. The actual
+    // browser `activeElement` still decides where native selection and keyboard
+    // input go, so always let `#focusEditor()` reconcile real DOM focus.
+    this.#focusEditor();
 
     // Set selection for single click
     if (!handledByDepth) {
       try {
         // SD-1584: clicking inside a block SDT selects the node (NodeSelection).
+        // Exception: clicks inside tables nested in this SDT should use text
+        // selection so caret placement/editing inside table cells works.
         const sdtBlock = clickDepth === 1 ? this.#findStructuredContentBlockAtPos(doc, hit.pos) : null;
         let nextSelection: Selection;
-        if (sdtBlock) {
+        let inlineSdtBoundaryPos: number | null = null;
+        let inlineSdtBoundaryDirection: 'before' | 'after' | null = null;
+        const insideTableInSdt =
+          !!sdtBlock && this.#isInsideTableWithinStructuredContentBlock(doc, hit.pos, sdtBlock.pos);
+        if (sdtBlock && !insideTableInSdt) {
           nextSelection = NodeSelection.create(doc, sdtBlock.pos);
         } else {
-          nextSelection = TextSelection.create(doc, hit.pos);
+          const inlineSdt = clickDepth === 1 ? this.#findStructuredContentInlineAtPos(doc, hit.pos) : null;
+          if (inlineSdt && hit.pos >= inlineSdt.end) {
+            const afterInlineSdt = inlineSdt.pos + inlineSdt.node.nodeSize;
+            inlineSdtBoundaryPos = afterInlineSdt;
+            inlineSdtBoundaryDirection = 'after';
+            nextSelection = TextSelection.create(doc, afterInlineSdt);
+          } else if (inlineSdt && hit.pos <= inlineSdt.start) {
+            inlineSdtBoundaryPos = inlineSdt.pos;
+            inlineSdtBoundaryDirection = 'before';
+            nextSelection = TextSelection.create(doc, inlineSdt.pos);
+          } else {
+            nextSelection = TextSelection.create(doc, hit.pos);
+          }
           if (!nextSelection.$from.parent.inlineContent) {
             nextSelection = Selection.near(doc.resolve(hit.pos), 1);
           }
         }
-        const tr = editor.state.tr.setSelection(nextSelection);
+        let tr = editor.state.tr.setSelection(nextSelection);
+        if (inlineSdtBoundaryPos != null && inlineSdtBoundaryDirection) {
+          tr = applyEditableSlotAtInlineBoundary(tr, inlineSdtBoundaryPos, inlineSdtBoundaryDirection);
+          nextSelection = tr.selection;
+        }
         // Preserve stored marks (e.g., formatting selected from toolbar before clicking)
         if (nextSelection instanceof TextSelection && nextSelection.empty && editor.state.storedMarks) {
           tr.setStoredMarks(editor.state.storedMarks);
@@ -1319,11 +1675,20 @@ export class EditorInputManager {
     // Handle header/footer hover
     const normalized = this.#callbacks.normalizeClientPoint?.(event.clientX, event.clientY);
     if (!normalized) return;
+    if (this.#deps.getActiveStorySession?.()?.kind === 'note') {
+      this.#callbacks.clearHoverRegion?.();
+      return;
+    }
     this.#handleHover(normalized);
   }
 
   #handlePointerUp(event: PointerEvent): void {
     if (!this.#deps) return;
+
+    // Emit local-only pointer event for external consumers (e.g. debugging trackpad issues)
+    // Emit directly on the Editor instance so consumers can use editor.on('pointerUp', ...)
+    const editor = this.#deps.getEditor();
+    editor.emit?.('pointerUp', { editor, event });
 
     this.#suppressFocusInFromDraggable = false;
 
@@ -1367,6 +1732,8 @@ export class EditorInputManager {
         this.#callbacks.finalizeDragSelectionWithDom?.(pointer, dragAnchor, dragMode);
       }
 
+      this.#callbacks.notifyDragSelectionEnded?.();
+
       this.#callbacks.scheduleA11ySelectionAnnouncement?.({ immediate: true });
 
       this.#dragLastPointer = null;
@@ -1401,25 +1768,40 @@ export class EditorInputManager {
       return;
     }
 
-    // When editing a header/footer, let the ProseMirror editor inside the
-    // overlay handle double-click word/paragraph selection. Do not re-run
-    // header/footer hit-testing for double-clicks that occur inside the
-    // active editor host.
     const sessionMode = this.#deps.getHeaderFooterSession()?.session?.mode ?? 'body';
-    if (sessionMode !== 'body') {
-      const activeEditorHost = this.#deps.getHeaderFooterSession()?.overlayManager?.getActiveEditorHost?.();
-      const clickedInsideEditorHost =
-        activeEditorHost && (activeEditorHost.contains(target as Node) || activeEditorHost === target);
-      if (clickedInsideEditorHost) {
-        return;
-      }
-    }
 
     const layoutState = this.#deps.getLayoutState();
     if (!layoutState.layout) return;
 
     const normalized = this.#callbacks.normalizeClientPoint?.(event.clientX, event.clientY);
     if (!normalized) return;
+
+    const clickedNoteTarget = this.#resolveRenderedNoteTargetAtPointer(target, event.clientX, event.clientY);
+    if (clickedNoteTarget) {
+      if (isSameRenderedNoteTarget(this.#getActiveRenderedNoteTarget(), clickedNoteTarget)) {
+        // Pointerdown already updated selection inside the live note session.
+        // Re-activating the same note here would remount the hidden editor and
+        // wipe out the word/paragraph selection that the multi-click logic just set.
+        //
+        // The activation gesture itself only registers one click inside the live
+        // note, so its trailing dblclick can leave a stale single-click marker
+        // behind. Clear only that activation residue and preserve genuine active
+        // multi-click state for triple-click paragraph selection.
+        if (this.#clickCount <= 1) {
+          this.#resetMultiClickTracking();
+        }
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      this.#callbacks.activateRenderedNoteSession?.(clickedNoteTarget, {
+        clientX: event.clientX,
+        clientY: event.clientY,
+        pageIndex: normalized.pageIndex,
+      });
+      return;
+    }
 
     const region = this.#callbacks.hitTestHeaderFooterRegion?.(
       normalized.x,
@@ -1428,13 +1810,20 @@ export class EditorInputManager {
       normalized.pageLocalY,
     );
     if (region) {
-      event.preventDefault();
-      event.stopPropagation();
+      if (sessionMode === 'body' || this.#isDifferentHeaderFooterRegionFromActiveSession(region)) {
+        event.preventDefault();
+        event.stopPropagation();
 
-      // Materialization (if needed) now happens inside #enterMode via
-      // ensureExplicitHeaderFooterSlot. The pointer handler only triggers
-      // activation — it is not responsible for slot creation.
-      this.#callbacks.activateHeaderFooterRegion?.(region);
+        // Materialization (if needed) now happens inside #enterMode via
+        // ensureExplicitHeaderFooterSlot. The pointer handler only triggers
+        // activation — it is not responsible for slot creation.
+        this.#callbacks.activateHeaderFooterRegion?.(region, {
+          clientX: event.clientX,
+          clientY: event.clientY,
+          pageIndex: normalized.pageIndex,
+          source: 'pointerDoubleClick',
+        });
+      }
     } else if ((this.#deps.getHeaderFooterSession()?.session?.mode ?? 'body') !== 'body') {
       this.#callbacks.exitHeaderFooterMode?.();
     }
@@ -1465,9 +1854,15 @@ export class EditorInputManager {
     if (!this.#deps) return;
 
     const sessionMode = this.#deps.getHeaderFooterSession()?.session?.mode ?? 'body';
+    const activeStorySession = this.#deps.getActiveStorySession?.() ?? null;
     if (event.key === 'Escape' && sessionMode !== 'body') {
       event.preventDefault();
       this.#callbacks.exitHeaderFooterMode?.();
+      return;
+    }
+    if (event.key === 'Escape' && activeStorySession?.kind === 'note') {
+      event.preventDefault();
+      this.#callbacks.exitActiveStorySession?.();
       return;
     }
 
@@ -1491,11 +1886,7 @@ export class EditorInputManager {
       return;
     }
 
-    try {
-      this.#deps.getActiveEditor().view?.focus();
-    } catch {
-      // Ignore focus failures
-    }
+    this.#focusEditorView(this.#deps.getActiveEditor().view);
     this.#callbacks.scheduleSelectionUpdate?.();
   }
 
@@ -1516,9 +1907,12 @@ export class EditorInputManager {
   #handleLinkClick(event: MouseEvent, linkEl: HTMLAnchorElement): void {
     const href = linkEl.getAttribute('href') ?? '';
     const isAnchorLink = href.startsWith('#') && href.length > 1;
-    const isTocLink = linkEl.closest('.superdoc-toc-entry') !== null;
 
-    if (isAnchorLink && isTocLink) {
+    // SD-2495: route any internal-anchor click (`#<bookmark>`) to in-document
+    // navigation. Covers TOC entries, heading/bookmark cross-references
+    // (REF fields with `\h`), and any other internal-hyperlink case — they all
+    // should scroll to the bookmark target instead of navigating the browser.
+    if (isAnchorLink) {
       event.preventDefault();
       event.stopPropagation();
       this.#callbacks.goToAnchor?.(href);
@@ -1583,6 +1977,34 @@ export class EditorInputManager {
     }
 
     return null;
+  }
+
+  #isInsideTableWithinStructuredContentBlock(doc: ProseMirrorNode, pos: number, sdtPos: number): boolean {
+    if (!Number.isFinite(pos) || !Number.isFinite(sdtPos)) return false;
+
+    try {
+      const $pos = doc.resolve(pos);
+      let tableDepth = -1;
+      let blockDepth = -1;
+
+      for (let depth = $pos.depth; depth > 0; depth--) {
+        const nodeName = $pos.node(depth)?.type?.name;
+        if (tableDepth === -1 && nodeName === 'table') {
+          tableDepth = depth;
+        }
+        if (nodeName === 'structuredContentBlock') {
+          const candidatePos = $pos.before(depth);
+          if (candidatePos === sdtPos) {
+            blockDepth = depth;
+            break;
+          }
+        }
+      }
+
+      return tableDepth !== -1 && blockDepth !== -1 && tableDepth > blockDepth;
+    } catch {
+      return false;
+    }
   }
 
   #findStructuredContentBlockById(doc: ProseMirrorNode, id: string): StructuredContentSelection | null {
@@ -1729,12 +2151,16 @@ export class EditorInputManager {
     pageLocalY?: number,
   ): boolean {
     const session = this.#deps?.getHeaderFooterSession();
-    const activeEditorHost = session?.overlayManager?.getActiveEditorHost?.();
-    const clickedInsideEditorHost =
-      activeEditorHost && (activeEditorHost.contains(event.target as Node) || activeEditorHost === event.target);
+    const activeSurfaceSelector =
+      session?.session?.mode === 'footer' ? '.superdoc-page-footer' : '.superdoc-page-header';
+    const visiblePointerSurface = resolveVisibleSurfaceAtPointer(event.target, event.clientX, event.clientY);
+    const clickedInsideVisibleActiveSurface =
+      visiblePointerSurface?.kind === 'headerFooter' &&
+      visiblePointerSurface.surface.closest(activeSurfaceSelector) != null;
 
-    if (clickedInsideEditorHost) {
-      return true; // Let editor handle it
+    if (visiblePointerSurface?.kind === 'bodyContent') {
+      this.#callbacks.exitHeaderFooterMode?.();
+      return false; // Continue to body click handling after exiting the active H/F session
     }
 
     const headerFooterRegion = this.#callbacks.hitTestHeaderFooterRegion?.(x, y, pageIndex, pageLocalY);
@@ -1743,10 +2169,82 @@ export class EditorInputManager {
       return false; // Continue to body click handling
     }
 
-    // Click is in a H/F region on a different page — don't consume the event.
-    // Let it fall through to the existing footer region check in #handlePointerDown
-    // which properly calls event.preventDefault() before the dblclick handler activates it.
+    if (visiblePointerSurface?.kind === 'headerFooter' && !clickedInsideVisibleActiveSurface) {
+      if (this.#isDifferentHeaderFooterRegionFromActiveSession(headerFooterRegion)) {
+        event.preventDefault();
+        return true;
+      }
+
+      this.#callbacks.exitHeaderFooterMode?.();
+      return false; // Continue to body click handling
+    }
+
+    this.#syncNonBodyCommentSelection(event, event.target as HTMLElement | null, this.#deps.getEditor(), {
+      clearOnMiss: true,
+    });
+
+    // Click is in the active rendered header/footer surface. Keep the story
+    // session active, update any tracked-change/comment bubble state, and let
+    // the normal rendered-surface hit testing place the selection/caret.
     return false;
+  }
+
+  #isDifferentHeaderFooterRegionFromActiveSession(region: HeaderFooterRegion): boolean {
+    const session = this.#deps?.getHeaderFooterSession()?.session;
+    if (!session || session.mode === 'body') {
+      return true;
+    }
+
+    if (session.mode !== region.kind) {
+      return true;
+    }
+
+    if (
+      session.headerFooterRefId &&
+      region.headerFooterRefId &&
+      session.headerFooterRefId !== region.headerFooterRefId
+    ) {
+      return true;
+    }
+
+    if (
+      Number.isFinite(session.pageIndex) &&
+      Number.isFinite(region.pageIndex) &&
+      session.pageIndex !== region.pageIndex
+    ) {
+      return true;
+    }
+
+    return (session.sectionType ?? null) !== (region.sectionType ?? null);
+  }
+
+  #isSameHeaderFooterRegion(
+    left: HeaderFooterRegion | null | undefined,
+    right: HeaderFooterRegion | null | undefined,
+  ): boolean {
+    if (!left || !right) {
+      return false;
+    }
+
+    if (left.kind !== right.kind || left.pageIndex !== right.pageIndex) {
+      return false;
+    }
+
+    if ((left.sectionId ?? null) !== (right.sectionId ?? null)) {
+      return false;
+    }
+
+    if ((left.sectionType ?? null) !== (right.sectionType ?? null)) {
+      return false;
+    }
+
+    const leftRefId = left.headerFooterRefId ?? null;
+    const rightRefId = right.headerFooterRefId ?? null;
+    if (leftRefId && rightRefId && leftRefId !== rightRefId) {
+      return false;
+    }
+
+    return true;
   }
 
   #handleInlineImageClick(
@@ -1860,7 +2358,7 @@ export class EditorInputManager {
   }
 
   #handleShiftClick(event: PointerEvent, headPos: number): void {
-    const editor = this.#deps?.getEditor();
+    const editor = this.#deps?.getActiveEditor() ?? this.#deps?.getEditor();
     if (!editor) return;
 
     const anchor = editor.state.selection.anchor;
@@ -1889,26 +2387,26 @@ export class EditorInputManager {
     this.#pendingMarginClick = null;
     this.#dragLastPointer = { clientX, clientY, x: normalized.x, y: normalized.y };
 
-    const viewportHost = this.#deps.getViewportHost();
-    const pageGeometryHelper = this.#deps.getPageGeometryHelper();
-
-    const rawHit = resolvePointerPositionHit({
-      layout: layoutState.layout,
-      blocks: layoutState.blocks,
-      measures: layoutState.measures,
-      containerPoint: { x: normalized.x, y: normalized.y },
-      domContainer: viewportHost,
+    const activeStorySession = this.#deps.getActiveStorySession?.() ?? null;
+    const sessionMode = this.#deps.getHeaderFooterSession()?.session?.mode ?? 'body';
+    const useActiveSurfaceHitTest = sessionMode !== 'body' || activeStorySession != null;
+    const editor = useActiveSurfaceHitTest
+      ? this.#deps.getActiveEditor()
+      : (this.#deps.getEditor() as ReturnType<EditorInputDependencies['getEditor']>);
+    const { rawHit, hit } = this.#resolveSelectionPointerHit({
+      layoutState,
+      normalized: { x: normalized.x, y: normalized.y },
       clientX,
       clientY,
-      geometryHelper: pageGeometryHelper ?? undefined,
+      editor,
+      useActiveSurfaceHitTest,
     });
 
-    if (!rawHit) return;
+    if (!rawHit || !hit) return;
 
-    // Don't extend selection into footnote lines
-    if (isFootnoteBlockId(rawHit.blockId)) return;
+    // Don't extend a body selection into read-only footnote content.
+    if (!useActiveSurfaceHitTest && isRenderedNoteBlockId(rawHit.blockId)) return;
 
-    const editor = this.#deps.getEditor();
     const doc = editor.state?.doc;
     if (!doc) return;
 
@@ -1921,21 +2419,8 @@ export class EditorInputManager {
 
     this.#callbacks.updateSelectionVirtualizationPins?.({ includeDragBuffer: true, extraPages: [rawHit.pageIndex] });
 
-    const epochMapper = this.#deps.getEpochMapper();
-    const mappedHead = epochMapper.mapPosFromLayoutToCurrentDetailed(rawHit.pos, rawHit.layoutEpoch, 1);
-    if (!mappedHead.ok) {
-      debugLog('warn', 'drag mapping failed', mappedHead);
-      return;
-    }
-
-    const hit = {
-      ...rawHit,
-      pos: Math.max(0, Math.min(mappedHead.pos, doc.content.size)),
-      layoutEpoch: mappedHead.toEpoch,
-    };
-
     this.#debugLastHit = {
-      source: pageMounted ? 'dom' : 'geometry',
+      source: useActiveSurfaceHitTest || pageMounted ? 'dom' : 'geometry',
       pos: rawHit.pos,
       layoutEpoch: rawHit.layoutEpoch,
       mappedPos: hit.pos,
@@ -1943,7 +2428,7 @@ export class EditorInputManager {
     this.#callbacks.updateSelectionDebugHud?.();
 
     // Check for cell selection
-    const currentTableHit = this.#hitTestTable(normalized.x, normalized.y);
+    const currentTableHit = useActiveSurfaceHitTest ? null : this.#hitTestTable(normalized.x, normalized.y);
     const shouldUseCellSel = this.#shouldUseCellSelection(currentTableHit);
 
     if (shouldUseCellSel && this.#cellAnchor) {
@@ -2012,17 +2497,12 @@ export class EditorInputManager {
   #handleHover(normalized: { x: number; y: number; pageIndex?: number; pageLocalY?: number }): void {
     if (!this.#deps) return;
 
-    const sessionMode = this.#deps.getHeaderFooterSession()?.session?.mode ?? 'body';
-    if (sessionMode !== 'body') {
-      this.#callbacks.clearHoverRegion?.();
-      return;
-    }
-
     if (this.#deps.getDocumentMode() === 'viewing') {
       this.#callbacks.clearHoverRegion?.();
       return;
     }
 
+    const sessionMode = this.#deps.getHeaderFooterSession()?.session?.mode ?? 'body';
     const region = this.#callbacks.hitTestHeaderFooterRegion?.(
       normalized.x,
       normalized.y,
@@ -2034,13 +2514,13 @@ export class EditorInputManager {
       return;
     }
 
+    if (sessionMode !== 'body' && !this.#isDifferentHeaderFooterRegionFromActiveSession(region)) {
+      this.#callbacks.clearHoverRegion?.();
+      return;
+    }
+
     const currentHover = this.#deps.getHeaderFooterSession()?.hoverRegion;
-    if (
-      currentHover &&
-      currentHover.kind === region.kind &&
-      currentHover.pageIndex === region.pageIndex &&
-      currentHover.sectionType === region.sectionType
-    ) {
+    if (this.#isSameHeaderFooterRegion(currentHover, region)) {
       return;
     }
 
@@ -2164,8 +2644,56 @@ export class EditorInputManager {
     this.#callbacks.activateHeaderFooterRegion?.(region);
   }
 
+  #getActiveRenderedNoteTarget(): RenderedNoteTarget | null {
+    const activeStorySession = this.#deps?.getActiveStorySession?.() ?? null;
+    if (activeStorySession?.kind !== 'note') {
+      return null;
+    }
+
+    const locator = activeStorySession.locator;
+    if (locator.storyType !== 'footnote' && locator.storyType !== 'endnote') {
+      return null;
+    }
+
+    return {
+      storyType: locator.storyType,
+      noteId: locator.noteId,
+    };
+  }
+
+  #resolveRenderedNoteTargetAtPointer(
+    target: HTMLElement | null,
+    clientX: number,
+    clientY: number,
+  ): RenderedNoteTarget | null {
+    const blockIdFromTarget = target?.closest?.('[data-block-id]')?.getAttribute?.('data-block-id') ?? '';
+    const parsedFromTarget = parseRenderedNoteTarget(blockIdFromTarget);
+    if (parsedFromTarget) {
+      return parsedFromTarget;
+    }
+
+    const doc = this.#deps?.getViewportHost()?.ownerDocument ?? document;
+    if (typeof doc.elementsFromPoint !== 'function') {
+      return null;
+    }
+
+    for (const element of doc.elementsFromPoint(clientX, clientY)) {
+      if (!(element instanceof HTMLElement)) {
+        continue;
+      }
+
+      const blockId = element.closest('[data-block-id]')?.getAttribute('data-block-id') ?? '';
+      const parsed = parseRenderedNoteTarget(blockId);
+      if (parsed) {
+        return parsed;
+      }
+    }
+
+    return null;
+  }
+
   #focusEditorAtFirstPosition(): void {
-    const editor = this.#deps?.getEditor();
+    const editor = this.#deps?.getActiveEditor() ?? this.#deps?.getEditor();
     const editorDom = editor?.view?.dom as HTMLElement | undefined;
     if (!editorDom) return;
 
@@ -2180,7 +2708,7 @@ export class EditorInputManager {
     }
 
     editorDom.focus();
-    editor?.view?.focus();
+    this.#focusEditorView(editor?.view);
     this.#callbacks.scheduleSelectionUpdate?.();
   }
 
@@ -2192,16 +2720,23 @@ export class EditorInputManager {
    * operations with tracked changes.
    */
   #focusEditor(): void {
-    const editor = this.#deps?.getEditor();
+    const editor = this.#deps?.getActiveEditor() ?? this.#deps?.getEditor();
     const view = editor?.view;
     const editorDom = view?.dom as HTMLElement | undefined;
     if (!editorDom) return;
 
     const active = document.activeElement as HTMLElement | null;
     const activeIsEditor = active === editorDom || (!!active && editorDom.contains?.(active));
-    const hasFocus = typeof view.hasFocus === 'function' && view.hasFocus();
 
-    if (activeIsEditor || hasFocus) {
+    // In presentation mode the hidden editor can keep an in-DOM selection while
+    // native focus still sits on a stale body editor or a layout surface. The
+    // actual activeElement decides where keyboard input goes, so only skip the
+    // focus handoff when the browser is already focused inside this editor.
+    if (activeIsEditor) {
+      // Hidden story editors still need ProseMirror to replay the current PM
+      // selection into the off-screen DOM after pointer-driven selection
+      // updates on the rendered surface.
+      this.#focusEditorView(view);
       return;
     }
 
@@ -2210,7 +2745,19 @@ export class EditorInputManager {
     }
 
     editorDom.focus();
-    view?.focus();
+    this.#focusEditorView(view);
+  }
+
+  #focusEditorView(view: { focus?: (() => void) | undefined } | null | undefined): void {
+    if (typeof view?.focus !== 'function') {
+      return;
+    }
+
+    try {
+      view.focus();
+    } catch {
+      // Ignore focus failures from stale or test-only views.
+    }
   }
 
   #handleRepeatClickOnActiveComment(event: PointerEvent, target: HTMLElement | null, editor: Editor): boolean {
@@ -2229,7 +2776,72 @@ export class EditorInputManager {
     return true;
   }
 
+  #syncNonBodyCommentActivation(event: PointerEvent, target: HTMLElement | null, editor: Editor): void {
+    this.#syncNonBodyCommentSelection(event, target, editor);
+  }
+
+  #resolveHeaderFooterCommentThreadIdFromGeometry(clientX: number, clientY: number): string | null {
+    const sessionMode = this.#deps?.getHeaderFooterSession()?.session?.mode ?? 'body';
+    if (sessionMode !== 'header' && sessionMode !== 'footer') {
+      return null;
+    }
+
+    const viewportHost = this.#deps?.getViewportHost();
+    if (!viewportHost) {
+      return null;
+    }
+
+    const activeSurfaceSelector = sessionMode === 'footer' ? '.superdoc-page-footer' : '.superdoc-page-header';
+    const annotationSelector = [
+      `${activeSurfaceSelector} ${COMMENT_HIGHLIGHT_SELECTOR}`,
+      `${activeSurfaceSelector} ${TRACK_CHANGE_SELECTOR}`,
+      `${activeSurfaceSelector} ${PM_TRACK_CHANGE_SELECTOR}`,
+    ].join(', ');
+    const annotationElements = Array.from(viewportHost.querySelectorAll<HTMLElement>(annotationSelector));
+
+    return resolveCommentThreadIdFromGeometry(annotationElements, clientX, clientY);
+  }
+
+  #syncNonBodyCommentSelection(
+    event: PointerEvent,
+    target: HTMLElement | null,
+    editor: Editor,
+    { clearOnMiss = false }: { clearOnMiss?: boolean } = {},
+  ): void {
+    const clickedThreadId =
+      resolveCommentThreadIdNearPointer(target, event.clientX, event.clientY) ??
+      this.#resolveHeaderFooterCommentThreadIdFromGeometry(event.clientX, event.clientY);
+    const activeThreadId = getActiveCommentThreadId(editor);
+
+    if (!clickedThreadId) {
+      if (!clearOnMiss || !activeThreadId) {
+        return;
+      }
+
+      editor.emit?.('commentsUpdate', {
+        type: comments_module_events.SELECTED,
+        activeCommentId: null,
+      });
+      return;
+    }
+
+    if (clickedThreadId === activeThreadId) {
+      return;
+    }
+
+    editor.emit?.('commentsUpdate', {
+      type: comments_module_events.SELECTED,
+      activeCommentId: clickedThreadId,
+    });
+  }
+
   #handleSingleCommentHighlightClick(event: PointerEvent, target: HTMLElement | null, editor: Editor): boolean {
+    // Direct hits on inline annotated text should not be intercepted here.
+    // Let generic click-to-position place the caret at the clicked pixel.
+    if (isDirectSingleCommentHighlightHit(target) || isDirectTrackedChangeHit(target)) {
+      return false;
+    }
+
     const clickedThreadId = resolveCommentThreadIdNearPointer(target, event.clientX, event.clientY);
     if (!clickedThreadId) {
       return false;

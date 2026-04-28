@@ -11,6 +11,7 @@
 <div align="center">
   <a href="https://www.npmjs.com/package/superdoc" target="_blank"><img src="https://img.shields.io/npm/v/superdoc.svg?color=1355ff" height="22px"></a>
   <a href="https://www.npmjs.com/package/superdoc" target="_blank"><img src="https://img.shields.io/npm/dm/superdoc.svg?color=1355ff" height="22px"></a>
+  <a href="https://codecov.io/gh/superdoc-dev/superdoc" target="_blank"><img src="https://codecov.io/gh/superdoc-dev/superdoc/branch/main/graph/badge.svg" height="22px"></a>
   <a href="https://www.gnu.org/licenses/agpl-3.0" target="_blank"><img src="https://img.shields.io/badge/License-AGPL%20v3-1355ff.svg?color=1355ff" height="22px"></a>
   <a href="https://github.com/superdoc-dev/superdoc" target="_blank"><img src="https://img.shields.io/github/stars/superdoc-dev/superdoc?style=flat&color=1355ff" height="22px"></a>
   <a href="https://discord.com/invite/b9UuaZRyaB" target="_blank"><img src="https://img.shields.io/badge/discord-join-1355ff" height="22px"></a>
@@ -159,6 +160,16 @@ Special thanks to these community members who have contributed code to SuperDoc:
 <a href="https://github.com/Branc0"><img src="https://github.com/Branc0.png" width="50" height="50" alt="Branc0" title="Rafael Rocha de Azevedo" /></a>
 <a href="https://github.com/Muhammad-Nur-Alamsyah-Anwar"><img src="https://github.com/Muhammad-Nur-Alamsyah-Anwar.png" width="50" height="50" alt="Muhammad-Nur-Alamsyah-Anwar" title="Alam" /></a>
 <a href="https://github.com/andrewsrigom"><img src="https://github.com/andrewsrigom.png" width="50" height="50" alt="andrewsrigom" title="Andrews Rigom" /></a>
+<a href="https://github.com/iguit0"><img src="https://github.com/iguit0.png" width="50" height="50" alt="iguit0" title="Igor Alves" /></a>
+<a href="https://github.com/PeterHollens"><img src="https://github.com/PeterHollens.png" width="50" height="50" alt="PeterHollens" title="Peter Hollens" /></a>
+<a href="https://github.com/baristaGeek"><img src="https://github.com/baristaGeek.png" width="50" height="50" alt="baristaGeek" title="Esteban Vargas" /></a>
+<a href="https://github.com/Anuj52"><img src="https://github.com/Anuj52.png" width="50" height="50" alt="Anuj52" title="Anuj Chaudhary" /></a>
+<a href="https://github.com/Abdeltoto"><img src="https://github.com/Abdeltoto.png" width="50" height="50" alt="Abdeltoto" title="Abdel ATIA" /></a>
+<a href="https://github.com/JoaaoVerona"><img src="https://github.com/JoaaoVerona.png" width="50" height="50" alt="JoaaoVerona" title="João Vitor Verona Biazibetti" /></a>
+<a href="https://github.com/michaelreavant"><img src="https://github.com/michaelreavant.png" width="50" height="50" alt="michaelreavant" title="michaelreavant" /></a>
+<a href="https://github.com/ArturQuirino"><img src="https://github.com/ArturQuirino.png" width="50" height="50" alt="ArturQuirino" title="ARTUR QUIRINO" /></a>
+<a href="https://github.com/kiluazen"><img src="https://github.com/kiluazen.png" width="50" height="50" alt="kiluazen" title="Kushal" /></a>
+<a href="https://github.com/kendaller"><img src="https://github.com/kendaller.png" width="50" height="50" alt="kendaller" title="Kendall Ernst" /></a>
 
 Want to see your avatar here? Check the [Contributing Guide](CONTRIBUTING.md) to get started.
 

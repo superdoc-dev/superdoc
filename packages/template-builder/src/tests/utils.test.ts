@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { areTemplateFieldsEqual, resolveToolbar, clampToViewport } from '../utils';
+import {
+  areTemplateFieldsEqual,
+  resolveToolbar,
+  clampToViewport,
+  getFieldTypeStyle,
+  generateFieldColorCSS,
+} from '../utils';
 import type { TemplateField } from '../types';
 
 describe('areTemplateFieldsEqual', () => {
@@ -154,5 +160,78 @@ describe('clampToViewport', () => {
     // maxTop = 768 - 300 - 10 = 458
     expect(result.left).toBe(764);
     expect(result.top).toBe(458);
+  });
+});
+
+describe('getFieldTypeStyle', () => {
+  it('returns hardcoded signer style without fieldColors', () => {
+    const style = getFieldTypeStyle('signer');
+    expect(style).toEqual({ background: '#fef3c7', color: '#b45309' });
+  });
+
+  it('returns default style for unknown type without fieldColors', () => {
+    const style = getFieldTypeStyle('unknown');
+    expect(style).toEqual({ background: '#f3f4f6', color: '#6b7280' });
+  });
+
+  it('returns custom color with color-mix background when fieldColors provided', () => {
+    const style = getFieldTypeStyle('date', { date: '#059669' });
+    expect(style.color).toBe('#059669');
+    expect(style.background).toContain('color-mix');
+    expect(style.background).toContain('#059669');
+  });
+
+  it('falls back to default for types not in fieldColors', () => {
+    const style = getFieldTypeStyle('unknown', { owner: '#629be7' });
+    expect(style).toEqual({ background: '#f3f4f6', color: '#6b7280' });
+  });
+
+  it('works with non-hex colors', () => {
+    const style = getFieldTypeStyle('custom', { custom: 'rgb(100, 200, 50)' });
+    expect(style.color).toBe('rgb(100, 200, 50)');
+    expect(style.background).toContain('color-mix');
+  });
+});
+
+describe('generateFieldColorCSS', () => {
+  it('returns empty string for empty object', () => {
+    expect(generateFieldColorCSS({}, '.scope')).toBe('');
+  });
+
+  it('generates per-type rules with data-sdt-tag selectors', () => {
+    const css = generateFieldColorCSS({ signer: '#d97706' }, '.scope');
+    expect(css).toContain('[data-sdt-tag*=\'"fieldType":"signer"\']');
+    expect(css).toContain('#d97706');
+  });
+
+  it('generates default rule when owner is defined', () => {
+    const css = generateFieldColorCSS({ owner: '#629be7', signer: '#d97706' }, '.scope');
+    // Default rule (no tag selector) + per-type rules
+    expect(css).toContain('.scope .superdoc-structured-content-inline,');
+    expect(css).toContain('#629be7');
+    expect(css).toContain('#d97706');
+  });
+
+  it('does not generate default rule when no owner key', () => {
+    const css = generateFieldColorCSS({ signer: '#d97706' }, '.scope');
+    // Should only have tag-selector rules, not a blanket default
+    const lines = css.split('\n').filter((l) => l.includes('border-color'));
+    lines.forEach((line) => {
+      // Every border-color rule should be within a tag selector context
+      expect(css).toContain('data-sdt-tag');
+    });
+  });
+
+  it('uses correct label selectors for inline and block', () => {
+    const css = generateFieldColorCSS({ owner: '#629be7' }, '.scope');
+    expect(css).toContain('.superdoc-structured-content-inline__label');
+    expect(css).toContain('.superdoc-structured-content__label');
+    // Should NOT contain the wrong block label class
+    expect(css).not.toContain('.superdoc-structured-content-block__label');
+  });
+
+  it('uses color-mix for label backgrounds', () => {
+    const css = generateFieldColorCSS({ owner: '#629be7' }, '.scope');
+    expect(css).toContain('color-mix(in srgb, #629be7 87%, transparent)');
   });
 });

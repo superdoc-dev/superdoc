@@ -43,7 +43,11 @@ const testUserEmail = urlParams.get('email') || 'user@superdoc.com';
 const testUserName = urlParams.get('name') || `SuperDoc ${Math.floor(1000 + Math.random() * 9000)}`;
 const userRole = urlParams.get('role') || 'editor';
 const useLayoutEngine = ref(urlParams.get('layout') !== '0');
+const showBookmarks = ref(urlParams.get('bookmarks') === '1');
 const useWebLayout = ref(urlParams.get('view') === 'web');
+// Tracked-change replacement model. 'paired' groups ins+del into one change
+// (Google Docs model); 'independent' keeps each as its own revision (Word / ECMA-376).
+const trackChangesReplacements = ref(urlParams.get('replacements') === 'independent' ? 'independent' : 'paired');
 const useCollaboration = urlParams.get('collab') === '1';
 const collabRoom = urlParams.get('room') || 'superdoc-dev-room';
 const collabUrl = 'ws://localhost:8081/v1/collaboration';
@@ -676,9 +680,6 @@ const init = async () => {
     comments: {
       visible: true,
     },
-    trackChanges: {
-      visible: true,
-    },
     toolbarGroups: ['left', 'center', 'right'],
     pagination: useLayoutEngine.value && !useWebLayout.value,
     viewOptions: { layout: useWebLayout.value ? 'web' : 'print' },
@@ -687,6 +688,7 @@ const init = async () => {
     layoutEngineOptions: {
       flowMode: useWebLayout.value ? 'semantic' : 'paginated',
       ...(useWebLayout.value ? { semanticOptions: { marginsMode: 'none' } } : {}),
+      showBookmarks: showBookmarks.value,
     },
     rulers: true,
     rulerContainer: '#ruler-container',
@@ -720,6 +722,10 @@ const init = async () => {
         // useInternalExternalComments: true,
         // suppressInternalExternal: true,
         permissionResolver: commentPermissionResolver,
+      },
+      trackChanges: {
+        visible: true,
+        replacements: trackChangesReplacements.value,
       },
       toolbar: {
         selector: 'toolbar',
@@ -1096,6 +1102,19 @@ const onEditorCreate = ({ editor }) => {
   editor.on('fieldAnnotationDoubleClicked', (params) => {
     console.log('fieldAnnotationDoubleClicked', { params });
   });
+
+  // SD-2494: Pointer event observability for debugging trackpad/right-click selection issues
+  editor.on('pointerDown', (params) => {
+    console.log('pointerDown', { params });
+  });
+
+  editor.on('pointerUp', (params) => {
+    console.log('pointerUp', { params });
+  });
+
+  editor.on('rightClick', (params) => {
+    console.log('rightClick', { params });
+  });
 };
 
 watch(
@@ -1200,10 +1219,30 @@ const toggleLayoutEngine = () => {
   window.location.href = url.toString();
 };
 
+const toggleShowBookmarks = () => {
+  showBookmarks.value = !showBookmarks.value;
+  superdoc.value?.setShowBookmarks?.(showBookmarks.value);
+};
+
 const toggleViewLayout = () => {
   const nextValue = !useWebLayout.value;
   const url = new URL(window.location.href);
   url.searchParams.set('view', nextValue ? 'web' : 'print');
+  window.location.href = url.toString();
+};
+
+// Switching replacement model requires SuperDoc to re-mount so the
+// importer and runtime both pick up the new mode. Reload with ?replacements=…
+// so the change is deep-linkable too.
+const setReplacementsMode = (mode) => {
+  if (mode !== 'paired' && mode !== 'independent') return;
+  if (mode === trackChangesReplacements.value) return;
+  const url = new URL(window.location.href);
+  if (mode === 'paired') {
+    url.searchParams.delete('replacements');
+  } else {
+    url.searchParams.set('replacements', mode);
+  }
   window.location.href = url.toString();
 };
 
@@ -1379,6 +1418,17 @@ if (scrollTestMode.value) {
                 <option value="neon-night">Neon Night</option>
               </select>
             </label>
+            <label class="dev-app__theme-control" title="Tracked replacement model (reloads on change)">
+              <span>Tracked replacements</span>
+              <select
+                :value="trackChangesReplacements"
+                class="dev-app__theme-select"
+                @change="setReplacementsMode($event.target.value)"
+              >
+                <option value="paired">Paired (Google Docs)</option>
+                <option value="independent">Independent (Word)</option>
+              </select>
+            </label>
             <div class="dev-app__dropdown" @mouseleave="closeSidebarMenu">
               <button
                 class="dev-app__header-export-btn dev-app__dropdown-trigger"
@@ -1471,6 +1521,9 @@ if (scrollTestMode.value) {
                 @change="handleCompareFile"
               />
             </div>
+            <button class="dev-app__header-export-btn" @click="toggleShowBookmarks">
+              {{ showBookmarks ? 'Hide' : 'Show' }} bookmarks
+            </button>
             <button class="dev-app__header-export-btn" @click="toggleLayoutEngine">
               Turn Layout Engine {{ useLayoutEngine ? 'off' : 'on' }} (reloads)
             </button>

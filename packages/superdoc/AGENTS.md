@@ -29,6 +29,64 @@ npm install @superdoc-dev/react  # React (includes superdoc)
 </script>
 ```
 
+## Embed editor — CDN (no build step)
+
+Drop SuperDoc into any HTML page via `<script>` tag. No bundler, no `npm install`. Served from jsDelivr.
+
+### Script tag (global)
+
+```html
+<link
+  rel="stylesheet"
+  href="https://cdn.jsdelivr.net/npm/superdoc@latest/dist/style.css"
+/>
+<div id="editor" style="height: 100vh"></div>
+<script src="https://cdn.jsdelivr.net/npm/superdoc@latest/dist/superdoc.min.js"></script>
+<script>
+  const superdoc = new SuperDoc({
+    selector: '#editor',
+    document: '/path/to/file.docx',
+    documentMode: 'editing',
+  });
+</script>
+```
+
+`window.SuperDoc` is the class directly. Named exports are attached as static properties (`SuperDoc.createTheme`, `SuperDoc.DOCX`, etc.). Collaboration (Yjs) is included. PDF viewing (`pdfjs-dist`) is not — use the ESM path below if you need it.
+
+### ES modules + import map
+
+For modern apps that want peer-dep control and smaller payload:
+
+```html
+<link
+  rel="stylesheet"
+  href="https://cdn.jsdelivr.net/npm/superdoc@latest/dist/style.css"
+/>
+<script type="importmap">
+  {
+    "imports": {
+      "superdoc": "https://cdn.jsdelivr.net/npm/superdoc@latest/dist/superdoc.es.js",
+      "vue": "https://cdn.jsdelivr.net/npm/vue@3/dist/vue.esm-browser.prod.js"
+    }
+  }
+</script>
+<div id="editor" style="height: 100vh"></div>
+<script type="module">
+  import { SuperDoc } from 'superdoc';
+  new SuperDoc({ selector: '#editor', document: '/path/to/file.docx' });
+</script>
+```
+
+Add `yjs`, `y-prosemirror`, `@hocuspocus/provider`, or `pdfjs-dist` to the import map if your build needs them.
+
+### Production pinning and integrity
+
+- The examples above use `@latest` for copy-paste. **In production, pin to a specific version** (e.g. `superdoc@1.26.0`) so you control upgrades.
+- Add [SRI hashes](https://developer.mozilla.org/docs/Web/Security/Subresource_Integrity) for production. Generate with: `curl -s https://cdn.jsdelivr.net/npm/superdoc@1.26.0/dist/superdoc.min.js | openssl dgst -sha384 -binary | openssl base64 -A | sed 's/^/sha384-/'`. Include `integrity="sha384-..." crossorigin="anonymous"` on each `<script>` and `<link>`.
+- jsDelivr serves immutable, gzipped responses (~1.5 MB on the wire for `superdoc.min.js`).
+
+Unpkg is mirrored automatically: replace `cdn.jsdelivr.net/npm/` with `unpkg.com/`.
+
 ## Embed editor — React
 
 ```tsx

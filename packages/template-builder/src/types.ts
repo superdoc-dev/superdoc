@@ -7,6 +7,10 @@ export interface FieldDefinition {
   id: string;
   label: string;
   defaultValue?: string;
+  presetContent?: {
+    html?: string;
+    json?: unknown;
+  };
   metadata?: Record<string, any>;
   mode?: 'inline' | 'block';
   group?: string;
@@ -50,6 +54,7 @@ export interface FieldMenuProps {
   onCreateField?: (field: FieldDefinition) => void | Promise<FieldDefinition | void>;
   existingFields?: TemplateField[];
   onSelectExisting?: (field: TemplateField) => void;
+  fieldColors?: Record<string, string>;
 }
 
 export interface FieldListProps {
@@ -58,6 +63,7 @@ export interface FieldListProps {
   onDelete: (fieldId: string | number) => void;
   onUpdate?: (field: TemplateField) => void;
   selectedFieldId?: string | number;
+  fieldColors?: Record<string, string>;
 }
 
 export interface DocumentConfig {
@@ -121,6 +127,9 @@ export interface SuperDocTemplateBuilderProps {
   /** Lock mode applied to all inserted fields unless overridden per-field */
   defaultLockMode?: LockMode;
 
+  /** Colors for field types in the document and sidebar. Keys are fieldType values, values are CSS colors. */
+  fieldColors?: Record<string, string>;
+
   /** Content Security Policy nonce for dynamically injected styles */
   cspNonce?: string;
 
@@ -156,6 +165,8 @@ export interface SuperDocTemplateBuilderHandle {
   nextField: () => void;
   previousField: () => void;
   getFields: () => TemplateField[];
+  /** Re-discover fields from the editor and notify via onFieldsChange */
+  refresh: () => void;
   exportTemplate: (config?: ExportConfig) => Promise<void | Blob>;
   /**
    * Returns the SuperDoc instance.

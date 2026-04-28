@@ -243,8 +243,10 @@ describe('Diff', () => {
       'runProperties.boldCs': true,
     });
     expect(formattingRunAttrsDiff.deleted).toEqual({});
+    // SD-2517: importer now preserves [] for runs with no inline w:rPr.
+    // When user adds bold (diff_after7), hasNewInlineProps triggers mark key addition.
     expect(formattingRunAttrsDiff.modified?.runPropertiesInlineKeys).toEqual({
-      from: ['fontFamily', 'fontSize'],
+      from: [],
       to: ['bold', 'boldCs', 'fontFamily', 'fontSize'],
     });
     expect(formattingRunAttrsDiff.modified?.rsidRPr).toMatchObject({

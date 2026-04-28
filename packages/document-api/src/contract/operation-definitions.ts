@@ -63,6 +63,7 @@ export type ReferenceGroupKey =
   | 'citations'
   | 'authorities'
   | 'ranges'
+  | 'selection'
   | 'diff'
   | 'protection'
   | 'permissionRanges';
@@ -105,9 +106,9 @@ export const INTENT_GROUP_META: Record<string, IntentGroupMeta> = {
   search: {
     toolName: 'superdoc_search',
     description:
-      'Refs expire after any mutation; always re-search before the next edit. ' +
       'Find text patterns or nodes in the document and get ref handles for targeting edits and formatting. ' +
-      'Use this to locate content before calling superdoc_edit or superdoc_format. ' +
+      'Refs expire after any mutation that changes the document. Re-search before the next edit when using individual tools (superdoc_edit, superdoc_format). ' +
+      'Within a superdoc_mutations batch, selectors in "where" clauses resolve automatically at compile time; no manual re-searching needed between steps. ' +
       'Text search returns handle.ref covering only the matched substring. Node search finds blocks by type (paragraph, heading, table, listItem, etc.). ' +
       'The "require" parameter controls match cardinality: "first" returns one match, "all" returns every match, "exactlyOne" fails if not exactly one match. ' +
       'Supports scoping via "within" to search inside a single block. ' +
@@ -128,7 +129,8 @@ export const INTENT_GROUP_META: Record<string, IntentGroupMeta> = {
     toolName: 'superdoc_get_content',
     description:
       'Read document content in various formats. Call this first in any workflow to understand document structure before making edits. ' +
-      'Action "blocks" returns structured block data with nodeId, nodeType, textPreview, formatting properties (fontFamily, fontSize, color, bold, underline, alignment), and ref handles for immediate use with superdoc_edit or superdoc_format. ' +
+      'Action "blocks" returns structured block data with nodeId, nodeType, textPreview, optional full text when includeText:true, formatting properties (fontFamily, fontSize, color, bold, underline, alignment), and ref handles for immediate use with superdoc_edit or superdoc_format. ' +
+      'When you need to evaluate or rewrite existing paragraphs or clauses, prefer action "blocks" with includeText:true so you can identify the correct block and then target it by nodeId. ' +
       'Action "text" and "markdown" return the full document as plain text or Markdown. Action "html" returns HTML. ' +
       'Action "info" returns document metadata: word count, paragraph count, page count, outline, available styles, and capability flags. ' +
       'The "blocks" action supports pagination via "offset" and "limit", and filtering via "nodeTypes". Other actions ignore these parameters. ' +
@@ -136,6 +138,7 @@ export const INTENT_GROUP_META: Record<string, IntentGroupMeta> = {
       'Do NOT call superdoc_edit or superdoc_format without first reading blocks to get valid refs and formatting reference values.',
     inputExamples: [
       { action: 'blocks' },
+      { action: 'blocks', includeText: true, offset: 0, limit: 20 },
       { action: 'blocks', offset: 0, limit: 20, nodeTypes: ['heading', 'paragraph'] },
       { action: 'text' },
       { action: 'info' },
@@ -144,17 +147,36 @@ export const INTENT_GROUP_META: Record<string, IntentGroupMeta> = {
   edit: {
     toolName: 'superdoc_edit',
     description:
+      'The primary tool for inserting content into documents. ' +
+      'ALWAYS use action "insert" with type "markdown" to create headings, paragraphs, or any block content — this is faster and creates proper document structure in one call. Do NOT use superdoc_create for headings or paragraphs. ' +
+      'The markdown parser creates headings from # markers (# = Heading1, ## = Heading2), bold from **text**, italic from *text*, and numbered/bullet lists. ' +
+      'Position markdown inserts with "target" (a BlockNodeAddress like {kind:"block", nodeType, nodeId}) and "placement" (before, after, insideStart, insideEnd). Without a target, content appends at the end of the document. ' +
+      'IMPORTANT: After a markdown insert, analyze the document context (what kind of document, how titles and body text are styled) and follow up with ONE superdoc_mutations call to format inserted blocks so they look like they belong. ' +
+      'Each format.apply step accepts "inline" (fontFamily, fontSize, bold, underline, color), "alignment", and "scope" in the same step. ' +
+      'Use scope: "block" so formatting covers the entire paragraph. ' +
+      'Copy the exact property values from the existing get_content blocks (fontFamily, fontSize, color, alignment, bold, underline). Do NOT invent values — use what the blocks show. ' +
+      'Also supports replace, delete, and undo/redo. For replace and delete, pass a "ref" from superdoc_search or superdoc_get_content blocks. ' +
+      'A search ref covers only the matched substring; a block ref covers the entire block text, so use block refs when rewriting or shortening whole paragraphs. ' +
+      'For multi-step redlines or whole-clause rewrites, prefer superdoc_mutations with where:{by:"block", nodeType, nodeId} from superdoc_get_content action "blocks" includeText:true rather than relying on text selectors. ' +
       'Refs expire after any mutation; always re-search before the next edit. ' +
-      'Modify document text: insert new content, replace existing text, delete a range, or undo/redo. ' +
-      'Use this for single text modifications. For 2+ edits that must succeed or fail atomically, use superdoc_mutations instead. ' +
-      'For replace and delete, pass a "ref" from superdoc_search or superdoc_get_content blocks. A search ref covers only the matched substring; a block ref covers the entire block text, so use block refs when rewriting or shortening whole paragraphs. ' +
-      'Insert supports plain text (default), markdown, or html via the "type" parameter. Use "placement" (before, after, insideStart, insideEnd) to control position relative to the target. ' +
-      'Supports "dryRun" to preview changes and "changeMode: tracked" to record edits as tracked changes. ' +
+      'For 2+ edits that must succeed or fail atomically, use superdoc_mutations instead. ' +
+      'Supports "dryRun" to preview changes and "changeMode: tracked" to record edits as tracked changes (not supported for markdown/html inserts). ' +
       'Do NOT build "target" objects manually when a ref is available; prefer "ref" for simpler, more reliable targeting.',
     inputExamples: [
+      {
+        action: 'insert',
+        type: 'markdown',
+        target: { kind: 'block', nodeType: 'paragraph', nodeId: '<nodeId>' },
+        placement: 'before',
+        value: '# Executive Summary\n\nThis agreement sets forth the principal terms...',
+      },
+      {
+        action: 'insert',
+        type: 'markdown',
+        value:
+          '# Section Title\n\nParagraph content here.\n\n# Another Section\n\nMore content with **bold** and *italic*.',
+      },
       { action: 'replace', ref: '<handle.ref>', text: 'new text here' },
-      { action: 'insert', value: 'Appended paragraph.', placement: 'insideEnd' },
-      { action: 'insert', ref: '<block.ref>', value: 'Inserted before.', placement: 'before' },
       { action: 'delete', ref: '<handle.ref>' },
       { action: 'undo' },
     ],
@@ -162,12 +184,11 @@ export const INTENT_GROUP_META: Record<string, IntentGroupMeta> = {
   create: {
     toolName: 'superdoc_create',
     description:
-      'You MUST call superdoc_format after this tool to match document styling. ' +
-      'Create a single paragraph, heading, or table in the document. Returns a nodeId for chaining subsequent creates and for use as a block target in superdoc_format. ' +
-      'When the user asks for a "heading", use action "heading" with a level (default 1). Use action "paragraph" only when the user asks for regular body text. ' +
-      'Before creating, call superdoc_get_content blocks to read formatting from regular body text paragraphs (non-empty, non-title blocks with alignment "justify" or "left"). ' +
-      'After creating, re-fetch blocks with superdoc_get_content to get a fresh ref for the new block, then apply TWO format calls: (1) superdoc_format action "inline" for character styling, AND (2) superdoc_format action "set_alignment" with the block target for paragraph alignment. Both calls are REQUIRED. ' +
-      'For body paragraphs: inline {bold:false, underline:false, fontFamily, fontSize, color from body blocks}, alignment "justify". Ignore underline:true from blocks data for body text; it is a style artifact. For headings: inline {bold:true, underline:true, fontSize scaled up, fontFamily, color}, alignment "center". ' +
+      'IMPORTANT: For headings and paragraphs, use superdoc_edit with type "markdown" instead — it is faster, creates proper styles, and handles positioning via target + placement. ' +
+      'Only use superdoc_create for tables or when markdown cannot express the content. ' +
+      'Creates a single paragraph, heading, or table. Returns nodeId and ref for the created block. ' +
+      'After creating, the returned ref is valid for ONE immediate superdoc_format call. For subsequent operations, re-fetch blocks with superdoc_get_content to get fresh refs (refs expire after any mutation). ' +
+      'When the user asks for a "heading", use action "heading" with a level (default 1). Use action "paragraph" for regular body text. ' +
       'Position with "at": {kind:"documentEnd"} (default), {kind:"documentStart"}, or {kind:"after"/"before", target:{kind:"block", nodeType, nodeId}} for relative placement. ' +
       'When creating multiple items in sequence, use the previous response nodeId as the next "at" target to maintain correct ordering. ' +
       'Do NOT use newlines in "text" to create multiple paragraphs; call this tool separately for each one.',
@@ -190,7 +211,9 @@ export const INTENT_GROUP_META: Record<string, IntentGroupMeta> = {
   format: {
     toolName: 'superdoc_format',
     description:
-      'Change text and paragraph formatting. Use this after superdoc_create to style new content, or with a search ref to restyle existing text. ' +
+      'Change text and paragraph formatting. ' +
+      'To format multiple items at once, use superdoc_mutations with format.apply steps instead of calling this tool repeatedly. Use require "all" with a node selector to format every heading or paragraph in one batch. ' +
+      'Use this tool for single-item formatting when you have a valid ref or nodeId. ' +
       'Action "inline" applies character formatting (bold, italic, underline, color, fontSize, fontFamily, highlight, strike, vertAlign) to a text range via "ref". ' +
       'Action "set_style" applies a named paragraph style by styleId (get available styles from superdoc_get_content info). ' +
       'Actions "set_alignment", "set_indentation", "set_spacing", "set_direction", and "set_flow_options" change paragraph-level properties and require a block target: {kind:"block", nodeType:"paragraph", nodeId:"<nodeId>"}, NOT a ref. ' +
@@ -198,8 +221,7 @@ export const INTENT_GROUP_META: Record<string, IntentGroupMeta> = {
       'Supports "dryRun" and "changeMode: tracked" for inline formatting. Paragraph-level actions do NOT support tracked changes. ' +
       'Do NOT use a search ref for paragraph-level actions; they require a block target with nodeId. ' +
       'Do NOT use {kind:"block", start:{kind:"nodeEdge",...}} or selection-like structures for paragraph actions. ONLY {kind:"block", nodeType, nodeId} is accepted. ' +
-      'Do NOT issue multiple superdoc_format calls in parallel; each call invalidates refs for subsequent calls. Format one block at a time. ' +
-      'Do NOT hardcode formatting values; always read them from superdoc_get_content blocks and replicate.',
+      'Do NOT issue multiple superdoc_format calls in parallel; each call invalidates refs for subsequent calls.',
     inputExamples: [
       { action: 'inline', ref: '<handle.ref>', inline: { bold: true } },
       {
@@ -229,14 +251,32 @@ export const INTENT_GROUP_META: Record<string, IntentGroupMeta> = {
     toolName: 'superdoc_list',
     description:
       'Create and manipulate bullet and numbered lists. ' +
-      'To create a list: first create all paragraphs at the SAME location using superdoc_create (chain each using the previous nodeId as the "at" target). ' +
-      'Then call action "create" with mode:"fromParagraphs", a preset ("disc" for bullet, "decimal" for numbered), and a range target: {from:{kind:"block", nodeType:"paragraph", nodeId:"<first>"}, to:{kind:"block", nodeType:"paragraph", nodeId:"<last>"}}. ' +
-      'The range converts ALL paragraphs between from and to into list items. Make sure no other content exists between them. ' +
-      'Action "set_type" converts between bullet and ordered (target any item in the list, kind:"ordered" or "bullet"). ' +
-      'Action "insert" adds a new item before/after a target list item. ' +
-      'Actions "indent" and "outdent" change nesting level; "set_level" jumps to a specific level (0-8). ' +
-      'Action "detach" converts a list item back to a plain paragraph. ' +
-      'Do NOT target paragraphs with indent/outdent/set_type; these actions require a listItem target.',
+      'Most actions require a list-item target: {kind:"block", nodeType:"listItem", nodeId:"<id>"}. ' +
+      'Exceptions: "create" and "attach" operate on paragraph targets (they turn paragraphs into list items). ' +
+      'Find nodeIds via superdoc_get_content({action:"blocks"}) — pick listItem blocks for most actions, paragraph blocks for create/attach.\n' +
+      '\n' +
+      'CREATE & CONVERT:\n' +
+      '• "create" — make a NEW list from paragraphs. Two modes: ' +
+      'mode:"empty" with at:{kind:"block", nodeType:"paragraph", nodeId} converts a single paragraph; ' +
+      'mode:"fromParagraphs" with target:{from:{...paragraph block address}, to:{...paragraph block address}} converts a range — ALL paragraphs between from and to become items, so make sure no other content sits between them. ' +
+      'Pass a preset ("disc"|"circle"|"square"|"dash" for bullets; "decimal"|"decimalParenthesis"|"lowerLetter"|"upperLetter"|"lowerRoman"|"upperRoman" for ordered) or a custom style. ' +
+      'Use "create" to start a fresh list — NOT to extend an existing one (use "attach" for that).\n' +
+      '• "attach" — add paragraphs to an EXISTING list, inheriting its numbering definition. Pass target:{paragraph block address} (or {from, to} range of paragraphs) + attachTo:{kind:"block", nodeType:"listItem", nodeId:"<any item in destination list>"} + optional level:0..8. Use this to extend a list or as the second half of a merge workflow (see "join" below).\n' +
+      '• "set_type" — convert an existing list between ordered and bullet. Pass target:{listItem} + kind:"ordered" or "bullet". Adjacent compatible sequences are merged automatically to preserve continuous numbering.\n' +
+      '• "detach" — convert a list item back to a plain paragraph. Pass target:{listItem}.\n' +
+      '\n' +
+      'ITEMS & NESTING:\n' +
+      '• "insert" — add a new list item adjacent to an existing item in the same list. Pass target:{listItem} + position:"before"|"after" + optional text. Use this (NOT superdoc_create) to add items to an existing list.\n' +
+      '• "indent" / "outdent" — bump the target item\'s nesting level by one (0-8 range). Pass target:{listItem}.\n' +
+      '• "set_level" — jump the target item to an explicit level. Pass target:{listItem} + level:0..8.\n' +
+      '\n' +
+      'NUMBERING (ordered lists):\n' +
+      '• "set_value" — restart numbering at the target. Pass target:{listItem} + value:<number> (e.g. value:1 to start over) or value:null to clear a previous override. Mid-sequence targets are atomically split off into their own sequence.\n' +
+      '• "continue_previous" — make the target\'s sequence continue numbering from the nearest compatible previous sequence (same abstract definition). Pass target:{listItem of the sequence you want to renumber}. Fails with NO_COMPATIBLE_PREVIOUS or INCOMPATIBLE_DEFINITIONS if no matching prior sequence exists.\n' +
+      '\n' +
+      'SEQUENCE SHAPE (merge / split):\n' +
+      '• "merge" — merge the target\'s sequence with an adjacent one into one continuous list. Pass target:{listItem} + direction:"withPrevious" or "withNext". Absorbed items adopt the absorbing sequence\'s numbering definition, and empty paragraphs between the two sequences are removed so numbering flows continuously.\n' +
+      '• "split" — split the target\'s sequence at the target item into two independent lists. The target and everything after become a new sequence that restarts numbering at 1. Pass target:{listItem}; add restartNumbering:false to keep the count continuing instead of restarting.',
     inputExamples: [
       {
         action: 'create',
@@ -255,6 +295,14 @@ export const INTENT_GROUP_META: Record<string, IntentGroupMeta> = {
         text: 'New list item',
       },
       { action: 'indent', target: { kind: 'block', nodeType: 'listItem', nodeId: '<itemId>' } },
+      {
+        action: 'merge',
+        target: { kind: 'block', nodeType: 'listItem', nodeId: '<itemId>' },
+        direction: 'withPrevious',
+      },
+      { action: 'split', target: { kind: 'block', nodeType: 'listItem', nodeId: '<itemId>' } },
+      { action: 'set_value', target: { kind: 'block', nodeType: 'listItem', nodeId: '<itemId>' }, value: 1 },
+      { action: 'continue_previous', target: { kind: 'block', nodeType: 'listItem', nodeId: '<itemId>' } },
     ],
   },
   comment: {
@@ -299,13 +347,18 @@ export const INTENT_GROUP_META: Record<string, IntentGroupMeta> = {
     toolName: 'superdoc_mutations',
     description:
       'All steps succeed or all fail; no partial application. ' +
-      'Execute multiple text edits atomically in a single batch. Use this INSTEAD OF multiple sequential superdoc_edit calls when you need 2+ text changes that should succeed or fail together. ' +
-      'Each step has an id (e.g. "s1"), an op (text.rewrite, text.insert, text.delete, format.apply, assert), a "where" clause for targeting ({by:"select", select:{...}, require:"first"|"exactlyOne"|"all"} or {by:"ref", ref:"..."}), and "args" with operation-specific parameters. ' +
-      'Action "preview" dry-runs the plan without modifying the document. Action "apply" executes it. ' +
-      'CRITICAL: split mutations by phase. Text mutations (text.rewrite, text.insert, text.delete) go in one call. Formatting (format.apply) goes in a separate call with fresh refs from a new superdoc_search. ' +
-      'Do NOT create two steps that target overlapping text in the same block; combine them into a single text.rewrite step. Overlapping steps fail with PLAN_CONFLICT_OVERLAP. ' +
-      'Do NOT use this for single edits; use superdoc_edit instead. ' +
-      'Do NOT mix text mutations and formatting in the same call.',
+      'Execute multiple operations atomically in one batch. Use this for any workflow needing 2+ changes. ' +
+      'Supported step types: text (text.rewrite, text.insert, text.delete), format (format.apply), create (create.heading, create.paragraph, create.table), assert. ' +
+      'Each step has an id, an op, a "where" clause for targeting ({by:"select", select:{...}, require:"first"|"exactlyOne"|"all"} or {by:"ref", ref:"..."} or {by:"block", nodeType:"paragraph", nodeId:"..."}), and "args" with operation-specific parameters. ' +
+      'Use {by:"block", nodeType, nodeId} when you want to rewrite, delete, format, or anchor against a whole known block from superdoc_get_content action "blocks" without relying on text matching. ' +
+      'For full-paragraph or full-clause rewrites, first call superdoc_get_content with action:"blocks" and includeText:true, then rewrite the matching block by nodeId. ' +
+      'Use {by:"select"} only for substring edits, discovery, or insertion relative to a sentence fragment; do NOT use a shortened text selector to replace an entire known block. ' +
+      'For create steps, "where" targets an existing anchor block and args.position ("before" or "after") controls placement. Sequential creates targeting the same anchor maintain correct order via internal position mapping. ' +
+      'For format.apply with require "all", use a node selector to format every heading or paragraph at once: {by:"select", select:{type:"node", nodeType:"heading"}, require:"all"}. ' +
+      'Selectors resolve at compile time (before execution). This means format.apply steps CANNOT target content created by earlier create steps in the same batch. Split creates and formatting into separate batches: first a mutations call with creates, then a mutations call with format.apply. ' +
+      'Action "preview" dry-runs the plan. Action "apply" executes it. ' +
+      'If a selector matches nothing, the failure reports the step id plus selector details so you can retry with a shorter or more distinctive anchor. ' +
+      'Do NOT create two steps that target overlapping text in the same block; combine them into a single text.rewrite step.',
     inputExamples: [
       {
         action: 'apply',
@@ -323,6 +376,29 @@ export const INTENT_GROUP_META: Record<string, IntentGroupMeta> = {
             op: 'text.delete',
             where: { by: 'select', select: { type: 'text', pattern: ' (deprecated)' }, require: 'all' },
             args: {},
+          },
+        ],
+      },
+      {
+        action: 'apply',
+        steps: [
+          {
+            id: 'r1',
+            op: 'text.rewrite',
+            where: { by: 'block', nodeType: 'paragraph', nodeId: '<nodeId>' },
+            args: { replacement: { text: 'Updated clause text.' } },
+          },
+          {
+            id: 'f1',
+            op: 'format.apply',
+            where: { by: 'select', select: { type: 'node', nodeType: 'heading' }, require: 'all' },
+            args: { inline: { color: '#FF0000' } },
+          },
+          {
+            id: 'f2',
+            op: 'format.apply',
+            where: { by: 'select', select: { type: 'text', pattern: 'Confidential Information' }, require: 'all' },
+            args: { inline: { bold: true } },
           },
         ],
       },
@@ -648,6 +724,19 @@ export const OPERATION_DEFINITIONS = {
     intentGroup: 'get_content',
     intentAction: 'info',
   },
+  extract: {
+    memberPath: 'extract',
+    description:
+      'Extract all document content with stable IDs for RAG pipelines. Returns blocks with full text, comments, and tracked changes — each with an ID compatible with scrollToElement().',
+    expectedResult:
+      'Returns an ExtractResult with blocks (nodeId, type, text, headingLevel), comments (entityId, text, anchoredText, blockId, status, author), tracked changes (entityId, type, excerpt, author, date), and revision.',
+    requiresDocumentContext: true,
+    metadata: readOperation(),
+    referenceDocPath: 'extract.mdx',
+    referenceGroup: 'core',
+    intentGroup: 'get_content',
+    intentAction: 'extract',
+  },
 
   clearContent: {
     memberPath: 'clearContent',
@@ -781,9 +870,9 @@ export const OPERATION_DEFINITIONS = {
   'blocks.list': {
     memberPath: 'blocks.list',
     description:
-      'List top-level blocks in document order with IDs, types, and text previews. Supports pagination via offset/limit and optional nodeType filtering.',
+      'List top-level blocks in document order with IDs, types, text previews, and optional full text when includeText:true. Supports pagination via offset/limit and optional nodeType filtering.',
     expectedResult:
-      'Returns a BlocksListResult with total block count, an ordered array of block entries (ordinal, nodeId, nodeType, textPreview, isEmpty), and the current document revision.',
+      'Returns a BlocksListResult with total block count, an ordered array of block entries (ordinal, nodeId, nodeType, textPreview, optional text, isEmpty), and the current document revision.',
     requiresDocumentContext: true,
     metadata: readOperation({
       throws: ['INVALID_INPUT'],
@@ -1632,6 +1721,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'lists/attach.mdx',
     referenceGroup: 'lists',
+    intentGroup: 'list',
+    intentAction: 'attach',
   },
   'lists.detach': {
     memberPath: 'lists.detach',
@@ -1732,6 +1823,42 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'lists/separate.mdx',
     referenceGroup: 'lists',
   },
+  'lists.merge': {
+    memberPath: 'lists.merge',
+    description:
+      'Compound: merge two adjacent list sequences into one. Reassigns numId on the absorbed sequence (no strict abstractNumId check — absorbed items adopt the absorbing definition) and deletes empty paragraphs between the two sequences. Use this instead of lists.join for the user-facing "merge these lists" intent.',
+    expectedResult: 'Returns a ListsMergeResult with the merged listId, absorbedCount, and removedEmptyBlocks count.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['INVALID_TARGET', 'NO_ADJACENT_SEQUENCE', 'NO_OP'],
+      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET'],
+    }),
+    referenceDocPath: 'lists/merge.mdx',
+    referenceGroup: 'lists',
+    intentGroup: 'list',
+    intentAction: 'merge',
+  },
+  'lists.split': {
+    memberPath: 'lists.split',
+    description:
+      'Compound: split a list sequence at the target item into two independent sequences. Runs lists.separate then (by default) lists.setValue(1) so the new half starts numbering fresh at 1. Pass restartNumbering:false for raw separate semantics (new half continues the previous count).',
+    expectedResult: 'Returns a ListsSplitResult with the new listId, numId, and the restart value applied (or null).',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['INVALID_TARGET', 'NO_OP'],
+      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET'],
+    }),
+    referenceDocPath: 'lists/split.mdx',
+    referenceGroup: 'lists',
+    intentGroup: 'list',
+    intentAction: 'split',
+  },
   'lists.setLevel': {
     memberPath: 'lists.setLevel',
     description: 'Set the absolute nesting level (0..8) of a list item.',
@@ -1764,6 +1891,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'lists/set-value.mdx',
     referenceGroup: 'lists',
+    intentGroup: 'list',
+    intentAction: 'set_value',
   },
   'lists.continuePrevious': {
     memberPath: 'lists.continuePrevious',
@@ -1779,6 +1908,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'lists/continue-previous.mdx',
     referenceGroup: 'lists',
+    intentGroup: 'list',
+    intentAction: 'continue_previous',
   },
   'lists.canContinuePrevious': {
     memberPath: 'lists.canContinuePrevious',
@@ -2290,6 +2421,22 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'ranges/resolve.mdx',
     referenceGroup: 'ranges',
+  },
+
+  'selection.current': {
+    memberPath: 'selection.current',
+    description:
+      "Read the editor's current selection as a portable SelectionInfo with a text-anchored TextTarget. Primitive for building custom comments UIs, floating toolbars, and other selection-driven components without reaching into ProseMirror internals.",
+    expectedResult:
+      'Returns a SelectionInfo with `empty`, `target` (TextTarget or null), `activeMarks`, and optionally `text` when `includeText: true`.',
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      idempotency: 'idempotent',
+      throws: ['INVALID_INPUT', 'INVALID_CONTEXT'],
+      deterministicTargetResolution: true,
+    }),
+    referenceDocPath: 'selection/current.mdx',
+    referenceGroup: 'selection',
   },
 
   'mutations.preview': {
@@ -3255,7 +3402,7 @@ export const OPERATION_DEFINITIONS = {
 
   'history.get': {
     memberPath: 'history.get',
-    description: 'Query the current undo/redo history state of the active editor.',
+    description: 'Query the current undo/redo history state of the document.',
     expectedResult:
       'Returns a HistoryState object with undoDepth, redoDepth, canUndo, canRedo, and a list of history-unsafe operations.',
     requiresDocumentContext: true,
@@ -3268,7 +3415,7 @@ export const OPERATION_DEFINITIONS = {
 
   'history.undo': {
     memberPath: 'history.undo',
-    description: 'Undo the most recent history-safe mutation in the active editor.',
+    description: 'Undo the most recent history-safe mutation in the document.',
     expectedResult:
       'Returns a HistoryActionResult with noop flag, reason (EMPTY_UNDO_STACK | NO_EFFECT when noop), and revision before/after.',
     requiresDocumentContext: true,
@@ -3288,7 +3435,7 @@ export const OPERATION_DEFINITIONS = {
 
   'history.redo': {
     memberPath: 'history.redo',
-    description: 'Redo the most recently undone action in the active editor.',
+    description: 'Redo the most recently undone action in the document.',
     expectedResult:
       'Returns a HistoryActionResult with noop flag, reason (EMPTY_REDO_STACK | NO_EFFECT when noop), and revision before/after.',
     requiresDocumentContext: true,

@@ -67,7 +67,60 @@ const FIELD_TYPE_STYLES: Record<string, { background: string; color: string }> =
 
 const DEFAULT_FIELD_TYPE_STYLE = { background: '#f3f4f6', color: '#6b7280' };
 
-export const getFieldTypeStyle = (fieldType: string) => FIELD_TYPE_STYLES[fieldType] ?? DEFAULT_FIELD_TYPE_STYLE;
+/**
+ * Derive a light background + dark text from a single color.
+ * Falls back to the hardcoded map when no fieldColors are provided.
+ */
+export const getFieldTypeStyle = (fieldType: string, fieldColors?: Record<string, string>) => {
+  if (fieldColors?.[fieldType]) {
+    const color = fieldColors[fieldType];
+    return { background: `color-mix(in srgb, ${color} 10%, transparent)`, color };
+  }
+  return FIELD_TYPE_STYLES[fieldType] ?? DEFAULT_FIELD_TYPE_STYLE;
+};
+
+const SDT_INLINE = '.superdoc-structured-content-inline';
+const SDT_BLOCK = '.superdoc-structured-content-block';
+const INLINE_LABEL = '.superdoc-structured-content-inline__label';
+const BLOCK_LABEL = '.superdoc-structured-content__label';
+
+function buildColorRules(scope: string, selector: string, color: string): string {
+  return `
+${scope} ${SDT_INLINE}${selector},
+${scope} ${SDT_BLOCK}${selector} {
+  border-color: ${color};
+}
+${scope} ${SDT_INLINE}${selector}:hover,
+${scope} ${SDT_BLOCK}${selector}:hover {
+  border-color: ${color};
+}
+${scope} ${SDT_INLINE}${selector} ${INLINE_LABEL},
+${scope} ${SDT_BLOCK}${selector} ${BLOCK_LABEL} {
+  border-color: ${color};
+  background-color: color-mix(in srgb, ${color} 87%, transparent);
+}`;
+}
+
+/** Generate scoped CSS rules for field type colors. */
+export function generateFieldColorCSS(fieldColors: Record<string, string>, scopeSelector: string): string {
+  const entries = Object.entries(fieldColors);
+  if (entries.length === 0) return '';
+
+  const rules: string[] = [];
+
+  // Default color applied to all fields (only if owner is defined)
+  if (fieldColors.owner) {
+    rules.push(buildColorRules(scopeSelector, '', fieldColors.owner));
+  }
+
+  // Per-type overrides
+  for (const [type, color] of entries) {
+    const tagSel = `[data-sdt-tag*='"fieldType":"${type}"']`;
+    rules.push(buildColorRules(scopeSelector, tagSel, color));
+  }
+
+  return rules.join('\n');
+}
 
 export const MENU_VIEWPORT_PADDING = 10;
 export const MENU_APPROX_WIDTH = 250;

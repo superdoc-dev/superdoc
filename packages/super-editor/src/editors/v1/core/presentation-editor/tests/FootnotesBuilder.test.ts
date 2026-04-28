@@ -3,6 +3,7 @@ import type { EditorState } from 'prosemirror-state';
 import { buildFootnotesInput, type ConverterLike } from '../layout/FootnotesBuilder.js';
 import type { ConverterContext } from '@superdoc/pm-adapter';
 import { SUBSCRIPT_SUPERSCRIPT_SCALE } from '@superdoc/pm-adapter/constants.js';
+import { toFlowBlocks } from '@superdoc/pm-adapter';
 
 // Mock toFlowBlocks
 vi.mock('@superdoc/pm-adapter', async (importOriginal) => {
@@ -147,6 +148,44 @@ describe('buildFootnotesInput', () => {
       expect(result?.dividerHeight).toBe(1);
     });
 
+    it('stamps converted footnote blocks with the footnote story key', () => {
+      const editorState = createMockEditorState([{ id: '1', pos: 10 }]);
+      const converter = createMockConverter([
+        { id: '1', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Note' }] }] },
+      ]);
+
+      buildFootnotesInput(editorState, converter, undefined, undefined);
+
+      const [, options] =
+        (toFlowBlocks as unknown as { mock: { calls: Array<[unknown, Record<string, unknown>]> } }).mock.calls.at(-1) ??
+        [];
+      expect(options?.storyKey).toBe('fn:1');
+    });
+
+    it('prefers the active note render override over stale converter content', () => {
+      const editorState = createMockEditorState([{ id: '1', pos: 10 }]);
+      const converter = createMockConverter([
+        {
+          id: '1',
+          content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Stale note' }] }],
+        },
+      ]);
+
+      buildFootnotesInput(editorState, converter, undefined, undefined, {
+        noteId: '1',
+        docJson: {
+          type: 'doc',
+          content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Live note' }] }],
+        },
+      });
+
+      const docArg = (toFlowBlocks as unknown as { mock: { calls: Array<[any]> } }).mock.calls.at(-1)?.[0];
+      expect(docArg).toEqual({
+        type: 'doc',
+        content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Live note' }] }],
+      });
+    });
+
     it('only includes footnotes that are referenced in the document', () => {
       const editorState = createMockEditorState([{ id: '1', pos: 10 }]); // Only ref 1 in doc
       const converter = createMockConverter([
@@ -182,6 +221,112 @@ describe('buildFootnotesInput', () => {
         ?.runs?.[0];
       expect(firstRun?.text).toBe('1');
       expect(firstRun?.dataAttrs?.['data-sd-footnote-number']).toBe('true');
+      expect(firstRun).not.toHaveProperty('pmStart');
+      expect(firstRun).not.toHaveProperty('pmEnd');
+    });
+
+    it('normalizes away empty note reference runs before layout conversion', () => {
+      const editorState = createMockEditorState([{ id: '1', pos: 10 }]);
+      const converter = createMockConverter([
+        {
+          id: '1',
+          content: [
+            {
+              type: 'paragraph',
+              content: [
+                { type: 'run', content: [], attrs: { runProperties: { styleId: 'FootnoteReference' } } },
+                {
+                  type: 'run',
+                  content: [{ type: 'text', text: 'Note' }],
+                },
+              ],
+            },
+          ],
+        },
+      ]);
+
+      buildFootnotesInput(editorState, converter, undefined, undefined);
+
+      const docArg = (toFlowBlocks as unknown as { mock: { calls: Array<[any]> } }).mock.calls.at(-1)?.[0];
+      expect(docArg?.content?.[0]?.content).toEqual([
+        {
+          type: 'run',
+          content: [{ type: 'text', text: 'Note' }],
+        },
+      ]);
+    });
+
+    it('normalizes away note separator tabs before layout conversion', () => {
+      const editorState = createMockEditorState([{ id: '1', pos: 10 }]);
+      const converter = createMockConverter([
+        {
+          id: '1',
+          content: [
+            {
+              type: 'paragraph',
+              content: [
+                { type: 'run', content: [], attrs: { runProperties: { styleId: 'FootnoteReference' } } },
+                {
+                  type: 'run',
+                  content: [{ type: 'tab' }, { type: 'text', text: 'Note' }],
+                },
+              ],
+            },
+          ],
+        },
+      ]);
+
+      buildFootnotesInput(editorState, converter, undefined, undefined);
+
+      const docArg = (toFlowBlocks as unknown as { mock: { calls: Array<[any]> } }).mock.calls.at(-1)?.[0];
+      expect(docArg?.content?.[0]?.content).toEqual([
+        {
+          type: 'run',
+          content: [{ type: 'text', text: 'Note' }],
+        },
+      ]);
+    });
+
+    it('normalizes away hidden passthrough field-code nodes before layout conversion', () => {
+      const editorState = createMockEditorState([{ id: '1', pos: 10 }]);
+      const converter = createMockConverter([
+        {
+          id: '1',
+          content: [
+            {
+              type: 'paragraph',
+              content: [
+                {
+                  type: 'run',
+                  content: [{ type: 'text', text: 'Section ' }],
+                },
+                {
+                  type: 'run',
+                  content: [{ type: 'passthroughInline', attrs: { originalName: 'w:fldChar' } }],
+                },
+                {
+                  type: 'run',
+                  content: [{ type: 'text', text: '1.2(b)' }],
+                },
+              ],
+            },
+          ],
+        },
+      ]);
+
+      buildFootnotesInput(editorState, converter, undefined, undefined);
+
+      const docArg = (toFlowBlocks as unknown as { mock: { calls: Array<[any]> } }).mock.calls.at(-1)?.[0];
+      expect(docArg?.content?.[0]?.content).toEqual([
+        {
+          type: 'run',
+          content: [{ type: 'text', text: 'Section ' }],
+        },
+        {
+          type: 'run',
+          content: [{ type: 'text', text: '1.2(b)' }],
+        },
+      ]);
     });
 
     it('builds the marker as a scaled superscript run instead of a Unicode superscript glyph', () => {

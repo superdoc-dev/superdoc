@@ -84,6 +84,8 @@ import { syncPackageMetadata } from './opc/sync-package-metadata.js';
 import { readSettingsRoot, parseProtectionState } from '../document-api-adapters/document-settings.js';
 import { applyEffectiveEditability, getProtectionStorage } from '../extensions/protection/editability.js';
 import { getViewModeSelectionWithoutStructuredContent } from './helpers/getViewModeSelectionWithoutStructuredContent.js';
+import { resolveMainBodyEditor } from '../document-api-adapters/helpers/word-statistics.js';
+import { commitLiveStorySessionRuntimes } from '../document-api-adapters/story-runtime/live-story-session-runtime-registry.js';
 
 declare const __APP_VERSION__: string | undefined;
 declare const version: string | undefined;
@@ -213,7 +215,7 @@ export interface SaveOptions {
   commentsType?: string;
 
   /** Comments to include in export */
-  comments?: Array<{ id: string; [key: string]: unknown }>;
+  comments?: Comment[];
 
   /** Highlight color for fields */
   fieldsHighlightColor?: string | null;
@@ -424,6 +426,9 @@ export class Editor extends EventEmitter<EditorEventMap> {
     onCommentsLoaded: () => null,
     onCommentClicked: () => null,
     onCommentLocationsUpdate: () => null,
+    onPointerDown: () => null,
+    onPointerUp: () => null,
+    onRightClick: () => null,
     onDocumentLocked: () => null,
     onFirstRender: () => null,
     onCollaborationReady: () => null,
@@ -600,7 +605,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
     }
 
     // Skip for sub-editors that are not primary document editors
-    if (this.options.mode === 'text' || this.options.isHeaderOrFooter) {
+    if (this.options.mode === 'text' || this.options.isHeaderOrFooter || this.options.isChildEditor) {
       return;
     }
 
@@ -761,6 +766,9 @@ export class Editor extends EventEmitter<EditorEventMap> {
     this.on('list-definitions-change', this.options.onListDefinitionsChange!);
     this.on('fonts-resolved', this.options.onFontsResolved!);
     this.on('exception', this.options.onException!);
+    this.on('pointerDown', this.options.onPointerDown!);
+    this.on('pointerUp', this.options.onPointerUp!);
+    this.on('rightClick', this.options.onRightClick!);
   }
 
   /**
@@ -1159,6 +1167,9 @@ export class Editor extends EventEmitter<EditorEventMap> {
     this.on('list-definitions-change', this.options.onListDefinitionsChange!);
     this.on('fonts-resolved', this.options.onFontsResolved!);
     this.on('exception', this.options.onException!);
+    this.on('pointerDown', this.options.onPointerDown!);
+    this.on('pointerUp', this.options.onPointerUp!);
+    this.on('rightClick', this.options.onRightClick!);
 
     if (!shouldMountRenderer) {
       this.#emitCreateAsync();
@@ -1235,6 +1246,9 @@ export class Editor extends EventEmitter<EditorEventMap> {
     this.on('commentClick', this.options.onCommentClicked!);
     this.on('locked', this.options.onDocumentLocked!);
     this.on('list-definitions-change', this.options.onListDefinitionsChange!);
+    this.on('pointerDown', this.options.onPointerDown!);
+    this.on('pointerUp', this.options.onPointerUp!);
+    this.on('rightClick', this.options.onRightClick!);
 
     if (!shouldMountRenderer) {
       this.#emitCreateAsync();
@@ -1864,10 +1878,27 @@ export class Editor extends EventEmitter<EditorEventMap> {
    * Set editor options and update state.
    */
   setOptions(options: Partial<EditorOptions> = {}): void {
-    this.options = {
-      ...this.options,
+    const previousOptions = this.options ?? {};
+    const nextOptions = {
+      ...previousOptions,
       ...options,
     };
+
+    // Preserve non-enumerable option metadata (for example the story editor's
+    // `parentEditor` getter) across option updates. Plain object spreading drops
+    // those descriptors, which breaks commit routing for child/story editors.
+    const previousDescriptors = Object.getOwnPropertyDescriptors(previousOptions);
+    for (const [key, descriptor] of Object.entries(previousDescriptors)) {
+      if (descriptor.enumerable) {
+        continue;
+      }
+      if (Object.prototype.hasOwnProperty.call(options, key)) {
+        continue;
+      }
+      Object.defineProperty(nextOptions, key, descriptor);
+    }
+
+    this.options = nextOptions;
 
     if ((this.options.isNewFile || !this.options.ydoc) && this.options.isCommentsEnabled) {
       this.options.shouldLoadComments = true;
@@ -1909,7 +1940,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
       }
     }
 
-    if (emitUpdate) {
+    if (emitUpdate && this.state) {
       this.emit('update', { editor: this, transaction: this.state.tr });
     }
   }
@@ -2093,6 +2124,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
         mockWindow: this.options.mockWindow ?? null,
         mockDocument: this.options.mockDocument ?? null,
         isNewFile: this.options.isNewFile ?? false,
+        trackedChangesOptions: this.options.trackedChanges ?? null,
       });
     }
   }
@@ -2235,7 +2267,22 @@ export class Editor extends EventEmitter<EditorEventMap> {
    *   - [3] fonts - Object containing font files from the DOCX
    */
   static async loadXmlData(
-    fileSource: File | Blob | Buffer,
+    fileSource: File | Blob | Buffer | ArrayBuffer,
+    isNode?: boolean,
+    options?: { password?: string },
+  ): Promise<
+    [DocxFileEntry[], Record<string, unknown>, Record<string, unknown>, Record<string, unknown>, Uint8Array | null]
+  >;
+  static async loadXmlData(
+    fileSource: File | Blob | Buffer | ArrayBuffer | null | undefined,
+    isNode?: boolean,
+    options?: { password?: string },
+  ): Promise<
+    | [DocxFileEntry[], Record<string, unknown>, Record<string, unknown>, Record<string, unknown>, Uint8Array | null]
+    | undefined
+  >;
+  static async loadXmlData(
+    fileSource: File | Blob | Buffer | ArrayBuffer | null | undefined,
     isNode: boolean = false,
     options?: { password?: string },
   ): Promise<
@@ -2672,6 +2719,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
             tr: transactionToApply,
             state: prevState,
             user: this.options.user!,
+            replacements: this.options.trackedChanges?.replacements === 'independent' ? 'independent' : 'paired',
           })
         : transactionToApply;
 
@@ -3092,12 +3140,18 @@ export class Editor extends EventEmitter<EditorEventMap> {
    * - `exportXmlOnly: true` → `string` (raw XML)
    * - `exportJsonOnly: true` → `string` (JSON string)
    * - `getUpdatedDocs: true` → `Record<string, string | null>` (file map)
-   * - Default → `Blob` (browser) or `Buffer` (Node.js headless)
+   * - Default → `Blob` (browser) or `Buffer` (Node.js headless). The runtime
+   *   value is determined by the editor's `isHeadless` option at construction
+   *   time, which the type system cannot see — so the default overload is
+   *   generic with `Blob` as the default. Browser consumers get `Blob`
+   *   automatically; Node headless consumers opt in with `exportDocx<Buffer>()`.
    */
   async exportDocx(params: ExportDocxParams & { exportXmlOnly: true }): Promise<string>;
   async exportDocx(params: ExportDocxParams & { exportJsonOnly: true }): Promise<string>;
   async exportDocx(params: ExportDocxParams & { getUpdatedDocs: true }): Promise<Record<string, string | null>>;
-  async exportDocx(params?: ExportDocxParams): Promise<Blob | Buffer>;
+  async exportDocx<T extends Blob | Buffer = Blob>(
+    params?: ExportDocxParams & { exportXmlOnly?: false; exportJsonOnly?: false; getUpdatedDocs?: false },
+  ): Promise<T>;
   async exportDocx({
     isFinalDoc = false,
     commentsType = 'external',
@@ -3109,6 +3163,9 @@ export class Editor extends EventEmitter<EditorEventMap> {
     compression,
   }: ExportDocxParams = {}): Promise<Blob | Buffer | Record<string, string | null> | string | undefined> {
     try {
+      const exportHostEditor = resolveMainBodyEditor(this);
+      commitLiveStorySessionRuntimes(exportHostEditor);
+
       // Use provided comments, or fall back to imported comments from converter
       const effectiveComments = comments ?? this.converter.comments ?? [];
 
@@ -3156,6 +3213,17 @@ export class Editor extends EventEmitter<EditorEventMap> {
       const footnotesRelsXml = footnotesRelsData?.elements?.[0]
         ? this.converter.schemaToXml(footnotesRelsData.elements[0])
         : null;
+      const endnotesData = this.converter.convertedXml['word/endnotes.xml'];
+      const endnotesXml = endnotesData?.elements?.[0] ? this.converter.schemaToXml(endnotesData.elements[0]) : null;
+      const endnotesRelsData = this.converter.convertedXml['word/_rels/endnotes.xml.rels'];
+      const endnotesRelsXml = endnotesRelsData?.elements?.[0]
+        ? this.converter.schemaToXml(endnotesRelsData.elements[0])
+        : null;
+
+      const settingsRelsData = this.converter.convertedXml['word/_rels/settings.xml.rels'];
+      const settingsRelsXml = settingsRelsData?.elements?.[0]
+        ? this.converter.schemaToXml(settingsRelsData.elements[0])
+        : null;
 
       const media = this.converter.addedMedia;
 
@@ -3191,7 +3259,15 @@ export class Editor extends EventEmitter<EditorEventMap> {
       };
 
       if (hasCustomSettings) {
-        updatedDocs['word/settings.xml'] = String(customSettings);
+        let settingsXml = String(customSettings);
+        if (settingsRelsXml) {
+          updatedDocs['word/_rels/settings.xml.rels'] = String(settingsRelsXml);
+        } else if (/<\w+:attachedTemplate\b/i.test(settingsXml)) {
+          // settings.xml references r:id on attachedTemplate via word/_rels/settings.xml.rels.
+          // If that part is missing (e.g. collab joiner), omit the element so the package stays valid.
+          settingsXml = settingsXml.replace(/<\w+:attachedTemplate\b[^>]*\/?>/gi, '');
+        }
+        updatedDocs['word/settings.xml'] = settingsXml;
       }
 
       if (footnotesXml) {
@@ -3200,6 +3276,14 @@ export class Editor extends EventEmitter<EditorEventMap> {
 
       if (footnotesRelsXml) {
         updatedDocs['word/_rels/footnotes.xml.rels'] = String(footnotesRelsXml);
+      }
+
+      if (endnotesXml) {
+        updatedDocs['word/endnotes.xml'] = String(endnotesXml);
+      }
+
+      if (endnotesRelsXml) {
+        updatedDocs['word/_rels/endnotes.xml.rels'] = String(endnotesRelsXml);
       }
 
       // Serialize each comment file if it exists in convertedXml, otherwise mark as null
@@ -3221,6 +3305,16 @@ export class Editor extends EventEmitter<EditorEventMap> {
 
       for (const path of bibliographyPartPaths) {
         const partData = this.converter.convertedXml[path];
+        if (partData?.elements?.[0]) {
+          updatedDocs[path] = String(this.converter.schemaToXml(partData.elements[0]));
+        }
+      }
+
+      for (const path of Object.keys(this.converter.convertedXml)) {
+        if (!path.startsWith('customXml/')) continue;
+        if (!path.endsWith('.xml') && !path.endsWith('.rels')) continue;
+        if (Object.prototype.hasOwnProperty.call(updatedDocs, path)) continue;
+        const partData = this.converter.convertedXml[path] as { elements?: unknown[] } | undefined;
         if (partData?.elements?.[0]) {
           updatedDocs[path] = String(this.converter.schemaToXml(partData.elements[0]));
         }
@@ -3707,11 +3801,11 @@ export class Editor extends EventEmitter<EditorEventMap> {
   /**
    * Replace the current file
    */
-  async replaceFile(newFile: File | Blob | Buffer, options?: { password?: string }): Promise<void> {
+  async replaceFile(newFile: File | Blob | Buffer | ArrayBuffer, options?: { password?: string }): Promise<void> {
     this.setOptions({ annotations: true });
     const [docx, media, mediaFiles, fonts, decryptedData] = (await Editor.loadXmlData(newFile, false, options))!;
     this.setOptions({
-      fileSource: decryptedData ?? newFile,
+      fileSource: decryptedData ?? (newFile instanceof ArrayBuffer ? new Blob([newFile]) : newFile),
       content: docx,
       media,
       mediaFiles,

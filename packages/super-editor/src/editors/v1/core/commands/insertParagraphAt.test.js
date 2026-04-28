@@ -100,7 +100,7 @@ describe('insertParagraphAt', () => {
 
     insertParagraphAt({ pos: 0, text: 'Hello' })({ state, dispatch });
 
-    expect(state.schema.text).toHaveBeenCalledWith('Hello');
+    expect(state.schema.text).toHaveBeenCalledWith('Hello', undefined);
   });
 
   it('sets forceTrackChanges meta when tracked is true', () => {

@@ -8,8 +8,14 @@ import type {
   ExportEvent,
 } from '@superdoc-dev/template-builder';
 import 'superdoc/style.css';
-import '@superdoc-dev/template-builder/field-types.css';
 import './App.css';
+
+const cellBorders = {
+  top: { val: 'single', size: 1, color: '#000000', style: 'solid' },
+  right: { val: 'single', size: 1, color: '#000000', style: 'solid' },
+  bottom: { val: 'single', size: 1, color: '#000000', style: 'solid' },
+  left: { val: 'single', size: 1, color: '#000000', style: 'solid' },
+} as const;
 
 const availableFields: FieldDefinition[] = [
   { id: '1242142770', label: 'Agreement Date' },
@@ -21,6 +27,77 @@ const availableFields: FieldDefinition[] = [
   { id: '1242142776', label: 'Signature', mode: 'block' },
   { id: '1242142777', label: 'Signer Name', fieldType: 'signer' },
   { id: '1242142778', label: 'Signer Table', mode: 'block', fieldType: 'signer' },
+  {
+    id: '1242142779',
+    label: 'Sample Table',
+    mode: 'block',
+    fieldType: 'signer',
+    presetContent: {
+      html: '<table style="border-collapse: collapse; width: 100%;"><tr><th style="border: 1px solid #000;">Column A</th><th style="border: 1px solid #000;">Column B</th></tr><tr><td style="border: 1px solid #000;"></td><td style="border: 1px solid #000;"></td></tr></table>',
+    },
+  },
+  {
+    id: '1242142780',
+    label: 'Sample List',
+    mode: 'block',
+    fieldType: 'signer',
+    presetContent: {
+      html: '<ul><li>First item</li><li>Second item</li><li>Third item</li></ul>',
+    },
+  },
+  {
+    id: '1242142781',
+    label: 'Sample Table (JSON)',
+    mode: 'block',
+    fieldType: 'signer',
+    presetContent: {
+      json: {
+        type: 'table',
+        content: [
+          {
+            type: 'tableRow',
+            content: [
+              {
+                type: 'tableHeader',
+                attrs: { borders: cellBorders },
+                content: [
+                  {
+                    type: 'paragraph',
+                    content: [{ type: 'run', content: [{ type: 'text', text: 'Column A' }] }],
+                  },
+                ],
+              },
+              {
+                type: 'tableHeader',
+                attrs: { borders: cellBorders },
+                content: [
+                  {
+                    type: 'paragraph',
+                    content: [{ type: 'run', content: [{ type: 'text', text: 'Column B' }] }],
+                  },
+                ],
+              },
+            ],
+          },
+          {
+            type: 'tableRow',
+            content: [
+              {
+                type: 'tableCell',
+                attrs: { borders: cellBorders },
+                content: [{ type: 'paragraph' }],
+              },
+              {
+                type: 'tableCell',
+                attrs: { borders: cellBorders },
+                content: [{ type: 'paragraph' }],
+              },
+            ],
+          },
+        ],
+      },
+    },
+  },
 ];
 
 export function App() {
@@ -253,6 +330,10 @@ export function App() {
           fields={fieldsConfig}
           list={listConfig}
           toolbar={true}
+          fieldColors={{
+            owner: '#629be7',
+            signer: '#d97706',
+          }}
           telemetry={{
             enabled: true,
             metadata: {

@@ -6,7 +6,7 @@ import { homedir, hostname } from 'node:os';
 import { join, resolve } from 'node:path';
 import { ENV_VAR_NAME_PATTERN, type CollaborationProfile } from './collaboration';
 import { CliError } from './errors';
-import { asRecord, pathExists } from './guards';
+import { asRecord, isRecord, pathExists } from './guards';
 import { validateSessionId } from './session';
 import type { CliIO, ExecutionMode, UserIdentity } from './types';
 
@@ -174,6 +174,18 @@ function normalizeSharedFields(record: Record<string, unknown>): SharedProfileFi
   };
 }
 
+function normalizeWebSocketParams(value: unknown): Record<string, string> | null | undefined {
+  if (value == null) return undefined;
+  if (!isRecord(value)) return null;
+  const result: Record<string, string> = {};
+  for (const [key, val] of Object.entries(value)) {
+    if (typeof key !== 'string' || key.length === 0) return null;
+    if (typeof val !== 'string') return null;
+    result[key] = val;
+  }
+  return result;
+}
+
 function normalizeWebSocketProfile(record: Record<string, unknown>): CollaborationProfile | undefined {
   const { providerType, url, documentId, tokenEnv } = record;
   if (typeof url !== 'string' || url.length === 0) return undefined;
@@ -183,11 +195,15 @@ function normalizeWebSocketProfile(record: Record<string, unknown>): Collaborati
   const shared = normalizeSharedFields(record);
   if (!shared) return undefined;
 
+  const params = normalizeWebSocketParams(record.params);
+  if (params === null) return undefined;
+
   return {
     providerType: providerType as 'hocuspocus' | 'y-websocket',
     url,
     documentId,
     tokenEnv: typeof tokenEnv === 'string' ? tokenEnv : undefined,
+    params,
     ...shared,
   };
 }

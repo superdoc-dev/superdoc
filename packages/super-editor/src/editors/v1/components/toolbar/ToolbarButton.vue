@@ -291,21 +291,19 @@ const caretIcon = computed(() => {
   height: 10px;
 }
 
-@media (max-width: 1280px) {
-  .toolbar-item--doc-mode .button-label {
-    display: none;
-  }
+.toolbar-item--doc-mode-compact .button-label {
+  display: none;
+}
 
-  .toolbar-item--doc-mode .toolbar-icon {
-    margin-right: 5px;
-  }
+.toolbar-item--doc-mode-compact .toolbar-icon {
+  margin-right: 5px;
+}
 
-  .toolbar-item--linked-styles {
-    width: auto !important;
-  }
+.toolbar-item--linked-styles-compact {
+  width: auto !important;
+}
 
-  .toolbar-item--linked-styles .button-label {
-    display: none;
-  }
+.toolbar-item--linked-styles-compact .button-label {
+  display: none;
 }
 </style>

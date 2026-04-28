@@ -13,7 +13,12 @@ import type {
   ParagraphBlock,
   ParagraphMeasure,
 } from '@superdoc/contracts';
-import { computeLinePmRange as computeLinePmRangeUnified, effectiveTableCellSpacing } from '@superdoc/contracts';
+import {
+  adjustAvailableWidthForTextIndent,
+  computeLinePmRange as computeLinePmRangeUnified,
+  effectiveTableCellSpacing,
+  getFirstLineIndentOffset,
+} from '@superdoc/contracts';
 import { describeCellRenderBlocks, computeCellSliceContentHeight, getEmbeddedRowLines } from '@superdoc/layout-engine';
 import { measureCharacterX } from './text-measurement.js';
 import { clickToPositionDom, findPageElement } from './dom-mapping.js';
@@ -51,13 +56,25 @@ export {
 export type { HeaderFooterBatch, DigitBucket } from './layoutHeaderFooter';
 export { findWordBoundaries, findParagraphBoundaries } from './text-boundaries';
 export type { BoundaryRange } from './text-boundaries';
+export {
+  buildSectionAwareHeaderFooterLayoutKey,
+  buildSectionContentWidth,
+  buildEffectiveHeaderFooterRefsBySection,
+  collectReferencedHeaderFooterRIds,
+  buildSectionAwareHeaderFooterMeasurementGroups,
+} from './sectionAwareHeaderFooter';
+export type {
+  HeaderFooterSectionKind,
+  HeaderFooterRefs,
+  SectionAwareHeaderFooterMeasurementGroup,
+} from './sectionAwareHeaderFooter';
 export { incrementalLayout, measureCache, normalizeMargin } from './incrementalLayout';
 export type { HeaderFooterLayoutResult, IncrementalLayoutResult } from './incrementalLayout';
 // Re-export computeDisplayPageNumber from layout-engine for section-aware page numbering
 export { computeDisplayPageNumber } from '@superdoc/layout-engine';
 export type { DisplayPageInfo, HeaderFooterConstraints } from '@superdoc/layout-engine';
 export { remeasureParagraph } from './remeasure';
-export { measureCharacterX } from './text-measurement';
+export { measureCharacterX, sliceRunsForLine } from './text-measurement';
 export { clickToPositionDom, findPageElement } from './dom-mapping';
 export { isListItem, getWordLayoutConfig, calculateTextStartIndent, extractParagraphIndent } from './list-indent-utils';
 export type { TextIndentCalculationParams } from './list-indent-utils';
@@ -126,10 +143,6 @@ export type { FallbackReason, SafetyConfig } from './safety-net';
 // Focus Watchdog
 export { FocusWatchdog } from './focus-watchdog';
 export type { FocusWatchdogConfig } from './focus-watchdog';
-
-// Benchmarks
-export { TypingPerfBenchmark } from './benchmarks';
-export type { BenchmarkResult, BenchmarkScenario } from './benchmarks';
 
 // Paragraph Hash Utilities
 export {
@@ -571,6 +584,8 @@ export function selectionToRects(
           // (accounts for gaps in PM positions between runs)
           const charOffsetFrom = pmPosToCharOffset(block, line, sliceFrom);
           const charOffsetTo = pmPosToCharOffset(block, line, sliceTo);
+          const visualCharOffsetFrom = pmPosToVisualCharOffset(block, line, sliceFrom);
+          const visualCharOffsetTo = pmPosToVisualCharOffset(block, line, sliceTo);
           // Detect list items by checking for marker presence
           const markerWidth = fragment.markerWidth ?? measure.marker?.markerWidth ?? 0;
           const isListItemFlag = isListItem(markerWidth, block);
@@ -579,18 +594,35 @@ export function selectionToRects(
           const blockAlignment = block.attrs?.alignment;
           const isJustified = blockAlignment === 'justify';
           const alignmentOverride = isListItemFlag && !isJustified ? 'left' : undefined;
-          const startX = mapPmToX(block, line, charOffsetFrom, fragment.width, alignmentOverride);
-          const endX = mapPmToX(block, line, charOffsetTo, fragment.width, alignmentOverride);
+          const isFirstLine = index === fragment.fromLine && !fragment.continuesFromPrev;
+          const fragmentMarkerTextWidth = fragment.markerTextWidth ?? measure.marker?.markerTextWidth ?? undefined;
+          const startX = mapPmToX(
+            block,
+            line,
+            visualCharOffsetFrom,
+            fragment.width,
+            alignmentOverride,
+            isFirstLine,
+            fragmentMarkerTextWidth,
+          );
+          const endX = mapPmToX(
+            block,
+            line,
+            visualCharOffsetTo,
+            fragment.width,
+            alignmentOverride,
+            isFirstLine,
+            fragmentMarkerTextWidth,
+          );
 
           // Calculate text indent using shared utility
           const indent = extractParagraphIndent(block.attrs?.indent);
           const wordLayout = getWordLayoutConfig(block);
-          const isFirstLine = index === fragment.fromLine;
           const indentAdjust = calculateTextStartIndent({
             isFirstLine,
             isListItem: isListItemFlag,
             markerWidth,
-            markerTextWidth: fragment.markerTextWidth ?? measure.marker?.markerTextWidth ?? undefined,
+            markerTextWidth: fragmentMarkerTextWidth,
             paraIndentLeft: indent.left,
             firstLineIndent: indent.firstLine,
             hangingIndent: indent.hanging,
@@ -654,6 +686,8 @@ export function selectionToRects(
               sliceTo,
               charOffsetFrom,
               charOffsetTo,
+              visualCharOffsetFrom,
+              visualCharOffsetTo,
               startX,
               endX,
               rect: { x: rectX, y: rectY, width: rectWidth, height: line.lineHeight },
@@ -664,8 +698,15 @@ export function selectionToRects(
                 Math.max(charOffsetFrom, charOffsetTo),
               ),
               indent: (block.attrs as { indent?: unknown } | undefined)?.indent,
+              alignment: (block.attrs as { alignment?: unknown } | undefined)?.alignment,
               marker: measure.marker,
+              markerWidth,
+              isListItemFlag,
+              alignmentOverride,
               lineSegments: line.segments,
+              lineSpaceCount: (line as { spaceCount?: unknown }).spaceCount,
+              lineNaturalWidth: (line as { naturalWidth?: unknown }).naturalWidth,
+              lineMaxWidth: (line as { maxWidth?: unknown }).maxWidth,
             });
           }
         });
@@ -881,17 +922,36 @@ export function selectionToRects(
 
                 const charOffsetFrom = pmPosToCharOffset(info.block, line, sliceFrom);
                 const charOffsetTo = pmPosToCharOffset(info.block, line, sliceTo);
+                const visualCharOffsetFrom = pmPosToVisualCharOffset(info.block, line, sliceFrom);
+                const visualCharOffsetTo = pmPosToVisualCharOffset(info.block, line, sliceTo);
                 const availableWidth = Math.max(1, cellMeasure.width - padding.left - padding.right);
-                const startX = mapPmToX(info.block, line, charOffsetFrom, availableWidth, alignmentOverride);
-                const endX = mapPmToX(info.block, line, charOffsetTo, availableWidth, alignmentOverride);
+                const isFirstLine = index === 0;
+                const cellMarkerTextWidth = info.measure?.marker?.markerTextWidth ?? undefined;
+                const startX = mapPmToX(
+                  info.block,
+                  line,
+                  visualCharOffsetFrom,
+                  availableWidth,
+                  alignmentOverride,
+                  isFirstLine,
+                  cellMarkerTextWidth,
+                );
+                const endX = mapPmToX(
+                  info.block,
+                  line,
+                  visualCharOffsetTo,
+                  availableWidth,
+                  alignmentOverride,
+                  isFirstLine,
+                  cellMarkerTextWidth,
+                );
 
                 // Calculate text indent using shared utility
-                const isFirstLine = index === info.startLine;
                 const textIndentAdjust = calculateTextStartIndent({
                   isFirstLine,
                   isListItem: cellIsListItem,
                   markerWidth: paragraphMarkerWidth,
-                  markerTextWidth: info.measure?.marker?.markerTextWidth ?? undefined,
+                  markerTextWidth: cellMarkerTextWidth,
                   paraIndentLeft: cellIndent.left,
                   firstLineIndent: cellIndent.firstLine,
                   hangingIndent: cellIndent.hanging,
@@ -1286,6 +1346,83 @@ export function pmPosToCharOffset(block: FlowBlock, line: Line, pmPos: number): 
   return charOffset;
 }
 
+/**
+ * Convert a ProseMirror position to a rendered character offset within a line.
+ *
+ * Unlike {@link pmPosToCharOffset}, this helper includes visual-only text runs
+ * that do not carry PM positions. That matters for selection highlighting when
+ * a line starts with rendered chrome such as a synthetic footnote number:
+ * the marker consumes horizontal space in the painter, but it is not part of
+ * the editable PM story. Using a PM-only offset would place the highlight too
+ * far left by the marker's width.
+ *
+ * The returned offset is intended for visual X mapping, not for slicing PM text.
+ */
+export function pmPosToVisualCharOffset(block: FlowBlock, line: Line, pmPos: number): number {
+  if (block.kind !== 'paragraph') return 0;
+
+  let visualOffset = 0;
+
+  for (let runIndex = line.fromRun; runIndex <= line.toRun; runIndex += 1) {
+    const run = block.runs[runIndex];
+    if (!run) continue;
+
+    const text =
+      'src' in run ||
+      run.kind === 'lineBreak' ||
+      run.kind === 'break' ||
+      run.kind === 'fieldAnnotation' ||
+      run.kind === 'math'
+        ? ''
+        : (run.text ?? '');
+    const runTextLength = text.length;
+    if (runTextLength === 0) {
+      continue;
+    }
+
+    const isFirstRun = runIndex === line.fromRun;
+    const isLastRun = runIndex === line.toRun;
+    const lineStartChar = isFirstRun ? line.fromChar : 0;
+    const lineEndChar = isLastRun ? line.toChar : runTextLength;
+    const runSliceCharCount = lineEndChar - lineStartChar;
+    if (runSliceCharCount <= 0) {
+      continue;
+    }
+
+    const runPmStart = run.pmStart ?? null;
+    const runPmEnd = run.pmEnd ?? (runPmStart != null ? runPmStart + runTextLength : null);
+
+    if (runPmStart == null || runPmEnd == null) {
+      visualOffset += runSliceCharCount;
+      continue;
+    }
+
+    const runPmRange = runPmEnd - runPmStart;
+    const runSlicePmStart = runPmStart + (lineStartChar / runTextLength) * runPmRange;
+    const runSlicePmEnd = runPmStart + (lineEndChar / runTextLength) * runPmRange;
+
+    if (pmPos >= runSlicePmStart && pmPos <= runSlicePmEnd) {
+      const runSlicePmRange = runSlicePmEnd - runSlicePmStart;
+      if (runSlicePmRange <= 0) {
+        return visualOffset;
+      }
+
+      const pmOffsetInSlice = pmPos - runSlicePmStart;
+      const visualOffsetInSlice = Math.round((pmOffsetInSlice / runSlicePmRange) * runSliceCharCount);
+      return visualOffset + Math.min(visualOffsetInSlice, runSliceCharCount);
+    }
+
+    if (pmPos > runSlicePmEnd) {
+      visualOffset += runSliceCharCount;
+      continue;
+    }
+
+    return visualOffset;
+  }
+
+  return visualOffset;
+}
+
 // determineColumn, findLineIndexAtY are now in position-hit.ts and re-exported above.
 
 const lineHeightBeforeIndex = (measure: Measure, absoluteLineIndex: number): number => {
@@ -1331,6 +1468,16 @@ const mapPmToX = (
   offset: number,
   fragmentWidth: number,
   alignmentOverride?: string,
+  isFirstLine?: boolean,
+  /**
+   * Measured marker text width for the hit fragment (or cell measure).
+   * Mirrors the painter's `fragment.markerTextWidth` check at
+   * `renderer.ts:3210-3211` — a list paragraph whose marker metadata exists
+   * but renders to zero width (empty/vanished marker, continuation fragment)
+   * must still receive the first-line width adjustment, so we gate on
+   * measured width, not on raw `marker.markerText` attribute.
+   */
+  markerTextWidth?: number,
 ): number => {
   if (fragmentWidth <= 0 || line.width <= 0) return 0;
 
@@ -1338,14 +1485,16 @@ const mapPmToX = (
   let paraIndentLeft = 0;
   let paraIndentRight = 0;
   let effectiveLeft = 0;
+  let isListParagraph = false;
+  let wl: ReturnType<typeof getWordLayoutConfig> | undefined;
   if (block.kind === 'paragraph') {
     const indentLeft = typeof block.attrs?.indent?.left === 'number' ? block.attrs.indent.left : 0;
     const indentRight = typeof block.attrs?.indent?.right === 'number' ? block.attrs.indent.right : 0;
     paraIndentLeft = Number.isFinite(indentLeft) ? indentLeft : 0;
     paraIndentRight = Number.isFinite(indentRight) ? indentRight : 0;
     effectiveLeft = paraIndentLeft;
-    const wl = getWordLayoutConfig(block);
-    const isListParagraph = Boolean(block.attrs?.numberingProperties) || Boolean(wl?.marker);
+    wl = getWordLayoutConfig(block);
+    isListParagraph = Boolean(block.attrs?.numberingProperties) || Boolean(wl?.marker);
     if (isListParagraph) {
       const explicitTextStart =
         typeof wl?.marker?.textStartX === 'number' && Number.isFinite(wl.marker.textStartX)
@@ -1360,7 +1509,7 @@ const mapPmToX = (
   }
 
   const totalIndent = effectiveLeft + paraIndentRight;
-  const availableWidth = Math.max(0, fragmentWidth - totalIndent);
+  let availableWidth = Math.max(0, fragmentWidth - totalIndent);
 
   // Validation: Warn when indents exceed fragment width (potential layout issue)
   if (totalIndent > fragmentWidth) {
@@ -1371,78 +1520,19 @@ const mapPmToX = (
     );
   }
 
-  // Use shared text measurement utility for pixel-perfect accuracy
-  return measureCharacterX(block, line, offset, availableWidth, alignmentOverride);
-};
-
-const _sliceRunsForLine = (block: FlowBlock, line: Line): Run[] => {
-  const result: Run[] = [];
-
-  if (block.kind !== 'paragraph') return result;
-
-  for (let runIndex = line.fromRun; runIndex <= line.toRun; runIndex += 1) {
-    const run = block.runs[runIndex];
-    if (!run) continue;
-
-    if (run.kind === 'tab') {
-      result.push(run);
-      continue;
-    }
-
-    // FIXED: ImageRun handling - images are atomic units, no slicing needed
-    if ('src' in run) {
-      result.push(run);
-      continue;
-    }
-
-    // LineBreakRun handling - line breaks are atomic units, no slicing needed
-    if (run.kind === 'lineBreak') {
-      result.push(run);
-      continue;
-    }
-
-    // BreakRun handling - breaks are atomic units, no slicing needed
-    if (run.kind === 'break') {
-      result.push(run);
-      continue;
-    }
-
-    // FieldAnnotationRun handling - field annotations are atomic units, no slicing needed
-    if (run.kind === 'fieldAnnotation') {
-      result.push(run);
-      continue;
-    }
-
-    // MathRun handling - math runs are atomic units, no slicing needed
-    if (run.kind === 'math') {
-      result.push(run);
-      continue;
-    }
-
-    const text = run.text ?? '';
-    const isFirstRun = runIndex === line.fromRun;
-    const isLastRun = runIndex === line.toRun;
-
-    if (isFirstRun || isLastRun) {
-      const start = isFirstRun ? line.fromChar : 0;
-      const end = isLastRun ? line.toChar : text.length;
-      const slice = text.slice(start, end);
-      const pmStart =
-        run.pmStart != null ? run.pmStart + start : run.pmEnd != null ? run.pmEnd - (text.length - start) : undefined;
-      const pmEnd =
-        run.pmStart != null ? run.pmStart + end : run.pmEnd != null ? run.pmEnd - (text.length - end) : undefined;
-      result.push({
-        ...run,
-        text: slice,
-        pmStart,
-        pmEnd,
-      });
-    } else {
-      result.push(run);
-    }
+  // Adjust availableWidth for first-line text indent to match the painter's justify spacing.
+  // Skip for list-marker first lines — the renderer only skips when the marker is actually
+  // rendered with non-zero measured text width, so gate on `markerTextWidth`, not on the
+  // raw `marker.markerText` attribute (which can be truthy for markers that measure to zero).
+  const hasRenderedMarkerText = isListParagraph && (markerTextWidth ?? 0) > 0;
+  if (isFirstLine && block.kind === 'paragraph' && !hasRenderedMarkerText) {
+    const suppressFLI = (block.attrs as Record<string, unknown>)?.suppressFirstLineIndent === true;
+    const firstLineOffset = getFirstLineIndentOffset(block.attrs?.indent, suppressFLI);
+    availableWidth = adjustAvailableWidthForTextIndent(availableWidth, firstLineOffset, line.maxWidth);
   }
 
-  return result;
+  // Use shared text measurement utility for pixel-perfect accuracy
+  return measureCharacterX(block, line, offset, availableWidth, alignmentOverride);
 };
 
 // isRtlBlock is now in position-hit.ts and re-exported above.

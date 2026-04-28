@@ -79,6 +79,21 @@ const makeTableMeasure = (columnWidths: number[], rowHeights: number[]): TableMe
   totalHeight: rowHeights.reduce((sum, height) => sum + height, 0),
 });
 
+const makeParagraphlessFloatingTable = (id: string): TableBlock =>
+  makeTableBlock(id, 1, {
+    anchor: {
+      isAnchored: true,
+      hRelativeFrom: 'page',
+      vRelativeFrom: 'paragraph',
+      offsetH: 120,
+      offsetV: 15,
+    },
+    wrap: {
+      type: 'Square',
+      wrapText: 'bothSides',
+    },
+  });
+
 const block: FlowBlock = {
   kind: 'paragraph',
   id: 'block-1',
@@ -211,6 +226,125 @@ describe('layoutDocument', () => {
     expect(fragments[1].x).toBeCloseTo(options.margins!.left + columnWidth + options.columns!.gap);
     expect(fragments[1].y).toBe(options.margins!.top);
     expect(layout.columns).toMatchObject({ count: 2, gap: 20 });
+  });
+
+  it('sets "page.columns" with separator when column separator is enabled', () => {
+    const options: LayoutOptions = {
+      pageSize: { w: 600, h: 800 },
+      margins: { top: 40, right: 40, bottom: 40, left: 40 },
+      columns: { count: 2, gap: 20, withSeparator: true },
+    };
+    const layout = layoutDocument([block], [makeMeasure([350, 350, 350])], options);
+
+    expect(layout.pages).toHaveLength(1);
+    expect(layout.pages[0].columns).toEqual({ count: 2, gap: 20, withSeparator: true });
+    expect(layout.columns).toMatchObject({ count: 2, gap: 20, withSeparator: true });
+  });
+
+  it('preserves explicit column widths on page-level column metadata', () => {
+    const options: LayoutOptions = {
+      pageSize: { w: 600, h: 800 },
+      margins: { top: 40, right: 40, bottom: 40, left: 40 },
+      columns: { count: 2, gap: 20, widths: [100, 400], equalWidth: false, withSeparator: true },
+    };
+    const layout = layoutDocument([block], [makeMeasure([350, 350, 350])], options);
+
+    expect(layout.pages).toHaveLength(1);
+    expect(layout.pages[0].columns).toEqual({
+      count: 2,
+      gap: 20,
+      widths: [100, 400],
+      equalWidth: false,
+      withSeparator: true,
+    });
+    expect(layout.columns).toEqual({
+      count: 2,
+      gap: 20,
+      widths: [100, 400],
+      equalWidth: false,
+      withSeparator: true,
+    });
+  });
+
+  it('does not set "page.columns" on single column layout', () => {
+    const options: LayoutOptions = {
+      pageSize: { w: 600, h: 800 },
+      margins: { top: 40, right: 40, bottom: 40, left: 40 },
+    };
+    const layout = layoutDocument([block], [makeMeasure([350])], options);
+
+    expect(layout.pages).toHaveLength(1);
+    expect(layout.pages[0].columns).toBeUndefined();
+    expect(layout.columns).toBeUndefined();
+  });
+
+  it('sets "page.columns" without separator when column separator is not enabled', () => {
+    const options: LayoutOptions = {
+      pageSize: { w: 600, h: 800 },
+      margins: { top: 40, right: 40, bottom: 40, left: 40 },
+      columns: { count: 2, gap: 20, withSeparator: false },
+    };
+    const layout = layoutDocument([block], [makeMeasure([350, 350, 350])], options);
+
+    expect(layout.pages).toHaveLength(1);
+    expect(layout.pages[0].columns).toEqual({ count: 2, gap: 20, withSeparator: false });
+    expect(layout.columns).toEqual({ count: 2, gap: 20, withSeparator: false });
+  });
+
+  it('emits page.columnRegions for continuous section breaks that change column config mid-page', () => {
+    // Two sections on the same page: first 2-col with separator, then a
+    // continuous break that switches to 3-col still with separator. The
+    // layout engine should record a ConstraintBoundary and surface it on
+    // page.columnRegions so the renderer can bound each separator to the
+    // correct Y range.
+    const blocks: FlowBlock[] = [
+      { kind: 'paragraph', id: 'intro', runs: [] },
+      {
+        kind: 'sectionBreak',
+        id: 'sb-continuous',
+        type: 'continuous',
+        columns: { count: 3, gap: 20, withSeparator: true },
+      },
+      { kind: 'paragraph', id: 'body', runs: [] },
+    ];
+    const measures: Measure[] = [makeMeasure([30]), { kind: 'sectionBreak' }, makeMeasure([30, 30, 30])];
+
+    const options: LayoutOptions = {
+      pageSize: { w: 600, h: 800 },
+      margins: { top: 40, right: 40, bottom: 40, left: 40 },
+      columns: { count: 2, gap: 20, withSeparator: true },
+    };
+
+    const layout = layoutDocument(blocks, measures, options);
+
+    expect(layout.pages).toHaveLength(1);
+    const regions = layout.pages[0].columnRegions;
+    expect(regions).toBeDefined();
+    expect(regions!.length).toBeGreaterThanOrEqual(2);
+    // First region covers the initial 2-col layout from topMargin to the boundary.
+    expect(regions![0].yStart).toBe(40);
+    expect(regions![0].columns).toEqual({ count: 2, gap: 20, withSeparator: true });
+    // Second region picks up the continuous break's 3-col config and ends at
+    // the bottom of the content area.
+    const last = regions![regions!.length - 1];
+    expect(last.columns).toMatchObject({ count: 3, gap: 20, withSeparator: true });
+    expect(last.yEnd).toBe(800 - 40);
+    // Regions must tile (no gaps, no overlap).
+    for (let i = 1; i < regions!.length; i++) {
+      expect(regions![i].yStart).toBe(regions![i - 1].yEnd);
+    }
+  });
+
+  it('omits page.columnRegions when no mid-page column change occurs', () => {
+    const options: LayoutOptions = {
+      pageSize: { w: 600, h: 800 },
+      margins: { top: 40, right: 40, bottom: 40, left: 40 },
+      columns: { count: 2, gap: 20, withSeparator: true },
+    };
+    const layout = layoutDocument([block], [makeMeasure([350, 350, 350])], options);
+
+    expect(layout.pages).toHaveLength(1);
+    expect(layout.pages[0].columnRegions).toBeUndefined();
   });
 
   it('applies spacing before and after paragraphs', () => {
@@ -716,6 +850,48 @@ describe('layoutDocument', () => {
     expect(anchoredTableFragment?.y).toBe(DEFAULT_OPTIONS.margins!.top + paragraphMeasure.totalHeight);
   });
 
+  it('renders a floating table when the document has no body paragraphs', () => {
+    const floatingOnlyTable = makeParagraphlessFloatingTable('table-floating-only');
+    const floatingOnlyMeasure = makeTableMeasure([220], [60]);
+
+    const layout = layoutDocument([floatingOnlyTable], [floatingOnlyMeasure], DEFAULT_OPTIONS);
+
+    expect(layout.pages).toHaveLength(1);
+
+    const fragment = layout.pages[0].fragments.find(
+      (candidate) => candidate.kind === 'table' && candidate.blockId === 'table-floating-only',
+    ) as TableFragment | undefined;
+
+    expect(fragment).toBeTruthy();
+    expect(fragment?.x).toBe(120);
+    expect(fragment?.y).toBe(DEFAULT_OPTIONS.margins!.top + 15);
+  });
+
+  it('renders a floating table after pruning a leading empty page', () => {
+    const leadingPageBreak: PageBreakBlock = {
+      kind: 'pageBreak',
+      id: 'page-break-before-floating-table',
+    };
+    const floatingOnlyTable = makeParagraphlessFloatingTable('table-floating-after-page-break');
+    const floatingOnlyMeasure = makeTableMeasure([220], [60]);
+
+    const layout = layoutDocument(
+      [leadingPageBreak, floatingOnlyTable],
+      [{ kind: 'pageBreak' }, floatingOnlyMeasure],
+      DEFAULT_OPTIONS,
+    );
+
+    expect(layout.pages).toHaveLength(1);
+
+    const fragment = layout.pages[0].fragments.find(
+      (candidate) => candidate.kind === 'table' && candidate.blockId === 'table-floating-after-page-break',
+    ) as TableFragment | undefined;
+
+    expect(fragment).toBeTruthy();
+    expect(fragment?.x).toBe(120);
+    expect(fragment?.y).toBe(DEFAULT_OPTIONS.margins!.top + 15);
+  });
+
   it('propagates pm ranges onto fragments', () => {
     const blockWithRuns: FlowBlock = {
       kind: 'paragraph',
@@ -897,6 +1073,125 @@ describe('layoutDocument', () => {
     // p3 appears on a new page with header/footer distances, body at base margins
     const pageWithP3 = layout.pages.find((p) => p.fragments.some((f) => f.blockId === 'p3'));
     expect(pageWithP3?.margins).toMatchObject({ top: 40, bottom: 40, header: 150, footer: 100 });
+  });
+
+  it('synthesizes page 1 for section-break-only body layouts', () => {
+    const sectionBreakBlock: SectionBreakBlock = {
+      kind: 'sectionBreak',
+      id: 'sb-only',
+      attrs: { isFirstSection: true, source: 'sectPr' },
+      pageSize: { w: 500, h: 700 },
+      orientation: 'landscape',
+      margins: { top: 40, right: 30, bottom: 35, left: 25, header: 120, footer: 90 },
+    };
+
+    const layout = layoutDocument([sectionBreakBlock], [{ kind: 'sectionBreak' }], DEFAULT_OPTIONS);
+
+    expect(layout.pages).toHaveLength(1);
+    expect(layout.pages[0].fragments).toHaveLength(0);
+    expect(layout.pages[0].orientation).toBe('landscape');
+    expect(layout.pages[0].margins).toMatchObject({
+      top: 40,
+      right: 30,
+      bottom: 35,
+      left: 25,
+      header: 120,
+      footer: 90,
+    });
+  });
+
+  it('resets page numbering when synthesizing a next-page section-break-only layout', () => {
+    const firstSection: SectionBreakBlock = {
+      kind: 'sectionBreak',
+      id: 'sb-first',
+      attrs: { isFirstSection: true, source: 'sectPr', sectionIndex: 0 },
+      pageSize: { w: 500, h: 700 },
+      margins: { top: 40, right: 30, bottom: 35, left: 25 },
+    };
+    const nextPageSection: SectionBreakBlock = {
+      kind: 'sectionBreak',
+      id: 'sb-next',
+      type: 'nextPage',
+      attrs: { source: 'sectPr', sectionIndex: 1 },
+      pageSize: { w: 520, h: 720 },
+      margins: { top: 45, right: 35, bottom: 40, left: 30 },
+    };
+
+    const layout = layoutDocument(
+      [firstSection, nextPageSection],
+      [{ kind: 'sectionBreak' }, { kind: 'sectionBreak' }],
+      DEFAULT_OPTIONS,
+    );
+
+    expect(layout.pages).toHaveLength(1);
+    expect(layout.pages[0].number).toBe(1);
+    expect(layout.pages[0].numberText).toBe('1');
+    expect(layout.pages[0].sectionIndex).toBe(1);
+    expect(layout.pages[0].margins).toMatchObject({
+      top: 45,
+      right: 35,
+      bottom: 40,
+      left: 30,
+    });
+  });
+
+  it('resets parity bookkeeping when synthesizing an even-page section-break-only layout', () => {
+    const firstSection: SectionBreakBlock = {
+      kind: 'sectionBreak',
+      id: 'sb-first',
+      attrs: { isFirstSection: true, source: 'sectPr', sectionIndex: 0 },
+      pageSize: { w: 500, h: 700 },
+      margins: { top: 40, right: 30, bottom: 35, left: 25 },
+    };
+    const evenPageSection: SectionBreakBlock = {
+      kind: 'sectionBreak',
+      id: 'sb-even',
+      type: 'evenPage',
+      attrs: { source: 'sectPr', sectionIndex: 1 },
+      pageSize: { w: 520, h: 720 },
+      margins: { top: 45, right: 35, bottom: 40, left: 30 },
+    };
+
+    const layout = layoutDocument(
+      [firstSection, evenPageSection],
+      [{ kind: 'sectionBreak' }, { kind: 'sectionBreak' }],
+      DEFAULT_OPTIONS,
+    );
+
+    expect(layout.pages).toHaveLength(1);
+    expect(layout.pages[0].number).toBe(1);
+    expect(layout.pages[0].numberText).toBe('1');
+    expect(layout.pages[0].sectionIndex).toBe(1);
+  });
+
+  it('preserves explicit numbering starts for section-break-only fallback pages', () => {
+    const firstSection: SectionBreakBlock = {
+      kind: 'sectionBreak',
+      id: 'sb-first',
+      attrs: { isFirstSection: true, source: 'sectPr', sectionIndex: 0 },
+      pageSize: { w: 500, h: 700 },
+      margins: { top: 40, right: 30, bottom: 35, left: 25 },
+    };
+    const nextPageSection: SectionBreakBlock = {
+      kind: 'sectionBreak',
+      id: 'sb-next',
+      type: 'nextPage',
+      attrs: { source: 'sectPr', sectionIndex: 1 },
+      pageSize: { w: 520, h: 720 },
+      margins: { top: 45, right: 35, bottom: 40, left: 30 },
+      numbering: { start: 5 },
+    };
+
+    const layout = layoutDocument(
+      [firstSection, nextPageSection],
+      [{ kind: 'sectionBreak' }, { kind: 'sectionBreak' }],
+      DEFAULT_OPTIONS,
+    );
+
+    expect(layout.pages).toHaveLength(1);
+    expect(layout.pages[0].number).toBe(1);
+    expect(layout.pages[0].numberText).toBe('5');
+    expect(layout.pages[0].sectionIndex).toBe(1);
   });
 
   it('section break with only header margin stores header distance', () => {
@@ -1743,6 +2038,78 @@ describe('layoutDocument', () => {
       expect(p3Fragment).toBeDefined();
       expect(p3Fragment?.width).toBe(210); // Half width = two columns
     });
+
+    it('starts new region below tallest column when columns have unequal heights', () => {
+      // Regression test for SD-1869: when a multi-column section has unequal column
+      // heights, the next region must start below the TALLEST column, not the last
+      // column's cursor. Without the maxCursorY fix, the new region would start at
+      // the shorter column's bottom, overlapping the taller one.
+      //
+      // Uses a 3-col → 2-col transition because the layout engine forces a new page
+      // when reducing to fewer columns than the current column index (guard at
+      // columnIndexBefore >= newColumns.count). With 3→2, content in col1
+      // (columnIndex=1) stays on the same page (1 < 2).
+      const toThreeColumns: FlowBlock = {
+        kind: 'sectionBreak',
+        id: 'sb-to-3col',
+        type: 'continuous',
+        columns: { count: 3, gap: 24 },
+        margins: {},
+      };
+      const toTwoColumns: FlowBlock = {
+        kind: 'sectionBreak',
+        id: 'sb-to-2col',
+        type: 'continuous',
+        columns: { count: 2, gap: 48 },
+        margins: {},
+      };
+
+      const blocks: FlowBlock[] = [
+        { kind: 'paragraph', id: 'p1', runs: [] }, // single column preamble
+        toThreeColumns,
+        { kind: 'paragraph', id: 'p-cols', runs: [] }, // 3 lines → col0 gets 2, col1 gets 1
+        toTwoColumns,
+        { kind: 'paragraph', id: 'p-after', runs: [] }, // must start below tallest column
+      ];
+
+      // p-cols: 3 lines of 250px each (750px total)
+      // Available column height = 720 (page bottom) - 112 (region top) = 608px
+      // Column 0 fits lines 0+1 (500px), line 2 overflows to column 1
+      // Column 0 bottom = 112 + 500 = 612
+      // Column 1 bottom = 112 + 250 = 362
+      const measures: Measure[] = [
+        makeMeasure([40]), // p1
+        { kind: 'sectionBreak' },
+        makeMeasure([250, 250, 250]), // p-cols: 3 lines, 2 in col0 + 1 in col1
+        { kind: 'sectionBreak' },
+        makeMeasure([40]), // p-after
+      ];
+
+      const options: LayoutOptions = {
+        pageSize: { w: 612, h: 792 },
+        margins: { top: 72, right: 72, bottom: 72, left: 72 },
+      };
+
+      const layout = layoutDocument(blocks, measures, options);
+
+      // Everything should fit on one page
+      expect(layout.pages.length).toBe(1);
+
+      // p1 at y=72, height=40 → region for 3-col section starts at y=112
+      const regionTop = 72 + 40; // 112
+
+      // Column 0: 2 lines × 250px = 500px → bottom at 112 + 500 = 612
+      // Column 1: 1 line × 250px = 250px → bottom at 112 + 250 = 362
+      const tallestColumnBottom = regionTop + 500; // 612
+
+      const page = layout.pages[0];
+      const pAfter = page.fragments.find((f) => f.blockId === 'p-after');
+      expect(pAfter).toBeDefined();
+
+      // KEY ASSERTION: p-after must start at or below the tallest column's bottom (612)
+      // Without the fix, it would start at 362 (column 1's bottom), overlapping column 0
+      expect(pAfter!.y).toBeGreaterThanOrEqual(tallestColumnBottom);
+    });
   });
 
   describe('columnBreak with multi-column pages', () => {
@@ -2548,6 +2915,21 @@ describe('layoutHeaderFooter', () => {
     expect(layout.pages).toEqual([]);
   });
 
+  it('does not synthesize blank pages for section-break-only header/footer layouts', () => {
+    const sectionBreakBlock: SectionBreakBlock = {
+      kind: 'sectionBreak',
+      id: 'header-sb',
+      attrs: { isFirstSection: true, source: 'sectPr' },
+      pageSize: { w: 200, h: 80 },
+      margins: { top: 0, right: 0, bottom: 0, left: 0 },
+    };
+
+    const layout = layoutHeaderFooter([sectionBreakBlock], [{ kind: 'sectionBreak' }], { width: 200, height: 80 });
+
+    expect(layout.pages).toEqual([]);
+    expect(layout.height).toBe(0);
+  });
+
   it('uses image measure height when fragment height missing', () => {
     const imageBlock: FlowBlock = {
       kind: 'image',
@@ -2847,6 +3229,66 @@ describe('layoutHeaderFooter', () => {
     expect(layout.height).toBeCloseTo(60, 0);
   });
 
+  it('excludes centered page-relative header overlays from measurement height', () => {
+    const paragraphBlock: FlowBlock = {
+      kind: 'paragraph',
+      id: 'para-1',
+      runs: [{ text: 'Header text', fontFamily: 'Arial', fontSize: 12, pmStart: 1, pmEnd: 12 }],
+    };
+    const centeredOverlay: FlowBlock = {
+      kind: 'drawing',
+      id: 'drawing-1',
+      drawingKind: 'vectorShape',
+      geometry: { width: 596, height: 531 },
+      anchor: {
+        isAnchored: true,
+        hRelativeFrom: 'page',
+        alignH: 'center',
+        vRelativeFrom: 'page',
+        alignV: 'center',
+        behindDoc: false,
+      },
+      shapeKind: 'Rectangle',
+    };
+    const paragraphMeasure: Measure = {
+      kind: 'paragraph',
+      lines: [{ fromRun: 0, fromChar: 0, toRun: 0, toChar: 11, width: 80, ascent: 12, descent: 3, lineHeight: 15 }],
+      totalHeight: 15,
+    };
+    const overlayMeasure: Measure = {
+      kind: 'drawing',
+      drawingKind: 'vectorShape',
+      width: 596,
+      height: 531,
+      scale: 1,
+      naturalWidth: 596,
+      naturalHeight: 531,
+      geometry: { width: 596, height: 531, rotation: 0, flipH: false, flipV: false },
+    };
+    const constraints = {
+      width: 624,
+      height: 864,
+      pageWidth: 816,
+      pageHeight: 1056,
+      margins: { left: 96, right: 96, top: 96, bottom: 96, header: 48 },
+    };
+
+    const layout = layoutHeaderFooter(
+      [paragraphBlock, centeredOverlay],
+      [paragraphMeasure, overlayMeasure],
+      constraints,
+      'header',
+    );
+    const overlayFragment = layout.pages[0]?.fragments.find((fragment) => fragment.blockId === 'drawing-1') as
+      | DrawingFragment
+      | undefined;
+
+    expect(layout.height).toBeCloseTo(15);
+    expect(layout.renderHeight).toBeGreaterThan(500);
+    expect(overlayFragment).toBeDefined();
+    expect(overlayFragment?.y).toBeGreaterThan(150);
+  });
+
   it('returns minimal height when header contains only behindDoc fragments with extreme offsets', () => {
     const imageBlock1: FlowBlock = {
       kind: 'image',
@@ -3061,6 +3503,77 @@ describe('layoutHeaderFooter', () => {
     // But render bounds should include it
     expect(layout.minY).toBeLessThan(0);
     expect(layout.renderHeight).toBeGreaterThan(layout.height);
+  });
+
+  it('keeps top-aligned page-relative header anchors in measurement height', () => {
+    const overlayBlock: FlowBlock = {
+      kind: 'drawing',
+      id: 'drawing-top',
+      drawingKind: 'vectorShape',
+      geometry: { width: 120, height: 60 },
+      anchor: {
+        isAnchored: true,
+        vRelativeFrom: 'page',
+        alignV: 'top',
+        offsetV: 40,
+        behindDoc: false,
+      },
+      shapeKind: 'Rectangle',
+    };
+    const overlayMeasure: Measure = {
+      kind: 'drawing',
+      drawingKind: 'vectorShape',
+      width: 120,
+      height: 60,
+      scale: 1,
+      naturalWidth: 120,
+      naturalHeight: 60,
+      geometry: { width: 120, height: 60, rotation: 0, flipH: false, flipV: false },
+    };
+    const constraints = {
+      width: 624,
+      height: 864,
+      pageWidth: 816,
+      pageHeight: 1056,
+      margins: { left: 96, right: 96, top: 96, bottom: 96, header: 48 },
+    };
+
+    const layout = layoutHeaderFooter([overlayBlock], [overlayMeasure], constraints, 'header');
+
+    expect(layout.height).toBeCloseTo(100);
+    expect(layout.renderHeight).toBeCloseTo(layout.height);
+  });
+
+  it('keeps bottom-aligned page-relative footer anchors in measurement height', () => {
+    const footerOverlay: FlowBlock = {
+      kind: 'image',
+      id: 'img-page',
+      src: 'data:image/png;base64,xxx',
+      anchor: {
+        isAnchored: true,
+        vRelativeFrom: 'page',
+        alignV: 'bottom',
+        offsetV: 0,
+        hRelativeFrom: 'page',
+        offsetH: 0,
+      },
+    };
+    const footerOverlayMeasure: Measure = {
+      kind: 'image',
+      width: 50,
+      height: 30,
+    };
+    const constraints = {
+      width: 200,
+      height: 800,
+      pageHeight: 1056,
+      margins: { left: 72, right: 72, top: 72, bottom: 72, header: 36 },
+    };
+
+    const layout = layoutHeaderFooter([footerOverlay], [footerOverlayMeasure], constraints, 'footer');
+
+    expect(layout.height).toBeCloseTo(72);
+    expect(layout.renderHeight).toBeCloseTo(layout.height);
   });
 
   it('post-normalizes page-relative anchors in footer layout', () => {
@@ -5097,5 +5610,333 @@ describe('requirePageBoundary edge cases', () => {
       expect(pageContainsBlock(layout.pages[1], 'para2')).toBe(true);
       expect(pageContainsBlock(layout.pages[1], 'para3')).toBe(true);
     });
+  });
+});
+
+describe('alternateHeaders (odd/even header differentiation)', () => {
+  // Two tall paragraphs (400px each) that force a 2-page layout.
+  const tallBlock = (id: string): FlowBlock => ({
+    kind: 'paragraph',
+    id,
+    runs: [],
+  });
+  const tallMeasure = makeMeasure([400]);
+
+  it('selects even/odd header heights when alternateHeaders is true', () => {
+    const options: LayoutOptions = {
+      pageSize: { w: 600, h: 800 },
+      margins: { top: 50, right: 50, bottom: 50, left: 50, header: 30 },
+      alternateHeaders: true,
+      headerContentHeights: {
+        odd: 80, // Odd pages: header pushes body start down
+        even: 40, // Even pages: smaller header
+      },
+    };
+
+    const layout = layoutDocument([tallBlock('p1'), tallBlock('p2')], [tallMeasure, tallMeasure], options);
+
+    expect(layout.pages).toHaveLength(2);
+
+    // Page 1 is odd (documentPageNumber=1) → uses 'odd' header height (80px)
+    // Body should start at max(margin.top, margin.header + headerContentHeight) = max(50, 30+80) = 110
+    const p1Fragment = layout.pages[0].fragments.find((f) => f.blockId === 'p1');
+    expect(p1Fragment).toBeDefined();
+    expect(p1Fragment!.y).toBeCloseTo(110, 0);
+
+    // Page 2 is even (documentPageNumber=2) → uses 'even' header height (40px)
+    // Body should start at max(margin.top, margin.header + headerContentHeight) = max(50, 30+40) = 70
+    const p2Fragment = layout.pages[1].fragments.find((f) => f.blockId === 'p2');
+    expect(p2Fragment).toBeDefined();
+    expect(p2Fragment!.y).toBeCloseTo(70, 0);
+  });
+
+  it('uses default header height for all pages when alternateHeaders is false', () => {
+    const options: LayoutOptions = {
+      pageSize: { w: 600, h: 800 },
+      margins: { top: 50, right: 50, bottom: 50, left: 50, header: 30 },
+      alternateHeaders: false,
+      headerContentHeights: {
+        default: 60,
+        odd: 80,
+        even: 40,
+      },
+    };
+
+    const layout = layoutDocument([tallBlock('p1'), tallBlock('p2')], [tallMeasure, tallMeasure], options);
+
+    expect(layout.pages).toHaveLength(2);
+
+    // Both pages use 'default' header height (60px)
+    // Body start = max(50, 30+60) = 90
+    const p1Fragment = layout.pages[0].fragments.find((f) => f.blockId === 'p1');
+    const p2Fragment = layout.pages[1].fragments.find((f) => f.blockId === 'p2');
+    expect(p1Fragment!.y).toBeCloseTo(90, 0);
+    expect(p2Fragment!.y).toBeCloseTo(90, 0);
+  });
+
+  it('defaults to false when alternateHeaders is omitted', () => {
+    const options: LayoutOptions = {
+      pageSize: { w: 600, h: 800 },
+      margins: { top: 50, right: 50, bottom: 50, left: 50, header: 30 },
+      // alternateHeaders not set
+      headerContentHeights: {
+        default: 60,
+        odd: 80,
+        even: 40,
+      },
+    };
+
+    const layout = layoutDocument([tallBlock('p1'), tallBlock('p2')], [tallMeasure, tallMeasure], options);
+
+    expect(layout.pages).toHaveLength(2);
+
+    // Both pages should use 'default' (60px), not odd/even
+    const p1Fragment = layout.pages[0].fragments.find((f) => f.blockId === 'p1');
+    const p2Fragment = layout.pages[1].fragments.find((f) => f.blockId === 'p2');
+    expect(p1Fragment!.y).toBeCloseTo(90, 0);
+    expect(p2Fragment!.y).toBeCloseTo(90, 0);
+  });
+
+  it('first page uses first variant when titlePg is enabled with alternateHeaders', () => {
+    const sectionBreak: SectionBreakBlock = {
+      kind: 'sectionBreak',
+      id: 'sb',
+      attrs: { isFirstSection: true, source: 'sectPr', sectionIndex: 0 },
+      pageSize: { w: 600, h: 800 },
+      margins: { top: 50, right: 50, bottom: 50, left: 50, header: 30 },
+    };
+
+    const options: LayoutOptions = {
+      pageSize: { w: 600, h: 800 },
+      margins: { top: 50, right: 50, bottom: 50, left: 50, header: 30 },
+      alternateHeaders: true,
+      sectionMetadata: [{ sectionIndex: 0, titlePg: true }],
+      headerContentHeights: {
+        first: 100, // First page: tallest header
+        odd: 80,
+        even: 40,
+      },
+    };
+
+    const layout = layoutDocument(
+      [sectionBreak, tallBlock('p1'), tallBlock('p2'), tallBlock('p3')],
+      [{ kind: 'sectionBreak' }, tallMeasure, tallMeasure, tallMeasure],
+      options,
+    );
+
+    expect(layout.pages.length).toBeGreaterThanOrEqual(3);
+
+    // Page 1 (first page of section, titlePg=true) → 'first' variant → 100px
+    // Body start = max(50, 30+100) = 130
+    const p1Fragment = layout.pages[0].fragments.find((f) => f.blockId === 'p1');
+    expect(p1Fragment).toBeDefined();
+    expect(p1Fragment!.y).toBeCloseTo(130, 0);
+
+    // Page 2 (documentPageNumber=2, even) → 'even' variant → 40px
+    // Body start = max(50, 30+40) = 70
+    const p2Fragment = layout.pages[1].fragments.find((f) => f.blockId === 'p2');
+    expect(p2Fragment).toBeDefined();
+    expect(p2Fragment!.y).toBeCloseTo(70, 0);
+
+    // Page 3 (documentPageNumber=3, odd) → 'odd' variant → 80px
+    // Body start = max(50, 30+80) = 110
+    const p3Fragment = layout.pages[2].fragments.find((f) => f.blockId === 'p3');
+    expect(p3Fragment).toBeDefined();
+    expect(p3Fragment!.y).toBeCloseTo(110, 0);
+  });
+
+  it('multi-section: uses document page number for even/odd, not section-relative', () => {
+    // Section 1 has 3 pages (pages 1-3), section 2 starts on page 4.
+    // Page 4 is even by document number, but sectionPageNumber=1 (odd).
+    // The fix ensures document page number is used for even/odd.
+    const sb1: SectionBreakBlock = {
+      kind: 'sectionBreak',
+      id: 'sb1',
+      attrs: { isFirstSection: true, source: 'sectPr', sectionIndex: 0 },
+      pageSize: { w: 600, h: 800 },
+      margins: { top: 50, right: 50, bottom: 50, left: 50, header: 30 },
+    };
+    const sb2: SectionBreakBlock = {
+      kind: 'sectionBreak',
+      id: 'sb2',
+      type: 'nextPage',
+      attrs: { source: 'sectPr', sectionIndex: 1 },
+      pageSize: { w: 600, h: 800 },
+      margins: { top: 50, right: 50, bottom: 50, left: 50, header: 30 },
+    };
+
+    const options: LayoutOptions = {
+      pageSize: { w: 600, h: 800 },
+      margins: { top: 50, right: 50, bottom: 50, left: 50, header: 30 },
+      alternateHeaders: true,
+      sectionMetadata: [{ sectionIndex: 0 }, { sectionIndex: 1 }],
+      headerContentHeights: {
+        odd: 80,
+        even: 40,
+      },
+    };
+
+    const layout = layoutDocument(
+      [sb1, tallBlock('p1'), tallBlock('p2'), tallBlock('p3'), sb2, tallBlock('p4')],
+      [{ kind: 'sectionBreak' }, tallMeasure, tallMeasure, tallMeasure, { kind: 'sectionBreak' }, tallMeasure],
+      options,
+    );
+
+    expect(layout.pages.length).toBeGreaterThanOrEqual(4);
+
+    // Page 4 (documentPageNumber=4, even) → should use 'even' header (40px)
+    // NOT 'odd' which would happen if sectionPageNumber (1) were used
+    // Body start = max(50, 30+40) = 70
+    const p4Fragment = layout.pages[3]?.fragments.find((f) => f.blockId === 'p4');
+    expect(p4Fragment).toBeDefined();
+    expect(p4Fragment!.y).toBeCloseTo(70, 0);
+  });
+
+  it('selects even/odd footer heights when alternateHeaders is true', () => {
+    // The footer-height path uses the per-rId map + sectionMetadata.footerRefs.
+    // Exposing the variant selection through `footerContentHeights` alone is not
+    // sufficient — without refs, the code falls back to 'default' for the footer
+    // variant regardless. We need the ref map to observe variant switching on
+    // `page.margins.bottom`.
+    const options: LayoutOptions = {
+      pageSize: { w: 600, h: 800 },
+      margins: { top: 50, right: 50, bottom: 50, left: 50, footer: 30 },
+      alternateHeaders: true,
+      sectionMetadata: [{ sectionIndex: 0, footerRefs: { odd: 'rIdFooterOdd', even: 'rIdFooterEven' } }],
+      footerContentHeightsByRId: new Map([
+        ['rIdFooterOdd', 80], // Odd pages: larger footer
+        ['rIdFooterEven', 40], // Even pages: smaller footer
+      ]),
+    };
+
+    const layout = layoutDocument([tallBlock('p1'), tallBlock('p2')], [tallMeasure, tallMeasure], options);
+
+    expect(layout.pages).toHaveLength(2);
+
+    // Page 1 is odd → 'odd' footer (80px) → bottom = max(50, 30+80) = 110
+    // Page 2 is even → 'even' footer (40px) → bottom = max(50, 30+40) = 70
+    // Body-top Y is footer-independent, so assert on the effective bottom margin
+    // the paginator stamped on each page.
+    expect(layout.pages[0].margins?.bottom).toBeCloseTo(110, 0);
+    expect(layout.pages[1].margins?.bottom).toBeCloseTo(70, 0);
+  });
+
+  it('falls back to default header when only default is defined with alternateHeaders', () => {
+    // Production path: a document with `w:evenAndOddHeaders` on but only a
+    // `default` header authored. sectionMetadata supplies the `default` ref and
+    // the per-rId height map supplies its measurement. Step-3 fallback at
+    // index.ts:1345-1349 kicks in and `effectiveVariantType` drops to 'default'.
+    const options: LayoutOptions = {
+      pageSize: { w: 600, h: 800 },
+      margins: { top: 50, right: 50, bottom: 50, left: 50, header: 30 },
+      alternateHeaders: true,
+      sectionMetadata: [{ sectionIndex: 0, headerRefs: { default: 'rIdHeaderDefault' } }],
+      headerContentHeightsByRId: new Map([['rIdHeaderDefault', 60]]),
+    };
+
+    const layout = layoutDocument([tallBlock('p1'), tallBlock('p2')], [tallMeasure, tallMeasure], options);
+
+    expect(layout.pages).toHaveLength(2);
+
+    // Both pages fall back to the default header (60px), so body start is the
+    // same on odd and even: max(50, 30+60) = 90.
+    const p1Fragment = layout.pages[0].fragments.find((f) => f.blockId === 'p1');
+    const p2Fragment = layout.pages[1].fragments.find((f) => f.blockId === 'p2');
+    expect(p1Fragment!.y).toBeCloseTo(90, 0);
+    expect(p2Fragment!.y).toBeCloseTo(90, 0);
+    // Effective top margin is also 90 on both pages.
+    expect(layout.pages[0].margins?.top).toBeCloseTo(90, 0);
+    expect(layout.pages[1].margins?.top).toBeCloseTo(90, 0);
+  });
+
+  it('prefers section-aware header heights over the plain rId fallback', () => {
+    const options: LayoutOptions = {
+      pageSize: { w: 600, h: 800 },
+      margins: { top: 50, right: 50, bottom: 50, left: 50, header: 30 },
+      sectionMetadata: [{ sectionIndex: 0, headerRefs: { default: 'rIdSharedHeader' } }],
+      headerContentHeightsByRId: new Map([['rIdSharedHeader', 40]]),
+      headerContentHeightsBySectionRef: new Map([['rIdSharedHeader::s0', 100]]),
+    };
+
+    const layout = layoutDocument([tallBlock('p1')], [tallMeasure], options);
+
+    expect(layout.pages).toHaveLength(1);
+
+    const pageOneFragment = layout.pages[0].fragments.find((fragment) => fragment.blockId === 'p1');
+    expect(pageOneFragment).toBeDefined();
+    expect(pageOneFragment!.y).toBeCloseTo(130, 0);
+    expect(layout.pages[0].margins?.top).toBeCloseTo(130, 0);
+  });
+
+  it('multi-section + titlePg + alternateHeaders: first page of section 2 lands on an even doc-page', () => {
+    // Most realistic mixed case. Section 1 has 3 pages (docPN 1-3). Section 2
+    // has titlePg=true and starts on docPN=4.
+    //   - Page 4 is sectionPageNumber=1 for section 2 + titlePg=true → 'first'
+    //   - Page 5 is docPN=5 (odd) → 'odd' (regardless of section-relative number)
+    //   - Page 6 is docPN=6 (even) → 'even'
+    // If the code used sectionPageNumber for even/odd, pages 5 and 6 would be
+    // swapped (section-relative 2 and 3 respectively). This guards both titlePg
+    // and the docPN rule across a section boundary.
+    const sb1: SectionBreakBlock = {
+      kind: 'sectionBreak',
+      id: 'sb1',
+      attrs: { isFirstSection: true, source: 'sectPr', sectionIndex: 0 },
+      pageSize: { w: 600, h: 800 },
+      margins: { top: 50, right: 50, bottom: 50, left: 50, header: 30 },
+    };
+    const sb2: SectionBreakBlock = {
+      kind: 'sectionBreak',
+      id: 'sb2',
+      type: 'nextPage',
+      attrs: { source: 'sectPr', sectionIndex: 1 },
+      pageSize: { w: 600, h: 800 },
+      margins: { top: 50, right: 50, bottom: 50, left: 50, header: 30 },
+    };
+
+    const options: LayoutOptions = {
+      pageSize: { w: 600, h: 800 },
+      margins: { top: 50, right: 50, bottom: 50, left: 50, header: 30 },
+      alternateHeaders: true,
+      sectionMetadata: [{ sectionIndex: 0 }, { sectionIndex: 1, titlePg: true }],
+      headerContentHeights: {
+        first: 100, // section 2 title-page header
+        odd: 80,
+        even: 40,
+      },
+    };
+
+    const layout = layoutDocument(
+      [sb1, tallBlock('p1'), tallBlock('p2'), tallBlock('p3'), sb2, tallBlock('p4'), tallBlock('p5'), tallBlock('p6')],
+      [
+        { kind: 'sectionBreak' },
+        tallMeasure,
+        tallMeasure,
+        tallMeasure,
+        { kind: 'sectionBreak' },
+        tallMeasure,
+        tallMeasure,
+        tallMeasure,
+      ],
+      options,
+    );
+
+    expect(layout.pages.length).toBeGreaterThanOrEqual(6);
+
+    // Page 4: section 2 first page + titlePg → 'first' (100px) → y = max(50, 30+100) = 130
+    const p4Fragment = layout.pages[3]?.fragments.find((f) => f.blockId === 'p4');
+    expect(p4Fragment).toBeDefined();
+    expect(p4Fragment!.y).toBeCloseTo(130, 0);
+
+    // Page 5: docPN=5, odd → 'odd' (80px) → y = max(50, 30+80) = 110
+    // If sectionPageNumber were used: sectionPN=2 → 'even' (40) → y = 70 (wrong)
+    const p5Fragment = layout.pages[4]?.fragments.find((f) => f.blockId === 'p5');
+    expect(p5Fragment).toBeDefined();
+    expect(p5Fragment!.y).toBeCloseTo(110, 0);
+
+    // Page 6: docPN=6, even → 'even' (40px) → y = max(50, 30+40) = 70
+    // If sectionPageNumber were used: sectionPN=3 → 'odd' (80) → y = 110 (wrong)
+    const p6Fragment = layout.pages[5]?.fragments.find((f) => f.blockId === 'p6');
+    expect(p6Fragment).toBeDefined();
+    expect(p6Fragment!.y).toBeCloseTo(70, 0);
   });
 });

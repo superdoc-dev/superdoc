@@ -18,6 +18,8 @@ export function dispatchIntentTool(
           return execute('doc.getHtml', rest);
         case 'info':
           return execute('doc.info', rest);
+        case 'extract':
+          return execute('doc.extract', rest);
         case 'blocks':
           return execute('doc.blocks.list', rest);
         default:
@@ -54,6 +56,8 @@ export function dispatchIntentTool(
           return execute('doc.format.paragraph.setIndentation', rest);
         case 'set_spacing':
           return execute('doc.format.paragraph.setSpacing', rest);
+        case 'set_flow_options':
+          return execute('doc.format.paragraph.setFlowOptions', rest);
         case 'set_direction':
           return execute('doc.format.paragraph.setDirection', rest);
         default:
@@ -67,6 +71,8 @@ export function dispatchIntentTool(
           return execute('doc.create.paragraph', rest);
         case 'heading':
           return execute('doc.create.heading', rest);
+        case 'table':
+          return execute('doc.create.table', rest);
         default:
           throw new Error(`Unknown action for superdoc_create: ${action}`);
       }
@@ -78,14 +84,24 @@ export function dispatchIntentTool(
           return execute('doc.lists.insert', rest);
         case 'create':
           return execute('doc.lists.create', rest);
+        case 'attach':
+          return execute('doc.lists.attach', rest);
         case 'detach':
           return execute('doc.lists.detach', rest);
         case 'indent':
           return execute('doc.lists.indent', rest);
         case 'outdent':
           return execute('doc.lists.outdent', rest);
+        case 'merge':
+          return execute('doc.lists.merge', rest);
+        case 'split':
+          return execute('doc.lists.split', rest);
         case 'set_level':
           return execute('doc.lists.setLevel', rest);
+        case 'set_value':
+          return execute('doc.lists.setValue', rest);
+        case 'continue_previous':
+          return execute('doc.lists.continuePrevious', rest);
         case 'set_type':
           return execute('doc.lists.setType', rest);
         default:

@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 
-import { comments_module_events } from '@superdoc/common';
 import { clickToPosition } from '@superdoc/layout-bridge';
 import { resolvePointerPositionHit } from '../input/PositionHitResolver.js';
 import { TextSelection } from 'prosemirror-state';
@@ -203,7 +202,7 @@ describe('EditorInputManager - single-thread comment highlight clicks', () => {
     return elementsFromPoint;
   }
 
-  it('treats a click on the already-active single-thread highlight as a no-op', () => {
+  it('lets direct clicks on the active single-thread highlight fall through to generic caret placement', () => {
     const highlight = document.createElement('span');
     highlight.className = 'superdoc-comment-highlight';
     highlight.setAttribute('data-comment-ids', 'comment-1');
@@ -211,20 +210,18 @@ describe('EditorInputManager - single-thread comment highlight clicks', () => {
 
     dispatchPointerDown(highlight);
 
-    expect(mockEditor.emit).toHaveBeenCalledWith('commentsUpdate', {
-      type: comments_module_events.SELECTED,
-      activeCommentId: 'comment-1',
-    });
-    expect(resolvePointerPositionHit).not.toHaveBeenCalled();
-    expect(TextSelection.create as unknown as Mock).not.toHaveBeenCalled();
-    expect(mockEditor.state.tr.setSelection).not.toHaveBeenCalled();
-    expect(mockEditor.view.dispatch).not.toHaveBeenCalled();
-    expect(mockEditor.view.focus).not.toHaveBeenCalled();
-    expect(editorDom.focus).not.toHaveBeenCalled();
-    expect(viewportHost.setPointerCapture).not.toHaveBeenCalled();
+    expect(mockEditor.emit).not.toHaveBeenCalledWith(
+      'commentsUpdate',
+      expect.objectContaining({ activeCommentId: 'comment-1' }),
+    );
+    expect(mockEditor.commands.setCursorById).not.toHaveBeenCalled();
+    expect(resolvePointerPositionHit).toHaveBeenCalled();
+    expect(TextSelection.create as unknown as Mock).toHaveBeenCalled();
+    expect(mockEditor.state.tr.setSelection).toHaveBeenCalled();
+    expect(viewportHost.setPointerCapture).toHaveBeenCalled();
   });
 
-  it('activates an inactive single-thread highlight without falling back to generic selection handling', () => {
+  it('lets direct clicks on an inactive single-thread highlight fall through to generic caret placement', () => {
     mockEditor.state.comments$.activeThreadId = 'comment-2';
 
     const highlight = document.createElement('span');
@@ -234,19 +231,14 @@ describe('EditorInputManager - single-thread comment highlight clicks', () => {
 
     dispatchPointerDown(highlight);
 
-    expect(mockEditor.commands.setCursorById).toHaveBeenCalledWith('comment-1', {
-      activeCommentId: 'comment-1',
-    });
-    expect(resolvePointerPositionHit).not.toHaveBeenCalled();
-    expect(TextSelection.create as unknown as Mock).not.toHaveBeenCalled();
-    expect(mockEditor.state.tr.setSelection).not.toHaveBeenCalled();
-    expect(mockEditor.view.dispatch).not.toHaveBeenCalled();
-    expect(mockEditor.view.focus).not.toHaveBeenCalled();
-    expect(editorDom.focus).not.toHaveBeenCalled();
-    expect(viewportHost.setPointerCapture).not.toHaveBeenCalled();
+    expect(mockEditor.commands.setCursorById).not.toHaveBeenCalled();
+    expect(resolvePointerPositionHit).toHaveBeenCalled();
+    expect(TextSelection.create as unknown as Mock).toHaveBeenCalled();
+    expect(mockEditor.state.tr.setSelection).toHaveBeenCalled();
+    expect(viewportHost.setPointerCapture).toHaveBeenCalled();
   });
 
-  it('activates a tracked-change decoration when it owns the clicked visual surface', () => {
+  it('lets direct clicks on a tracked-change decoration fall through to generic caret placement', () => {
     mockEditor.state.comments$.activeThreadId = 'comment-2';
 
     const trackedChange = document.createElement('span');
@@ -256,12 +248,32 @@ describe('EditorInputManager - single-thread comment highlight clicks', () => {
 
     dispatchPointerDown(trackedChange);
 
-    expect(mockEditor.commands.setCursorById).toHaveBeenCalledWith('change-1', {
-      activeCommentId: 'change-1',
-    });
-    expect(resolvePointerPositionHit).not.toHaveBeenCalled();
-    expect(mockEditor.state.tr.setSelection).not.toHaveBeenCalled();
-    expect(viewportHost.setPointerCapture).not.toHaveBeenCalled();
+    expect(mockEditor.commands.setCursorById).not.toHaveBeenCalled();
+    expect(resolvePointerPositionHit).toHaveBeenCalled();
+    expect(TextSelection.create as unknown as Mock).toHaveBeenCalled();
+    expect(mockEditor.state.tr.setSelection).toHaveBeenCalled();
+    expect(viewportHost.setPointerCapture).toHaveBeenCalled();
+  });
+
+  it('lets repeat direct clicks on the active tracked-change decoration reposition caret', () => {
+    mockEditor.state.comments$.activeThreadId = 'change-1';
+
+    const trackedChange = document.createElement('span');
+    trackedChange.className = 'track-delete-dec highlighted';
+    trackedChange.setAttribute('data-track-change-id', 'change-1');
+    viewportHost.appendChild(trackedChange);
+
+    dispatchPointerDown(trackedChange);
+
+    expect(mockEditor.emit).not.toHaveBeenCalledWith(
+      'commentsUpdate',
+      expect.objectContaining({ activeCommentId: 'change-1' }),
+    );
+    expect(mockEditor.commands.setCursorById).not.toHaveBeenCalled();
+    expect(resolvePointerPositionHit).toHaveBeenCalled();
+    expect(TextSelection.create as unknown as Mock).toHaveBeenCalled();
+    expect(mockEditor.state.tr.setSelection).toHaveBeenCalled();
+    expect(viewportHost.setPointerCapture).toHaveBeenCalled();
   });
 
   it('activates a nearby single-thread highlight when a split-run gap receives the pointer event', () => {

@@ -106,6 +106,7 @@ describe('getDefaultStyleDefinition', () => {
       pageBreakBefore: true,
       pageBreakAfter: false,
       basedOn: 'Base',
+      link: null,
     });
 
     // styles -> spacing and indent converted, textAlign propagated from justify when indent present
@@ -158,6 +159,31 @@ describe('getDefaultStyleDefinition', () => {
       { val: 'end', pos: 144, leader: undefined },
       { val: 'center', pos: 216, leader: undefined },
     ]);
+  });
+
+  it('parses w:link to linked character style id', () => {
+    const docx = {
+      'word/styles.xml': {
+        elements: [
+          {
+            elements: [
+              {
+                name: 'w:style',
+                attributes: { 'w:styleId': 'Heading1', 'w:type': 'paragraph' },
+                elements: [
+                  { name: 'w:name', attributes: { 'w:val': 'Heading 1' } },
+                  { name: 'w:link', attributes: { 'w:val': 'Heading1Char' } },
+                  { name: 'w:rPr', elements: [] },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    };
+
+    const res = getDefaultStyleDefinition('Heading1', docx);
+    expect(res.attrs.link).toBe('Heading1Char');
   });
 
   it('handles w:tabs element with no children gracefully', () => {

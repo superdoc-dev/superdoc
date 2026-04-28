@@ -293,10 +293,20 @@ describe('Intent tool catalog integrity', () => {
     }
   });
 
-  test('system prompt file exists and is non-empty', async () => {
-    const promptPath = path.join(REPO_ROOT, 'packages/sdk/tools/system-prompt.md');
-    const content = await readFile(promptPath, 'utf8');
-    expect(content.length).toBeGreaterThan(100);
+  test('system prompt template files exist and are non-empty', async () => {
+    const templatesDir = path.join(REPO_ROOT, 'packages/sdk/tools/prompt-templates');
+    for (const file of ['system-prompt-core.md', 'system-prompt-sdk-header.md', 'system-prompt-mcp-header.md']) {
+      const content = await readFile(path.join(templatesDir, file), 'utf8');
+      expect(content.length).toBeGreaterThan(10);
+    }
+  });
+
+  test('assembled system prompt files exist and are non-empty', async () => {
+    const toolsDir = path.join(REPO_ROOT, 'packages/sdk/tools');
+    for (const file of ['system-prompt.md', 'system-prompt-mcp.md']) {
+      const content = await readFile(path.join(toolsDir, file), 'utf8');
+      expect(content.length).toBeGreaterThan(100);
+    }
   });
 
   test('OpenAI tools have required function shape', async () => {

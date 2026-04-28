@@ -2,7 +2,7 @@ import type { Transaction } from 'prosemirror-state';
 import type { Editor } from '../Editor.js';
 import type { DefaultEventMap } from '../EventEmitter.js';
 import type { PartChangedEvent } from '../parts/types.js';
-import type { DocumentProtectionState } from '@superdoc/document-api';
+import type { DocumentProtectionState, StoryLocator } from '@superdoc/document-api';
 
 /** Source of a protection state change. */
 export type ProtectionChangeSource = 'init' | 'local-mutation' | 'remote-part-sync';
@@ -16,10 +16,63 @@ export interface FontsResolvedPayload {
 }
 
 /**
- * Comment data structure
+ * A structured element within a comment body.
+ *
+ * Comment bodies are stored as an array of elements, each representing
+ * a paragraph or nested content node. This mirrors ProseMirror-style
+ * node structure used throughout SuperDoc.
+ */
+export interface CommentElement {
+  /** Node type (e.g. 'paragraph', 'text') */
+  type: string;
+  /** Text content for leaf nodes */
+  text?: string;
+  /** Nested child elements */
+  content?: CommentElement[];
+  /** Additional element properties */
+  [key: string]: unknown;
+}
+
+/**
+ * A comment object as emitted through editor events and accepted by `exportDocx()`.
+ *
+ * This is the canonical comment shape used across SuperDoc:
+ * - Emitted via `commentsLoaded` and `commentsUpdate` events
+ * - Accepted by `exportDocx({ comments })` for saving
+ * - Produced by DOCX import in SuperConverter
  */
 export interface Comment {
-  id: string;
+  /** Unique identifier for this comment */
+  commentId: string;
+  /** Timestamp when the comment was created (ms since epoch) */
+  createdTime: number | null;
+  /** Display name of the comment author */
+  creatorName: string | null;
+  /** Email address of the comment author */
+  creatorEmail: string | null;
+  /** Avatar URL of the comment author */
+  creatorImage?: string | null;
+  /** Structured body content of the comment */
+  elements: CommentElement[];
+  /** Whether the comment thread is resolved/done */
+  isDone: boolean;
+  /** Parent comment ID for threaded replies */
+  parentCommentId?: string | null;
+  /** Original ID from the imported DOCX (used for round-trip fidelity) */
+  importedId?: string | null;
+  /** ProseMirror JSON representation of the comment body */
+  commentJSON?: unknown;
+  /** Plain text content of the comment */
+  commentText?: string | null;
+  /** Whether this is an internal/private comment */
+  isInternal?: boolean;
+  /** Whether this comment is associated with a tracked change */
+  trackedChange?: boolean;
+  /** The document/file ID this comment belongs to */
+  fileId?: string | null;
+  /** The document ID this comment belongs to */
+  documentId?: string | null;
+  /** Additional fields from the host application */
   [key: string]: unknown;
 }
 
@@ -51,6 +104,9 @@ export interface PaginationPayload {
   [key: string]: unknown;
 }
 
+/**
+ * Payload for document mode change events
+ */
 export interface DocumentModeChangePayload {
   editor: Editor;
   documentMode: 'editing' | 'viewing' | 'suggesting';
@@ -63,6 +119,15 @@ export interface ListDefinitionsPayload {
   change?: unknown;
   numbering?: unknown;
   editor?: unknown;
+}
+
+/** Payload emitted with the `tracked-changes-changed` event. */
+export interface TrackedChangesChangedPayload {
+  editor: Editor;
+  /** Stories whose tracked-change snapshot has changed. `undefined` means full rebuild. */
+  stories?: StoryLocator[];
+  /** Optional origin hint. */
+  source?: string;
 }
 
 /**
@@ -148,4 +213,21 @@ export interface EditorEventMap extends DefaultEventMap {
 
   /** Called when document protection state changes (init, local mutation, or remote sync). */
   protectionChanged: [{ editor: Editor; state: DocumentProtectionState; source: ProtectionChangeSource }];
+
+  /**
+   * Story-aware tracked-change invalidation signal.
+   *
+   * Emitted by the host-level `TrackedChangeIndex` service whenever one or
+   * more story caches are invalidated.
+   */
+  'tracked-changes-changed': [TrackedChangesChangedPayload];
+
+  /** Called on pointer down (local only, not broadcast via collaboration) */
+  pointerDown: [{ editor: Editor; event: PointerEvent }];
+
+  /** Called on pointer up (local only, not broadcast via collaboration) */
+  pointerUp: [{ editor: Editor; event: PointerEvent }];
+
+  /** Called on right-click (local only, not broadcast via collaboration) */
+  rightClick: [{ editor: Editor; event: PointerEvent }];
 }

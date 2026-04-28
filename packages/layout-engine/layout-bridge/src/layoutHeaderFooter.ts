@@ -221,6 +221,9 @@ export async function layoutHeaderFooterWithCache(
 
   // Page resolver path with digit bucketing
   const { totalPages: docTotalPages } = pageResolver(1);
+  if (!Number.isFinite(docTotalPages) || docTotalPages <= 0) {
+    return result;
+  }
   const useBucketing = FeatureFlags.HF_DIGIT_BUCKETING && docTotalPages >= MIN_PAGES_FOR_BUCKETING;
 
   for (const [type, blocks] of Object.entries(sections) as [keyof HeaderFooterBatch, FlowBlock[] | undefined][]) {
@@ -319,6 +322,8 @@ export async function layoutHeaderFooterWithCache(
       pages: pages.map((p) => ({
         number: p.number,
         fragments: p.fragments,
+        blocks: p.blocks,
+        measures: p.measures,
       })),
     };
 

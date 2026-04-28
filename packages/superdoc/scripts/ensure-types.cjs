@@ -173,6 +173,7 @@ if (fixedFiles > 0) {
 const superEditorFacadePath = path.join(distRoot, 'superdoc/src/super-editor.d.ts');
 const expectedSuperEditorFacade = [
   "export * from '../../super-editor/src/editors/v1/index.js';",
+  "export * from '../../super-editor/src/index.js';",
   "export { BLANK_DOCX_BASE64 } from '../../super-editor/src/editors/v1/core/blank-docx.js';",
   "export { getDocumentApiAdapters } from '../../super-editor/src/editors/v1/document-api-adapters/index.js';",
   "export { markdownToPmDoc } from '../../super-editor/src/editors/v1/core/helpers/markdown/index.js';",

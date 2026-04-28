@@ -48,6 +48,7 @@ export type HeaderFooterConstraints = {
    * `left`/`right`: horizontal page-relative conversion.
    * `top`/`bottom`: vertical margin-relative conversion and footer band origin.
    * `header`: header distance from page top edge (header band origin).
+   * `footer`: footer distance from page bottom edge (footer band origin).
    */
   margins?: {
     left: number;
@@ -55,6 +56,7 @@ export type HeaderFooterConstraints = {
     top?: number;
     bottom?: number;
     header?: number;
+    footer?: number;
   };
   /**
    * Optional base height used to bound behindDoc overflow handling.

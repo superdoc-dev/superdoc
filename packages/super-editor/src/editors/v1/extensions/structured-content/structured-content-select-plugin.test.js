@@ -161,6 +161,27 @@ describe('StructuredContentSelectPlugin', () => {
     expect((text.match(/\u200B/g) ?? []).length).toBe(1);
   });
 
+  it('exits inline SDT with one ArrowRight when only trailing ZWSP slots remain', () => {
+    const inlineSdt = schema.nodes.structuredContent.create({ id: 'inline-1' }, schema.text('Field\u200B\u200B'));
+    const paragraph = schema.nodes.paragraph.create(null, [schema.text('A '), inlineSdt, schema.text(' Z')]);
+    applyDoc(schema.nodes.doc.create(null, [paragraph]));
+
+    const sdt = findNode(editor.state.doc, 'structuredContent');
+    expect(sdt).not.toBeNull();
+
+    const contentFrom = sdt.pos + 1;
+    const afterVisibleText = contentFrom + 'Field'.length;
+    const afterSdt = sdt.pos + sdt.node.nodeSize;
+    editor.view.dispatch(editor.state.tr.setSelection(TextSelection.create(editor.state.doc, afterVisibleText)));
+
+    const event = new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true });
+    editor.view.someProp('handleKeyDown', (handler) => handler(editor.view, event));
+
+    expect(editor.state.selection.empty).toBe(true);
+    expect(editor.state.selection.from).toBe(afterSdt);
+    expect(editor.state.selection.to).toBe(afterSdt);
+  });
+
   it('ArrowLeft exit does not insert zero-width text before inline SDT', () => {
     const inlineSdt = schema.nodes.structuredContent.create({ id: 'inline-1' }, schema.text('Field'));
     const paragraph = schema.nodes.paragraph.create(null, [schema.text('A '), inlineSdt, schema.text(' Z')]);

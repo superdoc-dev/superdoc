@@ -365,10 +365,14 @@ describe('extract-adapter consumer simulation (SD-2766)', () => {
       blockIds: tc.blockIds?.map((b) => b.slice(0, 12)),
     }));
 
-    // eslint-disable-next-line no-console
-    console.log('[SD-2766 consumer simulation] blocks-with-spans:', JSON.stringify(blocksWithSpans, null, 2));
-    // eslint-disable-next-line no-console
-    console.log('[SD-2766 consumer simulation] tracked-changes:', JSON.stringify(tcSummary, null, 2));
+    // Logs are gated behind an env var so CI doesn't print two pretty-printed
+    // JSON blobs on every run. Set DEBUG_EXTRACT_SAMPLE=1 locally to inspect.
+    if (process.env.DEBUG_EXTRACT_SAMPLE) {
+      // eslint-disable-next-line no-console
+      console.log('[SD-2766 consumer simulation] blocks-with-spans:', JSON.stringify(blocksWithSpans, null, 2));
+      // eslint-disable-next-line no-console
+      console.log('[SD-2766 consumer simulation] tracked-changes:', JSON.stringify(tcSummary, null, 2));
+    }
 
     // Cheap assertion to keep this from being all log: at least one block has
     // spans and at least one tracked change reports its blockIds.

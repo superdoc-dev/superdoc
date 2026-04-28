@@ -513,6 +513,104 @@ describe('extract-adapter tracked-change spans', () => {
     expect(result.trackedChanges[0].blockIds).toEqual([tagged.nodeId]);
   });
 
+  it('suppresses the aggregate excerpt for in-app paired replacements with no OOXML sourceId', async () => {
+    // Reproduces the codex-bot finding on PR #2973: paired replacements
+    // created via in-app tracked editing have no `sourceId` on the marks,
+    // so `wordRevisionIds` is empty. Paired detection must come from the
+    // span walk's observed mark types, not from wordRevisionIds.
+    const sharedRawId = 'raw-paired-no-source';
+    const doc: SchemaDoc = {
+      type: 'doc',
+      content: [
+        paragraphRuns([
+          'before ',
+          { text: 'old', marks: [trackDeleteMark(sharedRawId, 'Author')] },
+          { text: 'new', marks: [trackInsertMark(sharedRawId, 'Author')] },
+          ' after',
+        ]),
+      ],
+    };
+
+    const ctx = await makeEditor(doc);
+    editor = ctx.editor;
+
+    const result = extractAdapter(editor, {});
+    expect(result.trackedChanges).toHaveLength(1);
+
+    const entry = result.trackedChanges[0];
+    expect(entry.wordRevisionIds).toBeUndefined();
+    // The whole point: even without OOXML provenance, the concatenated
+    // excerpt is suppressed because the spans showed both insert and delete.
+    expect(entry.excerpt).toBeUndefined();
+
+    // Spans still carry the per-half truth.
+    const block = result.blocks[0];
+    const taggedSpans = block.textSpans!.filter((s) => s.trackedChanges && s.trackedChanges.length > 0);
+    expect(taggedSpans.map((s) => `${s.text}:${s.trackedChanges![0].type}`)).toEqual(['old:delete', 'new:insert']);
+  });
+
+  it('coalesces adjacent runs that carry identical tracked-change marks into one span', async () => {
+    // Two separate text runs both wrapped in the same trackInsert mark must
+    // collapse into a single span — otherwise consumers see fragmented spans
+    // and have to re-merge in their rendering layer.
+    const sharedRawId = 'raw-coalesce-1';
+    const doc: SchemaDoc = {
+      type: 'doc',
+      content: [
+        paragraphRuns([
+          'plain ',
+          { text: 'first', marks: [trackInsertMark(sharedRawId, 'Author')] },
+          { text: 'second', marks: [trackInsertMark(sharedRawId, 'Author')] },
+          ' tail',
+        ]),
+      ],
+    };
+
+    const ctx = await makeEditor(doc);
+    editor = ctx.editor;
+
+    const result = extractAdapter(editor, {});
+    const block = result.blocks[0];
+    expect(block.text).toBe('plain firstsecond tail');
+    expect(block.textSpans).toHaveLength(3);
+    expect(block.textSpans!.map((s) => s.text)).toEqual(['plain ', 'firstsecond', ' tail']);
+    expect(block.textSpans![1].trackedChanges).toHaveLength(1);
+    expect(block.textSpans![1].trackedChanges![0].type).toBe('insert');
+  });
+
+  it('ignores non-tracked marks (bold) when computing span boundaries', async () => {
+    // A run with bold + trackInsert and an adjacent run with only bold must
+    // emit separate spans because their tracked-change sets differ — even
+    // though their non-tracked marks (bold) match. The walker must filter on
+    // tracked marks only.
+    const doc: SchemaDoc = {
+      type: 'doc',
+      content: [
+        paragraphRuns([
+          { text: 'bold-only', marks: [{ type: 'bold' }] },
+          {
+            text: 'bold-and-inserted',
+            marks: [{ type: 'bold' }, trackInsertMark('raw-bold-ins', 'Author')],
+          },
+          { text: ' tail', marks: [{ type: 'bold' }] },
+        ]),
+      ],
+    };
+
+    const ctx = await makeEditor(doc);
+    editor = ctx.editor;
+
+    const result = extractAdapter(editor, {});
+    const block = result.blocks[0];
+    expect(block.textSpans).toBeDefined();
+    expect(block.textSpans!.map((s) => s.text).join('')).toBe(block.text);
+
+    const taggedSpans = block.textSpans!.filter((s) => s.trackedChanges && s.trackedChanges.length > 0);
+    expect(taggedSpans).toHaveLength(1);
+    expect(taggedSpans[0].text).toBe('bold-and-inserted');
+    expect(taggedSpans[0].trackedChanges![0].type).toBe('insert');
+  });
+
   it('lists every block that carries the same tracked change in blockIds', async () => {
     // Two separate paragraphs both share the same raw mark id - the resolver
     // groups them into one entity. blockIds should list both block nodeIds.

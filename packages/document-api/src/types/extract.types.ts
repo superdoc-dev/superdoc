@@ -120,20 +120,22 @@ export interface ExtractTrackedChange {
   /**
    * Change type at the entity level.
    *
-   * In `'paired'` replacement mode (the default — see
-   * `modules.trackChanges.replacements`), a delete + insert pair shares one
-   * entity. The aggregate `type` collapses to `'insert'` for that case;
-   * per-half information lives on `block.textSpans[].trackedChanges[].type`,
-   * which is the source of truth for what each run actually represents.
+   * In paired replacement mode (the default — set
+   * `modules.trackChanges.replacements: 'independent'` for one entity per
+   * `<w:ins>` / `<w:del>` instead), a delete + insert pair shares one entity
+   * and the aggregate `type` collapses to `'insert'`. Per-half information
+   * lives on `block.textSpans[].trackedChanges[].type`, which is the source
+   * of truth for what each run actually represents.
    *
-   * In `'independent'` mode every revision is its own entity and `type` is
-   * the entity's only type.
+   * In independent mode every revision is its own entity and `type` is the
+   * entity's only type.
    */
   type: TrackChangeType;
   /**
-   * Block IDs whose `textSpans` carry this change. Lets consumers iterate
-   * a single tracked change without scanning every block. Omitted when the
-   * resolver could not match the change to any block (e.g. orphan marks).
+   * Block IDs whose `textSpans` carry this change, in document order. Lets
+   * consumers iterate a single tracked change without scanning every block.
+   * Omitted when the resolver could not match the change to any block (e.g.
+   * orphan marks).
    */
   blockIds?: string[];
   /**

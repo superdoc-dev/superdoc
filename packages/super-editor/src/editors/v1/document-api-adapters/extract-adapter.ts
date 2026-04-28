@@ -167,14 +167,17 @@ function indexCellsForTable(tableNode: ProseMirrorNode): CellAnchor[] {
  *
  * Returns a stable, sorted list so coalescing comparisons are key-equality.
  */
-function readSpanTrackedChanges(node: ProseMirrorNode, rawIdMap: Map<string, string>): ExtractTextSpanTrackedChange[] {
+function readSpanTrackedChanges(
+  node: ProseMirrorNode,
+  canonicalIdByAlias: Map<string, string>,
+): ExtractTextSpanTrackedChange[] {
   const out: ExtractTextSpanTrackedChange[] = [];
   for (const mark of node.marks) {
     const type = TRACK_MARK_TYPE_BY_NAME[mark.type.name];
     if (!type) continue;
     const rawId = (mark.attrs as Record<string, unknown> | undefined)?.id;
     if (typeof rawId !== 'string' || rawId.length === 0) continue;
-    const entityId = rawIdMap.get(rawId);
+    const entityId = canonicalIdByAlias.get(rawId);
     if (!entityId) continue;
     out.push({ entityId, type });
   }
@@ -195,37 +198,56 @@ function spanTrackedChangesEqual(a: ExtractTextSpanTrackedChange[], b: ExtractTe
 }
 
 /**
+ * Per-entity index built during the block walk. Tracks which blocks an entity
+ * appears in (for `ExtractTrackedChange.blockIds`) and which mark types it
+ * carries across all its spans (for paired-replacement detection — keying off
+ * `wordRevisionIds` would miss in-app paired edits where no `sourceId` is
+ * imported).
+ */
+interface EntityIndexEntry {
+  blockIds: Set<string>;
+  types: Set<TrackChangeType>;
+}
+
+type EntityIndex = Map<string, EntityIndexEntry>;
+
+function recordEntityHit(index: EntityIndex, entityId: string, type: TrackChangeType, blockId: string): void {
+  let entry = index.get(entityId);
+  if (!entry) {
+    entry = { blockIds: new Set<string>(), types: new Set<TrackChangeType>() };
+    index.set(entityId, entry);
+  }
+  entry.blockIds.add(blockId);
+  entry.types.add(type);
+}
+
+/**
  * Walks the inline descendants of a block and builds the span list for
  * `block.textSpans`. Returns `undefined` when no span carries any tracked-
  * change mark (clean blocks omit `textSpans` entirely).
  *
- * `entityToBlocks` accumulates the reverse index used to populate
- * `ExtractTrackedChange.blockIds`.
+ * `entityIndex` accumulates the reverse index used to populate
+ * `ExtractTrackedChange.blockIds` and to detect paired replacements.
  */
 function buildTextSpans(
   node: ProseMirrorNode,
   blockId: string,
-  rawIdMap: Map<string, string>,
-  entityToBlocks: Map<string, Set<string>>,
+  canonicalIdByAlias: Map<string, string>,
+  entityIndex: EntityIndex,
 ): ExtractTextSpan[] | undefined {
-  if (rawIdMap.size === 0) return undefined;
+  if (canonicalIdByAlias.size === 0) return undefined;
 
   const spans: ExtractTextSpan[] = [];
   let hasAnyTrackedChange = false;
 
   node.descendants((child) => {
     if (!child.isText || typeof child.text !== 'string' || child.text.length === 0) return true;
-    const tracked = readSpanTrackedChanges(child, rawIdMap);
+    const tracked = readSpanTrackedChanges(child, canonicalIdByAlias);
 
     if (tracked.length > 0) {
       hasAnyTrackedChange = true;
       for (const tc of tracked) {
-        let set = entityToBlocks.get(tc.entityId);
-        if (!set) {
-          set = new Set<string>();
-          entityToBlocks.set(tc.entityId, set);
-        }
-        set.add(blockId);
+        recordEntityHit(entityIndex, tc.entityId, tc.type, blockId);
       }
     }
 
@@ -251,8 +273,8 @@ function buildBlock(
   pos: number,
   nodeType: BlockNodeType,
   path: readonly number[],
-  rawIdMap: Map<string, string>,
-  entityToBlocks: Map<string, Set<string>>,
+  canonicalIdByAlias: Map<string, string>,
+  entityIndex: EntityIndex,
   tableContext?: ExtractTableContext,
 ): ExtractBlock | undefined {
   const nodeId = resolveBlockNodeId(node, pos, nodeType, path);
@@ -266,7 +288,7 @@ function buildBlock(
     type: nodeType,
     text: node.textContent,
   };
-  const spans = buildTextSpans(node, nodeId, rawIdMap, entityToBlocks);
+  const spans = buildTextSpans(node, nodeId, canonicalIdByAlias, entityIndex);
   if (spans) block.textSpans = spans;
   if (headingLevel !== undefined) block.headingLevel = headingLevel;
   if (tableContext) block.tableContext = tableContext;
@@ -296,8 +318,8 @@ interface NestedTableParent {
  */
 interface BlockWalkContext {
   ordinals: OrdinalCounter;
-  rawIdMap: Map<string, string>;
-  entityToBlocks: Map<string, Set<string>>;
+  canonicalIdByAlias: Map<string, string>;
+  entityIndex: EntityIndex;
 }
 
 function collectContainerBlocks(
@@ -331,7 +353,15 @@ function collectContainerBlocks(
 
     const childType = mapBlockNodeType(child);
     if (childType && EMITTABLE_BLOCK_TYPES.has(childType)) {
-      const block = buildBlock(child, childPos, childType, childPath, ctx.rawIdMap, ctx.entityToBlocks, tableContext);
+      const block = buildBlock(
+        child,
+        childPos,
+        childType,
+        childPath,
+        ctx.canonicalIdByAlias,
+        ctx.entityIndex,
+        tableContext,
+      );
       if (block) blocks.push(block);
       continue;
     }
@@ -401,18 +431,18 @@ function collectTableExtractBlocks(
 
 interface CollectedBlocks {
   blocks: ExtractBlock[];
-  entityToBlocks: Map<string, Set<string>>;
+  entityIndex: EntityIndex;
 }
 
 function collectBlocks(editor: Editor): CollectedBlocks {
   // doc is root - no opening token in the PM position model, content starts at 0.
   const ctx: BlockWalkContext = {
     ordinals: { next: 0 },
-    rawIdMap: buildTrackedChangeCanonicalIdMap(editor),
-    entityToBlocks: new Map<string, Set<string>>(),
+    canonicalIdByAlias: buildTrackedChangeCanonicalIdMap(editor),
+    entityIndex: new Map(),
   };
   const blocks = collectContainerBlocks(editor.state.doc, 0, [], ctx);
-  return { blocks, entityToBlocks: ctx.entityToBlocks };
+  return { blocks, entityIndex: ctx.entityIndex };
 }
 
 function collectComments(editor: Editor): ExtractComment[] {
@@ -432,7 +462,7 @@ function collectComments(editor: Editor): ExtractComment[] {
   });
 }
 
-function collectTrackedChanges(editor: Editor, entityToBlocks: Map<string, Set<string>>): ExtractTrackedChange[] {
+function collectTrackedChanges(editor: Editor, entityIndex: EntityIndex): ExtractTrackedChange[] {
   const result = trackChangesListWrapper(editor);
 
   return result.items.map((item) => {
@@ -440,17 +470,21 @@ function collectTrackedChanges(editor: Editor, entityToBlocks: Map<string, Set<s
       entityId: item.address.entityId,
       type: item.type,
     };
-    const blockIdSet = entityToBlocks.get(item.address.entityId);
-    if (blockIdSet && blockIdSet.size > 0) {
-      tc.blockIds = Array.from(blockIdSet);
+    const indexEntry = entityIndex.get(item.address.entityId);
+    if (indexEntry && indexEntry.blockIds.size > 0) {
+      tc.blockIds = Array.from(indexEntry.blockIds);
     }
     if (item.wordRevisionIds) tc.wordRevisionIds = item.wordRevisionIds;
-    // Suppress the aggregate excerpt for paired replacements (an entity that
-    // covers both an insert and a delete half). The internal excerpt
-    // concatenates the two halves and is misleading. Spans carry the
-    // per-half text and are the source of truth in that case.
-    const isPairedReplacement = !!(item.wordRevisionIds?.insert && item.wordRevisionIds?.delete);
-    if (item.excerpt && !isPairedReplacement) tc.excerpt = item.excerpt;
+    // Suppress the aggregate excerpt for any multi-type entity. The
+    // `groupTrackedChanges` resolver merges every mark sharing a raw id into
+    // a single record by widening `from`/`to`, so when an entity covers more
+    // than one mark type the excerpt is `textBetween(min(from), max(to))` —
+    // potentially the concatenation of two non-adjacent ranges. The spans
+    // carry the per-mark text and are the source of truth in that case.
+    // Detection runs off the span walk's own observation of mark types, so
+    // it works for in-app paired edits where no `sourceId` is imported.
+    const isMultiTypeEntity = !!(indexEntry && indexEntry.types.size > 1);
+    if (item.excerpt && !isMultiTypeEntity) tc.excerpt = item.excerpt;
     if (item.author) tc.author = item.author;
     if (item.date) tc.date = item.date;
     return tc;
@@ -458,11 +492,11 @@ function collectTrackedChanges(editor: Editor, entityToBlocks: Map<string, Set<s
 }
 
 export function extractAdapter(editor: Editor, _input: ExtractInput): ExtractResult {
-  const { blocks, entityToBlocks } = collectBlocks(editor);
+  const { blocks, entityIndex } = collectBlocks(editor);
   return {
     blocks,
     comments: collectComments(editor),
-    trackedChanges: collectTrackedChanges(editor, entityToBlocks),
+    trackedChanges: collectTrackedChanges(editor, entityIndex),
     revision: getRevision(editor),
   };
 }

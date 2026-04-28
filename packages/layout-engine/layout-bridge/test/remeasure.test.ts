@@ -369,6 +369,25 @@ describe('remeasureParagraph', () => {
       expect((textSegment?.x ?? 0) + leftIndentPx).toBeCloseTo(expectedTabAdvance, 1);
     });
 
+    it('compensates start tabs on wrapped body lines for negative-left paragraphs with hanging indents', () => {
+      const leftIndentPx = -40;
+      const run = tabRun();
+      const block = createBlock([textRun('AAAAA AAAAA AAAAA'), run, textRun('Body')], {
+        indent: { left: leftIndentPx, hanging: 20 },
+      });
+      const measure = remeasureParagraph(block, 100);
+
+      expect(measure.lines.length).toBeGreaterThan(1);
+      expect((run as { width?: number }).width).toBeCloseTo(30, 1);
+
+      const textSegment = measure.lines
+        .slice(1)
+        .flatMap((line) => line.segments ?? [])
+        .find((segment) => segment.runIndex === 2);
+      expect(textSegment?.x).toBeCloseTo(120, 1);
+      expect((textSegment?.x ?? 0) + leftIndentPx).toBeCloseTo(80, 1);
+    });
+
     it('does not clamp tabs early when negative left indent expands content width', () => {
       const leftIndentPx = -40;
       const tabStopPx = 190;

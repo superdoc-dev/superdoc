@@ -858,12 +858,12 @@ const applyTabLayoutToLines = (
       }
       const clampedTarget = Number.isFinite(maxAbsWidth) ? Math.min(target, maxAbsWidth) : target;
       const relativeTarget = clampedTarget - effectiveIndent;
-      const shouldCompensateNegativeLeft = indentLeft < 0 && rawFirstLineOffset >= 0;
+      const shouldCompensateNegativeLeft = indentLeft < 0 && effectiveIndent === indentLeft;
       // `relativeTarget` is layout geometry and controls the tab run width.
       // `paintTarget` is explicit segment geometry consumed by the DOM painter,
-      // which adds indentOffset again. For negative-left/no-hanging paragraphs,
-      // compensate the segment x only; the tab advance stays the single distance
-      // from the negative first-line origin back to the margin.
+      // which adds the current line indentOffset again. For negative-left body
+      // lines, compensate the segment x only; the tab advance stays the single
+      // distance from the negative line origin back to the margin.
       const paintTarget = shouldCompensateNegativeLeft ? relativeTarget - Math.min(effectiveIndent, 0) : relativeTarget;
       lineWidth = Math.max(lineWidth, relativeTarget);
       let currentLeader: LeaderDecoration | null = null;

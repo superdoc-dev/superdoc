@@ -1191,9 +1191,11 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
     const effectiveIndent = lines.length === 0 ? indentLeft + rawFirstLineOffset : indentLeft;
     // Negative-left paragraphs move the fragment itself left. Explicit segment
     // x values are still consumed by the DOM painter with indentOffset added,
-    // so compensate only the no-hanging negative-left case to keep final text
-    // at the margin while preserving the real single-indent tab advance.
-    return val === 'start' && indentLeft < 0 && hanging <= 0 ? startX - Math.min(effectiveIndent, 0) : startX;
+    // so compensate negative-left body lines while preserving the real
+    // single-indent tab advance.
+    return val === 'start' && indentLeft < 0 && effectiveIndent === indentLeft
+      ? startX - Math.min(effectiveIndent, 0)
+      : startX;
   };
 
   /**

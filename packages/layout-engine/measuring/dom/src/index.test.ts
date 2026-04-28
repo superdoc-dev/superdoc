@@ -1656,6 +1656,35 @@ describe('measureBlock', () => {
       }
     });
 
+    it('compensates start tabs on body lines for negative-left paragraphs with hanging indents', async () => {
+      const leftIndentPx = -40;
+      const block: FlowBlock = {
+        kind: 'paragraph',
+        id: 'negative-left-hanging-body-tab',
+        runs: [
+          { text: 'First', fontFamily: 'Arial', fontSize: 16 },
+          { kind: 'lineBreak' },
+          { kind: 'tab', text: '\t', tabIndex: 0 },
+          { text: 'Body', fontFamily: 'Arial', fontSize: 16 },
+        ],
+        attrs: {
+          indent: { left: leftIndentPx, hanging: 20 },
+        },
+      };
+
+      const measure = expectParagraphMeasure(await measureBlock(block, 200));
+
+      expect(measure.lines).toHaveLength(2);
+      const tabRun = block.runs[2];
+      if (tabRun.kind === 'tab') {
+        expect(tabRun.width).toBeCloseTo(Math.abs(leftIndentPx), 1);
+      }
+
+      const textSegment = measure.lines[1].segments?.find((segment) => segment.runIndex === 3);
+      expect(textSegment?.x).toBeCloseTo(Math.abs(leftIndentPx) * 2, 1);
+      expect((textSegment?.x ?? 0) + leftIndentPx).toBeCloseTo(Math.abs(leftIndentPx), 1);
+    });
+
     it('maps three trailing tabs to two explicit alignment stops (asymmetric case)', async () => {
       const centerStopTwips = 5000;
       const endStopTwips = 10000;

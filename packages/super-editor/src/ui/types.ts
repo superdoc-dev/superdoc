@@ -45,6 +45,12 @@ export interface SuperDocLike {
   off?(event: string, handler: (...args: unknown[]) => void): unknown;
   activeEditor?: SuperDocEditorLike | null;
   config?: { documentMode?: 'editing' | 'suggesting' | 'viewing' };
+  /**
+   * Optional setter for documentMode. Used by `ui.review.setRecording`
+   * as the temporary path until S4 ships an independent
+   * `trackChanges.setRecording` primitive.
+   */
+  setDocumentMode?(mode: 'editing' | 'suggesting' | 'viewing'): unknown;
 }
 
 export interface SuperDocEditorLike {
@@ -76,6 +82,14 @@ export interface SuperDocEditorLike {
     /** Ranges member on the Document API. Used for `ui.comments.scrollTo`. */
     ranges?: {
       scrollIntoView?(input: unknown): Promise<unknown>;
+    };
+    /**
+     * Tracked-changes member on the Document API. Used by
+     * `ui.review.*` for accept/reject and the merged feed.
+     */
+    trackChanges?: {
+      list?(query?: unknown): unknown;
+      decide?(input: unknown, options?: unknown): unknown;
     };
   };
 }
@@ -119,6 +133,13 @@ export interface SuperDocUIState {
    * can highlight the active card without a separate subscription.
    */
   comments: CommentsSlice;
+  /**
+   * Review slice — merged comments + tracked-changes feed for the
+   * Word / Google Docs review sidebar pattern. Cached at controller
+   * level alongside the comments slice; refreshes on the same events
+   * plus tracked-change events.
+   */
+  review: ReviewSlice;
 }
 
 /**
@@ -154,6 +175,59 @@ export interface CommentsSlice {
    * field) — the controller falls back gracefully.
    */
   activeIds: string[];
+}
+
+/**
+ * One item in the merged review feed (comments + tracked changes).
+ *
+ * Discriminated by `kind`. `documentOrder` is a dense rank within the
+ * snapshot — comparing two items' `documentOrder` tells you which
+ * appears first; consuming UIs don't need to recompute it.
+ */
+export type ReviewItem =
+  | {
+      kind: 'comment';
+      id: string;
+      documentOrder: number;
+      comment: import('@superdoc/document-api').CommentsListResult['items'][number];
+    }
+  | {
+      kind: 'change';
+      id: string;
+      documentOrder: number;
+      change: import('@superdoc/document-api').TrackChangesListResult['items'][number];
+    };
+
+/**
+ * Snapshot of the merged review feed exposed on `state.review`.
+ *
+ * Document-order ranking note (per SD-2791 ticket): both
+ * `editor.doc.trackChanges.list()` and tracked-change groupings are
+ * already returned in PM-position order, but cross-list interleaving
+ * between comments and tracked changes is *not* fully resolved
+ * because public `TrackChangeInfo` lacks a positional `target` today
+ * (separate ticket). The initial implementation interleaves comments
+ * (in their `comments.list()` order) ahead of tracked changes (in
+ * their `list()` order); migration-guide consumers get a stable
+ * iteration order and dense `documentOrder` ranks for next/previous
+ * navigation. When `TrackChangeInfo.target` lands, the merge sort
+ * gets refined transparently.
+ */
+export interface ReviewSlice {
+  /** Merged feed, sorted by `documentOrder`. */
+  items: ReviewItem[];
+  /**
+   * Number of unresolved review items (open comments + every tracked
+   * change). Drives sidebar-header counts.
+   */
+  openCount: number;
+  /**
+   * The currently active item id — driven by selection
+   * (`activeCommentIds[0] ?? activeChangeIds[0]`) plus
+   * `ui.review.next/previous/scrollTo` calls. `null` when nothing is
+   * focused.
+   */
+  activeId: string | null;
 }
 
 export interface SuperDocUIOptions {
@@ -198,6 +272,13 @@ export interface SuperDocUI {
    * mutation contract.
    */
   comments: CommentsHandle;
+
+  /**
+   * Review domain — merged comments + tracked-changes feed for
+   * Word/Google-Docs review sidebars. Same shape as `comments` but
+   * with accept/reject/next/previous semantics.
+   */
+  review: ReviewHandle;
 
   /**
    * Tear down all internal subscriptions to the editor / SuperDoc
@@ -310,4 +391,56 @@ export interface CommentsHandle {
    * Resolves to the receipt the doc-API returns.
    */
   scrollTo(commentId: string): Promise<import('@superdoc/document-api').ScrollIntoViewOutput>;
+}
+
+/**
+ * Review domain handle exposed on `ui.review`. Same architectural
+ * posture as `CommentsHandle`: every mutation routes through
+ * `editor.doc.trackChanges.*` (the Document API contract); next /
+ * previous / scrollTo are UI-only navigation helpers.
+ */
+export interface ReviewHandle {
+  /** Snapshot the merged review feed synchronously. */
+  getSnapshot(): ReviewSlice;
+  /**
+   * Subscribe to review-snapshot changes (items, openCount, activeId).
+   * Listener fires once synchronously with the current snapshot, then
+   * again whenever the slice changes by shallow equality. Returns an
+   * unsubscribe.
+   */
+  subscribe(listener: (event: { snapshot: ReviewSlice }) => void): () => void;
+  /** Accept a single tracked change via `trackChanges.decide`. */
+  accept(changeId: string): import('@superdoc/document-api').Receipt;
+  /** Reject a single tracked change via `trackChanges.decide`. */
+  reject(changeId: string): import('@superdoc/document-api').Receipt;
+  /** Accept every tracked change via `trackChanges.decide({ scope: 'all' })`. */
+  acceptAll(): import('@superdoc/document-api').Receipt;
+  /** Reject every tracked change via `trackChanges.decide({ scope: 'all' })`. */
+  rejectAll(): import('@superdoc/document-api').Receipt;
+  /**
+   * Move `activeId` to the next item in the merged feed (document
+   * order). Wraps to the first item past the last. Returns the new
+   * active id, or `null` if the feed is empty.
+   */
+  next(): string | null;
+  /**
+   * Move `activeId` to the previous item in the merged feed. Wraps
+   * to the last item past the first. Returns the new active id, or
+   * `null` if the feed is empty.
+   */
+  previous(): string | null;
+  /**
+   * Scroll the viewport to the given item (comment or tracked
+   * change) and set it as `activeId`. Routes through
+   * `editor.doc.ranges.scrollIntoView({ target: EntityAddress })`.
+   */
+  scrollTo(id: string): Promise<import('@superdoc/document-api').ScrollIntoViewOutput>;
+  /**
+   * Toggle tracked-changes recording. Today flips
+   * `superdoc.config.documentMode` between `'suggesting'` and
+   * `'editing'`; SD-2667's S4 follow-up will decouple recording from
+   * view mode and this routes through the new primitive once
+   * available.
+   */
+  setRecording(enabled: boolean): void;
 }

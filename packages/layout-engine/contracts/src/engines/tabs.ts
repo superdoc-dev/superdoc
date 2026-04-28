@@ -99,6 +99,8 @@ export interface CalculateTabWidthResult {
   tabStopPosUsed: number | 'default';
 }
 
+const TAB_STOP_POSITION_TOLERANCE_TWIPS = 20;
+
 /**
  * Compute the full set of tab stops for a paragraph.
  *
@@ -138,14 +140,18 @@ export function computeTabStops(context: TabContext): TabStop[] {
   // a leading tab should advance back to the left margin instead of jumping to
   // the first default tab interval.
   const firstLineOrigin = leftIndent - hanging;
-  if (hanging > 0 && firstLineOrigin < 0 && !stops.some((stop) => Math.abs(stop.pos) < 20)) {
+  if (
+    hanging > 0 &&
+    firstLineOrigin < 0 &&
+    !stops.some((stop) => Math.abs(stop.pos) < TAB_STOP_POSITION_TOLERANCE_TWIPS)
+  ) {
     stops.push({ val: 'start', pos: 0, leader: 'none' });
   }
   const leftIndentStop = Math.abs(leftIndent);
   if (
     leftIndentStop > 0 &&
     firstLineOrigin < leftIndentStop &&
-    !stops.some((stop) => Math.abs(stop.pos - leftIndentStop) < 20)
+    !stops.some((stop) => Math.abs(stop.pos - leftIndentStop) < TAB_STOP_POSITION_TOLERANCE_TWIPS)
   ) {
     stops.push({ val: 'start', pos: leftIndentStop, leader: 'none' });
   }
@@ -163,8 +169,12 @@ export function computeTabStops(context: TabContext): TabStop[] {
     pos += defaultTabInterval;
 
     // Don't add if there's already an explicit stop OR a cleared position at this position
-    const hasExplicitStop = filteredExplicitStops.some((s) => Math.abs(s.pos - pos) < 20);
-    const hasClearStop = clearPositions.some((clearPos) => Math.abs(clearPos - pos) < 20);
+    const hasExplicitStop = filteredExplicitStops.some(
+      (s) => Math.abs(s.pos - pos) < TAB_STOP_POSITION_TOLERANCE_TWIPS,
+    );
+    const hasClearStop = clearPositions.some(
+      (clearPos) => Math.abs(clearPos - pos) < TAB_STOP_POSITION_TOLERANCE_TWIPS,
+    );
 
     // Default stops must be >= leftIndent (for body text alignment)
     const isValidDefault = pos >= leftIndent;

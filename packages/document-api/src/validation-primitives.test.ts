@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { isRecord, isInteger, isTextAddress, assertNoUnknownFields } from './validation-primitives.js';
+import { isRecord, isInteger, isTextAddress, isTextTarget, assertNoUnknownFields } from './validation-primitives.js';
 import { DocumentApiValidationError } from './errors.js';
 
 describe('isRecord', () => {
@@ -75,6 +75,82 @@ describe('isTextAddress', () => {
     expect(isTextAddress(null)).toBe(false);
     expect(isTextAddress('text')).toBe(false);
     expect(isTextAddress(42)).toBe(false);
+  });
+});
+
+describe('isTextTarget', () => {
+  it('returns true for single-segment targets', () => {
+    expect(
+      isTextTarget({
+        kind: 'text',
+        segments: [{ blockId: 'p1', range: { start: 0, end: 5 } }],
+      }),
+    ).toBe(true);
+  });
+
+  it('returns true for multi-segment targets', () => {
+    expect(
+      isTextTarget({
+        kind: 'text',
+        segments: [
+          { blockId: 'p1', range: { start: 3, end: 10 } },
+          { blockId: 'p2', range: { start: 0, end: 7 } },
+        ],
+      }),
+    ).toBe(true);
+  });
+
+  it('returns false for wrong kind', () => {
+    expect(
+      isTextTarget({
+        kind: 'block',
+        segments: [{ blockId: 'p1', range: { start: 0, end: 5 } }],
+      }),
+    ).toBe(false);
+  });
+
+  it('returns false for empty segments array', () => {
+    expect(isTextTarget({ kind: 'text', segments: [] })).toBe(false);
+  });
+
+  it('returns false for missing segments', () => {
+    expect(isTextTarget({ kind: 'text' })).toBe(false);
+  });
+
+  it('returns false when any segment is malformed', () => {
+    expect(
+      isTextTarget({
+        kind: 'text',
+        segments: [
+          { blockId: 'p1', range: { start: 0, end: 5 } },
+          { blockId: 'p2' }, // missing range
+        ],
+      }),
+    ).toBe(false);
+  });
+
+  it('returns false when segment range has start > end', () => {
+    expect(
+      isTextTarget({
+        kind: 'text',
+        segments: [{ blockId: 'p1', range: { start: 7, end: 3 } }],
+      }),
+    ).toBe(false);
+  });
+
+  it('returns false for non-integer range values', () => {
+    expect(
+      isTextTarget({
+        kind: 'text',
+        segments: [{ blockId: 'p1', range: { start: 0, end: 1.5 } }],
+      }),
+    ).toBe(false);
+  });
+
+  it('returns false for non-objects', () => {
+    expect(isTextTarget(null)).toBe(false);
+    expect(isTextTarget('text')).toBe(false);
+    expect(isTextTarget(42)).toBe(false);
   });
 });
 

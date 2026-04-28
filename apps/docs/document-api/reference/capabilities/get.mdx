@@ -1895,6 +1895,11 @@ _No fields._
 | `operations.sections.setVerticalAlign.dryRun` | boolean | yes |  |
 | `operations.sections.setVerticalAlign.reasons` | enum[] | no |  |
 | `operations.sections.setVerticalAlign.tracked` | boolean | yes |  |
+| `operations.selection.current` | object | yes |  |
+| `operations.selection.current.available` | boolean | yes |  |
+| `operations.selection.current.dryRun` | boolean | yes |  |
+| `operations.selection.current.reasons` | enum[] | no |  |
+| `operations.selection.current.tracked` | boolean | yes |  |
 | `operations.styles.apply` | object | yes |  |
 | `operations.styles.apply.available` | boolean | yes |  |
 | `operations.styles.apply.dryRun` | boolean | yes |  |
@@ -4114,6 +4119,11 @@ _No fields._
     "sections.setVerticalAlign": {
       "available": true,
       "dryRun": true,
+      "tracked": false
+    },
+    "selection.current": {
+      "available": true,
+      "dryRun": false,
       "tracked": false
     },
     "styles.apply": {
@@ -17469,6 +17479,41 @@ _No fields._
           ],
           "type": "object"
         },
+        "selection.current": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
         "styles.apply": {
           "additionalProperties": false,
           "properties": {
@@ -19756,6 +19801,7 @@ _No fields._
         "trackChanges.decide",
         "query.match",
         "ranges.resolve",
+        "selection.current",
         "mutations.preview",
         "mutations.apply",
         "capabilities.get",

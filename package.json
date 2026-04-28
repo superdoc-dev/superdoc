@@ -51,7 +51,7 @@
     "lint:jsdoc:fix": "eslint packages/super-editor/src/editors/v1/extensions/field-annotation/field-annotation.js --config eslint.config.docs.mjs --fix",
     "pack": "pnpm run build:superdoc && pnpm run type-check && pnpm --prefix ./packages/superdoc run pack",
     "release": "pnpm run build:superdoc && pnpm run type-check && pnpm --prefix packages/superdoc exec semantic-release",
-    "release:dry-run": "pnpm run build:superdoc && pnpm run type-check && pnpm --prefix packages/superdoc exec semantic-release --dry-run",
+    "release:dry-run": "pnpm run build:superdoc && pnpm run type-check && node scripts/release-local-superdoc.mjs --dry-run",
     "release:local": "pnpm run build:superdoc && pnpm run type-check && node scripts/release-local-stable.mjs",
     "release:local:superdoc": "pnpm run build:superdoc && pnpm run type-check && node scripts/release-local-superdoc.mjs",
     "release:local:cli": "pnpm run build:superdoc && pnpm run type-check && node scripts/release-local-cli.mjs",

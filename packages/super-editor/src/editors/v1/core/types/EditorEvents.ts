@@ -221,4 +221,13 @@ export interface EditorEventMap extends DefaultEventMap {
    * more story caches are invalidated.
    */
   'tracked-changes-changed': [TrackedChangesChangedPayload];
+
+  /** Called on pointer down (local only, not broadcast via collaboration) */
+  pointerDown: [{ editor: Editor; event: PointerEvent }];
+
+  /** Called on pointer up (local only, not broadcast via collaboration) */
+  pointerUp: [{ editor: Editor; event: PointerEvent }];
+
+  /** Called on right-click (local only, not broadcast via collaboration) */
+  rightClick: [{ editor: Editor; event: PointerEvent }];
 }

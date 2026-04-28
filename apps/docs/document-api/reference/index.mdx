@@ -49,6 +49,7 @@ This reference is sourced from `packages/document-api/src/contract/*`.
 | Citations | 15 | 0 | 15 | [Open](/document-api/reference/citations/index) |
 | Table of Authorities | 11 | 0 | 11 | [Open](/document-api/reference/authorities/index) |
 | Ranges | 1 | 0 | 1 | [Open](/document-api/reference/ranges/index) |
+| Selection | 1 | 0 | 1 | [Open](/document-api/reference/selection/index) |
 | Diff | 3 | 0 | 3 | [Open](/document-api/reference/diff/index) |
 | Protection | 3 | 0 | 3 | [Open](/document-api/reference/protection/index) |
 | Permission Ranges | 5 | 0 | 5 | [Open](/document-api/reference/permission-ranges/index) |
@@ -582,6 +583,12 @@ The tables below are grouped by namespace.
 | Operation | API member path | Description |
 | --- | --- | --- |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/ranges/resolve"><code>ranges.resolve</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.ranges.resolve(...)</code></span> | Resolve two explicit anchors into a contiguous document range. Returns a transparent SelectionTarget, a mutation-ready ref, and preview metadata. Stateless and deterministic. |
+
+#### Selection
+
+| Operation | API member path | Description |
+| --- | --- | --- |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/selection/current"><code>selection.current</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.selection.current(...)</code></span> | Read the editor's current selection as a portable SelectionInfo with a text-anchored TextTarget. Primitive for building custom comments UIs, floating toolbars, and other selection-driven components without reaching into ProseMirror internals. |
 
 #### Diff
 

@@ -25,4 +25,5 @@ export {
   findPageElement,
   readLayoutEpochFromDom,
   resolvePositionWithinFragmentDom,
+  resolveTextBoundaryWithinFragmentDom,
 } from './DomPointerMapping.js';

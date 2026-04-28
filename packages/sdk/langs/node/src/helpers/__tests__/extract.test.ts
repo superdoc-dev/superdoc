@@ -28,11 +28,30 @@ function tc(entityId: string, type: 'insert' | 'delete' | 'format') {
 // ---------------------------------------------------------------------------
 
 describe('renderBlockText', () => {
-  test('returns block.text when block has no textSpans', () => {
+  test('returns block.text for clean blocks when there is nothing unsafe to escape', () => {
     const b = block('p1', 'plain text only');
     expect(renderBlockText(b)).toBe('plain text only');
     expect(renderBlockText(b, { trackedChanges: 'markdown' })).toBe('plain text only');
     expect(renderBlockText(b, { trackedChanges: 'plain' })).toBe('plain text only');
+  });
+
+  test('html: escapes clean-block text containing HTML metacharacters', () => {
+    // The common case: a block has no tracked changes (so no textSpans) but
+    // its plain text contains characters that would be unsafe to inject into
+    // the DOM. The helper must still escape — otherwise consumers following
+    // the docs ("html output is safe for direct DOM rendering") would ship
+    // an XSS hole on their first untracked block.
+    const b = block('p1', 'Use <script>alert(1)</script> & similar tags carefully');
+    const out = renderBlockText(b, { trackedChanges: 'html' });
+    expect(out).toBe('Use &lt;script&gt;alert(1)&lt;/script&gt; &amp; similar tags carefully');
+    expect(out).not.toContain('<script>');
+  });
+
+  test('markdown and plain: clean-block text is not escaped', () => {
+    // Markdown sources expect raw text; 'plain' is the explicit opt-out.
+    const b = block('p1', 'Use <script> tags');
+    expect(renderBlockText(b, { trackedChanges: 'markdown' })).toBe('Use <script> tags');
+    expect(renderBlockText(b, { trackedChanges: 'plain' })).toBe('Use <script> tags');
   });
 
   test('html: wraps insert/delete spans with semantic tags and entity ids', () => {

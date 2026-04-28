@@ -149,8 +149,17 @@ function escapeHtml(text: string): string {
  */
 export function renderBlockText(block: ExtractBlockLike, options: RenderBlockTextOptions = {}): string {
   const format: RenderBlockTextFormat = options.trackedChanges ?? 'html';
-  if (!block.textSpans || block.textSpans.length === 0) return block.text;
+
+  // 'plain' is always raw text — that's the explicit opt-out of escaping.
   if (format === 'plain') return block.text;
+
+  // Clean block (no tracked changes): no markers to inject, but in 'html'
+  // mode the text still has to be escaped before it can be safely rendered
+  // into the DOM. Skipping this would let untracked content like the
+  // literal string "<script>" pass through unescaped.
+  if (!block.textSpans || block.textSpans.length === 0) {
+    return format === 'html' ? escapeHtml(block.text) : block.text;
+  }
 
   return block.textSpans
     .map((span) => {

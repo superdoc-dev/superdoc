@@ -68,6 +68,9 @@ const normalizeColorWithDefault = (color?: string): string => {
  * style 'none' and width 0.
  *
  * @param ooxmlBorder - Raw OOXML border object with optional val, size, and color properties
+ * @param options - Optional conversion options
+ * @param options.unit - Unit of `size`. Defaults to `'px'` (clamps to a safe range).
+ *   Use `'eighthPoints'` when callers haven't pre-converted from OOXML's ST_EighthPointMeasure.
  * @returns BorderSpec with style, width (in pixels), and color, or undefined if invalid
  *
  * @example
@@ -133,6 +136,9 @@ export function convertBorderSpec(ooxmlBorder: unknown, options?: BorderConversi
  * a `none` flag for nil/none borders instead of returning a style enum.
  *
  * @param ooxmlBorder - Raw OOXML border object with optional val, size, and color properties
+ * @param options - Optional conversion options
+ * @param options.unit - Unit of `size`. Defaults to `'px'` (clamps to a safe range).
+ *   Use `'eighthPoints'` when callers haven't pre-converted from OOXML's ST_EighthPointMeasure.
  * @returns TableBorderValue with style, width, and color, or { none: true } for nil borders, or undefined if invalid
  *
  * @example
@@ -221,6 +227,9 @@ function isTableBorderValue(value: unknown): value is TableBorderValue {
  * - A raw OOXML-like border object where each side may contain { size, val, ... }
  *
  * @param bordersInput - Record of border definitions for sides (top, left, right, etc.)
+ * @param options - Optional conversion options forwarded to convertTableBorderValue
+ * @param options.unit - Unit of border `size`. Defaults to `'px'`.
+ *   Use `'eighthPoints'` when sides carry raw OOXML ST_EighthPointMeasure values.
  * @returns TableBorders | undefined
  */
 export function extractTableBorders(
@@ -262,6 +271,9 @@ export function extractTableBorders(
  * @param cellAttrs - ProseMirror table cell node attributes object
  * @returns CellBorders object with BorderSpec for each side (top, right, bottom, left), or undefined if no borders
  *
+ * Sizes on `cellAttrs.borders` are expected to be already in pixels - the DOCX
+ * translator converts from eighth-points before pm-adapter sees them.
+ *
  * @example
  * ```typescript
  * extractCellBorders({
@@ -270,7 +282,7 @@ export function extractTableBorders(
  *     bottom: { val: 'double', size: 16 }
  *   }
  * });
- * // { top: { style: 'single', width: 1.33, ... }, bottom: { style: 'double', width: 2.67, ... } }
+ * // { top: { style: 'single', width: 8, color: '#000000' }, bottom: { style: 'double', width: 16, color: '#000000' } }
  * ```
  */
 export function extractCellBorders(cellAttrs: Record<string, unknown>): CellBorders | undefined {

@@ -1100,6 +1100,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
   let hasSeenTextRun = false;
   let tabStopCursor = 0;
   let pendingTabAlignment: { target: number; val: TabStop['val'] } | null = null;
+  let pendingSegmentPrecedingTabEndX: number | undefined;
   let pendingLeader: LeaderDecoration | null = null;
   let pendingRunSpacing = 0;
   // Remember the last applied tab alignment so we can clamp end-aligned
@@ -1189,13 +1190,21 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
     pendingTabAlignment = null;
     pendingLeader = null;
 
+    const shouldCompensateNegativeLeft = val === 'start' && indentLeft < 0 && effectiveIndent === indentLeft;
+    pendingSegmentPrecedingTabEndX = shouldCompensateNegativeLeft ? startX : undefined;
+
     // Negative-left paragraphs move the fragment itself left. Explicit segment
     // x values are still consumed by the DOM painter with indentOffset added,
     // so compensate negative-left body lines while preserving the real
-    // single-indent tab advance.
-    return val === 'start' && indentLeft < 0 && effectiveIndent === indentLeft
-      ? startX - Math.min(effectiveIndent, 0)
-      : startX;
+    // single-indent tab advance. The uncompensated tab end is carried on the
+    // following segment as precedingTabEndX.
+    return shouldCompensateNegativeLeft ? startX - Math.min(effectiveIndent, 0) : startX;
+  };
+
+  const consumePendingPrecedingTabEndX = (): number | undefined => {
+    const value = pendingSegmentPrecedingTabEndX;
+    pendingSegmentPrecedingTabEndX = undefined;
+    return value;
   };
 
   /**
@@ -1626,6 +1635,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
         // Legacy: single-segment tab alignment (for start-aligned tabs)
         imageStartX = alignPendingTabForWidth(imageWidth);
       }
+      const imagePrecedingTabEndX = imageStartX !== undefined ? consumePendingPrecedingTabEndX() : undefined;
 
       // Initialize line if needed
       if (!currentLine) {
@@ -1646,6 +1656,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
               toChar: 1,
               width: imageWidth,
               ...(imageStartX !== undefined ? { x: imageStartX } : {}),
+              ...(imagePrecedingTabEndX !== undefined ? { precedingTabEndX: imagePrecedingTabEndX } : {}),
             },
           ],
         };
@@ -1712,6 +1723,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
           toChar: 1,
           width: imageWidth,
           ...(imageStartX !== undefined ? { x: imageStartX } : {}),
+          ...(imagePrecedingTabEndX !== undefined ? { precedingTabEndX: imagePrecedingTabEndX } : {}),
         });
       }
 
@@ -1818,6 +1830,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
       if (pendingTabAlignment && currentLine) {
         annotationStartX = alignPendingTabForWidth(annotationWidth);
       }
+      const annotationPrecedingTabEndX = annotationStartX !== undefined ? consumePendingPrecedingTabEndX() : undefined;
 
       // Initialize line if needed
       if (!currentLine) {
@@ -1837,6 +1850,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
               toChar: 1,
               width: annotationWidth,
               ...(annotationStartX !== undefined ? { x: annotationStartX } : {}),
+              ...(annotationPrecedingTabEndX !== undefined ? { precedingTabEndX: annotationPrecedingTabEndX } : {}),
             },
           ],
         };
@@ -1893,6 +1907,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
           toChar: 1,
           width: annotationWidth,
           ...(annotationStartX !== undefined ? { x: annotationStartX } : {}),
+          ...(annotationPrecedingTabEndX !== undefined ? { precedingTabEndX: annotationPrecedingTabEndX } : {}),
         });
       }
 
@@ -2023,6 +2038,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
           segmentStartX = currentLine.width;
         }
       }
+      const segmentPrecedingTabEndX = segmentStartX !== undefined ? consumePendingPrecedingTabEndX() : undefined;
 
       for (let wordIndex = 0; wordIndex < words.length; wordIndex++) {
         const word = words[wordIndex];
@@ -2430,7 +2446,15 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
             } else if (wordIndex === 0 && segmentStartX !== undefined) {
               explicitXHere = segmentStartX;
             }
-            appendSegment(currentLine.segments, runIndex, wordStartChar, wordEndNoSpace, wordOnlyWidth, explicitXHere);
+            appendSegment(
+              currentLine.segments,
+              runIndex,
+              wordStartChar,
+              wordEndNoSpace,
+              wordOnlyWidth,
+              explicitXHere,
+              wordIndex === 0 ? segmentPrecedingTabEndX : undefined,
+            );
             // finish current line and start a new one on next iteration
             trimTrailingWrapSpaces(currentLine);
             const metrics = finalizeLineMetrics(currentLine, spacing);
@@ -2472,7 +2496,15 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
           currentLine.width = roundValue(targetWidth);
           currentLine.maxFontInfo = updateMaxFontInfo(currentLine.maxFontSize, currentLine.maxFontInfo, run);
           currentLine.maxFontSize = Math.max(currentLine.maxFontSize, lineHeightFontSize(run));
-          appendSegment(currentLine.segments, runIndex, wordStartChar, newToChar, wordCommitWidth, explicitX);
+          appendSegment(
+            currentLine.segments,
+            runIndex,
+            wordStartChar,
+            newToChar,
+            wordCommitWidth,
+            explicitX,
+            wordIndex === 0 ? segmentPrecedingTabEndX : undefined,
+          );
           if (shouldIncludeDelimiterSpace) {
             currentLine.spaceCount += 1;
           }
@@ -3613,17 +3645,31 @@ const appendSegment = (
   toChar: number,
   width: number,
   x?: number,
+  precedingTabEndX?: number,
 ): void => {
   if (!segments) return;
   const last = segments[segments.length - 1];
   // Only merge segments if they are contiguous AND have no explicit X positioning
   // (explicit X means tab-aligned, shouldn't merge)
-  if (last && last.runIndex === runIndex && last.toChar === fromChar && x === undefined) {
+  if (
+    last &&
+    last.runIndex === runIndex &&
+    last.toChar === fromChar &&
+    x === undefined &&
+    precedingTabEndX === undefined
+  ) {
     last.toChar = toChar;
     last.width += width;
     return;
   }
-  segments.push({ runIndex, fromChar, toChar, width, x });
+  segments.push({
+    runIndex,
+    fromChar,
+    toChar,
+    width,
+    ...(x !== undefined ? { x } : {}),
+    ...(precedingTabEndX !== undefined ? { precedingTabEndX } : {}),
+  });
 };
 
 const resolveLineHeight = (spacing: ParagraphSpacing | undefined, fontSize: number, maxHeight: number = -1): number => {

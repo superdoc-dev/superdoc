@@ -371,6 +371,7 @@ type TabStopPx = {
 type PendingTabAlignStart = {
   layoutX: number;
   paintX: number;
+  precedingTabEndX?: number;
 };
 
 /**
@@ -866,6 +867,7 @@ const applyTabLayoutToLines = (
       // lines, compensate the segment x only; the tab advance stays the single
       // distance from the negative line origin back to the margin.
       const paintTarget = shouldCompensateNegativeLeft ? relativeTarget - Math.min(effectiveIndent, 0) : relativeTarget;
+      const precedingTabEndX = shouldCompensateNegativeLeft ? relativeTarget : undefined;
       lineWidth = Math.max(lineWidth, relativeTarget);
       let currentLeader: LeaderDecoration | null = null;
 
@@ -906,13 +908,23 @@ const applyTabLayoutToLines = (
         }
       } else {
         cursorX = Math.max(cursorX, relativeTarget);
-        pendingTabAlignStartX = { layoutX: relativeTarget, paintX: paintTarget };
+        pendingTabAlignStartX = {
+          layoutX: relativeTarget,
+          paintX: paintTarget,
+          ...(precedingTabEndX !== undefined ? { precedingTabEndX } : {}),
+        };
       }
 
       // Set tab run width for rendering
       if (run && run.kind === 'tab') {
         (run as { width?: number }).width = Math.max(0, relativeTarget - originX);
       }
+    };
+
+    const consumePendingTabAlignStart = (): PendingTabAlignStart | null => {
+      const pending = pendingTabAlignStartX;
+      pendingTabAlignStartX = null;
+      return pending;
     };
 
     for (let runIndex = line.fromRun; runIndex <= line.toRun; runIndex += 1) {
@@ -947,11 +959,13 @@ const applyTabLayoutToLines = (
             toChar: i,
             width: segmentWidth,
           };
-          const pendingTabAlign = pendingTabAlignStartX;
+          const pendingTabAlign = consumePendingTabAlignStart();
           if (pendingTabAlign != null) {
             segment.x = pendingTabAlign.paintX;
+            if (pendingTabAlign.precedingTabEndX !== undefined) {
+              segment.precedingTabEndX = pendingTabAlign.precedingTabEndX;
+            }
             cursorX = pendingTabAlign.layoutX + segmentWidth;
-            pendingTabAlignStartX = null;
           } else {
             cursorX += segmentWidth;
           }
@@ -971,11 +985,13 @@ const applyTabLayoutToLines = (
           toChar: sliceEnd,
           width: segmentWidth,
         };
-        const pendingTabAlign = pendingTabAlignStartX;
+        const pendingTabAlign = consumePendingTabAlignStart();
         if (pendingTabAlign != null) {
           segment.x = pendingTabAlign.paintX;
+          if (pendingTabAlign.precedingTabEndX !== undefined) {
+            segment.precedingTabEndX = pendingTabAlign.precedingTabEndX;
+          }
           cursorX = pendingTabAlign.layoutX + segmentWidth;
-          pendingTabAlignStartX = null;
         } else {
           cursorX += segmentWidth;
         }

@@ -1682,6 +1682,7 @@ describe('measureBlock', () => {
 
       const textSegment = measure.lines[1].segments?.find((segment) => segment.runIndex === 3);
       expect(textSegment?.x).toBeCloseTo(Math.abs(leftIndentPx) * 2, 1);
+      expect(textSegment?.precedingTabEndX).toBeCloseTo(Math.abs(leftIndentPx), 1);
       expect((textSegment?.x ?? 0) + leftIndentPx).toBeCloseTo(Math.abs(leftIndentPx), 1);
     });
 

@@ -363,6 +363,7 @@ describe('remeasureParagraph', () => {
 
       const textSegment = measure.lines[0].segments?.find((segment) => segment.runIndex === 1);
       expect(textSegment?.x).toBeCloseTo(expectedTabAdvance * 2, 1);
+      expect(textSegment?.precedingTabEndX).toBeCloseTo(expectedTabAdvance, 1);
       // Explicit segment x is pre-painter geometry. The DOM painter later adds the
       // negative paragraph indent, so the final fragment-local text position remains
       // one indent width from the negative-left fragment origin: 2*indent - indent.
@@ -385,6 +386,7 @@ describe('remeasureParagraph', () => {
         .flatMap((line) => line.segments ?? [])
         .find((segment) => segment.runIndex === 2);
       expect(textSegment?.x).toBeCloseTo(120, 1);
+      expect(textSegment?.precedingTabEndX).toBeCloseTo(80, 1);
       expect((textSegment?.x ?? 0) + leftIndentPx).toBeCloseTo(80, 1);
     });
 

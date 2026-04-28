@@ -6288,10 +6288,8 @@ export class DomPainter {
       });
 
       /**
-       * Finds the X position where the immediate next segment starts after a given run index.
-       * Only returns the X if the very next run has a segment with explicit positioning.
-       * This handles tab-aligned text where right/center alignment causes the text to start
-       * before the tab stop target.
+       * Finds the immediate next segment carrying tab geometry after a given run index.
+       * This handles tab-aligned text and compensated tab paint geometry.
        *
        * WHY ONLY THE IMMEDIATE NEXT RUN:
        * When rendering a tab, we need to know where the content IMMEDIATELY after this tab begins
@@ -6307,17 +6305,20 @@ export class DomPainter {
        * - TAB2 will independently check "MoreContent" when it's rendered
        *
        * @param fromRunIndex - The run index to search after
-       * @returns The X position of the immediate next segment, or undefined if not found or not immediate
+       * @returns The immediate next tab-positioned segment, or undefined if not found or not immediate
        */
-      const findImmediateNextSegmentX = (fromRunIndex: number): number | undefined => {
+      const findImmediateNextSegment = (fromRunIndex: number): LineSegment | undefined => {
         // Only check the immediate next run - don't skip over other tabs
         const nextRunIdx = fromRunIndex + 1;
         if (nextRunIdx <= line.toRun) {
           const nextSegments = segmentsByRun.get(nextRunIdx);
           if (nextSegments && nextSegments.length > 0) {
             const firstSegment = nextSegments[0];
-            // Return the segment's explicit X if it has one (from tab alignment)
-            return firstSegment.x;
+            // Return only the first segment; later segments in the same run are
+            // not immediately adjacent to this tab.
+            return firstSegment.x !== undefined || firstSegment.precedingTabEndX !== undefined
+              ? firstSegment
+              : undefined;
           }
         }
         return undefined;
@@ -6379,24 +6380,15 @@ export class DomPainter {
 
         if (baseRun.kind === 'tab') {
           // Find where the immediate next content begins (if it's right after this tab)
-          const immediateNextX = findImmediateNextSegmentX(runIndex);
+          const immediateNextSegment = findImmediateNextSegment(runIndex);
           const tabStartX = cumulativeX;
 
           // The tab should span from where previous content ended to where next content begins.
-          // If the immediate next segment has an explicit X (from tab alignment), use that.
-          // Otherwise, use the tab's measured width to calculate the end position.
+          // If layout supplied a tab-end boundary for the next segment, prefer it.
+          // Otherwise, use the next segment's explicit X (from tab alignment) or the
+          // tab's measured width.
           const measuredTabEndX = tabStartX + (baseRun.width ?? 0);
-          // Negative-left/no-hanging paragraphs may pre-compensate the next
-          // segment's explicit x because this painter adds indentOffset below.
-          // In that case, keep the tab underline/span width tied to the measured
-          // tab advance instead of stretching it to the compensated text x.
-          const usesNegativeIndentCompensation =
-            indentOffset < 0 &&
-            baseRun.width != null &&
-            immediateNextX !== undefined &&
-            immediateNextX > measuredTabEndX;
-          const tabEndX =
-            immediateNextX !== undefined && !usesNegativeIndentCompensation ? immediateNextX : measuredTabEndX;
+          const tabEndX = immediateNextSegment?.precedingTabEndX ?? immediateNextSegment?.x ?? measuredTabEndX;
           const actualTabWidth = tabEndX - tabStartX;
 
           const tabEl = this.doc!.createElement('span');

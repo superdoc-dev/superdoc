@@ -2968,7 +2968,32 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
                 description: 'Block type: paragraph, heading, listItem, image, tableOfContents.',
               },
               text: { type: 'string', description: 'Full plain text content of the block.' },
-              headingLevel: { type: 'integer', description: 'Heading level (1–6). Only present for headings.' },
+              textSpans: {
+                type: 'array',
+                description:
+                  'Block text broken into runs with tracked-change marks preserved per run. Present only when the block contains at least one tracked change. Concatenating span text yields `text`.',
+                items: objectSchema(
+                  {
+                    text: { type: 'string', description: 'Raw text of the run.' },
+                    trackedChanges: {
+                      type: 'array',
+                      description: 'Tracked-change marks applied to this run.',
+                      items: objectSchema(
+                        {
+                          entityId: {
+                            type: 'string',
+                            description: 'Tracked change entity ID matching an entry in trackedChanges[].',
+                          },
+                          type: { type: 'string', enum: ['insert', 'delete', 'format'] },
+                        },
+                        ['entityId', 'type'],
+                      ),
+                    },
+                  },
+                  ['text'],
+                ),
+              },
+              headingLevel: { type: 'integer', description: 'Heading level (1-6). Only present for headings.' },
               tableContext: objectSchema(
                 {
                   tableOrdinal: {
@@ -3024,10 +3049,32 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
             {
               entityId: {
                 type: 'string',
-                description: 'Tracked change entity ID — pass to scrollToElement() for navigation.',
+                description: 'Tracked change entity ID. Pass to scrollToElement() for navigation.',
               },
-              type: { type: 'string', enum: ['insert', 'delete', 'format'] },
-              excerpt: { type: 'string', description: 'Short text excerpt of the changed content.' },
+              type: {
+                type: 'string',
+                enum: ['insert', 'delete', 'format'],
+                description:
+                  "Aggregate type at the entity level. In paired replacement mode, a delete+insert pair shares one entity and this collapses to 'insert'; per-half type lives on block.textSpans[].trackedChanges[].",
+              },
+              blockIds: {
+                type: 'array',
+                description: 'Block IDs whose textSpans carry this change.',
+                items: { type: 'string' },
+              },
+              wordRevisionIds: objectSchema(
+                {
+                  insert: { type: 'string', description: 'Original OOXML w:id from a w:ins mark.' },
+                  delete: { type: 'string', description: 'Original OOXML w:id from a w:del mark.' },
+                  format: { type: 'string', description: 'Original OOXML w:id from a w:rPrChange mark.' },
+                },
+                [],
+              ),
+              excerpt: {
+                type: 'string',
+                description:
+                  'Short text excerpt of the changed content. Omitted for paired replacements; read block.textSpans for the per-half text.',
+              },
               author: { type: 'string', description: 'Change author name.' },
               date: { type: 'string', description: 'Change date (ISO string).' },
             },

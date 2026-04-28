@@ -46,7 +46,7 @@ export type HeaderFooterConstraints = {
   /**
    * Page margins for anchor positioning.
    * `left`/`right`: horizontal page-relative conversion.
-   * `top`/`bottom`: vertical margin-relative conversion and footer band origin.
+   * `top`/`bottom`: vertical margin-relative conversion and fallback footer band origin.
    * `header`: header distance from page top edge (header band origin).
    * `footer`: footer distance from page bottom edge (footer band origin).
    */

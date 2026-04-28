@@ -2398,6 +2398,17 @@ export class DomPainter {
     }
 
     const pageMargins = resolvedPage?.margins ?? page.margins;
+    const styledPageHeight = Number.parseFloat(pageEl.style.height || '');
+    const pageHeight =
+      page.size?.h ??
+      this.currentLayout?.pageSize?.h ??
+      (Number.isFinite(styledPageHeight) ? styledPageHeight : pageEl.clientHeight);
+
+    const footerDistance = pageMargins?.footer;
+    if (typeof footerDistance === 'number' && Number.isFinite(footerDistance)) {
+      return Math.max(0, pageHeight - Math.max(0, footerDistance));
+    }
+
     const bottomMargin = pageMargins?.bottom;
     if (bottomMargin == null) {
       return effectiveOffset;
@@ -2405,11 +2416,6 @@ export class DomPainter {
 
     const footnoteReserve = resolvedPage?.footnoteReserved ?? page.footnoteReserved ?? 0;
     const adjustedBottomMargin = Math.max(0, bottomMargin - footnoteReserve);
-    const styledPageHeight = Number.parseFloat(pageEl.style.height || '');
-    const pageHeight =
-      page.size?.h ??
-      this.currentLayout?.pageSize?.h ??
-      (Number.isFinite(styledPageHeight) ? styledPageHeight : pageEl.clientHeight);
 
     return Math.max(0, pageHeight - adjustedBottomMargin);
   }
@@ -6364,6 +6370,7 @@ export class DomPainter {
             geoSdtWrapper.style.top = '0px';
             geoSdtWrapper.style.height = `${line.lineHeight}px`;
           }
+          this.syncInlineSdtWrapperTypography(geoSdtWrapper, runForSdt);
           elem.style.left = `${elemLeftPx - geoSdtWrapperLeft}px`;
           geoSdtMaxRight = Math.max(geoSdtMaxRight, elemLeftPx + elemWidthPx);
           this.expandSdtWrapperPmRange(geoSdtWrapper, (runForSdt as TextRun).pmStart, (runForSdt as TextRun).pmEnd);
@@ -6651,8 +6658,11 @@ export class DomPainter {
           if (resolved && this.doc) {
             if (!currentInlineSdtWrapper) {
               currentInlineSdtWrapper = this.createInlineSdtWrapper(resolved.sdt);
+              this.syncInlineSdtWrapperTypography(currentInlineSdtWrapper, run);
               currentInlineSdtId = runSdtId;
             }
+            // Typography is set when wrapper is created from the first run.
+            // Follow-up (SD-2744): define a deterministic mixed-typography rule.
             this.expandSdtWrapperPmRange(currentInlineSdtWrapper, run.pmStart, run.pmEnd);
             currentInlineSdtWrapper.appendChild(elem);
           } else {
@@ -7051,6 +7061,17 @@ export class DomPainter {
     labelEl.textContent = alias;
     wrapper.appendChild(labelEl);
     return wrapper;
+  }
+
+  private syncInlineSdtWrapperTypography(wrapper: HTMLElement, runForSizing?: Run): void {
+    // The line container sets fontSize:0 (strut fix). Keep wrapper typography
+    // synced with the current run so border height tracks text-size edits.
+    const runFontSize =
+      runForSizing && 'fontSize' in runForSizing && typeof runForSizing.fontSize === 'number'
+        ? `${runForSizing.fontSize}px`
+        : BROWSER_DEFAULT_FONT_SIZE;
+    wrapper.style.fontSize = runFontSize;
+    wrapper.style.lineHeight = 'normal';
   }
 
   /**

@@ -5,6 +5,7 @@
  */
 
 import type {
+  BorderSpec,
   BorderStyle,
   BoxSpacing,
   CellBorders,
@@ -39,6 +40,7 @@ import {
   extractCellPadding,
   convertBorderSpec,
   normalizeShadingColor,
+  borderSizeToPx,
 } from '../attributes/index.js';
 import { pickNumber, twipsToPx } from '../utilities.js';
 import { hydrateTableStyleAttrs } from './table-styles.js';
@@ -147,6 +149,16 @@ const isTableCellNode = (node: PMNode): boolean =>
   node.type === 'table_cell' ||
   node.type === 'tableHeader' ||
   node.type === 'table_header';
+
+const convertResolvedCellBorder = (value: unknown): BorderSpec | undefined => {
+  if (!value || typeof value !== 'object') return undefined;
+
+  const border = value as Record<string, unknown>;
+  const size = typeof border.size === 'number' ? borderSizeToPx(border.size) : undefined;
+  const normalized = size != null ? { ...border, size } : border;
+
+  return convertBorderSpec(normalized);
+};
 
 type NormalizedRowHeight =
   | {
@@ -500,7 +512,7 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
   if (resolvedTcProps?.borders && typeof resolvedTcProps.borders === 'object') {
     const resolvedBorders: CellBorders = {};
     for (const side of ['top', 'right', 'bottom', 'left'] as const) {
-      const spec = convertBorderSpec((resolvedTcProps.borders as Record<string, unknown>)[side]);
+      const spec = convertResolvedCellBorder((resolvedTcProps.borders as Record<string, unknown>)[side]);
       if (spec) resolvedBorders[side] = spec;
     }
     if (Object.keys(resolvedBorders).length > 0) {
@@ -862,26 +874,35 @@ export function tableNodeToBlock(
   if (rows.length === 0) return null;
 
   const tableAttrs: Record<string, unknown> = {};
-  const getBorderSource = (): Record<string, unknown> | undefined => {
+
+  const getBorderSource = (): { borders: Record<string, unknown>; unit: 'px' | 'eighthPoints' } | undefined => {
     if (
       node.attrs?.borders &&
       typeof node.attrs.borders === 'object' &&
       node.attrs.borders !== null &&
       Object.keys(node.attrs.borders as Record<string, unknown>).length > 0
     ) {
-      return node.attrs.borders as Record<string, unknown>;
+      return {
+        borders: node.attrs.borders as Record<string, unknown>,
+        unit: 'px',
+      };
     }
     if (
       hydratedTableStyle?.borders &&
       typeof hydratedTableStyle.borders === 'object' &&
       hydratedTableStyle.borders !== null
     ) {
-      return hydratedTableStyle.borders as Record<string, unknown>;
+      return {
+        borders: hydratedTableStyle.borders as Record<string, unknown>,
+        unit: 'eighthPoints',
+      };
     }
-    return undefined;
   };
+
   const borderSource = getBorderSource();
-  const tableBorders: TableBorders | undefined = extractTableBorders(borderSource);
+  const tableBorders: TableBorders | undefined = borderSource
+    ? extractTableBorders(borderSource.borders, { unit: borderSource.unit })
+    : undefined;
   if (tableBorders) tableAttrs.borders = tableBorders;
 
   if (node.attrs?.borderCollapse) {

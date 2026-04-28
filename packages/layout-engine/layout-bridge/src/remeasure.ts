@@ -898,7 +898,7 @@ const applyTabLayoutToLines = (
 
           pendingTabAlignStartX = {
             layoutX: groupStartX,
-            paintX: shouldCompensateNegativeLeft ? groupStartX - Math.min(effectiveIndent, 0) : groupStartX,
+            paintX: groupStartX,
           };
         } else {
           cursorX = Math.max(cursorX, relativeTarget);

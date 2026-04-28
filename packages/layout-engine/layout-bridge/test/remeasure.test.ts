@@ -468,6 +468,28 @@ describe('remeasureParagraph', () => {
       expect(leader.to).toBeCloseTo(300 - pageNumWidth, 0);
     });
 
+    it('keeps negative-left right-aligned tab segments in initial-measurement coordinates', () => {
+      const indentLeft = -40;
+      const tabStopPx = 190;
+      const tabStop: TabStop = { pos: pxToTwips(tabStopPx), val: 'end', leader: 'dot' };
+      const block = createBlock([textRun('AAA'), tabRun(), textRun('12')], {
+        indent: { left: indentLeft },
+        tabs: [tabStop],
+      });
+      const measure = remeasureParagraph(block, 200);
+
+      expect(measure.lines).toHaveLength(1);
+
+      const pageNumberSegment = measure.lines[0].segments?.find((segment) => segment.runIndex === 2);
+      const leader = measure.lines[0].leaders?.[0];
+      const pageNumberWidth = '12'.length * CHAR_WIDTH;
+      const expectedPaintedX = tabStopPx - pageNumberWidth;
+
+      expect(pageNumberSegment?.x).toBeCloseTo(expectedPaintedX - indentLeft, 1);
+      expect((pageNumberSegment?.x ?? 0) + indentLeft).toBeCloseTo(expectedPaintedX, 1);
+      expect(leader?.to).toBeCloseTo(expectedPaintedX, 1);
+    });
+
     it('handles tab with hyphen leader', () => {
       const tabStop: TabStop = { pos: pxToTwips(100), val: 'end', leader: 'hyphen' };
       const block = createBlock([textRun('Entry'), tabRun(), textRun('99')], { tabs: [tabStop] });

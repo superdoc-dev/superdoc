@@ -500,6 +500,32 @@ describe('createHeadlessToolbar', () => {
     controller.destroy();
   });
 
+  it('forwards a bullet-list style argument into toggleBulletListStyle', () => {
+    const toggleBulletListStyle = vi.fn(() => true);
+    const superdoc = createActiveEditorHost({
+      commands: { toggleBulletListStyle },
+      state: createSelectionState({
+        empty: true,
+        $from: {
+          depth: 1,
+          node: vi.fn(() => ({ type: { name: 'doc' } })),
+          before: vi.fn(() => 0),
+          start: vi.fn(() => 0),
+        },
+      }),
+    });
+
+    const controller = createHeadlessToolbar({
+      superdoc,
+      commands: ['bullet-list'],
+    });
+
+    expect(controller.execute?.('bullet-list', 'circle')).toBe(true);
+    expect(toggleBulletListStyle).toHaveBeenCalledWith('circle');
+
+    controller.destroy();
+  });
+
   it('executes numbered-list through the registry direct command path', () => {
     const toggleOrderedList = vi.fn(() => true);
     const superdoc = createActiveEditorHost({

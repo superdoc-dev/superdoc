@@ -43,8 +43,34 @@ export interface SelectionInfo {
    * Active marks at the caret or across the selection. Names are
    * ProseMirror mark type names (e.g. `'bold'`, `'italic'`, `'link'`).
    * Use these to drive toolbar active-state rendering.
+   *
+   * `activeMarks` uses **intersection** semantics — a name is present
+   * only when every character in the selection carries that mark. This
+   * matches Word/Google Docs toolbar behavior.
    */
   activeMarks: string[];
+  /**
+   * Comment IDs whose `commentMark` overlaps any part of the current
+   * selection (or covers the caret when empty). Use to drive a
+   * floating "comment here" hint, highlight the active sidebar card,
+   * or disable a "new comment" button when the selection already
+   * covers an existing comment.
+   *
+   * **Union** semantics: an id is present when *any* character in the
+   * selection carries that comment, not when every character does.
+   * Multiple overlapping comments produce multiple ids.
+   */
+  activeCommentIds: string[];
+  /**
+   * Tracked-change IDs whose `trackInsert` / `trackDelete` /
+   * `trackFormat` mark overlaps any part of the current selection.
+   * Same union semantics as {@link activeCommentIds}.
+   *
+   * Use to drive review-sidebar highlighting and next/previous
+   * navigation without resolving every change individually via
+   * `trackChanges.list()`.
+   */
+  activeChangeIds: string[];
   /**
    * Quoted text of the selection. Populated only when `includeText: true`.
    * Undefined otherwise.

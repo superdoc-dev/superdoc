@@ -5299,9 +5299,11 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
             empty: { type: 'boolean' },
             target: { oneOf: [textTargetSchema, { type: 'null' }] },
             activeMarks: arraySchema({ type: 'string' }),
+            activeCommentIds: arraySchema({ type: 'string' }),
+            activeChangeIds: arraySchema({ type: 'string' }),
             text: { type: 'string' },
           },
-          ['empty', 'target', 'activeMarks'],
+          ['empty', 'target', 'activeMarks', 'activeCommentIds', 'activeChangeIds'],
         ),
       },
 

@@ -853,6 +853,8 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.lists.join` | `lists join` | Merge two adjacent list sequences into one. |
 | `doc.lists.canJoin` | `lists can-join` | Check whether two adjacent list sequences can be joined. |
 | `doc.lists.separate` | `lists separate` | Split a list sequence at the target item, creating a new sequence from that point forward. |
+| `doc.lists.merge` | `lists merge` | Compound: merge two adjacent list sequences into one. Reassigns numId on the absorbed sequence (no strict abstractNumId check — absorbed items adopt the absorbing definition) and deletes empty paragraphs between the two sequences. Use this instead of lists.join for the user-facing "merge these lists" intent. |
+| `doc.lists.split` | `lists split` | Compound: split a list sequence at the target item into two independent sequences. Runs lists.separate then (by default) lists.setValue(1) so the new half starts numbering fresh at 1. Pass restartNumbering:false for raw separate semantics (new half continues the previous count). |
 | `doc.lists.setLevel` | `lists set-level` | Set the absolute nesting level (0..8) of a list item. |
 | `doc.lists.setValue` | `lists set-value` | Set an explicit numbering value at the target item. Mid-sequence targets are atomically separated first. |
 | `doc.lists.continuePrevious` | `lists continue-previous` | Continue numbering from the nearest compatible previous list sequence. |
@@ -998,9 +1000,9 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 
 | Operation | CLI command | Description |
 | --- | --- | --- |
-| `doc.history.get` | `history get` | Query the current undo/redo history state of the active editor. |
-| `doc.history.undo` | `history undo` | Undo the most recent history-safe mutation in the active editor. |
-| `doc.history.redo` | `history redo` | Redo the most recently undone action in the active editor. |
+| `doc.history.get` | `history get` | Query the current undo/redo history state of the document. |
+| `doc.history.undo` | `history undo` | Undo the most recent history-safe mutation in the document. |
+| `doc.history.redo` | `history redo` | Redo the most recently undone action in the document. |
 
 #### Lifecycle
 
@@ -1315,6 +1317,8 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.lists.join` | `lists join` | Merge two adjacent list sequences into one. |
 | `doc.lists.can_join` | `lists can-join` | Check whether two adjacent list sequences can be joined. |
 | `doc.lists.separate` | `lists separate` | Split a list sequence at the target item, creating a new sequence from that point forward. |
+| `doc.lists.merge` | `lists merge` | Compound: merge two adjacent list sequences into one. Reassigns numId on the absorbed sequence (no strict abstractNumId check — absorbed items adopt the absorbing definition) and deletes empty paragraphs between the two sequences. Use this instead of lists.join for the user-facing "merge these lists" intent. |
+| `doc.lists.split` | `lists split` | Compound: split a list sequence at the target item into two independent sequences. Runs lists.separate then (by default) lists.setValue(1) so the new half starts numbering fresh at 1. Pass restartNumbering:false for raw separate semantics (new half continues the previous count). |
 | `doc.lists.set_level` | `lists set-level` | Set the absolute nesting level (0..8) of a list item. |
 | `doc.lists.set_value` | `lists set-value` | Set an explicit numbering value at the target item. Mid-sequence targets are atomically separated first. |
 | `doc.lists.continue_previous` | `lists continue-previous` | Continue numbering from the nearest compatible previous list sequence. |
@@ -1460,9 +1464,9 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 
 | Operation | CLI command | Description |
 | --- | --- | --- |
-| `doc.history.get` | `history get` | Query the current undo/redo history state of the active editor. |
-| `doc.history.undo` | `history undo` | Undo the most recent history-safe mutation in the active editor. |
-| `doc.history.redo` | `history redo` | Redo the most recently undone action in the active editor. |
+| `doc.history.get` | `history get` | Query the current undo/redo history state of the document. |
+| `doc.history.undo` | `history undo` | Undo the most recent history-safe mutation in the document. |
+| `doc.history.redo` | `history redo` | Redo the most recently undone action in the document. |
 
 #### Lifecycle
 

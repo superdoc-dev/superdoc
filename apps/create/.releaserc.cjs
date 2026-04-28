@@ -1,4 +1,9 @@
 /* eslint-env node */
+const {
+  createCommitAnalyzer,
+  createReleaseNotesGenerator,
+} = require('../../scripts/semantic-release/strict-breaking-parser.cjs');
+
 const branch = process.env.GITHUB_REF_NAME || process.env.CI_COMMIT_BRANCH;
 
 const branches = [
@@ -8,19 +13,12 @@ const branches = [
 
 const isPrerelease = branches.some((b) => typeof b === 'object' && b.name === branch && b.prerelease);
 
-const notesPlugin = isPrerelease
-  ? '@semantic-release/release-notes-generator'
-  : ['semantic-release-ai-notes', { style: 'concise' }];
+const notesPlugin = isPrerelease ? createReleaseNotesGenerator() : ['semantic-release-ai-notes', { style: 'concise' }];
 
 const config = {
   branches,
   tagFormat: 'create-v${version}',
-  plugins: [
-    'semantic-release-commit-filter',
-    '@semantic-release/commit-analyzer',
-    notesPlugin,
-    ['@semantic-release/npm'],
-  ],
+  plugins: ['semantic-release-commit-filter', createCommitAnalyzer(), notesPlugin, ['@semantic-release/npm']],
 };
 
 if (!isPrerelease) {
@@ -33,18 +31,22 @@ if (!isPrerelease) {
   ]);
 }
 
-config.plugins.push(['semantic-release-linear-app', {
-  teamKeys: ['SD'],
-  addComment: true,
-  packageName: 'create',
-  commentTemplate: 'shipped in {package} {releaseLink} {channel}'
-}]);
+config.plugins.push([
+  'semantic-release-linear-app',
+  {
+    teamKeys: ['SD'],
+    addComment: true,
+    packageName: 'create',
+    commentTemplate: 'shipped in {package} {releaseLink} {channel}',
+  },
+]);
 
 config.plugins.push([
   '@semantic-release/github',
   {
-    successComment: ':tada: This ${issue.pull_request ? "PR" : "issue"} is included in **@superdoc-dev/create** v${nextRelease.version}\n\nThe release is available on [GitHub release](${releases.find(release => release.pluginName === "@semantic-release/github").url})',
-  }
+    successComment:
+      ':tada: This ${issue.pull_request ? "PR" : "issue"} is included in **@superdoc-dev/create** v${nextRelease.version}\n\nThe release is available on [GitHub release](${releases.find(release => release.pluginName === "@semantic-release/github").url})',
+  },
 ]);
 
 module.exports = config;

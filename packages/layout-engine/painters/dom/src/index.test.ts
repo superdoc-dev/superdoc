@@ -2345,6 +2345,185 @@ describe('DomPainter', () => {
     expect(wrapper.textContent).toContain('controlled text');
   });
 
+  it('keeps inline SDT wrapper font-size in sync when run font-size changes', () => {
+    const block: FlowBlock = {
+      kind: 'paragraph',
+      id: 'inline-sdt-font-sync',
+      runs: [
+        {
+          text: 'Company Address',
+          fontFamily: 'Arial, sans-serif',
+          fontSize: 14.6667,
+          pmStart: 2044,
+          pmEnd: 2059,
+          sdt: {
+            type: 'structuredContent',
+            scope: 'inline',
+            id: '574416526',
+            tag: 'inline_text_sdt',
+            alias: 'Company Address',
+            lockMode: 'unlocked',
+          },
+        },
+      ],
+      attrs: {},
+    };
+
+    const measure: Measure = {
+      kind: 'paragraph',
+      lines: [
+        {
+          fromRun: 0,
+          fromChar: 0,
+          toRun: 0,
+          toChar: 15,
+          width: 180,
+          ascent: 12,
+          descent: 4,
+          lineHeight: 20,
+        },
+      ],
+      totalHeight: 20,
+    };
+
+    const layout: Layout = {
+      pageSize: { w: 612, h: 792 },
+      pages: [
+        {
+          number: 1,
+          fragments: [
+            {
+              kind: 'para',
+              blockId: 'inline-sdt-font-sync',
+              fromLine: 0,
+              toLine: 1,
+              x: 30,
+              y: 40,
+              width: 552,
+              pmStart: 2044,
+              pmEnd: 2059,
+            },
+          ],
+        },
+      ],
+    };
+
+    const painter = createTestPainter({ blocks: [block], measures: [measure] });
+    painter.paint(layout, mount);
+
+    const getInlineSdtWrapper = () =>
+      mount.querySelector('.superdoc-structured-content-inline[data-sdt-id="574416526"]') as HTMLElement | null;
+
+    const wrapperBefore = getInlineSdtWrapper();
+    expect(wrapperBefore).toBeTruthy();
+    expect(wrapperBefore?.style.fontSize).toBe('14.6667px');
+
+    const updatedBlock: FlowBlock = {
+      ...block,
+      runs: [
+        {
+          ...block.runs[0],
+          fontSize: 10,
+        },
+      ],
+    };
+
+    painter.setData([updatedBlock], [measure]);
+    painter.paint(layout, mount);
+
+    const wrapperAfter = getInlineSdtWrapper();
+    expect(wrapperAfter).toBeTruthy();
+    expect(wrapperAfter?.style.fontSize).toBe('10px');
+  });
+
+  it('uses first run font-size for inline SDT wrapper when a field has mixed run sizes', () => {
+    const mixedSizeBlock: FlowBlock = {
+      kind: 'paragraph',
+      id: 'inline-sdt-mixed-font-size',
+      runs: [
+        {
+          text: 'Big',
+          fontFamily: 'Arial, sans-serif',
+          fontSize: 36,
+          pmStart: 100,
+          pmEnd: 103,
+          sdt: {
+            type: 'structuredContent',
+            scope: 'inline',
+            id: 'mixed-size-sdt',
+            tag: 'inline_text_sdt',
+            alias: 'Mixed Size Field',
+            lockMode: 'unlocked',
+          },
+        },
+        {
+          text: ' small',
+          fontFamily: 'Arial, sans-serif',
+          fontSize: 10,
+          pmStart: 103,
+          pmEnd: 109,
+          sdt: {
+            type: 'structuredContent',
+            scope: 'inline',
+            id: 'mixed-size-sdt',
+            tag: 'inline_text_sdt',
+            alias: 'Mixed Size Field',
+            lockMode: 'unlocked',
+          },
+        },
+      ],
+      attrs: {},
+    };
+
+    const mixedSizeMeasure: Measure = {
+      kind: 'paragraph',
+      lines: [
+        {
+          fromRun: 0,
+          fromChar: 0,
+          toRun: 1,
+          toChar: 6,
+          width: 180,
+          ascent: 12,
+          descent: 4,
+          lineHeight: 20,
+        },
+      ],
+      totalHeight: 20,
+    };
+
+    const mixedSizeLayout: Layout = {
+      pageSize: { w: 612, h: 792 },
+      pages: [
+        {
+          number: 1,
+          fragments: [
+            {
+              kind: 'para',
+              blockId: 'inline-sdt-mixed-font-size',
+              fromLine: 0,
+              toLine: 1,
+              x: 30,
+              y: 40,
+              width: 552,
+              pmStart: 100,
+              pmEnd: 109,
+            },
+          ],
+        },
+      ],
+    };
+
+    const painter = createTestPainter({ blocks: [mixedSizeBlock], measures: [mixedSizeMeasure] });
+    painter.paint(mixedSizeLayout, mount);
+
+    const wrapper = mount.querySelector(
+      '.superdoc-structured-content-inline[data-sdt-id="mixed-size-sdt"]',
+    ) as HTMLElement | null;
+    expect(wrapper).toBeTruthy();
+    expect(wrapper?.style.fontSize).toBe('36px');
+  });
+
   it('positions word-layout markers relative to the text start', () => {
     const markerBlock: FlowBlock = {
       kind: 'paragraph',

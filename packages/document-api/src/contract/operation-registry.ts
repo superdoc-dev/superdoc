@@ -102,6 +102,10 @@ import type {
   ListsCanJoinResult,
   ListsSeparateInput,
   ListsSeparateResult,
+  ListsMergeInput,
+  ListsMergeResult,
+  ListsSplitInput,
+  ListsSplitResult,
   ListsSetLevelInput,
   ListsSetValueInput,
   ListsContinuePreviousInput,
@@ -674,6 +678,8 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
   'lists.join': { input: ListsJoinInput; options: MutationOptions; output: ListsJoinResult };
   'lists.canJoin': { input: ListsCanJoinInput; options: never; output: ListsCanJoinResult };
   'lists.separate': { input: ListsSeparateInput; options: MutationOptions; output: ListsSeparateResult };
+  'lists.merge': { input: ListsMergeInput; options: MutationOptions; output: ListsMergeResult };
+  'lists.split': { input: ListsSplitInput; options: MutationOptions; output: ListsSplitResult };
   'lists.setLevel': { input: ListsSetLevelInput; options: MutationOptions; output: ListsMutateItemResult };
   'lists.setValue': { input: ListsSetValueInput; options: MutationOptions; output: ListsMutateItemResult };
   'lists.continuePrevious': {

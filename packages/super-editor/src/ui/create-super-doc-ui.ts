@@ -208,12 +208,13 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
       const result = list.call(editor.doc!.comments, undefined) as CommentsListResult | undefined;
       commentsListCache = result ?? EMPTY_COMMENTS_LIST;
     } catch {
-      // A partial editor (mid-init / mid-tear-down) shouldn't blow up
-      // the controller; fall back to the previous cache value.
-      // (The follow-up commit on this branch — `12155be91` — switches
-      // this to reset to EMPTY_COMMENTS_LIST instead, so cross-document
-      // swaps don't leak. Kept here as the original commit for
-      // rebase-stack continuity.)
+      // Reset to empty rather than retaining the previous editor's
+      // cache. During document / editor swaps the new editor can
+      // throw transiently while initializing — keeping the prior
+      // value would leak the old document's comments into the new
+      // one's snapshot until the next successful refresh, which is a
+      // worse failure mode than briefly rendering an empty list.
+      commentsListCache = EMPTY_COMMENTS_LIST;
     }
   };
   refreshCommentsListCache();

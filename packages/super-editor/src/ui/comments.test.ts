@@ -162,6 +162,34 @@ describe('ui.comments — snapshot', () => {
     ui.destroy();
   });
 
+  it('clears the cache when comments.list() throws on refresh (no cross-document stale leakage)', async () => {
+    const { superdoc, mocks } = makeStubs({
+      comments: [
+        { id: 'c1', commentId: 'c1', text: 'first' },
+        { id: 'c2', commentId: 'c2', text: 'second' },
+      ],
+    });
+    const ui = createSuperDocUI({ superdoc });
+
+    // Start with a populated snapshot.
+    expect(ui.comments.getSnapshot().total).toBe(2);
+
+    // Simulate a document/editor swap where the new editor's list()
+    // throws transiently. The cache must reset to empty rather than
+    // continue serving the old editor's items.
+    mocks.list.mockImplementationOnce(() => {
+      throw new Error('editor mid-swap');
+    });
+    superdoc.fireEditor('commentsUpdate');
+    await flushMicrotasks();
+
+    const snap = ui.comments.getSnapshot();
+    expect(snap.total).toBe(0);
+    expect(snap.items).toEqual([]);
+
+    ui.destroy();
+  });
+
   it('falls back to [] when selection.current() predates SD-2792 (no activeCommentIds field)', () => {
     const { superdoc, editor } = makeStubs();
     // Override selection.current to return an SD-2668-shaped result

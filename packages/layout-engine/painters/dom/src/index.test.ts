@@ -4815,9 +4815,70 @@ describe('DomPainter', () => {
       expect(footerFragmentEl).toBeTruthy();
       // Footer container is at effectiveOffset (400px)
       expect(footerEl.style.top).toBe(`${footerOffset}px`);
-      // Fragment uses band-local Y + container offset from band origin
-      // The exact top depends on getDecorationAnchorPageOriginY, but the
-      // key invariant is that the absolute page position is correct.
+      // Fragment uses band-local Y + container offset from band origin.
+      // With footer distance provided, anchors convert back to absolute page-space
+      // using the physical footer reference point (pageHeight - footerDistance).
+      const renderedPageTop = parseFloat(footerEl.style.top || '0') + parseFloat(footerFragmentEl.style.top || '0');
+      expect(renderedPageTop).toBe((layout.pageSize?.h ?? 0) - 20 + footerFragment.y);
+    });
+
+    it('falls back to bottom margin origin when footer distance is missing', () => {
+      const footerImageBlock: FlowBlock = {
+        kind: 'image',
+        id: 'footer-page-relative-img-missing',
+        src: 'data:image/png;base64,xxx',
+        anchor: {
+          isAnchored: true,
+          hRelativeFrom: 'page',
+          vRelativeFrom: 'page',
+        },
+      };
+      const footerImageMeasure: Measure = {
+        kind: 'image',
+        width: 20,
+        height: 20,
+      };
+      const footerOffset = 400;
+      const footerFragment: Fragment = {
+        kind: 'image',
+        blockId: footerImageBlock.id,
+        x: 0,
+        y: 25,
+        width: 20,
+        height: 20,
+        isAnchored: true,
+      };
+
+      const painter = createTestPainter({
+        blocks: [block, footerImageBlock],
+        measures: [measure, footerImageMeasure],
+        footerProvider: () => ({
+          fragments: [footerFragment],
+          height: 80,
+          offset: footerOffset,
+        }),
+      });
+
+      painter.paint(
+        {
+          ...layout,
+          pages: [
+            {
+              ...layout.pages[0],
+              number: 1,
+              margins: { left: 0, right: 0, bottom: 100 },
+            },
+          ],
+        },
+        mount,
+      );
+
+      const footerEl = mount.querySelector('.superdoc-page-footer') as HTMLElement;
+      const footerFragmentEl = footerEl.querySelector(
+        '[data-block-id="footer-page-relative-img-missing"]',
+      ) as HTMLElement;
+
+      expect(footerFragmentEl).toBeTruthy();
       const renderedPageTop = parseFloat(footerEl.style.top || '0') + parseFloat(footerFragmentEl.style.top || '0');
       expect(renderedPageTop).toBe(footerOffset + footerFragment.y);
     });

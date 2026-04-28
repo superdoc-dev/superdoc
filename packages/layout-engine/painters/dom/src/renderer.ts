@@ -2398,6 +2398,17 @@ export class DomPainter {
     }
 
     const pageMargins = resolvedPage?.margins ?? page.margins;
+    const styledPageHeight = Number.parseFloat(pageEl.style.height || '');
+    const pageHeight =
+      page.size?.h ??
+      this.currentLayout?.pageSize?.h ??
+      (Number.isFinite(styledPageHeight) ? styledPageHeight : pageEl.clientHeight);
+
+    const footerDistance = pageMargins?.footer;
+    if (typeof footerDistance === 'number' && Number.isFinite(footerDistance)) {
+      return Math.max(0, pageHeight - Math.max(0, footerDistance));
+    }
+
     const bottomMargin = pageMargins?.bottom;
     if (bottomMargin == null) {
       return effectiveOffset;
@@ -2405,11 +2416,6 @@ export class DomPainter {
 
     const footnoteReserve = resolvedPage?.footnoteReserved ?? page.footnoteReserved ?? 0;
     const adjustedBottomMargin = Math.max(0, bottomMargin - footnoteReserve);
-    const styledPageHeight = Number.parseFloat(pageEl.style.height || '');
-    const pageHeight =
-      page.size?.h ??
-      this.currentLayout?.pageSize?.h ??
-      (Number.isFinite(styledPageHeight) ? styledPageHeight : pageEl.clientHeight);
 
     return Math.max(0, pageHeight - adjustedBottomMargin);
   }

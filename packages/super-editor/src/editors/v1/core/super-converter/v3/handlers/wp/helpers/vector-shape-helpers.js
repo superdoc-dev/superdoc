@@ -1,3 +1,5 @@
+import { findChildByLocalName, filterChildrenByLocalName, hasLocalName, getLocalName } from './drawingml-utils.js';
+
 /**
  * Converts a preset color name (a:prstClr) to its hex value.
  * Per ECMA-376 Part 1, Section 20.1.10.47 (ST_PresetColorVal).
@@ -161,15 +163,15 @@ function applyModifiersAndAlpha(color, elements) {
   let alpha = null;
   const modifiers = elements || [];
   modifiers.forEach((mod) => {
-    if (mod.name === 'a:shade') {
+    if (hasLocalName(mod, 'shade')) {
       color = applyColorModifier(color, 'shade', mod.attributes['val']);
-    } else if (mod.name === 'a:tint') {
+    } else if (hasLocalName(mod, 'tint')) {
       color = applyColorModifier(color, 'tint', mod.attributes['val']);
-    } else if (mod.name === 'a:lumMod') {
+    } else if (hasLocalName(mod, 'lumMod')) {
       color = applyColorModifier(color, 'lumMod', mod.attributes['val']);
-    } else if (mod.name === 'a:lumOff') {
+    } else if (hasLocalName(mod, 'lumOff')) {
       color = applyColorModifier(color, 'lumOff', mod.attributes['val']);
-    } else if (mod.name === 'a:alpha') {
+    } else if (hasLocalName(mod, 'alpha')) {
       alpha = parseInt(mod.attributes['val']) / 100000;
     }
   });
@@ -186,20 +188,20 @@ function applyModifiersAndAlpha(color, elements) {
 function extractColorFromElement(element) {
   if (!element?.elements) return null;
 
-  const schemeClr = element.elements.find((el) => el.name === 'a:schemeClr');
+  const schemeClr = findChildByLocalName(element.elements, 'schemeClr');
   if (schemeClr) {
     const themeName = schemeClr.attributes?.['val'];
     const baseColor = getThemeColor(themeName);
     return applyModifiersAndAlpha(baseColor, schemeClr.elements);
   }
 
-  const srgbClr = element.elements.find((el) => el.name === 'a:srgbClr');
+  const srgbClr = findChildByLocalName(element.elements, 'srgbClr');
   if (srgbClr) {
     const baseColor = '#' + srgbClr.attributes?.['val'];
     return applyModifiersAndAlpha(baseColor, srgbClr.elements);
   }
 
-  const prstClr = element.elements.find((el) => el.name === 'a:prstClr');
+  const prstClr = findChildByLocalName(element.elements, 'prstClr');
   if (prstClr) {
     const presetName = prstClr.attributes?.['val'];
     const baseColor = getPresetColor(presetName);
@@ -290,7 +292,7 @@ export function applyColorModifier(hexColor, modifier, value) {
  * @returns {number} The stroke width in pixels, or 1 if not found
  */
 export function extractStrokeWidth(spPr) {
-  const ln = spPr?.elements?.find((el) => el.name === 'a:ln');
+  const ln = findChildByLocalName(spPr?.elements, 'ln');
   if (!ln) return 1;
 
   const w = ln.attributes?.['w'];
@@ -316,11 +318,11 @@ export function extractStrokeWidth(spPr) {
  *   Line end configuration, or null when not present.
  */
 export function extractLineEnds(spPr) {
-  const ln = spPr?.elements?.find((el) => el.name === 'a:ln');
+  const ln = findChildByLocalName(spPr?.elements, 'ln');
   if (!ln?.elements) return null;
 
-  const parseEnd = (name) => {
-    const end = ln.elements.find((el) => el.name === name);
+  const parseEnd = (localName) => {
+    const end = findChildByLocalName(ln.elements, localName);
     if (!end?.attributes) return null;
     const type = end.attributes?.['type'];
     if (!type || type === 'none') return null;
@@ -329,11 +331,11 @@ export function extractLineEnds(spPr) {
     return { type, width, length };
   };
 
-  const head = parseEnd('a:headEnd');
-  const tail = parseEnd('a:tailEnd');
+  const headConfig = parseEnd('headEnd');
+  const tailConfig = parseEnd('tailEnd');
 
-  if (!head && !tail) return null;
-  return { head: head ?? undefined, tail: tail ?? undefined };
+  if (!headConfig && !tailConfig) return null;
+  return { head: headConfig ?? undefined, tail: tailConfig ?? undefined };
 }
 
 /**
@@ -344,15 +346,15 @@ export function extractLineEnds(spPr) {
  * @returns {string|null} Hex color value
  */
 export function extractStrokeColor(spPr, style) {
-  const ln = spPr?.elements?.find((el) => el.name === 'a:ln');
+  const ln = findChildByLocalName(spPr?.elements, 'ln');
 
   if (ln) {
-    const noFill = ln.elements?.find((el) => el.name === 'a:noFill');
+    const noFill = findChildByLocalName(ln.elements, 'noFill');
     if (noFill) {
       return null;
     }
 
-    const solidFill = ln.elements?.find((el) => el.name === 'a:solidFill');
+    const solidFill = findChildByLocalName(ln.elements, 'solidFill');
     if (solidFill) {
       const result = extractColorFromElement(solidFill);
       if (result) return result.color;
@@ -365,7 +367,7 @@ export function extractStrokeColor(spPr, style) {
     return null;
   }
 
-  const lnRef = style.elements?.find((el) => el.name === 'a:lnRef');
+  const lnRef = findChildByLocalName(style.elements, 'lnRef');
   if (!lnRef) {
     // No lnRef in style means no stroke specified - return null
     return null;
@@ -392,12 +394,12 @@ export function extractStrokeColor(spPr, style) {
  * @returns {string|null} Hex color value
  */
 export function extractFillColor(spPr, style) {
-  const noFill = spPr?.elements?.find((el) => el.name === 'a:noFill');
+  const noFill = findChildByLocalName(spPr?.elements, 'noFill');
   if (noFill) {
     return null;
   }
 
-  const solidFill = spPr?.elements?.find((el) => el.name === 'a:solidFill');
+  const solidFill = findChildByLocalName(spPr?.elements, 'solidFill');
   if (solidFill) {
     const result = extractColorFromElement(solidFill);
     if (result) {
@@ -408,12 +410,12 @@ export function extractFillColor(spPr, style) {
     }
   }
 
-  const gradFill = spPr?.elements?.find((el) => el.name === 'a:gradFill');
+  const gradFill = findChildByLocalName(spPr?.elements, 'gradFill');
   if (gradFill) {
     return extractGradientFill(gradFill);
   }
 
-  const blipFill = spPr?.elements?.find((el) => el.name === 'a:blipFill');
+  const blipFill = findChildByLocalName(spPr?.elements, 'blipFill');
   if (blipFill) {
     return '#cccccc'; // placeholder color for now
   }
@@ -424,7 +426,7 @@ export function extractFillColor(spPr, style) {
     return null;
   }
 
-  const fillRef = style.elements?.find((el) => el.name === 'a:fillRef');
+  const fillRef = findChildByLocalName(style.elements, 'fillRef');
   if (!fillRef) {
     // No fillRef in style means no fill specified - return transparent
     return null;
@@ -458,14 +460,14 @@ export function extractFillColor(spPr, style) {
  * @returns {{ paths: Array<{ d: string, w: number, h: number }> } | null}
  */
 export function extractCustomGeometry(spPr) {
-  const custGeom = spPr?.elements?.find((el) => el.name === 'a:custGeom');
+  const custGeom = findChildByLocalName(spPr?.elements, 'custGeom');
   if (!custGeom) return null;
 
-  const pathLst = custGeom.elements?.find((el) => el.name === 'a:pathLst');
+  const pathLst = findChildByLocalName(custGeom.elements, 'pathLst');
   if (!pathLst?.elements) return null;
 
   const paths = pathLst.elements
-    .filter((el) => el.name === 'a:path')
+    .filter((el) => hasLocalName(el, 'path'))
     .map((pathEl) => {
       const w = parseInt(pathEl.attributes?.['w'] || '0', 10);
       const h = parseInt(pathEl.attributes?.['h'] || '0', 10);
@@ -490,23 +492,23 @@ function convertDrawingMLPathToSvg(pathEl) {
 
   const parts = [];
   for (const cmd of pathEl.elements) {
-    switch (cmd.name) {
-      case 'a:moveTo': {
-        const pt = cmd.elements?.find((el) => el.name === 'a:pt');
+    switch (getLocalName(cmd.name)) {
+      case 'moveTo': {
+        const pt = findChildByLocalName(cmd.elements, 'pt');
         if (pt) {
           parts.push(`M ${pt.attributes?.['x'] || 0} ${pt.attributes?.['y'] || 0}`);
         }
         break;
       }
-      case 'a:lnTo': {
-        const pt = cmd.elements?.find((el) => el.name === 'a:pt');
+      case 'lnTo': {
+        const pt = findChildByLocalName(cmd.elements, 'pt');
         if (pt) {
           parts.push(`L ${pt.attributes?.['x'] || 0} ${pt.attributes?.['y'] || 0}`);
         }
         break;
       }
-      case 'a:cubicBezTo': {
-        const pts = cmd.elements?.filter((el) => el.name === 'a:pt') || [];
+      case 'cubicBezTo': {
+        const pts = filterChildrenByLocalName(cmd.elements, 'pt') || [];
         if (pts.length === 3) {
           parts.push(
             `C ${pts[0].attributes?.['x'] || 0} ${pts[0].attributes?.['y'] || 0} ` +
@@ -516,8 +518,8 @@ function convertDrawingMLPathToSvg(pathEl) {
         }
         break;
       }
-      case 'a:quadBezTo': {
-        const pts = cmd.elements?.filter((el) => el.name === 'a:pt') || [];
+      case 'quadBezTo': {
+        const pts = filterChildrenByLocalName(cmd.elements, 'pt') || [];
         if (pts.length === 2) {
           parts.push(
             `Q ${pts[0].attributes?.['x'] || 0} ${pts[0].attributes?.['y'] || 0} ` +
@@ -526,7 +528,7 @@ function convertDrawingMLPathToSvg(pathEl) {
         }
         break;
       }
-      case 'a:close':
+      case 'close':
         parts.push('Z');
         break;
       default:
@@ -550,14 +552,14 @@ function extractGradientFill(gradFill) {
   };
 
   // Extract gradient stops
-  const gsLst = gradFill.elements?.find((el) => el.name === 'a:gsLst');
+  const gsLst = findChildByLocalName(gradFill.elements, 'gsLst');
   if (gsLst) {
-    const stops = gsLst.elements?.filter((el) => el.name === 'a:gs') || [];
+    const stops = filterChildrenByLocalName(gsLst.elements, 'gs') || [];
     gradient.stops = stops.map((stop) => {
       const pos = parseInt(stop.attributes?.['pos'] || '0', 10) / 100000; // Convert from 0-100000 to 0-1
 
       // Extract color from the stop
-      const srgbClr = stop.elements?.find((el) => el.name === 'a:srgbClr');
+      const srgbClr = findChildByLocalName(stop.elements, 'srgbClr');
       let color = '#000000';
       let alpha = 1;
 
@@ -565,7 +567,7 @@ function extractGradientFill(gradFill) {
         color = '#' + srgbClr.attributes?.['val'];
 
         // Extract alpha if present
-        const alphaEl = srgbClr.elements?.find((el) => el.name === 'a:alpha');
+        const alphaEl = findChildByLocalName(srgbClr.elements, 'alpha');
         if (alphaEl) {
           alpha = parseInt(alphaEl.attributes?.['val'] || '100000', 10) / 100000;
         }
@@ -576,7 +578,7 @@ function extractGradientFill(gradFill) {
   }
 
   // Extract gradient direction (linear angle)
-  const lin = gradFill.elements?.find((el) => el.name === 'a:lin');
+  const lin = findChildByLocalName(gradFill.elements, 'lin');
   if (lin) {
     // Convert from 60000ths of a degree to degrees
     const ang = parseInt(lin.attributes?.['ang'] || '0', 10) / 60000;
@@ -584,7 +586,7 @@ function extractGradientFill(gradFill) {
   }
 
   // Check if it's a radial gradient
-  const path = gradFill.elements?.find((el) => el.name === 'a:path');
+  const path = findChildByLocalName(gradFill.elements, 'path');
   if (path) {
     gradient.gradientType = 'radial';
     gradient.path = path.attributes?.['path'] || 'circle';

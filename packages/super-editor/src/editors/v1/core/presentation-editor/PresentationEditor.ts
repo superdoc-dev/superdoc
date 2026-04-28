@@ -7253,6 +7253,10 @@ export class PresentationEditor extends EventEmitter {
         top: marginTop,
         bottom: marginBottom,
         header: headerMargin,
+        // Only set footer when the source defines w:footer. Defaulting to 0 here
+        // would defeat the bottom-margin fallback in computeFooterBandOrigin
+        // (typeof 0 === 'number' passes the check, returning pageHeight - 0).
+        ...(margins.footer != null ? { footer: footerMargin } : {}),
       },
       overflowBaseHeight,
     };

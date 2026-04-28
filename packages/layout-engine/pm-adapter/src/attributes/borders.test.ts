@@ -30,12 +30,12 @@ import {
 
 describe('convertBorderSpec', () => {
   describe('valid borders', () => {
-    it('should convert complete border with all properties', () => {
+    it('should treat already normalized pixel widths as-is', () => {
       const input = { val: 'single', size: 2, color: 'FF0000' };
       const result = convertBorderSpec(input);
       expect(result?.style).toBe('single');
       expect(result?.color).toBe('#FF0000');
-      expect(result?.width).toBeCloseTo(Math.max(0.5, (2 / 8) * (96 / 72)));
+      expect(result?.width).toBe(2);
     });
 
     it('should add # prefix to color if missing', () => {
@@ -43,7 +43,7 @@ describe('convertBorderSpec', () => {
       const result = convertBorderSpec(input);
       expect(result?.style).toBe('double');
       expect(result?.color).toBe('#00FF00');
-      expect(result?.width).toBeCloseTo(Math.max(0.5, (4 / 8) * (96 / 72)));
+      expect(result?.width).toBe(4);
     });
 
     it('should preserve # prefix if already present', () => {
@@ -51,7 +51,7 @@ describe('convertBorderSpec', () => {
       const result = convertBorderSpec(input);
       expect(result?.style).toBe('single');
       expect(result?.color).toBe('#0000FF');
-      expect(result?.width).toBeCloseTo(Math.max(0.5, (1 / 8) * (96 / 72)));
+      expect(result?.width).toBe(1);
     });
 
     it('should default to black color for auto', () => {
@@ -72,16 +72,22 @@ describe('convertBorderSpec', () => {
       expect(result?.style).toBe('single');
     });
 
-    it('should handle fractional width', () => {
+    it('should handle fractional pixel width', () => {
       const input = { val: 'single', size: 1.5, color: 'FF0000' };
       const result = convertBorderSpec(input);
-      expect(result?.width).toBeCloseTo(Math.max(0.5, (1.5 / 8) * (96 / 72)));
+      expect(result?.width).toBe(1.5);
     });
 
-    it('should convert eighths-of-point sizes to pixels', () => {
-      const input = { val: 'single', size: 16, color: 'FF0000' };
+    it('converts eighth-point sizes when requested', () => {
+      const input = { val: 'single', size: 8, color: 'FF0000' }; // 1pt → 1.333px
+      const result = convertBorderSpec(input, { unit: 'eighthPoints' });
+      expect(result?.width).toBeCloseTo(1.3333, 4);
+    });
+
+    it('should clamp extremely large widths to a reasonable maximum', () => {
+      const input = { val: 'single', size: 2000, color: 'FF0000' };
       const result = convertBorderSpec(input);
-      expect(result?.width).toBeCloseTo((16 / 8) * (96 / 72));
+      expect(result?.width).toBeCloseTo(100);
     });
 
     it('should handle various border styles', () => {
@@ -176,12 +182,12 @@ describe('convertBorderSpec', () => {
 
 describe('convertTableBorderValue', () => {
   describe('valid borders', () => {
-    it('should convert complete border with all properties', () => {
+    it('should keep normalized pixel widths', () => {
       const input = { val: 'single', size: 2, color: 'FF0000' };
       const result = convertTableBorderValue(input);
       expect(result?.style).toBe('single');
       expect(result?.color).toBe('#FF0000');
-      expect(result?.width).toBeCloseTo(Math.max(0.5, (2 / 8) * (96 / 72)));
+      expect(result?.width).toBe(2);
     });
 
     it('should add # prefix to color if missing', () => {
@@ -196,10 +202,16 @@ describe('convertTableBorderValue', () => {
       expect(result?.color).toBe('#000000');
     });
 
-    it('should convert border size units to pixels', () => {
-      const input = { val: 'single', size: 24, color: 'FF0000' };
+    it('should clamp extremely large widths to prevent overflow', () => {
+      const input = { val: 'single', size: 1000, color: 'FF0000' };
       const result = convertTableBorderValue(input);
-      expect(result?.width).toBeCloseTo((24 / 8) * (96 / 72));
+      expect(result?.width).toBe(100);
+    });
+
+    it('converts eighth-point sizes for table borders when requested', () => {
+      const input = { val: 'double', size: 4, color: '00FF00' }; // 0.5pt → 0.666px
+      const result = convertTableBorderValue(input, { unit: 'eighthPoints' });
+      expect(result?.width).toBeCloseTo(0.6666, 3);
     });
   });
 
@@ -272,7 +284,7 @@ describe('extractTableBorders', () => {
   });
 
   describe('raw OOXML borders extraction', () => {
-    it('should convert raw OOXML borders to TableBorderValue format', () => {
+    it('should keep raw OOXML pixel sizes when converting', () => {
       const input = {
         top: { val: 'single', size: 2, color: 'FF0000' },
         bottom: { val: 'double', size: 4, color: '00FF00' },
@@ -280,10 +292,10 @@ describe('extractTableBorders', () => {
       const result = extractTableBorders(input);
       expect(result?.top?.style).toBe('single');
       expect(result?.top?.color).toBe('#FF0000');
-      expect(result?.top?.width).toBeCloseTo(Math.max(0.5, (2 / 8) * (96 / 72)));
+      expect(result?.top?.width).toBe(2);
       expect(result?.bottom?.style).toBe('double');
       expect(result?.bottom?.color).toBe('#00FF00');
-      expect(result?.bottom?.width).toBeCloseTo(Math.max(0.5, (4 / 8) * (96 / 72)));
+      expect(result?.bottom?.width).toBe(4);
     });
 
     it('should handle all six border sides from raw OOXML', () => {
@@ -297,6 +309,16 @@ describe('extractTableBorders', () => {
       };
       const result = extractTableBorders(input);
       expect(Object.keys(result!)).toHaveLength(6);
+    });
+
+    it('converts eighth-point units when requested', () => {
+      const input = {
+        top: { val: 'single', size: 8 },
+        bottom: { val: 'single', size: 4 },
+      };
+      const result = extractTableBorders(input, { unit: 'eighthPoints' });
+      expect(result?.top?.width).toBeCloseTo(1.3333, 4);
+      expect(result?.bottom?.width).toBeCloseTo(0.6666, 3);
     });
 
     it('should convert nil borders to {none: true}', () => {
@@ -329,6 +351,56 @@ describe('extractTableBorders', () => {
   });
 });
 
+// SD-2343: borders pre-converted to pixels by the importer must not be
+// re-converted from eighth-points by pm-adapter. The doubly-converted
+// regression rendered ~1pt as ~0.18px and ~6pt as ~1.33px - invisible.
+describe('SD-2343 - no double conversion for pre-converted px widths', () => {
+  // sz values pulled directly from the fixture (sd-2343-table-border-widths.docx).
+  // After the importer converts eighth-points to pixels, pm-adapter receives
+  // these as the `size` field and must pass them through unchanged.
+  const cases = [
+    { label: 'thin (sz=4 → 0.67px)', size: 0.67 },
+    { label: 'default (sz=8 → 1.33px)', size: 1.33 },
+    { label: 'medium (sz=24 → 4px)', size: 4 },
+    { label: 'thick (sz=48 → 8px)', size: 8 },
+  ];
+
+  describe.each(cases)('$label', ({ size }) => {
+    it('convertBorderSpec preserves pixel width', () => {
+      const result = convertBorderSpec({ val: 'single', size });
+      expect(result?.width).toBeCloseTo(size, 4);
+    });
+
+    it('convertTableBorderValue preserves pixel width', () => {
+      const result = convertTableBorderValue({ val: 'single', size });
+      expect(result).not.toHaveProperty('none');
+      // Width is non-optional on TableBorderValue when not nil/none
+      expect((result as { width: number }).width).toBeCloseTo(size, 4);
+    });
+
+    it('extractTableBorders preserves pixel widths across all sides', () => {
+      const sides = {
+        top: { val: 'single', size },
+        right: { val: 'single', size },
+        bottom: { val: 'single', size },
+        left: { val: 'single', size },
+        insideH: { val: 'single', size },
+        insideV: { val: 'single', size },
+      };
+      const result = extractTableBorders(sides);
+      for (const side of ['top', 'right', 'bottom', 'left', 'insideH', 'insideV'] as const) {
+        expect((result?.[side] as { width: number }).width).toBeCloseTo(size, 4);
+      }
+    });
+  });
+
+  it('opt-in eighthPoints unit still converts (sz=8 → 1.333px)', () => {
+    // Confirms the dual-mode contract: legacy callers can still request conversion.
+    const result = convertBorderSpec({ val: 'single', size: 8 }, { unit: 'eighthPoints' });
+    expect(result?.width).toBeCloseTo(1.3333, 4);
+  });
+});
+
 describe('extractCellBorders', () => {
   describe('valid cell borders', () => {
     it('should extract all four cell border sides', () => {
@@ -343,16 +415,16 @@ describe('extractCellBorders', () => {
       const result = extractCellBorders(input);
       expect(result?.top?.style).toBe('single');
       expect(result?.top?.color).toBe('#FF0000');
-      expect(result?.top?.width).toBeCloseTo(Math.max(0.5, (1 / 8) * (96 / 72)));
+      expect(result?.top?.width).toBe(1);
       expect(result?.right?.style).toBe('double');
       expect(result?.right?.color).toBe('#00FF00');
-      expect(result?.right?.width).toBeCloseTo(Math.max(0.5, (2 / 8) * (96 / 72)));
+      expect(result?.right?.width).toBe(2);
       expect(result?.bottom?.style).toBe('dashed');
       expect(result?.bottom?.color).toBe('#0000FF');
-      expect(result?.bottom?.width).toBeCloseTo(Math.max(0.5, (3 / 8) * (96 / 72)));
+      expect(result?.bottom?.width).toBe(3);
       expect(result?.left?.style).toBe('dotted');
       expect(result?.left?.color).toBe('#FFFF00');
-      expect(result?.left?.width).toBeCloseTo(Math.max(0.5, (4 / 8) * (96 / 72)));
+      expect(result?.left?.width).toBe(4);
     });
 
     it('should extract partial cell borders', () => {

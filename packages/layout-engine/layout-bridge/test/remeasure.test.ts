@@ -390,6 +390,22 @@ describe('remeasureParagraph', () => {
       expect((textSegment?.x ?? 0) + leftIndentPx).toBeCloseTo(80, 1);
     });
 
+    it('keeps positive explicit start stops uncompensated in negative-left paragraphs', () => {
+      const leftIndentPx = -24;
+      const runs: Run[] = [textRun('AAAA'), ...Array.from({ length: 7 }, () => tabRun()), textRun('Company')];
+      const block = createBlock(runs, {
+        indent: { left: leftIndentPx },
+        tabs: [48, 96, 144, 192, 240, 288, 336].map((pos) => ({ pos: pxToTwips(pos), val: 'start' })),
+      });
+
+      const measure = remeasureParagraph(block, 600);
+      const textSegment = measure.lines[0].segments?.find((segment) => segment.runIndex === 8);
+
+      expect(textSegment?.x).toBeCloseTo(360, 1);
+      expect(textSegment?.precedingTabEndX).toBeUndefined();
+      expect((textSegment?.x ?? 0) + leftIndentPx).toBeCloseTo(336, 1);
+    });
+
     it('does not clamp tabs early when negative left indent expands content width', () => {
       const leftIndentPx = -40;
       const tabStopPx = 190;

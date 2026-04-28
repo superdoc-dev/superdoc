@@ -148,6 +148,7 @@ const DEFAULT_TAB_INTERVAL_TWIPS = 720; // 0.5 inch in twips
 const TWIPS_PER_INCH = 1440;
 const PX_PER_INCH = 96; // Standard CSS/DOM DPI
 const TWIPS_PER_PX = TWIPS_PER_INCH / PX_PER_INCH; // 15 twips per pixel
+const TAB_STOP_POSITION_TOLERANCE_TWIPS = 20;
 const _PX_PER_PT = 96 / 72; // Reserved for future pt↔px conversions
 const twipsToPx = (twips: number): number => twips / TWIPS_PER_PX;
 const pxToTwips = (px: number): number => Math.round(px * TWIPS_PER_PX);
@@ -222,6 +223,7 @@ type TabStopPx = {
   pos: number; // px
   val: TabStop['val'];
   leader?: TabStop['leader'];
+  isExplicit?: boolean;
 };
 
 // Unused type - may be needed for future decimal tab implementation
@@ -1099,7 +1101,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
   /** Tracks whether we've encountered a text run yet; used to apply fallback font info to leading line breaks. */
   let hasSeenTextRun = false;
   let tabStopCursor = 0;
-  let pendingTabAlignment: { target: number; val: TabStop['val'] } | null = null;
+  let pendingTabAlignment: { target: number; val: TabStop['val']; compensateNegativeLeft?: boolean } | null = null;
   let pendingSegmentPrecedingTabEndX: number | undefined;
   let pendingLeader: LeaderDecoration | null = null;
   let pendingRunSpacing = 0;
@@ -1163,7 +1165,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
       segmentWidth = 0;
     }
 
-    const { target, val } = pendingTabAlignment;
+    const { target, val, compensateNegativeLeft } = pendingTabAlignment;
     let startX = currentLine.width;
 
     if (val === 'decimal') {
@@ -1190,13 +1192,14 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
     pendingTabAlignment = null;
     pendingLeader = null;
 
-    const shouldCompensateNegativeLeft = val === 'start' && indentLeft < 0 && effectiveIndent === indentLeft;
+    const shouldCompensateNegativeLeft = compensateNegativeLeft === true;
     pendingSegmentPrecedingTabEndX = shouldCompensateNegativeLeft ? startX : undefined;
 
     // Negative-left paragraphs move the fragment itself left. Explicit segment
-    // x values are still consumed by the DOM painter with indentOffset added,
-    // so compensate negative-left body lines while preserving the real
-    // single-indent tab advance. The uncompensated tab end is carried on the
+    // x values are still consumed by the DOM painter with indentOffset added.
+    // Only compensate generated/default stops that advance from the negative
+    // line origin; authored explicit stops already have the same geometry Word
+    // uses. The uncompensated tab end is carried on the
     // following segment as precedingTabEndX.
     return shouldCompensateNegativeLeft ? startX - Math.min(effectiveIndent, 0) : startX;
   };
@@ -1603,7 +1606,13 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
           pendingLeader = null;
         } else {
           // For start-aligned tabs, use the existing pendingTabAlignment mechanism
-          pendingTabAlignment = { target: clampedTarget - effectiveIndent, val: stop.val };
+          const relativeTarget = clampedTarget - effectiveIndent;
+          pendingTabAlignment = {
+            target: relativeTarget,
+            val: stop.val,
+            compensateNegativeLeft:
+              stop.val === 'start' && indentLeft < 0 && effectiveIndent === indentLeft && stop.isExplicit !== true,
+          };
         }
       } else {
         pendingTabAlignment = null;
@@ -2578,7 +2587,13 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
         charPosInRun += 1;
         if (stop) {
           validateTabStopVal(stop);
-          pendingTabAlignment = { target: clampedTarget - effectiveIndent, val: stop.val };
+          const relativeTarget = clampedTarget - effectiveIndent;
+          pendingTabAlignment = {
+            target: relativeTarget,
+            val: stop.val,
+            compensateNegativeLeft:
+              stop.val === 'start' && indentLeft < 0 && effectiveIndent === indentLeft && stop.isExplicit !== true,
+          };
         } else {
           pendingTabAlignment = null;
           pendingLeader = null;
@@ -3817,11 +3832,19 @@ const buildTabStopsPx = (indent?: ParagraphIndent, tabs?: TabStop[], tabInterval
   });
 
   // Convert resulting tab stops from twips to pixels for measurement
-  return stops.map((stop) => ({
-    pos: twipsToPx(stop.pos),
-    val: stop.val,
-    leader: stop.leader,
-  }));
+  return stops.map((stop) => {
+    const isExplicit = tabs?.some(
+      (tab) =>
+        tab.val !== 'clear' && tab.val === stop.val && Math.abs(tab.pos - stop.pos) < TAB_STOP_POSITION_TOLERANCE_TWIPS,
+    );
+
+    return {
+      pos: twipsToPx(stop.pos),
+      val: stop.val,
+      leader: stop.leader,
+      isExplicit,
+    };
+  });
 };
 
 const getNextTabStopPx = (

@@ -265,6 +265,7 @@ const DEFAULT_TAB_INTERVAL_TWIPS = 720; // 0.5in
 const TWIPS_PER_INCH = 1440;
 const PX_PER_INCH = 96;
 const TWIPS_PER_PX = TWIPS_PER_INCH / PX_PER_INCH; // 15 twips per px
+const TAB_STOP_POSITION_TOLERANCE_TWIPS = 20;
 
 /**
  * Floating-point tolerance for tab stop comparison (0.1 pixels).
@@ -366,6 +367,8 @@ type TabStopPx = {
   val: TabStop['val'];
   /** Optional leader character style (dots, dashes, etc.) */
   leader?: TabStop['leader'];
+  /** Whether this stop came from authored paragraph tabs instead of generated defaults. */
+  isExplicit?: boolean;
 };
 
 type PendingTabAlignStart = {
@@ -478,11 +481,19 @@ const buildTabStopsPx = (indent?: ParagraphIndent, tabs?: TabStop[], tabInterval
     rawParagraphIndent: rawParagraphIndentTwips,
   });
 
-  return stops.map((stop: TabStop) => ({
-    pos: twipsToPx(stop.pos),
-    val: stop.val,
-    leader: stop.leader,
-  }));
+  return stops.map((stop: TabStop) => {
+    const isExplicit = tabs?.some(
+      (tab) =>
+        tab.val !== 'clear' && tab.val === stop.val && Math.abs(tab.pos - stop.pos) < TAB_STOP_POSITION_TOLERANCE_TWIPS,
+    );
+
+    return {
+      pos: twipsToPx(stop.pos),
+      val: stop.val,
+      leader: stop.leader,
+      isExplicit,
+    };
+  });
 };
 
 /**
@@ -860,12 +871,15 @@ const applyTabLayoutToLines = (
       }
       const clampedTarget = Number.isFinite(maxAbsWidth) ? Math.min(target, maxAbsWidth) : target;
       const relativeTarget = clampedTarget - effectiveIndent;
-      const shouldCompensateNegativeLeft = indentLeft < 0 && effectiveIndent === indentLeft;
+      const stopVal = stop?.val ?? 'start';
+      const shouldCompensateNegativeLeft =
+        stopVal === 'start' && indentLeft < 0 && effectiveIndent === indentLeft && stop?.isExplicit !== true;
       // `relativeTarget` is layout geometry and controls the tab run width.
       // `paintTarget` is explicit segment geometry consumed by the DOM painter,
       // which adds the current line indentOffset again. For negative-left body
-      // lines, compensate the segment x only; the tab advance stays the single
-      // distance from the negative line origin back to the margin.
+      // lines, only compensate generated/default stops that advance from the
+      // negative line origin. Authored explicit stops already have the same
+      // geometry Word uses.
       const paintTarget = shouldCompensateNegativeLeft ? relativeTarget - Math.min(effectiveIndent, 0) : relativeTarget;
       const precedingTabEndX = shouldCompensateNegativeLeft ? relativeTarget : undefined;
       lineWidth = Math.max(lineWidth, relativeTarget);
@@ -880,7 +894,6 @@ const applyTabLayoutToLines = (
       }
 
       // Handle alignment types
-      const stopVal = stop?.val ?? 'start';
       if (stopVal === 'end' || stopVal === 'center' || stopVal === 'decimal') {
         const groupMeasure = measureTabAlignmentGroupInLine(runs, line, startRunIndex, startChar, decimalSeparator);
         if (groupMeasure.totalWidth > 0) {

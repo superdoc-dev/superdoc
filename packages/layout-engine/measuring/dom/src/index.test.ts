@@ -1714,6 +1714,30 @@ describe('measureBlock', () => {
       expect((leadingSpaceSegment?.x ?? 0) + leftIndentPx).toBeCloseTo(Math.abs(leftIndentPx), 1);
     });
 
+    it('does not compensate positive explicit start stops in negative-left paragraphs', async () => {
+      const leftIndentPx = -24;
+      const block: FlowBlock = {
+        kind: 'paragraph',
+        id: 'negative-left-positive-start-tabs',
+        runs: [
+          { text: 'AAAA', fontFamily: 'Arial', fontSize: 16 },
+          ...Array.from({ length: 7 }, () => ({ kind: 'tab' as const, text: '\t' })),
+          { text: 'Company', fontFamily: 'Arial', fontSize: 16 },
+        ],
+        attrs: {
+          indent: { left: leftIndentPx },
+          tabs: [48, 96, 144, 192, 240, 288, 336].map((pos) => ({ pos: pos * 15, val: 'start' })),
+        },
+      };
+
+      const measure = expectParagraphMeasure(await measureBlock(block, 600));
+      const textSegment = measure.lines[0].segments?.find((segment) => segment.runIndex === 8);
+
+      expect(textSegment?.x).toBeCloseTo(360, 1);
+      expect(textSegment?.precedingTabEndX).toBeUndefined();
+      expect((textSegment?.x ?? 0) + leftIndentPx).toBeCloseTo(336, 1);
+    });
+
     it('maps three trailing tabs to two explicit alignment stops (asymmetric case)', async () => {
       const centerStopTwips = 5000;
       const endStopTwips = 10000;

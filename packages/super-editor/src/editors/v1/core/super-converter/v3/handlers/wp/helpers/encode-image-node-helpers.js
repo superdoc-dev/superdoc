@@ -419,7 +419,7 @@ export function handleImageNode(node, params, isAnchor) {
   if (docPrExtLst) {
     for (const ext of docPrExtLst.elements || []) {
       if (!hasLocalName(ext, 'ext')) continue;
-      const decEl = ext.elements?.find((el) => el.name === 'adec:decorative' || el.name === 'a16:decorative');
+      const decEl = findChildByLocalName(ext.elements, 'decorative');
       if (decEl && (decEl.attributes?.['val'] === '1' || decEl.attributes?.['val'] === 1)) {
         decorative = true;
         break;

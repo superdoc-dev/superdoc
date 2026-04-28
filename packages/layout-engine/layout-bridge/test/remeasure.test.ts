@@ -331,6 +331,21 @@ describe('remeasureParagraph', () => {
       expect(measure.lines[0].width).toBeGreaterThan(48);
     });
 
+    it('advances a leading tab to the left margin when hanging indent starts before it', () => {
+      const hangingPx = 567 / TWIPS_PER_PX;
+      const run = tabRun();
+      const block = createBlock([run, textRun('Test doc')], {
+        indent: { hanging: hangingPx },
+        tabs: [{ pos: -1440, val: 'start' }],
+        tabIntervalTwips: DEFAULT_TAB_INTERVAL_TWIPS,
+      });
+      const measure = remeasureParagraph(block, 200);
+
+      expect(measure.lines).toHaveLength(1);
+      expect((run as { width?: number }).width).toBeCloseTo(hangingPx, 1);
+      expect(measure.lines[0].width).toBeCloseTo(hangingPx + 'Test doc'.length * CHAR_WIDTH, 1);
+    });
+
     it('keeps right-aligned tab groups on the same line', () => {
       const tabStop: TabStop = { pos: pxToTwips(100), val: 'end' };
       const block = createBlock([textRun('AAA'), tabRun(), textRun('12')], { tabs: [tabStop] });

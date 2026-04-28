@@ -133,6 +133,15 @@ export function computeTabStops(context: TabContext): TabStop[] {
   const stops = [...filteredExplicitStops];
   const hasStartAlignedExplicit = filteredExplicitStops.some((stop) => stop.val === 'start');
 
+  // Word places an implicit tab stop at the left margin. This matters when a
+  // hanging indent pulls the first-line origin before the content left edge:
+  // a leading tab should advance back to the left margin instead of jumping to
+  // the first default tab interval.
+  const firstLineOrigin = leftIndent - hanging;
+  if (firstLineOrigin < 0 && !stops.some((stop) => Math.abs(stop.pos) < 20)) {
+    stops.push({ val: 'start', pos: 0, leader: 'none' });
+  }
+
   // Generate default stops at regular intervals.
   // - When no explicit start tabs exist (e.g., TOC paragraphs with only right-aligned tabs),
   //   seed defaults from the origin so numbering/content still lands on the default grid.

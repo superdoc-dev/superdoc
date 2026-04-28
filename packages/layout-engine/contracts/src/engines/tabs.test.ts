@@ -74,6 +74,17 @@ describe('engines-tabs computeTabStops', () => {
     expect(firstDefault?.leader).toBe('none');
   });
 
+  it('adds an implicit left-margin stop when hanging indent starts before the margin', () => {
+    const stops = computeTabStops({
+      explicitStops: [{ val: 'start', pos: -1440, leader: 'none' }],
+      defaultTabInterval: 720,
+      paragraphIndent: { left: 0, hanging: 567 },
+    });
+
+    expect(stops[0]).toEqual({ val: 'start', pos: 0, leader: 'none' });
+    expect(stops.find((stop) => stop.pos === 720)).toBeDefined();
+  });
+
   it('preserves tab stops between (left - hanging) and left when hanging indent exists', () => {
     // SD-1472 regression: When left=709 and hanging=709, the first line starts at 0.
     // Tab stops at 340 (between 0 and 709) should be preserved for first-line use.

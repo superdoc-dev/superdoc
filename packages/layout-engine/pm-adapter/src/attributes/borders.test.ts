@@ -351,6 +351,56 @@ describe('extractTableBorders', () => {
   });
 });
 
+// SD-2343: borders pre-converted to pixels by the importer must not be
+// re-converted from eighth-points by pm-adapter. The doubly-converted
+// regression rendered ~1pt as ~0.18px and ~6pt as ~1.33px - invisible.
+describe('SD-2343 - no double conversion for pre-converted px widths', () => {
+  // sz values pulled directly from the fixture (sd-2343-table-border-widths.docx).
+  // After the importer converts eighth-points to pixels, pm-adapter receives
+  // these as the `size` field and must pass them through unchanged.
+  const cases = [
+    { label: 'thin (sz=4 → 0.67px)', size: 0.67 },
+    { label: 'default (sz=8 → 1.33px)', size: 1.33 },
+    { label: 'medium (sz=24 → 4px)', size: 4 },
+    { label: 'thick (sz=48 → 8px)', size: 8 },
+  ];
+
+  describe.each(cases)('$label', ({ size }) => {
+    it('convertBorderSpec preserves pixel width', () => {
+      const result = convertBorderSpec({ val: 'single', size });
+      expect(result?.width).toBeCloseTo(size, 4);
+    });
+
+    it('convertTableBorderValue preserves pixel width', () => {
+      const result = convertTableBorderValue({ val: 'single', size });
+      expect(result).not.toHaveProperty('none');
+      // Width is non-optional on TableBorderValue when not nil/none
+      expect((result as { width: number }).width).toBeCloseTo(size, 4);
+    });
+
+    it('extractTableBorders preserves pixel widths across all sides', () => {
+      const sides = {
+        top: { val: 'single', size },
+        right: { val: 'single', size },
+        bottom: { val: 'single', size },
+        left: { val: 'single', size },
+        insideH: { val: 'single', size },
+        insideV: { val: 'single', size },
+      };
+      const result = extractTableBorders(sides);
+      for (const side of ['top', 'right', 'bottom', 'left', 'insideH', 'insideV'] as const) {
+        expect((result?.[side] as { width: number }).width).toBeCloseTo(size, 4);
+      }
+    });
+  });
+
+  it('opt-in eighthPoints unit still converts (sz=8 → 1.333px)', () => {
+    // Confirms the dual-mode contract: legacy callers can still request conversion.
+    const result = convertBorderSpec({ val: 'single', size: 8 }, { unit: 'eighthPoints' });
+    expect(result?.width).toBeCloseTo(1.3333, 4);
+  });
+});
+
 describe('extractCellBorders', () => {
   describe('valid cell borders', () => {
     it('should extract all four cell border sides', () => {

@@ -2750,6 +2750,78 @@ describe('PresentationEditor', () => {
       expect(errorSpy).not.toHaveBeenCalled();
     });
 
+    it('exits active header mode before navigating to a body bookmark', async () => {
+      const layoutResult = buildLayoutResult();
+      layoutResult.layout.pages[0].fragments = [
+        {
+          kind: 'para',
+          blockId: 'body-p1',
+          pmStart: 0,
+          pmEnd: 20,
+          y: 120,
+        },
+      ];
+      mockIncrementalLayout.mockResolvedValueOnce(layoutResult);
+      bookmarkResolverMocks.findAllBookmarksInDocument.mockReturnValueOnce([
+        { name: 'body-bm', bookmarkId: '7', storyKey: 'body' },
+      ]);
+      bookmarkResolverMocks.resolveBookmarkTarget.mockReturnValueOnce({
+        pos: 8,
+        name: 'body-bm',
+        bookmarkId: '7',
+        endPos: 9,
+        node: { attrs: { name: 'body-bm', id: '7' } },
+      });
+
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'test-doc',
+      });
+
+      await vi.waitFor(() => expect(mockIncrementalLayout).toHaveBeenCalled());
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      const pagesHost = container.querySelector('.presentation-editor__pages') as HTMLElement;
+      const mockPage = document.createElement('div');
+      mockPage.setAttribute('data-page-index', '0');
+      pagesHost.appendChild(mockPage);
+
+      const viewport = container.querySelector('.presentation-editor__viewport') as HTMLElement;
+      vi.spyOn(viewport, 'getBoundingClientRect').mockReturnValue({
+        left: 0,
+        top: 0,
+        width: 800,
+        height: 1000,
+        right: 800,
+        bottom: 1000,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      } as DOMRect);
+
+      viewport.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, clientX: 120, clientY: 50, button: 0 }));
+      await vi.waitFor(() => expect(createdSectionEditors.length).toBeGreaterThan(0));
+
+      const headerEditor = editor.getActiveEditor();
+      const bodyEditor = (Editor as unknown as MockedEditor).mock.results[0].value;
+      bodyEditor.commands = {
+        ...(bodyEditor.commands ?? {}),
+        setTextSelection: vi.fn(),
+      };
+      expect(headerEditor).not.toBe(bodyEditor);
+
+      const didNavigate = await editor.navigateTo({
+        kind: 'entity',
+        entityType: 'bookmark',
+        name: 'body-bm',
+      });
+
+      expect(didNavigate).toBe(true);
+      expect(editor.getActiveEditor()).toBe(bodyEditor);
+      expect(headerEditor.commands.setTextSelection).not.toHaveBeenCalledWith({ from: 8, to: 8 });
+      expect(bodyEditor.commands.setTextSelection).toHaveBeenCalledWith({ from: 8, to: 8 });
+    });
+
     it('activates the matching header surface before navigating to a document-wide bookmark', async () => {
       mockIncrementalLayout.mockResolvedValueOnce(buildLayoutResult());
       bookmarkResolverMocks.findAllBookmarksInDocument.mockReturnValueOnce([

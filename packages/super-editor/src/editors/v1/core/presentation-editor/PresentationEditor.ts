@@ -8179,6 +8179,7 @@ export class PresentationEditor extends EventEmitter {
     }
 
     if (!storyKey || storyKey === BODY_STORY_KEY) {
+      this.exitActiveStorySurface();
       return await this.goToAnchor(target.name);
     }
 

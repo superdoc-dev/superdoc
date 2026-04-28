@@ -190,6 +190,70 @@ describe('ui.comments — snapshot', () => {
     ui.destroy();
   });
 
+  it('returns the same array reference for empty activeIds across snapshots (shallowEqual stability)', () => {
+    // Pre-SD-2792 selection shape: no activeCommentIds. Without a
+    // shared sentinel, `?? []` would allocate a fresh array each
+    // computeState() call and trigger shallowEqual mismatch on the
+    // comments snapshot — every selection event would re-fire
+    // ui.comments.subscribe.
+    const { superdoc, editor } = makeStubs({ comments: [{ id: 'c1', commentId: 'c1' }] });
+    (editor.doc.selection.current as unknown as () => { empty: boolean; target: null }) = vi.fn(() => ({
+      empty: true,
+      target: null,
+    }));
+    const ui = createSuperDocUI({ superdoc });
+
+    const a = ui.comments.getSnapshot().activeIds;
+    const b = ui.comments.getSnapshot().activeIds;
+    expect(a).toBe(b); // same reference
+
+    ui.destroy();
+  });
+
+  it('refreshes the snapshot synchronously after own mutations (createFromSelection / resolve / delete)', () => {
+    const target = { kind: 'text' as const, segments: [{ blockId: 'p1', range: { start: 0, end: 5 } }] };
+    const { superdoc, mocks } = makeStubs({
+      comments: [{ id: 'c1', commentId: 'c1', text: 'first' }],
+      selectionTarget: target,
+    });
+    const ui = createSuperDocUI({ superdoc });
+
+    const cb = vi.fn();
+    ui.comments.subscribe(cb);
+    expect(cb).toHaveBeenCalledTimes(1);
+
+    // Simulate the wrapper updating the comments store: as soon as
+    // ui.comments.createFromSelection completes, list() must return
+    // the new item. The own-mutation refresh re-reads list() so
+    // subscribers see the post-mutation state without needing a
+    // commentsUpdate event.
+    superdoc.setComments([
+      { id: 'c1', commentId: 'c1', text: 'first' },
+      { id: 'c2', commentId: 'c2', text: 'second' },
+    ]);
+    ui.comments.createFromSelection({ text: 'second' });
+
+    expect(mocks.create).toHaveBeenCalledTimes(1);
+    // getSnapshot reflects the new state synchronously after the
+    // mutation (without needing a commentsUpdate event).
+    expect(ui.comments.getSnapshot().total).toBe(2);
+
+    // Same pattern for resolve.
+    superdoc.setComments([
+      { id: 'c1', commentId: 'c1', status: 'resolved' },
+      { id: 'c2', commentId: 'c2', text: 'second' },
+    ]);
+    ui.comments.resolve('c1');
+    expect(ui.comments.getSnapshot().items[0].status).toBe('resolved');
+
+    // And for delete.
+    superdoc.setComments([{ id: 'c2', commentId: 'c2', text: 'second' }]);
+    ui.comments.delete('c1');
+    expect(ui.comments.getSnapshot().total).toBe(1);
+
+    ui.destroy();
+  });
+
   it('falls back to [] when selection.current() predates SD-2792 (no activeCommentIds field)', () => {
     const { superdoc, editor } = makeStubs();
     // Override selection.current to return an SD-2668-shaped result

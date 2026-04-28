@@ -95,6 +95,16 @@ const ALL_TOOLBAR_COMMAND_IDS: PublicToolbarItemId[] = Object.keys(
 ) as PublicToolbarItemId[];
 
 /**
+ * Frozen empty-array sentinel for `state.comments.activeIds` when
+ * `selection.current()` predates SD-2792 (no `activeCommentIds`
+ * field). Allocating a fresh `[]` per `computeState()` would change
+ * the array reference every call and defeat `shallowEqual` on the
+ * comments snapshot — every selection event would re-fire
+ * `ui.comments.subscribe` even when nothing in the slice changed.
+ */
+const EMPTY_ACTIVE_IDS: readonly string[] = Object.freeze<string[]>([]);
+
+/**
  * Resolve the **routed** editor — the body, header, footer, or note
  * editor that PresentationEditor currently routes input/selection to.
  * Falls back to `superdoc.activeEditor` when no presentation layer is
@@ -231,9 +241,11 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     const quotedText = selectionInfo?.text ?? '';
     const documentMode = superdoc.config?.documentMode ?? null;
     // `activeCommentIds` is post-SD-2792; older builds will have
-    // `selectionInfo.activeCommentIds === undefined`. Fall back to []
-    // so the snapshot shape is stable for consumers either way.
-    const activeIds = selectionInfo?.activeCommentIds ?? [];
+    // `selectionInfo.activeCommentIds === undefined`. Fall back to a
+    // frozen shared array so the array reference is stable across
+    // computeState() calls (otherwise shallowEqual on the comments
+    // snapshot re-fires every selection event).
+    const activeIds = (selectionInfo?.activeCommentIds ?? EMPTY_ACTIVE_IDS) as string[];
     return {
       ready,
       documentMode,
@@ -548,11 +560,25 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
         };
       }
       const api = requireDocComments();
-      return (api.create as (input: unknown, options?: unknown) => Receipt).call(api, { target, text });
+      const receipt = (api.create as (input: unknown, options?: unknown) => Receipt).call(api, { target, text });
+      // Refresh + notify ourselves: the underlying wrappers don't
+      // emit a single canonical event for every comments mutation
+      // (some go through `transaction` only, some emit
+      // `commentsUpdate` ahead of the entity-store finishing). Doing
+      // it here means the next snapshot subscribers see is the
+      // post-mutation state, regardless of which event the wrapper
+      // happens to fire.
+      refreshAndNotify();
+      return receipt;
     },
     resolve(commentId) {
       const api = requireDocComments();
-      return (api.patch as (input: unknown, options?: unknown) => Receipt).call(api, { commentId, status: 'resolved' });
+      const receipt = (api.patch as (input: unknown, options?: unknown) => Receipt).call(api, {
+        commentId,
+        status: 'resolved',
+      });
+      refreshAndNotify();
+      return receipt;
     },
     reopen(commentId) {
       // Routes through `comments.patch({ status: 'active' })`. Today
@@ -562,11 +588,18 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
       // which is the correct visible behavior for a not-yet-shipped
       // operation rather than a silent no-op.
       const api = requireDocComments();
-      return (api.patch as (input: unknown, options?: unknown) => Receipt).call(api, { commentId, status: 'active' });
+      const receipt = (api.patch as (input: unknown, options?: unknown) => Receipt).call(api, {
+        commentId,
+        status: 'active',
+      });
+      refreshAndNotify();
+      return receipt;
     },
     delete(commentId) {
       const api = requireDocComments();
-      return (api.delete as (input: unknown, options?: unknown) => Receipt).call(api, { commentId });
+      const receipt = (api.delete as (input: unknown, options?: unknown) => Receipt).call(api, { commentId });
+      refreshAndNotify();
+      return receipt;
     },
     async scrollTo(commentId) {
       const api = requireDocRanges();

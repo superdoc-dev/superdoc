@@ -103,6 +103,18 @@ describe('engines-tabs computeTabStops', () => {
     expect(stops.find((stop) => stop.pos === 720)).toBeDefined();
   });
 
+  it('adds the implicit left-indent stop without adding a zero stop for negative left indent paragraphs', () => {
+    const stops = computeTabStops({
+      explicitStops: [{ val: 'start', pos: -1440, leader: 'none' }],
+      defaultTabInterval: 720,
+      paragraphIndent: { left: -567, hanging: 0 },
+    });
+
+    expect(stops[0]).toEqual({ val: 'start', pos: 567, leader: 'none' });
+    expect(stops.find((stop) => stop.pos === 0)).toBeUndefined();
+    expect(stops.find((stop) => stop.pos === 720)).toBeDefined();
+  });
+
   it('preserves tab stops between (left - hanging) and left when hanging indent exists', () => {
     // SD-1472 regression: When left=709 and hanging=709, the first line starts at 0.
     // Tab stops at 340 (between 0 and 709) should be preserved for first-line use.

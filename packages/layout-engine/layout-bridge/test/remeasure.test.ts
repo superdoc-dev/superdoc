@@ -346,6 +346,21 @@ describe('remeasureParagraph', () => {
       expect(measure.lines[0].width).toBeCloseTo(hangingPx + 'Test doc'.length * CHAR_WIDTH, 1);
     });
 
+    it('advances a leading tab to the left indent stop for negative left indent paragraphs', () => {
+      const leftIndentPx = -567 / TWIPS_PER_PX;
+      const run = tabRun();
+      const block = createBlock([run, textRun('Test doc')], {
+        indent: { left: leftIndentPx },
+        tabs: [{ pos: -1440, val: 'start' }],
+        tabIntervalTwips: DEFAULT_TAB_INTERVAL_TWIPS,
+      });
+      const measure = remeasureParagraph(block, 200);
+
+      expect(measure.lines).toHaveLength(1);
+      expect((run as { width?: number }).width).toBeCloseTo(Math.abs(leftIndentPx), 1);
+      expect(measure.lines[0].width).toBeCloseTo(Math.abs(leftIndentPx) + 'Test doc'.length * CHAR_WIDTH, 1);
+    });
+
     it('keeps right-aligned tab groups on the same line', () => {
       const tabStop: TabStop = { pos: pxToTwips(100), val: 'end' };
       const block = createBlock([textRun('AAA'), tabRun(), textRun('12')], { tabs: [tabStop] });

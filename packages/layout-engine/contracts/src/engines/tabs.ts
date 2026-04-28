@@ -138,12 +138,11 @@ export function computeTabStops(context: TabContext): TabStop[] {
   // a leading tab should advance back to the left margin instead of jumping to
   // the first default tab interval.
   const firstLineOrigin = leftIndent - hanging;
-  if (firstLineOrigin < 0 && !stops.some((stop) => Math.abs(stop.pos) < 20)) {
+  if (hanging > 0 && firstLineOrigin < 0 && !stops.some((stop) => Math.abs(stop.pos) < 20)) {
     stops.push({ val: 'start', pos: 0, leader: 'none' });
   }
   const leftIndentStop = Math.abs(leftIndent);
   if (
-    hanging > 0 &&
     leftIndentStop > 0 &&
     firstLineOrigin < leftIndentStop &&
     !stops.some((stop) => Math.abs(stop.pos - leftIndentStop) < 20)

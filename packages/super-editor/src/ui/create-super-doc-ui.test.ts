@@ -63,9 +63,10 @@ function makeSuperdocStub(
       const handlers = editorListeners.get(event);
       if (!handlers) return;
       // Snapshot before iterating: handlers can mutate the registration
-      // set (e.g., re-attach on surface change), and a Set's forEach
-      // picks up newly-added handlers mid-loop. Real editor event buses
-      // iterate a frozen list.
+      // set (e.g., presentation re-routing, headless-toolbar rebinding
+      // listeners on every change). A Set's forEach picks up newly-added
+      // handlers mid-loop, which produces unbounded recursion. Real
+      // editor event buses iterate a frozen list.
       [...handlers].forEach((handler) => handler(...args));
     },
     fireSuperdoc(event: string, ...args: unknown[]) {

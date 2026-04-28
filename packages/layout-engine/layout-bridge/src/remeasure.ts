@@ -1145,12 +1145,13 @@ export function remeasureParagraph(
   const attrs = block.attrs as ParagraphBlockAttrs | undefined;
   const indent = attrs?.indent;
   const wordLayout = attrs?.wordLayout;
-  // Keep raw values for hasNegativeIndent check (negative indents disable certain optimizations)
+  // Preserve finite negative indents for paragraph width geometry. This mirrors
+  // measuring/dom: negative indents expand the usable line width into the margin
+  // area, so tab cursor math and tab clamp bounds stay in the same coordinate space.
   const rawIndentLeft = typeof indent?.left === 'number' && Number.isFinite(indent.left) ? indent.left : 0;
   const rawIndentRight = typeof indent?.right === 'number' && Number.isFinite(indent.right) ? indent.right : 0;
-  // Clamp to 0 for actual layout calculations (negative indents shouldn't widen content area)
-  const indentLeft = Math.max(0, rawIndentLeft);
-  const indentRight = Math.max(0, rawIndentRight);
+  const indentLeft = rawIndentLeft;
+  const indentRight = rawIndentRight;
   const indentFirstLine = Math.max(0, indent?.firstLine ?? 0);
   const indentHanging = Math.max(0, indent?.hanging ?? 0);
   // Match measuring/dom/src/index.ts: `suppressFirstLineIndent` is a Word quirk where
@@ -1204,7 +1205,6 @@ export function remeasureParagraph(
       : Math.max(1, contentWidth - effectiveFirstLineOffset);
   const tabStops = buildTabStopsPx(indent as ParagraphIndent | undefined, attrs?.tabs, attrs?.tabIntervalTwips);
   const decimalSeparator = sanitizeDecimalSeparator(attrs?.decimalSeparator);
-  const tabIndentLeft = rawIndentLeft;
 
   let currentRun = 0;
   let currentChar = 0;
@@ -1213,7 +1213,7 @@ export function remeasureParagraph(
     const isFirstLine = lines.length === 0;
     // For first line, reduce available width by textStart/first-line offset (e.g., for in-flow list markers)
     const effectiveMaxWidth = Math.max(1, isFirstLine ? firstLineWidth : contentWidth);
-    const effectiveIndent = isFirstLine ? tabIndentLeft + baseFirstLineOffset : tabIndentLeft;
+    const effectiveIndent = isFirstLine ? indentLeft + baseFirstLineOffset : indentLeft;
     const startRun = currentRun;
     const startChar = currentChar;
     let width = 0;
@@ -1408,7 +1408,7 @@ export function remeasureParagraph(
     (run) => run?.kind === 'text' && typeof (run as TextRun).text === 'string' && (run as TextRun).text.includes('\t'),
   );
   if (hasTabRun || hasTextTab) {
-    applyTabLayoutToLines(lines, runs, tabStops, decimalSeparator, tabIndentLeft, baseFirstLineOffset);
+    applyTabLayoutToLines(lines, runs, tabStops, decimalSeparator, indentLeft, baseFirstLineOffset);
   }
 
   const totalHeight = lines.reduce((s, l) => s + l.lineHeight, 0);

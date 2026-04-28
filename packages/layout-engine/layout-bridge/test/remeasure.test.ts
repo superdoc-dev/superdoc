@@ -369,6 +369,23 @@ describe('remeasureParagraph', () => {
       expect((textSegment?.x ?? 0) + leftIndentPx).toBeCloseTo(expectedTabAdvance, 1);
     });
 
+    it('does not clamp tabs early when negative left indent expands content width', () => {
+      const leftIndentPx = -40;
+      const tabStopPx = 190;
+      const run = tabRun();
+      const block = createBlock([textRun('AAAAA'), run, textRun('X')], {
+        indent: { left: leftIndentPx },
+        tabs: [{ pos: pxToTwips(tabStopPx), val: 'start' }],
+      });
+
+      remeasureParagraph(block, 200);
+
+      // The leading implicit zero stop is already behind the cursor:
+      // absCurrentX = 50px text + -40px indent = 10px, target = 190px.
+      // The old mixed model clamped at 160px and advanced only 150px.
+      expect((run as { width?: number }).width).toBeCloseTo(180, 1);
+    });
+
     it('keeps right-aligned tab groups on the same line', () => {
       const tabStop: TabStop = { pos: pxToTwips(100), val: 'end' };
       const block = createBlock([textRun('AAA'), tabRun(), textRun('12')], { tabs: [tabStop] });
@@ -645,19 +662,18 @@ describe('remeasureParagraph', () => {
       // This should be reflected in line breaking behavior
     });
 
-    it('handles negative indent values by clamping to zero', () => {
-      // Implementation uses Math.max(0, indent) to prevent negative indents
+    it('preserves negative left and right indents in available width calculations', () => {
       const block = createBlock([textRun('Hello')], {
         indent: { left: -50, right: -30, firstLine: -20, hanging: -10 },
       });
       const measure = remeasureParagraph(block, 100);
 
-      // Should treat negative values as 0, so full width is available
       expect(measure.lines).toHaveLength(1);
       expect(measure.lines[0].width).toBe(5 * CHAR_WIDTH);
+      expect(measure.lines[0].maxWidth).toBe(180);
     });
 
-    it('avoids widening first line when negative indents are present with hanging', () => {
+    it('uses expanded content width when negative indents are present with hanging', () => {
       const maxWidth = 200;
       const block = createBlock([textRun('A'.repeat(40))], {
         indent: { left: -20, right: -30, hanging: 20 },
@@ -665,8 +681,8 @@ describe('remeasureParagraph', () => {
       const measure = remeasureParagraph(block, maxWidth);
 
       expect(measure.lines.length).toBeGreaterThan(1);
-      expect(measure.lines[0].maxWidth).toBe(maxWidth);
-      expect(measure.lines[1].maxWidth).toBe(maxWidth);
+      expect(measure.lines[0].maxWidth).toBe(250);
+      expect(measure.lines[1].maxWidth).toBe(250);
     });
 
     // SD-2415: the guard was relaxed from `hasNegativeIndent` to `hasNegativeLeftIndent`.
@@ -679,12 +695,12 @@ describe('remeasureParagraph', () => {
       const measure = remeasureParagraph(block, maxWidth);
 
       expect(measure.lines.length).toBeGreaterThan(1);
-      // First line widens by hanging amount; body lines use plain content width.
-      expect(measure.lines[0].maxWidth).toBe(maxWidth + 20);
-      expect(measure.lines[1].maxWidth).toBe(maxWidth);
+      // First line widens by hanging amount; body lines use content width expanded by negative right indent.
+      expect(measure.lines[0].maxWidth).toBe(250);
+      expect(measure.lines[1].maxWidth).toBe(230);
     });
 
-    it('does NOT widen first line when left indent is negative (SD-1401 regression guard)', () => {
+    it('keeps SD-1401 negative-left hanging paragraphs from wrapping prematurely under expanded-width semantics', () => {
       const maxWidth = 200;
       const block = createBlock([textRun('A'.repeat(40))], {
         indent: { left: -20, right: 0, hanging: 20 },
@@ -692,8 +708,12 @@ describe('remeasureParagraph', () => {
       const measure = remeasureParagraph(block, maxWidth);
 
       expect(measure.lines.length).toBeGreaterThan(1);
-      expect(measure.lines[0].maxWidth).toBe(maxWidth);
-      expect(measure.lines[1].maxWidth).toBe(maxWidth);
+      // SD-1401 originally guarded against premature body-line wrapping for
+      // negative-left + hanging paragraphs. The correct current model preserves
+      // the negative-left expanded content width, but does not add another
+      // hanging-width expansion on top of it.
+      expect(measure.lines[0].maxWidth).toBe(220);
+      expect(measure.lines[1].maxWidth).toBe(220);
     });
 
     // SD-2415: remeasure must match the initial measurer on `suppressFirstLineIndent`.

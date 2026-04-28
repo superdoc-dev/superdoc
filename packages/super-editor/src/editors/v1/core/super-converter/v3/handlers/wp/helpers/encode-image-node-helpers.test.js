@@ -549,6 +549,78 @@ describe('handleImageNode', () => {
     expect(result.attrs.kind).toBe('rect');
   });
 
+  describe('decorative flag (adec/a16/re-prefixed namespaces)', () => {
+    const buildNodeWithDecorative = ({
+      extLstName = 'a:extLst',
+      extName = 'a:ext',
+      decorativeName = 'adec:decorative',
+      val = '1',
+    } = {}) => {
+      const node = makeNode();
+      const docPr = node.elements.find((el) => el.name === 'wp:docPr');
+      docPr.elements = [
+        {
+          name: extLstName,
+          elements: [
+            {
+              name: extName,
+              attributes: { uri: '{C183D7F6-B498-43B3-948B-1728B52AA6E4}' },
+              elements: [{ name: decorativeName, attributes: { val } }],
+            },
+          ],
+        },
+      ];
+      return node;
+    };
+
+    it('detects decorative=1 emitted with the canonical adec: prefix (Word default)', () => {
+      const node = buildNodeWithDecorative({ decorativeName: 'adec:decorative' });
+      const result = handleImageNode(node, makeParams(), false);
+      expect(result.attrs.decorative).toBe(true);
+    });
+
+    it('detects decorative=1 emitted with the legacy a16: prefix', () => {
+      const node = buildNodeWithDecorative({ decorativeName: 'a16:decorative' });
+      const result = handleImageNode(node, makeParams(), false);
+      expect(result.attrs.decorative).toBe(true);
+    });
+
+    it('detects decorative=1 when the namespace prefix has been re-aliased (e.g. ns7:)', () => {
+      const node = buildNodeWithDecorative({
+        extLstName: 'ns6:extLst',
+        extName: 'ns6:ext',
+        decorativeName: 'ns7:decorative',
+      });
+      const result = handleImageNode(node, makeParams(), false);
+      expect(result.attrs.decorative).toBe(true);
+    });
+
+    it('leaves decorative=false when the val attribute is missing or zero', () => {
+      const node = buildNodeWithDecorative({ val: '0' });
+      const result = handleImageNode(node, makeParams(), false);
+      expect(result.attrs.decorative).toBe(false);
+    });
+
+    it('leaves decorative=false when extLst has no decorative descendant', () => {
+      const node = makeNode();
+      const docPr = node.elements.find((el) => el.name === 'wp:docPr');
+      docPr.elements = [
+        {
+          name: 'a:extLst',
+          elements: [
+            {
+              name: 'a:ext',
+              attributes: { uri: '{ANY}' },
+              elements: [{ name: 'a14:useLocalDpi', attributes: { val: '0' } }],
+            },
+          ],
+        },
+      ];
+      const result = handleImageNode(node, makeParams(), false);
+      expect(result.attrs.decorative).toBe(false);
+    });
+  });
+
   it('renders textbox shapes as vectorShapes with text content', () => {
     const node = makeShapeNode({ includeTextbox: true });
     const result = handleImageNode(node, makeParams(), false);

@@ -1,3 +1,4 @@
+import { resolveToolbarSources } from '../headless-toolbar/resolve-toolbar-sources.js';
 import type {
   EqualityFn,
   SelectorFn,
@@ -30,6 +31,59 @@ const EDITOR_EVENTS = [
 
 const SUPERDOC_EVENTS = ['editorCreate', 'document-mode-change', 'zoomChange'] as const;
 
+/**
+ * Presentation-editor events the controller listens to. These signal
+ * routing changes (the user moved focus into a header/footer/note) and
+ * presentation-layer mutations that don't surface as `transaction` on
+ * the body editor. Mirrors the `subscribe-toolbar-events` set so the
+ * toolbar registry's snapshot rebuilds and the unified UI state
+ * recompute on the same triggers.
+ */
+const PRESENTATION_EVENTS = [
+  'headerFooterEditingContext',
+  'headerFooterUpdate',
+  'headerFooterTransaction',
+  'activeSurfaceChange',
+  'historyStateChange',
+] as const;
+
+/**
+ * Resolve the **routed** editor — the body, header, footer, or note
+ * editor that PresentationEditor currently routes input/selection to.
+ * Falls back to `superdoc.activeEditor` when no presentation layer is
+ * active (e.g., simple non-paginated mounts, server-side stubs in
+ * tests).
+ *
+ * Reusing `resolveToolbarSources` keeps routing logic in one place;
+ * the toolbar registry and the UI controller agree on which editor
+ * owns the current selection at any moment.
+ */
+function resolveRoutedEditor(superdoc: SuperDocUIOptions['superdoc']): SuperDocEditorLike | null {
+  try {
+    const sources = resolveToolbarSources(superdoc as never);
+    return (sources.activeEditor as unknown as SuperDocEditorLike | null) ?? null;
+  } catch {
+    return (superdoc.activeEditor ?? null) as SuperDocEditorLike | null;
+  }
+}
+
+/**
+ * Resolve the PresentationEditor (when one exists), so we can
+ * subscribe to its events and re-route the active editor on surface
+ * changes.
+ */
+function resolvePresentationEditor(superdoc: SuperDocUIOptions['superdoc']): {
+  on?: (event: string, handler: (...args: unknown[]) => void) => unknown;
+  off?: (event: string, handler: (...args: unknown[]) => void) => unknown;
+} | null {
+  try {
+    const sources = resolveToolbarSources(superdoc as never);
+    return (sources.presentationEditor as never) ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
   const { superdoc } = options;
 
@@ -58,7 +112,11 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
   };
 
   const computeState = (): SuperDocUIState => {
-    const editor = superdoc.activeEditor ?? null;
+    // Route through PresentationEditor when active so selection state
+    // follows the body/header/footer/note editor the user is actually
+    // editing — `superdoc.activeEditor` stays on the body editor while
+    // `PresentationEditor.getActiveEditor()` follows the routed story.
+    const editor = resolveRoutedEditor(superdoc);
     const ready = editor != null;
     const selectionInfo = editor?.doc?.selection?.current?.({ includeText: true });
     const empty = selectionInfo ? selectionInfo.empty : true;
@@ -84,13 +142,15 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     });
   }
 
-  // Editor events: the activeEditor reference can swap on
-  // `editorCreate`, so we re-attach listeners each time it does.
+  // Editor events: the routed editor swaps when the user moves between
+  // body / header / footer / note surfaces (PresentationEditor
+  // `activeSurfaceChange`), or when the active document changes
+  // (`editorCreate`). Re-attach listeners on either signal.
   let currentEditor: SuperDocEditorLike | null = null;
   let currentEditorTeardown: (() => void) | null = null;
 
   const attachEditorListeners = () => {
-    const next = superdoc.activeEditor ?? null;
+    const next = resolveRoutedEditor(superdoc);
     if (next === currentEditor) return;
     currentEditorTeardown?.();
     currentEditorTeardown = null;
@@ -103,16 +163,56 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     currentEditorTeardown = () => {
       EDITOR_EVENTS.forEach((name) => next.off?.(name, scheduleNotify));
     };
+    // The set of source events changed — recompute state so subscribers
+    // see the new routed editor's selection.
+    scheduleNotify();
   };
 
+  // PresentationEditor events: surface changes route the editor; other
+  // events surface presentation-layer mutations that don't reach the
+  // body editor's `transaction` event. Track presentation editor by
+  // identity so we re-attach if the SuperDoc instance swaps documents.
+  let currentPresentation: ReturnType<typeof resolvePresentationEditor> = null;
+  let currentPresentationTeardown: (() => void) | null = null;
+
+  const attachPresentationListeners = () => {
+    const next = resolvePresentationEditor(superdoc);
+    if (next === currentPresentation) return;
+    currentPresentationTeardown?.();
+    currentPresentationTeardown = null;
+    currentPresentation = next;
+    if (!next || typeof next.on !== 'function' || typeof next.off !== 'function') return;
+
+    const onPresentationChange = () => {
+      // Re-route to the (possibly new) active surface, then notify.
+      attachEditorListeners();
+      scheduleNotify();
+    };
+
+    PRESENTATION_EVENTS.forEach((name) => {
+      next.on?.(name, onPresentationChange);
+    });
+    currentPresentationTeardown = () => {
+      PRESENTATION_EVENTS.forEach((name) => next.off?.(name, onPresentationChange));
+    };
+  };
+
+  attachPresentationListeners();
   attachEditorListeners();
   if (typeof superdoc.on === 'function') {
+    // editorCreate may bring a new PresentationEditor with a new active
+    // surface. Re-attach both layers so the controller follows.
+    superdoc.on?.('editorCreate', attachPresentationListeners);
     superdoc.on?.('editorCreate', attachEditorListeners);
   }
   teardown.push(() => {
     if (typeof superdoc.off === 'function') {
+      superdoc.off?.('editorCreate', attachPresentationListeners);
       superdoc.off?.('editorCreate', attachEditorListeners);
     }
+    currentPresentationTeardown?.();
+    currentPresentationTeardown = null;
+    currentPresentation = null;
     currentEditorTeardown?.();
     currentEditorTeardown = null;
     currentEditor = null;

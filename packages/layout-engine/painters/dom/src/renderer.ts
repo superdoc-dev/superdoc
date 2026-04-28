@@ -6385,7 +6385,18 @@ export class DomPainter {
           // The tab should span from where previous content ended to where next content begins.
           // If the immediate next segment has an explicit X (from tab alignment), use that.
           // Otherwise, use the tab's measured width to calculate the end position.
-          const tabEndX = immediateNextX !== undefined ? immediateNextX : tabStartX + (baseRun.width ?? 0);
+          const measuredTabEndX = tabStartX + (baseRun.width ?? 0);
+          // Negative-left/no-hanging paragraphs may pre-compensate the next
+          // segment's explicit x because this painter adds indentOffset below.
+          // In that case, keep the tab underline/span width tied to the measured
+          // tab advance instead of stretching it to the compensated text x.
+          const usesNegativeIndentCompensation =
+            indentOffset < 0 &&
+            baseRun.width != null &&
+            immediateNextX !== undefined &&
+            immediateNextX > measuredTabEndX;
+          const tabEndX =
+            immediateNextX !== undefined && !usesNegativeIndentCompensation ? immediateNextX : measuredTabEndX;
           const actualTabWidth = tabEndX - tabStartX;
 
           const tabEl = this.doc!.createElement('span');

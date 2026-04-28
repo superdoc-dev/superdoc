@@ -348,6 +348,7 @@ describe('remeasureParagraph', () => {
 
     it('advances a leading tab to the left indent stop for negative left indent paragraphs', () => {
       const leftIndentPx = -567 / TWIPS_PER_PX;
+      const expectedTabAdvance = Math.abs(leftIndentPx);
       const run = tabRun();
       const block = createBlock([run, textRun('Test doc')], {
         indent: { left: leftIndentPx },
@@ -357,8 +358,15 @@ describe('remeasureParagraph', () => {
       const measure = remeasureParagraph(block, 200);
 
       expect(measure.lines).toHaveLength(1);
-      expect((run as { width?: number }).width).toBeCloseTo(Math.abs(leftIndentPx), 1);
-      expect(measure.lines[0].width).toBeCloseTo(Math.abs(leftIndentPx) + 'Test doc'.length * CHAR_WIDTH, 1);
+      expect((run as { width?: number }).width).toBeCloseTo(expectedTabAdvance, 1);
+      expect(measure.lines[0].width).toBeCloseTo(expectedTabAdvance + 'Test doc'.length * CHAR_WIDTH, 1);
+
+      const textSegment = measure.lines[0].segments?.find((segment) => segment.runIndex === 1);
+      expect(textSegment?.x).toBeCloseTo(expectedTabAdvance * 2, 1);
+      // Explicit segment x is pre-painter geometry. The DOM painter later adds the
+      // negative paragraph indent, so the final fragment-local text position remains
+      // one indent width from the negative-left fragment origin: 2*indent - indent.
+      expect((textSegment?.x ?? 0) + leftIndentPx).toBeCloseTo(expectedTabAdvance, 1);
     });
 
     it('keeps right-aligned tab groups on the same line', () => {

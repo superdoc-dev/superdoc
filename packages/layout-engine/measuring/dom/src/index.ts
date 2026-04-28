@@ -1188,7 +1188,12 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
     pendingTabAlignment = null;
     pendingLeader = null;
 
-    return startX;
+    const effectiveIndent = lines.length === 0 ? indentLeft + rawFirstLineOffset : indentLeft;
+    // Negative-left paragraphs move the fragment itself left. Explicit segment
+    // x values are still consumed by the DOM painter with indentOffset added,
+    // so compensate only the no-hanging negative-left case to keep final text
+    // at the margin while preserving the real single-indent tab advance.
+    return val === 'start' && indentLeft < 0 && hanging <= 0 ? startX - Math.min(effectiveIndent, 0) : startX;
   };
 
   /**
@@ -3730,9 +3735,15 @@ const resolveIndentHanging = (item: ListBlock['items'][number]): number => {
 const buildTabStopsPx = (indent?: ParagraphIndent, tabs?: TabStop[], tabIntervalTwips?: number): TabStopPx[] => {
   // Convert indent from pixels to twips for the engine
   const paragraphIndentTwips = {
-    left: pxToTwips(sanitizeIndent(indent?.left)),
+    left: pxToTwips(sanitizePositive(indent?.left)),
     right: pxToTwips(sanitizePositive(indent?.right)),
     firstLine: pxToTwips(sanitizePositive(indent?.firstLine)),
+    hanging: pxToTwips(sanitizePositive(indent?.hanging)),
+  };
+  const rawParagraphIndentTwips = {
+    left: pxToTwips(sanitizeIndent(indent?.left)),
+    right: pxToTwips(sanitizeIndent(indent?.right)),
+    firstLine: pxToTwips(sanitizeIndent(indent?.firstLine)),
     hanging: pxToTwips(sanitizePositive(indent?.hanging)),
   };
 
@@ -3741,6 +3752,7 @@ const buildTabStopsPx = (indent?: ParagraphIndent, tabs?: TabStop[], tabInterval
     explicitStops: tabs ?? [],
     defaultTabInterval: tabIntervalTwips ?? DEFAULT_TAB_INTERVAL_TWIPS,
     paragraphIndent: paragraphIndentTwips,
+    rawParagraphIndent: rawParagraphIndentTwips,
   });
 
   // Convert resulting tab stops from twips to pixels for measurement

@@ -32,6 +32,7 @@ export interface TabContext {
   explicitStops: TabStop[]; // Stops defined in paragraph style (OOXML format)
   defaultTabInterval: number; // Twips (default 720 = 0.5 inch)
   paragraphIndent: ParagraphIndent; // Left/right/hanging indents (in twips)
+  rawParagraphIndent?: ParagraphIndent; // Unclamped indents, used for Word implicit tab-stop rules
 }
 
 /**
@@ -111,9 +112,11 @@ const TAB_STOP_POSITION_TOLERANCE_TWIPS = 20;
  * @returns Sorted array of tab stops in twips
  */
 export function computeTabStops(context: TabContext): TabStop[] {
-  const { explicitStops, defaultTabInterval, paragraphIndent } = context;
+  const { explicitStops, defaultTabInterval, paragraphIndent, rawParagraphIndent } = context;
   const leftIndent = paragraphIndent.left ?? 0;
   const hanging = paragraphIndent.hanging ?? 0;
+  const rawLeftIndent = rawParagraphIndent?.left ?? leftIndent;
+  const rawHanging = rawParagraphIndent?.hanging ?? hanging;
 
   // With a hanging indent, the first line starts at (leftIndent - hanging).
   // EXPLICIT tab stops between this effective position and leftIndent are valid for the first line
@@ -139,16 +142,13 @@ export function computeTabStops(context: TabContext): TabStop[] {
   // hanging indent pulls the first-line origin before the content left edge:
   // a leading tab should advance back to the left margin instead of jumping to
   // the first default tab interval.
-  const firstLineOrigin = leftIndent - hanging;
-  if (
-    hanging > 0 &&
-    firstLineOrigin < 0 &&
-    !stops.some((stop) => Math.abs(stop.pos) < TAB_STOP_POSITION_TOLERANCE_TWIPS)
-  ) {
+  const firstLineOrigin = rawLeftIndent - rawHanging;
+  if (firstLineOrigin < 0 && !stops.some((stop) => Math.abs(stop.pos) < TAB_STOP_POSITION_TOLERANCE_TWIPS)) {
     stops.push({ val: 'start', pos: 0, leader: 'none' });
   }
-  const leftIndentStop = Math.abs(leftIndent);
+  const leftIndentStop = Math.abs(rawLeftIndent);
   if (
+    rawHanging > 0 &&
     leftIndentStop > 0 &&
     firstLineOrigin < leftIndentStop &&
     !stops.some((stop) => Math.abs(stop.pos - leftIndentStop) < TAB_STOP_POSITION_TOLERANCE_TWIPS)

@@ -103,15 +103,28 @@ describe('engines-tabs computeTabStops', () => {
     expect(stops.find((stop) => stop.pos === 720)).toBeDefined();
   });
 
-  it('adds the implicit left-indent stop without adding a zero stop for negative left indent paragraphs', () => {
+  it('adds the implicit zero stop without adding a left-indent stop for negative left indent paragraphs', () => {
     const stops = computeTabStops({
       explicitStops: [{ val: 'start', pos: -1440, leader: 'none' }],
       defaultTabInterval: 720,
       paragraphIndent: { left: -567, hanging: 0 },
     });
 
-    expect(stops[0]).toEqual({ val: 'start', pos: 567, leader: 'none' });
-    expect(stops.find((stop) => stop.pos === 0)).toBeUndefined();
+    expect(stops[0]).toEqual({ val: 'start', pos: 0, leader: 'none' });
+    expect(stops.find((stop) => stop.pos === 567)).toBeUndefined();
+    expect(stops.find((stop) => stop.pos === 720)).toBeDefined();
+  });
+
+  it('uses raw negative indent for implicit stops while keeping normalized indent for defaults', () => {
+    const stops = computeTabStops({
+      explicitStops: [{ val: 'start', pos: -1440, leader: 'none' }],
+      defaultTabInterval: 720,
+      paragraphIndent: { left: 0, hanging: 0 },
+      rawParagraphIndent: { left: -567, hanging: 0 },
+    });
+
+    expect(stops[0]).toEqual({ val: 'start', pos: 0, leader: 'none' });
+    expect(stops.find((stop) => stop.pos === 567)).toBeUndefined();
     expect(stops.find((stop) => stop.pos === 720)).toBeDefined();
   });
 

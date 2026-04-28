@@ -3730,7 +3730,7 @@ const resolveIndentHanging = (item: ListBlock['items'][number]): number => {
 const buildTabStopsPx = (indent?: ParagraphIndent, tabs?: TabStop[], tabIntervalTwips?: number): TabStopPx[] => {
   // Convert indent from pixels to twips for the engine
   const paragraphIndentTwips = {
-    left: pxToTwips(sanitizePositive(indent?.left)),
+    left: pxToTwips(sanitizeIndent(indent?.left)),
     right: pxToTwips(sanitizePositive(indent?.right)),
     firstLine: pxToTwips(sanitizePositive(indent?.firstLine)),
     hanging: pxToTwips(sanitizePositive(indent?.hanging)),

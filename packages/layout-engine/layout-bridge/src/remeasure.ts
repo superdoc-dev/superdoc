@@ -319,6 +319,8 @@ const pxToTwips = (px: number): number => Math.round(px * TWIPS_PER_PX);
  */
 const sanitizeIndent = (value: number | undefined): number =>
   typeof value === 'number' && Number.isFinite(value) ? Math.max(0, value) : 0;
+const sanitizeTabIndentLeft = (value: number | undefined): number =>
+  typeof value === 'number' && Number.isFinite(value) ? value : 0;
 
 /**
  * Sanitizes the decimal separator to ensure it's a valid value for decimal tab alignment.
@@ -450,7 +452,7 @@ const markerFontString = (run?: MarkerRun): string => {
  */
 const buildTabStopsPx = (indent?: ParagraphIndent, tabs?: TabStop[], tabIntervalTwips?: number): TabStopPx[] => {
   const paragraphIndentTwips = {
-    left: pxToTwips(sanitizeIndent(indent?.left)),
+    left: pxToTwips(sanitizeTabIndentLeft(indent?.left)),
     right: pxToTwips(sanitizeIndent(indent?.right)),
     firstLine: pxToTwips(sanitizeIndent(indent?.firstLine)),
     hanging: pxToTwips(sanitizeIndent(indent?.hanging)),

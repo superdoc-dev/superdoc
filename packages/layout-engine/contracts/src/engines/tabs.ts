@@ -141,6 +141,15 @@ export function computeTabStops(context: TabContext): TabStop[] {
   if (firstLineOrigin < 0 && !stops.some((stop) => Math.abs(stop.pos) < 20)) {
     stops.push({ val: 'start', pos: 0, leader: 'none' });
   }
+  const leftIndentStop = Math.abs(leftIndent);
+  if (
+    hanging > 0 &&
+    leftIndentStop > 0 &&
+    firstLineOrigin < leftIndentStop &&
+    !stops.some((stop) => Math.abs(stop.pos - leftIndentStop) < 20)
+  ) {
+    stops.push({ val: 'start', pos: leftIndentStop, leader: 'none' });
+  }
 
   // Generate default stops at regular intervals.
   // - When no explicit start tabs exist (e.g., TOC paragraphs with only right-aligned tabs),

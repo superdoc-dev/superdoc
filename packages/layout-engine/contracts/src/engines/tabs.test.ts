@@ -85,6 +85,24 @@ describe('engines-tabs computeTabStops', () => {
     expect(stops.find((stop) => stop.pos === 720)).toBeDefined();
   });
 
+  it.each([
+    {
+      label: 'with explicit negative tab stop',
+      explicitStops: [{ val: 'start' as const, pos: -1440, leader: 'none' as const }],
+    },
+    { label: 'without explicit tab stops', explicitStops: [] },
+  ])('adds an implicit left-indent stop for hanging indent paragraphs $label', ({ explicitStops }) => {
+    const stops = computeTabStops({
+      explicitStops,
+      defaultTabInterval: 720,
+      paragraphIndent: { left: -600, hanging: 141 },
+    });
+
+    expect(stops[0]).toEqual({ val: 'start', pos: 0, leader: 'none' });
+    expect(stops[1]).toEqual({ val: 'start', pos: 600, leader: 'none' });
+    expect(stops.find((stop) => stop.pos === 720)).toBeDefined();
+  });
+
   it('preserves tab stops between (left - hanging) and left when hanging indent exists', () => {
     // SD-1472 regression: When left=709 and hanging=709, the first line starts at 0.
     // Tab stops at 340 (between 0 and 709) should be preserved for first-line use.
@@ -178,17 +196,17 @@ describe('engines-tabs computeTabStops', () => {
     expect(stops.filter((stop) => stop.pos === 720).length).toBe(0);
   });
 
-  it('still generates default start tabs before explicit right tabs (TOC regression)', () => {
+  it('adds the implicit left-indent stop before explicit right tabs (TOC regression)', () => {
     const stops = computeTabStops({
       explicitStops: [{ val: 'end', pos: 10593, leader: 'dot' }], // TOC1 style tab
       defaultTabInterval: 720,
       paragraphIndent: { left: 454, hanging: 454 }, // first line begins near 0"
     });
 
-    const firstDefault = stops.find((stop) => stop.val === 'start' && stop.leader === 'none');
-    expect(firstDefault).toBeDefined();
-    expect(firstDefault?.pos).toBe(720); // Word default 0.5" tab stop
-    expect(firstDefault!.pos).toBeLessThan(10593);
+    const startStops = stops.filter((stop) => stop.val === 'start' && stop.leader === 'none');
+    expect(startStops[0]?.pos).toBe(454); // Word implicit stop at left indent
+    expect(startStops.find((stop) => stop.pos === 720)).toBeDefined(); // Word default 0.5" tab stop
+    expect(startStops[0]!.pos).toBeLessThan(10593);
     expect(stops.find((stop) => stop.val === 'end' && stop.pos === 10593)).toBeDefined();
   });
 

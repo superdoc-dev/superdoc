@@ -184,7 +184,7 @@ function isDirectSingleCommentHighlightHit(target: EventTarget | null): boolean 
 
 function isDirectTrackedChangeHit(target: EventTarget | null): boolean {
   if (!(target instanceof Element)) return false;
-  return target.closest(TRACK_CHANGE_SELECTOR) != null;
+  return target.closest(`${TRACK_CHANGE_SELECTOR}, ${PM_TRACK_CHANGE_SELECTOR}`) != null;
 }
 
 function resolveTrackChangeThreadId(target: EventTarget | null): string | null {
@@ -1532,10 +1532,12 @@ export class EditorInputManager {
     }
 
     // Guard against stale note hits after a session switch or partial rerender.
+    // Compare both storyType and noteId so a footnote-N session does not
+    // mistake a hit on endnote-N as the same target.
     if (
       isNoteEditing &&
       activeNoteTarget &&
-      parseRenderedNoteTarget(rawHit.blockId)?.noteId !== activeNoteTarget.noteId
+      !isSameRenderedNoteTarget(parseRenderedNoteTarget(rawHit.blockId), activeNoteTarget)
     ) {
       this.#callbacks.exitActiveStorySession?.();
       this.#focusEditor();

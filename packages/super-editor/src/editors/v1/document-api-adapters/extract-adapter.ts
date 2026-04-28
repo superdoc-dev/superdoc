@@ -25,14 +25,29 @@ import type {
   ExtractBlock,
   ExtractTableContext,
   ExtractComment,
+  ExtractTextSpan,
+  ExtractTextSpanTrackedChange,
   ExtractTrackedChange,
   CommentsListQuery,
   BlockNodeType,
+  TrackChangeType,
 } from '@superdoc/document-api';
 import { getHeadingLevel, mapBlockNodeType, resolveBlockNodeId } from './helpers/node-address-resolver.js';
 import { getRevision } from './plan-engine/revision-tracker.js';
 import { createCommentsWrapper } from './plan-engine/comments-wrappers.js';
 import { trackChangesListWrapper } from './plan-engine/track-changes-wrappers.js';
+import { buildTrackedChangeCanonicalIdMap } from './helpers/tracked-change-resolver.js';
+import {
+  TrackDeleteMarkName,
+  TrackFormatMarkName,
+  TrackInsertMarkName,
+} from '../extensions/track-changes/constants.js';
+
+const TRACK_MARK_TYPE_BY_NAME: Record<string, TrackChangeType> = {
+  [TrackInsertMarkName]: 'insert',
+  [TrackDeleteMarkName]: 'delete',
+  [TrackFormatMarkName]: 'format',
+};
 
 /**
  * Block types we emit individually (paragraph-granular).
@@ -145,12 +160,99 @@ function indexCellsForTable(tableNode: ProseMirrorNode): CellAnchor[] {
   return anchors;
 }
 
+/**
+ * Reads tracked-change marks from a text node and produces the per-span
+ * tracked-change descriptors (one per trackInsert / trackDelete / trackFormat
+ * mark that has a known canonical entity ID).
+ *
+ * Returns a stable, sorted list so coalescing comparisons are key-equality.
+ */
+function readSpanTrackedChanges(node: ProseMirrorNode, rawIdMap: Map<string, string>): ExtractTextSpanTrackedChange[] {
+  const out: ExtractTextSpanTrackedChange[] = [];
+  for (const mark of node.marks) {
+    const type = TRACK_MARK_TYPE_BY_NAME[mark.type.name];
+    if (!type) continue;
+    const rawId = (mark.attrs as Record<string, unknown> | undefined)?.id;
+    if (typeof rawId !== 'string' || rawId.length === 0) continue;
+    const entityId = rawIdMap.get(rawId);
+    if (!entityId) continue;
+    out.push({ entityId, type });
+  }
+  out.sort((a, b) => {
+    if (a.entityId !== b.entityId) return a.entityId < b.entityId ? -1 : 1;
+    return a.type < b.type ? -1 : a.type > b.type ? 1 : 0;
+  });
+  return out;
+}
+
+/** Two span tracked-change lists are equal iff sorted entries match 1:1. */
+function spanTrackedChangesEqual(a: ExtractTextSpanTrackedChange[], b: ExtractTextSpanTrackedChange[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (a[i].entityId !== b[i].entityId || a[i].type !== b[i].type) return false;
+  }
+  return true;
+}
+
+/**
+ * Walks the inline descendants of a block and builds the span list for
+ * `block.textSpans`. Returns `undefined` when no span carries any tracked-
+ * change mark (clean blocks omit `textSpans` entirely).
+ *
+ * `entityToBlocks` accumulates the reverse index used to populate
+ * `ExtractTrackedChange.blockIds`.
+ */
+function buildTextSpans(
+  node: ProseMirrorNode,
+  blockId: string,
+  rawIdMap: Map<string, string>,
+  entityToBlocks: Map<string, Set<string>>,
+): ExtractTextSpan[] | undefined {
+  if (rawIdMap.size === 0) return undefined;
+
+  const spans: ExtractTextSpan[] = [];
+  let hasAnyTrackedChange = false;
+
+  node.descendants((child) => {
+    if (!child.isText || typeof child.text !== 'string' || child.text.length === 0) return true;
+    const tracked = readSpanTrackedChanges(child, rawIdMap);
+
+    if (tracked.length > 0) {
+      hasAnyTrackedChange = true;
+      for (const tc of tracked) {
+        let set = entityToBlocks.get(tc.entityId);
+        if (!set) {
+          set = new Set<string>();
+          entityToBlocks.set(tc.entityId, set);
+        }
+        set.add(blockId);
+      }
+    }
+
+    const last = spans.length > 0 ? spans[spans.length - 1] : undefined;
+    const lastTracked = last?.trackedChanges ?? [];
+    if (last && spanTrackedChangesEqual(lastTracked, tracked)) {
+      last.text += child.text;
+      return true;
+    }
+
+    const span: ExtractTextSpan = { text: child.text };
+    if (tracked.length > 0) span.trackedChanges = tracked;
+    spans.push(span);
+    return true;
+  });
+
+  return hasAnyTrackedChange ? spans : undefined;
+}
+
 /** Builds an `ExtractBlock` for a paragraph-like node. */
 function buildBlock(
   node: ProseMirrorNode,
   pos: number,
   nodeType: BlockNodeType,
   path: readonly number[],
+  rawIdMap: Map<string, string>,
+  entityToBlocks: Map<string, Set<string>>,
   tableContext?: ExtractTableContext,
 ): ExtractBlock | undefined {
   const nodeId = resolveBlockNodeId(node, pos, nodeType, path);
@@ -164,6 +266,8 @@ function buildBlock(
     type: nodeType,
     text: node.textContent,
   };
+  const spans = buildTextSpans(node, nodeId, rawIdMap, entityToBlocks);
+  if (spans) block.textSpans = spans;
   if (headingLevel !== undefined) block.headingLevel = headingLevel;
   if (tableContext) block.tableContext = tableContext;
   return block;
@@ -190,11 +294,17 @@ interface NestedTableParent {
  *     the same `tableContext` and `nestedParent`. No wrapper block emits.
  *   - Paragraph-like children emit a block and inherit `tableContext`.
  */
+interface BlockWalkContext {
+  ordinals: OrdinalCounter;
+  rawIdMap: Map<string, string>;
+  entityToBlocks: Map<string, Set<string>>;
+}
+
 function collectContainerBlocks(
   container: ProseMirrorNode,
   contentStart: number,
   containerPath: readonly number[],
-  ordinals: OrdinalCounter,
+  ctx: BlockWalkContext,
   tableContext?: ExtractTableContext,
   nestedParent?: NestedTableParent,
 ): ExtractBlock[] {
@@ -208,20 +318,20 @@ function collectContainerBlocks(
     const childPath = [...containerPath, i];
 
     if (child.type.name === 'table') {
-      blocks.push(...collectTableExtractBlocks(child, childPos, childPath, ordinals, nestedParent));
+      blocks.push(...collectTableExtractBlocks(child, childPos, childPath, ctx, nestedParent));
       continue;
     }
 
     if (SDT_BLOCK_NODE_NAMES.has(child.type.name)) {
       // Transparent descent: +1 skips the SDT's opening token so `contentStart`
       // points at the SDT's first child.
-      blocks.push(...collectContainerBlocks(child, childPos + 1, childPath, ordinals, tableContext, nestedParent));
+      blocks.push(...collectContainerBlocks(child, childPos + 1, childPath, ctx, tableContext, nestedParent));
       continue;
     }
 
     const childType = mapBlockNodeType(child);
     if (childType && EMITTABLE_BLOCK_TYPES.has(childType)) {
-      const block = buildBlock(child, childPos, childType, childPath, tableContext);
+      const block = buildBlock(child, childPos, childType, childPath, ctx.rawIdMap, ctx.entityToBlocks, tableContext);
       if (block) blocks.push(block);
       continue;
     }
@@ -233,7 +343,7 @@ function collectContainerBlocks(
     // dropped: the pre-SD-2672 `textContent` walk included that text, and
     // the new walker must not regress coverage.
     if (!child.isLeaf && child.firstChild?.isBlock === true) {
-      blocks.push(...collectContainerBlocks(child, childPos + 1, childPath, ordinals, tableContext, nestedParent));
+      blocks.push(...collectContainerBlocks(child, childPos + 1, childPath, ctx, tableContext, nestedParent));
     }
   }
 
@@ -249,10 +359,10 @@ function collectTableExtractBlocks(
   tableNode: ProseMirrorNode,
   tablePos: number,
   tablePath: readonly number[],
-  ordinals: OrdinalCounter,
+  ctx: BlockWalkContext,
   parent?: NestedTableParent,
 ): ExtractBlock[] {
-  const tableOrdinal = ordinals.next++;
+  const tableOrdinal = ctx.ordinals.next++;
   const anchors = indexCellsForTable(tableNode);
   const blocks: ExtractBlock[] = [];
 
@@ -278,7 +388,7 @@ function collectTableExtractBlocks(
     }
 
     blocks.push(
-      ...collectContainerBlocks(anchor.cellNode, cellContentStart, cellPath, ordinals, tableContext, {
+      ...collectContainerBlocks(anchor.cellNode, cellContentStart, cellPath, ctx, tableContext, {
         tableOrdinal,
         rowIndex: anchor.gridRowIndex,
         columnIndex: anchor.gridColumnIndex,
@@ -289,10 +399,20 @@ function collectTableExtractBlocks(
   return blocks;
 }
 
-function collectBlocks(editor: Editor): ExtractBlock[] {
+interface CollectedBlocks {
+  blocks: ExtractBlock[];
+  entityToBlocks: Map<string, Set<string>>;
+}
+
+function collectBlocks(editor: Editor): CollectedBlocks {
   // doc is root - no opening token in the PM position model, content starts at 0.
-  const ordinals: OrdinalCounter = { next: 0 };
-  return collectContainerBlocks(editor.state.doc, 0, [], ordinals);
+  const ctx: BlockWalkContext = {
+    ordinals: { next: 0 },
+    rawIdMap: buildTrackedChangeCanonicalIdMap(editor),
+    entityToBlocks: new Map<string, Set<string>>(),
+  };
+  const blocks = collectContainerBlocks(editor.state.doc, 0, [], ctx);
+  return { blocks, entityToBlocks: ctx.entityToBlocks };
 }
 
 function collectComments(editor: Editor): ExtractComment[] {
@@ -312,7 +432,7 @@ function collectComments(editor: Editor): ExtractComment[] {
   });
 }
 
-function collectTrackedChanges(editor: Editor): ExtractTrackedChange[] {
+function collectTrackedChanges(editor: Editor, entityToBlocks: Map<string, Set<string>>): ExtractTrackedChange[] {
   const result = trackChangesListWrapper(editor);
 
   return result.items.map((item) => {
@@ -320,7 +440,17 @@ function collectTrackedChanges(editor: Editor): ExtractTrackedChange[] {
       entityId: item.address.entityId,
       type: item.type,
     };
-    if (item.excerpt) tc.excerpt = item.excerpt;
+    const blockIdSet = entityToBlocks.get(item.address.entityId);
+    if (blockIdSet && blockIdSet.size > 0) {
+      tc.blockIds = Array.from(blockIdSet);
+    }
+    if (item.wordRevisionIds) tc.wordRevisionIds = item.wordRevisionIds;
+    // Suppress the aggregate excerpt for paired replacements (an entity that
+    // covers both an insert and a delete half). The internal excerpt
+    // concatenates the two halves and is misleading. Spans carry the
+    // per-half text and are the source of truth in that case.
+    const isPairedReplacement = !!(item.wordRevisionIds?.insert && item.wordRevisionIds?.delete);
+    if (item.excerpt && !isPairedReplacement) tc.excerpt = item.excerpt;
     if (item.author) tc.author = item.author;
     if (item.date) tc.date = item.date;
     return tc;
@@ -328,10 +458,11 @@ function collectTrackedChanges(editor: Editor): ExtractTrackedChange[] {
 }
 
 export function extractAdapter(editor: Editor, _input: ExtractInput): ExtractResult {
+  const { blocks, entityToBlocks } = collectBlocks(editor);
   return {
-    blocks: collectBlocks(editor),
+    blocks,
     comments: collectComments(editor),
-    trackedChanges: collectTrackedChanges(editor),
+    trackedChanges: collectTrackedChanges(editor, entityToBlocks),
     revision: getRevision(editor),
   };
 }

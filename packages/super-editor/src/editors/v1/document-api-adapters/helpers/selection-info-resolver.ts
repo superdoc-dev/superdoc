@@ -8,6 +8,7 @@ import type {
 } from '@superdoc/document-api';
 import type { Editor } from '../../core/Editor.js';
 import { pmPositionToTextOffset } from './text-offset-resolver.js';
+import { groupTrackedChanges } from './tracked-change-resolver.js';
 
 /**
  * Mark names that anchor live entities the UI cares about. We collect
@@ -50,7 +51,16 @@ export function resolveCurrentSelectionInfo(editor: Editor, input: SelectionCurr
   const target: TextTarget | null = segments && segments.length > 0 ? buildTextTarget(segments) : null;
 
   const activeMarks = collectActiveMarks(state, from, to);
-  const { commentIds: activeCommentIds, changeIds: activeChangeIds } = collectActiveEntityIds(state, from, to);
+  const { commentIds: activeCommentIds, changeIds: activeChangeRawIds } = collectActiveEntityIds(state, from, to);
+
+  // Tracked-change marks store their PM `attrs.id` (raw id), but the
+  // Document API's canonical id (`trackChanges.list().items[].id`) is a
+  // derived hash from `groupTrackedChanges`. Consumers compare the
+  // active ids against `list()` output to highlight the active sidebar
+  // card; returning raw ids would silently miss every match. Translate
+  // raw → canonical here so `activeChangeIds` matches the public
+  // contract.
+  const activeChangeIds = mapRawChangeIdsToCanonical(editor, activeChangeRawIds);
 
   const info: SelectionInfo = {
     empty,
@@ -128,6 +138,40 @@ function readBlockId(node: ProseMirrorNode): string | null {
   const attrs = (node.attrs ?? {}) as Record<string, unknown>;
   const id = attrs.sdBlockId ?? attrs.id ?? attrs.blockId;
   return typeof id === 'string' && id.length > 0 ? id : null;
+}
+
+/**
+ * Translate raw PM-mark `attrs.id`s to the canonical Document API
+ * tracked-change ids that `trackChanges.list()` returns.
+ *
+ * `groupTrackedChanges(editor)` is the single source of truth for the
+ * raw → canonical mapping; it's already cached per
+ * `editor.state.doc`, so a typical selection.current() call hits the
+ * cache and runs O(grouped). Unmapped raw ids (a partial editor or
+ * a mark that wasn't grouped for some reason) are dropped from the
+ * result rather than emitted as raw — leaking raw ids past this point
+ * would re-introduce the silent-no-match bug consumers report.
+ */
+function mapRawChangeIdsToCanonical(editor: Editor, rawIds: string[]): string[] {
+  if (rawIds.length === 0) return rawIds;
+  let grouped: ReturnType<typeof groupTrackedChanges>;
+  try {
+    grouped = groupTrackedChanges(editor);
+  } catch {
+    // Defensive: a partial editor mid-tear-down shouldn't wedge
+    // selection.current(). Fall back to dropping the change ids.
+    return [];
+  }
+  const rawToCanonical = new Map<string, string>();
+  for (const change of grouped) {
+    rawToCanonical.set(change.rawId, change.id);
+  }
+  const out: string[] = [];
+  for (const raw of rawIds) {
+    const canonical = rawToCanonical.get(raw);
+    if (canonical) out.push(canonical);
+  }
+  return out;
 }
 
 /**

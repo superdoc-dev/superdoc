@@ -3,6 +3,23 @@ import type { Node as ProseMirrorNode } from 'prosemirror-model';
 import type { Editor } from '../../core/Editor.js';
 import { resolveCurrentSelectionInfo, subscribeToSelection } from './selection-info-resolver.js';
 
+// Stub `groupTrackedChanges` so tests don't need a fully PM-shaped
+// editor with `editor.state.doc.textBetween` and the tracked-change
+// mark walker. Each test that exercises tracked-change ids configures
+// the raw → canonical mapping it expects.
+const groupTrackedChangesMock = vi.hoisted(() =>
+  vi.fn(() => [] as Array<{ rawId: string; id: string; from: number; to: number }>),
+);
+vi.mock('./tracked-change-resolver.js', () => ({
+  groupTrackedChanges: groupTrackedChangesMock,
+}));
+
+const setTrackedChangeMapping = (mappings: Array<{ rawId: string; canonical: string }>) => {
+  groupTrackedChangesMock.mockReturnValue(
+    mappings.map((m) => ({ rawId: m.rawId, id: m.canonical, from: 0, to: 0 })) as never,
+  );
+};
+
 // ---------------------------------------------------------------------------
 // PM node stub builder
 //
@@ -387,7 +404,17 @@ describe('resolveCurrentSelectionInfo > entity ids', () => {
     expect(info.activeChangeIds).toEqual([]);
   });
 
-  it('collects changeIds from trackInsert/trackDelete/trackFormat marks', () => {
+  it('collects changeIds from trackInsert/trackDelete/trackFormat marks (translated through canonical resolver)', () => {
+    // Raw mark ids and canonical Document API ids differ: the canonical
+    // id is a derived hash from `groupTrackedChanges`. We mock that map
+    // so the resolver sees raw 'tc1' / 'tc2' / 'tc3' and returns the
+    // canonical 'tcA' / 'tcB' / 'tcC' that consumers see in
+    // `trackChanges.list().items[].id`.
+    setTrackedChangeMapping([
+      { rawId: 'tc1', canonical: 'tcA' },
+      { rawId: 'tc2', canonical: 'tcB' },
+      { rawId: 'tc3', canonical: 'tcC' },
+    ]);
     const docNode = doc([
       entityMarkedTextBlock('p1', [
         { text: 'inserted ', marksWithAttrs: [{ name: 'trackInsert', attrs: { id: 'tc1' } }] },
@@ -399,11 +426,31 @@ describe('resolveCurrentSelectionInfo > entity ids', () => {
 
     const info = resolveCurrentSelectionInfo(editor, {});
 
-    expect([...info.activeChangeIds].sort()).toEqual(['tc1', 'tc2', 'tc3']);
+    expect([...info.activeChangeIds].sort()).toEqual(['tcA', 'tcB', 'tcC']);
     expect(info.activeCommentIds).toEqual([]);
   });
 
+  it('drops raw change ids that have no canonical mapping (defensive)', () => {
+    // Raw id present in the document but missing from groupTrackedChanges
+    // (mid-construction editor, or a mark that wasn't grouped). Leaking
+    // the raw id past the resolver would silently produce no-match
+    // highlights in consumer sidebars; drop it instead.
+    setTrackedChangeMapping([{ rawId: 'tc1', canonical: 'tcA' }]);
+    const docNode = doc([
+      entityMarkedTextBlock('p1', [
+        { text: 'mapped ', marksWithAttrs: [{ name: 'trackInsert', attrs: { id: 'tc1' } }] },
+        { text: 'orphan', marksWithAttrs: [{ name: 'trackInsert', attrs: { id: 'orphan-id' } }] },
+      ]),
+    ]);
+    const editor = makeEditor(docNode, { from: 2, to: 14 });
+
+    const info = resolveCurrentSelectionInfo(editor, {});
+
+    expect(info.activeChangeIds).toEqual(['tcA']);
+  });
+
   it('reports both comment and change ids when a span carries both', () => {
+    setTrackedChangeMapping([{ rawId: 'tc1', canonical: 'tcA' }]);
     const docNode = doc([
       entityMarkedTextBlock('p1', [
         {
@@ -420,7 +467,7 @@ describe('resolveCurrentSelectionInfo > entity ids', () => {
     const info = resolveCurrentSelectionInfo(editor, {});
 
     expect(info.activeCommentIds).toEqual(['c1']);
-    expect(info.activeChangeIds).toEqual(['tc1']);
+    expect(info.activeChangeIds).toEqual(['tcA']);
   });
 
   it('returns empty id arrays when no entity marks overlap the selection', () => {

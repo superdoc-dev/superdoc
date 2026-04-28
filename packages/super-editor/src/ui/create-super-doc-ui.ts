@@ -1,5 +1,16 @@
+import { createHeadlessToolbar } from '../headless-toolbar/index.js';
 import { resolveToolbarSources } from '../headless-toolbar/resolve-toolbar-sources.js';
+import { createToolbarRegistry } from '../headless-toolbar/toolbar-registry.js';
 import type {
+  HeadlessToolbarController,
+  HeadlessToolbarSuperdocHost,
+  PublicToolbarItemId,
+  ToolbarSnapshot,
+} from '../headless-toolbar/types.js';
+import { shallowEqual } from './equality.js';
+import type {
+  CommandHandle,
+  CommandsHandle,
   EqualityFn,
   SelectorFn,
   SuperDocEditorLike,
@@ -7,6 +18,8 @@ import type {
   SuperDocUIOptions,
   SuperDocUIState,
   Subscribable,
+  ToolbarCommandHandleState,
+  ToolbarHandle,
 } from './types.js';
 
 /**
@@ -46,6 +59,28 @@ const PRESENTATION_EVENTS = [
   'activeSurfaceChange',
   'historyStateChange',
 ] as const;
+
+/** Default state for an unknown / missing toolbar command. */
+const FALLBACK_COMMAND_STATE: ToolbarCommandHandleState<PublicToolbarItemId> = {
+  active: false,
+  disabled: true,
+  value: undefined,
+};
+
+/**
+ * Full set of registered toolbar command ids, used to seed the
+ * internal `createHeadlessToolbar` call. Without this the controller
+ * defaults to `commands = []`, leaving `snapshot.commands` empty and
+ * every per-command observer (`ui.commands.bold.observe`) reporting
+ * the fallback `{ active: false, disabled: true }` forever.
+ *
+ * Computed once at module load by walking the registry returned from
+ * `createToolbarRegistry()`. Future custom-command registration
+ * (FRICTION S3) will need to extend this dynamically.
+ */
+const ALL_TOOLBAR_COMMAND_IDS: PublicToolbarItemId[] = Object.keys(
+  createToolbarRegistry(),
+) as PublicToolbarItemId[];
 
 /**
  * Resolve the **routed** editor — the body, header, footer, or note
@@ -111,6 +146,44 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     });
   };
 
+  // Internal headless-toolbar instance. Feeds `state.toolbar` so
+  // `ui.toolbar.subscribe` and `ui.commands.<id>.observe` ride the
+  // same selector substrate as the rest of the controller. The Vue UI
+  // and any external `superdoc/headless-toolbar` consumer can keep
+  // using their existing entry points; this is the single source of
+  // truth at runtime.
+  //
+  // The structural cast is safe at runtime: the SuperDoc Vue instance
+  // satisfies HeadlessToolbarSuperdocHost (with `Editor` for
+  // activeEditor) at runtime; we accept the looser SuperDocLike at the
+  // public boundary so this controller can be unit-tested with stubs.
+  // Internal headless-toolbar instance. Feeds `state.toolbar` so
+  // `ui.toolbar.subscribe` and `ui.commands.<id>.observe` ride the
+  // same selector substrate as the rest of the controller. Per-command
+  // state derivers in the registry are now wrapped to default to
+  // disabled on throw, so a partial editor never wedges snapshot
+  // construction.
+  const toolbarController: HeadlessToolbarController = createHeadlessToolbar({
+    superdoc: superdoc as unknown as HeadlessToolbarSuperdocHost,
+    // Pass the full registry so snapshot.commands is populated for
+    // every built-in command — without this `ui.commands.<id>.observe`
+    // emits only the fallback disabled state.
+    commands: ALL_TOOLBAR_COMMAND_IDS,
+  });
+  let toolbarSnapshot: ToolbarSnapshot = toolbarController.getSnapshot();
+  const offToolbarSubscribe = toolbarController.subscribe(({ snapshot }) => {
+    toolbarSnapshot = snapshot;
+    scheduleNotify();
+  });
+  teardown.push(() => {
+    offToolbarSubscribe();
+    try {
+      toolbarController.destroy();
+    } catch {
+      // best-effort
+    }
+  });
+
   const computeState = (): SuperDocUIState => {
     // Route through PresentationEditor when active so selection state
     // follows the body/header/footer/note editor the user is actually
@@ -126,6 +199,7 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
       ready,
       documentMode,
       selection: { empty, quotedText },
+      toolbar: toolbarSnapshot,
     };
   };
 
@@ -283,10 +357,96 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     };
   };
 
+  // Aggregate toolbar handle. Mirrors HeadlessToolbarController so
+  // built-in SuperToolbar.vue (and external standalone-controller
+  // consumers) can swap to ui.toolbar without API churn.
+  const toolbar: ToolbarHandle = {
+    getSnapshot: () => toolbarController.getSnapshot(),
+    subscribe(listener) {
+      // Drives off the same selector substrate so subscribers receive
+      // the same coalesced burst pattern as ui.select consumers.
+      // Equality is set to "always different" because the headless
+      // controller already dedups internally; we want every emit it
+      // produces to propagate.
+      return select(
+        (state) => state.toolbar,
+        () => false,
+      ).subscribe((snapshot) => {
+        try {
+          listener({ snapshot });
+        } catch {
+          // see scheduleNotify
+        }
+      });
+    },
+    execute: ((id: PublicToolbarItemId, payload?: unknown): boolean => {
+      // The controller's execute signature is conditionally typed
+      // (variadic per-id payload); cast here keeps the consumer-facing
+      // type strict while delegating at runtime.
+      return (toolbarController.execute as (id: PublicToolbarItemId, payload?: unknown) => boolean)(id, payload);
+    }) as ToolbarHandle['execute'],
+  };
+
+  // Per-command handles. Cached so handle identity is stable across
+  // repeated accesses (matters for React `useMemo` deps and consumers
+  // comparing handles).
+  const commandHandleCache = new Map<string, CommandHandle<PublicToolbarItemId>>();
+
+  // Per-command Subscribable cache. Sharing one Subscribable across
+  // every `observe()` call for a given id means N components observing
+  // `bold` produce one selector + N downstream listeners, not N
+  // selectors. Each editor event recomputes once per command id, not
+  // once per active observer.
+  const commandSubscribableCache = new Map<
+    string,
+    Subscribable<ToolbarCommandHandleState<PublicToolbarItemId> | undefined>
+  >();
+  const getCommandSubscribable = (id: PublicToolbarItemId) => {
+    let sub = commandSubscribableCache.get(id);
+    if (sub) return sub;
+    sub = select(
+      (state) => state.toolbar.commands?.[id] as ToolbarCommandHandleState<PublicToolbarItemId> | undefined,
+      shallowEqual,
+    );
+    commandSubscribableCache.set(id, sub);
+    return sub;
+  };
+
+  const buildCommandHandle = (id: PublicToolbarItemId): CommandHandle<PublicToolbarItemId> => {
+    return {
+      observe(listener) {
+        return getCommandSubscribable(id).subscribe((cmdState) => {
+          const next = cmdState ?? FALLBACK_COMMAND_STATE;
+          try {
+            listener(next as ToolbarCommandHandleState<PublicToolbarItemId>);
+          } catch {
+            // see scheduleNotify
+          }
+        });
+      },
+      execute: ((payload?: unknown): boolean => {
+        return (toolbarController.execute as (id: PublicToolbarItemId, payload?: unknown) => boolean)(id, payload);
+      }) as CommandHandle<PublicToolbarItemId>['execute'],
+    };
+  };
+
+  const commands = new Proxy({} as CommandsHandle, {
+    get(_, prop) {
+      if (typeof prop !== 'string') return undefined;
+      let handle = commandHandleCache.get(prop);
+      if (handle) return handle;
+      handle = buildCommandHandle(prop as PublicToolbarItemId);
+      commandHandleCache.set(prop, handle);
+      return handle;
+    },
+  });
+
   const destroy = () => {
     if (destroyed) return;
     destroyed = true;
     stateChangeListeners.clear();
+    commandHandleCache.clear();
+    commandSubscribableCache.clear();
     teardown.forEach((fn) => {
       try {
         fn();
@@ -297,5 +457,5 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     teardown.length = 0;
   };
 
-  return { select, destroy };
+  return { select, toolbar, commands, destroy };
 }

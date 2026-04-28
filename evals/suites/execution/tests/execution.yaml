@@ -437,6 +437,9 @@
         return { pass: true, score: 1, reason: 'Used superdoc_list({action:"merge"})' };
       metric: action_selection
     - type: javascript
+      value: file://../shared/checks.cjs:checkBulletsAndNumbersMerged
+      metric: structural_change
+    - type: javascript
       value: file://../shared/checks.cjs:traceAllOk
     - type: javascript
       value: file://../shared/checks.cjs:traceLog
@@ -465,6 +468,9 @@
         return { pass: true, score: 1, reason: 'Used superdoc_list({action:"split"})' };
       metric: action_selection
     - type: javascript
+      value: file://../shared/checks.cjs:checkBulletListSplitAtWith
+      metric: structural_change
+    - type: javascript
       value: file://../shared/checks.cjs:traceAllOk
     - type: javascript
       value: file://../shared/checks.cjs:traceLog
@@ -491,6 +497,9 @@
         if (!actions.includes('set_value')) return { pass: false, score: 0, reason: `Expected action "set_value", got [${actions.join(', ')}]` };
         return { pass: true, score: 1, reason: 'Used superdoc_list({action:"set_value"})' };
       metric: action_selection
+    - type: javascript
+      value: file://../shared/checks.cjs:checkRestartAtAllSorts
+      metric: structural_change
     - type: javascript
       value: file://../shared/checks.cjs:traceAllOk
     - type: javascript

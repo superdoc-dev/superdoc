@@ -285,7 +285,7 @@ describe('executeListsSplit validates restartNumbering', () => {
     );
   });
 
-  it('accepts omitted restartNumbering (default behavior is opt-out at adapter layer)', () => {
+  it('accepts omitted restartNumbering (defaults to restart-on at the wrapper layer)', () => {
     const adapter = stubAdapter();
     executeListsSplit(adapter, { target: validTarget });
     expect(adapter.split).toHaveBeenCalled();

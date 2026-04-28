@@ -1028,8 +1028,10 @@ export function listsMergeWrapper(editor: Editor, input: ListsMergeInput, option
  * Compound split: separate a list sequence at the target and restart the new
  * half's numbering at 1 (by default).
  *
- * Equivalent to lists.separate + lists.setValue(1) applied atomically, with
- * restartNumbering opt-out for callers that want raw separate semantics.
+ * Runs as two sequential steps (separate, then setValue). If the second step
+ * fails after the first succeeds, the doc is left split without the renumber
+ * and the caller gets a failure result. Pass restartNumbering: false to skip
+ * the second step and get raw separate semantics.
  */
 export function listsSplitWrapper(editor: Editor, input: ListsSplitInput, options?: MutationOptions): ListsSplitResult {
   rejectTrackedMode('lists.split', options);

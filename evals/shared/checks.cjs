@@ -902,3 +902,161 @@ module.exports.checkNoSymbolFontsOnOrderedLevels = (output) => {
       `Violations: ${JSON.stringify(violations)}`,
   };
 };
+
+// ---------------------------------------------------------------------------
+// List structural checks for merge / split / restart evals.
+//
+// The text-and-action-name asserts in execution.yaml prove the agent picked
+// the right tool, but they do not prove the list itself changed. These read
+// `word/document.xml` from the saved `.docx` and inspect each paragraph's
+// `<w:numId>` / `<w:ilvl>` so a no-op or wrong-direction edit fails loudly.
+// ---------------------------------------------------------------------------
+
+function readDocumentXml(docxPath) {
+  try {
+    return execSync(`unzip -p ${JSON.stringify(docxPath)} word/document.xml`, {
+      encoding: 'utf8',
+      timeout: 10000,
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+  } catch (_) {
+    return null;
+  }
+}
+
+function extractListItems(documentXml) {
+  if (!documentXml) return [];
+  const items = [];
+  const pRegex = /<w:p\b[^>]*>([\s\S]*?)<\/w:p>/g;
+  let m;
+  while ((m = pRegex.exec(documentXml)) !== null) {
+    const body = m[1];
+    const numIdMatch = body.match(/<w:numId\b[^/]*w:val="(\d+)"/);
+    if (!numIdMatch) continue;
+    const ilvlMatch = body.match(/<w:ilvl\b[^/]*w:val="(\d+)"/);
+    const textParts = [...body.matchAll(/<w:t[^>]*>([\s\S]*?)<\/w:t>/g)].map((x) => x[1]);
+    items.push({
+      text: textParts.join(''),
+      numId: Number(numIdMatch[1]),
+      ilvl: ilvlMatch ? Number(ilvlMatch[1]) : 0,
+    });
+  }
+  return items;
+}
+
+function loadListItems(output) {
+  let parsed;
+  try { parsed = JSON.parse(output); } catch { return { skip: true, reason: 'output is not JSON' }; }
+  const outputFile = parsed?.outputFile;
+  if (!outputFile || typeof outputFile !== 'string') return { skip: true, reason: 'no outputFile (keepFile not set?)' };
+  const xml = readDocumentXml(outputFile);
+  if (!xml) return { fail: true, reason: `Could not read word/document.xml from ${outputFile}` };
+  return { items: extractListItems(xml), outputFile };
+}
+
+function findItem(items, snippet) {
+  return items.find((it) => it.text.includes(snippet));
+}
+
+function assertSingleNumIdAcross(output, itemTexts) {
+  const loaded = loadListItems(output);
+  if (loaded.skip) return true;
+  if (loaded.fail) return { pass: false, score: 0, reason: loaded.reason };
+  const numIds = itemTexts.map((t) => {
+    const found = findItem(loaded.items, t);
+    return found ? found.numId : null;
+  });
+  const missing = itemTexts.filter((_, i) => numIds[i] == null);
+  if (missing.length) return { pass: false, score: 0, reason: `List items not found: ${missing.join(', ')}` };
+  const distinct = new Set(numIds);
+  if (distinct.size > 1) {
+    return {
+      pass: false,
+      score: 0,
+      reason: `Expected one numId across all items, got ${distinct.size}: ${[...distinct].join(', ')}`,
+    };
+  }
+  return { pass: true, score: 1, reason: `All items share numId ${numIds[0]}` };
+}
+
+function assertDistinctNumIds(output, beforeText, afterText) {
+  const loaded = loadListItems(output);
+  if (loaded.skip) return true;
+  if (loaded.fail) return { pass: false, score: 0, reason: loaded.reason };
+  const before = findItem(loaded.items, beforeText);
+  const after = findItem(loaded.items, afterText);
+  if (!before || !after) {
+    return {
+      pass: false,
+      score: 0,
+      reason: `Could not find both items as list items: before=${!!before}, after=${!!after}`,
+    };
+  }
+  if (before.numId === after.numId) {
+    return {
+      pass: false,
+      score: 0,
+      reason: `Expected split: "${beforeText}" and "${afterText}" both still on numId ${before.numId}`,
+    };
+  }
+  return {
+    pass: true,
+    score: 1,
+    reason: `Split: "${beforeText}" on ${before.numId}, "${afterText}" on ${after.numId}`,
+  };
+}
+
+function assertRestartedNumbering(output, priorText, targetText) {
+  const loaded = loadListItems(output);
+  if (loaded.skip) return true;
+  if (loaded.fail) return { pass: false, score: 0, reason: loaded.reason };
+  const prior = findItem(loaded.items, priorText);
+  const target = findItem(loaded.items, targetText);
+  if (!prior || !target) {
+    return {
+      pass: false,
+      score: 0,
+      reason: `Could not find items: prior=${!!prior}, target=${!!target}`,
+    };
+  }
+  // Restart can show up two ways:
+  //  (a) target moved to a new numId (the new numId starts at 1)
+  //  (b) target stays on the same numId but numbering.xml gains a startOverride
+  if (prior.numId !== target.numId) {
+    return {
+      pass: true,
+      score: 1,
+      reason: `Restart via new numId: prior=${prior.numId}, target=${target.numId}`,
+    };
+  }
+  const numXml = readNumberingXml(loaded.outputFile);
+  if (numXml && /<w:startOverride\b[^/]*w:val="1"/.test(numXml)) {
+    return {
+      pass: true,
+      score: 1,
+      reason: `Restart via startOverride on numId ${target.numId}`,
+    };
+  }
+  return {
+    pass: false,
+    score: 0,
+    reason: `No restart detected: target on same numId ${target.numId} as prior, no startOverride found`,
+  };
+}
+
+// Test-specific wrappers used by execution.yaml. Each is bound to the
+// fixture document.docx; if that fixture changes, update the texts here.
+module.exports.checkBulletsAndNumbersMerged = (output) =>
+  assertSingleNumIdAcross(output, [
+    'All sorts of bullets.',
+    'Nested lists',
+    'Numbers',
+    'Or letters',
+    'All sorts of lists are supported',
+  ]);
+
+module.exports.checkBulletListSplitAtWith = (output) =>
+  assertDistinctNumIds(output, 'All sorts of bullets.', 'With');
+
+module.exports.checkRestartAtAllSorts = (output) =>
+  assertRestartedNumbering(output, 'Numbers', 'All sorts of lists are supported');

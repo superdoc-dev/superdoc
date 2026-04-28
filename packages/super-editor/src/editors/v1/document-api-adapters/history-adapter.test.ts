@@ -31,6 +31,28 @@ function makeEditor(overrides: Partial<Editor> = {}): Editor {
   } as unknown as Editor;
 }
 
+function makeRootPresentationOwner(
+  editor: Editor,
+  overrides: Partial<{
+    undo: () => boolean;
+    redo: () => boolean;
+    getHistoryState: () => { undoDepth: number; redoDepth: number; canUndo: boolean; canRedo: boolean };
+  }> = {},
+) {
+  return {
+    editor,
+    undo: vi.fn(() => true),
+    redo: vi.fn(() => true),
+    getHistoryState: vi.fn(() => ({
+      undoDepth: 0,
+      redoDepth: 0,
+      canUndo: false,
+      canRedo: false,
+    })),
+    ...overrides,
+  };
+}
+
 describe('createHistoryAdapter', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -74,7 +96,7 @@ describe('createHistoryAdapter', () => {
 
     const result = adapter.get();
 
-    expect(yGetStateMock).toHaveBeenCalledTimes(2);
+    expect(yGetStateMock).toHaveBeenCalledOnce();
     expect(result.undoDepth).toBe(3);
     expect(result.redoDepth).toBe(1);
     expect(result.canUndo).toBe(true);
@@ -82,6 +104,7 @@ describe('createHistoryAdapter', () => {
   });
 
   it('throws CAPABILITY_UNAVAILABLE when undo command is missing', () => {
+    undoDepthMock.mockReturnValue(1);
     const adapter = createHistoryAdapter(
       makeEditor({
         commands: {
@@ -100,6 +123,7 @@ describe('createHistoryAdapter', () => {
   });
 
   it('throws CAPABILITY_UNAVAILABLE when redo command is missing', () => {
+    redoDepthMock.mockReturnValue(1);
     const adapter = createHistoryAdapter(
       makeEditor({
         commands: {
@@ -170,5 +194,63 @@ describe('createHistoryAdapter', () => {
 
     expect(result.noop).toBe(true);
     expect(result.reason).toBe('NO_EFFECT');
+  });
+
+  it('routes root editor history through PresentationEditor when available', () => {
+    const rootEditor = makeEditor();
+    const presentationOwner = makeRootPresentationOwner(rootEditor, {
+      getHistoryState: vi.fn(() => ({
+        undoDepth: 4,
+        redoDepth: 2,
+        canUndo: true,
+        canRedo: true,
+      })),
+    });
+    (rootEditor as Editor & { presentationEditor?: unknown }).presentationEditor = presentationOwner;
+
+    const adapter = createHistoryAdapter(rootEditor);
+
+    expect(adapter.get()).toMatchObject({
+      undoDepth: 4,
+      redoDepth: 2,
+      canUndo: true,
+      canRedo: true,
+    });
+
+    adapter.undo();
+    adapter.redo();
+
+    expect(presentationOwner.undo).toHaveBeenCalledOnce();
+    expect(presentationOwner.redo).toHaveBeenCalledOnce();
+    expect(rootEditor.commands.undo).not.toHaveBeenCalled();
+    expect(rootEditor.commands.redo).not.toHaveBeenCalled();
+  });
+
+  it('keeps sub-editor adapters surface-scoped even when a PresentationEditor exists', () => {
+    undoDepthMock.mockReturnValue(1);
+    redoDepthMock.mockReturnValue(0);
+
+    const rootEditor = makeEditor();
+    const subEditor = makeEditor();
+    const presentationOwner = makeRootPresentationOwner(rootEditor, {
+      getHistoryState: vi.fn(() => ({
+        undoDepth: 9,
+        redoDepth: 9,
+        canUndo: true,
+        canRedo: true,
+      })),
+    });
+    (subEditor as Editor & { presentationEditor?: unknown }).presentationEditor = presentationOwner;
+
+    const adapter = createHistoryAdapter(subEditor);
+    const result = adapter.get();
+
+    expect(result.undoDepth).toBe(1);
+    expect(result.redoDepth).toBe(0);
+
+    adapter.undo();
+
+    expect(subEditor.commands.undo).toHaveBeenCalledOnce();
+    expect(presentationOwner.undo).not.toHaveBeenCalled();
   });
 });

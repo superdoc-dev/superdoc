@@ -1,0 +1,26 @@
+{
+  "name": "superdoc-ai-streaming-example",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently -k -n API,WEB -c blue,green \"node server.mjs\" \"vite --host 0.0.0.0 --port 5180 --strictPort\"",
+    "dev:server": "node server.mjs",
+    "dev:web": "vite",
+    "build": "vite build"
+  },
+  "dependencies": {
+    "dotenv": "^17.4.2",
+    "openai": "^6.34.0",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5",
+    "superdoc": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.1",
+    "concurrently": "^9.2.1",
+    "typescript": "^5.9.3",
+    "vite": "^7.2.7"
+  }
+}

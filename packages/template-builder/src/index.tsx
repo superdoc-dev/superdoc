@@ -183,7 +183,13 @@ const SuperDocTemplateBuilder = forwardRef<Types.SuperDocTemplateBuilderHandle, 
         const success = (
           mode === 'inline'
             ? editor.commands.insertStructuredContentInline?.({ attrs, text: field.defaultValue || field.alias })
-            : editor.commands.insertStructuredContentBlock?.({ attrs, text: field.defaultValue || field.alias })
+            : field.presetContent?.json || field.presetContent?.html
+              ? editor.commands.insertStructuredContentBlock?.({
+                  attrs,
+                  ...(field.presetContent.html ? { html: field.presetContent.html } : {}),
+                  ...(field.presetContent.json ? { json: field.presetContent.json } : {}),
+                })
+              : editor.commands.insertStructuredContentBlock?.({ attrs, text: field.defaultValue || field.alias })
         ) as boolean | undefined;
 
         if (success) {
@@ -531,6 +537,7 @@ const SuperDocTemplateBuilder = forwardRef<Types.SuperDocTemplateBuilderHandle, 
               alias: createdField.label,
               metadata: createdField.metadata,
               defaultValue: createdField.defaultValue,
+              presetContent: createdField.presetContent,
               fieldType: createdField.fieldType,
               lockMode: createdField.lockMode,
             });
@@ -543,6 +550,7 @@ const SuperDocTemplateBuilder = forwardRef<Types.SuperDocTemplateBuilderHandle, 
           alias: field.label,
           metadata: field.metadata,
           defaultValue: field.defaultValue,
+          presetContent: field.presetContent,
           fieldType: field.fieldType,
           lockMode: field.lockMode,
         });

@@ -160,6 +160,15 @@ export type RunMark = {
 export type TrackedChangeMeta = {
   kind: TrackedChangeKind;
   id: string;
+  /**
+   * Internal story key identifying which content story owns this tracked
+   * change (`'body'`, `'hf:part:…'`, `'fn:…'`, `'en:…'`).
+   *
+   * Set by the PM adapter during conversion and stamped on the rendered DOM
+   * as `data-story-key` so downstream code can distinguish anchors across
+   * stories without re-resolving the story runtime.
+   */
+  storyKey?: string;
   author?: string;
   authorEmail?: string;
   authorImage?: string;
@@ -377,6 +386,7 @@ export type BreakRun = {
   pmStart?: number;
   pmEnd?: number;
   sdt?: SdtMetadata;
+  trackedChange?: TrackedChangeMeta;
 };
 
 /**
@@ -1901,6 +1911,16 @@ export type HeaderFooterPage = {
   number: number;
   fragments: Fragment[];
   numberText?: string;
+  /**
+   * Optional page-local block clones backing this page's resolved fragments.
+   * Present when header/footer tokens were laid out per page or per bucket.
+   */
+  blocks?: FlowBlock[];
+  /**
+   * Optional page-local measures aligned with `blocks`.
+   * Present when header/footer tokens were laid out per page or per bucket.
+   */
+  measures?: Measure[];
 };
 
 export type HeaderFooterLayout = {
@@ -1980,6 +2000,8 @@ export type {
   ResolvedTableItem,
   ResolvedImageItem,
   ResolvedDrawingItem,
+  ResolvedHeaderFooterPage,
+  ResolvedHeaderFooterLayout,
 } from './resolved-layout.js';
 export { isResolvedTableItem, isResolvedImageItem, isResolvedDrawingItem } from './resolved-layout.js';
 

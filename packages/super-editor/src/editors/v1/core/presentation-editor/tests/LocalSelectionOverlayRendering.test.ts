@@ -349,6 +349,7 @@ describe('renderCaretOverlay', () => {
     expect(caret.style.width).toBe('2px');
     expect(caret.style.backgroundColor).toMatch(/#000000|rgb\(0,\s*0,\s*0\)/);
     expect(caret.style.borderRadius).toBe('1px');
+    expect(caret.style.boxShadow).toBe('0 0 0 1px rgba(255, 255, 255, 0.92)');
     expect(caret.style.pointerEvents).toBe('none');
   });
 

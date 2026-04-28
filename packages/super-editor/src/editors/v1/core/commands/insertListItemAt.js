@@ -1,4 +1,5 @@
 import { getResolvedParagraphProperties } from '@extensions/paragraph/resolvedPropertiesCache.js';
+import { buildTextWithTabs } from '../../document-api-adapters/helpers/text-with-tabs.js';
 
 /**
  * Insert a list-item paragraph before/after a target list paragraph position.
@@ -6,11 +7,11 @@ import { getResolvedParagraphProperties } from '@extensions/paragraph/resolvedPr
  * This command preserves numbering metadata (numId/ilvl) from the target item,
  * and always leaves marker rendering to the numbering plugin.
  *
- * @param {{ pos: number; position: 'before' | 'after'; text?: string; sdBlockId?: string; tracked?: boolean }} options
+ * @param {{ pos: number; position: 'before' | 'after'; text?: string; sdBlockId?: string; paraId?: string; tracked?: boolean }} options
  * @returns {import('./types/index.js').Command}
  */
 export const insertListItemAt =
-  ({ pos, position, text = '', sdBlockId, tracked }) =>
+  ({ pos, position, text = '', sdBlockId, paraId, tracked }) =>
   ({ state, dispatch }) => {
     if (!Number.isInteger(pos) || pos < 0 || pos > state.doc.content.size) return false;
     if (position !== 'before' && position !== 'after') return false;
@@ -34,7 +35,7 @@ export const insertListItemAt =
     const attrs = {
       ...(targetNode.attrs ?? {}),
       sdBlockId: sdBlockId ?? null,
-      paraId: null,
+      paraId: paraId ?? null,
       textId: null,
       listRendering: null,
       paragraphProperties: newParagraphProperties,
@@ -42,12 +43,12 @@ export const insertListItemAt =
     };
 
     const normalizedText = typeof text === 'string' ? text : '';
-    const textNode = normalizedText.length > 0 ? state.schema.text(normalizedText) : undefined;
+    // buildTextWithTabs splits '\t' into real tab nodes so exports emit <w:tab/>.
+    const content = normalizedText.length > 0 ? buildTextWithTabs(state.schema, normalizedText, undefined) : undefined;
 
     let paragraphNode;
     try {
-      paragraphNode =
-        paragraphType.createAndFill(attrs, textNode) ?? paragraphType.create(attrs, textNode ? [textNode] : undefined);
+      paragraphNode = paragraphType.createAndFill(attrs, content) ?? paragraphType.create(attrs, content ?? undefined);
     } catch {
       return false;
     }

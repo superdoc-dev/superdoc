@@ -102,6 +102,10 @@ import type {
   ListsCanJoinResult,
   ListsSeparateInput,
   ListsSeparateResult,
+  ListsMergeInput,
+  ListsMergeResult,
+  ListsSplitInput,
+  ListsSplitResult,
   ListsSetLevelInput,
   ListsSetValueInput,
   ListsContinuePreviousInput,
@@ -184,6 +188,7 @@ import type {
 } from '../sections/sections.types.js';
 import type { QueryMatchInput, QueryMatchOutput } from '../types/query-match.types.js';
 import type { ResolveRangeInput, ResolveRangeOutput } from '../ranges/ranges.types.js';
+import type { SelectionCurrentInput, SelectionInfo } from '../selection/selection.js';
 import type {
   CreateImageInput,
   CreateImageResult,
@@ -673,6 +678,8 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
   'lists.join': { input: ListsJoinInput; options: MutationOptions; output: ListsJoinResult };
   'lists.canJoin': { input: ListsCanJoinInput; options: never; output: ListsCanJoinResult };
   'lists.separate': { input: ListsSeparateInput; options: MutationOptions; output: ListsSeparateResult };
+  'lists.merge': { input: ListsMergeInput; options: MutationOptions; output: ListsMergeResult };
+  'lists.split': { input: ListsSplitInput; options: MutationOptions; output: ListsSplitResult };
   'lists.setLevel': { input: ListsSetLevelInput; options: MutationOptions; output: ListsMutateItemResult };
   'lists.setValue': { input: ListsSetValueInput; options: MutationOptions; output: ListsMutateItemResult };
   'lists.continuePrevious': {
@@ -845,6 +852,9 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
 
   // --- ranges.* ---
   'ranges.resolve': { input: ResolveRangeInput; options: never; output: ResolveRangeOutput };
+
+  // --- selection.* ---
+  'selection.current': { input: SelectionCurrentInput | undefined; options: never; output: SelectionInfo };
 
   // --- mutations.* ---
   'mutations.preview': { input: MutationsPreviewInput; options: never; output: MutationsPreviewOutput };

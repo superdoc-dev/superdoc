@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildWidthAuthoringTableAttrs } from './table-attr-sync.js';
+import { buildWidthAuthoringTableAttrs, syncExtractedTableAttrs } from './table-attr-sync.js';
 
 describe('buildWidthAuthoringTableAttrs', () => {
   it('recomputes nested tableWidth from the authored grid', () => {
@@ -53,5 +53,18 @@ describe('buildWidthAuthoringTableAttrs', () => {
     });
     expect(result.tableCellSpacing).toEqual({ value: 2, type: 'dxa' });
     expect(result.borderCollapse).toBe('separate');
+  });
+
+  it('promotes table borders in pixel units without mutating OOXML tableProperties', () => {
+    const tableProperties = {
+      borders: {
+        top: { val: 'single', size: 8, color: '000000' },
+      },
+    };
+
+    const result = syncExtractedTableAttrs(tableProperties);
+
+    expect((result.borders as Record<string, { size: number }>).top.size).toBeCloseTo(1.3333, 4);
+    expect(tableProperties.borders.top.size).toBe(8);
   });
 });

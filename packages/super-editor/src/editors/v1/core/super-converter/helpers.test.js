@@ -9,6 +9,7 @@ import {
   base64ToUint8Array,
   dataUriToArrayBuffer,
   detectImageType,
+  eighthPointsToPixels,
 } from './helpers.js';
 
 describe('polygonToObj', () => {
@@ -499,5 +500,63 @@ describe('detectImageType', () => {
 
   it('returns null for invalid base64 string', () => {
     expect(detectImageType('not-valid-base64!!!')).toBe(null);
+  });
+});
+
+describe('eighthPointsToPixels', () => {
+  // ECMA-376 §17.6.x ST_EighthPointMeasure: line border sz range is [2, 96].
+  // sz=2 → 0.25pt, sz=96 → 12pt. Conversion: (sz / 8) * (96 / 72) px-per-pt.
+  describe('without clamp option (default)', () => {
+    it('converts spec-min sz=2 to 1/3 px', () => {
+      expect(eighthPointsToPixels(2)).toBeCloseTo(1 / 3, 4);
+    });
+
+    it('converts sz=8 (1pt) to 1.333px', () => {
+      expect(eighthPointsToPixels(8)).toBeCloseTo(1.3333, 4);
+    });
+
+    it('converts spec-max sz=96 (12pt) to 16px', () => {
+      expect(eighthPointsToPixels(96)).toBeCloseTo(16, 4);
+    });
+
+    it('does not clamp out-of-spec values', () => {
+      expect(eighthPointsToPixels(1)).toBeCloseTo(1 / 6, 4);
+      expect(eighthPointsToPixels(2000)).toBeCloseTo(333.333, 2);
+    });
+
+    it('accepts numeric strings', () => {
+      expect(eighthPointsToPixels('24')).toBeCloseTo(4, 4);
+    });
+
+    it('returns undefined for null/undefined', () => {
+      expect(eighthPointsToPixels(null)).toBeUndefined();
+      expect(eighthPointsToPixels(undefined)).toBeUndefined();
+    });
+
+    it('returns undefined for non-finite input', () => {
+      expect(eighthPointsToPixels(NaN)).toBeUndefined();
+      expect(eighthPointsToPixels('not-a-number')).toBeUndefined();
+    });
+  });
+
+  describe('with clamp: true', () => {
+    it('clamps to MIN_BORDER_SIZE_PX (0.5) when result is below', () => {
+      // sz=2 → ~0.333px, gets clamped up to 0.5
+      expect(eighthPointsToPixels(2, { clamp: true })).toBe(0.5);
+    });
+
+    it('clamps to MAX_BORDER_SIZE_PX (100) when result is above', () => {
+      expect(eighthPointsToPixels(2000, { clamp: true })).toBe(100);
+    });
+
+    it('passes through values within range untouched', () => {
+      expect(eighthPointsToPixels(8, { clamp: true })).toBeCloseTo(1.3333, 4);
+      expect(eighthPointsToPixels(48, { clamp: true })).toBeCloseTo(8, 4);
+    });
+
+    it('returns 0 for non-positive input rather than the MIN clamp', () => {
+      expect(eighthPointsToPixels(0, { clamp: true })).toBe(0);
+      expect(eighthPointsToPixels(-5, { clamp: true })).toBe(0);
+    });
   });
 });

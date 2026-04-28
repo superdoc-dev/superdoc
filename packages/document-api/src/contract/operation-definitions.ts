@@ -63,6 +63,7 @@ export type ReferenceGroupKey =
   | 'citations'
   | 'authorities'
   | 'ranges'
+  | 'selection'
   | 'diff'
   | 'protection'
   | 'permissionRanges';
@@ -250,14 +251,32 @@ export const INTENT_GROUP_META: Record<string, IntentGroupMeta> = {
     toolName: 'superdoc_list',
     description:
       'Create and manipulate bullet and numbered lists. ' +
-      'To create a list: first create all paragraphs at the SAME location using superdoc_create (chain each using the previous nodeId as the "at" target). ' +
-      'Then call action "create" with mode:"fromParagraphs", a preset ("disc" for bullet, "decimal" for numbered), and a range target: {from:{kind:"block", nodeType:"paragraph", nodeId:"<first>"}, to:{kind:"block", nodeType:"paragraph", nodeId:"<last>"}}. ' +
-      'The range converts ALL paragraphs between from and to into list items. Make sure no other content exists between them. ' +
-      'Action "set_type" converts between bullet and ordered (target any item in the list, kind:"ordered" or "bullet"). ' +
-      'Action "insert" adds a new item before/after a target list item. ' +
-      'Actions "indent" and "outdent" change nesting level; "set_level" jumps to a specific level (0-8). ' +
-      'Action "detach" converts a list item back to a plain paragraph. ' +
-      'Do NOT target paragraphs with indent/outdent/set_type; these actions require a listItem target.',
+      'Most actions require a list-item target: {kind:"block", nodeType:"listItem", nodeId:"<id>"}. ' +
+      'Exceptions: "create" and "attach" operate on paragraph targets (they turn paragraphs into list items). ' +
+      'Find nodeIds via superdoc_get_content({action:"blocks"}) — pick listItem blocks for most actions, paragraph blocks for create/attach.\n' +
+      '\n' +
+      'CREATE & CONVERT:\n' +
+      '• "create" — make a NEW list from paragraphs. Two modes: ' +
+      'mode:"empty" with at:{kind:"block", nodeType:"paragraph", nodeId} converts a single paragraph; ' +
+      'mode:"fromParagraphs" with target:{from:{...paragraph block address}, to:{...paragraph block address}} converts a range — ALL paragraphs between from and to become items, so make sure no other content sits between them. ' +
+      'Pass a preset ("disc"|"circle"|"square"|"dash" for bullets; "decimal"|"decimalParenthesis"|"lowerLetter"|"upperLetter"|"lowerRoman"|"upperRoman" for ordered) or a custom style. ' +
+      'Use "create" to start a fresh list — NOT to extend an existing one (use "attach" for that).\n' +
+      '• "attach" — add paragraphs to an EXISTING list, inheriting its numbering definition. Pass target:{paragraph block address} (or {from, to} range of paragraphs) + attachTo:{kind:"block", nodeType:"listItem", nodeId:"<any item in destination list>"} + optional level:0..8. Use this to extend a list or as the second half of a merge workflow (see "join" below).\n' +
+      '• "set_type" — convert an existing list between ordered and bullet. Pass target:{listItem} + kind:"ordered" or "bullet". Adjacent compatible sequences are merged automatically to preserve continuous numbering.\n' +
+      '• "detach" — convert a list item back to a plain paragraph. Pass target:{listItem}.\n' +
+      '\n' +
+      'ITEMS & NESTING:\n' +
+      '• "insert" — add a new list item adjacent to an existing item in the same list. Pass target:{listItem} + position:"before"|"after" + optional text. Use this (NOT superdoc_create) to add items to an existing list.\n' +
+      '• "indent" / "outdent" — bump the target item\'s nesting level by one (0-8 range). Pass target:{listItem}.\n' +
+      '• "set_level" — jump the target item to an explicit level. Pass target:{listItem} + level:0..8.\n' +
+      '\n' +
+      'NUMBERING (ordered lists):\n' +
+      '• "set_value" — restart numbering at the target. Pass target:{listItem} + value:<number> (e.g. value:1 to start over) or value:null to clear a previous override. Mid-sequence targets are atomically split off into their own sequence.\n' +
+      '• "continue_previous" — make the target\'s sequence continue numbering from the nearest compatible previous sequence (same abstract definition). Pass target:{listItem of the sequence you want to renumber}. Fails with NO_COMPATIBLE_PREVIOUS or INCOMPATIBLE_DEFINITIONS if no matching prior sequence exists.\n' +
+      '\n' +
+      'SEQUENCE SHAPE (merge / split):\n' +
+      '• "merge" — merge the target\'s sequence with an adjacent one into one continuous list. Pass target:{listItem} + direction:"withPrevious" or "withNext". Absorbed items adopt the absorbing sequence\'s numbering definition, and empty paragraphs between the two sequences are removed so numbering flows continuously.\n' +
+      '• "split" — split the target\'s sequence at the target item into two independent lists. The target and everything after become a new sequence that restarts numbering at 1. Pass target:{listItem}; add restartNumbering:false to keep the count continuing instead of restarting.',
     inputExamples: [
       {
         action: 'create',
@@ -276,6 +295,14 @@ export const INTENT_GROUP_META: Record<string, IntentGroupMeta> = {
         text: 'New list item',
       },
       { action: 'indent', target: { kind: 'block', nodeType: 'listItem', nodeId: '<itemId>' } },
+      {
+        action: 'merge',
+        target: { kind: 'block', nodeType: 'listItem', nodeId: '<itemId>' },
+        direction: 'withPrevious',
+      },
+      { action: 'split', target: { kind: 'block', nodeType: 'listItem', nodeId: '<itemId>' } },
+      { action: 'set_value', target: { kind: 'block', nodeType: 'listItem', nodeId: '<itemId>' }, value: 1 },
+      { action: 'continue_previous', target: { kind: 'block', nodeType: 'listItem', nodeId: '<itemId>' } },
     ],
   },
   comment: {
@@ -1694,6 +1721,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'lists/attach.mdx',
     referenceGroup: 'lists',
+    intentGroup: 'list',
+    intentAction: 'attach',
   },
   'lists.detach': {
     memberPath: 'lists.detach',
@@ -1794,6 +1823,42 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'lists/separate.mdx',
     referenceGroup: 'lists',
   },
+  'lists.merge': {
+    memberPath: 'lists.merge',
+    description:
+      'Compound: merge two adjacent list sequences into one. Reassigns numId on the absorbed sequence (no strict abstractNumId check — absorbed items adopt the absorbing definition) and deletes empty paragraphs between the two sequences. Use this instead of lists.join for the user-facing "merge these lists" intent.',
+    expectedResult: 'Returns a ListsMergeResult with the merged listId, absorbedCount, and removedEmptyBlocks count.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['INVALID_TARGET', 'NO_ADJACENT_SEQUENCE', 'NO_OP'],
+      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET'],
+    }),
+    referenceDocPath: 'lists/merge.mdx',
+    referenceGroup: 'lists',
+    intentGroup: 'list',
+    intentAction: 'merge',
+  },
+  'lists.split': {
+    memberPath: 'lists.split',
+    description:
+      'Compound: split a list sequence at the target item into two independent sequences. Runs lists.separate then (by default) lists.setValue(1) so the new half starts numbering fresh at 1. Pass restartNumbering:false for raw separate semantics (new half continues the previous count).',
+    expectedResult: 'Returns a ListsSplitResult with the new listId, numId, and the restart value applied (or null).',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['INVALID_TARGET', 'NO_OP'],
+      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET'],
+    }),
+    referenceDocPath: 'lists/split.mdx',
+    referenceGroup: 'lists',
+    intentGroup: 'list',
+    intentAction: 'split',
+  },
   'lists.setLevel': {
     memberPath: 'lists.setLevel',
     description: 'Set the absolute nesting level (0..8) of a list item.',
@@ -1826,6 +1891,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'lists/set-value.mdx',
     referenceGroup: 'lists',
+    intentGroup: 'list',
+    intentAction: 'set_value',
   },
   'lists.continuePrevious': {
     memberPath: 'lists.continuePrevious',
@@ -1841,6 +1908,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'lists/continue-previous.mdx',
     referenceGroup: 'lists',
+    intentGroup: 'list',
+    intentAction: 'continue_previous',
   },
   'lists.canContinuePrevious': {
     memberPath: 'lists.canContinuePrevious',
@@ -2352,6 +2421,22 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'ranges/resolve.mdx',
     referenceGroup: 'ranges',
+  },
+
+  'selection.current': {
+    memberPath: 'selection.current',
+    description:
+      "Read the editor's current selection as a portable SelectionInfo with a text-anchored TextTarget. Primitive for building custom comments UIs, floating toolbars, and other selection-driven components without reaching into ProseMirror internals.",
+    expectedResult:
+      'Returns a SelectionInfo with `empty`, `target` (TextTarget or null), `activeMarks`, and optionally `text` when `includeText: true`.',
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      idempotency: 'idempotent',
+      throws: ['INVALID_INPUT', 'INVALID_CONTEXT'],
+      deterministicTargetResolution: true,
+    }),
+    referenceDocPath: 'selection/current.mdx',
+    referenceGroup: 'selection',
   },
 
   'mutations.preview': {
@@ -3317,7 +3402,7 @@ export const OPERATION_DEFINITIONS = {
 
   'history.get': {
     memberPath: 'history.get',
-    description: 'Query the current undo/redo history state of the active editor.',
+    description: 'Query the current undo/redo history state of the document.',
     expectedResult:
       'Returns a HistoryState object with undoDepth, redoDepth, canUndo, canRedo, and a list of history-unsafe operations.',
     requiresDocumentContext: true,
@@ -3330,7 +3415,7 @@ export const OPERATION_DEFINITIONS = {
 
   'history.undo': {
     memberPath: 'history.undo',
-    description: 'Undo the most recent history-safe mutation in the active editor.',
+    description: 'Undo the most recent history-safe mutation in the document.',
     expectedResult:
       'Returns a HistoryActionResult with noop flag, reason (EMPTY_UNDO_STACK | NO_EFFECT when noop), and revision before/after.',
     requiresDocumentContext: true,
@@ -3350,7 +3435,7 @@ export const OPERATION_DEFINITIONS = {
 
   'history.redo': {
     memberPath: 'history.redo',
-    description: 'Redo the most recently undone action in the active editor.',
+    description: 'Redo the most recently undone action in the document.',
     expectedResult:
       'Returns a HistoryActionResult with noop flag, reason (EMPTY_REDO_STACK | NO_EFFECT when noop), and revision before/after.',
     requiresDocumentContext: true,

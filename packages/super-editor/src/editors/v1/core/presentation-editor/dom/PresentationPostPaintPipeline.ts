@@ -22,7 +22,7 @@ type CommentHighlightDecoratorLike = Pick<
 >;
 type DecorationBridgeLike = Pick<
   DecorationBridge,
-  'recordTransaction' | 'hasChanges' | 'collectDecorationRanges' | 'sync' | 'destroy'
+  'recordTransaction' | 'hasChanges' | 'hasCurrentRanges' | 'collectDecorationRanges' | 'sync' | 'destroy'
 >;
 type ProofingDecoratorLike = Pick<PresentationProofingDecorator, 'setContainer' | 'applyAnnotations' | 'clear'>;
 
@@ -82,6 +82,10 @@ export class PresentationPostPaintPipeline {
 
   hasDecorationChanges(editorState: EditorState): boolean {
     return this.#decorationBridge.hasChanges(editorState);
+  }
+
+  hasCurrentDecorationRanges(editorState: EditorState): boolean {
+    return this.#decorationBridge.hasCurrentRanges(editorState);
   }
 
   collectDecorationRanges(editorState: EditorState): DecorationRange[] {

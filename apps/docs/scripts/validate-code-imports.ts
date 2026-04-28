@@ -25,7 +25,6 @@ const EXACT_SUPERDOC_IMPORTS = new Set([
   'superdoc/headless-toolbar/react',
   'superdoc/headless-toolbar/vue',
   'superdoc/style.css',
-  '@superdoc-dev/ai',
   '@superdoc-dev/esign',
   '@superdoc-dev/esign/styles.css',
   '@superdoc-dev/react',

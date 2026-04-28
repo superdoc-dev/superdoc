@@ -159,6 +159,29 @@ describe('executeStructuralInsert', () => {
 
     expect(new Set(result.insertedBlockIds).size).toBe(result.insertedBlockIds.length);
   });
+
+  it('splits \\t inside structural text into real tab nodes rather than raw characters', () => {
+    const fragment: SDFragment = {
+      type: 'paragraph',
+      content: [{ type: 'text', text: 'left\tright' }],
+    };
+
+    const result = executeStructuralInsert(editor, { content: fragment });
+    expect(result.success).toBe(true);
+
+    let tabCount = 0;
+    let sawText = '';
+    editor.state.doc.descendants((node) => {
+      if (node.type.name === 'tab') tabCount++;
+      if (node.isText) sawText += node.text ?? '';
+    });
+    expect(tabCount).toBe(1);
+    // No raw '\t' remains inside any text node.
+    expect(sawText.includes('\t')).toBe(false);
+    // Neighbours still present.
+    expect(sawText).toContain('left');
+    expect(sawText).toContain('right');
+  });
 });
 
 // ---------------------------------------------------------------------------

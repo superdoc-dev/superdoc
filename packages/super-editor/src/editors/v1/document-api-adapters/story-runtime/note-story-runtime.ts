@@ -19,6 +19,7 @@ import {
   ensureFootnoteRefRun,
   updateNoteElement,
 } from '../../core/parts/adapters/notes-part-descriptor.js';
+import { normalizeNotePmJson } from '../helpers/note-pm-json.js';
 
 type NoteStoryLocator = FootnoteStoryLocator | EndnoteStoryLocator;
 
@@ -88,63 +89,75 @@ export function resolveNoteRuntime(hostEditor: Editor, locator: NoteStoryLocator
     kind: 'note',
     dispose: () => storyEditor.destroy(),
     commit: (hostEditor: Editor) => {
-      const noteType = isFootnote ? 'footnote' : 'endnote';
-      const notesConfig = getNotesConfig(noteType);
+      commitNoteRuntime(hostEditor, storyEditor, locator, isFootnote);
+    },
+    commitEditor: (hostEditor: Editor, sessionEditor: Editor) => {
+      commitNoteRuntime(hostEditor, sessionEditor, locator, isFootnote);
+    },
+  };
+}
 
-      // Try rich export via converter's exportToXmlJson (preserves formatting)
-      const conv = (hostEditor as unknown as { converter?: ConverterWithNoteExport }).converter;
-      const pmJson =
-        typeof storyEditor.getUpdatedJson === 'function' ? storyEditor.getUpdatedJson() : storyEditor.getJSON();
+function commitNoteRuntime(
+  hostEditor: Editor,
+  storyEditor: Editor,
+  locator: NoteStoryLocator,
+  isFootnote: boolean,
+): void {
+  const noteType = isFootnote ? 'footnote' : 'endnote';
+  const notesConfig = getNotesConfig(noteType);
 
-      if (conv?.exportToXmlJson && pmJson) {
-        let ooxmlElements: unknown[] | null = null;
-        try {
-          const { result } = conv.exportToXmlJson({
-            data: pmJson,
-            editor: storyEditor,
-            editorSchema: storyEditor.schema,
-            isHeaderFooter: true,
-            comments: [],
-            commentDefinitions: [],
-          });
-          // result.elements[0] is the body wrapper; its children are all
-          // content elements (paragraphs, tables, etc.). Keep all of them
-          // so tables and other non-paragraph content survive the commit.
-          const body = result?.elements?.[0] as { elements?: unknown[] } | undefined;
-          ooxmlElements = body?.elements ?? null;
-        } catch {
-          // Fall through to plain-text fallback
-        }
+  // Try rich export via converter's exportToXmlJson (preserves formatting)
+  const conv = (hostEditor as unknown as { converter?: ConverterWithNoteExport }).converter;
+  const pmJson =
+    typeof storyEditor.getUpdatedJson === 'function' ? storyEditor.getUpdatedJson() : storyEditor.getJSON();
 
-        if (ooxmlElements && ooxmlElements.length > 0) {
-          mutatePart({
-            editor: hostEditor,
-            partId: notesConfig.partId,
-            operation: 'mutate',
-            source: `story-runtime:commit:${locator.storyType}`,
-            mutate({ part }) {
-              updateNoteContentFromOoxml(part, notesConfig, noteId, ooxmlElements!);
-            },
-          });
-          return;
-        }
-      }
+  if (conv?.exportToXmlJson && pmJson) {
+    let ooxmlElements: unknown[] | null = null;
+    try {
+      const { result } = conv.exportToXmlJson({
+        data: pmJson,
+        editor: storyEditor,
+        editorSchema: storyEditor.schema,
+        isHeaderFooter: true,
+        comments: [],
+        commentDefinitions: [],
+      });
+      // result.elements[0] is the body wrapper; its children are all
+      // content elements (paragraphs, tables, etc.). Keep all of them
+      // so tables and other non-paragraph content survive the commit.
+      const body = result?.elements?.[0] as { elements?: unknown[] } | undefined;
+      ooxmlElements = body?.elements ?? null;
+    } catch {
+      // Fall through to plain-text fallback
+    }
 
-      // Fallback: plain-text export (loses formatting)
-      const doc = storyEditor.state.doc;
-      const text = doc.textBetween(0, doc.content.size, '\n', '\n');
-
+    if (ooxmlElements && ooxmlElements.length > 0) {
       mutatePart({
         editor: hostEditor,
         partId: notesConfig.partId,
         operation: 'mutate',
         source: `story-runtime:commit:${locator.storyType}`,
         mutate({ part }) {
-          updateNoteElement(part, notesConfig, noteId, text);
+          updateNoteContentFromOoxml(part, notesConfig, locator.noteId, ooxmlElements!);
         },
       });
+      return;
+    }
+  }
+
+  // Fallback: plain-text export (loses formatting)
+  const doc = storyEditor.state.doc;
+  const text = doc.textBetween(0, doc.content.size, '\n', '\n');
+
+  mutatePart({
+    editor: hostEditor,
+    partId: notesConfig.partId,
+    operation: 'mutate',
+    source: `story-runtime:commit:${locator.storyType}`,
+    mutate({ part }) {
+      updateNoteElement(part, notesConfig, locator.noteId, text);
     },
-  };
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -172,20 +185,20 @@ function extractNotePmJson(converter: any, isFootnote: boolean, noteId: string):
   // Empty arrays represent blank notes (e.g., after the reference marker is stripped)
   // and are valid — they produce a minimal doc with an empty paragraph.
   if (Array.isArray(note.content)) {
-    return {
+    return normalizeNotePmJson({
       type: 'doc',
       content: note.content.length > 0 ? note.content : [{ type: 'paragraph' }],
-    };
+    });
   }
 
   // If the note has a `doc` field (pre-built PM JSON), return it directly
   if (note.doc && typeof note.doc === 'object') {
-    return note.doc;
+    return normalizeNotePmJson(note.doc);
   }
 
   // If the note itself looks like PM JSON (has a `type` field)
   if (note.type === 'doc' || note.type === 'footnoteBody' || note.type === 'endnoteBody') {
-    return note;
+    return normalizeNotePmJson(note);
   }
 
   return null;

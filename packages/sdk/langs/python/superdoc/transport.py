@@ -435,9 +435,25 @@ class AsyncHostTransport:
         """Ensure the host process is running and handshake is complete."""
         await self._ensure_connected()
 
+    async def _await_in_flight_cleanup(self) -> None:
+        """Wait for an already-running cleanup task, if any."""
+        existing = self._cleanup_task
+        if existing and not existing.done():
+            try:
+                await asyncio.shield(existing)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                pass
+
     async def dispose(self) -> None:
         """Gracefully shut down the host process."""
         if self._state == _State.DISCONNECTED:
+            # Reader-triggered cleanup flips state to DISCONNECTED before the
+            # subprocess is fully reaped. If that cleanup is still in flight,
+            # wait for it so dispose() doesn't return while the host process
+            # is still being torn down.
+            await self._await_in_flight_cleanup()
             return
         if self._state == _State.DISPOSING:
             # A reader-triggered cleanup is in flight (or an earlier teardown
@@ -445,14 +461,7 @@ class AsyncHostTransport:
             # observes "host fully torn down" by the time dispose() returns.
             # shield() so a cancelled dispose() doesn't interrupt _cleanup
             # mid-flight and leak the host process.
-            existing = self._cleanup_task
-            if existing and not existing.done():
-                try:
-                    await asyncio.shield(existing)
-                except asyncio.CancelledError:
-                    raise
-                except Exception:
-                    pass
+            await self._await_in_flight_cleanup()
             return
 
         self._stopping = True

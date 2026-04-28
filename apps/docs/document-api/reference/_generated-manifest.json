@@ -130,6 +130,7 @@
     "apps/docs/document-api/reference/diff/capture.mdx",
     "apps/docs/document-api/reference/diff/compare.mdx",
     "apps/docs/document-api/reference/diff/index.mdx",
+    "apps/docs/document-api/reference/extract.mdx",
     "apps/docs/document-api/reference/fields/get.mdx",
     "apps/docs/document-api/reference/fields/index.mdx",
     "apps/docs/document-api/reference/fields/insert.mdx",
@@ -298,6 +299,7 @@
     "apps/docs/document-api/reference/lists/insert.mdx",
     "apps/docs/document-api/reference/lists/join.mdx",
     "apps/docs/document-api/reference/lists/list.mdx",
+    "apps/docs/document-api/reference/lists/merge.mdx",
     "apps/docs/document-api/reference/lists/outdent.mdx",
     "apps/docs/document-api/reference/lists/restart-at.mdx",
     "apps/docs/document-api/reference/lists/separate.mdx",
@@ -316,6 +318,7 @@
     "apps/docs/document-api/reference/lists/set-level.mdx",
     "apps/docs/document-api/reference/lists/set-type.mdx",
     "apps/docs/document-api/reference/lists/set-value.mdx",
+    "apps/docs/document-api/reference/lists/split.mdx",
     "apps/docs/document-api/reference/markdown-to-fragment.mdx",
     "apps/docs/document-api/reference/mutations/apply.mdx",
     "apps/docs/document-api/reference/mutations/index.mdx",
@@ -354,6 +357,8 @@
     "apps/docs/document-api/reference/sections/set-section-direction.mdx",
     "apps/docs/document-api/reference/sections/set-title-page.mdx",
     "apps/docs/document-api/reference/sections/set-vertical-align.mdx",
+    "apps/docs/document-api/reference/selection/current.mdx",
+    "apps/docs/document-api/reference/selection/index.mdx",
     "apps/docs/document-api/reference/styles/apply.mdx",
     "apps/docs/document-api/reference/styles/index.mdx",
     "apps/docs/document-api/reference/styles/paragraph/clear-style.mdx",
@@ -436,6 +441,7 @@
         "getHtml",
         "markdownToFragment",
         "info",
+        "extract",
         "clearContent",
         "insert",
         "replace",
@@ -572,6 +578,8 @@
         "lists.join",
         "lists.canJoin",
         "lists.separate",
+        "lists.merge",
+        "lists.split",
         "lists.setLevel",
         "lists.setValue",
         "lists.continuePrevious",
@@ -989,6 +997,13 @@
     },
     {
       "aliasMemberPaths": [],
+      "key": "selection",
+      "operationIds": ["selection.current"],
+      "pagePath": "apps/docs/document-api/reference/selection/index.mdx",
+      "title": "Selection"
+    },
+    {
+      "aliasMemberPaths": [],
       "key": "diff",
       "operationIds": ["diff.capture", "diff.compare", "diff.apply"],
       "pagePath": "apps/docs/document-api/reference/diff/index.mdx",
@@ -1016,5 +1031,5 @@
     }
   ],
   "marker": "{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}",
-  "sourceHash": "b61fad6a3a330af8a57b78ded260c8d8918486c9829b50804227fbeb15e8bf53"
+  "sourceHash": "cdb0b02e84f6eb7f4db962c177d082e0f89ec48517abc775736a3d17e4da9ba8"
 }

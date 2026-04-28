@@ -1,3 +1,5 @@
+import { resolveHeaderFooterSelection } from './helpers/resolveHeaderFooterSelection.js';
+
 /**
  * Remove all marks in the current selection.
  *
@@ -11,11 +13,8 @@
  * only, the undo path restores the exact marks that were visible to the user.
  */
 //prettier-ignore
-export const unsetAllMarks = () => ({ tr, dispatch, editor }) => {
-  let { selection } = tr;
-  if (editor.options.isHeaderOrFooter) {
-    selection = editor.options.lastSelection;
-  }
+export const unsetAllMarks = () => ({ tr, dispatch }) => {
+  const selection = resolveHeaderFooterSelection({ tr });
   const { empty, ranges } = selection;
 
   if (dispatch) {

@@ -1,4 +1,5 @@
-import { twipsToPixels } from '../../core/super-converter/helpers.js';
+import { eighthPointsToPixels, twipsToPixels } from '../../core/super-converter/helpers.js';
+import { cloneBorders, mapBorderSizes } from '../../extensions/table/tableHelpers/border-utils.js';
 
 /**
  * Derives the promoted table node attrs that pm-adapter reads at runtime.
@@ -19,7 +20,9 @@ export function syncExtractedTableAttrs(tp: Record<string, unknown>): Record<str
   extracted.tableLayout = tp.tableLayout ?? null;
   // Keep the PM schema default shape ({}) when no borders are present. The table
   // extension's renderDOM calls Object.keys(borders), which crashes on null.
-  extracted.borders = tp.borders ?? {};
+  // Table properties store OOXML sizes in eighth-points, while promoted table
+  // attrs are consumed as pixels by the PM adapter/layout pipeline.
+  extracted.borders = convertTableBordersToPixelUnits(tp.borders) ?? {};
 
   const indent = tp.tableIndent as { value?: number; type?: string } | undefined;
   if (indent?.value != null) {
@@ -60,6 +63,13 @@ export function syncExtractedTableAttrs(tp: Record<string, unknown>): Record<str
   }
 
   return extracted;
+}
+
+function convertTableBordersToPixelUnits(value: unknown): Record<string, unknown> | undefined {
+  const clone = cloneBorders(value);
+  if (!clone || Object.keys(clone).length === 0) return undefined;
+  mapBorderSizes(clone, eighthPointsToPixels);
+  return Object.keys(clone).length > 0 ? clone : undefined;
 }
 
 /**

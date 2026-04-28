@@ -166,6 +166,16 @@ describe('handleImageNode', () => {
     };
   };
 
+  const renameDrawingMlPrefix = (node, prefix) => {
+    if (!node || typeof node !== 'object') return;
+    if (typeof node.name === 'string' && node.name.startsWith('a:')) {
+      node.name = `${prefix}:${node.name.slice(2)}`;
+    }
+    if (Array.isArray(node.elements)) {
+      node.elements.forEach((child) => renameDrawingMlPrefix(child, prefix));
+    }
+  };
+
   it('returns null if picture is missing', () => {
     const node = makeNode();
     node.elements[1].elements[0].elements = [];
@@ -528,6 +538,87 @@ describe('handleImageNode', () => {
     expect(extractFillColor).toHaveBeenCalled();
     expect(extractStrokeColor).toHaveBeenCalled();
     expect(extractStrokeWidth).toHaveBeenCalled();
+  });
+
+  it('handles DrawingML nodes with non-a prefixes', () => {
+    const node = makeShapeNode({ prst: 'rect' });
+    renameDrawingMlPrefix(node, 'ns6');
+
+    const result = handleImageNode(node, makeParams(), false);
+    expect(result.type).toBe('vectorShape');
+    expect(result.attrs.kind).toBe('rect');
+  });
+
+  describe('decorative flag (adec/a16/re-prefixed namespaces)', () => {
+    const buildNodeWithDecorative = ({
+      extLstName = 'a:extLst',
+      extName = 'a:ext',
+      decorativeName = 'adec:decorative',
+      val = '1',
+    } = {}) => {
+      const node = makeNode();
+      const docPr = node.elements.find((el) => el.name === 'wp:docPr');
+      docPr.elements = [
+        {
+          name: extLstName,
+          elements: [
+            {
+              name: extName,
+              attributes: { uri: '{C183D7F6-B498-43B3-948B-1728B52AA6E4}' },
+              elements: [{ name: decorativeName, attributes: { val } }],
+            },
+          ],
+        },
+      ];
+      return node;
+    };
+
+    it('detects decorative=1 emitted with the canonical adec: prefix (Word default)', () => {
+      const node = buildNodeWithDecorative({ decorativeName: 'adec:decorative' });
+      const result = handleImageNode(node, makeParams(), false);
+      expect(result.attrs.decorative).toBe(true);
+    });
+
+    it('detects decorative=1 emitted with the legacy a16: prefix', () => {
+      const node = buildNodeWithDecorative({ decorativeName: 'a16:decorative' });
+      const result = handleImageNode(node, makeParams(), false);
+      expect(result.attrs.decorative).toBe(true);
+    });
+
+    it('detects decorative=1 when the namespace prefix has been re-aliased (e.g. ns7:)', () => {
+      const node = buildNodeWithDecorative({
+        extLstName: 'ns6:extLst',
+        extName: 'ns6:ext',
+        decorativeName: 'ns7:decorative',
+      });
+      const result = handleImageNode(node, makeParams(), false);
+      expect(result.attrs.decorative).toBe(true);
+    });
+
+    it('leaves decorative=false when the val attribute is missing or zero', () => {
+      const node = buildNodeWithDecorative({ val: '0' });
+      const result = handleImageNode(node, makeParams(), false);
+      expect(result.attrs.decorative).toBe(false);
+    });
+
+    it('leaves decorative=false when extLst has no decorative descendant', () => {
+      const node = makeNode();
+      const docPr = node.elements.find((el) => el.name === 'wp:docPr');
+      docPr.elements = [
+        {
+          name: 'a:extLst',
+          elements: [
+            {
+              name: 'a:ext',
+              attributes: { uri: '{ANY}' },
+              elements: [{ name: 'a14:useLocalDpi', attributes: { val: '0' } }],
+            },
+          ],
+        },
+      ];
+      const result = handleImageNode(node, makeParams(), false);
+      expect(result.attrs.decorative).toBe(false);
+    });
   });
 
   it('renders textbox shapes as vectorShapes with text content', () => {

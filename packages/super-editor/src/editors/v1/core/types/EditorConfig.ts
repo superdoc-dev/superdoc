@@ -564,6 +564,15 @@ export interface EditorOptions {
   /** Host-provided permission hook */
   permissionResolver?: ((params: PermissionParams) => boolean | undefined) | null;
 
+  /** Called on pointer down events (local only, not broadcast via collaboration) */
+  onPointerDown?: (params: { editor: Editor; event: PointerEvent }) => void;
+
+  /** Called on pointer up events (local only, not broadcast via collaboration) */
+  onPointerUp?: (params: { editor: Editor; event: PointerEvent }) => void;
+
+  /** Called on right-click (local only, not broadcast via collaboration) */
+  onRightClick?: (params: { editor: Editor; event: PointerEvent }) => void;
+
   /**
    * Custom resolver for the link click popover.
    * Called when a user clicks a link to determine which popover to show.

@@ -44,8 +44,8 @@ export function isTextAddress(value: unknown): value is TextAddress {
 
 /**
  * Type guard for TextTarget — multi-segment text target used by read
- * operations and by scroll/navigation primitives that accept either a
- * single-block or multi-block anchor.
+ * operations and (since round 2 of the drop-in assessment) by
+ * `comments.create` for selections that span multiple blocks.
  */
 export function isTextTarget(value: unknown): value is TextTarget {
   if (!isRecord(value)) return false;

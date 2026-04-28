@@ -1,4 +1,9 @@
 /* eslint-env node */
+const {
+  createCommitAnalyzer,
+  createReleaseNotesGenerator,
+} = require('../../scripts/semantic-release/strict-breaking-parser.cjs');
+
 /*
  * Commit filter: MCP depends on SDK (workspace:*) and imports engine/session
  * code directly. Git log must include commits touching those paths so MCP
@@ -33,18 +38,12 @@ const branches = [
 const isPrerelease = branches.some((b) => typeof b === 'object' && b.name === branch && b.prerelease);
 
 // Use AI-powered notes for stable releases, conventional generator for prereleases
-const notesPlugin = isPrerelease
-  ? '@semantic-release/release-notes-generator'
-  : ['semantic-release-ai-notes', { style: 'concise' }];
+const notesPlugin = isPrerelease ? createReleaseNotesGenerator() : ['semantic-release-ai-notes', { style: 'concise' }];
 
 const config = {
   branches,
   tagFormat: 'mcp-v${version}',
-  plugins: [
-    '@semantic-release/commit-analyzer',
-    notesPlugin,
-    ['@semantic-release/npm'],
-  ],
+  plugins: [createCommitAnalyzer(), notesPlugin, ['@semantic-release/npm']],
 };
 
 if (!isPrerelease) {
@@ -58,18 +57,22 @@ if (!isPrerelease) {
 }
 
 // Linear integration - labels issues with version on release
-config.plugins.push(['semantic-release-linear-app', {
-  teamKeys: ['SD'],
-  addComment: true,
-  packageName: 'mcp',
-  commentTemplate: 'shipped in {package} {releaseLink} {channel}'
-}]);
+config.plugins.push([
+  'semantic-release-linear-app',
+  {
+    teamKeys: ['SD'],
+    addComment: true,
+    packageName: 'mcp',
+    commentTemplate: 'shipped in {package} {releaseLink} {channel}',
+  },
+]);
 
 config.plugins.push([
   '@semantic-release/github',
   {
-    successComment: ':tada: This ${issue.pull_request ? "PR" : "issue"} is included in **@superdoc-dev/mcp** v${nextRelease.version}\n\nThe release is available on [GitHub release](${releases.find(release => release.pluginName === "@semantic-release/github").url})',
-  }
+    successComment:
+      ':tada: This ${issue.pull_request ? "PR" : "issue"} is included in **@superdoc-dev/mcp** v${nextRelease.version}\n\nThe release is available on [GitHub release](${releases.find(release => release.pluginName === "@semantic-release/github").url})',
+  },
 ]);
 
 module.exports = config;

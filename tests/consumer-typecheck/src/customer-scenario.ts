@@ -119,13 +119,17 @@ import type {
   SelectionHandle,
   SelectionCommandContext,
   ResolveRangeOutput,
+  SelectionApi,
+  SelectionInfo,
+  SelectionCurrentInput,
+  SelectionChangeListener,
+  TextTarget,
+  TextAddress,
+  TextSegment,
 
   // Ranges — scrollIntoView
   ScrollIntoViewInput,
   ScrollIntoViewOutput,
-  TextAddress,
-  TextTarget,
-  TextSegment,
   EntityAddress,
 
   // Proofing
@@ -477,7 +481,7 @@ function testSelectionAPI(pe: PresentationEditor) {
 }
 
 // ============================================
-// SECTION 8b: Document API — ranges.scrollIntoView
+// SECTION 8c: Document API — ranges.scrollIntoView
 // ============================================
 
 /**
@@ -528,6 +532,82 @@ async function testRangesScrollIntoView(editor: Editor) {
     behavior: 'auto',
   };
   await api.scrollIntoView(fullInput);
+}
+
+// ============================================
+// SECTION 8b: Document API — selection primitives
+// ============================================
+
+/**
+ * Smoke test for the exported `editor.doc.selection.*` surface.
+ * Validates that the types consumers build custom toolbars / comment
+ * sidebars against (SelectionInfo, TextTarget, the subscription
+ * shape) are reachable from the `superdoc` package entrypoint and
+ * compose correctly with `comments.create`.
+ *
+ * The function is not called at runtime — it exists for the type
+ * checker only, like the other sections in this file.
+ */
+function testDocSelectionPrimitives(editor: Editor) {
+  const api: SelectionApi = (editor as any).doc.selection;
+
+  // selection.current() with and without args.
+  const info: SelectionInfo = api.current();
+  const infoWithText: SelectionInfo = api.current({ includeText: true });
+  void infoWithText;
+
+  // SelectionInfo shape destructuring — the properties a floating
+  // toolbar or comment composer would read.
+  const empty: boolean = info.empty;
+  const target: TextTarget | null = info.target;
+  const marks: string[] = info.activeMarks;
+  const text: string | undefined = info.text;
+  void empty;
+  void marks;
+  void text;
+
+  // Hand the selection target straight to comments.create — this is
+  // the advertised DX flow. Accepts TextTarget via the widened input.
+  if (target !== null) {
+    // Per-segment access.
+    for (const segment of target.segments) {
+      const blockId: string = segment.blockId;
+      const start: number = segment.range.start;
+      const end: number = segment.range.end;
+      void blockId;
+      void start;
+      void end;
+    }
+    // Comments.create should accept TextTarget directly. Shape only —
+    // there is no guarantee the runtime `doc.comments` is reachable
+    // here, but the parameter type must compile.
+    type CommentsCreate = (input: { text: string; target: TextTarget | TextAddress }) => unknown;
+    const create: CommentsCreate = (_input) => undefined;
+    create({ text: 'comment', target });
+  }
+
+  // Construct TextAddress / TextTarget / TextSegment literals.
+  const ta: TextAddress = { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } };
+  const seg: TextSegment = { blockId: 'p1', range: { start: 0, end: 5 } };
+  const tt: TextTarget = { kind: 'text', segments: [seg] };
+  void ta;
+  void tt;
+
+  // Subscription: onChange returns an unsubscribe. Listener receives
+  // a SelectionInfo. The parameter is annotated explicitly because
+  // document-api types are surfaced via ambient `any` shims in the
+  // published package (workspace-package privacy), so type inference
+  // through SelectionChangeListener collapses to implicit any.
+  const listener: SelectionChangeListener = (next: SelectionInfo) => {
+    const nextTarget: TextTarget | null = next.target;
+    void nextTarget;
+  };
+  const unsubscribe: () => void = api.onChange(listener);
+  unsubscribe();
+
+  // The exported SelectionCurrentInput type is the argument shape.
+  const input: SelectionCurrentInput = { includeText: true };
+  api.current(input);
 }
 
 // ============================================

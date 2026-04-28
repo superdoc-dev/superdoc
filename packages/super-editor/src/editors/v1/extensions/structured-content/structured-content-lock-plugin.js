@@ -50,7 +50,6 @@ function checkLockViolation(sdtNodes, from, to) {
     const crossesStart = from < sdt.pos && to > sdt.pos && to < sdt.end;
     const crossesEnd = from > sdt.pos && from < sdt.end && to > sdt.end;
 
-    console.log('SDT pos:', sdt.pos, 'end:', sdt.end, 'from:', from, 'to:', to);
     const wouldDamageWrapper = containsSDT || crossesStart || crossesEnd;
     // Content modification: inside SDT but NOT deleting the entire wrapper
     const wouldModifyContent = insideSDT && !containsSDT;

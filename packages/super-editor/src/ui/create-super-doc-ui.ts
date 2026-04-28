@@ -238,13 +238,31 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
       });
     };
 
-    stateChangeListeners.add(onStateChange);
-
+    // Refcount the controller-level listener: attach on first
+    // subscriber, detach when the last subscriber leaves. Without this
+    // each `ui.select(...)` would leak an `onStateChange` closure into
+    // `stateChangeListeners` for the lifetime of the controller —
+    // long-lived sessions where React/Vue components mount/unmount
+    // would accumulate dead closures that still recompute on every
+    // editor event.
     return {
       get(): TSlice {
+        // No subscribers means `last` isn't being kept fresh by
+        // `onStateChange`. Recompute so untracked snapshots stay
+        // accurate; tracked snapshots return the cached value.
+        if (listeners.size === 0) {
+          last = selector(computeState());
+        }
         return last;
       },
       subscribe(listener) {
+        if (listeners.size === 0) {
+          // First subscriber: refresh `last` so the initial emit is
+          // not stale (state may have evolved between `select()` and
+          // `subscribe()`), then attach the controller-level listener.
+          last = selector(computeState());
+          stateChangeListeners.add(onStateChange);
+        }
         listeners.add(listener);
         // Initial synchronous emit, matching CKEditor's `bind().to()`
         // behavior and useSyncExternalStore semantics. New subscribers
@@ -257,6 +275,9 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
         }
         return () => {
           listeners.delete(listener);
+          if (listeners.size === 0) {
+            stateChangeListeners.delete(onStateChange);
+          }
         };
       },
     };

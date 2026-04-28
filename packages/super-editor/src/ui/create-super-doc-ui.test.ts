@@ -221,6 +221,85 @@ describe('createSuperDocUI', () => {
     expect(cb2).toHaveBeenCalledTimes(2); // initial + rebuild
   });
 
+  it('does not leak controller-level listeners across select+subscribe+unsubscribe cycles', async () => {
+    const superdoc = makeSuperdocStub();
+    const ui = createSuperDocUI({ superdoc });
+    teardown.push(() => ui.destroy());
+
+    // 100 mount/unmount-shaped cycles. Without refcount, each select()
+    // would leave its onStateChange wired to the controller forever
+    // and re-run on every editor event.
+    const selector = vi.fn((state) => state.documentMode);
+    for (let i = 0; i < 100; i += 1) {
+      const slice = ui.select(selector);
+      const off = slice.subscribe(() => {});
+      off();
+    }
+
+    // Reset to count only post-cycle invocations.
+    selector.mockClear();
+
+    // Fire one editor event and let the microtask drain.
+    superdoc.fireEditor('transaction');
+    await flushMicrotasks();
+
+    // With the fix: 0 stale selectors fire. Without it: 100 would.
+    expect(selector).toHaveBeenCalledTimes(0);
+  });
+
+  it('an active subscriber holds the controller listener; it detaches only on the last unsubscribe', async () => {
+    const superdoc = makeSuperdocStub({ documentMode: 'editing' });
+    const ui = createSuperDocUI({ superdoc });
+    teardown.push(() => ui.destroy());
+
+    const selector = vi.fn((state) => state.documentMode);
+    const slice = ui.select(selector);
+    const off1 = slice.subscribe(() => {});
+    const off2 = slice.subscribe(() => {});
+
+    selector.mockClear();
+    superdoc.setDocumentMode('suggesting');
+    superdoc.fireSuperdoc('document-mode-change');
+    await flushMicrotasks();
+
+    // Both subscribers active: selector ran once for the event.
+    expect(selector).toHaveBeenCalledTimes(1);
+
+    off1();
+
+    selector.mockClear();
+    superdoc.setDocumentMode('viewing');
+    superdoc.fireSuperdoc('document-mode-change');
+    await flushMicrotasks();
+
+    // One subscriber still active: selector still runs.
+    expect(selector).toHaveBeenCalledTimes(1);
+
+    off2();
+
+    selector.mockClear();
+    superdoc.setDocumentMode('editing');
+    superdoc.fireSuperdoc('document-mode-change');
+    await flushMicrotasks();
+
+    // No subscribers: selector should not run.
+    expect(selector).toHaveBeenCalledTimes(0);
+  });
+
+  it('get() refreshes the snapshot when no subscribers are attached', () => {
+    const superdoc = makeSuperdocStub({ documentMode: 'editing' });
+    const ui = createSuperDocUI({ superdoc });
+    teardown.push(() => ui.destroy());
+
+    const slice = ui.select((state) => state.documentMode);
+    expect(slice.get()).toBe('editing');
+
+    // No subscribers — controller listener isn't running. get() must
+    // still return fresh state on the next call.
+    superdoc.setDocumentMode('suggesting');
+    expect(slice.get()).toBe('suggesting');
+  });
+
   it('destroy detaches all source listeners', () => {
     const superdoc = makeSuperdocStub();
     const ui = createSuperDocUI({ superdoc });

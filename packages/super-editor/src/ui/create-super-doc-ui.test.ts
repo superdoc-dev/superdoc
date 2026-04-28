@@ -60,10 +60,18 @@ function makeSuperdocStub(
     }),
 
     fireEditor(event: string, ...args: unknown[]) {
-      editorListeners.get(event)?.forEach((handler) => handler(...args));
+      const handlers = editorListeners.get(event);
+      if (!handlers) return;
+      // Snapshot before iterating: handlers can mutate the registration
+      // set (e.g., re-attach on surface change), and a Set's forEach
+      // picks up newly-added handlers mid-loop. Real editor event buses
+      // iterate a frozen list.
+      [...handlers].forEach((handler) => handler(...args));
     },
     fireSuperdoc(event: string, ...args: unknown[]) {
-      superdocListeners.get(event)?.forEach((handler) => handler(...args));
+      const handlers = superdocListeners.get(event);
+      if (!handlers) return;
+      [...handlers].forEach((handler) => handler(...args));
     },
     setSelection(empty: boolean, text = '') {
       selectionEmpty = empty;
@@ -276,6 +284,90 @@ describe('createSuperDocUI', () => {
     expect(newEditor.on).toHaveBeenCalled();
     // And the slice should reflect the new editor's selection
     expect(cb).toHaveBeenLastCalledWith(false);
+  });
+
+  it('routes selection through PresentationEditor.getActiveEditor() when active', async () => {
+    // Body editor with one selection; routed (header) editor with another.
+    const bodyListeners = new Map<string, Set<(...args: unknown[]) => void>>();
+    const bodyEditor = {
+      on: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
+        if (!bodyListeners.has(event)) bodyListeners.set(event, new Set());
+        bodyListeners.get(event)!.add(handler);
+      }),
+      off: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
+        bodyListeners.get(event)?.delete(handler);
+      }),
+      state: { selection: { empty: true } },
+      options: { documentId: 'doc-1', isHeaderOrFooter: false },
+      isEditable: true,
+      doc: { selection: { current: vi.fn(() => ({ empty: true, text: '', target: null })) } },
+    };
+
+    const headerListeners = new Map<string, Set<(...args: unknown[]) => void>>();
+    const headerEditor = {
+      on: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
+        if (!headerListeners.has(event)) headerListeners.set(event, new Set());
+        headerListeners.get(event)!.add(handler);
+      }),
+      off: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
+        headerListeners.get(event)?.delete(handler);
+      }),
+      state: { selection: { empty: false } },
+      options: { documentId: 'doc-1', isHeaderOrFooter: true, headerFooterType: 'header' },
+      isEditable: true,
+      doc: { selection: { current: vi.fn(() => ({ empty: false, text: 'header text', target: null })) } },
+    };
+
+    const presentationListeners = new Map<string, Set<(...args: unknown[]) => void>>();
+    const presentationEditor: Record<string, unknown> = {
+      on: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
+        if (!presentationListeners.has(event)) presentationListeners.set(event, new Set());
+        presentationListeners.get(event)!.add(handler);
+      }),
+      off: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
+        presentationListeners.get(event)?.delete(handler);
+      }),
+      isEditable: true,
+      state: { selection: { empty: false } },
+      // Routed-editor pointer; the test flips this on activeSurfaceChange.
+      getActiveEditor: vi.fn(() => bodyEditor),
+      commands: {},
+    };
+
+    // Stamp the presentation editor onto the body editor so
+    // resolveToolbarSources picks it up via the direct-owner path.
+    (bodyEditor as unknown as { _presentationEditor: unknown })._presentationEditor = presentationEditor;
+
+    const superdoc = {
+      activeEditor: bodyEditor as never,
+      config: { documentMode: 'editing' as const },
+      on: vi.fn(),
+      off: vi.fn(),
+    };
+
+    const ui = createSuperDocUI({ superdoc });
+    teardown.push(() => ui.destroy());
+
+    const cb = vi.fn();
+    ui.select((state) => state.selection.quotedText).subscribe(cb);
+
+    // Initial selection comes from the routed (body) editor.
+    expect(cb).toHaveBeenLastCalledWith('');
+
+    // Route to the header editor and fire activeSurfaceChange.
+    presentationEditor.getActiveEditor = vi.fn(() => headerEditor);
+    const surfaceChangeHandlers = presentationListeners.get('activeSurfaceChange');
+    expect(surfaceChangeHandlers && surfaceChangeHandlers.size).toBeGreaterThan(0);
+    [...(surfaceChangeHandlers ?? [])].forEach((h) => h());
+    await flushMicrotasks();
+
+    // Selection now reflects the header editor's selection.
+    expect(cb).toHaveBeenLastCalledWith('header text');
+
+    // The header editor should have received .on() registrations
+    // (transaction / selectionUpdate / etc.) when the controller
+    // re-routed.
+    expect(headerEditor.on).toHaveBeenCalled();
   });
 
   it('listener errors do not propagate to the editor or other subscribers', async () => {

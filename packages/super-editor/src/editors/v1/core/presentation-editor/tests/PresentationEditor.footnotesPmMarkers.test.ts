@@ -64,35 +64,42 @@ vi.mock('@superdoc/pm-adapter', async (importOriginal) => {
   };
 });
 
-vi.mock('@superdoc/layout-bridge', () => ({
-  incrementalLayout: mockIncrementalLayout,
-  normalizeMargin: (value: number | undefined, fallback: number) =>
-    Number.isFinite(value) ? (value as number) : fallback,
-  selectionToRects: vi.fn(() => []),
-  clickToPosition: vi.fn(),
-  getFragmentAtPosition: vi.fn(),
-  computeLinePmRange: vi.fn(),
-  measureCharacterX: vi.fn(),
-  extractIdentifierFromConverter: vi.fn(),
-  getHeaderFooterType: vi.fn(),
-  getBucketForPageNumber: vi.fn(),
-  getBucketRepresentative: vi.fn(),
-  buildMultiSectionIdentifier: vi.fn(),
-  getHeaderFooterTypeForSection: vi.fn(),
-  layoutHeaderFooterWithCache: vi.fn(),
-  computeDisplayPageNumber: vi.fn(),
-  findWordBoundaries: vi.fn(),
-  findParagraphBoundaries: vi.fn(),
-  createDragHandler: vi.fn(),
-  PageGeometryHelper: vi.fn(() => ({
-    updateLayout: vi.fn(),
-    getPageIndexAtY: vi.fn(() => 0),
-    getNearestPageIndex: vi.fn(() => 0),
-    getPageTop: vi.fn(() => 0),
-    getPageGap: vi.fn(() => 0),
-    getLayout: vi.fn(() => ({ pages: [] })),
-  })),
-}));
+vi.mock('@superdoc/layout-bridge', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@superdoc/layout-bridge')>();
+
+  return {
+    ...actual,
+    incrementalLayout: mockIncrementalLayout,
+    normalizeMargin: (value: number | undefined, fallback: number) =>
+      Number.isFinite(value) ? (value as number) : fallback,
+    selectionToRects: vi.fn(() => []),
+    clickToPosition: vi.fn(),
+    getFragmentAtPosition: vi.fn(),
+    computeLinePmRange: vi.fn(),
+    measureCharacterX: vi.fn(),
+    extractIdentifierFromConverter: vi.fn(),
+    getHeaderFooterType: vi.fn(),
+    getBucketForPageNumber: vi.fn(),
+    getBucketRepresentative: vi.fn(),
+    buildMultiSectionIdentifier: vi.fn(),
+    buildEffectiveHeaderFooterRefsBySection: vi.fn(() => new Map()),
+    collectReferencedHeaderFooterRIds: vi.fn(() => new Set()),
+    getHeaderFooterTypeForSection: vi.fn(),
+    layoutHeaderFooterWithCache: vi.fn(),
+    computeDisplayPageNumber: vi.fn(),
+    findWordBoundaries: vi.fn(),
+    findParagraphBoundaries: vi.fn(),
+    createDragHandler: vi.fn(),
+    PageGeometryHelper: vi.fn(() => ({
+      updateLayout: vi.fn(),
+      getPageIndexAtY: vi.fn(() => 0),
+      getNearestPageIndex: vi.fn(() => 0),
+      getPageTop: vi.fn(() => 0),
+      getPageGap: vi.fn(() => 0),
+      getLayout: vi.fn(() => ({ pages: [] })),
+    })),
+  };
+});
 
 vi.mock('@superdoc/painter-dom', () => ({
   createDomPainter: vi.fn(() => ({
@@ -113,6 +120,7 @@ vi.mock('@superdoc/measuring-dom', () => ({ measureBlock: vi.fn(() => ({ width: 
 
 vi.mock('@superdoc/layout-resolved', () => ({
   resolveLayout: mockResolveLayout,
+  resolveHeaderFooterLayout: vi.fn(() => ({ height: 0, pages: [] })),
 }));
 
 vi.mock('../../header-footer/HeaderFooterRegistry', () => ({
@@ -128,6 +136,7 @@ vi.mock('../../header-footer/HeaderFooterRegistry', () => ({
     clear: vi.fn(),
     getBatch: vi.fn(() => []),
     getBlocksByRId: vi.fn(() => new Map()),
+    setTrackedChangesRenderConfig: vi.fn(),
   })),
 }));
 
@@ -174,7 +183,7 @@ describe('PresentationEditor - footnote number marker PM position', () => {
     vi.clearAllMocks();
   });
 
-  it('adds pmStart/pmEnd to the data-sd-footnote-number marker run', async () => {
+  it('keeps the synthetic footnote number marker out of the editable PM range', async () => {
     editor = new PresentationEditor({ element: container });
     await new Promise((r) => setTimeout(r, 100));
 
@@ -185,8 +194,8 @@ describe('PresentationEditor - footnote number marker PM position', () => {
 
     const markerRun = blocks?.[0]?.runs?.[0];
     expect(markerRun?.dataAttrs?.['data-sd-footnote-number']).toBe('true');
-    expect(markerRun?.pmStart).toBe(5);
-    expect(markerRun?.pmEnd).toBe(6);
+    expect(markerRun?.pmStart).toBeUndefined();
+    expect(markerRun?.pmEnd).toBeUndefined();
   });
 
   it('appends semantic footnotes as end-of-document blocks in semantic flow mode', async () => {

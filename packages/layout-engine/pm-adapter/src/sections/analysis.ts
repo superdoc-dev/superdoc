@@ -96,7 +96,23 @@ export function findParagraphsWithSectPr(doc: PMNode): {
       return;
     }
 
-    if (node.type === 'index' || node.type === 'bibliography' || node.type === 'tableOfAuthorities') {
+    // Recurse into container node types that wrap body paragraphs. Children
+    // of these nodes are counted as paragraphs for section-range purposes and
+    // their handlers increment `currentParagraphIndex` + call the section-break
+    // emission helper per child.
+    //
+    // `documentPartObject` / `tableOfContents` are important for SD-2557:
+    // Word stores the closing sectPr of a TOC section on the trailing empty
+    // paragraph INSIDE the SDT. Without recursion, that sectPr is invisible to
+    // section-range analysis and the nextPage break between TOC and the next
+    // body section is silently dropped.
+    if (
+      node.type === 'index' ||
+      node.type === 'bibliography' ||
+      node.type === 'tableOfAuthorities' ||
+      node.type === 'documentPartObject' ||
+      node.type === 'tableOfContents'
+    ) {
       getNodeChildren(node).forEach(visitNode);
     }
   };

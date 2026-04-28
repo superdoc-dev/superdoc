@@ -15,7 +15,21 @@ export type { EditorState, Transaction } from 'prosemirror-state';
 export type { Schema } from 'prosemirror-model';
 
 // Document API types
-export type { ResolveRangeOutput, DocumentApi, DocumentProtectionState } from '@superdoc/document-api';
+export type {
+  ResolveRangeOutput,
+  DocumentApi,
+  DocumentProtectionState,
+  SelectionApi,
+  SelectionInfo,
+  SelectionCurrentInput,
+  SelectionChangeListener,
+  ScrollIntoViewInput,
+  ScrollIntoViewOutput,
+  TextAddress,
+  TextTarget,
+  TextSegment,
+  EntityAddress,
+} from '@superdoc/document-api';
 
 // Selection handle types
 export type { SelectionHandle } from './editors/v1/core/selection-state.js';
@@ -43,6 +57,7 @@ export type {
   FontsResolvedPayload,
   PaginationPayload,
   ListDefinitionsPayload,
+  TrackedChangesChangedPayload,
   ProtectionChangeSource,
   EditorEventMap,
 } from './editors/v1/core/types/EditorEvents.js';

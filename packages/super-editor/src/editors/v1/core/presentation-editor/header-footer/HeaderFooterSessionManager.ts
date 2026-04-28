@@ -4,15 +4,27 @@
  * This class encapsulates all the state and logic for:
  * - Header/footer region tracking and hit testing
  * - Session state machine (body/header/footer modes)
- * - Editor overlay management for H/F editing
+ * - Hidden-host story-session coordination for H/F editing
  * - Decoration providers for rendering
  * - Hover UI for edit affordances
  *
  * @module presentation-editor/header-footer/HeaderFooterSessionManager
  */
 
-import type { Layout, FlowBlock, Measure, Page, SectionMetadata, Fragment } from '@superdoc/contracts';
+import type {
+  Layout,
+  FlowBlock,
+  Measure,
+  Page,
+  SectionMetadata,
+  Fragment,
+  ResolvedHeaderFooterLayout,
+  ResolvedPaintItem,
+} from '@superdoc/contracts';
 import type { PageDecorationProvider } from '@superdoc/painter-dom';
+import { resolveHeaderFooterLayout } from '@superdoc/layout-resolved';
+import type { HeaderFooterPartStoryLocator } from '@superdoc/document-api';
+import { DOM_CLASS_NAMES } from '@superdoc/dom-contract';
 
 import type { Editor } from '../../Editor.js';
 import type {
@@ -27,8 +39,8 @@ import {
   HeaderFooterEditorManager,
   HeaderFooterLayoutAdapter,
   type HeaderFooterDescriptor,
+  type HeaderFooterTrackedChangesRenderConfig,
 } from '../../header-footer/HeaderFooterRegistry.js';
-import { EditorOverlayManager } from '../../header-footer/EditorOverlayManager.js';
 import { initHeaderFooterRegistry } from '../../header-footer/HeaderFooterRegistryInit.js';
 import { layoutPerRIdHeaderFooters } from '../../header-footer/HeaderFooterPerRidLayout.js';
 import {
@@ -37,13 +49,16 @@ import {
   getHeaderFooterTypeForSection,
   getBucketForPageNumber,
   getBucketRepresentative,
+  buildSectionAwareHeaderFooterLayoutKey,
   type HeaderFooterIdentifier,
   type HeaderFooterLayoutResult,
   type MultiSectionHeaderFooterIdentifier,
   type HeaderFooterConstraints,
 } from '@superdoc/layout-bridge';
+import { selectionToRects } from '@superdoc/layout-bridge';
 import { deduplicateOverlappingRects } from '../../../dom-observer/DomSelectionGeometry.js';
 import { resolveSectionProjections } from '../../../document-api-adapters/helpers/sections-resolver.js';
+import { computeCaretLayoutRectGeometry as computeCaretLayoutRectGeometryFromHelper } from '../selection/CaretGeometry.js';
 import {
   ensureExplicitHeaderFooterSlot,
   normalizeVariant,
@@ -52,6 +67,155 @@ import {
 // =============================================================================
 // Types
 // =============================================================================
+
+type SurfacePmEntry = {
+  pmStart: number;
+  pmEnd: number;
+  el: HTMLElement;
+};
+
+function buildSurfacePmEntries(surface: HTMLElement): SurfacePmEntry[] {
+  const nodes = Array.from(surface.querySelectorAll<HTMLElement>('[data-pm-start][data-pm-end]'));
+  const nonLeaf = new WeakSet<HTMLElement>();
+  const nodeSet = new WeakSet<HTMLElement>();
+  nodes.forEach((node) => nodeSet.add(node));
+
+  for (const node of nodes) {
+    let parent = node.parentElement;
+    while (parent && parent !== surface) {
+      if (nodeSet.has(parent)) {
+        nonLeaf.add(parent);
+      }
+      parent = parent.parentElement;
+    }
+  }
+
+  const entries: SurfacePmEntry[] = [];
+  for (const node of nodes) {
+    if (node.classList.contains(DOM_CLASS_NAMES.INLINE_SDT_WRAPPER)) {
+      continue;
+    }
+    if (nonLeaf.has(node)) {
+      continue;
+    }
+
+    const pmStart = Number(node.dataset.pmStart ?? 'NaN');
+    const pmEnd = Number(node.dataset.pmEnd ?? 'NaN');
+    if (!Number.isFinite(pmStart) || !Number.isFinite(pmEnd) || pmEnd < pmStart) {
+      continue;
+    }
+
+    entries.push({ pmStart, pmEnd, el: node });
+  }
+
+  entries.sort((a, b) => (a.pmStart - b.pmStart !== 0 ? a.pmStart - b.pmStart : a.pmEnd - b.pmEnd));
+  return entries;
+}
+
+function findSurfaceEntriesInRange(
+  entries: SurfacePmEntry[],
+  from: number,
+  to: number,
+  options?: { boundaryInclusive?: boolean },
+): SurfacePmEntry[] {
+  if (!Number.isFinite(from) || !Number.isFinite(to) || entries.length === 0) {
+    return [];
+  }
+
+  const start = Math.min(from, to);
+  const end = Math.max(from, to);
+  if (start === end) {
+    return [];
+  }
+
+  const boundaryInclusive = options?.boundaryInclusive === true;
+  return entries.filter((entry) =>
+    boundaryInclusive ? entry.pmStart <= end && entry.pmEnd >= start : entry.pmStart < end && entry.pmEnd > start,
+  );
+}
+
+function findSurfaceEntryAtPos(entries: SurfacePmEntry[], pos: number): SurfacePmEntry | null {
+  if (!Number.isFinite(pos) || entries.length === 0) {
+    return null;
+  }
+
+  const exactEntry = entries.find((entry) => pos >= entry.pmStart && pos <= entry.pmEnd);
+  if (exactEntry) {
+    return exactEntry;
+  }
+
+  const nextEntry = entries.find((entry) => pos < entry.pmStart);
+  if (nextEntry) {
+    return nextEntry;
+  }
+
+  return entries[entries.length - 1] ?? null;
+}
+
+function mapPmPosToTextOffset(pos: number, pmStart: number, pmEnd: number, textLength: number): number {
+  if (!Number.isFinite(pos) || !Number.isFinite(pmStart) || !Number.isFinite(pmEnd) || textLength <= 0) {
+    return 0;
+  }
+
+  const pmRange = pmEnd - pmStart;
+  if (!Number.isFinite(pmRange) || pmRange <= 0) {
+    return 0;
+  }
+
+  if (pmRange === textLength) {
+    return Math.min(textLength, Math.max(0, pos - pmStart));
+  }
+
+  if (pos <= pmStart) {
+    return 0;
+  }
+  if (pos >= pmEnd) {
+    return textLength;
+  }
+
+  const midpoint = pmStart + pmRange / 2;
+  return pos <= midpoint ? 0 : textLength;
+}
+
+function setSurfaceRangeStart(range: Range, entry: SurfacePmEntry, pos: number): boolean {
+  const textNode = entry.el.firstChild;
+  if (textNode && textNode.nodeType === Node.TEXT_NODE) {
+    range.setStart(textNode, mapPmPosToTextOffset(pos, entry.pmStart, entry.pmEnd, (textNode as Text).length));
+    return true;
+  }
+
+  if (!entry.el.isConnected || !entry.el.parentNode) {
+    return false;
+  }
+
+  if (pos <= entry.pmStart) {
+    range.setStartBefore(entry.el);
+    return true;
+  }
+
+  range.setStartAfter(entry.el);
+  return true;
+}
+
+function setSurfaceRangeEnd(range: Range, entry: SurfacePmEntry, pos: number): boolean {
+  const textNode = entry.el.firstChild;
+  if (textNode && textNode.nodeType === Node.TEXT_NODE) {
+    range.setEnd(textNode, mapPmPosToTextOffset(pos, entry.pmStart, entry.pmEnd, (textNode as Text).length));
+    return true;
+  }
+
+  if (!entry.el.isConnected || !entry.el.parentNode) {
+    return false;
+  }
+
+  if (pos <= entry.pmStart) {
+    range.setEndBefore(entry.el);
+    return true;
+  }
+
+  range.setEndAfter(entry.el);
+  return true;
+}
 
 /**
  * Options for initializing the HeaderFooterSessionManager.
@@ -135,6 +299,11 @@ export type SessionManagerDependencies = {
   setPendingDocChange: () => void;
   /** Get total page count from body layout */
   getBodyPageCount: () => number;
+  /** Get the generic story-session manager when enabled */
+  getStorySessionManager?: () => {
+    activate: (locator: HeaderFooterPartStoryLocator, options?: Record<string, unknown>) => { editor: Editor };
+    exit: () => void;
+  } | null;
 };
 
 /**
@@ -176,6 +345,59 @@ export type SessionManagerCallbacks = {
   }) => void;
 };
 
+type HeaderFooterActivationOptions = {
+  initialSelection?: 'end' | 'defer';
+};
+
+// =============================================================================
+// Helpers
+// =============================================================================
+
+/**
+ * Resolve a `HeaderFooterLayoutResult` into a `ResolvedHeaderFooterLayout`.
+ * Paired with the originals so the decoration provider can deliver aligned
+ * `items` alongside `fragments`.
+ */
+function resolveResult(result: HeaderFooterLayoutResult): ResolvedHeaderFooterLayout {
+  return resolveHeaderFooterLayout(result.layout, result.blocks, result.measures);
+}
+
+function shiftResolvedPaintItemY(item: ResolvedPaintItem, yOffset: number): ResolvedPaintItem {
+  if (item.kind === 'group') {
+    return {
+      ...item,
+      y: item.y + yOffset,
+      children: item.children.map((child) => shiftResolvedPaintItemY(child, yOffset)),
+    };
+  }
+
+  return {
+    ...item,
+    y: item.y + yOffset,
+  };
+}
+
+function normalizeDecorationFragments(fragments: Fragment[], layoutMinY: number): Fragment[] {
+  if (layoutMinY >= 0) {
+    return fragments;
+  }
+
+  const yOffset = -layoutMinY;
+  return fragments.map((fragment) => ({ ...fragment, y: fragment.y + yOffset }));
+}
+
+function normalizeDecorationItems(
+  items: ResolvedPaintItem[] | undefined,
+  layoutMinY: number,
+): ResolvedPaintItem[] | undefined {
+  if (!items || layoutMinY >= 0) {
+    return items;
+  }
+
+  const yOffset = -layoutMinY;
+  return items.map((item) => shiftResolvedPaintItemY(item, yOffset));
+}
+
 // =============================================================================
 // HeaderFooterSessionManager
 // =============================================================================
@@ -194,7 +416,6 @@ export class HeaderFooterSessionManager {
   #headerFooterAdapter: HeaderFooterLayoutAdapter | null = null;
   #headerFooterIdentifier: HeaderFooterIdentifier | null = null;
   #multiSectionIdentifier: MultiSectionHeaderFooterIdentifier | null = null;
-  #overlayManager: EditorOverlayManager | null = null;
   #managerCleanups: Array<() => void> = [];
 
   // Layout results
@@ -202,6 +423,12 @@ export class HeaderFooterSessionManager {
   #footerLayoutResults: HeaderFooterLayoutResult[] | null = null;
   #headerLayoutsByRId: Map<string, HeaderFooterLayoutResult> = new Map();
   #footerLayoutsByRId: Map<string, HeaderFooterLayoutResult> = new Map();
+
+  // Resolved layouts (aligned 1:1 with the results above)
+  #resolvedHeaderLayouts: ResolvedHeaderFooterLayout[] | null = null;
+  #resolvedFooterLayouts: ResolvedHeaderFooterLayout[] | null = null;
+  #resolvedHeaderByRId: Map<string, ResolvedHeaderFooterLayout> = new Map();
+  #resolvedFooterByRId: Map<string, ResolvedHeaderFooterLayout> = new Map();
 
   // Decoration providers
   #headerDecorationProvider: PageDecorationProvider | undefined;
@@ -220,10 +447,15 @@ export class HeaderFooterSessionManager {
   #hoverOverlay: HTMLElement | null = null;
   #hoverTooltip: HTMLElement | null = null;
   #modeBanner: HTMLElement | null = null;
+  #activeBorderLine: HTMLElement | null = null;
   #hoverRegion: HeaderFooterRegion | null = null;
 
   // Document mode
   #documentMode: 'editing' | 'viewing' | 'suggesting' = 'editing';
+  #trackedChangesRenderConfig: HeaderFooterTrackedChangesRenderConfig = {
+    mode: 'review',
+    enabled: true,
+  };
 
   constructor(options: HeaderFooterSessionManagerOptions) {
     this.#options = options;
@@ -318,11 +550,6 @@ export class HeaderFooterSessionManager {
     });
   }
 
-  /** Editor overlay manager */
-  get overlayManager(): EditorOverlayManager | null {
-    return this.#overlayManager;
-  }
-
   /** Header layout results */
   get headerLayoutResults(): HeaderFooterLayoutResult[] | null {
     return this.#headerLayoutResults;
@@ -331,6 +558,7 @@ export class HeaderFooterSessionManager {
   /** Set header layout results */
   set headerLayoutResults(results: HeaderFooterLayoutResult[] | null) {
     this.#headerLayoutResults = results;
+    this.#resolvedHeaderLayouts = results ? results.map(resolveResult) : null;
   }
 
   /** Footer layout results */
@@ -341,6 +569,7 @@ export class HeaderFooterSessionManager {
   /** Set footer layout results */
   set footerLayoutResults(results: HeaderFooterLayoutResult[] | null) {
     this.#footerLayoutResults = results;
+    this.#resolvedFooterLayouts = results ? results.map(resolveResult) : null;
   }
 
   /** Header layouts by rId */
@@ -420,6 +649,26 @@ export class HeaderFooterSessionManager {
    */
   setDocumentMode(mode: 'editing' | 'viewing' | 'suggesting'): void {
     this.#documentMode = mode;
+    if (this.#activeEditor) {
+      this.#applyChildEditorDocumentMode(this.#activeEditor, mode);
+    }
+  }
+
+  setTrackedChangesRenderConfig(config: HeaderFooterTrackedChangesRenderConfig): void {
+    const nextConfig: HeaderFooterTrackedChangesRenderConfig = {
+      mode: config.mode,
+      enabled: config.enabled,
+    };
+
+    if (
+      this.#trackedChangesRenderConfig.mode === nextConfig.mode &&
+      this.#trackedChangesRenderConfig.enabled === nextConfig.enabled
+    ) {
+      return;
+    }
+
+    this.#trackedChangesRenderConfig = nextConfig;
+    this.#headerFooterAdapter?.setTrackedChangesRenderConfig(nextConfig);
   }
 
   /**
@@ -431,6 +680,8 @@ export class HeaderFooterSessionManager {
   ): void {
     this.#headerLayoutResults = headerResults;
     this.#footerLayoutResults = footerResults;
+    this.#resolvedHeaderLayouts = headerResults ? headerResults.map(resolveResult) : null;
+    this.#resolvedFooterLayouts = footerResults ? footerResults.map(resolveResult) : null;
   }
 
   /**
@@ -451,9 +702,6 @@ export class HeaderFooterSessionManager {
     const mediaFiles = optionsMedia ?? storageMedia;
 
     const result = initHeaderFooterRegistry({
-      painterHost: this.#options.painterHost,
-      visibleHost: this.#options.visibleHost,
-      selectionOverlay: this.#options.selectionOverlay,
       editor: this.#options.editor,
       converter,
       mediaFiles,
@@ -470,19 +718,15 @@ export class HeaderFooterSessionManager {
         this.#deps?.setPendingDocChange();
         this.#deps?.scheduleRerender();
       },
-      exitHeaderFooterMode: () => {
-        this.exitMode();
-      },
       previousCleanups: this.#managerCleanups,
       previousAdapter: this.#headerFooterAdapter,
       previousManager: this.#headerFooterManager,
-      previousOverlayManager: this.#overlayManager,
     });
 
-    this.#overlayManager = result.overlayManager;
     this.#headerFooterIdentifier = result.headerFooterIdentifier;
     this.#headerFooterManager = result.headerFooterManager;
     this.#headerFooterAdapter = result.headerFooterAdapter;
+    this.#headerFooterAdapter?.setTrackedChangesRenderConfig(this.#trackedChangesRenderConfig);
     this.#managerCleanups = result.cleanups;
   }
 
@@ -574,6 +818,8 @@ export class HeaderFooterSessionManager {
         if (!region.sectionId) console.error('[HeaderFooterSessionManager] Footer region missing sectionId', region);
       }
     }
+
+    this.#syncActiveBorder();
   }
 
   /**
@@ -708,13 +954,13 @@ export class HeaderFooterSessionManager {
   /**
    * Activate a header/footer region for editing.
    */
-  activateRegion(region: HeaderFooterRegion): void {
+  activateRegion(region: HeaderFooterRegion, options?: HeaderFooterActivationOptions): Promise<Editor | null> {
     const permission = this.#validateEditPermission();
     if (!permission.allowed) {
       this.#callbacks.onEditBlocked?.(permission.reason ?? 'restricted');
-      return;
+      return Promise.resolve(null);
     }
-    void this.#enterMode(region);
+    return this.#enterMode(region, options);
   }
 
   /**
@@ -725,15 +971,11 @@ export class HeaderFooterSessionManager {
 
     // Capture headerFooterRefId before clearing session - needed for cache invalidation
     const editedHeaderId = this.#session.headerFooterRefId;
-
     if (this.#activeEditor) {
-      this.#activeEditor.setEditable(false);
-      this.#activeEditor.setOptions({ documentMode: 'viewing' });
+      this.#applyChildEditorDocumentMode(this.#activeEditor, 'viewing');
     }
     this.#teardownActiveEditorEventBridge();
-
-    this.#overlayManager?.hideEditingOverlay();
-    this.#overlayManager?.showSelectionOverlay();
+    this.#deps?.getStorySessionManager?.()?.exit();
 
     this.#activeEditor = null;
     this.#session = { mode: 'body' };
@@ -765,21 +1007,53 @@ export class HeaderFooterSessionManager {
     this.activateRegion(region);
   }
 
-  async #enterMode(region: HeaderFooterRegion): Promise<void> {
+  #activateStorySessionForRegion(region: HeaderFooterRegion, descriptor: HeaderFooterDescriptor): Editor | null {
+    const storySessionManager = this.#deps?.getStorySessionManager?.() ?? null;
+    if (!storySessionManager) {
+      return null;
+    }
+
+    const locator: HeaderFooterPartStoryLocator = {
+      kind: 'story',
+      storyType: 'headerFooterPart',
+      refId: descriptor.id,
+    };
+
+    const bodyPageCount = this.#deps?.getBodyPageCount() ?? 1;
+    const session = storySessionManager.activate(locator, {
+      // Presentation-mode header/footer sessions now reuse the manager-backed
+      // per-refId editor, which already exports on update. Commit once on exit
+      // to avoid double-syncing every keystroke while still flushing the final
+      // state if the session closes mid-batch.
+      commitPolicy: 'onExit',
+      preferHiddenHost: true,
+      hostWidthPx: Math.max(1, region.width),
+      editorContext: {
+        availableWidth: Math.max(1, region.width),
+        availableHeight: Math.max(1, region.height),
+        currentPageNumber: Math.max(1, region.pageNumber ?? 1),
+        totalPageCount: Math.max(1, bodyPageCount),
+        surfaceKind: region.kind,
+      },
+    });
+
+    return session?.editor ?? null;
+  }
+
+  async #enterMode(region: HeaderFooterRegion, options?: HeaderFooterActivationOptions): Promise<Editor | null> {
     try {
-      if (!this.#headerFooterManager || !this.#overlayManager) {
+      if (!this.#headerFooterManager) {
         this.clearHover();
-        return;
+        return null;
       }
 
       // Clean up previous session if switching between pages while in editing mode
       if (this.#session.mode !== 'body') {
         if (this.#activeEditor) {
-          this.#activeEditor.setEditable(false);
-          this.#activeEditor.setOptions({ documentMode: 'viewing' });
+          this.#applyChildEditorDocumentMode(this.#activeEditor, 'viewing');
         }
         this.#teardownActiveEditorEventBridge();
-        this.#overlayManager.hideEditingOverlay();
+        this.#deps?.getStorySessionManager?.()?.exit();
         this.#activeEditor = null;
         this.#session = { mode: 'body' };
       }
@@ -793,6 +1067,7 @@ export class HeaderFooterSessionManager {
           sectionId: region.sectionId,
           kind: region.kind,
           variant: normalizeVariant(region.sectionType ?? 'default'),
+          addToHistory: false,
         });
         if (materializationResult) {
           // Refresh registry so the new refId is discoverable
@@ -809,12 +1084,12 @@ export class HeaderFooterSessionManager {
           region,
         );
         this.clearHover();
-        return;
+        return null;
       }
       if (!descriptor.id) {
         console.warn('[HeaderFooterSessionManager] Descriptor missing id:', descriptor);
         this.clearHover();
-        return;
+        return null;
       }
 
       // Virtualized pages may not be mounted - scroll into view if needed
@@ -830,7 +1105,7 @@ export class HeaderFooterSessionManager {
               error: new Error('Failed to mount page for editing'),
               context: 'enterMode',
             });
-            return;
+            return null;
           }
           pageElement = this.#deps?.getPageElement(region.pageIndex) ?? null;
         } catch (scrollError) {
@@ -840,7 +1115,7 @@ export class HeaderFooterSessionManager {
             error: scrollError,
             context: 'enterMode.pageMount',
           });
-          return;
+          return null;
         }
       }
 
@@ -851,115 +1126,58 @@ export class HeaderFooterSessionManager {
           error: new Error('Page element not found after mount'),
           context: 'enterMode',
         });
-        return;
+        return null;
       }
 
-      const layoutOptions = this.#deps?.getLayoutOptions() ?? {};
-      const { success, editorHost, reason } = this.#overlayManager.showEditingOverlay(
-        pageElement,
-        region,
-        layoutOptions.zoom ?? 1,
-      );
-      if (!success || !editorHost) {
-        console.error('[HeaderFooterSessionManager] Failed to create editor host:', reason);
+      let editor;
+      const storySessionManager = this.#deps?.getStorySessionManager?.() ?? null;
+      if (!storySessionManager) {
         this.clearHover();
         this.#callbacks.onError?.({
-          error: new Error(`Failed to create editor host: ${reason}`),
-          context: 'enterMode.showOverlay',
+          error: new Error('Story session manager unavailable'),
+          context: 'enterMode.storySessionUnavailable',
         });
-        return;
+        return null;
       }
 
-      const bodyPageCount = this.#deps?.getBodyPageCount() ?? 1;
-      let editor;
       try {
-        editor = await this.#headerFooterManager.ensureEditor(descriptor, {
-          editorHost,
-          availableWidth: region.width,
-          availableHeight: region.height,
-          currentPageNumber: region.pageNumber,
-          totalPageCount: bodyPageCount,
-        });
+        editor = this.#activateStorySessionForRegion(region, descriptor);
       } catch (editorError) {
-        console.error('[HeaderFooterSessionManager] Error creating editor:', editorError);
-        this.#overlayManager.hideEditingOverlay();
+        console.error('[HeaderFooterSessionManager] Error creating story session:', editorError);
         this.clearHover();
         this.#callbacks.onError?.({
           error: editorError,
-          context: 'enterMode.ensureEditor',
+          context: 'enterMode.storySession',
         });
-        return;
+        return null;
       }
 
       if (!editor) {
         console.warn('[HeaderFooterSessionManager] Failed to ensure editor for descriptor:', descriptor);
-        this.#overlayManager.hideEditingOverlay();
         this.clearHover();
         this.#callbacks.onError?.({
           error: new Error('Failed to create editor instance'),
           context: 'enterMode.ensureEditor',
         });
-        return;
+        return null;
       }
 
-      // For footers, apply positioning adjustments
-      if (region.kind === 'footer') {
-        const editorContainer = editorHost.firstElementChild;
-        if (editorContainer instanceof HTMLElement) {
-          editorContainer.style.overflow = 'visible';
-          if (region.minY != null && region.minY < 0) {
-            const shiftDown = Math.abs(region.minY);
-            editorContainer.style.transform = `translateY(${shiftDown}px)`;
-          } else {
-            editorContainer.style.transform = '';
-          }
-        }
-      }
+      const shouldRestoreInitialSelection = options?.initialSelection !== 'defer';
 
       try {
-        editor.setEditable(true);
-        editor.setOptions({ documentMode: 'editing' });
+        this.#applyChildEditorDocumentMode(editor, this.#documentMode);
 
-        // Ensure the header/footer editor receives focus on user interaction.
-        // Without this, subsequent clicks in newly-activated editors may not
-        // update ProseMirror selection because the view never regains focus.
-        try {
-          const editorView = editor.view;
-          if (editorView && editorHost) {
-            const focusHandler = () => {
-              try {
-                editorView.focus();
-              } catch {
-                // Ignore focus errors; selection updates will still work when possible.
-              }
-            };
-            editorHost.addEventListener('mousedown', focusHandler);
-            this.#managerCleanups.push(() => editorHost.removeEventListener('mousedown', focusHandler));
-          }
-        } catch {
-          // Best-effort: if we can't wire the focus handler, continue without it.
-        }
-
-        // Move caret to end of content
-        try {
-          const doc = editor.state?.doc;
-          if (doc) {
-            const endPos = doc.content.size - 1;
-            const pos = Math.max(1, endPos);
-            editor.commands?.setTextSelection?.({ from: pos, to: pos });
-          }
-        } catch (cursorError) {
-          console.warn('[HeaderFooterSessionManager] Could not set cursor to end:', cursorError);
+        if (shouldRestoreInitialSelection) {
+          this.#applyDefaultSelectionAtStoryEnd(editor, 'Could not set cursor to end');
         }
       } catch (editableError) {
         console.error('[HeaderFooterSessionManager] Error setting editor editable:', editableError);
-        this.#overlayManager.hideEditingOverlay();
         this.clearHover();
         this.#callbacks.onError?.({
           error: editableError,
           context: 'enterMode.setEditable',
         });
-        return;
+        return null;
       }
 
       this.#activeEditor = editor;
@@ -981,16 +1199,29 @@ export class HeaderFooterSessionManager {
         console.warn('[HeaderFooterSessionManager] Could not focus editor:', focusError);
       }
 
+      if (shouldRestoreInitialSelection) {
+        // WebKit can keep a stale DOM selection when the hidden story editor
+        // receives focus. Re-applying the PM selection after focus keeps the
+        // first keyboard event aligned with the intended caret position.
+        this.#applyDefaultSelectionAtStoryEnd(editor, 'Could not restore cursor after focus');
+        try {
+          editor.view?.focus();
+        } catch (focusError) {
+          console.warn('[HeaderFooterSessionManager] Could not refocus editor after restoring selection:', focusError);
+        }
+        this.#scheduleSelectionRestoreAfterFocus(editor);
+      }
+
       this.#emitModeChanged();
       this.#emitEditingContext(editor);
       this.#deps?.notifyInputBridgeTargetChanged();
+      return editor;
     } catch (error) {
       console.error('[HeaderFooterSessionManager] Unexpected error in enterMode:', error);
 
       // Attempt cleanup
       try {
-        this.#overlayManager?.hideEditingOverlay();
-        this.#overlayManager?.showSelectionOverlay();
+        this.#deps?.getStorySessionManager?.()?.exit();
         this.clearHover();
         this.#teardownActiveEditorEventBridge();
         this.#activeEditor = null;
@@ -1003,7 +1234,75 @@ export class HeaderFooterSessionManager {
         error,
         context: 'enterMode',
       });
+      return null;
     }
+  }
+
+  #applyChildEditorDocumentMode(editor: Editor, mode: 'editing' | 'viewing' | 'suggesting'): void {
+    const pm = editor.view?.dom ?? null;
+
+    if (mode === 'viewing') {
+      editor.commands?.enableTrackChangesShowOriginal?.();
+      editor.setOptions?.({ documentMode: 'viewing' });
+      editor.setEditable?.(false);
+    } else if (mode === 'suggesting') {
+      editor.commands?.disableTrackChangesShowOriginal?.();
+      editor.commands?.enableTrackChanges?.();
+      editor.setOptions?.({ documentMode: 'suggesting' });
+      editor.setEditable?.(true);
+    } else {
+      editor.commands?.disableTrackChangesShowOriginal?.();
+      editor.commands?.disableTrackChanges?.();
+      editor.setOptions?.({ documentMode: 'editing' });
+      editor.setEditable?.(true);
+    }
+
+    if (pm instanceof HTMLElement) {
+      pm.setAttribute('aria-readonly', mode === 'viewing' ? 'true' : 'false');
+      pm.setAttribute('documentmode', mode);
+      pm.classList.toggle('view-mode', mode === 'viewing');
+    }
+  }
+
+  #getDefaultSelectionAtStoryEnd(editor: Editor): { from: number; to: number } | null {
+    const doc = editor.state?.doc;
+    if (!doc) return null;
+
+    const endPos = doc.content.size - 1;
+    const pos = Math.max(1, endPos);
+    return { from: pos, to: pos };
+  }
+
+  #applyEditorTextSelection(editor: Editor, selection: { from: number; to: number }, warningMessage: string): void {
+    try {
+      editor.commands?.setTextSelection?.(selection);
+    } catch (error) {
+      console.warn(`[HeaderFooterSessionManager] ${warningMessage}:`, error);
+    }
+  }
+
+  #applyDefaultSelectionAtStoryEnd(editor: Editor, warningMessage: string): void {
+    const selection = this.#getDefaultSelectionAtStoryEnd(editor);
+    if (!selection) return;
+    this.#applyEditorTextSelection(editor, selection, warningMessage);
+  }
+
+  #scheduleSelectionRestoreAfterFocus(editor: Editor): void {
+    const win = editor.view?.dom?.ownerDocument?.defaultView;
+    if (!win) return;
+
+    win.requestAnimationFrame(() => {
+      if (this.#activeEditor !== editor || this.#session.mode === 'body') {
+        return;
+      }
+
+      this.#applyDefaultSelectionAtStoryEnd(editor, 'Could not restore cursor on the next frame');
+      try {
+        editor.view?.focus();
+      } catch (focusError) {
+        console.warn('[HeaderFooterSessionManager] Could not refocus editor on the next frame:', focusError);
+      }
+    });
   }
 
   #validateEditPermission(): { allowed: boolean; reason?: string } {
@@ -1042,6 +1341,7 @@ export class HeaderFooterSessionManager {
     this.#callbacks.onModeChanged?.(this.#session);
     this.#callbacks.onUpdateAwarenessSession?.(this.#session);
     this.#updateModeBanner();
+    this.#syncActiveBorder();
   }
 
   #emitEditingContext(editor: Editor): void {
@@ -1175,6 +1475,55 @@ export class HeaderFooterSessionManager {
     return this.#hoverRegion;
   }
 
+  #getActiveRegion(): HeaderFooterRegion | null {
+    if (this.#session.mode === 'header') {
+      return this.#headerRegions.get(this.#session.pageIndex ?? -1) ?? null;
+    }
+
+    if (this.#session.mode === 'footer') {
+      return this.#footerRegions.get(this.#session.pageIndex ?? -1) ?? null;
+    }
+
+    return null;
+  }
+
+  #hideActiveBorder(): void {
+    if (this.#activeBorderLine) {
+      this.#activeBorderLine.remove();
+      this.#activeBorderLine = null;
+    }
+  }
+
+  #syncActiveBorder(): void {
+    this.#hideActiveBorder();
+
+    const region = this.#getActiveRegion();
+    if (!region || this.#session.mode === 'body') {
+      return;
+    }
+
+    const pageElement = this.#deps?.getPageElement(region.pageIndex);
+    if (!pageElement) {
+      return;
+    }
+
+    const borderLine = pageElement.ownerDocument.createElement('div');
+    borderLine.className = 'superdoc-header-footer-border';
+    Object.assign(borderLine.style, {
+      position: 'absolute',
+      left: '0',
+      right: '0',
+      top: `${region.kind === 'header' ? region.localY + region.height : region.localY}px`,
+      height: '1px',
+      backgroundColor: '#4472c4',
+      pointerEvents: 'none',
+      zIndex: '8',
+    });
+
+    pageElement.appendChild(borderLine);
+    this.#activeBorderLine = borderLine;
+  }
+
   // ===========================================================================
   // Layout
   // ===========================================================================
@@ -1274,10 +1623,20 @@ export class HeaderFooterSessionManager {
     layout: Layout,
     sectionMetadata: SectionMetadata[],
   ): Promise<void> {
-    return await layoutPerRIdHeaderFooters(headerFooterInput, layout, sectionMetadata, {
+    await layoutPerRIdHeaderFooters(headerFooterInput, layout, sectionMetadata, {
       headerLayoutsByRId: this.#headerLayoutsByRId,
       footerLayoutsByRId: this.#footerLayoutsByRId,
     });
+
+    // Rebuild resolved maps aligned 1:1 with the raw rId maps.
+    this.#resolvedHeaderByRId.clear();
+    for (const [key, result] of this.#headerLayoutsByRId) {
+      this.#resolvedHeaderByRId.set(key, resolveResult(result));
+    }
+    this.#resolvedFooterByRId.clear();
+    for (const [key, result] of this.#footerLayoutsByRId) {
+      this.#resolvedFooterByRId.set(key, resolveResult(result));
+    }
   }
 
   #computeMetrics(
@@ -1377,15 +1736,9 @@ export class HeaderFooterSessionManager {
   /**
    * Compute selection rectangles in header/footer mode.
    *
-   * This method intentionally does NOT use layout-engine geometry. Header/footer
-   * editing is driven by a dedicated ProseMirror editor instance mounted inside
-   * an overlay host. For selection, we rely on the browser's native DOM selection
-   * rectangles from that editor and then remap them into layout coordinates using
-   * the current region and body page height.
-   *
-   * Selection rectangles are therefore derived from:
-   * - Native ProseMirror selection → DOM Range → client rects
-   * - Header/footer region → pageIndex / local offset
+   * Header/footer editing uses a hidden off-screen ProseMirror host, so the
+   * visible selection overlay must be derived from the rendered header/footer
+   * layout rather than from the editor DOM.
    */
   computeSelectionRects(from: number, to: number): LayoutRect[] {
     // Guard: must be in header/footer mode with an active editor and region context.
@@ -1411,29 +1764,14 @@ export class HeaderFooterSessionManager {
 
     const region = context.region;
     const pageIndex = region.pageIndex;
+    const bodyPageHeight = this.#deps?.getBodyPageHeight() ?? this.#options.defaultPageSize.h;
 
-    // Compute DOM-based rectangles local to the editor host. We intentionally
-    // ignore the numeric from/to arguments and any cached ProseMirror
-    // selection, and instead rely solely on the live DOM selection inside the
-    // active header/footer editor. This avoids stale selection state when
-    // switching between multiple header/footer editors.
-    const domSelection = view.dom.ownerDocument?.getSelection?.();
-    let domRectList: DOMRect[] = [];
-
-    if (domSelection && domSelection.rangeCount > 0) {
-      for (let i = 0; i < domSelection.rangeCount; i += 1) {
-        const range = domSelection.getRangeAt(i);
-        if (!range) continue;
-        const rangeRects = Array.from(range.getClientRects()) as unknown as DOMRect[];
-        domRectList.push(...rangeRects);
-      }
-
-      // Normalize to a minimal set of rects. Browsers often return both a
-      // line-box rect and a text-content rect on the same line; without
-      // deduplication this produces overlapping highlights that look like
-      // intersecting selections.
-      domRectList = deduplicateOverlappingRects(domRectList);
+    const hiddenHostRects = this.#computeHiddenHostSelectionRects(context, from, to, bodyPageHeight);
+    if (hiddenHostRects) {
+      return hiddenHostRects;
     }
+
+    const domRectList = this.#computeEditorRangeClientRects(view, from, to);
 
     if (!domRectList.length) {
       return [];
@@ -1447,7 +1785,6 @@ export class HeaderFooterSessionManager {
     // deltas and sizes must be converted back out of zoom space here.
     const editorDom = view.dom as HTMLElement;
     const editorHostRect = editorDom.getBoundingClientRect();
-    const bodyPageHeight = this.#deps?.getBodyPageHeight() ?? this.#options.defaultPageSize.h;
     const layoutOptions = this.#deps?.getLayoutOptions() ?? {};
     const zoom =
       typeof layoutOptions.zoom === 'number' && Number.isFinite(layoutOptions.zoom) && layoutOptions.zoom > 0
@@ -1487,6 +1824,356 @@ export class HeaderFooterSessionManager {
     return layoutRects;
   }
 
+  #computeHiddenHostSelectionRects(
+    context: HeaderFooterLayoutContext,
+    from: number,
+    to: number,
+    bodyPageHeight: number,
+  ): LayoutRect[] | null {
+    const activeEditor = this.#activeEditor;
+    const editorDom = activeEditor?.view?.dom as HTMLElement | null;
+    if (!editorDom?.closest?.('.presentation-editor__story-hidden-host')) {
+      return null;
+    }
+
+    const visibleSurfaceRects = this.#computeVisibleSurfaceSelectionRects(context, from, to, bodyPageHeight);
+    if (visibleSurfaceRects?.length) {
+      return visibleSurfaceRects;
+    }
+
+    const localRects = selectionToRects(context.layout, context.blocks, context.measures, from, to) ?? [];
+    if (localRects.length) {
+      return localRects.map((rect) => ({
+        pageIndex: context.region.pageIndex,
+        x: context.region.localX + rect.x,
+        y: context.region.pageIndex * bodyPageHeight + context.region.localY + rect.y,
+        width: rect.width,
+        height: rect.height,
+      }));
+    }
+
+    const liveRect = activeEditor
+      ? this.#computeHiddenHostLiveRangeRect(activeEditor, from, to, context, bodyPageHeight)
+      : null;
+    return liveRect ? [liveRect] : [];
+  }
+
+  #computeVisibleSurfaceSelectionRects(
+    context: HeaderFooterLayoutContext,
+    from: number,
+    to: number,
+    bodyPageHeight: number,
+  ): LayoutRect[] | null {
+    const pageElement = this.#deps?.getPageElement(context.region.pageIndex);
+    if (!pageElement) {
+      return null;
+    }
+
+    const surfaceSelector = this.#session.mode === 'header' ? '.superdoc-page-header' : '.superdoc-page-footer';
+    const surfaceElement = pageElement.querySelector<HTMLElement>(surfaceSelector);
+    if (!surfaceElement) {
+      return null;
+    }
+
+    const entries = buildSurfacePmEntries(surfaceElement);
+    const surfaceEntries = findSurfaceEntriesInRange(entries, from, to, { boundaryInclusive: true });
+    if (!surfaceEntries.length) {
+      return null;
+    }
+
+    const start = Math.min(from, to);
+    const end = Math.max(from, to);
+    const startEntry =
+      surfaceEntries.find((entry) => start >= entry.pmStart && start <= entry.pmEnd) ?? surfaceEntries[0] ?? null;
+    const endEntry =
+      surfaceEntries.find((entry) => end >= entry.pmStart && end <= entry.pmEnd) ??
+      surfaceEntries[surfaceEntries.length - 1] ??
+      null;
+    if (!startEntry || !endEntry) {
+      return null;
+    }
+
+    const doc = pageElement.ownerDocument;
+    if (!doc?.createRange) {
+      return null;
+    }
+
+    const range = doc.createRange();
+    try {
+      if (!setSurfaceRangeStart(range, startEntry, start)) {
+        return null;
+      }
+      if (!setSurfaceRangeEnd(range, endEntry, end)) {
+        return null;
+      }
+    } catch {
+      return null;
+    }
+
+    let clientRects: DOMRect[] = [];
+    try {
+      clientRects = deduplicateOverlappingRects(Array.from(range.getClientRects()) as unknown as DOMRect[]);
+    } catch {
+      return null;
+    }
+
+    if (!clientRects.length) {
+      return null;
+    }
+
+    const layoutOptions = this.#deps?.getLayoutOptions() ?? {};
+    const zoom =
+      typeof layoutOptions.zoom === 'number' && Number.isFinite(layoutOptions.zoom) && layoutOptions.zoom > 0
+        ? layoutOptions.zoom
+        : 1;
+    const pageRect = pageElement.getBoundingClientRect();
+
+    const layoutRects: LayoutRect[] = [];
+    for (const clientRect of clientRects) {
+      const width = clientRect.width / zoom;
+      const height = clientRect.height / zoom;
+      if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+        continue;
+      }
+
+      const localX = (clientRect.left - pageRect.left) / zoom;
+      const localY = (clientRect.top - pageRect.top) / zoom;
+      if (!Number.isFinite(localX) || !Number.isFinite(localY)) {
+        continue;
+      }
+
+      layoutRects.push({
+        pageIndex: context.region.pageIndex,
+        x: localX,
+        y: context.region.pageIndex * bodyPageHeight + localY,
+        width: Math.max(1, width),
+        height: Math.max(1, height),
+      });
+    }
+
+    return layoutRects.length ? layoutRects : null;
+  }
+
+  #computeVisibleSurfaceCaretRect(
+    context: HeaderFooterLayoutContext,
+    pos: number,
+    bodyPageHeight: number,
+  ): LayoutRect | null {
+    const pageElement = this.#deps?.getPageElement(context.region.pageIndex);
+    if (!pageElement) {
+      return null;
+    }
+
+    const surfaceSelector = this.#session.mode === 'header' ? '.superdoc-page-header' : '.superdoc-page-footer';
+    const surfaceElement = pageElement.querySelector<HTMLElement>(surfaceSelector);
+    if (!surfaceElement) {
+      return null;
+    }
+
+    const entries = buildSurfacePmEntries(surfaceElement);
+    const entry = findSurfaceEntryAtPos(entries, pos);
+    if (!entry) {
+      return null;
+    }
+
+    const pageRect = pageElement.getBoundingClientRect();
+    const zoom =
+      typeof this.#deps?.getLayoutOptions()?.zoom === 'number' &&
+      Number.isFinite(this.#deps?.getLayoutOptions()?.zoom) &&
+      (this.#deps?.getLayoutOptions()?.zoom ?? 0) > 0
+        ? (this.#deps?.getLayoutOptions()?.zoom as number)
+        : 1;
+
+    const textNode = Array.from(entry.el.childNodes).find((node): node is Text => node.nodeType === Node.TEXT_NODE);
+    if (textNode) {
+      const range = entry.el.ownerDocument?.createRange();
+      if (!range) {
+        return null;
+      }
+
+      const charIndex = mapPmPosToTextOffset(pos, entry.pmStart, entry.pmEnd, textNode.length);
+      range.setStart(textNode, charIndex);
+      range.setEnd(textNode, charIndex);
+
+      const rangeRect = range.getBoundingClientRect();
+      if (!Number.isFinite(rangeRect.left) || !Number.isFinite(rangeRect.top) || rangeRect.height <= 0) {
+        return null;
+      }
+
+      return {
+        pageIndex: context.region.pageIndex,
+        x: (rangeRect.left - pageRect.left) / zoom,
+        y: context.region.pageIndex * bodyPageHeight + (rangeRect.top - pageRect.top) / zoom,
+        width: 1,
+        height: Math.max(1, rangeRect.height / zoom),
+      };
+    }
+
+    const elementRect = entry.el.getBoundingClientRect();
+    if (!Number.isFinite(elementRect.left) || !Number.isFinite(elementRect.top) || elementRect.height <= 0) {
+      return null;
+    }
+
+    const localX = (pos <= entry.pmStart ? elementRect.left : elementRect.right) - pageRect.left;
+    return {
+      pageIndex: context.region.pageIndex,
+      x: localX / zoom,
+      y: context.region.pageIndex * bodyPageHeight + (elementRect.top - pageRect.top) / zoom,
+      width: 1,
+      height: Math.max(1, elementRect.height / zoom),
+    };
+  }
+
+  #computeHiddenHostLiveRangeRect(
+    editor: Editor,
+    from: number,
+    to: number,
+    context: HeaderFooterLayoutContext,
+    bodyPageHeight: number,
+  ): LayoutRect | null {
+    const view = editor.view as
+      | (Editor['view'] & {
+          coordsAtPos?: (pos: number, side?: number) => { left: number; right: number; top: number; bottom: number };
+        })
+      | null
+      | undefined;
+
+    if (!view || typeof view.coordsAtPos !== 'function') {
+      return null;
+    }
+
+    const docSize = editor.state?.doc?.content?.size ?? 0;
+    const start = Math.max(0, Math.min(Math.min(from, to), docSize));
+    const end = Math.max(0, Math.min(Math.max(from, to), docSize));
+
+    const layoutOptions = this.#deps?.getLayoutOptions() ?? {};
+    const zoom =
+      typeof layoutOptions.zoom === 'number' && Number.isFinite(layoutOptions.zoom) && layoutOptions.zoom > 0
+        ? layoutOptions.zoom
+        : 1;
+    const editorHostRect = view.dom.getBoundingClientRect();
+
+    try {
+      const startCoords = view.coordsAtPos(start);
+      const endCoords = start === end ? startCoords : view.coordsAtPos(end, -1);
+      const left = Math.min(startCoords.left, endCoords.left);
+      const right = Math.max(startCoords.right, endCoords.right);
+      const top = Math.min(startCoords.top, endCoords.top);
+      const bottom = Math.max(startCoords.bottom, endCoords.bottom);
+      const width = Math.max(1, (right - left) / zoom);
+      const height = Math.max(1, (bottom - top) / zoom);
+      const localX = (left - editorHostRect.left) / zoom;
+      const localY = (top - editorHostRect.top) / zoom;
+
+      if (!Number.isFinite(localX) || !Number.isFinite(localY)) {
+        return null;
+      }
+
+      return {
+        pageIndex: context.region.pageIndex,
+        x: context.region.localX + localX,
+        y: context.region.pageIndex * bodyPageHeight + context.region.localY + localY,
+        width,
+        height,
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  #computeEditorRangeClientRects(view: Editor['view'], from: number, to: number): DOMRect[] {
+    if (!Number.isFinite(from) || !Number.isFinite(to)) {
+      return [];
+    }
+
+    const docSize = view.state?.doc?.content?.size ?? 0;
+    const start = Math.max(0, Math.min(Math.min(from, to), docSize));
+    const end = Math.max(0, Math.min(Math.max(from, to), docSize));
+    if (start === end || typeof view.domAtPos !== 'function') {
+      return [];
+    }
+
+    const doc = view.dom.ownerDocument;
+    const range = doc?.createRange?.();
+    if (!range) {
+      return [];
+    }
+
+    try {
+      const startBoundary = view.domAtPos(start);
+      const endBoundary = view.domAtPos(end);
+      range.setStart(startBoundary.node, startBoundary.offset);
+      range.setEnd(endBoundary.node, endBoundary.offset);
+    } catch {
+      return [];
+    }
+
+    try {
+      const clientRects = Array.from(range.getClientRects()) as unknown as DOMRect[];
+      return deduplicateOverlappingRects(clientRects);
+    } catch {
+      return [];
+    }
+  }
+
+  computeCaretRect(pos: number): LayoutRect | null {
+    if (this.#session.mode === 'body') {
+      return null;
+    }
+
+    const context = this.getContext();
+    if (!context) {
+      return null;
+    }
+
+    const region = context.region;
+    const bodyPageHeight = this.#deps?.getBodyPageHeight() ?? this.#options.defaultPageSize.h;
+    const visibleSurfaceCaretRect = this.#computeVisibleSurfaceCaretRect(context, pos, bodyPageHeight);
+    if (visibleSurfaceCaretRect) {
+      return visibleSurfaceCaretRect;
+    }
+
+    const layoutOptions = this.#deps?.getLayoutOptions() ?? {};
+    const geometry = computeCaretLayoutRectGeometryFromHelper(
+      {
+        layout: context.layout,
+        blocks: context.blocks,
+        measures: context.measures,
+        painterHost: null,
+        viewportHost: this.#options.visibleHost,
+        visibleHost: this.#options.visibleHost,
+        zoom: layoutOptions.zoom ?? 1,
+      },
+      pos,
+      false,
+    );
+
+    if (geometry) {
+      return {
+        pageIndex: region.pageIndex,
+        x: region.localX + geometry.x,
+        y: region.pageIndex * bodyPageHeight + region.localY + geometry.y,
+        width: 1,
+        height: geometry.height,
+      };
+    }
+
+    const liveRect = this.#activeEditor
+      ? this.#computeHiddenHostLiveRangeRect(this.#activeEditor, pos, pos, context, bodyPageHeight)
+      : null;
+    if (liveRect) {
+      return {
+        pageIndex: liveRect.pageIndex,
+        x: liveRect.x,
+        y: liveRect.y,
+        width: 1,
+        height: liveRect.height,
+      };
+    }
+
+    return null;
+  }
+
   /**
    * Get the current header/footer layout context.
    */
@@ -1504,27 +2191,18 @@ export class HeaderFooterSessionManager {
       return null;
     }
 
-    const results = this.#session.mode === 'header' ? this.#headerLayoutResults : this.#footerLayoutResults;
-    if (!results || results.length === 0) {
+    const activeLayoutResult = this.#resolveActiveLayoutResult(region);
+    if (!activeLayoutResult) {
       console.warn('[HeaderFooterSessionManager] Header/footer layout results not available');
       return null;
     }
 
-    const variant = results.find((entry) => entry.type === this.#session.sectionType) ?? results[0] ?? null;
-    if (!variant) {
-      console.warn(
-        '[HeaderFooterSessionManager] Header/footer variant not found for sectionType:',
-        this.#session.sectionType,
-      );
-      return null;
-    }
-
     const pageWidth = Math.max(1, region.width);
-    const pageHeight = Math.max(1, variant.layout.height ?? region.height ?? 1);
+    const pageHeight = Math.max(1, activeLayoutResult.layout.height ?? region.height ?? 1);
 
     const layoutLike: Layout = {
       pageSize: { w: pageWidth, h: pageHeight },
-      pages: variant.layout.pages.map((page: Page) => ({
+      pages: activeLayoutResult.layout.pages.map((page: Page) => ({
         number: page.number,
         numberText: page.numberText,
         fragments: page.fragments,
@@ -1533,10 +2211,30 @@ export class HeaderFooterSessionManager {
 
     return {
       layout: layoutLike,
-      blocks: variant.blocks,
-      measures: variant.measures,
+      blocks: activeLayoutResult.blocks,
+      measures: activeLayoutResult.measures,
       region,
     };
+  }
+
+  #resolveActiveLayoutResult(region: HeaderFooterRegion): HeaderFooterLayoutResult | null {
+    const layoutsByRId = this.#session.mode === 'header' ? this.#headerLayoutsByRId : this.#footerLayoutsByRId;
+    const concreteRefId = this.#session.headerFooterRefId ?? region.headerFooterRefId ?? null;
+
+    if (concreteRefId && layoutsByRId.size > 0) {
+      const compositeKey = buildSectionAwareHeaderFooterLayoutKey(concreteRefId, region.sectionIndex ?? 0);
+      const layoutByRef = layoutsByRId.get(compositeKey) ?? layoutsByRId.get(concreteRefId) ?? null;
+      if (layoutByRef) {
+        return layoutByRef;
+      }
+    }
+
+    const results = this.#session.mode === 'header' ? this.#headerLayoutResults : this.#footerLayoutResults;
+    if (!results || results.length === 0) {
+      return null;
+    }
+
+    return results.find((entry) => entry.type === this.#session.sectionType) ?? results[0] ?? null;
   }
 
   /**
@@ -1572,12 +2270,46 @@ export class HeaderFooterSessionManager {
     this.rebuildRegions(layout);
   }
 
+  private resolveAlignedDecorationItems(
+    fragments: Fragment[],
+    slotPageNumber: number,
+    result: HeaderFooterLayoutResult,
+    cachedResolvedLayout: ResolvedHeaderFooterLayout | undefined,
+    contextLabel: string,
+  ): ResolvedPaintItem[] | undefined {
+    const cachedPage = cachedResolvedLayout?.pages.find((page) => page.number === slotPageNumber);
+    const cachedItems = cachedPage?.items;
+    if (cachedItems && cachedItems.length === fragments.length) {
+      return cachedItems;
+    }
+    if (cachedItems) {
+      console.warn(
+        `[HeaderFooterSessionManager] Resolved items length (${cachedItems.length}) does not match fragments length (${fragments.length}) for ${contextLabel}. Recomputing items.`,
+      );
+    }
+
+    const freshResolvedLayout = resolveHeaderFooterLayout(result.layout, result.blocks, result.measures);
+    const freshPage = freshResolvedLayout.pages.find((page) => page.number === slotPageNumber);
+    const freshItems = freshPage?.items;
+    if (freshItems && freshItems.length === fragments.length) {
+      return freshItems;
+    }
+    if (freshItems) {
+      console.warn(
+        `[HeaderFooterSessionManager] Fresh resolved items length (${freshItems.length}) does not match fragments length (${fragments.length}) for ${contextLabel}. Dropping items.`,
+      );
+    }
+    return undefined;
+  }
+
   /**
    * Create a decoration provider for header or footer rendering.
    */
   createDecorationProvider(kind: 'header' | 'footer', layout: Layout): PageDecorationProvider | undefined {
     const results = kind === 'header' ? this.#headerLayoutResults : this.#footerLayoutResults;
     const layoutsByRId = kind === 'header' ? this.#headerLayoutsByRId : this.#footerLayoutsByRId;
+    const resolvedResults = kind === 'header' ? this.#resolvedHeaderLayouts : this.#resolvedFooterLayouts;
+    const resolvedByRId = kind === 'header' ? this.#resolvedHeaderByRId : this.#resolvedFooterByRId;
 
     if ((!results || results.length === 0) && (!layoutsByRId || layoutsByRId.size === 0)) {
       return undefined;
@@ -1652,6 +2384,14 @@ export class HeaderFooterSessionManager {
           const slotPage = this.#findPageForNumber(rIdLayout.layout.pages, pageNumber);
           if (slotPage) {
             const fragments = slotPage.fragments ?? [];
+            const resolvedLayout = resolvedByRId.get(rIdLayoutKey);
+            const alignedItems = this.resolveAlignedDecorationItems(
+              fragments,
+              slotPage.number,
+              rIdLayout,
+              resolvedLayout,
+              `rId '${rIdLayoutKey}' page ${pageNumber}`,
+            );
             const pageHeight = page?.size?.h ?? layout.pageSize?.h ?? layoutOptions.pageSize?.h ?? defaultPageSize.h;
             const margins = pageMargins ?? layout.pages[0]?.margins ?? layoutOptions.margins ?? defaultMargins;
             const decorationMargins =
@@ -1666,11 +2406,12 @@ export class HeaderFooterSessionManager {
             const metrics = this.#computeMetrics(kind, rawLayoutHeight, box, pageHeight, margins?.footer ?? 0);
 
             const layoutMinY = rIdLayout.layout.minY ?? 0;
-            const normalizedFragments =
-              layoutMinY < 0 ? fragments.map((f) => ({ ...f, y: f.y - layoutMinY })) : fragments;
+            const normalizedFragments = normalizeDecorationFragments(fragments, layoutMinY);
+            const normalizedItems = normalizeDecorationItems(alignedItems, layoutMinY);
 
             return {
               fragments: normalizedFragments,
+              items: normalizedItems,
               height: metrics.containerHeight,
               contentHeight: metrics.layoutHeight > 0 ? metrics.layoutHeight : metrics.containerHeight,
               offset: metrics.offset,
@@ -1691,7 +2432,8 @@ export class HeaderFooterSessionManager {
         return null;
       }
 
-      const variant = results.find((entry) => entry.type === headerFooterType);
+      const variantIndex = results.findIndex((entry) => entry.type === headerFooterType);
+      const variant = variantIndex >= 0 ? results[variantIndex] : undefined;
       if (!variant || !variant.layout?.pages?.length) {
         return null;
       }
@@ -1701,6 +2443,15 @@ export class HeaderFooterSessionManager {
         return null;
       }
       const fragments = slotPage.fragments ?? [];
+
+      const resolvedVariant = resolvedResults?.[variantIndex];
+      const alignedVariantItems = this.resolveAlignedDecorationItems(
+        fragments,
+        slotPage.number,
+        variant,
+        resolvedVariant,
+        `variant '${headerFooterType}' page ${pageNumber}`,
+      );
 
       const pageHeight = page?.size?.h ?? layout.pageSize?.h ?? layoutOptions.pageSize?.h ?? defaultPageSize.h;
       const margins = pageMargins ?? layout.pages[0]?.margins ?? layoutOptions.margins ?? defaultMargins;
@@ -1714,10 +2465,12 @@ export class HeaderFooterSessionManager {
       const finalHeaderId = sectionRId ?? fallbackId ?? undefined;
 
       const layoutMinY = variant.layout.minY ?? 0;
-      const normalizedFragments = layoutMinY < 0 ? fragments.map((f) => ({ ...f, y: f.y - layoutMinY })) : fragments;
+      const normalizedFragments = normalizeDecorationFragments(fragments, layoutMinY);
+      const normalizedItems = normalizeDecorationItems(alignedVariantItems, layoutMinY);
 
       return {
         fragments: normalizedFragments,
+        items: normalizedItems,
         height: metrics.containerHeight,
         contentHeight: metrics.layoutHeight > 0 ? metrics.layoutHeight : metrics.containerHeight,
         offset: metrics.offset,
@@ -1798,6 +2551,10 @@ export class HeaderFooterSessionManager {
     this.#footerLayoutResults = null;
     this.#headerLayoutsByRId.clear();
     this.#footerLayoutsByRId.clear();
+    this.#resolvedHeaderLayouts = null;
+    this.#resolvedFooterLayouts = null;
+    this.#resolvedHeaderByRId.clear();
+    this.#resolvedFooterByRId.clear();
 
     // Clear decoration providers
     this.#headerDecorationProvider = undefined;
@@ -1812,12 +2569,10 @@ export class HeaderFooterSessionManager {
     this.#activeEditor = null;
 
     // Clear UI references
+    this.#hideActiveBorder();
     this.#hoverOverlay = null;
     this.#hoverTooltip = null;
     this.#modeBanner = null;
     this.#hoverRegion = null;
-
-    // Clear overlay manager
-    this.#overlayManager = null;
   }
 }

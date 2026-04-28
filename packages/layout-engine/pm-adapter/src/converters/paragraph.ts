@@ -49,6 +49,7 @@ import { structuredContentNodeToBlocks } from './inline-converters/structured-co
 import { pageReferenceNodeToBlock } from './inline-converters/page-reference.js';
 import { fieldAnnotationNodeToRun } from './inline-converters/field-annotation.js';
 import { bookmarkStartNodeToBlocks } from './inline-converters/bookmark-start.js';
+import { bookmarkEndNodeToRun } from './inline-converters/bookmark-end.js';
 import { tabNodeToRun } from './inline-converters/tab.js';
 import { tokenNodeToRun } from './inline-converters/generic-token.js';
 import { imageNodeToRun } from './inline-converters/image.js';
@@ -89,7 +90,7 @@ const isHiddenShape = (node: PMNode): boolean => {
 /**
  * Helper to check if a run is a text run.
  */
-const isTextRun = (run: Run): run is TextRun => {
+export const isTextRun = (run: Run): run is TextRun => {
   const kind = (run as { kind?: string }).kind;
   return (kind === undefined || kind === 'text') && 'text' in run;
 };
@@ -213,6 +214,43 @@ export function mergeAdjacentRuns(runs: Run[]): Run[] {
 }
 
 /**
+ * Expands text runs that contain inline newlines into multiple runs.
+ *
+ * @param {Run[]} runs - The runs to expand
+ * @returns {Run[]} The expanded runs
+ */
+export function expandRunsForInlineNewlines(runs: Run[]): Run[] {
+  const result: Run[] = [];
+  for (const run of runs) {
+    const textRun = run as TextRun;
+    if ('text' in run && typeof textRun.text === 'string' && textRun.text.includes('\n')) {
+      const segments = textRun.text.split('\n');
+      let cursor = textRun.pmStart ?? 0;
+      segments.forEach((segment, idx) => {
+        if (segment.length > 0) {
+          result.push({ ...textRun, text: segment, pmStart: cursor, pmEnd: cursor + segment.length });
+          cursor += segment.length;
+        }
+        if (idx !== segments.length - 1) {
+          result.push({
+            kind: 'break',
+            breakType: 'line',
+            pmStart: cursor,
+            pmEnd: cursor + 1,
+            sdt: textRun.sdt,
+            trackedChange: textRun.trackedChange,
+          });
+          cursor += 1;
+        }
+      });
+    } else {
+      result.push(run);
+    }
+  }
+  return result;
+}
+
+/**
  * Extracts the default font family and size from paragraph properties.
  * Used for creating default runs in empty paragraphs.
  * @param converterContext - Converter context with document styles
@@ -249,7 +287,10 @@ const toTrackChangeAttrs = (value: unknown): Record<string, unknown> | undefined
 
 // Paragraph-mark revisions are stored in paragraphProperties.runProperties (pPr/rPr), not inline text marks.
 // Convert them into mark-like metadata so tracked-change filtering can reuse the same projection pipeline.
-const getParagraphMarkTrackedChange = (paragraphProperties: ParagraphProperties): TrackedChangeMeta | undefined => {
+const getParagraphMarkTrackedChange = (
+  paragraphProperties: ParagraphProperties,
+  storyKey?: string,
+): TrackedChangeMeta | undefined => {
   const runProperties =
     paragraphProperties?.runProperties && typeof paragraphProperties.runProperties === 'object'
       ? (paragraphProperties.runProperties as Record<string, unknown>)
@@ -271,7 +312,7 @@ const getParagraphMarkTrackedChange = (paragraphProperties: ParagraphProperties)
   if (trackDeleteAttrs) {
     marks.push({ type: 'trackDelete', attrs: trackDeleteAttrs });
   }
-  return collectTrackedChangeFromMarks(marks);
+  return collectTrackedChangeFromMarks(marks, storyKey);
 };
 
 const isEmptyTextRun = (run: Run): boolean => {
@@ -509,6 +550,7 @@ export function paragraphToFlowBlocks({
   para,
   nextBlockId,
   positions,
+  storyKey,
   trackedChangesConfig,
   bookmarks,
   hyperlinkConfig = DEFAULT_HYPERLINK_CONFIG,
@@ -572,7 +614,7 @@ export function paragraphToFlowBlocks({
     if (paragraphProps.runProperties?.vanish) {
       return blocks;
     }
-    const paragraphMarkTrackedChange = getParagraphMarkTrackedChange(paragraphProps);
+    const paragraphMarkTrackedChange = getParagraphMarkTrackedChange(paragraphProps, storyKey);
     // Get the PM position of the empty paragraph for caret rendering
     const paraPos = positions.get(para);
     const emptyRun: TextRun = {
@@ -619,6 +661,7 @@ export function paragraphToFlowBlocks({
       applyMarksToRun,
       themeColors,
       enableComments,
+      storyKey,
     );
 
     // Ghost list artifact suppression only applies in markup/review modes.
@@ -726,6 +769,7 @@ export function paragraphToFlowBlocks({
     const inlineConverterParams = {
       node: node,
       positions,
+      storyKey,
       defaultFont,
       defaultSize,
       inheritedMarks: inheritedMarks ?? [],
@@ -748,6 +792,7 @@ export function paragraphToFlowBlocks({
       nextBlockId: stableNextBlockId,
       nextId,
       positions,
+      storyKey,
       trackedChangesConfig,
       defaultFont,
       defaultSize,
@@ -845,6 +890,21 @@ export function paragraphToFlowBlocks({
     }
   });
 
+  // Expand text runs containing inline '\n' into separate text + break runs.
+  // The measurer does the same expansion locally and emits fromRun/toRun indices
+  // relative to the expanded array. By expanding here, all downstream consumers
+  // (measurer, renderer, computeLinePmRange, selectionToRects) see consistent indices.
+  blocks.forEach((block) => {
+    if (
+      block.kind === 'paragraph' &&
+      block.runs.some(
+        (r) => 'text' in r && typeof (r as TextRun).text === 'string' && (r as TextRun).text.includes('\n'),
+      )
+    ) {
+      block.runs = expandRunsForInlineNewlines(block.runs);
+    }
+  });
+
   if (!trackedChangesConfig) {
     return blocks;
   }
@@ -862,6 +922,7 @@ export function paragraphToFlowBlocks({
       applyMarksToRun,
       themeColors,
       enableComments,
+      storyKey,
     );
     if (trackedChangesConfig.enabled && filteredRuns.length === 0) {
       return;
@@ -926,6 +987,9 @@ const INLINE_CONVERTERS_REGISTRY: Record<string, InlineConverterSpec> = {
   },
   bookmarkStart: {
     inlineConverter: bookmarkStartNodeToBlocks,
+  },
+  bookmarkEnd: {
+    inlineConverter: bookmarkEndNodeToRun,
   },
   tab: {
     inlineConverter: tabNodeToRun,
@@ -1082,6 +1146,7 @@ export function handleParagraphNode(node: PMNode, context: NodeHandlerContext): 
       para: node,
       nextBlockId,
       positions,
+      storyKey: context.storyKey,
       trackedChangesConfig,
       bookmarks,
       hyperlinkConfig,
@@ -1110,6 +1175,7 @@ export function handleParagraphNode(node: PMNode, context: NodeHandlerContext): 
     para: node,
     nextBlockId,
     positions,
+    storyKey: context.storyKey,
     trackedChangesConfig,
     bookmarks,
     hyperlinkConfig,

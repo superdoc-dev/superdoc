@@ -82,7 +82,7 @@ Deterministic outcomes:
 - Missing tracked-change capabilities must fail with `CAPABILITY_UNAVAILABLE`.
 - Text/format targets that cannot be resolved after remote edits must fail deterministically (`TARGET_NOT_FOUND` / `NO_OP`), never silently mutate the wrong range.
 - Tracked entity IDs returned by mutation receipts (`insert` / `replace` / `delete`) and `create.paragraph.trackedChangeRefs` must match canonical IDs from `trackChanges.list`.
-- `trackChanges.get` / `accept` / `reject` accept canonical IDs only.
+- `trackChanges.get` / `trackChanges.decide` accept canonical tracked-change IDs. Include `story` when targeting a non-body change.
 
 ## Common Workflows
 
@@ -699,27 +699,27 @@ List all comments in the document. Optionally include resolved comments.
 
 ### `trackChanges.list`
 
-List tracked changes in the document. Supports filtering by `type` and pagination via `limit`/`offset`.
+List tracked changes in the document. Supports filtering by `type`, pagination via `limit`/`offset`, and story scoping via `in`.
 
-- **Input**: `TrackChangesListInput | undefined` (`{ limit?, offset?, type? }`)
+- **Input**: `TrackChangesListInput | undefined` (`{ limit?, offset?, type?, in?: StoryLocator | 'all' }`)
 - **Output**: `TrackChangesListResult` (`{ items, total }`)
 - **Mutates**: No
 - **Idempotency**: idempotent
 
 ### `trackChanges.get`
 
-Retrieve full information for a single tracked change by its canonical ID. Throws `TARGET_NOT_FOUND` when the ID is invalid.
+Retrieve full information for a single tracked change by its canonical ID. Include `story` for non-body changes. Throws `TARGET_NOT_FOUND` when the ID is invalid.
 
-- **Input**: `TrackChangesGetInput` (`{ id }`)
+- **Input**: `TrackChangesGetInput` (`{ id, story? }`)
 - **Output**: `TrackChangeInfo` (includes `wordRevisionIds` with raw imported Word OOXML `w:id` values when available)
 - **Mutates**: No
 - **Idempotency**: idempotent
 
 ### `trackChanges.decide`
 
-Accept or reject a tracked change by ID, or accept/reject all changes with `{ scope: 'all' }`.
+Accept or reject a tracked change by ID, or accept/reject all changes with `{ scope: 'all' }`. Include `story` when the change lives outside the body.
 
-- **Input**: `ReviewDecideInput` (`{ decision: 'accept' | 'reject', target: { id } | { scope: 'all' } }`)
+- **Input**: `ReviewDecideInput` (`{ decision: 'accept' | 'reject', target: { id, story? } | { scope: 'all' } }`)
 - **Output**: `Receipt`
 - **Mutates**: Yes
 - **Idempotency**: conditional

@@ -3656,6 +3656,25 @@ describe('toFlowBlocks', () => {
       expect(blocks[0].attrs?.trackedChangesEnabled).toBe(true);
     });
 
+    it('propagates storyKey into tracked change metadata for non-body stories', () => {
+      const pmDoc = buildDocWithMarks([
+        {
+          type: 'trackInsert',
+          attrs: {
+            id: 'ins-story',
+          },
+        },
+      ]);
+
+      const { blocks } = toFlowBlocks(pmDoc, { storyKey: 'hf:part:rId7' });
+      const run = blocks[0].runs[0] as never;
+      expect(run.trackedChange).toMatchObject({
+        kind: 'insert',
+        id: 'ins-story',
+        storyKey: 'hf:part:rId7',
+      });
+    });
+
     it('hides insertions when trackedChangesMode is original', () => {
       const pmDoc = {
         type: 'doc',
@@ -3874,6 +3893,14 @@ describe('toFlowBlocks', () => {
       const { blocks: reviewBlocks } = toFlowBlocks(pmDoc);
       const reviewImage = reviewBlocks.find((block): block is ImageBlock => block.kind === 'image');
       expect(reviewImage?.attrs?.trackedChange).toMatchObject({ id: 'del-img', kind: 'delete' });
+
+      const { blocks: storyBlocks } = toFlowBlocks(pmDoc, { storyKey: 'hf:part:rId7' });
+      const storyImage = storyBlocks.find((block): block is ImageBlock => block.kind === 'image');
+      expect(storyImage?.attrs?.trackedChange).toMatchObject({
+        id: 'del-img',
+        kind: 'delete',
+        storyKey: 'hf:part:rId7',
+      });
 
       const { blocks: finalBlocks } = toFlowBlocks(pmDoc, { trackedChangesMode: 'final' });
       expect(finalBlocks.some((block) => block.kind === 'image')).toBe(false);

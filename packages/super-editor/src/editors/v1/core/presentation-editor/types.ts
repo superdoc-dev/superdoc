@@ -165,6 +165,15 @@ export type LayoutEngineOptions = {
   ruler?: RulerOptions;
   /** Proofing / spellcheck configuration. */
   proofing?: ProofingConfig;
+  /**
+   * Render visible gray `[` / `]` bracket markers at bookmark start/end
+   * positions — matching Word's opt-in "Show bookmarks" (File > Options >
+   * Advanced). Off by default because bookmarks are a structural concept,
+   * not a visual one. Auto-generated bookmarks (names starting with `_`,
+   * such as `_Toc…` or `_Ref…`) are hidden even when enabled, mirroring
+   * Word's behavior. SD-2454.
+   */
+  showBookmarks?: boolean;
 };
 
 export type PresentationEditorOptions = ConstructorParameters<typeof Editor>[0] & {
@@ -201,6 +210,24 @@ export type PresentationEditorOptions = ConstructorParameters<typeof Editor>[0] 
    * @default false
    */
   allowSelectionInViewMode?: boolean;
+  /**
+   * Opt-in experimental behaviors. These are not part of the stable public
+   * API and may change shape or default without notice.
+   */
+  experimental?: {
+    /**
+     * Route undo/redo through a document-wide history queue so body and
+     * header/footer edits can be undone in the order they happened,
+     * regardless of which surface currently has focus.
+     *
+     * Enabled by default. Set to `false` to fall back to legacy
+     * active-surface undo routing.
+     *
+     * @default true
+     * @see plans/unified-history.md
+     */
+    unifiedHistory?: boolean;
+  };
 };
 
 /**
@@ -343,6 +370,10 @@ export interface EditorWithConverter extends Editor {
       id: string;
       content?: unknown[];
     }>;
+    endnotes?: Array<{
+      id: string;
+      content?: unknown[];
+    }>;
   };
 }
 
@@ -425,7 +456,7 @@ export type PendingMarginClick =
  * to prevent unwanted scroll behavior when the hidden editor receives focus.
  *
  * @remarks
- * This flag is set by {@link PresentationEditor#wrapHiddenEditorFocus} to ensure
+ * This flag is set by {@link PresentationEditor#wrapOffscreenEditorFocus} to ensure
  * the wrapping is idempotent (applied only once per view instance).
  */
 export interface EditorViewWithScrollFlag {

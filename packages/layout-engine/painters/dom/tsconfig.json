@@ -12,6 +12,8 @@
   "references": [
     { "path": "../../contracts/tsconfig.json" },
     { "path": "../../dom-contract/tsconfig.json" },
+    { "path": "../../layout-bridge/tsconfig.types.json" },
+    { "path": "../../layout-resolved/tsconfig.json" },
     { "path": "../../measuring/dom/tsconfig.json" },
     { "path": "../../../../shared/common/tsconfig.json" }
   ]

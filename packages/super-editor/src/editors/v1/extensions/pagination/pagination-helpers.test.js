@@ -9,6 +9,13 @@ const { MockEditor, getStarterExtensions, applyStyleIsolationClass } = vi.hoiste
       this.once = vi.fn();
       this.emit = vi.fn();
       this.setEditable = vi.fn();
+      this.setOptions = vi.fn();
+      this.commands = {
+        enableTrackChanges: vi.fn(),
+        disableTrackChanges: vi.fn(),
+        enableTrackChangesShowOriginal: vi.fn(),
+        disableTrackChangesShowOriginal: vi.fn(),
+      };
       this.view = { dom: document.createElement('div') };
       this.storage = { image: { media: {} } };
     }
@@ -41,13 +48,17 @@ vi.mock('@core/parts/adapters/header-footer-sync.js', () => ({
   exportSubEditorToPart: vi.fn(),
 }));
 
-import { createHeaderFooterEditor } from './pagination-helpers.js';
+import { createHeaderFooterEditor, toggleHeaderFooterEditMode } from './pagination-helpers.js';
 
 function createParentEditor() {
   return {
     constructor: MockEditor,
     options: {
       role: 'editor',
+      user: {
+        name: 'SuperDoc Test',
+        email: 'test@superdoc.com',
+      },
       fonts: {},
       isHeadless: true,
     },
@@ -92,7 +103,50 @@ describe('createHeaderFooterEditor', () => {
       expect.objectContaining({
         isHeaderOrFooter: true,
         headerFooterType: 'footer',
+        user: {
+          name: 'SuperDoc Test',
+          email: 'test@superdoc.com',
+        },
       }),
     );
+  });
+
+  it('applies suggesting mode to header/footer editors when edit mode is enabled', () => {
+    const headerEditor = new MockEditor({});
+    const footerEditor = new MockEditor({});
+    const mainPm = document.createElement('div');
+    const focusedSectionEditor = {
+      view: {
+        focus: vi.fn(),
+      },
+    };
+
+    toggleHeaderFooterEditMode({
+      editor: {
+        converter: {
+          headerEditors: [{ editor: headerEditor }],
+          footerEditors: [{ editor: footerEditor }],
+        },
+        view: {
+          dom: mainPm,
+        },
+      },
+      focusedSectionEditor,
+      isEditMode: true,
+      documentMode: 'suggesting',
+    });
+
+    expect(headerEditor.commands.disableTrackChangesShowOriginal).toHaveBeenCalledTimes(1);
+    expect(headerEditor.commands.enableTrackChanges).toHaveBeenCalledTimes(1);
+    expect(headerEditor.setOptions).toHaveBeenCalledWith({ documentMode: 'suggesting' });
+    expect(headerEditor.setEditable).toHaveBeenCalledWith(true, false);
+    expect(headerEditor.view.dom.getAttribute('documentmode')).toBe('suggesting');
+
+    expect(footerEditor.commands.disableTrackChangesShowOriginal).toHaveBeenCalledTimes(1);
+    expect(footerEditor.commands.enableTrackChanges).toHaveBeenCalledTimes(1);
+    expect(footerEditor.setOptions).toHaveBeenCalledWith({ documentMode: 'suggesting' });
+    expect(footerEditor.setEditable).toHaveBeenCalledWith(true, false);
+    expect(footerEditor.view.dom.getAttribute('documentmode')).toBe('suggesting');
+    expect(focusedSectionEditor.view.focus).toHaveBeenCalledTimes(1);
   });
 });

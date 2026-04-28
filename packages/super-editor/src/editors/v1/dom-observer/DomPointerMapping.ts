@@ -215,6 +215,26 @@ export function clickToPositionDom(domContainer: HTMLElement, clientX: number, c
 }
 
 /**
+ * Resolves a click within a specific rendered fragment.
+ *
+ * Unlike {@link clickToPositionDom}, this helper does not scan the full page
+ * hit chain to choose a fragment. Callers that already know which rendered
+ * fragment owns the click can use this to avoid cross-surface ambiguity when
+ * multiple stories share overlapping PM position ranges.
+ */
+export function resolvePositionWithinFragmentDom(
+  fragmentEl: HTMLElement,
+  clientX: number,
+  clientY: number,
+): number | null {
+  if (!fragmentEl.classList?.contains?.(CLASS.fragment)) {
+    return null;
+  }
+
+  return resolveFragment(fragmentEl, clientX, clientY);
+}
+
+/**
  * Finds the page element containing the given viewport coordinates.
  *
  * Tries `elementsFromPoint` first, then falls back to bounding-rect checks
@@ -293,6 +313,33 @@ function resolveFragment(fragmentEl: HTMLElement, viewX: number, viewY: number):
   return resolveLineAtX(lineEl, viewX);
 }
 
+export type TextBoundaryHit = {
+  node: Text;
+  offset: number;
+};
+
+export function resolveTextBoundaryWithinFragmentDom(
+  fragmentEl: HTMLElement,
+  clientX: number,
+  clientY: number,
+): TextBoundaryHit | null {
+  if (!fragmentEl.classList?.contains?.(CLASS.fragment)) {
+    return null;
+  }
+
+  const lineEls = Array.from(fragmentEl.querySelectorAll(`.${CLASS.line}`)) as HTMLElement[];
+  if (lineEls.length === 0) {
+    return null;
+  }
+
+  const lineEl = findLineAtY(lineEls, clientY);
+  if (!lineEl) {
+    return null;
+  }
+
+  return resolveLineTextBoundaryAtX(lineEl, clientX);
+}
+
 /**
  * Given a known line element, resolves the PM position at the given X
  * coordinate.
@@ -309,6 +356,49 @@ function resolveLineAtX(lineEl: HTMLElement, viewX: number): number | null {
 
   const spanEls = getClickableSpans(lineEl);
   return resolvePositionInLine(lineEl, lineStart, lineEnd, spanEls, viewX);
+}
+
+function resolveLineTextBoundaryAtX(lineEl: HTMLElement, viewX: number): TextBoundaryHit | null {
+  const spanEls = getClickableSpans(lineEl);
+  if (spanEls.length === 0) {
+    return null;
+  }
+
+  const rtl = isRtlLine(lineEl);
+  const allRects = spanEls.map((el) => el.getBoundingClientRect());
+  const visibleRects = allRects.filter(isVisibleRect);
+  const boundsRects = visibleRects.length > 0 ? visibleRects : allRects;
+
+  const visualLeft = Math.min(...boundsRects.map((r) => r.left));
+  const visualRight = Math.max(...boundsRects.map((r) => r.right));
+
+  if (viewX <= visualLeft) {
+    const edgeSpan = rtl ? spanEls[spanEls.length - 1] : spanEls[0];
+    return resolveElementBoundary(edgeSpan, rtl ? 'after' : 'before');
+  }
+
+  if (viewX >= visualRight) {
+    const edgeSpan = rtl ? spanEls[0] : spanEls[spanEls.length - 1];
+    return resolveElementBoundary(edgeSpan, rtl ? 'before' : 'after');
+  }
+
+  const targetEl = findSpanAtX(spanEls, viewX);
+  if (!targetEl) {
+    return null;
+  }
+
+  const textNode = findFirstTextNode(targetEl);
+  if (!textNode || !textNode.textContent) {
+    const targetRect = targetEl.getBoundingClientRect();
+    const closerToLeft = Math.abs(viewX - targetRect.left) <= Math.abs(viewX - targetRect.right);
+    const boundarySide = rtl ? (closerToLeft ? 'after' : 'before') : closerToLeft ? 'before' : 'after';
+    return resolveElementBoundary(targetEl, boundarySide);
+  }
+
+  return {
+    node: textNode,
+    offset: findCharIndexAtX(textNode, viewX, rtl),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -359,21 +449,82 @@ function resolvePositionInLine(
 
   const targetEl = findSpanAtX(spanEls, viewX);
   if (!targetEl) return lineStart;
+  const targetIndex = spanEls.indexOf(targetEl);
+  if (targetIndex < 0) {
+    return lineStart;
+  }
 
   const { start: spanStart, end: spanEnd } = readPmRange(targetEl);
   if (!Number.isFinite(spanStart) || !Number.isFinite(spanEnd)) return null;
+  const rightCaretBoundary = resolveRightCaretBoundary(spanEls, targetIndex, spanStart, spanEnd);
 
   // Non-text or empty element → snap to nearest edge
   const firstChild = targetEl.firstChild;
   if (!firstChild || firstChild.nodeType !== Node.TEXT_NODE || !firstChild.textContent) {
     const targetRect = targetEl.getBoundingClientRect();
     const closerToLeft = Math.abs(viewX - targetRect.left) <= Math.abs(viewX - targetRect.right);
-    return rtl ? (closerToLeft ? spanEnd : spanStart) : closerToLeft ? spanStart : spanEnd;
+    return rtl ? (closerToLeft ? rightCaretBoundary : spanStart) : closerToLeft ? spanStart : rightCaretBoundary;
   }
 
   const textNode = firstChild as Text;
   const charIndex = findCharIndexAtX(textNode, viewX, rtl);
-  return mapCharIndexToPm(spanStart, spanEnd, textNode.length, charIndex);
+  return mapCharIndexToPm(spanStart, spanEnd, rightCaretBoundary, textNode.length, charIndex);
+}
+
+function resolveElementBoundary(
+  element: HTMLElement | null | undefined,
+  side: 'before' | 'after',
+): TextBoundaryHit | null {
+  if (!(element instanceof HTMLElement)) {
+    return null;
+  }
+
+  const textNode = findFirstTextNode(element);
+  if (!textNode) {
+    return null;
+  }
+
+  return {
+    node: textNode,
+    offset: side === 'before' ? 0 : (textNode.textContent?.length ?? 0),
+  };
+}
+
+function findFirstTextNode(element: HTMLElement): Text | null {
+  const doc = getNodeDocument(element);
+  if (!doc) {
+    return null;
+  }
+
+  const walker = doc.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+  const node = walker.nextNode();
+  return node instanceof Text ? node : null;
+}
+
+/**
+ * Visible text can be split across adjacent PM wrapper nodes, which creates
+ * hidden structural gaps between consecutive rendered spans. The caret the user
+ * sees at the right edge of the current span should land at the next rendered
+ * span's start, not inside the hidden wrapper gap.
+ */
+function resolveRightCaretBoundary(
+  spanEls: readonly HTMLElement[],
+  targetIndex: number,
+  spanStart: number,
+  spanEnd: number,
+): number {
+  for (let index = targetIndex + 1; index < spanEls.length; index += 1) {
+    const { start: nextStart } = readPmRange(spanEls[index]);
+    if (!Number.isFinite(nextStart)) {
+      continue;
+    }
+    if (nextStart > spanEnd) {
+      return nextStart;
+    }
+    break;
+  }
+
+  return spanEnd;
 }
 
 // ---------------------------------------------------------------------------
@@ -431,19 +582,45 @@ function findSpanAtX(spanEls: HTMLElement[], viewX: number): HTMLElement | null 
  * Otherwise (e.g. ligatures or collapsed content) falls back to a midpoint
  * heuristic.
  */
-function mapCharIndexToPm(spanStart: number, spanEnd: number, textLength: number, charIndex: number): number {
+function mapCharIndexToPm(
+  spanStart: number,
+  spanEnd: number,
+  rightCaretBoundary: number,
+  textLength: number,
+  charIndex: number,
+): number {
   if (!Number.isFinite(spanStart) || !Number.isFinite(spanEnd)) return spanStart;
   if (textLength <= 0) return spanStart;
 
   const pmRange = spanEnd - spanStart;
   if (!Number.isFinite(pmRange) || pmRange <= 0) return spanStart;
 
+  const safeRightBoundary =
+    Number.isFinite(rightCaretBoundary) && rightCaretBoundary >= spanEnd ? rightCaretBoundary : spanEnd;
+
+  const clampedIndex = Math.max(0, Math.min(textLength, charIndex));
+
+  // When text is split across wrapper nodes (for example tracked-change runs),
+  // PM exposes hidden boundary positions between visible spans. Preserve the
+  // normal 1:1 mapping for visible characters and reserve the structural gap
+  // for the final caret boundary only.
+  if (safeRightBoundary > spanEnd) {
+    if (clampedIndex >= textLength) {
+      return safeRightBoundary;
+    }
+
+    const directPos = spanStart + clampedIndex;
+    if (directPos <= spanEnd) {
+      return directPos;
+    }
+  }
+
   if (pmRange === textLength) {
-    return Math.min(spanEnd, Math.max(spanStart, spanStart + charIndex));
+    return Math.min(spanEnd, Math.max(spanStart, spanStart + clampedIndex));
   }
 
   // PM range ≠ text length — snap to closer half
-  return charIndex / textLength <= 0.5 ? spanStart : spanEnd;
+  return clampedIndex / textLength <= 0.5 ? spanStart : safeRightBoundary;
 }
 
 /**

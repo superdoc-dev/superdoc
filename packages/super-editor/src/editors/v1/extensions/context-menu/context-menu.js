@@ -1,6 +1,6 @@
 import { Plugin, PluginKey } from 'prosemirror-state';
 import { Extension } from '@core/Extension.js';
-import { getSurfaceRelativePoint } from '../../core/helpers/editorSurface.js';
+import { getEditorSurfaceElement, getSurfaceRelativePoint } from '../../core/helpers/editorSurface.js';
 
 /**
  * Find the nearest ancestor element that creates a containing block for `position: fixed`.
@@ -226,7 +226,7 @@ export const ContextMenu = Extension.create({
               } else {
                 // Fallback to selection-based positioning (slash trigger)
                 const relativePoint = getSurfaceRelativePoint(editor, meta);
-                const surface = editor.presentationEditor?.element ?? editor.view?.dom ?? editor.options?.element;
+                const surface = getEditorSurfaceElement(editor);
                 if (relativePoint && surface) {
                   try {
                     const rect = surface.getBoundingClientRect();
@@ -263,7 +263,7 @@ export const ContextMenu = Extension.create({
               //
               // Example: If viewport coords are (200, 150) and containing block is at (50, 30),
               // we need (150, 120) in containing-block-relative coordinates.
-              const menuSurface = editor.presentationEditor?.element ?? editor.view?.dom ?? editor.options?.element;
+              const menuSurface = getEditorSurfaceElement(editor);
               const containingBlock = findContainingBlockAncestor(menuSurface);
               if (containingBlock) {
                 try {

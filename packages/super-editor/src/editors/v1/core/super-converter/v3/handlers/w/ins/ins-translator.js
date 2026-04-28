@@ -23,14 +23,17 @@ const validXmlAttributes = [
  * @returns {import('@translator').SCEncoderResult}
  */
 const encode = (params, encodedAttrs = {}) => {
-  const { nodeListHandler, extraParams = {}, converter } = params;
+  const { nodeListHandler, extraParams = {}, converter, filename } = params;
   const { node } = extraParams;
 
   // Preserve the original OOXML w:id for round-trip export fidelity.
   // The internal id is remapped to a shared UUID for replacement pairing.
   const originalWordId = encodedAttrs.id;
-  if (originalWordId && converter?.trackedChangeIdMap?.has(originalWordId)) {
-    encodedAttrs.id = converter.trackedChangeIdMap.get(originalWordId);
+  const partPath = typeof filename === 'string' && filename.length > 0 ? `word/${filename}` : 'word/document.xml';
+  const trackedChangeIdMap =
+    converter?.trackedChangeIdMapsByPart?.get?.(partPath) ?? converter?.trackedChangeIdMap ?? null;
+  if (originalWordId && trackedChangeIdMap?.has(originalWordId)) {
+    encodedAttrs.id = trackedChangeIdMap.get(originalWordId);
   }
   encodedAttrs.sourceId = originalWordId || '';
 

@@ -1176,9 +1176,10 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
       startX = Math.max(0, target);
     }
 
+    const effectiveIndent = lines.length === 0 ? indentLeft + rawFirstLineOffset : indentLeft;
+
     // Update pending leader to end where aligned content begins
     if (pendingLeader) {
-      const effectiveIndent = lines.length === 0 ? indentLeft + rawFirstLineOffset : indentLeft;
       pendingLeader.to = startX + effectiveIndent;
     }
 
@@ -1188,7 +1189,6 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
     pendingTabAlignment = null;
     pendingLeader = null;
 
-    const effectiveIndent = lines.length === 0 ? indentLeft + rawFirstLineOffset : indentLeft;
     // Negative-left paragraphs move the fragment itself left. Explicit segment
     // x values are still consumed by the DOM painter with indentOffset added,
     // so compensate negative-left body lines while preserving the real
@@ -3746,6 +3746,7 @@ const buildTabStopsPx = (indent?: ParagraphIndent, tabs?: TabStop[], tabInterval
     left: pxToTwips(sanitizeIndent(indent?.left)),
     right: pxToTwips(sanitizeIndent(indent?.right)),
     firstLine: pxToTwips(sanitizeIndent(indent?.firstLine)),
+    // Hanging is unsigned in OOXML; preserve negative left/right/firstLine only.
     hanging: pxToTwips(sanitizePositive(indent?.hanging)),
   };
 

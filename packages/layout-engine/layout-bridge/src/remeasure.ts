@@ -319,7 +319,7 @@ const pxToTwips = (px: number): number => Math.round(px * TWIPS_PER_PX);
  */
 const sanitizeIndent = (value: number | undefined): number =>
   typeof value === 'number' && Number.isFinite(value) ? Math.max(0, value) : 0;
-const sanitizeTabIndentLeft = (value: number | undefined): number =>
+const sanitizeRawIndent = (value: number | undefined): number =>
   typeof value === 'number' && Number.isFinite(value) ? value : 0;
 
 /**
@@ -463,9 +463,10 @@ const buildTabStopsPx = (indent?: ParagraphIndent, tabs?: TabStop[], tabInterval
     hanging: pxToTwips(sanitizeIndent(indent?.hanging)),
   };
   const rawParagraphIndentTwips = {
-    left: pxToTwips(sanitizeTabIndentLeft(indent?.left)),
-    right: pxToTwips(sanitizeTabIndentLeft(indent?.right)),
-    firstLine: pxToTwips(sanitizeTabIndentLeft(indent?.firstLine)),
+    left: pxToTwips(sanitizeRawIndent(indent?.left)),
+    right: pxToTwips(sanitizeRawIndent(indent?.right)),
+    firstLine: pxToTwips(sanitizeRawIndent(indent?.firstLine)),
+    // Hanging is unsigned in OOXML; preserve negative left/right/firstLine only.
     hanging: pxToTwips(sanitizeIndent(indent?.hanging)),
   };
 
@@ -946,7 +947,7 @@ const applyTabLayoutToLines = (
             toChar: i,
             width: segmentWidth,
           };
-          const pendingTabAlign = pendingTabAlignStartX as PendingTabAlignStart | null;
+          const pendingTabAlign = pendingTabAlignStartX;
           if (pendingTabAlign != null) {
             segment.x = pendingTabAlign.paintX;
             cursorX = pendingTabAlign.layoutX + segmentWidth;
@@ -970,7 +971,7 @@ const applyTabLayoutToLines = (
           toChar: sliceEnd,
           width: segmentWidth,
         };
-        const pendingTabAlign = pendingTabAlignStartX as PendingTabAlignStart | null;
+        const pendingTabAlign = pendingTabAlignStartX;
         if (pendingTabAlign != null) {
           segment.x = pendingTabAlign.paintX;
           cursorX = pendingTabAlign.layoutX + segmentWidth;

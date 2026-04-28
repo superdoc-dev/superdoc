@@ -7,10 +7,13 @@ import type {
   PublicToolbarItemId,
   ToolbarSnapshot,
 } from '../headless-toolbar/types.js';
+import type { CommentsListResult, Receipt, ScrollIntoViewOutput } from '@superdoc/document-api';
 import { shallowEqual } from './equality.js';
 import type {
   CommandHandle,
   CommandsHandle,
+  CommentsHandle,
+  CommentsSlice,
   EqualityFn,
   SelectorFn,
   SuperDocEditorLike,
@@ -41,6 +44,15 @@ const EDITOR_EVENTS = [
   'comment-positions',
   'trackedChangesUpdate',
 ] as const;
+
+/**
+ * Editor events that should trigger a refresh of the cached
+ * `comments.list()` result before notifying subscribers. The base
+ * `EDITOR_EVENTS` list also fires `scheduleNotify` for these, but we
+ * need the cache invalidation to happen *first* so `computeState()`
+ * sees fresh items.
+ */
+const COMMENTS_REFRESH_EVENTS = ['commentsUpdate', 'commentsLoaded'] as const;
 
 const SUPERDOC_EVENTS = ['editorCreate', 'document-mode-change', 'zoomChange'] as const;
 
@@ -148,21 +160,9 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
 
   // Internal headless-toolbar instance. Feeds `state.toolbar` so
   // `ui.toolbar.subscribe` and `ui.commands.<id>.observe` ride the
-  // same selector substrate as the rest of the controller. The Vue UI
-  // and any external `superdoc/headless-toolbar` consumer can keep
-  // using their existing entry points; this is the single source of
-  // truth at runtime.
-  //
-  // The structural cast is safe at runtime: the SuperDoc Vue instance
-  // satisfies HeadlessToolbarSuperdocHost (with `Editor` for
-  // activeEditor) at runtime; we accept the looser SuperDocLike at the
-  // public boundary so this controller can be unit-tested with stubs.
-  // Internal headless-toolbar instance. Feeds `state.toolbar` so
-  // `ui.toolbar.subscribe` and `ui.commands.<id>.observe` ride the
   // same selector substrate as the rest of the controller. Per-command
-  // state derivers in the registry are now wrapped to default to
-  // disabled on throw, so a partial editor never wedges snapshot
-  // construction.
+  // state derivers in the registry are wrapped to default to disabled
+  // on throw, so a partial editor never wedges snapshot construction.
   const toolbarController: HeadlessToolbarController = createHeadlessToolbar({
     superdoc: superdoc as unknown as HeadlessToolbarSuperdocHost,
     // Pass the full registry so snapshot.commands is populated for
@@ -184,6 +184,40 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     }
   });
 
+  // Comments slice cache. `editor.doc.comments.list()` is O(N) and
+  // re-running it on every `computeState()` would tax the hot path —
+  // instead we cache the list result and refresh on `commentsUpdate` /
+  // `commentsLoaded` editor events. `selection.current().activeCommentIds`
+  // is read fresh in `computeState()` since it's already cheap (one
+  // selection walk).
+  const EMPTY_COMMENTS_LIST: CommentsListResult = {
+    evaluatedRevision: '',
+    total: 0,
+    items: [],
+    page: { limit: 0, offset: 0, returned: 0 },
+  };
+  let commentsListCache: CommentsListResult = EMPTY_COMMENTS_LIST;
+  const refreshCommentsListCache = () => {
+    const editor = resolveRoutedEditor(superdoc);
+    const list = editor?.doc?.comments?.list;
+    if (typeof list !== 'function') {
+      commentsListCache = EMPTY_COMMENTS_LIST;
+      return;
+    }
+    try {
+      const result = list.call(editor.doc!.comments, undefined) as CommentsListResult | undefined;
+      commentsListCache = result ?? EMPTY_COMMENTS_LIST;
+    } catch {
+      // A partial editor (mid-init / mid-tear-down) shouldn't blow up
+      // the controller; fall back to the previous cache value.
+      // (The follow-up commit on this branch — `12155be91` — switches
+      // this to reset to EMPTY_COMMENTS_LIST instead, so cross-document
+      // swaps don't leak. Kept here as the original commit for
+      // rebase-stack continuity.)
+    }
+  };
+  refreshCommentsListCache();
+
   const computeState = (): SuperDocUIState => {
     // Route through PresentationEditor when active so selection state
     // follows the body/header/footer/note editor the user is actually
@@ -195,11 +229,20 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     const empty = selectionInfo ? selectionInfo.empty : true;
     const quotedText = selectionInfo?.text ?? '';
     const documentMode = superdoc.config?.documentMode ?? null;
+    // `activeCommentIds` is post-SD-2792; older builds will have
+    // `selectionInfo.activeCommentIds === undefined`. Fall back to []
+    // so the snapshot shape is stable for consumers either way.
+    const activeIds = selectionInfo?.activeCommentIds ?? [];
     return {
       ready,
       documentMode,
       selection: { empty, quotedText },
       toolbar: toolbarSnapshot,
+      comments: {
+        total: commentsListCache.total,
+        items: commentsListCache.items,
+        activeIds,
+      },
     };
   };
 
@@ -223,6 +266,11 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
   let currentEditor: SuperDocEditorLike | null = null;
   let currentEditorTeardown: (() => void) | null = null;
 
+  const refreshAndNotify = () => {
+    refreshCommentsListCache();
+    scheduleNotify();
+  };
+
   const attachEditorListeners = () => {
     const next = resolveRoutedEditor(superdoc);
     if (next === currentEditor) return;
@@ -234,11 +282,21 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     EDITOR_EVENTS.forEach((name) => {
       next.on?.(name, scheduleNotify);
     });
+    // Comment-list invalidation runs ahead of scheduleNotify so the
+    // subsequent state recompute sees the fresh items array. Without
+    // this, `state.comments.items` would lag one tick behind a create/
+    // patch/delete.
+    COMMENTS_REFRESH_EVENTS.forEach((name) => {
+      next.on?.(name, refreshAndNotify);
+    });
     currentEditorTeardown = () => {
       EDITOR_EVENTS.forEach((name) => next.off?.(name, scheduleNotify));
+      COMMENTS_REFRESH_EVENTS.forEach((name) => next.off?.(name, refreshAndNotify));
     };
-    // The set of source events changed — recompute state so subscribers
-    // see the new routed editor's selection.
+    // The set of source events changed and the routed editor swapped
+    // — refresh the comments cache for the new editor and recompute
+    // state so subscribers see the new selection.
+    refreshCommentsListCache();
     scheduleNotify();
   };
 
@@ -441,6 +499,84 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     },
   });
 
+  // ---- ui.comments ---------------------------------------------------------
+  //
+  // Subscribe is built on the substrate so consumers ride the same
+  // microtask-coalesced burst pattern as `ui.select`. Action methods
+  // are convenience facades that route through `editor.doc.comments.*`
+  // — they do NOT introduce a parallel mutation contract; both
+  // `ui.comments.resolve(id)` and `editor.doc.comments.patch({ id,
+  // status: 'resolved' })` produce the same document mutation.
+
+  const requireDocComments = () => {
+    const editor = resolveRoutedEditor(superdoc);
+    const api = editor?.doc?.comments;
+    if (!api) {
+      throw new Error('ui.comments: no active editor / comments API. Open a document first.');
+    }
+    return api;
+  };
+
+  const requireDocRanges = () => {
+    const editor = resolveRoutedEditor(superdoc);
+    const api = editor?.doc?.ranges;
+    if (!api?.scrollIntoView) {
+      throw new Error('ui.comments.scrollTo: no active editor / ranges API.');
+    }
+    return api;
+  };
+
+  const comments: CommentsHandle = {
+    getSnapshot: () => computeState().comments,
+    subscribe(listener) {
+      return select((state) => state.comments, shallowEqual).subscribe((snapshot) => {
+        try {
+          listener({ snapshot });
+        } catch {
+          // see scheduleNotify
+        }
+      });
+    },
+    createFromSelection({ text }) {
+      const editor = resolveRoutedEditor(superdoc);
+      const target = editor?.doc?.selection?.current?.()?.target;
+      if (!target) {
+        return {
+          success: false,
+          failure: { code: 'NO_OP', message: 'ui.comments.createFromSelection: no addressable selection target.' },
+        };
+      }
+      const api = requireDocComments();
+      return (api.create as (input: unknown, options?: unknown) => Receipt).call(api, { target, text });
+    },
+    resolve(commentId) {
+      const api = requireDocComments();
+      return (api.patch as (input: unknown, options?: unknown) => Receipt).call(api, { commentId, status: 'resolved' });
+    },
+    reopen(commentId) {
+      // Routes through `comments.patch({ status: 'active' })`. Today
+      // doc-api validation rejects anything other than 'resolved' —
+      // SD-2789 widens the union and ships the lifecycle inverse.
+      // Until then this surfaces an INVALID_INPUT receipt or throws,
+      // which is the correct visible behavior for a not-yet-shipped
+      // operation rather than a silent no-op.
+      const api = requireDocComments();
+      return (api.patch as (input: unknown, options?: unknown) => Receipt).call(api, { commentId, status: 'active' });
+    },
+    delete(commentId) {
+      const api = requireDocComments();
+      return (api.delete as (input: unknown, options?: unknown) => Receipt).call(api, { commentId });
+    },
+    async scrollTo(commentId) {
+      const api = requireDocRanges();
+      return (api.scrollIntoView as (input: unknown) => Promise<ScrollIntoViewOutput>).call(api, {
+        target: { kind: 'entity', entityType: 'comment', entityId: commentId },
+        block: 'center',
+        behavior: 'smooth',
+      });
+    },
+  };
+
   const destroy = () => {
     if (destroyed) return;
     destroyed = true;
@@ -457,5 +593,5 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     teardown.length = 0;
   };
 
-  return { select, toolbar, commands, destroy };
+  return { select, toolbar, commands, comments, destroy };
 }

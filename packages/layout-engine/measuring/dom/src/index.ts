@@ -1094,6 +1094,8 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
     leaders?: Line['leaders'];
     /** Count of breakable spaces already included on this line (for justify-aware fitting) */
     spaceCount: number;
+    /** Internal marker for an empty line seeded by an explicit line break. */
+    isLineBreakPlaceholder?: boolean;
   } | null = null;
 
   // Helper to calculate effective available width based on current line count.
@@ -1469,6 +1471,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
         maxWidth: nextLineMaxWidth,
         segments: [],
         spaceCount: 0,
+        isLineBreakPlaceholder: true,
       };
       tabStopCursor = 0;
       pendingTabAlignment = null;
@@ -1476,6 +1479,15 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
       lastAppliedTabAlign = null;
       pendingRunSpacing = 0;
       continue;
+    }
+
+    // When a text/tab/atomic run follows an explicit lineBreak, currentLine is a
+    // placeholder line seeded with the break run index. Re-anchor it so line ranges
+    // start at the first visible run on the new line.
+    if (currentLine?.isLineBreakPlaceholder) {
+      currentLine.fromRun = runIndex;
+      currentLine.toRun = runIndex;
+      currentLine.isLineBreakPlaceholder = false;
     }
 
     // Handle tab runs specially

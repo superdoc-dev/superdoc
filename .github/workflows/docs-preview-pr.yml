@@ -1,0 +1,76 @@
+# Triggers a Mintlify preview deployment for docs-touching PRs targeting
+# `main` or `stable`. The `stable` case covers promote-stable PRs so reviewers
+# see the docs that will go live the moment the release succeeds. The `main`
+# case gives doc authors a hosted preview during normal development, since
+# Mintlify's automatic previews only fire on PRs targeting the deployment
+# branch (`docs-stable`). Path filter keeps the 5 req/min Mintlify API quota
+# from being spent on unrelated code PRs.
+name: 📖 Docs preview (PR)
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize]
+    branches:
+      - main
+      - stable
+    paths:
+      - 'apps/docs/**'
+      - 'packages/document-api/src/contract/**'
+      - 'scripts/generate-all.mjs'
+
+permissions:
+  pull-requests: write
+
+concurrency:
+  group: preview-stable-docs-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  trigger-preview:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Mintlify preview
+        id: preview
+        env:
+          MINTLIFY_API_KEY: ${{ secrets.MINTLIFY_API_KEY }}
+          MINTLIFY_PROJECT_ID: ${{ secrets.MINTLIFY_PROJECT_ID }}
+          BRANCH: ${{ github.head_ref }}
+        run: |
+          set -euo pipefail
+          if [ -z "${MINTLIFY_API_KEY}" ] || [ -z "${MINTLIFY_PROJECT_ID}" ]; then
+            echo "MINTLIFY_API_KEY or MINTLIFY_PROJECT_ID not set; skipping."
+            echo "preview_url=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          response=$(curl -sS -X POST \
+            -H "Authorization: Bearer ${MINTLIFY_API_KEY}" \
+            -H "Content-Type: application/json" \
+            -d "{\"branch\": \"${BRANCH}\"}" \
+            "https://api.mintlify.com/v1/project/preview/${MINTLIFY_PROJECT_ID}")
+
+          echo "Mintlify response: ${response}"
+          preview_url=$(echo "${response}" | jq -r '.previewUrl // empty')
+          echo "preview_url=${preview_url}" >> "$GITHUB_OUTPUT"
+
+      # Comment once per PR. Mintlify reuses the same URL for the same branch
+      # on redeploys, so subsequent pushes refresh content in place at the same
+      # URL. We can't gate on `action == 'opened'` because the workflow may
+      # first run on a `synchronize` event (e.g., when this workflow file
+      # didn't exist on the base branch when the PR was opened), so we check
+      # for an existing preview comment instead.
+      - name: Comment preview URL on PR
+        if: steps.preview.outputs.preview_url != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PREVIEW_URL: ${{ steps.preview.outputs.preview_url }}
+        run: |
+          set -euo pipefail
+          existing=$(gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json comments \
+            --jq '[.comments[] | select(.body | startswith("📖 Docs preview:"))] | length')
+          if [ "$existing" -gt 0 ]; then
+            echo "Preview comment already exists; skipping."
+            exit 0
+          fi
+          gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --body "📖 Docs preview: ${PREVIEW_URL}"

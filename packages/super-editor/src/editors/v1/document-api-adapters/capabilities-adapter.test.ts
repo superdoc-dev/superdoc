@@ -15,6 +15,7 @@ function makeEditor(overrides: Partial<Editor> = {}): Editor {
     addCommentReply: vi.fn(() => true),
     moveComment: vi.fn(() => true),
     resolveComment: vi.fn(() => true),
+    reopenComment: vi.fn(() => true),
     removeComment: vi.fn(() => true),
     setCommentInternal: vi.fn(() => true),
     setActiveComment: vi.fn(() => true),

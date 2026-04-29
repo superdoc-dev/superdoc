@@ -8,6 +8,23 @@ import type {
 } from '@superdoc/document-api';
 import type { Editor } from '../../core/Editor.js';
 import { pmPositionToTextOffset } from './text-offset-resolver.js';
+import { groupTrackedChanges } from './tracked-change-resolver.js';
+import { resolveCommentIdFromAttrs } from './value-utils.js';
+
+/**
+ * Mark names that anchor live entities the UI cares about. We collect
+ * the entity ids in the same selection walk that produces
+ * `activeMarks` so consumers can answer "is there a comment / tracked
+ * change under the cursor?" without overlap-filtering `comments.list()`
+ * on every keystroke.
+ *
+ * Kept inline rather than imported from extension constants because
+ * the selection resolver lives one package up the dependency graph
+ * from the comment / track-changes extensions, and we'd rather not
+ * pull those (and their PM plugins) into the resolver's import graph.
+ */
+const COMMENT_MARK_NAME = 'commentMark';
+const TRACK_CHANGE_MARK_NAMES = new Set(['trackInsert', 'trackDelete', 'trackFormat']);
 
 /**
  * Reads the current ProseMirror selection and projects it into the Document
@@ -22,7 +39,7 @@ import { pmPositionToTextOffset } from './text-offset-resolver.js';
 export function resolveCurrentSelectionInfo(editor: Editor, input: SelectionCurrentInput): SelectionInfo {
   const state = editor.state;
   if (!state) {
-    return { empty: true, target: null, activeMarks: [] };
+    return { empty: true, target: null, activeMarks: [], activeCommentIds: [], activeChangeIds: [] };
   }
 
   const sel = state.selection;
@@ -35,11 +52,23 @@ export function resolveCurrentSelectionInfo(editor: Editor, input: SelectionCurr
   const target: TextTarget | null = segments && segments.length > 0 ? buildTextTarget(segments) : null;
 
   const activeMarks = collectActiveMarks(state, from, to);
+  const { commentIds: activeCommentIds, changeIds: activeChangeRawIds } = collectActiveEntityIds(state, from, to);
+
+  // Tracked-change marks store their PM `attrs.id` (raw id), but the
+  // Document API's canonical id (`trackChanges.list().items[].id`) is a
+  // derived hash from `groupTrackedChanges`. Consumers compare the
+  // active ids against `list()` output to highlight the active sidebar
+  // card; returning raw ids would silently miss every match. Translate
+  // raw → canonical here so `activeChangeIds` matches the public
+  // contract.
+  const activeChangeIds = mapRawChangeIdsToCanonical(editor, activeChangeRawIds);
 
   const info: SelectionInfo = {
     empty,
     target,
     activeMarks,
+    activeCommentIds,
+    activeChangeIds,
   };
 
   if (input.includeText && !empty) {
@@ -110,6 +139,112 @@ function readBlockId(node: ProseMirrorNode): string | null {
   const attrs = (node.attrs ?? {}) as Record<string, unknown>;
   const id = attrs.sdBlockId ?? attrs.id ?? attrs.blockId;
   return typeof id === 'string' && id.length > 0 ? id : null;
+}
+
+/**
+ * Translate raw PM-mark `attrs.id`s to the canonical Document API
+ * tracked-change ids that `trackChanges.list()` returns.
+ *
+ * `groupTrackedChanges(editor)` is the single source of truth for the
+ * raw → canonical mapping; it's already cached per
+ * `editor.state.doc`, so a typical selection.current() call hits the
+ * cache and runs O(grouped). Unmapped raw ids (a partial editor or
+ * a mark that wasn't grouped for some reason) are dropped from the
+ * result rather than emitted as raw — leaking raw ids past this point
+ * would re-introduce the silent-no-match bug consumers report.
+ */
+function mapRawChangeIdsToCanonical(editor: Editor, rawIds: string[]): string[] {
+  if (rawIds.length === 0) return rawIds;
+  let grouped: ReturnType<typeof groupTrackedChanges>;
+  try {
+    grouped = groupTrackedChanges(editor);
+  } catch {
+    // Defensive: a partial editor mid-tear-down shouldn't wedge
+    // selection.current(). Fall back to dropping the change ids.
+    return [];
+  }
+  const rawToCanonical = new Map<string, string>();
+  for (const change of grouped) {
+    rawToCanonical.set(change.rawId, change.id);
+  }
+  // Dedupe through a Set: when two raw ids in `rawIds` group to the
+  // same canonical (e.g. paired tracked-change pieces — insert + delete
+  // halves of a tracked replace, or an undo step that produced a stale
+  // raw alias), the canonical should appear once. Without this, an
+  // overlapping selection across both halves would emit a duplicate
+  // in `activeChangeIds` and double-count in any UI driven by it.
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of rawIds) {
+    const canonical = rawToCanonical.get(raw);
+    if (!canonical) continue;
+    if (seen.has(canonical)) continue;
+    seen.add(canonical);
+    out.push(canonical);
+  }
+  return out;
+}
+
+/**
+ * Collect comment and tracked-change ids that touch the selection.
+ *
+ * Union semantics (NOT intersection): an id is included when *any*
+ * character in the range carries that mark. For an empty selection
+ * (caret), this resolves to ids on the marks at the caret position,
+ * including stored marks the user is about to apply.
+ *
+ * Walks text nodes in one pass; bounded allocation. Co-located with
+ * `collectActiveMarks` so the resolver only walks the selection
+ * range twice (once for mark-name intersection, once here for
+ * id-attribute union) — the dedup at the subscriber level
+ * (`selectionInfoKey`) keeps this cheap on the hot path.
+ */
+function collectActiveEntityIds(
+  state: { selection: any; storedMarks?: any; doc: ProseMirrorNode },
+  from: number,
+  to: number,
+): { commentIds: string[]; changeIds: string[] } {
+  const commentIds = new Set<string>();
+  const changeIds = new Set<string>();
+
+  const collectFromMark = (markType: string, attrs: Record<string, unknown> | undefined) => {
+    if (markType === COMMENT_MARK_NAME) {
+      // Imported / legacy comment marks may carry the id on
+      // `importedId` or `w:id` instead of `commentId`. The rest of
+      // the comment adapter graph (`comments.list`, `comments.patch`,
+      // etc.) treats those as the canonical id; without the same
+      // fallback, `selection.current().activeCommentIds` would stay
+      // empty over an imported anchor while `comments.list` reports
+      // the comment — breaking sidebar highlight / disable logic for
+      // legacy DOCX imports.
+      const id = resolveCommentIdFromAttrs((attrs ?? {}) as Record<string, unknown>);
+      if (typeof id === 'string' && id.length > 0) commentIds.add(id);
+    } else if (TRACK_CHANGE_MARK_NAMES.has(markType)) {
+      const id = attrs?.id;
+      if (typeof id === 'string' && id.length > 0) changeIds.add(id);
+    }
+  };
+
+  if (from === to) {
+    // Caret-only: include stored marks (sticky formatting the user is
+    // about to apply) plus the marks resolved at the position itself.
+    if (state.storedMarks) {
+      for (const mark of state.storedMarks) collectFromMark(mark.type.name, mark.attrs);
+    }
+    const $pos = state.doc.resolve(from);
+    for (const mark of $pos.marks()) collectFromMark(mark.type.name, mark.attrs);
+  } else {
+    state.doc.nodesBetween(from, to, (node, pos) => {
+      if (!node.isText) return true;
+      const start = Math.max(pos, from);
+      const end = Math.min(pos + node.nodeSize, to);
+      if (end <= start) return false;
+      for (const mark of node.marks) collectFromMark(mark.type.name, mark.attrs);
+      return false;
+    });
+  }
+
+  return { commentIds: Array.from(commentIds), changeIds: Array.from(changeIds) };
 }
 
 function collectActiveMarks(
@@ -195,7 +330,9 @@ function selectionInfoKey(info: SelectionInfo): string {
     targetKey = target.segments.map((s) => `${s.blockId}:${s.range.start}-${s.range.end}`).join('|');
   }
   const marks = [...info.activeMarks].sort().join(',');
-  return `${info.empty ? '1' : '0'}:${targetKey}:${marks}`;
+  const comments = [...info.activeCommentIds].sort().join(',');
+  const changes = [...info.activeChangeIds].sort().join(',');
+  return `${info.empty ? '1' : '0'}:${targetKey}:${marks}:c=${comments}:tc=${changes}`;
 }
 
 function markTypesPresentEverywhere(doc: ProseMirrorNode, from: number, to: number): Set<string> {

@@ -1,4 +1,4 @@
-name: SuperDoc PR Renderer Build
+name: "Labs: PR Renderer Build"
 
 on:
   pull_request:
@@ -23,7 +23,7 @@ concurrency:
 
 jobs:
   build-package:
-    name: Build PR Renderer Package
+    name: Package
     if: >-
       github.event.action != 'closed' &&
       (github.event.pull_request.draft == false || github.event.action == 'ready_for_review') &&
@@ -92,7 +92,7 @@ jobs:
           retention-days: 1
 
   register:
-    name: Register PR Renderer Build
+    name: Register
     needs: build-package
     if: >-
       github.event.action != 'closed' &&
@@ -338,7 +338,7 @@ jobs:
           echo "renderer_build_status=${RENDERER_BUILD_STATUS}" >> "${GITHUB_OUTPUT}"
 
   cleanup:
-    name: Cleanup PR Renderer Build
+    name: Cleanup
     if: >-
       github.event.action == 'closed' &&
       github.event.pull_request.merged == true &&

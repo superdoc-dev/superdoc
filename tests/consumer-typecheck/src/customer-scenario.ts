@@ -850,12 +850,21 @@ function testVueComponents() {
 import {
   createSuperDocUI,
   shallowEqual,
+  type CommentAddress as UICommentAddress,
+  type CommentInfo as UICommentInfo,
   type CommentsHandle,
+  type CommentsListQuery as UICommentsListQuery,
+  type CommentsListResult as UICommentsListResult,
   type CommentsSlice,
+  type EntityAddress as UIEntityAddress,
   type EqualityFn,
+  type Receipt as UIReceipt,
   type ReviewHandle,
   type ReviewItem,
   type ReviewSlice,
+  type ScrollIntoViewInput as UIScrollIntoViewInput,
+  type ScrollIntoViewOutput as UIScrollIntoViewOutput,
+  type SelectionInfo as UISelectionInfo,
   type SelectionSlice,
   type SelectorFn,
   type Subscribable,
@@ -864,6 +873,10 @@ import {
   type SuperDocUI,
   type SuperDocUIOptions,
   type SuperDocUIState,
+  type TextTarget as UITextTarget,
+  type TrackChangeInfo as UITrackChangeInfo,
+  type TrackChangesListResult as UITrackChangesListResult,
+  type TrackedChangeAddress as UITrackedChangeAddress,
   type ViewportGetRectInput,
   type ViewportHandle,
   type ViewportRect,
@@ -914,6 +927,42 @@ function testSuperDocUISubEntry() {
   void (null as never as AssertViewportShapes);
   void (null as never as AssertSubstrate);
   void (null as never as AssertHostShapes);
+
+  // SD-2815: document-side shapes the controller surfaces resolve
+  // through `superdoc/ui` directly, so consumers don't have to dip
+  // into `@superdoc/document-api`. The aliases above (`UICommentInfo`
+  // etc.) collide with the same types imported earlier from
+  // `superdoc`; importing both here proves the re-export does not
+  // shadow or diverge from the canonical doc-api shapes.
+  type AssertDocReExports = {
+    commentItem: UICommentInfo;
+    commentsList: UICommentsListResult;
+    commentsQuery: UICommentsListQuery;
+    trackChangeItem: UITrackChangeInfo;
+    trackChangesList: UITrackChangesListResult;
+    receipt: UIReceipt;
+    scrollInput: UIScrollIntoViewInput;
+    scrollOutput: UIScrollIntoViewOutput;
+    selectionInfo: UISelectionInfo;
+    textTarget: UITextTarget;
+    entityAddress: UIEntityAddress;
+    commentAddress: UICommentAddress;
+    trackedChangeAddress: UITrackedChangeAddress;
+  };
+  void (null as never as AssertDocReExports);
+
+  // The doc-api types reached through `superdoc/ui` should be
+  // assignable to (and from) the same types reached through the root
+  // `superdoc` import. Aliasing avoids name collisions while letting
+  // the typechecker confirm structural equivalence.
+  type AssertDocReExportParity = {
+    textTargetSame: UITextTarget extends TextTarget ? true : false;
+    textTargetSameInverse: TextTarget extends UITextTarget ? true : false;
+    selectionInfoSame: UISelectionInfo extends SelectionInfo ? true : false;
+    scrollInputSame: UIScrollIntoViewInput extends ScrollIntoViewInput ? true : false;
+    entityAddressSame: UIEntityAddress extends EntityAddress ? true : false;
+  };
+  void (null as never as AssertDocReExportParity);
 }
 
 export {

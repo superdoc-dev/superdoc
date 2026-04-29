@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { createSuperDocUI, type SuperDocUI, type Subscribable } from 'superdoc/ui';
 
 /**
@@ -15,9 +15,26 @@ import { createSuperDocUI, type SuperDocUI, type Subscribable } from 'superdoc/u
  * {@link useSuperDocSlice} subscription helper.
  */
 
+/**
+ * Minimal structural type for the host SuperDoc instance — the example
+ * only reaches it for things the controller doesn't expose (currently:
+ * `export({...})` which produces a downloadable DOCX). Everything
+ * else routes through `ui.*`.
+ */
+export interface SuperDocHost {
+  export(options: { exportType: string[]; commentsType?: 'internal' | 'external'; triggerDownload?: boolean }): Promise<unknown>;
+}
+
 interface SuperDocUIContextValue {
   /** The controller, or null until SuperDoc reports ready. */
   ui: SuperDocUI | null;
+  /**
+   * The host SuperDoc instance. Most components should reach for
+   * {@link useSuperDocUI} (and `ui.*`) instead — the host exists in
+   * context only because operations like `export(...)` aren't on the
+   * controller surface today.
+   */
+  host: SuperDocHost | null;
   /** Set the SuperDoc instance once the React wrapper says it's ready. */
   setSuperDoc(instance: unknown): void;
 }
@@ -26,6 +43,15 @@ const SuperDocUIContext = createContext<SuperDocUIContextValue | null>(null);
 
 export function SuperDocUIProvider({ children }: { children: ReactNode }) {
   const [ui, setUI] = useState<SuperDocUI | null>(null);
+  const [host, setHost] = useState<SuperDocHost | null>(null);
+
+  // Track the latest controller in a ref so the unmount cleanup can
+  // tear it down. Using `[ui]` deps on the cleanup effect would
+  // destroy the controller every time it changes (immediately after
+  // we create it); using `[]` would capture the initial null. A ref
+  // sidesteps both pitfalls.
+  const uiRef = useRef<SuperDocUI | null>(null);
+  uiRef.current = ui;
 
   // Create the controller exactly once per SuperDoc lifetime and tear
   // it down on unmount. `setSuperDoc` is stable so the editor wrapper
@@ -38,20 +64,31 @@ export function SuperDocUIProvider({ children }: { children: ReactNode }) {
       prev?.destroy();
       return createSuperDocUI({ superdoc: instance as never });
     });
+    setHost(instance as SuperDocHost);
   }, []);
 
   useEffect(() => {
     return () => {
-      ui?.destroy();
+      uiRef.current?.destroy();
+      uiRef.current = null;
     };
-    // Tear down on unmount only. Re-running on every `ui` change would
-    // immediately destroy the controller we just created.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
-    <SuperDocUIContext.Provider value={{ ui, setSuperDoc }}>{children}</SuperDocUIContext.Provider>
+    <SuperDocUIContext.Provider value={{ ui, host, setSuperDoc }}>{children}</SuperDocUIContext.Provider>
   );
+}
+
+/**
+ * Read the host SuperDoc instance from context. Reach for
+ * {@link useSuperDocUI} first — host access is reserved for
+ * operations that aren't on the controller surface today
+ * (e.g. `export()`).
+ */
+export function useSuperDocHost(): SuperDocHost | null {
+  const ctx = useContext(SuperDocUIContext);
+  if (!ctx) throw new Error('useSuperDocHost must be used inside <SuperDocUIProvider>.');
+  return ctx.host;
 }
 
 /**

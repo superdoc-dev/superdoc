@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
-import type { CustomCommandRegistrationResult, SuperDocUIState } from 'superdoc/ui';
-import { useSuperDocUI, useSuperDocSlice } from '../lib/SuperDocUIProvider';
+import type {
+  CustomCommandHandleState,
+  CustomCommandRegistrationResult,
+} from 'superdoc/ui';
+import { useSuperDocUI } from '../lib/SuperDocUIProvider';
 
 /**
  * Hardcoded clause library for the demo. A real consumer would fetch
@@ -28,9 +31,16 @@ const CLAUSES = [
 
 type ClauseId = (typeof CLAUSES)[number]['id'];
 
-interface InsertCluasePayload {
+interface InsertClausePayload {
   clauseId: ClauseId;
 }
+
+const STATIC_DISABLED: CustomCommandHandleState<unknown> = {
+  active: false,
+  disabled: true,
+  value: undefined,
+  source: 'custom',
+};
 
 /**
  * Demonstrates `ui.commands.register({...})` — the surface SuperDoc
@@ -38,19 +48,19 @@ interface InsertCluasePayload {
  *
  *   1. Registers `'company.insertClause'` on mount and unregisters
  *      on unmount, so the command's lifetime matches the component's.
- *      Real consumer apps usually hold the registration for the
+ *      A real consumer app usually holds the registration for the
  *      session, but the pattern is the same.
  *
- *   2. Reads its disabled state from `ui.selection` — you can only
- *      insert a clause when the cursor is in the document. That's
- *      derived from `state.selection.empty === false || state has
- *      a target`, the kind of cross-state check `getState` is for.
+ *   2. Reads its disabled state from the command's own observable —
+ *      `reg.handle.observe(state => ...)`. Custom commands are first-
+ *      class on `state.toolbar.commands`, so this is the canonical
+ *      way to drive a toolbar button's enabled/disabled state.
  *
- *   3. Routes the actual mutation through the live SuperDoc instance.
- *      The clause text is inserted at the current cursor via
- *      `editor.commands.insertContent(text)` — the doc-api-based
- *      equivalent (a structured create/text op) would also work but
- *      this kept the example small.
+ *   3. Routes the actual mutation through the host SuperDoc instance
+ *      passed to the `execute` callback by the registry. The example
+ *      uses `superdoc.activeEditor.commands.insertContent(text)`
+ *      because the doc-api doesn't expose a public text-insert
+ *      primitive yet — that's a separate ticket.
  *
  * Capturing the registration return value (`reg.handle`) is the
  * realistic typed path: `ui.commands['company.insertClause']` works
@@ -60,15 +70,8 @@ interface InsertCluasePayload {
 export function InsertClauseButton() {
   const ui = useSuperDocUI();
   const [open, setOpen] = useState(false);
-  const regRef = useRef<CustomCommandRegistrationResult<InsertCluasePayload, unknown> | null>(null);
-
-  // Disable the button when there's no editor selection to insert into.
-  // Selecting the bool directly (instead of the full state) means
-  // shallowEqual short-circuits re-emits when readiness doesn't flip.
-  const ready = useSuperDocSlice<boolean>(
-    (controller) => controller.select(deriveReady, (a, b) => a === b),
-    false,
-  );
+  const [commandState, setCommandState] = useState<CustomCommandHandleState<unknown>>(STATIC_DISABLED);
+  const regRef = useRef<CustomCommandRegistrationResult<InsertClausePayload, unknown> | null>(null);
 
   // Register the custom command on mount; unregister on unmount.
   // `ui` is null until `<EditorMount>` reports onReady — until then
@@ -76,30 +79,60 @@ export function InsertClauseButton() {
   useEffect(() => {
     if (!ui) return;
 
-    const reg = ui.commands.register<InsertCluasePayload>({
+    const reg = ui.commands.register<InsertClausePayload>({
       id: 'company.insertClause',
       getState: ({ state }) => ({
         active: false,
-        disabled: !deriveReady(state),
+        // Disabled when there's nothing positional to anchor the
+        // insert against, or when the document is read-only.
+        disabled:
+          !state.ready ||
+          state.documentMode === 'viewing' ||
+          state.selection.target === null,
       }),
-      execute: ({ payload }) => {
+      execute: ({ payload, superdoc }) => {
         if (!payload) return false;
         const clause = CLAUSES.find((c) => c.id === payload.clauseId);
         if (!clause) return false;
-        // The doc-api equivalents (`format.apply`, `comments.create`,
-        // `tables.insertRow`, …) are the right home for *structured*
-        // mutations. Plain "insert this text at the cursor" still
-        // routes through `editor.commands` for now — the contract
-        // doesn't expose a public text-insert primitive yet, and
-        // that's a separate ticket.
-        const editor = (ui as any).superdoc?.activeEditor;
-        editor?.commands?.insertContent?.(clause.body);
-        return true;
+
+        // Route through the public Document API. `editor.doc.insert`
+        // expects a `SelectionTarget` (kind: 'selection' with start/end
+        // points), so we lift the first segment of the `TextTarget`
+        // returned by `ui.selection` into that shape. Single-segment
+        // is the common cursor case; multi-block selections would need
+        // the same ceremony per segment, but a paragraph-clause insert
+        // doesn't.
+        const host = superdoc as {
+          activeEditor?: {
+            doc?: {
+              insert(input: {
+                value: string;
+                type: 'text';
+                target: { kind: 'selection'; start: unknown; end: unknown };
+              }): { success: boolean };
+            };
+          };
+        };
+        const textTarget = ui.selection.getSnapshot().target;
+        const seg = textTarget?.segments?.[0];
+        if (!seg) return false;
+        const receipt = host.activeEditor?.doc?.insert({
+          value: clause.body,
+          type: 'text',
+          target: {
+            kind: 'selection',
+            start: { kind: 'text', blockId: seg.blockId, offset: seg.range.start },
+            end: { kind: 'text', blockId: seg.blockId, offset: seg.range.end },
+          },
+        });
+        return receipt?.success === true;
       },
     });
 
     regRef.current = reg;
+    const unobserve = reg.handle.observe(setCommandState);
     return () => {
+      unobserve();
       reg.unregister();
       regRef.current = null;
     };
@@ -114,7 +147,7 @@ export function InsertClauseButton() {
     <div className="clause-menu">
       <button
         className="tb-btn"
-        disabled={!ui || !ready}
+        disabled={!ui || commandState.disabled}
         title="Insert standard clause"
         aria-haspopup="menu"
         aria-expanded={open}
@@ -134,24 +167,4 @@ export function InsertClauseButton() {
       )}
     </div>
   );
-}
-
-/**
- * "Can a clause be inserted right now?" Used both in `getState` (so
- * `snapshot.commands['company.insertClause']` reflects the truth)
- * and in this component's local subscription to drive the button's
- * own `disabled`.
- *
- * For an Insert action, "ready" means the editor has loaded *and*
- * the cursor is in the document — we don't require a non-collapsed
- * range because Insert places at the caret. A real product might
- * also check permissions, doc mode, etc.
- */
-function deriveReady(state: SuperDocUIState): boolean {
-  if (!state.ready) return false;
-  if (state.documentMode === 'viewing') return false;
-  // Empty selection (cursor only) is fine — Insert goes at the caret.
-  // Selection target null means we don't have a positionable cursor at
-  // all (no focus / no editor).
-  return state.selection.target !== null || state.selection.empty;
 }

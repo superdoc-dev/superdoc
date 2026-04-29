@@ -1,7 +1,12 @@
 import type { ToolbarSnapshotSlice } from 'superdoc/ui';
 import { shallowEqual } from 'superdoc/ui';
-import { useSuperDocUI, useSuperDocSlice } from '../lib/SuperDocUIProvider';
+import { useSuperDocUI, useSuperDocSlice, useSuperDocHost } from '../lib/SuperDocUIProvider';
 import { InsertClauseButton } from './InsertClauseButton';
+
+interface ToolbarProps {
+  /** Called when the user clicks the comment button to start composing. */
+  onComposeComment(): void;
+}
 
 const EMPTY_SNAPSHOT: ToolbarSnapshotSlice = { context: null, commands: {} };
 
@@ -41,7 +46,7 @@ const HISTORY_BUTTONS: BuiltInButton[] = [
  * custom command is a separate component that calls
  * `ui.commands.register({...})`.
  */
-export function Toolbar() {
+export function Toolbar({ onComposeComment }: ToolbarProps) {
   const ui = useSuperDocUI();
   const snapshot = useSuperDocSlice<ToolbarSnapshotSlice>(
     (controller) => controller.select((state) => state.toolbar, shallowEqual),
@@ -113,21 +118,56 @@ export function Toolbar() {
       </div>
 
       <div className="toolbar-group">
-        <CommentButton />
+        <CommentButton onCompose={onComposeComment} />
         <InsertClauseButton />
+      </div>
+
+      <div className="toolbar-group" style={{ marginLeft: 'auto' }}>
+        <ExportButton />
       </div>
     </div>
   );
 }
 
 /**
- * Comment button — wired to `ui.commands.register` is overkill since
- * comment creation is a built-in concept, not a custom one. We bind
- * directly to `ui.comments.createFromSelection({ text })`. The
- * "comment here?" prompt is a simple `window.prompt` for the demo;
- * a real consumer would render a popover.
+ * Export DOCX. Calls `superdoc.export({ exportType: ['docx'],
+ * triggerDownload: true })` on the host instance — comments,
+ * tracked-change decisions, and inserted clauses all round-trip into
+ * the downloaded file. The point of the demo: changes you make
+ * through the controller surface persist into the .docx the user
+ * actually keeps.
  */
-function CommentButton() {
+function ExportButton() {
+  const host = useSuperDocHost();
+
+  const onClick = async () => {
+    if (!host) return;
+    try {
+      await host.export({
+        exportType: ['docx'],
+        commentsType: 'external',
+        triggerDownload: true,
+      });
+    } catch (err) {
+      console.error('[Toolbar] export failed', err);
+      alert(err instanceof Error ? err.message : 'Export failed');
+    }
+  };
+
+  return (
+    <button className="tb-btn export-btn" disabled={!host} title="Download as DOCX" onClick={onClick}>
+      Export DOCX
+    </button>
+  );
+}
+
+/**
+ * Clicking the comment button opens the inline composer in the
+ * activity panel — see `<CommentComposer>`. The button is disabled
+ * when there's no positional selection (target null), since
+ * `comments.createFromSelection` would have nothing to anchor to.
+ */
+function CommentButton({ onCompose }: { onCompose(): void }) {
   const ui = useSuperDocUI();
   const selection = useSuperDocSlice(
     (controller) => controller.select((state) => state.selection, shallowEqual),
@@ -140,12 +180,7 @@ function CommentButton() {
       className="tb-btn"
       disabled={disabled}
       title="Add comment on selection"
-      onClick={() => {
-        if (!ui || disabled) return;
-        const text = window.prompt('Comment:');
-        if (!text) return;
-        ui.comments.createFromSelection({ text });
-      }}
+      onClick={onCompose}
     >
       <CommentIcon />
     </button>
@@ -170,7 +205,7 @@ function UndoIcon() {
   return (
     <svg {...ICON_PROPS}>
       <path d="M3 7v6h6" />
-      <path d="M3 13a9 9 0 1 0 3-7.7L3 8" />
+      <path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13" />
     </svg>
   );
 }
@@ -179,7 +214,7 @@ function RedoIcon() {
   return (
     <svg {...ICON_PROPS}>
       <path d="M21 7v6h-6" />
-      <path d="M21 13a9 9 0 1 1-3-7.7l3 2.7" />
+      <path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3L21 13" />
     </svg>
   );
 }

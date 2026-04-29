@@ -110,7 +110,6 @@ import { getSchemaIntrospection } from './helpers/schema-introspection.js';
  * @typedef {import('@superdoc/super-editor').SelectionApi} SelectionApi
  * @typedef {import('@superdoc/super-editor').SelectionInfo} SelectionInfo
  * @typedef {import('@superdoc/super-editor').SelectionCurrentInput} SelectionCurrentInput
- * @typedef {import('@superdoc/super-editor').SelectionChangeListener} SelectionChangeListener
  * @typedef {import('@superdoc/super-editor').ScrollIntoViewInput} ScrollIntoViewInput
  * @typedef {import('@superdoc/super-editor').ScrollIntoViewOutput} ScrollIntoViewOutput
  * @typedef {import('@superdoc/super-editor').TextTarget} TextTarget

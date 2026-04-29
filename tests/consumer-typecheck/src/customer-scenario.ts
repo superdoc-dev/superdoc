@@ -122,12 +122,11 @@ import type {
   SelectionApi,
   SelectionInfo,
   SelectionCurrentInput,
-  SelectionChangeListener,
   TextTarget,
   TextAddress,
   TextSegment,
 
-  // Ranges — scrollIntoView
+  // Viewport scroll (now exposed via ui.viewport.scrollIntoView)
   ScrollIntoViewInput,
   ScrollIntoViewOutput,
   EntityAddress,
@@ -481,23 +480,21 @@ function testSelectionAPI(pe: PresentationEditor) {
 }
 
 // ============================================
-// SECTION 8c: Document API — ranges.scrollIntoView
+// SECTION 8c: Viewport scroll — `ui.viewport.scrollIntoView`
 // ============================================
 
 /**
- * Smoke test for `editor.doc.ranges.scrollIntoView`. Consumers need to
- * construct all three target shapes (TextAddress, TextTarget, EntityAddress)
- * and await the returned Promise. The function is type-checked only —
- * it is not called at runtime.
+ * Type-only smoke test for `ui.viewport.scrollIntoView`. Consumers
+ * construct `ScrollIntoViewInput` (TextAddress, TextTarget, or
+ * EntityAddress) and pass it to the viewport handle, which returns
+ * `Promise<ScrollIntoViewOutput>`.
  */
-async function testRangesScrollIntoView(editor: Editor) {
-  const api = (editor as any).doc.ranges as {
-    scrollIntoView(input: ScrollIntoViewInput): Promise<ScrollIntoViewOutput>;
-  };
-
+async function testViewportScrollIntoView(viewport: {
+  scrollIntoView(input: ScrollIntoViewInput): Promise<ScrollIntoViewOutput>;
+}) {
   // TextAddress — single-block target.
   const textAddress: TextAddress = { kind: 'text', blockId: 'p1', range: { start: 0, end: 10 } };
-  const resTextAddr: ScrollIntoViewOutput = await api.scrollIntoView({ target: textAddress });
+  const resTextAddr: ScrollIntoViewOutput = await viewport.scrollIntoView({ target: textAddress });
   const successA: boolean = resTextAddr.success;
   void successA;
 
@@ -507,7 +504,7 @@ async function testRangesScrollIntoView(editor: Editor) {
     kind: 'text',
     segments: [seg, { blockId: 'p2', range: { start: 0, end: 3 } }],
   };
-  const resTextTarget: ScrollIntoViewOutput = await api.scrollIntoView({
+  const resTextTarget: ScrollIntoViewOutput = await viewport.scrollIntoView({
     target: textTarget,
     block: 'start',
     behavior: 'auto',
@@ -521,8 +518,8 @@ async function testRangesScrollIntoView(editor: Editor) {
     entityType: 'trackedChange',
     entityId: 'tc_1',
   };
-  await api.scrollIntoView({ target: commentAddr, behavior: 'smooth' });
-  await api.scrollIntoView({ target: trackedAddr, block: 'center' });
+  await viewport.scrollIntoView({ target: commentAddr, behavior: 'smooth' });
+  await viewport.scrollIntoView({ target: trackedAddr, block: 'center' });
 
   // Construct a full input object and pass it through — verifies the
   // combined type compiles for consumers who build inputs programmatically.
@@ -531,7 +528,7 @@ async function testRangesScrollIntoView(editor: Editor) {
     block: 'nearest',
     behavior: 'auto',
   };
-  await api.scrollIntoView(fullInput);
+  await viewport.scrollIntoView(fullInput);
 }
 
 // ============================================
@@ -593,19 +590,10 @@ function testDocSelectionPrimitives(editor: Editor) {
   void ta;
   void tt;
 
-  // Subscription: onChange returns an unsubscribe. Listener receives
-  // a SelectionInfo. The parameter is annotated explicitly because
-  // document-api types are surfaced via ambient `any` shims in the
-  // published package (workspace-package privacy), so type inference
-  // through SelectionChangeListener collapses to implicit any.
-  const listener: SelectionChangeListener = (next: SelectionInfo) => {
-    const nextTarget: TextTarget | null = next.target;
-    void nextTarget;
-  };
-  const unsubscribe: () => void = api.onChange(listener);
-  unsubscribe();
-
-  // The exported SelectionCurrentInput type is the argument shape.
+  // The Document API contract is request/response: `current()` is
+  // the read primitive. For change subscriptions, use the
+  // `superdoc/ui` selector substrate
+  // (`createSuperDocUI({ superdoc }).select(s => s.selection, ...)`).
   const input: SelectionCurrentInput = { includeText: true };
   api.current(input);
 }
@@ -846,6 +834,88 @@ function testVueComponents() {
   const slashMenu = SlashMenu;
 }
 
+// ============================================
+// SECTION 18: superdoc/ui sub-entry — `createSuperDocUI({ superdoc })`
+// ============================================
+
+/**
+ * Type-level smoke test for the published `superdoc/ui` sub-entry.
+ *
+ * Mirrors the `superdoc/headless-toolbar` shim pattern: this module
+ * is a thin re-export of the browser-only UI controller from
+ * `@superdoc/super-editor`. Without a consumer-perspective import,
+ * the published sub-entry would only be type-checked from inside the
+ * monorepo and a broken re-export could ship undetected.
+ */
+import {
+  createSuperDocUI,
+  shallowEqual,
+  type CommentsHandle,
+  type CommentsSlice,
+  type EqualityFn,
+  type ReviewHandle,
+  type ReviewItem,
+  type ReviewSlice,
+  type SelectionSlice,
+  type SelectorFn,
+  type Subscribable,
+  type SuperDocEditorLike,
+  type SuperDocLike,
+  type SuperDocUI,
+  type SuperDocUIOptions,
+  type SuperDocUIState,
+  type ViewportGetRectInput,
+  type ViewportHandle,
+  type ViewportRect,
+  type ViewportRectResult,
+} from 'superdoc/ui';
+
+function testSuperDocUISubEntry() {
+  // Runtime exports compile and have callable shapes.
+  const factory: (options: SuperDocUIOptions) => SuperDocUI = createSuperDocUI;
+  const eq: EqualityFn<unknown> = shallowEqual;
+  void factory;
+  void eq;
+
+  // Public handle / slice types resolve through the sub-entry.
+  type AssertHandles = {
+    toolbar: SuperDocUI['toolbar'];
+    commands: SuperDocUI['commands'];
+    comments: CommentsHandle;
+    review: ReviewHandle;
+    viewport: ViewportHandle;
+    state: SuperDocUIState;
+  };
+  type AssertSlices = {
+    selection: SelectionSlice;
+    comments: CommentsSlice;
+    review: ReviewSlice;
+    reviewItem: ReviewItem;
+  };
+  type AssertViewportShapes = {
+    input: ViewportGetRectInput;
+    rect: ViewportRect;
+    result: ViewportRectResult;
+  };
+  type AssertSubstrate = {
+    selector: SelectorFn<SuperDocUIState, SelectionSlice>;
+    sub: Subscribable<SelectionSlice>;
+  };
+  type AssertHostShapes = {
+    superdoc: SuperDocLike;
+    editor: SuperDocEditorLike;
+  };
+
+  // `void` the type aliases so the file stays a smoke test, not a
+  // sample. Touching each at value level via `null as never` keeps
+  // the typechecker honest without runtime work.
+  void (null as never as AssertHandles);
+  void (null as never as AssertSlices);
+  void (null as never as AssertViewportShapes);
+  void (null as never as AssertSubstrate);
+  void (null as never as AssertHostShapes);
+}
+
 export {
   testTypeShapes,
   testEditorOptions,
@@ -856,6 +926,7 @@ export {
   testReplaceFile,
   testPresentationEditorMethods,
   testSelectionAPI,
+  testViewportScrollIntoView,
   testEditorEvents,
   testPresentationEditorEvents,
   testToolbar,
@@ -871,4 +942,5 @@ export {
   testAdditionalFunctions,
   testAdditionalClasses,
   testVueComponents,
+  testSuperDocUISubEntry,
 };

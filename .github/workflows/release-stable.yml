@@ -176,3 +176,16 @@ jobs:
         with:
           packages-dir: packages/sdk/langs/python/dist/
           skip-existing: true
+
+      # Stable docs deploy from `docs-stable`. The orchestrator emits
+      # `promote_sha` only when the run released (or no-op'd) on the SHA it
+      # checked out; it stays empty on failure or deferral, so production docs
+      # never advance past a commit whose packages were not actually published.
+      - name: Promote stable docs
+        if: steps.stable_release.outputs.promote_sha != ''
+        env:
+          GITHUB_TOKEN: ${{ steps.generate_token.outputs.token }}
+          PROMOTE_SHA: ${{ steps.stable_release.outputs.promote_sha }}
+        run: |
+          set -euo pipefail
+          git push origin "${PROMOTE_SHA}:refs/heads/docs-stable"

@@ -450,6 +450,119 @@ describe('createSuperDocUI', () => {
     expect(headerEditor.on).toHaveBeenCalled();
   });
 
+  it('state.selection mirrors full SelectionInfo (target, activeMarks, activeCommentIds, activeChangeIds, quotedText)', () => {
+    const superdoc = makeSuperdocStub();
+    // Replace the default selection.current stub with one that returns
+    // the full SelectionInfo shape.
+    const target = {
+      kind: 'text' as const,
+      segments: [{ blockId: 'p1', range: { start: 0, end: 5 } }],
+    };
+    (superdoc.activeEditor as { doc: { selection: { current: unknown } } }).doc.selection.current = vi.fn(() => ({
+      empty: false,
+      text: 'Hello',
+      target,
+      activeMarks: ['bold', 'italic'],
+      activeCommentIds: ['c1'],
+      activeChangeIds: ['tc1'],
+    }));
+    const ui = createSuperDocUI({ superdoc });
+    teardown.push(() => ui.destroy());
+
+    const slice = ui.select((state) => state.selection).get();
+    expect(slice).toEqual({
+      empty: false,
+      target,
+      activeMarks: ['bold', 'italic'],
+      activeCommentIds: ['c1'],
+      activeChangeIds: ['tc1'],
+      quotedText: 'Hello',
+    });
+  });
+
+  it('state.selection slice keeps identity stable across recomputes when the projection has not changed', async () => {
+    const superdoc = makeSuperdocStub();
+    const target = {
+      kind: 'text' as const,
+      segments: [{ blockId: 'p1', range: { start: 0, end: 5 } }],
+    };
+    // Each call to selection.current returns FRESH arrays (mirrors the
+    // resolver behavior — `activeMarks`/`activeCommentIds`/`activeChangeIds`
+    // are produced per call, not memoized at the resolver level).
+    (superdoc.activeEditor as { doc: { selection: { current: unknown } } }).doc.selection.current = vi.fn(() => ({
+      empty: false,
+      text: 'Hello',
+      target,
+      activeMarks: ['bold'],
+      activeCommentIds: ['c1'],
+      activeChangeIds: [],
+    }));
+    const ui = createSuperDocUI({ superdoc });
+    teardown.push(() => ui.destroy());
+
+    const cb = vi.fn();
+    ui.select((state) => state.selection, shallowEqual).subscribe(cb);
+    expect(cb).toHaveBeenCalledTimes(1); // initial
+
+    // Fire two transactions that don't change the projection. Without
+    // slice-level memoization, shallowEqual on the slice would flip on
+    // every call because the inner arrays are fresh each time.
+    superdoc.fireEditor('transaction');
+    await flushMicrotasks();
+    superdoc.fireEditor('transaction');
+    await flushMicrotasks();
+
+    expect(cb).toHaveBeenCalledTimes(1);
+  });
+
+  it('state.selection slice changes identity when activeMarks change (typing into bold)', async () => {
+    const superdoc = makeSuperdocStub();
+    let activeMarks: string[] = [];
+    (superdoc.activeEditor as { doc: { selection: { current: unknown } } }).doc.selection.current = vi.fn(() => ({
+      empty: true,
+      text: '',
+      target: null,
+      activeMarks,
+      activeCommentIds: [],
+      activeChangeIds: [],
+    }));
+    const ui = createSuperDocUI({ superdoc });
+    teardown.push(() => ui.destroy());
+
+    const cb = vi.fn();
+    ui.select((state) => state.selection, shallowEqual).subscribe(cb);
+    expect(cb).toHaveBeenCalledTimes(1);
+
+    activeMarks = ['bold'];
+    superdoc.fireEditor('selectionUpdate');
+    await flushMicrotasks();
+
+    expect(cb).toHaveBeenCalledTimes(2);
+    const latestSlice = cb.mock.calls[1][0] as { activeMarks: string[] };
+    expect(latestSlice.activeMarks).toEqual(['bold']);
+  });
+
+  it('state.selection falls back to safe defaults when selection.current is missing fields (legacy resolver)', () => {
+    const superdoc = makeSuperdocStub();
+    // Legacy / partial resolver: only `empty` + `text` fields present.
+    (superdoc.activeEditor as { doc: { selection: { current: unknown } } }).doc.selection.current = vi.fn(() => ({
+      empty: true,
+      text: '',
+    }));
+    const ui = createSuperDocUI({ superdoc });
+    teardown.push(() => ui.destroy());
+
+    const slice = ui.select((state) => state.selection).get();
+    expect(slice).toEqual({
+      empty: true,
+      target: null,
+      activeMarks: [],
+      activeCommentIds: [],
+      activeChangeIds: [],
+      quotedText: '',
+    });
+  });
+
   it('listener errors do not propagate to the editor or other subscribers', async () => {
     const superdoc = makeSuperdocStub();
     const ui = createSuperDocUI({ superdoc });

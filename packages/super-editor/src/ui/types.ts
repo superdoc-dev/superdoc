@@ -164,9 +164,54 @@ export interface SuperDocUIState {
  */
 export type ToolbarSnapshotSlice = import('../headless-toolbar/types.js').ToolbarSnapshot;
 
+/**
+ * Snapshot of the editor's current selection — the full
+ * {@link import('@superdoc/document-api').SelectionInfo} projection
+ * mirrored on the controller so a single `ui.select(s => s.selection,
+ * shallowEqual)` subscribe gives consumers everything they need to
+ * drive a floating bubble menu, format toolbar, mention popover, or
+ * "comment here" hint without dipping back into `editor.doc.selection.current()`.
+ */
 export interface SelectionSlice {
+  /** True when the selection is empty (cursor only, no range). */
   empty: boolean;
-  /** The selected text, or '' when the selection is collapsed. */
+  /**
+   * The selection anchored to text content as a portable
+   * {@link import('@superdoc/document-api').TextTarget}, or `null` when
+   * the selection is not in text (empty document, node selection, no
+   * focus). Multi-segment when the selection spans multiple blocks.
+   * Pass directly to `editor.doc.comments.create({ target })`.
+   */
+  target: import('@superdoc/document-api').TextTarget | null;
+  /**
+   * Active marks at the caret or across the selection. Names are
+   * ProseMirror mark type names (`'bold'`, `'italic'`, `'link'`).
+   * Drives toolbar active-state rendering. Intersection semantics: a
+   * mark name is included only if every character in the range carries
+   * it (or, when empty, the caret/stored marks).
+   */
+  activeMarks: string[];
+  /**
+   * Comment ids whose `commentMark` overlaps the selection (or sits
+   * under the caret when empty). Union semantics: an id is included
+   * when *any* character in the range carries the mark. Use to
+   * highlight the active sidebar card or render a "comment here" hint.
+   * Same array as `state.comments.activeIds` — duplicated for the
+   * single-subscribe ergonomic.
+   */
+  activeCommentIds: string[];
+  /**
+   * Tracked-change ids whose mark (`trackInsert` / `trackDelete` /
+   * `trackFormat`) overlaps the selection. Union semantics. Mirrors
+   * `state.review.activeId` (which picks the first id) for consumers
+   * that want the full set.
+   */
+  activeChangeIds: string[];
+  /**
+   * Quoted text of the selection. Always present on the slice;
+   * empty string when the selection is collapsed. Equivalent to
+   * `editor.doc.selection.current({ includeText: true }).text ?? ''`.
+   */
   quotedText: string;
 }
 

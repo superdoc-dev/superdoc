@@ -2932,18 +2932,6 @@ async function buildMeasuredAutoFitContentMetrics(
   };
 }
 
-/**
- * Resolve a table-cell border width in pixels for content-box calculations.
- */
-function getMeasuredCellBorderWidthPx(border: { style?: string; width?: number } | undefined): number {
-  if (!border || border.style === 'none') {
-    return 0;
-  }
-
-  const width = typeof border.width === 'number' ? border.width : 0;
-  return border.style === 'thick' ? Math.max(width * 2, 3) : Math.max(0, width);
-}
-
 async function measureImageBlock(block: ImageBlock, constraints: MeasureConstraints): Promise<ImageMeasure> {
   const intrinsic = getIntrinsicImageSize(block, constraints.maxWidth);
 

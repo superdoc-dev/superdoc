@@ -1404,21 +1404,19 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
         // the selected OOXML slot. With even/odd headers enabled, `default`
         // represents the odd-page header, not a replacement for a missing even
         // header.
+        const defaultHeaderRef = activeSectionRefs?.headerRefs?.default;
+        const defaultFooterRef = activeSectionRefs?.footerRefs?.default;
         const shouldUseDefaultHeaderRef =
-          variantType !== 'default' &&
-          activeSectionRefs?.headerRefs?.default &&
-          (!alternateHeaders || variantType === 'odd');
+          variantType !== 'default' && defaultHeaderRef && (!alternateHeaders || variantType === 'odd');
         const shouldUseDefaultFooterRef =
-          variantType !== 'default' &&
-          activeSectionRefs?.footerRefs?.default &&
-          (!alternateHeaders || variantType === 'odd');
+          variantType !== 'default' && defaultFooterRef && (!alternateHeaders || variantType === 'odd');
 
         if (!headerRef && shouldUseDefaultHeaderRef) {
-          headerRef = activeSectionRefs.headerRefs.default;
+          headerRef = defaultHeaderRef;
           effectiveVariantType = 'default';
         }
         if (!footerRef && shouldUseDefaultFooterRef) {
-          footerRef = activeSectionRefs.footerRefs.default;
+          footerRef = defaultFooterRef;
         }
 
         // Calculate the actual header/footer heights for this page's variant

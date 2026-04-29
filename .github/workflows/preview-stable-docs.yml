@@ -53,13 +53,24 @@ jobs:
           preview_url=$(echo "${response}" | jq -r '.previewUrl // empty')
           echo "preview_url=${preview_url}" >> "$GITHUB_OUTPUT"
 
-      # Comment only on first open. Mintlify reuses the same URL for the same
-      # branch on redeploys, so subsequent pushes refresh content in place.
+      # Comment once per PR. Mintlify reuses the same URL for the same branch
+      # on redeploys, so subsequent pushes refresh content in place at the same
+      # URL. We can't gate on `action == 'opened'` because the workflow may
+      # first run on a `synchronize` event (e.g., when this workflow file
+      # didn't exist on the base branch when the PR was opened), so we check
+      # for an existing preview comment instead.
       - name: Comment preview URL on PR
-        if: steps.preview.outputs.preview_url != '' && github.event.action == 'opened'
+        if: steps.preview.outputs.preview_url != ''
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           PREVIEW_URL: ${{ steps.preview.outputs.preview_url }}
         run: |
+          set -euo pipefail
+          existing=$(gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json comments \
+            --jq '[.comments[] | select(.body | startswith("📖 Docs preview:"))] | length')
+          if [ "$existing" -gt 0 ]; then
+            echo "Preview comment already exists; skipping."
+            exit 0
+          fi
           gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --body "📖 Docs preview: ${PREVIEW_URL}"

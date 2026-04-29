@@ -106,7 +106,7 @@ The `superdoc` package currently exposes the following entries via `package.json
 |---|---|---|---|
 | `.` | Yes | Public subpath | Main entry, stays |
 | `./types` | Yes | Public type contract | Type-only entry, stays |
-| `./super-editor` | Yes | TBD | **Open question 1** |
+| `./super-editor` | Yes | Legacy public compatibility surface | Was effectively public when no other headless path existed. `Editor`, `PresentationEditor`, `getStarterExtensions`, `Extensions`, `SuperToolbar`, `SuperConverter`, `DocxZipper` and most of the surface are now exported from `superdoc` itself. Kept exported, not advertised, migration target is `superdoc`. See Decision 1. |
 | `./ui` | Yes | Public subpath | Stays |
 | `./headless-toolbar` | Yes | Public subpath | Stays |
 | `./headless-toolbar/react` | Yes | Public subpath | Stays |
@@ -123,7 +123,7 @@ Any type appearing in a public `.d.ts` (any file reachable from the entries abov
 1. **Owned directly by `superdoc`.** Defined in `packages/superdoc/src/`, no internal package specifier in its declaration.
 2. **Included in the published `superdoc` declaration graph under a `superdoc`-owned path, with no private package specifier exposed.** This is intentionally tool-agnostic; it covers a curated emit, generated public type files, declaration bundling, or any future delivery mechanism. The constraint is the output shape, not the tool.
 3. **Re-exported from a real public package.** `@superdoc-dev/react` types coming through their own package.
-4. **Re-exported from a published `@superdoc/*` package.** Only applies to packages explicitly classified as public package above (currently none; see open question 2).
+4. **Re-exported from a published `@superdoc/*` (or `@superdoc-dev/*`) package.** Only applies to packages explicitly classified as a supported public package in the inventory above. The Document API package is the immediate candidate; its delivery shape is settled by Decision 2.
 
 If a type does not satisfy one of these, it must not appear. The audit gate (SD-2832) enforces this.
 
@@ -131,7 +131,7 @@ If a type does not satisfy one of these, it must not appear. The audit gate (SD-
 
 1. **Published public declarations must not import private workspace packages.** Source code may still import internal packages at runtime; the constraint is on the emitted `.d.ts` reachable from a public entry.
 2. **Internal packages may import other internal packages freely.** No restriction inward.
-3. **`superdoc/super-editor` (if it stays public) must follow the same declaration rules as `superdoc` itself.** Currently it leaks the most.
+3. **Legacy public surfaces follow the same declaration rules as supported public surfaces.** They get minimal type coverage to avoid breaking existing consumers, but they must not leak private workspace packages.
 4. **`shared/*` packages are internal runtime only.** Their types do not appear in any public declaration; values used by public code get inlined.
 
 ## Decisions and pending inputs

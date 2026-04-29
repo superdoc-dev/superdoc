@@ -24,6 +24,7 @@ import type {
   ReviewHandle,
   ReviewItem,
   ReviewSlice,
+  SelectionHandle,
   SelectionSlice,
   SelectorFn,
   SuperDocEditorLike,
@@ -1124,6 +1125,28 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     },
   };
 
+  // ---- ui.selection ------------------------------------------------------
+  //
+  // Same shape as `ui.comments` / `ui.review` / `ui.toolbar`:
+  // synchronous `getSnapshot()` + memoized `subscribe()`. Sugar over
+  // `ui.select((s) => s.selection, shallowEqual)` so consumers writing
+  // floating bubble menus / format toolbars / mention popovers /
+  // "comment here" hints have the same ergonomic surface as the
+  // other domain handles instead of dipping into the lower-level
+  // selector substrate.
+  const selection: SelectionHandle = {
+    getSnapshot: () => computeState().selection,
+    subscribe(listener) {
+      return select((state) => state.selection, shallowEqual).subscribe((snapshot) => {
+        try {
+          listener({ snapshot });
+        } catch {
+          // see scheduleNotify
+        }
+      });
+    },
+  };
+
   const destroy = () => {
     if (destroyed) return;
     destroyed = true;
@@ -1140,5 +1163,5 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     teardown.length = 0;
   };
 
-  return { select, toolbar, commands, comments, review, viewport, destroy };
+  return { select, toolbar, commands, comments, review, selection, viewport, destroy };
 }

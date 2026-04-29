@@ -9,6 +9,7 @@ export {
   type ReviewHandle,
   type ReviewItem,
   type ReviewSlice,
+  type SelectionHandle,
   type SelectionSlice,
   type SelectorFn,
   type Subscribable,

@@ -563,6 +563,68 @@ describe('createSuperDocUI', () => {
     });
   });
 
+  it('ui.selection.getSnapshot returns the current slice synchronously', () => {
+    const superdoc = makeSuperdocStub();
+    const target = {
+      kind: 'text' as const,
+      segments: [{ blockId: 'p1', range: { start: 0, end: 3 } }],
+    };
+    (superdoc.activeEditor as { doc: { selection: { current: unknown } } }).doc.selection.current = vi.fn(() => ({
+      empty: false,
+      text: 'foo',
+      target,
+      activeMarks: ['bold'],
+      activeCommentIds: ['c1'],
+      activeChangeIds: [],
+    }));
+    const ui = createSuperDocUI({ superdoc });
+    teardown.push(() => ui.destroy());
+
+    const snap = ui.selection.getSnapshot();
+    expect(snap).toEqual({
+      empty: false,
+      target,
+      activeMarks: ['bold'],
+      activeCommentIds: ['c1'],
+      activeChangeIds: [],
+      quotedText: 'foo',
+    });
+  });
+
+  it('ui.selection.subscribe fires once with the initial snapshot then on changes', async () => {
+    const superdoc = makeSuperdocStub();
+    let activeMarks: string[] = [];
+    (superdoc.activeEditor as { doc: { selection: { current: unknown } } }).doc.selection.current = vi.fn(() => ({
+      empty: true,
+      text: '',
+      target: null,
+      activeMarks,
+      activeCommentIds: [],
+      activeChangeIds: [],
+    }));
+    const ui = createSuperDocUI({ superdoc });
+    teardown.push(() => ui.destroy());
+
+    const cb = vi.fn();
+    const off = ui.selection.subscribe(cb);
+    expect(cb).toHaveBeenCalledTimes(1); // initial snapshot
+
+    // No-op transaction: same projection, listener stays at one call.
+    superdoc.fireEditor('selectionUpdate');
+    await flushMicrotasks();
+    expect(cb).toHaveBeenCalledTimes(1);
+
+    // Real change: caret enters bold → listener fires.
+    activeMarks = ['bold'];
+    superdoc.fireEditor('selectionUpdate');
+    await flushMicrotasks();
+    expect(cb).toHaveBeenCalledTimes(2);
+    const arg = cb.mock.calls[1][0] as { snapshot: { activeMarks: string[] } };
+    expect(arg.snapshot.activeMarks).toEqual(['bold']);
+
+    off();
+  });
+
   it('listener errors do not propagate to the editor or other subscribers', async () => {
     const superdoc = makeSuperdocStub();
     const ui = createSuperDocUI({ superdoc });

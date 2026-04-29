@@ -35,6 +35,7 @@ export type {
   SuperDocUIState,
 
   // Selection
+  SelectionHandle,
   SelectionSlice,
 
   // Toolbar + commands

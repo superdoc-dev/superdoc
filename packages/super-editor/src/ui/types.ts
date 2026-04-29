@@ -344,6 +344,22 @@ export interface SuperDocUI {
   review: ReviewHandle;
 
   /**
+   * Selection domain — single subscription + read surface for
+   * floating bubble menus, format toolbars, mention popovers, and
+   * "comment here" hints. The handle is sugar over
+   * `ui.select((s) => s.selection, shallowEqual)` plus a synchronous
+   * `getSnapshot()`; the lower-level selector substrate stays
+   * available for finer-grained slices.
+   *
+   * The slice mirrors `editor.doc.selection.current()` —
+   * `target` (TextTarget | null), `activeMarks`, `activeCommentIds`,
+   * `activeChangeIds`, `quotedText`, `empty` — memoized at the
+   * controller so subscribers don't re-fire on transactions that
+   * leave the projection unchanged.
+   */
+  selection: SelectionHandle;
+
+  /**
    * Viewport domain — imperative geometry queries for sticky-card /
    * floating-toolbar placement against painted entities and ranges.
    * No subscription substrate — viewport rects are read on-demand by
@@ -358,6 +374,24 @@ export interface SuperDocUI {
    * fire and `select(...)` should not be called.
    */
   destroy(): void;
+}
+
+/**
+ * Selection domain handle exposed on `ui.selection`. Same shape as
+ * `CommentsHandle` / `ReviewHandle`: snapshot + subscription. Mirrors
+ * the full `SelectionInfo` projection through the memoized
+ * `state.selection` slice.
+ */
+export interface SelectionHandle {
+  /** Snapshot the current selection slice synchronously. */
+  getSnapshot(): SelectionSlice;
+  /**
+   * Subscribe to selection slice changes. The listener fires once
+   * with the initial snapshot, then again only when the projected
+   * selection state actually changes (memoized — no re-fire on
+   * typing-only transactions). Returns an unsubscribe.
+   */
+  subscribe(listener: (event: { snapshot: SelectionSlice }) => void): () => void;
 }
 
 /**
@@ -537,19 +571,17 @@ export interface ViewportRect {
 
 export interface ViewportGetRectInput {
   /**
-   * The thing to look up. Same target shapes as `viewport.scrollIntoView`:
-   *   - `EntityAddress` (comment / tracked change by id)
-   *   - `TextAddress` (single-block text range) — deferred
-   *   - `TextTarget` (multi-segment text target) — deferred
-   *
-   * The text-anchored paths land in a follow-up to keep this PR small;
-   * the union is widened in the type so consumers can author future-
-   * compatible call sites today.
+   * Entity to look up — comment or tracked change by id. Today
+   * `getRect` resolves rects via the painter's data attributes
+   * (`data-comment-ids`, `data-track-change-id`) which only stamp
+   * entity addresses, not text-anchored ranges. Text targets
+   * (`TextAddress` / `TextTarget`) are intentionally not in the
+   * union: surface should match real behavior so a typed call site
+   * isn't lying about what works at runtime. They land via a
+   * follow-up that adds story-aware text resolution to the rect
+   * helper.
    */
-  target:
-    | import('@superdoc/document-api').EntityAddress
-    | import('@superdoc/document-api').TextAddress
-    | import('@superdoc/document-api').TextTarget;
+  target: import('@superdoc/document-api').EntityAddress;
 }
 
 export type ViewportRectResult =

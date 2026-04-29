@@ -165,6 +165,8 @@ export type {
 
 // superdoc/ui public types (browser UI controller)
 export type {
+  CommentsHandle,
+  CommentsSlice,
   EqualityFn,
   SelectorFn,
   SelectionSlice,

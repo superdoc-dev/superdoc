@@ -56,7 +56,26 @@ export interface SuperDocEditorLike {
         empty: boolean;
         text?: string;
         target?: unknown;
+        /** Present after SD-2792; absent on older builds — controller falls back to []. */
+        activeCommentIds?: string[];
+        activeChangeIds?: string[];
       };
+    };
+    /**
+     * Comments member on the Document API. The structural typing
+     * keeps the controller loose from the real `CommentsApi` interface
+     * to allow stub-driven unit tests without pulling in the full
+     * adapter graph; runtime calls forward to the real `editor.doc`.
+     */
+    comments?: {
+      list?(query?: unknown): unknown;
+      create?(input: unknown, options?: unknown): unknown;
+      patch?(input: unknown, options?: unknown): unknown;
+      delete?(input: unknown, options?: unknown): unknown;
+    };
+    /** Ranges member on the Document API. Used for `ui.comments.scrollTo`. */
+    ranges?: {
+      scrollIntoView?(input: unknown): Promise<unknown>;
     };
   };
 }
@@ -91,6 +110,15 @@ export interface SuperDocUIState {
    * (fine-grained per-command observables).
    */
   toolbar: ToolbarSnapshotSlice;
+  /**
+   * Comments slice. Sourced from `editor.doc.comments.list()` and
+   * cached at the controller level — the list is refreshed on
+   * `commentsUpdate` / `commentsLoaded` events, not recomputed per
+   * `computeState()` call. `activeIds` mirrors
+   * `selection.current().activeCommentIds` so a comment-aware sidebar
+   * can highlight the active card without a separate subscription.
+   */
+  comments: CommentsSlice;
 }
 
 /**
@@ -104,6 +132,28 @@ export interface SelectionSlice {
   empty: boolean;
   /** The selected text, or '' when the selection is collapsed. */
   quotedText: string;
+}
+
+/**
+ * Snapshot of the comments collection exposed on `state.comments`.
+ *
+ * Items use the same shape `editor.doc.comments.list()` returns
+ * (`DiscoveryItem<CommentDomain>`), so consumers that already consume
+ * that contract see no shape mismatch. `activeIds` is a denormalized
+ * convenience driven by `selection.current().activeCommentIds`.
+ */
+export interface CommentsSlice {
+  /** Total count from the list result (before pagination, if any). */
+  total: number;
+  /** Items from `editor.doc.comments.list()`. Empty array on error or no editor. */
+  items: import('@superdoc/document-api').CommentsListResult['items'];
+  /**
+   * Comment IDs whose `commentMark` overlaps the current selection
+   * (or covers the caret when empty). Empty array when the editor's
+   * `selection.current()` predates SD-2792 (no `activeCommentIds`
+   * field) — the controller falls back gracefully.
+   */
+  activeIds: string[];
 }
 
 export interface SuperDocUIOptions {
@@ -122,7 +172,6 @@ export interface SuperDocUI {
    */
   select<TSlice>(selector: SelectorFn<SuperDocUIState, TSlice>, equality?: EqualityFn<TSlice>): Subscribable<TSlice>;
 
-  /**
    * Aggregate toolbar surface. Mirrors the `HeadlessToolbarController`
    * shape from `superdoc/headless-toolbar`, sourced from the same
    * internal controller. Equivalent to subscribing to the toolbar slice
@@ -139,6 +188,16 @@ export interface SuperDocUI {
    * changes don't trigger a re-render.
    */
   commands: CommandsHandle;
+
+  /**
+   * Comments domain — single subscription + actions surface. Subscribe
+   * to receive snapshot updates (items + activeIds + total); call
+   * action methods to mutate. All mutations route through
+   * `editor.doc.comments.*` (the Document API contract); this handle
+   * exists to give UI consumers a stable surface, not to be a parallel
+   * mutation contract.
+   */
+  comments: CommentsHandle;
 
   /**
    * Tear down all internal subscriptions to the editor / SuperDoc
@@ -212,3 +271,43 @@ export type ToolbarCommandHandleState<Id extends import('../headless-toolbar/typ
 export type CommandsHandle = {
   [Id in import('../headless-toolbar/types.js').PublicToolbarItemId]: CommandHandle<Id>;
 };
+
+/**
+ * Comments domain handle exposed on `ui.comments`. The execute
+ * methods are convenience facades over `editor.doc.comments.*` —
+ * they produce identical document mutations to direct doc-API calls.
+ */
+export interface CommentsHandle {
+  /** Snapshot the current comments slice synchronously. */
+  getSnapshot(): CommentsSlice;
+  /**
+   * Subscribe to comments-snapshot changes. Listener fires once
+   * synchronously with the current snapshot, then again whenever
+   * items, activeIds, or total change (shallow equality).
+   * Returns an unsubscribe.
+   */
+  subscribe(listener: (event: { snapshot: CommentsSlice }) => void): () => void;
+  /**
+   * Create a comment anchored to the current selection. Reads the
+   * routed editor's `selection.current().target` and routes through
+   * `editor.doc.comments.create`. Returns the operation receipt.
+   */
+  createFromSelection(input: { text: string }): import('@superdoc/document-api').Receipt;
+  /** Resolve a comment via `editor.doc.comments.patch`. */
+  resolve(commentId: string): import('@superdoc/document-api').Receipt;
+  /**
+   * Reopen a resolved comment via `editor.doc.comments.patch({ status:
+   * 'active' })`. Currently throws `INVALID_INPUT` on the doc-API
+   * because the patch input only accepts `'resolved'`; SD-2789 adds
+   * the lifecycle inverse and reroutes this method to succeed.
+   */
+  reopen(commentId: string): import('@superdoc/document-api').Receipt;
+  /** Delete a comment via `editor.doc.comments.delete`. */
+  delete(commentId: string): import('@superdoc/document-api').Receipt;
+  /**
+   * Scroll the viewport to the comment's anchor via
+   * `editor.doc.ranges.scrollIntoView({ target: EntityAddress })`.
+   * Resolves to the receipt the doc-API returns.
+   */
+  scrollTo(commentId: string): Promise<import('@superdoc/document-api').ScrollIntoViewOutput>;
+}

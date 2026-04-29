@@ -62,6 +62,8 @@ export interface SuperDocEditorLike {
         empty: boolean;
         text?: string;
         target?: unknown;
+        /** Active mark names at the caret / across the selection. */
+        activeMarks?: string[];
         /** Present after SD-2792; absent on older builds — controller falls back to []. */
         activeCommentIds?: string[];
         activeChangeIds?: string[];

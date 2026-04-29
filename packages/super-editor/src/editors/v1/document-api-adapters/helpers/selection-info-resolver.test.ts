@@ -450,6 +450,50 @@ describe('resolveCurrentSelectionInfo > entity ids', () => {
     expect(info.activeCommentIds).toEqual(['c1']);
   });
 
+  it('resolves comment ids from importedId / w:id when commentId is absent (legacy DOCX imports)', () => {
+    // Imported / legacy comment marks may carry the id on `importedId`
+    // or `w:id` instead of the post-import canonical `commentId`. The
+    // resolver must honor the same fallback chain the rest of the
+    // adapter graph uses (`resolveCommentIdFromAttrs`).
+    const docNode = doc([
+      entityMarkedTextBlock('p1', [
+        { text: 'imported ', marksWithAttrs: [{ name: 'commentMark', attrs: { importedId: 'imp-1' } }] },
+        { text: 'legacy', marksWithAttrs: [{ name: 'commentMark', attrs: { 'w:id': 'leg-2' } }] },
+      ]),
+    ]);
+    const editor = makeEditor(docNode, { from: 2, to: 17 });
+
+    const info = resolveCurrentSelectionInfo(editor, {});
+
+    expect([...info.activeCommentIds].sort()).toEqual(['imp-1', 'leg-2']);
+  });
+
+  it('collects entity ids from inline atom nodes (image, tab, line break with marks)', () => {
+    // A range selection over an image with a comment should still
+    // surface the comment id. Inline leaf nodes carry marks just like
+    // text runs do; restricting to `isText` would skip them and leave
+    // sidebar highlighting empty for image-only / atom-only selections.
+    const imageWithComment = createNode('image', [], {
+      isInline: true,
+      isLeaf: true,
+      attrs: { src: 'cat.png' },
+      marksWithAttrs: [{ name: 'commentMark', attrs: { commentId: 'c-img' } }],
+    });
+    const block = createNode('paragraph', [imageWithComment], {
+      isBlock: true,
+      inlineContent: true,
+      attrs: { sdBlockId: 'p1' },
+    });
+    const docNode = doc([block]);
+    // Doc layout: doc[0..5], paragraph[1..4] (content [2..3]), image atom[2..3].
+    // Select the image atom span: PM [2, 3].
+    const editor = makeEditor(docNode, { from: 2, to: 3 });
+
+    const info = resolveCurrentSelectionInfo(editor, {});
+
+    expect(info.activeCommentIds).toEqual(['c-img']);
+  });
+
   it('empty arrays survive a JSON round-trip (serialization-stable shape)', () => {
     // Schema and dispatch tests assume the SelectionInfo output is JSON-
     // serializable with stable field presence. Empty arrays should

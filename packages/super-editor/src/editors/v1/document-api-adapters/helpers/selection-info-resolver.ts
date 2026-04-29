@@ -2,6 +2,7 @@ import type { Node as ProseMirrorNode } from 'prosemirror-model';
 import type { SelectionCurrentInput, SelectionInfo, TextTarget, TextSegment } from '@superdoc/document-api';
 import type { Editor } from '../../core/Editor.js';
 import { pmPositionToTextOffset } from './text-offset-resolver.js';
+import { resolveCommentIdFromAttrs } from './value-utils.js';
 
 /**
  * Mark names that anchor live entities the UI cares about. We collect
@@ -147,7 +148,12 @@ function collectActiveEntityIds(
 
   const collectFromMark = (markType: string, attrs: Record<string, unknown> | undefined) => {
     if (markType === COMMENT_MARK_NAME) {
-      const id = attrs?.commentId;
+      // Imported / legacy comments may carry the id on `importedId` or
+      // `w:id` instead of `commentId`. Use the same resolution helper
+      // the rest of the comment adapters use so a sidebar built on the
+      // selection slice highlights the active card for legacy DOCX
+      // imports too.
+      const id = resolveCommentIdFromAttrs((attrs ?? {}) as Record<string, unknown>);
       if (typeof id === 'string' && id.length > 0) commentIds.add(id);
     } else if (TRACK_CHANGE_MARK_NAMES.has(markType)) {
       const id = attrs?.id;
@@ -165,7 +171,15 @@ function collectActiveEntityIds(
     for (const mark of $pos.marks()) collectFromMark(mark.type.name, mark.attrs);
   } else {
     state.doc.nodesBetween(from, to, (node, pos) => {
-      if (!node.isText) return true;
+      // Walk text nodes AND inline atoms (images, tabs, line breaks,
+      // footnote references). Inline leaf nodes can carry comment /
+      // tracked-change marks just like text runs do — limiting to
+      // `isText` would skip them and leave `activeCommentIds` /
+      // `activeChangeIds` empty for selections that only cover an
+      // image with a comment, breaking sidebar highlighting in that
+      // case. Block-level nodes still recurse so we descend into
+      // their inline children.
+      if (!node.isInline) return true;
       const start = Math.max(pos, from);
       const end = Math.min(pos + node.nodeSize, to);
       if (end <= start) return false;

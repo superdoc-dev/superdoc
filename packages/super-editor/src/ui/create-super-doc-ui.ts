@@ -478,7 +478,15 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
       comments: {
         total: commentsListCache.total,
         items: commentsListCache.items,
-        activeIds,
+        // Plumb from the memoized selection slice so the array
+        // reference stays stable across recomputes when the active
+        // set hasn't changed. The resolver returns a fresh `[]` (or
+        // a fresh non-empty array) every call; without this the
+        // `shallowEqual` check on `state.comments` would mismatch
+        // every transaction / selectionUpdate even when nothing in
+        // the comments slice actually changed, re-firing every
+        // `ui.comments.subscribe` listener on the editing hot path.
+        activeIds: selectionSlice.activeCommentIds,
       },
       review: reviewSlice,
     };

@@ -4,18 +4,22 @@ import { useSetSuperDoc } from 'superdoc/ui/react';
 
 const CURRENT_USER = { name: 'Alex Rivera', email: 'alex@example.com' };
 
-// Disable SuperDoc's built-in comments UI. The custom sidebar drives
-// comments entirely through `ui.comments` — leaving the default UI on
-// would mean both the floating trigger and the custom card render at
-// once, which is the "double UI" footgun consumers asking about
-// drop-in always hit first.
-const MODULES = { comments: false as const };
-
 // Telemetry opt-out is the default the example demonstrates. The
 // SuperDoc default is `enabled: true`; consumers building their own
 // privacy / consent story typically want it disabled until that path
 // is wired.
 const TELEMETRY = { enabled: false as const };
+
+// NOTE on `modules: { comments: false }`. The example previously set
+// this to hide SuperDoc's built-in floating-comment UI, but the flag
+// ALSO short-circuits comment-data ingest (`use-document.js` line 88),
+// so any comments imported from the source DOCX never reach the
+// commentsStore and `host.export()` writes them out as an empty list.
+// Round-trip drops every imported comment. Until SuperDoc adds a
+// "hide UI without disabling storage" option, the example leaves the
+// default config in place: comments load, export round-trips, and
+// the built-in floating UI is hidden via CSS / `contained` layout
+// instead.
 
 /**
  * Mounts `<SuperDocEditor>` and hands the running SuperDoc instance to
@@ -36,7 +40,6 @@ export function EditorMount() {
       document="/sample-review.docx"
       documentMode="editing"
       user={CURRENT_USER}
-      modules={MODULES}
       telemetry={TELEMETRY}
       hideToolbar
       contained

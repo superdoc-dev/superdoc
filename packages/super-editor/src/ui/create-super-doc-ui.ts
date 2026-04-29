@@ -181,6 +181,39 @@ function resolvePresentationEditor(superdoc: SuperDocUIOptions['superdoc']): {
   }
 }
 
+/**
+ * Lift a {@link import('@superdoc/document-api').TextTarget} into the
+ * {@link import('@superdoc/document-api').SelectionTarget} shape that
+ * point/range Document API operations (`editor.doc.insert`,
+ * `editor.doc.text.replace`, etc.) accept directly.
+ *
+ * - `null` in → `null` out (no selection means no insert anchor).
+ * - Single-segment selection: start/end share `blockId`.
+ * - Multi-segment selection: first segment supplies the start point,
+ *   last segment the end point. Inner segments are dropped — they're
+ *   reachable from the {start,end} pair via the same block traversal
+ *   the doc-api adapter already does internally.
+ *
+ * The helper sits next to the controller so consumers don't have to
+ * reach into a private adapter to convert. Doc-api ops will eventually
+ * accept TextTarget directly (separate ticket); until then,
+ * `selectionSlice.selectionTarget` is the consumer-facing shortcut.
+ */
+function textTargetToSelectionTarget(
+  textTarget: import('@superdoc/document-api').TextTarget | null,
+): import('@superdoc/document-api').SelectionTarget | null {
+  if (!textTarget) return null;
+  const segments = textTarget.segments;
+  if (!segments || segments.length === 0) return null;
+  const first = segments[0]!;
+  const last = segments[segments.length - 1]!;
+  return {
+    kind: 'selection',
+    start: { kind: 'text', blockId: first.blockId, offset: first.range.start },
+    end: { kind: 'text', blockId: last.blockId, offset: last.range.end },
+  };
+}
+
 export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
   const { superdoc } = options;
 
@@ -455,11 +488,11 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     // inside the resolver) keeps the slice identity stable and lets
     // `shallowEqual` short-circuit `ui.select(s => s.selection)`
     // subscribers.
-    const selectionTarget = (selectionInfo?.target ?? null) as import('@superdoc/document-api').TextTarget | null;
+    const selectionTextTarget = (selectionInfo?.target ?? null) as import('@superdoc/document-api').TextTarget | null;
     const selectionActiveMarks = (selectionInfo?.activeMarks ?? EMPTY_ACTIVE_IDS) as string[];
     const selectionKey = buildSelectionKey(
       empty,
-      selectionTarget,
+      selectionTextTarget,
       selectionActiveMarks,
       activeIds,
       activeChangeIdsFromSelection,
@@ -471,7 +504,11 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     } else {
       selectionSlice = {
         empty,
-        target: selectionTarget,
+        target: selectionTextTarget,
+        // Derived from `target`. Allocated only on memo miss so a
+        // typing-only transaction (which leaves the selection
+        // unchanged) doesn't churn the SelectionTarget identity.
+        selectionTarget: textTargetToSelectionTarget(selectionTextTarget),
         activeMarks: selectionActiveMarks,
         activeCommentIds: activeIds,
         activeChangeIds: activeChangeIdsFromSelection,

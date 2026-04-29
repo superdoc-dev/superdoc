@@ -207,9 +207,25 @@ export interface SelectionSlice {
    * {@link import('@superdoc/document-api').TextTarget}, or `null` when
    * the selection is not in text (empty document, node selection, no
    * focus). Multi-segment when the selection spans multiple blocks.
-   * Pass directly to `editor.doc.comments.create({ target })`.
+   * Pass directly to `editor.doc.comments.create({ target })` and to
+   * range-mutation operations like `editor.doc.format.apply`.
    */
   target: import('@superdoc/document-api').TextTarget | null;
+  /**
+   * The same selection in {@link import('@superdoc/document-api').SelectionTarget}
+   * shape — explicit start/end {@link import('@superdoc/document-api').SelectionPoint}s.
+   * Pass directly to `editor.doc.insert({ target })` and to other
+   * point/range operations that accept a SelectionTarget.
+   *
+   * Derived from `target`: `null` when `target` is null; otherwise the
+   * first segment's `blockId` + `range.start` as the start point and
+   * the last segment's `blockId` + `range.end` as the end point. The
+   * derivation lives on the slice so consumers don't have to reach for
+   * a private conversion helper every time they want to insert text at
+   * the cursor — the controller exposes the cursor in both the shapes
+   * SuperDoc's own document operations consume.
+   */
+  selectionTarget: import('@superdoc/document-api').SelectionTarget | null;
   /**
    * Active marks at the caret or across the selection. Names are
    * ProseMirror mark type names (`'bold'`, `'italic'`, `'link'`).

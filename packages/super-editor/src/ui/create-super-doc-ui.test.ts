@@ -473,11 +473,69 @@ describe('createSuperDocUI', () => {
     expect(slice).toEqual({
       empty: false,
       target,
+      // SD-2812: derived alongside `target`. Single-segment selection
+      // collapses to `start`/`end` on the same blockId.
+      selectionTarget: {
+        kind: 'selection',
+        start: { kind: 'text', blockId: 'p1', offset: 0 },
+        end: { kind: 'text', blockId: 'p1', offset: 5 },
+      },
       activeMarks: ['bold', 'italic'],
       activeCommentIds: ['c1'],
       activeChangeIds: ['tc1'],
       quotedText: 'Hello',
     });
+  });
+
+  // SD-2812: regression — selectionTarget mirrors the TextTarget for the
+  // common single-block case AND the multi-block case (first segment's
+  // start, last segment's end). Doc-api point/range ops accept this
+  // shape directly so the consumer doesn't have to convert.
+  it('state.selection.selectionTarget spans first..last segment for multi-block selections', () => {
+    const superdoc = makeSuperdocStub();
+    const target = {
+      kind: 'text' as const,
+      segments: [
+        { blockId: 'p1', range: { start: 4, end: 10 } },
+        { blockId: 'p2', range: { start: 0, end: 8 } },
+        { blockId: 'p3', range: { start: 0, end: 3 } },
+      ],
+    };
+    (superdoc.activeEditor as { doc: { selection: { current: unknown } } }).doc.selection.current = vi.fn(() => ({
+      empty: false,
+      text: 'spans three paragraphs',
+      target,
+      activeMarks: [],
+      activeCommentIds: [],
+      activeChangeIds: [],
+    }));
+    const ui = createSuperDocUI({ superdoc });
+    teardown.push(() => ui.destroy());
+
+    const slice = ui.select((state) => state.selection).get();
+    expect(slice.selectionTarget).toEqual({
+      kind: 'selection',
+      start: { kind: 'text', blockId: 'p1', offset: 4 },
+      end: { kind: 'text', blockId: 'p3', offset: 3 },
+    });
+  });
+
+  it('state.selection.selectionTarget is null when target is null', () => {
+    const superdoc = makeSuperdocStub();
+    (superdoc.activeEditor as { doc: { selection: { current: unknown } } }).doc.selection.current = vi.fn(() => ({
+      empty: true,
+      text: '',
+      target: null,
+      activeMarks: [],
+      activeCommentIds: [],
+      activeChangeIds: [],
+    }));
+    const ui = createSuperDocUI({ superdoc });
+    teardown.push(() => ui.destroy());
+
+    const slice = ui.select((state) => state.selection).get();
+    expect(slice.target).toBeNull();
+    expect(slice.selectionTarget).toBeNull();
   });
 
   it('state.selection slice keeps identity stable across recomputes when the projection has not changed', async () => {
@@ -556,6 +614,7 @@ describe('createSuperDocUI', () => {
     expect(slice).toEqual({
       empty: true,
       target: null,
+      selectionTarget: null,
       activeMarks: [],
       activeCommentIds: [],
       activeChangeIds: [],
@@ -584,6 +643,11 @@ describe('createSuperDocUI', () => {
     expect(snap).toEqual({
       empty: false,
       target,
+      selectionTarget: {
+        kind: 'selection',
+        start: { kind: 'text', blockId: 'p1', offset: 0 },
+        end: { kind: 'text', blockId: 'p1', offset: 3 },
+      },
       activeMarks: ['bold'],
       activeCommentIds: ['c1'],
       activeChangeIds: [],

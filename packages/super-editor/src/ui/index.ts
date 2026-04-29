@@ -19,6 +19,20 @@
 export { createSuperDocUI } from './create-super-doc-ui.js';
 export { shallowEqual } from './equality.js';
 
+// Re-export the document-side address shapes the controller surfaces
+// so consumers can type their components without reaching into the
+// `@superdoc/document-api` package directly. The full type re-export
+// pass is tracked separately (SD-2815); these are the shapes the
+// selection slice exposes today.
+export type {
+  TextTarget,
+  TextSegment,
+  TextAddress,
+  SelectionTarget,
+  SelectionPoint,
+  EntityAddress,
+} from '@superdoc/document-api';
+
 export type {
   // Substrate
   EqualityFn,

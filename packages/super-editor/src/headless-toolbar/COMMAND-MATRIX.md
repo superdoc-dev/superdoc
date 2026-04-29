@@ -17,43 +17,64 @@ For prep flows (file pickers, link dialogs, image upload, etc.) the UI layer sti
 
 The `route` column gives reviewers a stable way to reject accidental `editor.commands.*` re-introductions: if a new command lands on Bucket 1 but its `route` is `legacy-editor-command`, the pair test won't pass. CI catches the drift.
 
+## Layering rule (path B)
+
+Toggle is a UI gesture, not a document operation. The Document API stays deterministic — "set bold true", "set bold false", "set color X", "clear color" — and toggle behavior lives in the executor. So `ui.commands.bold.execute()` reads the current selection state, decides the intended outcome, and calls the appropriate doc-api operation sequence.
+
+This means each Bucket-1 entry has an `execution` shape that says *how* the toolbar gets to the doc-api operation:
+
+| Execution | Meaning |
+|--|--|
+| `single-doc-op` | One doc-api call, deterministic from payload. |
+| `composed-doc-ops` | Toolbar reads selection state, picks one or more doc-api calls (toggle, conditional clear, etc.). |
+| `ui-session` | UI/session state — no doc-api call. (Bucket 3.) |
+| `legacy-gap` | Falls back to `editor.commands.*` until the doc-api gap is filled. (Bucket 2.) |
+
+Pair tests assert that `ui.commands.<id>.execute()` produces the same final document state as the explicit doc-api sequence for a given starting state. For `composed-doc-ops` entries the "explicit sequence" varies by start state — the test exercises both branches (e.g. apply path *and* clear path for bold) so drift can't hide in either one.
+
+We will *not* add `format.toggleBold` (or similar UI-gesture ops) to the Document API. If the test exposes a missing deterministic operation — say there's no clean way to clear bold via doc-api — the gap is "set/clear inline formatting", not "toggle bold".
+
 ## Bucket 1 — `document-api` (33)
 
-| Command | Doc-api operation | Notes |
-|--|--|--|
-| `bold` | `format.bold` | |
-| `italic` | `format.italic` | |
-| `underline` | `format.underline` | |
-| `strikethrough` | `format.strike` | |
-| `font-size` | `format.fontSize` | |
-| `font-family` | `format.fontFamily` | |
-| `text-color` | `format.color` | |
-| `highlight-color` | `format.highlight` | |
-| `link` | `hyperlinks.wrap` / `hyperlinks.remove` | UI layer still owns the link prompt. Only the final mutation routes through doc-api. |
-| `text-align` | `format.paragraph.setAlignment` | |
-| `line-height` | `format.paragraph.setSpacing` (lineHeight) | |
-| `linked-style` | `styles.paragraph.setStyle` | Pair test must be strict — if the toolbar path does anything beyond apply-style (cursor moves, mark cleanup, etc.), the test must surface it. |
-| `bullet-list` | `lists.create` / `lists.attach` | |
-| `numbered-list` | `lists.create` / `lists.attach` | |
-| `indent-increase` | `lists.indent` (in list) / `format.paragraph.setIndentation` | |
-| `indent-decrease` | `lists.outdent` (in list) / `format.paragraph.setIndentation` | |
-| `undo` | `history.undo` | Editor-session state, but the contract owns it, so `ui.commands` must not bypass it. |
-| `redo` | `history.redo` | |
-| `clear-formatting` | `format.paragraph.resetDirectFormatting` | |
-| `track-changes-accept-selection` | `trackChanges.decide({ decision: 'accept' })` | |
-| `track-changes-reject-selection` | `trackChanges.decide({ decision: 'reject' })` | |
-| `image` | `create.image` | UI layer owns the file picker / upload dialog. Mutation goes through doc-api. |
-| `table-insert` | `create.table` | |
-| `table-add-row-before` | `tables.insertRow({ position: 'before' })` | |
-| `table-add-row-after` | `tables.insertRow({ position: 'after' })` | |
-| `table-delete-row` | `tables.deleteRow` | |
-| `table-add-column-before` | `tables.insertColumn({ position: 'before' })` | |
-| `table-add-column-after` | `tables.insertColumn({ position: 'after' })` | |
-| `table-delete-column` | `tables.deleteColumn` | |
-| `table-delete` | `tables.delete` | |
-| `table-merge-cells` | `tables.mergeCells` | |
-| `table-split-cell` | `tables.splitCell` | |
-| `table-remove-borders` | `tables.clearBorder` | |
+| Command | Execution | Doc-api operation(s) | Notes |
+|--|--|--|--|
+| `bold` | `composed-doc-ops` | `format.bold` (apply) / `format.apply({inline:{bold:false}})` (clear) | Toggle: read state → apply or clear. |
+| `italic` | `composed-doc-ops` | `format.italic` / `format.apply({inline:{italic:false}})` | Toggle. |
+| `underline` | `composed-doc-ops` | `format.underline` / `format.apply({inline:{underline:null}})` | Toggle. Underline is an object patch, not a boolean — clear via null. |
+| `strikethrough` | `composed-doc-ops` | `format.strike` / `format.apply({inline:{strike:false}})` | Toggle. |
+| `font-size` | `single-doc-op` | `format.fontSize` (or `format.apply` with null to clear) | Set-to-value. Empty/null payload clears. |
+| `font-family` | `single-doc-op` | `format.fontFamily` (or null to clear) | Set-to-value. |
+| `text-color` | `single-doc-op` | `format.color` (or null to clear) | Set-to-value. |
+| `highlight-color` | `single-doc-op` | `format.highlight` (or null to clear) | Set-to-value. |
+| `link` | `composed-doc-ops` | `hyperlinks.wrap` (set) / `hyperlinks.remove` (unset) | UI layer owns the link prompt. Mutation routes through doc-api once payload has `{href}`. |
+| `text-align` | `single-doc-op` | `format.paragraph.setAlignment` | |
+| `line-height` | `single-doc-op` | `format.paragraph.setSpacing` (lineHeight) | |
+| `linked-style` | `single-doc-op` | `styles.paragraph.setStyle` | Pair test must be strict — if the toolbar path does anything beyond apply-style (cursor moves, mark cleanup, etc.), the test must surface it. |
+| `bullet-list` | `composed-doc-ops` | `lists.create` / `lists.attach` / `lists.detach` (toggle) | Toggle into/out of list. |
+| `numbered-list` | `composed-doc-ops` | `lists.create` / `lists.attach` / `lists.detach` (toggle) | Toggle. |
+| `indent-increase` | `composed-doc-ops` | `lists.indent` (in list) / `format.paragraph.setIndentation` (else) | Branch on context. |
+| `indent-decrease` | `composed-doc-ops` | `lists.outdent` (in list) / `format.paragraph.setIndentation` (else) | Branch on context. |
+| `undo` | `single-doc-op` | `history.undo` | Editor-session state, but the contract owns it, so `ui.commands` must not bypass it. |
+| `redo` | `single-doc-op` | `history.redo` | |
+| `clear-formatting` | `single-doc-op` | `format.paragraph.resetDirectFormatting` | |
+| `track-changes-accept-selection` | `single-doc-op` | `trackChanges.decide({ decision: 'accept' })` | |
+| `track-changes-reject-selection` | `single-doc-op` | `trackChanges.decide({ decision: 'reject' })` | |
+| `image` | `single-doc-op` | `create.image` | UI layer owns the file picker / upload dialog. Mutation goes through doc-api. |
+| `table-insert` | `single-doc-op` | `create.table` | |
+| `table-add-row-before` | `single-doc-op` | `tables.insertRow({ position: 'before' })` | |
+| `table-add-row-after` | `single-doc-op` | `tables.insertRow({ position: 'after' })` | |
+| `table-delete-row` | `single-doc-op` | `tables.deleteRow` | |
+| `table-add-column-before` | `single-doc-op` | `tables.insertColumn({ position: 'before' })` | |
+| `table-add-column-after` | `single-doc-op` | `tables.insertColumn({ position: 'after' })` | |
+| `table-delete-column` | `single-doc-op` | `tables.deleteColumn` | |
+| `table-delete` | `single-doc-op` | `tables.delete` | |
+| `table-merge-cells` | `single-doc-op` | `tables.mergeCells` | |
+| `table-split-cell` | `single-doc-op` | `tables.splitCell` | |
+| `table-remove-borders` | `single-doc-op` | `tables.clearBorder` | |
+
+### Field-annotation special case
+
+`bold`, `italic`, `underline`, `strikethrough`, and a few others have a pre-check today: if the cursor is in a "field annotation" UI element, they call `editor.commands.toggleFieldAnnotationsFormat(...)` instead of the normal mark path. That branch stays as-is for now — it's a UI-internal special case that doesn't have a doc-api equivalent. Pair tests skip the field-annotation path; only the normal-text path is asserted. If field-annotation formatting needs to land on the contract later, it gets its own gap ticket.
 
 Each entry above ships a pair test:
 

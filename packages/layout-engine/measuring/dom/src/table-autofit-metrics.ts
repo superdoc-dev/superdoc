@@ -14,7 +14,7 @@ import type {
 } from '@superdoc/contracts';
 import { toCssFontFamily } from '@superdoc/font-utils';
 import type { AutoFitRowInput } from './autofit-columns.js';
-import type { WorkingTableGridInput } from './autofit-normalize.js';
+import type { WorkingTableCellInput, WorkingTableGridInput } from './autofit-normalize.js';
 import type { FixedLayoutResult } from './fixed-table-columns.js';
 import { getMeasuredTextWidth } from './measurementCache.js';
 
@@ -291,7 +291,7 @@ export function buildAutoFitTableResultCacheKey(table: TableBlock, options: Auto
           columnIndex: column.columnIndex,
           preferredWidth: column.preferredWidth ?? null,
         })),
-        cells: row.cells.map((cell) => ({
+        cells: (row.cells as WorkingTableCellInput[]).map((cell) => ({
           startColumn: cell.startColumn,
           span: cell.span ?? 1,
           preferredWidth: cell.preferredWidth ?? null,

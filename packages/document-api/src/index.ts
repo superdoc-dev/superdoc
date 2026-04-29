@@ -1416,6 +1416,7 @@ export type {
   ReplyToCommentInput,
   MoveCommentInput,
   ResolveCommentInput,
+  ReopenCommentInput,
   RemoveCommentInput,
   SetCommentInternalInput,
   GoToCommentInput,

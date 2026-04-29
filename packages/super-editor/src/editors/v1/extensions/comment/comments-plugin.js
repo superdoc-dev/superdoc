@@ -5,6 +5,7 @@ import { CommentMarkName } from './comments-constants.js';
 import {
   getHighlightColor,
   removeCommentsById,
+  reopenCommentById,
   resolveCommentById,
   translateFormatChangesToEnglish,
 } from './comments-helpers.js';
@@ -298,6 +299,12 @@ export const CommentsPlugin = Extension.create({
         ({ tr, dispatch, state }) => {
           tr.setMeta(CommentsPluginKey, { event: 'update' });
           return resolveCommentById({ commentId, importedId, state, tr, dispatch });
+        },
+      reopenComment:
+        ({ commentId, importedId, internal }) =>
+        ({ tr, dispatch, state }) => {
+          tr.setMeta(CommentsPluginKey, { event: 'update' });
+          return reopenCommentById({ commentId, importedId, internal, state, tr, dispatch });
         },
       editComment:
         ({ commentId, importedId, content, text }) =>

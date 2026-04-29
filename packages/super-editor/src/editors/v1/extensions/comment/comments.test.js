@@ -582,6 +582,126 @@ describe('comments plugin commands', () => {
     ]);
   });
 
+  it('reopens a resolved comment by removing range nodes and restoring the mark', () => {
+    const { commands, state, schema } = setup();
+
+    // First resolve the comment so the doc has commentRangeStart /
+    // commentRangeEnd anchor nodes and no live mark — the shape we
+    // expect when reopening hits.
+    const resolveTr = state.tr;
+    commands.resolveComment({ commentId: 'comment-1' })({
+      tr: resolveTr,
+      dispatch: vi.fn(),
+      state,
+    });
+    const resolvedState = state.apply(resolveTr);
+
+    const reopenTr = resolvedState.tr;
+    const dispatch = vi.fn();
+    const result = commands.reopenComment({ commentId: 'comment-1' })({
+      tr: reopenTr,
+      dispatch,
+      state: resolvedState,
+    });
+
+    expect(result).toBe(true);
+    expect(dispatch).toHaveBeenCalledWith(reopenTr);
+
+    const applied = resolvedState.apply(reopenTr);
+    const restoredMarkIds = [];
+    const remainingAnchors = [];
+
+    applied.doc.descendants((node) => {
+      node.marks.forEach((mark) => {
+        if (mark.type === schema.marks[CommentMarkName]) {
+          restoredMarkIds.push(mark.attrs.commentId);
+        }
+      });
+      if (node.type.name === 'commentRangeStart' || node.type.name === 'commentRangeEnd') {
+        remainingAnchors.push({ type: node.type.name, id: node.attrs['w:id'] });
+      }
+    });
+
+    // Mark restored across the original range. Each text run carries
+    // the mark on its inline content, so length matches the inline
+    // node count of the original "Hello" text (a single text node).
+    expect(restoredMarkIds.length).toBeGreaterThan(0);
+    expect(restoredMarkIds.every((id) => id === 'comment-1')).toBe(true);
+    // Anchor nodes are gone — reopen is the symmetric inverse of resolve.
+    expect(remainingAnchors).toEqual([]);
+  });
+
+  it('reopen returns false when the comment is not resolved (no anchors found)', () => {
+    const { commands, state } = setup();
+    // Doc starts with the live mark, never resolved — no anchors to
+    // reopen against. Helper must report no-op.
+    const tr = state.tr;
+    const dispatch = vi.fn();
+    const result = commands.reopenComment({ commentId: 'comment-1' })({ tr, dispatch, state });
+
+    expect(result).toBe(false);
+    expect(dispatch).not.toHaveBeenCalled();
+  });
+
+  it('reopen restores the original `internal` flag stamped on commentRangeStart', () => {
+    const { commands, state, schema } = setup();
+    // Resolve first to plant anchor nodes (internal: true from setup).
+    const resolveTr = state.tr;
+    commands.resolveComment({ commentId: 'comment-1' })({
+      tr: resolveTr,
+      dispatch: vi.fn(),
+      state,
+    });
+    const resolvedState = state.apply(resolveTr);
+
+    // Reopen with no `internal` override — helper should fall back to
+    // the value stamped on the anchor node (true in this fixture).
+    const reopenTr = resolvedState.tr;
+    commands.reopenComment({ commentId: 'comment-1' })({
+      tr: reopenTr,
+      dispatch: vi.fn(),
+      state: resolvedState,
+    });
+    const applied = resolvedState.apply(reopenTr);
+
+    let restoredInternal;
+    applied.doc.descendants((node) => {
+      const mark = node.marks.find((m) => m.type === schema.marks[CommentMarkName]);
+      if (mark && restoredInternal === undefined) {
+        restoredInternal = mark.attrs.internal;
+      }
+    });
+    expect(restoredInternal).toBe(true);
+  });
+
+  it('reopen honors an explicit `internal` override (entity-store value)', () => {
+    const { commands, state, schema } = setup();
+    const resolveTr = state.tr;
+    commands.resolveComment({ commentId: 'comment-1' })({
+      tr: resolveTr,
+      dispatch: vi.fn(),
+      state,
+    });
+    const resolvedState = state.apply(resolveTr);
+
+    const reopenTr = resolvedState.tr;
+    commands.reopenComment({ commentId: 'comment-1', internal: false })({
+      tr: reopenTr,
+      dispatch: vi.fn(),
+      state: resolvedState,
+    });
+    const applied = resolvedState.apply(reopenTr);
+
+    let restoredInternal;
+    applied.doc.descendants((node) => {
+      const mark = node.marks.find((m) => m.type === schema.marks[CommentMarkName]);
+      if (mark && restoredInternal === undefined) {
+        restoredInternal = mark.attrs.internal;
+      }
+    });
+    expect(restoredInternal).toBe(false);
+  });
+
   it('sets active comment meta', () => {
     const { commands } = setup();
     const tr = { setMeta: vi.fn() };

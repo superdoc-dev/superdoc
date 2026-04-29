@@ -20,20 +20,40 @@ export { createSuperDocUI } from './create-super-doc-ui.js';
 export { shallowEqual } from './equality.js';
 
 export type {
-  CommentsHandle,
-  CommentsSlice,
+  // Substrate
   EqualityFn,
-  ReviewHandle,
-  ReviewItem,
-  ReviewSlice,
   SelectorFn,
-  SelectionSlice,
   Subscribable,
+
+  // Host shapes (structural)
   SuperDocEditorLike,
   SuperDocLike,
+
+  // Controller
   SuperDocUI,
   SuperDocUIOptions,
   SuperDocUIState,
+
+  // Selection
+  SelectionSlice,
+
+  // Toolbar + commands
+  CommandHandle,
+  CommandsHandle,
+  ToolbarCommandHandleState,
+  ToolbarHandle,
+  ToolbarSnapshotSlice,
+
+  // Comments
+  CommentsHandle,
+  CommentsSlice,
+
+  // Review
+  ReviewHandle,
+  ReviewItem,
+  ReviewSlice,
+
+  // Viewport
   ViewportGetRectInput,
   ViewportHandle,
   ViewportRect,

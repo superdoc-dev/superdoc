@@ -4812,7 +4812,11 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
         commentId: { type: 'string' },
         text: { type: 'string', description: 'Updated comment text.' },
         target: textAddressSchema,
-        status: { enum: ['resolved'], description: "Set comment status. Use 'resolved' to mark as resolved." },
+        status: {
+          enum: ['resolved', 'active'],
+          description:
+            "Set comment status. Use 'resolved' to resolve a comment, or 'active' to reopen a previously resolved comment (lifecycle inverse).",
+        },
         isInternal: {
           type: 'boolean',
           description: 'When true, marks the comment as internal (hidden from external collaborators).',

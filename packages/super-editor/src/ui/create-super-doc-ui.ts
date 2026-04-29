@@ -24,6 +24,7 @@ import type {
   ReviewHandle,
   ReviewItem,
   ReviewSlice,
+  SelectionSlice,
   SelectorFn,
   SuperDocEditorLike,
   SuperDocUI,
@@ -306,6 +307,39 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     slice: ReviewSlice;
   } | null = null;
 
+  /**
+   * Memoized selection slice. Slice identity is stable when the
+   * derived shape — empty, target (deep), activeMarks, activeCommentIds,
+   * activeChangeIds, quotedText — has not changed since the last
+   * computeState. Without this, a typing-only transaction (which leaves
+   * the projected SelectionInfo unchanged but allocates fresh arrays
+   * inside the resolver) would re-fire every `ui.select(s => s.selection)`
+   * subscriber per keystroke.
+   */
+  let selectionMemo: { key: string; slice: SelectionSlice } | null = null;
+
+  /**
+   * Stable string key over a SelectionInfo for slice memoization. Two
+   * infos producing the same key represent the same observable
+   * selection state, so the slice can be reused.
+   */
+  const buildSelectionKey = (
+    empty: boolean,
+    target: import('@superdoc/document-api').TextTarget | null,
+    activeMarks: string[],
+    activeCommentIds: string[],
+    activeChangeIds: string[],
+    quotedText: string,
+  ): string => {
+    const targetKey = target
+      ? target.segments.map((s) => `${s.blockId}:${s.range.start}-${s.range.end}`).join('|')
+      : 'null';
+    const marks = [...activeMarks].sort().join(',');
+    const comments = [...activeCommentIds].sort().join(',');
+    const changes = [...activeChangeIds].sort().join(',');
+    return `${empty ? '1' : '0'}:${targetKey}:m=${marks}:c=${comments}:tc=${changes}:t=${quotedText}`;
+  };
+
   const computeState = (): SuperDocUIState => {
     // Route through PresentationEditor when active so selection state
     // follows the body/header/footer/note editor the user is actually
@@ -386,10 +420,41 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
       };
     }
 
+    // Build (or reuse) the rich selection slice. Memo key folds in
+    // every observable field so a typing-only transaction (which leaves
+    // the projected SelectionInfo unchanged but allocates fresh arrays
+    // inside the resolver) keeps the slice identity stable and lets
+    // `shallowEqual` short-circuit `ui.select(s => s.selection)`
+    // subscribers.
+    const selectionTarget = (selectionInfo?.target ?? null) as import('@superdoc/document-api').TextTarget | null;
+    const selectionActiveMarks = (selectionInfo?.activeMarks ?? EMPTY_ACTIVE_IDS) as string[];
+    const selectionKey = buildSelectionKey(
+      empty,
+      selectionTarget,
+      selectionActiveMarks,
+      activeIds,
+      activeChangeIdsFromSelection,
+      quotedText,
+    );
+    let selectionSlice: SelectionSlice;
+    if (selectionMemo && selectionMemo.key === selectionKey) {
+      selectionSlice = selectionMemo.slice;
+    } else {
+      selectionSlice = {
+        empty,
+        target: selectionTarget,
+        activeMarks: selectionActiveMarks,
+        activeCommentIds: activeIds,
+        activeChangeIds: activeChangeIdsFromSelection,
+        quotedText,
+      };
+      selectionMemo = { key: selectionKey, slice: selectionSlice };
+    }
+
     return {
       ready,
       documentMode,
-      selection: { empty, quotedText },
+      selection: selectionSlice,
       toolbar: toolbarSnapshot,
       comments: {
         total: commentsListCache.total,

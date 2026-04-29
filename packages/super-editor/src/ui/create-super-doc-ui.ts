@@ -193,6 +193,12 @@ function resolvePresentationEditor(superdoc: SuperDocUIOptions['superdoc']): {
  *   last segment the end point. Inner segments are dropped — they're
  *   reachable from the {start,end} pair via the same block traversal
  *   the doc-api adapter already does internally.
+ * - `story` is preserved on every level (root, start, end). When the
+ *   selection lives in a non-body story (header/footer/footnote/
+ *   endnote) the doc-api routes mutations from the target's `story`
+ *   field; dropping it here would silently route inserts into the
+ *   body and either fail to resolve the block or edit the wrong
+ *   story.
  *
  * The helper sits next to the controller so consumers don't have to
  * reach into a private adapter to convert. Doc-api ops will eventually
@@ -207,11 +213,14 @@ function textTargetToSelectionTarget(
   if (!segments || segments.length === 0) return null;
   const first = segments[0]!;
   const last = segments[segments.length - 1]!;
-  return {
-    kind: 'selection',
-    start: { kind: 'text', blockId: first.blockId, offset: first.range.start },
-    end: { kind: 'text', blockId: last.blockId, offset: last.range.end },
-  };
+  const story = (textTarget as { story?: import('@superdoc/document-api').SelectionTarget['story'] }).story;
+  const start: import('@superdoc/document-api').SelectionPoint = story
+    ? { kind: 'text', blockId: first.blockId, offset: first.range.start, story }
+    : { kind: 'text', blockId: first.blockId, offset: first.range.start };
+  const end: import('@superdoc/document-api').SelectionPoint = story
+    ? { kind: 'text', blockId: last.blockId, offset: last.range.end, story }
+    : { kind: 'text', blockId: last.blockId, offset: last.range.end };
+  return story ? { kind: 'selection', start, end, story } : { kind: 'selection', start, end };
 }
 
 export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
@@ -393,13 +402,22 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     activeChangeIds: string[],
     quotedText: string,
   ): string => {
+    // Story is folded into the key so a header→body cursor change (or
+    // any cross-story navigation) busts the memo and re-derives
+    // `selectionTarget`. Without this, two selections at the same
+    // block/offset in different stories would reuse the prior slice
+    // and misroute downstream insert/replace operations (the
+    // SD-2812 review caught this on the controller's selectionTarget
+    // lift; the same reasoning applies here).
+    const story = target ? (target as { story?: { id?: string; type?: string } }).story : undefined;
+    const storyKey = story ? `s=${story.type ?? ''}:${story.id ?? ''}` : '';
     const targetKey = target
       ? target.segments.map((s) => `${s.blockId}:${s.range.start}-${s.range.end}`).join('|')
       : 'null';
     const marks = [...activeMarks].sort().join(',');
     const comments = [...activeCommentIds].sort().join(',');
     const changes = [...activeChangeIds].sort().join(',');
-    return `${empty ? '1' : '0'}:${targetKey}:m=${marks}:c=${comments}:tc=${changes}:t=${quotedText}`;
+    return `${empty ? '1' : '0'}:${storyKey}:${targetKey}:m=${marks}:c=${comments}:tc=${changes}:t=${quotedText}`;
   };
 
   const computeState = (): SuperDocUIState => {

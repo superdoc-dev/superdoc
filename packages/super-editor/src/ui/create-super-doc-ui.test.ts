@@ -520,6 +520,38 @@ describe('createSuperDocUI', () => {
     });
   });
 
+  // SD-2812 review (PR #3010): the lift must preserve the
+  // `story` field on TextTarget. Mutation operations route from
+  // target.story; dropping it would silently send an insert into
+  // the body even when the cursor is in a header/footer/footnote.
+  it('state.selection.selectionTarget preserves the story field for non-body selections', () => {
+    const superdoc = makeSuperdocStub();
+    const story = { type: 'header', id: 'header-1' };
+    const target = {
+      kind: 'text' as const,
+      segments: [{ blockId: 'h1', range: { start: 2, end: 9 } }],
+      story,
+    };
+    (superdoc.activeEditor as { doc: { selection: { current: unknown } } }).doc.selection.current = vi.fn(() => ({
+      empty: false,
+      text: 'in header',
+      target,
+      activeMarks: [],
+      activeCommentIds: [],
+      activeChangeIds: [],
+    }));
+    const ui = createSuperDocUI({ superdoc });
+    teardown.push(() => ui.destroy());
+
+    const slice = ui.select((state) => state.selection).get();
+    expect(slice.selectionTarget).toEqual({
+      kind: 'selection',
+      start: { kind: 'text', blockId: 'h1', offset: 2, story },
+      end: { kind: 'text', blockId: 'h1', offset: 9, story },
+      story,
+    });
+  });
+
   it('state.selection.selectionTarget is null when target is null', () => {
     const superdoc = makeSuperdocStub();
     (superdoc.activeEditor as { doc: { selection: { current: unknown } } }).doc.selection.current = vi.fn(() => ({

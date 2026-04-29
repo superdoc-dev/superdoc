@@ -161,11 +161,28 @@ export interface SuperDocUIState {
 }
 
 /**
- * Toolbar snapshot exposed on `state.toolbar`. Aliased to the existing
- * `ToolbarSnapshot` type from `headless-toolbar` so downstream consumers
- * see the same shape they would from the standalone controller.
+ * Toolbar snapshot exposed on `state.toolbar`. Mirrors the headless-toolbar
+ * shape with one widening: every command state carries a `source` field
+ * so consumers can distinguish built-ins from commands registered via
+ * `ui.commands.register(...)` without branching on the id.
  */
-export type ToolbarSnapshotSlice = import('../headless-toolbar/types.js').ToolbarSnapshot;
+export type ToolbarSnapshotSlice = {
+  context: import('../headless-toolbar/types.js').ToolbarContext | null;
+  commands: Record<string, UIToolbarCommandState>;
+};
+
+/**
+ * Per-command snapshot entry. `active`/`disabled`/`value` match the
+ * headless-toolbar contract; `source` is the UI-controller addition that
+ * tells consumers whether the command came from the built-in registry or
+ * a `ui.commands.register(...)` call.
+ */
+export type UIToolbarCommandState = {
+  active: boolean;
+  disabled: boolean;
+  value?: unknown;
+  source: 'built-in' | 'custom';
+};
 
 /**
  * Snapshot of the editor's current selection — the full
@@ -455,9 +472,129 @@ export type ToolbarCommandHandleState<Id extends import('../headless-toolbar/typ
  * Map of every toolbar command id to its handle. Indexed via
  * `ui.commands.bold.observe(...)` etc. The runtime exposes a Proxy so
  * any `PublicToolbarItemId` key works without pre-enumerating.
+ *
+ * `register(...)` extends the surface with consumer-defined commands —
+ * see {@link CustomCommandRegistration}.
  */
 export type CommandsHandle = {
   [Id in import('../headless-toolbar/types.js').PublicToolbarItemId]: CommandHandle<Id>;
+} & {
+  /**
+   * Register a custom toolbar command at runtime so consumers migrating
+   * from TipTap / CKEditor / TinyMCE can wire their own toolbar buttons
+   * (AI Rewrite, Insert Mention, custom workflow actions, etc.) without
+   * forking the built-in registry.
+   *
+   * Returns a {@link CustomCommandRegistration} with three members:
+   *
+   * - `handle`: typed `{ observe, execute }` surface for this command.
+   *   Equivalent to `ui.commands[id]` but carries the consumer's payload
+   *   and value types — capture the registration to keep that typing.
+   * - `invalidate()`: re-runs `getState` and re-emits the snapshot.
+   *   Use when external app state (permissions, AI quota, upload status,
+   *   etc.) changes — SuperDoc has no other way to know about it.
+   *   Microtask-coalesced; safe to call from any external signal handler
+   *   but call it on *bucket* state changes, not per-keystroke.
+   * - `unregister()`: idempotent. Removes the command and tears down its
+   *   per-command Subscribable so observers stop firing.
+   *
+   * Built-in collisions are refused by default with a console warning.
+   * Pass `override: true` on the registration to deliberately replace a
+   * built-in (e.g. swap `bold` for a tracked-changes-aware variant).
+   * Custom-vs-custom collisions warn and replace the prior registration.
+   */
+  register<TPayload = unknown, TValue = unknown>(
+    registration: CustomCommandRegistration<TPayload, TValue>,
+  ): CustomCommandRegistrationResult<TPayload, TValue>;
+};
+
+/**
+ * Input shape for {@link CommandsHandle.register}.
+ *
+ * `getState` is sync and should be cheap (it runs on every snapshot
+ * rebuild). Async work — fetching, uploading, prompting — belongs in
+ * `execute`. If app state changes outside the editor (the app's auth
+ * provider says permissions changed; an AI quota counter ticks down)
+ * call the registration's `invalidate()` to re-derive `getState`.
+ *
+ * Errors thrown from `getState` are caught and the command falls back
+ * to a static `{ active: false, disabled: false }` for that snapshot.
+ * The error is reported via `console.error` once per error message
+ * (not once per snapshot rebuild) so a buggy custom command can't
+ * flood the console or wedge the toolbar.
+ */
+export type CustomCommandRegistration<TPayload = unknown, TValue = unknown> = {
+  /**
+   * Command id. Use a namespaced convention like `'company.aiRewrite'`
+   * to avoid future collisions with built-in commands. Collides with a
+   * built-in by default → warns and refuses (pass `override: true` to
+   * replace deliberately).
+   */
+  id: string;
+  /**
+   * Execute the command. Receives `payload` (typed per registration)
+   * and the host `superdoc` instance. Return value is normalized to
+   * `boolean` for the synchronous result; async commands return a
+   * Promise that the runtime awaits internally.
+   */
+  execute: (args: { payload?: TPayload; superdoc: SuperDocLike }) => boolean | void | Promise<boolean | void>;
+  /**
+   * Optional state deriver. Runs on every snapshot rebuild. If omitted,
+   * the command's state stays static at `{ active: false, disabled: false, value: undefined }`.
+   *
+   * `state` is the controller's current `SuperDocUIState` so the
+   * deriver can read `state.selection`, `state.documentMode`, etc.
+   * without needing a separate selector subscription.
+   */
+  getState?: (args: { state: SuperDocUIState }) =>
+    | {
+        active?: boolean;
+        disabled?: boolean;
+        value?: TValue;
+      }
+    | undefined
+    | void;
+  /**
+   * Set to `true` to deliberately replace a built-in command id. Without
+   * this flag, registrations colliding with a built-in are refused with
+   * a console warning.
+   */
+  override?: boolean;
+};
+
+/** Return value from {@link CommandsHandle.register}. */
+export type CustomCommandRegistrationResult<TPayload, TValue> = {
+  /**
+   * Typed `{ observe, execute }` handle for this registration. Equivalent
+   * to indexing `ui.commands[id]` at runtime, but the captured handle
+   * carries the consumer's `TPayload` / `TValue` types — index access
+   * with a string key cannot.
+   */
+  handle: CustomCommandHandle<TPayload, TValue>;
+  /**
+   * Re-runs `getState` and re-emits the snapshot. Use when external app
+   * state (not editor state) changes. Microtask-coalesced.
+   */
+  invalidate(): void;
+  /**
+   * Idempotent. Removes the command and tears down per-command
+   * Subscribables. Calling twice is a no-op.
+   */
+  unregister(): void;
+};
+
+/** Typed handle returned for a custom registration. */
+export type CustomCommandHandle<TPayload = unknown, TValue = unknown> = {
+  observe(listener: (state: CustomCommandHandleState<TValue>) => void): () => void;
+  execute(...args: TPayload extends void | undefined ? [] : [payload: TPayload]): boolean | Promise<boolean>;
+};
+
+/** Stable per-custom-command state shape. */
+export type CustomCommandHandleState<TValue = unknown> = {
+  active: boolean;
+  disabled: boolean;
+  value: TValue | undefined;
+  source: 'custom';
 };
 
 /**

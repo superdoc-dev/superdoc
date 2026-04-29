@@ -16,6 +16,7 @@ import type {
 } from '@superdoc/document-api';
 import { shallowEqual } from './equality.js';
 import { scrollRangeIntoView } from './scroll-into-view.js';
+import { createCustomCommandsRegistry } from './custom-commands.js';
 import type {
   CommandHandle,
   CommandsHandle,
@@ -34,6 +35,8 @@ import type {
   Subscribable,
   ToolbarCommandHandleState,
   ToolbarHandle,
+  ToolbarSnapshotSlice,
+  UIToolbarCommandState,
   ViewportGetRectInput,
   ViewportHandle,
   ViewportRect,
@@ -230,6 +233,12 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
       // best-effort
     }
   });
+
+  // Custom-commands registry — built lazily so its hooks (scheduleNotify,
+  // buildSubscribable, isBuiltIn) can reference the substrate primitives
+  // declared further down. The actual registry instance is created after
+  // `select` is in scope.
+  const BUILT_IN_COMMAND_ID_SET: Set<string> = new Set(ALL_TOOLBAR_COMMAND_IDS);
 
   // Comments slice cache. `editor.doc.comments.list()` is O(N) and
   // re-running it on every `computeState()` would tax the hot path —
@@ -471,11 +480,31 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
       selectionMemo = { key: selectionKey, slice: selectionSlice };
     }
 
-    return {
+    // Built-in commands are tagged with `source: 'built-in'` so consumers
+    // can render one uniform toolbar without branching on the id.
+    // Custom commands (registered via `ui.commands.register`) are merged
+    // in below, after the rest of the state is built — their `getState`
+    // callback receives the same `SuperDocUIState` we return here so the
+    // deriver can read selection, document mode, etc. without dipping
+    // back into the controller.
+    const builtInCommands: Record<string, UIToolbarCommandState> = {};
+    if (toolbarSnapshot.commands) {
+      for (const [id, cmdState] of Object.entries(toolbarSnapshot.commands)) {
+        if (!cmdState) continue;
+        builtInCommands[id] = {
+          active: cmdState.active,
+          disabled: cmdState.disabled,
+          value: cmdState.value,
+          source: 'built-in',
+        };
+      }
+    }
+
+    const partial: SuperDocUIState = {
       ready,
       documentMode,
       selection: selectionSlice,
-      toolbar: toolbarSnapshot,
+      toolbar: { context: toolbarSnapshot.context, commands: builtInCommands } as ToolbarSnapshotSlice,
       comments: {
         total: commentsListCache.total,
         items: commentsListCache.items,
@@ -490,6 +519,16 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
         activeIds: selectionSlice.activeCommentIds,
       },
       review: reviewSlice,
+    };
+
+    const customCommandStates = customCommandsRegistry.computeStates(partial);
+    const mergedCommands: Record<string, UIToolbarCommandState> = customCommandStates
+      ? { ...builtInCommands, ...customCommandStates }
+      : builtInCommands;
+
+    return {
+      ...partial,
+      toolbar: { context: toolbarSnapshot.context, commands: mergedCommands } as ToolbarSnapshotSlice,
     };
   };
 
@@ -667,7 +706,11 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
   // built-in SuperToolbar.vue (and external standalone-controller
   // consumers) can swap to ui.toolbar without API churn.
   const toolbar: ToolbarHandle = {
-    getSnapshot: () => toolbarController.getSnapshot(),
+    // Pull from `state.toolbar` (post-merge with custom commands and
+    // tagged with `source`) rather than the bare headless-toolbar
+    // snapshot — the public `ToolbarSnapshotSlice` shape is the merged
+    // one, not the underlying built-ins-only shape.
+    getSnapshot: () => computeState().toolbar,
     subscribe(listener) {
       // Drives off the same selector substrate so subscribers receive
       // the same coalesced burst pattern as ui.select consumers.
@@ -736,9 +779,36 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     };
   };
 
+  // Custom commands registry. Wires the substrate primitives (selectors
+  // for state observation, scheduleNotify for re-emit) to the registry
+  // so registered commands ride the same dedupe/coalesce posture as
+  // built-ins. Built-in collisions are refused without `override: true`.
+  const customCommandsRegistry = createCustomCommandsRegistry({
+    superdoc,
+    isBuiltIn: (id) => BUILT_IN_COMMAND_ID_SET.has(id),
+    scheduleNotify,
+    buildSubscribable: (id) => select((state) => state.toolbar.commands?.[id], shallowEqual),
+  });
+  teardown.push(() => {
+    customCommandsRegistry.destroy();
+  });
+
   const commands = new Proxy({} as CommandsHandle, {
     get(_, prop) {
       if (typeof prop !== 'string') return undefined;
+      // `register` is the one non-id key on the Proxy. Delegates to the
+      // custom-commands registry; everything else flows through the
+      // per-id handle cache below.
+      if (prop === 'register') {
+        return customCommandsRegistry.register.bind(customCommandsRegistry);
+      }
+      // Custom-registered ids surface a typed handle from the registry.
+      // Built-in ids fall through to the existing per-id cache so they
+      // keep the same observe/execute shape they had before SD-2802.
+      if (customCommandsRegistry.has(prop)) {
+        const customHandle = customCommandsRegistry.getHandle(prop);
+        if (customHandle) return customHandle;
+      }
       let handle = commandHandleCache.get(prop);
       if (handle) return handle;
       handle = buildCommandHandle(prop as PublicToolbarItemId);

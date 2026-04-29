@@ -41,9 +41,14 @@ export type {
   // Toolbar + commands
   CommandHandle,
   CommandsHandle,
+  CustomCommandHandle,
+  CustomCommandHandleState,
+  CustomCommandRegistration,
+  CustomCommandRegistrationResult,
   ToolbarCommandHandleState,
   ToolbarHandle,
   ToolbarSnapshotSlice,
+  UIToolbarCommandState,
 
   // Comments
   CommentsHandle,

@@ -100,7 +100,18 @@ export const toggleList =
         hasNonListParagraphs = true;
       }
     }
-    if (!firstListNode && from > 0) {
+    // Only borrow numbering from a preceding list paragraph when the selection
+    // is made up of *plain* paragraphs (no numbering yet). The borrow is meant
+    // to extend a previous list onto adjacent non-list paragraphs. If a
+    // paragraph in the selection is already a list item — even one whose
+    // marker doesn't match the requested style — we should not reuse a
+    // neighbor's numId, because that throws away the existing nesting and
+    // overrides the user's style choice with the neighbor's level. Falling
+    // through to `create` mints a fresh abstract instead.
+    const selectionAlreadyHasListNumbering = paragraphsInSelection.some(
+      ({ node }) => getResolvedParagraphProperties(node)?.numberingProperties != null,
+    );
+    if (!firstListNode && !selectionAlreadyHasListNumbering && from > 0) {
       const beforeNode = getPrecedingParagraphForListReuse(state.doc, from, paragraphsInSelection);
       if (beforeNode && predicate(beforeNode)) {
         firstListNode = beforeNode;

@@ -944,6 +944,16 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
       if (typeof entity.entityType !== 'string' || typeof entity.entityId !== 'string' || !entity.entityId) {
         return { success: false, reason: 'invalid-target' };
       }
+      // Reject unsupported entity types up front so a typo or unsupported
+      // address (e.g. `bookmark`, `field`) returns `invalid-target` rather
+      // than falling through to `getEntityRects` which would emit `[]`
+      // and surface as `not-mounted` — that would mislead consumers into
+      // retrying / scroll-and-retry loops for a target shape we don't
+      // handle. Keep this list aligned with the supported branches in
+      // `PresentationEditor.getEntityRects`.
+      if (entity.entityType !== 'comment' && entity.entityType !== 'trackedChange') {
+        return { success: false, reason: 'invalid-target' };
+      }
 
       const rangeRects = presentation.getEntityRects({
         entityType: entity.entityType,

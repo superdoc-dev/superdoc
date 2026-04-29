@@ -175,6 +175,22 @@ describe('ui.viewport.getRect — entity targets', () => {
     ui.destroy();
   });
 
+  it('returns invalid-target for unsupported entity types (e.g. typos, future kinds)', () => {
+    const { superdoc, mocks } = makeStubs();
+    const ui = createSuperDocUI({ superdoc });
+
+    // A bogus entity type must short-circuit to `invalid-target` rather
+    // than fall through to `getEntityRects` (which would emit `[]` and
+    // surface as `not-mounted`, misleading consumers into retry loops).
+    const result = ui.viewport.getRect({
+      target: { kind: 'entity', entityType: 'mystery', entityId: 'x' } as never,
+    });
+    expect(result).toEqual({ success: false, reason: 'invalid-target' });
+    // We never even consulted the engine for an unsupported type.
+    expect(mocks.getEntityRects).not.toHaveBeenCalled();
+    ui.destroy();
+  });
+
   it('returns invalid-target for text-anchored targets (deferred path)', () => {
     const { superdoc } = makeStubs();
     const ui = createSuperDocUI({ superdoc });

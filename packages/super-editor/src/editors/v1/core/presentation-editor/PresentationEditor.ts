@@ -47,7 +47,11 @@ import { createLayoutMetrics as createLayoutMetricsFromHelper } from './layout/P
 import { buildFootnotesInput, type NoteRenderOverride } from './layout/FootnotesBuilder.js';
 import { safeCleanup } from './utils/SafeCleanup.js';
 import { createHiddenHost } from './dom/HiddenHost.js';
-import { findRenderedCommentElements, elementsToRangeRects } from './dom/EntityRectFinder.js';
+import {
+  elementsToRangeRects,
+  findRenderedCommentElements,
+  findRenderedTrackedChangeElementsStrict,
+} from './dom/EntityRectFinder.js';
 import { RemoteCursorManager, type RenderDependencies } from './remote-cursors/RemoteCursorManager.js';
 import { EditorInputManager } from './pointer-events/EditorInputManager.js';
 import { SelectionSyncCoordinator } from './selection/SelectionSyncCoordinator.js';
@@ -2152,7 +2156,17 @@ export class PresentationEditor extends EventEmitter {
     const storyKey = resolveStoryKeyFromAddress(target.story);
     let elements: HTMLElement[];
     if (entityType === 'trackedChange') {
-      elements = this.#findRenderedTrackedChangeElements(entityId, storyKey);
+      // Use a strict story filter for the viewport read path. The
+      // navigation helper `#findRenderedTrackedChangeElements` falls
+      // back to all same-id matches when no exact story match wins a
+      // heuristic — that's correct for "scroll to this change", but
+      // wrong here: a sticky card asked to anchor a header/footer
+      // change must not silently anchor to a body copy of the same
+      // id. Empty result when the requested story has no painted copy
+      // is the correct signal — the UI controller maps it to
+      // `not-mounted` so the consumer can pre-mount via
+      // `viewport.scrollIntoView` and retry.
+      elements = findRenderedTrackedChangeElementsStrict(host, entityId, escapeAttrValue, storyKey);
     } else if (entityType === 'comment') {
       elements = findRenderedCommentElements(host, entityId, storyKey);
     } else {

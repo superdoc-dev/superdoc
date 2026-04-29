@@ -2,7 +2,11 @@
  * @vitest-environment jsdom
  */
 import { describe, expect, it } from 'vitest';
-import { elementsToRangeRects, findRenderedCommentElements } from './EntityRectFinder.js';
+import {
+  elementsToRangeRects,
+  findRenderedCommentElements,
+  findRenderedTrackedChangeElementsStrict,
+} from './EntityRectFinder.js';
 
 const BODY_STORY_KEY = 'body';
 
@@ -95,6 +99,62 @@ describe('findRenderedCommentElements', () => {
     const all = findRenderedCommentElements(host, 'c1');
     expect(all).toContain(bodyRun);
     expect(all).toContain(headerRun);
+  });
+});
+
+describe('findRenderedTrackedChangeElementsStrict', () => {
+  function paintTrackedChangeRun(host: HTMLElement, id: string, opts: { storyKey?: string; pageIndex?: number } = {}) {
+    const page = document.createElement('div');
+    page.className = 'superdoc-page';
+    page.dataset.pageIndex = String(opts.pageIndex ?? 0);
+    const run = document.createElement('span');
+    run.dataset.trackChangeId = id;
+    if (opts.storyKey != null) run.dataset.storyKey = opts.storyKey;
+    page.appendChild(run);
+    host.appendChild(page);
+    return run;
+  }
+
+  const escape = (value: string) => value.replace(/["\\]/g, (c) => `\\${c}`);
+
+  it('returns only exact-story matches when a storyKey is provided (strict, no fallback)', () => {
+    const host = makeHost();
+    const bodyRun = paintTrackedChangeRun(host, 'tc1', { storyKey: 'body' });
+    const headerRun = paintTrackedChangeRun(host, 'tc1', { storyKey: 'story:headerFooterPart:rId1' });
+
+    const headerOnly = findRenderedTrackedChangeElementsStrict(host, 'tc1', escape, 'story:headerFooterPart:rId1');
+    expect(headerOnly).toEqual([headerRun]);
+    expect(headerOnly).not.toContain(bodyRun);
+  });
+
+  it('returns [] when the requested story has no painted copy (strict, no cross-story fallback)', () => {
+    const host = makeHost();
+    paintTrackedChangeRun(host, 'tc1', { storyKey: 'body' });
+    paintTrackedChangeRun(host, 'tc1', { storyKey: 'story:footerPart:rId2' });
+
+    // Asking for a header copy must NOT fall back to body or footer rects
+    // — a sticky card asked to anchor a header tracked change would
+    // otherwise silently anchor to the wrong story.
+    const headerOnly = findRenderedTrackedChangeElementsStrict(host, 'tc1', escape, 'story:headerFooterPart:rId1');
+    expect(headerOnly).toEqual([]);
+  });
+
+  it('returns every painted copy across stories when no storyKey is provided', () => {
+    const host = makeHost();
+    const a = paintTrackedChangeRun(host, 'tc1', { storyKey: 'body' });
+    const b = paintTrackedChangeRun(host, 'tc1', { storyKey: 'story:headerFooterPart:rId1' });
+    const all = findRenderedTrackedChangeElementsStrict(host, 'tc1', escape);
+    expect(all).toContain(a);
+    expect(all).toContain(b);
+  });
+
+  it('escapes ids that contain CSS-special characters', () => {
+    const host = makeHost();
+    const run = paintTrackedChangeRun(host, 'tc"with"quotes');
+    const cssEscape = (value: string) =>
+      typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(value) : value.replace(/["\\]/g, (c) => `\\${c}`);
+    const matches = findRenderedTrackedChangeElementsStrict(host, 'tc"with"quotes', cssEscape);
+    expect(matches).toContain(run);
   });
 });
 

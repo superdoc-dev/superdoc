@@ -484,6 +484,38 @@ describe('computeAutoFitColumnWidths', () => {
     expect(result.columnWidths[2]).toBeCloseTo(20, 3);
   });
 
+  it('does not redistribute remaining slack into protected columns when no growable columns remain', () => {
+    const result = computeAutoFitColumnWidths(
+      buildExplicitInput({
+        workingInput: buildWorkingInput({
+          preferredTableWidth: 300,
+          maxTableWidth: 300,
+          preferredColumnWidths: [100, 100],
+          gridColumnCount: 2,
+          rows: [
+            {
+              skippedBefore: [],
+              skippedAfter: [],
+              skippedColumns: [],
+              logicalColumnCount: 2,
+              cells: [{ startColumn: 0, span: 2, preferredWidth: undefined }],
+            },
+          ],
+        }),
+        fixedLayout: {
+          columnWidths: [100, 100],
+          totalWidth: 200,
+          gridColumnCount: 2,
+          preferredTableWidth: 300,
+        },
+        contentMetrics: buildContentMetrics([[{ span: 2, min: 201, max: 240 }]]),
+      }),
+    );
+
+    expect(result.columnWidths[0] + result.columnWidths[1]).toBeCloseTo(240, 3);
+    expect(result.totalWidth).toBeCloseTo(240, 3);
+  });
+
   it('redistributes remaining slack back to tblW after trigger handling', () => {
     const result = computeAutoFitColumnWidths(
       buildExplicitInput({

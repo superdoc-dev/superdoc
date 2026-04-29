@@ -685,7 +685,17 @@ function distributeRemainingSlack(widths: number[], targetWidth: number, growabl
   }, 0);
   const slack = targetWidth - currentTotal;
   if (basis <= 0) {
-    return widths.map(() => targetWidth / widths.length);
+    if (growableColumns == null) {
+      return widths;
+    }
+
+    const growableIndexes = widths.map((_, index) => index).filter((index) => growableColumns.has(index));
+    if (growableIndexes.length === 0) {
+      return widths;
+    }
+
+    const share = slack / growableIndexes.length;
+    return widths.map((width, index) => (growableColumns.has(index) ? width + share : width));
   }
 
   return widths.map((width, index) => {

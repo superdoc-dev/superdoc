@@ -897,7 +897,18 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
           }
         });
       },
-      execute(payload?: unknown): boolean {
+      execute(payload?: unknown): boolean | Promise<boolean> {
+        // Re-resolve at dispatch time so a `register({ override: true })`
+        // call that lands AFTER this handle was cached still routes
+        // dispatch through the override. Without this, the cached
+        // handle's observe stream emits the merged custom state (the
+        // selector reads the merged `state.toolbar.commands[id]`) but
+        // execute keeps running the original built-in, leaving config
+        // driven toolbars showing the override visually while clicks
+        // run the wrong command.
+        if (customCommandsRegistry.has(id)) {
+          return customCommandsRegistry.execute(id, payload);
+        }
         return (toolbarController.execute as (id: PublicToolbarItemId, payload?: unknown) => boolean)(id, payload);
       },
     };

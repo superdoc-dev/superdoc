@@ -699,6 +699,73 @@ describe('ui.commands.get', () => {
     ui.destroy();
   });
 
+  // Regression for PR #3013 review comment: cached dynamic handles
+  // for built-in ids must dispatch through any later
+  // `register({ id, override: true })`. A consumer that memoizes
+  // `ui.commands.get('bold')` once and only later registers an
+  // override would otherwise see the merged custom state on the
+  // observe stream while still routing execute() to the built-in,
+  // breaking override semantics for long-lived handles.
+  it('cached built-in dynamic handle dispatches through a later override', () => {
+    const { superdoc } = makeStubs();
+    const ui = createSuperDocUI({ superdoc });
+
+    // Cache the handle BEFORE registering the override.
+    const cachedHandle = ui.commands.get('bold');
+    expect(cachedHandle).toBeDefined();
+
+    const customExecute = vi.fn(() => true);
+    ui.commands.register({
+      id: 'bold',
+      override: true,
+      execute: customExecute,
+      getState: () => ({ active: true, disabled: false, value: 'overridden' }),
+    });
+
+    // Execute via the cached handle. The custom override's execute
+    // should run, not the built-in toolbar controller's bold.
+    cachedHandle!.execute();
+    expect(customExecute).toHaveBeenCalledTimes(1);
+
+    ui.destroy();
+  });
+
+  it('cached built-in dynamic handle reverts to built-in dispatch after the override unregisters', () => {
+    const { superdoc, editor } = makeStubs();
+    const ui = createSuperDocUI({ superdoc });
+
+    const cachedHandle = ui.commands.get('bold');
+    const customExecute = vi.fn(() => true);
+    const reg = ui.commands.register({
+      id: 'bold',
+      override: true,
+      execute: customExecute,
+    });
+
+    cachedHandle!.execute();
+    expect(customExecute).toHaveBeenCalledTimes(1);
+
+    // After unregister, the built-in dispatch path resumes.
+    reg.unregister();
+
+    // Reset the editor's bold spy so we can detect a built-in dispatch
+    // after unregister. The toolbarController is internal, but a
+    // built-in dispatch ultimately routes through the editor's
+    // commands surface; the stub's `commands.toggleBold` mock receives
+    // the call. (If toolbarController short-circuits before reaching
+    // the editor it still won't call customExecute, which is what we
+    // assert below.)
+    customExecute.mockClear();
+    cachedHandle!.execute();
+    expect(customExecute).not.toHaveBeenCalled();
+
+    // Editor reference is unused if toolbar dispatch routes elsewhere;
+    // the assertion that matters is `customExecute` did not fire.
+    void editor;
+
+    ui.destroy();
+  });
+
   it('observers detach when unsubscribed', () => {
     const { superdoc } = makeStubs();
     const ui = createSuperDocUI({ superdoc });

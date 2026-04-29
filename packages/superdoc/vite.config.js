@@ -85,6 +85,10 @@ export const getAliases = (_isDev) => {
     { find: '@superdoc/super-editor/headless-toolbar/react', replacement: path.resolve(__dirname, '../super-editor/src/headless-toolbar/react.ts') },
     { find: '@superdoc/super-editor/headless-toolbar/vue', replacement: path.resolve(__dirname, '../super-editor/src/headless-toolbar/vue.ts') },
     { find: '@superdoc/super-editor/presentation-editor', replacement: path.resolve(__dirname, '../super-editor/src/index.ts') },
+    // The longer `/ui/react` alias must come before `/ui` so the
+    // prefix match resolves it first; otherwise `/ui` would swallow
+    // `/ui/react` and the React entry would resolve to the controller.
+    { find: '@superdoc/super-editor/ui/react', replacement: path.resolve(__dirname, '../super-editor/src/ui/react/index.ts') },
     { find: '@superdoc/super-editor/ui', replacement: path.resolve(__dirname, '../super-editor/src/ui/index.ts') },
     { find: '@superdoc/super-editor', replacement: path.resolve(__dirname, '../super-editor/src/index.ts') },
 
@@ -205,6 +209,7 @@ export default defineConfig(({ mode, command }) => {
           'headless-toolbar-react': 'src/headless-toolbar-react.js',
           'headless-toolbar-vue': 'src/headless-toolbar-vue.js',
           'ui': 'src/ui.js',
+          'ui-react': 'src/ui-react.js',
           'super-editor': 'src/super-editor.js',
           'types': 'src/types.ts',
           'super-editor/docx-zipper': '@core/DocxZipper',
@@ -219,6 +224,7 @@ export default defineConfig(({ mode, command }) => {
           'pdfjs-dist/legacy/build/pdf.mjs',
           'pdfjs-dist/web/pdf_viewer.mjs',
           'react',
+          'react/jsx-runtime',
           'vue',
         ],
         output: [

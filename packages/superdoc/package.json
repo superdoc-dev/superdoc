@@ -52,6 +52,11 @@
       "source": "./src/ui.js",
       "import": "./dist/ui.es.js"
     },
+    "./ui/react": {
+      "types": "./dist/superdoc/src/ui-react.d.ts",
+      "source": "./src/ui-react.js",
+      "import": "./dist/ui-react.es.js"
+    },
     "./headless-toolbar/react": {
       "types": "./dist/superdoc/src/headless-toolbar-react.d.ts",
       "source": "./src/headless-toolbar-react.js",
@@ -75,6 +80,9 @@
       ],
       "ui": [
         "./dist/superdoc/src/ui.d.ts"
+      ],
+      "ui/react": [
+        "./dist/superdoc/src/ui-react.d.ts"
       ],
       "headless-toolbar/react": [
         "./dist/superdoc/src/headless-toolbar-react.d.ts"

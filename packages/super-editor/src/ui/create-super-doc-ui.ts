@@ -479,7 +479,7 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     // doc-api `StoryLocator` shape: `body` carries no extra id;
     // `headerFooterSlot` discriminates by section + kind + variant;
     // `headerFooterPart` by `refId`; `footnote` / `endnote` by `noteId`.
-    const story = target ? (target as { story?: Record<string, unknown> }).story : undefined;
+    const story = target ? (target as unknown as { story?: Record<string, unknown> }).story : undefined;
     let storyKey = '';
     if (story) {
       const storyType = typeof story.storyType === 'string' ? story.storyType : '';

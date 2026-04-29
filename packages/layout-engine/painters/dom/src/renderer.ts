@@ -599,6 +599,15 @@ function shouldIncludeInlineImageSnapshotElement(element: HTMLElement): boolean 
   return !element.closest(`.${DOM_CLASS_NAMES.INLINE_IMAGE_CLIP_WRAPPER}`);
 }
 
+function resolvedPaintCacheSignature(resolvedItem: ResolvedPaintItem | undefined): string {
+  if (!resolvedItem) return '';
+  return (
+    (resolvedItem as { paintCacheVersion?: string }).paintCacheVersion ??
+    (resolvedItem as { version?: string }).version ??
+    ''
+  );
+}
+
 function collectPaintSnapshotEntitiesFromDomRoot(rootEl: HTMLElement): PaintSnapshotEntities {
   const entities = createEmptyPaintSnapshotEntities();
 
@@ -2784,7 +2793,7 @@ export class DomPainter {
       const sdtBoundary = sdtBoundaries.get(index);
       const betweenInfo = betweenBorderFlags.get(index);
       const resolvedItem = this.getResolvedFragmentItem(pageIndex, index);
-      const resolvedSig = (resolvedItem as { version?: string } | undefined)?.version ?? '';
+      const resolvedSig = resolvedPaintCacheSignature(resolvedItem);
 
       if (current) {
         existing.delete(key);
@@ -2949,7 +2958,7 @@ export class DomPainter {
         resolvedItem,
       );
       el.appendChild(fragmentEl);
-      const initSig = (resolvedItem as { version?: string } | undefined)?.version ?? '';
+      const initSig = resolvedPaintCacheSignature(resolvedItem);
       return {
         key: fragmentKey(fragment),
         signature: initSig,

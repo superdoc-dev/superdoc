@@ -132,8 +132,12 @@ export type ResolvedFragmentItem = {
   paragraphBorderHash?: string;
   /** Pre-extracted paragraph borders for between-border rendering. */
   paragraphBorders?: ParagraphBorders;
-  /** Pre-computed change-detection signature (blockVersion + fragment-specific data). */
+  /** Pre-computed visual/layout signature (blockVersion + fragment-specific data). */
   version?: string;
+  /** Pre-computed source/evidence metadata signature. Does not imply visual/layout geometry changed. */
+  evidenceVersion?: string;
+  /** Combined paint reuse signature. DomPainter uses this to refresh source-linked DOM metadata. */
+  paintCacheVersion?: string;
   /** Pre-extracted block for paragraph (ParagraphBlock) or list-item (ListBlock) fragments. */
   block?: ParagraphBlock | ListBlock;
   /** Pre-extracted measure for paragraph (ParagraphMeasure) or list-item (ListMeasure) fragments. */
@@ -256,8 +260,12 @@ export type ResolvedTableItem = {
   effectiveColumnWidths: number[];
   /** Pre-computed SDT container key for boundary grouping (`structuredContent:<id>` or `documentSection:<id>`). */
   sdtContainerKey?: string | null;
-  /** Pre-computed change-detection signature (blockVersion + fragment-specific data). */
+  /** Pre-computed visual/layout signature (blockVersion + fragment-specific data). */
   version?: string;
+  /** Pre-computed source/evidence metadata signature. Does not imply visual/layout geometry changed. */
+  evidenceVersion?: string;
+  /** Combined paint reuse signature. DomPainter uses this to refresh source-linked DOM metadata. */
+  paintCacheVersion?: string;
   /** Optional DOCX source evidence preserved for intelligence adapters and paint snapshots. */
   sourceAnchor?: SourceAnchor;
 };
@@ -298,8 +306,12 @@ export type ResolvedImageItem = {
   metadata?: ImageFragmentMetadata;
   /** Pre-computed SDT container key for boundary grouping (typically null for images). */
   sdtContainerKey?: string | null;
-  /** Pre-computed change-detection signature (blockVersion + fragment-specific data). */
+  /** Pre-computed visual/layout signature (blockVersion + fragment-specific data). */
   version?: string;
+  /** Pre-computed source/evidence metadata signature. Does not imply visual/layout geometry changed. */
+  evidenceVersion?: string;
+  /** Combined paint reuse signature. DomPainter uses this to refresh source-linked DOM metadata. */
+  paintCacheVersion?: string;
   /** Optional DOCX source evidence preserved for intelligence adapters and paint snapshots. */
   sourceAnchor?: SourceAnchor;
 };
@@ -338,8 +350,12 @@ export type ResolvedDrawingItem = {
   block: DrawingBlock;
   /** Pre-computed SDT container key for boundary grouping (typically null for drawings). */
   sdtContainerKey?: string | null;
-  /** Pre-computed change-detection signature (blockVersion + fragment-specific data). */
+  /** Pre-computed visual/layout signature (blockVersion + fragment-specific data). */
   version?: string;
+  /** Pre-computed source/evidence metadata signature. Does not imply visual/layout geometry changed. */
+  evidenceVersion?: string;
+  /** Combined paint reuse signature. DomPainter uses this to refresh source-linked DOM metadata. */
+  paintCacheVersion?: string;
   /** Optional DOCX source evidence preserved for intelligence adapters and paint snapshots. */
   sourceAnchor?: SourceAnchor;
 };

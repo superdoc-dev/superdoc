@@ -470,11 +470,29 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     // any cross-story navigation) busts the memo and re-derives
     // `selectionTarget`. Without this, two selections at the same
     // block/offset in different stories would reuse the prior slice
-    // and misroute downstream insert/replace operations (the
-    // SD-2812 review caught this on the controller's selectionTarget
-    // lift; the same reasoning applies here).
-    const story = target ? (target as { story?: { id?: string; type?: string } }).story : undefined;
-    const storyKey = story ? `s=${story.type ?? ''}:${story.id ?? ''}` : '';
+    // and misroute downstream insert/replace operations.
+    //
+    // The serialized fields match the real `StoryLocator` discriminated
+    // union (storyType + per-variant id), NOT a generic `{ type, id }`
+    // shape. Using the wrong field names silently collapses every
+    // story to the empty key, defeating the memo bust. Aligned to the
+    // doc-api `StoryLocator` shape: `body` carries no extra id;
+    // `headerFooterSlot` discriminates by section + kind + variant;
+    // `headerFooterPart` by `refId`; `footnote` / `endnote` by `noteId`.
+    const story = target ? (target as { story?: Record<string, unknown> }).story : undefined;
+    let storyKey = '';
+    if (story) {
+      const storyType = typeof story.storyType === 'string' ? story.storyType : '';
+      // Capture every discriminating field across the StoryLocator
+      // union; absent fields serialize as empty so two stories that
+      // differ on any one field produce different keys.
+      const refId = typeof story.refId === 'string' ? story.refId : '';
+      const noteId = typeof story.noteId === 'string' ? story.noteId : '';
+      const section = story.section && typeof story.section === 'object' ? JSON.stringify(story.section) : '';
+      const headerFooterKind = typeof story.headerFooterKind === 'string' ? story.headerFooterKind : '';
+      const variant = typeof story.variant === 'string' ? story.variant : '';
+      storyKey = `s=${storyType}:r=${refId}:n=${noteId}:hf=${headerFooterKind}:v=${variant}:sec=${section}`;
+    }
     const targetKey = target
       ? target.segments.map((s) => `${s.blockId}:${s.range.start}-${s.range.end}`).join('|')
       : 'null';
@@ -848,10 +866,18 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
       });
     },
     execute: ((id: PublicToolbarItemId, payload?: unknown): boolean => {
-      // The controller's execute signature is conditionally typed
-      // (variadic per-id payload); cast here keeps the consumer-facing
-      // type strict while delegating at runtime.
-      return (toolbarController.execute as (id: PublicToolbarItemId, payload?: unknown) => boolean)(id, payload);
+      // Routes through the centralized `dispatchCommand` so a later
+      // `register({ id, override: true })` is honored from this
+      // surface too. Returns `boolean` for the public type even
+      // though the underlying dispatcher may return `Promise<boolean>`
+      // for an async custom override; the existing `ToolbarHandle.execute`
+      // signature is sync-typed, so an async override called via this
+      // path resolves silently. Consumers that need the resolution
+      // should use `ui.commands.get(id)?.execute()` (typed as
+      // `boolean | Promise<boolean>`) or capture the registration
+      // result from `ui.commands.register(...)`.
+      const result = dispatchCommand(id, payload);
+      return result instanceof Promise ? true : result;
     }) as ToolbarHandle['execute'],
   };
 
@@ -893,7 +919,11 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
         });
       },
       execute: ((payload?: unknown): boolean => {
-        return (toolbarController.execute as (id: PublicToolbarItemId, payload?: unknown) => boolean)(id, payload);
+        // Same dispatch path as `ui.toolbar.execute(id)` and
+        // `ui.commands.get(id)?.execute()`. See `dispatchCommand`
+        // for the override-routing rationale.
+        const result = dispatchCommand(id, payload);
+        return result instanceof Promise ? true : result;
       }) as CommandHandle<PublicToolbarItemId>['execute'],
     };
   };
@@ -911,6 +941,31 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
   teardown.push(() => {
     customCommandsRegistry.destroy();
   });
+
+  /**
+   * Single dispatch path for every `execute`-shaped surface on the
+   * controller (`ui.toolbar.execute(id)`, `ui.commands.bold.execute()`,
+   * `ui.commands.get(id)?.execute()`). All three re-resolve through the
+   * custom-commands registry FIRST so a `register({ override: true })`
+   * call routes dispatch through the override regardless of which
+   * surface the consumer happens to call. Without this single path,
+   * `state.toolbar.commands.bold` shows `source: 'custom'` while a
+   * click via `ui.commands.bold.execute()` runs the built-in,
+   * producing a state/action mismatch the consumer can't see.
+   *
+   * Resolved at call time, not at handle-construction time, so a
+   * cached handle (React `useMemo` deps, etc.) survives a later
+   * register/unregister cycle without the consumer needing to re-fetch.
+   */
+  const dispatchCommand = (id: string, payload?: unknown): boolean | Promise<boolean> => {
+    if (customCommandsRegistry.has(id)) {
+      return customCommandsRegistry.execute(id, payload);
+    }
+    return (toolbarController.execute as (id: PublicToolbarItemId, payload?: unknown) => boolean)(
+      id as PublicToolbarItemId,
+      payload,
+    );
+  };
 
   // Per-id cache for the type-erased dynamic handles returned by
   // `ui.commands.get(id)`. Cached so handle identity is stable across
@@ -945,18 +1000,12 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
         });
       },
       execute(payload?: unknown): boolean | Promise<boolean> {
-        // Re-resolve at dispatch time so a `register({ override: true })`
-        // call that lands AFTER this handle was cached still routes
-        // dispatch through the override. Without this, the cached
-        // handle's observe stream emits the merged custom state (the
-        // selector reads the merged `state.toolbar.commands[id]`) but
-        // execute keeps running the original built-in, leaving config
-        // driven toolbars showing the override visually while clicks
-        // run the wrong command.
-        if (customCommandsRegistry.has(id)) {
-          return customCommandsRegistry.execute(id, payload);
-        }
-        return (toolbarController.execute as (id: PublicToolbarItemId, payload?: unknown) => boolean)(id, payload);
+        // Same dispatch path as `ui.toolbar.execute(id)` and
+        // `ui.commands.bold.execute()`. See `dispatchCommand` for
+        // the override-routing rationale; this handle exposes the
+        // full `boolean | Promise<boolean>` return type so consumers
+        // can `await` an async custom override.
+        return dispatchCommand(id, payload);
       },
     };
   };

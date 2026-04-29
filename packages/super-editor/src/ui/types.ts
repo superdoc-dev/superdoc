@@ -2,17 +2,16 @@
  * Public types for `superdoc/ui` (the browser UI controller).
  *
  * The controller exposes a single observation pipeline (the **selector
- * substrate**) that domain namespaces — `ui.toolbar`, `ui.commands`,
- * `ui.comments`, `ui.review`, `ui.viewport`, `ui.selection` — are
- * implemented on top of in sibling tickets.
+ * substrate** at `ui.select(...)`) that the domain namespaces
+ * (`ui.toolbar`, `ui.commands`, `ui.comments`, `ui.review`,
+ * `ui.viewport`, `ui.selection`) are implemented on top of. Consumers
+ * building their own UI typically reach for the domain handles
+ * (`ui.comments.subscribe(...)`, `ui.commands.bold.observe(...)`)
+ * and only drop down to `ui.select` for slices the domain handles
+ * don't expose.
  *
- * The skeleton in this package ships only:
- *   - `createSuperDocUI({ superdoc })` factory
- *   - `ui.select(selector, equality)` substrate
- *   - `ui.destroy()` lifecycle
- *
- * Consumers building custom UI layer their state on top of `ui.select`.
- * Domain namespaces are added by sibling tickets.
+ * Lifecycle: `createSuperDocUI({ superdoc })` per editor mount;
+ * `ui.destroy()` on unmount tears down every internal subscription.
  */
 
 export type EqualityFn<T> = (a: T, b: T) => boolean;
@@ -115,25 +114,23 @@ export interface SuperDocEditorLike {
 /**
  * The unified UI state model.
  *
- * The skeleton ships the minimum slice needed to prove the substrate
- * end-to-end. Sibling tickets extend this via TypeScript module
- * augmentation as their domains land:
- *   - SD-2796 adds `commands` (per-command active/disabled state)
- *   - SD-2790 adds `comments`
- *   - SD-2791 adds `trackedChanges`
- *   - SD-2792 reads add `selection.activeCommentIds` / `activeChangeIds`
+ * Read individual fields via {@link SuperDocUI.select} or pull whole
+ * slices through the domain handles (`ui.selection.subscribe`,
+ * `ui.comments.subscribe`, etc.). Each slice is memoized so a typing
+ * only transaction (which leaves selection / comments / review
+ * unchanged) does not re-fire downstream subscribers.
  *
- * Implementation note: the selector substrate recomputes the full state
- * snapshot on every source event today, then dedups per-subscriber via
- * the equality function. Lazy/incremental computation is an
- * optimization that does not change the public API.
+ * Implementation note: the selector substrate recomputes the full
+ * state snapshot on every source event today, then dedups per
+ * subscriber via the equality function. Lazy / incremental
+ * computation is an optimization that does not change the public API.
  */
 export interface SuperDocUIState {
   /** True when SuperDoc has an active editor mounted. */
   ready: boolean;
   /** Mirror of `superdoc.config.documentMode`. */
   documentMode: 'editing' | 'suggesting' | 'viewing' | null;
-  /** Selection slice (minimal in the skeleton). */
+  /** Selection projection. See {@link SelectionSlice}. */
   selection: SelectionSlice;
   /**
    * Toolbar snapshot — `{ context, commands }`. Sourced from the
@@ -217,13 +214,30 @@ export interface SelectionSlice {
    * Pass directly to `editor.doc.insert({ target })` and to other
    * point/range operations that accept a SelectionTarget.
    *
+   * ```ts
+   * const { selectionTarget } = ui.selection.getSnapshot();
+   * if (selectionTarget) {
+   *   editor.doc.insert({ target: selectionTarget, content: 'Hello' });
+   * }
+   * ```
+   *
    * Derived from `target`: `null` when `target` is null; otherwise the
    * first segment's `blockId` + `range.start` as the start point and
    * the last segment's `blockId` + `range.end` as the end point. The
    * derivation lives on the slice so consumers don't have to reach for
    * a private conversion helper every time they want to insert text at
-   * the cursor — the controller exposes the cursor in both the shapes
-   * SuperDoc's own document operations consume.
+   * the cursor.
+   *
+   * Story field caveat: when `target.story` is present, the derivation
+   * preserves it on every {@link import('@superdoc/document-api').SelectionPoint}
+   * and the {@link import('@superdoc/document-api').SelectionTarget}
+   * root, so non-body selections route correctly. Today the selection
+   * resolver does NOT yet stamp `target.story` for non-body surfaces
+   * (header / footer / footnote / endnote); a doc-api follow-up
+   * tracks this. Until it lands, consumers building BYO UI on top of
+   * non-body content should detect the routed surface themselves and
+   * stamp the right `StoryLocator` before passing the target into a
+   * doc-api operation.
    */
   selectionTarget: import('@superdoc/document-api').SelectionTarget | null;
   /**
@@ -466,13 +480,32 @@ export interface SelectionHandle {
 /**
  * Frozen snapshot returned by {@link SelectionHandle.capture}.
  *
- * Same shape as {@link SelectionSlice}; declared as its own type
- * so consumers can name the captured value in their component
- * state (`useState<SelectionCapture | null>(null)`) and so the
- * planned `restore(capture)` follow-up has a stable input type.
- * Treat as a value object; do NOT mutate.
+ * Same shape as {@link SelectionSlice} but `DeepReadonly` so the
+ * type signal matches the runtime deep-freeze: assigning into
+ * `captured.target.segments[0].range.start` or
+ * `captured.activeMarks[0]` is a TypeScript error AND a runtime
+ * throw in strict mode. Declared as its own named type so
+ * consumers can name the captured value in their component state
+ * (`useState<SelectionCapture | null>(null)`) and so the planned
+ * `restore(capture)` follow-up has a stable input type.
  */
-export type SelectionCapture = SelectionSlice;
+export type SelectionCapture = DeepReadonly<SelectionSlice>;
+
+/**
+ * Recursively mark every property and array element as `readonly`.
+ * Mirrors the runtime `Object.freeze` walk performed by
+ * `ui.selection.capture()` so the static type matches reality.
+ *
+ * Kept module-local: this is an implementation detail of the
+ * captured selection contract, not a generic helper consumers
+ * should reach for.
+ */
+type DeepReadonly<T> =
+  T extends ReadonlyArray<infer U>
+    ? ReadonlyArray<DeepReadonly<U>>
+    : T extends object
+      ? { readonly [K in keyof T]: DeepReadonly<T[K]> }
+      : T;
 
 /**
  * Aggregate toolbar handle exposed on `ui.toolbar`. Compatible with
@@ -746,9 +779,9 @@ export interface CommentsHandle {
   resolve(commentId: string): import('@superdoc/document-api').Receipt;
   /**
    * Reopen a resolved comment via `editor.doc.comments.patch({ status:
-   * 'active' })`. Currently throws `INVALID_INPUT` on the doc-API
-   * because the patch input only accepts `'resolved'`; SD-2789 adds
-   * the lifecycle inverse and reroutes this method to succeed.
+   * 'active' })`. The doc-api lifecycle inverse shipped in SD-2789;
+   * the call resolves cleanly when the comment exists and is
+   * currently resolved, and returns a failure receipt otherwise.
    */
   reopen(commentId: string): import('@superdoc/document-api').Receipt;
   /** Delete a comment via `editor.doc.comments.delete`. */

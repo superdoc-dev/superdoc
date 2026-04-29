@@ -730,6 +730,108 @@ describe('ui.commands.get', () => {
     ui.destroy();
   });
 
+  // Regression for PR #3010 review comment 3: a custom handle
+  // captured before a custom-vs-custom replacement must not execute
+  // the replacement's handler. Without the entry-identity guard,
+  // `regA.handle.execute()` after `register({ id }) → regB` would
+  // run B's executor, with regA's consumer none the wiser.
+  it('captured custom handle refuses execute after a later registration replaces the entry', () => {
+    const { superdoc } = makeStubs();
+    const ui = createSuperDocUI({ superdoc });
+
+    const aExecute = vi.fn(() => true);
+    const regA = ui.commands.register({ id: 'company.x', execute: aExecute });
+
+    // Replacement (custom-vs-custom): warns, replaces.
+    const bExecute = vi.fn(() => true);
+    ui.commands.register({ id: 'company.x', execute: bExecute });
+
+    // regA's captured handle is now stale; must not run B's executor.
+    const result = regA.handle.execute();
+    expect(result).toBe(false);
+    expect(aExecute).not.toHaveBeenCalled();
+    expect(bExecute).not.toHaveBeenCalled();
+
+    ui.destroy();
+  });
+
+  it('captured custom handle stops emitting on its observer after replacement', async () => {
+    const { superdoc } = makeStubs();
+    const ui = createSuperDocUI({ superdoc });
+
+    const regA = ui.commands.register({
+      id: 'company.x',
+      execute: () => true,
+      getState: () => ({ active: false, disabled: false, value: 'A' }),
+    });
+
+    const aListener = vi.fn();
+    regA.handle.observe(aListener);
+    expect(aListener).toHaveBeenCalledTimes(1); // initial sync emit
+    aListener.mockClear();
+
+    // Replace.
+    ui.commands.register({
+      id: 'company.x',
+      execute: () => true,
+      getState: () => ({ active: true, disabled: true, value: 'B' }),
+    });
+
+    // Coalesce: scheduleNotify runs on a microtask.
+    await Promise.resolve();
+    await Promise.resolve();
+
+    // A's listener must NOT see B's state. The registry actively
+    // disposes A's observers via `disposeAllObservers(id)` on
+    // replacement; the entry-identity short-circuit catches any
+    // emit that races between schedule and dispose.
+    expect(aListener).not.toHaveBeenCalled();
+
+    ui.destroy();
+  });
+
+  // Regression for PR #3010 review comment 2: every execute-shaped
+  // surface must route through the same dispatch path. Previously
+  // only `ui.commands.get(id)?.execute()` re-resolved through the
+  // override registry; `ui.commands.bold.execute()` and
+  // `ui.toolbar.execute('bold')` still went straight to the built-in
+  // toolbar controller, producing a state/action mismatch when an
+  // override was registered.
+  it('ui.commands.bold.execute routes through a later override', () => {
+    const { superdoc } = makeStubs();
+    const ui = createSuperDocUI({ superdoc });
+
+    const customExecute = vi.fn(() => true);
+    ui.commands.register({
+      id: 'bold',
+      override: true,
+      execute: customExecute,
+    });
+
+    // Bracket-style per-id handle.
+    (ui.commands as unknown as { bold: { execute(): boolean } }).bold.execute();
+    expect(customExecute).toHaveBeenCalledTimes(1);
+
+    ui.destroy();
+  });
+
+  it("ui.toolbar.execute('bold') routes through a later override", () => {
+    const { superdoc } = makeStubs();
+    const ui = createSuperDocUI({ superdoc });
+
+    const customExecute = vi.fn(() => true);
+    ui.commands.register({
+      id: 'bold',
+      override: true,
+      execute: customExecute,
+    });
+
+    ui.toolbar.execute('bold');
+    expect(customExecute).toHaveBeenCalledTimes(1);
+
+    ui.destroy();
+  });
+
   it('cached built-in dynamic handle reverts to built-in dispatch after the override unregisters', () => {
     const { superdoc, editor } = makeStubs();
     const ui = createSuperDocUI({ superdoc });

@@ -194,6 +194,12 @@ export default defineConfig(({ mode, command }) => {
           'src/headless-toolbar-react.js',
           'src/headless-toolbar-vue.js',
           'src/ui.js',
+          // Same pattern as the other public re-export barrels above:
+          // `ui-react.js` is a thin pass-through to
+          // `@superdoc/super-editor/ui/react`. The provider / hook
+          // implementations are tested in the super-editor package
+          // (`src/ui/react/*.test.tsx`).
+          'src/ui-react.js',
           // Pure JSDoc typedef files (body is `export {}`, no runtime code)
           'src/core/types/**',
           '**/types.js',

@@ -44,6 +44,14 @@ export interface ResolveCommentInput {
   commentId: string;
 }
 
+/**
+ * Input for reopening a previously-resolved comment. Accepted as the
+ * `status: 'active'` branch of `comments.patch`.
+ */
+export interface ReopenCommentInput {
+  commentId: string;
+}
+
 export interface RemoveCommentInput {
   commentId: string;
 }
@@ -104,8 +112,12 @@ export interface CommentsPatchInput {
   text?: string;
   /** New anchor range (routes to move). */
   target?: TextAddress;
-  /** Set status to 'resolved' (routes to resolve). */
-  status?: 'resolved';
+  /**
+   * Lifecycle transition. `'resolved'` routes to resolve, `'active'`
+   * routes to reopen — symmetric inverse that removes the resolve
+   * anchors and restores the live comment mark.
+   */
+  status?: 'resolved' | 'active';
   /** Set the internal/private flag (routes to setInternal). */
   isInternal?: boolean;
 }
@@ -132,6 +144,14 @@ export interface CommentsAdapter {
   move(input: MoveCommentInput, options?: RevisionGuardOptions): Receipt;
   /** Resolve an open comment. */
   resolve(input: ResolveCommentInput, options?: RevisionGuardOptions): Receipt;
+  /**
+   * Reopen a previously-resolved comment. Symmetric inverse of
+   * {@link CommentsAdapter.resolve}: removes the
+   * `commentRangeStart` / `commentRangeEnd` anchor nodes inserted at
+   * resolve time and restores the live `comment` mark across the
+   * original range so subsequent operations see the comment as active.
+   */
+  reopen(input: ReopenCommentInput, options?: RevisionGuardOptions): Receipt;
   /** Remove a comment from the document. */
   remove(input: RemoveCommentInput, options?: RevisionGuardOptions): Receipt;
   /** Set the internal/private flag on a comment. */
@@ -268,11 +288,15 @@ function validatePatchCommentInput(input: unknown): asserts input is CommentsPat
     });
   }
 
-  if (status !== undefined && status !== 'resolved') {
-    throw new DocumentApiValidationError('INVALID_INPUT', `status must be "resolved", got "${String(status)}".`, {
-      field: 'status',
-      value: status,
-    });
+  if (status !== undefined && status !== 'resolved' && status !== 'active') {
+    throw new DocumentApiValidationError(
+      'INVALID_INPUT',
+      `status must be "resolved" or "active", got "${String(status)}".`,
+      {
+        field: 'status',
+        value: status,
+      },
+    );
   }
 
   if (isInternal !== undefined && typeof isInternal !== 'boolean') {
@@ -340,6 +364,9 @@ export function executeCommentsPatch(
   }
   if (input.status === 'resolved') {
     return adapter.resolve({ commentId: input.commentId }, options);
+  }
+  if (input.status === 'active') {
+    return adapter.reopen({ commentId: input.commentId }, options);
   }
   if (input.isInternal !== undefined) {
     return adapter.setInternal({ commentId: input.commentId, isInternal: input.isInternal }, options);

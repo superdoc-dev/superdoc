@@ -542,6 +542,8 @@ describe('measureBlock', () => {
       expect(measure.lines).toHaveLength(2);
       expect(measure.lines[0].width).toBeGreaterThan(0);
       expect(measure.lines[1].width).toBeGreaterThan(0);
+      expect(measure.lines[1].fromRun).toBe(2);
+      expect(measure.lines[1].toRun).toBe(2);
     });
 
     it('creates an empty line for leading lineBreak at start of paragraph', async () => {

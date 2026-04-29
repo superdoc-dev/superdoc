@@ -180,6 +180,7 @@ export default defineConfig(({ mode, command }) => {
           'src/headless-toolbar.js',
           'src/headless-toolbar-react.js',
           'src/headless-toolbar-vue.js',
+          'src/ui.js',
           // Pure JSDoc typedef files (body is `export {}`, no runtime code)
           'src/core/types/**',
           '**/types.js',
@@ -202,6 +203,7 @@ export default defineConfig(({ mode, command }) => {
           'headless-toolbar': 'src/headless-toolbar.js',
           'headless-toolbar-react': 'src/headless-toolbar-react.js',
           'headless-toolbar-vue': 'src/headless-toolbar-vue.js',
+          'ui': 'src/ui.js',
           'super-editor': 'src/super-editor.js',
           'types': 'src/types.ts',
           'super-editor/docx-zipper': '@core/DocxZipper',

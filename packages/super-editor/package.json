@@ -31,7 +31,8 @@
     },
     "./ui": {
       "source": "./src/ui/index.ts",
-      "types": "./dist/src/ui/index.d.ts"
+      "types": "./dist/src/ui/index.d.ts",
+      "import": "./dist/ui.es.js"
     },
     "./parts-runtime": {
       "source": "./src/editors/v1/core/parts/init-parts-runtime.ts",

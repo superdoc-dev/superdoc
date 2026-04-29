@@ -1,13 +1,22 @@
-# Triggers a Mintlify preview deployment for any PR targeting `stable`.
-# Promote-stable PRs target this branch, so reviewers see the docs that will
-# go live the moment the release succeeds.
-name: 👀 Preview docs for stable PRs
+# Triggers a Mintlify preview deployment for docs-touching PRs targeting
+# `main` or `stable`. The `stable` case covers promote-stable PRs so reviewers
+# see the docs that will go live the moment the release succeeds. The `main`
+# case gives doc authors a hosted preview during normal development, since
+# Mintlify's automatic previews only fire on PRs targeting the deployment
+# branch (`docs-stable`). Path filter keeps the 5 req/min Mintlify API quota
+# from being spent on unrelated code PRs.
+name: 👀 Preview docs for main and stable PRs
 
 on:
   pull_request:
     types: [opened, reopened, synchronize]
     branches:
+      - main
       - stable
+    paths:
+      - 'apps/docs/**'
+      - 'packages/document-api/src/contract/**'
+      - 'scripts/generate-all.mjs'
 
 permissions:
   pull-requests: write

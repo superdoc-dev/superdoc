@@ -176,3 +176,14 @@ jobs:
         with:
           packages-dir: packages/sdk/langs/python/dist/
           skip-existing: true
+
+      # Stable docs deploy from `docs-stable`. Promoting only after every release
+      # step above has succeeded keeps published docs in lockstep with the
+      # packages users can actually install.
+      - name: Promote stable docs
+        env:
+          GITHUB_TOKEN: ${{ steps.generate_token.outputs.token }}
+        run: |
+          set -euo pipefail
+          git fetch origin stable
+          git push origin refs/remotes/origin/stable:refs/heads/docs-stable

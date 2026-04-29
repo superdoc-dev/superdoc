@@ -1,0 +1,56 @@
+# Triggers a Mintlify preview deployment for any PR targeting `stable`.
+# Promote-stable PRs target this branch, so reviewers see the docs that will
+# go live the moment the release succeeds.
+name: 👀 Preview docs for stable PRs
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize]
+    branches:
+      - stable
+
+permissions:
+  pull-requests: write
+
+concurrency:
+  group: preview-stable-docs-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  trigger-preview:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Mintlify preview
+        id: preview
+        env:
+          MINTLIFY_API_KEY: ${{ secrets.MINTLIFY_API_KEY }}
+          MINTLIFY_PROJECT_ID: ${{ secrets.MINTLIFY_PROJECT_ID }}
+          BRANCH: ${{ github.head_ref }}
+        run: |
+          set -euo pipefail
+          if [ -z "${MINTLIFY_API_KEY}" ] || [ -z "${MINTLIFY_PROJECT_ID}" ]; then
+            echo "MINTLIFY_API_KEY or MINTLIFY_PROJECT_ID not set; skipping."
+            echo "preview_url=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          response=$(curl -sS -X POST \
+            -H "Authorization: Bearer ${MINTLIFY_API_KEY}" \
+            -H "Content-Type: application/json" \
+            -d "{\"branch\": \"${BRANCH}\"}" \
+            "https://api.mintlify.com/v1/project/preview/${MINTLIFY_PROJECT_ID}")
+
+          echo "Mintlify response: ${response}"
+          preview_url=$(echo "${response}" | jq -r '.previewUrl // empty')
+          echo "preview_url=${preview_url}" >> "$GITHUB_OUTPUT"
+
+      # Comment only on first open. Mintlify reuses the same URL for the same
+      # branch on redeploys, so subsequent pushes refresh content in place.
+      - name: Comment preview URL on PR
+        if: steps.preview.outputs.preview_url != '' && github.event.action == 'opened'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PREVIEW_URL: ${{ steps.preview.outputs.preview_url }}
+        run: |
+          gh pr comment "$PR_NUMBER" --body "📖 Docs preview: ${PREVIEW_URL}"

@@ -92,6 +92,25 @@ export interface SuperDocEditorLike {
       decide?(input: unknown, options?: unknown): unknown;
     };
   };
+  /**
+   * PresentationEditor handle. Browser-only. The controller calls
+   * `presentationEditor.getEntityRects(target)` from `ui.viewport.getRect`
+   * to look up the painted-DOM rectangles for an entity (comment or
+   * tracked change) without leaking DOM elements through the public
+   * `ui.viewport` surface. Optional in the structural typing to keep
+   * SSR / non-browser stubs valid.
+   */
+  presentationEditor?: {
+    getEntityRects?(target: { entityType?: unknown; entityId?: unknown; story?: unknown }): Array<{
+      pageIndex: number;
+      left: number;
+      right: number;
+      top: number;
+      bottom: number;
+      width: number;
+      height: number;
+    }>;
+  } | null;
 }
 
 /**
@@ -282,6 +301,15 @@ export interface SuperDocUI {
   review: ReviewHandle;
 
   /**
+   * Viewport domain — imperative geometry queries for sticky-card /
+   * floating-toolbar placement against painted entities and ranges.
+   * No subscription substrate — viewport rects are read on-demand by
+   * the consumer (e.g. on hover, on scroll, on layout-change events
+   * the consumer already listens to). Browser-only by definition.
+   */
+  viewport: ViewportHandle;
+
+  /**
    * Tear down all internal subscriptions to the editor / SuperDoc
    * instance / presentation editor. After destroy, no listeners will
    * fire and `select(...)` should not be called.
@@ -444,4 +472,112 @@ export interface ReviewHandle {
    * available.
    */
   setRecording(enabled: boolean): void;
+}
+
+/**
+ * Plain value rectangle in viewport coordinates. Always a snapshot,
+ * never a live `DOMRect`. Coordinates measure from the top-left of
+ * the user's viewport, not the editor host, so consumers can position
+ * fixed/absolute elements directly with the returned `top` / `left`.
+ */
+export interface ViewportRect {
+  top: number;
+  left: number;
+  width: number;
+  height: number;
+  /**
+   * Page index of the painted page that contains this rect. Useful
+   * for per-page sidebars or footers that render once per page.
+   */
+  pageIndex: number;
+}
+
+export interface ViewportGetRectInput {
+  /**
+   * The thing to look up. Mirrors `editor.doc.ranges.scrollIntoView`'s
+   * target shapes:
+   *   - `EntityAddress` (comment / tracked change by id)
+   *   - `TextAddress` (single-block text range) — deferred
+   *   - `TextTarget` (multi-segment text target) — deferred
+   *
+   * The text-anchored paths land in a follow-up to keep this PR small;
+   * the union is widened in the type so consumers can author future-
+   * compatible call sites today.
+   */
+  target:
+    | import('@superdoc/document-api').EntityAddress
+    | import('@superdoc/document-api').TextAddress
+    | import('@superdoc/document-api').TextTarget;
+}
+
+export type ViewportRectResult =
+  | {
+      success: true;
+      /**
+       * Primary anchor rect — the first painted occurrence of the
+       * target, suitable as the anchor point for a sidebar card or
+       * floating toolbar. For multi-page / multi-line targets,
+       * `rects` carries the full set in document order.
+       */
+      rect: ViewportRect;
+      /** Every painted occurrence of the target, in document order. */
+      rects: ViewportRect[];
+      /** Page index of the primary anchor (`rect.pageIndex`). */
+      pageIndex: number;
+    }
+  | {
+      success: false;
+      reason: /**
+       * Editor / presentation editor not initialized yet — no
+       * active editor, or layout has not bootstrapped. The caller
+       * can retry after `editorCreate` fires.
+       */
+      | 'not-ready'
+        /**
+         * Caller-shape error: `target` is missing, has the wrong
+         * `kind`, or refers to an `entityType` the controller does
+         * not handle. Indicates a programming mistake, not a
+         * transient state.
+         */
+        | 'invalid-target'
+        /**
+         * Target's referenced block / entity is not in the model
+         * (e.g. a stale id from a closed snapshot). Reserved for the
+         * text-anchored paths once they land; the entity-anchored
+         * path returns `not-mounted` for unknown ids since the DOM
+         * lookup can't distinguish "doesn't exist" from "currently
+         * virtualized".
+         */
+        | 'unresolved'
+        /**
+         * Valid target but currently virtualized / offscreen — the
+         * page or story isn't painted in the DOM. Caller can call
+         * `viewport.scrollIntoView` first to mount it, then retry.
+         * Same posture as `editor.doc.ranges.scrollIntoView` for
+         * non-body stories on virtualized pages (SD-2750).
+         */
+        | 'not-mounted';
+    };
+
+/**
+ * Imperative viewport-geometry surface. No subscription primitive —
+ * rects are read on demand. Consumers who need to reflow on layout
+ * change typically already listen to a `transaction` / `paint` /
+ * `scroll` event upstream and call `getRect` from there.
+ */
+export interface ViewportHandle {
+  /**
+   * Look up the painted rectangle(s) of an entity or text range in
+   * viewport coordinates. Synchronous — no DOM mutation required.
+   */
+  getRect(input: ViewportGetRectInput): ViewportRectResult;
+  /**
+   * Scroll the viewport so the target is visible. Thin pass-through
+   * to `editor.doc.ranges.scrollIntoView` for parity with the rest
+   * of the controller surface, so consumers don't have to dip into
+   * `editor.doc` for scroll geometry that pairs with `getRect`.
+   */
+  scrollIntoView(
+    input: import('@superdoc/document-api').ScrollIntoViewInput,
+  ): Promise<import('@superdoc/document-api').ScrollIntoViewOutput>;
 }

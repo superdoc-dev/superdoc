@@ -47,6 +47,11 @@ import { createLayoutMetrics as createLayoutMetricsFromHelper } from './layout/P
 import { buildFootnotesInput, type NoteRenderOverride } from './layout/FootnotesBuilder.js';
 import { safeCleanup } from './utils/SafeCleanup.js';
 import { createHiddenHost } from './dom/HiddenHost.js';
+import {
+  elementsToRangeRects,
+  findRenderedCommentElements,
+  findRenderedTrackedChangeElementsStrict,
+} from './dom/EntityRectFinder.js';
 import { RemoteCursorManager, type RenderDependencies } from './remote-cursors/RemoteCursorManager.js';
 import { EditorInputManager } from './pointer-events/EditorInputManager.js';
 import { SelectionSyncCoordinator } from './selection/SelectionSyncCoordinator.js';
@@ -2118,6 +2123,56 @@ export class PresentationEditor extends EventEmitter {
       bounds,
       pageIndex: rects[0]?.pageIndex ?? 0,
     };
+  }
+
+  /**
+   * Viewport-coords rect lookup for an entity (comment / tracked
+   * change) painted in the editor surface. Drives the
+   * `superdoc/ui` `ui.viewport.getRect` substrate so consumers can
+   * pin sticky cards / floating toolbars next to inline highlights
+   * without reaching into DOM, PM positions, or painter selectors.
+   *
+   * Returns plain value rects (not live `DOMRect`) in viewport
+   * coordinates. An empty array means the entity isn't currently
+   * painted — virtualized page, story not active, or id not present
+   * in the document. Callers can choose to scroll first then retry,
+   * or render the card detached.
+   *
+   * @param target - The entity to locate. `entityType` is one of
+   *                 `'comment'` or `'trackedChange'`. `story` is
+   *                 optional; when provided, results are filtered to
+   *                 that story so an id that exists in body and a
+   *                 footer doesn't return rects from both.
+   */
+  getEntityRects(target: { entityType?: unknown; entityId?: unknown; story?: unknown }): RangeRect[] {
+    if (!target || typeof target !== 'object') return [];
+    const entityType = target.entityType;
+    const entityId = target.entityId;
+    if (typeof entityType !== 'string' || typeof entityId !== 'string' || entityId.length === 0) {
+      return [];
+    }
+    const host = this.#visibleHost;
+    if (!host) return [];
+    const storyKey = resolveStoryKeyFromAddress(target.story);
+    let elements: HTMLElement[];
+    if (entityType === 'trackedChange') {
+      // Use a strict story filter for the viewport read path. The
+      // navigation helper `#findRenderedTrackedChangeElements` falls
+      // back to all same-id matches when no exact story match wins a
+      // heuristic — that's correct for "scroll to this change", but
+      // wrong here: a sticky card asked to anchor a header/footer
+      // change must not silently anchor to a body copy of the same
+      // id. Empty result when the requested story has no painted copy
+      // is the correct signal — the UI controller maps it to
+      // `not-mounted` so the consumer can pre-mount via
+      // `viewport.scrollIntoView` and retry.
+      elements = findRenderedTrackedChangeElementsStrict(host, entityId, escapeAttrValue, storyKey);
+    } else if (entityType === 'comment') {
+      elements = findRenderedCommentElements(host, entityId, storyKey);
+    } else {
+      return [];
+    }
+    return elementsToRangeRects(elements);
   }
 
   #getThreadSelectionBounds(

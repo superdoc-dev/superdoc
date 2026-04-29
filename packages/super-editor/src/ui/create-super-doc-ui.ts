@@ -15,6 +15,7 @@ import type {
   TrackChangesListResult,
 } from '@superdoc/document-api';
 import { shallowEqual } from './equality.js';
+import { scrollRangeIntoView } from './scroll-into-view.js';
 import type {
   CommandHandle,
   CommandsHandle,
@@ -671,13 +672,16 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     return api;
   };
 
-  const requireDocRanges = () => {
+  /**
+   * Run `scrollRangeIntoView` against whichever editor
+   * PresentationEditor currently routes to (body / header / footer /
+   * note). Returns `{ success: false }` when no routed editor is
+   * mounted.
+   */
+  const runScrollIntoView = async (input: ScrollIntoViewInput): Promise<ScrollIntoViewOutput> => {
     const editor = resolveRoutedEditor(superdoc);
-    const api = editor?.doc?.ranges;
-    if (!api?.scrollIntoView) {
-      throw new Error('ui.comments.scrollTo: no active editor / ranges API.');
-    }
-    return api;
+    if (!editor) return { success: false };
+    return scrollRangeIntoView(editor as unknown as Parameters<typeof scrollRangeIntoView>[0], input);
   };
 
   const comments: CommentsHandle = {
@@ -743,8 +747,7 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
       return receipt;
     },
     async scrollTo(commentId) {
-      const api = requireDocRanges();
-      return (api.scrollIntoView as (input: unknown) => Promise<ScrollIntoViewOutput>).call(api, {
+      return runScrollIntoView({
         target: { kind: 'entity', entityType: 'comment', entityId: commentId },
         block: 'center',
         behavior: 'smooth',
@@ -862,10 +865,9 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     async scrollTo(id) {
       const kind = entityKindForId(id);
       const entityType = kind === 'change' ? 'trackedChange' : 'comment';
-      const api = requireDocRanges();
       activeReviewId = id;
       scheduleNotify();
-      return (api.scrollIntoView as (input: unknown) => Promise<ScrollIntoViewOutput>).call(api, {
+      return runScrollIntoView({
         target: { kind: 'entity', entityType, entityId: id },
         block: 'center',
         behavior: 'smooth',
@@ -974,12 +976,7 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     },
 
     async scrollIntoView(input: ScrollIntoViewInput): Promise<ScrollIntoViewOutput> {
-      const editor = resolveRoutedEditor(superdoc);
-      const api = editor?.doc?.ranges;
-      if (!api?.scrollIntoView) {
-        return { success: false };
-      }
-      return (api.scrollIntoView as (input: unknown) => Promise<ScrollIntoViewOutput>).call(api, input);
+      return runScrollIntoView(input);
     },
   };
 

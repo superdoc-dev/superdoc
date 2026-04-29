@@ -79,10 +79,6 @@ export interface SuperDocEditorLike {
       patch?(input: unknown, options?: unknown): unknown;
       delete?(input: unknown, options?: unknown): unknown;
     };
-    /** Ranges member on the Document API. Used for `ui.comments.scrollTo`. */
-    ranges?: {
-      scrollIntoView?(input: unknown): Promise<unknown>;
-    };
     /**
      * Tracked-changes member on the Document API. Used by
      * `ui.review.*` for accept/reject and the merged feed.
@@ -416,8 +412,8 @@ export interface CommentsHandle {
   delete(commentId: string): import('@superdoc/document-api').Receipt;
   /**
    * Scroll the viewport to the comment's anchor via
-   * `editor.doc.ranges.scrollIntoView({ target: EntityAddress })`.
-   * Resolves to the receipt the doc-API returns.
+   * `ui.viewport.scrollIntoView({ target: EntityAddress })`. Resolves
+   * to a `{ success: boolean }` receipt.
    */
   scrollTo(commentId: string): Promise<import('@superdoc/document-api').ScrollIntoViewOutput>;
 }
@@ -461,7 +457,7 @@ export interface ReviewHandle {
   /**
    * Scroll the viewport to the given item (comment or tracked
    * change) and set it as `activeId`. Routes through
-   * `editor.doc.ranges.scrollIntoView({ target: EntityAddress })`.
+   * `ui.viewport.scrollIntoView({ target: EntityAddress })`.
    */
   scrollTo(id: string): Promise<import('@superdoc/document-api').ScrollIntoViewOutput>;
   /**
@@ -494,8 +490,7 @@ export interface ViewportRect {
 
 export interface ViewportGetRectInput {
   /**
-   * The thing to look up. Mirrors `editor.doc.ranges.scrollIntoView`'s
-   * target shapes:
+   * The thing to look up. Same target shapes as `viewport.scrollIntoView`:
    *   - `EntityAddress` (comment / tracked change by id)
    *   - `TextAddress` (single-block text range) — deferred
    *   - `TextTarget` (multi-segment text target) — deferred
@@ -553,8 +548,8 @@ export type ViewportRectResult =
          * Valid target but currently virtualized / offscreen — the
          * page or story isn't painted in the DOM. Caller can call
          * `viewport.scrollIntoView` first to mount it, then retry.
-         * Same posture as `editor.doc.ranges.scrollIntoView` for
-         * non-body stories on virtualized pages (SD-2750).
+         * Same posture as the underlying scroll path for non-body
+         * stories on virtualized pages (SD-2750).
          */
         | 'not-mounted';
     };
@@ -572,10 +567,12 @@ export interface ViewportHandle {
    */
   getRect(input: ViewportGetRectInput): ViewportRectResult;
   /**
-   * Scroll the viewport so the target is visible. Thin pass-through
-   * to `editor.doc.ranges.scrollIntoView` for parity with the rest
-   * of the controller surface, so consumers don't have to dip into
-   * `editor.doc` for scroll geometry that pairs with `getRect`.
+   * Scroll the viewport so the target is visible. Browser-only by
+   * definition: drives `presentation.navigateTo()` for entity targets
+   * (story-aware) and `presentation.scrollToPositionAsync()` for text
+   * targets. Lives on `ui.*` rather than `editor.doc.*` because
+   * viewport scroll is a UI side-effect, not a request/response
+   * Document API operation.
    */
   scrollIntoView(
     input: import('@superdoc/document-api').ScrollIntoViewInput,

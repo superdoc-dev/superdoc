@@ -22,7 +22,6 @@ export type {
   SelectionApi,
   SelectionInfo,
   SelectionCurrentInput,
-  SelectionChangeListener,
   ScrollIntoViewInput,
   ScrollIntoViewOutput,
   TextAddress,

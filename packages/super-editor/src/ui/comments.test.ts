@@ -42,9 +42,17 @@ function makeStubs(
     })),
     page: { limit: 50, offset: 0, returned: commentsList.length },
   }));
-  const scrollIntoView = vi.fn(async (_input: unknown) => ({ success: true as const }));
+  const navigateTo = vi.fn(async (_target: unknown) => true);
 
-  const editor = {
+  const editor: {
+    on: ReturnType<typeof vi.fn>;
+    off: ReturnType<typeof vi.fn>;
+    doc: unknown;
+    presentationEditor: {
+      navigateTo: typeof navigateTo;
+      getActiveEditor: () => unknown;
+    };
+  } = {
     on: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
       if (!editorListeners.has(event)) editorListeners.set(event, new Set());
       editorListeners.get(event)!.add(handler);
@@ -63,9 +71,12 @@ function makeStubs(
         })),
       },
       comments: { create, patch, delete: del, list },
-      ranges: { scrollIntoView },
     },
+    // Self-reference assigned below so toolbar source resolution sees
+    // the same routed editor as the rest of the stub.
+    presentationEditor: undefined as never,
   };
+  editor.presentationEditor = { navigateTo, getActiveEditor: () => editor };
 
   const superdoc: SuperDocLike & {
     fireEditor(event: string, ...args: unknown[]): void;
@@ -90,7 +101,7 @@ function makeStubs(
     },
   };
 
-  return { superdoc, editor, mocks: { create, patch, delete: del, list, scrollIntoView } };
+  return { superdoc, editor, mocks: { create, patch, delete: del, list, navigateTo } };
 }
 
 const flushMicrotasks = () => Promise.resolve();
@@ -328,17 +339,15 @@ describe('ui.comments — actions route through editor.doc.*', () => {
     ui.destroy();
   });
 
-  it('scrollTo forwards to ranges.scrollIntoView with an EntityAddress', async () => {
+  it('scrollTo navigates to the comment EntityAddress via the presentation editor', async () => {
     const { superdoc, mocks } = makeStubs();
     const ui = createSuperDocUI({ superdoc });
 
     await ui.comments.scrollTo('c-42');
 
-    expect(mocks.scrollIntoView).toHaveBeenCalledTimes(1);
-    const arg = mocks.scrollIntoView.mock.calls[0][0] as {
-      target: { kind: string; entityType: string; entityId: string };
-    };
-    expect(arg.target).toEqual({ kind: 'entity', entityType: 'comment', entityId: 'c-42' });
+    expect(mocks.navigateTo).toHaveBeenCalledTimes(1);
+    const target = mocks.navigateTo.mock.calls[0][0] as { kind: string; entityType: string; entityId: string };
+    expect(target).toEqual({ kind: 'entity', entityType: 'comment', entityId: 'c-42' });
 
     ui.destroy();
   });

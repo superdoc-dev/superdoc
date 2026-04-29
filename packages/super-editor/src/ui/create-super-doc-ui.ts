@@ -145,6 +145,53 @@ const ALL_TOOLBAR_COMMAND_IDS: PublicToolbarItemId[] = Object.keys(createToolbar
 const EMPTY_ACTIVE_IDS: readonly string[] = Object.freeze<string[]>([]);
 
 /**
+ * Recursive structural clone for `ui.selection.capture()` (SD-2821).
+ * The captured handle is consumer-facing; it must not share array
+ * or object references with the controller's memoized selection
+ * slice. Without this, a `captured.target.segments[0].range.start =
+ * 99` from consumer code would corrupt the shared snapshot every
+ * other subscriber sees. JSON-clone is sufficient because the
+ * selection slice is plain data (strings, numbers, booleans, null,
+ * arrays, plain objects) with no functions, Dates, Maps, or cycles.
+ */
+function deepClone<T>(value: T): T {
+  if (value === null || typeof value !== 'object') return value;
+  if (Array.isArray(value)) {
+    return value.map((item) => deepClone(item)) as unknown as T;
+  }
+  const out: Record<string, unknown> = {};
+  for (const key of Object.keys(value as object)) {
+    out[key] = deepClone((value as Record<string, unknown>)[key]);
+  }
+  return out as T;
+}
+
+/**
+ * Recursive `Object.freeze` for `ui.selection.capture()` (SD-2821).
+ * `Object.freeze({ ...slice })` only freezes the top level; nested
+ * arrays / objects (target, target.segments, activeMarks) stay
+ * mutable. Walking the structure here makes
+ * `captured.activeMarks.push(...)` and
+ * `captured.target.segments[0].range.start = 99` throw in strict
+ * mode, matching the public API's "captured handle is opaque"
+ * promise. Cycle-safe: we check `Object.isFrozen(value)` before
+ * recursing so already-frozen sentinels (e.g.
+ * {@link EMPTY_ACTIVE_IDS}) don't loop back through this helper.
+ */
+function deepFreeze<T>(value: T): T {
+  if (value === null || typeof value !== 'object') return value;
+  if (Object.isFrozen(value)) return value;
+  if (Array.isArray(value)) {
+    for (const item of value) deepFreeze(item);
+  } else {
+    for (const key of Object.keys(value as object)) {
+      deepFreeze((value as Record<string, unknown>)[key]);
+    }
+  }
+  return Object.freeze(value);
+}
+
+/**
  * Resolve the **routed** editor — the body, header, footer, or note
  * editor that PresentationEditor currently routes input/selection to.
  * Falls back to `superdoc.activeEditor` when no presentation layer is
@@ -1375,21 +1422,20 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
       });
     },
     capture() {
-      // Capture is sugar over `getSnapshot()` plus a freeze: the
-      // memoized selection slice already carries the portable
-      // address shapes consumers need (target, selectionTarget,
-      // activeMarks, etc.). The freeze prevents accidental mutation
-      // of the shared snapshot; the consumer treats the captured
-      // value as opaque.
-      //
-      // Returns null when the snapshot has no addressable text
-      // anchor (empty selection in a node selection, no editor
-      // mounted, doc not yet bootstrapped). A `null` guard at the
-      // call site is the consumer's signal that capture-and-restore
-      // doesn't make sense for the current state.
+      // Capture is sugar over `getSnapshot()` plus a deep clone +
+      // deep freeze: the memoized selection slice carries the
+      // portable address shapes consumers need (target,
+      // selectionTarget, activeMarks, etc.), and shares them with
+      // every other live subscriber. A shallow freeze on the
+      // top-level snapshot would still let
+      // `captured.target.segments[0].range.start = 99` or
+      // `captured.activeMarks.push(...)` corrupt the shared slice
+      // and feed bad targets into later `editor.doc.*` calls. Clone
+      // first so the freeze applies to the consumer's copy alone,
+      // not the controller's memo, then freeze recursively.
       const slice = computeState().selection;
       if (!slice.target && !slice.selectionTarget) return null;
-      return Object.freeze({ ...slice });
+      return deepFreeze(deepClone(slice));
     },
   };
 

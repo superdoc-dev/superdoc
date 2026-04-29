@@ -9,6 +9,7 @@ import type {
 import type { Editor } from '../../core/Editor.js';
 import { pmPositionToTextOffset } from './text-offset-resolver.js';
 import { groupTrackedChanges } from './tracked-change-resolver.js';
+import { resolveCommentIdFromAttrs } from './value-utils.js';
 
 /**
  * Mark names that anchor live entities the UI cares about. We collect
@@ -166,10 +167,20 @@ function mapRawChangeIdsToCanonical(editor: Editor, rawIds: string[]): string[] 
   for (const change of grouped) {
     rawToCanonical.set(change.rawId, change.id);
   }
+  // Dedupe through a Set: when two raw ids in `rawIds` group to the
+  // same canonical (e.g. paired tracked-change pieces — insert + delete
+  // halves of a tracked replace, or an undo step that produced a stale
+  // raw alias), the canonical should appear once. Without this, an
+  // overlapping selection across both halves would emit a duplicate
+  // in `activeChangeIds` and double-count in any UI driven by it.
+  const seen = new Set<string>();
   const out: string[] = [];
   for (const raw of rawIds) {
     const canonical = rawToCanonical.get(raw);
-    if (canonical) out.push(canonical);
+    if (!canonical) continue;
+    if (seen.has(canonical)) continue;
+    seen.add(canonical);
+    out.push(canonical);
   }
   return out;
 }
@@ -198,7 +209,15 @@ function collectActiveEntityIds(
 
   const collectFromMark = (markType: string, attrs: Record<string, unknown> | undefined) => {
     if (markType === COMMENT_MARK_NAME) {
-      const id = attrs?.commentId;
+      // Imported / legacy comment marks may carry the id on
+      // `importedId` or `w:id` instead of `commentId`. The rest of
+      // the comment adapter graph (`comments.list`, `comments.patch`,
+      // etc.) treats those as the canonical id; without the same
+      // fallback, `selection.current().activeCommentIds` would stay
+      // empty over an imported anchor while `comments.list` reports
+      // the comment — breaking sidebar highlight / disable logic for
+      // legacy DOCX imports.
+      const id = resolveCommentIdFromAttrs((attrs ?? {}) as Record<string, unknown>);
       if (typeof id === 'string' && id.length > 0) commentIds.add(id);
     } else if (TRACK_CHANGE_MARK_NAMES.has(markType)) {
       const id = attrs?.id;

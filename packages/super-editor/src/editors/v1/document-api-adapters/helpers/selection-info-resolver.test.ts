@@ -449,6 +449,29 @@ describe('resolveCurrentSelectionInfo > entity ids', () => {
     expect(info.activeChangeIds).toEqual(['tcA']);
   });
 
+  it('dedupes canonical ids when two raw ids map to the same canonical (paired tracked changes)', () => {
+    // Tracked replace produces paired insert + delete halves whose
+    // raw mark ids both group to a single canonical id. A range
+    // selection across both halves must surface the canonical id
+    // once, not twice — otherwise sidebar counts and union-driven
+    // highlights would double-count the change.
+    setTrackedChangeMapping([
+      { rawId: 'tc1-insert', canonical: 'tcA' },
+      { rawId: 'tc1-delete', canonical: 'tcA' },
+    ]);
+    const docNode = doc([
+      entityMarkedTextBlock('p1', [
+        { text: 'inserted ', marksWithAttrs: [{ name: 'trackInsert', attrs: { id: 'tc1-insert' } }] },
+        { text: 'deleted', marksWithAttrs: [{ name: 'trackDelete', attrs: { id: 'tc1-delete' } }] },
+      ]),
+    ]);
+    const editor = makeEditor(docNode, { from: 2, to: 16 });
+
+    const info = resolveCurrentSelectionInfo(editor, {});
+
+    expect(info.activeChangeIds).toEqual(['tcA']);
+  });
+
   it('reports both comment and change ids when a span carries both', () => {
     setTrackedChangeMapping([{ rawId: 'tc1', canonical: 'tcA' }]);
     const docNode = doc([
@@ -496,6 +519,27 @@ describe('resolveCurrentSelectionInfo > entity ids', () => {
     const info = resolveCurrentSelectionInfo(editor, {});
 
     expect(info.activeCommentIds).toEqual(['c1']);
+  });
+
+  it('resolves comment ids from importedId / w:id when commentId is absent (legacy DOCX imports)', () => {
+    // Imported / legacy comment marks may carry the id on
+    // `importedId` or `w:id` instead of the post-import canonical
+    // `commentId`. The resolver must honor the same fallback chain
+    // the rest of the comment adapter graph uses
+    // (`resolveCommentIdFromAttrs`); without it,
+    // `selection.current().activeCommentIds` would stay empty over a
+    // run that `comments.list()` reports as a real comment.
+    const docNode = doc([
+      entityMarkedTextBlock('p1', [
+        { text: 'imported ', marksWithAttrs: [{ name: 'commentMark', attrs: { importedId: 'imp-1' } }] },
+        { text: 'legacy', marksWithAttrs: [{ name: 'commentMark', attrs: { 'w:id': 'leg-2' } }] },
+      ]),
+    ]);
+    const editor = makeEditor(docNode, { from: 2, to: 17 });
+
+    const info = resolveCurrentSelectionInfo(editor, {});
+
+    expect([...info.activeCommentIds].sort()).toEqual(['imp-1', 'leg-2']);
   });
 
   it('empty arrays survive a JSON round-trip (serialization-stable shape)', () => {

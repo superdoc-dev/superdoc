@@ -40,6 +40,8 @@ Returns a SelectionInfo with `empty`, `target` (TextTarget or null), `activeMark
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
+| `activeChangeIds` | string[] | yes |  |
+| `activeCommentIds` | string[] | yes |  |
 | `activeMarks` | string[] | yes |  |
 | `empty` | boolean | yes |  |
 | `target` | TextTarget \\| null | yes | One of: TextTarget, null |
@@ -49,6 +51,12 @@ Returns a SelectionInfo with `empty`, `target` (TextTarget or null), `activeMark
 
 ```json
 {
+  "activeChangeIds": [
+    "example"
+  ],
+  "activeCommentIds": [
+    "example"
+  ],
   "activeMarks": [
     "example"
   ],
@@ -99,6 +107,18 @@ Returns a SelectionInfo with `empty`, `target` (TextTarget or null), `activeMark
 {
   "additionalProperties": false,
   "properties": {
+    "activeChangeIds": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "activeCommentIds": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
     "activeMarks": {
       "items": {
         "type": "string"
@@ -125,7 +145,9 @@ Returns a SelectionInfo with `empty`, `target` (TextTarget or null), `activeMark
   "required": [
     "empty",
     "target",
-    "activeMarks"
+    "activeMarks",
+    "activeCommentIds",
+    "activeChangeIds"
   ],
   "type": "object"
 }

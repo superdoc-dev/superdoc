@@ -4,7 +4,7 @@
  * Converts ProseMirror chart nodes to DrawingBlocks with drawingKind: 'chart'.
  */
 
-import type { ChartDrawing, DrawingGeometry, BoxSpacing, ImageAnchor } from '@superdoc/contracts';
+import type { ChartDrawing, DrawingGeometry, BoxSpacing, ImageAnchor, SourceAnchor } from '@superdoc/contracts';
 import type { PMNode, NodeHandlerContext, BlockIdGenerator, PositionMap } from '../types.js';
 import {
   pickNumber,
@@ -145,6 +145,7 @@ export function chartNodeToDrawingBlock(
   };
 
   const normalizedWrap = normalizeWrap(rawAttrs.wrap);
+  const sourceAnchor = isPlainObject(rawAttrs.sourceAnchor) ? (rawAttrs.sourceAnchor as SourceAnchor) : undefined;
   const anchor = normalizeAnchor(rawAttrs.anchorData, rawAttrs, normalizedWrap?.behindDoc);
 
   const pos = positions.get(node);
@@ -174,6 +175,7 @@ export function chartNodeToDrawingBlock(
     drawingContentId: typeof rawAttrs.drawingContentId === 'string' ? rawAttrs.drawingContentId : undefined,
     drawingContent: toDrawingContentSnapshot(rawAttrs.drawingContent),
     attrs: attrsWithPm,
+    sourceAnchor,
   };
 }
 

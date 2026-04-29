@@ -496,6 +496,118 @@ describe('clickToPosition: table cell empty space', () => {
     expect(result!.pos).toBeGreaterThanOrEqual(50);
     expect(result!.blockId).toBe('table-block');
   });
+
+  it('chooses the nearest paragraph when clicking empty space before cell text', () => {
+    const firstParagraph: FlowBlock = {
+      kind: 'paragraph',
+      id: 'cell-para-1',
+      runs: [{ text: 'First paragraph', fontFamily: 'Arial', fontSize: 14, pmStart: 50, pmEnd: 65 }],
+    };
+
+    const secondParagraph: FlowBlock = {
+      kind: 'paragraph',
+      id: 'cell-para-2',
+      runs: [{ text: 'Second paragraph', fontFamily: 'Arial', fontSize: 14, pmStart: 65, pmEnd: 81 }],
+    };
+
+    const multiParaTableBlock: FlowBlock = {
+      kind: 'table',
+      id: 'table-gap-block',
+      rows: [
+        {
+          id: 'row-0',
+          cells: [
+            {
+              id: 'cell-0',
+              blocks: [firstParagraph, secondParagraph],
+              attrs: { padding: { top: 2, bottom: 2, left: 4, right: 4 } },
+            },
+          ],
+        },
+      ],
+    };
+
+    const multiParaTableMeasure: Measure = {
+      kind: 'table',
+      rows: [
+        {
+          height: 60,
+          cells: [
+            {
+              width: 200,
+              height: 60,
+              gridColumnStart: 0,
+              blocks: [
+                {
+                  kind: 'paragraph',
+                  lines: [
+                    {
+                      fromRun: 0,
+                      fromChar: 0,
+                      toRun: 0,
+                      toChar: 15,
+                      width: 120,
+                      ascent: 10,
+                      descent: 4,
+                      lineHeight: 16,
+                    },
+                  ],
+                  totalHeight: 16,
+                },
+                {
+                  kind: 'paragraph',
+                  lines: [
+                    {
+                      fromRun: 0,
+                      fromChar: 0,
+                      toRun: 0,
+                      toChar: 16,
+                      width: 130,
+                      ascent: 10,
+                      descent: 4,
+                      lineHeight: 16,
+                    },
+                  ],
+                  totalHeight: 16,
+                },
+              ],
+            },
+          ],
+        },
+      ],
+      columnWidths: [200],
+      totalWidth: 200,
+      totalHeight: 60,
+    };
+
+    const gapLayout: Layout = {
+      pageSize: { w: 400, h: 500 },
+      pages: [
+        {
+          number: 1,
+          fragments: [
+            {
+              kind: 'table',
+              blockId: 'table-gap-block',
+              fromRow: 0,
+              toRow: 1,
+              x: 30,
+              y: 70,
+              width: 200,
+              height: 60,
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = clickToPosition(gapLayout, [multiParaTableBlock], [multiParaTableMeasure], { x: 50, y: 71 });
+
+    expect(result).not.toBeNull();
+    expect(result!.blockId).toBe('table-gap-block');
+    expect(result!.pos).toBeGreaterThanOrEqual(50);
+    expect(result!.pos).toBeLessThanOrEqual(65);
+  });
 });
 
 describe('clickToPosition: table cell on page 2 (multi-page)', () => {

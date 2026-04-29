@@ -144,6 +144,43 @@ export const CONTRACTS_VERSION = '1.0.0';
 /** Unique identifier for a block in the document. Format: `${pos}-${type}`. */
 export type BlockId = string;
 
+/**
+ * Optional DOCX source evidence carried through the render pipeline.
+ *
+ * Phase 3 keeps this deliberately optional and payload-shaped so existing
+ * layout snapshots remain valid while source-linked intelligence consumers can
+ * preserve exact DOCX/source-tree anchors where available.
+ */
+export type SourceAnchor = {
+  sourceNodeId?: string;
+  occurrenceId?: string;
+  rawFactIds?: string[];
+  schemaQNames?: Array<{
+    qName: string;
+    namespaceUri?: string;
+    prefix?: string;
+    localName?: string;
+    ownerElementQName?: string;
+  }>;
+  featureKey?: string;
+  conceptKey?: string;
+  sourceRef?: {
+    partUri: string;
+    xpathLikePath: string;
+    rawFactId?: string;
+    occurrenceId?: string;
+  };
+  anchorConfidence?: 'high' | 'medium' | 'low';
+  pmNodeId?: string;
+  pmRange?: {
+    from: number;
+    to: number;
+  };
+  flowBlockId?: string;
+  layoutFragmentId?: string;
+  paintItemId?: string;
+};
+
 /** Tab leader type for filling space before tab stops. */
 export type LeaderType = 'dot' | 'heavy' | 'hyphen' | 'middleDot' | 'underscore';
 
@@ -491,6 +528,7 @@ export type ParagraphBlock = {
   id: BlockId;
   runs: Run[];
   attrs?: ParagraphAttrs;
+  sourceAnchor?: SourceAnchor;
 };
 
 /** Border style (subset of OOXML ST_Border). */
@@ -567,6 +605,7 @@ export type TableCell = {
   rowSpan?: number;
   colSpan?: number;
   attrs?: TableCellAttrs;
+  sourceAnchor?: SourceAnchor;
 };
 
 export type TableRowProperties = {
@@ -587,6 +626,7 @@ export type TableRow = {
   id: BlockId;
   cells: TableCell[];
   attrs?: TableRowAttrs;
+  sourceAnchor?: SourceAnchor;
 };
 
 export type TableBlock = {
@@ -600,6 +640,7 @@ export type TableBlock = {
   anchor?: TableAnchor;
   /** Text wrapping for floating tables (from w:tblpPr distances). */
   wrap?: TableWrap;
+  sourceAnchor?: SourceAnchor;
 };
 
 export type BoxSpacing = {
@@ -654,6 +695,7 @@ export type ImageBlock = {
   flipV?: boolean; // Vertical flip
   /** Image hyperlink from OOXML a:hlinkClick. When set, clicking the image opens the URL. */
   hyperlink?: ImageHyperlink;
+  sourceAnchor?: SourceAnchor;
 };
 
 export type DrawingKind = 'image' | 'vectorShape' | 'shapeGroup' | 'chart';
@@ -843,6 +885,7 @@ export type DrawingBlockBase = {
   drawingContentId?: string;
   drawingContent?: DrawingContentSnapshot;
   attrs?: Record<string, unknown>;
+  sourceAnchor?: SourceAnchor;
 };
 
 /**
@@ -1457,12 +1500,14 @@ export type ListMarker = {
   lvlText?: string;
   customFormat?: string;
   align?: 'left' | 'center' | 'right';
+  sourceAnchor?: SourceAnchor;
 };
 
 export type ListItem = {
   id: BlockId;
   marker: ListMarker;
   paragraph: ParagraphBlock;
+  sourceAnchor?: SourceAnchor;
 };
 
 export type ListBlock = {
@@ -1470,6 +1515,7 @@ export type ListBlock = {
   id: BlockId;
   listType: 'bullet' | 'number';
   items: ListItem[];
+  sourceAnchor?: SourceAnchor;
 };
 
 export type FlowBlock =
@@ -1791,6 +1837,7 @@ export type ParaFragment = {
   lines?: Line[];
   pmStart?: number;
   pmEnd?: number;
+  sourceAnchor?: SourceAnchor;
 };
 
 export type TableColumnBoundary = {
@@ -1854,6 +1901,7 @@ export type TableFragment = {
   /** Per-fragment column widths, rescaled when table is clamped to section width.
    *  When set, the renderer uses these instead of measure.columnWidths. */
   columnWidths?: number[];
+  sourceAnchor?: SourceAnchor;
 };
 
 export type ImageFragment = {
@@ -1869,6 +1917,7 @@ export type ImageFragment = {
   pmStart?: number;
   pmEnd?: number;
   metadata?: ImageFragmentMetadata;
+  sourceAnchor?: SourceAnchor;
 };
 
 export type DrawingFragment = {
@@ -1887,6 +1936,7 @@ export type DrawingFragment = {
   drawingContentId?: string;
   pmStart?: number;
   pmEnd?: number;
+  sourceAnchor?: SourceAnchor;
 };
 
 export type ListItemFragment = {
@@ -1901,6 +1951,7 @@ export type ListItemFragment = {
   markerWidth: number;
   continuesFromPrev?: boolean;
   continuesOnNext?: boolean;
+  sourceAnchor?: SourceAnchor;
 };
 
 export type Fragment = ParaFragment | ImageFragment | DrawingFragment | ListItemFragment | TableFragment;

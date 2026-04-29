@@ -10,6 +10,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import type { Editor } from '../../core/Editor.js';
 import type { Node as ProseMirrorNode } from 'prosemirror-model';
+import { eighthPointsToPixels } from '../../core/super-converter/helpers.js';
 import {
   tablesSetLayoutAdapter,
   tablesSetStyleAdapter,
@@ -501,6 +502,28 @@ describe('table setter/getter parity', () => {
       // Top-level mirror should be cleared
       expect(attrs.tableCellSpacing).toBeNull();
       expect(attrs.borderCollapse).toBeNull();
+    });
+  });
+
+  describe('setBorder → mirrors pixel sizes on top-level attrs', () => {
+    it('converts eighth-point border sizes to px for rendering', () => {
+      const { editor, getSetNodeMarkupCalls } = makeTableEditorWithProps();
+      tablesSetBorderAdapter(editor, {
+        nodeId: 'table-1',
+        edge: 'top',
+        lineStyle: 'single',
+        lineWeightPt: 1,
+        color: '000000',
+      });
+
+      const calls = getSetNodeMarkupCalls();
+      const tableCall = calls.find(({ attrs }) => attrs.tableProperties != null) ?? lastWrittenAttrs(calls);
+      const attrs = tableCall?.attrs ?? {};
+      const tp = attrs.tableProperties as any;
+      const mirroredBorders = attrs.borders as any;
+      const expectedPx = eighthPointsToPixels(8)!; // 1pt → px
+      expect(tp?.borders?.top?.size).toBe(8);
+      expect(mirroredBorders?.top?.size).toBeCloseTo(expectedPx, 4);
     });
   });
 

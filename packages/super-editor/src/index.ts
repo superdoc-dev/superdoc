@@ -22,7 +22,6 @@ export type {
   SelectionApi,
   SelectionInfo,
   SelectionCurrentInput,
-  SelectionChangeListener,
   ScrollIntoViewInput,
   ScrollIntoViewOutput,
   TextAddress,
@@ -162,3 +161,25 @@ export type {
   ToolbarTarget,
   ToolbarValueMap,
 } from './headless-toolbar/types.js';
+
+// superdoc/ui public types (browser UI controller)
+export type {
+  CommentsHandle,
+  CommentsSlice,
+  EqualityFn,
+  ReviewHandle,
+  ReviewItem,
+  ReviewSlice,
+  SelectorFn,
+  SelectionSlice,
+  Subscribable,
+  SuperDocEditorLike,
+  SuperDocLike,
+  SuperDocUI,
+  SuperDocUIOptions,
+  SuperDocUIState,
+  ViewportGetRectInput,
+  ViewportHandle,
+  ViewportRect,
+  ViewportRectResult,
+} from './ui/types.js';

@@ -1,6 +1,7 @@
 {
   "files": [],
   "references": [
+    { "path": "packages/docx-evidence-contracts/tsconfig.json" },
     { "path": "packages/word-layout/tsconfig.json" },
     { "path": "packages/layout-engine/contracts/tsconfig.json" },
     { "path": "packages/layout-engine/dom-contract/tsconfig.json" },

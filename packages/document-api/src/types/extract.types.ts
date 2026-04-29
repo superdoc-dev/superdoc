@@ -1,4 +1,4 @@
-import type { CommentStatus, TrackChangeType } from './index.js';
+import type { CommentStatus, TrackChangeType, TrackChangeWordRevisionIds } from './index.js';
 
 // ---------------------------------------------------------------------------
 // extract
@@ -35,6 +35,40 @@ export interface ExtractTableContext {
 }
 
 /**
+ * Reference to a tracked change applied to one text span.
+ *
+ * The `entityId` matches an entry in `ExtractResult.trackedChanges`, so
+ * consumers can look up author/date or pass it to `scrollToElement()`.
+ */
+export interface ExtractTextSpanTrackedChange {
+  /** Tracked change entity ID. */
+  entityId: string;
+  /** The mark type carried on this run: insert, delete, or format. */
+  type: TrackChangeType;
+}
+
+/**
+ * A contiguous run of text within a block, optionally tagged with the
+ * tracked-change marks that apply to it.
+ *
+ * Spans tile the block's text exactly:
+ * `block.textSpans.map(s => s.text).join('') === block.text`.
+ *
+ * Adjacent runs are coalesced when their `trackedChanges` sets are identical
+ * (same `(entityId, type)` pairs, ignoring order). Plain text with no tracked
+ * marks is one or more spans with `trackedChanges` omitted.
+ *
+ * A single span can carry multiple entries when overlapping marks apply, for
+ * example a run that is both inserted and bold-tracked.
+ */
+export interface ExtractTextSpan {
+  /** Raw text of the run. Tiles `block.text` when concatenated in order. */
+  text: string;
+  /** Tracked-change marks applied to this run. Omitted when none apply. */
+  trackedChanges?: ExtractTextSpanTrackedChange[];
+}
+
+/**
  * One addressable unit of document content.
  *
  * Extraction is paragraph-granular: tables are NOT returned as a single block.
@@ -53,6 +87,12 @@ export interface ExtractBlock {
   type: string;
   /** Full plain text content of the block. */
   text: string;
+  /**
+   * Structured reconstruction of the block's text with tracked-change marks
+   * preserved per run. Present only when the block contains at least one
+   * tracked change. When concatenated, span text equals `text`.
+   */
+  textSpans?: ExtractTextSpan[];
   /** Heading level (1-6). Only present for headings. */
   headingLevel?: number;
   /** Table coordinates. Only present for blocks inside a table cell. */
@@ -75,11 +115,42 @@ export interface ExtractComment {
 }
 
 export interface ExtractTrackedChange {
-  /** Tracked change entity ID — pass to `scrollToElement()` for navigation. */
+  /** Tracked change entity ID. Pass to `scrollToElement()` for navigation. */
   entityId: string;
-  /** Change type. */
+  /**
+   * Change type at the entity level.
+   *
+   * In paired replacement mode (the default — set
+   * `modules.trackChanges.replacements: 'independent'` for one entity per
+   * `<w:ins>` / `<w:del>` instead), a delete + insert pair shares one entity
+   * and the aggregate `type` collapses to `'insert'`. Per-half information
+   * lives on `block.textSpans[].trackedChanges[].type`, which is the source
+   * of truth for what each run actually represents.
+   *
+   * In independent mode every revision is its own entity and `type` is the
+   * entity's only type.
+   */
   type: TrackChangeType;
-  /** Short text excerpt of the changed content. */
+  /**
+   * Block IDs whose `textSpans` carry this change, in document order. Lets
+   * consumers iterate a single tracked change without scanning every block.
+   * Omitted when the resolver could not match the change to any block (e.g.
+   * orphan marks).
+   */
+  blockIds?: string[];
+  /**
+   * Original OOXML `w:id` values (per ECMA-376 §17.13.5) for the marks that
+   * make up this entity. In paired mode a replacement populates both
+   * `insert` and `delete`. In independent mode only one key is set. Useful
+   * for spec-aware consumers that need to map back to the source document.
+   */
+  wordRevisionIds?: TrackChangeWordRevisionIds;
+  /**
+   * Short text excerpt of the changed content. Omitted for paired
+   * replacements: the underlying text spans both halves and any single
+   * string would either concatenate them (misleading) or pick a side
+   * arbitrarily. Read `block.textSpans` for the per-half text instead.
+   */
   excerpt?: string;
   /** Change author name. */
   author?: string;

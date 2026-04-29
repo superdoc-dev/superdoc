@@ -122,13 +122,14 @@ export interface RangeResolverAdapter {
 }
 
 // ---------------------------------------------------------------------------
-// scrollIntoView
+// scrollIntoView — input/output value types
 // ---------------------------------------------------------------------------
 
 /**
- * Input for `ranges.scrollIntoView` — scrolls the editor viewport so the
- * given text target is visible. Handles paginated, virtualized layouts by
- * mounting the target page if it isn't yet in the DOM.
+ * Input for `ui.viewport.scrollIntoView` — scrolls the editor
+ * viewport so the given target is visible. Handles paginated,
+ * virtualized layouts by mounting the target page if it isn't yet in
+ * the DOM.
  */
 export interface ScrollIntoViewInput {
   /**
@@ -146,18 +147,10 @@ export interface ScrollIntoViewInput {
 }
 
 /**
- * Result of `ranges.scrollIntoView`.
- * `success: false` when the target couldn't be resolved or a page failed to
- * mount within the navigation timeout.
+ * Result of `ui.viewport.scrollIntoView`. `success: false` when the
+ * target couldn't be resolved or a page failed to mount within the
+ * navigation timeout.
  */
 export interface ScrollIntoViewOutput {
   success: boolean;
-}
-
-/**
- * Adapter method for `ranges.scrollIntoView`. Async because virtualized
- * pages may need to mount before the scroll completes.
- */
-export interface RangeScrollAdapter {
-  scrollIntoView(input: ScrollIntoViewInput): Promise<ScrollIntoViewOutput>;
 }

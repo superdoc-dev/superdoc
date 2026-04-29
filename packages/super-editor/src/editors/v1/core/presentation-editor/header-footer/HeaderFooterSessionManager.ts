@@ -2350,7 +2350,11 @@ export class HeaderFooterSessionManager {
           const prevSectionIds = multiSectionId.sectionHeaderIds.get(sectionIndex - 1);
           sectionRId = prevSectionIds?.[headerFooterType as keyof typeof prevSectionIds] ?? undefined;
         }
-        if (!sectionRId && headerFooterType !== 'default') {
+        const shouldUseDefaultHeaderRef =
+          headerFooterType !== 'default' &&
+          page.sectionRefs.headerRefs?.default &&
+          (!multiSectionId?.alternateHeaders || headerFooterType === 'odd');
+        if (!sectionRId && shouldUseDefaultHeaderRef) {
           sectionRId = page.sectionRefs.headerRefs?.default;
         }
       } else if (page?.sectionRefs && kind === 'footer') {
@@ -2359,7 +2363,11 @@ export class HeaderFooterSessionManager {
           const prevSectionIds = multiSectionId.sectionFooterIds.get(sectionIndex - 1);
           sectionRId = prevSectionIds?.[headerFooterType as keyof typeof prevSectionIds] ?? undefined;
         }
-        if (!sectionRId && headerFooterType !== 'default') {
+        const shouldUseDefaultFooterRef =
+          headerFooterType !== 'default' &&
+          page.sectionRefs.footerRefs?.default &&
+          (!multiSectionId?.alternateHeaders || headerFooterType === 'odd');
+        if (!sectionRId && shouldUseDefaultFooterRef) {
           sectionRId = page.sectionRefs.footerRefs?.default;
         }
       }

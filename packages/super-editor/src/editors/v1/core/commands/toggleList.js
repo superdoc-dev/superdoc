@@ -131,8 +131,31 @@ export const toggleList =
     if (!dispatch) return true;
 
     if (mode === 'create') {
+      // If we're swapping the bullet style on an already-nested item, mint the
+      // new list with the override applied at that paragraph's existing level —
+      // otherwise the override only lands on level 0 and the nested paragraph
+      // ends up rendering whatever marker the base template assigned to its
+      // level. We pick the level from the first list paragraph in the
+      // selection so style swaps stay coherent with the existing nesting.
+      let bulletStyleLevel = 0;
+      if (bulletStyle) {
+        const firstExistingListPara = paragraphsInSelection.find(
+          ({ node }) => getResolvedParagraphProperties(node)?.numberingProperties?.ilvl != null,
+        );
+        const existingIlvl = firstExistingListPara
+          ? getResolvedParagraphProperties(firstExistingListPara.node)?.numberingProperties?.ilvl
+          : null;
+        if (existingIlvl != null) bulletStyleLevel = existingIlvl;
+      }
+
       const numId = ListHelpers.getNewListId(editor);
-      ListHelpers.generateNewListDefinition({ numId: Number(numId), listType, editor, bulletStyle });
+      ListHelpers.generateNewListDefinition({
+        numId: Number(numId),
+        listType,
+        editor,
+        bulletStyle,
+        bulletStyleLevel,
+      });
       sharedNumberingProperties = {
         numId: Number(numId),
         ilvl: 0,
@@ -150,7 +173,16 @@ export const toggleList =
         continue;
       }
 
-      updateNumberingProperties(sharedNumberingProperties, node, pos, editor, tr);
+      // Preserve the paragraph's existing nesting level when re-pointing it at
+      // the new list definition. Without this, swapping the bullet style on a
+      // nested item snaps it back to ilvl 0 and visually "outdents" the row.
+      const existingIlvl = getResolvedParagraphProperties(node)?.numberingProperties?.ilvl;
+      const propertiesForParagraph =
+        mode === 'create' && existingIlvl != null && existingIlvl !== sharedNumberingProperties.ilvl
+          ? { ...sharedNumberingProperties, ilvl: existingIlvl }
+          : sharedNumberingProperties;
+
+      updateNumberingProperties(propertiesForParagraph, node, pos, editor, tr);
     }
 
     // Restore a natural post-toggle selection.

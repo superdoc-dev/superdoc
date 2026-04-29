@@ -31,6 +31,14 @@ interface GenerateOptions {
   fmt?: string | null;
   markerFontFamily?: string | null;
   bulletStyle?: 'disc' | 'circle' | 'square' | null;
+  /**
+   * Level (`w:ilvl`) at which to apply `bulletStyle`. Defaults to 0 (top-level).
+   * Used when the user changes the bullet style for a nested list item — the
+   * override needs to land on the paragraph's actual level, otherwise the
+   * paragraph keeps showing whatever marker the base template assigned to that
+   * level.
+   */
+  bulletStyleLevel?: number | null;
 }
 
 const BULLET_STYLE_CHARS: Record<string, string> = {
@@ -110,7 +118,7 @@ function refreshAbstractIdentity(abstractDef: any): void {
  */
 export function generateNewListDefinition(numbering: NumberingModel, options: GenerateOptions): GenerateResult {
   let { listType } = options;
-  const { numId, level, start, text, fmt, markerFontFamily, bulletStyle } = options;
+  const { numId, level, start, text, fmt, markerFontFamily, bulletStyle, bulletStyleLevel } = options;
   if (typeof listType !== 'string') listType = (listType as any).name;
 
   const definition = listType === 'orderedList' ? baseOrderedListDef : baseBulletList;
@@ -130,20 +138,28 @@ export function generateNewListDefinition(numbering: NumberingModel, options: Ge
   // visually distinct in Word).
   refreshAbstractIdentity(newAbstractDef);
 
-  // Override the bullet style for the new list if a bullet style is provided
+  // Override the bullet style for the new list if a bullet style is provided.
+  // The override lands at `bulletStyleLevel` (default level 0). Targeting a
+  // specific level keeps nested-item style swaps coherent with the paragraph's
+  // existing nesting depth.
   const shouldOverrideBulletStyle = bulletStyle && listType !== 'orderedList';
   if (shouldOverrideBulletStyle) {
     const char = BULLET_STYLE_CHARS[bulletStyle];
+    const targetLevel = String(
+      Math.max(0, Number.isFinite(bulletStyleLevel as number) ? (bulletStyleLevel as number) : 0),
+    );
 
     if (char) {
-      const lvl0 = newAbstractDef.elements.find((el: any) => el.name === 'w:lvl' && el.attributes['w:ilvl'] === '0');
+      const lvl = newAbstractDef.elements.find(
+        (el: any) => el.name === 'w:lvl' && el.attributes['w:ilvl'] === targetLevel,
+      );
 
-      if (lvl0) {
-        const lvlText = lvl0.elements.find((el: any) => el.name === 'w:lvlText');
+      if (lvl) {
+        const lvlText = lvl.elements.find((el: any) => el.name === 'w:lvlText');
         if (lvlText) lvlText.attributes['w:val'] = char;
 
         // Remove any inherited font so the Unicode char renders in the document's default font
-        const rPr = lvl0.elements.find((el: any) => el.name === 'w:rPr');
+        const rPr = lvl.elements.find((el: any) => el.name === 'w:rPr');
         if (rPr) rPr.elements = rPr.elements.filter((el: any) => el.name !== 'w:rFonts');
       }
     }

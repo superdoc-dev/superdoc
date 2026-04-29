@@ -51,6 +51,7 @@ export function markerTextToBulletStyle(markerText) {
  * @param {string} [param0.fmt]
  * @param {string} [param0.markerFontFamily]
  * @param {'disc'|'circle'|'square'} [param0.bulletStyle]
+ * @param {number} [param0.bulletStyleLevel]
  * @param {import('../Editor').Editor} param0.editor
  * @returns {Object} The new abstract and num definitions.
  */
@@ -64,6 +65,7 @@ export const generateNewListDefinition = ({
   editor,
   markerFontFamily,
   bulletStyle,
+  bulletStyleLevel,
 }) => {
   /** @type {{ abstractDef: any, numDef: any }} */
   let resultDefs;
@@ -78,6 +80,7 @@ export const generateNewListDefinition = ({
       fmt,
       markerFontFamily,
       bulletStyle,
+      bulletStyleLevel,
     });
     resultDefs = { abstractDef: result.abstractDef, numDef: result.numDef };
   });

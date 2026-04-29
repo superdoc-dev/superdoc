@@ -182,6 +182,8 @@ describe('toggleList', () => {
       numId: 42,
       listType: 'orderedList',
       editor,
+      bulletStyle: undefined,
+      bulletStyleLevel: 0,
     });
     const expectedNumbering = { numId: 42, ilvl: 0 };
     for (const [index, { node, pos }] of paragraphs.entries()) {
@@ -213,6 +215,8 @@ describe('toggleList', () => {
       numId: 99,
       listType: 'orderedList',
       editor,
+      bulletStyle: undefined,
+      bulletStyleLevel: 0,
     });
     expect(dispatch).toHaveBeenCalledWith(tr);
   });
@@ -359,6 +363,7 @@ describe('toggleList', () => {
         listType: 'bulletList',
         editor,
         bulletStyle: 'square',
+        bulletStyleLevel: 0,
       });
     });
 
@@ -409,6 +414,7 @@ describe('toggleList', () => {
         listType: 'bulletList',
         editor,
         bulletStyle: 'square',
+        bulletStyleLevel: 0,
       });
       // Paragraph migrates to the new numId.
       expect(updateNumberingProperties).toHaveBeenCalledWith(

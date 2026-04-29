@@ -4617,6 +4617,55 @@ describe('measureBlock', () => {
       expect(measure.columnWidths).toEqual([320, 320]);
     });
 
+    it('preserves fixed-layout grid widths wider than the column when tableWidth is absent', async () => {
+      // Quiet behavior pinned: with `tableLayout: 'fixed'` and no `tableWidth` attr,
+      // the imported grid widths pass through even when they exceed the available column.
+      // Previously, the measure would have scaled them down to fit `maxWidth`.
+      const block: FlowBlock = {
+        kind: 'table',
+        id: 'fixed-no-width',
+        attrs: {
+          tableLayout: 'fixed',
+        },
+        rows: [
+          {
+            id: 'row-0',
+            cells: [
+              {
+                id: 'cell-0-0',
+                blocks: [
+                  {
+                    kind: 'paragraph',
+                    id: 'para-0',
+                    runs: [{ text: 'A', fontFamily: 'Arial', fontSize: 12 }],
+                  },
+                ],
+              },
+              {
+                id: 'cell-0-1',
+                blocks: [
+                  {
+                    kind: 'paragraph',
+                    id: 'para-1',
+                    runs: [{ text: 'B', fontFamily: 'Arial', fontSize: 12 }],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+        columnWidths: [400, 400],
+      };
+
+      const measure = await measureBlock(block, { maxWidth: 500 });
+
+      expect(measure.kind).toBe('table');
+      if (measure.kind !== 'table') throw new Error('expected table measure');
+
+      expect(measure.totalWidth).toBe(800);
+      expect(measure.columnWidths).toEqual([400, 400]);
+    });
+
     it('handles percentage width with width property instead of value', async () => {
       const block: FlowBlock = {
         kind: 'table',

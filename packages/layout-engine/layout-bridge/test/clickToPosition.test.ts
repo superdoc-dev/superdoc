@@ -135,6 +135,168 @@ describe('clickToPosition', () => {
     expect(result?.blockId).toBe('wide-table');
     expect(result?.column).toBe(1);
   });
+
+  it('falls back to visual x when a table fragment has no columnIndex', () => {
+    // Legacy fragments without columnIndex should still resolve a column via fragment.x.
+    const cellParagraph: FlowBlock = {
+      kind: 'paragraph',
+      id: 'legacy-cell-para',
+      runs: [{ text: 'Legacy', fontFamily: 'Arial', fontSize: 16, pmStart: 200, pmEnd: 206 }],
+    };
+
+    const tableBlock: TableBlock = {
+      kind: 'table',
+      id: 'legacy-table',
+      rows: [{ id: 'row-0', cells: [{ id: 'cell-0-0', blocks: [cellParagraph] }] }],
+    };
+
+    const cellMeasure: Measure = {
+      kind: 'paragraph',
+      lines: [
+        {
+          fromRun: 0,
+          fromChar: 0,
+          toRun: 0,
+          toChar: 6,
+          width: 80,
+          ascent: 12,
+          descent: 4,
+          lineHeight: 20,
+        },
+      ],
+      totalHeight: 20,
+    };
+
+    const tableMeasure: TableMeasure = {
+      kind: 'table',
+      rows: [
+        {
+          cells: [
+            {
+              blocks: [cellMeasure],
+              paragraph: cellMeasure,
+              width: 240,
+              height: 28,
+              gridColumnStart: 0,
+              colSpan: 1,
+              rowSpan: 1,
+            },
+          ],
+          height: 28,
+        },
+      ],
+      columnWidths: [240],
+      totalWidth: 240,
+      totalHeight: 28,
+    };
+
+    // Visual x=320 puts the fragment past the column-0 right edge in a 2-col layout
+    // with column width 290 ((600 - 20) / 2). determineColumn maps it to column 1.
+    const tableFragment: TableFragment = {
+      kind: 'table',
+      blockId: 'legacy-table',
+      fromRow: 0,
+      toRow: 1,
+      x: 320,
+      y: 40,
+      width: 240,
+      height: 28,
+      pmStart: 200,
+      pmEnd: 206,
+    };
+
+    const layout: Layout = {
+      pageSize: { w: 600, h: 800 },
+      columns: { count: 2, gap: 20 },
+      pages: [{ number: 1, fragments: [tableFragment] }],
+    };
+
+    const result = clickToPosition(layout, [tableBlock], [tableMeasure], { x: 360, y: 54 });
+
+    expect(result?.blockId).toBe('legacy-table');
+    expect(result?.column).toBe(1);
+  });
+
+  it('clamps a table fragment columnIndex that exceeds the document column count', () => {
+    // Defensive: a fragment claiming columnIndex 5 in a 2-column layout should
+    // be clamped to the last valid column (1) rather than producing a stale index.
+    const cellParagraph: FlowBlock = {
+      kind: 'paragraph',
+      id: 'oob-cell-para',
+      runs: [{ text: 'Out', fontFamily: 'Arial', fontSize: 16, pmStart: 300, pmEnd: 303 }],
+    };
+
+    const tableBlock: TableBlock = {
+      kind: 'table',
+      id: 'oob-table',
+      rows: [{ id: 'row-0', cells: [{ id: 'cell-0-0', blocks: [cellParagraph] }] }],
+    };
+
+    const cellMeasure: Measure = {
+      kind: 'paragraph',
+      lines: [
+        {
+          fromRun: 0,
+          fromChar: 0,
+          toRun: 0,
+          toChar: 3,
+          width: 40,
+          ascent: 12,
+          descent: 4,
+          lineHeight: 20,
+        },
+      ],
+      totalHeight: 20,
+    };
+
+    const tableMeasure: TableMeasure = {
+      kind: 'table',
+      rows: [
+        {
+          cells: [
+            {
+              blocks: [cellMeasure],
+              paragraph: cellMeasure,
+              width: 200,
+              height: 28,
+              gridColumnStart: 0,
+              colSpan: 1,
+              rowSpan: 1,
+            },
+          ],
+          height: 28,
+        },
+      ],
+      columnWidths: [200],
+      totalWidth: 200,
+      totalHeight: 28,
+    };
+
+    const tableFragment: TableFragment = {
+      kind: 'table',
+      blockId: 'oob-table',
+      columnIndex: 5,
+      fromRow: 0,
+      toRow: 1,
+      x: 100,
+      y: 40,
+      width: 200,
+      height: 28,
+      pmStart: 300,
+      pmEnd: 303,
+    };
+
+    const layout: Layout = {
+      pageSize: { w: 600, h: 800 },
+      columns: { count: 2, gap: 20 },
+      pages: [{ number: 1, fragments: [tableFragment] }],
+    };
+
+    const result = clickToPosition(layout, [tableBlock], [tableMeasure], { x: 120, y: 54 });
+
+    expect(result?.blockId).toBe('oob-table');
+    expect(result?.column).toBe(1);
+  });
 });
 
 describe('hitTestPage with pageGap', () => {

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { shallowEqual, type ReviewSlice, type SelectionSlice } from 'superdoc/ui';
-import { useSuperDocUI, useSuperDocSlice } from '../lib/SuperDocUIProvider';
+import type { ReviewSlice } from 'superdoc/ui';
+import { useSuperDocReview, useSuperDocSelection, useSuperDocUI } from 'superdoc/ui/react';
 import { CommentComposer } from './CommentComposer';
 
 interface Props {
@@ -9,16 +9,6 @@ interface Props {
   /** Close the composer without posting. */
   onCloseComposer(): void;
 }
-
-const EMPTY_REVIEW: ReviewSlice = { items: [], openCount: 0, activeId: null };
-const EMPTY_SELECTION: SelectionSlice = {
-  empty: true,
-  target: null,
-  activeMarks: [],
-  activeCommentIds: [],
-  activeChangeIds: [],
-  quotedText: '',
-};
 
 /**
  * Single Activity feed merging comments + tracked changes in document
@@ -43,14 +33,8 @@ interface DecidedChange {
 
 export function ActivitySidebar({ composeOpen, onCloseComposer }: Props) {
   const ui = useSuperDocUI();
-  const review = useSuperDocSlice<ReviewSlice>(
-    (controller) => controller.select((state) => state.review, shallowEqual),
-    EMPTY_REVIEW,
-  );
-  const selection = useSuperDocSlice<SelectionSlice>(
-    (controller) => controller.select((state) => state.selection, shallowEqual),
-    EMPTY_SELECTION,
-  );
+  const review = useSuperDocReview();
+  const selection = useSuperDocSelection();
 
   // Track tracked-changes that the user has accepted/rejected. Once
   // decided, the change leaves the live `ui.review` feed (the

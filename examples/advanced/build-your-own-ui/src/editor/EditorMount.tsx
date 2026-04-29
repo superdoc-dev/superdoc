@@ -1,6 +1,6 @@
 import { SuperDocEditor } from '@superdoc-dev/react';
 import '@superdoc-dev/react/style.css';
-import { useSetSuperDoc } from '../lib/SuperDocUIProvider';
+import { useSetSuperDoc } from 'superdoc/ui/react';
 
 const CURRENT_USER = { name: 'Alex Rivera', email: 'alex@example.com' };
 

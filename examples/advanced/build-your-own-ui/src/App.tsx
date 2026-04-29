@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { SuperDocUIProvider } from './lib/SuperDocUIProvider';
+import { SuperDocUIProvider } from 'superdoc/ui/react';
 import { EditorMount } from './editor/EditorMount';
 import { Toolbar } from './components/Toolbar';
 import { ActivitySidebar } from './components/ActivitySidebar';

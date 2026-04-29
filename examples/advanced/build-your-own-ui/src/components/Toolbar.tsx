@@ -1,14 +1,15 @@
-import type { ToolbarSnapshotSlice } from 'superdoc/ui';
-import { shallowEqual } from 'superdoc/ui';
-import { useSuperDocUI, useSuperDocSlice, useSuperDocHost } from '../lib/SuperDocUIProvider';
+import {
+  useSuperDocUI,
+  useSuperDocCommand,
+  useSuperDocSelection,
+  useSuperDocHost,
+} from 'superdoc/ui/react';
 import { InsertClauseButton } from './InsertClauseButton';
 
 interface ToolbarProps {
   /** Called when the user clicks the comment button to start composing. */
   onComposeComment(): void;
 }
-
-const EMPTY_SNAPSHOT: ToolbarSnapshotSlice = { context: null, commands: {} };
 
 interface BuiltInButton {
   id: string;
@@ -29,92 +30,61 @@ const HISTORY_BUTTONS: BuiltInButton[] = [
 ];
 
 /**
- * Toolbar reads its state and dispatches its actions through
- * `ui.toolbar` and `ui.commands.<id>`. Two patterns to notice:
+ * Toolbar reads its state and dispatches its actions through the
+ * official `superdoc/ui/react` hooks. Two patterns to notice:
  *
- *   1. `useSuperDocSlice` binds the React tree to the
- *      `Subscribable` exposed on `ui.toolbar`. The component
- *      re-renders only when the snapshot changes (shallow-equal),
- *      not on every editor transaction.
- *   2. `ui.commands[id].execute(payload?)` fires a button. The
- *      same surface drives built-ins (this file) and custom
- *      commands (`InsertClauseButton.tsx`).
+ *   1. `useSuperDocCommand(id)` binds a single button to one
+ *      command's state. Components only re-render when THAT command
+ *      flips active / disabled / value, not on every editor
+ *      transaction. This is the CKEditor-style per-command
+ *      observable pattern.
+ *   2. `ui.commands.get(id)?.execute(payload?)` is the typed dynamic
+ *      lookup that returns `undefined` for unknown ids. The same
+ *      surface drives built-ins (this file) and custom commands
+ *      (`InsertClauseButton.tsx`); after a `register({ override:
+ *      true })` call, dispatch automatically routes through the
+ *      override on every surface (`ui.commands.bold.execute()`,
+ *      `ui.toolbar.execute('bold')`, and this `get(id)?.execute()`
+ *      path).
  *
- * We deliberately keep this file dumb about which commands exist or
- * what they mean — it walks a static list and reads its state from
- * the snapshot. Adding a built-in is a one-line entry; adding a
- * custom command is a separate component that calls
+ * Adding a built-in is a one-line entry in the static list below;
+ * adding a custom command is a separate component that calls
  * `ui.commands.register({...})`.
  */
 export function Toolbar({ onComposeComment }: ToolbarProps) {
   const ui = useSuperDocUI();
-  const snapshot = useSuperDocSlice<ToolbarSnapshotSlice>(
-    (controller) => controller.select((state) => state.toolbar, shallowEqual),
-    EMPTY_SNAPSHOT,
-  );
-
   const ready = !!ui;
-  const stateOf = (id: string) => snapshot.commands[id];
   const execute = (id: string, payload?: unknown) => {
-    if (!ui) return;
-    // `ui.commands` is a string-indexed proxy; the typed surface includes
-    // `register` (non-id member) plus per-id `CommandHandle` entries. Cast
-    // through `unknown` so the structural mismatch on `register` doesn't
-    // trip the lookup site.
-    const handle = (ui.commands as unknown as Record<string, {
-      execute: (payload?: unknown) => boolean | Promise<boolean>;
-    }>)[id];
-    handle?.execute(payload);
+    ui?.commands.get(id)?.execute(payload);
   };
 
   return (
     <div className="toolbar" role="toolbar" aria-label="Document toolbar">
       <div className="toolbar-group">
         {TEXT_BUTTONS.map((b) => (
-          <button
-            key={b.id}
-            className={`tb-btn ${stateOf(b.id)?.active ? 'active' : ''}`}
-            disabled={!ready || !!stateOf(b.id)?.disabled}
-            title={b.title}
-            style={b.fontStyle}
-            onClick={() => execute(b.id)}
-          >
-            {b.label}
-          </button>
+          <ToolbarButton key={b.id} id={b.id} ready={ready} button={b} onClick={() => execute(b.id)} />
         ))}
       </div>
 
       <div className="toolbar-group">
         {HISTORY_BUTTONS.map((b) => (
-          <button
-            key={b.id}
-            className="tb-btn"
-            disabled={!ready || !!stateOf(b.id)?.disabled}
-            title={b.title}
-            onClick={() => execute(b.id)}
-          >
-            {b.label}
-          </button>
+          <ToolbarButton key={b.id} id={b.id} ready={ready} button={b} onClick={() => execute(b.id)} />
         ))}
       </div>
 
       <div className="toolbar-group">
-        <button
-          className={`tb-btn ${stateOf('bullet-list')?.active ? 'active' : ''}`}
-          disabled={!ready || !!stateOf('bullet-list')?.disabled}
-          title="Bullet list"
+        <ToolbarButton
+          id="bullet-list"
+          ready={ready}
+          button={{ id: 'bullet-list', label: <BulletListIcon />, title: 'Bullet list' }}
           onClick={() => execute('bullet-list')}
-        >
-          <BulletListIcon />
-        </button>
-        <button
-          className={`tb-btn ${stateOf('numbered-list')?.active ? 'active' : ''}`}
-          disabled={!ready || !!stateOf('numbered-list')?.disabled}
-          title="Numbered list"
+        />
+        <ToolbarButton
+          id="numbered-list"
+          ready={ready}
+          button={{ id: 'numbered-list', label: <OrderedListIcon />, title: 'Numbered list' }}
           onClick={() => execute('numbered-list')}
-        >
-          <OrderedListIcon />
-        </button>
+        />
       </div>
 
       <div className="toolbar-group">
@@ -126,6 +96,38 @@ export function Toolbar({ onComposeComment }: ToolbarProps) {
         <ExportButton />
       </div>
     </div>
+  );
+}
+
+/**
+ * One built-in toolbar button. Subscribes ONLY to its own command's
+ * state via `useSuperDocCommand(id)`, so unrelated state changes
+ * (other commands flipping, comments updating, etc.) do not
+ * re-render the button. This is the granular subscription pattern
+ * SuperDoc exposes for high-frequency UI like toolbars.
+ */
+function ToolbarButton({
+  id,
+  ready,
+  button,
+  onClick,
+}: {
+  id: string;
+  ready: boolean;
+  button: BuiltInButton;
+  onClick(): void;
+}) {
+  const cmd = useSuperDocCommand(id);
+  return (
+    <button
+      className={`tb-btn ${cmd.active ? 'active' : ''}`}
+      disabled={!ready || cmd.disabled}
+      title={button.title}
+      style={button.fontStyle}
+      onClick={onClick}
+    >
+      {button.label}
+    </button>
   );
 }
 
@@ -163,16 +165,13 @@ function ExportButton() {
 
 /**
  * Clicking the comment button opens the inline composer in the
- * activity panel — see `<CommentComposer>`. The button is disabled
- * when there's no positional selection (target null), since
+ * activity panel (see `<CommentComposer>`). The button is disabled
+ * when there's no positional selection (`target` null), since
  * `comments.createFromSelection` would have nothing to anchor to.
  */
 function CommentButton({ onCompose }: { onCompose(): void }) {
   const ui = useSuperDocUI();
-  const selection = useSuperDocSlice(
-    (controller) => controller.select((state) => state.selection, shallowEqual),
-    { empty: true, target: null, activeMarks: [], activeCommentIds: [], activeChangeIds: [], quotedText: '' },
-  );
+  const selection = useSuperDocSelection();
   const disabled = !ui || selection.empty || selection.target === null;
 
   return (

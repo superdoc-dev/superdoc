@@ -3,7 +3,7 @@ import type {
   CustomCommandHandleState,
   CustomCommandRegistrationResult,
 } from 'superdoc/ui';
-import { useSuperDocUI } from '../lib/SuperDocUIProvider';
+import { useSuperDocUI } from 'superdoc/ui/react';
 
 /**
  * Hardcoded clause library for the demo. A real consumer would fetch
@@ -56,16 +56,18 @@ const STATIC_DISABLED: CustomCommandHandleState<unknown> = {
  *      class on `state.toolbar.commands`, so this is the canonical
  *      way to drive a toolbar button's enabled/disabled state.
  *
- *   3. Routes the actual mutation through the host SuperDoc instance
- *      passed to the `execute` callback by the registry. The example
- *      uses `superdoc.activeEditor.commands.insertContent(text)`
- *      because the doc-api doesn't expose a public text-insert
- *      primitive yet — that's a separate ticket.
+ *   3. Routes the actual mutation through the public Document API
+ *      (`editor.doc.insert`) using `state.selection.selectionTarget`,
+ *      which already carries the cursor in the explicit
+ *      start/end-point shape `editor.doc.insert` consumes. No
+ *      inline lift, no adapter-helper import.
  *
  * Capturing the registration return value (`reg.handle`) is the
- * realistic typed path: `ui.commands['company.insertClause']` works
- * at runtime but degrades to `unknown` at compile time without
- * module augmentation.
+ * typed path: it carries the consumer's `TPayload` / `TValue`
+ * generics. Dynamic-lookup callers should use
+ * `ui.commands.get('company.insertClause')` (returns
+ * `DynamicCommandHandle | undefined`); the older bracket-index path
+ * still works at runtime but loses the per-command typing.
  */
 export function InsertClauseButton() {
   const ui = useSuperDocUI();
@@ -95,35 +97,27 @@ export function InsertClauseButton() {
         const clause = CLAUSES.find((c) => c.id === payload.clauseId);
         if (!clause) return false;
 
-        // Route through the public Document API. `editor.doc.insert`
-        // expects a `SelectionTarget` (kind: 'selection' with start/end
-        // points), so we lift the first segment of the `TextTarget`
-        // returned by `ui.selection` into that shape. Single-segment
-        // is the common cursor case; multi-block selections would need
-        // the same ceremony per segment, but a paragraph-clause insert
-        // doesn't.
+        // Route through the public Document API. The selection slice
+        // already exposes the cursor in BOTH shapes the doc-api
+        // consumes: `target` (TextTarget, for comments / format.apply)
+        // and `selectionTarget` (SelectionTarget, for insert /
+        // replace). No inline lift, no adapter-helper import; pass
+        // `selectionTarget` straight through.
+        const selectionTarget = ui.selection.getSnapshot().selectionTarget;
+        if (!selectionTarget) return false;
         const host = superdoc as {
           activeEditor?: {
             doc?: {
-              insert(input: {
-                value: string;
-                type: 'text';
-                target: { kind: 'selection'; start: unknown; end: unknown };
-              }): { success: boolean };
+              insert(input: { value: string; type: 'text'; target: typeof selectionTarget }): {
+                success: boolean;
+              };
             };
           };
         };
-        const textTarget = ui.selection.getSnapshot().target;
-        const seg = textTarget?.segments?.[0];
-        if (!seg) return false;
         const receipt = host.activeEditor?.doc?.insert({
           value: clause.body,
           type: 'text',
-          target: {
-            kind: 'selection',
-            start: { kind: 'text', blockId: seg.blockId, offset: seg.range.start },
-            end: { kind: 'text', blockId: seg.blockId, offset: seg.range.end },
-          },
+          target: selectionTarget,
         });
         return receipt?.success === true;
       },

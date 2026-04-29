@@ -1062,7 +1062,15 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
         return { success: false, reason: 'invalid-target' };
       }
 
-      const editor = resolveRoutedEditor(superdoc);
+      // Resolve through the **host** editor — `presentationEditor`
+      // lives on the body / host, not the routed child story editor
+      // (header / footer / note). When focus is in a child story,
+      // `resolveRoutedEditor` returns that child, whose
+      // `presentationEditor` is undefined; the rect lookup would
+      // wrongly return `not-ready`. Story-aware routing happens
+      // through the entity address's `story` field inside
+      // `getEntityRects`. Same posture as `runScrollIntoView`.
+      const editor = resolveHostEditor(superdoc);
       const presentation = editor?.presentationEditor;
       if (!presentation || typeof presentation.getEntityRects !== 'function') {
         return { success: false, reason: 'not-ready' };

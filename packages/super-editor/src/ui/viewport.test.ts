@@ -237,6 +237,44 @@ describe('ui.viewport.getRect — entity targets', () => {
 
     ui.destroy();
   });
+
+  it('regression: getRect resolves through the host editor even when toolbar routing returns a child story editor', () => {
+    // When focus is in a header / footer / note, the toolbar source
+    // resolver returns the child story editor — but
+    // `presentationEditor` lives on the host (body) editor only.
+    // Routing getRect through the routed child would wrongly return
+    // `not-ready`. The host's `getEntityRects` is the right call;
+    // the entity target's `story` field carries the story info.
+    const { superdoc, mocks } = makeStubs({
+      rectsById: {
+        'tc-header': [{ pageIndex: 1, left: 5, top: 6, right: 25, bottom: 18, width: 20, height: 12 }],
+      },
+    });
+    // Plant a child story editor without its own `presentationEditor`
+    // and route through it. Without the host fix, getRect would see
+    // `presentation` undefined and return `not-ready`.
+    const hostEditor = superdoc.activeEditor as unknown as {
+      presentationEditor: { getActiveEditor: () => unknown };
+    };
+    hostEditor.presentationEditor.getActiveEditor = () => ({ doc: {} });
+
+    const ui = createSuperDocUI({ superdoc });
+
+    const result = ui.viewport.getRect({
+      target: {
+        kind: 'entity',
+        entityType: 'trackedChange',
+        entityId: 'tc-header',
+      },
+    });
+
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect(result.rect.width).toBe(20);
+    expect(mocks.getEntityRects).toHaveBeenCalledTimes(1);
+
+    ui.destroy();
+  });
 });
 
 describe('ui.viewport.scrollIntoView', () => {

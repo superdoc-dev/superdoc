@@ -861,9 +861,10 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
   //
   // Same architectural rules as `ui.comments`: every mutation routes
   // through the Document API (`editor.doc.trackChanges.decide`); next
-  // / previous / scrollTo are UI-only navigation helpers; setRecording
-  // is a temporary documentMode flip until SD-2667/S4 splits recording
-  // from view mode.
+  // / previous / scrollTo are UI-only navigation helpers. Track-changes
+  // recording state is intentionally absent here — it lives on
+  // documentMode today and lands as a dedicated primitive in
+  // SD-2667/S4 (filed separately).
 
   const requireDocTrackChanges = () => {
     // Always go through the host editor — `trackChanges.decide` is
@@ -1009,19 +1010,6 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
         block: 'center',
         behavior: 'smooth',
       });
-    },
-    setRecording(enabled) {
-      // SD-2667/S4 will introduce an independent
-      // `editor.doc.trackChanges.setRecording` primitive. Until then,
-      // recording state is collapsed onto `documentMode` — flip
-      // between 'suggesting' (recording on) and 'editing' (off).
-      const next = enabled ? 'suggesting' : 'editing';
-      if (typeof superdoc.setDocumentMode === 'function') {
-        superdoc.setDocumentMode(next);
-      } else if (superdoc.config) {
-        superdoc.config.documentMode = next;
-      }
-      scheduleNotify();
     },
   };
 

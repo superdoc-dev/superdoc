@@ -46,9 +46,10 @@ export interface SuperDocLike {
   activeEditor?: SuperDocEditorLike | null;
   config?: { documentMode?: 'editing' | 'suggesting' | 'viewing' };
   /**
-   * Optional setter for documentMode. Used by `ui.review.setRecording`
-   * as the temporary path until S4 ships an independent
-   * `trackChanges.setRecording` primitive.
+   * Optional setter for documentMode. Reserved for future
+   * `ui.<domain>` surfaces (SD-2799) that move document-mode and
+   * other UI-only commands off the toolbar registry into dedicated
+   * handles. Not consumed by the controller today.
    */
   setDocumentMode?(mode: 'editing' | 'suggesting' | 'viewing'): unknown;
 }
@@ -541,14 +542,6 @@ export interface ReviewHandle {
    * `ui.viewport.scrollIntoView({ target: EntityAddress })`.
    */
   scrollTo(id: string): Promise<import('@superdoc/document-api').ScrollIntoViewOutput>;
-  /**
-   * Toggle tracked-changes recording. Today flips
-   * `superdoc.config.documentMode` between `'suggesting'` and
-   * `'editing'`; SD-2667's S4 follow-up will decouple recording from
-   * view mode and this routes through the new primitive once
-   * available.
-   */
-  setRecording(enabled: boolean): void;
 }
 
 /**

@@ -324,7 +324,7 @@ describe('ui.review — next/previous navigation', () => {
   });
 });
 
-describe('ui.review — scrollTo + setRecording', () => {
+describe('ui.review — scrollTo', () => {
   it('scrollTo(id) navigates to the right EntityAddress via the presentation editor', async () => {
     const { superdoc, mocks } = makeStubs({
       comments: [{ id: 'c1', commentId: 'c1' }],
@@ -339,19 +339,6 @@ describe('ui.review — scrollTo + setRecording', () => {
     await ui.review.scrollTo('tc1');
     target = mocks.navigateTo.mock.calls[1][0] as { kind: string; entityType: string; entityId: string };
     expect(target).toEqual({ kind: 'entity', entityType: 'trackedChange', entityId: 'tc1' });
-
-    ui.destroy();
-  });
-
-  it('setRecording(true) flips documentMode to suggesting (temporary path)', () => {
-    const { superdoc, mocks } = makeStubs();
-    const ui = createSuperDocUI({ superdoc });
-
-    ui.review.setRecording(true);
-    expect(mocks.setDocumentMode).toHaveBeenCalledWith('suggesting');
-
-    ui.review.setRecording(false);
-    expect(mocks.setDocumentMode).toHaveBeenCalledWith('editing');
 
     ui.destroy();
   });

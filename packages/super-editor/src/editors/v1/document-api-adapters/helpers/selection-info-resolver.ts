@@ -2,6 +2,22 @@ import type { Node as ProseMirrorNode } from 'prosemirror-model';
 import type { SelectionCurrentInput, SelectionInfo, TextTarget, TextSegment } from '@superdoc/document-api';
 import type { Editor } from '../../core/Editor.js';
 import { pmPositionToTextOffset } from './text-offset-resolver.js';
+import { resolveCommentIdFromAttrs } from './value-utils.js';
+
+/**
+ * Mark names that anchor live entities the UI cares about. We collect
+ * the entity ids in the same selection walk that produces
+ * `activeMarks` so consumers can answer "is there a comment / tracked
+ * change under the cursor?" without overlap-filtering `comments.list()`
+ * on every keystroke.
+ *
+ * Kept inline rather than imported from extension constants because
+ * the selection resolver lives one package up the dependency graph
+ * from the comment / track-changes extensions, and we'd rather not
+ * pull those (and their PM plugins) into the resolver's import graph.
+ */
+const COMMENT_MARK_NAME = 'commentMark';
+const TRACK_CHANGE_MARK_NAMES = new Set(['trackInsert', 'trackDelete', 'trackFormat']);
 
 /**
  * Reads the current ProseMirror selection and projects it into the Document
@@ -16,7 +32,7 @@ import { pmPositionToTextOffset } from './text-offset-resolver.js';
 export function resolveCurrentSelectionInfo(editor: Editor, input: SelectionCurrentInput): SelectionInfo {
   const state = editor.state;
   if (!state) {
-    return { empty: true, target: null, activeMarks: [] };
+    return { empty: true, target: null, activeMarks: [], activeCommentIds: [], activeChangeIds: [] };
   }
 
   const sel = state.selection;
@@ -29,11 +45,14 @@ export function resolveCurrentSelectionInfo(editor: Editor, input: SelectionCurr
   const target: TextTarget | null = segments && segments.length > 0 ? buildTextTarget(segments) : null;
 
   const activeMarks = collectActiveMarks(state, from, to);
+  const { commentIds: activeCommentIds, changeIds: activeChangeIds } = collectActiveEntityIds(state, from, to);
 
   const info: SelectionInfo = {
     empty,
     target,
     activeMarks,
+    activeCommentIds,
+    activeChangeIds,
   };
 
   if (input.includeText && !empty) {
@@ -104,6 +123,72 @@ function readBlockId(node: ProseMirrorNode): string | null {
   const attrs = (node.attrs ?? {}) as Record<string, unknown>;
   const id = attrs.sdBlockId ?? attrs.id ?? attrs.blockId;
   return typeof id === 'string' && id.length > 0 ? id : null;
+}
+
+/**
+ * Collect comment and tracked-change ids that touch the selection.
+ *
+ * Union semantics (NOT intersection): an id is included when *any*
+ * character in the range carries that mark. For an empty selection
+ * (caret), this resolves to ids on the marks at the caret position,
+ * including stored marks the user is about to apply.
+ *
+ * Walks text nodes in one pass; bounded allocation. Co-located with
+ * `collectActiveMarks` so the resolver only walks the selection
+ * range twice (once for mark-name intersection, once here for
+ * id-attribute union).
+ */
+function collectActiveEntityIds(
+  state: { selection: any; storedMarks?: any; doc: ProseMirrorNode },
+  from: number,
+  to: number,
+): { commentIds: string[]; changeIds: string[] } {
+  const commentIds = new Set<string>();
+  const changeIds = new Set<string>();
+
+  const collectFromMark = (markType: string, attrs: Record<string, unknown> | undefined) => {
+    if (markType === COMMENT_MARK_NAME) {
+      // Imported / legacy comments may carry the id on `importedId` or
+      // `w:id` instead of `commentId`. Use the same resolution helper
+      // the rest of the comment adapters use so a sidebar built on the
+      // selection slice highlights the active card for legacy DOCX
+      // imports too.
+      const id = resolveCommentIdFromAttrs((attrs ?? {}) as Record<string, unknown>);
+      if (typeof id === 'string' && id.length > 0) commentIds.add(id);
+    } else if (TRACK_CHANGE_MARK_NAMES.has(markType)) {
+      const id = attrs?.id;
+      if (typeof id === 'string' && id.length > 0) changeIds.add(id);
+    }
+  };
+
+  if (from === to) {
+    // Caret-only: include stored marks (sticky formatting the user is
+    // about to apply) plus the marks resolved at the position itself.
+    if (state.storedMarks) {
+      for (const mark of state.storedMarks) collectFromMark(mark.type.name, mark.attrs);
+    }
+    const $pos = state.doc.resolve(from);
+    for (const mark of $pos.marks()) collectFromMark(mark.type.name, mark.attrs);
+  } else {
+    state.doc.nodesBetween(from, to, (node, pos) => {
+      // Walk text nodes AND inline atoms (images, tabs, line breaks,
+      // footnote references). Inline leaf nodes can carry comment /
+      // tracked-change marks just like text runs do — limiting to
+      // `isText` would skip them and leave `activeCommentIds` /
+      // `activeChangeIds` empty for selections that only cover an
+      // image with a comment, breaking sidebar highlighting in that
+      // case. Block-level nodes still recurse so we descend into
+      // their inline children.
+      if (!node.isInline) return true;
+      const start = Math.max(pos, from);
+      const end = Math.min(pos + node.nodeSize, to);
+      if (end <= start) return false;
+      for (const mark of node.marks) collectFromMark(mark.type.name, mark.attrs);
+      return false;
+    });
+  }
+
+  return { commentIds: Array.from(commentIds), changeIds: Array.from(changeIds) };
 }
 
 function collectActiveMarks(

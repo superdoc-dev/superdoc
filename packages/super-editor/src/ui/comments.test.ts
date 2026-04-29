@@ -221,6 +221,35 @@ describe('ui.comments — snapshot', () => {
     ui.destroy();
   });
 
+  it('does not re-fire ui.comments.subscribe when the resolver returns fresh-but-equal activeCommentIds arrays', async () => {
+    // Post-SD-2792 the resolver returns `Array.from(new Set(...))` on
+    // every call — fresh references even when the contents are
+    // identical. Without slice-level memoization piping through the
+    // comments slice, every keystroke / selectionUpdate would trip
+    // shallowEqual and re-render every comment-aware sidebar.
+    const { superdoc, editor } = makeStubs({ comments: [{ id: 'c1', commentId: 'c1' }] });
+    (editor.doc.selection.current as unknown as () => unknown) = vi.fn(() => ({
+      empty: true,
+      target: null,
+      activeMarks: [],
+      activeCommentIds: ['c1'], // fresh array literal each call
+      activeChangeIds: [],
+    }));
+    const ui = createSuperDocUI({ superdoc });
+
+    const cb = vi.fn();
+    ui.comments.subscribe(cb);
+    expect(cb).toHaveBeenCalledTimes(1); // initial
+
+    superdoc.fireEditor('selectionUpdate');
+    await Promise.resolve();
+    superdoc.fireEditor('selectionUpdate');
+    await Promise.resolve();
+
+    expect(cb).toHaveBeenCalledTimes(1);
+    ui.destroy();
+  });
+
   it('refreshes the snapshot synchronously after own mutations (createFromSelection / resolve / delete)', () => {
     const target = { kind: 'text' as const, segments: [{ blockId: 'p1', range: { start: 0, end: 5 } }] };
     const { superdoc, mocks } = makeStubs({

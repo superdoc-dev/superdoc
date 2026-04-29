@@ -66,10 +66,20 @@ export async function scrollRangeIntoView(editor: Editor, input: ScrollIntoViewI
 
   try {
     // After the entity early-return, `target` narrows to
-    // `TextAddress | TextTarget`. `TextTarget` has `segments`;
-    // `TextAddress` has `blockId` + `range`. Resolve the first
-    // segment and hand it to the text resolver.
-    const firstSegment = 'segments' in target ? target.segments[0] : { blockId: target.blockId, range: target.range };
+    // `TextAddress | TextTarget`. Discriminate by checking for a
+    // non-empty `segments` array — a bare `'segments' in target`
+    // type-guard would mis-classify a hybrid payload that happens to
+    // carry both `segments` (empty) and `blockId`/`range` because
+    // `'segments' in {}` answers shape, not content.
+    const isMultiSegmentTarget =
+      Array.isArray((target as { segments?: unknown }).segments) &&
+      ((target as { segments: unknown[] }).segments.length ?? 0) > 0;
+    const firstSegment = isMultiSegmentTarget
+      ? (target as { segments: Array<{ blockId: string; range: { start: number; end: number } }> }).segments[0]
+      : {
+          blockId: (target as { blockId: string }).blockId,
+          range: (target as { range: { start: number; end: number } }).range,
+        };
     if (!firstSegment) return { success: false };
 
     const resolved = resolveTextTarget(editor, {

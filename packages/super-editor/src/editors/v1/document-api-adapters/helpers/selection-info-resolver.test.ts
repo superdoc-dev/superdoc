@@ -21,6 +21,12 @@ type NodeOptions = {
   attrs?: Record<string, unknown>;
   /** Mark names applied to this node (only used for text nodes). */
   markNames?: string[];
+  /**
+   * Marks with attrs (commentMark, trackInsert, etc). Coexists with
+   * `markNames` — both end up in `node.marks`. Use this for tests that
+   * exercise per-mark attribute-driven id collection.
+   */
+  marksWithAttrs?: Array<{ name: string; attrs: Record<string, unknown> }>;
 };
 
 function createNode(typeName: string, children: ProseMirrorNode[] = [], options: NodeOptions = {}): ProseMirrorNode {
@@ -50,7 +56,10 @@ function createNode(typeName: string, children: ProseMirrorNode[] = [], options:
     child(index: number) {
       return children[index]!;
     },
-    marks: (options.markNames ?? []).map((name) => ({ type: { name } })),
+    marks: [
+      ...(options.markNames ?? []).map((name) => ({ type: { name }, attrs: {} as Record<string, unknown> })),
+      ...(options.marksWithAttrs ?? []).map((m) => ({ type: { name: m.name }, attrs: m.attrs })),
+    ],
     // `nodesBetween` walks the whole subtree. A minimal correct
     // implementation for our test shapes: visit self first, then recurse
     // into children with the right child-position accounting.
@@ -154,7 +163,7 @@ describe('resolveCurrentSelectionInfo', () => {
   it('returns an empty info with null target when the editor has no state', () => {
     const editor = { state: null } as unknown as Editor;
     const info = resolveCurrentSelectionInfo(editor, {});
-    expect(info).toEqual({ empty: true, target: null, activeMarks: [] });
+    expect(info).toEqual({ empty: true, target: null, activeMarks: [], activeCommentIds: [], activeChangeIds: [] });
   });
 
   it('projects a single-block selection into a one-segment TextTarget', () => {
@@ -322,5 +331,180 @@ describe('resolveCurrentSelectionInfo', () => {
     // the per-character loop. A noisy CI worker still completes in well
     // under a second for 10k chars; pick a bound that won't flake.
     expect(elapsed).toBeLessThan(500);
+  });
+});
+// ---------------------------------------------------------------------------
+// activeCommentIds / activeChangeIds (SD-2792)
+// ---------------------------------------------------------------------------
+
+/**
+ * Marked-text helper that lets each run carry attribute-bearing marks
+ * (commentMark with commentId, trackInsert/Delete/Format with id).
+ */
+function entityMarkedTextBlock(
+  blockId: string,
+  runs: Array<{
+    text: string;
+    marks?: string[];
+    marksWithAttrs?: Array<{ name: string; attrs: Record<string, unknown> }>;
+  }>,
+): ProseMirrorNode {
+  const children = runs.map((r) =>
+    createNode('text', [], {
+      text: r.text,
+      markNames: r.marks ?? [],
+      marksWithAttrs: r.marksWithAttrs ?? [],
+    }),
+  );
+  return createNode('paragraph', children, {
+    isBlock: true,
+    inlineContent: true,
+    attrs: { sdBlockId: blockId },
+  });
+}
+
+describe('resolveCurrentSelectionInfo > entity ids', () => {
+  it('collects commentIds from commentMarks across the selection (union)', () => {
+    const docNode = doc([
+      entityMarkedTextBlock('p1', [
+        { text: 'Hello ', marksWithAttrs: [{ name: 'commentMark', attrs: { commentId: 'c1' } }] },
+        {
+          text: 'world',
+          marksWithAttrs: [
+            { name: 'commentMark', attrs: { commentId: 'c1' } },
+            { name: 'commentMark', attrs: { commentId: 'c2' } },
+          ],
+        },
+      ]),
+    ]);
+    // Select the whole text "Hello world" (PM positions 2..13).
+    const editor = makeEditor(docNode, { from: 2, to: 13 });
+
+    const info = resolveCurrentSelectionInfo(editor, {});
+
+    expect([...info.activeCommentIds].sort()).toEqual(['c1', 'c2']);
+    expect(info.activeChangeIds).toEqual([]);
+  });
+
+  it('collects changeIds from trackInsert/trackDelete/trackFormat marks', () => {
+    const docNode = doc([
+      entityMarkedTextBlock('p1', [
+        { text: 'inserted ', marksWithAttrs: [{ name: 'trackInsert', attrs: { id: 'tc1' } }] },
+        { text: 'deleted ', marksWithAttrs: [{ name: 'trackDelete', attrs: { id: 'tc2' } }] },
+        { text: 'reformat', marksWithAttrs: [{ name: 'trackFormat', attrs: { id: 'tc3' } }] },
+      ]),
+    ]);
+    const editor = makeEditor(docNode, { from: 2, to: 27 });
+
+    const info = resolveCurrentSelectionInfo(editor, {});
+
+    expect([...info.activeChangeIds].sort()).toEqual(['tc1', 'tc2', 'tc3']);
+    expect(info.activeCommentIds).toEqual([]);
+  });
+
+  it('reports both comment and change ids when a span carries both', () => {
+    const docNode = doc([
+      entityMarkedTextBlock('p1', [
+        {
+          text: 'reviewed',
+          marksWithAttrs: [
+            { name: 'commentMark', attrs: { commentId: 'c1' } },
+            { name: 'trackInsert', attrs: { id: 'tc1' } },
+          ],
+        },
+      ]),
+    ]);
+    const editor = makeEditor(docNode, { from: 2, to: 10 });
+
+    const info = resolveCurrentSelectionInfo(editor, {});
+
+    expect(info.activeCommentIds).toEqual(['c1']);
+    expect(info.activeChangeIds).toEqual(['tc1']);
+  });
+
+  it('returns empty id arrays when no entity marks overlap the selection', () => {
+    const docNode = doc([entityMarkedTextBlock('p1', [{ text: 'Plain text', marks: ['bold'] }])]);
+    const editor = makeEditor(docNode, { from: 2, to: 12 });
+
+    const info = resolveCurrentSelectionInfo(editor, {});
+
+    expect(info.activeCommentIds).toEqual([]);
+    expect(info.activeChangeIds).toEqual([]);
+    expect(info.activeMarks).toEqual(['bold']);
+  });
+
+  it('uses union semantics, not intersection (one comment touching part of the selection counts)', () => {
+    // Run 1 has comment c1; run 2 is plain. activeMarks would not include
+    // a "bold" if it only touched run 1, but activeCommentIds should
+    // include c1 because we use union semantics.
+    const docNode = doc([
+      entityMarkedTextBlock('p1', [
+        { text: 'commented', marksWithAttrs: [{ name: 'commentMark', attrs: { commentId: 'c1' } }] },
+        { text: ' tail', marks: [] },
+      ]),
+    ]);
+    const editor = makeEditor(docNode, { from: 2, to: 16 });
+
+    const info = resolveCurrentSelectionInfo(editor, {});
+
+    expect(info.activeCommentIds).toEqual(['c1']);
+  });
+
+  it('resolves comment ids from importedId / w:id when commentId is absent (legacy DOCX imports)', () => {
+    // Imported / legacy comment marks may carry the id on `importedId`
+    // or `w:id` instead of the post-import canonical `commentId`. The
+    // resolver must honor the same fallback chain the rest of the
+    // adapter graph uses (`resolveCommentIdFromAttrs`).
+    const docNode = doc([
+      entityMarkedTextBlock('p1', [
+        { text: 'imported ', marksWithAttrs: [{ name: 'commentMark', attrs: { importedId: 'imp-1' } }] },
+        { text: 'legacy', marksWithAttrs: [{ name: 'commentMark', attrs: { 'w:id': 'leg-2' } }] },
+      ]),
+    ]);
+    const editor = makeEditor(docNode, { from: 2, to: 17 });
+
+    const info = resolveCurrentSelectionInfo(editor, {});
+
+    expect([...info.activeCommentIds].sort()).toEqual(['imp-1', 'leg-2']);
+  });
+
+  it('collects entity ids from inline atom nodes (image, tab, line break with marks)', () => {
+    // A range selection over an image with a comment should still
+    // surface the comment id. Inline leaf nodes carry marks just like
+    // text runs do; restricting to `isText` would skip them and leave
+    // sidebar highlighting empty for image-only / atom-only selections.
+    const imageWithComment = createNode('image', [], {
+      isInline: true,
+      isLeaf: true,
+      attrs: { src: 'cat.png' },
+      marksWithAttrs: [{ name: 'commentMark', attrs: { commentId: 'c-img' } }],
+    });
+    const block = createNode('paragraph', [imageWithComment], {
+      isBlock: true,
+      inlineContent: true,
+      attrs: { sdBlockId: 'p1' },
+    });
+    const docNode = doc([block]);
+    // Doc layout: doc[0..5], paragraph[1..4] (content [2..3]), image atom[2..3].
+    // Select the image atom span: PM [2, 3].
+    const editor = makeEditor(docNode, { from: 2, to: 3 });
+
+    const info = resolveCurrentSelectionInfo(editor, {});
+
+    expect(info.activeCommentIds).toEqual(['c-img']);
+  });
+
+  it('empty arrays survive a JSON round-trip (serialization-stable shape)', () => {
+    // Schema and dispatch tests assume the SelectionInfo output is JSON-
+    // serializable with stable field presence. Empty arrays should
+    // serialize and parse back as empty arrays, not be elided.
+    const docNode = doc([textBlock('p1', 'Hello')]);
+    const editor = makeEditor(docNode, { from: 2, to: 7 });
+
+    const info = resolveCurrentSelectionInfo(editor, {});
+    const roundTripped = JSON.parse(JSON.stringify(info));
+
+    expect(roundTripped.activeCommentIds).toEqual([]);
+    expect(roundTripped.activeChangeIds).toEqual([]);
   });
 });

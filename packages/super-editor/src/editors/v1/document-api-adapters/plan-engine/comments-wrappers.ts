@@ -3,7 +3,7 @@
  * engine's revision management and execution path.
  *
  * Read operations (list, get, goTo) are pure queries or non-mutating navigation.
- * Mutating operations (add, edit, reply, move, resolve, remove, setInternal, setActive)
+ * Mutating operations (add, edit, reply, move, resolve, reopen, remove, setInternal, setActive)
  * delegate to editor commands with plan-engine revision tracking.
  */
 

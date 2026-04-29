@@ -7,7 +7,7 @@
  * and `ui.review.scrollTo`.
  */
 
-import type { ScrollIntoViewInput, ScrollIntoViewOutput, TextAddress, TextTarget } from '@superdoc/document-api';
+import type { ScrollIntoViewInput, ScrollIntoViewOutput } from '@superdoc/document-api';
 import type { Editor } from '../editors/v1/core/Editor.js';
 import { resolveTextTarget } from '../editors/v1/document-api-adapters/helpers/adapter-utils.js';
 
@@ -42,12 +42,18 @@ export async function scrollRangeIntoView(editor: Editor, input: ScrollIntoViewI
     return { success: false };
   }
 
-  if ('kind' in input.target && (input.target as { kind?: unknown }).kind === 'entity') {
+  // Narrow to the entity branch via discriminated-union check on
+  // `kind`. `TextAddress`, `TextTarget`, and `EntityAddress` all have
+  // a `kind` field, so the equality check narrows `target` directly
+  // without a cast — `target` is `EntityAddress` inside the block and
+  // `TextAddress | TextTarget` after the early return.
+  const target = input.target;
+  if (target.kind === 'entity') {
     if (typeof presentation.navigateTo !== 'function') {
       return { success: false };
     }
     try {
-      const ok = await presentation.navigateTo(input.target);
+      const ok = await presentation.navigateTo(target);
       return { success: Boolean(ok) };
     } catch {
       return { success: false };
@@ -59,11 +65,11 @@ export async function scrollRangeIntoView(editor: Editor, input: ScrollIntoViewI
   }
 
   try {
-    const target = input.target as TextAddress | TextTarget;
-    const firstSegment =
-      'segments' in target
-        ? target.segments[0]
-        : { blockId: (target as TextAddress).blockId, range: (target as TextAddress).range };
+    // After the entity early-return, `target` narrows to
+    // `TextAddress | TextTarget`. `TextTarget` has `segments`;
+    // `TextAddress` has `blockId` + `range`. Resolve the first
+    // segment and hand it to the text resolver.
+    const firstSegment = 'segments' in target ? target.segments[0] : { blockId: target.blockId, range: target.range };
     if (!firstSegment) return { success: false };
 
     const resolved = resolveTextTarget(editor, {

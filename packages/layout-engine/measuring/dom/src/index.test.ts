@@ -1641,6 +1641,7 @@ describe('measureBlock', () => {
 
       const firstLine = measure.lines[0];
       const textSegment = firstLine.segments?.find((segment) => segment.runIndex === 2);
+      expect(firstLine.hasExplicitTabStops).toBeUndefined();
       expect(textSegment?.x).toBeDefined();
       // First line starts at left - hanging (40px), so a segment x of 60px
       // lands the post-tab text exactly at the body indent (100px).
@@ -1674,6 +1675,7 @@ describe('measureBlock', () => {
       const measure = expectParagraphMeasure(await measureBlock(block, 800));
       expect(measure.lines).toHaveLength(1);
       const line = measure.lines[0];
+      expect(line.hasExplicitTabStops).toBe(true);
       expect(line.leaders).toBeDefined();
       expect(line.leaders?.[0]?.style).toBe('dot');
       // Leader must end right before the page number — within ~20px of the right stop

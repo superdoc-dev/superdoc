@@ -14,6 +14,7 @@ describe('engines-tabs computeTabStops', () => {
 
     expect(stops[0].pos).toBeGreaterThanOrEqual(360);
     expect(stops.find((stop) => stop.pos === 1440)?.val).toBe('end');
+    expect(stops.find((stop) => stop.pos === 1440)?.source).toBe('explicit');
   });
 
   it('filters out clear tabs', () => {
@@ -72,6 +73,7 @@ describe('engines-tabs computeTabStops', () => {
     const firstDefault = stops.find((stop) => stop.pos === 720);
     expect(firstDefault?.val).toBe('start');
     expect(firstDefault?.leader).toBe('none');
+    expect(firstDefault?.source).toBe('default');
   });
 
   it('preserves tab stops between (left - hanging) and left when hanging indent exists', () => {
@@ -156,6 +158,7 @@ describe('engines-tabs computeTabStops', () => {
     expect(implicitBodyStop).toMatchObject({
       val: 'start',
       leader: 'none',
+      source: 'default',
     });
     expect(stops[0]?.pos).toBe(1000);
     expect(stops.find((stop) => stop.pos === 720)).toBeUndefined();
@@ -170,6 +173,17 @@ describe('engines-tabs computeTabStops', () => {
     });
 
     expect(stops.filter((stop) => stop.pos === 3600)).toHaveLength(1);
+  });
+
+  it('does not synthesize the implicit hanging stop when it was explicitly cleared', () => {
+    const stops = computeTabStops({
+      explicitStops: [{ val: 'clear', pos: 1000 }],
+      defaultTabInterval: 720,
+      paragraphIndent: { left: 1000, hanging: 500 },
+    });
+
+    expect(stops.find((stop) => stop.pos === 1000)).toBeUndefined();
+    expect(stops.find((stop) => stop.pos === 1440)).toBeDefined();
   });
 
   it('combines explicit stops in hanging range with defaults starting at leftIndent', () => {

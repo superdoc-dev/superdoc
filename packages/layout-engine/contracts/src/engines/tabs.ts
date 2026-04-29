@@ -22,6 +22,7 @@ export interface TabStop {
   val: 'start' | 'end' | 'center' | 'decimal' | 'bar' | 'clear';
   pos: number; // Twips from paragraph start (after left indent)
   leader?: 'none' | 'dot' | 'hyphen' | 'heavy' | 'underscore' | 'middleDot';
+  source?: 'explicit' | 'default';
 }
 
 /**
@@ -125,7 +126,8 @@ export function computeTabStops(context: TabContext): TabStop[] {
   // Filter explicit stops: keep those >= effectiveMinIndent (supports hanging indent first lines)
   const filteredExplicitStops = explicitStops
     .filter((stop) => stop.val !== 'clear')
-    .filter((stop) => stop.pos >= effectiveMinIndent);
+    .filter((stop) => stop.pos >= effectiveMinIndent)
+    .map((stop) => ({ ...stop, source: 'explicit' as const }));
 
   // Find the rightmost explicit stop (use original stops for this calculation)
   const maxExplicit = filteredExplicitStops.reduce((max, stop) => Math.max(max, stop.pos), 0);
@@ -133,16 +135,18 @@ export function computeTabStops(context: TabContext): TabStop[] {
   const stops: TabStop[] = [...filteredExplicitStops];
   const hasStartAlignedExplicit = filteredExplicitStops.some((stop) => stop.val === 'start');
   const hasExplicitStops = filteredExplicitStops.length > 0;
+  const hasClearAtLeftIndent = clearPositions.some((clearPos) => Math.abs(clearPos - leftIndent) < 20);
 
   // Word treats the body text start of a hanging-indent paragraph as an implicit
   // tab target. This is what lets manual numbering like "1.\tText" align the
   // first-line text with wrapped body lines even when the left indent is not on
   // the document's default tab grid.
-  if (!hasExplicitStops && hanging > 0 && leftIndent > effectiveMinIndent) {
+  if (!hasExplicitStops && !hasClearAtLeftIndent && hanging > 0 && leftIndent > effectiveMinIndent) {
     stops.push({
       val: 'start',
       pos: leftIndent,
       leader: 'none',
+      source: 'default',
     });
   }
 
@@ -170,6 +174,7 @@ export function computeTabStops(context: TabContext): TabStop[] {
         val: 'start',
         pos,
         leader: 'none',
+        source: 'default',
       });
     }
   }

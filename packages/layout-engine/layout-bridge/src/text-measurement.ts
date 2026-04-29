@@ -68,22 +68,6 @@ const isWordChar = (char: string): boolean => {
   return (code >= 48 && code <= 57) || (code >= 65 && code <= 90) || (code >= 97 && code <= 122) || char === "'";
 };
 
-const lineContainsManualTabWithoutSegments = (block: FlowBlock, line: Line): boolean => {
-  if (block.kind !== 'paragraph') return false;
-  if (line.segments?.some((seg) => seg.x !== undefined)) {
-    return false;
-  }
-  const fromRun = line.fromRun ?? 0;
-  const toRun = line.toRun ?? fromRun;
-  for (let runIndex = fromRun; runIndex <= toRun; runIndex += 1) {
-    const run = block.runs[runIndex];
-    if (run && isTabRun(run)) {
-      return true;
-    }
-  }
-  return false;
-};
-
 const capitalizeText = (text: string): string => {
   if (!text) return text;
   let result = '';
@@ -245,7 +229,6 @@ const getJustifyAdjustment = (
   }
 
   const alignment = alignmentOverride ?? block.attrs?.alignment;
-  const hasExplicitPositioning = line.segments?.some((seg) => seg.x !== undefined) ?? false;
 
   // Derive last-line info from block/line when not explicitly provided.
   // This ensures measurement matches rendering even when callers don't pass these flags.
@@ -257,7 +240,8 @@ const getJustifyAdjustment = (
   // Determine if justify should be applied using shared logic
   const shouldJustify = shouldApplyJustify({
     alignment,
-    hasExplicitPositioning,
+    hasExplicitPositioning: line.segments?.some((seg) => seg.x !== undefined) ?? false,
+    hasExplicitTabStops: line.hasExplicitTabStops === true,
     isLastLineOfParagraph: isLastLineOfParagraph ?? derivedIsLastLine,
     paragraphEndsWithLineBreak: paragraphEndsWithLineBreak ?? derivedEndsWithLineBreak,
     skipJustifyOverride,
@@ -435,17 +419,8 @@ export function measureCharacterX(
     line.maxWidth ??
     // Fallback: if no maxWidth, approximate available width as line width (no slack)
     line.width;
-  const manualTabWithoutSegments = lineContainsManualTabWithoutSegments(block, line);
   // Pass availableWidth to justify calculation to match painter's word-spacing
-  const justify = getJustifyAdjustment(
-    block,
-    line,
-    availableWidth,
-    alignmentOverride,
-    undefined,
-    undefined,
-    manualTabWithoutSegments,
-  );
+  const justify = getJustifyAdjustment(block, line, availableWidth, alignmentOverride, undefined, undefined, undefined);
   const alignment = alignmentOverride ?? (block.kind === 'paragraph' ? block.attrs?.alignment : undefined);
   // For justify alignment, the line is stretched to fill available width (slack distributed across spaces)
   // For center/right alignment, the line keeps its natural width and is positioned within the available space
@@ -841,16 +816,7 @@ export function findCharacterAtX(
     // Fallback: approximate with line width when no maxWidth is present
     line.width;
   // Pass availableWidth to justify calculation to match painter's word-spacing
-  const manualTabWithoutSegments = lineContainsManualTabWithoutSegments(block, line);
-  const justify = getJustifyAdjustment(
-    block,
-    line,
-    availableWidth,
-    alignmentOverride,
-    undefined,
-    undefined,
-    manualTabWithoutSegments,
-  );
+  const justify = getJustifyAdjustment(block, line, availableWidth, alignmentOverride, undefined, undefined, undefined);
   const alignment = alignmentOverride ?? (block.kind === 'paragraph' ? block.attrs?.alignment : undefined);
   // For justify alignment, the line is stretched to fill available width (slack distributed across spaces)
   // For center/right alignment, the line keeps its natural width and is positioned within the available space

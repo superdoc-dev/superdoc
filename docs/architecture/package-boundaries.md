@@ -18,14 +18,32 @@ Every workspace package and every `superdoc` subpath export sits in exactly one 
 
 | Tier | Consumer can install/import? | Types may appear in public `.d.ts`? | Stability commitment |
 |---|---|---|---|
-| **Public package** | Yes (real npm name) | Yes (its own surface) | Semver, breaking changes documented |
-| **Public subpath** | Yes via `superdoc/<name>` | Yes (curated, gated) | Same as `superdoc` |
-| **Public type contract** | Indirectly (types reachable through `superdoc`) | Yes | Versioned with `superdoc` |
+| **Supported public package** | Yes (real npm name) | Yes (its own surface) | Semver, breaking changes documented |
+| **Supported public subpath** | Yes via `superdoc/<name>` | Yes (curated, gated) | Same as `superdoc` |
+| **Supported public type contract** | Indirectly (types reachable through `superdoc`) | Yes | Versioned with `superdoc` |
+| **Legacy public compatibility surface** | Yes today (existing customers may already depend on it) | Yes (minimal coverage to avoid breaking consumers) | Kept compiling, not expanded, not advertised. Removal only after a documented migration window |
 | **Internal runtime** | No | No | None; refactor freely |
 | **Internal implementation** | No | No | None; refactor freely |
 | **Dev/test/generated** | No | No | None |
 
-The first three are public surface. The last three are private and must not leak through any published declaration file.
+Three states matter to consumers and the audit gate:
+
+1. **Supported public** (the first three rows). We document, test, version, and expect customers to build on it.
+2. **Legacy public compatibility** (the fourth row). Customers may already use it, so we cannot break it casually, but we do not want new customers depending on it. It gets minimal type support and a migration path.
+3. **Private** (the bottom three rows). Not for customers, not allowed to leak into public declarations.
+
+The legacy tier is what makes this RFC actionable today. Some surfaces (notably `superdoc/super-editor`) were public out of necessity in earlier versions because there was no other way to run SuperDoc headlessly. That necessity is gone, but we cannot drop the surface immediately because customers built on it. Legacy public is the honest classification while a migration path is built and adopted.
+
+### Handling legacy public surface
+
+For any entry classified as legacy public:
+
+1. **Stop advertising the old import path.** Update docs, support guidance, and example code to point at the supported replacement.
+2. **Add or finish the supported replacement** if one is missing. Without a migration target, "legacy public" silently becomes "public forever."
+3. **Keep the old path compiling.** No surprise breakage for existing consumers.
+4. **Add type coverage only enough to avoid breaking consumers.** Not full type-governance; just enough that strict-mode TS compiles.
+5. **Add deprecation docs or warnings where appropriate.** Optional console warning on first use, JSDoc `@deprecated`, or changelog notes.
+6. **Remove only after a documented migration window**, if ever.
 
 ## Inventory
 
@@ -34,8 +52,8 @@ The first three are public surface. The last three are private and must not leak
 | Path | npm name | Tier | Decision |
 |---|---|---|---|
 | `packages/superdoc` | `superdoc` | Public package | Canonical entry point; stays public |
-| `packages/super-editor` | `@superdoc/super-editor` | TBD | **Open question 1** below |
-| `packages/document-api` | `@superdoc/document-api` | Public type contract | Document API is part of the public surface (see Q2a). Delivery shape is **Open question 2b** below |
+| `packages/super-editor` | `@superdoc/super-editor` | Legacy public compatibility surface | Was effectively public when no other headless path existed. Now superseded by exports from `superdoc` itself and (going forward) `@superdoc-dev/document-api`. Kept compiling for existing consumers; new use migrates to the supported replacements. See Decision 1 below. |
+| `packages/document-api` | `@superdoc/document-api` | Supported public type contract | Document API is part of the public surface. Recommended delivery: rename to `@superdoc-dev/document-api` and publish (see Decision 2). |
 | `packages/react` | `@superdoc-dev/react` | Public package | Already published |
 | `packages/sdk/langs/node` | `@superdoc-dev/sdk` | Public package | Already published; the actual SDK npm artifact |
 | `packages/sdk/langs/node/platforms/*` | `@superdoc-dev/sdk-<os>-<arch>` | Public package | Optional native binaries selected by the SDK package |
@@ -93,9 +111,9 @@ The `superdoc` package currently exposes the following entries via `package.json
 | `./headless-toolbar` | Yes | Public subpath | Stays |
 | `./headless-toolbar/react` | Yes | Public subpath | Stays |
 | `./headless-toolbar/vue` | Yes | Public subpath | Stays |
-| `./converter` | No (runtime-only) | TBD | **Open question 4** |
-| `./docx-zipper` | No (runtime-only) | TBD | **Open question 4** |
-| `./file-zipper` | No (runtime-only) | TBD | **Open question 4** |
+| `./converter` | No (runtime-only) | Legacy public compatibility surface | DOCX conversion is also reachable through `Editor.open` / `Editor.loadXmlData` / `SuperConverter` exported from `superdoc`. Kept exported, not advertised, migration target is `superdoc`. |
+| `./docx-zipper` | No (runtime-only) | Legacy public compatibility surface | `DocxZipper` is exported from `superdoc`. Kept exported, not advertised, migration target is `superdoc`. |
+| `./file-zipper` | No (runtime-only) | Legacy public compatibility surface | `createZip` is exported from `superdoc`. Kept exported, not advertised, migration target is `superdoc`. |
 | `./style.css` | N/A | Public asset | Stays |
 
 ## Type ownership rules
@@ -116,71 +134,49 @@ If a type does not satisfy one of these, it must not appear. The audit gate (SD-
 3. **`superdoc/super-editor` (if it stays public) must follow the same declaration rules as `superdoc` itself.** Currently it leaks the most.
 4. **`shared/*` packages are internal runtime only.** Their types do not appear in any public declaration; values used by public code get inlined.
 
-## Open questions
+## Decisions and pending inputs
 
-### 1. Is `superdoc/super-editor` supported public API or an unsupported escape hatch?
+### Decision 1. `superdoc/super-editor` and `@superdoc/super-editor` are legacy public compatibility surface.
 
-**Context.** The `superdoc/super-editor` subpath re-exports a large surface from `@superdoc/super-editor` (about 1,878 JS source files behind it, plus type re-exports of ProseMirror primitives). Multiple consumers actively import from it today; it is de-facto public.
+**Context.** The `super-editor` subpath was effectively public in earlier versions because there was no other way to use SuperDoc headlessly (server-side, AI agents, batch processing, custom toolbars). That necessity is gone: `superdoc` itself now re-exports `Editor`, `PresentationEditor`, `getStarterExtensions`, `getRichTextExtensions`, `Extensions`, `defineNode`, `defineMark`, `isNodeType`, `assertNodeType`, `isMarkType`, `SuperToolbar`, `CommentsPluginKey`, `TrackChangesBasePluginKey`, `SuperConverter`, `DocxZipper`, and `createZip`. Almost everything customers reached for from the subpath is now reachable from the main package.
 
-The ambiguity has two layers, and both need a decision. The `@superdoc/super-editor` workspace package itself does not carry `private: true`, but is also not actively published or documented as a standalone npm package. Consumers reach its surface through the `superdoc/super-editor` subpath instead. The RFC needs to decide whether the standalone package is publishable, internal-only, or formally deprecated in favor of the subpath facade. The subpath classification (Options A/B/C below) inherits from that decision.
+**Decision.** Both the standalone `@superdoc/super-editor` package and the `superdoc/super-editor` subpath are classified as **legacy public compatibility surface**. We do not break them. We do not advertise them. New customer guidance, docs, and examples point at `superdoc`. The audit gate enforces no growth (no new exports added through this surface), but minimal type coverage is preserved so existing imports keep compiling.
 
-**Options.**
-- **A. Promote to supported public surface.** Curate the re-export list, type-govern it like `superdoc`, document it. Commits the team to ProseMirror primitives in the public API.
-- **B. Mark as unsupported escape hatch.** Document that anything imported from `superdoc/super-editor` may break without notice. Customers using it migrate to `superdoc` or the Document API.
-- **C. Narrow to a curated facade.** Pick the small subset of `super-editor` that customers genuinely need (a list of editor commands, the headless renderer, etc.) and ship only that. Drop the rest.
+**Pending inputs that refine the migration plan but do not change the classification.**
+- Usage scrape across Slack and public GitHub channels to confirm which symbols are actually depended on. (See deliverables below; first cut is captured in the SD-2829 thread comments.)
+- A small list of symbols that exist on the subpath but not yet on `superdoc` (`Extension` class, `assembleDocumentApiAdapters`, `createDocumentApi`, `resolveSelectionTarget`, `resolveDefaultInsertTarget`, ProseMirror primitive type re-exports). Either add them to `superdoc`, or accept they migrate to a different supported home.
+- Migration window length (the RFC recommends two to three minor versions, given how long we have actively pointed customers at this path; a longer window may be appropriate).
 
-**Recommendation tentative: Option C, pending usage data.** Option C is probably right but the input is missing. Before committing, run a usage scrape (Slack threads, GitHub issues, customer code samples) for actual `superdoc/super-editor` imports. The result of that scrape is a deliverable of this RFC.
+### Decision 2. `@superdoc/document-api` is a supported public type contract; recommended delivery is to publish under `@superdoc-dev/document-api`.
 
-### 2a. Is `@superdoc/document-api` part of the public surface?
+**Context.** The package contains real, well-typed APIs (`DocumentApi`, `BookmarkInfo`, `BlocksListResult`, etc.) and is already promoted to customers through the documentation site, the SDK, the MCP, and AI agent guidance. It is functionally public; only the delivery mechanism is open.
 
-**Context.** The package contains real, well-typed APIs (`DocumentApi`, `BookmarkInfo`, `BlocksListResult`, etc.) and is already promoted to customers as a stable surface (the Document API documentation site, the SDK, the MCP). It is functionally public; the only question is mechanism.
+**Decision (product).** Document API is a supported public type contract. Its types must be reachable to consumers without collapsing to `any`.
 
-**Decision: Yes.** Document API is a public type contract. Its types must be reachable to consumers without collapsing to `any`. The package itself stays in the workspace; the delivery shape is question 2b.
+**Recommendation (delivery).** Publish as `@superdoc-dev/document-api` (renamed from `@superdoc/document-api` to align with the convention used by the other public packages: `@superdoc-dev/react`, `esign`, `template-builder`, `sdk`, `collaboration-yjs`). The renaming is itself a signal of public intent and avoids the build-pipeline complexity that SD-2830 surfaced when trying to inline the types into `superdoc`'s declaration graph.
 
-### 2b. Does `@superdoc/document-api` ship as its own published package, or get included in `superdoc`'s declaration graph?
+**Alternative still on the table.** Keep `@superdoc/document-api` private and include the types under a `superdoc`-owned path via a curated-emit pipeline. SD-2830 owns this implementation question. The customer-visible result is the same; the trade-off is "one extra public package name to maintain" vs "one extra build pipeline to maintain."
 
-**Context.** Given 2a's answer, two delivery paths are open. The SD-2830 spike confirmed that api-extractor-based bundling is not viable on the current codebase, but other curated-emit paths exist.
+### Decision 3. The layout-engine sub-packages stay separate.
 
-**Options.**
-- **A. Publish `@superdoc/document-api` as a real npm package.** Drop `private: true`. The leak becomes a legitimate dependency. Faster fix; commits the package name and its API shape as long-term public surface.
-- **B. Include the types in `superdoc`'s declaration graph** under a `superdoc`-owned path. Keep the package private. Requires a curated-emit pipeline (path rewrites or generated type files); see SD-2830 for what that costs.
+**Context.** `packages/layout-engine/` contains ten sub-packages (`contracts`, `dom-contract`, `geometry-utils`, `layout-bridge`, `layout-engine`, `layout-resolved`, `pm-adapter`, `style-engine`, `painters/dom`, `measuring/dom`), all private, all internal implementation.
 
-**Recommendation: pending SD-2830.** This is the implementation question that SD-2830 owns; this RFC only commits to 2a. Whichever delivery path SD-2830 produces, the customer-visible result is the same: real Document API types resolvable to consumers, no `any` collapse.
+**Decision.** Keep as-is. The audit gate (SD-2832) plus the type ownership rules remove the customer-visible cost of the split. Restructuring without a strong forcing function is scope creep. Revisit only if the audit gate proves expensive to maintain because of the package count.
 
-### 3. Do the eight layout-engine sub-packages stay separate, or collapse into one internal package?
+### Decision 4. Runtime-only `superdoc` subpaths are legacy public compatibility surface.
 
-**Context.** `packages/layout-engine/` contains: `contracts`, `dom-contract`, `geometry-utils`, `layout-bridge`, `layout-engine`, `layout-resolved`, `pm-adapter`, `style-engine`, plus `painters/dom` and `measuring/dom`. Ten sub-packages, all private, all `@superdoc/*`. The split predates this RFC and was driven by build/test isolation concerns at the time.
+**Context.** `./converter`, `./docx-zipper`, `./file-zipper` are exported as runtime-only entries today. The functionality they expose (DOCX conversion, zipping) is also reachable through `superdoc`'s main entry: `Editor.open`, `Editor.loadXmlData`, `SuperConverter`, `DocxZipper`, `createZip` are all exported from `superdoc`.
 
-**Options.**
-- **A. Keep as-is.** Each sub-package keeps its own `package.json`, tsconfig, tests. Internal-only.
-- **B. Collapse into one internal `@superdoc/layout` package.** Lower navigation cost, fewer `@superdoc/*` names to track. Loses the dependency-direction benefits the split currently encodes.
-- **C. Move to a `private/` subdirectory** outside `packages/` to make the internal status visually obvious.
-
-**Recommendation: A for now.** The audit gate (SD-2832) plus the type ownership rules above remove the customer-visible cost of the split. Restructuring without a strong forcing function is scope-creep risk. Revisit if the audit gate proves expensive to maintain because of the package count.
-
-### 4. Which runtime-only `superdoc` subpaths stay supported?
-
-**Context.** `./converter`, `./docx-zipper`, `./file-zipper` are exported as runtime entries with no `types` field. Customers using them today get no type information. "Public but untyped" conflicts with the goal of this project; under strict TS settings, those imports fail to resolve cleanly. Each subpath needs a clean classification.
-
-**Options for each subpath.**
-- **A. Supported public subpath with a minimal explicit type contract.** Pick the small, intentional API surface and own it.
-- **B. Legacy unsupported subpath with a deprecation and migration plan.** Add a deprecation notice in the docs, set a removal version, point users at the supported alternative.
-- **C. Remove immediately.** Only if usage is verifiably zero.
-
-**Recommendation.**
-- `./converter`: **Option A.** DOCX import/export is core SuperDoc functionality. The supported surface should expose the small set of conversion entry points customers actually need (open, save, the converter instance), not the whole `SuperConverter` class.
-- `./docx-zipper` and `./file-zipper`: **Option B.** These are internal-shaped utilities that ended up exported. Mark them deprecated, set a removal target (one or two minor versions out), document the supported alternative (probably the `./converter` API after Option A lands), and remove on schedule.
-
-Note: Option B requires the deprecation actually goes somewhere. Without a migration target, Option B becomes "public forever, just with a sad note." If we cannot identify a supported alternative within Option A's surface, the honest choice is to escalate `docx-zipper` / `file-zipper` to Option A as well.
+**Decision.** All three subpaths are classified as **legacy public compatibility surface**. Migration target is `superdoc` itself (the symbols already exist there). We keep them exported, stop advertising them, point new use at `superdoc`, and add minimal type coverage so strict-mode TS does not break.
 
 ## Deliverables
 
 This RFC is "done" when the following are produced and reviewed:
 
-1. **This document, merged**, with the open questions either decided or labeled with their concrete next step.
-2. **A `superdoc/super-editor` usage scrape** (Slack threads, GitHub issues, customer code samples) that lists the symbols actually imported today. Input to the Q1 decision.
+1. **This document, merged**, with the four decisions accepted by the team and any team-level adjustments captured in the decisions log.
+2. **A migration plan for `superdoc/super-editor`**. The classification (legacy public compatibility) is decided; what remains is the concrete plan: which symbols missing from `superdoc` get added vs migrated to a different home, the deprecation window length, the docs and changelog updates that retire the old import path. First-cut data is in the SD-2829 thread; the plan is the deliverable.
 3. **A clarification on `@superdoc-dev/ai`**. Currently `private: true`; either keep private and remove from the in-scope inventory, or commit to publishing.
-4. **A short list of guarded public types** for the audit gate (Document API entry types, `Config`, command props, layout-facing types like `Layout` if any of them stay public). This list is the input the audit gate (SD-2832) checks for `any` regressions.
+4. **A short list of guarded public types** for the audit gate (Document API entry types, `Config`, command props, layout-facing types if any are kept public). This list is the input the audit gate (SD-2832) checks for `any` regressions.
 
 ## CI enforcement
 

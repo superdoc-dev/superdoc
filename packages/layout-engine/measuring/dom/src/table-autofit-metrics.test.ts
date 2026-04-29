@@ -52,6 +52,100 @@ describe('table-autofit-metrics', () => {
     expect(metrics.maxWidthPx).toBeGreaterThan(metrics.minWidthPx);
   });
 
+  it('keeps non-breaking-space tokens together across adjacent styled runs', async () => {
+    const splitRunCell: TableCell = {
+      id: 'cell-nbsp-split-runs',
+      attrs: {
+        padding: { left: 0, right: 0, top: 0, bottom: 0 },
+      },
+      blocks: [
+        {
+          kind: 'paragraph',
+          id: 'para-nbsp-split-runs',
+          runs: [
+            { text: 'EXHIBIT\u00a0\u201c', fontFamily: 'Arial', fontSize: 12 },
+            { text: 'A', fontFamily: 'Arial', fontSize: 12 },
+            { text: '\u201d', fontFamily: 'Arial', fontSize: 12 },
+          ],
+        },
+      ],
+    };
+
+    const unsplitCell: TableCell = {
+      id: 'cell-nbsp-unsplit',
+      attrs: {
+        padding: { left: 0, right: 0, top: 0, bottom: 0 },
+      },
+      blocks: [
+        {
+          kind: 'paragraph',
+          id: 'para-nbsp-unsplit',
+          runs: [{ text: 'EXHIBIT\u00a0\u201cA\u201d', fontFamily: 'Arial', fontSize: 12 }],
+        },
+      ],
+    };
+
+    const metrics = await measureTableCellContentMetrics(splitRunCell, { maxWidth: 400, measureBlock });
+    const expected = await measureTableCellContentMetrics(unsplitCell, { maxWidth: 400, measureBlock });
+
+    expect(metrics.minWidthPx).toBeCloseTo(expected.maxWidthPx, 3);
+  });
+
+  it('keeps quote-delimited hyperlink text together after a normal breakable space', async () => {
+    const splitRunCell: TableCell = {
+      id: 'cell-quote-split-runs',
+      attrs: {
+        padding: { left: 0, right: 0, top: 0, bottom: 0 },
+      },
+      blocks: [
+        {
+          kind: 'paragraph',
+          id: 'para-quote-split-runs',
+          runs: [
+            { text: 'EXHIBIT \u201c', fontFamily: 'Arial', fontSize: 12 },
+            { text: 'A', fontFamily: 'Arial', fontSize: 12 },
+            { text: '\u201d', fontFamily: 'Arial', fontSize: 12 },
+          ],
+        },
+      ],
+    };
+
+    const quoteTokenCell: TableCell = {
+      id: 'cell-quote-token',
+      attrs: {
+        padding: { left: 0, right: 0, top: 0, bottom: 0 },
+      },
+      blocks: [
+        {
+          kind: 'paragraph',
+          id: 'para-quote-token',
+          runs: [{ text: '\u201cA\u201d', fontFamily: 'Arial', fontSize: 12 }],
+        },
+      ],
+    };
+
+    const fullPhraseCell: TableCell = {
+      id: 'cell-quote-full-phrase',
+      attrs: {
+        padding: { left: 0, right: 0, top: 0, bottom: 0 },
+      },
+      blocks: [
+        {
+          kind: 'paragraph',
+          id: 'para-quote-full-phrase',
+          runs: [{ text: 'EXHIBIT \u201cA\u201d', fontFamily: 'Arial', fontSize: 12 }],
+        },
+      ],
+    };
+
+    const metrics = await measureTableCellContentMetrics(splitRunCell, { maxWidth: 400, measureBlock });
+    const expected = await measureTableCellContentMetrics(quoteTokenCell, { maxWidth: 400, measureBlock });
+    const fullPhrase = await measureTableCellContentMetrics(fullPhraseCell, { maxWidth: 400, measureBlock });
+
+    expect(metrics.minWidthPx).toBeGreaterThanOrEqual(expected.maxWidthPx);
+    expect(metrics.minWidthPx).toBeLessThan(fullPhrase.maxWidthPx);
+  });
+
   it('keeps explicit line breaks when computing no-wrap max width', async () => {
     const wrappedCell: TableCell = {
       id: 'cell-breaks',

@@ -29,8 +29,8 @@ const TABLE_AUTOFIT_RESULT_CACHE_SIZE = 500;
  * artificial wrapping. It intentionally exceeds any realistic authored line.
  */
 const NO_WRAP_MAX_WIDTH = Number.MAX_SAFE_INTEGER;
-const TOKEN_BREAK_PATTERN = /[\s\-\u00ad\u2010\u2012\u2013\u2014\u200b\u2028\u2029]+/u;
-const EXPLICIT_LINE_BREAK_PATTERN = /\r\n|\r|\n|\u2028|\u2029/u;
+const TOKEN_BOUNDARY_PATTERN =
+  /[ \t\f\v\-\u00ad\u2010\u2012\u2013\u2014\u200b\u2028\u2029]+|\r\n|\r|\n|\u2028|\u2029/gu;
 
 /**
  * Minimal measurement constraints shape consumed by the injected block measurer.
@@ -533,16 +533,31 @@ async function measureNestedTableIntrinsicWidthMetrics(
  */
 function measureParagraphMinTokenWidth(paragraph: ParagraphBlock): number {
   let widestToken = 0;
+  let currentTokenWidth = 0;
+
+  const flushToken = (): void => {
+    widestToken = Math.max(widestToken, currentTokenWidth);
+    currentTokenWidth = 0;
+  };
 
   for (const run of paragraph.runs) {
     if (isExplicitLineBreakRun(run)) {
+      flushToken();
       continue;
     }
 
     if (isTextLikeRun(run)) {
-      widestToken = Math.max(widestToken, measureTextRunMinTokenWidth(run));
+      accumulateTextRunMinTokenWidth(
+        run,
+        (width) => {
+          currentTokenWidth += width;
+        },
+        flushToken,
+      );
       continue;
     }
+
+    flushToken();
 
     if (run.kind === 'image') {
       widestToken = Math.max(widestToken, run.width ?? 0);
@@ -559,33 +574,45 @@ function measureParagraphMinTokenWidth(paragraph: ParagraphBlock): number {
     }
   }
 
+  flushToken();
+
   return widestToken;
 }
 
 /**
  * Measures the widest unbreakable token contributed by a text-bearing run.
  */
-function measureTextRunMinTokenWidth(run: Extract<Run, { text: string }>): number {
+function accumulateTextRunMinTokenWidth(
+  run: Extract<Run, { text: string }>,
+  appendTokenPiece: (width: number) => void,
+  flushToken: () => void,
+): void {
   const font = buildFontString(run);
-  let widestToken = 0;
+  let cursor = 0;
 
-  for (const authoredLine of splitOnExplicitLineBreaks(run.text)) {
-    if (authoredLine.length === 0) continue;
-
-    const tokens = authoredLine.split(TOKEN_BREAK_PATTERN).filter((token) => token.length > 0);
-    if (tokens.length === 0) continue;
-
-    let lineOffset = 0;
-    for (const token of tokens) {
-      const tokenStart = authoredLine.indexOf(token, lineOffset);
-      const measuredToken = applyTextTransform(token, run, tokenStart);
-      const width = getMeasuredTextWidth(measuredToken, font, getLetterSpacing(run), getCanvasContext());
-      widestToken = Math.max(widestToken, width);
-      lineOffset = tokenStart + token.length;
+  for (const boundary of run.text.matchAll(TOKEN_BOUNDARY_PATTERN)) {
+    const boundaryStart = boundary.index ?? cursor;
+    if (boundaryStart > cursor) {
+      appendTokenPiece(measureTextRunTokenSlice(run, cursor, boundaryStart, font));
     }
+    flushToken();
+    cursor = boundaryStart + boundary[0].length;
   }
 
-  return widestToken;
+  if (cursor < run.text.length) {
+    appendTokenPiece(measureTextRunTokenSlice(run, cursor, run.text.length, font));
+  }
+}
+
+function measureTextRunTokenSlice(
+  run: Extract<Run, { text: string }>,
+  start: number,
+  end: number,
+  font: string,
+): number {
+  const token = run.text.slice(start, end);
+  const measuredToken = applyTextTransform(token, run, start);
+  return getMeasuredTextWidth(measuredToken, font, getLetterSpacing(run), getCanvasContext());
 }
 
 /**
@@ -734,31 +761,6 @@ function buildFontString(run: {
   parts.push(`${normalizeFontSize(run.fontSize)}px`);
   parts.push(toCssFontFamily(normalizeFontFamily(run.fontFamily)) ?? normalizeFontFamily(run.fontFamily));
   return parts.join(' ');
-}
-
-/**
- * Normalizes line-break-bearing text into authored display lines.
- */
-function splitOnExplicitLineBreaks(text: string): string[] {
-  const lines: string[] = [];
-  let remaining = text;
-
-  while (remaining.length > 0) {
-    const match = remaining.match(EXPLICIT_LINE_BREAK_PATTERN);
-    if (!match || match.index == null) {
-      lines.push(remaining);
-      return lines;
-    }
-
-    lines.push(remaining.slice(0, match.index));
-    remaining = remaining.slice(match.index + match[0].length);
-  }
-
-  if (text.length === 0 || EXPLICIT_LINE_BREAK_PATTERN.test(text[text.length - 1] ?? '')) {
-    lines.push('');
-  }
-
-  return lines;
 }
 
 /**

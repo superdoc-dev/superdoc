@@ -1374,6 +1374,23 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
         }
       });
     },
+    capture() {
+      // Capture is sugar over `getSnapshot()` plus a freeze: the
+      // memoized selection slice already carries the portable
+      // address shapes consumers need (target, selectionTarget,
+      // activeMarks, etc.). The freeze prevents accidental mutation
+      // of the shared snapshot; the consumer treats the captured
+      // value as opaque.
+      //
+      // Returns null when the snapshot has no addressable text
+      // anchor (empty selection in a node selection, no editor
+      // mounted, doc not yet bootstrapped). A `null` guard at the
+      // call site is the consumer's signal that capture-and-restore
+      // doesn't make sense for the current state.
+      const slice = computeState().selection;
+      if (!slice.target && !slice.selectionTarget) return null;
+      return Object.freeze({ ...slice });
+    },
   };
 
   const destroy = () => {

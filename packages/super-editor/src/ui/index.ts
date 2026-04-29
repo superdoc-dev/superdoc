@@ -88,6 +88,7 @@ export type {
   SuperDocUIState,
 
   // Selection
+  SelectionCapture,
   SelectionHandle,
   SelectionSlice,
 

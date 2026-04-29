@@ -687,6 +687,84 @@ describe('createSuperDocUI', () => {
     });
   });
 
+  it('ui.selection.capture returns a frozen snapshot for an addressable selection', () => {
+    const superdoc = makeSuperdocStub();
+    const target = {
+      kind: 'text' as const,
+      segments: [{ blockId: 'p1', range: { start: 0, end: 5 } }],
+    };
+    (superdoc.activeEditor as { doc: { selection: { current: unknown } } }).doc.selection.current = vi.fn(() => ({
+      empty: false,
+      text: 'hello',
+      target,
+      activeMarks: ['italic'],
+      activeCommentIds: [],
+      activeChangeIds: [],
+    }));
+    const ui = createSuperDocUI({ superdoc });
+    teardown.push(() => ui.destroy());
+
+    const captured = ui.selection.capture();
+    expect(captured).not.toBeNull();
+    expect(captured!.target).toEqual(target);
+    expect(captured!.selectionTarget).toEqual({
+      kind: 'selection',
+      start: { kind: 'text', blockId: 'p1', offset: 0 },
+      end: { kind: 'text', blockId: 'p1', offset: 5 },
+    });
+    expect(captured!.activeMarks).toEqual(['italic']);
+    expect(captured!.quotedText).toBe('hello');
+
+    // Frozen: assigning a property must throw in strict mode.
+    expect(Object.isFrozen(captured)).toBe(true);
+  });
+
+  it('ui.selection.capture returns null when there is no addressable selection', () => {
+    const superdoc = makeSuperdocStub();
+    (superdoc.activeEditor as { doc: { selection: { current: unknown } } }).doc.selection.current = vi.fn(() => ({
+      empty: true,
+      text: '',
+      target: null,
+      activeMarks: [],
+      activeCommentIds: [],
+      activeChangeIds: [],
+    }));
+    const ui = createSuperDocUI({ superdoc });
+    teardown.push(() => ui.destroy());
+
+    expect(ui.selection.capture()).toBeNull();
+  });
+
+  it('ui.selection.capture survives a later selection clear (use-case: sidebar composer keeps focus)', () => {
+    const superdoc = makeSuperdocStub();
+    const target = {
+      kind: 'text' as const,
+      segments: [{ blockId: 'p1', range: { start: 0, end: 4 } }],
+    };
+    let live: unknown = {
+      empty: false,
+      text: 'word',
+      target,
+      activeMarks: [],
+      activeCommentIds: [],
+      activeChangeIds: [],
+    };
+    (superdoc.activeEditor as { doc: { selection: { current: unknown } } }).doc.selection.current = vi.fn(() => live);
+    const ui = createSuperDocUI({ superdoc });
+    teardown.push(() => ui.destroy());
+
+    const captured = ui.selection.capture();
+    expect(captured?.target).toEqual(target);
+
+    // Composer takes focus: the live selection clears, but the
+    // captured handle keeps the original target so a downstream
+    // `editor.doc.comments.create({ target: captured.target })`
+    // still has a valid anchor.
+    live = { empty: true, text: '', target: null, activeMarks: [], activeCommentIds: [], activeChangeIds: [] };
+    expect(ui.selection.getSnapshot().target).toBeNull();
+    expect(captured!.target).toEqual(target);
+  });
+
   it('ui.selection.subscribe fires once with the initial snapshot then on changes', async () => {
     const superdoc = makeSuperdocStub();
     let activeMarks: string[] = [];

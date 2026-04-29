@@ -122,6 +122,7 @@ export default defineConfig(({ mode }) => {
           'headless-toolbar-vue': 'src/headless-toolbar/vue.ts',
           'super-editor': 'src/index.ts',
           'ui': 'src/ui/index.ts',
+          'ui-react': 'src/ui/react/index.ts',
           'types': 'src/types.ts',
           'editor': '@core/Editor',
           'converter': '@core/super-converter/SuperConverter',

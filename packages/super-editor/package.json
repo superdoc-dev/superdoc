@@ -29,6 +29,10 @@
       "source": "./src/editors/v1/core/helpers/markdown/index.ts",
       "types": "./dist/src/editors/v1/core/helpers/markdown/index.d.ts"
     },
+    "./ui": {
+      "source": "./src/ui/index.ts",
+      "types": "./dist/src/ui/index.d.ts"
+    },
     "./parts-runtime": {
       "source": "./src/editors/v1/core/parts/init-parts-runtime.ts",
       "types": "./dist/src/editors/v1/core/parts/init-parts-runtime.d.ts"

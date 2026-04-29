@@ -25,4 +25,4 @@ export {
   type ViewportHandle,
   type ViewportRect,
   type ViewportRectResult,
-} from '@superdoc/super-editor';
+} from '@superdoc/super-editor/ui';

@@ -146,6 +146,51 @@ jobs:
             exit 1
           fi
 
+          print_labs_error() {
+            local operation="$1"
+            local status="$2"
+            local response_file="$3"
+            local response_bytes
+
+            response_bytes="$(wc -c < "${response_file}" | tr -d ' ')"
+            echo "${operation} failed with HTTP ${status} (${response_bytes} response bytes)." >&2
+
+            if ! jq -e 'type == "object"' "${response_file}" > /dev/null 2>&1; then
+              echo "Labs response body omitted because it is not a JSON object." >&2
+              return
+            fi
+
+            local error_summary
+            error_summary="$(jq -r '
+              def scrub:
+                tostring
+                | gsub("[\r\n\t]+"; " ")
+                | gsub("gh[pousr]_[A-Za-z0-9_]+"; "<redacted-token>")
+                | gsub("github_pat_[A-Za-z0-9_]+"; "<redacted-token>")
+                | gsub("eyJ[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+"; "<redacted-jwt>")
+                | gsub("https?://[^ ]+"; "<redacted-url>")
+                | gsub("[A-Za-z0-9_./:@%+-]{80,}"; "<redacted-opaque-value>")
+                | .[0:500];
+              [
+                ["code", (.error.code // .code // empty)],
+                ["message", (.error.message // .message // empty)],
+                ["request_id", (.requestId // .request_id // .traceId // .trace_id // empty)]
+              ]
+              | .[]
+              | select(.[1] != null and (.[1] | tostring | length) > 0)
+              | "\(.[0])=\(.[1] | scrub)"
+            ' "${response_file}")"
+
+            if [[ -z "${error_summary}" ]]; then
+              echo "Labs JSON response did not include public error fields; response body omitted." >&2
+              return
+            fi
+
+            while IFS= read -r line; do
+              echo "Labs error ${line}" >&2
+            done <<< "${error_summary}"
+          }
+
           RESPONSE_FILE="$(mktemp)"
           HTTP_STATUS="$(curl \
             --silent \
@@ -163,14 +208,13 @@ jobs:
             "${LABS_API_URL%/}/v1/internal/superdoc/pr-builds/package-artifacts")"
 
           if [[ "${HTTP_STATUS}" -lt 200 || "${HTTP_STATUS}" -ge 300 ]]; then
-            cat "${RESPONSE_FILE}"
+            print_labs_error "Labs package artifact upload" "${HTTP_STATUS}" "${RESPONSE_FILE}"
             exit 1
           fi
 
           PACKAGE_KEY="$(jq -r '.packageSource.artifactKey // empty' "${RESPONSE_FILE}")"
           if [[ -z "${PACKAGE_KEY}" ]]; then
-            cat "${RESPONSE_FILE}"
-            echo "Labs upload response did not include packageSource.artifactKey." >&2
+            echo "Labs package artifact upload response did not include packageSource.artifactKey; response body omitted." >&2
             exit 1
           fi
 
@@ -193,6 +237,51 @@ jobs:
           TRIGGER_EVENT: ${{ github.event.action }}
         run: |
           set -euo pipefail
+
+          print_labs_error() {
+            local operation="$1"
+            local status="$2"
+            local response_file="$3"
+            local response_bytes
+
+            response_bytes="$(wc -c < "${response_file}" | tr -d ' ')"
+            echo "${operation} failed with HTTP ${status} (${response_bytes} response bytes)." >&2
+
+            if ! jq -e 'type == "object"' "${response_file}" > /dev/null 2>&1; then
+              echo "Labs response body omitted because it is not a JSON object." >&2
+              return
+            fi
+
+            local error_summary
+            error_summary="$(jq -r '
+              def scrub:
+                tostring
+                | gsub("[\r\n\t]+"; " ")
+                | gsub("gh[pousr]_[A-Za-z0-9_]+"; "<redacted-token>")
+                | gsub("github_pat_[A-Za-z0-9_]+"; "<redacted-token>")
+                | gsub("eyJ[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+"; "<redacted-jwt>")
+                | gsub("https?://[^ ]+"; "<redacted-url>")
+                | gsub("[A-Za-z0-9_./:@%+-]{80,}"; "<redacted-opaque-value>")
+                | .[0:500];
+              [
+                ["code", (.error.code // .code // empty)],
+                ["message", (.error.message // .message // empty)],
+                ["request_id", (.requestId // .request_id // .traceId // .trace_id // empty)]
+              ]
+              | .[]
+              | select(.[1] != null and (.[1] | tostring | length) > 0)
+              | "\(.[0])=\(.[1] | scrub)"
+            ' "${response_file}")"
+
+            if [[ -z "${error_summary}" ]]; then
+              echo "Labs JSON response did not include public error fields; response body omitted." >&2
+              return
+            fi
+
+            while IFS= read -r line; do
+              echo "Labs error ${line}" >&2
+            done <<< "${error_summary}"
+          }
 
           jq \
             --arg repositoryOwner "${REPOSITORY_OWNER}" \
@@ -231,7 +320,7 @@ jobs:
             "${LABS_API_URL%/}/v1/internal/superdoc/pr-builds")"
 
           if [[ "${HTTP_STATUS}" -lt 200 || "${HTTP_STATUS}" -ge 300 ]]; then
-            cat "${RESPONSE_FILE}"
+            print_labs_error "Labs PR build registration" "${HTTP_STATUS}" "${RESPONSE_FILE}"
             exit 1
           fi
 
@@ -240,8 +329,7 @@ jobs:
           RENDERER_BUILD_STATUS="$(jq -r '.rendererBuild.status // empty' "${RESPONSE_FILE}")"
 
           if [[ -z "${PR_BUILD_ID}" || -z "${RENDERER_BUILD_ID}" ]]; then
-            cat "${RESPONSE_FILE}"
-            echo "Labs registration response did not include expected IDs." >&2
+            echo "Labs PR build registration response did not include expected IDs; response body omitted." >&2
             exit 1
           fi
 
@@ -281,6 +369,51 @@ jobs:
             exit 1
           fi
 
+          print_labs_error() {
+            local operation="$1"
+            local status="$2"
+            local response_file="$3"
+            local response_bytes
+
+            response_bytes="$(wc -c < "${response_file}" | tr -d ' ')"
+            echo "${operation} failed with HTTP ${status} (${response_bytes} response bytes)." >&2
+
+            if ! jq -e 'type == "object"' "${response_file}" > /dev/null 2>&1; then
+              echo "Labs response body omitted because it is not a JSON object." >&2
+              return
+            fi
+
+            local error_summary
+            error_summary="$(jq -r '
+              def scrub:
+                tostring
+                | gsub("[\r\n\t]+"; " ")
+                | gsub("gh[pousr]_[A-Za-z0-9_]+"; "<redacted-token>")
+                | gsub("github_pat_[A-Za-z0-9_]+"; "<redacted-token>")
+                | gsub("eyJ[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+"; "<redacted-jwt>")
+                | gsub("https?://[^ ]+"; "<redacted-url>")
+                | gsub("[A-Za-z0-9_./:@%+-]{80,}"; "<redacted-opaque-value>")
+                | .[0:500];
+              [
+                ["code", (.error.code // .code // empty)],
+                ["message", (.error.message // .message // empty)],
+                ["request_id", (.requestId // .request_id // .traceId // .trace_id // empty)]
+              ]
+              | .[]
+              | select(.[1] != null and (.[1] | tostring | length) > 0)
+              | "\(.[0])=\(.[1] | scrub)"
+            ' "${response_file}")"
+
+            if [[ -z "${error_summary}" ]]; then
+              echo "Labs JSON response did not include public error fields; response body omitted." >&2
+              return
+            fi
+
+            while IFS= read -r line; do
+              echo "Labs error ${line}" >&2
+            done <<< "${error_summary}"
+          }
+
           jq -n \
             --arg repositoryFullName "${REPOSITORY_FULL_NAME}" \
             --arg baseRef "${BASE_REF}" \
@@ -312,7 +445,7 @@ jobs:
             "${LABS_API_URL%/}/v1/internal/superdoc/pr-builds/cleanup")"
 
           if [[ "${HTTP_STATUS}" -lt 200 || "${HTTP_STATUS}" -ge 300 ]]; then
-            cat "${RESPONSE_FILE}"
+            print_labs_error "Labs PR build cleanup" "${HTTP_STATUS}" "${RESPONSE_FILE}"
             exit 1
           fi
 

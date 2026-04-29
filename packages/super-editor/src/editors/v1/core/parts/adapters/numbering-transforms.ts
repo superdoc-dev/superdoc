@@ -70,6 +70,37 @@ function buildNumDef(numId: number, abstractId: number): any {
   };
 }
 
+/**
+ * Generate an 8-hex-digit identifier suitable for `w:nsid` / `w:tmpl`.
+ *
+ * Word uses `w:nsid` as the logical identity of an abstract numbering definition.
+ * Two abstracts with the same `w:nsid` are treated as the same list, so any new
+ * abstract we synthesize at runtime must carry a fresh value — otherwise styles
+ * applied to a second list collapse onto the first when the doc is opened in Word.
+ */
+function generateAbstractIdentityHex(): string {
+  let hex = '';
+  for (let i = 0; i < 8; i += 1) {
+    hex += Math.floor(Math.random() * 16).toString(16);
+  }
+  return hex.toUpperCase();
+}
+
+/**
+ * Replace the `w:nsid` and `w:tmpl` values inside a cloned abstract with fresh
+ * hex identifiers so the new abstract has its own logical identity.
+ */
+function refreshAbstractIdentity(abstractDef: any): void {
+  if (!abstractDef?.elements?.length) return;
+  for (const el of abstractDef.elements) {
+    if (el?.name === 'w:nsid' && el.attributes) {
+      el.attributes['w:val'] = generateAbstractIdentityHex();
+    } else if (el?.name === 'w:tmpl' && el.attributes) {
+      el.attributes['w:val'] = generateAbstractIdentityHex();
+    }
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Pure transforms
 // ---------------------------------------------------------------------------
@@ -92,6 +123,12 @@ export function generateNewListDefinition(numbering: NumberingModel, options: Ge
       attributes: { ...definition.attributes, 'w:abstractNumId': String(newAbstractId) },
     }),
   );
+  // The base templates carry fixed `w:nsid` / `w:tmpl` values. Word treats those
+  // as the logical identity of an abstract — two abstracts sharing an `nsid` are
+  // collapsed when the document is opened. Freshen them per clone so each new
+  // list has its own identity (e.g. style swaps on later list items remain
+  // visually distinct in Word).
+  refreshAbstractIdentity(newAbstractDef);
 
   // Override the bullet style for the new list if a bullet style is provided
   const shouldOverrideBulletStyle = bulletStyle && listType !== 'orderedList';
@@ -184,10 +221,14 @@ export function changeNumIdSameAbstract(
   }
 
   const newAbstractId = getNextId(numbering.abstracts);
-  const newAbstractDef = {
-    ...abstract,
-    attributes: { ...(abstract.attributes || {}), 'w:abstractNumId': String(newAbstractId) },
-  };
+  const newAbstractDef = JSON.parse(
+    JSON.stringify({
+      ...abstract,
+      attributes: { ...(abstract.attributes || {}), 'w:abstractNumId': String(newAbstractId) },
+    }),
+  );
+  // See `generateNewListDefinition` — duplicate `w:nsid` collapses lists in Word.
+  refreshAbstractIdentity(newAbstractDef);
   numbering.abstracts[newAbstractId] = newAbstractDef;
 
   const newNumDef = buildNumDef(newId, newAbstractId);

@@ -54,13 +54,19 @@ function findFirstMatch(source: string, pattern: RegExp, label: string): string 
 }
 
 function getParagraphXmlByText(documentXml: string, text: string): string {
-  const textPattern = escapeRegex(text);
-  const paragraphPattern = new RegExp(`<w:p\\b[\\s\\S]*?<w:t[^>]*>${textPattern}<\\/w:t>[\\s\\S]*?<\\/w:p>`);
-  const match = documentXml.match(paragraphPattern);
-  if (!match?.[0]) {
-    throw new Error(`Unable to find exported paragraph containing "${text}".`);
+  // Walk every <w:p>…</w:p> block and return the first one whose own text content
+  // matches. A non-greedy regex anchored at the doc start would otherwise span
+  // across earlier paragraphs and pick up *their* numId references for later
+  // paragraphs — see the SD-2978 reproduction.
+  const paragraphRegex = /<w:p\b[^>]*>[\s\S]*?<\/w:p>/g;
+  for (const match of documentXml.matchAll(paragraphRegex)) {
+    const paragraphXml = match[0];
+    const textContent = Array.from(paragraphXml.matchAll(/<w:t[^>]*>([\s\S]*?)<\/w:t>/g))
+      .map((m) => m[1])
+      .join('');
+    if (textContent.includes(text)) return paragraphXml;
   }
-  return match[0];
+  throw new Error(`Unable to find exported paragraph containing "${text}".`);
 }
 
 function getExportedBulletMarker({

@@ -16,7 +16,7 @@ import {
   setLvlStyleOnAbstract as pureSetLvlStyleOnAbstract,
   getNextNumberingId,
 } from '@core/parts/adapters/numbering-transforms';
-import { mutateNumbering } from '@core/parts/adapters/numbering-mutation';
+import { mutateNumbering, mutateNumberingBatch } from '@core/parts/adapters/numbering-mutation';
 
 // ---------------------------------------------------------------------------
 // Side-effectful shims (thin wrappers around pure transforms)
@@ -514,11 +514,22 @@ export const setLvlRestartOnAbstract = (editor, abstractNumId, ilvl, restartAfte
 };
 
 /**
+ * Resolve the abstractNumId a numId points to. Follows `w:numStyleLink` redirects
+ * via {@link getListDefinitionDetails} so style-linked lists land on the real abstract.
+ * @param {import('../Editor').Editor} editor
+ * @param {number} numId
+ * @param {number} ilvl
+ * @returns {number | null}
+ */
+const resolveAbstractIdForLevel = (editor, numId, ilvl) => {
+  const details = getListDefinitionDetails({ numId, level: ilvl, editor });
+  const raw = details?.abstractId;
+  const id = raw != null ? Number(raw) : NaN;
+  return Number.isFinite(id) ? id : null;
+};
+
+/**
  * Update the bullet/ordered style on a list level for an existing numId.
- *
- * Resolves the abstract definition the numId points to and rewrites the matching
- * `w:lvl` so every paragraph using `(numId, ilvl)` re-renders with the new style.
- * Returns true when an abstract level was updated.
  *
  * @param {Object} param0
  * @param {import('../Editor').Editor} param0.editor
@@ -526,19 +537,55 @@ export const setLvlRestartOnAbstract = (editor, abstractNumId, ilvl, restartAfte
  * @param {number} param0.ilvl
  * @param {'disc'|'circle'|'square'|null} [param0.bulletStyle]
  * @param {import('../../extensions/types/paragraph-commands.js').OrderedListStyle|null} [param0.orderedStyle]
- * @returns {boolean}
+ * @returns {boolean} `true` when the abstract was actually changed.
  */
 export const setListLevelStyle = ({ editor, numId, ilvl, bulletStyle, orderedStyle }) => {
-  const numDef = editor.converter?.numbering?.definitions?.[numId];
-  const abstractIdRaw = numDef?.elements?.find((el) => el.name === 'w:abstractNumId')?.attributes?.['w:val'];
-  const abstractNumId = abstractIdRaw != null ? Number(abstractIdRaw) : NaN;
-  if (!Number.isFinite(abstractNumId)) return false;
+  const abstractNumId = resolveAbstractIdForLevel(editor, numId, ilvl);
+  if (abstractNumId == null) return false;
 
   let updated = false;
   mutateNumbering(editor, 'list-numbering-helpers:setListLevelStyle', (numbering) => {
     updated = pureSetLvlStyleOnAbstract(numbering, abstractNumId, ilvl, { bulletStyle, orderedStyle });
   });
   return updated;
+};
+
+/**
+ * Batched variant of {@link setListLevelStyle}. Runs every level update inside a single
+ * `mutateNumberingBatch` so multi-level selections cost one invalidation cycle, not N.
+ *
+ * @param {Object} param0
+ * @param {import('../Editor').Editor} param0.editor
+ * @param {Array<{ numId: number, ilvl: number, bulletStyle?: 'disc'|'circle'|'square'|null, orderedStyle?: import('../../extensions/types/paragraph-commands.js').OrderedListStyle|null }>} param0.levels
+ * @returns {boolean} `true` when at least one abstract level was actually changed.
+ */
+export const setListLevelStyles = ({ editor, levels }) => {
+  if (!levels?.length) return false;
+
+  const resolved = [];
+  for (const level of levels) {
+    const abstractNumId = resolveAbstractIdForLevel(editor, level.numId, level.ilvl);
+    if (abstractNumId == null) continue;
+    resolved.push({
+      abstractNumId,
+      ilvl: level.ilvl,
+      bulletStyle: level.bulletStyle,
+      orderedStyle: level.orderedStyle,
+    });
+  }
+  if (!resolved.length) return false;
+
+  let anyChanged = false;
+  mutateNumberingBatch(
+    editor,
+    'list-numbering-helpers:setListLevelStyles',
+    resolved.map(({ abstractNumId, ilvl, bulletStyle, orderedStyle }) => (numbering) => {
+      if (pureSetLvlStyleOnAbstract(numbering, abstractNumId, ilvl, { bulletStyle, orderedStyle })) {
+        anyChanged = true;
+      }
+    }),
+  );
+  return anyChanged;
 };
 
 /**
@@ -565,6 +612,7 @@ export const ListHelpers = {
   createNumDefinition,
   setLvlRestartOnAbstract,
   setListLevelStyle,
+  setListLevelStyles,
   rebuildRawNumberingFromTranslated,
 
   // Schema helpers

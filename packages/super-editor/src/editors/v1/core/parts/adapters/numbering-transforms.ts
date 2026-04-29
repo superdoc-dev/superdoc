@@ -385,9 +385,8 @@ export function setLvlRestartOnAbstract(
 /**
  * Update the bullet/ordered style on a single level of an abstract definition.
  *
- * Mutates `w:numFmt`, `w:lvlText`, and `w:rPr` on the matching `w:lvl` element so every
- * num definition referencing this abstract picks up the new style. Used for "change the
- * style of the whole list at this level" operations.
+ * Returns `true` only when the abstract was actually changed — callers can use that
+ * to skip downstream invalidation when the requested style already matches.
  */
 export function setLvlStyleOnAbstract(
   numbering: NumberingModel,
@@ -403,41 +402,46 @@ export function setLvlStyleOnAbstract(
   if (!lvlEl) return false;
   if (!lvlEl.elements) lvlEl.elements = [];
 
-  const setOrAddChild = (name: string, value: string) => {
+  const setOrAddChild = (name: string, value: string): boolean => {
     const existing = lvlEl.elements.find((el: any) => el.name === name);
     if (existing) {
+      if (existing.attributes?.['w:val'] === value) return false;
       existing.attributes = { ...(existing.attributes || {}), 'w:val': value };
-    } else {
-      lvlEl.elements.push({ type: 'element', name, attributes: { 'w:val': value } });
+      return true;
     }
+    lvlEl.elements.push({ type: 'element', name, attributes: { 'w:val': value } });
+    return true;
   };
 
   if (options.bulletStyle) {
     const char = BULLET_STYLE_CHARS[options.bulletStyle];
     if (!char) return false;
-    setOrAddChild('w:numFmt', 'bullet');
-    setOrAddChild('w:lvlText', char);
+
+    let changed = false;
+    if (setOrAddChild('w:numFmt', 'bullet')) changed = true;
+    if (setOrAddChild('w:lvlText', char)) changed = true;
 
     // Drop the inherited bullet font so the Unicode glyph renders in the document's default font.
     const rPr = lvlEl.elements.find((el: any) => el.name === 'w:rPr');
-    if (rPr?.elements) {
+    if (rPr?.elements?.some((el: any) => el.name === 'w:rFonts')) {
       rPr.elements = rPr.elements.filter((el: any) => el.name !== 'w:rFonts');
+      changed = true;
     }
-    return true;
+    return changed;
   }
 
   if (options.orderedStyle) {
     const config = ORDERED_LIST_STYLES[options.orderedStyle];
     if (!config) return false;
-    // The default `config.text` is "%1<suffix>" — correct for level 0 but wrong for
-    // sublevels, where the placeholder must reference the level being mutated. OOXML
-    // numbers `%N` from 1 starting at the top level, so at ilvl=N we want "%(N+1)".
-    // Preserve whatever suffix the style uses (e.g. ".", ")") so paren styles stay paren.
+    // OOXML `%N` references counter level N-1 (1-indexed from the top), so at ilvl=N we
+    // need `%(N+1)`. Preserve the style's suffix (e.g. ".", ")") so paren styles stay paren.
     const suffix = config.text.replace(/^%\d+/, '');
     const lvlTextValue = `%${ilvl + 1}${suffix}`;
-    setOrAddChild('w:numFmt', config.fmt);
-    setOrAddChild('w:lvlText', lvlTextValue);
-    return true;
+
+    let changed = false;
+    if (setOrAddChild('w:numFmt', config.fmt)) changed = true;
+    if (setOrAddChild('w:lvlText', lvlTextValue)) changed = true;
+    return changed;
   }
 
   return false;

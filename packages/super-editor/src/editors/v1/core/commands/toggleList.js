@@ -102,47 +102,49 @@ export const toggleList =
       return true;
     });
 
-    // Skip visually empty paragraphs (e.g., paragraphs with only an empty run)
-    // but only when creating a list from multiple paragraphs.
-    // If only a single paragraph is selected (even if empty), we should still apply the list.
+    // Skip visually empty paragraphs when creating a list from multiple paragraphs;
+    // a single selected paragraph (even if empty) should still toggle.
     const originalParagraphsInSelection =
       allParagraphsInSelection.length === 1
         ? allParagraphsInSelection
         : allParagraphsInSelection.filter(({ node }) => !isVisuallyEmptyParagraph(node));
 
-    // Expand to every sibling paragraph at the same (numId, ilvl) when the selection is
-    // entirely inside a list. This is what makes "change list style" or "switch list type"
-    // affect the whole list level — caret in one item flips every item at that level.
-    let paragraphsInSelection = originalParagraphsInSelection;
-    if (originalParagraphsInSelection.length > 0) {
-      const seenLevels = new Set();
-      let allListItems = true;
-      for (const { node } of originalParagraphsInSelection) {
+    // Expand to every sibling paragraph at the same `(numId, ilvl)` when the selection is
+    // entirely inside a list, so a caret in one item flips every item at that level.
+    // Each entry caches numId/ilvl so the abstract-gate loop below doesn't re-walk attrs.
+    let paragraphsInSelection = originalParagraphsInSelection.map((p) => ({ ...p }));
+    const seenLevels = new Set();
+    let allListItems = paragraphsInSelection.length > 0;
+    for (const p of paragraphsInSelection) {
+      const np = getResolvedParagraphProperties(p.node)?.numberingProperties;
+      if (!np?.numId) {
+        allListItems = false;
+        break;
+      }
+      p.numId = Number(np.numId);
+      p.ilvl = Number(np.ilvl ?? 0);
+      seenLevels.add(`${p.numId}:${p.ilvl}`);
+    }
+
+    if (allListItems && seenLevels.size > 0) {
+      const expanded = new Map();
+      for (const p of paragraphsInSelection) expanded.set(p.pos, p);
+
+      state.doc.descendants((node, pos) => {
+        if (node.type.name !== 'paragraph') return true;
+        if (expanded.has(pos)) return false;
         const np = getResolvedParagraphProperties(node)?.numberingProperties;
-        if (!np?.numId) {
-          allListItems = false;
-          break;
-        }
-        seenLevels.add(`${Number(np.numId)}:${Number(np.ilvl ?? 0)}`);
-      }
-
-      if (allListItems && seenLevels.size > 0 && typeof state.doc.descendants === 'function') {
-        const expanded = new Map();
-        for (const p of originalParagraphsInSelection) expanded.set(p.pos, p);
-
-        state.doc.descendants((node, pos) => {
-          if (node.type.name !== 'paragraph') return true;
-          if (!expanded.has(pos)) {
-            const np = getResolvedParagraphProperties(node)?.numberingProperties;
-            if (np?.numId && seenLevels.has(`${Number(np.numId)}:${Number(np.ilvl ?? 0)}`)) {
-              expanded.set(pos, { node, pos });
-            }
+        if (np?.numId) {
+          const numId = Number(np.numId);
+          const ilvl = Number(np.ilvl ?? 0);
+          if (seenLevels.has(`${numId}:${ilvl}`)) {
+            expanded.set(pos, { node, pos, numId, ilvl });
           }
-          return false;
-        });
+        }
+        return false;
+      });
 
-        paragraphsInSelection = [...expanded.values()].sort((a, b) => a.pos - b.pos);
-      }
+      paragraphsInSelection = [...expanded.values()].sort((a, b) => a.pos - b.pos);
     }
 
     for (const { node } of paragraphsInSelection) {
@@ -159,49 +161,33 @@ export const toggleList =
       }
     }
 
-    // Word-compatible behavior for "change list style on existing list items":
-    // When every selected paragraph is already a list of the requested kind (bullet/ordered)
-    // and a specific style is requested, mutate the abstract definition for each unique
-    // (numId, ilvl). Updating the abstract restyles every item at that level without
-    // allocating a new numId — items keep their list membership and continue numbering.
+    // When every paragraph is already a list of the requested kind and a specific style is
+    // requested, mutate the abstract definition once per unique (numId, ilvl). That restyles
+    // every item at that level without allocating a new numId — preserving list identity
+    // and continuous numbering across siblings.
     const styleRequested = listType === 'bulletList' ? bulletStyle : orderedStyle;
-    if (styleRequested && firstListNode == null && paragraphsInSelection.length > 0) {
+    if (styleRequested && firstListNode == null && allListItems && paragraphsInSelection.length > 0) {
       const targetKind = listType === 'bulletList' ? 'bullet' : 'ordered';
-      const levelsToRestyle = [];
       let allMatchKind = true;
-      for (const { node } of paragraphsInSelection) {
+      const levelMap = new Map();
+      for (const { node, numId, ilvl } of paragraphsInSelection) {
         if (getParagraphListKind(node, editor) !== targetKind) {
           allMatchKind = false;
           break;
         }
-        const np = getResolvedParagraphProperties(node)?.numberingProperties;
-        if (!np?.numId) {
-          allMatchKind = false;
-          break;
-        }
-        levelsToRestyle.push({ numId: Number(np.numId), ilvl: Number(np.ilvl ?? 0) });
+        levelMap.set(`${numId}:${ilvl}`, { numId, ilvl, bulletStyle, orderedStyle });
       }
 
-      if (allMatchKind && levelsToRestyle.length > 0) {
+      if (allMatchKind && levelMap.size > 0) {
         if (!dispatch) return true;
 
-        const seen = new Set();
-        for (const { numId, ilvl } of levelsToRestyle) {
-          const key = `${numId}:${ilvl}`;
-          if (seen.has(key)) continue;
-          seen.add(key);
-          ListHelpers.setListLevelStyle({ editor, numId, ilvl, bulletStyle, orderedStyle });
-        }
+        ListHelpers.setListLevelStyles({ editor, levels: [...levelMap.values()] });
 
-        // `setListLevelStyle` runs `mutateNumbering`, which synchronously fires
-        // `handleNumberingInvalidation` — that dispatches a fresh empty tr against
-        // the current `editor.state`, advancing `state.doc`. The `tr` CommandService
-        // captured before this command ran is now stale (its `before` no longer
-        // matches `state.doc`), and dispatching it would throw "Applying a mismatched
-        // transaction". The invalidation pass already triggers numberingPlugin's
-        // `appendTransaction` to recompute `listRendering` for every affected paragraph,
-        // so we don't need to dispatch anything ourselves — just tell CommandService
-        // to skip its auto-dispatch.
+        // `mutateNumbering`'s invalidation handler synchronously dispatches a fresh tr
+        // that advances `state.doc`, leaving the captured `tr` with a stale `before`.
+        // CommandService's auto-dispatch would then throw "Applying a mismatched
+        // transaction". The invalidation pass already triggers the marker recompute,
+        // so we just opt out of the auto-dispatch.
         tr.setMeta('preventDispatch', true);
         return true;
       }
@@ -253,10 +239,7 @@ export const toggleList =
       updateNumberingProperties(sharedNumberingProperties, node, pos, editor, tr);
     }
 
-    // Restore a natural post-toggle selection — anchored to the user's original
-    // selection, NOT the expanded set. The expansion above only widens the range of
-    // paragraphs we operate on; the caret should stay where the user put it.
-    // Collapsed caret toggles should keep a caret. Ranged toggles should keep a range.
+    // Restore selection anchored to the user's original range, not the expanded one.
     if (originalParagraphsInSelection.length > 0) {
       const firstPara = originalParagraphsInSelection[0];
       const lastPara = originalParagraphsInSelection[originalParagraphsInSelection.length - 1];

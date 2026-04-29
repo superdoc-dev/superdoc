@@ -2726,13 +2726,9 @@ export class Editor extends EventEmitter<EditorEventMap> {
 
       const { state: appliedState, transactions: appliedTransactions } = prevState.applyTransaction(transactionToApply);
       nextState = appliedState;
-      // Pick the transaction that actually carries the doc delta.
-      // When the input tr is empty (e.g., the no-op tr dispatched by `handleNumberingInvalidation`),
-      // an appendTransaction plugin (numberingPlugin) may produce the real change. Downstream
-      // listeners — PresentationEditor in particular — read `transaction.docChanged` and `transaction.mapping`
-      // to decide whether to re-render and to compose position maps. Without this picker they
-      // see the empty input tr and no re-paint happens.
-      // Walk forward so the input tr (which usually carries user meta) is preferred when it has docChanged.
+      // Pick whichever applied tr carries the doc delta — when the input tr is empty an
+      // appendTransaction plugin (e.g. numberingPlugin) may have produced the real change,
+      // and downstream listeners read `transaction.docChanged`/`mapping` off this tr.
       effectiveTransaction = appliedTransactions.find((t) => t.docChanged) ?? transactionToApply;
     } catch (error) {
       if (forceTrackChanges) throw error;

@@ -12,6 +12,7 @@ vi.mock('@helpers/list-numbering-helpers.js', () => ({
     generateNewListDefinition: vi.fn(),
     getListDefinitionDetails: vi.fn(() => null),
     setListLevelStyle: vi.fn(() => true),
+    setListLevelStyles: vi.fn(() => true),
   },
   // Standalone exports added in PR-2873 — toggleList.js imports these directly
   markerTextToBulletStyle: vi.fn((markerText) => {
@@ -54,11 +55,12 @@ const createParagraph = (attrs, pos, { nodeSize = 12, firstChildName = 'run', la
   pos,
 });
 
+/**
+ * @param {Array<{ node: any, pos: number }>} paragraphs - Paragraphs inside the user's selection range.
+ * @param {{ from?: number, to?: number, beforeNode?: any, allDocParagraphs?: Array<{ node: any, pos: number }> }} [opts]
+ *   `allDocParagraphs`: full-document set returned by `descendants`. Defaults to `paragraphs`.
+ */
 const createState = (paragraphs, { from = 1, to = 10, beforeNode = null, allDocParagraphs } = {}) => {
-  // `paragraphs` are the ones inside the user's selection range.
-  // `allDocParagraphs` is the full document — defaults to the same list when not provided.
-  // The expansion logic in toggleList scans the doc via `descendants` to find every
-  // paragraph at the same (numId, ilvl) as a selected list item.
   const docParagraphs = allDocParagraphs ?? paragraphs;
   return {
     doc: {
@@ -471,17 +473,12 @@ describe('toggleList', () => {
 
       expect(result).toBe(true);
       expect(ListHelpers.generateNewListDefinition).not.toHaveBeenCalled();
-      expect(ListHelpers.setListLevelStyle).toHaveBeenCalledTimes(1);
-      expect(ListHelpers.setListLevelStyle).toHaveBeenCalledWith({
+      expect(ListHelpers.setListLevelStyles).toHaveBeenCalledTimes(1);
+      expect(ListHelpers.setListLevelStyles).toHaveBeenCalledWith({
         editor,
-        numId: 3,
-        ilvl: 0,
-        bulletStyle: 'square',
-        orderedStyle: undefined,
+        levels: [{ numId: 3, ilvl: 0, bulletStyle: 'square', orderedStyle: undefined }],
       });
       expect(updateNumberingProperties).not.toHaveBeenCalled();
-      // The numbering invalidation handler dispatches the recompute tr; the captured
-      // `tr` is now stale, so we tell CommandService to skip its auto-dispatch.
       expect(tr.setMeta).toHaveBeenCalledWith('preventDispatch', true);
       expect(dispatch).not.toHaveBeenCalled();
     });
@@ -506,13 +503,10 @@ describe('toggleList', () => {
 
       expect(result).toBe(true);
       expect(ListHelpers.generateNewListDefinition).not.toHaveBeenCalled();
-      expect(ListHelpers.setListLevelStyle).toHaveBeenCalledTimes(1);
-      expect(ListHelpers.setListLevelStyle).toHaveBeenCalledWith({
+      expect(ListHelpers.setListLevelStyles).toHaveBeenCalledTimes(1);
+      expect(ListHelpers.setListLevelStyles).toHaveBeenCalledWith({
         editor,
-        numId: 5,
-        ilvl: 0,
-        bulletStyle: null,
-        orderedStyle: 'upper-roman',
+        levels: [{ numId: 5, ilvl: 0, bulletStyle: null, orderedStyle: 'upper-roman' }],
       });
       expect(updateNumberingProperties).not.toHaveBeenCalled();
       expect(tr.setMeta).toHaveBeenCalledWith('preventDispatch', true);
@@ -520,8 +514,8 @@ describe('toggleList', () => {
     });
 
     it('restyles each unique (numId, ilvl) once even with multiple selected items', () => {
-      // Selection covers three items at two levels. The abstract should be updated once
-      // per unique (numId, ilvl) — not once per paragraph.
+      // Selection covers three items at two levels. The batch should contain one entry
+      // per unique (numId, ilvl) — not one per paragraph — and a single batched call.
       const paragraphs = [
         createParagraph(
           {
@@ -552,20 +546,13 @@ describe('toggleList', () => {
 
       expect(result).toBe(true);
       expect(ListHelpers.generateNewListDefinition).not.toHaveBeenCalled();
-      expect(ListHelpers.setListLevelStyle).toHaveBeenCalledTimes(2);
-      expect(ListHelpers.setListLevelStyle).toHaveBeenNthCalledWith(1, {
+      expect(ListHelpers.setListLevelStyles).toHaveBeenCalledTimes(1);
+      expect(ListHelpers.setListLevelStyles).toHaveBeenCalledWith({
         editor,
-        numId: 5,
-        ilvl: 0,
-        bulletStyle: null,
-        orderedStyle: 'upper-roman',
-      });
-      expect(ListHelpers.setListLevelStyle).toHaveBeenNthCalledWith(2, {
-        editor,
-        numId: 5,
-        ilvl: 1,
-        bulletStyle: null,
-        orderedStyle: 'upper-roman',
+        levels: [
+          { numId: 5, ilvl: 0, bulletStyle: null, orderedStyle: 'upper-roman' },
+          { numId: 5, ilvl: 1, bulletStyle: null, orderedStyle: 'upper-roman' },
+        ],
       });
     });
 
@@ -690,13 +677,10 @@ describe('toggleList', () => {
 
       expect(result).toBe(true);
       expect(ListHelpers.generateNewListDefinition).not.toHaveBeenCalled();
-      expect(ListHelpers.setListLevelStyle).toHaveBeenCalledTimes(1);
-      expect(ListHelpers.setListLevelStyle).toHaveBeenCalledWith({
+      expect(ListHelpers.setListLevelStyles).toHaveBeenCalledTimes(1);
+      expect(ListHelpers.setListLevelStyles).toHaveBeenCalledWith({
         editor,
-        numId: 5,
-        ilvl: 0,
-        bulletStyle: 'square',
-        orderedStyle: undefined,
+        levels: [{ numId: 5, ilvl: 0, bulletStyle: 'square', orderedStyle: undefined }],
       });
       expect(updateNumberingProperties).not.toHaveBeenCalled();
     });
@@ -717,7 +701,7 @@ describe('toggleList', () => {
       const result = handler({ editor, state, tr, dispatch: undefined });
 
       expect(result).toBe(true);
-      expect(ListHelpers.setListLevelStyle).not.toHaveBeenCalled();
+      expect(ListHelpers.setListLevelStyles).not.toHaveBeenCalled();
       expect(ListHelpers.generateNewListDefinition).not.toHaveBeenCalled();
     });
   });

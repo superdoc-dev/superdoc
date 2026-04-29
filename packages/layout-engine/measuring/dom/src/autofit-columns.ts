@@ -234,6 +234,8 @@ export function computeAutoFitColumnWidths(input: AutoFitInput): AutoFitResult {
     triggerCells.length > 0 ? collectNonProtectedColumns(triggerCells, gridColumnCount) : undefined;
   let resolvedWidths = currentWidths.slice();
   let targetTableWidth = sanitizeOptionalWidth(workingInput.preferredTableWidth) ?? fixedLayout.totalWidth;
+  const shouldPreservePreferredGrid =
+    workingInput.preserveAutoGrid === true || workingInput.preserveExplicitAutoGrid === true;
 
   if (triggerCells.length > 0) {
     resolvedWidths = raiseToMinimums(resolvedWidths, minBounds);
@@ -243,7 +245,7 @@ export function computeAutoFitColumnWidths(input: AutoFitInput): AutoFitResult {
     targetTableWidth = Math.min(targetTableWidth, workingInput.maxTableWidth);
   } else {
     targetTableWidth = Math.min(targetTableWidth, workingInput.maxTableWidth);
-    if (workingInput.preserveAutoGrid !== true) {
+    if (!shouldPreservePreferredGrid) {
       resolvedWidths = redistributeTowardMaximumsWithinCurrentTable(resolvedWidths, minBounds, maxBounds);
       resolvedWidths = redistributeTowardContentWeightedShape(resolvedWidths, minBounds, maxBounds);
     }

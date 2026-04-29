@@ -133,6 +133,96 @@ describe('computeAutoFitColumnWidths', () => {
     expect(result.totalWidth).toBeGreaterThan(100);
   });
 
+  it('preserves explicit tblW AutoFit authored grid when content already fits', () => {
+    const authoredWidths = [95.867, 472.533, 84.467];
+    const tableWidth = authoredWidths.reduce((sum, width) => sum + width, 0);
+    const result = computeAutoFitColumnWidths(
+      buildExplicitInput({
+        workingInput: buildWorkingInput({
+          preferredTableWidth: tableWidth,
+          preserveExplicitAutoGrid: true,
+          maxTableWidth: 800,
+          preferredColumnWidths: authoredWidths,
+          gridColumnCount: 3,
+          rows: [
+            {
+              skippedBefore: [],
+              skippedAfter: [],
+              skippedColumns: [],
+              logicalColumnCount: 3,
+              cells: [
+                { startColumn: 0, span: 1, preferredWidth: authoredWidths[0] },
+                { startColumn: 1, span: 1, preferredWidth: authoredWidths[1] },
+                { startColumn: 2, span: 1, preferredWidth: authoredWidths[2] },
+              ],
+            },
+          ],
+        }),
+        fixedLayout: {
+          columnWidths: authoredWidths,
+          totalWidth: tableWidth,
+          gridColumnCount: 3,
+          preferredTableWidth: tableWidth,
+        },
+        contentMetrics: buildContentMetrics([
+          [
+            { min: 70, max: 120, preferredWidth: authoredWidths[0] },
+            { min: 200, max: 558, preferredWidth: authoredWidths[1] },
+            { min: 25, max: 25, preferredWidth: authoredWidths[2] },
+          ],
+        ]),
+      }),
+    );
+
+    expect(result.columnWidths).toEqual(authoredWidths);
+    expect(result.totalWidth).toBeCloseTo(tableWidth, 3);
+  });
+
+  it('still redistributes explicit tblW AutoFit authored grids when content minimums require it', () => {
+    const result = computeAutoFitColumnWidths(
+      buildExplicitInput({
+        workingInput: buildWorkingInput({
+          preferredTableWidth: 300,
+          preserveExplicitAutoGrid: true,
+          maxTableWidth: 500,
+          preferredColumnWidths: [100, 100, 100],
+          gridColumnCount: 3,
+          rows: [
+            {
+              skippedBefore: [],
+              skippedAfter: [],
+              skippedColumns: [],
+              logicalColumnCount: 3,
+              cells: [
+                { startColumn: 0, span: 1, preferredWidth: 100 },
+                { startColumn: 1, span: 1, preferredWidth: 100 },
+                { startColumn: 2, span: 1, preferredWidth: 100 },
+              ],
+            },
+          ],
+        }),
+        fixedLayout: {
+          columnWidths: [100, 100, 100],
+          totalWidth: 300,
+          gridColumnCount: 3,
+          preferredTableWidth: 300,
+        },
+        contentMetrics: buildContentMetrics([
+          [
+            { min: 40, max: 60, preferredWidth: 100 },
+            { min: 180, max: 220, preferredWidth: 100 },
+            { min: 40, max: 60, preferredWidth: 100 },
+          ],
+        ]),
+      }),
+    );
+
+    expect(result.columnWidths[1]).toBeGreaterThanOrEqual(180);
+    expect(result.columnWidths[0]).toBeLessThan(100);
+    expect(result.columnWidths[2]).toBeLessThan(100);
+    expect(result.totalWidth).toBe(300);
+  });
+
   it('keeps content-fitting tables at tblW instead of shrinking to content maxima', () => {
     const result = computeAutoFitColumnWidths(
       buildExplicitInput({

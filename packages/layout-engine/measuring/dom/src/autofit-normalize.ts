@@ -67,6 +67,12 @@ export type WorkingTableGridInput = {
    * grid as preferred geometry unless content minimums force growth.
    */
   preserveAutoGrid?: boolean;
+  /**
+   * AutoFit tables with explicit tblW and a complete authored grid that matches
+   * tblW should keep that grid as preferred geometry unless content minimums
+   * force growth.
+   */
+  preserveExplicitAutoGrid?: boolean;
   /** Preferred table width target, in pixels, if resolvable. */
   preferredTableWidth?: number;
   /** Preferred/authored grid widths, in pixels, in logical-column order. */
@@ -160,12 +166,19 @@ export function buildAutoFitWorkingGridInput(
     preferredTableWidth,
     gridColumnCount,
   });
+  const preserveExplicitAutoGrid = shouldPreserveExplicitAutoGrid({
+    layoutMode,
+    preferredColumnWidths,
+    preferredTableWidth,
+    gridColumnCount,
+  });
 
   return {
     layoutMode,
     maxTableWidth,
     ...(preserveAuthoredGrid ? { preserveAuthoredGrid } : {}),
     ...(preserveAutoGrid ? { preserveAutoGrid } : {}),
+    ...(preserveExplicitAutoGrid ? { preserveExplicitAutoGrid } : {}),
     preferredTableWidth,
     preferredColumnWidths,
     gridColumnCount,
@@ -205,6 +218,20 @@ function shouldPreserveAutoGrid(args: {
   if (preferredTableWidth != null) return false;
   if (preferredColumnWidths.length === 0 || preferredColumnWidths.length !== gridColumnCount) return false;
   return true;
+}
+
+function shouldPreserveExplicitAutoGrid(args: {
+  layoutMode: AutoFitLayoutMode;
+  preferredColumnWidths: number[];
+  preferredTableWidth: number | undefined;
+  gridColumnCount: number;
+}): boolean {
+  const { layoutMode, preferredColumnWidths, preferredTableWidth, gridColumnCount } = args;
+  if (layoutMode !== 'autofit') return false;
+  if (preferredTableWidth == null || preferredTableWidth <= 0) return false;
+  if (preferredColumnWidths.length === 0 || preferredColumnWidths.length !== gridColumnCount) return false;
+
+  return approximatelyEqual(sumWidths(preferredColumnWidths), preferredTableWidth);
 }
 
 /**

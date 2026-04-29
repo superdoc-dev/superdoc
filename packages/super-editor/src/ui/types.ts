@@ -433,7 +433,46 @@ export interface SelectionHandle {
    * typing-only transactions). Returns an unsubscribe.
    */
   subscribe(listener: (event: { snapshot: SelectionSlice }) => void): () => void;
+  /**
+   * Capture the current selection as a portable handle.
+   *
+   * The pattern: a sidebar composer or floating menu opens, takes
+   * focus into its own input element, and the editor's selection
+   * visually clears (browser focus moved away). Without this
+   * primitive every consumer reaches for an ad-hoc closure that
+   * snapshots the selection at click-time and races to use it
+   * before focus moves. Capture freezes the portable address
+   * shapes (target / selectionTarget / activeMarks / etc.) so the
+   * consumer can pass `captured.target` or
+   * `captured.selectionTarget` directly into `editor.doc.*` calls
+   * (`comments.create`, `text.replace`, `format.apply`, etc.) when
+   * the composer submits, regardless of where browser focus is.
+   *
+   * Returns `null` when there is no addressable selection (no
+   * editor mounted, selection collapsed in a non-text node, etc.).
+   * The returned handle is a frozen value object, safe to store
+   * on a React ref or in component state across renders.
+   *
+   * Visual restore (re-focus the editor and highlight the captured
+   * range when the composer closes) is intentionally NOT on this
+   * surface today: the public Document API has no `selection.set`
+   * primitive yet, and `editor.doc.*` is the contract this
+   * controller routes through. A `restore()` method lands once the
+   * doc-api primitive does.
+   */
+  capture(): SelectionCapture | null;
 }
+
+/**
+ * Frozen snapshot returned by {@link SelectionHandle.capture}.
+ *
+ * Same shape as {@link SelectionSlice}; declared as its own type
+ * so consumers can name the captured value in their component
+ * state (`useState<SelectionCapture | null>(null)`) and so the
+ * planned `restore(capture)` follow-up has a stable input type.
+ * Treat as a value object; do NOT mutate.
+ */
+export type SelectionCapture = SelectionSlice;
 
 /**
  * Aggregate toolbar handle exposed on `ui.toolbar`. Compatible with

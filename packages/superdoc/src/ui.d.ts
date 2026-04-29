@@ -22,6 +22,7 @@ export {
   type ReviewSlice,
   type ScrollIntoViewInput,
   type ScrollIntoViewOutput,
+  type SelectionCapture,
   type SelectionHandle,
   type SelectionInfo,
   type SelectionPoint,

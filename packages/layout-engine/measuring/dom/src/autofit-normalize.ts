@@ -62,6 +62,11 @@ export type WorkingTableGridInput = {
    * matches tblW should keep that grid as the visual column geometry.
    */
   preserveAuthoredGrid?: boolean;
+  /**
+   * AutoFit tables with tblW=auto and a complete authored grid should keep that
+   * grid as preferred geometry unless content minimums force growth.
+   */
+  preserveAutoGrid?: boolean;
   /** Preferred table width target, in pixels, if resolvable. */
   preferredTableWidth?: number;
   /** Preferred/authored grid widths, in pixels, in logical-column order. */
@@ -149,11 +154,18 @@ export function buildAutoFitWorkingGridInput(
     preferredTableWidth,
     gridColumnCount,
   });
+  const preserveAutoGrid = shouldPreserveAutoGrid({
+    layoutMode,
+    preferredColumnWidths,
+    preferredTableWidth,
+    gridColumnCount,
+  });
 
   return {
     layoutMode,
     maxTableWidth,
     ...(preserveAuthoredGrid ? { preserveAuthoredGrid } : {}),
+    ...(preserveAutoGrid ? { preserveAutoGrid } : {}),
     preferredTableWidth,
     preferredColumnWidths,
     gridColumnCount,
@@ -180,6 +192,19 @@ function shouldPreserveAuthoredGrid(args: {
   if (preferredColumnWidths.length === 0 || preferredColumnWidths.length !== gridColumnCount) return false;
 
   return approximatelyEqual(sumWidths(preferredColumnWidths), preferredTableWidth);
+}
+
+function shouldPreserveAutoGrid(args: {
+  layoutMode: AutoFitLayoutMode;
+  preferredColumnWidths: number[];
+  preferredTableWidth: number | undefined;
+  gridColumnCount: number;
+}): boolean {
+  const { layoutMode, preferredColumnWidths, preferredTableWidth, gridColumnCount } = args;
+  if (layoutMode !== 'autofit') return false;
+  if (preferredTableWidth != null) return false;
+  if (preferredColumnWidths.length === 0 || preferredColumnWidths.length !== gridColumnCount) return false;
+  return true;
 }
 
 /**

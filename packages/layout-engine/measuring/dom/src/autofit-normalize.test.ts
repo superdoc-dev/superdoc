@@ -105,6 +105,47 @@ describe('buildAutoFitWorkingGridInput', () => {
     expect(result.gridColumnCount).toBe(3);
   });
 
+  it('marks complete tblW auto grids as preferred AutoFit geometry', () => {
+    const block = createTableBlock({
+      attrs: {
+        tableWidth: { value: 0, type: 'auto' },
+      },
+      columnWidths: [290, 152],
+      rows: [
+        {
+          id: 'row-1',
+          cells: [{ id: 'cell-1' }, { id: 'cell-2' }],
+        },
+      ],
+    });
+
+    const result = buildAutoFitWorkingGridInput(block, { maxWidth: 600 });
+
+    expect(result.layoutMode).toBe('autofit');
+    expect(result.preferredTableWidth).toBeUndefined();
+    expect(result.preserveAutoGrid).toBe(true);
+  });
+
+  it('does not mark incomplete tblW auto grids as preferred AutoFit geometry', () => {
+    const block = createTableBlock({
+      attrs: {
+        tableWidth: { value: 0, type: 'auto' },
+      },
+      columnWidths: [290],
+      rows: [
+        {
+          id: 'row-1',
+          cells: [{ id: 'cell-1' }, { id: 'cell-2' }],
+        },
+      ],
+    });
+
+    const result = buildAutoFitWorkingGridInput(block, { maxWidth: 600 });
+
+    expect(result.preserveAutoGrid).toBeUndefined();
+    expect(result.gridColumnCount).toBe(2);
+  });
+
   it('normalizes omitted tblLayout to autofit mode', () => {
     const block = createTableBlock({
       rows: [{ id: 'row-1', cells: [{ id: 'cell-1', colSpan: 1 }] }],

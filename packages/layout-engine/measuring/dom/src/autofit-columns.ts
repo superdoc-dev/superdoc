@@ -243,8 +243,10 @@ export function computeAutoFitColumnWidths(input: AutoFitInput): AutoFitResult {
     targetTableWidth = Math.min(targetTableWidth, workingInput.maxTableWidth);
   } else {
     targetTableWidth = Math.min(targetTableWidth, workingInput.maxTableWidth);
-    resolvedWidths = redistributeTowardMaximumsWithinCurrentTable(resolvedWidths, minBounds, maxBounds);
-    resolvedWidths = redistributeTowardContentWeightedShape(resolvedWidths, minBounds, maxBounds);
+    if (workingInput.preserveAutoGrid !== true) {
+      resolvedWidths = redistributeTowardMaximumsWithinCurrentTable(resolvedWidths, minBounds, maxBounds);
+      resolvedWidths = redistributeTowardContentWeightedShape(resolvedWidths, minBounds, maxBounds);
+    }
   }
 
   resolvedWidths = shrinkToTargetWidth(resolvedWidths, targetTableWidth, minBounds);

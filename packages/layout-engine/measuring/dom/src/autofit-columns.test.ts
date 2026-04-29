@@ -73,6 +73,66 @@ describe('computeAutoFitColumnWidths', () => {
     expect(result.totalWidth).toBe(200);
   });
 
+  it('preserves tblW auto authored grid when content already fits', () => {
+    const result = computeAutoFitColumnWidths(
+      buildExplicitInput({
+        workingInput: buildWorkingInput({
+          preferredTableWidth: undefined,
+          preserveAutoGrid: true,
+          maxTableWidth: 624,
+          preferredColumnWidths: [290, 152],
+          gridColumnCount: 2,
+        }),
+        fixedLayout: {
+          columnWidths: [290, 152],
+          totalWidth: 442,
+          gridColumnCount: 2,
+          preferredTableWidth: undefined,
+        },
+        contentMetrics: buildContentMetrics([
+          [
+            { min: 200, max: 318 },
+            { min: 112, max: 123 },
+          ],
+        ]),
+      }),
+    );
+
+    expect(result.columnWidths).toEqual([290, 152]);
+    expect(result.totalWidth).toBe(442);
+  });
+
+  it('still grows tblW auto authored grid when content minimums require it', () => {
+    const result = computeAutoFitColumnWidths(
+      buildExplicitInput({
+        workingInput: buildWorkingInput({
+          preferredTableWidth: undefined,
+          preserveAutoGrid: true,
+          maxTableWidth: 500,
+          preferredColumnWidths: [50, 50],
+          gridColumnCount: 2,
+        }),
+        fixedLayout: {
+          columnWidths: [50, 50],
+          totalWidth: 100,
+          gridColumnCount: 2,
+          preferredTableWidth: undefined,
+        },
+        contentMetrics: buildContentMetrics([
+          [
+            { min: 40, max: 60 },
+            { min: 180, max: 220 },
+          ],
+        ]),
+      }),
+    );
+
+    expect(result.columnWidths[0]).toBeGreaterThanOrEqual(40);
+    expect(result.columnWidths[0]).toBeLessThanOrEqual(50);
+    expect(result.columnWidths[1]).toBeGreaterThanOrEqual(180);
+    expect(result.totalWidth).toBeGreaterThan(100);
+  });
+
   it('keeps content-fitting tables at tblW instead of shrinking to content maxima', () => {
     const result = computeAutoFitColumnWidths(
       buildExplicitInput({

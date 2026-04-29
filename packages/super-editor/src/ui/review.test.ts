@@ -64,10 +64,18 @@ function makeStubs(
     page: { limit: 50, offset: 0, returned: changesList.length },
   }));
   const decide = vi.fn((_input: unknown) => ({ success: true as const }));
-  const scrollIntoView = vi.fn(async (_input: unknown) => ({ success: true as const }));
+  const navigateTo = vi.fn(async (_target: unknown) => true);
   const setDocumentMode = vi.fn();
 
-  const editor = {
+  const editor: {
+    on: ReturnType<typeof vi.fn>;
+    off: ReturnType<typeof vi.fn>;
+    doc: unknown;
+    presentationEditor: {
+      navigateTo: typeof navigateTo;
+      getActiveEditor: () => unknown;
+    };
+  } = {
     on: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
       if (!editorListeners.has(event)) editorListeners.set(event, new Set());
       editorListeners.get(event)!.add(handler);
@@ -87,9 +95,12 @@ function makeStubs(
       },
       comments: { list: listComments, create: vi.fn(), patch: vi.fn(), delete: vi.fn() },
       trackChanges: { list: listChanges, decide },
-      ranges: { scrollIntoView },
     },
+    // Self-reference assigned below so toolbar source resolution sees
+    // the same routed editor as the rest of the stub.
+    presentationEditor: undefined as never,
   };
+  editor.presentationEditor = { navigateTo, getActiveEditor: () => editor };
 
   const superdoc: SuperDocLike & {
     fireEditor(event: string, ...args: unknown[]): void;
@@ -129,7 +140,7 @@ function makeStubs(
     },
   };
 
-  return { superdoc, editor, mocks: { listComments, listChanges, decide, scrollIntoView, setDocumentMode } };
+  return { superdoc, editor, mocks: { listComments, listChanges, decide, navigateTo, setDocumentMode } };
 }
 
 describe('ui.review — snapshot', () => {
@@ -314,7 +325,7 @@ describe('ui.review — next/previous navigation', () => {
 });
 
 describe('ui.review — scrollTo + setRecording', () => {
-  it('scrollTo(id) routes to ranges.scrollIntoView with the right entity type', async () => {
+  it('scrollTo(id) navigates to the right EntityAddress via the presentation editor', async () => {
     const { superdoc, mocks } = makeStubs({
       comments: [{ id: 'c1', commentId: 'c1' }],
       trackedChanges: [{ id: 'tc1' }],
@@ -322,12 +333,12 @@ describe('ui.review — scrollTo + setRecording', () => {
     const ui = createSuperDocUI({ superdoc });
 
     await ui.review.scrollTo('c1');
-    let arg = mocks.scrollIntoView.mock.calls[0][0] as { target: { entityType: string; entityId: string } };
-    expect(arg.target).toEqual({ kind: 'entity', entityType: 'comment', entityId: 'c1' });
+    let target = mocks.navigateTo.mock.calls[0][0] as { kind: string; entityType: string; entityId: string };
+    expect(target).toEqual({ kind: 'entity', entityType: 'comment', entityId: 'c1' });
 
     await ui.review.scrollTo('tc1');
-    arg = mocks.scrollIntoView.mock.calls[1][0] as { target: { entityType: string; entityId: string } };
-    expect(arg.target).toEqual({ kind: 'entity', entityType: 'trackedChange', entityId: 'tc1' });
+    target = mocks.navigateTo.mock.calls[1][0] as { kind: string; entityType: string; entityId: string };
+    expect(target).toEqual({ kind: 'entity', entityType: 'trackedChange', entityId: 'tc1' });
 
     ui.destroy();
   });

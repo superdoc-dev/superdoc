@@ -122,12 +122,11 @@ import type {
   SelectionApi,
   SelectionInfo,
   SelectionCurrentInput,
-  SelectionChangeListener,
   TextTarget,
   TextAddress,
   TextSegment,
 
-  // Ranges — scrollIntoView
+  // Viewport scroll (now exposed via ui.viewport.scrollIntoView)
   ScrollIntoViewInput,
   ScrollIntoViewOutput,
   EntityAddress,
@@ -481,23 +480,21 @@ function testSelectionAPI(pe: PresentationEditor) {
 }
 
 // ============================================
-// SECTION 8c: Document API — ranges.scrollIntoView
+// SECTION 8c: Viewport scroll — `ui.viewport.scrollIntoView`
 // ============================================
 
 /**
- * Smoke test for `editor.doc.ranges.scrollIntoView`. Consumers need to
- * construct all three target shapes (TextAddress, TextTarget, EntityAddress)
- * and await the returned Promise. The function is type-checked only —
- * it is not called at runtime.
+ * Type-only smoke test for `ui.viewport.scrollIntoView`. Consumers
+ * construct `ScrollIntoViewInput` (TextAddress, TextTarget, or
+ * EntityAddress) and pass it to the viewport handle, which returns
+ * `Promise<ScrollIntoViewOutput>`.
  */
-async function testRangesScrollIntoView(editor: Editor) {
-  const api = (editor as any).doc.ranges as {
-    scrollIntoView(input: ScrollIntoViewInput): Promise<ScrollIntoViewOutput>;
-  };
-
+async function testViewportScrollIntoView(viewport: {
+  scrollIntoView(input: ScrollIntoViewInput): Promise<ScrollIntoViewOutput>;
+}) {
   // TextAddress — single-block target.
   const textAddress: TextAddress = { kind: 'text', blockId: 'p1', range: { start: 0, end: 10 } };
-  const resTextAddr: ScrollIntoViewOutput = await api.scrollIntoView({ target: textAddress });
+  const resTextAddr: ScrollIntoViewOutput = await viewport.scrollIntoView({ target: textAddress });
   const successA: boolean = resTextAddr.success;
   void successA;
 
@@ -507,7 +504,7 @@ async function testRangesScrollIntoView(editor: Editor) {
     kind: 'text',
     segments: [seg, { blockId: 'p2', range: { start: 0, end: 3 } }],
   };
-  const resTextTarget: ScrollIntoViewOutput = await api.scrollIntoView({
+  const resTextTarget: ScrollIntoViewOutput = await viewport.scrollIntoView({
     target: textTarget,
     block: 'start',
     behavior: 'auto',
@@ -521,8 +518,8 @@ async function testRangesScrollIntoView(editor: Editor) {
     entityType: 'trackedChange',
     entityId: 'tc_1',
   };
-  await api.scrollIntoView({ target: commentAddr, behavior: 'smooth' });
-  await api.scrollIntoView({ target: trackedAddr, block: 'center' });
+  await viewport.scrollIntoView({ target: commentAddr, behavior: 'smooth' });
+  await viewport.scrollIntoView({ target: trackedAddr, block: 'center' });
 
   // Construct a full input object and pass it through — verifies the
   // combined type compiles for consumers who build inputs programmatically.
@@ -531,7 +528,7 @@ async function testRangesScrollIntoView(editor: Editor) {
     block: 'nearest',
     behavior: 'auto',
   };
-  await api.scrollIntoView(fullInput);
+  await viewport.scrollIntoView(fullInput);
 }
 
 // ============================================
@@ -593,19 +590,10 @@ function testDocSelectionPrimitives(editor: Editor) {
   void ta;
   void tt;
 
-  // Subscription: onChange returns an unsubscribe. Listener receives
-  // a SelectionInfo. The parameter is annotated explicitly because
-  // document-api types are surfaced via ambient `any` shims in the
-  // published package (workspace-package privacy), so type inference
-  // through SelectionChangeListener collapses to implicit any.
-  const listener: SelectionChangeListener = (next: SelectionInfo) => {
-    const nextTarget: TextTarget | null = next.target;
-    void nextTarget;
-  };
-  const unsubscribe: () => void = api.onChange(listener);
-  unsubscribe();
-
-  // The exported SelectionCurrentInput type is the argument shape.
+  // The Document API contract is request/response: `current()` is
+  // the read primitive. For change subscriptions, use the
+  // `superdoc/ui` selector substrate
+  // (`createSuperDocUI({ superdoc }).select(s => s.selection, ...)`).
   const input: SelectionCurrentInput = { includeText: true };
   api.current(input);
 }
@@ -856,6 +844,7 @@ export {
   testReplaceFile,
   testPresentationEditorMethods,
   testSelectionAPI,
+  testViewportScrollIntoView,
   testEditorEvents,
   testPresentationEditorEvents,
   testToolbar,

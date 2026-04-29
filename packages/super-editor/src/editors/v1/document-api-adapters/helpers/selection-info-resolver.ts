@@ -1,11 +1,5 @@
 import type { Node as ProseMirrorNode } from 'prosemirror-model';
-import type {
-  SelectionCurrentInput,
-  SelectionInfo,
-  SelectionChangeListener,
-  TextTarget,
-  TextSegment,
-} from '@superdoc/document-api';
+import type { SelectionCurrentInput, SelectionInfo, TextTarget, TextSegment } from '@superdoc/document-api';
 import type { Editor } from '../../core/Editor.js';
 import { pmPositionToTextOffset } from './text-offset-resolver.js';
 import { groupTrackedChanges } from './tracked-change-resolver.js';
@@ -196,8 +190,8 @@ function mapRawChangeIdsToCanonical(editor: Editor, rawIds: string[]): string[] 
  * Walks text nodes in one pass; bounded allocation. Co-located with
  * `collectActiveMarks` so the resolver only walks the selection
  * range twice (once for mark-name intersection, once here for
- * id-attribute union) — the dedup at the subscriber level
- * (`selectionInfoKey`) keeps this cheap on the hot path.
+ * id-attribute union) — the controller substrate dedups subscribers
+ * with `shallowEqual`, keeping this cheap on the hot path.
  */
 function collectActiveEntityIds(
   state: { selection: any; storedMarks?: any; doc: ProseMirrorNode },
@@ -271,68 +265,6 @@ function collectActiveMarks(
   }
 
   return Array.from(names);
-}
-
-/**
- * Subscribe to selection changes on the editor.
- *
- * - Microtask coalescing so a single user action that dispatches multiple
- *   PM transactions fires the listener at most once per tick.
- * - Content dedupe so doc-only transactions (typing without moving the
- *   caret) don't re-fire the listener with an identical SelectionInfo.
- *   The transaction event is needed to catch programmatic selection
- *   changes that don't emit `selectionUpdate`, but it also fires on
- *   every keystroke; without dedupe the listener runs per character.
- */
-export function subscribeToSelection(editor: Editor, listener: SelectionChangeListener): () => void {
-  let scheduled = false;
-  let cancelled = false;
-  let lastEmittedKey: string | null = null;
-  const flush = () => {
-    scheduled = false;
-    if (cancelled) return;
-    const info = resolveCurrentSelectionInfo(editor, {});
-    const key = selectionInfoKey(info);
-    if (key === lastEmittedKey) return;
-    lastEmittedKey = key;
-    listener(info);
-  };
-  const schedule = () => {
-    if (scheduled || cancelled) return;
-    scheduled = true;
-    queueMicrotask(flush);
-  };
-
-  editor.on('selectionUpdate', schedule);
-  editor.on('transaction', schedule);
-
-  return () => {
-    // Mark cancelled first so a microtask already queued by `schedule`
-    // no-ops when it finally fires — otherwise the listener can be invoked
-    // after unsubscribe returns (stale state updates during unmount).
-    cancelled = true;
-    editor.off?.('selectionUpdate', schedule);
-    editor.off?.('transaction', schedule);
-  };
-}
-
-/**
- * Build a stable string key from a SelectionInfo for content-dedupe.
- * Two infos that produce the same key represent the same observable
- * selection state — the listener can skip the second one.
- */
-function selectionInfoKey(info: SelectionInfo): string {
-  const target = info.target;
-  let targetKey: string;
-  if (!target) {
-    targetKey = 'null';
-  } else {
-    targetKey = target.segments.map((s) => `${s.blockId}:${s.range.start}-${s.range.end}`).join('|');
-  }
-  const marks = [...info.activeMarks].sort().join(',');
-  const comments = [...info.activeCommentIds].sort().join(',');
-  const changes = [...info.activeChangeIds].sort().join(',');
-  return `${info.empty ? '1' : '0'}:${targetKey}:${marks}:c=${comments}:tc=${changes}`;
 }
 
 function markTypesPresentEverywhere(doc: ProseMirrorNode, from: number, to: number): Set<string> {

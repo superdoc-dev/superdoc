@@ -5,9 +5,8 @@ import type { SuperDocLike } from './types.js';
 
 /**
  * Stub for `ui.viewport` tests. Models the minimal surface the
- * controller calls: `editor.presentationEditor.getEntityRects` for
- * geometry lookups, and `editor.doc.ranges.scrollIntoView` for the
- * thin pass-through.
+ * controller calls: `presentationEditor.getEntityRects` for geometry
+ * lookups and `presentationEditor.navigateTo` for entity scroll.
  */
 function makeStubs(
   initial: {
@@ -31,7 +30,7 @@ function makeStubs(
     if (typeof target.entityId !== 'string') return [];
     return rectsById[target.entityId] ?? [];
   });
-  const scrollIntoView = vi.fn(async (_input: unknown) => ({ success: true as const }));
+  const navigateTo = vi.fn(async (_target: unknown) => true);
 
   const editor: {
     on: ReturnType<typeof vi.fn>;
@@ -40,6 +39,7 @@ function makeStubs(
     presentationEditor:
       | {
           getEntityRects: typeof getEntityRects;
+          navigateTo: typeof navigateTo;
           getActiveEditor: () => unknown;
         }
       | undefined;
@@ -64,7 +64,6 @@ function makeStubs(
           page: { limit: 0, offset: 0, returned: 0 },
         })),
       },
-      ranges: { scrollIntoView },
     },
     presentationEditor: undefined,
   };
@@ -72,6 +71,7 @@ function makeStubs(
   // same stub editor the toolbar source resolver expects when present.
   editor.presentationEditor = {
     getEntityRects,
+    navigateTo,
     getActiveEditor: () => editor,
   };
 
@@ -82,7 +82,7 @@ function makeStubs(
     off: vi.fn(),
   };
 
-  return { superdoc, editor, mocks: { getEntityRects, scrollIntoView } };
+  return { superdoc, editor, mocks: { getEntityRects, navigateTo } };
 }
 
 describe('ui.viewport.getRect — entity targets', () => {
@@ -240,7 +240,7 @@ describe('ui.viewport.getRect — entity targets', () => {
 });
 
 describe('ui.viewport.scrollIntoView', () => {
-  it('passes the input straight through to editor.doc.ranges.scrollIntoView', async () => {
+  it('navigates entity targets through the presentation editor', async () => {
     const { superdoc, mocks } = makeStubs();
     const ui = createSuperDocUI({ superdoc });
 
@@ -252,13 +252,13 @@ describe('ui.viewport.scrollIntoView', () => {
     const result = await ui.viewport.scrollIntoView(input);
 
     expect(result).toEqual({ success: true });
-    expect(mocks.scrollIntoView).toHaveBeenCalledWith(input);
+    expect(mocks.navigateTo).toHaveBeenCalledWith(input.target);
     ui.destroy();
   });
 
-  it('returns { success: false } when no editor / ranges API is available', async () => {
+  it('returns { success: false } when no presentation editor is mounted', async () => {
     const { superdoc } = makeStubs();
-    (superdoc.activeEditor as unknown as { doc: { ranges: unknown } }).doc.ranges = undefined as never;
+    (superdoc.activeEditor as unknown as { presentationEditor: unknown }).presentationEditor = undefined;
     const ui = createSuperDocUI({ superdoc });
 
     const result = await ui.viewport.scrollIntoView({

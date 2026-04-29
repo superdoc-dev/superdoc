@@ -106,6 +106,11 @@ export function createCustomCommandsRegistry(deps: CustomCommandsRegistryDeps): 
   const entries = new Map<string, InternalCustomEntry>();
   const handleCache = new Map<string, CustomCommandHandle<unknown, unknown>>();
   const subscribableCache = new Map<string, Subscribable<UIToolbarCommandState | undefined>>();
+  // Active observer disposers per command id. Lets `unregister` (and
+  // replacement) actively tear down inner subscriptions instead of
+  // waiting for the observer wrapper's lazy `!entries.has(id)` check
+  // to fire on the next snapshot rebuild.
+  const observerDisposers = new Map<string, Set<() => void>>();
 
   const getOrCreateSubscribable = (id: string) => {
     let sub = subscribableCache.get(id);
@@ -115,23 +120,52 @@ export function createCustomCommandsRegistry(deps: CustomCommandsRegistryDeps): 
     return sub;
   };
 
+  const disposeAllObservers = (id: string) => {
+    const set = observerDisposers.get(id);
+    if (!set) return;
+    // Snapshot then iterate so a disposer that removes itself from the
+    // set during teardown doesn't perturb iteration.
+    const disposers = [...set];
+    observerDisposers.delete(id);
+    for (const dispose of disposers) {
+      try {
+        dispose();
+      } catch {
+        // best-effort; one buggy disposer must not block the rest
+      }
+    }
+  };
+
   const buildHandle = <TPayload, TValue>(id: string): CustomCommandHandle<TPayload, TValue> => ({
     observe(listener) {
       let innerOff: (() => void) | null = null;
       let stopped = false;
+      const dispose = () => {
+        if (stopped) return;
+        stopped = true;
+        innerOff?.();
+        innerOff = null;
+        observerDisposers.get(id)?.delete(dispose);
+      };
+      // Track the disposer so `unregister` / replacement can tear this
+      // observer down actively. The lazy `!entries.has(id)` short-circuit
+      // below is still kept as a safety net for observers that get
+      // notified between unregister and active disposal.
+      let set = observerDisposers.get(id);
+      if (!set) {
+        set = new Set();
+        observerDisposers.set(id, set);
+      }
+      set.add(dispose);
+
       innerOff = getOrCreateSubscribable(id).subscribe((state) => {
         if (stopped) return;
-        // The Subscribable lives on the controller's selector substrate
-        // and outlives the registration; if the command was unregistered
-        // since the last emit, stop forwarding to the listener and
-        // detach the inner subscription. Without this, a button bound
-        // to `reg.handle.observe(...)` would keep receiving the static
-        // fallback state (disabled: false) after `reg.unregister()`,
-        // leaving stale buttons enabled.
+        // Safety net: the Subscribable lives on the controller's selector
+        // substrate and outlives the registration. If the command was
+        // unregistered between the schedule and this emit, stop forwarding
+        // to the listener and detach the inner subscription.
         if (!entries.has(id)) {
-          stopped = true;
-          innerOff?.();
-          innerOff = null;
+          dispose();
           return;
         }
         const next: CustomCommandHandleState<TValue> = state
@@ -149,11 +183,7 @@ export function createCustomCommandsRegistry(deps: CustomCommandsRegistryDeps): 
           // the controller's notify loop.
         }
       });
-      return () => {
-        stopped = true;
-        innerOff?.();
-        innerOff = null;
-      };
+      return dispose;
     },
     execute: ((payload?: TPayload) => {
       const result = registry.execute(id, payload);
@@ -193,18 +223,29 @@ export function createCustomCommandsRegistry(deps: CustomCommandsRegistryDeps): 
         };
       }
 
-      // Custom-vs-custom replacement: warn and replace.
+      // Custom-vs-custom replacement: warn, dispose old observers, replace.
+      // Existing observers attached to the prior registration must be
+      // told their command is gone before we install the new one — the
+      // observer's `entries.has(id)` short-circuit will then detach.
       if (entries.has(id)) {
         console.warn(DEFAULT_REPLACEMENT_MESSAGE(id));
+        disposeAllObservers(id);
       }
 
-      entries.set(id, {
+      // Capture the entry by reference so this registration's
+      // `unregister()` / `invalidate()` only mutates state for ITS own
+      // registration. Without this, a stale `unregister()` from
+      // consumer A could delete a *replacement* registration installed
+      // by consumer B at the same id — the bug was identity-blind
+      // `entries.delete(id)`.
+      const ownEntry: InternalCustomEntry = {
         id,
         execute: execute as InternalCustomEntry['execute'],
         getState: getState as InternalCustomEntry['getState'],
         override,
         lastErrorMessage: null,
-      });
+      };
+      entries.set(id, ownEntry);
 
       // Bust the handle cache so the next `getHandle(id)` rebuilds against
       // the new registration. The Subscribable cache stays valid — the
@@ -219,14 +260,27 @@ export function createCustomCommandsRegistry(deps: CustomCommandsRegistryDeps): 
         handle: getHandle<TPayload, TValue>(id) as CustomCommandHandle<TPayload, TValue>,
         invalidate() {
           if (unregistered) return;
+          // Identity check: if a different registration replaced this id,
+          // this `invalidate()` is from a stale owner — silently no-op.
+          if (entries.get(id) !== ownEntry) return;
           deps.scheduleNotify();
         },
         unregister() {
           if (unregistered) return;
           unregistered = true;
+          // Identity check: only delete if THIS registration is still the
+          // owner. A prior `register({ id, override: false })` returning
+          // the same id would have replaced ownEntry; calling unregister
+          // from the older registration must not nuke the new one.
+          if (entries.get(id) !== ownEntry) return;
           entries.delete(id);
           handleCache.delete(id);
           subscribableCache.delete(id);
+          // Actively detach every active observer for this id so they
+          // stop holding the inner Subscribable. The observer wrapper's
+          // lazy `!entries.has(id)` check would otherwise leave the
+          // subscriber attached for one extra microtask.
+          disposeAllObservers(id);
           deps.scheduleNotify();
         },
       };
@@ -303,6 +357,11 @@ export function createCustomCommandsRegistry(deps: CustomCommandsRegistryDeps): 
     },
 
     destroy() {
+      // Dispose every active observer before clearing maps so the
+      // inner Subscribables release their selector subscriptions; just
+      // clearing the caches would leave the substrate listeners alive.
+      const ids = [...observerDisposers.keys()];
+      for (const id of ids) disposeAllObservers(id);
       entries.clear();
       handleCache.clear();
       subscribableCache.clear();

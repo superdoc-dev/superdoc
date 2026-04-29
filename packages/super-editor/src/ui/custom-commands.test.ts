@@ -460,4 +460,94 @@ describe('ui.commands.register', () => {
 
     ui.destroy();
   });
+
+  // Regression: PR #3004 review (bot P1).
+  // When consumer A registers an id and consumer B replaces it, A holds
+  // a stale registration object whose `unregister()` would blindly call
+  // `entries.delete(id)` and remove B's active registration. Identity
+  // check on the captured entry must reject the stale call.
+  it('A.unregister after B replaced is a no-op for the live registration', () => {
+    const { superdoc } = makeStubs();
+    const ui = createSuperDocUI({ superdoc });
+
+    const aExecute = vi.fn(() => true);
+    const bExecute = vi.fn(() => true);
+
+    const a = ui.commands.register({ id: 'company.x', execute: aExecute });
+    const b = ui.commands.register({ id: 'company.x', execute: bExecute });
+
+    a.unregister();
+
+    // B is still live and dispatchable.
+    expect(ui.toolbar.getSnapshot().commands['company.x']).toBeDefined();
+    b.handle.execute();
+    expect(bExecute).toHaveBeenCalledTimes(1);
+    expect(aExecute).not.toHaveBeenCalled();
+
+    ui.destroy();
+  });
+
+  it('A.invalidate after B replaced is a no-op (does not re-emit B as A)', async () => {
+    const { superdoc } = makeStubs();
+    const ui = createSuperDocUI({ superdoc });
+
+    const a = ui.commands.register({
+      id: 'company.x',
+      execute: vi.fn(() => true),
+      getState: () => ({ active: true, disabled: false }),
+    });
+    const b = ui.commands.register({
+      id: 'company.x',
+      execute: vi.fn(() => true),
+      getState: () => ({ active: false, disabled: false }),
+    });
+
+    const listener = vi.fn();
+    b.handle.observe(listener);
+    expect(listener).toHaveBeenCalledTimes(1);
+
+    // Stale invalidate from the prior owner — should NOT trigger a rebuild
+    // for B's observer.
+    a.invalidate();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(listener).toHaveBeenCalledTimes(1);
+
+    ui.destroy();
+  });
+
+  // Regression: PR #3004 review (bot P2).
+  // Replacement via `register` again should actively detach observers
+  // attached to the prior registration, not just bust the cache.
+  it('replacing a registration disposes observers attached to the prior one', async () => {
+    const { superdoc } = makeStubs();
+    const ui = createSuperDocUI({ superdoc });
+
+    const a = ui.commands.register({
+      id: 'company.y',
+      execute: vi.fn(() => true),
+      getState: () => ({ active: false, disabled: false }),
+    });
+
+    const aListener = vi.fn();
+    a.handle.observe(aListener);
+    expect(aListener).toHaveBeenCalledTimes(1);
+
+    // Replace.
+    ui.commands.register({
+      id: 'company.y',
+      execute: vi.fn(() => true),
+      getState: () => ({ active: true, disabled: true }),
+    });
+
+    await Promise.resolve();
+    await Promise.resolve();
+
+    // A's listener must NOT see the replacement's state — it was bound
+    // to the prior registration's handle.
+    expect(aListener).toHaveBeenCalledTimes(1);
+
+    ui.destroy();
+  });
 });

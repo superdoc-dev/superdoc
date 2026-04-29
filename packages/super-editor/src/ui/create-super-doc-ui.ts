@@ -21,6 +21,7 @@ import type {
   CommandHandle,
   CommandsHandle,
   CommentsHandle,
+  DynamicCommandHandle,
   EqualityFn,
   ReviewHandle,
   ReviewItem,
@@ -105,6 +106,22 @@ const FALLBACK_COMMAND_STATE: ToolbarCommandHandleState<PublicToolbarItemId> = {
 };
 
 /**
+ * Default state emitted from a {@link DynamicCommandHandle} when the
+ * command has no entry in `state.toolbar.commands` yet (e.g. the
+ * snapshot has not populated, or the command was unregistered between
+ * subscribe and the first emit). Carries `source: 'built-in'` because
+ * the dynamic handle for a built-in id reaches this branch only for
+ * built-ins. Customs never produce `undefined` here (the registry's
+ * computeStates always returns a state for every entry).
+ */
+const FALLBACK_DYNAMIC_STATE: UIToolbarCommandState = {
+  active: false,
+  disabled: true,
+  value: undefined,
+  source: 'built-in',
+};
+
+/**
  * Full set of registered toolbar command ids, used to seed the
  * internal `createHeadlessToolbar` call. Without this the controller
  * defaults to `commands = []`, leaving `snapshot.commands` empty and
@@ -126,6 +143,53 @@ const ALL_TOOLBAR_COMMAND_IDS: PublicToolbarItemId[] = Object.keys(createToolbar
  * `ui.comments.subscribe` even when nothing in the slice changed.
  */
 const EMPTY_ACTIVE_IDS: readonly string[] = Object.freeze<string[]>([]);
+
+/**
+ * Recursive structural clone for `ui.selection.capture()` (SD-2821).
+ * The captured handle is consumer-facing; it must not share array
+ * or object references with the controller's memoized selection
+ * slice. Without this, a `captured.target.segments[0].range.start =
+ * 99` from consumer code would corrupt the shared snapshot every
+ * other subscriber sees. JSON-clone is sufficient because the
+ * selection slice is plain data (strings, numbers, booleans, null,
+ * arrays, plain objects) with no functions, Dates, Maps, or cycles.
+ */
+function deepClone<T>(value: T): T {
+  if (value === null || typeof value !== 'object') return value;
+  if (Array.isArray(value)) {
+    return value.map((item) => deepClone(item)) as unknown as T;
+  }
+  const out: Record<string, unknown> = {};
+  for (const key of Object.keys(value as object)) {
+    out[key] = deepClone((value as Record<string, unknown>)[key]);
+  }
+  return out as T;
+}
+
+/**
+ * Recursive `Object.freeze` for `ui.selection.capture()` (SD-2821).
+ * `Object.freeze({ ...slice })` only freezes the top level; nested
+ * arrays / objects (target, target.segments, activeMarks) stay
+ * mutable. Walking the structure here makes
+ * `captured.activeMarks.push(...)` and
+ * `captured.target.segments[0].range.start = 99` throw in strict
+ * mode, matching the public API's "captured handle is opaque"
+ * promise. Cycle-safe: we check `Object.isFrozen(value)` before
+ * recursing so already-frozen sentinels (e.g.
+ * {@link EMPTY_ACTIVE_IDS}) don't loop back through this helper.
+ */
+function deepFreeze<T>(value: T): T {
+  if (value === null || typeof value !== 'object') return value;
+  if (Object.isFrozen(value)) return value;
+  if (Array.isArray(value)) {
+    for (const item of value) deepFreeze(item);
+  } else {
+    for (const key of Object.keys(value as object)) {
+      deepFreeze((value as Record<string, unknown>)[key]);
+    }
+  }
+  return Object.freeze(value);
+}
 
 /**
  * Resolve the **routed** editor — the body, header, footer, or note
@@ -179,6 +243,48 @@ function resolvePresentationEditor(superdoc: SuperDocUIOptions['superdoc']): {
   } catch {
     return null;
   }
+}
+
+/**
+ * Lift a {@link import('@superdoc/document-api').TextTarget} into the
+ * {@link import('@superdoc/document-api').SelectionTarget} shape that
+ * point/range Document API operations (`editor.doc.insert`,
+ * `editor.doc.text.replace`, etc.) accept directly.
+ *
+ * - `null` in → `null` out (no selection means no insert anchor).
+ * - Single-segment selection: start/end share `blockId`.
+ * - Multi-segment selection: first segment supplies the start point,
+ *   last segment the end point. Inner segments are dropped — they're
+ *   reachable from the {start,end} pair via the same block traversal
+ *   the doc-api adapter already does internally.
+ * - `story` is preserved on every level (root, start, end). When the
+ *   selection lives in a non-body story (header/footer/footnote/
+ *   endnote) the doc-api routes mutations from the target's `story`
+ *   field; dropping it here would silently route inserts into the
+ *   body and either fail to resolve the block or edit the wrong
+ *   story.
+ *
+ * The helper sits next to the controller so consumers don't have to
+ * reach into a private adapter to convert. Doc-api ops will eventually
+ * accept TextTarget directly (separate ticket); until then,
+ * `selectionSlice.selectionTarget` is the consumer-facing shortcut.
+ */
+function textTargetToSelectionTarget(
+  textTarget: import('@superdoc/document-api').TextTarget | null,
+): import('@superdoc/document-api').SelectionTarget | null {
+  if (!textTarget) return null;
+  const segments = textTarget.segments;
+  if (!segments || segments.length === 0) return null;
+  const first = segments[0]!;
+  const last = segments[segments.length - 1]!;
+  const story = (textTarget as { story?: import('@superdoc/document-api').SelectionTarget['story'] }).story;
+  const start: import('@superdoc/document-api').SelectionPoint = story
+    ? { kind: 'text', blockId: first.blockId, offset: first.range.start, story }
+    : { kind: 'text', blockId: first.blockId, offset: first.range.start };
+  const end: import('@superdoc/document-api').SelectionPoint = story
+    ? { kind: 'text', blockId: last.blockId, offset: last.range.end, story }
+    : { kind: 'text', blockId: last.blockId, offset: last.range.end };
+  return story ? { kind: 'selection', start, end, story } : { kind: 'selection', start, end };
 }
 
 export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
@@ -360,13 +466,40 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     activeChangeIds: string[],
     quotedText: string,
   ): string => {
+    // Story is folded into the key so a header→body cursor change (or
+    // any cross-story navigation) busts the memo and re-derives
+    // `selectionTarget`. Without this, two selections at the same
+    // block/offset in different stories would reuse the prior slice
+    // and misroute downstream insert/replace operations.
+    //
+    // The serialized fields match the real `StoryLocator` discriminated
+    // union (storyType + per-variant id), NOT a generic `{ type, id }`
+    // shape. Using the wrong field names silently collapses every
+    // story to the empty key, defeating the memo bust. Aligned to the
+    // doc-api `StoryLocator` shape: `body` carries no extra id;
+    // `headerFooterSlot` discriminates by section + kind + variant;
+    // `headerFooterPart` by `refId`; `footnote` / `endnote` by `noteId`.
+    const story = target ? (target as unknown as { story?: Record<string, unknown> }).story : undefined;
+    let storyKey = '';
+    if (story) {
+      const storyType = typeof story.storyType === 'string' ? story.storyType : '';
+      // Capture every discriminating field across the StoryLocator
+      // union; absent fields serialize as empty so two stories that
+      // differ on any one field produce different keys.
+      const refId = typeof story.refId === 'string' ? story.refId : '';
+      const noteId = typeof story.noteId === 'string' ? story.noteId : '';
+      const section = story.section && typeof story.section === 'object' ? JSON.stringify(story.section) : '';
+      const headerFooterKind = typeof story.headerFooterKind === 'string' ? story.headerFooterKind : '';
+      const variant = typeof story.variant === 'string' ? story.variant : '';
+      storyKey = `s=${storyType}:r=${refId}:n=${noteId}:hf=${headerFooterKind}:v=${variant}:sec=${section}`;
+    }
     const targetKey = target
       ? target.segments.map((s) => `${s.blockId}:${s.range.start}-${s.range.end}`).join('|')
       : 'null';
     const marks = [...activeMarks].sort().join(',');
     const comments = [...activeCommentIds].sort().join(',');
     const changes = [...activeChangeIds].sort().join(',');
-    return `${empty ? '1' : '0'}:${targetKey}:m=${marks}:c=${comments}:tc=${changes}:t=${quotedText}`;
+    return `${empty ? '1' : '0'}:${storyKey}:${targetKey}:m=${marks}:c=${comments}:tc=${changes}:t=${quotedText}`;
   };
 
   const computeState = (): SuperDocUIState => {
@@ -455,11 +588,11 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     // inside the resolver) keeps the slice identity stable and lets
     // `shallowEqual` short-circuit `ui.select(s => s.selection)`
     // subscribers.
-    const selectionTarget = (selectionInfo?.target ?? null) as import('@superdoc/document-api').TextTarget | null;
+    const selectionTextTarget = (selectionInfo?.target ?? null) as import('@superdoc/document-api').TextTarget | null;
     const selectionActiveMarks = (selectionInfo?.activeMarks ?? EMPTY_ACTIVE_IDS) as string[];
     const selectionKey = buildSelectionKey(
       empty,
-      selectionTarget,
+      selectionTextTarget,
       selectionActiveMarks,
       activeIds,
       activeChangeIdsFromSelection,
@@ -471,7 +604,11 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     } else {
       selectionSlice = {
         empty,
-        target: selectionTarget,
+        target: selectionTextTarget,
+        // Derived from `target`. Allocated only on memo miss so a
+        // typing-only transaction (which leaves the selection
+        // unchanged) doesn't churn the SelectionTarget identity.
+        selectionTarget: textTargetToSelectionTarget(selectionTextTarget),
         activeMarks: selectionActiveMarks,
         activeCommentIds: activeIds,
         activeChangeIds: activeChangeIdsFromSelection,
@@ -729,10 +866,18 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
       });
     },
     execute: ((id: PublicToolbarItemId, payload?: unknown): boolean => {
-      // The controller's execute signature is conditionally typed
-      // (variadic per-id payload); cast here keeps the consumer-facing
-      // type strict while delegating at runtime.
-      return (toolbarController.execute as (id: PublicToolbarItemId, payload?: unknown) => boolean)(id, payload);
+      // Routes through the centralized `dispatchCommand` so a later
+      // `register({ id, override: true })` is honored from this
+      // surface too. Returns `boolean` for the public type even
+      // though the underlying dispatcher may return `Promise<boolean>`
+      // for an async custom override; the existing `ToolbarHandle.execute`
+      // signature is sync-typed, so an async override called via this
+      // path resolves silently. Consumers that need the resolution
+      // should use `ui.commands.get(id)?.execute()` (typed as
+      // `boolean | Promise<boolean>`) or capture the registration
+      // result from `ui.commands.register(...)`.
+      const result = dispatchCommand(id, payload);
+      return result instanceof Promise ? true : result;
     }) as ToolbarHandle['execute'],
   };
 
@@ -774,7 +919,11 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
         });
       },
       execute: ((payload?: unknown): boolean => {
-        return (toolbarController.execute as (id: PublicToolbarItemId, payload?: unknown) => boolean)(id, payload);
+        // Same dispatch path as `ui.toolbar.execute(id)` and
+        // `ui.commands.get(id)?.execute()`. See `dispatchCommand`
+        // for the override-routing rationale.
+        const result = dispatchCommand(id, payload);
+        return result instanceof Promise ? true : result;
       }) as CommandHandle<PublicToolbarItemId>['execute'],
     };
   };
@@ -793,6 +942,117 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     customCommandsRegistry.destroy();
   });
 
+  /**
+   * Single dispatch path for every `execute`-shaped surface on the
+   * controller (`ui.toolbar.execute(id)`, `ui.commands.bold.execute()`,
+   * `ui.commands.get(id)?.execute()`). All three re-resolve through the
+   * custom-commands registry FIRST so a `register({ override: true })`
+   * call routes dispatch through the override regardless of which
+   * surface the consumer happens to call. Without this single path,
+   * `state.toolbar.commands.bold` shows `source: 'custom'` while a
+   * click via `ui.commands.bold.execute()` runs the built-in,
+   * producing a state/action mismatch the consumer can't see.
+   *
+   * Resolved at call time, not at handle-construction time, so a
+   * cached handle (React `useMemo` deps, etc.) survives a later
+   * register/unregister cycle without the consumer needing to re-fetch.
+   */
+  const dispatchCommand = (id: string, payload?: unknown): boolean | Promise<boolean> => {
+    if (customCommandsRegistry.has(id)) {
+      return customCommandsRegistry.execute(id, payload);
+    }
+    return (toolbarController.execute as (id: PublicToolbarItemId, payload?: unknown) => boolean)(
+      id as PublicToolbarItemId,
+      payload,
+    );
+  };
+
+  // Per-id cache for the type-erased dynamic handles returned by
+  // `ui.commands.get(id)`. Cached so handle identity is stable across
+  // repeated lookups for the same id (consumers can put the result in
+  // a React `useMemo` dep and not re-create observers per render).
+  // Caches lazily: entries are created on first `get(id)` call.
+  const dynamicHandleCache = new Map<string, DynamicCommandHandle>();
+
+  /**
+   * Build a {@link DynamicCommandHandle} for a built-in id. Reuses the
+   * per-command Subscribable so dynamic and per-id observers share the
+   * same selector subscription against `state.toolbar.commands?.[id]`.
+   * The emitted slice already carries `source: 'built-in'` after the
+   * computeState merge, so no remapping is needed beyond the fallback.
+   */
+  const buildBuiltInDynamicHandle = (id: PublicToolbarItemId): DynamicCommandHandle => {
+    return {
+      observe(listener) {
+        return getCommandSubscribable(id).subscribe((cmdState) => {
+          // The subscribable's selector returns a value cast to
+          // `ToolbarCommandHandleState<Id>` (no `source` field), but the
+          // runtime slice is the merged `UIToolbarCommandState` with the
+          // discriminator already populated by computeState. Cast back
+          // to the public dynamic shape rather than re-allocating a fresh
+          // object per emit.
+          const next = (cmdState ?? FALLBACK_DYNAMIC_STATE) as UIToolbarCommandState;
+          try {
+            listener(next);
+          } catch {
+            // see scheduleNotify
+          }
+        });
+      },
+      execute(payload?: unknown): boolean | Promise<boolean> {
+        // Same dispatch path as `ui.toolbar.execute(id)` and
+        // `ui.commands.bold.execute()`. See `dispatchCommand` for
+        // the override-routing rationale; this handle exposes the
+        // full `boolean | Promise<boolean>` return type so consumers
+        // can `await` an async custom override.
+        return dispatchCommand(id, payload);
+      },
+    };
+  };
+
+  /**
+   * Bridge a {@link CustomCommandHandle} from the custom-commands
+   * registry into the unified {@link DynamicCommandHandle} shape.
+   * Custom handles already emit `CustomCommandHandleState` (which
+   * carries `source: 'custom'`) and `execute` already accepts an
+   * unknown payload, so the wrapper is mostly identity. It exists to
+   * satisfy the public type and to keep `dynamicHandleCache` stable.
+   */
+  const buildCustomDynamicHandle = (id: string): DynamicCommandHandle | undefined => {
+    const customHandle = customCommandsRegistry.getHandle(id);
+    if (!customHandle) return undefined;
+    return {
+      observe(listener) {
+        return customHandle.observe(listener);
+      },
+      execute(payload?: unknown) {
+        return (customHandle.execute as (payload?: unknown) => boolean | Promise<boolean>)(payload);
+      },
+    };
+  };
+
+  const getDynamicHandle = (id: string): DynamicCommandHandle | undefined => {
+    if (typeof id !== 'string' || id.length === 0) return undefined;
+    // Custom takes priority: `register({ id, override: true })` lets a
+    // custom command shadow a built-in id, and the dynamic-lookup
+    // result must follow that shadowing so consumers iterating over
+    // mixed id arrays get the override semantics they configured.
+    if (customCommandsRegistry.has(id)) {
+      // Don't memoize the wrapper: a later `unregister()` followed by a
+      // fresh `register()` for the same id swaps the underlying handle,
+      // and a stale wrapper would observe / execute against the prior
+      // registration. Building on demand is cheap (two closures) and
+      // keeps semantics aligned with the Proxy `get` path.
+      return buildCustomDynamicHandle(id);
+    }
+    if (!BUILT_IN_COMMAND_ID_SET.has(id)) return undefined;
+    let cached = dynamicHandleCache.get(id);
+    if (cached) return cached;
+    cached = buildBuiltInDynamicHandle(id as PublicToolbarItemId);
+    dynamicHandleCache.set(id, cached);
+    return cached;
+  };
+
   const commands = new Proxy({} as CommandsHandle, {
     get(_, prop) {
       if (typeof prop !== 'string') return undefined;
@@ -801,6 +1061,13 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
       // per-id handle cache below.
       if (prop === 'register') {
         return customCommandsRegistry.register.bind(customCommandsRegistry);
+      }
+      // `get(id)` is the typed dynamic-lookup escape hatch (see
+      // `DynamicCommandHandle`). Returns undefined for unregistered ids
+      // instead of producing a fallback handle that emits forever
+      // disabled state, which is what the bare proxy lookup does today.
+      if (prop === 'get') {
+        return getDynamicHandle;
       }
       // Custom-registered ids surface a typed handle from the registry.
       // Built-in ids fall through to the existing per-id cache so they
@@ -1203,6 +1470,22 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
         }
       });
     },
+    capture() {
+      // Capture is sugar over `getSnapshot()` plus a deep clone +
+      // deep freeze: the memoized selection slice carries the
+      // portable address shapes consumers need (target,
+      // selectionTarget, activeMarks, etc.), and shares them with
+      // every other live subscriber. A shallow freeze on the
+      // top-level snapshot would still let
+      // `captured.target.segments[0].range.start = 99` or
+      // `captured.activeMarks.push(...)` corrupt the shared slice
+      // and feed bad targets into later `editor.doc.*` calls. Clone
+      // first so the freeze applies to the consumer's copy alone,
+      // not the controller's memo, then freeze recursively.
+      const slice = computeState().selection;
+      if (!slice.target && !slice.selectionTarget) return null;
+      return deepFreeze(deepClone(slice));
+    },
   };
 
   const destroy = () => {
@@ -1211,6 +1494,7 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     stateChangeListeners.clear();
     commandHandleCache.clear();
     commandSubscribableCache.clear();
+    dynamicHandleCache.clear();
     teardown.forEach((fn) => {
       try {
         fn();

@@ -473,11 +473,101 @@ describe('createSuperDocUI', () => {
     expect(slice).toEqual({
       empty: false,
       target,
+      // SD-2812: derived alongside `target`. Single-segment selection
+      // collapses to `start`/`end` on the same blockId.
+      selectionTarget: {
+        kind: 'selection',
+        start: { kind: 'text', blockId: 'p1', offset: 0 },
+        end: { kind: 'text', blockId: 'p1', offset: 5 },
+      },
       activeMarks: ['bold', 'italic'],
       activeCommentIds: ['c1'],
       activeChangeIds: ['tc1'],
       quotedText: 'Hello',
     });
+  });
+
+  // SD-2812: regression — selectionTarget mirrors the TextTarget for the
+  // common single-block case AND the multi-block case (first segment's
+  // start, last segment's end). Doc-api point/range ops accept this
+  // shape directly so the consumer doesn't have to convert.
+  it('state.selection.selectionTarget spans first..last segment for multi-block selections', () => {
+    const superdoc = makeSuperdocStub();
+    const target = {
+      kind: 'text' as const,
+      segments: [
+        { blockId: 'p1', range: { start: 4, end: 10 } },
+        { blockId: 'p2', range: { start: 0, end: 8 } },
+        { blockId: 'p3', range: { start: 0, end: 3 } },
+      ],
+    };
+    (superdoc.activeEditor as { doc: { selection: { current: unknown } } }).doc.selection.current = vi.fn(() => ({
+      empty: false,
+      text: 'spans three paragraphs',
+      target,
+      activeMarks: [],
+      activeCommentIds: [],
+      activeChangeIds: [],
+    }));
+    const ui = createSuperDocUI({ superdoc });
+    teardown.push(() => ui.destroy());
+
+    const slice = ui.select((state) => state.selection).get();
+    expect(slice.selectionTarget).toEqual({
+      kind: 'selection',
+      start: { kind: 'text', blockId: 'p1', offset: 4 },
+      end: { kind: 'text', blockId: 'p3', offset: 3 },
+    });
+  });
+
+  // SD-2812 review (PR #3010): the lift must preserve the
+  // `story` field on TextTarget. Mutation operations route from
+  // target.story; dropping it would silently send an insert into
+  // the body even when the cursor is in a header/footer/footnote.
+  it('state.selection.selectionTarget preserves the story field for non-body selections', () => {
+    const superdoc = makeSuperdocStub();
+    const story = { type: 'header', id: 'header-1' };
+    const target = {
+      kind: 'text' as const,
+      segments: [{ blockId: 'h1', range: { start: 2, end: 9 } }],
+      story,
+    };
+    (superdoc.activeEditor as { doc: { selection: { current: unknown } } }).doc.selection.current = vi.fn(() => ({
+      empty: false,
+      text: 'in header',
+      target,
+      activeMarks: [],
+      activeCommentIds: [],
+      activeChangeIds: [],
+    }));
+    const ui = createSuperDocUI({ superdoc });
+    teardown.push(() => ui.destroy());
+
+    const slice = ui.select((state) => state.selection).get();
+    expect(slice.selectionTarget).toEqual({
+      kind: 'selection',
+      start: { kind: 'text', blockId: 'h1', offset: 2, story },
+      end: { kind: 'text', blockId: 'h1', offset: 9, story },
+      story,
+    });
+  });
+
+  it('state.selection.selectionTarget is null when target is null', () => {
+    const superdoc = makeSuperdocStub();
+    (superdoc.activeEditor as { doc: { selection: { current: unknown } } }).doc.selection.current = vi.fn(() => ({
+      empty: true,
+      text: '',
+      target: null,
+      activeMarks: [],
+      activeCommentIds: [],
+      activeChangeIds: [],
+    }));
+    const ui = createSuperDocUI({ superdoc });
+    teardown.push(() => ui.destroy());
+
+    const slice = ui.select((state) => state.selection).get();
+    expect(slice.target).toBeNull();
+    expect(slice.selectionTarget).toBeNull();
   });
 
   it('state.selection slice keeps identity stable across recomputes when the projection has not changed', async () => {
@@ -556,6 +646,7 @@ describe('createSuperDocUI', () => {
     expect(slice).toEqual({
       empty: true,
       target: null,
+      selectionTarget: null,
       activeMarks: [],
       activeCommentIds: [],
       activeChangeIds: [],
@@ -584,11 +675,148 @@ describe('createSuperDocUI', () => {
     expect(snap).toEqual({
       empty: false,
       target,
+      selectionTarget: {
+        kind: 'selection',
+        start: { kind: 'text', blockId: 'p1', offset: 0 },
+        end: { kind: 'text', blockId: 'p1', offset: 3 },
+      },
       activeMarks: ['bold'],
       activeCommentIds: ['c1'],
       activeChangeIds: [],
       quotedText: 'foo',
     });
+  });
+
+  it('ui.selection.capture returns a frozen snapshot for an addressable selection', () => {
+    const superdoc = makeSuperdocStub();
+    const target = {
+      kind: 'text' as const,
+      segments: [{ blockId: 'p1', range: { start: 0, end: 5 } }],
+    };
+    (superdoc.activeEditor as { doc: { selection: { current: unknown } } }).doc.selection.current = vi.fn(() => ({
+      empty: false,
+      text: 'hello',
+      target,
+      activeMarks: ['italic'],
+      activeCommentIds: [],
+      activeChangeIds: [],
+    }));
+    const ui = createSuperDocUI({ superdoc });
+    teardown.push(() => ui.destroy());
+
+    const captured = ui.selection.capture();
+    expect(captured).not.toBeNull();
+    expect(captured!.target).toEqual(target);
+    expect(captured!.selectionTarget).toEqual({
+      kind: 'selection',
+      start: { kind: 'text', blockId: 'p1', offset: 0 },
+      end: { kind: 'text', blockId: 'p1', offset: 5 },
+    });
+    expect(captured!.activeMarks).toEqual(['italic']);
+    expect(captured!.quotedText).toBe('hello');
+
+    // Frozen: assigning a property must throw in strict mode.
+    expect(Object.isFrozen(captured)).toBe(true);
+  });
+
+  // Regression for PR #3016 review: shallow Object.freeze leaves
+  // nested fields (target, target.segments, activeMarks array)
+  // mutable. A consumer that does
+  // `captured.target.segments[0].range.start = 99` or
+  // `captured.activeMarks.push('foo')` would otherwise corrupt the
+  // shared memoized slice and feed bad targets into later
+  // editor.doc.* calls.
+  it('ui.selection.capture deep-freezes nested fields against consumer mutation', () => {
+    const superdoc = makeSuperdocStub();
+    const target = {
+      kind: 'text' as const,
+      segments: [{ blockId: 'p1', range: { start: 0, end: 5 } }],
+    };
+    (superdoc.activeEditor as { doc: { selection: { current: unknown } } }).doc.selection.current = vi.fn(() => ({
+      empty: false,
+      text: 'hello',
+      target,
+      activeMarks: ['italic'],
+      activeCommentIds: [],
+      activeChangeIds: [],
+    }));
+    const ui = createSuperDocUI({ superdoc });
+    teardown.push(() => ui.destroy());
+
+    const captured = ui.selection.capture();
+    expect(captured).not.toBeNull();
+
+    // Top-level frozen.
+    expect(Object.isFrozen(captured)).toBe(true);
+    // Nested object: target itself.
+    expect(Object.isFrozen(captured!.target)).toBe(true);
+    // Nested arrays: segments and the marks list.
+    expect(Object.isFrozen(captured!.target!.segments)).toBe(true);
+    expect(Object.isFrozen(captured!.target!.segments[0])).toBe(true);
+    expect(Object.isFrozen(captured!.target!.segments[0].range)).toBe(true);
+    expect(Object.isFrozen(captured!.activeMarks)).toBe(true);
+    expect(Object.isFrozen(captured!.selectionTarget)).toBe(true);
+    expect(Object.isFrozen(captured!.selectionTarget!.start)).toBe(true);
+
+    // Strict-mode mutation attempts throw. The test file is an ES
+    // module so its top-level code is strict by default.
+    expect(() => {
+      (captured!.target!.segments[0].range as { start: number }).start = 99;
+    }).toThrow();
+    expect(() => {
+      (captured!.activeMarks as string[]).push('bold');
+    }).toThrow();
+
+    // The shared snapshot the controller still holds is unaffected.
+    const liveAgain = ui.selection.getSnapshot();
+    expect(liveAgain.target?.segments[0].range.start).toBe(0);
+    expect(liveAgain.activeMarks).toEqual(['italic']);
+  });
+
+  it('ui.selection.capture returns null when there is no addressable selection', () => {
+    const superdoc = makeSuperdocStub();
+    (superdoc.activeEditor as { doc: { selection: { current: unknown } } }).doc.selection.current = vi.fn(() => ({
+      empty: true,
+      text: '',
+      target: null,
+      activeMarks: [],
+      activeCommentIds: [],
+      activeChangeIds: [],
+    }));
+    const ui = createSuperDocUI({ superdoc });
+    teardown.push(() => ui.destroy());
+
+    expect(ui.selection.capture()).toBeNull();
+  });
+
+  it('ui.selection.capture survives a later selection clear (use-case: sidebar composer keeps focus)', () => {
+    const superdoc = makeSuperdocStub();
+    const target = {
+      kind: 'text' as const,
+      segments: [{ blockId: 'p1', range: { start: 0, end: 4 } }],
+    };
+    let live: unknown = {
+      empty: false,
+      text: 'word',
+      target,
+      activeMarks: [],
+      activeCommentIds: [],
+      activeChangeIds: [],
+    };
+    (superdoc.activeEditor as { doc: { selection: { current: unknown } } }).doc.selection.current = vi.fn(() => live);
+    const ui = createSuperDocUI({ superdoc });
+    teardown.push(() => ui.destroy());
+
+    const captured = ui.selection.capture();
+    expect(captured?.target).toEqual(target);
+
+    // Composer takes focus: the live selection clears, but the
+    // captured handle keeps the original target so a downstream
+    // `editor.doc.comments.create({ target: captured.target })`
+    // still has a valid anchor.
+    live = { empty: true, text: '', target: null, activeMarks: [], activeCommentIds: [], activeChangeIds: [] };
+    expect(ui.selection.getSnapshot().target).toBeNull();
+    expect(captured!.target).toEqual(target);
   });
 
   it('ui.selection.subscribe fires once with the initial snapshot then on changes', async () => {

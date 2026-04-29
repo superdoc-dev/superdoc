@@ -34,6 +34,11 @@
       "types": "./dist/src/ui/index.d.ts",
       "import": "./dist/ui.es.js"
     },
+    "./ui/react": {
+      "source": "./src/ui/react/index.ts",
+      "types": "./dist/src/ui/react/index.d.ts",
+      "import": "./dist/ui-react.es.js"
+    },
     "./parts-runtime": {
       "source": "./src/editors/v1/core/parts/init-parts-runtime.ts",
       "types": "./dist/src/editors/v1/core/parts/init-parts-runtime.d.ts"
@@ -166,8 +171,10 @@
   },
   "devDependencies": {
     "@floating-ui/dom": "catalog:",
+    "@testing-library/react": "catalog:",
     "@types/mdast": "catalog:",
     "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
     "@vitejs/plugin-vue": "catalog:",
     "@vue/test-utils": "catalog:",
     "canvas": "catalog:",
@@ -176,6 +183,7 @@
     "postcss-nested-import": "catalog:",
     "prosemirror-test-builder": "catalog:",
     "react": "catalog:",
+    "react-dom": "catalog:",
     "tippy.js": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",

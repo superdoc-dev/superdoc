@@ -551,3 +551,372 @@ describe('ui.commands.register', () => {
     ui.destroy();
   });
 });
+
+describe('ui.commands.get', () => {
+  it('returns undefined for unregistered ids', () => {
+    const { superdoc } = makeStubs();
+    const ui = createSuperDocUI({ superdoc });
+
+    expect(ui.commands.get('definitely-not-a-command')).toBeUndefined();
+    // Empty / non-string ids guard the entry early.
+    expect(ui.commands.get('')).toBeUndefined();
+    expect(ui.commands.get('register')).toBeUndefined();
+    expect(ui.commands.get('get')).toBeUndefined();
+
+    ui.destroy();
+  });
+
+  it('returns a handle for a built-in id, observe emits state with source: "built-in"', () => {
+    const { superdoc } = makeStubs();
+    const ui = createSuperDocUI({ superdoc });
+
+    const handle = ui.commands.get('bold');
+    expect(handle).toBeDefined();
+    expect(typeof handle?.observe).toBe('function');
+    expect(typeof handle?.execute).toBe('function');
+
+    const listener = vi.fn();
+    const off = handle!.observe(listener);
+
+    // Initial synchronous emit, like every Subscribable in the controller.
+    expect(listener).toHaveBeenCalledTimes(1);
+    const emitted = listener.mock.calls[0][0];
+    expect(emitted.source).toBe('built-in');
+    expect(typeof emitted.active).toBe('boolean');
+    expect(typeof emitted.disabled).toBe('boolean');
+
+    off();
+    ui.destroy();
+  });
+
+  it('returns the same handle on repeated lookups for a built-in id', () => {
+    const { superdoc } = makeStubs();
+    const ui = createSuperDocUI({ superdoc });
+
+    const a = ui.commands.get('italic');
+    const b = ui.commands.get('italic');
+    expect(a).toBeDefined();
+    expect(a).toBe(b);
+
+    ui.destroy();
+  });
+
+  it('returns a handle for a custom-registered id, observe emits state with source: "custom"', () => {
+    const { superdoc } = makeStubs();
+    const ui = createSuperDocUI({ superdoc });
+
+    ui.commands.register({
+      id: 'company.aiRewrite',
+      execute: vi.fn(() => true),
+      getState: () => ({ active: false, disabled: false, value: 'ready' }),
+    });
+
+    const handle = ui.commands.get('company.aiRewrite');
+    expect(handle).toBeDefined();
+
+    const listener = vi.fn();
+    handle!.observe(listener);
+
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener.mock.calls[0][0]).toEqual({
+      active: false,
+      disabled: false,
+      value: 'ready',
+      source: 'custom',
+    });
+
+    ui.destroy();
+  });
+
+  it('execute on a custom handle forwards payload to the registered execute', () => {
+    const { superdoc } = makeStubs();
+    const ui = createSuperDocUI({ superdoc });
+
+    const execute = vi.fn(() => true);
+    ui.commands.register<{ prompt: string }>({
+      id: 'company.aiRewrite',
+      execute,
+    });
+
+    const handle = ui.commands.get('company.aiRewrite');
+    handle!.execute({ prompt: 'fix tone' });
+
+    expect(execute).toHaveBeenCalledTimes(1);
+    expect(execute).toHaveBeenCalledWith({
+      payload: { prompt: 'fix tone' },
+      superdoc,
+    });
+
+    ui.destroy();
+  });
+
+  it('returns undefined after unregistering a custom command', () => {
+    const { superdoc } = makeStubs();
+    const ui = createSuperDocUI({ superdoc });
+
+    const reg = ui.commands.register({
+      id: 'company.aiRewrite',
+      execute: vi.fn(() => true),
+    });
+
+    expect(ui.commands.get('company.aiRewrite')).toBeDefined();
+
+    reg.unregister();
+
+    expect(ui.commands.get('company.aiRewrite')).toBeUndefined();
+
+    ui.destroy();
+  });
+
+  it('returns the custom handle when a built-in is overridden', () => {
+    const { superdoc } = makeStubs();
+    const ui = createSuperDocUI({ superdoc });
+
+    const customExecute = vi.fn(() => true);
+    ui.commands.register({
+      id: 'bold',
+      override: true,
+      execute: customExecute,
+      getState: () => ({ active: true, disabled: false, value: 'overridden' }),
+    });
+
+    const handle = ui.commands.get('bold');
+    expect(handle).toBeDefined();
+
+    const listener = vi.fn();
+    handle!.observe(listener);
+
+    expect(listener.mock.calls[0][0]).toEqual({
+      active: true,
+      disabled: false,
+      value: 'overridden',
+      source: 'custom',
+    });
+
+    handle!.execute();
+    expect(customExecute).toHaveBeenCalledTimes(1);
+
+    ui.destroy();
+  });
+
+  // Regression for PR #3013 review comment: cached dynamic handles
+  // for built-in ids must dispatch through any later
+  // `register({ id, override: true })`. A consumer that memoizes
+  // `ui.commands.get('bold')` once and only later registers an
+  // override would otherwise see the merged custom state on the
+  // observe stream while still routing execute() to the built-in,
+  // breaking override semantics for long-lived handles.
+  it('cached built-in dynamic handle dispatches through a later override', () => {
+    const { superdoc } = makeStubs();
+    const ui = createSuperDocUI({ superdoc });
+
+    // Cache the handle BEFORE registering the override.
+    const cachedHandle = ui.commands.get('bold');
+    expect(cachedHandle).toBeDefined();
+
+    const customExecute = vi.fn(() => true);
+    ui.commands.register({
+      id: 'bold',
+      override: true,
+      execute: customExecute,
+      getState: () => ({ active: true, disabled: false, value: 'overridden' }),
+    });
+
+    // Execute via the cached handle. The custom override's execute
+    // should run, not the built-in toolbar controller's bold.
+    cachedHandle!.execute();
+    expect(customExecute).toHaveBeenCalledTimes(1);
+
+    ui.destroy();
+  });
+
+  // Regression for PR #3010 review comment 3: a custom handle
+  // captured before a custom-vs-custom replacement must not execute
+  // the replacement's handler. Without the entry-identity guard,
+  // `regA.handle.execute()` after `register({ id }) → regB` would
+  // run B's executor, with regA's consumer none the wiser.
+  it('captured custom handle refuses execute after a later registration replaces the entry', () => {
+    const { superdoc } = makeStubs();
+    const ui = createSuperDocUI({ superdoc });
+
+    const aExecute = vi.fn(() => true);
+    const regA = ui.commands.register({ id: 'company.x', execute: aExecute });
+
+    // Replacement (custom-vs-custom): warns, replaces.
+    const bExecute = vi.fn(() => true);
+    ui.commands.register({ id: 'company.x', execute: bExecute });
+
+    // regA's captured handle is now stale; must not run B's executor.
+    const result = regA.handle.execute();
+    expect(result).toBe(false);
+    expect(aExecute).not.toHaveBeenCalled();
+    expect(bExecute).not.toHaveBeenCalled();
+
+    ui.destroy();
+  });
+
+  it('captured custom handle stops emitting on its observer after replacement', async () => {
+    const { superdoc } = makeStubs();
+    const ui = createSuperDocUI({ superdoc });
+
+    const regA = ui.commands.register({
+      id: 'company.x',
+      execute: () => true,
+      getState: () => ({ active: false, disabled: false, value: 'A' }),
+    });
+
+    const aListener = vi.fn();
+    regA.handle.observe(aListener);
+    expect(aListener).toHaveBeenCalledTimes(1); // initial sync emit
+    aListener.mockClear();
+
+    // Replace.
+    ui.commands.register({
+      id: 'company.x',
+      execute: () => true,
+      getState: () => ({ active: true, disabled: true, value: 'B' }),
+    });
+
+    // Coalesce: scheduleNotify runs on a microtask.
+    await Promise.resolve();
+    await Promise.resolve();
+
+    // A's listener must NOT see B's state. The registry actively
+    // disposes A's observers via `disposeAllObservers(id)` on
+    // replacement; the entry-identity short-circuit catches any
+    // emit that races between schedule and dispose.
+    expect(aListener).not.toHaveBeenCalled();
+
+    ui.destroy();
+  });
+
+  // Regression for PR #3010 review comment 2: every execute-shaped
+  // surface must route through the same dispatch path. Previously
+  // only `ui.commands.get(id)?.execute()` re-resolved through the
+  // override registry; `ui.commands.bold.execute()` and
+  // `ui.toolbar.execute('bold')` still went straight to the built-in
+  // toolbar controller, producing a state/action mismatch when an
+  // override was registered.
+  it('ui.commands.bold.execute routes through a later override', () => {
+    const { superdoc } = makeStubs();
+    const ui = createSuperDocUI({ superdoc });
+
+    const customExecute = vi.fn(() => true);
+    ui.commands.register({
+      id: 'bold',
+      override: true,
+      execute: customExecute,
+    });
+
+    // Bracket-style per-id handle.
+    (ui.commands as unknown as { bold: { execute(): boolean } }).bold.execute();
+    expect(customExecute).toHaveBeenCalledTimes(1);
+
+    ui.destroy();
+  });
+
+  it("ui.toolbar.execute('bold') routes through a later override", () => {
+    const { superdoc } = makeStubs();
+    const ui = createSuperDocUI({ superdoc });
+
+    const customExecute = vi.fn(() => true);
+    ui.commands.register({
+      id: 'bold',
+      override: true,
+      execute: customExecute,
+    });
+
+    ui.toolbar.execute('bold');
+    expect(customExecute).toHaveBeenCalledTimes(1);
+
+    ui.destroy();
+  });
+
+  it('cached built-in dynamic handle reverts to built-in dispatch after the override unregisters', () => {
+    const { superdoc, editor } = makeStubs();
+    const ui = createSuperDocUI({ superdoc });
+
+    const cachedHandle = ui.commands.get('bold');
+    const customExecute = vi.fn(() => true);
+    const reg = ui.commands.register({
+      id: 'bold',
+      override: true,
+      execute: customExecute,
+    });
+
+    cachedHandle!.execute();
+    expect(customExecute).toHaveBeenCalledTimes(1);
+
+    // After unregister, the built-in dispatch path resumes.
+    reg.unregister();
+
+    // Reset the editor's bold spy so we can detect a built-in dispatch
+    // after unregister. The toolbarController is internal, but a
+    // built-in dispatch ultimately routes through the editor's
+    // commands surface; the stub's `commands.toggleBold` mock receives
+    // the call. (If toolbarController short-circuits before reaching
+    // the editor it still won't call customExecute, which is what we
+    // assert below.)
+    customExecute.mockClear();
+    cachedHandle!.execute();
+    expect(customExecute).not.toHaveBeenCalled();
+
+    // Editor reference is unused if toolbar dispatch routes elsewhere;
+    // the assertion that matters is `customExecute` did not fire.
+    void editor;
+
+    ui.destroy();
+  });
+
+  it('observers detach when unsubscribed', () => {
+    const { superdoc } = makeStubs();
+    const ui = createSuperDocUI({ superdoc });
+
+    const handle = ui.commands.get('bold');
+    const listener = vi.fn();
+    const off = handle!.observe(listener);
+
+    expect(listener).toHaveBeenCalledTimes(1);
+    listener.mockClear();
+    off();
+
+    // After unsubscribe, no further emits. Fire a stub event that
+    // would otherwise rebuild the snapshot.
+    (superdoc as unknown as { fireEditor(event: string): void }).fireEditor('selectionUpdate');
+
+    expect(listener).not.toHaveBeenCalled();
+
+    ui.destroy();
+  });
+
+  it('enables dynamic toolbar configuration without unsafe casts', () => {
+    const { superdoc } = makeStubs();
+    const ui = createSuperDocUI({ superdoc });
+
+    ui.commands.register({
+      id: 'company.aiRewrite',
+      execute: vi.fn(() => true),
+      getState: () => ({ active: false, disabled: false, value: 'ready' }),
+    });
+
+    // The friction case from SD-2814: a config-driven toolbar.
+    const config: string[] = ['bold', 'italic', 'company.aiRewrite', 'unknown-id'];
+    const states = config.map((id) => {
+      const handle = ui.commands.get(id);
+      if (!handle) return { id, found: false };
+      let state: unknown = null;
+      const off = handle.observe((s) => {
+        state = s;
+      });
+      off();
+      return { id, found: true, state };
+    });
+
+    expect(states[0].found).toBe(true);
+    expect(states[1].found).toBe(true);
+    expect(states[2].found).toBe(true);
+    expect(states[3].found).toBe(false);
+
+    ui.destroy();
+  });
+});

@@ -2964,12 +2964,18 @@ importers:
       '@floating-ui/dom':
         specifier: 'catalog:'
         version: 1.7.6
+      '@testing-library/react':
+        specifier: 'catalog:'
+        version: 16.3.2(@testing-library/dom@10.4.1)(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
       '@types/mdast':
         specifier: 'catalog:'
         version: 4.0.4
       '@types/react':
         specifier: 'catalog:'
         version: 19.2.14
+      '@types/react-dom':
+        specifier: 'catalog:'
+        version: 19.2.3(@types/react@19.2.14)
       '@vitejs/plugin-vue':
         specifier: 'catalog:'
         version: 6.0.2(rolldown-vite@7.3.1(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@25.6.0)(esbuild@0.27.7)(jiti@2.6.1)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3))(vue@3.5.32(typescript@5.9.3))
@@ -2994,6 +3000,9 @@ importers:
       react:
         specifier: 'catalog:'
         version: 19.2.4
+      react-dom:
+        specifier: 'catalog:'
+        version: 19.2.4(react@19.2.4)
       tippy.js:
         specifier: 'catalog:'
         version: 6.3.7
@@ -6461,6 +6470,7 @@ packages:
   '@microsoft/teamsapp-cli@3.0.2':
     resolution: {integrity: sha512-AowuJwrrUxeF9Bq/frxuy9YZjK/ECk3pi0UBXl3CQLZ4XNWfgWatiFi/UWpyHDLccFs+0Za3nNYATFvgsxEFwQ==}
     engines: {node: '>=12'}
+    deprecated: This package is deprecated and supported Node.js version is 18-22. Please use @microsoft/m365agentstoolkit-cli instead.
     hasBin: true
 
   '@microsoft/teamsfx-api@0.23.1':

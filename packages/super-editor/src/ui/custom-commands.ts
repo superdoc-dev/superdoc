@@ -136,7 +136,10 @@ export function createCustomCommandsRegistry(deps: CustomCommandsRegistryDeps): 
     }
   };
 
-  const buildHandle = <TPayload, TValue>(id: string): CustomCommandHandle<TPayload, TValue> => ({
+  const buildHandle = <TPayload, TValue>(
+    id: string,
+    ownEntry: InternalCustomEntry,
+  ): CustomCommandHandle<TPayload, TValue> => ({
     observe(listener) {
       let innerOff: (() => void) | null = null;
       let stopped = false;
@@ -148,7 +151,7 @@ export function createCustomCommandsRegistry(deps: CustomCommandsRegistryDeps): 
         observerDisposers.get(id)?.delete(dispose);
       };
       // Track the disposer so `unregister` / replacement can tear this
-      // observer down actively. The lazy `!entries.has(id)` short-circuit
+      // observer down actively. The lazy entry-identity short-circuit
       // below is still kept as a safety net for observers that get
       // notified between unregister and active disposal.
       let set = observerDisposers.get(id);
@@ -160,11 +163,14 @@ export function createCustomCommandsRegistry(deps: CustomCommandsRegistryDeps): 
 
       innerOff = getOrCreateSubscribable(id).subscribe((state) => {
         if (stopped) return;
-        // Safety net: the Subscribable lives on the controller's selector
-        // substrate and outlives the registration. If the command was
-        // unregistered between the schedule and this emit, stop forwarding
-        // to the listener and detach the inner subscription.
-        if (!entries.has(id)) {
+        // Identity safety net: the Subscribable lives on the
+        // controller's selector substrate and outlives the
+        // registration. If the entry this handle was built against
+        // has been removed OR replaced (custom-vs-custom register
+        // calls), stop forwarding to the listener. A consumer that
+        // captured `regA.handle` before regA was replaced by regB
+        // must NOT see B's state on A's observer.
+        if (entries.get(id) !== ownEntry) {
           dispose();
           return;
         }
@@ -186,16 +192,27 @@ export function createCustomCommandsRegistry(deps: CustomCommandsRegistryDeps): 
       return dispose;
     },
     execute: ((payload?: TPayload) => {
+      // Identity check (PR #3010 review): a captured handle from
+      // registration A must not execute registration B's handler if
+      // a later `register({ id })` replaced A with B. The internal
+      // `registry.execute(id, ...)` is identity-blind (it looks up
+      // the current entry), so the guard lives on this side. Returns
+      // `false` so the consumer sees a clean "stale handle" signal
+      // matching the no-op handle that built-in collisions return.
+      if (entries.get(id) !== ownEntry) {
+        return false;
+      }
       const result = registry.execute(id, payload);
       return result;
     }) as CustomCommandHandle<TPayload, TValue>['execute'],
   });
 
   const getHandle = <TPayload, TValue>(id: string) => {
-    if (!entries.has(id)) return undefined;
+    const entry = entries.get(id);
+    if (!entry) return undefined;
     let cached = handleCache.get(id) as CustomCommandHandle<TPayload, TValue> | undefined;
     if (cached) return cached;
-    cached = buildHandle<TPayload, TValue>(id);
+    cached = buildHandle<TPayload, TValue>(id, entry);
     handleCache.set(id, cached as CustomCommandHandle<unknown, unknown>);
     return cached;
   };

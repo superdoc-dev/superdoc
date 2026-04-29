@@ -551,3 +551,203 @@ describe('ui.commands.register', () => {
     ui.destroy();
   });
 });
+
+describe('ui.commands.get', () => {
+  it('returns undefined for unregistered ids', () => {
+    const { superdoc } = makeStubs();
+    const ui = createSuperDocUI({ superdoc });
+
+    expect(ui.commands.get('definitely-not-a-command')).toBeUndefined();
+    // Empty / non-string ids guard the entry early.
+    expect(ui.commands.get('')).toBeUndefined();
+    expect(ui.commands.get('register')).toBeUndefined();
+    expect(ui.commands.get('get')).toBeUndefined();
+
+    ui.destroy();
+  });
+
+  it('returns a handle for a built-in id, observe emits state with source: "built-in"', () => {
+    const { superdoc } = makeStubs();
+    const ui = createSuperDocUI({ superdoc });
+
+    const handle = ui.commands.get('bold');
+    expect(handle).toBeDefined();
+    expect(typeof handle?.observe).toBe('function');
+    expect(typeof handle?.execute).toBe('function');
+
+    const listener = vi.fn();
+    const off = handle!.observe(listener);
+
+    // Initial synchronous emit, like every Subscribable in the controller.
+    expect(listener).toHaveBeenCalledTimes(1);
+    const emitted = listener.mock.calls[0][0];
+    expect(emitted.source).toBe('built-in');
+    expect(typeof emitted.active).toBe('boolean');
+    expect(typeof emitted.disabled).toBe('boolean');
+
+    off();
+    ui.destroy();
+  });
+
+  it('returns the same handle on repeated lookups for a built-in id', () => {
+    const { superdoc } = makeStubs();
+    const ui = createSuperDocUI({ superdoc });
+
+    const a = ui.commands.get('italic');
+    const b = ui.commands.get('italic');
+    expect(a).toBeDefined();
+    expect(a).toBe(b);
+
+    ui.destroy();
+  });
+
+  it('returns a handle for a custom-registered id, observe emits state with source: "custom"', () => {
+    const { superdoc } = makeStubs();
+    const ui = createSuperDocUI({ superdoc });
+
+    ui.commands.register({
+      id: 'company.aiRewrite',
+      execute: vi.fn(() => true),
+      getState: () => ({ active: false, disabled: false, value: 'ready' }),
+    });
+
+    const handle = ui.commands.get('company.aiRewrite');
+    expect(handle).toBeDefined();
+
+    const listener = vi.fn();
+    handle!.observe(listener);
+
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener.mock.calls[0][0]).toEqual({
+      active: false,
+      disabled: false,
+      value: 'ready',
+      source: 'custom',
+    });
+
+    ui.destroy();
+  });
+
+  it('execute on a custom handle forwards payload to the registered execute', () => {
+    const { superdoc } = makeStubs();
+    const ui = createSuperDocUI({ superdoc });
+
+    const execute = vi.fn(() => true);
+    ui.commands.register<{ prompt: string }>({
+      id: 'company.aiRewrite',
+      execute,
+    });
+
+    const handle = ui.commands.get('company.aiRewrite');
+    handle!.execute({ prompt: 'fix tone' });
+
+    expect(execute).toHaveBeenCalledTimes(1);
+    expect(execute).toHaveBeenCalledWith({
+      payload: { prompt: 'fix tone' },
+      superdoc,
+    });
+
+    ui.destroy();
+  });
+
+  it('returns undefined after unregistering a custom command', () => {
+    const { superdoc } = makeStubs();
+    const ui = createSuperDocUI({ superdoc });
+
+    const reg = ui.commands.register({
+      id: 'company.aiRewrite',
+      execute: vi.fn(() => true),
+    });
+
+    expect(ui.commands.get('company.aiRewrite')).toBeDefined();
+
+    reg.unregister();
+
+    expect(ui.commands.get('company.aiRewrite')).toBeUndefined();
+
+    ui.destroy();
+  });
+
+  it('returns the custom handle when a built-in is overridden', () => {
+    const { superdoc } = makeStubs();
+    const ui = createSuperDocUI({ superdoc });
+
+    const customExecute = vi.fn(() => true);
+    ui.commands.register({
+      id: 'bold',
+      override: true,
+      execute: customExecute,
+      getState: () => ({ active: true, disabled: false, value: 'overridden' }),
+    });
+
+    const handle = ui.commands.get('bold');
+    expect(handle).toBeDefined();
+
+    const listener = vi.fn();
+    handle!.observe(listener);
+
+    expect(listener.mock.calls[0][0]).toEqual({
+      active: true,
+      disabled: false,
+      value: 'overridden',
+      source: 'custom',
+    });
+
+    handle!.execute();
+    expect(customExecute).toHaveBeenCalledTimes(1);
+
+    ui.destroy();
+  });
+
+  it('observers detach when unsubscribed', () => {
+    const { superdoc } = makeStubs();
+    const ui = createSuperDocUI({ superdoc });
+
+    const handle = ui.commands.get('bold');
+    const listener = vi.fn();
+    const off = handle!.observe(listener);
+
+    expect(listener).toHaveBeenCalledTimes(1);
+    listener.mockClear();
+    off();
+
+    // After unsubscribe, no further emits. Fire a stub event that
+    // would otherwise rebuild the snapshot.
+    (superdoc as unknown as { fireEditor(event: string): void }).fireEditor('selectionUpdate');
+
+    expect(listener).not.toHaveBeenCalled();
+
+    ui.destroy();
+  });
+
+  it('enables dynamic toolbar configuration without unsafe casts', () => {
+    const { superdoc } = makeStubs();
+    const ui = createSuperDocUI({ superdoc });
+
+    ui.commands.register({
+      id: 'company.aiRewrite',
+      execute: vi.fn(() => true),
+      getState: () => ({ active: false, disabled: false, value: 'ready' }),
+    });
+
+    // The friction case from SD-2814: a config-driven toolbar.
+    const config: string[] = ['bold', 'italic', 'company.aiRewrite', 'unknown-id'];
+    const states = config.map((id) => {
+      const handle = ui.commands.get(id);
+      if (!handle) return { id, found: false };
+      let state: unknown = null;
+      const off = handle.observe((s) => {
+        state = s;
+      });
+      off();
+      return { id, found: true, state };
+    });
+
+    expect(states[0].found).toBe(true);
+    expect(states[1].found).toBe(true);
+    expect(states[2].found).toBe(true);
+    expect(states[3].found).toBe(false);
+
+    ui.destroy();
+  });
+});

@@ -529,7 +529,69 @@ export type CommandsHandle = {
   register<TPayload = void, TValue = unknown>(
     registration: CustomCommandRegistration<TPayload, TValue>,
   ): CustomCommandRegistrationResult<TPayload, TValue>;
+
+  /**
+   * Look up a command handle by string id at runtime.
+   *
+   * Returns a {@link DynamicCommandHandle} for any registered id,
+   * built-in (`'bold'`, `'italic'`, etc.) or custom (registered via
+   * {@link CommandsHandle.register}), and `undefined` for unknown ids.
+   *
+   * Use this instead of indexing `ui.commands[id]` when the id is only
+   * known at runtime: a toolbar driven by a `string[]` config, a
+   * keyboard-shortcut router, a plugin loop. Indexing the surface with
+   * a generic `string` type-errors today because the surface mixes
+   * per-command handles with the `register` method, so consumers
+   * otherwise reach for an unsafe `as` cast on every dispatch site.
+   *
+   * The returned handle's `observe` listener receives the full
+   * {@link UIToolbarCommandState} (active / disabled / value / source),
+   * so a single render path can drive built-in *and* custom buttons
+   * uniformly without branching on the id.
+   */
+  get(id: string): DynamicCommandHandle | undefined;
 };
+
+/**
+ * Type-erased command handle returned from {@link CommandsHandle.get}.
+ *
+ * Bridges built-ins ({@link CommandHandle}) and customs
+ * ({@link CustomCommandHandle}) into one observe/execute surface so
+ * consumers iterating `string[]` ids don't have to branch. The emitted
+ * state carries `source` so a uniform renderer can still distinguish
+ * the two when it wants.
+ *
+ * `execute` accepts an optional `unknown` payload and returns
+ * `boolean | Promise<boolean>` (built-ins are sync, customs may be
+ * async). Capture the typed registration result for type-safe
+ * payloads. `get(id)` is the dynamic-lookup fallback, not a
+ * replacement for the per-id typing of `ui.commands.bold`.
+ */
+export interface DynamicCommandHandle {
+  /**
+   * Subscribe to the command's state. The listener fires once
+   * synchronously with the current state, then again whenever the
+   * state changes by shallow equality. Returns an unsubscribe.
+   *
+   * For ids in the built-in registry that haven't received a
+   * snapshot yet (or whose value has gone stale), the listener is
+   * still called with a deterministic disabled fallback so consumer
+   * code can render without a null check on every emit.
+   */
+  observe(listener: (state: UIToolbarCommandState) => void): () => void;
+  /**
+   * Execute the command. Forwards to the same dispatch path as
+   * `ui.toolbar.execute(id, payload)` for built-ins and the
+   * registered `execute` handler for customs.
+   *
+   * The payload is `unknown` because `get(id)` erases per-command
+   * payload typing. Pass the value the command expects (e.g. the
+   * `string` for `'font-size'`). The returned Promise resolves to
+   * `false` when a custom command's handler rejects or returns
+   * `false`; built-ins return synchronously.
+   */
+  execute(payload?: unknown): boolean | Promise<boolean>;
+}
 
 /**
  * Input shape for {@link CommandsHandle.register}.

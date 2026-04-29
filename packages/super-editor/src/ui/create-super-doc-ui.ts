@@ -345,7 +345,13 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
       const items: ReviewItem[] = [];
       let order = 0;
       for (const comment of commentsListCache.items) {
-        items.push({ kind: 'comment', id: comment.commentId, documentOrder: order++, comment });
+        // `comments.list()` returns `DiscoveryItem<CommentDomain>` whose
+        // canonical identifier lives on `id` (set from the underlying
+        // commentId by the adapter). The legacy `commentId` field is
+        // only on `CommentInfo` / `comments.get()` — not on this
+        // discovery shape. Reading it would emit `undefined` and break
+        // active-id matching + next/previous/scrollTo.
+        items.push({ kind: 'comment', id: comment.id, documentOrder: order++, comment });
       }
       for (const change of trackChangesListCache.items) {
         items.push({ kind: 'change', id: change.id, documentOrder: order++, change });

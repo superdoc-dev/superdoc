@@ -30,11 +30,13 @@ function makeStubs(
   const listComments = vi.fn(() => ({
     evaluatedRevision: 'r1',
     total: commentsList.length,
+    // Mirror the production discovery-item shape: canonical id is on
+    // `id`, set from the underlying commentId by the adapter. There is
+    // no `commentId` field on `DiscoveryItem<CommentDomain>` itself.
     items: commentsList.map((c) => ({
-      id: c.id,
+      id: c.commentId,
       handle: { ref: `comment:${c.commentId}`, refStability: 'stable' as const, targetKind: 'comment' as const },
       address: { kind: 'entity' as const, entityType: 'comment' as const, entityId: c.commentId },
-      commentId: c.commentId,
       status: c.status ?? ('open' as const),
       text: c.text,
     })),
@@ -339,6 +341,30 @@ describe('ui.review — scrollTo + setRecording', () => {
 
     ui.review.setRecording(false);
     expect(mocks.setDocumentMode).toHaveBeenCalledWith('editing');
+
+    ui.destroy();
+  });
+});
+
+describe('ui.review — regression: comment row id sourced from discovery.id', () => {
+  it('comment ReviewItem.id mirrors the discovery item id (not undefined commentId)', () => {
+    const { superdoc } = makeStubs({
+      comments: [
+        { id: 'c1', commentId: 'c1' },
+        { id: 'c2', commentId: 'c2' },
+      ],
+    });
+    const ui = createSuperDocUI({ superdoc });
+
+    const ids = ui.review.getSnapshot().items.map((i) => i.id);
+    // Without the fix every comment row would expose `id: undefined`
+    // because `DiscoveryItem<CommentDomain>` has no `commentId` field.
+    expect(ids).toEqual(['c1', 'c2']);
+    expect(ids.every((id) => typeof id === 'string' && id.length > 0)).toBe(true);
+
+    // And navigation must work on those ids end-to-end.
+    expect(ui.review.next()).toBe('c1');
+    expect(ui.review.next()).toBe('c2');
 
     ui.destroy();
   });

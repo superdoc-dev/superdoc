@@ -45,12 +45,20 @@ export interface SuperDocLike {
   activeEditor?: SuperDocEditorLike | null;
   config?: { documentMode?: 'editing' | 'suggesting' | 'viewing' };
   /**
-   * Optional setter for documentMode. Reserved for future
-   * `ui.<domain>` surfaces (SD-2799) that move document-mode and
-   * other UI-only commands off the toolbar registry into dedicated
-   * handles. Not consumed by the controller today.
+   * Optional setter for documentMode. Consumed by `ui.document.setMode`
+   * (SD-2816) and reserved for future `ui.<domain>` surfaces (SD-2799)
+   * that move other UI-only commands off the toolbar registry.
    */
   setDocumentMode?(mode: 'editing' | 'suggesting' | 'viewing'): unknown;
+  /**
+   * Optional export bridge. `ui.document.export(options)` forwards
+   * here so consumers wiring an Export DOCX button can call it from
+   * the controller surface instead of pulling the host instance into
+   * their context. The shape mirrors `SuperDoc.export()` from the
+   * superdoc package; declared optional and `unknown`-typed so non
+   * browser test stubs stay valid without a host implementation.
+   */
+  export?(options?: DocumentExportInput): Promise<unknown>;
 }
 
 export interface SuperDocEditorLike {
@@ -130,6 +138,14 @@ export interface SuperDocUIState {
   ready: boolean;
   /** Mirror of `superdoc.config.documentMode`. */
   documentMode: 'editing' | 'suggesting' | 'viewing' | null;
+  /**
+   * Document-level slice exposed on `state.document` (SD-2816). Sugar
+   * over the top-level `ready` and `documentMode` fields so a single
+   * subscription drives the document-bar / Export button / mode
+   * toggle. Kept minimal: dirty-tracking is a follow-up because
+   * SuperDoc has no host-side dirty primitive today.
+   */
+  document: DocumentSlice;
   /** Selection projection. See {@link SelectionSlice}. */
   selection: SelectionSlice;
   /**
@@ -424,11 +440,121 @@ export interface SuperDocUI {
   viewport: ViewportHandle;
 
   /**
+   * Document domain. Session-level operations a custom toolbar
+   * needs (Export DOCX, document-mode toggle, ready state). Sugar
+   * over `state.document` plus passthroughs to the host SuperDoc
+   * instance's `setDocumentMode` / `export`. Lifts the operations
+   * that previously forced consumers to wire a separate "host" hook
+   * through their React context just so a toolbar button could call
+   * `superdoc.export(...)`. Dirty / unsaved-changes is intentionally
+   * not on this slice today: SuperDoc has no host-side dirty primitive,
+   * and adding one is a separate ticket.
+   */
+  document: DocumentHandle;
+
+  /**
    * Tear down all internal subscriptions to the editor / SuperDoc
    * instance / presentation editor. After destroy, no listeners will
    * fire and `select(...)` should not be called.
    */
   destroy(): void;
+}
+
+/**
+ * Document slice exposed on `state.document` and through
+ * {@link DocumentHandle}.
+ *
+ * Mirrors the `ready` / `documentMode` top-level fields as a single
+ * memoized object so a Document Bar / Export button / mode toggle can
+ * subscribe once instead of subscribing to two separate substrate
+ * selectors.
+ */
+export interface DocumentSlice {
+  /** True when SuperDoc has an active editor mounted. */
+  ready: boolean;
+  /** Mirror of `superdoc.config.documentMode`. */
+  mode: 'editing' | 'suggesting' | 'viewing' | null;
+}
+
+/**
+ * Input shape for {@link DocumentHandle.export}. Mirrors the public
+ * `SuperDoc.export()` signature from the superdoc package; declared
+ * here on the controller so consumers don't have to import the host
+ * type to type their Export button. Every field is optional and the
+ * runtime defaults match `SuperDoc.export()`.
+ */
+export interface DocumentExportInput {
+  /**
+   * Output formats. `['docx']` (default) downloads the active document
+   * as DOCX. Multiple formats produce a zip.
+   */
+  exportType?: string[];
+  /**
+   * How comments are written to the export. `'external'` (default)
+   * preserves comments as Word-style comment nodes; `'internal'` keeps
+   * them on the SuperDoc internal channel; `'clean'` strips comments
+   * from the export.
+   */
+  commentsType?: 'internal' | 'external' | 'clean';
+  /** Override the default document title used as the file name. */
+  exportedName?: string;
+  /** Additional binary blobs to bundle with the export (zipped). */
+  additionalFiles?: unknown[];
+  /** File names paired with `additionalFiles` (same length). */
+  additionalFileNames?: string[];
+  /**
+   * When true, accepted/rejected tracked changes are flattened into
+   * the export so the recipient sees the final document instead of
+   * the working copy with revision history.
+   */
+  isFinalDoc?: boolean;
+  /**
+   * When true (default), the browser triggers a download for the
+   * resulting blob; when false, the blob is returned for the consumer
+   * to handle (upload, preview, attach, etc.).
+   */
+  triggerDownload?: boolean;
+  /**
+   * Optional CSS color for highlighting form fields in the export.
+   * `null` (default) leaves fields unhighlighted.
+   */
+  fieldsHighlightColor?: string | null;
+}
+
+/**
+ * Document domain handle exposed on `ui.document`. Snapshot +
+ * subscription mirror the other domain handles; `setMode` and
+ * `export` are imperative passthroughs to the host. Construction is
+ * cheap: every method routes through the controller's existing
+ * substrate / host references, no new caching needed.
+ */
+export interface DocumentHandle {
+  /** Snapshot the current document slice synchronously. */
+  getSnapshot(): DocumentSlice;
+  /**
+   * Subscribe to document-slice changes. Listener fires once
+   * synchronously with the current snapshot, then again whenever
+   * `ready` or `mode` changes by shallow equality. Returns an
+   * unsubscribe.
+   */
+  subscribe(listener: (event: { snapshot: DocumentSlice }) => void): () => void;
+  /**
+   * Set the document mode. Routes through `superdoc.setDocumentMode`
+   * which fires the existing `document-mode-change` event and updates
+   * the per-editor mode. No-op when the host stub omits the setter
+   * (e.g. SSR / non-browser test stubs).
+   */
+  setMode(mode: 'editing' | 'suggesting' | 'viewing'): void;
+  /**
+   * Export the document. Routes through `superdoc.export(options)`
+   * with the same defaults as the host method (DOCX, external
+   * comments, browser-triggered download). Returns the resulting
+   * blob (or zip) when `triggerDownload: false`, or `undefined`
+   * when the download was triggered. Rejects if the host's export
+   * fails; consumers should wrap their toolbar Export button in a
+   * try/catch and surface the error inline.
+   */
+  export(options?: DocumentExportInput): Promise<unknown>;
 }
 
 /**

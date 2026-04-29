@@ -119,4 +119,9 @@ export type {
   ViewportHandle,
   ViewportRect,
   ViewportRectResult,
+
+  // Document
+  DocumentExportInput,
+  DocumentHandle,
+  DocumentSlice,
 } from './types.js';

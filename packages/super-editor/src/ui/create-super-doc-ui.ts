@@ -843,16 +843,13 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
       return receipt;
     },
     async scrollTo(commentId) {
-      // Preserve `address.story` for non-body comments so navigation
-      // resolves to the right header / footer / note rather than
-      // defaulting to body.
-      const story = lookupItemStory(commentId);
-      const target =
-        story != null
-          ? { kind: 'entity' as const, entityType: 'comment' as const, entityId: commentId, story }
-          : { kind: 'entity' as const, entityType: 'comment' as const, entityId: commentId };
+      // `CommentAddress` is body-scoped in the contract — it has no
+      // `story` field today. Story-aware comment navigation lands as
+      // a separate doc-API extension; until then, just route the id
+      // and let `presentation.navigateTo` resolve through the comment
+      // entity store.
       return runScrollIntoView({
-        target,
+        target: { kind: 'entity', entityType: 'comment', entityId: commentId },
         block: 'center',
         behavior: 'smooth',
       });
@@ -990,14 +987,22 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     },
     async scrollTo(id) {
       const kind = entityKindForId(id);
-      const entityType = kind === 'change' ? 'trackedChange' : 'comment';
       activeReviewId = id;
       scheduleNotify();
-      const story = lookupItemStory(id);
-      const target =
-        story != null
-          ? { kind: 'entity' as const, entityType, entityId: id, story }
-          : { kind: 'entity' as const, entityType, entityId: id };
+      // `EntityAddress` is a discriminated union: `CommentAddress`
+      // doesn't carry a `story` field, only `TrackedChangeAddress`
+      // does. Branch on `kind` so the constructed target matches the
+      // right union member exactly.
+      let target: import('@superdoc/document-api').EntityAddress;
+      if (kind === 'change') {
+        const story = lookupItemStory(id) as import('@superdoc/document-api').TrackedChangeAddress['story'];
+        target =
+          story != null
+            ? { kind: 'entity', entityType: 'trackedChange', entityId: id, story }
+            : { kind: 'entity', entityType: 'trackedChange', entityId: id };
+      } else {
+        target = { kind: 'entity', entityType: 'comment', entityId: id };
+      }
       return runScrollIntoView({
         target,
         block: 'center',

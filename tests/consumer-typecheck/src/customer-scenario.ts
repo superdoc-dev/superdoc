@@ -834,6 +834,88 @@ function testVueComponents() {
   const slashMenu = SlashMenu;
 }
 
+// ============================================
+// SECTION 18: superdoc/ui sub-entry — `createSuperDocUI({ superdoc })`
+// ============================================
+
+/**
+ * Type-level smoke test for the published `superdoc/ui` sub-entry.
+ *
+ * Mirrors the `superdoc/headless-toolbar` shim pattern: this module
+ * is a thin re-export of the browser-only UI controller from
+ * `@superdoc/super-editor`. Without a consumer-perspective import,
+ * the published sub-entry would only be type-checked from inside the
+ * monorepo and a broken re-export could ship undetected.
+ */
+import {
+  createSuperDocUI,
+  shallowEqual,
+  type CommentsHandle,
+  type CommentsSlice,
+  type EqualityFn,
+  type ReviewHandle,
+  type ReviewItem,
+  type ReviewSlice,
+  type SelectionSlice,
+  type SelectorFn,
+  type Subscribable,
+  type SuperDocEditorLike,
+  type SuperDocLike,
+  type SuperDocUI,
+  type SuperDocUIOptions,
+  type SuperDocUIState,
+  type ViewportGetRectInput,
+  type ViewportHandle,
+  type ViewportRect,
+  type ViewportRectResult,
+} from 'superdoc/ui';
+
+function testSuperDocUISubEntry() {
+  // Runtime exports compile and have callable shapes.
+  const factory: (options: SuperDocUIOptions) => SuperDocUI = createSuperDocUI;
+  const eq: EqualityFn<unknown> = shallowEqual;
+  void factory;
+  void eq;
+
+  // Public handle / slice types resolve through the sub-entry.
+  type AssertHandles = {
+    toolbar: SuperDocUI['toolbar'];
+    commands: SuperDocUI['commands'];
+    comments: CommentsHandle;
+    review: ReviewHandle;
+    viewport: ViewportHandle;
+    state: SuperDocUIState;
+  };
+  type AssertSlices = {
+    selection: SelectionSlice;
+    comments: CommentsSlice;
+    review: ReviewSlice;
+    reviewItem: ReviewItem;
+  };
+  type AssertViewportShapes = {
+    input: ViewportGetRectInput;
+    rect: ViewportRect;
+    result: ViewportRectResult;
+  };
+  type AssertSubstrate = {
+    selector: SelectorFn<SuperDocUIState, SelectionSlice>;
+    sub: Subscribable<SelectionSlice>;
+  };
+  type AssertHostShapes = {
+    superdoc: SuperDocLike;
+    editor: SuperDocEditorLike;
+  };
+
+  // `void` the type aliases so the file stays a smoke test, not a
+  // sample. Touching each at value level via `null as never` keeps
+  // the typechecker honest without runtime work.
+  void (null as never as AssertHandles);
+  void (null as never as AssertSlices);
+  void (null as never as AssertViewportShapes);
+  void (null as never as AssertSubstrate);
+  void (null as never as AssertHostShapes);
+}
+
 export {
   testTypeShapes,
   testEditorOptions,
@@ -860,4 +942,5 @@ export {
   testAdditionalFunctions,
   testAdditionalClasses,
   testVueComponents,
+  testSuperDocUISubEntry,
 };

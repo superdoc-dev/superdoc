@@ -133,6 +133,53 @@ describe('computeAutoFitColumnWidths', () => {
     expect(result.totalWidth).toBeGreaterThan(100);
   });
 
+  it('redistributes uniform tblW auto grids by content', () => {
+    const result = computeAutoFitColumnWidths(
+      buildExplicitInput({
+        workingInput: buildWorkingInput({
+          preferredTableWidth: undefined,
+          maxTableWidth: 624,
+          preferredColumnWidths: [156, 156, 156, 156],
+          gridColumnCount: 4,
+          rows: [
+            {
+              skippedBefore: [],
+              skippedAfter: [],
+              skippedColumns: [],
+              logicalColumnCount: 4,
+              cells: [
+                { startColumn: 0, span: 1, preferredWidth: undefined },
+                { startColumn: 1, span: 1, preferredWidth: undefined },
+                { startColumn: 2, span: 1, preferredWidth: undefined },
+                { startColumn: 3, span: 1, preferredWidth: undefined },
+              ],
+            },
+          ],
+        }),
+        fixedLayout: {
+          columnWidths: [156, 156, 156, 156],
+          totalWidth: 624,
+          gridColumnCount: 4,
+          preferredTableWidth: undefined,
+        },
+        contentMetrics: buildContentMetrics([
+          [
+            { min: 80, max: 193.5 },
+            { min: 60, max: 70 },
+            { min: 60, max: 75 },
+            { min: 60, max: 75 },
+          ],
+        ]),
+      }),
+    );
+
+    expect(result.totalWidth).toBeCloseTo(624, 3);
+    expect(result.columnWidths[0]).toBeGreaterThan(193.5);
+    expect(result.columnWidths[1]).toBeLessThan(156);
+    expect(result.columnWidths[2]).toBeLessThan(156);
+    expect(result.columnWidths[3]).toBeLessThan(156);
+  });
+
   it('preserves explicit tblW AutoFit authored grid when content already fits', () => {
     const authoredWidths = [95.867, 472.533, 84.467];
     const tableWidth = authoredWidths.reduce((sum, width) => sum + width, 0);

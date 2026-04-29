@@ -217,6 +217,7 @@ function shouldPreserveAutoGrid(args: {
   if (layoutMode !== 'autofit') return false;
   if (preferredTableWidth != null) return false;
   if (preferredColumnWidths.length === 0 || preferredColumnWidths.length !== gridColumnCount) return false;
+  if (!hasNonUniformGrid(preferredColumnWidths)) return false;
   return true;
 }
 
@@ -230,8 +231,15 @@ function shouldPreserveExplicitAutoGrid(args: {
   if (layoutMode !== 'autofit') return false;
   if (preferredTableWidth == null || preferredTableWidth <= 0) return false;
   if (preferredColumnWidths.length === 0 || preferredColumnWidths.length !== gridColumnCount) return false;
+  if (!hasNonUniformGrid(preferredColumnWidths)) return false;
 
   return approximatelyEqual(sumWidths(preferredColumnWidths), preferredTableWidth);
+}
+
+function hasNonUniformGrid(widths: number[]): boolean {
+  if (widths.length <= 1) return true;
+  const firstWidth = widths[0];
+  return widths.some((width) => !approximatelyEqual(width, firstWidth));
 }
 
 /**

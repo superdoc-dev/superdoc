@@ -105,7 +105,7 @@ describe('buildAutoFitWorkingGridInput', () => {
     expect(result.gridColumnCount).toBe(3);
   });
 
-  it('marks complete tblW auto grids as preferred AutoFit geometry', () => {
+  it('marks complete non-uniform tblW auto grids as preferred AutoFit geometry', () => {
     const block = createTableBlock({
       attrs: {
         tableWidth: { value: 0, type: 'auto' },
@@ -124,6 +124,26 @@ describe('buildAutoFitWorkingGridInput', () => {
     expect(result.layoutMode).toBe('autofit');
     expect(result.preferredTableWidth).toBeUndefined();
     expect(result.preserveAutoGrid).toBe(true);
+  });
+
+  it('does not mark uniform tblW auto grids as preferred AutoFit geometry', () => {
+    const block = createTableBlock({
+      attrs: {
+        tableWidth: { value: 0, type: 'auto' },
+      },
+      columnWidths: [156, 156, 156, 156],
+      rows: [
+        {
+          id: 'row-1',
+          cells: [{ id: 'cell-1' }, { id: 'cell-2' }, { id: 'cell-3' }, { id: 'cell-4' }],
+        },
+      ],
+    });
+
+    const result = buildAutoFitWorkingGridInput(block, { maxWidth: 624 });
+
+    expect(result.preserveAutoGrid).toBeUndefined();
+    expect(result.gridColumnCount).toBe(4);
   });
 
   it('does not mark incomplete tblW auto grids as preferred AutoFit geometry', () => {
@@ -182,6 +202,25 @@ describe('buildAutoFitWorkingGridInput', () => {
     });
 
     const result = buildAutoFitWorkingGridInput(block, { maxWidth: 800 });
+
+    expect(result.preserveExplicitAutoGrid).toBeUndefined();
+  });
+
+  it('does not mark uniform explicit tblW AutoFit grids as preferred geometry', () => {
+    const block = createTableBlock({
+      attrs: {
+        tableWidth: { width: 624, type: 'px' },
+      },
+      columnWidths: [156, 156, 156, 156],
+      rows: [
+        {
+          id: 'row-1',
+          cells: [{ id: 'cell-1' }, { id: 'cell-2' }, { id: 'cell-3' }, { id: 'cell-4' }],
+        },
+      ],
+    });
+
+    const result = buildAutoFitWorkingGridInput(block, { maxWidth: 624 });
 
     expect(result.preserveExplicitAutoGrid).toBeUndefined();
   });

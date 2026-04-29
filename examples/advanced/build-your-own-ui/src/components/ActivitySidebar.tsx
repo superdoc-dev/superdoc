@@ -91,6 +91,31 @@ export function ActivitySidebar({ composeOpen, onCloseComposer }: Props) {
     }
   };
 
+  // Reconcile `decidedChanges` against the live review feed: when a
+  // tracked change we previously decided reappears in `review.items`
+  // (undo of the accept/reject, collaborator restore, etc.), drop it
+  // from the local decided roll-up. Without this prune, the same
+  // change renders in both the Active and Resolved sections with a
+  // stale "accepted" / "rejected" label.
+  useEffect(() => {
+    setDecidedChanges((prev) => {
+      if (prev.size === 0) return prev;
+      const liveChangeIds = new Set<string>();
+      for (const item of review.items) {
+        if (item.kind === 'change') liveChangeIds.add(item.id);
+      }
+      let mutated = false;
+      const next = new Map(prev);
+      for (const id of prev.keys()) {
+        if (liveChangeIds.has(id)) {
+          next.delete(id);
+          mutated = true;
+        }
+      }
+      return mutated ? next : prev;
+    });
+  }, [review.items]);
+
   // Auto-scroll the matching card into view when the active entity changes.
   const containerRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {

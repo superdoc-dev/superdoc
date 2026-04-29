@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { shallowEqual } from '../equality.js';
 import type {
   CommentsSlice,
@@ -6,7 +7,7 @@ import type {
   ToolbarSnapshotSlice,
   UIToolbarCommandState,
 } from '../types.js';
-import { useSuperDocSlice } from './provider.js';
+import { useSuperDocSlice, useSuperDocUI } from './provider.js';
 
 const EMPTY_SELECTION: SelectionSlice = {
   empty: true,
@@ -73,10 +74,27 @@ const FALLBACK_COMMAND_STATE: UIToolbarCommandState = {
  * const bold = useSuperDocCommand('bold');
  * <button data-active={bold.active} disabled={bold.disabled}>B</button>
  * ```
+ *
+ * Implementation note: this hook bypasses {@link useSuperDocSlice}
+ * because the selector closes over `id`. `useSuperDocSlice`'s
+ * subscription effect re-runs only when the controller swaps, so a
+ * toolbar component reused with a different command id under the
+ * same provider would otherwise keep emitting state for the prior
+ * id. Subscribing here with `[ui, id]` deps fixes the resubscription
+ * the substrate alone can't see.
  */
 export function useSuperDocCommand(id: string): UIToolbarCommandState {
-  return useSuperDocSlice(
-    (ui) => ui.select((state) => state.toolbar.commands?.[id] ?? FALLBACK_COMMAND_STATE, shallowEqual),
-    FALLBACK_COMMAND_STATE,
-  );
+  const ui = useSuperDocUI();
+  const [value, setValue] = useState<UIToolbarCommandState>(FALLBACK_COMMAND_STATE);
+
+  useEffect(() => {
+    if (!ui) {
+      setValue(FALLBACK_COMMAND_STATE);
+      return;
+    }
+    const sub = ui.select((state) => state.toolbar.commands?.[id] ?? FALLBACK_COMMAND_STATE, shallowEqual);
+    return sub.subscribe((next) => setValue(next));
+  }, [ui, id]);
+
+  return value;
 }

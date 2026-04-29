@@ -81,6 +81,9 @@
       "ui": [
         "./dist/superdoc/src/ui.d.ts"
       ],
+      "ui/react": [
+        "./dist/superdoc/src/ui-react.d.ts"
+      ],
       "headless-toolbar/react": [
         "./dist/superdoc/src/headless-toolbar-react.d.ts"
       ],

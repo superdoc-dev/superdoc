@@ -62,18 +62,27 @@ export function SuperDocUIProvider({ children }: { children: ReactNode }) {
   const [ui, setUI] = useState<SuperDocUI | null>(null);
   const [host, setHost] = useState<SuperDocHost | null>(null);
 
+  // Tracks the latest controller for the unmount cleanup effect and
+  // for prior-controller teardown on re-init. Maintained imperatively
+  // by `setSuperDoc`, never assigned during render: a render-time
+  // assignment would run twice under React StrictMode and could mask
+  // the controller that was actually live at unmount time.
   const uiRef = useRef<SuperDocUI | null>(null);
-  uiRef.current = ui;
 
   const setSuperDoc = useCallback((instance: unknown) => {
-    setUI((prev) => {
-      // SuperDoc emits `onReady` once per mount. If it ever fires
-      // twice for the same instance (re-init, dev StrictMode, etc.),
-      // drop the prior controller before creating the new one so
-      // subscriptions don't accumulate.
-      prev?.destroy();
-      return createSuperDocUI({ superdoc: instance as never });
-    });
+    // Construct (and tear down the prior) controller in the callback
+    // body, NOT inside a `setUI((prev) => ...)` updater. React's
+    // StrictMode invokes state-updater functions twice in development
+    // to find non-pure updaters: a second invocation here would call
+    // `createSuperDocUI` again, producing a controller React then
+    // discards but whose subscriptions stay attached to the SuperDoc
+    // / editor instance. The body of `setSuperDoc` runs once per call
+    // so the side effects (destroy + create) stay in lockstep with
+    // the value React records as the new state.
+    uiRef.current?.destroy();
+    const next = createSuperDocUI({ superdoc: instance as never });
+    uiRef.current = next;
+    setUI(next);
     setHost(instance as SuperDocHost);
   }, []);
 

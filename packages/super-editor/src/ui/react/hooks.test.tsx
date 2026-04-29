@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, render } from '@testing-library/react';
-import { SuperDocUIProvider, useSetSuperDoc } from './provider.js';
+import { SuperDocUIProvider, useSetSuperDoc, useSuperDocUI } from './provider.js';
 import {
   useSuperDocCommand,
   useSuperDocComments,
@@ -194,5 +194,81 @@ describe('domain hooks', () => {
     // built-in snapshot's default disabled posture (no editor context).
     expect(cmd?.source).toBe('built-in');
     expect(typeof cmd?.disabled).toBe('boolean');
+  });
+
+  // Regression for PR #3011 review comment: useSuperDocCommand must
+  // resubscribe when the id prop changes while the same controller
+  // stays mounted. A toolbar that maps over a config array of command
+  // ids and reuses one component instance per slot would otherwise
+  // observe the wrong command when the id changes.
+  it('useSuperDocCommand resubscribes when the id changes', async () => {
+    let setSuperDoc: ReturnType<typeof useSetSuperDoc> | undefined;
+    const captured: Array<{ id: string; source: string; value: unknown }> = [];
+
+    function Probe({ id }: { id: string }) {
+      const cmd = useSuperDocCommand(id);
+      setSuperDoc = useSetSuperDoc();
+      captured.push({ id, source: cmd.source, value: cmd.value });
+      return <span>{id}</span>;
+    }
+
+    const { rerender } = render(
+      <SuperDocUIProvider>
+        <Probe id='ai.first' />
+      </SuperDocUIProvider>,
+    );
+
+    // Stub a controller, then register two distinct custom commands so
+    // each id has a state distinguishable in the snapshot.
+    const stub = makeSuperdocStub();
+    act(() => {
+      setSuperDoc!(stub);
+    });
+
+    // Reach into the controller via context to register custom commands
+    // with distinct values per id. Use the public ui.commands.register
+    // surface.
+    let registered = false;
+    function Register() {
+      const ui = useSuperDocUI();
+      if (ui && !registered) {
+        registered = true;
+        ui.commands.register({ id: 'ai.first', execute: () => true, getState: () => ({ value: 'A' }) });
+        ui.commands.register({ id: 'ai.second', execute: () => true, getState: () => ({ value: 'B' }) });
+      }
+      return null;
+    }
+    rerender(
+      <SuperDocUIProvider>
+        <Probe id='ai.first' />
+        <Register />
+      </SuperDocUIProvider>,
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // Probe with id='ai.second' now. If the hook fails to resubscribe,
+    // the captured value will keep showing 'A' (stale).
+    rerender(
+      <SuperDocUIProvider>
+        <Probe id='ai.second' />
+        <Register />
+      </SuperDocUIProvider>,
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // The most recent capture for id='ai.second' must reflect the
+    // ai.second command's value, not ai.first's.
+    const lastForSecond = [...captured].reverse().find((c) => c.id === 'ai.second');
+    expect(lastForSecond).toBeDefined();
+    expect(lastForSecond!.value).toBe('B');
+    expect(lastForSecond!.source).toBe('custom');
   });
 });

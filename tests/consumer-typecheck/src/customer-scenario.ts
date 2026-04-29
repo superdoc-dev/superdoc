@@ -963,6 +963,47 @@ function testSuperDocUISubEntry() {
     entityAddressSame: UIEntityAddress extends EntityAddress ? true : false;
   };
   void (null as never as AssertDocReExportParity);
+
+  // SD-2815 guard: prove the doc-api types reached through `superdoc/ui`
+  // are NOT `any` shims (the post-build script that previously stamped
+  // every `@superdoc/document-api` reference as `any` in
+  // `_internal-shims.d.ts` would otherwise compile this file silently
+  // even though every property access succeeds against `any`).
+  //
+  // `any extends 'literal' ? ... : ...` distributes to `boolean`, so
+  // the conditional below is `true` only when the type is real. If the
+  // doc-api dist regresses to ambient-`any`, `IsNotAny<UICommentInfo>`
+  // collapses to `boolean` and the `extends true` check fails.
+  type IsAny<T> = 0 extends 1 & T ? true : false;
+  type IsNotAny<T> = IsAny<T> extends true ? false : true;
+  type AssertDocReExportsHaveRealShape = {
+    commentInfoIsReal: IsNotAny<UICommentInfo> extends true ? true : false;
+    receiptIsReal: IsNotAny<UIReceipt> extends true ? true : false;
+    selectionInfoIsReal: IsNotAny<UISelectionInfo> extends true ? true : false;
+    textTargetIsReal: IsNotAny<UITextTarget> extends true ? true : false;
+    scrollInputIsReal: IsNotAny<UIScrollIntoViewInput> extends true ? true : false;
+    trackChangeInfoIsReal: IsNotAny<UITrackChangeInfo> extends true ? true : false;
+  };
+  // Force `true` literally on every field. Anything else (including
+  // `boolean` from a distributed `IsAny<any>`) breaks the assignment.
+  const docApiTypesAreReal: AssertDocReExportsHaveRealShape = {
+    commentInfoIsReal: true,
+    receiptIsReal: true,
+    selectionInfoIsReal: true,
+    textTargetIsReal: true,
+    scrollInputIsReal: true,
+    trackChangeInfoIsReal: true,
+  };
+  void docApiTypesAreReal;
+
+  // Belt-and-suspenders: read a known field on `UICommentInfo` so a
+  // future test reader sees a concrete usage. If `UICommentInfo` is
+  // `any`, this still compiles (any accepts everything), but the
+  // `IsNotAny` check above would already have failed.
+  function readCommentId(c: UICommentInfo): string {
+    return c.commentId;
+  }
+  void readCommentId;
 }
 
 export {

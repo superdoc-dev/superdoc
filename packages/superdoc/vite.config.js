@@ -113,7 +113,15 @@ export default defineConfig(({ mode, command }) => {
   const plugins = [
     vue(),
     !skipDts && dts({
-      include: ['src/**/*', '../super-editor/src/**/*'],
+      // SD-2815: include `../document-api/src/**/*` so the doc-api
+      // types re-exported from `superdoc/ui` (CommentInfo, Receipt,
+      // SelectionInfo, TextTarget, etc.) emit real declarations into
+      // the published dist instead of falling through to the
+      // `_internal-shims.d.ts` `any` fallback that ensure-types.cjs
+      // generates for every unshipped `@superdoc/*` package. Without
+      // this, packed consumers see `any` for those public types and
+      // the new re-export surface adds no actual checking.
+      include: ['src/**/*', '../super-editor/src/**/*', '../document-api/src/**/*'],
       outDir: 'dist',
       // vite-plugin-dts still gathers diagnostics for this mixed JS/Vue source
       // tree, but we do not use this build as the authoritative type-check gate.

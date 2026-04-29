@@ -22,5 +22,5 @@
       "@shared/*": ["shared/*"]
     }
   },
-  "include": ["src", "../super-editor/src"]
+  "include": ["src", "../super-editor/src", "../document-api/src"]
 }

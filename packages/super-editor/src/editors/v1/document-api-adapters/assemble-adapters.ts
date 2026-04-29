@@ -99,8 +99,7 @@ import { executePlan } from './plan-engine/executor.js';
 import { previewPlan } from './plan-engine/preview.js';
 import { queryMatchAdapter } from './plan-engine/query-match-adapter.js';
 import { resolveRange } from './helpers/range-resolver.js';
-import { scrollRangeIntoView } from './helpers/scroll-into-view-adapter.js';
-import { resolveCurrentSelectionInfo, subscribeToSelection } from './helpers/selection-info-resolver.js';
+import { resolveCurrentSelectionInfo } from './helpers/selection-info-resolver.js';
 import { initRevision, trackRevisions } from './plan-engine/revision-tracker.js';
 import { initStoryRevisionStore } from './story-runtime/story-revision-store.js';
 import { registerBuiltInExecutors } from './plan-engine/register-executors.js';
@@ -723,11 +722,9 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
     },
     ranges: {
       resolve: (input) => resolveRange(editor, input),
-      scrollIntoView: (input) => scrollRangeIntoView(editor, input),
     },
     selection: {
       current: (input) => resolveCurrentSelectionInfo(editor, input),
-      onChange: (listener) => subscribeToSelection(editor, listener),
     },
     query: {
       match: (input) => queryMatchAdapter(editor, input),

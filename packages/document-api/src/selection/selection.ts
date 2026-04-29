@@ -14,24 +14,11 @@ import { isRecord, assertNoUnknownFields } from '../validation-primitives.js';
 export type { SelectionCurrentInput, SelectionInfo } from './selection.types.js';
 
 /**
- * Callback invoked whenever the editor's selection changes, with the
- * current {@link SelectionInfo}. Consumers may dedupe on `target` /
- * `activeMarks` identity if their UI doesn't need every transaction.
- */
-export type SelectionChangeListener = (info: SelectionInfo) => void;
-
-/**
  * Engine-specific adapter for the selection API.
  */
 export interface SelectionAdapter {
   /** Read the editor's current selection. */
   current(input: SelectionCurrentInput): SelectionInfo;
-  /**
-   * Subscribe to selection changes. Returns an unsubscribe function.
-   * Implementations should debounce to at most once per tick to avoid
-   * storms during multi-step transactions.
-   */
-  onChange(listener: SelectionChangeListener): () => void;
 }
 
 /**
@@ -46,16 +33,6 @@ export interface SelectionApi {
    * pass the resulting `target` directly to `comments.create`.
    */
   current(input?: SelectionCurrentInput): SelectionInfo;
-
-  /**
-   * Subscribe to selection changes. The listener fires with a fresh
-   * {@link SelectionInfo} (as `includeText: false`) whenever the user's
-   * selection, stored marks, or containing block changes.
-   *
-   * Returns an unsubscribe function — call it in cleanup (React
-   * `useEffect` return, Vue `onUnmounted`, etc.).
-   */
-  onChange(listener: SelectionChangeListener): () => void;
 }
 
 const SELECTION_CURRENT_ALLOWED_KEYS = new Set(['includeText']);

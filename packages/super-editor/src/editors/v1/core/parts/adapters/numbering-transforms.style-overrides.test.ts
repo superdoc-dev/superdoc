@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { generateNewListDefinition, type NumberingModel } from './numbering-transforms';
+import { generateNewListDefinition, setLvlStyleOnAbstract, type NumberingModel } from './numbering-transforms';
 
 function freshModel(): NumberingModel {
   return { abstracts: {}, definitions: {} };
@@ -128,6 +128,95 @@ describe('generateNewListDefinition - ordered style override', () => {
     const lvl0 = findLvl0(result.abstractDef);
     expect(findChild(lvl0, 'w:numFmt').attributes['w:val']).toBe('decimal');
     expect(findChild(lvl0, 'w:lvlText').attributes['w:val']).toBe('%1.');
+  });
+});
+
+describe('setLvlStyleOnAbstract', () => {
+  it('rewrites bullet lvlText and numFmt and strips rFonts in place', () => {
+    const numbering = freshModel();
+    const { abstractId } = generateNewListDefinition(numbering, {
+      numId: 1,
+      listType: 'bulletList',
+      bulletStyle: 'disc',
+    });
+
+    const ok = setLvlStyleOnAbstract(numbering, abstractId, 0, { bulletStyle: 'square' });
+    expect(ok).toBe(true);
+
+    const lvl0 = findLvl0(numbering.abstracts[abstractId]);
+    expect(findChild(lvl0, 'w:lvlText').attributes['w:val']).toBe('▪');
+    expect(findChild(lvl0, 'w:numFmt').attributes['w:val']).toBe('bullet');
+    const rPr = findChild(lvl0, 'w:rPr');
+    expect(findChild(rPr, 'w:rFonts')).toBeUndefined();
+  });
+
+  it('rewrites ordered numFmt and lvlText for upper-roman', () => {
+    const numbering = freshModel();
+    const { abstractId } = generateNewListDefinition(numbering, {
+      numId: 1,
+      listType: 'orderedList',
+      orderedStyle: 'decimal',
+    });
+
+    const ok = setLvlStyleOnAbstract(numbering, abstractId, 0, { orderedStyle: 'upper-roman' });
+    expect(ok).toBe(true);
+
+    const lvl0 = findLvl0(numbering.abstracts[abstractId]);
+    expect(findChild(lvl0, 'w:numFmt').attributes['w:val']).toBe('upperRoman');
+    expect(findChild(lvl0, 'w:lvlText').attributes['w:val']).toBe('%1.');
+  });
+
+  it('returns false for unknown abstract or missing level', () => {
+    const numbering = freshModel();
+    expect(setLvlStyleOnAbstract(numbering, 99, 0, { bulletStyle: 'disc' })).toBe(false);
+
+    const { abstractId } = generateNewListDefinition(numbering, { numId: 1, listType: 'orderedList' });
+    expect(setLvlStyleOnAbstract(numbering, abstractId, 99, { orderedStyle: 'decimal' })).toBe(false);
+  });
+
+  it('returns false when neither style is provided', () => {
+    const numbering = freshModel();
+    const { abstractId } = generateNewListDefinition(numbering, { numId: 1, listType: 'bulletList' });
+    expect(setLvlStyleOnAbstract(numbering, abstractId, 0, {})).toBe(false);
+  });
+
+  it('writes a level-correct lvlText placeholder for sublevels (ilvl=1 → "%2.")', () => {
+    // Regression: at ilvl=1 the placeholder must reference the level being mutated,
+    // not "%1" (which is the parent's counter). Otherwise every sublevel item renders
+    // the same value as its parent.
+    const numbering = freshModel();
+    const { abstractId } = generateNewListDefinition(numbering, {
+      numId: 1,
+      listType: 'orderedList',
+      orderedStyle: 'decimal',
+    });
+
+    const ok = setLvlStyleOnAbstract(numbering, abstractId, 1, { orderedStyle: 'upper-roman' });
+    expect(ok).toBe(true);
+
+    const lvl1 = numbering.abstracts[abstractId].elements.find(
+      (el: any) => el.name === 'w:lvl' && el.attributes['w:ilvl'] === '1',
+    );
+    expect(findChild(lvl1, 'w:numFmt').attributes['w:val']).toBe('upperRoman');
+    expect(findChild(lvl1, 'w:lvlText').attributes['w:val']).toBe('%2.');
+  });
+
+  it('preserves the suffix character for paren styles at sublevels (ilvl=2 → "%3)")', () => {
+    const numbering = freshModel();
+    const { abstractId } = generateNewListDefinition(numbering, {
+      numId: 1,
+      listType: 'orderedList',
+      orderedStyle: 'decimal',
+    });
+
+    const ok = setLvlStyleOnAbstract(numbering, abstractId, 2, { orderedStyle: 'lower-alpha-paren' });
+    expect(ok).toBe(true);
+
+    const lvl2 = numbering.abstracts[abstractId].elements.find(
+      (el: any) => el.name === 'w:lvl' && el.attributes['w:ilvl'] === '2',
+    );
+    expect(findChild(lvl2, 'w:numFmt').attributes['w:val']).toBe('lowerLetter');
+    expect(findChild(lvl2, 'w:lvlText').attributes['w:val']).toBe('%3)');
   });
 });
 

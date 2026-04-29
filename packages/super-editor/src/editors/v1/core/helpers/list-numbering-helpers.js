@@ -13,6 +13,7 @@ import {
   removeLvlOverride as pureRemoveLvlOverride,
   createNumDefinition as pureCreateNumDefinition,
   setLvlRestartOnAbstract as pureSetLvlRestartOnAbstract,
+  setLvlStyleOnAbstract as pureSetLvlStyleOnAbstract,
   getNextNumberingId,
 } from '@core/parts/adapters/numbering-transforms';
 import { mutateNumbering } from '@core/parts/adapters/numbering-mutation';
@@ -69,8 +70,8 @@ export function numberingInfoToOrderedStyle(numberingType, markerText) {
  * @param {string} [param0.text]
  * @param {string} [param0.fmt]
  * @param {string} [param0.markerFontFamily]
- * @param {'disc'|'circle'|'square'} [param0.bulletStyle]
- * @param {import('../../extensions/types/paragraph-commands.js').OrderedListStyle} [param0.orderedStyle]
+ * @param {'disc'|'circle'|'square'|null} [param0.bulletStyle]
+ * @param {import('../../extensions/types/paragraph-commands.js').OrderedListStyle|null} [param0.orderedStyle]
  * @param {import('../Editor').Editor} param0.editor
  * @returns {Object} The new abstract and num definitions.
  */
@@ -513,6 +514,34 @@ export const setLvlRestartOnAbstract = (editor, abstractNumId, ilvl, restartAfte
 };
 
 /**
+ * Update the bullet/ordered style on a list level for an existing numId.
+ *
+ * Resolves the abstract definition the numId points to and rewrites the matching
+ * `w:lvl` so every paragraph using `(numId, ilvl)` re-renders with the new style.
+ * Returns true when an abstract level was updated.
+ *
+ * @param {Object} param0
+ * @param {import('../Editor').Editor} param0.editor
+ * @param {number} param0.numId
+ * @param {number} param0.ilvl
+ * @param {'disc'|'circle'|'square'|null} [param0.bulletStyle]
+ * @param {import('../../extensions/types/paragraph-commands.js').OrderedListStyle|null} [param0.orderedStyle]
+ * @returns {boolean}
+ */
+export const setListLevelStyle = ({ editor, numId, ilvl, bulletStyle, orderedStyle }) => {
+  const numDef = editor.converter?.numbering?.definitions?.[numId];
+  const abstractIdRaw = numDef?.elements?.find((el) => el.name === 'w:abstractNumId')?.attributes?.['w:val'];
+  const abstractNumId = abstractIdRaw != null ? Number(abstractIdRaw) : NaN;
+  if (!Number.isFinite(abstractNumId)) return false;
+
+  let updated = false;
+  mutateNumbering(editor, 'list-numbering-helpers:setListLevelStyle', (numbering) => {
+    updated = pureSetLvlStyleOnAbstract(numbering, abstractNumId, ilvl, { bulletStyle, orderedStyle });
+  });
+  return updated;
+};
+
+/**
  * ListHelpers is a collection of utility functions for managing lists in the editor.
  */
 export const ListHelpers = {
@@ -535,6 +564,7 @@ export const ListHelpers = {
   // Numbering definition helpers
   createNumDefinition,
   setLvlRestartOnAbstract,
+  setListLevelStyle,
   rebuildRawNumberingFromTranslated,
 
   // Schema helpers

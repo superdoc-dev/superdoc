@@ -125,12 +125,11 @@ test.describe('PR-2873 list style changes', () => {
     }
   });
 
-  test.describe('partial-selection style switch', () => {
-    test('applying a different bullet style to one item splits the list', async ({ superdoc }) => {
+  test.describe('whole-list style switch', () => {
+    test('applying a different bullet style restyles every item at the same level', async ({ superdoc }) => {
       await createBulletList(superdoc, ['alpha', 'beta', 'gamma']);
 
       const before = await Promise.all(['alpha', 'beta', 'gamma'].map((t) => getParagraphNumberingByText(superdoc, t)));
-      // Sanity: all three start in the same list.
       expect(before[0]?.numId).toBe(before[1]?.numId);
       expect(before[1]?.numId).toBe(before[2]?.numId);
 
@@ -139,26 +138,157 @@ test.describe('PR-2873 list style changes', () => {
       await superdoc.waitForStable();
 
       const after = await Promise.all(['alpha', 'beta', 'gamma'].map((t) => getParagraphNumberingByText(superdoc, t)));
+      const snapshots = await Promise.all(['alpha', 'beta', 'gamma'].map((t) => getListItemSnapshots(superdoc, t)));
 
-      // Currently observed behavior (PR-2873): alpha gets a fresh numId (a brand-new
-      // single-item square list); beta/gamma stay in the original list.
-      //
-      // This documents the partial-selection fragmentation finding from the runtime
-      // review. If/when the PR converts to whole-list-conversion semantics
-      // (Word's behavior), this expectation should flip to:
-      //   expect(after[0]?.numId).toBe(after[1]?.numId);
-      expect(after[0]?.numId).not.toBe(before[0]?.numId);
+      // Word-compatible behavior: caret in one item restyles the abstract definition for
+      // (numId, ilvl=0) so every sibling at that level picks up the new bullet character.
+      expect(after[0]?.numId).toBe(before[0]?.numId);
       expect(after[1]?.numId).toBe(before[1]?.numId);
       expect(after[2]?.numId).toBe(before[2]?.numId);
+      for (const snap of snapshots) {
+        expect(snap[0].markerText).toBe('▪');
+        expect(snap[0].lvlText).toBe('▪');
+      }
     });
 
-    test('applying a different ordered style to item 1 renumbers the surviving items', async ({ superdoc }) => {
+    test('switching list kind from bullet to ordered flips every item at the same level', async ({ superdoc }) => {
+      await createBulletList(superdoc, ['one', 'two']);
+
+      const before = await Promise.all(['one', 'two'].map((t) => getParagraphNumberingByText(superdoc, t)));
+      expect(before[0]?.numId).toBe(before[1]?.numId);
+
+      // Caret is only in the first item.
+      await placeCursorIn(superdoc, 'one');
+      await superdoc.executeCommand('toggleOrderedList');
+      await superdoc.waitForStable();
+
+      const afterOne = await getListItemSnapshots(superdoc, 'one');
+      const afterTwo = await getListItemSnapshots(superdoc, 'two');
+
+      // Both items at the same level should have flipped — no fragmentation.
+      expect(afterOne[0].numberingType).toBe('decimal');
+      expect(afterTwo[0].numberingType).toBe('decimal');
+      expect(afterOne[0].markerText).toBe('1.');
+      expect(afterTwo[0].markerText).toBe('2.');
+      expect(afterOne[0].numId).toBe(afterTwo[0].numId);
+    });
+
+    test('switching list kind from ordered to bullet flips every item at the same level', async ({ superdoc }) => {
+      await createOrderedList(superdoc, ['one', 'two']);
+
+      const before = await Promise.all(['one', 'two'].map((t) => getParagraphNumberingByText(superdoc, t)));
+      expect(before[0]?.numId).toBe(before[1]?.numId);
+
+      await placeCursorIn(superdoc, 'one');
+      await superdoc.executeCommand('toggleBulletList');
+      await superdoc.waitForStable();
+
+      const afterOne = await getListItemSnapshots(superdoc, 'one');
+      const afterTwo = await getListItemSnapshots(superdoc, 'two');
+
+      expect(afterOne[0].numberingType).toBe('bullet');
+      expect(afterTwo[0].numberingType).toBe('bullet');
+      expect(afterOne[0].numId).toBe(afterTwo[0].numId);
+    });
+
+    test('decimal → roman after creating the list via toggleOrderedList (user-reported scenario)', async ({
+      superdoc,
+    }) => {
+      // Mirrors the exact reproduction the user described:
+      //   1. Type two plain paragraphs.
+      //   2. Convert them into an ordered (decimal) list via the toolbar command.
+      //   3. With caret in one item, switch the style to upper-roman.
+      // Both items must end up as roman markers (I., II.).
+      await superdoc.type('one');
+      await superdoc.newLine();
+      await superdoc.type('two');
+      await superdoc.waitForStable();
+
+      // Select both paragraphs and convert them to a decimal ordered list.
+      await superdoc.page.evaluate(() => {
+        const editor = (window as any).editor;
+        const TS = editor.state.selection.constructor;
+        editor.view.dispatch(
+          editor.state.tr.setSelection(TS.create(editor.state.doc, 1, editor.state.doc.content.size - 1)),
+        );
+      });
+      await superdoc.executeCommand('toggleOrderedList');
+      await superdoc.waitForStable();
+
+      const decimalSnapshots = await Promise.all(['one', 'two'].map((t) => getListItemSnapshots(superdoc, t)));
+      expect(decimalSnapshots[0][0].markerText).toBe('1.');
+      expect(decimalSnapshots[1][0].markerText).toBe('2.');
+
+      await placeCursorIn(superdoc, 'one');
+      await superdoc.executeCommand('toggleOrderedListStyle', 'upper-roman' as unknown as Record<string, unknown>);
+      await superdoc.waitForStable();
+
+      const romanSnapshots = await Promise.all(['one', 'two'].map((t) => getListItemSnapshots(superdoc, t)));
+      expect(romanSnapshots[0][0].numFmt).toBe('upperRoman');
+      expect(romanSnapshots[1][0].numFmt).toBe('upperRoman');
+      expect(romanSnapshots[0][0].markerText).toBe('I.');
+      expect(romanSnapshots[1][0].markerText).toBe('II.');
+      expect(romanSnapshots[0][0].numId).toBe(romanSnapshots[1][0].numId);
+
+      // Also assert what the user actually sees: the DOM markers rendered by DomPainter.
+      const visibleMarkers = await superdoc.page.locator('.superdoc-paragraph-marker').allInnerTexts();
+      expect(visibleMarkers.map((t) => t.trim())).toEqual(['I.', 'II.']);
+    });
+
+    test('changing a sublevel style preserves continuous numbering across siblings', async ({ superdoc }) => {
+      // Reproduces the user-reported issue:
+      //   1. Add "level0" at level 0 (decimal).
+      //   2. Press Enter + Tab → "sub1" at level 1.
+      //   3. Press Enter → "sub2" at level 1.
+      //   4. Caret in sub1, change style to upper-roman.
+      // Both sublevel items should renumber as "I." and "II.", not duplicate "I." and "I.".
+      // Use the input rule to create the list — same shortcut a user would type.
+      await superdoc.type('1. level0');
+      await superdoc.waitForStable();
+      await superdoc.newLine();
+      await superdoc.waitForStable();
+      await superdoc.type('sub1');
+      await superdoc.press('Tab');
+      await superdoc.waitForStable();
+      await superdoc.newLine();
+      await superdoc.waitForStable();
+      await superdoc.type('sub2');
+      await superdoc.waitForStable();
+
+      // Sanity: before changing style we should see "1." (level0), and the
+      // input-rule default markers for level 1 ("a.", "b.") on sub1 and sub2.
+      const before = await Promise.all(['level0', 'sub1', 'sub2'].map((t) => getListItemSnapshots(superdoc, t)));
+      expect(before[0][0].markerText).toBe('1.');
+      expect(before[1][0].markerText).toBe('a.');
+      expect(before[2][0].markerText).toBe('b.');
+
+      // Caret in sub1, change style to upper-roman.
+      await placeCursorIn(superdoc, 'sub1');
+      await superdoc.executeCommand('toggleOrderedListStyle', 'upper-roman' as unknown as Record<string, unknown>);
+      await superdoc.waitForStable();
+
+      const after = await Promise.all(['level0', 'sub1', 'sub2'].map((t) => getListItemSnapshots(superdoc, t)));
+
+      // level0 stays decimal (we only changed level 1).
+      expect(after[0][0].markerText).toBe('1.');
+      // Sublevel items should be I. and II. — preserve continuous numbering.
+      expect(after[1][0].numFmt).toBe('upperRoman');
+      expect(after[2][0].numFmt).toBe('upperRoman');
+      expect(after[1][0].markerText).toBe('I.');
+      expect(after[2][0].markerText).toBe('II.');
+
+      // Visible DOM should match the data layer: top-level "1.", sublevels "I.", "II.".
+      const visibleMarkers = await superdoc.page.locator('.superdoc-paragraph-marker').allInnerTexts();
+      expect(visibleMarkers.map((t) => t.trim())).toEqual(['1.', 'I.', 'II.']);
+    });
+
+    test('applying a different ordered style restyles every item at the same level', async ({ superdoc }) => {
       await createOrderedList(superdoc, ['one', 'two', 'three']);
 
-      const beforeSnapshots = await getListItemSnapshots(superdoc, 'one');
+      const beforeOne = await getListItemSnapshots(superdoc, 'one');
       const beforeTwo = await getListItemSnapshots(superdoc, 'two');
       const beforeThree = await getListItemSnapshots(superdoc, 'three');
-      expect(beforeSnapshots[0].markerText).toBe('1.');
+      expect(beforeOne[0].markerText).toBe('1.');
       expect(beforeTwo[0].markerText).toBe('2.');
       expect(beforeThree[0].markerText).toBe('3.');
 
@@ -170,16 +300,19 @@ test.describe('PR-2873 list style changes', () => {
       const afterTwo = await getListItemSnapshots(superdoc, 'two');
       const afterThree = await getListItemSnapshots(superdoc, 'three');
 
-      // "one" now belongs to a fresh single-item upper-roman list.
+      // All three items at the same level are now upper-roman (I., II., III.).
+      for (const snap of [afterOne, afterTwo, afterThree]) {
+        expect(snap[0].numFmt).toBe('upperRoman');
+        expect(snap[0].lvlText).toBe('%1.');
+      }
       expect(afterOne[0].markerText).toBe('I.');
-      expect(afterOne[0].numFmt).toBe('upperRoman');
+      expect(afterTwo[0].markerText).toBe('II.');
+      expect(afterThree[0].markerText).toBe('III.');
 
-      // "two" and "three" are still decimal but Word-compatible behavior would keep
-      // them as 2./3.; this PR auto-renumbers them from 1. because the head left.
-      expect(afterTwo[0].numFmt).toBe('decimal');
-      expect(afterThree[0].numFmt).toBe('decimal');
-      expect(afterTwo[0].markerText).toBe('1.');
-      expect(afterThree[0].markerText).toBe('2.');
+      // numId is preserved — we mutated the abstract, not the paragraph references.
+      expect(afterOne[0].numId).toBe(beforeOne[0].numId);
+      expect(afterTwo[0].numId).toBe(beforeTwo[0].numId);
+      expect(afterThree[0].numId).toBe(beforeThree[0].numId);
     });
   });
 });

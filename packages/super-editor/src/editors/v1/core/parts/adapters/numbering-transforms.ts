@@ -382,5 +382,66 @@ export function setLvlRestartOnAbstract(
   return true;
 }
 
+/**
+ * Update the bullet/ordered style on a single level of an abstract definition.
+ *
+ * Mutates `w:numFmt`, `w:lvlText`, and `w:rPr` on the matching `w:lvl` element so every
+ * num definition referencing this abstract picks up the new style. Used for "change the
+ * style of the whole list at this level" operations.
+ */
+export function setLvlStyleOnAbstract(
+  numbering: NumberingModel,
+  abstractNumId: number,
+  ilvl: number,
+  options: { bulletStyle?: 'disc' | 'circle' | 'square' | null; orderedStyle?: OrderedListStyle | null },
+): boolean {
+  const abstract = numbering.abstracts[abstractNumId];
+  if (!abstract?.elements) return false;
+
+  const ilvlStr = String(ilvl);
+  const lvlEl = abstract.elements.find((el: any) => el.name === 'w:lvl' && el.attributes?.['w:ilvl'] === ilvlStr);
+  if (!lvlEl) return false;
+  if (!lvlEl.elements) lvlEl.elements = [];
+
+  const setOrAddChild = (name: string, value: string) => {
+    const existing = lvlEl.elements.find((el: any) => el.name === name);
+    if (existing) {
+      existing.attributes = { ...(existing.attributes || {}), 'w:val': value };
+    } else {
+      lvlEl.elements.push({ type: 'element', name, attributes: { 'w:val': value } });
+    }
+  };
+
+  if (options.bulletStyle) {
+    const char = BULLET_STYLE_CHARS[options.bulletStyle];
+    if (!char) return false;
+    setOrAddChild('w:numFmt', 'bullet');
+    setOrAddChild('w:lvlText', char);
+
+    // Drop the inherited bullet font so the Unicode glyph renders in the document's default font.
+    const rPr = lvlEl.elements.find((el: any) => el.name === 'w:rPr');
+    if (rPr?.elements) {
+      rPr.elements = rPr.elements.filter((el: any) => el.name !== 'w:rFonts');
+    }
+    return true;
+  }
+
+  if (options.orderedStyle) {
+    const config = ORDERED_LIST_STYLES[options.orderedStyle];
+    if (!config) return false;
+    // The default `config.text` is "%1<suffix>" — correct for level 0 but wrong for
+    // sublevels, where the placeholder must reference the level being mutated. OOXML
+    // numbers `%N` from 1 starting at the top level, so at ilvl=N we want "%(N+1)".
+    // Preserve whatever suffix the style uses (e.g. ".", ")") so paren styles stay paren.
+    const suffix = config.text.replace(/^%\d+/, '');
+    const lvlTextValue = `%${ilvl + 1}${suffix}`;
+    setOrAddChild('w:numFmt', config.fmt);
+    setOrAddChild('w:lvlText', lvlTextValue);
+    return true;
+  }
+
+  return false;
+}
+
 // Re-export ID allocation for external callers that need just IDs
 export { getNextId as getNextNumberingId };

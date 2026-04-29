@@ -2703,6 +2703,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
     const prevState = this.state;
     let nextState: EditorState;
     let transactionToApply = transaction;
+    let effectiveTransaction: Transaction = transaction;
     const forceTrackChanges = transactionToApply.getMeta('forceTrackChanges') === true;
     try {
       const trackChangesState = TrackChangesBasePluginKey.getState(prevState);
@@ -2723,8 +2724,16 @@ export class Editor extends EventEmitter<EditorEventMap> {
           })
         : transactionToApply;
 
-      const { state: appliedState } = prevState.applyTransaction(transactionToApply);
+      const { state: appliedState, transactions: appliedTransactions } = prevState.applyTransaction(transactionToApply);
       nextState = appliedState;
+      // Pick the transaction that actually carries the doc delta.
+      // When the input tr is empty (e.g., the no-op tr dispatched by `handleNumberingInvalidation`),
+      // an appendTransaction plugin (numberingPlugin) may produce the real change. Downstream
+      // listeners — PresentationEditor in particular — read `transaction.docChanged` and `transaction.mapping`
+      // to decide whether to re-render and to compose position maps. Without this picker they
+      // see the empty input tr and no re-paint happens.
+      // Walk forward so the input tr (which usually carries user meta) is preferred when it has docChanged.
+      effectiveTransaction = appliedTransactions.find((t) => t.docChanged) ?? transactionToApply;
     } catch (error) {
       if (forceTrackChanges) throw error;
       // just in case
@@ -2772,7 +2781,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
       });
     }
 
-    if (transactionToApply.docChanged) {
+    if (effectiveTransaction.docChanged) {
       // Track document modifications and promote to GUID if needed
       if (transaction.docChanged && this.converter) {
         if (!this.converter.documentGuid) {
@@ -2784,7 +2793,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
 
       this.emit('update', {
         editor: this,
-        transaction: transactionToApply,
+        transaction: effectiveTransaction,
       });
     }
   }

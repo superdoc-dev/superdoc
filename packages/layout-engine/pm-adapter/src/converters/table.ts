@@ -22,6 +22,7 @@ import type {
   TableBlock,
   TableAnchor,
   TableWrap,
+  SourceAnchor,
 } from '@superdoc/contracts';
 import type {
   PMNode,
@@ -75,6 +76,13 @@ function normalizeCellSpacing(raw: number | { value?: number; type?: string } | 
   const t = (raw.type ?? 'px').toLowerCase();
   const type = t === 'dxa' ? 'dxa' : 'px';
   return { value, type };
+}
+
+function sourceAnchorFromNode(node: PMNode): SourceAnchor | undefined {
+  const sourceAnchor = (node.attrs as Record<string, unknown> | undefined)?.sourceAnchor;
+  return sourceAnchor && typeof sourceAnchor === 'object' && !Array.isArray(sourceAnchor)
+    ? (sourceAnchor as SourceAnchor)
+    : undefined;
 }
 
 function normalizeLegacyBorderStyle(value: string | undefined): BorderStyle {
@@ -582,6 +590,7 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
     rowSpan: rowSpan ?? undefined,
     colSpan: colSpan ?? undefined,
     attrs: Object.keys(cellAttrs).length > 0 ? cellAttrs : undefined,
+    sourceAnchor: sourceAnchorFromNode(cellNode),
   };
 };
 
@@ -667,6 +676,7 @@ const parseTableRow = (args: ParseTableRowArgs): TableRow | null => {
     id: context.nextBlockId(`row-${rowIndex}`),
     cells,
     attrs,
+    sourceAnchor: sourceAnchorFromNode(rowNode),
   };
 };
 
@@ -1038,6 +1048,7 @@ export function tableNodeToBlock(
     columnWidths,
     ...(anchor ? { anchor } : {}),
     ...(wrap ? { wrap } : {}),
+    sourceAnchor: sourceAnchorFromNode(node),
   };
 
   return tableBlock;

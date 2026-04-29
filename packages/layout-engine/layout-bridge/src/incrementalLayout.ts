@@ -1871,32 +1871,13 @@ export async function incrementalLayout(
             reservesStabilized = true;
             break;
           }
-          // SD-1680: when reserves oscillate (typically between a state where all footnotes
-          // fit and a state where body packs tighter with some footnotes pushed off the
-          // page), prefer the element-wise max across all seen states. This matches Word's
-          // bias toward keeping footnotes on their ref's page rather than tight body
-          // packing, and avoids overflow from the body reserving less than the plan places.
-          const nextKey = nextReserves.join(',');
-          const seen = seenReserveVectors.some((v) => v.join(',') === nextKey);
-          if (seen) {
-            const allVectors = [...seenReserveVectors, nextReserves];
-            const mergedLength = Math.max(...allVectors.map((v) => v.length));
-            const merged = new Array<number>(mergedLength).fill(0);
-            for (const vec of allVectors) {
-              for (let i = 0; i < mergedLength; i += 1) {
-                if ((vec[i] ?? 0) > merged[i]) merged[i] = vec[i];
-              }
-            }
-            reserves = merged;
-            // Relayout with merged reserves so post-loop sees a layout consistent with the
-            // reserves we're about to apply — otherwise pages may collapse to the layout
-            // built with the smaller oscillating reserve.
-            layout = relayout(reserves);
-            ({ columns: pageColumns, idsByColumn } = resolveFootnoteAssignments(layout));
-            ({ measuresById } = await measureFootnoteBlocks(collectFootnoteIdsByColumn(idsByColumn)));
-            plan = computeFootnoteLayoutPlan(layout, idsByColumn, measuresById, reserves, pageColumns);
-            break;
-          }
+          // Reserves are oscillating. Break out; the post-reserve grow loop
+          // below (which is monotonic and has its own cycle detector) will
+          // bump any under-reserved pages to the current plan's demand.
+          // Merging history here would carry over large demands from early
+          // passes that the current layout no longer anchors, leading to
+          // wasted reserved space on pages that never get any footnote.
+          if (seenReserveVectors.some((v) => v.join(',') === nextReserves.join(','))) break;
           seenReserveVectors.push(nextReserves.slice());
           // Only update reserves when we will do another layout pass; otherwise layout
           // would be built with the previous reserves while reserves would be nextReserves,
@@ -1923,28 +1904,14 @@ export async function incrementalLayout(
           finalPageColumns,
         );
         let reservesAppliedToLayout = reserves;
-        // SD-1680: the post-loop can still mismatch the body reserve and plan placement when
-        // relayouting with finalPlan.reserves shifts footnote refs between pages (the newly
-        // relaxed page now holds refs the old reserves didn't account for). Iterate a few
-        // times, each step taking the element-wise max of current reserves and the new plan's
-        // reserves, so the final layout's reservation on every page is at least as large as
-        // the demand from the final ref assignment. This guarantees placements stay inside
-        // the band and cannot render past the page's bottom margin.
-        const MAX_POST_PASSES = 3;
-        for (let postPass = 0; postPass < MAX_POST_PASSES; postPass += 1) {
-          const target = reservesAppliedToLayout.slice();
-          const planReserves = finalPlan.reserves;
-          const len = Math.max(target.length, planReserves.length);
-          let needsRelayout = false;
-          for (let i = 0; i < len; i += 1) {
-            const applied = target[i] ?? 0;
-            const needed = planReserves[i] ?? 0;
-            if (needed > applied) {
-              target[i] = needed;
-              needsRelayout = true;
-            }
+
+        const vectorsEqual = (a: number[], b: number[]): boolean => {
+          for (let i = 0; i < Math.max(a.length, b.length); i += 1) {
+            if ((a[i] ?? 0) !== (b[i] ?? 0)) return false;
           }
-          if (!needsRelayout) break;
+          return true;
+        };
+        const applyReserves = async (target: number[]) => {
           layout = relayout(target);
           reservesAppliedToLayout = target;
           ({ columns: finalPageColumns, idsByColumn: finalIdsByColumn } = resolveFootnoteAssignments(layout));
@@ -1958,7 +1925,93 @@ export async function incrementalLayout(
             reservesAppliedToLayout,
             finalPageColumns,
           );
+        };
+        // Grow-only convergence: ensures every page reserves at least as much
+        // as its plan demands, so footnotes never render past the page bottom.
+        // Monotonic (reserves only increase) and safe under oscillation. Needs
+        // several passes for growth on one page to propagate to the pages it
+        // spills into. If a target cycles back to one we've tried, we merge
+        // element-wise with the last applied target to force progress.
+        const growReserves = async (maxPasses: number): Promise<boolean> => {
+          const seen: number[][] = [reservesAppliedToLayout.slice()];
+          for (let pass = 0; pass < maxPasses; pass += 1) {
+            const target = reservesAppliedToLayout.slice();
+            const plan = finalPlan.reserves;
+            let grew = false;
+            for (let i = 0; i < Math.max(target.length, plan.length); i += 1) {
+              if ((plan[i] ?? 0) > (target[i] ?? 0)) {
+                target[i] = plan[i];
+                grew = true;
+              }
+            }
+            if (!grew) return true;
+            let next = target;
+            if (seen.some((prev) => vectorsEqual(prev, target))) {
+              const last = seen[seen.length - 1];
+              next = target.map((v, i) => Math.max(v, last[i] ?? 0));
+              if (vectorsEqual(next, reservesAppliedToLayout)) return true;
+            }
+            await applyReserves(next);
+            seen.push(next);
+          }
+          return false;
+        };
+
+        // Fast path for well-converged docs: if every page's current reserve
+        // already satisfies the plan and no page is carrying dead reserve,
+        // skip both the initial grow and the tighten loop entirely. Avoids
+        // up to ~20 unnecessary relayouts on documents without oscillation.
+        const TIGHTEN_SLACK_PX = 8;
+        const needsWork = (() => {
+          const plan = finalPlan.reserves;
+          const applied = reservesAppliedToLayout;
+          const len = Math.max(plan.length, applied.length);
+          for (let i = 0; i < len; i += 1) {
+            const a = applied[i] ?? 0;
+            const p = plan[i] ?? 0;
+            if (p > a) return true; // under-reserved — grow must bump
+            if (a >= TIGHTEN_SLACK_PX && p === 0) return true; // dead reserve — tighten can reclaim
+          }
+          return false;
+        })();
+
+        if (needsWork) {
+          const GROW_MAX_PASSES = 10;
+          if (!(await growReserves(GROW_MAX_PASSES))) {
+            console.warn(
+              '[incrementalLayout] Footnote post-reserve loop did not converge; some pages may have footnotes overflowing the reserved band.',
+            );
+          }
+
+          // Opportunistic tighten: the grow loop is monotonic, so pages whose
+          // plan no longer asks for a reserve (footnote content shifted to
+          // later pages during an earlier pass) still carry their old reserve.
+          // Zero those pages' reserves and regrow any that gain footnote
+          // content after the body reflows. Revert if regrow can't stabilize
+          // safely or would add pages. Iterate a few times — each tighten
+          // + regrow can expose a fresh set of "reserved but plan==0" pages
+          // after the body reflows.
+          const MAX_TIGHTEN_ITERATIONS = 8;
+          for (let iteration = 0; iteration < MAX_TIGHTEN_ITERATIONS; iteration += 1) {
+            const pagesToTighten: number[] = [];
+            for (let i = 0; i < reservesAppliedToLayout.length; i += 1) {
+              const applied = reservesAppliedToLayout[i] ?? 0;
+              const planned = finalPlan.reserves[i] ?? 0;
+              if (applied >= TIGHTEN_SLACK_PX && planned === 0) pagesToTighten.push(i);
+            }
+            if (pagesToTighten.length === 0) break;
+            const safeApplied = reservesAppliedToLayout.slice();
+            const safePageCount = layout.pages.length;
+            const tightened = reservesAppliedToLayout.slice();
+            for (const i of pagesToTighten) tightened[i] = 0;
+            await applyReserves(tightened);
+            if (!(await growReserves(GROW_MAX_PASSES)) || layout.pages.length > safePageCount) {
+              await applyReserves(safeApplied);
+              break;
+            }
+          }
         }
+
         const blockById = new Map<string, FlowBlock>();
         finalBlocks.forEach((block) => {
           blockById.set(block.id, block);

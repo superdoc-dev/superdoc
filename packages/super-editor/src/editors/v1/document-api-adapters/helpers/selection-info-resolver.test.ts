@@ -556,4 +556,3 @@ describe('resolveCurrentSelectionInfo > entity ids', () => {
     expect(roundTripped.activeChangeIds).toEqual([]);
   });
 });
-

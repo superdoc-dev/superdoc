@@ -1,0 +1,460 @@
+name: "Labs: PR Renderer Build"
+
+on:
+  pull_request:
+    branches:
+      - main
+      - stable
+    types:
+      - opened
+      - ready_for_review
+      - reopened
+      - synchronize
+      - closed
+
+permissions:
+  actions: read
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: pr-renderer-build-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  build-package:
+    name: Package
+    if: >-
+      github.event.action != 'closed' &&
+      (github.event.pull_request.draft == false || github.event.action == 'ready_for_review') &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.13
+
+      - name: Install canvas system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            libcairo2-dev \
+            libpango1.0-dev \
+            libjpeg-dev \
+            libgif-dev \
+            librsvg2-dev \
+            libpixman-1-dev
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build package tarball
+        run: pnpm run pack:es
+
+      - name: Verify package tarball
+        id: package
+        run: |
+          set -euo pipefail
+
+          PACKAGE_PATH="packages/superdoc/superdoc.tgz"
+          if [[ ! -f "${PACKAGE_PATH}" ]]; then
+            echo "Expected ${PACKAGE_PATH} to exist after pnpm run pack:es." >&2
+            exit 1
+          fi
+
+          PACKAGE_SHA="$(shasum -a 256 "${PACKAGE_PATH}" | awk '{print $1}')"
+          PACKAGE_SIZE="$(wc -c < "${PACKAGE_PATH}" | tr -d ' ')"
+
+          echo "path=${PACKAGE_PATH}" >> "${GITHUB_OUTPUT}"
+          echo "sha256=${PACKAGE_SHA}" >> "${GITHUB_OUTPUT}"
+          echo "size_bytes=${PACKAGE_SIZE}" >> "${GITHUB_OUTPUT}"
+
+      - name: Upload package workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          if-no-files-found: error
+          name: superdoc-pr-package-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}
+          path: ${{ steps.package.outputs.path }}
+          retention-days: 1
+
+  register:
+    name: Register
+    needs: build-package
+    if: >-
+      github.event.action != 'closed' &&
+      (github.event.pull_request.draft == false || github.event.action == 'ready_for_review') &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Download package workflow artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: superdoc-pr-package-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}
+          path: package-artifact
+
+      - name: Verify downloaded package tarball
+        id: package
+        run: |
+          set -euo pipefail
+
+          PACKAGE_PATH="package-artifact/superdoc.tgz"
+          if [[ ! -f "${PACKAGE_PATH}" ]]; then
+            echo "Expected ${PACKAGE_PATH} to exist after artifact download." >&2
+            exit 1
+          fi
+
+          PACKAGE_SHA="$(shasum -a 256 "${PACKAGE_PATH}" | awk '{print $1}')"
+          PACKAGE_SIZE="$(wc -c < "${PACKAGE_PATH}" | tr -d ' ')"
+
+          echo "path=${PACKAGE_PATH}" >> "${GITHUB_OUTPUT}"
+          echo "sha256=${PACKAGE_SHA}" >> "${GITHUB_OUTPUT}"
+          echo "size_bytes=${PACKAGE_SIZE}" >> "${GITHUB_OUTPUT}"
+
+      - name: Upload package artifact to Labs
+        id: upload
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          LABS_API_URL: ${{ vars.LABS_API_URL }}
+          LABS_PR_BUILD_TOKEN: ${{ secrets.LABS_PR_BUILD_TOKEN || secrets.LABS_RELEASE_QUALIFICATION_TOKEN }}
+          PACKAGE_PATH: ${{ steps.package.outputs.path }}
+          PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number }}
+          REPOSITORY_FULL_NAME: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${LABS_API_URL}" ]]; then
+            echo "LABS_API_URL repository variable is required." >&2
+            exit 1
+          fi
+          if [[ -z "${LABS_PR_BUILD_TOKEN}" ]]; then
+            echo "LABS_PR_BUILD_TOKEN secret is required." >&2
+            exit 1
+          fi
+
+          print_labs_error() {
+            local operation="$1"
+            local status="$2"
+            local response_file="$3"
+            local response_bytes
+
+            response_bytes="$(wc -c < "${response_file}" | tr -d ' ')"
+            echo "${operation} failed with HTTP ${status} (${response_bytes} response bytes)." >&2
+
+            if ! jq -e 'type == "object"' "${response_file}" > /dev/null 2>&1; then
+              echo "Labs response body omitted because it is not a JSON object." >&2
+              return
+            fi
+
+            local error_summary
+            error_summary="$(jq -r '
+              def scrub:
+                tostring
+                | gsub("[\r\n\t]+"; " ")
+                | gsub("gh[pousr]_[A-Za-z0-9_]+"; "<redacted-token>")
+                | gsub("github_pat_[A-Za-z0-9_]+"; "<redacted-token>")
+                | gsub("eyJ[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+"; "<redacted-jwt>")
+                | gsub("https?://[^ ]+"; "<redacted-url>")
+                | gsub("[A-Za-z0-9_./:@%+-]{80,}"; "<redacted-opaque-value>")
+                | .[0:500];
+              [
+                ["code", (.error.code // .code // empty)],
+                ["message", (.error.message // .message // empty)],
+                ["request_id", (.requestId // .request_id // .traceId // .trace_id // empty)]
+              ]
+              | .[]
+              | select(.[1] != null and (.[1] | tostring | length) > 0)
+              | "\(.[0])=\(.[1] | scrub)"
+            ' "${response_file}")"
+
+            if [[ -z "${error_summary}" ]]; then
+              echo "Labs JSON response did not include public error fields; response body omitted." >&2
+              return
+            fi
+
+            while IFS= read -r line; do
+              echo "Labs error ${line}" >&2
+            done <<< "${error_summary}"
+          }
+
+          RESPONSE_FILE="$(mktemp)"
+          HTTP_STATUS="$(curl \
+            --silent \
+            --show-error \
+            --output "${RESPONSE_FILE}" \
+            --write-out '%{http_code}' \
+            -X POST \
+            -H 'content-type: application/gzip' \
+            -H "x-labs-internal-token: ${LABS_PR_BUILD_TOKEN}" \
+            -H 'x-superdoc-package-file-name: superdoc.tgz' \
+            -H "x-superdoc-repository-full-name: ${REPOSITORY_FULL_NAME}" \
+            -H "x-superdoc-pull-request-number: ${PULL_REQUEST_NUMBER}" \
+            -H "x-superdoc-head-sha: ${HEAD_SHA}" \
+            --data-binary "@${PACKAGE_PATH}" \
+            "${LABS_API_URL%/}/v1/internal/superdoc/pr-builds/package-artifacts")"
+
+          if [[ "${HTTP_STATUS}" -lt 200 || "${HTTP_STATUS}" -ge 300 ]]; then
+            print_labs_error "Labs package artifact upload" "${HTTP_STATUS}" "${RESPONSE_FILE}"
+            exit 1
+          fi
+
+          PACKAGE_KEY="$(jq -r '.packageSource.artifactKey // empty' "${RESPONSE_FILE}")"
+          if [[ -z "${PACKAGE_KEY}" ]]; then
+            echo "Labs package artifact upload response did not include packageSource.artifactKey; response body omitted." >&2
+            exit 1
+          fi
+
+          cp "${RESPONSE_FILE}" package-upload-response.json
+          echo "artifact_key=${PACKAGE_KEY}" >> "${GITHUB_OUTPUT}"
+
+      - name: Register PR build in Labs
+        id: register
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          LABS_API_URL: ${{ vars.LABS_API_URL }}
+          LABS_PR_BUILD_TOKEN: ${{ secrets.LABS_PR_BUILD_TOKEN || secrets.LABS_RELEASE_QUALIFICATION_TOKEN }}
+          PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number }}
+          PULL_REQUEST_URL: ${{ github.event.pull_request.html_url }}
+          REPOSITORY_FULL_NAME: ${{ github.repository }}
+          REPOSITORY_NAME: ${{ github.event.repository.name }}
+          REPOSITORY_OWNER: ${{ github.repository_owner }}
+          TRIGGER_EVENT: ${{ github.event.action }}
+        run: |
+          set -euo pipefail
+
+          print_labs_error() {
+            local operation="$1"
+            local status="$2"
+            local response_file="$3"
+            local response_bytes
+
+            response_bytes="$(wc -c < "${response_file}" | tr -d ' ')"
+            echo "${operation} failed with HTTP ${status} (${response_bytes} response bytes)." >&2
+
+            if ! jq -e 'type == "object"' "${response_file}" > /dev/null 2>&1; then
+              echo "Labs response body omitted because it is not a JSON object." >&2
+              return
+            fi
+
+            local error_summary
+            error_summary="$(jq -r '
+              def scrub:
+                tostring
+                | gsub("[\r\n\t]+"; " ")
+                | gsub("gh[pousr]_[A-Za-z0-9_]+"; "<redacted-token>")
+                | gsub("github_pat_[A-Za-z0-9_]+"; "<redacted-token>")
+                | gsub("eyJ[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+"; "<redacted-jwt>")
+                | gsub("https?://[^ ]+"; "<redacted-url>")
+                | gsub("[A-Za-z0-9_./:@%+-]{80,}"; "<redacted-opaque-value>")
+                | .[0:500];
+              [
+                ["code", (.error.code // .code // empty)],
+                ["message", (.error.message // .message // empty)],
+                ["request_id", (.requestId // .request_id // .traceId // .trace_id // empty)]
+              ]
+              | .[]
+              | select(.[1] != null and (.[1] | tostring | length) > 0)
+              | "\(.[0])=\(.[1] | scrub)"
+            ' "${response_file}")"
+
+            if [[ -z "${error_summary}" ]]; then
+              echo "Labs JSON response did not include public error fields; response body omitted." >&2
+              return
+            fi
+
+            while IFS= read -r line; do
+              echo "Labs error ${line}" >&2
+            done <<< "${error_summary}"
+          }
+
+          jq \
+            --arg repositoryOwner "${REPOSITORY_OWNER}" \
+            --arg repositoryName "${REPOSITORY_NAME}" \
+            --arg repositoryFullName "${REPOSITORY_FULL_NAME}" \
+            --arg pullRequestUrl "${PULL_REQUEST_URL}" \
+            --arg baseRef "${BASE_REF}" \
+            --arg headRef "${HEAD_REF}" \
+            --arg headSha "${HEAD_SHA}" \
+            --arg triggerEvent "${TRIGGER_EVENT}" \
+            --argjson pullRequestNumber "${PULL_REQUEST_NUMBER}" \
+            '.packageSource as $packageSource | {
+              repositoryOwner: $repositoryOwner,
+              repositoryName: $repositoryName,
+              repositoryFullName: $repositoryFullName,
+              pullRequestNumber: $pullRequestNumber,
+              pullRequestUrl: $pullRequestUrl,
+              baseRef: $baseRef,
+              headRef: $headRef,
+              headSha: $headSha,
+              triggerEvent: $triggerEvent,
+              packageSource: $packageSource
+            }' \
+            package-upload-response.json > pr-build-upsert-payload.json
+
+          RESPONSE_FILE="$(mktemp)"
+          HTTP_STATUS="$(curl \
+            --silent \
+            --show-error \
+            --output "${RESPONSE_FILE}" \
+            --write-out '%{http_code}' \
+            -X POST \
+            -H 'content-type: application/json' \
+            -H "x-labs-internal-token: ${LABS_PR_BUILD_TOKEN}" \
+            --data @pr-build-upsert-payload.json \
+            "${LABS_API_URL%/}/v1/internal/superdoc/pr-builds")"
+
+          if [[ "${HTTP_STATUS}" -lt 200 || "${HTTP_STATUS}" -ge 300 ]]; then
+            print_labs_error "Labs PR build registration" "${HTTP_STATUS}" "${RESPONSE_FILE}"
+            exit 1
+          fi
+
+          PR_BUILD_ID="$(jq -r '.prBuild.prBuildId // empty' "${RESPONSE_FILE}")"
+          RENDERER_BUILD_ID="$(jq -r '.rendererBuild.buildId // empty' "${RESPONSE_FILE}")"
+          RENDERER_BUILD_STATUS="$(jq -r '.rendererBuild.status // empty' "${RESPONSE_FILE}")"
+
+          if [[ -z "${PR_BUILD_ID}" || -z "${RENDERER_BUILD_ID}" ]]; then
+            echo "Labs PR build registration response did not include expected IDs; response body omitted." >&2
+            exit 1
+          fi
+
+          echo "pr_build_id=${PR_BUILD_ID}" >> "${GITHUB_OUTPUT}"
+          echo "renderer_build_id=${RENDERER_BUILD_ID}" >> "${GITHUB_OUTPUT}"
+          echo "renderer_build_status=${RENDERER_BUILD_STATUS}" >> "${GITHUB_OUTPUT}"
+
+  cleanup:
+    name: Cleanup
+    if: >-
+      github.event.action == 'closed' &&
+      github.event.pull_request.merged == true &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Request Labs cleanup
+        id: cleanup
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          LABS_API_URL: ${{ vars.LABS_API_URL }}
+          LABS_PR_BUILD_TOKEN: ${{ secrets.LABS_PR_BUILD_TOKEN || secrets.LABS_RELEASE_QUALIFICATION_TOKEN }}
+          MERGE_COMMIT_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+          PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number }}
+          REPOSITORY_FULL_NAME: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${LABS_API_URL}" ]]; then
+            echo "LABS_API_URL repository variable is required." >&2
+            exit 1
+          fi
+          if [[ -z "${LABS_PR_BUILD_TOKEN}" ]]; then
+            echo "LABS_PR_BUILD_TOKEN secret is required." >&2
+            exit 1
+          fi
+
+          print_labs_error() {
+            local operation="$1"
+            local status="$2"
+            local response_file="$3"
+            local response_bytes
+
+            response_bytes="$(wc -c < "${response_file}" | tr -d ' ')"
+            echo "${operation} failed with HTTP ${status} (${response_bytes} response bytes)." >&2
+
+            if ! jq -e 'type == "object"' "${response_file}" > /dev/null 2>&1; then
+              echo "Labs response body omitted because it is not a JSON object." >&2
+              return
+            fi
+
+            local error_summary
+            error_summary="$(jq -r '
+              def scrub:
+                tostring
+                | gsub("[\r\n\t]+"; " ")
+                | gsub("gh[pousr]_[A-Za-z0-9_]+"; "<redacted-token>")
+                | gsub("github_pat_[A-Za-z0-9_]+"; "<redacted-token>")
+                | gsub("eyJ[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+"; "<redacted-jwt>")
+                | gsub("https?://[^ ]+"; "<redacted-url>")
+                | gsub("[A-Za-z0-9_./:@%+-]{80,}"; "<redacted-opaque-value>")
+                | .[0:500];
+              [
+                ["code", (.error.code // .code // empty)],
+                ["message", (.error.message // .message // empty)],
+                ["request_id", (.requestId // .request_id // .traceId // .trace_id // empty)]
+              ]
+              | .[]
+              | select(.[1] != null and (.[1] | tostring | length) > 0)
+              | "\(.[0])=\(.[1] | scrub)"
+            ' "${response_file}")"
+
+            if [[ -z "${error_summary}" ]]; then
+              echo "Labs JSON response did not include public error fields; response body omitted." >&2
+              return
+            fi
+
+            while IFS= read -r line; do
+              echo "Labs error ${line}" >&2
+            done <<< "${error_summary}"
+          }
+
+          jq -n \
+            --arg repositoryFullName "${REPOSITORY_FULL_NAME}" \
+            --arg baseRef "${BASE_REF}" \
+            --arg headRef "${HEAD_REF}" \
+            --arg headSha "${HEAD_SHA}" \
+            --arg mergeCommitSha "${MERGE_COMMIT_SHA}" \
+            --arg reason "merged" \
+            --argjson pullRequestNumber "${PULL_REQUEST_NUMBER}" \
+            '{
+              repositoryFullName: $repositoryFullName,
+              pullRequestNumber: $pullRequestNumber,
+              baseRef: $baseRef,
+              headRef: $headRef,
+              headSha: $headSha,
+              reason: $reason
+            } | if $mergeCommitSha == "" then . else . + { mergeCommitSha: $mergeCommitSha } end' \
+            > pr-build-cleanup-payload.json
+
+          RESPONSE_FILE="$(mktemp)"
+          HTTP_STATUS="$(curl \
+            --silent \
+            --show-error \
+            --output "${RESPONSE_FILE}" \
+            --write-out '%{http_code}' \
+            -X POST \
+            -H 'content-type: application/json' \
+            -H "x-labs-internal-token: ${LABS_PR_BUILD_TOKEN}" \
+            --data @pr-build-cleanup-payload.json \
+            "${LABS_API_URL%/}/v1/internal/superdoc/pr-builds/cleanup")"
+
+          if [[ "${HTTP_STATUS}" -lt 200 || "${HTTP_STATUS}" -ge 300 ]]; then
+            print_labs_error "Labs PR build cleanup" "${HTTP_STATUS}" "${RESPONSE_FILE}"
+            exit 1
+          fi
+
+          MATCHED="$(jq -r '.cleanup.matchedBuildCount // 0' "${RESPONSE_FILE}")"
+          PACKAGE_DELETED="$(jq -r '.cleanup.deletedPackageObjectCount // 0' "${RESPONSE_FILE}")"
+          RENDERER_DELETED="$(jq -r '.cleanup.deletedRendererObjectCount // 0' "${RESPONSE_FILE}")"
+          EXPIRED="$(jq -r '.cleanup.expiredRendererBuildCount // 0' "${RESPONSE_FILE}")"
+
+          echo "matched=${MATCHED}" >> "${GITHUB_OUTPUT}"
+          echo "package_deleted=${PACKAGE_DELETED}" >> "${GITHUB_OUTPUT}"
+          echo "renderer_deleted=${RENDERER_DELETED}" >> "${GITHUB_OUTPUT}"
+          echo "expired=${EXPIRED}" >> "${GITHUB_OUTPUT}"

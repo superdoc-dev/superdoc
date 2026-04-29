@@ -194,7 +194,7 @@ const scenarios = [
     moduleResolution: 'bundler',
     skipLibCheck: true,
     strict: true,
-    files: ['src/guarded-public-types.ts'],
+    files: ['src/informational/guarded-public-types.ts'],
     mustPass: false,
   },
   {
@@ -203,7 +203,7 @@ const scenarios = [
     moduleResolution: 'node16',
     skipLibCheck: true,
     strict: true,
-    files: ['src/guarded-public-types.ts'],
+    files: ['src/informational/guarded-public-types.ts'],
     mustPass: false,
   },
 ];

@@ -16,11 +16,14 @@
  * The list below is the "guarded public types" surface referenced by the
  * package boundary RFC (SD-2829, deliverable 4).
  *
- * STATE: this scenario is currently INFORMATIONAL in the matrix. Most
- * assertions are expected to fail today because the bundling/curated-emit
- * work in SD-2830 has not landed yet. Once SD-2830 ships and the leaks are
- * resolved, flip the matrix entry from `mustPass: false` to `mustPass: true`
- * so further regressions break CI.
+ * STATE: this file lives under `src/informational/` and is excluded from
+ * the base `tsconfig.json` so a bare `tsc --noEmit` does not compile it.
+ * It is reached only through the matrix, which compiles it with a per-
+ * scenario tsconfig under `mustPass: false`. Most assertions are expected
+ * to fail today because the bundling / curated-emit work in SD-2830 has
+ * not landed yet. Once SD-2830 ships and the leaks are resolved, flip the
+ * matrix entry from `mustPass: false` to `mustPass: true` and consider
+ * moving this file out of `informational/` so it joins the required set.
  */
 
 import type {

@@ -2,6 +2,8 @@ import { Plugin, TextSelection } from 'prosemirror-state';
 
 import { applyEditableSlotAtInlineBoundary } from '@helpers/ensure-editable-slot-inline-boundary.js';
 
+const INLINE_LEAF_TEXT = '\ufffc';
+
 /**
  * Select-all-on-click plugin for inline StructuredContent nodes.
  *
@@ -39,8 +41,8 @@ export function createStructuredContentSelectPlugin(editor) {
 
             // Empty selection: exit only at exact boundaries.
             if (selection.empty) {
-              const trailingSlice = state.doc.textBetween(selection.from, contentTo, '', '');
-              const leadingSlice = state.doc.textBetween(contentFrom, selection.from, '', '');
+              const trailingSlice = state.doc.textBetween(selection.from, contentTo, '', INLINE_LEAF_TEXT);
+              const leadingSlice = state.doc.textBetween(contentFrom, selection.from, '', INLINE_LEAF_TEXT);
               const onlyTrailingEditableSlots = trailingSlice.length > 0 && isEditableSlotText(trailingSlice);
               const onlyLeadingEditableSlots = leadingSlice.length > 0 && isEditableSlotText(leadingSlice);
               // Be tolerant by 1 position to avoid requiring a second key press

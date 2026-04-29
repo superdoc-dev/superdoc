@@ -7,18 +7,12 @@ import type {
   PublicToolbarItemId,
   ToolbarSnapshot,
 } from '../headless-toolbar/types.js';
-import type {
-  CommentsListResult,
-  Receipt,
-  ScrollIntoViewOutput,
-  TrackChangesListResult,
-} from '@superdoc/document-api';
+import type { CommentsListResult, Receipt, ScrollIntoViewOutput, TrackChangesListResult } from '@superdoc/document-api';
 import { shallowEqual } from './equality.js';
 import type {
   CommandHandle,
   CommandsHandle,
   CommentsHandle,
-  CommentsSlice,
   EqualityFn,
   ReviewHandle,
   ReviewItem,
@@ -55,12 +49,17 @@ const EDITOR_EVENTS = [
 
 /**
  * Editor events that should trigger a refresh of the cached
- * `comments.list()` result before notifying subscribers. The base
- * `EDITOR_EVENTS` list also fires `scheduleNotify` for these, but we
- * need the cache invalidation to happen *first* so `computeState()`
- * sees fresh items.
+ * `comments.list()` / `trackChanges.list()` results before notifying
+ * subscribers. The base `EDITOR_EVENTS` list also fires
+ * `scheduleNotify` for these, but we need the cache invalidation to
+ * happen *first* so `computeState()` sees fresh items.
+ *
+ * Includes `trackedChangesUpdate` so an external accept/reject (e.g.,
+ * a collaborator's decision arriving over the wire, or a different
+ * UI mutating the list) refreshes the tracked-changes cache without
+ * waiting for an unrelated comments event.
  */
-const COMMENTS_REFRESH_EVENTS = ['commentsUpdate', 'commentsLoaded'] as const;
+const LIST_REFRESH_EVENTS = ['commentsUpdate', 'commentsLoaded', 'trackedChangesUpdate'] as const;
 
 const SUPERDOC_EVENTS = ['editorCreate', 'document-mode-change', 'zoomChange'] as const;
 
@@ -98,9 +97,7 @@ const FALLBACK_COMMAND_STATE: ToolbarCommandHandleState<PublicToolbarItemId> = {
  * `createToolbarRegistry()`. Future custom-command registration
  * (FRICTION S3) will need to extend this dynamically.
  */
-const ALL_TOOLBAR_COMMAND_IDS: PublicToolbarItemId[] = Object.keys(
-  createToolbarRegistry(),
-) as PublicToolbarItemId[];
+const ALL_TOOLBAR_COMMAND_IDS: PublicToolbarItemId[] = Object.keys(createToolbarRegistry()) as PublicToolbarItemId[];
 
 /**
  * Frozen empty-array sentinel for `state.comments.activeIds` when
@@ -268,12 +265,35 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
   refreshTrackChangesListCache();
 
   /**
-   * Internal `activeReviewId`. Mirrors selection-driven activity by
-   * default (first comment id, then first tracked-change id under the
-   * cursor) and is updated by explicit `ui.review.next/previous/scrollTo`.
-   * Reset to null when the underlying item disappears from the feed.
+   * Internal `activeReviewId`. Mirrors selection-driven activity when
+   * the user moves the cursor to a different review item, and is
+   * updated by explicit `ui.review.next/previous/scrollTo` calls.
+   * Tracked separately from `lastSelectionDrivenId` so explicit
+   * navigation away from a still-selected item isn't immediately
+   * overwritten by the next computeState() call.
    */
   let activeReviewId: string | null = null;
+  /**
+   * The selection-driven id observed during the last `computeState`.
+   * Only when this changes between calls does the controller mirror
+   * it onto `activeReviewId`; otherwise the user's `next() /
+   * previous() / scrollTo()` choice persists across recomputes.
+   */
+  let lastSelectionDrivenId: string | null = null;
+
+  /**
+   * Memoized review slice. The merged-feed array is rebuilt only when
+   * one of its inputs changes — comments items reference, tracked-
+   * changes items reference, or `activeReviewId`. Without this,
+   * shallowEqual on `state.review` would mismatch every keystroke
+   * because we'd allocate a fresh items array per computeState.
+   */
+  let reviewMemo: {
+    commentsRef: CommentsListResult['items'] | null;
+    changesRef: TrackChangesListResult['items'] | null;
+    activeId: string | null;
+    slice: ReviewSlice;
+  } | null = null;
 
   const computeState = (): SuperDocUIState => {
     // Route through PresentationEditor when active so selection state
@@ -294,37 +314,59 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     const activeIds = (selectionInfo?.activeCommentIds ?? EMPTY_ACTIVE_IDS) as string[];
     const activeChangeIdsFromSelection = (selectionInfo?.activeChangeIds ?? EMPTY_ACTIVE_IDS) as string[];
 
-    // Build the merged review feed. Comments first (in list order),
-    // then tracked changes (in list order). Document-order
-    // interleaving across the two lists is deferred until
-    // `TrackChangeInfo.target` lands (out-of-scope per SD-2791); the
-    // current ordering is stable and gives consumers dense
-    // documentOrder ranks for next/previous navigation.
-    const reviewItems: ReviewItem[] = [];
-    let order = 0;
-    for (const comment of commentsListCache.items) {
-      reviewItems.push({ kind: 'comment', id: comment.commentId, documentOrder: order++, comment });
-    }
-    for (const change of trackChangesListCache.items) {
-      reviewItems.push({ kind: 'change', id: change.id, documentOrder: order++, change });
-    }
-
-    // Open count: every tracked change is open (no resolved state) +
-    // every non-resolved comment.
-    let openCount = trackChangesListCache.total;
-    for (const c of commentsListCache.items) {
-      if (c.status !== 'resolved') openCount += 1;
-    }
-
-    // Reconcile activeReviewId with the live feed. Sync from selection
-    // when the cursor lands on something; otherwise keep the last
-    // navigated id (next/previous/scrollTo set it explicitly). Reset
-    // to null if the id no longer exists in the feed.
+    // Reconcile activeReviewId. Mirror selection only when the
+    // *selection-driven* id has changed since the last computeState —
+    // otherwise an explicit next/previous/scrollTo is preserved across
+    // subsequent recomputes (the cursor hasn't moved). Sync logic:
+    //   - selection moved to a non-null entity id → mirror it
+    //   - selection moved to no entity (caret elsewhere) → keep
+    //     activeReviewId so navigation persists, but clear it if the
+    //     underlying item dropped out of the feed
     const selectionDrivenActiveId = activeIds[0] ?? activeChangeIdsFromSelection[0] ?? null;
-    if (selectionDrivenActiveId) {
+    const selectionMoved = selectionDrivenActiveId !== lastSelectionDrivenId;
+    lastSelectionDrivenId = selectionDrivenActiveId;
+    if (selectionMoved && selectionDrivenActiveId) {
       activeReviewId = selectionDrivenActiveId;
-    } else if (activeReviewId && !reviewItems.some((item) => item.id === activeReviewId)) {
-      activeReviewId = null;
+    }
+
+    // Build (or reuse) the merged review feed. Memo invalidates only
+    // when source caches or activeReviewId change, so unrelated
+    // transactions / selection events don't allocate a fresh items
+    // array and re-fire ui.review subscribers.
+    let reviewSlice: ReviewSlice;
+    if (
+      reviewMemo &&
+      reviewMemo.commentsRef === commentsListCache.items &&
+      reviewMemo.changesRef === trackChangesListCache.items &&
+      reviewMemo.activeId === activeReviewId
+    ) {
+      reviewSlice = reviewMemo.slice;
+    } else {
+      const items: ReviewItem[] = [];
+      let order = 0;
+      for (const comment of commentsListCache.items) {
+        items.push({ kind: 'comment', id: comment.commentId, documentOrder: order++, comment });
+      }
+      for (const change of trackChangesListCache.items) {
+        items.push({ kind: 'change', id: change.id, documentOrder: order++, change });
+      }
+      let openCount = trackChangesListCache.total;
+      for (const c of commentsListCache.items) {
+        if (c.status !== 'resolved') openCount += 1;
+      }
+      // If the previously active id dropped out of the feed (e.g. an
+      // accept/delete/reject), reset to null. Compute *after* items is
+      // built so the final slice matches the eventual activeReviewId.
+      if (activeReviewId && !items.some((item) => item.id === activeReviewId)) {
+        activeReviewId = null;
+      }
+      reviewSlice = { items, openCount, activeId: activeReviewId };
+      reviewMemo = {
+        commentsRef: commentsListCache.items,
+        changesRef: trackChangesListCache.items,
+        activeId: activeReviewId,
+        slice: reviewSlice,
+      };
     }
 
     return {
@@ -337,11 +379,7 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
         items: commentsListCache.items,
         activeIds,
       },
-      review: {
-        items: reviewItems,
-        openCount,
-        activeId: activeReviewId,
-      },
+      review: reviewSlice,
     };
   };
 
@@ -386,12 +424,12 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     // subsequent state recompute sees the fresh items array. Without
     // this, `state.comments.items` would lag one tick behind a create/
     // patch/delete.
-    COMMENTS_REFRESH_EVENTS.forEach((name) => {
+    LIST_REFRESH_EVENTS.forEach((name) => {
       next.on?.(name, refreshAndNotify);
     });
     currentEditorTeardown = () => {
       EDITOR_EVENTS.forEach((name) => next.off?.(name, scheduleNotify));
-      COMMENTS_REFRESH_EVENTS.forEach((name) => next.off?.(name, refreshAndNotify));
+      LIST_REFRESH_EVENTS.forEach((name) => next.off?.(name, refreshAndNotify));
     };
     // The set of source events changed and the routed editor swapped
     // — refresh the comments cache for the new editor and recompute
@@ -722,6 +760,22 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     return item?.kind ?? null;
   };
 
+  /**
+   * Build the `target` payload for `trackChanges.decide` for a single
+   * change id. Looks up the change in the cached feed; when its
+   * `address.story` is non-body (header / footer / footnote /
+   * endnote), include the story so the doc-API adapter can route
+   * the decision to the right story instead of defaulting to body and
+   * failing with target-not-found. Body-anchored changes omit the
+   * field for parity with the doc-API's body-default contract.
+   */
+  const buildChangeDecideTarget = (changeId: string): { id: string; story?: unknown } => {
+    const item = trackChangesListCache.items.find((c) => c.id === changeId);
+    const story = (item as unknown as { address?: { story?: unknown } } | undefined)?.address?.story;
+    if (story != null) return { id: changeId, story };
+    return { id: changeId };
+  };
+
   const review: ReviewHandle = {
     getSnapshot: () => computeState().review,
     subscribe(listener) {
@@ -737,7 +791,7 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
       const api = requireDocTrackChanges();
       const receipt = (api.decide as (input: unknown, options?: unknown) => Receipt).call(api, {
         decision: 'accept',
-        target: { id: changeId },
+        target: buildChangeDecideTarget(changeId),
       });
       refreshAndNotify();
       return receipt;
@@ -746,7 +800,7 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
       const api = requireDocTrackChanges();
       const receipt = (api.decide as (input: unknown, options?: unknown) => Receipt).call(api, {
         decision: 'reject',
-        target: { id: changeId },
+        target: buildChangeDecideTarget(changeId),
       });
       refreshAndNotify();
       return receipt;

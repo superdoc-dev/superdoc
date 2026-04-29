@@ -246,6 +246,7 @@ export interface SuperDocUI {
    */
   select<TSlice>(selector: SelectorFn<SuperDocUIState, TSlice>, equality?: EqualityFn<TSlice>): Subscribable<TSlice>;
 
+  /**
    * Aggregate toolbar surface. Mirrors the `HeadlessToolbarController`
    * shape from `superdoc/headless-toolbar`, sourced from the same
    * internal controller. Equivalent to subscribing to the toolbar slice

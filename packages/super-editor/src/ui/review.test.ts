@@ -11,7 +11,12 @@ import type { SuperDocLike } from './types.js';
 function makeStubs(
   initial: {
     comments?: Array<{ id: string; commentId: string; text?: string; status?: 'open' | 'resolved' }>;
-    trackedChanges?: Array<{ id: string; type?: 'insert' | 'delete' | 'format'; excerpt?: string }>;
+    trackedChanges?: Array<{
+      id: string;
+      type?: 'insert' | 'delete' | 'format';
+      excerpt?: string;
+      story?: unknown;
+    }>;
     activeCommentIds?: string[];
     activeChangeIds?: string[];
   } = {},
@@ -45,7 +50,12 @@ function makeStubs(
         refStability: 'stable' as const,
         targetKind: 'trackedChange' as const,
       },
-      address: { kind: 'entity' as const, entityType: 'trackedChange' as const, entityId: tc.id },
+      address: {
+        kind: 'entity' as const,
+        entityType: 'trackedChange' as const,
+        entityId: tc.id,
+        ...(tc.story != null ? { story: tc.story } : {}),
+      },
       type: tc.type ?? ('insert' as const),
       excerpt: tc.excerpt,
     })),
@@ -330,6 +340,135 @@ describe('ui.review — scrollTo + setRecording', () => {
     ui.review.setRecording(false);
     expect(mocks.setDocumentMode).toHaveBeenCalledWith('editing');
 
+    ui.destroy();
+  });
+});
+
+describe('ui.review — regression: navigation persists past the selected item', () => {
+  it('next() while the cursor is on the active item is not overwritten by the unchanged selection', async () => {
+    const { superdoc } = makeStubs({
+      comments: [
+        { id: 'c1', commentId: 'c1' },
+        { id: 'c2', commentId: 'c2' },
+      ],
+      trackedChanges: [{ id: 'tc1' }],
+      activeCommentIds: ['c1'],
+    });
+    const ui = createSuperDocUI({ superdoc });
+
+    // Selection lands on c1 → activeId mirrors selection
+    expect(ui.review.getSnapshot().activeId).toBe('c1');
+
+    // User clicks "Next" in the sidebar — selection has not moved (still on c1)
+    expect(ui.review.next()).toBe('c2');
+    expect(ui.review.getSnapshot().activeId).toBe('c2');
+
+    // A subsequent recompute (e.g. typing emits transaction → selectionUpdate)
+    // must NOT snap activeReviewId back to the selection-driven id, because
+    // the selection has not moved since the last computeState.
+    superdoc.fireEditor('selectionUpdate');
+    await Promise.resolve();
+    expect(ui.review.getSnapshot().activeId).toBe('c2');
+
+    superdoc.fireEditor('transaction');
+    await Promise.resolve();
+    expect(ui.review.getSnapshot().activeId).toBe('c2');
+
+    ui.destroy();
+  });
+});
+
+describe('ui.review — regression: trackedChangesUpdate refreshes cache', () => {
+  it('a trackedChangesUpdate event surfaces fresh items in the next snapshot', async () => {
+    const { superdoc } = makeStubs({
+      trackedChanges: [{ id: 'tc1' }],
+    });
+    const ui = createSuperDocUI({ superdoc });
+
+    expect(ui.review.getSnapshot().items.map((i) => i.id)).toEqual(['tc1']);
+
+    superdoc.setTrackedChanges([{ id: 'tc1' }, { id: 'tc2' }]);
+    superdoc.fireEditor('trackedChangesUpdate');
+    await Promise.resolve();
+
+    expect(ui.review.getSnapshot().items.map((i) => i.id)).toEqual(['tc1', 'tc2']);
+
+    ui.destroy();
+  });
+});
+
+describe('ui.review — regression: decide carries non-body story', () => {
+  it('accept(id) on a header change includes target.story so the adapter routes correctly', () => {
+    const { superdoc, mocks } = makeStubs({
+      trackedChanges: [{ id: 'tc-header', story: 'header:rId1' }],
+    });
+    const ui = createSuperDocUI({ superdoc });
+
+    ui.review.accept('tc-header');
+
+    expect(mocks.decide).toHaveBeenCalledWith({
+      decision: 'accept',
+      target: { id: 'tc-header', story: 'header:rId1' },
+    });
+
+    ui.destroy();
+  });
+
+  it('reject(id) on a footer change includes target.story', () => {
+    const { superdoc, mocks } = makeStubs({
+      trackedChanges: [{ id: 'tc-footer', story: 'footer:rId2' }],
+    });
+    const ui = createSuperDocUI({ superdoc });
+
+    ui.review.reject('tc-footer');
+
+    expect(mocks.decide).toHaveBeenCalledWith({
+      decision: 'reject',
+      target: { id: 'tc-footer', story: 'footer:rId2' },
+    });
+
+    ui.destroy();
+  });
+
+  it('accept(id) on a body change omits target.story (parity with body-default contract)', () => {
+    const { superdoc, mocks } = makeStubs({
+      trackedChanges: [{ id: 'tc-body' }],
+    });
+    const ui = createSuperDocUI({ superdoc });
+
+    ui.review.accept('tc-body');
+
+    expect(mocks.decide).toHaveBeenCalledWith({
+      decision: 'accept',
+      target: { id: 'tc-body' },
+    });
+
+    ui.destroy();
+  });
+});
+
+describe('ui.review — regression: subscribers are not re-fired on unrelated transactions', () => {
+  it('a typing-only event (transaction without comments/trackedChanges change) does not re-fire ui.review subscribers', async () => {
+    const { superdoc } = makeStubs({
+      comments: [{ id: 'c1', commentId: 'c1' }],
+      trackedChanges: [{ id: 'tc1' }],
+    });
+    const ui = createSuperDocUI({ superdoc });
+
+    const cb = vi.fn();
+    const off = ui.review.subscribe(cb);
+    expect(cb).toHaveBeenCalledTimes(1); // initial snapshot
+
+    superdoc.fireEditor('transaction');
+    await Promise.resolve();
+    superdoc.fireEditor('selectionUpdate');
+    await Promise.resolve();
+
+    // Memoization keeps the slice identity-stable when the source caches and
+    // activeReviewId have not changed, so shallowEqual short-circuits.
+    expect(cb).toHaveBeenCalledTimes(1);
+
+    off();
     ui.destroy();
   });
 });

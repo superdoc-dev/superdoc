@@ -696,6 +696,7 @@ for (const arg of process.argv.slice(2)) {
 setStepOutput('sdk_python_snapshot_tag', '');
 setStepOutput('sdk_python_snapshot_companion_dir', '');
 setStepOutput('sdk_python_snapshot_main_dir', '');
+setStepOutput('promote_sha', '');
 
 // ---------------------------------------------------------------------------
 // Branch guard
@@ -921,6 +922,13 @@ if (hasFailed) {
 
 if (deferredReason && !hasFailed) {
   console.log('\nCurrent run stopped before publishing from a stale checkout. The next queued stable run should continue from the latest branch head.');
+}
+
+// Emit the SHA the docs-stable promotion step should publish. Stays empty when
+// the run failed or was deferred, so production docs never advance past a
+// commit whose packages are not actually published.
+if (!hasFailed && !deferredReason) {
+  setStepOutput('promote_sha', getCurrentHead());
 }
 
 // Remind operator about @semantic-release/git behavior on stable

@@ -53,4 +53,4 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
           PREVIEW_URL: ${{ steps.preview.outputs.preview_url }}
         run: |
-          gh pr comment "$PR_NUMBER" --body "📖 Docs preview: ${PREVIEW_URL}"
+          gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --body "📖 Docs preview: ${PREVIEW_URL}"

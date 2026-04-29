@@ -1235,6 +1235,7 @@ function layoutMonolithicTable(context: TableLayoutContext): void {
     height,
     metadata,
     columnWidths,
+    sourceAnchor: context.block.sourceAnchor,
   };
   applyTableFragmentPmRange(fragment, context.block, context.measure);
   state.page.fragments.push(fragment);
@@ -1386,6 +1387,7 @@ export function layoutTableBlock({
       height,
       metadata,
       columnWidths,
+      sourceAnchor: block.sourceAnchor,
     };
     applyTableFragmentPmRange(fragment, block, measure);
     state.page.fragments.push(fragment);
@@ -1551,6 +1553,7 @@ export function layoutTableBlock({
             continuationPartialRow,
           ),
           columnWidths: scaledWidths,
+          sourceAnchor: block.sourceAnchor,
         };
 
         applyTableFragmentPmRange(fragment, block, measure);
@@ -1666,6 +1669,7 @@ export function layoutTableBlock({
           forcedPartialRow,
         ),
         columnWidths: scaledWidths,
+        sourceAnchor: block.sourceAnchor,
       };
 
       applyTableFragmentPmRange(fragment, block, measure);
@@ -1716,6 +1720,7 @@ export function layoutTableBlock({
         partialRow,
       ),
       columnWidths: scaledWidths,
+      sourceAnchor: block.sourceAnchor,
     };
 
     applyTableFragmentPmRange(fragment, block, measure);
@@ -1769,6 +1774,7 @@ export function createAnchoredTableFragment(
     width: measure.totalWidth ?? 0,
     height: measure.totalHeight ?? 0,
     metadata,
+    sourceAnchor: block.sourceAnchor,
   };
   applyTableFragmentPmRange(fragment, block, measure);
   return fragment;

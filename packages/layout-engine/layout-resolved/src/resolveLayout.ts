@@ -206,18 +206,21 @@ export function resolveFragmentItem(
     case 'table': {
       const item = resolveTableItem(fragment as TableFragment, fragmentIndex, pageIndex, blockMap);
       if (sdtContainerKey != null) item.sdtContainerKey = sdtContainerKey;
+      if (fragment.sourceAnchor != null) item.sourceAnchor = fragment.sourceAnchor;
       item.version = version;
       return item;
     }
     case 'image': {
       const item = resolveImageItem(fragment as ImageFragment, fragmentIndex, pageIndex, blockMap);
       if (sdtContainerKey != null) item.sdtContainerKey = sdtContainerKey;
+      if (fragment.sourceAnchor != null) item.sourceAnchor = fragment.sourceAnchor;
       item.version = version;
       return item;
     }
     case 'drawing': {
       const item = resolveDrawingItem(fragment as DrawingFragment, fragmentIndex, pageIndex, blockMap);
       if (sdtContainerKey != null) item.sdtContainerKey = sdtContainerKey;
+      if (fragment.sourceAnchor != null) item.sourceAnchor = fragment.sourceAnchor;
       item.version = version;
       return item;
     }
@@ -238,6 +241,7 @@ export function resolveFragmentItem(
         content: resolveParagraphContentIfApplicable(fragment, blockMap),
       };
       if (sdtContainerKey != null) item.sdtContainerKey = sdtContainerKey;
+      if (fragment.sourceAnchor != null) item.sourceAnchor = fragment.sourceAnchor;
 
       // Pre-extract block/measure for para and list-item fragments so the painter
       // can prefer resolved data over a blockLookup read.
@@ -246,9 +250,15 @@ export function resolveFragmentItem(
         if (fragment.kind === 'para' && entry.block.kind === 'paragraph' && entry.measure.kind === 'paragraph') {
           item.block = entry.block as ParagraphBlock;
           item.measure = entry.measure as ParagraphMeasure;
+          if (item.sourceAnchor == null) item.sourceAnchor = (entry.block as ParagraphBlock).sourceAnchor;
         } else if (fragment.kind === 'list-item' && entry.block.kind === 'list' && entry.measure.kind === 'list') {
-          item.block = entry.block as ListBlock;
+          const listBlock = entry.block as ListBlock;
+          const listItem = listBlock.items.find((candidate) => candidate.id === (fragment as ListItemFragment).itemId);
+          item.block = listBlock;
           item.measure = entry.measure as ListMeasure;
+          if (item.sourceAnchor == null) {
+            item.sourceAnchor = listItem?.sourceAnchor ?? listItem?.paragraph.sourceAnchor ?? listBlock.sourceAnchor;
+          }
         }
       }
 

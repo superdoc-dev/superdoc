@@ -12,6 +12,7 @@ import type {
   ParagraphBorders,
   ParagraphMeasure,
   SectionVerticalAlign,
+  SourceAnchor,
   TableBlock,
   TableMeasure,
 } from './index.js';
@@ -137,6 +138,8 @@ export type ResolvedFragmentItem = {
   block?: ParagraphBlock | ListBlock;
   /** Pre-extracted measure for paragraph (ParagraphMeasure) or list-item (ListMeasure) fragments. */
   measure?: ParagraphMeasure | ListMeasure;
+  /** Optional DOCX source evidence preserved for intelligence adapters and paint snapshots. */
+  sourceAnchor?: SourceAnchor;
 };
 
 /** Resolved paragraph content for non-table paragraph/list-item fragments. */
@@ -255,6 +258,8 @@ export type ResolvedTableItem = {
   sdtContainerKey?: string | null;
   /** Pre-computed change-detection signature (blockVersion + fragment-specific data). */
   version?: string;
+  /** Optional DOCX source evidence preserved for intelligence adapters and paint snapshots. */
+  sourceAnchor?: SourceAnchor;
 };
 
 /**
@@ -295,6 +300,8 @@ export type ResolvedImageItem = {
   sdtContainerKey?: string | null;
   /** Pre-computed change-detection signature (blockVersion + fragment-specific data). */
   version?: string;
+  /** Optional DOCX source evidence preserved for intelligence adapters and paint snapshots. */
+  sourceAnchor?: SourceAnchor;
 };
 
 /**
@@ -333,6 +340,8 @@ export type ResolvedDrawingItem = {
   sdtContainerKey?: string | null;
   /** Pre-computed change-detection signature (blockVersion + fragment-specific data). */
   version?: string;
+  /** Optional DOCX source evidence preserved for intelligence adapters and paint snapshots. */
+  sourceAnchor?: SourceAnchor;
 };
 
 /** Type guard: checks whether a resolved paint item is a ResolvedTableItem. */
@@ -393,4 +402,6 @@ export type ResolvedListMarkerItem = {
     color?: string;
     letterSpacing?: number;
   };
+  /** Optional DOCX source evidence for list-marker observations. */
+  sourceAnchor?: SourceAnchor;
 };

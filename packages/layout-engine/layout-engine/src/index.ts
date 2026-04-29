@@ -2255,6 +2255,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
           behindDoc: imgBlock.anchor?.behindDoc === true,
           zIndex: getFragmentZIndex(imgBlock),
           metadata,
+          sourceAnchor: imgBlock.sourceAnchor,
         };
 
         const attrs = imgBlock.attrs as Record<string, unknown> | undefined;
@@ -2303,6 +2304,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
           behindDoc: drawBlock.anchor?.behindDoc === true,
           zIndex: getFragmentZIndex(drawBlock),
           drawingContentId: drawBlock.drawingContentId,
+          sourceAnchor: drawBlock.sourceAnchor,
         };
 
         const attrs = drawBlock.attrs as Record<string, unknown> | undefined;

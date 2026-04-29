@@ -16,6 +16,7 @@ import type {
   SdtMetadata,
   DrawingBlock,
   TrackedChangeMeta,
+  SourceAnchor,
 } from '@superdoc/contracts';
 import type {
   PMNode,
@@ -73,6 +74,13 @@ import {
 } from './shapes.js';
 import { chartNodeToDrawingBlock } from './chart.js';
 import { tableNodeToBlock } from './table.js';
+
+function sourceAnchorFromNode(node: PMNode): SourceAnchor | undefined {
+  const sourceAnchor = (node.attrs as Record<string, unknown> | undefined)?.sourceAnchor;
+  return sourceAnchor && typeof sourceAnchor === 'object' && !Array.isArray(sourceAnchor)
+    ? (sourceAnchor as SourceAnchor)
+    : undefined;
+}
 
 // ============================================================================
 // Helper functions for inline image detection and conversion
@@ -583,6 +591,7 @@ export function paragraphToFlowBlocks({
 
   const blocks: FlowBlock[] = [];
   const paraAttrs = (para.attrs ?? {}) as Record<string, unknown>;
+  const sourceAnchor = sourceAnchorFromNode(para);
   const rawParagraphProps =
     typeof paraAttrs.paragraphProperties === 'object' && paraAttrs.paragraphProperties !== null
       ? (paraAttrs.paragraphProperties as Record<string, unknown>)
@@ -644,6 +653,7 @@ export function paragraphToFlowBlocks({
       id: baseBlockId,
       runs: [emptyRun],
       attrs: emptyParagraphAttrs,
+      sourceAnchor,
     });
     if (!trackedChangesConfig) {
       return blocks;
@@ -747,6 +757,7 @@ export function paragraphToFlowBlocks({
       id: nextId(),
       runs,
       attrs: deepClone(paragraphAttrs),
+      sourceAnchor,
     });
     partIndex += 1;
   };
@@ -878,6 +889,7 @@ export function paragraphToFlowBlocks({
         },
       ],
       attrs: deepClone(paragraphAttrs),
+      sourceAnchor,
     });
   }
 

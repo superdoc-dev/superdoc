@@ -173,7 +173,6 @@ export const Paragraph = OxmlNode.create({
       listRendering: {
         keepOnSplit: false,
         renderDOM: ({ listRendering }) => {
-          console.log('listRendering', listRendering);
           return {
             'data-marker-type': listRendering?.markerText,
             'data-list-level': listRendering?.path ? JSON.stringify(listRendering.path) : null,

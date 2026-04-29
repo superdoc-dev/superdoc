@@ -20,6 +20,8 @@ export { createSuperDocUI } from './create-super-doc-ui.js';
 export { shallowEqual } from './equality.js';
 
 export type {
+  CommentsHandle,
+  CommentsSlice,
   EqualityFn,
   SelectorFn,
   SelectionSlice,

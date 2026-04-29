@@ -1,6 +1,8 @@
 export {
   createSuperDocUI,
   shallowEqual,
+  type CommentsHandle,
+  type CommentsSlice,
   type EqualityFn,
   type SelectorFn,
   type SelectionSlice,

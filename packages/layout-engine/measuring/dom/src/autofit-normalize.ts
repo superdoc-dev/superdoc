@@ -9,6 +9,8 @@ import type {
 
 /** Number of OOXML twips per rendered CSS pixel at 96 DPI. */
 const TWIPS_PER_PX = 15;
+/** Authored/skipped grid columns at or below this width are treated as import placeholders. */
+const PLACEHOLDER_COLUMN_MAX_WIDTH = 1;
 
 /**
  * Narrow OOXML measurement shape used by normalization.
@@ -146,13 +148,19 @@ export function buildAutoFitWorkingGridInput(
     block.attrs?.tableWidth as TableWidthAttr | undefined,
     maxTableWidth,
   );
-  const preferredColumnWidths = normalizePreferredColumnWidths(block.columnWidths);
+  const rawPreferredColumnWidths = normalizePreferredColumnWidths(block.columnWidths);
+  const logicalColumnLimit = resolveTrailingPlaceholderColumnLimit(rawPreferredColumnWidths);
   let activeRowSpans: number[] = [];
   const rows = block.rows.map((row) => {
-    const normalized = normalizeRow(row, preferredTableWidth ?? maxTableWidth, activeRowSpans);
+    const normalized = normalizeRow(row, preferredTableWidth ?? maxTableWidth, activeRowSpans, logicalColumnLimit);
     activeRowSpans = normalized.nextActiveRowSpans;
     return normalized.row;
   });
+  const occupiedGridColumnCount = determineGridColumnCount(0, rows);
+  const preferredColumnWidths = trimTrailingUnoccupiedPlaceholderColumns(
+    rawPreferredColumnWidths,
+    occupiedGridColumnCount,
+  );
   const gridColumnCount = determineGridColumnCount(preferredColumnWidths.length, rows);
   const preserveAuthoredGrid = shouldPreserveAuthoredGrid({
     layoutMode,
@@ -204,7 +212,11 @@ function shouldPreserveAuthoredGrid(args: {
   if (preferredTableWidth == null || preferredTableWidth <= 0) return false;
   if (preferredColumnWidths.length === 0 || preferredColumnWidths.length !== gridColumnCount) return false;
 
-  return approximatelyEqual(sumWidths(preferredColumnWidths), preferredTableWidth);
+  const totalPreferredColumnWidth = sumWidths(preferredColumnWidths);
+  return (
+    approximatelyEqual(totalPreferredColumnWidth, preferredTableWidth) ||
+    isSlightlyUnderPreferredTableWidth(totalPreferredColumnWidth, preferredTableWidth)
+  );
 }
 
 function shouldPreserveAutoGrid(args: {
@@ -242,6 +254,32 @@ function hasNonUniformGrid(widths: number[]): boolean {
   return widths.some((width) => !approximatelyEqual(width, firstWidth));
 }
 
+function trimTrailingUnoccupiedPlaceholderColumns(widths: number[], occupiedGridColumnCount: number): number[] {
+  const occupiedCount = Math.max(0, Math.floor(occupiedGridColumnCount));
+  if (occupiedCount <= 0 || widths.length <= occupiedCount) return widths;
+
+  const trailingWidths = widths.slice(occupiedCount);
+  if (!trailingWidths.every((width) => width <= PLACEHOLDER_COLUMN_MAX_WIDTH)) {
+    return widths;
+  }
+
+  return widths.slice(0, occupiedCount);
+}
+
+function resolveTrailingPlaceholderColumnLimit(widths: number[]): number | undefined {
+  let trailingPlaceholderCount = 0;
+  for (let index = widths.length - 1; index >= 0; index--) {
+    if (widths[index] > PLACEHOLDER_COLUMN_MAX_WIDTH) break;
+    trailingPlaceholderCount += 1;
+  }
+
+  if (trailingPlaceholderCount === 0 || trailingPlaceholderCount === widths.length) {
+    return undefined;
+  }
+
+  return widths.length - trailingPlaceholderCount;
+}
+
 /**
  * Normalize preferred/authored grid widths into a finite pixel vector.
  */
@@ -260,10 +298,15 @@ function normalizeRow(
   row: TableBlock['rows'][number],
   percentageBasis: number,
   activeRowSpans: number[],
+  logicalColumnLimit: number | undefined,
 ): { row: WorkingTableRowInput; nextActiveRowSpans: number[] } {
   const rowProps = (row.attrs?.tableRowProperties ?? {}) as TableRowProperties;
   const skippedBeforeCount = sanitizeCount(rowProps.gridBefore);
-  const skippedAfterCount = sanitizeCount(rowProps.gridAfter);
+  const skippedAfterCount = normalizeSkippedAfterCount(
+    rowProps.gridAfter,
+    rowProps.wAfter as OoxmlMeasurement | undefined,
+    percentageBasis,
+  );
   const cells = Array.isArray(row.cells) ? row.cells : [];
   let columnIndex = advancePastOccupiedColumns(activeRowSpans, 0);
 
@@ -278,7 +321,7 @@ function normalizeRow(
 
   const normalizedCells = cells.map((cell) => {
     columnIndex = advancePastOccupiedColumns(activeRowSpans, columnIndex);
-    const normalizedCell = normalizeCell(cell, percentageBasis, columnIndex);
+    const normalizedCell = normalizeCell(cell, percentageBasis, columnIndex, logicalColumnLimit);
     columnIndex += normalizedCell.span ?? 1;
     return normalizedCell;
   });
@@ -351,6 +394,22 @@ function buildSkippedColumns(
   return { columns, nextColumnIndex: columnIndex };
 }
 
+function normalizeSkippedAfterCount(
+  countValue: unknown,
+  preferredWidthMeasurement: OoxmlMeasurement | undefined,
+  percentageBasis: number,
+): number {
+  const count = sanitizeCount(countValue);
+  if (count <= 0) return 0;
+
+  const totalPreferredWidth = resolveMeasurementToPx(preferredWidthMeasurement, percentageBasis);
+  if (totalPreferredWidth != null && totalPreferredWidth <= PLACEHOLDER_COLUMN_MAX_WIDTH * count) {
+    return 0;
+  }
+
+  return count;
+}
+
 /**
  * Normalize one runtime cell into span and preferred-width metadata.
  */
@@ -358,12 +417,19 @@ function normalizeCell(
   cell: TableBlock['rows'][number]['cells'][number],
   percentageBasis: number,
   startColumn: number,
+  logicalColumnLimit: number | undefined,
 ): WorkingTableCellInput {
   const cellProps = (cell.attrs?.tableCellProperties ?? {}) as NormalizationTableCellProperties;
+  const rawSpan = sanitizeCount(cell.colSpan) || 1;
+  const span =
+    logicalColumnLimit != null && startColumn < logicalColumnLimit && startColumn + rawSpan > logicalColumnLimit
+      ? Math.max(1, logicalColumnLimit - startColumn)
+      : rawSpan;
+
   return {
     cellId: cell.id,
     startColumn,
-    span: sanitizeCount(cell.colSpan) || 1,
+    span,
     preferredWidth: resolveMeasurementToPx(cellProps.cellWidth, percentageBasis),
   };
 }
@@ -497,4 +563,9 @@ function sumWidths(widths: number[]): number {
 
 function approximatelyEqual(left: number, right: number): boolean {
   return Math.abs(left - right) <= 0.01;
+}
+
+function isSlightlyUnderPreferredTableWidth(totalColumnWidth: number, preferredTableWidth: number): boolean {
+  if (totalColumnWidth <= 0 || totalColumnWidth >= preferredTableWidth) return false;
+  return preferredTableWidth - totalColumnWidth <= preferredTableWidth * 0.05;
 }

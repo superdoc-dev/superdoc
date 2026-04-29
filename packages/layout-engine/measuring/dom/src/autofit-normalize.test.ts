@@ -84,6 +84,33 @@ describe('buildAutoFitWorkingGridInput', () => {
     expect(result.preserveAuthoredGrid).toBe(true);
   });
 
+  it('marks complete fixed grids that are slightly under tblW as authoritative', () => {
+    const block = createTableBlock({
+      attrs: {
+        tableLayout: 'fixed',
+        tableWidth: { width: 386, type: 'px' },
+      },
+      columnWidths: [86.8, 56.667, 56.667, 56.667, 56.667, 56.667],
+      rows: [
+        {
+          id: 'row-1',
+          cells: [
+            { id: 'cell-1' },
+            { id: 'cell-2' },
+            { id: 'cell-3' },
+            { id: 'cell-4' },
+            { id: 'cell-5' },
+            { id: 'cell-6' },
+          ],
+        },
+      ],
+    });
+
+    const result = buildAutoFitWorkingGridInput(block, { maxWidth: 386 });
+
+    expect(result.preserveAuthoredGrid).toBe(true);
+  });
+
   it('does not mark incomplete fixed grids as authoritative', () => {
     const block = createTableBlock({
       attrs: {
@@ -103,6 +130,26 @@ describe('buildAutoFitWorkingGridInput', () => {
 
     expect(result.preserveAuthoredGrid).toBeUndefined();
     expect(result.gridColumnCount).toBe(3);
+  });
+
+  it('does not mark complete fixed grids far under tblW as authoritative', () => {
+    const block = createTableBlock({
+      attrs: {
+        tableLayout: 'fixed',
+        tableWidth: { width: 500, type: 'px' },
+      },
+      columnWidths: [120, 180],
+      rows: [
+        {
+          id: 'row-1',
+          cells: [{ id: 'cell-1' }, { id: 'cell-2' }],
+        },
+      ],
+    });
+
+    const result = buildAutoFitWorkingGridInput(block, { maxWidth: 600 });
+
+    expect(result.preserveAuthoredGrid).toBeUndefined();
   });
 
   it('marks complete non-uniform tblW auto grids as preferred AutoFit geometry', () => {
@@ -223,6 +270,123 @@ describe('buildAutoFitWorkingGridInput', () => {
     const result = buildAutoFitWorkingGridInput(block, { maxWidth: 624 });
 
     expect(result.preserveExplicitAutoGrid).toBeUndefined();
+  });
+
+  it('trims trailing unused placeholder grid columns', () => {
+    const block = createTableBlock({
+      attrs: {
+        tableLayout: 'fixed',
+        tableWidth: { width: 386, type: 'px' },
+      },
+      columnWidths: [86.8, 56.667, 56.667, 56.667, 56.667, 56.667, 0.4],
+      rows: [
+        {
+          id: 'row-1',
+          cells: [
+            { id: 'cell-1' },
+            { id: 'cell-2' },
+            { id: 'cell-3' },
+            { id: 'cell-4' },
+            { id: 'cell-5' },
+            { id: 'cell-6' },
+          ],
+        },
+      ],
+    });
+
+    const result = buildAutoFitWorkingGridInput(block, { maxWidth: 386 });
+
+    expect(result.preferredColumnWidths).toEqual([86.8, 56.667, 56.667, 56.667, 56.667, 56.667]);
+    expect(result.gridColumnCount).toBe(6);
+  });
+
+  it('ignores near-zero gridAfter placeholder columns', () => {
+    const block = createTableBlock({
+      attrs: {
+        tableLayout: 'fixed',
+        tableWidth: { width: 386, type: 'px' },
+      },
+      columnWidths: [86.8, 56.667, 56.667, 56.667, 56.667, 56.667, 0.4],
+      rows: [
+        {
+          id: 'row-1',
+          attrs: {
+            tableRowProperties: {
+              gridAfter: 1,
+              wAfter: { value: 8, type: 'dxa' },
+            },
+          },
+          cells: [
+            { id: 'cell-1' },
+            { id: 'cell-2' },
+            { id: 'cell-3' },
+            { id: 'cell-4' },
+            { id: 'cell-5' },
+            { id: 'cell-6' },
+          ],
+        },
+        {
+          id: 'row-2',
+          cells: [{ id: 'cell-full-span', colSpan: 7 }],
+        },
+      ],
+    });
+
+    const result = buildAutoFitWorkingGridInput(block, { maxWidth: 386 });
+
+    expect(result.rows[0].skippedAfter).toEqual([]);
+    expect(result.rows[1].cells[0].span).toBe(6);
+    expect(result.preferredColumnWidths).toEqual([86.8, 56.667, 56.667, 56.667, 56.667, 56.667]);
+    expect(result.gridColumnCount).toBe(6);
+  });
+
+  it('keeps substantive gridAfter columns', () => {
+    const block = createTableBlock({
+      attrs: {
+        tableLayout: 'fixed',
+        tableWidth: { width: 400, type: 'px' },
+      },
+      columnWidths: [100, 100, 40],
+      rows: [
+        {
+          id: 'row-1',
+          attrs: {
+            tableRowProperties: {
+              gridAfter: 1,
+              wAfter: { value: 600, type: 'dxa' },
+            },
+          },
+          cells: [{ id: 'cell-1' }, { id: 'cell-2' }],
+        },
+      ],
+    });
+
+    const result = buildAutoFitWorkingGridInput(block, { maxWidth: 400 });
+
+    expect(result.rows[0].skippedAfter).toHaveLength(1);
+    expect(result.preferredColumnWidths).toEqual([100, 100, 40]);
+    expect(result.gridColumnCount).toBe(3);
+  });
+
+  it('keeps trailing unused authored grid columns when they are not placeholders', () => {
+    const block = createTableBlock({
+      attrs: {
+        tableLayout: 'fixed',
+        tableWidth: { width: 400, type: 'px' },
+      },
+      columnWidths: [100, 100, 40],
+      rows: [
+        {
+          id: 'row-1',
+          cells: [{ id: 'cell-1' }, { id: 'cell-2' }],
+        },
+      ],
+    });
+
+    const result = buildAutoFitWorkingGridInput(block, { maxWidth: 400 });
+
+    expect(result.preferredColumnWidths).toEqual([100, 100, 40]);
+    expect(result.gridColumnCount).toBe(3);
   });
 
   it('normalizes omitted tblLayout to autofit mode', () => {

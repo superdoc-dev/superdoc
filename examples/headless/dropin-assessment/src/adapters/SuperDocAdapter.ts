@@ -1,10 +1,4 @@
-// FRICTION: `createHeadlessToolbar` is NOT on the main 'superdoc' entry — it's at
-// 'superdoc/headless-toolbar'. Not discoverable without reading package.json exports.
-import {
-  createHeadlessToolbar,
-  type HeadlessToolbarController,
-  type PublicToolbarItemId,
-} from 'superdoc/headless-toolbar';
+import { createSuperDocUI, type SuperDocUI } from 'superdoc/ui';
 import type { EditorAdapter } from '../core/EditorAdapter';
 import type {
   Comment,
@@ -29,10 +23,11 @@ function deriveAuthorColor(key: string): string {
 }
 
 /**
- * Maps the generic toolbar ids used by our UI to SuperDoc's headless toolbar
- * command ids. Gaps and naming mismatches are logged in FRICTION.md.
+ * Maps the generic toolbar ids used by our UI to SuperDoc's built-in
+ * `ui.commands.<id>` ids. Gaps and naming mismatches are tracked in
+ * FRICTION.md.
  */
-const ID_MAP: Partial<Record<ToolbarCommandId, PublicToolbarItemId>> = {
+const ID_MAP: Partial<Record<ToolbarCommandId, string>> = {
   bold: 'bold',
   italic: 'italic',
   underline: 'underline',
@@ -45,81 +40,72 @@ const ID_MAP: Partial<Record<ToolbarCommandId, PublicToolbarItemId>> = {
 };
 
 /**
- * Adapter that satisfies our EditorAdapter contract using SuperDoc's public API.
- * Any use of `superdoc.activeEditor` or `editor.state` / `editor.view` is an
- * escape hatch — those are deprecated and represent DX gaps.
+ * Adapter that satisfies our `EditorAdapter` contract by routing through the
+ * `superdoc/ui` browser controller. The controller is the canonical surface
+ * for build-your-own-UI consumers — every signal the adapter forwards
+ * (toolbar, selection, comments, review feed, viewport scroll) reads from
+ * `ui.*` rather than poking at editor internals.
  */
 export class SuperDocAdapter implements EditorAdapter {
-  private superdoc: any;                 // SuperDocInstance
-  private toolbarCtl: HeadlessToolbarController | null = null;
+  private superdoc: any;
+  private ui: SuperDocUI | null = null;
   private commentsCache: Comment[] = [];
+  private trackedChangesCache: TrackedChange[] = [];
 
   private toolbarListeners = new Set<(s: ToolbarState) => void>();
   private selectionListeners = new Set<(s: SelectionInfo) => void>();
   private commentListeners = new Set<(c: Comment[]) => void>();
-  private unsubscribes: Array<() => void> = [];
+  private trackedChangesListeners = new Set<(c: TrackedChange[]) => void>();
+
+  /** commentId → TextTarget from comments.list(). Used by scrollToComment fallback. */
+  private commentTargets = new Map<string, any>();
 
   constructor(superdoc: any) {
     this.superdoc = superdoc;
+    this.ui = createSuperDocUI({ superdoc });
 
-    this.toolbarCtl = createHeadlessToolbar({
-      superdoc,
-      commands: [
-        'bold',
-        'italic',
-        'underline',
-        'strikethrough',
-        'bullet-list',
-        'numbered-list',
-        'link',
-      ],
+    // Toolbar: any change to button state (bold active, link disabled, etc.)
+    // re-renders the consumer toolbar. Selection-driven UI also rides this
+    // so the consumer doesn't need a second subscription for "is the
+    // selection empty / collapsed".
+    this.ui.toolbar.subscribe(() => {
+      this.emitToolbar();
+    });
+    this.ui.selection.subscribe(({ snapshot }) => {
+      this.emitSelection({
+        hasSelection: snapshot.target !== null,
+        empty: snapshot.empty,
+        quotedText: snapshot.quotedText ?? '',
+      });
     });
 
-    this.unsubscribes.push(
-      this.toolbarCtl.subscribe(() => {
-        this.emitToolbar();
-        this.emitSelection();
-      }),
-    );
-
-    // Subscribe to selection changes through the public Document API.
-    const editor = superdoc.activeEditor;
-    if (editor?.doc?.selection?.onChange) {
-      const unsub = editor.doc.selection.onChange(() => this.emitSelection());
-      this.unsubscribes.push(unsub);
-    }
-
-    // Comments: subscribe to the superdoc-level commentsUpdate event
-    const onCommentsUpdate = () => {
-      this.refreshCommentsCache();
+    // Comments + review feed both arrive as full snapshots from the
+    // controller. We re-shape them into the example app's `Comment` /
+    // `TrackedChange` types and cache locally so `listComments()` /
+    // `listTrackedChanges()` stay synchronous.
+    this.ui.comments.subscribe(({ snapshot }) => {
+      this.commentsCache = snapshot.items.map((info: any) => this.infoToComment(info));
       this.emitComments();
-    };
-    superdoc.on?.('commentsUpdate', onCommentsUpdate);
-    this.unsubscribes.push(() => superdoc.off?.('commentsUpdate', onCommentsUpdate));
-
-    // Track changes: listen for both initial load + updates
-    const onTrackedChangesUpdate = () => {
-      this.refreshTrackedChangesCache();
-      this.emitTrackedChanges();
-    };
-    superdoc.on?.('trackedChangesUpdate', onTrackedChangesUpdate);
-    superdoc.on?.('trackChangesLoaded', onTrackedChangesUpdate);
-    this.unsubscribes.push(() => {
-      superdoc.off?.('trackedChangesUpdate', onTrackedChangesUpdate);
-      superdoc.off?.('trackChangesLoaded', onTrackedChangesUpdate);
     });
-
-    this.refreshCommentsCache();
-    this.refreshTrackedChangesCache();
+    this.ui.review.subscribe(({ snapshot }) => {
+      this.trackedChangesCache = snapshot.items
+        .filter((item) => item.kind === 'change')
+        .map((item) =>
+          this.infoToTrackedChange((item as Extract<typeof item, { kind: 'change' }>).change),
+        );
+      this.emitTrackedChanges();
+    });
   }
 
   // EditorAdapter: mount/destroy are no-ops because <SuperDocEditor> owns its own DOM
   mount() {/* FRICTION: SuperDoc's React wrapper owns its own DOM lifecycle */}
   destroy() {
-    this.unsubscribes.forEach((fn) => fn());
-    this.unsubscribes = [];
-    this.toolbarCtl?.destroy();
-    this.toolbarCtl = null;
+    this.ui?.destroy();
+    this.ui = null;
+    this.toolbarListeners.clear();
+    this.selectionListeners.clear();
+    this.commentListeners.clear();
+    this.trackedChangesListeners.clear();
   }
 
   // ---- toolbar ----
@@ -127,22 +113,31 @@ export class SuperDocAdapter implements EditorAdapter {
   executeCommand(id: ToolbarCommandId, payload?: unknown): boolean {
     const mapped = ID_MAP[id];
     if (!mapped) {
-      // FRICTION: no public way to perform these from the headless toolbar
-      console.warn(`[SuperDocAdapter] No headless toolbar command for "${id}"`);
+      console.warn(`[SuperDocAdapter] No ui.commands entry for "${id}"`);
       return false;
     }
-    const ctl = this.toolbarCtl;
-    if (!ctl) return false;
+    const ui = this.ui;
+    if (!ui) return false;
+    // `ui.commands` is a string-indexed proxy at runtime; the typed
+    // surface includes `register` (non-id key) plus per-id `CommandHandle`
+    // entries. Cast through `unknown` so the structural mismatch on
+    // `register` doesn't trip the tsc check at the lookup site.
+    const handle = (ui.commands as unknown as Record<string, {
+      execute: (payload?: unknown) => boolean | Promise<boolean>;
+    }>)[mapped];
+    if (!handle) return false;
     if (mapped === 'link') {
       const href = (payload as { href?: string | null } | undefined)?.href ?? null;
-      return ctl.execute('link', { href });
+      const result = handle.execute({ href });
+      return result === true;
     }
-    return ctl.execute(mapped as any);
+    const result = handle.execute(payload as never);
+    return result === true;
   }
 
   getToolbarState(): ToolbarState {
-    const snapshot = this.toolbarCtl?.getSnapshot();
-    const cmd = (id: PublicToolbarItemId) => {
+    const snapshot = this.ui?.toolbar.getSnapshot();
+    const cmd = (id: string) => {
       const s = snapshot?.commands?.[id];
       return { active: !!s?.active, disabled: !!s?.disabled || !snapshot?.context };
     };
@@ -168,17 +163,12 @@ export class SuperDocAdapter implements EditorAdapter {
   // ---- selection ----
 
   getSelection(): SelectionInfo {
-    // Read the selection through the published Document API. The
-    // multi-segment TextTarget (returned by selection.current) is what
-    // addComment consumes internally — the UI only needs to know
-    // whether a selection exists and what text is selected.
-    const editor = this.superdoc?.activeEditor;
-    if (!editor?.doc?.selection?.current) return { hasSelection: false, empty: true, quotedText: '' };
-    const info = editor.doc.selection.current({ includeText: true });
+    const snapshot = this.ui?.selection.getSnapshot();
+    if (!snapshot) return { hasSelection: false, empty: true, quotedText: '' };
     return {
-      hasSelection: info.target !== null && info.target !== undefined,
-      empty: info.empty,
-      quotedText: info.text ?? '',
+      hasSelection: snapshot.target !== null,
+      empty: snapshot.empty,
+      quotedText: snapshot.quotedText ?? '',
     };
   }
 
@@ -194,64 +184,45 @@ export class SuperDocAdapter implements EditorAdapter {
   }
 
   addComment(input: { body: string; authorId: string }): Comment | null {
-    const editor = this.superdoc.activeEditor;
-
-    // Read the selection through the Document API — no PM reach-in needed.
-    const selection = editor.doc.selection.current();
-    const target = selection.target;
-    if (!target) {
-      console.warn('[SuperDocAdapter] addComment: no text selection available');
-      return null;
-    }
-
-    // comments.create accepts the full multi-segment TextTarget, so
-    // selections spanning multiple blocks anchor across the full range.
-    let receipt: any = null;
+    const ui = this.ui;
+    if (!ui) return null;
+    let receipt: any;
     try {
-      receipt = editor.doc.comments.create({ target, text: input.body });
+      receipt = ui.comments.createFromSelection({ text: input.body });
     } catch (err) {
-      console.error('[SuperDocAdapter] addComment: comments.create threw', err);
+      console.error('[SuperDocAdapter] addComment: createFromSelection threw', err);
       return null;
     }
-
-    // Receipt shape is `{ success: boolean, inserted: [{ kind, entityType,
-    // entityId }] }`. Anything else is an engine-level failure and the
-    // caller should see it rather than an invented comment.
     if (!receipt?.success) {
-      console.error('[SuperDocAdapter] addComment: non-success receipt', receipt);
+      console.warn('[SuperDocAdapter] addComment: non-success receipt', receipt);
       return null;
     }
-
-    this.refreshCommentsCache();
-    this.emitComments();
-
     const newId = receipt.inserted?.[0]?.entityId;
     if (!newId) return null;
     return this.commentsCache.find((c) => c.id === newId) ?? null;
   }
 
   updateComment(id: string, patch: { body?: string; resolved?: boolean }) {
-    const editor = this.superdoc.activeEditor;
+    const ui = this.ui;
+    if (!ui) return;
     if (patch.body !== undefined) {
-      editor.doc.comments.patch({ commentId: id, text: patch.body });
+      // Body edits still go through the doc-api directly — `ui.comments`
+      // exposes resolve / reopen / scrollTo as ergonomic facades but
+      // delegates body patches to the contract.
+      this.superdoc?.activeEditor?.doc?.comments?.patch?.({ commentId: id, text: patch.body });
     }
     if (patch.resolved === true) {
-      editor.doc.comments.patch({ commentId: id, status: 'resolved' });
+      ui.comments.resolve(id);
     }
     if (patch.resolved === false) {
-      // FRICTION: CommentsPatchInput.status is typed as `'resolved'` only.
-      // There is no public reopen path.
-      console.warn('[SuperDocAdapter] No public API to reopen a resolved comment');
+      // SD-2789 landed `comments.patch({ status: 'active' })`. The legacy
+      // FRICTION note ("no public reopen path") is now closed.
+      ui.comments.reopen(id);
     }
-    this.refreshCommentsCache();
-    this.emitComments();
   }
 
   deleteComment(id: string) {
-    const editor = this.superdoc.activeEditor;
-    editor.doc.comments.delete({ commentId: id });
-    this.refreshCommentsCache();
-    this.emitComments();
+    this.superdoc?.activeEditor?.doc?.comments?.delete?.({ commentId: id });
   }
 
   onCommentsChange(cb: (comments: Comment[]) => void) {
@@ -262,32 +233,14 @@ export class SuperDocAdapter implements EditorAdapter {
   // ---- navigation ----
 
   async scrollToComment(commentId: string): Promise<void> {
-    const editor = this.superdoc?.activeEditor;
-    if (!editor?.doc?.ranges) return;
-    // Prefer the entity-address form so the Document API resolves the id
-    // through its internal comment-anchor index; falls back to the cached
-    // TextTarget if needed.
-    await editor.doc.ranges.scrollIntoView({
-      target: { kind: 'entity', entityType: 'comment', entityId: commentId },
-      block: 'center',
-      behavior: 'smooth',
-    });
+    await this.ui?.comments.scrollTo(commentId);
   }
 
   async scrollToChange(changeId: string): Promise<void> {
-    const editor = this.superdoc?.activeEditor;
-    if (!editor?.doc?.ranges) return;
-    await editor.doc.ranges.scrollIntoView({
-      target: { kind: 'entity', entityType: 'trackedChange', entityId: changeId },
-      block: 'center',
-      behavior: 'smooth',
-    });
+    await this.ui?.review.scrollTo(changeId);
   }
 
   // ---- track changes ----
-
-  private trackedChangesCache: TrackedChange[] = [];
-  private trackedChangesListeners = new Set<(c: TrackedChange[]) => void>();
 
   isTrackingChanges(): boolean {
     // FRICTION: `documentMode` is a SuperDoc concept, not TC state per se.
@@ -297,7 +250,7 @@ export class SuperDocAdapter implements EditorAdapter {
 
   setTrackingChanges(enabled: boolean): void {
     // FRICTION: to toggle TC we flip documentMode between 'suggesting' and
-    // 'editing'. There is no public `trackChanges.setEnabled()` API.
+    // 'editing'. SD-2799 will move this to a dedicated `ui.<domain>` surface.
     this.superdoc?.setDocumentMode?.(enabled ? 'suggesting' : 'editing');
   }
 
@@ -306,21 +259,11 @@ export class SuperDocAdapter implements EditorAdapter {
   }
 
   acceptChange(id: string): void {
-    this.superdoc?.activeEditor?.doc?.trackChanges?.decide?.({
-      decision: 'accept',
-      target: { id },
-    });
-    this.refreshTrackedChangesCache();
-    this.emitTrackedChanges();
+    this.ui?.review.accept(id);
   }
 
   rejectChange(id: string): void {
-    this.superdoc?.activeEditor?.doc?.trackChanges?.decide?.({
-      decision: 'reject',
-      target: { id },
-    });
-    this.refreshTrackedChangesCache();
-    this.emitTrackedChanges();
+    this.ui?.review.reject(id);
   }
 
   onTrackedChangesChange(cb: (changes: TrackedChange[]) => void) {
@@ -328,26 +271,50 @@ export class SuperDocAdapter implements EditorAdapter {
     return () => this.trackedChangesListeners.delete(cb);
   }
 
-  private refreshTrackedChangesCache() {
-    const editor = this.superdoc?.activeEditor;
-    const api = editor?.doc?.trackChanges;
-    if (!api?.list) {
-      this.trackedChangesCache = [];
-      return;
-    }
-    try {
-      const result = api.list();
-      const items: any[] = (result as any)?.items ?? [];
-      this.trackedChangesCache = items.map((info) => this.infoToTrackedChange(info));
-    } catch {
-      this.trackedChangesCache = [];
-    }
+  // ---- export ----
+
+  async exportDocx(): Promise<void> {
+    await this.superdoc.export({
+      exportType: ['docx'],
+      commentsType: 'external',
+      triggerDownload: true,
+    });
+  }
+
+  // ---- internals ----
+
+  private infoToComment(info: any): Comment {
+    const authorEmail: string = info.creatorEmail ?? '';
+    const authorName: string = info.creatorName ?? authorEmail.split('@')[0] ?? 'Unknown';
+    const authorKey = authorEmail.split('@')[0];
+    const preset = authorKey ? AUTHORS[authorKey as keyof typeof AUTHORS] : undefined;
+    const author: Comment['author'] = preset ?? {
+      id: authorEmail || authorName,
+      name: authorName,
+      color: deriveAuthorColor(authorEmail || authorName),
+    };
+
+    const createdAtIso =
+      typeof info.createdTime === 'number'
+        ? new Date(info.createdTime).toISOString()
+        : typeof info.createdAt === 'string'
+          ? info.createdAt
+          : new Date().toISOString();
+
+    const commentId = info.commentId ?? info.id;
+    if (info.target) this.commentTargets.set(commentId, info.target);
+
+    return {
+      id: commentId,
+      author,
+      body: info.text ?? '',
+      createdAt: createdAtIso,
+      resolved: info.status === 'resolved' || info.isDone === true,
+      quotedText: info.anchoredText ?? info.quotedText ?? '',
+    };
   }
 
   private infoToTrackedChange(info: any): TrackedChange {
-    // TrackChangeInfo carries authorEmail/author and a date string. We
-    // preserve whatever the import gave us rather than mapping to a
-    // synthetic AUTHORS entry.
     const kindMap: Record<string, TrackedChange['kind']> = {
       insert: 'insertion',
       delete: 'deletion',
@@ -375,92 +342,19 @@ export class SuperDocAdapter implements EditorAdapter {
     };
   }
 
-  private emitTrackedChanges() {
-    this.trackedChangesListeners.forEach((cb) => cb(this.trackedChangesCache));
-  }
-
-  // ---- internals ----
-
-  /** commentId → TextTarget from comments.list(). Used by scrollToComment. */
-  private commentTargets = new Map<string, any>();
-
-  private refreshCommentsCache() {
-    const editor = this.superdoc?.activeEditor;
-    if (!editor?.doc?.comments) {
-      this.commentsCache = [];
-      return;
-    }
-    try {
-      const result = editor.doc.comments.list();
-      const items = result?.items ?? [];
-      this.commentsCache = items.map((info: any) => this.infoToComment(info));
-    } catch (e) {
-      console.warn('[SuperDocAdapter] comments.list failed:', e);
-      this.commentsCache = [];
-    }
-  }
-
-  private infoToComment(info: any): Comment {
-    // Use the real author identity from the DOCX import. Falling back to a
-    // fixed AUTHORS entry papered over the fact that imported comments
-    // carry their own `creatorName` / `creatorEmail`, and the sidebar was
-    // attributing them to the wrong person.
-    const authorEmail: string = info.creatorEmail ?? '';
-    const authorName: string = info.creatorName ?? authorEmail.split('@')[0] ?? 'Unknown';
-    const authorKey = authorEmail.split('@')[0];
-    const preset = authorKey ? AUTHORS[authorKey as keyof typeof AUTHORS] : undefined;
-    const author: Comment['author'] = preset ?? {
-      id: authorEmail || authorName,
-      name: authorName,
-      color: deriveAuthorColor(authorEmail || authorName),
-    };
-
-    // SuperDoc emits `createdTime` (epoch ms number); our UI consumes ISO
-    // strings. The previous code read a non-existent `createdAt` field and
-    // silently fell through to `new Date().toISOString()`, which made every
-    // imported comment appear to have been created just now.
-    const createdAtIso =
-      typeof info.createdTime === 'number'
-        ? new Date(info.createdTime).toISOString()
-        : typeof info.createdAt === 'string'
-          ? info.createdAt
-          : new Date().toISOString();
-
-    const commentId = info.commentId ?? info.id;
-    if (info.target) this.commentTargets.set(commentId, info.target);
-
-    return {
-      id: commentId,
-      author,
-      body: info.text ?? '',
-      createdAt: createdAtIso,
-      resolved: info.status === 'resolved' || info.isDone === true,
-      quotedText: info.anchoredText ?? info.quotedText ?? '',
-    };
-  }
-
-  // ---- export ----
-
-  async exportDocx(): Promise<void> {
-    // SuperDoc's public export() handles editor → DOCX serialization,
-    // re-attaches comments, and triggers the browser download.
-    await this.superdoc.export({
-      exportType: ['docx'],
-      commentsType: 'external',
-      triggerDownload: true,
-    });
-  }
-
   private emitToolbar() {
     const s = this.getToolbarState();
     this.toolbarListeners.forEach((cb) => cb(s));
   }
-  private emitSelection() {
-    const s = this.getSelection();
-    this.selectionListeners.forEach((cb) => cb(s));
+  private emitSelection(state?: SelectionInfo) {
+    const next = state ?? this.getSelection();
+    this.selectionListeners.forEach((cb) => cb(next));
   }
   private emitComments() {
     const list = this.commentsCache;
     this.commentListeners.forEach((cb) => cb(list));
+  }
+  private emitTrackedChanges() {
+    this.trackedChangesListeners.forEach((cb) => cb(this.trackedChangesCache));
   }
 }

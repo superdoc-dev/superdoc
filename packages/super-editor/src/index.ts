@@ -179,4 +179,8 @@ export type {
   SuperDocUI,
   SuperDocUIOptions,
   SuperDocUIState,
+  ViewportGetRectInput,
+  ViewportHandle,
+  ViewportRect,
+  ViewportRectResult,
 } from './ui/types.js';

@@ -415,8 +415,8 @@ describe('ui.review — regression: navigation persists past the selected item',
   });
 });
 
-describe('ui.review — regression: trackedChangesUpdate refreshes cache', () => {
-  it('a trackedChangesUpdate event surfaces fresh items in the next snapshot', async () => {
+describe('ui.review — regression: tracked-changes-changed refreshes cache', () => {
+  it('a tracked-changes-changed event surfaces fresh items in the next snapshot', async () => {
     const { superdoc } = makeStubs({
       trackedChanges: [{ id: 'tc1' }],
     });
@@ -425,7 +425,11 @@ describe('ui.review — regression: trackedChangesUpdate refreshes cache', () =>
     expect(ui.review.getSnapshot().items.map((i) => i.id)).toEqual(['tc1']);
 
     superdoc.setTrackedChanges([{ id: 'tc1' }, { id: 'tc2' }]);
-    superdoc.fireEditor('trackedChangesUpdate');
+    // The tracked-change index broadcasts `tracked-changes-changed`
+    // (not `trackedChangesUpdate`) on every transaction that adds /
+    // removes / invalidates changes. The controller listens to that
+    // event so collaborator-driven mutations refresh the cache too.
+    superdoc.fireEditor('tracked-changes-changed');
     await Promise.resolve();
 
     expect(ui.review.getSnapshot().items.map((i) => i.id)).toEqual(['tc1', 'tc2']);
@@ -479,6 +483,94 @@ describe('ui.review — regression: decide carries non-body story', () => {
       decision: 'accept',
       target: { id: 'tc-body' },
     });
+
+    ui.destroy();
+  });
+});
+
+describe('ui.review — regression: scrollTo carries non-body story', () => {
+  it('scrollTo on a header change passes target.story to navigateTo', async () => {
+    const { superdoc, mocks } = makeStubs({
+      trackedChanges: [{ id: 'tc-header', story: 'header:rId1' }],
+    });
+    const ui = createSuperDocUI({ superdoc });
+
+    await ui.review.scrollTo('tc-header');
+
+    expect(mocks.navigateTo).toHaveBeenCalledTimes(1);
+    expect(mocks.navigateTo).toHaveBeenCalledWith({
+      kind: 'entity',
+      entityType: 'trackedChange',
+      entityId: 'tc-header',
+      story: 'header:rId1',
+    });
+    ui.destroy();
+  });
+
+  it('scrollTo on a body change omits target.story (parity with body-default)', async () => {
+    const { superdoc, mocks } = makeStubs({
+      trackedChanges: [{ id: 'tc-body' }],
+    });
+    const ui = createSuperDocUI({ superdoc });
+
+    await ui.review.scrollTo('tc-body');
+
+    expect(mocks.navigateTo).toHaveBeenCalledWith({
+      kind: 'entity',
+      entityType: 'trackedChange',
+      entityId: 'tc-body',
+    });
+    ui.destroy();
+  });
+});
+
+describe('ui.review — regression: decisions route through the host editor', () => {
+  it('accept(id) goes through superdoc.activeEditor (host) even when toolbar routing returns a child story editor', () => {
+    const { superdoc, mocks } = makeStubs({
+      trackedChanges: [{ id: 'tc1' }],
+    });
+
+    // Plant a child story editor that the toolbar source resolver
+    // would return (simulating "focus is in a header"). Its decide
+    // mock must NEVER be called — review decisions are document-wide
+    // and must route through the host editor.
+    const childDecide = vi.fn((_input: unknown) => ({ success: false as const }));
+    const childEditor = {
+      doc: { trackChanges: { decide: childDecide } },
+    };
+    const hostEditor = superdoc.activeEditor as unknown as {
+      presentationEditor: { getActiveEditor: () => unknown };
+    };
+    hostEditor.presentationEditor.getActiveEditor = () => childEditor;
+
+    const ui = createSuperDocUI({ superdoc });
+
+    ui.review.accept('tc1');
+
+    expect(mocks.decide).toHaveBeenCalledTimes(1); // host editor's decide
+    expect(childDecide).not.toHaveBeenCalled(); // child editor's decide untouched
+
+    ui.destroy();
+  });
+
+  it('acceptAll() routes through the host editor too', () => {
+    const { superdoc, mocks } = makeStubs({
+      trackedChanges: [{ id: 'tc1' }, { id: 'tc2' }],
+    });
+    const childDecide = vi.fn((_input: unknown) => ({ success: false as const }));
+    const hostEditor = superdoc.activeEditor as unknown as {
+      presentationEditor: { getActiveEditor: () => unknown };
+    };
+    hostEditor.presentationEditor.getActiveEditor = () => ({
+      doc: { trackChanges: { decide: childDecide } },
+    });
+
+    const ui = createSuperDocUI({ superdoc });
+
+    ui.review.acceptAll();
+
+    expect(mocks.decide).toHaveBeenCalledWith({ decision: 'accept', target: { scope: 'all' } });
+    expect(childDecide).not.toHaveBeenCalled();
 
     ui.destroy();
   });

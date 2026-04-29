@@ -56,7 +56,7 @@ const EDITOR_EVENTS = [
   'commentsUpdate',
   'commentsLoaded',
   'comment-positions',
-  'trackedChangesUpdate',
+  'tracked-changes-changed',
 ] as const;
 
 /**
@@ -66,12 +66,14 @@ const EDITOR_EVENTS = [
  * `scheduleNotify` for these, but we need the cache invalidation to
  * happen *first* so `computeState()` sees fresh items.
  *
- * Includes `trackedChangesUpdate` so an external accept/reject (e.g.,
- * a collaborator's decision arriving over the wire, or a different
- * UI mutating the list) refreshes the tracked-changes cache without
- * waiting for an unrelated comments event.
+ * `tracked-changes-changed` is the canonical broadcast emitted by the
+ * tracked-change index whenever a transaction adds, removes, or
+ * invalidates tracked changes (including remote / collaborator-driven
+ * mutations). Without it, the cache only refreshes when the
+ * controller's own action methods call `refreshAndNotify`, leaving
+ * `ui.review` subscribers stale after normal editing.
  */
-const LIST_REFRESH_EVENTS = ['commentsUpdate', 'commentsLoaded', 'trackedChangesUpdate'] as const;
+const LIST_REFRESH_EVENTS = ['commentsUpdate', 'commentsLoaded', 'tracked-changes-changed'] as const;
 
 const SUPERDOC_EVENTS = ['editorCreate', 'document-mode-change', 'zoomChange'] as const;
 
@@ -139,6 +141,23 @@ function resolveRoutedEditor(superdoc: SuperDocUIOptions['superdoc']): SuperDocE
   } catch {
     return (superdoc.activeEditor ?? null) as SuperDocEditorLike | null;
   }
+}
+
+/**
+ * Resolve the **host** (body) editor — the one that owns the document
+ * scope. Always `superdoc.activeEditor`, never the routed
+ * header/footer/note story editor.
+ *
+ * Document-wide operations (`trackChanges.decide`,
+ * `presentation.navigateTo`, `presentation.scrollToPositionAsync`)
+ * must run against the host so the adapter treats the body as the
+ * scope and routes to the right story via the target's `story`
+ * field. Calling these on a child story editor (when focus is in a
+ * header/footer) would scope the decision/scroll to that story
+ * instead of the document.
+ */
+function resolveHostEditor(superdoc: SuperDocUIOptions['superdoc']): SuperDocEditorLike | null {
+  return (superdoc.activeEditor ?? null) as SuperDocEditorLike | null;
 }
 
 /**
@@ -738,13 +757,17 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
   };
 
   /**
-   * Run `scrollRangeIntoView` against whichever editor
-   * PresentationEditor currently routes to (body / header / footer /
-   * note). Returns `{ success: false }` when no routed editor is
-   * mounted.
+   * Run `scrollRangeIntoView` against the host editor — the
+   * presentation editor lives at the host level and its
+   * `navigateTo` is story-aware (the entity target's `story` field
+   * tells it which story to activate). Routing through a child story
+   * editor would scope navigation to that story instead of the
+   * document.
+   *
+   * Returns `{ success: false }` when no host editor is mounted.
    */
   const runScrollIntoView = async (input: ScrollIntoViewInput): Promise<ScrollIntoViewOutput> => {
-    const editor = resolveRoutedEditor(superdoc);
+    const editor = resolveHostEditor(superdoc);
     if (!editor) return { success: false };
     return scrollRangeIntoView(editor as unknown as Parameters<typeof scrollRangeIntoView>[0], input);
   };
@@ -812,8 +835,16 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
       return receipt;
     },
     async scrollTo(commentId) {
+      // Preserve `address.story` for non-body comments so navigation
+      // resolves to the right header / footer / note rather than
+      // defaulting to body.
+      const story = lookupItemStory(commentId);
+      const target =
+        story != null
+          ? { kind: 'entity' as const, entityType: 'comment' as const, entityId: commentId, story }
+          : { kind: 'entity' as const, entityType: 'comment' as const, entityId: commentId };
       return runScrollIntoView({
-        target: { kind: 'entity', entityType: 'comment', entityId: commentId },
+        target,
         block: 'center',
         behavior: 'smooth',
       });
@@ -829,7 +860,12 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
   // from view mode.
 
   const requireDocTrackChanges = () => {
-    const editor = resolveRoutedEditor(superdoc);
+    // Always go through the host editor — `trackChanges.decide` is
+    // document-wide and the change's own `address.story` (carried in
+    // the decide target) tells the adapter which story to operate
+    // against. Routing through a child story editor when focus is in
+    // a header/footer would scope the decision to that story.
+    const editor = resolveHostEditor(superdoc);
     const api = editor?.doc?.trackChanges;
     if (!api?.decide) {
       throw new Error('ui.review: no active editor / trackChanges API. Open a document first.');
@@ -858,6 +894,23 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     const story = (item as unknown as { address?: { story?: unknown } } | undefined)?.address?.story;
     if (story != null) return { id: changeId, story };
     return { id: changeId };
+  };
+
+  /**
+   * Look up a review item's `address.story` so navigation /
+   * scrollTo can carry it into the EntityAddress target. Without this,
+   * `presentation.navigateTo({ entityId: 'tc-header-x' })` defaults
+   * to body and either fails with target-not-found or anchors to a
+   * same-id body change. Returns `undefined` for body-anchored items
+   * so the EntityAddress stays minimal.
+   */
+  const lookupItemStory = (id: string): unknown | undefined => {
+    const change = trackChangesListCache.items.find((c) => c.id === id);
+    if (change) {
+      return (change as unknown as { address?: { story?: unknown } }).address?.story;
+    }
+    const comment = commentsListCache.items.find((c) => c.id === id);
+    return (comment as unknown as { address?: { story?: unknown } } | undefined)?.address?.story;
   };
 
   const review: ReviewHandle = {
@@ -932,8 +985,13 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
       const entityType = kind === 'change' ? 'trackedChange' : 'comment';
       activeReviewId = id;
       scheduleNotify();
+      const story = lookupItemStory(id);
+      const target =
+        story != null
+          ? { kind: 'entity' as const, entityType, entityId: id, story }
+          : { kind: 'entity' as const, entityType, entityId: id };
       return runScrollIntoView({
-        target: { kind: 'entity', entityType, entityId: id },
+        target,
         block: 'center',
         behavior: 'smooth',
       });

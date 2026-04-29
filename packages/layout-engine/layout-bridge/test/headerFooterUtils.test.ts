@@ -72,13 +72,13 @@ describe('headerFooterUtils', () => {
     expect(getHeaderFooterType(3, identifier)).toBe('odd');
   });
 
-  it('falls back to default when alternating slots missing', () => {
+  it('uses default only for odd pages when alternating slots are missing', () => {
     const identifier = extractIdentifierFromConverter({
       headerIds: { default: 'rId1' },
       pageStyles: { alternateHeaders: true },
     });
 
-    expect(getHeaderFooterType(2, identifier)).toBe('default');
+    expect(getHeaderFooterType(2, identifier)).toBeNull();
     expect(getHeaderFooterType(3, identifier)).toBe('default');
   });
 
@@ -147,7 +147,7 @@ describe('headerFooterUtils', () => {
       expect(getHeaderFooterType(3, identifier)).toBeNull();
     });
 
-    it('handles document with odd pages only (even pages fall back to default)', () => {
+    it('handles document with odd pages only', () => {
       const identifier = extractIdentifierFromConverter({
         headerIds: { default: 'rIdDefault', odd: 'rIdOdd' },
         pageStyles: { alternateHeaders: true },
@@ -157,9 +157,9 @@ describe('headerFooterUtils', () => {
       expect(getHeaderFooterType(1, identifier)).toBe('odd');
       expect(getHeaderFooterType(3, identifier)).toBe('odd');
       expect(getHeaderFooterType(5, identifier)).toBe('odd');
-      // Even pages fall back to 'default' (no 'even' variant defined)
-      expect(getHeaderFooterType(2, identifier)).toBe('default');
-      expect(getHeaderFooterType(4, identifier)).toBe('default');
+      // Even pages have no header when no 'even' variant is defined.
+      expect(getHeaderFooterType(2, identifier)).toBeNull();
+      expect(getHeaderFooterType(4, identifier)).toBeNull();
     });
 
     it('handles document with all header/footer variants defined', () => {
@@ -658,7 +658,7 @@ describe('headerFooterUtils', () => {
       expect(oddPageType).toBe('odd');
     });
 
-    it('falls back to section default content id when alternate header parity ref is missing', () => {
+    it('uses section default content id for odd pages when alternate header odd ref is missing', () => {
       const sectionMetadata: SectionMetadata[] = [
         {
           sectionIndex: 0,
@@ -685,6 +685,36 @@ describe('headerFooterUtils', () => {
       const oddPageHeader = resolveHeaderFooterForPageAndSection(layout, 0, identifier, { kind: 'header' });
       expect(oddPageHeader?.type).toBe('odd');
       expect(oddPageHeader?.contentId).toBe('h0-default');
+    });
+
+    it('does not use section default content id for even pages when alternate header even ref is missing', () => {
+      const sectionMetadata: SectionMetadata[] = [
+        {
+          sectionIndex: 0,
+          headerRefs: { default: 'h0-default' },
+        },
+      ];
+
+      const identifier = buildMultiSectionIdentifier(sectionMetadata, { alternateHeaders: true });
+      const layout: Layout = {
+        pageSize: { w: 600, h: 800 },
+        pages: [
+          { number: 1, fragments: [], sectionIndex: 0 },
+          {
+            number: 2,
+            fragments: [],
+            sectionIndex: 0,
+            sectionRefs: { headerRefs: { default: 'h0-default' } },
+          },
+        ],
+        headerFooter: {
+          even: { pages: [{ number: 2, fragments: [] }] },
+        },
+      };
+
+      const evenPageHeader = resolveHeaderFooterForPageAndSection(layout, 1, identifier, { kind: 'header' });
+      expect(evenPageHeader?.type).toBe('even');
+      expect(evenPageHeader?.contentId).toBeNull();
     });
 
     it('keeps parity variant but does not infer default content id for missing alternate refs', () => {

@@ -1400,12 +1400,24 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
           }
         }
 
-        // Step 3: Fall back to current section's 'default'
-        if (!headerRef && variantType !== 'default' && activeSectionRefs?.headerRefs?.default) {
+        // Step 3: Fall back to current section's default only when that ref is
+        // the selected OOXML slot. With even/odd headers enabled, `default`
+        // represents the odd-page header, not a replacement for a missing even
+        // header.
+        const shouldUseDefaultHeaderRef =
+          variantType !== 'default' &&
+          activeSectionRefs?.headerRefs?.default &&
+          (!alternateHeaders || variantType === 'odd');
+        const shouldUseDefaultFooterRef =
+          variantType !== 'default' &&
+          activeSectionRefs?.footerRefs?.default &&
+          (!alternateHeaders || variantType === 'odd');
+
+        if (!headerRef && shouldUseDefaultHeaderRef) {
           headerRef = activeSectionRefs.headerRefs.default;
           effectiveVariantType = 'default';
         }
-        if (!footerRef && variantType !== 'default' && activeSectionRefs?.footerRefs?.default) {
+        if (!footerRef && shouldUseDefaultFooterRef) {
           footerRef = activeSectionRefs.footerRefs.default;
         }
 

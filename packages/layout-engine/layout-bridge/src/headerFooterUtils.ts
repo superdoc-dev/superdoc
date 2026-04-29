@@ -83,12 +83,13 @@ export const getHeaderFooterType = (
   }
 
   if (identifier.alternateHeaders) {
-    if (pageNumber % 2 === 0 && (hasEven || hasDefault)) {
-      return hasEven ? 'even' : 'default';
+    if (pageNumber % 2 === 0 && hasEven) {
+      return 'even';
     }
     if (pageNumber % 2 === 1 && (hasOdd || hasDefault)) {
       return hasOdd ? 'odd' : 'default';
     }
+    return null;
   }
 
   if (hasDefault) {
@@ -429,9 +430,9 @@ export function getHeaderFooterIdForPage(
     if (!ids) return null;
     const direct = ids[variantType];
     if (direct) return direct;
-    // Under alternate headers/footers, Word still falls back to section default
-    // when an explicit odd/even ref is not provided.
-    if ((variantType === 'odd' || variantType === 'even') && ids.default) return ids.default;
+    // With w:evenAndOddHeaders enabled, OOXML `default` is the primary/odd
+    // page slot. It must not be used as a replacement for a missing even ref.
+    if (variantType === 'odd' && ids.default) return ids.default;
     return null;
   };
 

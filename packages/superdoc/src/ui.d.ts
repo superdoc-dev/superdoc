@@ -15,4 +15,8 @@ export {
   type SuperDocUI,
   type SuperDocUIOptions,
   type SuperDocUIState,
+  type ViewportGetRectInput,
+  type ViewportHandle,
+  type ViewportRect,
+  type ViewportRectResult,
 } from '@superdoc/super-editor';

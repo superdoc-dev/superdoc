@@ -7,7 +7,13 @@ import type {
   PublicToolbarItemId,
   ToolbarSnapshot,
 } from '../headless-toolbar/types.js';
-import type { CommentsListResult, Receipt, ScrollIntoViewOutput, TrackChangesListResult } from '@superdoc/document-api';
+import type {
+  CommentsListResult,
+  Receipt,
+  ScrollIntoViewInput,
+  ScrollIntoViewOutput,
+  TrackChangesListResult,
+} from '@superdoc/document-api';
 import { shallowEqual } from './equality.js';
 import type {
   CommandHandle,
@@ -25,6 +31,10 @@ import type {
   Subscribable,
   ToolbarCommandHandleState,
   ToolbarHandle,
+  ViewportGetRectInput,
+  ViewportHandle,
+  ViewportRect,
+  ViewportRectResult,
 } from './types.js';
 
 /**
@@ -876,6 +886,93 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     },
   };
 
+  // ---- ui.viewport -------------------------------------------------------
+  //
+  // Imperative geometry surface. No state slice, no subscription —
+  // sticky-card / floating-toolbar consumers already listen to a
+  // transaction / paint / scroll event upstream and call `getRect`
+  // from there. Returns plain value rects, never live `DOMRect`s.
+  // The DOM lookup itself lives in `PresentationEditor.getEntityRects`
+  // so DOM elements / painter selectors never escape through the UI.
+  //
+  // Text-anchored paths (TextAddress / TextTarget) are deferred to a
+  // follow-up — the type signature accepts them today so consumer
+  // call sites are forward-compatible, but those branches return
+  // `{ success: false, reason: 'invalid-target' }` until the
+  // story-aware text resolver lands.
+
+  const toViewportRect = (rect: {
+    pageIndex: number;
+    left: number;
+    top: number;
+    right: number;
+    bottom: number;
+    width: number;
+    height: number;
+  }): ViewportRect => ({
+    top: rect.top,
+    left: rect.left,
+    width: rect.width,
+    height: rect.height,
+    pageIndex: rect.pageIndex,
+  });
+
+  const viewport: ViewportHandle = {
+    getRect(input: ViewportGetRectInput): ViewportRectResult {
+      const target = input?.target;
+      if (!target || typeof target !== 'object') {
+        return { success: false, reason: 'invalid-target' };
+      }
+
+      const editor = resolveRoutedEditor(superdoc);
+      const presentation = editor?.presentationEditor;
+      if (!presentation || typeof presentation.getEntityRects !== 'function') {
+        return { success: false, reason: 'not-ready' };
+      }
+
+      // Entity-anchored path. Text-anchored paths are deferred — the
+      // resolver needs story-aware routing through the active routed
+      // editor (header/footer/note vs body) to avoid silently reading
+      // body coords for a non-body target. Until that lands, surface
+      // an explicit `invalid-target` so consumers don't quietly get
+      // wrong rects.
+      if (!('kind' in target) || (target as { kind?: unknown }).kind !== 'entity') {
+        return { success: false, reason: 'invalid-target' };
+      }
+
+      const entity = target as { kind: 'entity'; entityType?: unknown; entityId?: unknown; story?: unknown };
+      if (typeof entity.entityType !== 'string' || typeof entity.entityId !== 'string' || !entity.entityId) {
+        return { success: false, reason: 'invalid-target' };
+      }
+
+      const rangeRects = presentation.getEntityRects({
+        entityType: entity.entityType,
+        entityId: entity.entityId,
+        story: entity.story,
+      });
+      if (!rangeRects || rangeRects.length === 0) {
+        return { success: false, reason: 'not-mounted' };
+      }
+
+      const rects = rangeRects.map(toViewportRect);
+      return {
+        success: true,
+        rect: rects[0],
+        rects,
+        pageIndex: rects[0].pageIndex,
+      };
+    },
+
+    async scrollIntoView(input: ScrollIntoViewInput): Promise<ScrollIntoViewOutput> {
+      const editor = resolveRoutedEditor(superdoc);
+      const api = editor?.doc?.ranges;
+      if (!api?.scrollIntoView) {
+        return { success: false };
+      }
+      return (api.scrollIntoView as (input: unknown) => Promise<ScrollIntoViewOutput>).call(api, input);
+    },
+  };
+
   const destroy = () => {
     if (destroyed) return;
     destroyed = true;
@@ -892,5 +989,5 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     teardown.length = 0;
   };
 
-  return { select, toolbar, commands, comments, review, destroy };
+  return { select, toolbar, commands, comments, review, viewport, destroy };
 }

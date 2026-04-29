@@ -57,6 +57,11 @@ export type WorkingTableGridInput = {
   layoutMode: AutoFitLayoutMode;
   /** Maximum runtime width available to the table, in pixels. */
   maxTableWidth: number;
+  /**
+   * Fixed-layout tables with a complete authored grid whose total already
+   * matches tblW should keep that grid as the visual column geometry.
+   */
+  preserveAuthoredGrid?: boolean;
   /** Preferred table width target, in pixels, if resolvable. */
   preferredTableWidth?: number;
   /** Preferred/authored grid widths, in pixels, in logical-column order. */
@@ -138,10 +143,17 @@ export function buildAutoFitWorkingGridInput(
     return normalized.row;
   });
   const gridColumnCount = determineGridColumnCount(preferredColumnWidths.length, rows);
+  const preserveAuthoredGrid = shouldPreserveAuthoredGrid({
+    layoutMode,
+    preferredColumnWidths,
+    preferredTableWidth,
+    gridColumnCount,
+  });
 
   return {
     layoutMode,
     maxTableWidth,
+    ...(preserveAuthoredGrid ? { preserveAuthoredGrid } : {}),
     preferredTableWidth,
     preferredColumnWidths,
     gridColumnCount,
@@ -154,6 +166,20 @@ export function buildAutoFitWorkingGridInput(
  */
 function resolveLayoutMode(tableLayout: unknown): AutoFitLayoutMode {
   return tableLayout === 'fixed' ? 'fixed' : 'autofit';
+}
+
+function shouldPreserveAuthoredGrid(args: {
+  layoutMode: AutoFitLayoutMode;
+  preferredColumnWidths: number[];
+  preferredTableWidth: number | undefined;
+  gridColumnCount: number;
+}): boolean {
+  const { layoutMode, preferredColumnWidths, preferredTableWidth, gridColumnCount } = args;
+  if (layoutMode !== 'fixed') return false;
+  if (preferredTableWidth == null || preferredTableWidth <= 0) return false;
+  if (preferredColumnWidths.length === 0 || preferredColumnWidths.length !== gridColumnCount) return false;
+
+  return approximatelyEqual(sumWidths(preferredColumnWidths), preferredTableWidth);
 }
 
 /**
@@ -403,4 +429,12 @@ function sanitizePositiveNumber(value: unknown): number {
 function sanitizeNonNegativeNumber(value: unknown): number | undefined {
   if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) return undefined;
   return value;
+}
+
+function sumWidths(widths: number[]): number {
+  return widths.reduce((sum, width) => sum + Math.max(0, width), 0);
+}
+
+function approximatelyEqual(left: number, right: number): boolean {
+  return Math.abs(left - right) <= 0.01;
 }

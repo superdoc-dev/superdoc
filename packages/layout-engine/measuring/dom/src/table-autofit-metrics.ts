@@ -283,6 +283,7 @@ export function buildAutoFitTableResultCacheKey(table: TableBlock, options: Auto
     workingGrid: {
       layoutMode: options.workingInput.layoutMode,
       gridColumnCount: options.workingInput.gridColumnCount,
+      preserveAuthoredGrid: options.workingInput.preserveAuthoredGrid === true,
       preferredTableWidth: options.workingInput.preferredTableWidth ?? null,
       preferredColumnWidths: options.workingInput.preferredColumnWidths,
       rows: options.workingInput.rows.map((row) => ({

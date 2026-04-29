@@ -51,6 +51,60 @@ describe('buildAutoFitWorkingGridInput', () => {
     ]);
   });
 
+  it('marks complete fixed grids that already match tblW as authoritative', () => {
+    const block = createTableBlock({
+      attrs: {
+        tableLayout: 'fixed',
+        tableWidth: { width: 400, type: 'px' },
+      },
+      columnWidths: [57.53333333333333, 239.46666666666667, 103],
+      rows: [
+        {
+          id: 'row-1',
+          cells: [
+            {
+              id: 'cell-1',
+              attrs: { tableCellProperties: { cellWidth: { value: 2880, type: 'dxa' } } },
+            },
+            {
+              id: 'cell-2',
+              attrs: { tableCellProperties: { cellWidth: { value: 1440, type: 'dxa' } } },
+            },
+            {
+              id: 'cell-3',
+              attrs: { tableCellProperties: { cellWidth: { value: 5760, type: 'dxa' } } },
+            },
+          ],
+        },
+      ],
+    });
+
+    const result = buildAutoFitWorkingGridInput(block, { maxWidth: 600 });
+
+    expect(result.preserveAuthoredGrid).toBe(true);
+  });
+
+  it('does not mark incomplete fixed grids as authoritative', () => {
+    const block = createTableBlock({
+      attrs: {
+        tableLayout: 'fixed',
+        tableWidth: { width: 400, type: 'px' },
+      },
+      columnWidths: [120, 180],
+      rows: [
+        {
+          id: 'row-1',
+          cells: [{ id: 'cell-1' }, { id: 'cell-2' }, { id: 'cell-3' }],
+        },
+      ],
+    });
+
+    const result = buildAutoFitWorkingGridInput(block, { maxWidth: 600 });
+
+    expect(result.preserveAuthoredGrid).toBeUndefined();
+    expect(result.gridColumnCount).toBe(3);
+  });
+
   it('normalizes omitted tblLayout to autofit mode', () => {
     const block = createTableBlock({
       rows: [{ id: 'row-1', cells: [{ id: 'cell-1', colSpan: 1 }] }],

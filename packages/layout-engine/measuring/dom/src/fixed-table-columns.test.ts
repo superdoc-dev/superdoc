@@ -283,6 +283,72 @@ describe('computeFixedTableColumnWidths', () => {
     expect(result.totalWidth).toBe(240);
   });
 
+  it('preserves complete authored grid for fixed tables when grid sums to tblW', () => {
+    const result = computeFixedTableColumnWidths(
+      buildFixedInput({
+        preferredColumnWidths: [57.53333333333333, 239.46666666666667, 103],
+        preferredTableWidth: 400,
+        preserveAuthoredGrid: true,
+        rows: [
+          {
+            skippedBefore: [],
+            skippedAfter: [],
+            skippedColumns: [],
+            logicalColumnCount: 3,
+            cells: [
+              { startColumn: 0, span: 1, preferredWidth: 192 },
+              { startColumn: 1, span: 1, preferredWidth: 96 },
+              { startColumn: 2, span: 1, preferredWidth: 384 },
+            ],
+          },
+          {
+            skippedBefore: [],
+            skippedAfter: [],
+            skippedColumns: [],
+            logicalColumnCount: 3,
+            cells: [
+              { startColumn: 0, span: 1, preferredWidth: 192 },
+              { startColumn: 1, span: 1, preferredWidth: 960 },
+              { startColumn: 2, span: 1, preferredWidth: 384 },
+            ],
+          },
+        ],
+      }),
+    );
+
+    expect(result.columnWidths).toEqual([57.53333333333333, 239.46666666666667, 103]);
+    expect(result.totalWidth).toBe(400);
+  });
+
+  it('still applies fixed tcW requests when authored grid is not protected', () => {
+    const result = computeFixedTableColumnWidths(
+      buildFixedInput({
+        preferredColumnWidths: [57.53333333333333, 239.46666666666667],
+        preferredTableWidth: 400,
+        gridColumnCount: 3,
+        rows: [
+          {
+            skippedBefore: [],
+            skippedAfter: [],
+            skippedColumns: [],
+            logicalColumnCount: 3,
+            cells: [
+              { startColumn: 0, span: 1, preferredWidth: 192 },
+              { startColumn: 1, span: 1, preferredWidth: 96 },
+              { startColumn: 2, span: 1, preferredWidth: 384 },
+            ],
+          },
+        ],
+      }),
+    );
+
+    expect(result.columnWidths).not.toEqual([57.53333333333333, 239.46666666666667, 103]);
+    expect(result.columnWidths[0]).toBeCloseTo(114.28571428571428, 10);
+    expect(result.columnWidths[1]).toBeCloseTo(57.14285714285714, 10);
+    expect(result.columnWidths[2]).toBeCloseTo(228.57142857142856, 10);
+    expect(result.totalWidth).toBe(400);
+  });
+
   it('does not clamp fixed results to the available container width', () => {
     const result = computeFixedTableColumnWidths(
       buildFixedInput({

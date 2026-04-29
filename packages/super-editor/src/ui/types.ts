@@ -168,7 +168,14 @@ export interface SuperDocUIState {
  */
 export type ToolbarSnapshotSlice = {
   context: import('../headless-toolbar/types.js').ToolbarContext | null;
-  commands: Record<string, UIToolbarCommandState>;
+  /**
+   * Per-command snapshot states, keyed by command id. Returns `undefined`
+   * for ids that are not currently registered (custom commands before
+   * `register` / after `unregister`, typos in built-in ids). Consumers
+   * must guard with `snapshot.commands[id]?.disabled` rather than
+   * indexing directly.
+   */
+  commands: { [id: string]: UIToolbarCommandState | undefined };
 };
 
 /**
@@ -503,7 +510,7 @@ export type CommandsHandle = {
    * built-in (e.g. swap `bold` for a tracked-changes-aware variant).
    * Custom-vs-custom collisions warn and replace the prior registration.
    */
-  register<TPayload = unknown, TValue = unknown>(
+  register<TPayload = void, TValue = unknown>(
     registration: CustomCommandRegistration<TPayload, TValue>,
   ): CustomCommandRegistrationResult<TPayload, TValue>;
 };
@@ -523,7 +530,7 @@ export type CommandsHandle = {
  * (not once per snapshot rebuild) so a buggy custom command can't
  * flood the console or wedge the toolbar.
  */
-export type CustomCommandRegistration<TPayload = unknown, TValue = unknown> = {
+export type CustomCommandRegistration<TPayload = void, TValue = unknown> = {
   /**
    * Command id. Use a namespaced convention like `'company.aiRewrite'`
    * to avoid future collisions with built-in commands. Collides with a
@@ -584,7 +591,7 @@ export type CustomCommandRegistrationResult<TPayload, TValue> = {
 };
 
 /** Typed handle returned for a custom registration. */
-export type CustomCommandHandle<TPayload = unknown, TValue = unknown> = {
+export type CustomCommandHandle<TPayload = void, TValue = unknown> = {
   observe(listener: (state: CustomCommandHandleState<TValue>) => void): () => void;
   execute(...args: TPayload extends void | undefined ? [] : [payload: TPayload]): boolean | Promise<boolean>;
 };

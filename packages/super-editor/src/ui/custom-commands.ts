@@ -117,7 +117,23 @@ export function createCustomCommandsRegistry(deps: CustomCommandsRegistryDeps): 
 
   const buildHandle = <TPayload, TValue>(id: string): CustomCommandHandle<TPayload, TValue> => ({
     observe(listener) {
-      return getOrCreateSubscribable(id).subscribe((state) => {
+      let innerOff: (() => void) | null = null;
+      let stopped = false;
+      innerOff = getOrCreateSubscribable(id).subscribe((state) => {
+        if (stopped) return;
+        // The Subscribable lives on the controller's selector substrate
+        // and outlives the registration; if the command was unregistered
+        // since the last emit, stop forwarding to the listener and
+        // detach the inner subscription. Without this, a button bound
+        // to `reg.handle.observe(...)` would keep receiving the static
+        // fallback state (disabled: false) after `reg.unregister()`,
+        // leaving stale buttons enabled.
+        if (!entries.has(id)) {
+          stopped = true;
+          innerOff?.();
+          innerOff = null;
+          return;
+        }
         const next: CustomCommandHandleState<TValue> = state
           ? {
               active: state.active,
@@ -133,6 +149,11 @@ export function createCustomCommandsRegistry(deps: CustomCommandsRegistryDeps): 
           // the controller's notify loop.
         }
       });
+      return () => {
+        stopped = true;
+        innerOff?.();
+        innerOff = null;
+      };
     },
     execute: ((payload?: TPayload) => {
       const result = registry.execute(id, payload);
@@ -160,7 +181,6 @@ export function createCustomCommandsRegistry(deps: CustomCommandsRegistryDeps): 
       // crash on `result.handle.execute(...)` — they just see a warned
       // disabled command, matching the "warn and refuse" decision.
       if (deps.isBuiltIn(id) && !override) {
-         
         console.warn(DEFAULT_BUILTIN_COLLISION_MESSAGE(id));
         return {
           handle: buildNoOpHandle<TPayload, TValue>(id),
@@ -175,7 +195,6 @@ export function createCustomCommandsRegistry(deps: CustomCommandsRegistryDeps): 
 
       // Custom-vs-custom replacement: warn and replace.
       if (entries.has(id)) {
-         
         console.warn(DEFAULT_REPLACEMENT_MESSAGE(id));
       }
 
@@ -232,7 +251,7 @@ export function createCustomCommandsRegistry(deps: CustomCommandsRegistryDeps): 
             const message = err instanceof Error ? err.message : String(err);
             if (entry.lastErrorMessage !== message) {
               entry.lastErrorMessage = message;
-               
+
               console.error(`[superdoc/ui] custom command '${entry.id}' getState threw: ${message}`);
             }
           }
@@ -241,7 +260,12 @@ export function createCustomCommandsRegistry(deps: CustomCommandsRegistryDeps): 
         out[entry.id] = {
           active: derived?.active ?? STATIC_CUSTOM_STATE.active,
           disabled: derived?.disabled ?? STATIC_CUSTOM_STATE.disabled,
-          value: derived?.value ?? STATIC_CUSTOM_STATE.value,
+          // Don't use `??` for value: a custom command (matching built-ins
+          // like `link` / `text-color`) may legitimately use `null` to mean
+          // "no current value", and `null ?? undefined` would silently
+          // collapse it to undefined. Only fall through when `getState`
+          // itself returned no derived state at all.
+          value: derived ? derived.value : STATIC_CUSTOM_STATE.value,
           source: 'custom',
         };
       }
@@ -254,7 +278,11 @@ export function createCustomCommandsRegistry(deps: CustomCommandsRegistryDeps): 
       const entry = entries.get(id);
       if (!entry) return false;
       try {
-        const result = entry.execute({
+        // `payload` is `unknown` at this internal callsite — the public
+        // `register<TPayload>(...)` signature carries the consumer's
+        // payload type to the captured handle, but the runtime registry
+        // stores entries with the default `void` payload. Cast to bridge.
+        const result = (entry.execute as (args: { payload?: unknown; superdoc: SuperDocLike }) => unknown)({
           payload,
           superdoc: deps.superdoc,
         });
@@ -262,7 +290,6 @@ export function createCustomCommandsRegistry(deps: CustomCommandsRegistryDeps): 
           return result.then(
             (value) => value !== false,
             (err) => {
-               
               console.error(`[superdoc/ui] custom command '${id}' execute rejected:`, err);
               return false;
             },
@@ -270,7 +297,6 @@ export function createCustomCommandsRegistry(deps: CustomCommandsRegistryDeps): 
         }
         return result !== false;
       } catch (err) {
-         
         console.error(`[superdoc/ui] custom command '${id}' execute threw:`, err);
         return false;
       }
@@ -293,7 +319,6 @@ function buildNoOpHandle<TPayload, TValue>(id: string): CustomCommandHandle<TPay
       return () => {};
     },
     execute: ((..._args: unknown[]) => {
-       
       console.warn(
         `[superdoc/ui] ui.commands['${id}'].execute(): registration was refused (built-in collision without override).`,
       );

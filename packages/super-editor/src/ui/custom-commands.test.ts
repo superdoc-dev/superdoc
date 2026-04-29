@@ -376,4 +376,88 @@ describe('ui.commands.register', () => {
 
     ui.destroy();
   });
+
+  // Regression: PR #3004 review.
+  // Default payload generic must allow zero-arg execute. Without the
+  // `void` default, `register({ id, execute: () => true })` returned a
+  // handle whose `execute()` was a type error.
+  it('register() without a payload generic permits zero-arg execute', () => {
+    const { superdoc } = makeStubs();
+    const ui = createSuperDocUI({ superdoc });
+
+    const reg = ui.commands.register({
+      id: 'company.refresh',
+      execute: () => true,
+    });
+
+    // Type-level: no `<void>` generic needed. Runtime: returns boolean.
+    expect(reg.handle.execute()).toBe(true);
+
+    ui.destroy();
+  });
+
+  // Regression: PR #3004 review.
+  // `snapshot.commands[id]` must be `UIToolbarCommandState | undefined`
+  // so consumers can't crash on `.disabled` when the id isn't registered.
+  it('snapshot.commands returns undefined for unregistered ids', () => {
+    const { superdoc } = makeStubs();
+    const ui = createSuperDocUI({ superdoc });
+
+    const snapshot = ui.toolbar.getSnapshot();
+    const entry = snapshot.commands['company.never.registered'];
+    expect(entry).toBeUndefined();
+    // Safe-guard pattern is the documented one:
+    expect(entry?.disabled).toBeUndefined();
+
+    ui.destroy();
+  });
+
+  // Regression: PR #3004 review.
+  // A custom command (mirroring built-ins like `link` / `text-color`) may
+  // legitimately use `null` to mean "no current value". The previous
+  // `derived?.value ?? STATIC_CUSTOM_STATE.value` collapsed null → undefined.
+  it('preserves null returned from getState as a meaningful value', () => {
+    const { superdoc } = makeStubs();
+    const ui = createSuperDocUI({ superdoc });
+
+    ui.commands.register({
+      id: 'company.maybeLink',
+      execute: vi.fn(() => true),
+      getState: () => ({ active: false, disabled: false, value: null }),
+    });
+
+    expect(ui.toolbar.getSnapshot().commands['company.maybeLink']?.value).toBe(null);
+
+    ui.destroy();
+  });
+
+  // Regression: PR #3004 review.
+  // After unregister, observers attached via `reg.handle.observe(...)`
+  // must stop firing. Otherwise the subsequent rebuild emits the static
+  // fallback `{ disabled: false }` and a button bound to the observer
+  // would stay enabled even though the command is gone.
+  it('observers stop firing after unregister', async () => {
+    const { superdoc } = makeStubs();
+    const ui = createSuperDocUI({ superdoc });
+
+    const reg = ui.commands.register({
+      id: 'company.gated',
+      execute: vi.fn(() => true),
+      getState: () => ({ active: false, disabled: false }),
+    });
+
+    const listener = vi.fn();
+    reg.handle.observe(listener);
+    expect(listener).toHaveBeenCalledTimes(1);
+
+    reg.unregister();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    // No further emissions after unregister — the listener saw exactly
+    // the initial-subscribe call and nothing else.
+    expect(listener).toHaveBeenCalledTimes(1);
+
+    ui.destroy();
+  });
 });

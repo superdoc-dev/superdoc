@@ -480,32 +480,23 @@ export interface SelectionHandle {
 /**
  * Frozen snapshot returned by {@link SelectionHandle.capture}.
  *
- * Same shape as {@link SelectionSlice} but `DeepReadonly` so the
- * type signal matches the runtime deep-freeze: assigning into
- * `captured.target.segments[0].range.start` or
- * `captured.activeMarks[0]` is a TypeScript error AND a runtime
- * throw in strict mode. Declared as its own named type so
- * consumers can name the captured value in their component state
- * (`useState<SelectionCapture | null>(null)`) and so the planned
- * `restore(capture)` follow-up has a stable input type.
- */
-export type SelectionCapture = DeepReadonly<SelectionSlice>;
-
-/**
- * Recursively mark every property and array element as `readonly`.
- * Mirrors the runtime `Object.freeze` walk performed by
- * `ui.selection.capture()` so the static type matches reality.
+ * Same shape as {@link SelectionSlice}; declared as its own type
+ * so consumers can name the captured value in their component
+ * state (`useState<SelectionCapture | null>(null)`) and so the
+ * planned `restore(capture)` follow-up has a stable input type.
  *
- * Kept module-local: this is an implementation detail of the
- * captured selection contract, not a generic helper consumers
- * should reach for.
+ * The runtime value is recursively `Object.freeze`d, so assigning
+ * into `captured.target.segments[0].range.start` or
+ * `captured.activeMarks[0]` throws in strict mode. We do NOT
+ * encode that as a `readonly` type because the canonical use case
+ * is passing `captured.target` straight to `editor.doc.*`
+ * operations whose parameters are typed as mutable shapes (the
+ * doc-api doesn't mutate them, but its types don't say `readonly`).
+ * Adding `readonly` here would force a cast at every doc-api
+ * boundary; the runtime guard plus this JSDoc carry the "do not
+ * mutate" contract instead.
  */
-type DeepReadonly<T> =
-  T extends ReadonlyArray<infer U>
-    ? ReadonlyArray<DeepReadonly<U>>
-    : T extends object
-      ? { readonly [K in keyof T]: DeepReadonly<T[K]> }
-      : T;
+export type SelectionCapture = SelectionSlice;
 
 /**
  * Aggregate toolbar handle exposed on `ui.toolbar`. Compatible with

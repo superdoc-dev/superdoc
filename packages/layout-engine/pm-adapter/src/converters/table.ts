@@ -150,6 +150,11 @@ const isTableCellNode = (node: PMNode): boolean =>
   node.type === 'tableHeader' ||
   node.type === 'table_header';
 
+const isTableSkipPlaceholderCell = (node: PMNode): boolean => {
+  const placeholder = node.attrs?.__placeholder;
+  return placeholder === 'gridBefore' || placeholder === 'gridAfter';
+};
+
 const convertResolvedCellBorder = (value: unknown): BorderSpec | undefined => {
   if (!value || typeof value !== 'object') return undefined;
 
@@ -629,6 +634,10 @@ const parseTableRow = (args: ParseTableRowArgs): TableRow | null => {
     | Record<string, unknown>
     | undefined;
   rowNode.content.forEach((cellNode, cellIndex) => {
+    if (isTableCellNode(cellNode) && isTableSkipPlaceholderCell(cellNode)) {
+      return;
+    }
+
     const parsedCell = parseTableCell({
       cellNode,
       rowIndex,

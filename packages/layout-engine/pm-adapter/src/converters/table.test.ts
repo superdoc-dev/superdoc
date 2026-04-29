@@ -179,6 +179,110 @@ describe('table converter', () => {
       expect(result.rows[0].cells[0].paragraph.kind).toBe('paragraph');
     });
 
+    it('does not emit imported gridBefore/gridAfter placeholder cells into TableBlock rows', () => {
+      const node: PMNode = {
+        type: 'table',
+        attrs: {
+          tableLayout: 'fixed',
+          tableProperties: {
+            tableLayout: 'fixed',
+            tableWidth: { value: 11384, type: 'dxa' },
+          },
+          grid: [{ col: 8 }, { col: 3974 }, { col: 2844 }, { col: 4558 }],
+        },
+        content: [
+          {
+            type: 'tableRow',
+            attrs: {
+              tableRowProperties: {
+                gridBefore: 1,
+                wBefore: { value: 8, type: 'dxa' },
+              },
+            },
+            content: [
+              {
+                type: 'tableCell',
+                attrs: {
+                  __placeholder: 'gridBefore',
+                  colspan: 1,
+                  colwidth: [0.533],
+                },
+                content: [{ type: 'paragraph', content: [] }],
+              },
+              {
+                type: 'tableCell',
+                attrs: {
+                  colspan: 3,
+                  colwidth: [264.933, 189.6, 303.867],
+                  tableCellProperties: {
+                    cellWidth: { value: 11376, type: 'dxa' },
+                    gridSpan: 3,
+                  },
+                },
+                content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Client Information' }] }],
+              },
+            ],
+          },
+          {
+            type: 'tableRow',
+            attrs: {
+              tableRowProperties: {
+                gridAfter: 1,
+                wAfter: { value: 4558, type: 'dxa' },
+              },
+            },
+            content: [
+              {
+                type: 'tableCell',
+                attrs: {
+                  colspan: 2,
+                  colwidth: [0.533, 264.933],
+                },
+                content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Contract ACC' }] }],
+              },
+              {
+                type: 'tableCell',
+                attrs: {
+                  __placeholder: 'gridAfter',
+                  colspan: 1,
+                  colwidth: [303.867],
+                },
+                content: [{ type: 'paragraph', content: [] }],
+              },
+            ],
+          },
+        ],
+      };
+
+      const result = tableNodeToBlock(
+        node,
+        mockBlockIdGenerator,
+        mockPositionMap,
+        'Arial',
+        16,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        mockParagraphConverter,
+      ) as TableBlock;
+
+      expect(result.rows[0].attrs?.tableRowProperties).toMatchObject({
+        gridBefore: 1,
+        wBefore: { value: 8, type: 'dxa' },
+      });
+      expect(result.rows[0].cells).toHaveLength(1);
+      expect(result.rows[0].cells[0].blocks[0].kind).toBe('paragraph');
+      expect((result.rows[0].cells[0].blocks[0] as ParagraphBlock).runs[0].text).toBe('Client Information');
+
+      expect(result.rows[1].attrs?.tableRowProperties).toMatchObject({
+        gridAfter: 1,
+        wAfter: { value: 4558, type: 'dxa' },
+      });
+      expect(result.rows[1].cells).toHaveLength(1);
+      expect((result.rows[1].cells[0].blocks[0] as ParagraphBlock).runs[0].text).toBe('Contract ACC');
+    });
+
     it('converts table with multiple rows and cells', () => {
       const node: PMNode = {
         type: 'table',

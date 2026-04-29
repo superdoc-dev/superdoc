@@ -2,6 +2,9 @@
   "name": "@superdoc-dev/mcp",
   "version": "0.2.0",
   "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
   "bin": {
     "superdoc-mcp": "./dist/index.js"
   },
@@ -15,12 +18,11 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@superdoc-dev/sdk": "workspace:*",
-    "@superdoc/document-api": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.26.0",
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@superdoc/document-api": "workspace:*",
     "@superdoc/super-editor": "workspace:*",
     "superdoc": "workspace:*",
     "@types/bun": "catalog:",

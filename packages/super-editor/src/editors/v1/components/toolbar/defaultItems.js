@@ -635,6 +635,8 @@ export const makeDefaultItems = ({
     type: 'dropdown',
     name: 'list',
     command: 'toggleBulletListStyle',
+    splitButton: true,
+    splitButtonCommand: 'toggleBulletList',
     icon: toolbarIcons.bulletList,
     hasCaret: true,
     tooltip: toolbarTexts.bulletList,

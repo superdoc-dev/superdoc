@@ -44,6 +44,8 @@ export const useToolbarItem = (options) => {
   // icon properties
   const iconColor = ref(options.iconColor);
   const hasCaret = ref(options.hasCaret);
+  const splitButton = ref(Boolean(options.splitButton));
+  const splitButtonCommand = options.splitButtonCommand;
   const restoreEditorFocus = Boolean(options.restoreEditorFocus);
 
   // dropdown properties
@@ -134,6 +136,8 @@ export const useToolbarItem = (options) => {
     parentItem,
     iconColor,
     hasCaret,
+    splitButton,
+    splitButtonCommand,
     dropdownStyles,
     tooltipVisible,
     tooltipTimeout,

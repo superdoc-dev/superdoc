@@ -1714,6 +1714,34 @@ describe('measureBlock', () => {
       expect((leadingSpaceSegment?.x ?? 0) + leftIndentPx).toBeCloseTo(Math.abs(leftIndentPx), 1);
     });
 
+    it('clears compensated tab geometry when the first following word wraps', async () => {
+      const leftIndentPx = -40;
+      const block: FlowBlock = {
+        kind: 'paragraph',
+        id: 'negative-left-stale-tab-end-after-wrap',
+        runs: [
+          { text: 'First', fontFamily: 'Arial', fontSize: 16 },
+          { kind: 'lineBreak' },
+          { kind: 'tab', text: '\t', tabIndex: 0 },
+          { text: 'Supercalifragilistic', fontFamily: 'Arial', fontSize: 16 },
+          { kind: 'tab', text: '\t', tabIndex: 1 },
+          { text: '9', fontFamily: 'Arial', fontSize: 16 },
+        ],
+        attrs: {
+          indent: { left: leftIndentPx, hanging: 20 },
+          tabs: [{ pos: 180 * 15, val: 'end', leader: 'dot' }],
+        },
+      };
+
+      const measure = expectParagraphMeasure(await measureBlock(block, 120));
+      const rightAlignedSegment = measure.lines
+        .flatMap((line) => line.segments ?? [])
+        .find((segment) => segment.runIndex === 5);
+
+      expect(rightAlignedSegment?.x).toBeDefined();
+      expect(rightAlignedSegment?.precedingTabEndX).toBeUndefined();
+    });
+
     it('does not compensate positive explicit start stops in negative-left paragraphs', async () => {
       const leftIndentPx = -24;
       const block: FlowBlock = {

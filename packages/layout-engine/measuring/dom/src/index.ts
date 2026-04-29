@@ -1209,6 +1209,9 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
     pendingSegmentPrecedingTabEndX = undefined;
     return value;
   };
+  const clearPendingPrecedingTabEndX = (): void => {
+    pendingSegmentPrecedingTabEndX = undefined;
+  };
 
   /**
    * Aligns a text segment at a pending tab stop by measuring its width and applying the appropriate alignment.
@@ -2401,6 +2404,10 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
         }
 
         if (shouldBreak) {
+          if (wordIndex === 0 && hasPendingSegmentTabGeometry) {
+            hasPendingSegmentTabGeometry = false;
+            clearPendingPrecedingTabEndX();
+          }
           trimTrailingWrapSpaces(currentLine);
           const metrics = finalizeLineMetrics(currentLine, spacing);
           const lineBase = currentLine;

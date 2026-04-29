@@ -253,7 +253,7 @@ describe('buildAutoFitWorkingGridInput', () => {
     expect(result.preserveExplicitAutoGrid).toBeUndefined();
   });
 
-  it('does not mark uniform explicit tblW AutoFit grids as preferred geometry', () => {
+  it('marks uniform explicit tblW AutoFit grids as preferred geometry when they match tblW', () => {
     const block = createTableBlock({
       attrs: {
         tableWidth: { width: 624, type: 'px' },
@@ -262,7 +262,36 @@ describe('buildAutoFitWorkingGridInput', () => {
       rows: [
         {
           id: 'row-1',
-          cells: [{ id: 'cell-1' }, { id: 'cell-2' }, { id: 'cell-3' }, { id: 'cell-4' }],
+          cells: [
+            { id: 'cell-1', attrs: { tableCellProperties: { cellWidth: { value: 2340, type: 'dxa' } } } },
+            { id: 'cell-2', attrs: { tableCellProperties: { cellWidth: { value: 2340, type: 'dxa' } } } },
+            { id: 'cell-3', attrs: { tableCellProperties: { cellWidth: { value: 2340, type: 'dxa' } } } },
+            { id: 'cell-4', attrs: { tableCellProperties: { cellWidth: { value: 2340, type: 'dxa' } } } },
+          ],
+        },
+      ],
+    });
+
+    const result = buildAutoFitWorkingGridInput(block, { maxWidth: 624 });
+
+    expect(result.preserveExplicitAutoGrid).toBe(true);
+  });
+
+  it('does not mark uniform explicit tblW AutoFit grids with auto cell widths as preferred geometry', () => {
+    const block = createTableBlock({
+      attrs: {
+        tableWidth: { width: 624, type: 'px' },
+      },
+      columnWidths: [156, 156, 156, 156],
+      rows: [
+        {
+          id: 'row-1',
+          cells: [
+            { id: 'cell-1', attrs: { tableCellProperties: { cellWidth: { value: 0, type: 'auto' } } } },
+            { id: 'cell-2', attrs: { tableCellProperties: { cellWidth: { value: 0, type: 'auto' } } } },
+            { id: 'cell-3', attrs: { tableCellProperties: { cellWidth: { value: 0, type: 'auto' } } } },
+            { id: 'cell-4', attrs: { tableCellProperties: { cellWidth: { value: 0, type: 'auto' } } } },
+          ],
         },
       ],
     });

@@ -179,6 +179,7 @@ export function buildAutoFitWorkingGridInput(
     preferredColumnWidths,
     preferredTableWidth,
     gridColumnCount,
+    rows,
   });
 
   return {
@@ -238,12 +239,13 @@ function shouldPreserveExplicitAutoGrid(args: {
   preferredColumnWidths: number[];
   preferredTableWidth: number | undefined;
   gridColumnCount: number;
+  rows: WorkingTableRowInput[];
 }): boolean {
-  const { layoutMode, preferredColumnWidths, preferredTableWidth, gridColumnCount } = args;
+  const { layoutMode, preferredColumnWidths, preferredTableWidth, gridColumnCount, rows } = args;
   if (layoutMode !== 'autofit') return false;
   if (preferredTableWidth == null || preferredTableWidth <= 0) return false;
   if (preferredColumnWidths.length === 0 || preferredColumnWidths.length !== gridColumnCount) return false;
-  if (!hasNonUniformGrid(preferredColumnWidths)) return false;
+  if (!hasNonUniformGrid(preferredColumnWidths) && !hasConcreteCellWidthRequest(rows)) return false;
 
   return approximatelyEqual(sumWidths(preferredColumnWidths), preferredTableWidth);
 }
@@ -252,6 +254,10 @@ function hasNonUniformGrid(widths: number[]): boolean {
   if (widths.length <= 1) return true;
   const firstWidth = widths[0];
   return widths.some((width) => !approximatelyEqual(width, firstWidth));
+}
+
+function hasConcreteCellWidthRequest(rows: WorkingTableRowInput[]): boolean {
+  return rows.some((row) => row.cells.some((cell) => cell.preferredWidth != null));
 }
 
 function trimTrailingUnoccupiedPlaceholderColumns(widths: number[], occupiedGridColumnCount: number): number[] {

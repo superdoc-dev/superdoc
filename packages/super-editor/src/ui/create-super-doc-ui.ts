@@ -21,6 +21,7 @@ import type {
   CommandHandle,
   CommandsHandle,
   CommentsHandle,
+  DynamicCommandHandle,
   EqualityFn,
   ReviewHandle,
   ReviewItem,
@@ -102,6 +103,22 @@ const FALLBACK_COMMAND_STATE: ToolbarCommandHandleState<PublicToolbarItemId> = {
   active: false,
   disabled: true,
   value: undefined,
+};
+
+/**
+ * Default state emitted from a {@link DynamicCommandHandle} when the
+ * command has no entry in `state.toolbar.commands` yet (e.g. the
+ * snapshot has not populated, or the command was unregistered between
+ * subscribe and the first emit). Carries `source: 'built-in'` because
+ * the dynamic handle for a built-in id reaches this branch only for
+ * built-ins. Customs never produce `undefined` here (the registry's
+ * computeStates always returns a state for every entry).
+ */
+const FALLBACK_DYNAMIC_STATE: UIToolbarCommandState = {
+  active: false,
+  disabled: true,
+  value: undefined,
+  source: 'built-in',
 };
 
 /**
@@ -848,6 +865,98 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     customCommandsRegistry.destroy();
   });
 
+  // Per-id cache for the type-erased dynamic handles returned by
+  // `ui.commands.get(id)`. Cached so handle identity is stable across
+  // repeated lookups for the same id (consumers can put the result in
+  // a React `useMemo` dep and not re-create observers per render).
+  // Caches lazily: entries are created on first `get(id)` call.
+  const dynamicHandleCache = new Map<string, DynamicCommandHandle>();
+
+  /**
+   * Build a {@link DynamicCommandHandle} for a built-in id. Reuses the
+   * per-command Subscribable so dynamic and per-id observers share the
+   * same selector subscription against `state.toolbar.commands?.[id]`.
+   * The emitted slice already carries `source: 'built-in'` after the
+   * computeState merge, so no remapping is needed beyond the fallback.
+   */
+  const buildBuiltInDynamicHandle = (id: PublicToolbarItemId): DynamicCommandHandle => {
+    return {
+      observe(listener) {
+        return getCommandSubscribable(id).subscribe((cmdState) => {
+          // The subscribable's selector returns a value cast to
+          // `ToolbarCommandHandleState<Id>` (no `source` field), but the
+          // runtime slice is the merged `UIToolbarCommandState` with the
+          // discriminator already populated by computeState. Cast back
+          // to the public dynamic shape rather than re-allocating a fresh
+          // object per emit.
+          const next = (cmdState ?? FALLBACK_DYNAMIC_STATE) as UIToolbarCommandState;
+          try {
+            listener(next);
+          } catch {
+            // see scheduleNotify
+          }
+        });
+      },
+      execute(payload?: unknown): boolean | Promise<boolean> {
+        // Re-resolve at dispatch time so a `register({ override: true })`
+        // call that lands AFTER this handle was cached still routes
+        // dispatch through the override. Without this, the cached
+        // handle's observe stream emits the merged custom state (the
+        // selector reads the merged `state.toolbar.commands[id]`) but
+        // execute keeps running the original built-in, leaving config
+        // driven toolbars showing the override visually while clicks
+        // run the wrong command.
+        if (customCommandsRegistry.has(id)) {
+          return customCommandsRegistry.execute(id, payload);
+        }
+        return (toolbarController.execute as (id: PublicToolbarItemId, payload?: unknown) => boolean)(id, payload);
+      },
+    };
+  };
+
+  /**
+   * Bridge a {@link CustomCommandHandle} from the custom-commands
+   * registry into the unified {@link DynamicCommandHandle} shape.
+   * Custom handles already emit `CustomCommandHandleState` (which
+   * carries `source: 'custom'`) and `execute` already accepts an
+   * unknown payload, so the wrapper is mostly identity. It exists to
+   * satisfy the public type and to keep `dynamicHandleCache` stable.
+   */
+  const buildCustomDynamicHandle = (id: string): DynamicCommandHandle | undefined => {
+    const customHandle = customCommandsRegistry.getHandle(id);
+    if (!customHandle) return undefined;
+    return {
+      observe(listener) {
+        return customHandle.observe(listener);
+      },
+      execute(payload?: unknown) {
+        return (customHandle.execute as (payload?: unknown) => boolean | Promise<boolean>)(payload);
+      },
+    };
+  };
+
+  const getDynamicHandle = (id: string): DynamicCommandHandle | undefined => {
+    if (typeof id !== 'string' || id.length === 0) return undefined;
+    // Custom takes priority: `register({ id, override: true })` lets a
+    // custom command shadow a built-in id, and the dynamic-lookup
+    // result must follow that shadowing so consumers iterating over
+    // mixed id arrays get the override semantics they configured.
+    if (customCommandsRegistry.has(id)) {
+      // Don't memoize the wrapper: a later `unregister()` followed by a
+      // fresh `register()` for the same id swaps the underlying handle,
+      // and a stale wrapper would observe / execute against the prior
+      // registration. Building on demand is cheap (two closures) and
+      // keeps semantics aligned with the Proxy `get` path.
+      return buildCustomDynamicHandle(id);
+    }
+    if (!BUILT_IN_COMMAND_ID_SET.has(id)) return undefined;
+    let cached = dynamicHandleCache.get(id);
+    if (cached) return cached;
+    cached = buildBuiltInDynamicHandle(id as PublicToolbarItemId);
+    dynamicHandleCache.set(id, cached);
+    return cached;
+  };
+
   const commands = new Proxy({} as CommandsHandle, {
     get(_, prop) {
       if (typeof prop !== 'string') return undefined;
@@ -856,6 +965,13 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
       // per-id handle cache below.
       if (prop === 'register') {
         return customCommandsRegistry.register.bind(customCommandsRegistry);
+      }
+      // `get(id)` is the typed dynamic-lookup escape hatch (see
+      // `DynamicCommandHandle`). Returns undefined for unregistered ids
+      // instead of producing a fallback handle that emits forever
+      // disabled state, which is what the bare proxy lookup does today.
+      if (prop === 'get') {
+        return getDynamicHandle;
       }
       // Custom-registered ids surface a typed handle from the registry.
       // Built-in ids fall through to the existing per-id cache so they
@@ -1266,6 +1382,7 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     stateChangeListeners.clear();
     commandHandleCache.clear();
     commandSubscribableCache.clear();
+    dynamicHandleCache.clear();
     teardown.forEach((fn) => {
       try {
         fn();

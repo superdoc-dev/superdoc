@@ -9,6 +9,7 @@ export {
   type CustomCommandHandleState,
   type CustomCommandRegistration,
   type CustomCommandRegistrationResult,
+  type DynamicCommandHandle,
   type EntityAddress,
   type EqualityFn,
   type ReviewHandle,

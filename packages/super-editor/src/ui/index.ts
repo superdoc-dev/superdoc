@@ -59,6 +59,7 @@ export type {
   CustomCommandHandleState,
   CustomCommandRegistration,
   CustomCommandRegistrationResult,
+  DynamicCommandHandle,
   ToolbarCommandHandleState,
   ToolbarHandle,
   ToolbarSnapshotSlice,

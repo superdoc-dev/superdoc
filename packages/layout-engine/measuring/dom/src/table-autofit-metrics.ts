@@ -114,6 +114,8 @@ export type AutoFitTableResultKeyOptions = {
   maxWidth: number;
   cellMetricKeys: string[];
   layoutEpoch?: number | string;
+  workingInput: WorkingTableGridInput;
+  fixedLayout: FixedLayoutResult;
 };
 
 /**
@@ -278,6 +280,30 @@ export function buildAutoFitTableResultCacheKey(table: TableBlock, options: Auto
     maxWidth: Math.max(1, Math.round(options.maxWidth)),
     layoutEpoch: options.layoutEpoch ?? null,
     cellMetricKeys: options.cellMetricKeys,
+    workingGrid: {
+      layoutMode: options.workingInput.layoutMode,
+      gridColumnCount: options.workingInput.gridColumnCount,
+      preferredTableWidth: options.workingInput.preferredTableWidth ?? null,
+      preferredColumnWidths: options.workingInput.preferredColumnWidths,
+      rows: options.workingInput.rows.map((row) => ({
+        logicalColumnCount: row.logicalColumnCount,
+        skippedColumns: (row.skippedColumns ?? []).map((column) => ({
+          columnIndex: column.columnIndex,
+          preferredWidth: column.preferredWidth ?? null,
+        })),
+        cells: row.cells.map((cell) => ({
+          startColumn: cell.startColumn,
+          span: cell.span ?? 1,
+          preferredWidth: cell.preferredWidth ?? null,
+        })),
+      })),
+    },
+    fixedLayout: {
+      columnWidths: options.fixedLayout.columnWidths,
+      totalWidth: options.fixedLayout.totalWidth,
+      gridColumnCount: options.fixedLayout.gridColumnCount,
+      preferredTableWidth: options.fixedLayout.preferredTableWidth ?? null,
+    },
   });
 }
 

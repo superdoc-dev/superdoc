@@ -5,6 +5,7 @@ import { measureBlock } from './index.js';
 import { buildAutoFitWorkingGridInput } from './autofit-normalize.js';
 import { computeFixedTableColumnWidths } from './fixed-table-columns.js';
 import {
+  buildAutoFitTableResultCacheKey,
   clearTableAutoFitMeasurementCaches,
   measureTableAutoFitContentMetrics,
   measureTableCellContentMetrics,
@@ -493,5 +494,75 @@ describe('table-autofit-metrics', () => {
     expect(metrics.rowMetrics[0].cells[0].minContentWidth).toBe(directFixedBasisMetrics.minWidthPx);
     expect(metrics.rowMetrics[0].cells[0].maxContentWidth).toBe(directFixedBasisMetrics.maxWidthPx);
     expect(directPageBasisMetrics.maxWidthPx).toBeGreaterThanOrEqual(directFixedBasisMetrics.maxWidthPx);
+  });
+
+  it('changes the table-result cache key when row placement changes without cell metric changes', () => {
+    const table: TableBlock = {
+      kind: 'table',
+      id: 'table-cache-key-placement',
+      columnWidths: [100, 100, 100],
+      rows: [
+        {
+          id: 'row-cache-key-0',
+          cells: [
+            {
+              id: 'cell-cache-key-0-0',
+              blocks: [
+                {
+                  kind: 'paragraph',
+                  id: 'para-cache-key-0-0',
+                  runs: [{ text: 'A', fontFamily: 'Arial', fontSize: 12 }],
+                },
+              ],
+            },
+            {
+              id: 'cell-cache-key-0-1',
+              blocks: [
+                {
+                  kind: 'paragraph',
+                  id: 'para-cache-key-0-1',
+                  runs: [{ text: 'B', fontFamily: 'Arial', fontSize: 12 }],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    const baseWorkingInput = buildAutoFitWorkingGridInput(table, { maxWidth: 400 });
+    const shiftedWorkingInput = {
+      ...baseWorkingInput,
+      rows: [
+        {
+          ...baseWorkingInput.rows[0],
+          logicalColumnCount: 3,
+          skippedBefore: [{ columnIndex: 0, preferredWidth: undefined, minContentWidth: 0, maxContentWidth: 0 }],
+          skippedColumns: [{ columnIndex: 0, preferredWidth: undefined, minContentWidth: 0, maxContentWidth: 0 }],
+          cells: baseWorkingInput.rows[0].cells.map((cell) => ({
+            ...cell,
+            startColumn: cell.startColumn + 1,
+          })),
+        },
+      ],
+    };
+    const baseFixedLayout = computeFixedTableColumnWidths(baseWorkingInput);
+    const shiftedFixedLayout = computeFixedTableColumnWidths(shiftedWorkingInput);
+    const cellMetricKeys = ['cell-a', 'cell-b'];
+
+    const baseKey = buildAutoFitTableResultCacheKey(table, {
+      maxWidth: 400,
+      cellMetricKeys,
+      workingInput: baseWorkingInput,
+      fixedLayout: baseFixedLayout,
+    });
+    const shiftedKey = buildAutoFitTableResultCacheKey(table, {
+      maxWidth: 400,
+      cellMetricKeys,
+      workingInput: shiftedWorkingInput,
+      fixedLayout: shiftedFixedLayout,
+    });
+
+    expect(baseKey).not.toBe(shiftedKey);
   });
 });

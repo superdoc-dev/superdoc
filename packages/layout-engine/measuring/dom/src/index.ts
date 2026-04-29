@@ -2887,6 +2887,8 @@ async function resolveRuntimeTableColumnWidths(
   const cacheKey = buildAutoFitTableResultCacheKey(block, {
     maxWidth: workingInput.maxTableWidth,
     cellMetricKeys,
+    workingInput,
+    fixedLayout,
   });
   const cached = getCachedAutoFitTableResult(cacheKey);
   if (cached) {

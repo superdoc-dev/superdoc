@@ -52,8 +52,8 @@ For any entry classified as legacy public:
 | Path | npm name | Tier | Decision |
 |---|---|---|---|
 | `packages/superdoc` | `superdoc` | Public package | Canonical entry point; stays public |
-| `packages/super-editor` | `@superdoc/super-editor` | Legacy public compatibility surface | Was effectively public when no other headless path existed. Now superseded by exports from `superdoc` itself and (going forward) `@superdoc-dev/document-api`. Kept compiling for existing consumers; new use migrates to the supported replacements. See Decision 1 below. |
-| `packages/document-api` | `@superdoc/document-api` | Supported public type contract | Document API is part of the public surface. Recommended delivery: rename to `@superdoc-dev/document-api` and publish (see Decision 2). |
+| `packages/super-editor` | `@superdoc/super-editor` | Legacy public compatibility surface | Was effectively public when no other headless path existed. Now superseded by exports from `superdoc` itself plus (going forward) the published Document API package. Kept compiling for existing consumers; new use migrates to the supported replacements. See Decision 1 below. |
+| `packages/document-api` | `@superdoc/document-api` | Supported public type contract | Recommended delivery is to publish the package; the team picks between keeping the name `@superdoc/document-api` (fast path) and renaming to `@superdoc-dev/document-api` (taxonomy-clean). See Decision 2. |
 | `packages/react` | `@superdoc-dev/react` | Public package | Already published |
 | `packages/sdk/langs/node` | `@superdoc-dev/sdk` | Public package | Already published; the actual SDK npm artifact |
 | `packages/sdk/langs/node/platforms/*` | `@superdoc-dev/sdk-<os>-<arch>` | Public package | Optional native binaries selected by the SDK package |
@@ -147,15 +147,20 @@ If a type does not satisfy one of these, it must not appear. The audit gate (SD-
 - A small list of symbols that exist on the subpath but not yet on `superdoc` (`Extension` class, `assembleDocumentApiAdapters`, `createDocumentApi`, `resolveSelectionTarget`, `resolveDefaultInsertTarget`, ProseMirror primitive type re-exports). Either add them to `superdoc`, or accept they migrate to a different supported home.
 - Migration window length (the RFC recommends two to three minor versions, given how long we have actively pointed customers at this path; a longer window may be appropriate).
 
-### Decision 2. `@superdoc/document-api` is a supported public type contract; recommended delivery is to publish under `@superdoc-dev/document-api`.
+### Decision 2. Document API is a supported public type contract; recommended delivery is to publish the package.
 
 **Context.** The package contains real, well-typed APIs (`DocumentApi`, `BookmarkInfo`, `BlocksListResult`, etc.) and is already promoted to customers through the documentation site, the SDK, the MCP, and AI agent guidance. It is functionally public; only the delivery mechanism is open.
 
 **Decision (product).** Document API is a supported public type contract. Its types must be reachable to consumers without collapsing to `any`.
 
-**Recommendation (delivery).** Publish as `@superdoc-dev/document-api` (renamed from `@superdoc/document-api` to align with the convention used by the other public packages: `@superdoc-dev/react`, `esign`, `template-builder`, `sdk`, `collaboration-yjs`). The renaming is itself a signal of public intent and avoids the build-pipeline complexity that SD-2830 surfaced when trying to inline the types into `superdoc`'s declaration graph.
+**Recommendation (delivery).** Publish the package. The published name is the only choice that remains, and it is a real trade-off:
 
-**Alternative still on the table.** Keep `@superdoc/document-api` private and include the types under a `superdoc`-owned path via a curated-emit pipeline. SD-2830 owns this implementation question. The customer-visible result is the same; the trade-off is "one extra public package name to maintain" vs "one extra build pipeline to maintain."
+- **Fast path: keep the name `@superdoc/document-api`.** Drop `private: true` and add it to the release pipeline. No source rewrites because every existing public-declaration site already references `@superdoc/document-api`. Estimated cost: about one day. The downside is taxonomy: `@superdoc/*` was meant to read as "internal" in this RFC, and one published `@superdoc/*` package weakens that signal.
+- **Taxonomy-clean path: rename to `@superdoc-dev/document-api`.** Aligns with the convention used by the other public packages (`@superdoc-dev/react`, `esign`, `template-builder`, `sdk`, `collaboration-yjs`). Requires migrating every public-declaration import that references `@superdoc/document-api` to the new name. Estimated cost: a few days, with a migration window for any external consumers who may have written their own type-only paths.
+
+The fast path solves the customer-facing complaint immediately; the taxonomy-clean path is the better long-term shape. The team should pick one explicitly. The RFC's other decisions are unaffected by the choice.
+
+**D1 alternative (curated emit) parked as future improvement.** SD-2830 spike showed the technique works at the type-system level (`rollup-plugin-dts` plus `@rollup/plugin-alias` inlines the right types: `DocumentApi`, `FlowBlock`, `Layout`, etc. all resolve to real interfaces in the bundled output). However, the bundler corrupts `declare module '...' { ... }` augmentation patterns the codebase uses for command-map type augmentation, producing malformed `.d.ts` that fails `tsc --noEmit`. Resolving this would require either restructuring the augmentation patterns in source or evaluating a different declaration bundler; neither is on the critical path for the customer fix. D1 stays viable as a future improvement, particularly for inlining the layout-engine sub-package types.
 
 ### Decision 3. The layout-engine sub-packages stay separate.
 
@@ -182,13 +187,15 @@ This RFC is "done" when the following are produced and reviewed:
 
 Once this RFC lands, the audit gate (SD-2832) becomes a literal encoding of the rules above:
 
-- No private `@superdoc/*` specifier in any `.d.ts` reachable from a public entry.
+- No private `@superdoc/*` specifier in any `.d.ts` reachable from a public entry. (`@superdoc-dev/*` published packages are allowed; that is the convention for public packages.)
 - No `_internal-shims.d.ts` in `dist/`.
 - No package-manager-internal paths.
 - No collapse to `any` on a guarded list of public types (Document API, configuration, command props).
 - Pack-and-install consumer typecheck (SD-2831) with `skipLibCheck: false` across resolution modes and frameworks.
 
 Future PRs that violate these rules fail CI with a message that points back to this document.
+
+If we adopt D1 (curated emit) for any portion of the surface in the future, an additional audit rule applies: **no private implementation concept exposed as a named public type unless deliberately allowed.** Inlining a type via the bundler removes the package specifier from the import but does not make the inlined shape publicly contracted. The audit gate would maintain an explicit allowlist of types that are intentionally part of the public surface (e.g. `FlowBlock` if we choose to expose it) so that an accidental inline of an implementation-detail type fails CI even when the package-name leak rule is satisfied.
 
 ## Out of scope
 

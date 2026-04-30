@@ -1551,10 +1551,25 @@ export class SuperDoc extends EventEmitter {
    * @returns {Promise<Array<Blob>>}
    */
   async exportEditorsToDOCX({ commentsType, isFinalDoc, fieldsHighlightColor } = {}) {
-    const comments = [];
-    if (commentsType !== 'clean') {
-      if (this.commentsStore && typeof this.commentsStore.translateCommentsForExport === 'function') {
-        comments.push(...this.commentsStore.translateCommentsForExport());
+    // `comments` is intentionally `undefined` (not `[]`) when the UI
+    // comments store is disabled or empty so `editor.exportDocx`'s
+    // `comments ?? this.converter.comments ?? []` fallback fires and
+    // imported comments survive the round-trip. Passing `[]` would
+    // override the engine-level data path with the UI-store snapshot
+    // and silently drop every comment loaded from the source DOCX
+    // when consumers run with `modules.comments: false` (the BYO UI
+    // story).
+    //
+    // `commentsType: 'clean'` is the explicit "strip comments"
+    // signal: pass `[]` so the engine emits no comments regardless
+    // of what's in the converter or UI store.
+    let comments;
+    if (commentsType === 'clean') {
+      comments = [];
+    } else if (this.commentsStore && typeof this.commentsStore.translateCommentsForExport === 'function') {
+      const fromUiStore = this.commentsStore.translateCommentsForExport();
+      if (Array.isArray(fromUiStore) && fromUiStore.length > 0) {
+        comments = fromUiStore;
       }
     }
 

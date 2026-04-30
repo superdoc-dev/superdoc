@@ -508,6 +508,96 @@ describe('SuperDoc core', () => {
     expect(results).toEqual([originalBlob]);
   });
 
+  it('passes comments: undefined when the UI store is empty so engine fallback to converter.comments fires', async () => {
+    // Regression: `modules.comments: false` (and any other path that
+    // leaves the UI commentsStore empty) used to override
+    // `Editor.exportDocx`'s `comments ?? this.converter.comments`
+    // fallback by passing `[]` instead of `undefined`. Imported
+    // comments survived in `editor.converter.comments` but the export
+    // wrote zero comments to the DOCX. This test pins the boundary:
+    // when the UI store has no comments to contribute, hand off
+    // `undefined` so the engine's converter-comments fallback wins.
+    createAppHarness();
+    const instance = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: false, toolbar: {} },
+      colors: [],
+      user: { name: 'Jane', email: 'jane@example.com' },
+      onException: vi.fn(),
+    });
+    await flushMicrotasks();
+
+    const exportDocxMock = vi.fn().mockResolvedValue(new Blob(['out']));
+    instance.superdocStore.documents = [
+      { id: 'doc-1', type: DOCX, data: null, getEditor: () => ({ exportDocx: exportDocxMock }) },
+    ];
+
+    await instance.exportEditorsToDOCX();
+
+    expect(exportDocxMock).toHaveBeenCalledTimes(1);
+    const passed = exportDocxMock.mock.calls[0][0];
+    expect(passed.comments).toBeUndefined();
+  });
+
+  it('passes comments: [] when commentsType is "clean" so the engine emits no comments', async () => {
+    createAppHarness();
+    const instance = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: {}, toolbar: {} },
+      colors: [],
+      user: { name: 'Jane', email: 'jane@example.com' },
+      onException: vi.fn(),
+    });
+    await flushMicrotasks();
+
+    // Even when the UI store would yield comments, `'clean'` is the
+    // explicit "strip all comments" signal and must override.
+    instance.commentsStore.translateCommentsForExport = vi.fn(() => [
+      { commentId: 'c1', creatorEmail: 'x@y.z', elements: [] },
+    ]);
+    const exportDocxMock = vi.fn().mockResolvedValue(new Blob(['out']));
+    instance.superdocStore.documents = [
+      { id: 'doc-1', type: DOCX, data: null, getEditor: () => ({ exportDocx: exportDocxMock }) },
+    ];
+
+    await instance.exportEditorsToDOCX({ commentsType: 'clean' });
+
+    expect(exportDocxMock).toHaveBeenCalledTimes(1);
+    const passed = exportDocxMock.mock.calls[0][0];
+    expect(passed.comments).toEqual([]);
+  });
+
+  it('passes UI-store comments when the store has them', async () => {
+    createAppHarness();
+    const instance = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: {}, toolbar: {} },
+      colors: [],
+      user: { name: 'Jane', email: 'jane@example.com' },
+      onException: vi.fn(),
+    });
+    await flushMicrotasks();
+
+    const fromStore = [{ commentId: 'c1', creatorEmail: 'a@b.c', elements: [] }];
+    instance.commentsStore.translateCommentsForExport = vi.fn(() => fromStore);
+    const exportDocxMock = vi.fn().mockResolvedValue(new Blob(['out']));
+    instance.superdocStore.documents = [
+      { id: 'doc-1', type: DOCX, data: null, getEditor: () => ({ exportDocx: exportDocxMock }) },
+    ];
+
+    await instance.exportEditorsToDOCX();
+
+    expect(exportDocxMock).toHaveBeenCalledTimes(1);
+    const passed = exportDocxMock.mock.calls[0][0];
+    expect(passed.comments).toEqual(fromStore);
+  });
+
   it('skips non-DOCX documents when exporting editors to DOCX', async () => {
     createAppHarness();
 

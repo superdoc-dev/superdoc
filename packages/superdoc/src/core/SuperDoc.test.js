@@ -508,15 +508,13 @@ describe('SuperDoc core', () => {
     expect(results).toEqual([originalBlob]);
   });
 
-  it('passes comments: undefined when the UI store is empty so engine fallback to converter.comments fires', async () => {
-    // Regression: `modules.comments: false` (and any other path that
-    // leaves the UI commentsStore empty) used to override
+  it('passes comments: undefined when the UI store is unhydrated (modules.comments: false)', async () => {
+    // Regression for the BYO UI story. With the built-in comments
+    // module disabled, the UI store never holds the imported
+    // comments, so the export must hand off `undefined` and let
     // `Editor.exportDocx`'s `comments ?? this.converter.comments`
-    // fallback by passing `[]` instead of `undefined`. Imported
-    // comments survived in `editor.converter.comments` but the export
-    // wrote zero comments to the DOCX. This test pins the boundary:
-    // when the UI store has no comments to contribute, hand off
-    // `undefined` so the engine's converter-comments fallback wins.
+    // fallback fire. Passing `[]` here would silently drop every
+    // imported comment from the round-trip.
     createAppHarness();
     const instance = new SuperDoc({
       selector: '#host',
@@ -539,6 +537,40 @@ describe('SuperDoc core', () => {
     expect(exportDocxMock).toHaveBeenCalledTimes(1);
     const passed = exportDocxMock.mock.calls[0][0];
     expect(passed.comments).toBeUndefined();
+  });
+
+  it('passes comments: [] when the UI store IS hydrated and the user deleted every comment', async () => {
+    // Regression for the deletion-resurrection bug a reviewer
+    // spotted on the first patch. When `modules.comments` is
+    // enabled (default), the UI store IS the source of truth: an
+    // authoritative-empty array means "user deleted everything,"
+    // not "store is unhydrated." Passing `undefined` here would
+    // route through `Editor.exportDocx`'s `converter.comments`
+    // fallback and resurrect every imported comment that the user
+    // had explicitly deleted via the built-in UI.
+    createAppHarness();
+    const instance = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: {}, toolbar: {} },
+      colors: [],
+      user: { name: 'Jane', email: 'jane@example.com' },
+      onException: vi.fn(),
+    });
+    await flushMicrotasks();
+
+    instance.commentsStore.translateCommentsForExport = vi.fn(() => []);
+    const exportDocxMock = vi.fn().mockResolvedValue(new Blob(['out']));
+    instance.superdocStore.documents = [
+      { id: 'doc-1', type: DOCX, data: null, getEditor: () => ({ exportDocx: exportDocxMock }) },
+    ];
+
+    await instance.exportEditorsToDOCX();
+
+    expect(exportDocxMock).toHaveBeenCalledTimes(1);
+    const passed = exportDocxMock.mock.calls[0][0];
+    expect(passed.comments).toEqual([]);
   });
 
   it('passes comments: [] when commentsType is "clean" so the engine emits no comments', async () => {
@@ -569,6 +601,67 @@ describe('SuperDoc core', () => {
     expect(exportDocxMock).toHaveBeenCalledTimes(1);
     const passed = exportDocxMock.mock.calls[0][0];
     expect(passed.comments).toEqual([]);
+  });
+
+  it("commentsType: 'clean' wins even when modules.comments is disabled", async () => {
+    // 'clean' is the explicit "strip all comments" signal. When the
+    // UI store is unhydrated AND the consumer asks for clean, the
+    // engine fallback to `converter.comments` must NOT fire; that
+    // would silently re-include imported comments the consumer
+    // explicitly asked to drop. This branch is the one place where
+    // module-disabled + clean must pass `[]` instead of `undefined`.
+    createAppHarness();
+    const instance = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: false, toolbar: {} },
+      colors: [],
+      user: { name: 'Jane', email: 'jane@example.com' },
+      onException: vi.fn(),
+    });
+    await flushMicrotasks();
+
+    const exportDocxMock = vi.fn().mockResolvedValue(new Blob(['out']));
+    instance.superdocStore.documents = [
+      { id: 'doc-1', type: DOCX, data: null, getEditor: () => ({ exportDocx: exportDocxMock }) },
+    ];
+
+    await instance.exportEditorsToDOCX({ commentsType: 'clean' });
+
+    expect(exportDocxMock).toHaveBeenCalledTimes(1);
+    expect(exportDocxMock.mock.calls[0][0].comments).toEqual([]);
+  });
+
+  it('falls back to undefined when commentsStore is missing entirely (no race throw)', async () => {
+    // Defensive: during certain init phases or in test stubs, the
+    // commentsStore may be absent. The export must not throw and must
+    // route to the engine fallback (undefined). The original code
+    // already guarded with `this.commentsStore && typeof ...`; this
+    // test pins that the guard survives the rewrite.
+    createAppHarness();
+    const instance = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: {}, toolbar: {} },
+      colors: [],
+      user: { name: 'Jane', email: 'jane@example.com' },
+      onException: vi.fn(),
+    });
+    await flushMicrotasks();
+
+    // Simulate a missing commentsStore (the Pinia store was never
+    // attached, e.g., a partial init path).
+    instance.commentsStore = null;
+    const exportDocxMock = vi.fn().mockResolvedValue(new Blob(['out']));
+    instance.superdocStore.documents = [
+      { id: 'doc-1', type: DOCX, data: null, getEditor: () => ({ exportDocx: exportDocxMock }) },
+    ];
+
+    await expect(instance.exportEditorsToDOCX()).resolves.toBeDefined();
+    expect(exportDocxMock).toHaveBeenCalledTimes(1);
+    expect(exportDocxMock.mock.calls[0][0].comments).toBeUndefined();
   });
 
   it('passes UI-store comments when the store has them', async () => {

@@ -10,6 +10,9 @@ const DEFAULT_API_URL = 'https://labs-api.superdoc.workers.dev';
 const DEFAULT_BROWSERS = ['chromium', 'firefox', 'webkit'];
 const DEFAULT_POLL_INTERVAL_SECONDS = 10;
 const DEFAULT_SHARD_COUNT = 64;
+const CUSTOM_API_URL_OPT_IN_ENV = 'SUPERDOC_ALLOW_CUSTOM_LABS_API_URL';
+const LOCAL_API_HOSTS = new Set(['localhost', '127.0.0.1', '::1', '[::1]']);
+const OFFICIAL_LABS_API_HOSTS = new Set(['labs-api.superdoc.workers.dev', 'labs.superdoc.dev']);
 const PACKAGE_ARTIFACT_PATH = path.join('packages', 'superdoc', 'superdoc.tgz');
 const TERMINAL_RUN_STATUSES = new Set(['action_required', 'cancelled', 'failed', 'succeeded', 'superseded']);
 const ANSI_ESCAPE_PATTERN = /\u001B\[[0-?]*[ -/]*[@-~]/gu;
@@ -833,7 +836,50 @@ function extractErrorMessage(responseBody) {
 }
 
 function resolveApiUrl() {
-  return (process.env.SUPERDOC_LABS_API_URL || process.env.LABS_API_URL || DEFAULT_API_URL).replace(/\/+$/, '');
+  const configuredApiUrl = process.env.SUPERDOC_LABS_API_URL || process.env.LABS_API_URL;
+  const rawApiUrl = configuredApiUrl || DEFAULT_API_URL;
+  const normalizedApiUrl = rawApiUrl.trim().replace(/\/+$/, '');
+  let parsedApiUrl;
+
+  try {
+    parsedApiUrl = new URL(normalizedApiUrl);
+  } catch {
+    throw new Error(`Invalid Labs API URL: ${rawApiUrl}`);
+  }
+
+  if (!configuredApiUrl) {
+    return normalizedApiUrl;
+  }
+
+  const isOfficialLabsHost = parsedApiUrl.protocol === 'https:' && OFFICIAL_LABS_API_HOSTS.has(parsedApiUrl.hostname);
+  if (isOfficialLabsHost) {
+    return normalizedApiUrl;
+  }
+
+  const isLocalApiHost = LOCAL_API_HOSTS.has(parsedApiUrl.hostname) || parsedApiUrl.hostname.endsWith('.localhost');
+  if (isLocalApiHost && isCustomApiUrlOptedIn()) {
+    return normalizedApiUrl;
+  }
+
+  if (!isCustomApiUrlOptedIn()) {
+    throw new Error(
+      `Custom Labs API URLs require ${CUSTOM_API_URL_OPT_IN_ENV}=1. ` +
+        'This prevents Cloudflare bearer tokens from being sent to unexpected hosts.',
+    );
+  }
+
+  throw new Error(
+    `Refusing to send Labs auth to ${parsedApiUrl.hostname}. ` +
+      'Use the production Labs API, an official Labs host, or an opted-in localhost URL.',
+  );
+}
+
+function isCustomApiUrlOptedIn() {
+  return ['1', 'true', 'yes'].includes(
+    String(process.env[CUSTOM_API_URL_OPT_IN_ENV] ?? '')
+      .trim()
+      .toLowerCase(),
+  );
 }
 
 function parsePositiveInteger(value, optionName) {
@@ -969,6 +1015,8 @@ a compact progress view.
 Authentication:
   Set CLOUDFLARE_API_TOKEN to a Cloudflare user API token, or run npx
   wrangler login before using this command.
+  Custom localhost API URLs require ${CUSTOM_API_URL_OPT_IN_ENV}=1; arbitrary
+  hosts are rejected so bearer tokens are not sent outside Labs.
 
 Options:
   --npm-version <version>      Run behavior tests against a published npm version instead of a local package

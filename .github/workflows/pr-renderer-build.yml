@@ -1,4 +1,4 @@
-name: "Labs: PR Renderer Build"
+name: 'Labs: PR Renderer Build'
 
 on:
   pull_request:
@@ -336,6 +336,219 @@ jobs:
           echo "pr_build_id=${PR_BUILD_ID}" >> "${GITHUB_OUTPUT}"
           echo "renderer_build_id=${RENDERER_BUILD_ID}" >> "${GITHUB_OUTPUT}"
           echo "renderer_build_status=${RENDERER_BUILD_STATUS}" >> "${GITHUB_OUTPUT}"
+
+  stable-promotion-checks:
+    name: 'Labs: Stable promotion checks'
+    needs: register
+    # Temporarily disabled. Keep the job definition intact so the checks can
+    # be re-enabled by removing this false guard.
+    if: >-
+      false &&
+      always() &&
+      github.event.action != 'closed' &&
+      github.event.pull_request.base.ref == 'stable' &&
+      (github.event.pull_request.draft == false || github.event.action == 'ready_for_review') &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Verify PR renderer build registration
+        env:
+          REGISTER_RESULT: ${{ needs.register.result }}
+        run: |
+          set -euo pipefail
+
+          if [[ "${REGISTER_RESULT}" != "success" ]]; then
+            echo "PR renderer build registration must succeed before Labs stable promotion checks can run." >&2
+            echo "Register job result: ${REGISTER_RESULT}" >&2
+            exit 1
+          fi
+
+      - name: Build stable promotion payload
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          set -euo pipefail
+
+          MERGE_PREPARATION_STATUS="unknown"
+          if [[ "${PR_TITLE}" == *"conflicts need resolution"* ]]; then
+            MERGE_PREPARATION_STATUS="conflicts"
+          fi
+
+          cat <<EOF > stable-promotion-checks-payload.json
+          {
+            "repositoryOwner": "${{ github.repository_owner }}",
+            "repositoryName": "${GITHUB_REPOSITORY#*/}",
+            "repositoryFullName": "${{ github.repository }}",
+            "pullRequestNumber": ${{ github.event.pull_request.number }},
+            "pullRequestUrl": "${{ github.event.pull_request.html_url }}",
+            "baseRef": "${{ github.event.pull_request.base.ref }}",
+            "headRef": "${{ github.event.pull_request.head.ref }}",
+            "headSha": "${{ github.event.pull_request.head.sha }}",
+            "mergePreparationStatus": "${MERGE_PREPARATION_STATUS}",
+            "triggerEvent": "${{ github.event.action }}"
+          }
+          EOF
+
+      - name: Dispatch to Labs stable promotion orchestrator
+        id: dispatch
+        env:
+          LABS_RELEASE_QUALIFICATION_TOKEN: ${{ secrets.LABS_RELEASE_QUALIFICATION_TOKEN }}
+          LABS_RELEASE_QUALIFICATION_URL: ${{ vars.LABS_RELEASE_QUALIFICATION_URL }}
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${LABS_RELEASE_QUALIFICATION_URL}" ]]; then
+            echo "LABS_RELEASE_QUALIFICATION_URL is required." >&2
+            exit 1
+          fi
+
+          if [[ -z "${LABS_RELEASE_QUALIFICATION_TOKEN}" ]]; then
+            echo "LABS_RELEASE_QUALIFICATION_TOKEN is required." >&2
+            exit 1
+          fi
+
+          RESPONSE_FILE="$(mktemp)"
+          set +e
+          HTTP_STATUS="$(curl \
+            --fail-with-body \
+            --silent \
+            --show-error \
+            --output "${RESPONSE_FILE}" \
+            --write-out '%{http_code}' \
+            -X POST \
+            -H 'content-type: application/json' \
+            -H "x-labs-internal-token: ${LABS_RELEASE_QUALIFICATION_TOKEN}" \
+            --data @stable-promotion-checks-payload.json \
+            "${LABS_RELEASE_QUALIFICATION_URL}")"
+          CURL_EXIT=$?
+          set -e
+
+          if [[ "${CURL_EXIT}" -ne 0 ]]; then
+            cat "${RESPONSE_FILE}"
+            exit "${CURL_EXIT}"
+          fi
+
+          if [[ "${HTTP_STATUS}" -lt 200 || "${HTTP_STATUS}" -ge 300 ]]; then
+            cat "${RESPONSE_FILE}"
+            exit 1
+          fi
+
+          RUN_ID="$(jq -r '.run.runId // empty' "${RESPONSE_FILE}")"
+          RUN_STATUS="$(jq -r '.run.status // empty' "${RESPONSE_FILE}")"
+          RUN_STATUS_MESSAGE="$(jq -r '.run.statusMessage // empty' "${RESPONSE_FILE}")"
+          CREATED="$(jq -r '.created // false' "${RESPONSE_FILE}")"
+
+          if [[ -z "${RUN_ID}" || -z "${RUN_STATUS}" ]]; then
+            cat "${RESPONSE_FILE}"
+            echo "Labs response did not include the expected run metadata." >&2
+            exit 1
+          fi
+
+          RUN_STATUS_URL="${LABS_RELEASE_QUALIFICATION_URL%/}/${RUN_ID}"
+
+          echo "run_id=${RUN_ID}" >> "${GITHUB_OUTPUT}"
+          echo "run_status=${RUN_STATUS}" >> "${GITHUB_OUTPUT}"
+          echo "run_status_message=${RUN_STATUS_MESSAGE}" >> "${GITHUB_OUTPUT}"
+          echo "run_status_url=${RUN_STATUS_URL}" >> "${GITHUB_OUTPUT}"
+          echo "created=${CREATED}" >> "${GITHUB_OUTPUT}"
+
+      - name: Wait for Labs stable promotion result
+        id: await
+        env:
+          INITIAL_RUN_STATUS: ${{ steps.dispatch.outputs.run_status }}
+          INITIAL_RUN_STATUS_MESSAGE: ${{ steps.dispatch.outputs.run_status_message }}
+          LABS_RELEASE_QUALIFICATION_TOKEN: ${{ secrets.LABS_RELEASE_QUALIFICATION_TOKEN }}
+          RUN_STATUS_URL: ${{ steps.dispatch.outputs.run_status_url }}
+        run: |
+          set -euo pipefail
+
+          RUN_STATUS="${INITIAL_RUN_STATUS}"
+          RUN_STATUS_MESSAGE="${INITIAL_RUN_STATUS_MESSAGE}"
+
+          while [[ "${RUN_STATUS}" == "queued" || "${RUN_STATUS}" == "in_progress" ]]; do
+            RESPONSE_FILE="$(mktemp)"
+            set +e
+            HTTP_STATUS="$(curl \
+              --fail-with-body \
+              --silent \
+              --show-error \
+              --output "${RESPONSE_FILE}" \
+              --write-out '%{http_code}' \
+              -H "x-labs-internal-token: ${LABS_RELEASE_QUALIFICATION_TOKEN}" \
+              "${RUN_STATUS_URL}")"
+            CURL_EXIT=$?
+            set -e
+
+            if [[ "${CURL_EXIT}" -ne 0 ]]; then
+              cat "${RESPONSE_FILE}"
+              exit "${CURL_EXIT}"
+            fi
+
+            if [[ "${HTTP_STATUS}" -lt 200 || "${HTTP_STATUS}" -ge 300 ]]; then
+              cat "${RESPONSE_FILE}"
+              exit 1
+            fi
+
+            RUN_STATUS="$(jq -r '.run.status // empty' "${RESPONSE_FILE}")"
+            RUN_STATUS_MESSAGE="$(jq -r '.run.statusMessage // empty' "${RESPONSE_FILE}")"
+
+            if [[ -z "${RUN_STATUS}" ]]; then
+              cat "${RESPONSE_FILE}"
+              echo "Labs run lookup did not include a terminal status." >&2
+              exit 1
+            fi
+
+            if [[ "${RUN_STATUS}" == "queued" || "${RUN_STATUS}" == "in_progress" ]]; then
+              sleep 10
+            fi
+          done
+
+          echo "run_status=${RUN_STATUS}" >> "${GITHUB_OUTPUT}"
+          echo "run_status_message=${RUN_STATUS_MESSAGE}" >> "${GITHUB_OUTPUT}"
+
+      - name: Enforce Labs stable promotion result
+        env:
+          FINAL_RUN_STATUS: ${{ steps.await.outputs.run_status }}
+          FINAL_RUN_STATUS_MESSAGE: ${{ steps.await.outputs.run_status_message }}
+        run: |
+          set -euo pipefail
+
+          case "${FINAL_RUN_STATUS}" in
+            succeeded)
+              exit 0
+              ;;
+            superseded)
+              echo "${FINAL_RUN_STATUS_MESSAGE:-Labs stable promotion checks were superseded by a newer run.}"
+              exit 0
+              ;;
+            failed|action_required)
+              echo "${FINAL_RUN_STATUS_MESSAGE:-Labs stable promotion checks failed.}" >&2
+              exit 1
+              ;;
+            *)
+              echo "Unexpected Labs stable promotion status: ${FINAL_RUN_STATUS}" >&2
+              exit 1
+              ;;
+          esac
+
+      - name: Write workflow summary
+        if: always()
+        run: |
+          {
+            echo "### Labs: Stable promotion checks"
+            echo
+            echo "| Field | Value |"
+            echo "| --- | --- |"
+            echo "| PR | #${{ github.event.pull_request.number }} |"
+            echo "| Base branch | \`${{ github.event.pull_request.base.ref }}\` |"
+            echo "| Head branch | \`${{ github.event.pull_request.head.ref }}\` |"
+            echo "| Head SHA | \`${{ github.event.pull_request.head.sha }}\` |"
+            echo "| Labs run | \`${{ steps.dispatch.outputs.run_id }}\` |"
+            echo "| Labs status | \`${{ steps.await.outputs.run_status }}\` |"
+            echo "| Labs status message | ${{ steps.await.outputs.run_status_message || 'n/a' }} |"
+            echo "| New run created | \`${{ steps.dispatch.outputs.created }}\` |"
+          } >> "${GITHUB_STEP_SUMMARY}"
 
   cleanup:
     name: Cleanup

@@ -738,9 +738,13 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     currentEditorTeardown?.();
     currentEditorTeardown = null;
     currentEditor = next;
-    // Editor swap (replaceFile, document switch) resets dirty to a
-    // clean state — the new document hasn't been edited yet.
-    dirty = false;
+    // NOTE: don't reset `dirty` here. `attachEditorListeners` also
+    // runs on routed-surface swaps (body ↔ header / footer / footnote
+    // via `activeSurfaceChange`), and clearing the flag there would
+    // hide unsaved body edits whenever the user clicked into a
+    // different surface. The flag is reset only by:
+    //   - `editorCreate` (new document mounted by the host), or
+    //   - `ui.document.replaceFile()` (explicit consumer action).
     if (!next || typeof next.on !== 'function' || typeof next.off !== 'function') return;
 
     EDITOR_EVENTS.forEach((name) => {
@@ -798,6 +802,19 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     };
   };
 
+  // Dedicated dirty reset on document mount. `editorCreate` fires when
+  // the host creates a fresh editor — initial mount, or after
+  // `replaceFile` rebuilds the model — so the new document opens
+  // clean. Kept as a separate handler (rather than folded into
+  // attachEditorListeners) because that helper also runs on surface
+  // swaps within the same document, which must NOT clear dirty.
+  const resetDirtyOnNewDocument = () => {
+    if (dirty) {
+      dirty = false;
+      scheduleNotify();
+    }
+  };
+
   attachPresentationListeners();
   attachEditorListeners();
   if (typeof superdoc.on === 'function') {
@@ -805,11 +822,13 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     // surface. Re-attach both layers so the controller follows.
     superdoc.on?.('editorCreate', attachPresentationListeners);
     superdoc.on?.('editorCreate', attachEditorListeners);
+    superdoc.on?.('editorCreate', resetDirtyOnNewDocument);
   }
   teardown.push(() => {
     if (typeof superdoc.off === 'function') {
       superdoc.off?.('editorCreate', attachPresentationListeners);
       superdoc.off?.('editorCreate', attachEditorListeners);
+      superdoc.off?.('editorCreate', resetDirtyOnNewDocument);
     }
     currentPresentationTeardown?.();
     currentPresentationTeardown = null;

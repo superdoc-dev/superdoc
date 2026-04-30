@@ -273,6 +273,26 @@ describe('ui.document', () => {
     ui.destroy();
   });
 
+  it('editorCreate resets dirty (new document mounted by the host)', async () => {
+    const { superdoc } = makeStubs('editing');
+    const ui = createSuperDocUI({ superdoc });
+
+    superdoc.fireEditor('transaction', {
+      editor: superdoc.activeEditor,
+      transaction: { docChanged: true },
+      duration: 1,
+    });
+    await Promise.resolve();
+    expect(ui.document.getSnapshot().dirty).toBe(true);
+
+    superdoc.fireSuperdoc('editorCreate');
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(ui.document.getSnapshot().dirty).toBe(false);
+    ui.destroy();
+  });
+
   it('setMode forwards to superdoc.setDocumentMode with the passed mode', () => {
     const { superdoc } = makeStubs('editing');
     const ui = createSuperDocUI({ superdoc });

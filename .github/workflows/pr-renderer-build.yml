@@ -99,7 +99,7 @@ jobs:
       (github.event.pull_request.draft == false || github.event.action == 'ready_for_review') &&
       github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - name: Download package workflow artifact
         uses: actions/download-artifact@v4
@@ -336,6 +336,98 @@ jobs:
           echo "pr_build_id=${PR_BUILD_ID}" >> "${GITHUB_OUTPUT}"
           echo "renderer_build_id=${RENDERER_BUILD_ID}" >> "${GITHUB_OUTPUT}"
           echo "renderer_build_status=${RENDERER_BUILD_STATUS}" >> "${GITHUB_OUTPUT}"
+
+      - name: Wait for Labs renderer artifact
+        id: wait_renderer_artifact
+        env:
+          LABS_API_URL: ${{ vars.LABS_API_URL }}
+          LABS_PR_BUILD_TOKEN: ${{ secrets.LABS_PR_BUILD_TOKEN || secrets.LABS_RELEASE_QUALIFICATION_TOKEN }}
+          PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number }}
+          RENDERER_BUILD_ID: ${{ steps.register.outputs.renderer_build_id }}
+          REPOSITORY_FULL_NAME: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${LABS_API_URL}" ]]; then
+            echo "LABS_API_URL repository variable is required." >&2
+            exit 1
+          fi
+          if [[ -z "${LABS_PR_BUILD_TOKEN}" ]]; then
+            echo "LABS_PR_BUILD_TOKEN secret is required." >&2
+            exit 1
+          fi
+          if [[ -z "${RENDERER_BUILD_ID}" ]]; then
+            echo "Register step did not produce renderer_build_id." >&2
+            exit 1
+          fi
+
+          deadline_seconds=900
+          poll_seconds=10
+          started_at="$(date +%s)"
+          latest_message="Renderer artifact is not ready yet."
+
+          while true; do
+            response_file="$(mktemp)"
+            http_status="$(curl \
+              --get \
+              --silent \
+              --show-error \
+              --output "${response_file}" \
+              --write-out '%{http_code}' \
+              -H "x-labs-internal-token: ${LABS_PR_BUILD_TOKEN}" \
+              --data-urlencode "repository=${REPOSITORY_FULL_NAME}" \
+              --data-urlencode "pullRequestNumber=${PULL_REQUEST_NUMBER}" \
+              "${LABS_API_URL%/}/v1/internal/superdoc/pr-builds")"
+
+            if [[ "${http_status}" == "200" ]]; then
+              response_build_id="$(jq -r '.rendererBuild.buildId // empty' "${response_file}")"
+              renderer_artifact_id="$(jq -r '.rendererArtifact.artifactId // empty' "${response_file}")"
+              module_url="$(jq -r '.rendererArtifact.moduleUrl // empty' "${response_file}")"
+              style_url="$(jq -r '.rendererArtifact.styleUrl // empty' "${response_file}")"
+
+              if [[ "${response_build_id}" != "${RENDERER_BUILD_ID}" ]]; then
+                echo "Labs returned renderer build ${response_build_id}, expected ${RENDERER_BUILD_ID}." >&2
+                exit 1
+              fi
+              if [[ -z "${renderer_artifact_id}" || -z "${module_url}" || -z "${style_url}" ]]; then
+                echo "Labs PR build lookup succeeded but did not include a complete renderer artifact." >&2
+                exit 1
+              fi
+
+              echo "renderer_artifact_id=${renderer_artifact_id}" >> "${GITHUB_OUTPUT}"
+              echo "module_url=${module_url}" >> "${GITHUB_OUTPUT}"
+              echo "style_url=${style_url}" >> "${GITHUB_OUTPUT}"
+              break
+            fi
+
+            latest_message="$(jq -r '.error.message // .message // "Labs PR build lookup did not return a public message."' "${response_file}" 2>/dev/null || true)"
+            if [[ "${http_status}" != "409" || "${latest_message}" != *"renderer artifact is still building"* ]]; then
+              echo "Labs PR build lookup failed with HTTP ${http_status}: ${latest_message}" >&2
+              exit 1
+            fi
+
+            now="$(date +%s)"
+            if (( now - started_at >= deadline_seconds )); then
+              echo "Timed out waiting for Labs renderer artifact after ${deadline_seconds}s: ${latest_message}" >&2
+              exit 1
+            fi
+
+            sleep "${poll_seconds}"
+          done
+
+      - name: Write renderer artifact summary
+        env:
+          RENDERER_ARTIFACT_ID: ${{ steps.wait_renderer_artifact.outputs.renderer_artifact_id }}
+          RENDERER_BUILD_ID: ${{ steps.register.outputs.renderer_build_id }}
+        run: |
+          {
+            echo "### Labs: PR Renderer Build"
+            echo
+            echo "| Field | Value |"
+            echo "| --- | --- |"
+            echo "| Renderer build | \`${RENDERER_BUILD_ID}\` |"
+            echo "| Renderer artifact | \`${RENDERER_ARTIFACT_ID}\` |"
+          } >> "${GITHUB_STEP_SUMMARY}"
 
   stable-promotion-checks:
     name: 'Labs: Stable promotion checks'

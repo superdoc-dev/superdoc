@@ -16,6 +16,9 @@ concurrency:
 jobs:
   detect:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
     outputs:
       behavior: ${{ steps.set.outputs.behavior }}
     steps:
@@ -39,6 +42,9 @@ jobs:
               - 'package.json'
               - 'pnpm-workspace.yaml'
               - '.nvmrc'
+              - 'tsconfig.base.json'
+              - 'tsconfig.references.json'
+              - 'vite.sourceResolve.ts'
               - '.github/workflows/ci-behavior.yml'
 
       - id: set
@@ -110,6 +116,10 @@ jobs:
     steps:
       - name: Check results
         run: |
+          if [[ "${{ needs.detect.result }}" != "success" ]]; then
+            echo "Detect job did not succeed (result: ${{ needs.detect.result }})."
+            exit 1
+          fi
           if [[ "${{ needs.detect.outputs.behavior }}" != "true" ]]; then
             echo "Behavior tests skipped: no relevant paths changed."
             exit 0

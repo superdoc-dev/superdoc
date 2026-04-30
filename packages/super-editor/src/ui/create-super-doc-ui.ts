@@ -465,6 +465,15 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
   let documentMemo: { slice: DocumentSlice } | null = null;
 
   /**
+   * Internal dirty flag. Flipped to `true` by any editor transaction
+   * with `tr.docChanged`; cleared by a successful `ui.document.export`
+   * or by `ui.document.replaceFile`. Selection-only transactions don't
+   * touch it. Tracked separately from `documentMemo` so a flag flip
+   * busts the memo without re-allocating on every typing-only event.
+   */
+  let dirty = false;
+
+  /**
    * Stable string key over a SelectionInfo for slice memoization. Two
    * infos producing the same key represent the same observable
    * selection state, so the slice can be reused.
@@ -637,10 +646,15 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     // (ready, mode) are unchanged so `shallowEqual` on `state.document`
     // short-circuits ui.document.subscribe per transaction.
     let documentSlice: DocumentSlice;
-    if (documentMemo && documentMemo.slice.ready === ready && documentMemo.slice.mode === documentMode) {
+    if (
+      documentMemo &&
+      documentMemo.slice.ready === ready &&
+      documentMemo.slice.mode === documentMode &&
+      documentMemo.slice.dirty === dirty
+    ) {
       documentSlice = documentMemo.slice;
     } else {
-      documentSlice = { ready, mode: documentMode };
+      documentSlice = { ready, mode: documentMode, dirty };
       documentMemo = { slice: documentSlice };
     }
 
@@ -703,12 +717,30 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     scheduleNotify();
   };
 
+  /**
+   * Mutates `dirty` to `true` when a transaction actually changed the
+   * document. Read `payload.transaction.docChanged` so selection-only
+   * transactions (cursor moves, range adjustments) don't flip the flag.
+   * `scheduleNotify()` runs separately via the EDITOR_EVENTS wiring so
+   * we don't double-notify here.
+   */
+  const onTransaction = (payload: unknown) => {
+    if (dirty) return;
+    const tr = (payload as { transaction?: { docChanged?: unknown } } | undefined)?.transaction;
+    if (tr && tr.docChanged === true) {
+      dirty = true;
+    }
+  };
+
   const attachEditorListeners = () => {
     const next = resolveRoutedEditor(superdoc);
     if (next === currentEditor) return;
     currentEditorTeardown?.();
     currentEditorTeardown = null;
     currentEditor = next;
+    // Editor swap (replaceFile, document switch) resets dirty to a
+    // clean state — the new document hasn't been edited yet.
+    dirty = false;
     if (!next || typeof next.on !== 'function' || typeof next.off !== 'function') return;
 
     EDITOR_EVENTS.forEach((name) => {
@@ -721,9 +753,14 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     LIST_REFRESH_EVENTS.forEach((name) => {
       next.on?.(name, refreshAndNotify);
     });
+    // Dirty-flag listener. Runs alongside the scheduleNotify wiring on
+    // 'transaction' (kept separate so `dirty` reads the transaction
+    // payload before the snapshot is recomputed).
+    next.on?.('transaction', onTransaction);
     currentEditorTeardown = () => {
       EDITOR_EVENTS.forEach((name) => next.off?.(name, scheduleNotify));
       LIST_REFRESH_EVENTS.forEach((name) => next.off?.(name, refreshAndNotify));
+      next.off?.('transaction', onTransaction);
     };
     // The set of source events changed and the routed editor swapped
     // — refresh the comments cache for the new editor and recompute
@@ -1551,7 +1588,15 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
         // as the requireDocComments helper used by ui.comments.
         throw new Error('ui.document.export: host SuperDoc instance does not implement export().');
       }
-      return exportFn.call(superdoc, options);
+      // Successful export = persisted snapshot, clear dirty. A reject
+      // leaves dirty alone so the consumer can retry. Notify after the
+      // flip so subscribers see `dirty: false` synchronously.
+      const result = await exportFn.call(superdoc, options);
+      if (dirty) {
+        dirty = false;
+        scheduleNotify();
+      }
+      return result;
     },
     async replaceFile(file: File): Promise<void> {
       const editor = superdoc.activeEditor;
@@ -1560,6 +1605,14 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
         throw new Error('ui.document.replaceFile: host has no active editor with replaceFile().');
       }
       await replace.call(editor, file);
+      // Replacing the file rebuilds the document model from scratch —
+      // selection, scroll, and dirty all reset. The editor swap flips
+      // `dirty` via attachEditorListeners; clear here defensively in
+      // case the swap doesn't fire (same-instance reuse).
+      if (dirty) {
+        dirty = false;
+        scheduleNotify();
+      }
       // SD-2839 workaround: when `modules.comments: false`,
       // `Editor.#initComments()` short-circuits and never re-emits
       // `commentsLoaded` after `replaceFile`. The controller normally

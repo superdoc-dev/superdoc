@@ -472,6 +472,22 @@ export interface DocumentSlice {
   ready: boolean;
   /** Mirror of `superdoc.config.documentMode`. */
   mode: 'editing' | 'suggesting' | 'viewing' | null;
+  /**
+   * True when the document has unsaved changes. Flips to `true` on any
+   * editor transaction that mutates the document (`tr.docChanged`).
+   * Selection-only transactions (cursor moves, range adjustments) do
+   * not flip the flag.
+   *
+   * Cleared back to `false` when:
+   * - `ui.document.export(...)` resolves successfully, or
+   * - `ui.document.replaceFile(...)` swaps the document.
+   *
+   * Undo-to-clean is not tracked: hitting undo until the document
+   * matches its on-open state still reads as dirty. Apps that need
+   * the Word/GDocs-style "no unsaved changes" semantics should layer
+   * their own edit-count diff on top.
+   */
+  dirty: boolean;
 }
 
 /**

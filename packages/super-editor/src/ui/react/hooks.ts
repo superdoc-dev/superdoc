@@ -26,7 +26,7 @@ const EMPTY_TRACK_CHANGES: TrackChangesSlice = { items: [], total: 0, activeId: 
 
 const EMPTY_TOOLBAR: ToolbarSnapshotSlice = { context: null, commands: {} };
 
-const EMPTY_DOCUMENT: DocumentSlice = { ready: false, mode: null };
+const EMPTY_DOCUMENT: DocumentSlice = { ready: false, mode: null, dirty: false };
 
 /**
  * Subscribe to the current selection slice.

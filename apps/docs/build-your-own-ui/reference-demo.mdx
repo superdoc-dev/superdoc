@@ -22,14 +22,14 @@ The reference workspace at [`demos/build-your-own-ui/`](https://github.com/super
 
 The workspace composes every surface at once. Useful for understanding how the pieces fit. Less useful as copy-paste source.
 
-For copy-paste, start from the per-domain pages above. Each one teaches one concept with a small snippet that uses public APIs only. The reference workspace sometimes reaches through `useSuperDocHost()` to call APIs the controller doesn't bridge yet (custom-command Document API access, replies). The demo labels those reaches in comments. The docs label them as known limitations and link to the relevant Linear ticket.
+For copy-paste, start from the per-domain pages above. Each one teaches one concept with a small snippet that uses public APIs only. The reference workspace sometimes reaches through `useSuperDocHost()` to call APIs the controller doesn't bridge yet (custom-command Document API access, posting replies). The demo labels those reaches in comments; the per-domain docs show the same workaround so you don't have to dig.
 
 ## What it deliberately doesn't do
 
 - No design system. Plain React, plain CSS. Drop the same patterns into your Tailwind / shadcn / MUI / Mantine stack.
 - No backend. The clause library in `<InsertClauseButton>` is hardcoded. Real consumers fetch from their own API and call `reg.invalidate()` when permissions or availability change.
 - No AI provider. Custom commands can call any LLM from `execute`; the demo picked "Insert clause" because it's concrete and self-contained.
-- No floating bubble menu or link popover. Those need viewport text-rect helpers (planned follow-up, SD-2822).
+- No floating bubble menu or link popover. To position one today, read the browser's selection rect from a `useSuperDocSelection()` effect: `window.getSelection()?.getRangeAt(0)?.getBoundingClientRect()`. The viewport surface resolves entity rects (`ui.viewport.getRect`) but not text-anchored rects yet, so DOM-side measurement is the path until that lands.
 
 ## Run it locally
 

@@ -116,5 +116,5 @@ function ActiveAwareList() {
 ## Trade-offs
 
 - `acceptAll` and `rejectAll` apply across every story. To scope to body only, call `accept` / `reject` per id.
-- Tracked changes in headers, footers, and footnotes route correctly through `scrollTo`. Smooth scroll for those is a planned follow-up (SD-2841); for now they snap.
+- Tracked changes in headers, footers, and footnotes route correctly through `scrollTo`. Non-body entities snap to view (story activation mounts the surface synchronously before alignment); body entities scroll smoothly.
 - The merged Activity feed pattern is consumer-owned. The controller stays minimal so apps that only render tracked changes don't pay for comment merging, and apps that want an Activity panel decide their own ordering rules.

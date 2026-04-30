@@ -159,9 +159,34 @@ const repliesByParent = items.reduce((map, c) => {
 }, new Map<string, typeof items>());
 ```
 
-<Warning>
-  **Posting a reply isn't on `ui.comments` yet.** A typed `ui.comments.reply()` is filed as a follow-up (SD-2817). Until it lands, the reference demo posts replies through `useSuperDocHost()` as an escape hatch — see `ActivitySidebar.tsx` in `demos/build-your-own-ui/`. Treat that snippet as a temporary workaround, not the canonical pattern.
-</Warning>
+To post a reply, route through `editor.doc.comments.create({ parentCommentId, text })` via `useSuperDocHost()`. The same `create` operation handles top-level comments and replies, discriminated by whether `parentCommentId` is set.
+
+```tsx
+import { useSuperDocHost } from 'superdoc/ui/react';
+
+function ReplyComposer({ parent }: { parent: { id: string } }) {
+  const host = useSuperDocHost();
+  const [text, setText] = useState('');
+
+  const post = () => {
+    if (!host?.activeEditor || !text.trim()) return;
+    host.activeEditor.doc?.comments?.create({
+      parentCommentId: parent.id,
+      text: text.trim(),
+    });
+    setText('');
+  };
+
+  return (
+    <>
+      <textarea value={text} onChange={(e) => setText(e.target.value)} />
+      <button onClick={post} disabled={!host || !text.trim()}>Reply</button>
+    </>
+  );
+}
+```
+
+The next snapshot from `useSuperDocComments()` includes the reply, threaded under the parent via `parentCommentId`. The reference demo's `ActivitySidebar` ships this pattern with focus management and Ctrl/Cmd+Enter to post.
 
 ## Trade-offs
 

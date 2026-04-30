@@ -143,14 +143,12 @@ ui.commands.register<{ clauseId: string }>({
 });
 ```
 
-<Warning>
-  Reaching `superdoc.activeEditor?.doc?.*` from inside `execute` is the current escape hatch. Tracked under SD-2844: a typed Document API context is on the way. The pattern above is what works today and is what the reference demo ships.
-</Warning>
-
 Two things make the snippet safe to copy:
 
 - The positional target comes from `ui.selection.getSnapshot().selectionTarget` (a public `SelectionTarget` shape that `editor.doc.insert` accepts). Don't pass `selection.current().target` — that's a `TextTarget`, the wrong shape for `insert`.
-- The structural cast on `superdoc` declares only the call you're about to make. When SD-2844 lands, you delete the cast and reach the typed context directly.
+- The structural cast on `superdoc` declares only the one call you're about to make. Keep it narrow: `{ activeEditor?: { doc?: { insert(...) } } }`, not a wholesale `as SuperDoc` lift. A scoped cast stays accurate as the controller surface grows; a broad cast quietly drifts.
+
+The reference demo's `InsertClauseButton` ships this exact pattern.
 
 ## Override a built-in
 

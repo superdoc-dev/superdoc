@@ -125,4 +125,22 @@ export function ImportButton() {
 - `setMode` forwards to the host. SSR / non-browser stubs that omit the setter fall back to a no-op.
 - `export` is async and rejects on host errors. Unhandled rejections are noisy; always wrap.
 - `replaceFile` rebuilds the document model. Selection, scroll position, and undo history reset.
-- A typed dirty-state indicator is a planned follow-up (SD-2667). Today the controller doesn't track unsaved changes.
+- The controller doesn't track unsaved changes. To drive a dirty indicator, listen to the host editor's `transaction` event via `useSuperDocHost()` and clear the flag after `ui.document.export(...)` resolves:
+
+```tsx
+const host = useSuperDocHost();
+const [dirty, setDirty] = useState(false);
+
+useEffect(() => {
+  const editor = host?.activeEditor;
+  if (!editor || typeof editor.on !== 'function') return;
+  const onTransaction = () => setDirty(true);
+  editor.on('transaction', onTransaction);
+  return () => editor.off?.('transaction', onTransaction);
+}, [host]);
+
+const onExport = async () => {
+  await ui?.document.export({ exportType: ['docx'], triggerDownload: true });
+  setDirty(false);
+};
+```

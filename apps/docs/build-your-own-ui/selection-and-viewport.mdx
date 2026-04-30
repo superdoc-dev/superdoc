@@ -119,4 +119,4 @@ Rects are plain values in viewport coordinates. Multi-page or multi-line targets
 
 - The selection slice updates on every editor change. Subscribe via the typed hook, not via raw `ui.select(...)`, so the controller can dedupe by shallow equality.
 - `getRect` is synchronous and DOM-driven. Text-anchored targets are deferred until story-aware text resolution lands.
-- `scrollIntoView` honors `behavior: 'smooth'` for body content. Non-body tracked changes snap today; smooth scroll for those is a planned follow-up (SD-2841).
+- `scrollIntoView` honors `behavior: 'smooth'` for body content. Non-body entities (header / footer / footnote / endnote) snap to view because story activation has to mount the surface synchronously before alignment. If smooth animation across non-body entities matters, scroll the editor surface yourself first with `behavior: 'smooth'`, then call `scrollIntoView` to land the entity.

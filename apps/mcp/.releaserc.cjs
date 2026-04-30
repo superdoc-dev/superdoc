@@ -43,7 +43,18 @@ const notesPlugin = isPrerelease ? createReleaseNotesGenerator() : ['semantic-re
 const config = {
   branches,
   tagFormat: 'mcp-v${version}',
-  plugins: [createCommitAnalyzer(), notesPlugin, ['@semantic-release/npm']],
+  plugins: [
+    createCommitAnalyzer(),
+    notesPlugin,
+    // Publish via pnpm — npm does not rewrite `workspace:*` / `catalog:` specifiers.
+    ['@semantic-release/npm', { npmPublish: false }],
+    [
+      '@semantic-release/exec',
+      {
+        publishCmd: 'pnpm publish --no-git-checks --access public --tag ${nextRelease.channel || "latest"}',
+      },
+    ],
+  ],
 };
 
 if (!isPrerelease) {

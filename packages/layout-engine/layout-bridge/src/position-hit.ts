@@ -143,6 +143,14 @@ export const determineColumn = (layout: Layout, fragmentX: number): number => {
   return Math.max(0, Math.min(columns.count - 1, raw));
 };
 
+const determineTableColumn = (layout: Layout, fragment: TableFragment): number => {
+  if (typeof fragment.columnIndex === 'number') {
+    const count = layout.columns?.count ?? 1;
+    return Math.max(0, Math.min(Math.max(0, count - 1), fragment.columnIndex));
+  }
+  return determineColumn(layout, fragment.x);
+};
+
 // ---------------------------------------------------------------------------
 // Line / position helpers
 // ---------------------------------------------------------------------------
@@ -581,6 +589,12 @@ export const hitTestTableFragment = (
       return 0;
     };
 
+    let nearestParagraphHit:
+      | (Omit<TableHitResult, 'fragment' | 'block' | 'measure' | 'pageIndex' | 'cellRowIndex' | 'cellColIndex'> & {
+          distance: number;
+        })
+      | null = null;
+
     for (let i = 0; i < cellBlocks.length && i < cellBlockMeasures.length; i++) {
       const cellBlock = cellBlocks[i];
       const cellBlockMeasure = cellBlockMeasures[i];
@@ -599,8 +613,7 @@ export const hitTestTableFragment = (
       const paragraphMeasure = cellBlockMeasure as ParagraphMeasure;
 
       const isWithinBlock = cellLocalY >= blockStartY && cellLocalY < blockEndY;
-      const isLastParagraph = i === Math.min(cellBlocks.length, cellBlockMeasures.length) - 1;
-      if (isWithinBlock || isLastParagraph) {
+      if (isWithinBlock) {
         const unclampedLocalY = cellLocalY - blockStartY;
         const localYWithinBlock = Math.max(0, Math.min(unclampedLocalY, Math.max(blockHeight, 0)));
         return {
@@ -618,8 +631,37 @@ export const hitTestTableFragment = (
         };
       }
 
+      const distanceToBlock = cellLocalY < blockStartY ? blockStartY - cellLocalY : Math.max(0, cellLocalY - blockEndY);
+      if (!nearestParagraphHit || distanceToBlock < nearestParagraphHit.distance) {
+        const unclampedLocalY = cellLocalY - blockStartY;
+        nearestParagraphHit = {
+          cellBlock: paragraphBlock,
+          cellMeasure: paragraphMeasure,
+          localX: Math.max(0, cellLocalX),
+          localY: Math.max(0, Math.min(unclampedLocalY, Math.max(blockHeight, 0))),
+          blockStartGlobal: blockStartGlobalLines,
+          distance: distanceToBlock,
+        };
+      }
+
       blockStartY = blockEndY;
       blockStartGlobalLines += paragraphMeasure.lines.length;
+    }
+
+    if (nearestParagraphHit) {
+      return {
+        fragment: tableFragment,
+        block: tableBlock,
+        measure: tableMeasure,
+        pageIndex: pageHit.pageIndex,
+        cellRowIndex: rowIndex,
+        cellColIndex: colIndex,
+        cellBlock: nearestParagraphHit.cellBlock,
+        cellMeasure: nearestParagraphHit.cellMeasure,
+        localX: nearestParagraphHit.localX,
+        localY: nearestParagraphHit.localY,
+        blockStartGlobal: nearestParagraphHit.blockStartGlobal,
+      };
     }
   }
 
@@ -901,7 +943,7 @@ export function clickToPositionGeometry(
           layoutEpoch,
           blockId: tableHit.fragment.blockId,
           pageIndex,
-          column: determineColumn(layout, tableHit.fragment.x),
+          column: determineTableColumn(layout, tableHit.fragment),
           lineIndex,
         };
       }
@@ -915,7 +957,7 @@ export function clickToPositionGeometry(
         layoutEpoch,
         blockId: tableHit.fragment.blockId,
         pageIndex,
-        column: determineColumn(layout, tableHit.fragment.x),
+        column: determineTableColumn(layout, tableHit.fragment),
         lineIndex: 0,
       };
     }

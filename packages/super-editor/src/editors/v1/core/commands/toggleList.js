@@ -1,6 +1,6 @@
 // @ts-check
 import { updateNumberingProperties } from './changeListLevel.js';
-import { ListHelpers } from '@helpers/list-numbering-helpers.js';
+import { ListHelpers, markerTextToBulletStyle } from '@helpers/list-numbering-helpers.js';
 import { getResolvedParagraphProperties } from '@extensions/paragraph/resolvedPropertiesCache.js';
 import { isVisuallyEmptyParagraph } from './removeNumberingProperties.js';
 import { Selection, TextSelection } from 'prosemirror-state';
@@ -26,10 +26,15 @@ function getParagraphListKind(node, editor) {
   return numFmtIsBullet(fmt) ? 'bullet' : 'ordered';
 }
 
-function paragraphMatchesToggleListType(node, editor, listType) {
+function paragraphMatchesToggleListType(node, editor, listType, bulletStyle) {
   const kind = getParagraphListKind(node, editor);
   if (!kind) return false;
-  if (listType === 'bulletList') return kind === 'bullet';
+  if (listType === 'bulletList') {
+    if (kind !== 'bullet') return false;
+    if (!bulletStyle) return true;
+    const markerText = node.attrs.listRendering?.markerText;
+    return markerTextToBulletStyle(markerText) === bulletStyle;
+  }
   if (listType === 'orderedList') return kind === 'ordered';
   return false;
 }
@@ -60,13 +65,13 @@ function getPrecedingParagraphForListReuse(doc, from, paragraphsInSelection) {
 }
 
 export const toggleList =
-  (listType) =>
+  (listType, bulletStyle) =>
   ({ editor, state, tr, dispatch }) => {
     if (listType !== 'orderedList' && listType !== 'bulletList') {
       return false;
     }
 
-    const predicate = (n) => paragraphMatchesToggleListType(n, editor, listType);
+    const predicate = (n) => paragraphMatchesToggleListType(n, editor, listType, bulletStyle);
     const { selection } = state;
     const { from, to } = selection;
     let firstListNode = null;
@@ -95,7 +100,18 @@ export const toggleList =
         hasNonListParagraphs = true;
       }
     }
-    if (!firstListNode && from > 0) {
+    // Only borrow numbering from a preceding list paragraph when the selection
+    // is made up of *plain* paragraphs (no numbering yet). The borrow is meant
+    // to extend a previous list onto adjacent non-list paragraphs. If a
+    // paragraph in the selection is already a list item — even one whose
+    // marker doesn't match the requested style — we should not reuse a
+    // neighbor's numId, because that throws away the existing nesting and
+    // overrides the user's style choice with the neighbor's level. Falling
+    // through to `create` mints a fresh abstract instead.
+    const selectionAlreadyHasListNumbering = paragraphsInSelection.some(
+      ({ node }) => getResolvedParagraphProperties(node)?.numberingProperties != null,
+    );
+    if (!firstListNode && !selectionAlreadyHasListNumbering && from > 0) {
       const beforeNode = getPrecedingParagraphForListReuse(state.doc, from, paragraphsInSelection);
       if (beforeNode && predicate(beforeNode)) {
         firstListNode = beforeNode;
@@ -126,8 +142,31 @@ export const toggleList =
     if (!dispatch) return true;
 
     if (mode === 'create') {
+      // If we're swapping the bullet style on an already-nested item, mint the
+      // new list with the override applied at that paragraph's existing level —
+      // otherwise the override only lands on level 0 and the nested paragraph
+      // ends up rendering whatever marker the base template assigned to its
+      // level. We pick the level from the first list paragraph in the
+      // selection so style swaps stay coherent with the existing nesting.
+      let bulletStyleLevel = 0;
+      if (bulletStyle) {
+        const firstExistingListPara = paragraphsInSelection.find(
+          ({ node }) => getResolvedParagraphProperties(node)?.numberingProperties?.ilvl != null,
+        );
+        const existingIlvl = firstExistingListPara
+          ? getResolvedParagraphProperties(firstExistingListPara.node)?.numberingProperties?.ilvl
+          : null;
+        if (existingIlvl != null) bulletStyleLevel = existingIlvl;
+      }
+
       const numId = ListHelpers.getNewListId(editor);
-      ListHelpers.generateNewListDefinition({ numId: Number(numId), listType, editor });
+      ListHelpers.generateNewListDefinition({
+        numId: Number(numId),
+        listType,
+        editor,
+        bulletStyle,
+        bulletStyleLevel,
+      });
       sharedNumberingProperties = {
         numId: Number(numId),
         ilvl: 0,
@@ -145,7 +184,16 @@ export const toggleList =
         continue;
       }
 
-      updateNumberingProperties(sharedNumberingProperties, node, pos, editor, tr);
+      // Preserve the paragraph's existing nesting level when re-pointing it at
+      // the new list definition. Without this, swapping the bullet style on a
+      // nested item snaps it back to ilvl 0 and visually "outdents" the row.
+      const existingIlvl = getResolvedParagraphProperties(node)?.numberingProperties?.ilvl;
+      const propertiesForParagraph =
+        mode === 'create' && existingIlvl != null && existingIlvl !== sharedNumberingProperties.ilvl
+          ? { ...sharedNumberingProperties, ilvl: existingIlvl }
+          : sharedNumberingProperties;
+
+      updateNumberingProperties(propertiesForParagraph, node, pos, editor, tr);
     }
 
     // Restore a natural post-toggle selection.

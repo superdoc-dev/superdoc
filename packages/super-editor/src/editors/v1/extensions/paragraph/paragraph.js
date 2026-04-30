@@ -324,6 +324,17 @@ export const Paragraph = OxmlNode.create({
       },
 
       /**
+       * Toggle a bullet list with a specific bullet style at the current selection
+       * @category Command
+       * @example
+       * editor.commands.toggleBulletListStyle('disc')
+       * @note Style can be 'disc' (•), 'circle' (◦), or 'square' (▪)
+       */
+      toggleBulletListStyle: (style) => (params) => {
+        return toggleList('bulletList', style)(params);
+      },
+
+      /**
        * Restart numbering for the current list
        * @category Command
        * @example

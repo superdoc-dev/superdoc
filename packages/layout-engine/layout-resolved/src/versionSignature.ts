@@ -10,6 +10,7 @@ import type {
   ParagraphBlock,
   SdtMetadata,
   ShapeGroupDrawing,
+  SourceAnchor,
   TableAttrs,
   TableBlock,
   TableCellAttrs,
@@ -139,6 +140,41 @@ const hashNumber = (seed: number, value: number | undefined | null): number => {
   hash ^= hash >>> 13;
   return hash >>> 0;
 };
+
+// ---------------------------------------------------------------------------
+// sourceAnchorSignature
+// ---------------------------------------------------------------------------
+
+const stableSerializeEvidenceValue = (value: unknown): string => {
+  if (value === undefined) return '';
+  if (value === null) return 'null';
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+    return JSON.stringify(value);
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => stableSerializeEvidenceValue(item)).join(',')}]`;
+  }
+  if (typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    return `{${Object.keys(record)
+      .sort()
+      .filter((key) => record[key] !== undefined)
+      .map((key) => `${JSON.stringify(key)}:${stableSerializeEvidenceValue(record[key])}`)
+      .join(',')}}`;
+  }
+  return JSON.stringify(String(value));
+};
+
+/**
+ * Stable source/evidence metadata signature for paint cache invalidation.
+ *
+ * Source anchors are not visual geometry. Keep them out of deriveBlockVersion()
+ * and fragmentSignature(), but include this fingerprint in DomPainter's paint
+ * reuse signature so metadata-only updates refresh data-source-* attributes and
+ * paint snapshot anchors.
+ */
+export const sourceAnchorSignature = (sourceAnchor: SourceAnchor | undefined): string =>
+  sourceAnchor ? stableSerializeEvidenceValue(sourceAnchor) : '';
 
 // ---------------------------------------------------------------------------
 // deriveBlockVersion

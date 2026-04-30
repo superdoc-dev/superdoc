@@ -36,15 +36,6 @@ SuperDocUIProvider          one controller per app
 
 Components consume the controller via `useSuperDocUI()`. They never reach into `editor.state` or `editor.view`.
 
-## Types
-
-Every value the demo touches comes from a published type:
-
-- `superdoc/ui` ships the controller surface: `SelectionCapture`, `ReviewItem`, `ReviewSlice`, `CustomCommandHandleState`, `CustomCommandRegistrationResult`.
-- `superdoc` ships the host: `SuperDoc`, `DocumentMode`.
-
-For the few surfaces the controller does not bridge yet (`setDocumentMode`, `replaceFile`), cast `useSuperDocHost()` once to `SuperDoc` and let IntelliSense drive from there. No inline shape casts, no `as unknown as { ... }`.
-
 ## Telemetry
 
 `telemetry: { enabled: false }` is set in `EditorMount.tsx`. SuperDoc defaults to enabled.

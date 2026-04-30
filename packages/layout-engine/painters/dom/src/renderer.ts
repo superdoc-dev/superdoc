@@ -109,6 +109,7 @@ import { applyImageClipPath } from './utils/image-clip-path.js';
 import { isMinimalWordLayout as isMinimalWordLayoutShared } from '@superdoc/common/list-marker-utils';
 import {
   computeTabWidth,
+  createListMarkerElement,
   resolvePainterListMarkerGeometry,
   resolvePainterListTextStartPx,
 } from './utils/marker-helpers.js';
@@ -3144,15 +3145,7 @@ export class DomPainter {
             lineEl.style.paddingLeft = `${resolvedMarker.firstLinePaddingLeftPx}px`;
 
             if (!resolvedMarker.vanish) {
-              const markerContainer = this.doc!.createElement('span');
-              markerContainer.classList.add(DOM_CLASS_NAMES.LIST_MARKER);
-              markerContainer.style.display = 'inline-block';
-              markerContainer.style.wordSpacing = '0px';
-
-              const markerEl = this.doc!.createElement('span');
-              markerEl.classList.add('superdoc-paragraph-marker');
-              markerEl.textContent = resolvedMarker.text;
-              markerEl.style.pointerEvents = 'none';
+              const markerContainer = createListMarkerElement(this.doc!, resolvedMarker.text, resolvedMarker.run);
 
               markerContainer.style.position = 'relative';
               if (resolvedMarker.justification === 'right') {
@@ -3164,19 +3157,6 @@ export class DomPainter {
                 lineEl.style.paddingLeft =
                   parseFloat(lineEl.style.paddingLeft) + (resolvedMarker.centerPaddingAdjustPx ?? 0) + 'px';
               }
-
-              markerEl.style.fontFamily =
-                toCssFontFamily(resolvedMarker.run.fontFamily) ?? resolvedMarker.run.fontFamily;
-              markerEl.style.fontSize = `${resolvedMarker.run.fontSize}px`;
-              markerEl.style.fontWeight = resolvedMarker.run.bold ? 'bold' : '';
-              markerEl.style.fontStyle = resolvedMarker.run.italic ? 'italic' : '';
-              if (resolvedMarker.run.color) {
-                markerEl.style.color = resolvedMarker.run.color;
-              }
-              if (resolvedMarker.run.letterSpacing != null) {
-                markerEl.style.letterSpacing = `${resolvedMarker.run.letterSpacing}px`;
-              }
-              markerContainer.appendChild(markerEl);
 
               if (resolvedMarker.suffix === 'tab') {
                 const tabEl = this.doc!.createElement('span');
@@ -3356,16 +3336,7 @@ export class DomPainter {
             lineEl.style.paddingLeft = `${paraIndentLeft + (paraIndent?.firstLine ?? 0) - (paraIndent?.hanging ?? 0)}px`;
 
             if (!marker.run.vanish) {
-              const markerContainer = this.doc!.createElement('span');
-              markerContainer.classList.add(DOM_CLASS_NAMES.LIST_MARKER);
-              markerContainer.style.display = 'inline-block';
-              markerContainer.style.wordSpacing = '0px';
-
-              const markerEl = this.doc!.createElement('span');
-              markerEl.classList.add('superdoc-paragraph-marker');
-              markerEl.textContent = marker.markerText ?? '';
-              markerEl.style.pointerEvents = 'none';
-
+              const markerContainer = createListMarkerElement(this.doc!, marker.markerText ?? '', marker.run);
               const markerJustification = marker.justification ?? 'left';
 
               markerContainer.style.position = 'relative';
@@ -3377,18 +3348,6 @@ export class DomPainter {
                 markerContainer.style.left = `${markerStartPos - fragment.markerTextWidth! / 2}px`;
                 lineEl.style.paddingLeft = parseFloat(lineEl.style.paddingLeft) + fragment.markerTextWidth! / 2 + 'px';
               }
-
-              markerEl.style.fontFamily = toCssFontFamily(marker.run.fontFamily) ?? marker.run.fontFamily;
-              markerEl.style.fontSize = `${marker.run.fontSize}px`;
-              markerEl.style.fontWeight = marker.run.bold ? 'bold' : '';
-              markerEl.style.fontStyle = marker.run.italic ? 'italic' : '';
-              if (marker.run.color) {
-                markerEl.style.color = marker.run.color;
-              }
-              if (marker.run.letterSpacing != null) {
-                markerEl.style.letterSpacing = `${marker.run.letterSpacing}px`;
-              }
-              markerContainer.appendChild(markerEl);
 
               const suffix = marker.suffix ?? 'tab';
               if (suffix === 'tab') {

@@ -18,8 +18,10 @@ import type {
   WrapTextMode,
 } from '@superdoc/contracts';
 import { effectiveTableCellSpacing, rescaleColumnWidths, normalizeZIndex, getCellSpacingPx } from '@superdoc/contracts';
-import { DOM_CLASS_NAMES } from '@superdoc/dom-contract';
-import { toCssFontFamily } from '@superdoc/font-utils';
+import { createListMarkerElement,
+  computeTabWidth,
+  resolvePainterListMarkerGeometry,
+  resolvePainterListTextStartPx } from '../utils/marker-helpers.js';
 import type { FragmentRenderContext, RenderedLineInfo } from '../renderer.js';
 import { applyParagraphBorderStyles, applyParagraphShadingStyles } from '../features/paragraph-borders/index.js';
 import { applySquareWrapExclusionsToLines } from '../utils/anchor-helpers';
@@ -30,11 +32,6 @@ import {
   getSdtContainerKey,
   type SdtBoundaryOptions,
 } from '../utils/sdt-helpers.js';
-import {
-  computeTabWidth,
-  resolvePainterListMarkerGeometry,
-  resolvePainterListTextStartPx,
-} from '../utils/marker-helpers.js';
 import { applyCellBorders } from './border-utils.js';
 import { renderTableFragment as renderTableFragmentElement } from './renderTableFragment.js';
 
@@ -352,30 +349,7 @@ function renderListMarker(params: MarkerRenderParams): void {
     return;
   }
 
-  // Create marker container (inline-block to isolate from word-spacing used for justification)
-  const markerContainer = doc.createElement('span');
-  markerContainer.classList.add(DOM_CLASS_NAMES.LIST_MARKER);
-  markerContainer.style.display = 'inline-block';
-  markerContainer.style.wordSpacing = '0px';
-
-  const markerEl = doc.createElement('span');
-  markerEl.classList.add('superdoc-paragraph-marker');
-  markerEl.textContent = markerLayout?.markerText ?? '';
-  markerEl.style.pointerEvents = 'none';
-
-  // Apply marker run styling
-  markerEl.style.fontFamily = toCssFontFamily(markerLayout?.run?.fontFamily) ?? markerLayout?.run?.fontFamily ?? '';
-  if (markerLayout?.run?.fontSize != null) {
-    markerEl.style.fontSize = `${markerLayout.run.fontSize}px`;
-  }
-  markerEl.style.fontWeight = markerLayout?.run?.bold ? 'bold' : '';
-  markerEl.style.fontStyle = markerLayout?.run?.italic ? 'italic' : '';
-  if (markerLayout?.run?.color) {
-    markerEl.style.color = markerLayout.run.color;
-  }
-  if (markerLayout?.run?.letterSpacing != null) {
-    markerEl.style.letterSpacing = `${markerLayout.run.letterSpacing}px`;
-  }
+  const markerContainer = createListMarkerElement(doc, markerLayout?.markerText ?? '', markerLayout?.run ?? {});
 
   // Left-justified markers stay inline (position: relative) within the text flow.
   // Right/center-justified markers are absolutely positioned.
@@ -389,8 +363,6 @@ function renderListMarker(params: MarkerRenderParams): void {
     markerContainer.style.left = `${markerStartPos - markerTextWidth / 2}px`;
     lineEl.style.paddingLeft = parseFloat(lineEl.style.paddingLeft) + markerTextWidth / 2 + 'px';
   }
-
-  markerContainer.appendChild(markerEl);
 
   // Add suffix separator after marker, before text content
   const suffixType = markerLayout?.suffix ?? 'tab';

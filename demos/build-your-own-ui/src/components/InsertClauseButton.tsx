@@ -92,7 +92,7 @@ export function InsertClauseButton() {
           state.documentMode === 'viewing' ||
           state.selection.target === null,
       }),
-      execute: ({ payload, superdoc }) => {
+      execute: ({ payload, editor }) => {
         if (!payload) return false;
         const clause = CLAUSES.find((c) => c.id === payload.clauseId);
         if (!clause) return false;
@@ -101,20 +101,10 @@ export function InsertClauseButton() {
         // already exposes the cursor in BOTH shapes the doc-api
         // consumes: `target` (TextTarget, for comments / format.apply)
         // and `selectionTarget` (SelectionTarget, for insert /
-        // replace). No inline lift, no adapter-helper import; pass
-        // `selectionTarget` straight through.
+        // replace). Pass `selectionTarget` straight through.
         const selectionTarget = ui.selection.getSnapshot().selectionTarget;
         if (!selectionTarget) return false;
-        const host = superdoc as {
-          activeEditor?: {
-            doc?: {
-              insert(input: { value: string; type: 'text'; target: typeof selectionTarget }): {
-                success: boolean;
-              };
-            };
-          };
-        };
-        const receipt = host.activeEditor?.doc?.insert({
+        const receipt = editor?.doc?.insert?.({
           value: clause.body,
           type: 'text',
           target: selectionTarget,

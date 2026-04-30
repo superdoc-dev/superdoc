@@ -942,6 +942,10 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
   // built-ins. Built-in collisions are refused without `override: true`.
   const customCommandsRegistry = createCustomCommandsRegistry({
     superdoc,
+    // Late-bound so `execute` sees whichever story editor is active at
+    // the time the command runs (matches the routing every other
+    // `ui.*` mutation uses).
+    getEditor: () => resolveRoutedEditor(superdoc),
     isBuiltIn: (id) => BUILT_IN_COMMAND_ID_SET.has(id),
     scheduleNotify,
     buildSubscribable: (id) => select((state) => state.toolbar.commands?.[id], shallowEqual),

@@ -3,6 +3,7 @@ import type {
   CustomCommandRegistrationResult,
   CustomCommandHandle,
   CustomCommandHandleState,
+  SuperDocEditorLike,
   SuperDocLike,
   SuperDocUIState,
   Subscribable,
@@ -80,6 +81,15 @@ interface CustomCommandsRegistryDeps {
   isBuiltIn(id: string): boolean;
   /** Host superdoc passed to custom `execute` callbacks. */
   superdoc: SuperDocLike;
+  /**
+   * Resolve the routed editor at execute-time. Passed to custom
+   * `execute` callbacks alongside `superdoc` so registrations can
+   * reach `editor.doc.*` without a structural cast. Late-bound (a
+   * function, not a captured value) so the registry sees whichever
+   * story editor is active when the command runs, matching the
+   * routing the rest of `ui.*` uses.
+   */
+  getEditor(): SuperDocEditorLike | null;
   /**
    * Re-emit the controller snapshot. Called whenever the registry
    * changes (register / unregister / invalidate) so subscribers see the
@@ -353,9 +363,16 @@ export function createCustomCommandsRegistry(deps: CustomCommandsRegistryDeps): 
         // `register<TPayload>(...)` signature carries the consumer's
         // payload type to the captured handle, but the runtime registry
         // stores entries with the default `void` payload. Cast to bridge.
-        const result = (entry.execute as (args: { payload?: unknown; superdoc: SuperDocLike }) => unknown)({
+        const result = (
+          entry.execute as (args: {
+            payload?: unknown;
+            superdoc: SuperDocLike;
+            editor: SuperDocEditorLike | null;
+          }) => unknown
+        )({
           payload,
           superdoc: deps.superdoc,
+          editor: deps.getEditor(),
         });
         if (result instanceof Promise) {
           return result.then(

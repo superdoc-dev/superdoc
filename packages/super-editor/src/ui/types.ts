@@ -112,6 +112,18 @@ export interface SuperDocEditorLike {
       list?(query?: unknown): unknown;
       decide?(input: unknown, options?: unknown): unknown;
     };
+    /**
+     * Insert content at a positional target. Surfaces the typed
+     * doc-API signature so custom commands can call
+     * `editor.doc.insert(...)` without a structural cast. The control
+     * surface needs `editor.doc.insert` for the BYO-UI custom-command
+     * pattern (Insert clause, AI-generated text); other doc-API
+     * mutation methods stay loose unless a similar use case lands.
+     */
+    insert?(
+      input: import('@superdoc/document-api').InsertInput,
+      options?: unknown,
+    ): import('@superdoc/document-api').SDMutationReceipt;
   };
   /**
    * PresentationEditor handle. Browser-only. The controller calls
@@ -814,12 +826,23 @@ export type CustomCommandRegistration<TPayload = void, TValue = unknown> = {
    */
   id: string;
   /**
-   * Execute the command. Receives `payload` (typed per registration)
-   * and the host `superdoc` instance. Return value is normalized to
-   * `boolean` for the synchronous result; async commands return a
-   * Promise that the runtime awaits internally.
+   * Execute the command. Receives:
+   *
+   * - `payload` (typed per registration),
+   * - the host `superdoc` instance, and
+   * - the routed `editor` — the same editor `ui.commands.*` mutations
+   *   target. Use `editor.doc.*` for direct Document API access without
+   *   reaching `superdoc.activeEditor`. `editor` is `null` before the
+   *   editor has reported ready, so guard early.
+   *
+   * Return value is normalized to `boolean` for the synchronous result;
+   * async commands return a Promise the runtime awaits internally.
    */
-  execute: (args: { payload?: TPayload; superdoc: SuperDocLike }) => boolean | void | Promise<boolean | void>;
+  execute: (args: {
+    payload?: TPayload;
+    superdoc: SuperDocLike;
+    editor: SuperDocEditorLike | null;
+  }) => boolean | void | Promise<boolean | void>;
   /**
    * Optional state deriver. Runs on every snapshot rebuild. If omitted,
    * the command's state stays static at `{ active: false, disabled: false, value: undefined }`.

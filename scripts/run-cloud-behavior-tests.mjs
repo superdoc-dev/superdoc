@@ -891,7 +891,7 @@ function parsePositiveInteger(value, optionName) {
 }
 
 function stripPnpmSeparator(args) {
-  return args[0] === '--' ? args.slice(1) : args;
+  return args.filter((arg) => arg !== '--');
 }
 
 function normalizeOutputLines(value) {

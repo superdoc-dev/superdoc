@@ -1,5 +1,7 @@
 # Behavior Tests
 
+<!-- merge-queue smoke test: this comment is a no-op to be reverted after queue mechanics are validated. -->
+
 Playwright tests that run against a real SuperDoc instance in the browser (Chromium, Firefox, WebKit).
 
 ## Setup

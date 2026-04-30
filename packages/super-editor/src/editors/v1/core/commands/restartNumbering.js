@@ -60,11 +60,14 @@ export const restartNumbering = ({ editor, tr, state }) => {
 
   // Remap paragraphs from this position onwards to the new numId. Steps are
   // accumulated on the captured tr; CommandService dispatches it after we return.
+  // Default ilvl to 0 — when numbering comes from a style (e.g. ListNumber) the
+  // inline numberingProperties may omit ilvl. Without the default we'd export
+  // a <w:numPr> with no <w:ilvl>, but Word always writes <w:ilvl w:val="0"/>.
   state.doc.nodesBetween(paragraphPos, state.doc.content.size, (node, pos) => {
     if (node.type.name !== 'paragraph') return true;
     const props = getResolvedParagraphProperties(node)?.numberingProperties;
     if (props?.numId === numId) {
-      updateNumberingProperties({ numId: newNumId, ilvl: props.ilvl }, node, pos, editor, tr);
+      updateNumberingProperties({ numId: newNumId, ilvl: props.ilvl ?? 0 }, node, pos, editor, tr);
     }
     return true;
   });

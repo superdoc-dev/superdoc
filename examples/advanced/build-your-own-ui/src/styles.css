@@ -331,6 +331,48 @@ button {
   line-height: 1.4;
 }
 
+.thread-replies {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  border-left: 2px solid var(--border);
+  padding-left: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.thread-reply {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.thread-reply .author {
+  font-weight: 600;
+  color: var(--text);
+  margin-right: 4px;
+}
+
+.thread-reply-body {
+  flex: 1;
+  line-height: 1.35;
+}
+
+.thread-reply-text {
+  color: var(--text);
+}
+
+.avatar.avatar-sm {
+  width: 18px;
+  height: 18px;
+  font-size: 9px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
 .card-actions {
   display: flex;
   gap: 6px;

@@ -55,20 +55,51 @@ export function ActivitySidebar({ composeOpen, onCloseComposer }: Props) {
     return null;
   }, [selection.activeCommentIds, selection.activeChangeIds]);
 
-  // Partition the live feed into active vs resolved-comment buckets.
-  // Tracked changes that are still pending stay active. Decided
-  // tracked changes are merged in later from the local `decidedChanges`
-  // state; the live feed no longer carries them.
+  // Partition the live feed into active vs resolved-comment buckets,
+  // and fold reply comments under their parent. Word/Google Docs thread
+  // a comment by `parentCommentId` (DOCX persists this in
+  // commentsExtended.xml as `paraIdParent`). The doc-api surfaces
+  // `parentCommentId` on each item; we group it here so the sidebar
+  // renders one card per thread root with its replies stacked under
+  // it. Replies whose parent is missing (resolved or pruned) fall
+  // back to top-level so we don't lose them.
   const { active, resolvedComments } = useMemo(() => {
     const a: ReviewSlice['items'] = [];
     const r: ReviewSlice['items'] = [];
+    const commentRoots = new Set<string>();
+    for (const item of review.items) {
+      if (item.kind === 'comment') {
+        const c = item.comment as { parentCommentId?: string };
+        if (!c.parentCommentId) commentRoots.add(item.id);
+      }
+    }
     for (const item of review.items) {
       const isResolvedComment =
         item.kind === 'comment' && (item.comment as { status?: string }).status === 'resolved';
+      if (item.kind === 'comment') {
+        const c = item.comment as { parentCommentId?: string };
+        // Reply rows are rendered inline inside the parent card —
+        // skip them at the top level if the parent is also visible.
+        if (c.parentCommentId && commentRoots.has(c.parentCommentId)) continue;
+      }
       if (isResolvedComment) r.push(item);
       else a.push(item);
     }
     return { active: a, resolvedComments: r };
+  }, [review.items]);
+
+  // Replies indexed by parent id. Built once per snapshot.
+  const repliesByParent = useMemo(() => {
+    const map = new Map<string, ReviewSlice['items']>();
+    for (const item of review.items) {
+      if (item.kind !== 'comment') continue;
+      const c = item.comment as { parentCommentId?: string };
+      if (!c.parentCommentId) continue;
+      const list = map.get(c.parentCommentId) ?? [];
+      list.push(item);
+      map.set(c.parentCommentId, list);
+    }
+    return map;
   }, [review.items]);
 
   const decideChange = (id: string, decision: 'accepted' | 'rejected') => {
@@ -155,6 +186,7 @@ export function ActivitySidebar({ composeOpen, onCloseComposer }: Props) {
               item={item}
               active={item.id === activeEntityId}
               resolved={false}
+              replies={item.kind === 'comment' ? repliesByParent.get(item.id) : undefined}
               onDecideChange={decideChange}
               onClick={() => {
                 if (item.kind === 'comment') ui.comments.scrollTo(item.id);
@@ -174,6 +206,7 @@ export function ActivitySidebar({ composeOpen, onCloseComposer }: Props) {
               item={item}
               active={item.id === activeEntityId}
               resolved
+              replies={repliesByParent.get(item.id)}
               onDecideChange={decideChange}
               onClick={() => ui.comments.scrollTo(item.id)}
             />
@@ -191,18 +224,19 @@ interface CardProps {
   item: ReviewSlice['items'][number];
   active: boolean;
   resolved: boolean;
+  replies?: ReviewSlice['items'];
   onClick(): void;
   onDecideChange(id: string, decision: 'accepted' | 'rejected'): void;
 }
 
-function ActivityCard({ item, active, resolved, onClick, onDecideChange }: CardProps) {
+function ActivityCard({ item, active, resolved, replies, onClick, onDecideChange }: CardProps) {
   const ui = useSuperDocUI()!;
   const className = ['card', active ? 'active' : '', resolved ? 'resolved' : ''].filter(Boolean).join(' ');
 
   return (
     <div className={className} data-card-id={item.id} onClick={onClick}>
       {item.kind === 'comment' ? (
-        <CommentBody comment={item.comment as never} resolved={resolved} ui={ui} />
+        <CommentBody comment={item.comment as never} resolved={resolved} replies={replies} ui={ui} />
       ) : (
         <ChangeBody change={item.change as never} onDecide={(decision) => onDecideChange(item.id, decision)} />
       )}
@@ -219,15 +253,18 @@ interface CommentRecord {
   anchoredText?: string;
 }
 
-function CommentBody({ comment, resolved, ui }: { comment: CommentRecord; resolved: boolean; ui: NonNullable<ReturnType<typeof useSuperDocUI>> }) {
+function CommentBody({
+  comment,
+  resolved,
+  replies,
+  ui,
+}: {
+  comment: CommentRecord;
+  resolved: boolean;
+  replies?: ReviewSlice['items'];
+  ui: NonNullable<ReturnType<typeof useSuperDocUI>>;
+}) {
   const author = comment.creatorName ?? comment.creatorEmail ?? 'Unknown';
-  const initials = author
-    .split(/\s+/)
-    .map((p) => p[0])
-    .filter(Boolean)
-    .slice(0, 2)
-    .join('')
-    .toUpperCase();
   const time = comment.createdTime
     ? new Date(comment.createdTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     : '';
@@ -235,12 +272,32 @@ function CommentBody({ comment, resolved, ui }: { comment: CommentRecord; resolv
   return (
     <>
       <div className="card-header">
-        <span className="avatar" style={{ background: avatarColor(author) }}>{initials}</span>
+        <span className="avatar" style={{ background: avatarColor(author) }}>{initials(author)}</span>
         <span className="author">{author}</span>
         <span className="timestamp">{time}</span>
       </div>
       {comment.anchoredText ? <div className="quote">“{comment.anchoredText}”</div> : null}
       <div className="body">{comment.text}</div>
+      {replies && replies.length > 0 ? (
+        <ul className="thread-replies">
+          {replies.map((r) => {
+            if (r.kind !== 'comment') return null;
+            const reply = r.comment as CommentRecord;
+            const a = reply.creatorName ?? reply.creatorEmail ?? 'Unknown';
+            return (
+              <li key={r.id} className="thread-reply" data-card-id={r.id}>
+                <span className="avatar avatar-sm" style={{ background: avatarColor(a) }}>
+                  {initials(a)}
+                </span>
+                <div className="thread-reply-body">
+                  <span className="author">{a}</span>
+                  <span className="thread-reply-text">{reply.text}</span>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      ) : null}
       <div className="card-actions" onClick={(e) => e.stopPropagation()}>
         {resolved ? (
           <button className="primary" onClick={() => ui.comments.reopen(comment.id)}>
@@ -252,6 +309,16 @@ function CommentBody({ comment, resolved, ui }: { comment: CommentRecord; resolv
       </div>
     </>
   );
+}
+
+function initials(name: string): string {
+  return name
+    .split(/\s+/)
+    .map((p) => p[0])
+    .filter(Boolean)
+    .slice(0, 2)
+    .join('')
+    .toUpperCase();
 }
 
 interface ChangeRecord {

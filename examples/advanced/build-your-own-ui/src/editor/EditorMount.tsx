@@ -14,7 +14,17 @@ const CURRENT_USER = { name: 'Alex Rivera', email: 'alex@example.com' };
 // passed, and `SuperDoc.exportEditorsToDOCX` no longer overrides
 // that fallback with an empty array. The round-trip is preserved
 // regardless of the UI flag.
-const MODULES = { comments: false as const };
+//
+// `trackChanges.replacements: 'independent'` opts out of the default
+// 'paired' replacement model. With 'paired', a typed-over selection
+// surfaces as a single review entity (the deletion half is folded
+// into the insertion). With 'independent' each half gets its own id
+// — matching the Word / ECMA-376 §17.13.5 revision model and what a
+// review sidebar typically wants to render as two distinct rows.
+const MODULES = {
+  comments: false as const,
+  trackChanges: { replacements: 'independent' as const },
+};
 
 // Telemetry opt-out is the default the example demonstrates. The
 // SuperDoc default is `enabled: true`; consumers building their own

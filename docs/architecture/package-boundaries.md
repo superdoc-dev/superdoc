@@ -100,21 +100,24 @@ These are listed for completeness so the inventory above can be treated as exhau
 
 ### `superdoc` subpath exports
 
-The `superdoc` package currently exposes the following entries via `package.json` `exports`:
+The `superdoc` package currently exposes the following entries via `package.json` `exports`. The "Matrix coverage" column lists the consumer-typecheck fixture file (`tests/consumer-typecheck/src/<file>`) that exercises the subpath under strict mode. Runtime-only subpaths have no `types` entry by design and therefore no fixture; the consumer matrix is a type-contract gate, and a subpath without a contract has nothing to assert.
 
-| Subpath | Has `types`? | Tier | Decision |
-|---|---|---|---|
-| `.` | Yes | Public subpath | Main entry, stays |
-| `./types` | Yes | Public type contract | Type-only entry, stays |
-| `./super-editor` | Yes | Legacy public compatibility surface | Was effectively public when no other headless path existed. `Editor`, `PresentationEditor`, `getStarterExtensions`, `Extensions`, `SuperToolbar`, `SuperConverter`, `DocxZipper` and most of the surface are now exported from `superdoc` itself. Kept exported, not advertised, migration target is `superdoc`. See Decision 1. |
-| `./ui` | Yes | Public subpath | Stays |
-| `./headless-toolbar` | Yes | Public subpath | Stays |
-| `./headless-toolbar/react` | Yes | Public subpath | Stays |
-| `./headless-toolbar/vue` | Yes | Public subpath | Stays |
-| `./converter` | No (runtime-only) | Legacy public compatibility surface | DOCX conversion is also reachable through `Editor.open` / `Editor.loadXmlData` / `SuperConverter` exported from `superdoc`. Kept exported, not advertised, migration target is `superdoc`. |
-| `./docx-zipper` | No (runtime-only) | Legacy public compatibility surface | `DocxZipper` is exported from `superdoc`. Kept exported, not advertised, migration target is `superdoc`. |
-| `./file-zipper` | No (runtime-only) | Legacy public compatibility surface | `createZip` is exported from `superdoc`. Kept exported, not advertised, migration target is `superdoc`. |
-| `./style.css` | N/A | Public asset | Stays |
+| Subpath | Has `types`? | Tier | Matrix coverage | Decision |
+|---|---|---|---|---|
+| `.` | Yes | Public subpath | `imports-main.ts`, `headless-node.ts`, `all-public-types.ts`, `editor-doc-runtime.ts`, `customer-scenario.ts`, `prosemirror-coexistence.ts` | Main entry, stays |
+| `./types` | Yes | Public type contract | `imports-types-entry.ts` | Type-only entry, stays |
+| `./super-editor` | Yes | Legacy public compatibility surface | `imports-sub-export.ts` | Was effectively public when no other headless path existed. `Editor`, `PresentationEditor`, `getStarterExtensions`, `Extensions`, `SuperToolbar`, `SuperConverter`, `DocxZipper` and most of the surface are now exported from `superdoc` itself. Kept exported, not advertised, migration target is `superdoc`. See Decision 1. |
+| `./ui` | Yes | Public subpath | `imports-ui.ts` | Stays |
+| `./ui/react` | Yes | Public subpath | `imports-ui-react.ts` | Stays |
+| `./headless-toolbar` | Yes | Public subpath | `imports-headless-toolbar.ts` | Stays |
+| `./headless-toolbar/react` | Yes | Public subpath | `imports-headless-toolbar-react.ts` | Stays |
+| `./headless-toolbar/vue` | Yes | Public subpath | `imports-headless-toolbar-vue.ts` | Stays |
+| `./converter` | No (runtime-only) | Legacy public compatibility surface | n/a (no type contract) | DOCX conversion is also reachable through `Editor.open` / `Editor.loadXmlData` / `SuperConverter` exported from `superdoc`. Kept exported, not advertised, migration target is `superdoc`. |
+| `./docx-zipper` | No (runtime-only) | Legacy public compatibility surface | n/a (no type contract) | `DocxZipper` is exported from `superdoc`. Kept exported, not advertised, migration target is `superdoc`. |
+| `./file-zipper` | No (runtime-only) | Legacy public compatibility surface | n/a (no type contract) | `createZip` is exported from `superdoc`. Kept exported, not advertised, migration target is `superdoc`. |
+| `./style.css` | N/A | Public asset | n/a (asset) | Stays |
+
+When a new subpath is added to `package.json` `exports`, the change must update both this inventory and the consumer matrix in the same PR. SD-2861's matrix scenarios are the gate that fails CI when a typed subpath ships without coverage.
 
 ## Type ownership rules
 

@@ -6,19 +6,6 @@ permissions:
 on:
   pull_request:
     branches: [main, stable, 'release/**']
-    paths-ignore:
-      - 'apps/docs/**'
-      - 'apps/mcp/**'
-      - 'apps/vscode-ext/**'
-      - 'demos/**'
-      - 'examples/**'
-      - 'packages/react/**'
-      - 'packages/sdk/**'
-      - 'packages/template-builder/**'
-      - 'packages/esign/**'
-      - 'packages/ai/**'
-      - 'evals/**'
-      - '**/*.md'
   merge_group:
   workflow_dispatch:
 
@@ -27,7 +14,46 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  detect:
+    runs-on: ubuntu-latest
+    outputs:
+      superdoc: ${{ steps.set.outputs.superdoc }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
+        id: filter
+        if: github.event_name == 'pull_request'
+        with:
+          filters: |
+            superdoc:
+              - 'packages/superdoc/**'
+              - 'packages/super-editor/**'
+              - 'packages/layout-engine/**'
+              - 'packages/word-layout/**'
+              - 'packages/preset-geometry/**'
+              - 'packages/document-api/**'
+              - 'shared/**'
+              - 'tests/**'
+              - 'scripts/**'
+              - 'package.json'
+              - 'pnpm-lock.yaml'
+              - 'pnpm-workspace.yaml'
+              - '.nvmrc'
+              - 'vitest.config.mjs'
+              - '.github/workflows/ci-superdoc.yml'
+
+      - id: set
+        run: |
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            echo "superdoc=${{ steps.filter.outputs.superdoc }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "superdoc=true" >> "$GITHUB_OUTPUT"
+          fi
+
   build:
+    needs: detect
+    if: needs.detect.outputs.superdoc == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -235,12 +261,24 @@ jobs:
   validate:
     name: CI SuperDoc / validate
     if: always()
-    needs: [build, unit-tests, cli-tests, coverage]
+    needs: [detect, build, unit-tests, cli-tests, coverage]
     runs-on: ubuntu-latest
     steps:
       - name: Check results
         run: |
-          if [[ "${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped') }}" == "true" ]]; then
-            echo "One or more required jobs did not succeed."
-            exit 1
+          if [[ "${{ needs.detect.outputs.superdoc }}" != "true" ]]; then
+            echo "SuperDoc CI skipped: no relevant paths changed."
+            exit 0
           fi
+          for job_result in \
+            "build:${{ needs.build.result }}" \
+            "unit-tests:${{ needs.unit-tests.result }}" \
+            "cli-tests:${{ needs.cli-tests.result }}" \
+            "coverage:${{ needs.coverage.result }}"; do
+            name="${job_result%%:*}"
+            result="${job_result##*:}"
+            if [[ "$result" != "success" ]]; then
+              echo "Job '$name' was required but did not succeed (result: $result)."
+              exit 1
+            fi
+          done

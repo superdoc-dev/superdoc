@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import type { DocumentMode, SuperDoc } from 'superdoc';
 import {
   useSuperDocUI,
   useSuperDocCommand,
@@ -7,8 +8,6 @@ import {
   useSuperDocSlice,
 } from 'superdoc/ui/react';
 import { InsertClauseButton } from './InsertClauseButton';
-
-type DocumentMode = 'editing' | 'suggesting' | 'viewing';
 
 interface ToolbarProps {
   /** Called when the user clicks the comment button to start composing. */
@@ -118,14 +117,13 @@ export function Toolbar({ onComposeComment }: ToolbarProps) {
  * something else flips the mode.
  */
 function ModeToggle() {
-  const host = useSuperDocHost();
+  const host = useSuperDocHost() as SuperDoc | null;
   const mode = useSuperDocSlice<DocumentMode | null>(
-    (ui) => ui.select((s) => s.documentMode, Object.is) as never,
+    (ui) => ui.select((s) => s.documentMode, Object.is),
     null,
   );
   const setMode = (next: DocumentMode) => {
-    if (!host) return;
-    (host as unknown as { setDocumentMode?: (m: DocumentMode) => void }).setDocumentMode?.(next);
+    host?.setDocumentMode(next);
   };
   const current: DocumentMode = mode ?? 'editing';
   return (
@@ -237,7 +235,7 @@ function ExportButton() {
  *     way; the manual emit just unblocks the cache.
  */
 function ReimportButton() {
-  const host = useSuperDocHost();
+  const host = useSuperDocHost() as SuperDoc | null;
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -247,13 +245,7 @@ function ReimportButton() {
     if (!host || !file) return;
     setBusy(true);
     try {
-      const editor = (host as unknown as {
-        activeEditor?: {
-          replaceFile?(file: File): Promise<void>;
-          emit?(event: string, payload: unknown): void;
-          converter?: { comments?: unknown[] };
-        };
-      }).activeEditor;
+      const editor = host.activeEditor;
       if (!editor?.replaceFile) {
         alert('Reimport is not supported on this build of SuperDoc.');
         return;

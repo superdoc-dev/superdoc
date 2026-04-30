@@ -1,7 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { ReviewSlice } from 'superdoc/ui';
+import type { ReviewItem, ReviewSlice } from 'superdoc/ui';
 import { useSuperDocReview, useSuperDocSelection, useSuperDocUI } from 'superdoc/ui/react';
 import { CommentComposer } from './CommentComposer';
+
+type ReviewCommentItem = Extract<ReviewItem, { kind: 'comment' }>;
+type ReviewChangeItem = Extract<ReviewItem, { kind: 'change' }>;
+type ReviewComment = ReviewCommentItem['comment'];
+type ReviewChange = ReviewChangeItem['change'];
 
 interface Props {
   /** When true, render the inline composer at the top of the panel. */
@@ -236,21 +241,12 @@ function ActivityCard({ item, active, resolved, replies, onClick, onDecideChange
   return (
     <div className={className} data-card-id={item.id} onClick={onClick}>
       {item.kind === 'comment' ? (
-        <CommentBody comment={item.comment as never} resolved={resolved} replies={replies} ui={ui} />
+        <CommentBody comment={item.comment} resolved={resolved} replies={replies} ui={ui} />
       ) : (
-        <ChangeBody change={item.change as never} onDecide={(decision) => onDecideChange(item.id, decision)} />
+        <ChangeBody change={item.change} onDecide={(decision) => onDecideChange(item.id, decision)} />
       )}
     </div>
   );
-}
-
-interface CommentRecord {
-  id: string;
-  text?: string;
-  creatorName?: string;
-  creatorEmail?: string;
-  createdTime?: number;
-  anchoredText?: string;
 }
 
 function CommentBody({
@@ -259,7 +255,7 @@ function CommentBody({
   replies,
   ui,
 }: {
-  comment: CommentRecord;
+  comment: ReviewComment;
   resolved: boolean;
   replies?: ReviewSlice['items'];
   ui: NonNullable<ReturnType<typeof useSuperDocUI>>;
@@ -282,7 +278,7 @@ function CommentBody({
         <ul className="thread-replies">
           {replies.map((r) => {
             if (r.kind !== 'comment') return null;
-            const reply = r.comment as CommentRecord;
+            const reply = r.comment;
             const a = reply.creatorName ?? reply.creatorEmail ?? 'Unknown';
             return (
               <li key={r.id} className="thread-reply" data-card-id={r.id}>
@@ -321,20 +317,11 @@ function initials(name: string): string {
     .toUpperCase();
 }
 
-interface ChangeRecord {
-  id: string;
-  type?: string;
-  author?: string;
-  authorEmail?: string;
-  excerpt?: string;
-  date?: string | number;
-}
-
 function ChangeBody({
   change,
   onDecide,
 }: {
-  change: ChangeRecord;
+  change: ReviewChange;
   onDecide: (decision: 'accepted' | 'rejected') => void;
 }) {
   const kind = change.type === 'insert' ? 'insertion' : change.type === 'delete' ? 'deletion' : 'format';

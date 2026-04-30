@@ -19,6 +19,7 @@ Open http://localhost:5189.
 
 - Click toolbar buttons (bold, italic, lists, undo, redo) wired through `useSuperDocCommand`.
 - Insert a custom clause registered with `ui.commands.register`.
+- Switch between Edit and Suggest. In Suggest, every edit lands as a tracked change.
 - Select text and add a comment. Reply threads render under their parent.
 - Accept or reject tracked changes. Decided ones move to a Resolved section.
 - Export the doc, edit it in Word, click Import, watch the activity feed update.
@@ -28,12 +29,21 @@ Open http://localhost:5189.
 ```
 SuperDocUIProvider          one controller per app
 └── EditorMount             <SuperDocEditor> + onReady
-    ├── Toolbar             ui.commands
+    ├── Toolbar             ui.commands + setDocumentMode
     └── ActivitySidebar     ui.review + ui.selection
         └── CommentComposer ui.selection.capture()
 ```
 
 Components consume the controller via `useSuperDocUI()`. They never reach into `editor.state` or `editor.view`.
+
+## Types
+
+Every value the demo touches comes from a published type:
+
+- `superdoc/ui` ships the controller surface: `SelectionCapture`, `ReviewItem`, `ReviewSlice`, `CustomCommandHandleState`, `CustomCommandRegistrationResult`.
+- `superdoc` ships the host: `SuperDoc`, `DocumentMode`.
+
+For the few surfaces the controller does not bridge yet (`setDocumentMode`, `replaceFile`), cast `useSuperDocHost()` once to `SuperDoc` and let IntelliSense drive from there. No inline shape casts, no `as unknown as { ... }`.
 
 ## Telemetry
 

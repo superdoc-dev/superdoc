@@ -176,6 +176,7 @@ import { getSchemaIntrospection } from './helpers/schema-introspection.js';
  * @typedef {import('./core/types/index.js').ContextMenuItem} ContextMenuItem
  * @typedef {import('./core/types/index.js').ContextMenuSection} ContextMenuSection
  * @typedef {import('./core/types/index.js').ContextMenuConfig} ContextMenuConfig
+ * @typedef {import('./core/types/index.js').DocumentMode} DocumentMode
  */
 
 // Public exports

@@ -116,6 +116,9 @@ import { getSchemaIntrospection } from './helpers/schema-introspection.js';
  * @typedef {import('@superdoc/super-editor').TextAddress} TextAddress
  * @typedef {import('@superdoc/super-editor').TextSegment} TextSegment
  * @typedef {import('@superdoc/super-editor').EntityAddress} EntityAddress
+ * @typedef {import('@superdoc/super-editor').DocumentApi} DocumentApi
+ * @typedef {import('@superdoc/super-editor').BlocksListResult} BlocksListResult
+ * @typedef {import('@superdoc/super-editor').BookmarkInfo} BookmarkInfo
  * @typedef {import('@superdoc/super-editor').LayoutUpdatePayload} LayoutUpdatePayload
  * @typedef {import('@superdoc/super-editor').CoreCommandMap} CoreCommandMap
  * @deprecated Editor commands will be removed in a future version. Use the Document API instead.

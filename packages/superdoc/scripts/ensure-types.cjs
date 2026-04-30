@@ -6,6 +6,46 @@ const path = require('node:path');
 // Verify that vite-plugin-dts generated the expected type entry points.
 // Path aliases are resolved by vite-plugin-dts via tsconfig.json paths.
 const distRoot = path.resolve(__dirname, '..', 'dist');
+const repoRoot = path.resolve(__dirname, '..', '..', '..');
+
+// SD-2842: vite-plugin-dts skips hand-written `.d.ts` files in its include
+// glob (it only emits declarations from `.ts`/`.js`). When a file like
+// `core-command-map.d.ts` is referenced via a relative import from another
+// emitted `.d.ts`, the consumer hits an unresolved-module error. Copy
+// every hand-written `.d.ts` from the source trees we publish into the
+// matching dist location so those imports resolve.
+function copyHandwrittenDtsFiles(srcDir, destDir) {
+  let copied = 0;
+  function walk(currentSrc, currentDest) {
+    if (!fs.existsSync(currentSrc)) return;
+    for (const entry of fs.readdirSync(currentSrc, { withFileTypes: true })) {
+      if (entry.name === 'node_modules' || entry.name === '__tests__' || entry.name === 'tests') continue;
+      const srcPath = path.join(currentSrc, entry.name);
+      const destPath = path.join(currentDest, entry.name);
+      if (entry.isDirectory()) {
+        walk(srcPath, destPath);
+        continue;
+      }
+      if (!entry.name.endsWith('.d.ts')) continue;
+      // Skip if the dist already has this file (vite-plugin-dts may have
+      // generated its own version from a co-located .ts file)
+      if (fs.existsSync(destPath)) continue;
+      fs.mkdirSync(path.dirname(destPath), { recursive: true });
+      fs.copyFileSync(srcPath, destPath);
+      copied++;
+    }
+  }
+  walk(srcDir, destDir);
+  return copied;
+}
+
+const handwrittenCopiedSuperEditor = copyHandwrittenDtsFiles(
+  path.join(repoRoot, 'packages/super-editor/src'),
+  path.join(distRoot, 'super-editor/src'),
+);
+if (handwrittenCopiedSuperEditor > 0) {
+  console.log(`[ensure-types] ✓ Copied ${handwrittenCopiedSuperEditor} hand-written .d.ts files from super-editor/src`);
+}
 
 const requiredEntryPoints = [
   'superdoc/src/index.d.ts',
@@ -124,6 +164,23 @@ function rewriteDocApiPaths(fileContent, filePath) {
   });
 }
 
+// SD-2842: rewrite `@superdoc/contracts` bare specifiers to point at
+// the contracts dist that vite-plugin-dts now emits at
+// `dist/layout-engine/contracts/src/`. Layout, FlowBlock, etc. were
+// collapsing to `any` via the shim file because the bare specifier
+// could not resolve. Same idea as the document-api rewrite above.
+const CONTRACTS_PATH_RE = /(['"])@superdoc\/contracts(\/[^'"]+)?\1/g;
+function rewriteContractsPaths(fileContent, filePath) {
+  return fileContent.replace(CONTRACTS_PATH_RE, (_match, quote, subpath = '') => {
+    const target = path.join(distRoot, 'layout-engine/contracts/src/index.d.ts');
+    let rel = path.relative(path.dirname(filePath), target).split(path.sep).join('/');
+    if (!rel.startsWith('.')) rel = './' + rel;
+    rel = rel.replace(/\.d\.ts$/, '.js');
+    if (subpath) rel = rel.replace(/\/index\.js$/, subpath);
+    return `${quote}${rel}${quote}`;
+  });
+}
+
 const dtsFiles = findDtsFiles(distRoot);
 for (const filePath of dtsFiles) {
   let fileContent = fs.readFileSync(filePath, 'utf8');
@@ -135,6 +192,14 @@ for (const filePath of dtsFiles) {
   const beforeDocApi = fileContent;
   fileContent = rewriteDocApiPaths(fileContent, filePath);
   if (fileContent !== beforeDocApi) {
+    changed = true;
+    totalReplacements++;
+  }
+
+  // SD-2842: same treatment for @superdoc/contracts.
+  const beforeContracts = fileContent;
+  fileContent = rewriteContractsPaths(fileContent, filePath);
+  if (fileContent !== beforeContracts) {
     changed = true;
     totalReplacements++;
   }
@@ -240,7 +305,7 @@ for (const filePath of dtsFiles) {
     const mod = m[2];
 
     // Skip relative imports and already-handled packages
-    if (mod.startsWith('.') || mod.startsWith('@superdoc/common') || mod.startsWith('@superdoc/super-editor') || mod.startsWith('@superdoc/document-api')) continue;
+    if (mod.startsWith('.') || mod.startsWith('@superdoc/common') || mod.startsWith('@superdoc/super-editor') || mod.startsWith('@superdoc/document-api') || mod.startsWith('@superdoc/contracts')) continue;
 
     if (mod.startsWith('@superdoc/')) {
       if (!workspaceImports.has(mod)) workspaceImports.set(mod, new Set());
@@ -253,7 +318,7 @@ for (const filePath of dtsFiles) {
   const dynamicImports = fileContent.matchAll(/import\(['"]([^'"]+)['"]\)\.(\w+)/g);
   for (const m of dynamicImports) {
     const mod = m[1];
-    if (mod.startsWith('.') || mod.startsWith('@superdoc/common') || mod.startsWith('@superdoc/super-editor') || mod.startsWith('@superdoc/document-api')) continue;
+    if (mod.startsWith('.') || mod.startsWith('@superdoc/common') || mod.startsWith('@superdoc/super-editor') || mod.startsWith('@superdoc/document-api') || mod.startsWith('@superdoc/contracts')) continue;
 
     if (mod.startsWith('@superdoc/')) {
       if (!workspaceImports.has(mod)) workspaceImports.set(mod, new Set());
@@ -268,7 +333,7 @@ for (const filePath of dtsFiles) {
     // Skip @superdoc/super-editor (consumer-facing, not internal)
     // Skip @superdoc/common root module (inlined separately), but allow subpath
     // imports like @superdoc/common/components/BasicUpload.vue to be shimmed
-    if (mod === '@superdoc/common' || mod.startsWith('@superdoc/super-editor') || mod.startsWith('@superdoc/document-api')) continue;
+    if (mod === '@superdoc/common' || mod.startsWith('@superdoc/super-editor') || mod.startsWith('@superdoc/document-api') || mod.startsWith('@superdoc/contracts')) continue;
     if (!workspaceImports.has(mod)) workspaceImports.set(mod, new Set());
   }
 }

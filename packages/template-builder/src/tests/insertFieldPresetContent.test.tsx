@@ -120,7 +120,7 @@ describe('SuperDocTemplateBuilder presetContent insertion', () => {
     expect(firstBlockCallArg).not.toHaveProperty('text');
   });
 
-  it('keeps text fallback for block fields without presetContent', async () => {
+  it('omits text on block insert without presetContent (runtime ignores it)', async () => {
     const ref = await renderBuilder();
     let result = false;
 
@@ -131,13 +131,21 @@ describe('SuperDocTemplateBuilder presetContent insertion', () => {
       });
     });
 
+    // The block-insert API uses `html` / `json` / current selection for
+    // its content; `text` is not part of `StructuredContentBlockInsert`
+    // and was always silently ignored at runtime. Now that the typed
+    // surface rejects unknown fields, the call site no longer passes
+    // `text` for block insertion, matching what the runtime actually
+    // honored. Inline insertion still accepts `text` (handled by the
+    // separate inline test below).
     expect(result).toBe(true);
     expect(insertStructuredContentBlockMock).toHaveBeenCalledTimes(1);
-    expect(insertStructuredContentBlockMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        text: 'Default signature content',
-      }),
-    );
+    const firstBlockCallArg = (
+      insertStructuredContentBlockMock as unknown as {
+        mock: { calls: Array<Array<Record<string, unknown>>> };
+      }
+    ).mock.calls[0]?.[0];
+    expect(firstBlockCallArg).not.toHaveProperty('text');
   });
 
   it('ignores presetContent for inline insertion', async () => {

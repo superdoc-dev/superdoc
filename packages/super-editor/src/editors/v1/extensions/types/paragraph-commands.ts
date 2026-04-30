@@ -15,6 +15,9 @@ export interface ParagraphCommands {
   /** Toggle bullet list formatting on the current selection */
   toggleBulletList: () => boolean;
 
+  /** Toggle a bullet list with a specific style ('disc' | 'circle' | 'square') */
+  toggleBulletListStyle: (style: 'disc' | 'circle' | 'square') => boolean;
+
   /** Restart numbering for the current list item */
   restartNumbering: () => boolean;
 

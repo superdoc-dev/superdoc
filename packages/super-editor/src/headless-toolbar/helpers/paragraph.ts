@@ -117,6 +117,11 @@ export const createListStateDeriver =
         ? activeNumberingType === 'bullet'
         : activeNumberingType != null && activeNumberingType !== 'bullet';
 
+    if (numberingType === 'bullet') {
+      const markerText = isActive ? (paragraphNode?.attrs?.listRendering?.markerText ?? null) : null;
+      return { active: isActive, disabled: false, value: markerText };
+    }
+
     return {
       active: isActive,
       disabled: false,

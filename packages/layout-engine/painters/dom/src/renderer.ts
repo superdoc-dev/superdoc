@@ -38,6 +38,7 @@ import type {
   ShapeGroupDrawing,
   ShapeTextContent,
   SolidFillWithAlpha,
+  SourceAnchor,
   TableAttrs,
   TableBlock,
   TableCellAttrs,
@@ -391,6 +392,7 @@ export type PaintSnapshotMarkerStyle = {
   fontWeight?: string;
   fontStyle?: string;
   color?: string;
+  sourceAnchor?: SourceAnchor;
 };
 
 export type PaintSnapshotTabStyle = {
@@ -433,6 +435,7 @@ export type PaintSnapshotImageEntity = {
   pmStart?: number;
   pmEnd?: number;
   blockId?: string;
+  sourceAnchor?: SourceAnchor;
 };
 
 export type PaintSnapshotEntities = {
@@ -449,6 +452,7 @@ export type PaintSnapshotLine = {
   style: PaintSnapshotLineStyle;
   markers?: PaintSnapshotMarkerStyle[];
   tabs?: PaintSnapshotTabStyle[];
+  sourceAnchor?: SourceAnchor;
 };
 
 export type PaintSnapshotPage = {
@@ -487,6 +491,7 @@ type PaintSnapshotCaptureOptions = {
   inTableFragment?: boolean;
   inTableParagraph?: boolean;
   wrapperEl?: HTMLElement;
+  sourceAnchor?: SourceAnchor;
 };
 
 function roundSnapshotMetric(value: number): number | null {
@@ -536,6 +541,52 @@ function compactSnapshotObject<T extends Record<string, unknown>>(input: T): T {
   return out;
 }
 
+function applySourceAnchorDataset(element: HTMLElement, sourceAnchor?: SourceAnchor): void {
+  if (!sourceAnchor) {
+    delete element.dataset.sourceAnchor;
+    delete element.dataset.sourceNodeId;
+    delete element.dataset.sourceOccurrenceId;
+    return;
+  }
+
+  try {
+    element.dataset.sourceAnchor = JSON.stringify(sourceAnchor);
+  } catch {
+    delete element.dataset.sourceAnchor;
+  }
+  if (sourceAnchor.sourceNodeId) {
+    element.dataset.sourceNodeId = sourceAnchor.sourceNodeId;
+  } else {
+    delete element.dataset.sourceNodeId;
+  }
+  if (sourceAnchor.occurrenceId) {
+    element.dataset.sourceOccurrenceId = sourceAnchor.occurrenceId;
+  } else {
+    delete element.dataset.sourceOccurrenceId;
+  }
+}
+
+function readSourceAnchorDataset(element: HTMLElement | null | undefined): SourceAnchor | undefined {
+  if (!element) return undefined;
+  const encoded = element.dataset?.sourceAnchor;
+  if (typeof encoded !== 'string' || encoded.length === 0) return undefined;
+
+  try {
+    const parsed = JSON.parse(encoded) as SourceAnchor;
+    return parsed && typeof parsed === 'object' ? parsed : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function readNearestSourceAnchor(element: HTMLElement | null | undefined): SourceAnchor | undefined {
+  if (!element) return undefined;
+  return (
+    readSourceAnchorDataset(element) ??
+    readSourceAnchorDataset(element.closest(`.${CLASS_NAMES.fragment}`) as HTMLElement | null)
+  );
+}
+
 function shouldIncludeInlineImageSnapshotElement(element: HTMLElement): boolean {
   if (element.classList.contains(DOM_CLASS_NAMES.INLINE_IMAGE_CLIP_WRAPPER)) {
     return true;
@@ -546,6 +597,15 @@ function shouldIncludeInlineImageSnapshotElement(element: HTMLElement): boolean 
   }
 
   return !element.closest(`.${DOM_CLASS_NAMES.INLINE_IMAGE_CLIP_WRAPPER}`);
+}
+
+function resolvedPaintCacheSignature(resolvedItem: ResolvedPaintItem | undefined): string {
+  if (!resolvedItem) return '';
+  return (
+    (resolvedItem as { paintCacheVersion?: string }).paintCacheVersion ??
+    (resolvedItem as { version?: string }).version ??
+    ''
+  );
 }
 
 function collectPaintSnapshotEntitiesFromDomRoot(rootEl: HTMLElement): PaintSnapshotEntities {
@@ -627,6 +687,7 @@ function collectPaintSnapshotEntitiesFromDomRoot(rootEl: HTMLElement): PaintSnap
         kind: 'inline',
         pmStart: readSnapshotDatasetNumber(element.dataset.pmStart),
         pmEnd: readSnapshotDatasetNumber(element.dataset.pmEnd),
+        sourceAnchor: readNearestSourceAnchor(element),
       }) as PaintSnapshotImageEntity,
     );
   }
@@ -646,6 +707,7 @@ function collectPaintSnapshotEntitiesFromDomRoot(rootEl: HTMLElement): PaintSnap
         pmStart: readSnapshotDatasetNumber(element.dataset.pmStart),
         pmEnd: readSnapshotDatasetNumber(element.dataset.pmEnd),
         blockId: element.getAttribute('data-sd-block-id'),
+        sourceAnchor: readNearestSourceAnchor(element),
       }) as PaintSnapshotImageEntity,
     );
   }
@@ -700,6 +762,7 @@ function snapshotMarkerStyleFromElement(markerEl: HTMLElement): PaintSnapshotMar
     fontWeight: readSnapshotStyleValue(style.fontWeight),
     fontStyle: readSnapshotStyleValue(style.fontStyle),
     color: readSnapshotStyleValue(style.color),
+    sourceAnchor: readNearestSourceAnchor(markerEl),
   }) as PaintSnapshotMarkerStyle;
 }
 
@@ -1506,6 +1569,8 @@ export class DomPainter {
         style,
         markers,
         tabs,
+        sourceAnchor:
+          readNearestSourceAnchor(lineEl) ?? readNearestSourceAnchor(options.wrapperEl) ?? options.sourceAnchor,
       }) as PaintSnapshotLine,
     );
 
@@ -1549,6 +1614,7 @@ export class DomPainter {
             style: snapshotLineStyleFromElement(lineEl),
             markers,
             tabs,
+            sourceAnchor: readNearestSourceAnchor(lineEl),
           }) as PaintSnapshotLine,
         );
       }
@@ -2727,7 +2793,7 @@ export class DomPainter {
       const sdtBoundary = sdtBoundaries.get(index);
       const betweenInfo = betweenBorderFlags.get(index);
       const resolvedItem = this.getResolvedFragmentItem(pageIndex, index);
-      const resolvedSig = (resolvedItem as { version?: string } | undefined)?.version ?? '';
+      const resolvedSig = resolvedPaintCacheSignature(resolvedItem);
 
       if (current) {
         existing.delete(key);
@@ -2892,7 +2958,7 @@ export class DomPainter {
         resolvedItem,
       );
       el.appendChild(fragmentEl);
-      const initSig = (resolvedItem as { version?: string } | undefined)?.version ?? '';
+      const initSig = resolvedPaintCacheSignature(resolvedItem);
       return {
         key: fragmentKey(fragment),
         signature: initSig,
@@ -3164,6 +3230,10 @@ export class DomPainter {
               const markerEl = this.doc!.createElement('span');
               markerEl.classList.add('superdoc-paragraph-marker');
               markerEl.textContent = resolvedMarker.text;
+              applySourceAnchorDataset(
+                markerEl,
+                resolvedMarker.sourceAnchor ?? resolvedItem?.sourceAnchor ?? fragment.sourceAnchor,
+              );
               markerEl.style.pointerEvents = 'none';
 
               markerContainer.style.position = 'relative';
@@ -3211,6 +3281,7 @@ export class DomPainter {
           this.capturePaintSnapshotLine(lineEl, context, {
             inTableFragment: false,
             inTableParagraph: false,
+            sourceAnchor: resolvedItem?.sourceAnchor ?? fragment.sourceAnchor,
           });
           fragmentEl.appendChild(lineEl);
         });
@@ -3377,6 +3448,10 @@ export class DomPainter {
               const markerEl = this.doc!.createElement('span');
               markerEl.classList.add('superdoc-paragraph-marker');
               markerEl.textContent = marker.markerText ?? '';
+              applySourceAnchorDataset(
+                markerEl,
+                block.sourceAnchor ?? resolvedItem?.sourceAnchor ?? fragment.sourceAnchor,
+              );
               markerEl.style.pointerEvents = 'none';
 
               const markerJustification = marker.justification ?? 'left';
@@ -3425,6 +3500,7 @@ export class DomPainter {
           this.capturePaintSnapshotLine(lineEl, context, {
             inTableFragment: false,
             inTableParagraph: false,
+            sourceAnchor: resolvedItem?.sourceAnchor ?? fragment.sourceAnchor,
           });
           fragmentEl.appendChild(lineEl);
         });
@@ -3564,6 +3640,7 @@ export class DomPainter {
         fragmentEl.style.top = `${fragment.y}px`;
         fragmentEl.style.width = `${fragment.markerWidth + fragment.width}px`;
         fragmentEl.dataset.blockId = fragment.blockId;
+        applySourceAnchorDataset(fragmentEl, fragment.sourceAnchor);
       }
       fragmentEl.dataset.itemId = fragment.itemId;
 
@@ -3588,6 +3665,10 @@ export class DomPainter {
 
       const markerEl = this.doc.createElement('span');
       markerEl.classList.add('superdoc-list-marker');
+      applySourceAnchorDataset(
+        markerEl,
+        item.marker.sourceAnchor ?? item.sourceAnchor ?? resolvedItem?.sourceAnchor ?? fragment.sourceAnchor,
+      );
 
       // Track B: Use marker styling from wordLayout if available
       const wordLayout: MinimalWordLayout | undefined = item.paragraph.attrs?.wordLayout as
@@ -3668,6 +3749,7 @@ export class DomPainter {
         this.capturePaintSnapshotLine(lineEl, context, {
           inTableFragment: false,
           inTableParagraph: false,
+          sourceAnchor: resolvedItem?.sourceAnchor ?? fragment.sourceAnchor,
         });
         contentEl.appendChild(lineEl);
       });
@@ -6788,6 +6870,7 @@ export class DomPainter {
     el.style.width = `${fragment.width}px`;
     el.dataset.blockId = fragment.blockId;
     el.dataset.layoutEpoch = String(this.layoutEpoch);
+    applySourceAnchorDataset(el, fragment.sourceAnchor);
 
     // Footnote content is read-only: prevent cursor placement and typing (blockId prefix from FootnotesBuilder)
     if (typeof fragment.blockId === 'string' && fragment.blockId.startsWith('footnote-')) {
@@ -6943,6 +7026,7 @@ export class DomPainter {
     el.style.width = `${item.width}px`;
     el.dataset.blockId = item.blockId;
     el.dataset.layoutEpoch = String(this.layoutEpoch);
+    applySourceAnchorDataset(el, item.sourceAnchor ?? fragment.sourceAnchor);
     this.applyFragmentWrapperZIndex(el, fragment, item.zIndex);
 
     if (item.fragmentKind === 'image' || item.fragmentKind === 'drawing' || item.fragmentKind === 'table') {

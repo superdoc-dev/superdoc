@@ -2265,6 +2265,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
           behindDoc: imgBlock.anchor?.behindDoc === true,
           zIndex: getFragmentZIndex(imgBlock),
           metadata,
+          sourceAnchor: imgBlock.sourceAnchor,
         };
 
         const attrs = imgBlock.attrs as Record<string, unknown> | undefined;
@@ -2313,6 +2314,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
           behindDoc: drawBlock.anchor?.behindDoc === true,
           zIndex: getFragmentZIndex(drawBlock),
           drawingContentId: drawBlock.drawingContentId,
+          sourceAnchor: drawBlock.sourceAnchor,
         };
 
         const attrs = drawBlock.attrs as Record<string, unknown> | undefined;
@@ -3086,7 +3088,7 @@ export { resolvePageNumberTokens } from './resolvePageTokens.js';
 export type { NumberingContext, ResolvePageTokensResult } from './resolvePageTokens.js';
 
 // Table utilities consumed by layout-bridge and cross-package sync tests
-export { getCellLines, getEmbeddedRowLines } from './layout-table.js';
+export { getCellLines, getEmbeddedRowLines, resolveTableFrame, resolveRenderedTableWidth } from './layout-table.js';
 export { describeCellRenderBlocks, computeCellSliceContentHeight } from './table-cell-slice.js';
 
 export { SINGLE_COLUMN_DEFAULT } from './section-breaks.js';

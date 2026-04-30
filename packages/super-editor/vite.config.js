@@ -113,6 +113,17 @@ export default defineConfig(({ mode }) => {
       rollupOptions: {
         external: [
           'react',
+          // Externalize the JSX runtime so the ui-react entry (the
+          // only TSX in this build) does not inline React 19's
+          // jsx-runtime bytes. The published `superdoc/ui/react`
+          // bundle resolves @superdoc/super-editor from source via
+          // aliases, so end users hit superdoc's externalization,
+          // not this dist directly. Externalizing here keeps the
+          // intermediate bundle compatible if it's ever consumed
+          // through pnpm-link / examples that use the dist path,
+          // which would otherwise feed React-17/18 hosts a runtime
+          // their renderer can't read.
+          'react/jsx-runtime',
           'vue',
           'yjs',
           'y-protocols',
@@ -122,6 +133,7 @@ export default defineConfig(({ mode }) => {
           'headless-toolbar-vue': 'src/headless-toolbar/vue.ts',
           'super-editor': 'src/index.ts',
           'ui': 'src/ui/index.ts',
+          'ui-react': 'src/ui/react/index.ts',
           'types': 'src/types.ts',
           'editor': '@core/Editor',
           'converter': '@core/super-converter/SuperConverter',

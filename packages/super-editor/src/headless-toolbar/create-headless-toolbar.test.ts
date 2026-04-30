@@ -473,10 +473,10 @@ describe('createHeadlessToolbar', () => {
   });
 
   it('executes bullet-list through the registry direct command path', () => {
-    const toggleBulletList = vi.fn(() => true);
+    const toggleBulletListStyle = vi.fn(() => true);
     const superdoc = createActiveEditorHost({
       commands: {
-        toggleBulletList,
+        toggleBulletListStyle,
       },
       state: createSelectionState({
         empty: true,
@@ -495,7 +495,33 @@ describe('createHeadlessToolbar', () => {
     });
 
     expect(controller.execute?.('bullet-list')).toBe(true);
-    expect(toggleBulletList).toHaveBeenCalledTimes(1);
+    expect(toggleBulletListStyle).toHaveBeenCalledTimes(1);
+
+    controller.destroy();
+  });
+
+  it('forwards a bullet-list style argument into toggleBulletListStyle', () => {
+    const toggleBulletListStyle = vi.fn(() => true);
+    const superdoc = createActiveEditorHost({
+      commands: { toggleBulletListStyle },
+      state: createSelectionState({
+        empty: true,
+        $from: {
+          depth: 1,
+          node: vi.fn(() => ({ type: { name: 'doc' } })),
+          before: vi.fn(() => 0),
+          start: vi.fn(() => 0),
+        },
+      }),
+    });
+
+    const controller = createHeadlessToolbar({
+      superdoc,
+      commands: ['bullet-list'],
+    });
+
+    expect(controller.execute?.('bullet-list', 'circle')).toBe(true);
+    expect(toggleBulletListStyle).toHaveBeenCalledWith('circle');
 
     controller.destroy();
   });

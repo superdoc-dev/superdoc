@@ -28,6 +28,8 @@ export type {
   TextTarget,
   TextSegment,
   EntityAddress,
+  BlocksListResult,
+  BookmarkInfo,
 } from '@superdoc/document-api';
 
 // Selection handle types

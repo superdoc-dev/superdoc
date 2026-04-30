@@ -9,6 +9,7 @@ import type {
   TableFragment,
   ListItemFragment,
   DrawingFragment,
+  SourceAnchor,
 } from '@superdoc/contracts';
 
 describe('resolveLayout', () => {
@@ -3007,6 +3008,58 @@ describe('resolveLayout', () => {
       const ver1 = (result1.pages[0].items[0] as any).version;
       const ver2 = (result2.pages[0].items[0] as any).version;
       expect(ver1).toBe(ver2);
+    });
+
+    it('keeps visual version stable but changes paint cache version when source evidence changes', () => {
+      const paraFragment: ParaFragment = {
+        kind: 'para',
+        blockId: 'p1',
+        fromLine: 0,
+        toLine: 1,
+        x: 72,
+        y: 0,
+        width: 468,
+      };
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [{ number: 1, fragments: [paraFragment] }],
+      };
+      const measures: Measure[] = [{ kind: 'paragraph', lines: [{ lineHeight: 20 }] } as any];
+      const anchorA: SourceAnchor = {
+        sourceNodeId: 'srcnode_a',
+        occurrenceId: 'occ_a',
+        sourceRef: { partUri: 'word/document.xml', xpathLikePath: '/w:document[1]/w:body[1]/w:p[1]' },
+      };
+      const anchorB: SourceAnchor = {
+        sourceNodeId: 'srcnode_b',
+        occurrenceId: 'occ_b',
+        sourceRef: { partUri: 'word/document.xml', xpathLikePath: '/w:document[1]/w:body[1]/w:p[1]' },
+      };
+      const blocks1: FlowBlock[] = [
+        {
+          kind: 'paragraph',
+          id: 'p1',
+          sourceAnchor: anchorA,
+          runs: [{ text: 'hello', fontFamily: 'Arial', fontSize: 12 }],
+        } as any,
+      ];
+      const blocks2: FlowBlock[] = [
+        {
+          kind: 'paragraph',
+          id: 'p1',
+          sourceAnchor: anchorB,
+          runs: [{ text: 'hello', fontFamily: 'Arial', fontSize: 12 }],
+        } as any,
+      ];
+
+      const result1 = resolveLayout({ layout, flowMode: 'paginated', blocks: blocks1, measures });
+      const result2 = resolveLayout({ layout, flowMode: 'paginated', blocks: blocks2, measures });
+      const item1 = result1.pages[0].items[0] as any;
+      const item2 = result2.pages[0].items[0] as any;
+
+      expect(item1.version).toBe(item2.version);
+      expect(item1.evidenceVersion).not.toBe(item2.evidenceVersion);
+      expect(item1.paintCacheVersion).not.toBe(item2.paintCacheVersion);
     });
 
     it('produces different versions when fragment line range changes', () => {

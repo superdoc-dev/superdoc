@@ -716,6 +716,61 @@ describe('comments-wrappers: addCommentHandler multi-segment targets', () => {
     });
   });
 
+  it('treats a TextTarget with a stray blockId but no range as TextTarget, not TextAddress', () => {
+    // The public validator accepts this as a TextTarget because the
+    // segments array is valid. A stray blockId alone is not enough to form
+    // a TextAddress, so the adapter must not fall through to the
+    // single-block path and dereference target.range.
+    const editor = makeWriteEditor();
+    vi.mocked(resolveTextTarget).mockReturnValue({ from: 11, to: 17 });
+    vi.mocked(executeDomainCommand).mockReturnValue({
+      steps: [{ effect: 'changed' }],
+    } as unknown as ReturnType<typeof executeDomainCommand>);
+
+    const wrapper = createCommentsWrapper(editor);
+    const target = {
+      kind: 'text',
+      blockId: 'partial-address-only',
+      segments: [{ blockId: 'pZ', range: { start: 2, end: 8 } }],
+    } as unknown as Parameters<typeof wrapper.add>[0]['target'];
+
+    expect(() => wrapper.add({ text: 'comment', target })).not.toThrow();
+    expect(resolveTextTarget).toHaveBeenCalledTimes(1);
+    expect(resolveTextTarget).toHaveBeenCalledWith(editor, {
+      kind: 'text',
+      blockId: 'pZ',
+      range: { start: 2, end: 8 },
+    });
+  });
+
+  it('treats a TextTarget with a stray range but no blockId as TextTarget, not TextAddress', () => {
+    // Same partial-hybrid class as above: this is valid as a TextTarget,
+    // but not as a TextAddress. The adapter should resolve the real
+    // segment instead of manufacturing a segment from the stray range.
+    const editor = makeWriteEditor();
+    vi.mocked(resolveTextTarget).mockReturnValue({ from: 11, to: 17 });
+    vi.mocked(executeDomainCommand).mockReturnValue({
+      steps: [{ effect: 'changed' }],
+    } as unknown as ReturnType<typeof executeDomainCommand>);
+
+    const wrapper = createCommentsWrapper(editor);
+    const target = {
+      kind: 'text',
+      range: { start: 99, end: 100 },
+      segments: [{ blockId: 'pZ', range: { start: 2, end: 8 } }],
+    } as unknown as Parameters<typeof wrapper.add>[0]['target'];
+
+    const receipt = wrapper.add({ text: 'comment', target });
+
+    expect(receipt.success).toBe(true);
+    expect(resolveTextTarget).toHaveBeenCalledTimes(1);
+    expect(resolveTextTarget).toHaveBeenCalledWith(editor, {
+      kind: 'text',
+      blockId: 'pZ',
+      range: { start: 2, end: 8 },
+    });
+  });
+
   it('rejects a TextTarget with collapsed segments in different blocks', () => {
     // Regression: two collapsed segments in different blocks would slip
     // both the gap check and the spanning-range collapse check (because

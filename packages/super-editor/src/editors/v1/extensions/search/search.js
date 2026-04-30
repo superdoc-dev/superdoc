@@ -2,7 +2,7 @@
 
 import { Extension } from '@core/Extension.js';
 import { PositionTracker } from '@core/PositionTracker.js';
-import { search, SearchQuery, setSearchState, getMatchHighlights } from './prosemirror-search-patched.js';
+import { search, getMatchHighlights } from './prosemirror-search-patched.js';
 import { Plugin, PluginKey, TextSelection } from 'prosemirror-state';
 import { Decoration, DecorationSet } from 'prosemirror-view';
 import { Fragment, Slice } from 'prosemirror-model';
@@ -27,6 +27,9 @@ export const getCustomSearchDecorations = (state) => {
 
 const isRegExp = (value) => Object.prototype.toString.call(value) === '[object RegExp]';
 const SEARCH_POSITION_TRACKER_TYPE = 'search-match';
+const DEFAULT_SEARCH_MODEL = 'raw';
+
+const normalizeSearchModel = (value) => (value === 'visible' ? 'visible' : DEFAULT_SEARCH_MODEL);
 
 /**
  * Convert raw SearchIndex matches into SearchMatch objects with document ranges
@@ -211,6 +214,8 @@ const getPositionTracker = (editor) => {
  *   When false, matches are tracked without visual styling, useful for programmatic search without UI changes.
  * @property {number} [maxMatches=1000] - Maximum number of matches to return.
  * @property {boolean} [caseSensitive=false] - Whether the search should be case-sensitive.
+ * @property {'raw'|'visible'} [searchModel='raw'] - Internal text model selector used by search infrastructure.
+ *   `visible` excludes pending tracked deletions from the searchable model while preserving additions.
  */
 
 /**
@@ -263,6 +268,12 @@ export const Search = Extension.create({
        * Whether the current search ignores diacritics
        */
       ignoreDiacritics: false,
+      /**
+       * @private
+       * @type {'raw'|'visible'}
+       * Internal search text model for future behavior switches.
+       */
+      searchModel: DEFAULT_SEARCH_MODEL,
     };
   },
 
@@ -288,7 +299,9 @@ export const Search = Extension.create({
         // when the user edits the document to contain the search term.
         if (storage?.query) {
           // Rebuild the index against the new doc
-          storage.searchIndex.ensureValid(newState.doc);
+          storage.searchIndex.ensureValid(newState.doc, {
+            searchModel: storage.searchModel ?? DEFAULT_SEARCH_MODEL,
+          });
 
           const searchFn = storage.ignoreDiacritics
             ? (q, opts) => storage.searchIndex.searchIgnoringDiacritics(q, opts)
@@ -296,6 +309,7 @@ export const Search = Extension.create({
 
           const indexMatches = searchFn(storage.query, {
             caseSensitive: storage.caseSensitive,
+            searchModel: storage.searchModel ?? DEFAULT_SEARCH_MODEL,
           });
 
           const refreshed = mapIndexMatchesToDocMatches({
@@ -468,7 +482,7 @@ export const Search = Extension.create({
       search:
         (patternInput, options = {}) =>
         /** @returns {SearchMatch[]} */
-        ({ state, dispatch, editor }) => {
+        ({ state, editor }) => {
           // Validate options parameter - must be an object if provided
           if (options != null && (typeof options !== 'object' || Array.isArray(options))) {
             throw new TypeError('Search options must be an object');
@@ -477,19 +491,17 @@ export const Search = Extension.create({
           // Extract options
           const highlight = typeof options?.highlight === 'boolean' ? options.highlight : true;
           const maxMatches = typeof options?.maxMatches === 'number' ? options.maxMatches : 1000;
+          const searchModel = normalizeSearchModel(options?.searchModel);
 
           // Determine if this is a regex search
-          let isRegexSearch = false;
           let caseSensitive = false;
           let searchPattern = patternInput;
 
           if (isRegExp(patternInput)) {
-            isRegexSearch = true;
             caseSensitive = !patternInput.flags.includes('i');
             searchPattern = patternInput;
           } else if (typeof patternInput === 'string' && /^\/(.+)\/([gimsuy]*)$/.test(patternInput)) {
             const [, body, flags] = patternInput.match(/^\/(.+)\/([gimsuy]*)$/);
-            isRegexSearch = true;
             caseSensitive = !flags.includes('i');
             searchPattern = new RegExp(body, flags.includes('g') ? flags : flags + 'g');
           } else {
@@ -503,12 +515,14 @@ export const Search = Extension.create({
 
           // Ensure search index is valid
           const searchIndex = this.storage.searchIndex;
-          searchIndex.ensureValid(state.doc);
+          searchIndex.ensureValid(state.doc, { searchModel });
+          this.storage.searchModel = searchModel;
 
           // Search using the index
           const indexMatches = searchIndex.search(searchPattern, {
             caseSensitive,
             maxMatches,
+            searchModel,
           });
 
           // Map matches to document positions
@@ -591,6 +605,7 @@ export const Search = Extension.create({
        * @param {boolean} [options.caseSensitive=false] - Case-sensitive search
        * @param {boolean} [options.ignoreDiacritics=false] - Ignore diacritics when matching
        * @param {boolean} [options.highlight=true] - Apply visual highlighting
+       * @param {'raw'|'visible'} [options.searchModel='raw'] - Internal text model selector.
        * @returns {{ matches: SearchMatch[], activeMatchIndex: number }}
        */
       setSearchSession:
@@ -599,11 +614,13 @@ export const Search = Extension.create({
           const caseSensitive = options.caseSensitive ?? false;
           const ignoreDiacritics = options.ignoreDiacritics ?? false;
           const highlight = options.highlight ?? true;
+          const searchModel = normalizeSearchModel(options.searchModel);
 
           // Store session state
           this.storage.query = query;
           this.storage.caseSensitive = caseSensitive;
           this.storage.ignoreDiacritics = ignoreDiacritics;
+          this.storage.searchModel = searchModel;
 
           // Clear existing position trackers
           const positionTracker = getPositionTracker(editor);
@@ -618,12 +635,12 @@ export const Search = Extension.create({
 
           // Build/validate search index
           const searchIndex = this.storage.searchIndex;
-          searchIndex.ensureValid(state.doc);
+          searchIndex.ensureValid(state.doc, { searchModel });
 
           // Search with diacritic support
           const indexMatches = ignoreDiacritics
-            ? searchIndex.searchIgnoringDiacritics(query, { caseSensitive })
-            : searchIndex.search(query, { caseSensitive });
+            ? searchIndex.searchIgnoringDiacritics(query, { caseSensitive, searchModel })
+            : searchIndex.search(query, { caseSensitive, searchModel });
 
           // Map matches to document positions
           const resultMatches = mapIndexMatchesToDocMatches({
@@ -656,6 +673,7 @@ export const Search = Extension.create({
           this.storage.query = '';
           this.storage.caseSensitive = false;
           this.storage.ignoreDiacritics = false;
+          this.storage.searchModel = DEFAULT_SEARCH_MODEL;
 
           return true;
         },
@@ -667,7 +685,7 @@ export const Search = Extension.create({
        */
       nextSearchMatch:
         () =>
-        ({ state, editor }) => {
+        ({ editor }) => {
           const matches = this.storage.searchResults;
           if (!matches || matches.length === 0) {
             return { activeMatchIndex: -1, match: null };
@@ -690,7 +708,7 @@ export const Search = Extension.create({
        */
       previousSearchMatch:
         () =>
-        ({ state, editor }) => {
+        ({ editor }) => {
           const matches = this.storage.searchResults;
           if (!matches || matches.length === 0) {
             return { activeMatchIndex: -1, match: null };
@@ -715,7 +733,7 @@ export const Search = Extension.create({
        */
       replaceSearchMatch:
         (replacement) =>
-        ({ state, dispatch, editor, commands }) => {
+        ({ state, dispatch, commands }) => {
           const matches = this.storage.searchResults;
           const activeIdx = this.storage.activeMatchIndex;
 
@@ -744,6 +762,7 @@ export const Search = Extension.create({
             caseSensitive: this.storage.caseSensitive,
             ignoreDiacritics: this.storage.ignoreDiacritics,
             highlight: this.storage.highlightEnabled,
+            searchModel: this.storage.searchModel,
           });
 
           // Clamp activeMatchIndex to new match count and scroll to the

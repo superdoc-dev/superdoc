@@ -184,7 +184,10 @@ const scenarios = [
     files: ['src/prosemirror-coexistence.ts'],
     mustPass: true,
   },
-  // skipLibCheck=false — informational only (pre-existing dep errors)
+  // skipLibCheck=false — informational. Existing dep noise from
+  // node_modules (~30 errors at last count) is expected here; the
+  // `allowNodeModuleErrors` flag opts this scenario into the DEPS
+  // classification rather than INFO so the failure mode stays explicit.
   {
     name: 'bundler / skipLibCheck=false',
     module: 'ESNext',
@@ -192,7 +195,8 @@ const scenarios = [
     skipLibCheck: false,
     strict: true,
     files: ['src/imports-main.ts'],
-    mustPass: false, // may fail from dep errors in node_modules
+    mustPass: false,
+    allowNodeModuleErrors: true,
   },
   // SD-2842: every public type re-exported via `superdoc` must resolve
   // to a real interface, not collapse to `any` and not be missing.
@@ -313,29 +317,37 @@ for (const scenario of scenarios) {
     icon = '✓';
     status = 'PASS';
     passed++;
-  } else if (srcErrors === 0) {
-    icon = '⚠';
-    status = `DEPS (nm:${nmErrors})`;
-    warnings++;
   } else if (!scenario.mustPass) {
-    // Scenario is informational. Src-level errors are the regression target,
-    // not a CI failure today; report as a warning so the matrix can run green
-    // until the implementation work flips the scenario to mustPass: true.
+    // Informational scenario: any kind of error (src-level or in
+    // node_modules) is reported as a warning. The `allowNodeModuleErrors`
+    // flag is the explicit opt-in for scenarios where dep noise is the
+    // expected outcome (e.g. the existing skipLibCheck=false probe whose
+    // job is to surface 30+ pre-existing errors in node_modules).
     icon = '⚠';
-    status = `INFO (src:${srcErrors} nm:${nmErrors})`;
+    if (scenario.allowNodeModuleErrors && srcErrors === 0) {
+      status = `DEPS (nm:${nmErrors})`;
+    } else {
+      status = `INFO (src:${srcErrors} nm:${nmErrors})`;
+    }
     warnings++;
   } else {
+    // Required scenario failed. Any error class fails CI. A broken
+    // published declaration surfaces under `node_modules/superdoc/...`
+    // even with `skipLibCheck: true` (parse errors are not skipped by
+    // lib-check), so a `mustPass: true` scenario with all errors in
+    // node_modules is exactly the regression class this gate exists to
+    // catch.
     icon = '✗';
     status = `FAIL (src:${srcErrors} nm:${nmErrors})`;
     failed++;
     console.log(`  ${icon} ${scenario.name}: ${status}`);
-    console.log(
-      output
-        .split('\n')
-        .filter((l) => l.startsWith('src/'))
-        .map((l) => `    ${l}`)
-        .join('\n'),
-    );
+    const errorLines = output
+      .split('\n')
+      .filter((l) => l.startsWith('src/') || l.startsWith('node_modules/'))
+      .slice(0, 20);
+    if (errorLines.length > 0) {
+      console.log(errorLines.map((l) => `    ${l}`).join('\n'));
+    }
     continue;
   }
 

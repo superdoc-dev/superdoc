@@ -2613,25 +2613,6 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
   };
 }
 
-/**
- * Validates and extracts a numeric value from a table width attribute.
- *
- * Performs runtime validation to ensure the value is a valid, finite number
- * that can be used in calculations. This guards against NaN, Infinity, and
- * invalid numeric values that could break layout calculations.
- *
- * @param attr - Table width attribute object (potentially unsafe)
- * @returns Valid numeric value or undefined if validation fails
- *
- * @example
- * ```typescript
- * validateTableWidthValue({ width: 2500, type: 'pct' }) // Returns: 2500
- * validateTableWidthValue({ value: 300, type: 'px' }) // Returns: 300
- * validateTableWidthValue({ width: NaN, type: 'pct' }) // Returns: undefined
- * validateTableWidthValue({ width: -100, type: 'pct' }) // Returns: undefined
- * validateTableWidthValue({}) // Returns: undefined
- * ```
- */
 async function measureTableBlock(block: TableBlock, constraints: MeasureConstraints): Promise<TableMeasure> {
   const maxWidth = typeof constraints === 'number' ? constraints : constraints.maxWidth;
   const workingInput = buildAutoFitWorkingGridInput(block, { maxWidth });

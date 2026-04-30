@@ -1400,13 +1400,23 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
           }
         }
 
-        // Step 3: Fall back to current section's 'default'
-        if (!headerRef && variantType !== 'default' && activeSectionRefs?.headerRefs?.default) {
-          headerRef = activeSectionRefs.headerRefs.default;
+        // Step 3: Fall back to current section's default only when that ref is
+        // the selected OOXML slot. With even/odd headers enabled, `default`
+        // represents the odd-page header, not a replacement for a missing even
+        // header.
+        const defaultHeaderRef = activeSectionRefs?.headerRefs?.default;
+        const defaultFooterRef = activeSectionRefs?.footerRefs?.default;
+        const shouldUseDefaultHeaderRef =
+          variantType !== 'default' && defaultHeaderRef && (!alternateHeaders || variantType === 'odd');
+        const shouldUseDefaultFooterRef =
+          variantType !== 'default' && defaultFooterRef && (!alternateHeaders || variantType === 'odd');
+
+        if (!headerRef && shouldUseDefaultHeaderRef) {
+          headerRef = defaultHeaderRef;
           effectiveVariantType = 'default';
         }
-        if (!footerRef && variantType !== 'default' && activeSectionRefs?.footerRefs?.default) {
-          footerRef = activeSectionRefs.footerRefs.default;
+        if (!footerRef && shouldUseDefaultFooterRef) {
+          footerRef = defaultFooterRef;
         }
 
         // Calculate the actual header/footer heights for this page's variant
@@ -2255,6 +2265,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
           behindDoc: imgBlock.anchor?.behindDoc === true,
           zIndex: getFragmentZIndex(imgBlock),
           metadata,
+          sourceAnchor: imgBlock.sourceAnchor,
         };
 
         const attrs = imgBlock.attrs as Record<string, unknown> | undefined;
@@ -2303,6 +2314,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
           behindDoc: drawBlock.anchor?.behindDoc === true,
           zIndex: getFragmentZIndex(drawBlock),
           drawingContentId: drawBlock.drawingContentId,
+          sourceAnchor: drawBlock.sourceAnchor,
         };
 
         const attrs = drawBlock.attrs as Record<string, unknown> | undefined;
@@ -3076,7 +3088,7 @@ export { resolvePageNumberTokens } from './resolvePageTokens.js';
 export type { NumberingContext, ResolvePageTokensResult } from './resolvePageTokens.js';
 
 // Table utilities consumed by layout-bridge and cross-package sync tests
-export { getCellLines, getEmbeddedRowLines } from './layout-table.js';
+export { getCellLines, getEmbeddedRowLines, resolveTableFrame, resolveRenderedTableWidth } from './layout-table.js';
 export { describeCellRenderBlocks, computeCellSliceContentHeight } from './table-cell-slice.js';
 
 export { SINGLE_COLUMN_DEFAULT } from './section-breaks.js';

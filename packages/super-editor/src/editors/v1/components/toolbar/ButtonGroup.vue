@@ -123,6 +123,21 @@ const handleToolbarButtonTextSubmit = (item, argument) => {
   emit('command', { item, argument });
 };
 
+const handleSplitButtonMainClick = (item) => {
+  if (item.disabled.value) return;
+
+  closeDropdowns();
+
+  const splitCommand = item.splitButtonCommand;
+  const dropdownCommand = item.command;
+  const targetCommand = splitCommand || dropdownCommand;
+  if (!targetCommand) return;
+
+  const commandItem = { ...item, command: targetCommand };
+  emit('item-clicked');
+  emit('command', { item: commandItem, argument: null });
+};
+
 const closeDropdowns = () => {
   const toolbarItems = proxy?.$toolbar?.toolbarItems || [];
   const overflowItems = proxy?.$toolbar?.overflowItems || [];
@@ -359,6 +374,7 @@ onBeforeUnmount(() => {
                 :toolbar-item="item"
                 :disabled="item.disabled.value"
                 @textSubmit="handleToolbarButtonTextSubmit(item, $event)"
+                @mainClick="handleSplitButtonMainClick(item)"
               />
             </template>
             <div>

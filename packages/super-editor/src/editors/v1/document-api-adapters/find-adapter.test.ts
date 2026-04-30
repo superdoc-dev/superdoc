@@ -1,7 +1,7 @@
 import type { Node as ProseMirrorNode } from 'prosemirror-model';
 import type { Editor } from '../core/Editor.js';
 import type { Query } from '@superdoc/document-api';
-import { findLegacyAdapter } from './find-adapter.js';
+import { findLegacyAdapter, sdFindAdapter } from './find-adapter.js';
 
 // ---------------------------------------------------------------------------
 // Helpers — lightweight ProseMirror-like stubs
@@ -703,6 +703,22 @@ describe('findLegacyAdapter — text selectors', () => {
     expect(capturedOptions!.maxMatches).toBe(Infinity);
   });
 
+  it('uses visible search model for text selector queries', () => {
+    let capturedOptions: Record<string, unknown> | undefined;
+    const doc = buildDoc({ typeName: 'paragraph', attrs: { sdBlockId: 'p1' }, nodeSize: 50, offset: 0 });
+    const search: SearchFn = (_pattern, options) => {
+      capturedOptions = options as Record<string, unknown>;
+      return [];
+    };
+    const editor = makeEditor(doc, search);
+    const query: Query = { select: { type: 'text', pattern: 'tracked' } };
+
+    findLegacyAdapter(editor, query);
+
+    expect(capturedOptions).toBeDefined();
+    expect(capturedOptions!.searchModel).toBe('visible');
+  });
+
   it('throws when editor has no search command', () => {
     const doc = buildDoc({ typeName: 'paragraph', attrs: { sdBlockId: 'p1' }, nodeSize: 50, offset: 0 });
     const editor = makeEditor(doc); // no search command
@@ -891,6 +907,51 @@ describe('findLegacyAdapter — text selectors', () => {
 
     expect(result.total).toBe(1);
     expect(result.items[0].address.nodeId).toBe('p1');
+  });
+});
+
+describe('sdFindAdapter — tracked changes text search defaults', () => {
+  it('uses visible model semantics for delete/add/collapsed queries', () => {
+    const doc = buildDoc('beforeDELETEafter ADD', {
+      typeName: 'paragraph',
+      attrs: { sdBlockId: 'p1' },
+      nodeSize: 50,
+      offset: 0,
+    });
+
+    const search: SearchFn = (pattern, options) => {
+      const source = pattern instanceof RegExp ? pattern.source : String(pattern);
+      const searchModel = (options as { searchModel?: string } | undefined)?.searchModel ?? 'raw';
+      const isVisible = searchModel === 'visible';
+
+      if (source === 'DELETE') {
+        return isVisible ? [] : [{ from: 7, to: 13, text: 'DELETE' }];
+      }
+      if (source === 'ADD') {
+        return [{ from: 18, to: 21, text: 'ADD' }];
+      }
+      if (source === 'beforeafter') {
+        return isVisible ? [] : [{ from: 0, to: 11, text: 'beforeafter' }];
+      }
+
+      return [];
+    };
+
+    const editor = makeEditor(doc, search);
+
+    const deletedOnly = sdFindAdapter(editor, { select: { type: 'text', pattern: 'DELETE' } });
+    const addedOnly = sdFindAdapter(editor, { select: { type: 'text', pattern: 'ADD' } });
+    const collapsed = sdFindAdapter(editor, { select: { type: 'text', pattern: 'beforeafter' } });
+
+    expect(deletedOnly.total).toBe(0);
+    expect(deletedOnly.items).toHaveLength(0);
+
+    expect(addedOnly.total).toBe(1);
+    expect(addedOnly.items).toHaveLength(1);
+    expect(addedOnly.items[0].address).toEqual({ kind: 'block', nodeType: 'paragraph', nodeId: 'p1' });
+
+    expect(collapsed.total).toBe(0);
+    expect(collapsed.items).toHaveLength(0);
   });
 });
 

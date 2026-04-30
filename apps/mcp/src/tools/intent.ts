@@ -1,7 +1,7 @@
 /**
  * Register intent-based tools from the generated catalog.
  *
- * Reads catalog.json and registers each intent tool with the MCP server.
+ * Registers each intent tool from the MCP-local generated catalog.
  * Tool dispatch is handled by the generated dispatchIntentTool function,
  * routing through DocumentApi.invoke().
  */
@@ -10,7 +10,8 @@ import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { SessionManager } from '../session-manager.js';
 import type { DocumentApi, DynamicInvokeRequest } from '@superdoc/document-api';
-import { dispatchIntentTool, getToolCatalog } from '@superdoc-dev/sdk';
+import { MCP_TOOL_CATALOG } from '../generated/catalog.js';
+import { dispatchIntentTool } from '../generated/intent-dispatch.generated.js';
 
 // ---------------------------------------------------------------------------
 // Types for the generated catalog
@@ -116,8 +117,8 @@ function executeOperation(api: DocumentApi, operationId: string, input: Record<s
 // Register all intent tools
 // ---------------------------------------------------------------------------
 
-export async function registerIntentTools(server: McpServer, sessions: SessionManager): Promise<void> {
-  const catalog = (await getToolCatalog()) as unknown as Catalog;
+export function registerIntentTools(server: McpServer, sessions: SessionManager): void {
+  const catalog = MCP_TOOL_CATALOG as unknown as Catalog;
 
   for (const tool of catalog.tools) {
     const zodSchema = buildZodSchema(tool);

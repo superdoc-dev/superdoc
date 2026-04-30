@@ -233,18 +233,23 @@ export function computeAutoFitColumnWidths(input: AutoFitInput): AutoFitResult {
   const postTriggerGrowableColumns =
     triggerCells.length > 0 ? collectNonProtectedColumns(triggerCells, gridColumnCount) : undefined;
   let resolvedWidths = currentWidths.slice();
-  let targetTableWidth = sanitizeOptionalWidth(workingInput.preferredTableWidth) ?? fixedLayout.totalWidth;
+  const preferredTableWidth = sanitizeOptionalWidth(workingInput.preferredTableWidth);
+  let targetTableWidth = preferredTableWidth ?? fixedLayout.totalWidth;
+  const canOverflowAvailableWidth = preferredTableWidth != null || hasCompleteAuthoredGrid(workingInput);
+  const maxResolvedTableWidth = canOverflowAvailableWidth
+    ? Math.max(workingInput.maxTableWidth, targetTableWidth)
+    : workingInput.maxTableWidth;
   const shouldPreservePreferredGrid =
     workingInput.preserveAutoGrid === true || workingInput.preserveExplicitAutoGrid === true;
 
   if (triggerCells.length > 0) {
     resolvedWidths = raiseToMinimums(resolvedWidths, minBounds);
     resolvedWidths = expandTriggersWithinCurrentTable(resolvedWidths, triggerCells, minBounds, maxBounds);
-    resolvedWidths = expandTriggersByGrowingTable(resolvedWidths, triggerCells, maxBounds, workingInput.maxTableWidth);
+    resolvedWidths = expandTriggersByGrowingTable(resolvedWidths, triggerCells, maxBounds, maxResolvedTableWidth);
     targetTableWidth = Math.max(targetTableWidth, sumWidths(resolvedWidths));
-    targetTableWidth = Math.min(targetTableWidth, workingInput.maxTableWidth);
+    targetTableWidth = Math.min(targetTableWidth, maxResolvedTableWidth);
   } else {
-    targetTableWidth = Math.min(targetTableWidth, workingInput.maxTableWidth);
+    targetTableWidth = Math.min(targetTableWidth, maxResolvedTableWidth);
     if (!shouldPreservePreferredGrid) {
       resolvedWidths = redistributeTowardMaximumsWithinCurrentTable(resolvedWidths, minBounds, maxBounds);
       resolvedWidths = redistributeTowardContentWeightedShape(resolvedWidths, minBounds, maxBounds);
@@ -262,11 +267,20 @@ export function computeAutoFitColumnWidths(input: AutoFitInput): AutoFitResult {
     resolvedWidths = clampTriggeredSpansToTargets(resolvedWidths, triggerCells, minBounds, maxBounds, currentWidths);
   }
 
-  if (sumWidths(resolvedWidths) > workingInput.maxTableWidth) {
-    resolvedWidths = shrinkToTargetWidth(resolvedWidths, workingInput.maxTableWidth, minBounds);
+  if (sumWidths(resolvedWidths) > maxResolvedTableWidth) {
+    resolvedWidths = shrinkToTargetWidth(resolvedWidths, maxResolvedTableWidth, minBounds);
   }
 
   return finalizeResult(workingInput.layoutMode, resolvedWidths, minColumnWidth);
+}
+
+function hasCompleteAuthoredGrid(workingInput: WorkingTableGridInput): boolean {
+  const authoredColumnCount = workingInput.preferredColumnWidths.length;
+  if (authoredColumnCount === 0) {
+    return false;
+  }
+
+  return workingInput.rows.some((row) => row.logicalColumnCount >= authoredColumnCount);
 }
 
 /**

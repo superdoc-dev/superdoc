@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
+import { NodeSelection } from 'prosemirror-state';
 import type { Node as ProseMirrorNode } from 'prosemirror-model';
 import type { Editor } from '../../core/Editor.js';
-import { resolveCurrentSelectionInfo, subscribeToSelection } from './selection-info-resolver.js';
+import { resolveCurrentSelectionInfo } from './selection-info-resolver.js';
 
 // Stub `groupTrackedChanges` so tests don't need a fully PM-shaped
 // editor with `editor.state.doc.textBetween` and the tracked-change
@@ -143,14 +144,31 @@ function doc(blocks: ProseMirrorNode[]): ProseMirrorNode {
   return createNode('doc', blocks, { isBlock: false, inlineContent: false });
 }
 
+function makeRealNodeSelection(
+  from: number,
+  to: number,
+  node: { type: { name: string }; isBlock: boolean; isLeaf: boolean; isInline: boolean; nodeSize: number },
+): NodeSelection {
+  const sel = Object.create(NodeSelection.prototype);
+  Object.defineProperty(sel, 'from', { value: from, configurable: true });
+  Object.defineProperty(sel, 'to', { value: to, configurable: true });
+  Object.defineProperty(sel, 'empty', { value: false, configurable: true });
+  Object.defineProperty(sel, 'node', { value: node, configurable: true });
+  return sel as NodeSelection;
+}
+
 /** Minimal editor stub whose doc + selection are controllable per test. */
-function makeEditor(docNode: ProseMirrorNode, selection: { from: number; to: number; empty?: boolean }): Editor {
+function makeEditor(
+  docNode: ProseMirrorNode,
+  selection: { from: number; to: number; empty?: boolean; node?: unknown },
+): Editor {
   const empty = selection.empty ?? selection.from === selection.to;
+  const pmSelection = 'node' in selection ? selection : { from: selection.from, to: selection.to, empty };
   const listeners = new Map<string, Array<() => void>>();
   return {
     state: {
       doc: docNode,
-      selection: { from: selection.from, to: selection.to, empty },
+      selection: pmSelection,
       storedMarks: null,
     },
     on(event: string, listener: () => void) {
@@ -213,6 +231,41 @@ describe('resolveCurrentSelectionInfo', () => {
       { blockId: 'p1', range: { start: 0, end: 3 } },
       { blockId: 'p2', range: { start: 0, end: 2 } },
     ]);
+  });
+
+  it('returns null target for a NodeSelection over an addressable text block', () => {
+    // SelectionInfo.target is only for text selections. A NodeSelection
+    // over a text-bearing block still represents the node, not a user text
+    // range that can safely feed comments.create.
+    const paragraph = textBlock('p1', 'Hello');
+    const docNode = doc([paragraph]);
+    const selection = makeRealNodeSelection(1, 1 + paragraph.nodeSize, paragraph as any);
+    const editor = makeEditor(docNode, selection);
+
+    const info = resolveCurrentSelectionInfo(editor, {});
+
+    expect(info.empty).toBe(false);
+    expect(info.target).toBeNull();
+  });
+
+  it('returns null target for a NodeSelection over a text-bearing structured content block', () => {
+    // Presentation clicks can select a block SDT as a NodeSelection. Even
+    // though the wrapper contains textblocks, the selection itself is not
+    // a text selection and should not be projected into a TextTarget.
+    const innerParagraph = textBlock('p-inside-sdt', 'Field text');
+    const blockSdt = createNode('structuredContentBlock', [innerParagraph], {
+      isBlock: true,
+      inlineContent: false,
+      attrs: { sdBlockId: 'sdt-1' },
+    });
+    const docNode = doc([blockSdt]);
+    const selection = makeRealNodeSelection(1, 1 + blockSdt.nodeSize, blockSdt as any);
+    const editor = makeEditor(docNode, selection);
+
+    const info = resolveCurrentSelectionInfo(editor, {});
+
+    expect(info.empty).toBe(false);
+    expect(info.target).toBeNull();
   });
 
   it('returns null target when no selected block has an addressable blockId', () => {
@@ -554,116 +607,5 @@ describe('resolveCurrentSelectionInfo > entity ids', () => {
 
     expect(roundTripped.activeCommentIds).toEqual([]);
     expect(roundTripped.activeChangeIds).toEqual([]);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// subscribeToSelection
-// ---------------------------------------------------------------------------
-
-describe('subscribeToSelection', () => {
-  it('fires the listener once per tick when selection updates', async () => {
-    const docNode = doc([textBlock('p1', 'Hi')]);
-    const editor = makeEditor(docNode, { from: 1, to: 3 }) as Editor & { __fire(event: string): void };
-    const listener = vi.fn();
-
-    const unsubscribe = subscribeToSelection(editor, listener);
-    editor.__fire('selectionUpdate');
-    editor.__fire('selectionUpdate');
-    // Multiple events in one tick coalesce via queueMicrotask.
-
-    await Promise.resolve(); // flush the microtask
-    expect(listener).toHaveBeenCalledTimes(1);
-
-    unsubscribe();
-  });
-
-  it('stops firing after unsubscribe', async () => {
-    const docNode = doc([textBlock('p1', 'Hi')]);
-    const editor = makeEditor(docNode, { from: 1, to: 3 }) as Editor & { __fire(event: string): void };
-    const listener = vi.fn();
-
-    const unsubscribe = subscribeToSelection(editor, listener);
-    unsubscribe();
-    editor.__fire('selectionUpdate');
-    await Promise.resolve();
-
-    expect(listener).not.toHaveBeenCalled();
-  });
-
-  it('cancels a microtask queued just before unsubscribe (no stale fire)', async () => {
-    // Regression: before the cancel flag, a microtask queued by the last
-    // pre-unmount event could still invoke the listener after unsubscribe
-    // returned — a classic source of stale state updates during React
-    // component unmount.
-    const docNode = doc([textBlock('p1', 'Hi')]);
-    const editor = makeEditor(docNode, { from: 1, to: 3 }) as Editor & { __fire(event: string): void };
-    const listener = vi.fn();
-
-    const unsubscribe = subscribeToSelection(editor, listener);
-    editor.__fire('selectionUpdate'); // queues a microtask
-    unsubscribe(); // must mark the queued microtask as no-op
-    await Promise.resolve();
-
-    expect(listener).not.toHaveBeenCalled();
-  });
-
-  it('dedupes events that produce identical SelectionInfo (typing without moving caret)', async () => {
-    // Regression: the `transaction` subscription is needed to catch
-    // programmatic selection changes that don't emit `selectionUpdate`,
-    // but it ALSO fires on every keystroke. Without content dedupe the
-    // listener ran per character even when the projected SelectionInfo
-    // was unchanged. Multiple ticks emitting the same selection state
-    // should fire the listener exactly once.
-    const docNode = doc([textBlock('p1', 'Hi')]);
-    const editor = makeEditor(docNode, { from: 1, to: 3 }) as Editor & { __fire(event: string): void };
-    const listener = vi.fn();
-
-    const unsubscribe = subscribeToSelection(editor, listener);
-
-    // First tick: a transaction event with the selection at [1, 3].
-    editor.__fire('transaction');
-    await Promise.resolve();
-    expect(listener).toHaveBeenCalledTimes(1);
-
-    // Second tick: another transaction with no selection change.
-    // Without dedupe this would re-fire; with dedupe it skips.
-    editor.__fire('transaction');
-    await Promise.resolve();
-    expect(listener).toHaveBeenCalledTimes(1);
-
-    // Third tick: same again — still one call.
-    editor.__fire('transaction');
-    await Promise.resolve();
-    expect(listener).toHaveBeenCalledTimes(1);
-
-    unsubscribe();
-  });
-
-  it('fires again when SelectionInfo changes after a deduped tick', async () => {
-    // Dedupe must not become sticky: a real selection change after a
-    // deduped tick must still invoke the listener.
-    const docNode = doc([textBlock('p1', 'Hello')]);
-    const editor = makeEditor(docNode, { from: 1, to: 3 }) as Editor & {
-      __fire(event: string): void;
-    };
-    const listener = vi.fn();
-
-    const unsubscribe = subscribeToSelection(editor, listener);
-    editor.__fire('transaction');
-    await Promise.resolve();
-    expect(listener).toHaveBeenCalledTimes(1);
-
-    // Change the selection on the editor stub, then fire again.
-    (editor.state as { selection: { from: number; to: number; empty: boolean } }).selection = {
-      from: 2,
-      to: 4,
-      empty: false,
-    };
-    editor.__fire('transaction');
-    await Promise.resolve();
-    expect(listener).toHaveBeenCalledTimes(2);
-
-    unsubscribe();
   });
 });

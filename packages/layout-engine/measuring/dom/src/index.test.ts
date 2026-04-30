@@ -3405,6 +3405,9 @@ describe('measureBlock', () => {
       const block: FlowBlock = {
         kind: 'table',
         id: 'table-1',
+        attrs: {
+          tableWidth: { value: 5000, type: 'pct' },
+        },
         rows: [
           {
             id: 'row-0',
@@ -3442,14 +3445,14 @@ describe('measureBlock', () => {
             ],
           },
         ],
-        columnWidths: [400, 400], // Total 800px
+        columnWidths: [400, 400], // Total 800px, but pct width should rescale to current column
       };
 
       const measure = await measureBlock(block, { maxWidth: 600 });
 
       expect(measure.kind).toBe('table');
       if (measure.kind !== 'table') throw new Error('expected table measure');
-      // Should scale: 400 * (600/800) = 300
+      // Percentage width should rescale to the current column width: 400 * (600/800) = 300
       expect(measure.columnWidths[0]).toBe(300);
       expect(measure.columnWidths[1]).toBe(300);
       expect(measure.totalWidth).toBe(600);
@@ -4018,6 +4021,9 @@ describe('measureBlock', () => {
       const block: FlowBlock = {
         kind: 'table',
         id: 'scale-test-1',
+        attrs: {
+          tableWidth: { value: 5000, type: 'pct' },
+        },
         rows: [
           {
             id: 'row-0',
@@ -4063,7 +4069,7 @@ describe('measureBlock', () => {
       expect(measure.kind).toBe('table');
       if (measure.kind !== 'table') throw new Error('expected table measure');
 
-      // Should scale from 400px to 300px maintaining 1:2:1 ratio
+      // Percentage width should scale from 400px to 300px maintaining 1:2:1 ratio
       // 100 * (300/400) = 75, 200 * (300/400) = 150
       expect(measure.columnWidths.reduce((sum, width) => sum + width, 0)).toBe(300);
       expect(Math.abs(measure.columnWidths[0] - measure.columnWidths[2])).toBeLessThanOrEqual(2);
@@ -4119,6 +4125,9 @@ describe('measureBlock', () => {
       const block: FlowBlock = {
         kind: 'table',
         id: 'scale-test-3',
+        attrs: {
+          tableWidth: { value: 5000, type: 'pct' },
+        },
         rows: [
           {
             id: 'row-0',
@@ -4207,6 +4216,9 @@ describe('measureBlock', () => {
       const block: FlowBlock = {
         kind: 'table',
         id: 'scale-test-5',
+        attrs: {
+          tableWidth: { value: 5000, type: 'pct' },
+        },
         rows: [
           {
             id: 'row-0',
@@ -4476,6 +4488,53 @@ describe('measureBlock', () => {
       expect(measure.columnWidths[1]).toBe(300);
     });
 
+    it('preserves explicit widths wider than the content column', async () => {
+      const block: FlowBlock = {
+        kind: 'table',
+        id: 'explicit-wide-table',
+        attrs: {
+          tableWidth: { width: 700, type: 'px' },
+        },
+        rows: [
+          {
+            id: 'row-0',
+            cells: [
+              {
+                id: 'cell-0-0',
+                blocks: [
+                  {
+                    kind: 'paragraph',
+                    id: 'para-0',
+                    runs: [{ text: 'A', fontFamily: 'Arial', fontSize: 12 }],
+                  },
+                ],
+              },
+              {
+                id: 'cell-0-1',
+                blocks: [
+                  {
+                    kind: 'paragraph',
+                    id: 'para-1',
+                    runs: [{ text: 'B', fontFamily: 'Arial', fontSize: 12 }],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+        columnWidths: [200, 200],
+      };
+
+      const measure = await measureBlock(block, { maxWidth: 500 });
+
+      expect(measure.kind).toBe('table');
+      if (measure.kind !== 'table') throw new Error('expected table measure');
+
+      expect(measure.totalWidth).toBe(700);
+      expect(measure.columnWidths[0]).toBe(350);
+      expect(measure.columnWidths[1]).toBe(350);
+    });
+
     it('scales column widths to 50% of available width when tableWidth type is pct with value 2500', async () => {
       const block: FlowBlock = {
         kind: 'table',
@@ -4523,6 +4582,98 @@ describe('measureBlock', () => {
       expect(measure.totalWidth).toBe(300);
       expect(measure.columnWidths[0]).toBe(150);
       expect(measure.columnWidths[1]).toBe(150);
+    });
+
+    it('preserves imported grid widths that exceed the content column', async () => {
+      const block: FlowBlock = {
+        kind: 'table',
+        id: 'grid-wide-table',
+        rows: [
+          {
+            id: 'row-0',
+            cells: [
+              {
+                id: 'cell-0-0',
+                blocks: [
+                  {
+                    kind: 'paragraph',
+                    id: 'para-0',
+                    runs: [{ text: 'A', fontFamily: 'Arial', fontSize: 12 }],
+                  },
+                ],
+              },
+              {
+                id: 'cell-0-1',
+                blocks: [
+                  {
+                    kind: 'paragraph',
+                    id: 'para-1',
+                    runs: [{ text: 'B', fontFamily: 'Arial', fontSize: 12 }],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+        columnWidths: [320, 320],
+      };
+
+      const measure = await measureBlock(block, { maxWidth: 500 });
+
+      expect(measure.kind).toBe('table');
+      if (measure.kind !== 'table') throw new Error('expected table measure');
+
+      expect(measure.totalWidth).toBe(640);
+      expect(measure.columnWidths).toEqual([320, 320]);
+    });
+
+    it('preserves fixed-layout grid widths wider than the column when tableWidth is absent', async () => {
+      // Quiet behavior pinned: with `tableLayout: 'fixed'` and no `tableWidth` attr,
+      // the imported grid widths pass through even when they exceed the available column.
+      // Previously, the measure would have scaled them down to fit `maxWidth`.
+      const block: FlowBlock = {
+        kind: 'table',
+        id: 'fixed-no-width',
+        attrs: {
+          tableLayout: 'fixed',
+        },
+        rows: [
+          {
+            id: 'row-0',
+            cells: [
+              {
+                id: 'cell-0-0',
+                blocks: [
+                  {
+                    kind: 'paragraph',
+                    id: 'para-0',
+                    runs: [{ text: 'A', fontFamily: 'Arial', fontSize: 12 }],
+                  },
+                ],
+              },
+              {
+                id: 'cell-0-1',
+                blocks: [
+                  {
+                    kind: 'paragraph',
+                    id: 'para-1',
+                    runs: [{ text: 'B', fontFamily: 'Arial', fontSize: 12 }],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+        columnWidths: [400, 400],
+      };
+
+      const measure = await measureBlock(block, { maxWidth: 500 });
+
+      expect(measure.kind).toBe('table');
+      if (measure.kind !== 'table') throw new Error('expected table measure');
+
+      expect(measure.totalWidth).toBe(800);
+      expect(measure.columnWidths).toEqual([400, 400]);
     });
 
     it('handles percentage width with width property instead of value', async () => {

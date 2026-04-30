@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import type { FlowBlock, Measure } from '@superdoc/contracts';
+import type { FlowBlock, Measure, TableBlock, TableMeasure } from '@superdoc/contracts';
 import { incrementalLayout } from '../src/incrementalLayout';
 
 const makeParagraph = (id: string, text: string, pmStart: number): FlowBlock => ({
@@ -79,5 +79,93 @@ describe('Footnotes in columns', () => {
 
     expect(footnoteOneFragment?.x).toBeCloseTo(columnOneX, 2);
     expect(footnoteTwoFragment?.x).toBeCloseTo(columnTwoX, 2);
+  });
+
+  it('keeps footnotes in the owning column for wide overflow tables', async () => {
+    const paragraphOne = makeParagraph('para-1', 'Column 1 text', 0);
+    const columnBreak: FlowBlock = { kind: 'columnBreak', id: 'col-break-1' };
+
+    const tableCellParagraph = makeParagraph('table-cell-para', 'Wide table ref', 80);
+    const wideTable: TableBlock = {
+      kind: 'table',
+      id: 'wide-table',
+      attrs: { justification: 'right' },
+      rows: [
+        {
+          id: 'row-0',
+          cells: [{ id: 'cell-0-0', blocks: [tableCellParagraph] }],
+        },
+      ],
+    };
+
+    const footnote = makeParagraph('footnote-wide-0-paragraph', 'Wide table footnote', 0);
+
+    const tableCellMeasure = makeMeasure(18, 'Wide table ref'.length);
+    const wideTableMeasure: TableMeasure = {
+      kind: 'table',
+      rows: [
+        {
+          cells: [
+            {
+              blocks: [tableCellMeasure],
+              paragraph: tableCellMeasure,
+              width: 320,
+              height: 28,
+              gridColumnStart: 0,
+              colSpan: 1,
+              rowSpan: 1,
+            },
+          ],
+          height: 28,
+        },
+      ],
+      columnWidths: [320],
+      totalWidth: 320,
+      totalHeight: 28,
+    };
+
+    const measureBlock = vi.fn(async (block: FlowBlock) => {
+      if (block.kind === 'columnBreak') {
+        return { kind: 'columnBreak' } as Measure;
+      }
+      if (block.kind === 'table') {
+        return wideTableMeasure;
+      }
+      const textLength = block.kind === 'paragraph' ? (block.runs?.[0]?.text?.length ?? 1) : 1;
+      const lineHeight = block.id.startsWith('footnote-') ? 10 : 18;
+      return makeMeasure(lineHeight, textLength);
+    });
+
+    const columns = { count: 2, gap: 20 };
+    const margins = { top: 60, right: 60, bottom: 60, left: 60 };
+    const pageSize = { w: 600, h: 800 };
+
+    const result = await incrementalLayout(
+      [],
+      null,
+      [paragraphOne, columnBreak, wideTable],
+      {
+        pageSize,
+        margins,
+        columns,
+        footnotes: {
+          refs: [{ id: 'wide', pos: 82 }],
+          blocksById: new Map([['wide', [footnote]]]),
+        },
+      },
+      measureBlock,
+    );
+
+    const page = result.layout.pages[0];
+    const columnWidth = (pageSize.w - margins.left - margins.right - columns.gap) / columns.count;
+    const columnTwoX = margins.left + columnWidth + columns.gap;
+
+    const tableFragment = page.fragments.find((fragment) => fragment.blockId === wideTable.id);
+    const footnoteFragment = page.fragments.find((fragment) => fragment.blockId === footnote.id);
+
+    expect(tableFragment?.kind).toBe('table');
+    expect(tableFragment && 'columnIndex' in tableFragment ? tableFragment.columnIndex : undefined).toBe(1);
+    expect(tableFragment?.x).toBeLessThan(columnTwoX);
+    expect(footnoteFragment?.x).toBeCloseTo(columnTwoX, 2);
   });
 });

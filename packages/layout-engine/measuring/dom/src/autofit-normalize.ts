@@ -1,5 +1,5 @@
 import type { TableBlock, TableRowProperties, TableWidthAttr } from '@superdoc/contracts';
-import { OOXML_PCT_DIVISOR } from '@superdoc/contracts';
+import { OOXML_PCT_DIVISOR, resolveTableWidthAttr } from '@superdoc/contracts';
 import type {
   AutoFitCellInput,
   AutoFitLayoutMode,
@@ -497,13 +497,12 @@ function determineGridColumnCount(preferredColumnCount: number, rows: AutoFitRow
  * Resolve a preferred table width into pixels when possible.
  */
 function resolvePreferredTableWidth(tableWidth: TableWidthAttr | undefined, maxWidth: number): number | undefined {
-  if (!tableWidth || typeof tableWidth !== 'object') return undefined;
-  const raw = typeof tableWidth.width === 'number' ? tableWidth.width : tableWidth.value;
-  if (!Number.isFinite(raw) || raw == null || raw <= 0) return undefined;
-  if (tableWidth.type === 'pct') {
-    return Math.round(maxWidth * (raw / OOXML_PCT_DIVISOR));
+  const resolvedWidth = resolveTableWidthAttr(tableWidth);
+  if (!resolvedWidth) return undefined;
+  if (resolvedWidth.type === 'pct') {
+    return Math.round(maxWidth * (resolvedWidth.width / OOXML_PCT_DIVISOR));
   }
-  return raw;
+  return resolvedWidth.width;
 }
 
 /**

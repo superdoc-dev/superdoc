@@ -772,6 +772,7 @@ const MAX_HREF_LENGTH = 2048;
 
 const SAFE_ANCHOR_PATTERN = /^[A-Za-z0-9._-]+$/;
 
+const LIST_MARKER_CLASS_NAME = 'superdoc-list-marker';
 /**
  * Maximum allowed length for data URLs (10MB).
  * Prevents denial of service attacks from extremely large embedded images.
@@ -3145,7 +3146,7 @@ export class DomPainter {
 
             if (!resolvedMarker.vanish) {
               const markerContainer = this.doc!.createElement('span');
-              markerContainer.classList.add('superdoc-list-marker');
+              markerContainer.classList.add(LIST_MARKER_CLASS_NAME);
               markerContainer.style.display = 'inline-block';
               markerContainer.style.wordSpacing = '0px';
 
@@ -3357,7 +3358,7 @@ export class DomPainter {
 
             if (!marker.run.vanish) {
               const markerContainer = this.doc!.createElement('span');
-              markerContainer.classList.add('superdoc-list-marker');
+              markerContainer.classList.add(LIST_MARKER_CLASS_NAME);
               markerContainer.style.display = 'inline-block';
               markerContainer.style.wordSpacing = '0px';
 
@@ -3574,7 +3575,7 @@ export class DomPainter {
       }
 
       const markerEl = this.doc.createElement('span');
-      markerEl.classList.add('superdoc-list-marker');
+      markerEl.classList.add(LIST_MARKER_CLASS_NAME);
 
       // Track B: Use marker styling from wordLayout if available
       const wordLayout: MinimalWordLayout | undefined = item.paragraph.attrs?.wordLayout as
@@ -6846,11 +6847,7 @@ export class DomPainter {
       return true;
     }
 
-    return (
-      section === 'header' &&
-      fragment.kind === 'drawing' &&
-      this.isHeaderWordArtWatermark(resolvedItem?.block)
-    );
+    return section === 'header' && fragment.kind === 'drawing' && this.isHeaderWordArtWatermark(resolvedItem?.block);
   }
 
   private isHeaderWordArtWatermark(block: DrawingBlock | undefined): boolean {

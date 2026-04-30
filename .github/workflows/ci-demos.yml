@@ -52,6 +52,7 @@ jobs:
       fail-fast: false
       matrix:
         demo:
+          - build-your-own-ui
           - cdn
           - custom-mark
           - custom-node

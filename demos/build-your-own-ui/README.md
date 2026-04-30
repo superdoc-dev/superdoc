@@ -1,8 +1,8 @@
 # Build your own SuperDoc UI
 
-A small React app that wires your toolbar, sidebar, and custom commands to SuperDoc through `superdoc/ui/react`.
+A reference workspace built on the `superdoc/ui/react` surface. Toolbar, comment threads, tracked-change review, custom commands, DOCX round-trip - in one app.
 
-You already have UI. SuperDoc gives you the data, state, and actions to drive it.
+This is a demo, not a minimal canonical recipe. It shows how the pieces compose in a real product, and it carries a few documented workarounds where the public API isn't yet enough on its own. For copy-paste-ready single-concept patterns (toolbar only, comments only, etc.), see the `examples/` folder once those land.
 
 ## Run
 

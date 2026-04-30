@@ -320,8 +320,11 @@ function testPresentationEditorCommands(pe: PresentationEditor) {
   // Track changes
   pe.commands.enableTrackChanges();
   pe.commands.disableTrackChanges();
-  pe.commands.acceptTrackedChange();
-  pe.commands.rejectTrackedChange();
+  // Selection-based variants need no arguments. The `acceptTrackedChange`
+  // and `rejectTrackedChange` commands take an explicit TrackedChangeOptions
+  // payload; consumer code typically reaches for the selection variants here.
+  pe.commands.acceptTrackedChangeBySelection();
+  pe.commands.rejectTrackedChangeOnSelection();
 }
 
 // ============================================

@@ -52,7 +52,7 @@ For any entry classified as legacy public:
 | Path | npm name | Tier | Decision |
 |---|---|---|---|
 | `packages/superdoc` | `superdoc` | Public package | Canonical entry point; stays public |
-| `packages/super-editor` | `@superdoc/super-editor` | Legacy public compatibility surface | Was effectively public when no other headless path existed. Now superseded by exports from `superdoc` itself plus (going forward) the published Document API package. Kept compiling for existing consumers; new use migrates to the supported replacements. See Decision 1 below. |
+| `packages/super-editor` | `@superdoc/super-editor` | Legacy public compatibility surface | Was effectively public when no other headless path existed. Now superseded by exports from `superdoc` itself, including the relocated Document API types. Kept compiling for existing consumers; new use migrates to the supported replacements. See Decision 1 below. |
 | `packages/document-api` | `@superdoc/document-api` | Supported public type contract | Types relocated into `superdoc`'s published declaration graph; the workspace package itself stays private. Publishing under a named npm artifact remains a future option. See Decision 2. |
 | `packages/react` | `@superdoc-dev/react` | Public package | Already published |
 | `packages/sdk/langs/node` | `@superdoc-dev/sdk` | Public package | Already published; the actual SDK npm artifact |
@@ -123,7 +123,7 @@ Any type appearing in a public `.d.ts` (any file reachable from the entries abov
 1. **Owned directly by `superdoc`.** Defined in `packages/superdoc/src/`, no internal package specifier in its declaration.
 2. **Included in the published `superdoc` declaration graph under a `superdoc`-owned path, with no private package specifier exposed.** This is intentionally tool-agnostic; it covers a curated emit, generated public type files, declaration bundling, or any future delivery mechanism. The constraint is the output shape, not the tool.
 3. **Re-exported from a real public package.** `@superdoc-dev/react` types coming through their own package.
-4. **Re-exported from a published `@superdoc/*` (or `@superdoc-dev/*`) package.** Only applies to packages explicitly classified as a supported public package in the inventory above. The Document API package is the immediate candidate; its delivery shape is settled by Decision 2.
+4. **Re-exported from a published `@superdoc/*` (or `@superdoc-dev/*`) package.** Only applies to packages explicitly classified as a supported public package in the inventory above. Currently no `@superdoc/*` workspace package is in this tier; the Document API is delivered via relocation (Decision 2) rather than a separate published package, but moving to a published package remains a future option.
 
 If a type does not satisfy one of these, it must not appear. The audit gate (SD-2832) enforces this.
 
@@ -209,7 +209,7 @@ If we adopt D1 (curated emit) for any portion of the surface in the future, an a
 The order in which the work lands matters. The RFC and the gate tickets are useful only if the customer-acute fixes happen on top of them, and the structural follow-ups happen on top of green gates.
 
 1. **Land the boundary and gate work** (SD-2829, SD-2831, SD-2832).
-2. **Fix the acute Document API issue.** Publish or otherwise expose Document API as a real type contract. This removes the worst `any` collapse and unblocks the customers most often filing TypeScript reports.
+2. **Fix the acute Document API issue.** Make Document API types resolvable from `superdoc` so `editor.doc.<method>` returns real types and `import type { DocumentApi } from 'superdoc'` resolves to a real interface. Implementation per Decision 2 (relocation into `superdoc`'s published declaration graph; publishing as a named package remains a future option).
 3. **Drive the supported entries to green** against the gates. No public type resolves through `_internal-shims.d.ts`. No private `@superdoc/*` imports in any `.d.ts` reachable from a public entry. `skipLibCheck: false` passes for the supported entries in the consumer matrix.
 4. **Folder reorganization** (SD-2835). The structural change becomes lower risk after step 3 because the gates catch any regression that the move might introduce. See SD-2835 for the proposed shape.
 5. **Surgical TypeScript migration** of the public contract files: configuration, command surfaces, toolbar/UI types, the supported `superdoc/super-editor` facade. Do not start with a 1,800-file repo-wide migration; that is expensive and would not on its own guarantee the published artifact works.

@@ -106,9 +106,30 @@ const getCommentMarkSegmentsById = (commentId, doc, importedId) => {
 };
 
 /**
- * Convert raw mark segments into merged contiguous ranges.
- * A single commentId can appear in multiple disjoint ranges (e.g. if content is split),
- * so this returns both the raw segments and the merged ranges.
+ * Collapse raw mark segments for a single comment id into one anchor range.
+ *
+ * Per ECMA-376 §17.13.4.3 / §17.13.4.4 / §17.13.4.5, `w:id` is the
+ * unique identifier for an annotation, and the start / end / reference
+ * triplet appears exactly once per id. A multi-paragraph or
+ * discontinuous comment is still ONE annotation: PM splits it into
+ * multiple text-node mark segments because of paragraph and node
+ * boundaries, but the OOXML emission must collapse them back into a
+ * single `(commentRangeStart, commentRangeEnd)` pair covering the
+ * full extent.
+ *
+ * Verified against Word: a comment that crosses a paragraph break
+ * produces one `<w:commentRangeStart w:id="…"/>` at the first
+ * commented position and one `<w:commentRangeEnd w:id="…"/>` after
+ * the last commented position, with the paragraph break sitting
+ * inside the range. See `tests/visual/test-data/.../comment-fixture.docx`
+ * (or generate one via the Word fixture instructions in this file's
+ * accompanying test).
+ *
+ * The previous adjacency-based merge (`seg.from <= active.to`) failed
+ * across paragraph boundaries, where PM positions skip the
+ * close+open delta of the structural node. That produced N pairs for
+ * an N-paragraph comment, which Word treated as N independent
+ * annotations sharing the same id — a non-conformant document.
  *
  * @param {string} commentId The comment ID to match
  * @param {string} [importedId] The imported comment ID to match
@@ -119,33 +140,19 @@ const getCommentMarkRangesById = (commentId, doc, importedId) => {
   const segments = getCommentMarkSegmentsById(commentId, doc, importedId);
   if (!segments.length) return { segments, ranges: [] };
 
-  const ranges = [];
-  let active = null;
-
-  segments.forEach((seg) => {
-    if (!active) {
-      active = {
-        from: seg.from,
-        to: seg.to,
-        internal: !!seg.attrs?.internal,
-      };
-      return;
-    }
-
-    if (seg.from <= active.to) {
-      active.to = Math.max(active.to, seg.to);
-      return;
-    }
-
-    ranges.push(active);
-    active = {
-      from: seg.from,
-      to: seg.to,
-      internal: !!seg.attrs?.internal,
-    };
-  });
-
-  if (active) ranges.push(active);
+  // All segments belong to the same logical annotation by id, so the
+  // anchor range is the min/max envelope across every segment. The
+  // `internal` flag is taken from the first segment — every segment
+  // for one annotation should have the same value (the mark attr is
+  // stamped once at create time).
+  let from = segments[0].from;
+  let to = segments[0].to;
+  for (let i = 1; i < segments.length; i += 1) {
+    const seg = segments[i];
+    if (seg.from < from) from = seg.from;
+    if (seg.to > to) to = seg.to;
+  }
+  const ranges = [{ from, to, internal: !!segments[0].attrs?.internal }];
   return { segments, ranges };
 };
 

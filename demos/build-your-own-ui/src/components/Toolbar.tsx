@@ -1,12 +1,10 @@
 import { useRef, useState } from 'react';
-import type { DocumentMode, SuperDoc } from 'superdoc';
-import type { DocumentSlice } from 'superdoc/ui';
+import type { DocumentMode } from 'superdoc';
 import {
   useSuperDocUI,
   useSuperDocCommand,
   useSuperDocSelection,
-  useSuperDocHost,
-  useSuperDocSlice,
+  useSuperDocDocument,
 } from 'superdoc/ui/react';
 import { InsertClauseButton } from './InsertClauseButton';
 
@@ -117,10 +115,7 @@ export function Toolbar({ onComposeComment }: ToolbarProps) {
  */
 function ModeToggle() {
   const ui = useSuperDocUI();
-  const document = useSuperDocSlice<DocumentSlice>(
-    (handle) => handle.select((s) => s.document, Object.is),
-    { ready: false, mode: null },
-  );
+  const document = useSuperDocDocument();
   const current: DocumentMode = document.mode ?? 'editing';
   return (
     <>
@@ -212,46 +207,23 @@ function ExportButton() {
  * Reimport DOCX. Round-trip companion to the Export button: the user
  * exports a DOCX, opens it in Word (or any editor that emits OOXML),
  * adds comments / tracks changes / edits there, then reimports the
- * modified file here. The Activity sidebar (driven by `ui.comments`
- * and `ui.review`) refreshes automatically because:
- *
- *   - tracked changes live as PM marks on the doc; `replaceFile`
- *     swaps the doc and fires `transaction`, which the controller
- *     listens to. `ui.review` re-emits its merged feed on the next
- *     microtask.
- *
- *   - imported comments end up in `editor.converter.comments` after
- *     `replaceFile` runs `#createConverter`. The controller normally
- *     refreshes its `ui.comments` cache on the editor's
- *     `commentsLoaded` event, but with `modules.comments: false` (our
- *     BYO posture) `Editor.#initComments()` short-circuits and never
- *     emits. Until SD-2839 splits "comment data" from "comment UI"
- *     properly, we manually re-emit `commentsLoaded` here so the
- *     controller picks the new comments up. The data is real either
- *     way; the manual emit just unblocks the cache.
+ * modified file here. `ui.document.replaceFile` swaps the doc and
+ * re-emits `commentsLoaded` internally so the activity sidebar
+ * refreshes regardless of `modules.comments: false` (engine fix
+ * tracked under SD-2839).
  */
 function ReimportButton() {
-  const host = useSuperDocHost() as SuperDoc | null;
+  const ui = useSuperDocUI();
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [busy, setBusy] = useState(false);
 
   const onPick = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = ''; // allow re-selecting the same file later
-    if (!host || !file) return;
+    if (!ui || !file) return;
     setBusy(true);
     try {
-      const editor = host.activeEditor;
-      if (!editor?.replaceFile) {
-        alert('Reimport is not supported on this build of SuperDoc.');
-        return;
-      }
-      await editor.replaceFile(file);
-      // Manual `commentsLoaded` re-emit; see component JSDoc.
-      editor.emit?.('commentsLoaded', {
-        editor,
-        comments: editor.converter?.comments ?? [],
-      });
+      await ui.document.replaceFile(file);
     } catch (err) {
       console.error('[Toolbar] reimport failed', err);
       alert(err instanceof Error ? err.message : 'Reimport failed');
@@ -271,7 +243,7 @@ function ReimportButton() {
       />
       <button
         className='tb-btn'
-        disabled={!host || busy}
+        disabled={!ui || busy}
         title='Replace the current document with a DOCX file (round-trip test)'
         onClick={() => inputRef.current?.click()}
       >

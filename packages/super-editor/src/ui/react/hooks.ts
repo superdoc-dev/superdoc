@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { shallowEqual } from '../equality.js';
 import type {
   CommentsSlice,
+  DocumentSlice,
   ReviewSlice,
   SelectionSlice,
   ToolbarSnapshotSlice,
@@ -24,6 +25,8 @@ const EMPTY_COMMENTS: CommentsSlice = { items: [], activeIds: [], total: 0 };
 const EMPTY_REVIEW: ReviewSlice = { items: [], openCount: 0, activeId: null };
 
 const EMPTY_TOOLBAR: ToolbarSnapshotSlice = { context: null, commands: {} };
+
+const EMPTY_DOCUMENT: DocumentSlice = { ready: false, mode: null };
 
 /**
  * Subscribe to the current selection slice.
@@ -50,6 +53,16 @@ export function useSuperDocReview(): ReviewSlice {
 /** Subscribe to the full toolbar snapshot (context + per-command states). */
 export function useSuperDocToolbar(): ToolbarSnapshotSlice {
   return useSuperDocSlice((ui) => ui.select((state) => state.toolbar, shallowEqual), EMPTY_TOOLBAR);
+}
+
+/**
+ * Subscribe to the document slice (`{ ready, mode }`). Pair with
+ * `useSuperDocUI()?.document.setMode(...)` and `.export(...)` /
+ * `.replaceFile(...)` to drive a document bar / Export button / mode
+ * toggle from one subscription.
+ */
+export function useSuperDocDocument(): DocumentSlice {
+  return useSuperDocSlice((ui) => ui.select((state) => state.document, shallowEqual), EMPTY_DOCUMENT);
 }
 
 const FALLBACK_COMMAND_STATE: UIToolbarCommandState = {

@@ -249,4 +249,56 @@ describe('ui.document', () => {
 
     ui.destroy();
   });
+
+  it('replaceFile forwards to activeEditor.replaceFile and re-emits commentsLoaded', async () => {
+    const { superdoc, editor } = makeStubs();
+    const replaceFile = vi.fn(async (_file: File) => undefined);
+    const emit = vi.fn();
+    (editor as unknown as { replaceFile: typeof replaceFile }).replaceFile = replaceFile;
+    (editor as unknown as { emit: typeof emit }).emit = emit;
+    (editor as unknown as { converter: { comments: unknown[] } }).converter = {
+      comments: [{ id: 'c1', text: 'imported' }],
+    };
+
+    const ui = createSuperDocUI({ superdoc });
+    const file = new File(['stub'], 'sample.docx');
+
+    await ui.document.replaceFile(file);
+
+    expect(replaceFile).toHaveBeenCalledWith(file);
+    expect(emit).toHaveBeenCalledWith('commentsLoaded', {
+      editor,
+      comments: [{ id: 'c1', text: 'imported' }],
+    });
+
+    ui.destroy();
+  });
+
+  it('replaceFile rejects when activeEditor has no replaceFile', async () => {
+    const { superdoc } = makeStubs();
+    const ui = createSuperDocUI({ superdoc });
+    const file = new File(['stub'], 'sample.docx');
+
+    await expect(ui.document.replaceFile(file)).rejects.toThrow(/no active editor with replaceFile/);
+
+    ui.destroy();
+  });
+
+  it('replaceFile propagates engine rejection without re-emitting commentsLoaded', async () => {
+    const { superdoc, editor } = makeStubs();
+    const replaceFile = vi.fn(async (_file: File) => {
+      throw new Error('parse failed');
+    });
+    const emit = vi.fn();
+    (editor as unknown as { replaceFile: typeof replaceFile }).replaceFile = replaceFile;
+    (editor as unknown as { emit: typeof emit }).emit = emit;
+
+    const ui = createSuperDocUI({ superdoc });
+    const file = new File(['stub'], 'broken.docx');
+
+    await expect(ui.document.replaceFile(file)).rejects.toThrow(/parse failed/);
+    expect(emit).not.toHaveBeenCalled();
+
+    ui.destroy();
+  });
 });

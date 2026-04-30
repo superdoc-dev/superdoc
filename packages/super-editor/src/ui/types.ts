@@ -64,6 +64,21 @@ export interface SuperDocLike {
 export interface SuperDocEditorLike {
   on?(event: string, handler: (...args: unknown[]) => void): unknown;
   off?(event: string, handler: (...args: unknown[]) => void): unknown;
+  emit?(event: string, payload: unknown): void;
+  /**
+   * Replace the current document file. Consumed by `ui.document.replaceFile`
+   * to give consumers a typed import path without reaching into the host
+   * instance. Optional in the structural typing so SSR / non-browser
+   * stubs stay valid.
+   */
+  replaceFile?(file: File): Promise<unknown>;
+  /**
+   * Converter handle. The controller reads `converter.comments` after
+   * a `replaceFile` to manually re-emit `commentsLoaded` while
+   * SD-2839 is open (Editor short-circuits the event when
+   * `modules.comments: false`).
+   */
+  converter?: { comments?: unknown[] };
   doc?: {
     selection?: {
       current?(input?: { includeText?: boolean }): {
@@ -555,6 +570,16 @@ export interface DocumentHandle {
    * try/catch and surface the error inline.
    */
   export(options?: DocumentExportInput): Promise<unknown>;
+  /**
+   * Replace the current document file. Routes through
+   * `superdoc.activeEditor.replaceFile(file)` and re-emits
+   * `commentsLoaded` once the swap completes so consumers running
+   * `modules.comments: false` (SD-2839) still see imported comments
+   * refresh in `ui.comments`. Resolves when the swap and the
+   * post-swap event have both fired. Rejects if the host has no
+   * active editor or the engine swap throws.
+   */
+  replaceFile(file: File): Promise<void>;
 }
 
 /**

@@ -14,11 +14,14 @@ import { resolveTextTarget } from '../editors/v1/document-api-adapters/helpers/a
 /**
  * Two paths:
  * - EntityAddress (comment / tracked change by id) → delegates to
- *   `presentation.navigateTo(target)`, which handles paginated layouts,
- *   virtualized page mounting, AND story activation for entities in
- *   header/footer/footnote/endnote stories. `block` and `behavior`
- *   options are not applied here — `navigateTo` picks sensible viewport
- *   alignment per entity type.
+ *   `presentation.navigateTo(target, { behavior, block })`, which
+ *   handles paginated layouts, virtualized page mounting, AND story
+ *   activation for entities in header/footer/footnote/endnote stories.
+ *   The viewport surface defaults `behavior` to `'smooth'` so a
+ *   review-sidebar click animates instead of teleporting; the underlying
+ *   virtualized-page mount step is unaffected because the mount-trigger
+ *   scroll is internal to `scrollToPositionAsync` and only the final
+ *   alignment retry honors caller behavior.
  * - TextAddress / TextTarget → resolves the first segment to a PM
  *   position and calls `scrollToPositionAsync` with caller-provided
  *   `block` / `behavior` options. This path is body-only today; text
@@ -53,7 +56,10 @@ export async function scrollRangeIntoView(editor: Editor, input: ScrollIntoViewI
       return { success: false };
     }
     try {
-      const ok = await presentation.navigateTo(target);
+      const ok = await presentation.navigateTo(target, {
+        behavior: input.behavior ?? 'smooth',
+        block: input.block ?? 'center',
+      });
       return { success: Boolean(ok) };
     } catch {
       return { success: false };

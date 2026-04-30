@@ -162,6 +162,20 @@ const scenarios = [
     files: ['src/all-public-types.ts'],
     mustPass: true,
   },
+  // SD-2842: end-to-end smoke test for the runtime entry point. Asserts
+  // editor.doc is typed (not any), method calls return real types,
+  // wrong method names and wrong argument shapes are rejected at compile
+  // time. Catches regressions where a named import still resolves but
+  // the getter on the live Editor class is typed loosely.
+  {
+    name: 'bundler / editor.doc runtime smoke (SD-2842)',
+    module: 'ESNext',
+    moduleResolution: 'bundler',
+    skipLibCheck: true,
+    strict: true,
+    files: ['src/editor-doc-runtime.ts'],
+    mustPass: true,
+  },
 ];
 
 const tscPath = join(__dirname, 'node_modules', '.bin', 'tsc');

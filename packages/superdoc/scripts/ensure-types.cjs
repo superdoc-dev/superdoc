@@ -416,4 +416,20 @@ for (const entry of requiredEntryPoints) {
 }
 
 console.log(`[ensure-types] ✓ Generated ambient shims for ${wsCount} workspace modules`);
+
+// SD-2842 regression net: assert that no relocated package leaked back
+// into the shim file. If one shows up, a future change broke the
+// rewrite or include for that package and customers would see `any`
+// for those types again.
+const shimContent = fs.readFileSync(shimPath, 'utf8');
+const SHIM_FORBIDDEN = ['@superdoc/document-api', ...RELOCATION_RULES.map((r) => r.pkg)];
+for (const pkg of SHIM_FORBIDDEN) {
+  const re = new RegExp(`declare module '${pkg.replace(/\//g, '\\/')}(\\/[^']+)?'`);
+  if (re.test(shimContent)) {
+    console.error(`[ensure-types] ✗ ${pkg} appears in _internal-shims.d.ts. Its types should resolve via the relocation rewrite, not via an ambient any shim. Investigate the include glob, the rewrite rule, and the shim-skip predicate for this package.`);
+    process.exit(1);
+  }
+}
+console.log(`[ensure-types] ✓ Verified ${SHIM_FORBIDDEN.length} relocated packages do not appear in shim file`);
+
 console.log('[ensure-types] ✓ Verified type entry points');

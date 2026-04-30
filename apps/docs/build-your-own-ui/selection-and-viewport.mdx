@@ -1,0 +1,10 @@
+---
+title: 'Selection and viewport'
+description: 'Read the selection. Capture it. Scroll an entity into view. Look up painted rects.'
+---
+
+<Note>
+  This page is being written. Stub for navigation. Track progress on [SD-2669](https://linear.app/superdocworkspace/issue/SD-2669).
+</Note>
+
+`useSuperDocSelection()` returns the live selection slice. `ui.selection.capture()` returns a frozen snapshot you can hold across focus changes. `ui.viewport.scrollIntoView(target)` and `ui.viewport.getRect(target)` give you geometry without reaching for the DOM.

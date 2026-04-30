@@ -172,6 +172,22 @@
             ]
           },
           {
+            "group": "Build Your Own UI",
+            "tag": "NEW",
+            "pages": [
+              "build-your-own-ui/overview",
+              "build-your-own-ui/react-setup",
+              "build-your-own-ui/toolbar-and-commands",
+              "build-your-own-ui/custom-commands",
+              "build-your-own-ui/comments",
+              "build-your-own-ui/review",
+              "build-your-own-ui/selection-and-viewport",
+              "build-your-own-ui/document-control",
+              "build-your-own-ui/reference-demo",
+              "build-your-own-ui/api-reference"
+            ]
+          },
+          {
             "group": "Solutions",
             "pages": [
               "solutions/overview",

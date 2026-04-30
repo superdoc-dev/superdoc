@@ -61,12 +61,12 @@ Returns the comments slice. See [Comments](/build-your-own-ui/comments).
 const { items, total, activeIds } = useSuperDocComments();
 ```
 
-### `useSuperDocReview()`
+### `useSuperDocTrackChanges()`
 
-Returns the merged review feed. See [Review](/build-your-own-ui/review).
+Returns the tracked-changes slice. See [Track changes](/build-your-own-ui/track-changes).
 
 ```ts
-const { items, openCount, activeId } = useSuperDocReview();
+const { items, total, activeId } = useSuperDocTrackChanges();
 ```
 
 ### `useSuperDocDocument()`
@@ -142,20 +142,20 @@ ui.comments.delete(commentId);
 ui.comments.scrollTo(commentId);
 ```
 
-### `ui.review`
+### `ui.trackChanges`
 
-Merged feed, accept / reject, navigation.
+Live list, accept / reject, navigation.
 
 ```ts
-ui.review.getSnapshot();
-ui.review.subscribe(({ snapshot }) => {});
-ui.review.accept(changeId);
-ui.review.reject(changeId);
-ui.review.acceptAll();
-ui.review.rejectAll();
-ui.review.next();
-ui.review.previous();
-ui.review.scrollTo(itemId);
+ui.trackChanges.getSnapshot();
+ui.trackChanges.subscribe(({ snapshot }) => {});
+ui.trackChanges.accept(changeId);
+ui.trackChanges.reject(changeId);
+ui.trackChanges.acceptAll();
+ui.trackChanges.rejectAll();
+ui.trackChanges.next();
+ui.trackChanges.previous();
+ui.trackChanges.scrollTo(changeId);
 ```
 
 ### `ui.document`
@@ -223,8 +223,8 @@ Imported from `superdoc/ui`.
 | `SelectionSlice` | `useSuperDocSelection()` return shape. |
 | `SelectionCapture` | Output of `ui.selection.capture()`. |
 | `CommentsSlice` | `useSuperDocComments()` return shape. |
-| `ReviewSlice` | `useSuperDocReview()` return shape. |
-| `ReviewItem` | `{ kind: 'comment', comment } \| { kind: 'change', change }`. |
+| `TrackChangesSlice` | `useSuperDocTrackChanges()` return shape. |
+| `TrackChangesItem` | `{ id, change }`. |
 | `DocumentSlice` | `useSuperDocDocument()` return shape. |
 | `ToolbarSnapshotSlice` | `useSuperDocToolbar()` return shape. |
 | `UIToolbarCommandState` | Per-command state shape. |

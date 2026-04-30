@@ -79,7 +79,7 @@ export function BoldButton() {
 | `useSuperDocUI()` | The controller, or `null` until ready | Calling `ui.commands.get(id)?.execute()` and other actions |
 | `useSuperDocCommand(id)` | `{ active, disabled, value, source }` | Binding one toolbar button to one command |
 | `useSuperDocComments()` | The live comments feed | Building a comments sidebar |
-| `useSuperDocReview()` | Merged comments + tracked changes | Building a review panel |
+| `useSuperDocTrackChanges()` | The live tracked-changes feed | Building a track-changes review panel |
 | `useSuperDocSelection()` | The current selection slice | Enabling/disabling buttons, building bubble menus |
 | `useSuperDocDocument()` | `{ ready, mode }` | Mode toggles, "ready" guards |
 | `useSuperDocSlice(picker, initial)` | Any slice from `ui.select(...)` | Custom subscriptions the typed hooks don't cover |

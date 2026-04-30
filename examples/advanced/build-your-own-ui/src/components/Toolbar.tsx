@@ -1,3 +1,4 @@
+import { useRef, useState } from 'react';
 import {
   useSuperDocUI,
   useSuperDocCommand,
@@ -93,6 +94,7 @@ export function Toolbar({ onComposeComment }: ToolbarProps) {
       </div>
 
       <div className="toolbar-group" style={{ marginLeft: 'auto' }}>
+        <ReimportButton />
         <ExportButton />
       </div>
     </div>
@@ -160,6 +162,85 @@ function ExportButton() {
     <button className="tb-btn export-btn" disabled={!host} title="Download as DOCX" onClick={onClick}>
       Export DOCX
     </button>
+  );
+}
+
+/**
+ * Reimport DOCX. Round-trip companion to the Export button: the user
+ * exports a DOCX, opens it in Word (or any editor that emits OOXML),
+ * adds comments / tracks changes / edits there, then reimports the
+ * modified file here. The Activity sidebar (driven by `ui.comments`
+ * and `ui.review`) refreshes automatically because:
+ *
+ *   - tracked changes live as PM marks on the doc; `replaceFile`
+ *     swaps the doc and fires `transaction`, which the controller
+ *     listens to. `ui.review` re-emits its merged feed on the next
+ *     microtask.
+ *
+ *   - imported comments end up in `editor.converter.comments` after
+ *     `replaceFile` runs `#createConverter`. The controller normally
+ *     refreshes its `ui.comments` cache on the editor's
+ *     `commentsLoaded` event, but with `modules.comments: false` (our
+ *     BYO posture) `Editor.#initComments()` short-circuits and never
+ *     emits. Until SD-2839 splits "comment data" from "comment UI"
+ *     properly, we manually re-emit `commentsLoaded` here so the
+ *     controller picks the new comments up. The data is real either
+ *     way; the manual emit just unblocks the cache.
+ */
+function ReimportButton() {
+  const host = useSuperDocHost();
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const onPick = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // allow re-selecting the same file later
+    if (!host || !file) return;
+    setBusy(true);
+    try {
+      const editor = (host as unknown as {
+        activeEditor?: {
+          replaceFile?(file: File): Promise<void>;
+          emit?(event: string, payload: unknown): void;
+          converter?: { comments?: unknown[] };
+        };
+      }).activeEditor;
+      if (!editor?.replaceFile) {
+        alert('Reimport is not supported on this build of SuperDoc.');
+        return;
+      }
+      await editor.replaceFile(file);
+      // Manual `commentsLoaded` re-emit; see component JSDoc.
+      editor.emit?.('commentsLoaded', {
+        editor,
+        comments: editor.converter?.comments ?? [],
+      });
+    } catch (err) {
+      console.error('[Toolbar] reimport failed', err);
+      alert(err instanceof Error ? err.message : 'Reimport failed');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <>
+      <input
+        ref={inputRef}
+        type='file'
+        accept='.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        style={{ display: 'none' }}
+        onChange={onPick}
+      />
+      <button
+        className='tb-btn'
+        disabled={!host || busy}
+        title='Replace the current document with a DOCX file (round-trip test)'
+        onClick={() => inputRef.current?.click()}
+      >
+        {busy ? 'Reimporting…' : 'Reimport DOCX'}
+      </button>
+    </>
   );
 }
 

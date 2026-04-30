@@ -181,6 +181,10 @@ function ToolbarButton({
  */
 function ExportButton() {
   const ui = useSuperDocUI();
+  // Read the dirty flag so the button can hint at unsaved changes.
+  // `useSuperDocDocument` re-renders only when ready / mode / dirty
+  // flip, so a typing burst is one re-render, not many.
+  const { dirty } = useSuperDocDocument();
 
   const onClick = async () => {
     if (!ui) return;
@@ -197,8 +201,18 @@ function ExportButton() {
   };
 
   return (
-    <button className="tb-btn export-btn" disabled={!ui} title="Download as DOCX" onClick={onClick}>
+    <button
+      className="tb-btn export-btn"
+      disabled={!ui}
+      title={dirty ? 'Download as DOCX (unsaved changes)' : 'Download as DOCX'}
+      onClick={onClick}
+    >
       Export
+      {dirty ? (
+        <span aria-hidden style={{ marginLeft: 4, color: '#f59e0b' }}>
+          •
+        </span>
+      ) : null}
     </button>
   );
 }

@@ -1738,9 +1738,10 @@ export async function incrementalLayout(
                     tableWidthRaw,
                     block.attrs,
                   );
-                  // Rescale column widths when table was clamped to section width.
-                  // This happens in mixed-orientation docs where measurement uses the
-                  // widest section but rendering is per-section (SD-1859).
+                  // Rescale column widths only when the resolved fragment width is narrower
+                  // than the measured table width. Today that primarily happens for
+                  // percentage-width tables rendered in a narrower section (SD-1859),
+                  // while non-percent wide tables keep their measured overflow width.
                   const fragmentColumnWidths = rescaleColumnWidths(
                     measure.columnWidths,
                     measure.totalWidth,

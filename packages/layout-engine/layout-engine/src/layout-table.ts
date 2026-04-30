@@ -153,6 +153,11 @@ export function resolveRenderedTableWidth(
     return Math.max(0, Math.round(columnWidth * (configuredWidth.width / OOXML_PCT_DIVISOR)));
   }
 
+  // Explicit px/pixel/dxa widths are already applied during measurement in
+  // measuring/dom's resolveTableWidth() + measureTableBlock() pipeline. We keep
+  // measuredWidth authoritative here so layout uses the fully measured table
+  // total, including any border/cell-spacing effects, while only percentage
+  // widths are recomputed against the current section width.
   return safeMeasuredWidth;
 }
 

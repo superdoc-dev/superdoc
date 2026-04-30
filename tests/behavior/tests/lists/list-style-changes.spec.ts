@@ -66,6 +66,36 @@ async function placeCursorIn(superdoc: SuperDocFixture, text: string): Promise<v
 }
 
 test.describe('PR-2873 list style changes', () => {
+  test.describe('toolbar active state', () => {
+    test('bullet list button is active when caret is in a bullet list', async ({ superdoc }) => {
+      await superdoc.type('item');
+      await superdoc.executeCommand('toggleBulletList');
+      await superdoc.waitForStable();
+      await placeCursorIn(superdoc, 'item');
+
+      await expect(superdoc.page.locator('[data-item="btn-list"]').first()).toHaveClass(/active/);
+      await expect(superdoc.page.locator('[data-item="btn-numberedlist"]').first()).not.toHaveClass(/active/);
+    });
+
+    test('numbered list button is active when caret is in an ordered list', async ({ superdoc }) => {
+      await superdoc.type('item');
+      await superdoc.executeCommand('toggleOrderedList');
+      await superdoc.waitForStable();
+      await placeCursorIn(superdoc, 'item');
+
+      await expect(superdoc.page.locator('[data-item="btn-numberedlist"]').first()).toHaveClass(/active/);
+      await expect(superdoc.page.locator('[data-item="btn-list"]').first()).not.toHaveClass(/active/);
+    });
+
+    test('neither button is active when caret is on a plain paragraph', async ({ superdoc }) => {
+      await superdoc.type('plain');
+      await superdoc.waitForStable();
+
+      await expect(superdoc.page.locator('[data-item="btn-list"]').first()).not.toHaveClass(/active/);
+      await expect(superdoc.page.locator('[data-item="btn-numberedlist"]').first()).not.toHaveClass(/active/);
+    });
+  });
+
   test.describe('toggleBulletListStyle creates correct OOXML', () => {
     const cases = [
       { style: 'disc' as const, expectedChar: '\u2022' },

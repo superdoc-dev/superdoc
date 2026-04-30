@@ -642,7 +642,6 @@ export const makeDefaultItems = ({
     hasCaret: true,
     tooltip: toolbarTexts.bulletList,
     restoreEditorFocus: true,
-    suppressActiveHighlight: true,
     attributes: {
       ariaLabel: 'Bullet list',
     },
@@ -676,7 +675,6 @@ export const makeDefaultItems = ({
     hasCaret: true,
     tooltip: toolbarTexts.numberedList,
     restoreEditorFocus: true,
-    suppressActiveHighlight: true,
     attributes: {
       ariaLabel: 'Numbered list',
     },

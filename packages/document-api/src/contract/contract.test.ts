@@ -373,6 +373,7 @@ describe('document-api contract catalog', () => {
       'citations',
       'authorities',
       'ranges',
+      'selection',
       'diff',
       'protection',
       'permissionRanges',

@@ -19,6 +19,9 @@ export type {
   ResolveRangeOutput,
   DocumentApi,
   DocumentProtectionState,
+  SelectionApi,
+  SelectionInfo,
+  SelectionCurrentInput,
   ScrollIntoViewInput,
   ScrollIntoViewOutput,
   StoryLocator,
@@ -30,8 +33,10 @@ export type {
   CommentAddress,
   TrackedChangeAddress,
   NavigableAddress,
+  BlocksListResult,
+  BookmarkInfo,
+  BookmarkAddress,
 } from '@superdoc/document-api';
-export type { BookmarkAddress } from '@superdoc/document-api';
 
 // Selection handle types
 export type { SelectionHandle } from './editors/v1/core/selection-state.js';
@@ -164,3 +169,25 @@ export type {
   ToolbarTarget,
   ToolbarValueMap,
 } from './headless-toolbar/types.js';
+
+// superdoc/ui public types (browser UI controller)
+export type {
+  CommentsHandle,
+  CommentsSlice,
+  EqualityFn,
+  ReviewHandle,
+  ReviewItem,
+  ReviewSlice,
+  SelectorFn,
+  SelectionSlice,
+  Subscribable,
+  SuperDocEditorLike,
+  SuperDocLike,
+  SuperDocUI,
+  SuperDocUIOptions,
+  SuperDocUIState,
+  ViewportGetRectInput,
+  ViewportHandle,
+  ViewportRect,
+  ViewportRectResult,
+} from './ui/types.js';

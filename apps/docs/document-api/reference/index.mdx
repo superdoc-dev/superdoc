@@ -26,7 +26,7 @@ This reference is sourced from `packages/document-api/src/contract/*`.
 | Sections | 18 | 0 | 18 | [Open](/document-api/reference/sections/index) |
 | Format | 44 | 1 | 45 | [Open](/document-api/reference/format/index) |
 | Styles | 1 | 0 | 1 | [Open](/document-api/reference/styles/index) |
-| Lists | 36 | 0 | 36 | [Open](/document-api/reference/lists/index) |
+| Lists | 38 | 0 | 38 | [Open](/document-api/reference/lists/index) |
 | Comments | 5 | 0 | 5 | [Open](/document-api/reference/comments/index) |
 | Track Changes | 3 | 0 | 3 | [Open](/document-api/reference/track-changes/index) |
 | Query | 1 | 0 | 1 | [Open](/document-api/reference/query/index) |
@@ -49,6 +49,7 @@ This reference is sourced from `packages/document-api/src/contract/*`.
 | Citations | 15 | 0 | 15 | [Open](/document-api/reference/citations/index) |
 | Table of Authorities | 11 | 0 | 11 | [Open](/document-api/reference/authorities/index) |
 | Ranges | 1 | 0 | 1 | [Open](/document-api/reference/ranges/index) |
+| Selection | 1 | 0 | 1 | [Open](/document-api/reference/selection/index) |
 | Diff | 3 | 0 | 3 | [Open](/document-api/reference/diff/index) |
 | Protection | 3 | 0 | 3 | [Open](/document-api/reference/protection/index) |
 | Permission Ranges | 5 | 0 | 5 | [Open](/document-api/reference/permission-ranges/index) |
@@ -195,6 +196,8 @@ The tables below are grouped by namespace.
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/lists/join"><code>lists.join</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.lists.join(...)</code></span> | Merge two adjacent list sequences into one. |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/lists/can-join"><code>lists.canJoin</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.lists.canJoin(...)</code></span> | Check whether two adjacent list sequences can be joined. |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/lists/separate"><code>lists.separate</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.lists.separate(...)</code></span> | Split a list sequence at the target item, creating a new sequence from that point forward. |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/lists/merge"><code>lists.merge</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.lists.merge(...)</code></span> | Compound: merge two adjacent list sequences into one. Reassigns numId on the absorbed sequence (no strict abstractNumId check — absorbed items adopt the absorbing definition) and deletes empty paragraphs between the two sequences. Use this instead of lists.join for the user-facing "merge these lists" intent. |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/lists/split"><code>lists.split</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.lists.split(...)</code></span> | Compound: split a list sequence at the target item into two independent sequences. Runs lists.separate then (by default) lists.setValue(1) so the new half starts numbering fresh at 1. Pass restartNumbering:false for raw separate semantics (new half continues the previous count). |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/lists/set-level"><code>lists.setLevel</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.lists.setLevel(...)</code></span> | Set the absolute nesting level (0..8) of a list item. |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/lists/set-value"><code>lists.setValue</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.lists.setValue(...)</code></span> | Set an explicit numbering value at the target item. Mid-sequence targets are atomically separated first. |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/lists/continue-previous"><code>lists.continuePrevious</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.lists.continuePrevious(...)</code></span> | Continue numbering from the nearest compatible previous list sequence. |
@@ -337,9 +340,9 @@ The tables below are grouped by namespace.
 
 | Operation | API member path | Description |
 | --- | --- | --- |
-| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/history/get"><code>history.get</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.history.get(...)</code></span> | Query the current undo/redo history state of the active editor. |
-| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/history/undo"><code>history.undo</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.history.undo(...)</code></span> | Undo the most recent history-safe mutation in the active editor. |
-| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/history/redo"><code>history.redo</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.history.redo(...)</code></span> | Redo the most recently undone action in the active editor. |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/history/get"><code>history.get</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.history.get(...)</code></span> | Query the current undo/redo history state of the document. |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/history/undo"><code>history.undo</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.history.undo(...)</code></span> | Undo the most recent history-safe mutation in the document. |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/history/redo"><code>history.redo</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.history.redo(...)</code></span> | Redo the most recently undone action in the document. |
 
 #### Table of Contents
 
@@ -582,6 +585,12 @@ The tables below are grouped by namespace.
 | Operation | API member path | Description |
 | --- | --- | --- |
 | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/ranges/resolve"><code>ranges.resolve</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.ranges.resolve(...)</code></span> | Resolve two explicit anchors into a contiguous document range. Returns a transparent SelectionTarget, a mutation-ready ref, and preview metadata. Stateless and deterministic. |
+
+#### Selection
+
+| Operation | API member path | Description |
+| --- | --- | --- |
+| <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><a href="/document-api/reference/selection/current"><code>selection.current</code></a></span> | <span style={{ whiteSpace: 'nowrap', wordBreak: 'normal', overflowWrap: 'normal' }}><code>editor.doc.selection.current(...)</code></span> | Read the editor's current selection as a portable SelectionInfo with a text-anchored TextTarget. Primitive for building custom comments UIs, floating toolbars, and other selection-driven components without reaching into ProseMirror internals. |
 
 #### Diff
 

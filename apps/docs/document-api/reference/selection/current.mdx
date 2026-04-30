@@ -1,0 +1,155 @@
+---
+title: selection.current
+sidebarTitle: selection.current
+description: "Read the editor's current selection as a portable SelectionInfo with a text-anchored TextTarget. Primitive for building custom comments UIs, floating toolbars, and other selection-driven components without reaching into ProseMirror internals."
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+## Summary
+
+Read the editor's current selection as a portable SelectionInfo with a text-anchored TextTarget. Primitive for building custom comments UIs, floating toolbars, and other selection-driven components without reaching into ProseMirror internals.
+
+- Operation ID: `selection.current`
+- API member path: `editor.doc.selection.current(...)`
+- Mutates document: `no`
+- Idempotency: `idempotent`
+- Supports tracked mode: `no`
+- Supports dry run: `no`
+- Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a SelectionInfo with `empty`, `target` (TextTarget or null), `activeMarks`, and optionally `text` when `includeText: true`.
+
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `includeText` | boolean | no |  |
+
+### Example request
+
+```json
+{
+  "includeText": true
+}
+```
+
+## Output fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `activeChangeIds` | string[] | yes |  |
+| `activeCommentIds` | string[] | yes |  |
+| `activeMarks` | string[] | yes |  |
+| `empty` | boolean | yes |  |
+| `target` | TextTarget \\| null | yes | One of: TextTarget, null |
+| `text` | string | no |  |
+
+### Example response
+
+```json
+{
+  "activeChangeIds": [
+    "example"
+  ],
+  "activeCommentIds": [
+    "example"
+  ],
+  "activeMarks": [
+    "example"
+  ],
+  "empty": true,
+  "target": {
+    "kind": "text",
+    "segments": [
+      {
+        "blockId": "block-abc123",
+        "range": {
+          "end": 10,
+          "start": 0
+        }
+      }
+    ]
+  },
+  "text": "Hello, world."
+}
+```
+
+## Pre-apply throws
+
+- `INVALID_INPUT`
+- `INVALID_CONTEXT`
+
+## Non-applied failure codes
+
+- None
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "includeText": {
+      "type": "boolean"
+    }
+  },
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "activeChangeIds": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "activeCommentIds": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "activeMarks": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "empty": {
+      "type": "boolean"
+    },
+    "target": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/TextTarget"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "text": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "empty",
+    "target",
+    "activeMarks",
+    "activeCommentIds",
+    "activeChangeIds"
+  ],
+  "type": "object"
+}
+```
+</Accordion>

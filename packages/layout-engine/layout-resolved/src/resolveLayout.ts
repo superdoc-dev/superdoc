@@ -28,7 +28,7 @@ import { resolveDrawingItem } from './resolveDrawing.js';
 import type { BlockMapEntry } from './resolvedBlockLookup.js';
 import { computeSdtContainerKey } from './sdtContainerKey.js';
 import { hashParagraphBorders } from './paragraphBorderHash.js';
-import { deriveBlockVersion, fragmentSignature } from './versionSignature.js';
+import { deriveBlockVersion, fragmentSignature, sourceAnchorSignature } from './versionSignature.js';
 
 export type ResolveLayoutInput = {
   layout: Layout;
@@ -190,6 +190,17 @@ function computeBlockVersion(
   return version;
 }
 
+function applyPaintVersions(item: Extract<ResolvedPaintItem, { kind: 'fragment' }>, visualVersion: string): void {
+  const evidenceVersion = sourceAnchorSignature(item.sourceAnchor);
+  item.version = visualVersion;
+  if (evidenceVersion) {
+    item.evidenceVersion = evidenceVersion;
+    item.paintCacheVersion = `${visualVersion}|source:${evidenceVersion}`;
+  } else {
+    item.paintCacheVersion = visualVersion;
+  }
+}
+
 export function resolveFragmentItem(
   fragment: Fragment,
   fragmentIndex: number,
@@ -206,19 +217,22 @@ export function resolveFragmentItem(
     case 'table': {
       const item = resolveTableItem(fragment as TableFragment, fragmentIndex, pageIndex, blockMap);
       if (sdtContainerKey != null) item.sdtContainerKey = sdtContainerKey;
-      item.version = version;
+      if (fragment.sourceAnchor != null) item.sourceAnchor = fragment.sourceAnchor;
+      applyPaintVersions(item, version);
       return item;
     }
     case 'image': {
       const item = resolveImageItem(fragment as ImageFragment, fragmentIndex, pageIndex, blockMap);
       if (sdtContainerKey != null) item.sdtContainerKey = sdtContainerKey;
-      item.version = version;
+      if (fragment.sourceAnchor != null) item.sourceAnchor = fragment.sourceAnchor;
+      applyPaintVersions(item, version);
       return item;
     }
     case 'drawing': {
       const item = resolveDrawingItem(fragment as DrawingFragment, fragmentIndex, pageIndex, blockMap);
       if (sdtContainerKey != null) item.sdtContainerKey = sdtContainerKey;
-      item.version = version;
+      if (fragment.sourceAnchor != null) item.sourceAnchor = fragment.sourceAnchor;
+      applyPaintVersions(item, version);
       return item;
     }
     default: {
@@ -238,6 +252,7 @@ export function resolveFragmentItem(
         content: resolveParagraphContentIfApplicable(fragment, blockMap),
       };
       if (sdtContainerKey != null) item.sdtContainerKey = sdtContainerKey;
+      if (fragment.sourceAnchor != null) item.sourceAnchor = fragment.sourceAnchor;
 
       // Pre-extract block/measure for para and list-item fragments so the painter
       // can prefer resolved data over a blockLookup read.
@@ -246,9 +261,15 @@ export function resolveFragmentItem(
         if (fragment.kind === 'para' && entry.block.kind === 'paragraph' && entry.measure.kind === 'paragraph') {
           item.block = entry.block as ParagraphBlock;
           item.measure = entry.measure as ParagraphMeasure;
+          if (item.sourceAnchor == null) item.sourceAnchor = (entry.block as ParagraphBlock).sourceAnchor;
         } else if (fragment.kind === 'list-item' && entry.block.kind === 'list' && entry.measure.kind === 'list') {
-          item.block = entry.block as ListBlock;
+          const listBlock = entry.block as ListBlock;
+          const listItem = listBlock.items.find((candidate) => candidate.id === (fragment as ListItemFragment).itemId);
+          item.block = listBlock;
           item.measure = entry.measure as ListMeasure;
+          if (item.sourceAnchor == null) {
+            item.sourceAnchor = listItem?.sourceAnchor ?? listItem?.paragraph.sourceAnchor ?? listBlock.sourceAnchor;
+          }
         }
       }
 
@@ -272,7 +293,7 @@ export function resolveFragmentItem(
         if (listItem.continuesOnNext != null) item.continuesOnNext = listItem.continuesOnNext;
         if (listItem.markerWidth != null) item.markerWidth = listItem.markerWidth;
       }
-      item.version = version;
+      applyPaintVersions(item, version);
       return item;
     }
   }

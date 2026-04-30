@@ -299,6 +299,7 @@
     "apps/docs/document-api/reference/lists/insert.mdx",
     "apps/docs/document-api/reference/lists/join.mdx",
     "apps/docs/document-api/reference/lists/list.mdx",
+    "apps/docs/document-api/reference/lists/merge.mdx",
     "apps/docs/document-api/reference/lists/outdent.mdx",
     "apps/docs/document-api/reference/lists/restart-at.mdx",
     "apps/docs/document-api/reference/lists/separate.mdx",
@@ -317,6 +318,7 @@
     "apps/docs/document-api/reference/lists/set-level.mdx",
     "apps/docs/document-api/reference/lists/set-type.mdx",
     "apps/docs/document-api/reference/lists/set-value.mdx",
+    "apps/docs/document-api/reference/lists/split.mdx",
     "apps/docs/document-api/reference/markdown-to-fragment.mdx",
     "apps/docs/document-api/reference/mutations/apply.mdx",
     "apps/docs/document-api/reference/mutations/index.mdx",
@@ -355,6 +357,8 @@
     "apps/docs/document-api/reference/sections/set-section-direction.mdx",
     "apps/docs/document-api/reference/sections/set-title-page.mdx",
     "apps/docs/document-api/reference/sections/set-vertical-align.mdx",
+    "apps/docs/document-api/reference/selection/current.mdx",
+    "apps/docs/document-api/reference/selection/index.mdx",
     "apps/docs/document-api/reference/styles/apply.mdx",
     "apps/docs/document-api/reference/styles/index.mdx",
     "apps/docs/document-api/reference/styles/paragraph/clear-style.mdx",
@@ -574,6 +578,8 @@
         "lists.join",
         "lists.canJoin",
         "lists.separate",
+        "lists.merge",
+        "lists.split",
         "lists.setLevel",
         "lists.setValue",
         "lists.continuePrevious",
@@ -991,6 +997,13 @@
     },
     {
       "aliasMemberPaths": [],
+      "key": "selection",
+      "operationIds": ["selection.current"],
+      "pagePath": "apps/docs/document-api/reference/selection/index.mdx",
+      "title": "Selection"
+    },
+    {
+      "aliasMemberPaths": [],
       "key": "diff",
       "operationIds": ["diff.capture", "diff.compare", "diff.apply"],
       "pagePath": "apps/docs/document-api/reference/diff/index.mdx",
@@ -1018,5 +1031,5 @@
     }
   ],
   "marker": "{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}",
-  "sourceHash": "c8670fb494b56c19fbd09a7bada35974fbb3c22d938f6a5e01eee6e8467961c0"
+  "sourceHash": "20f0873e29e8589387d0776cc53e6eea8d5fce102a3eba9a47a183c49b5f0b13"
 }

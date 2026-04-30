@@ -311,6 +311,140 @@ describe('DomPointerMapping', () => {
       });
     });
 
+    it('resolves through a nested table wrapper when the click lands between lines', () => {
+      container.innerHTML = `
+        <div class="superdoc-page" data-page-index="0">
+          <div class="superdoc-fragment superdoc-table-fragment" data-block-id="table1">
+            <div class="superdoc-table-cell" style="position: absolute;">
+              <div class="cell-content">
+                <div class="paragraph-a" style="margin-bottom: 12px;">
+                  <div class="superdoc-line" data-pm-start="5" data-pm-end="15">
+                    <span data-pm-start="5" data-pm-end="15">Upper line</span>
+                  </div>
+                </div>
+                <div class="paragraph-b">
+                  <div class="superdoc-line" data-pm-start="20" data-pm-end="30">
+                    <span data-pm-start="20" data-pm-end="30">Lower line</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+
+      const page = container.querySelector('.superdoc-page') as HTMLElement;
+      const tableFragment = container.querySelector('.superdoc-table-fragment') as HTMLElement;
+      const cell = container.querySelector('.superdoc-table-cell') as HTMLElement;
+      const content = container.querySelector('.cell-content') as HTMLElement;
+      const lines = container.querySelectorAll('.superdoc-line') as NodeListOf<HTMLElement>;
+      const upperRect = lines[0].getBoundingClientRect();
+      const lowerRect = lines[1].getBoundingClientRect();
+      const gapY = upperRect.bottom + Math.max(1, (lowerRect.top - upperRect.bottom) / 3);
+
+      withMockedElementsFromPoint(
+        [content, cell, tableFragment, page, container, document.body, document.documentElement],
+        () => {
+          const result = clickToPositionDom(container, upperRect.left + 5, gapY);
+          expect(result).toBeGreaterThanOrEqual(5);
+          expect(result).toBeLessThanOrEqual(15);
+        },
+      );
+    });
+
+    it('limits nested table wrapper lookup to the current page fragment', () => {
+      container.innerHTML = `
+        <div class="superdoc-page" data-page-index="0">
+          <div class="superdoc-fragment superdoc-table-fragment" data-block-id="table-page-0">
+            <div class="cell-content">
+              <div class="superdoc-line" data-pm-start="5" data-pm-end="15">
+                <span data-pm-start="5" data-pm-end="15">Page 0 line</span>
+              </div>
+              <div class="superdoc-page" data-page-index="1">
+                <div class="superdoc-fragment superdoc-table-fragment" data-block-id="table-page-1">
+                  <div class="superdoc-line" data-pm-start="100" data-pm-end="110">
+                    <span data-pm-start="100" data-pm-end="110">Page 1 line</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+
+      const page = container.querySelector('.superdoc-page[data-page-index="0"]') as HTMLElement;
+      const tableFragment = container.querySelector('[data-block-id="table-page-0"]') as HTMLElement;
+      const content = container.querySelector('.cell-content') as HTMLElement;
+      const line = container.querySelector('.superdoc-line[data-pm-start="5"]') as HTMLElement;
+      const lineRect = line.getBoundingClientRect();
+
+      withMockedElementsFromPoint(
+        [content, tableFragment, page, container, document.body, document.documentElement],
+        () => {
+          const result = clickToPositionDom(container, lineRect.left + 5, lineRect.top + 5);
+          expect(result).toBeGreaterThanOrEqual(5);
+          expect(result).toBeLessThanOrEqual(15);
+        },
+      );
+    });
+
+    it('does not jump to a sibling-page table fragment when clicking inside the current page slice', () => {
+      // SD-2356: when the same logical table is split across pages, each
+      // page gets its own .superdoc-table-fragment with the SAME
+      // data-block-id. Without per-page scoping, findLineAtY would pick
+      // the geometrically-closest line across ALL pages of the table and
+      // resolve the click into the wrong page's PM range.
+      container.innerHTML = `
+        <div class="superdoc-page" data-page-index="0">
+          <div class="superdoc-fragment superdoc-table-fragment" data-block-id="shared-table">
+            <div class="cell-content">
+              <div class="superdoc-line" data-pm-start="5" data-pm-end="15">
+                <span data-pm-start="5" data-pm-end="15">Page 0 line</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="superdoc-page" data-page-index="1">
+          <div class="superdoc-fragment superdoc-table-fragment" data-block-id="shared-table">
+            <div class="cell-content">
+              <div class="superdoc-line" data-pm-start="100" data-pm-end="110">
+                <span data-pm-start="100" data-pm-end="110">Page 1 line</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+
+      const page0 = container.querySelector('.superdoc-page[data-page-index="0"]') as HTMLElement;
+      const page0Fragment = page0.querySelector('.superdoc-table-fragment') as HTMLElement;
+      const page0Content = page0.querySelector('.cell-content') as HTMLElement;
+      const page0Line = page0.querySelector('.superdoc-line') as HTMLElement;
+      const page0Span = page0.querySelector('span') as HTMLElement;
+      const page1Line = container.querySelector('.superdoc-page[data-page-index="1"] .superdoc-line') as HTMLElement;
+      const page1Span = container.querySelector('.superdoc-page[data-page-index="1"] span') as HTMLElement;
+
+      // Page 0's line sits at Y=50, page 1's line at Y=200. Click at Y=180
+      // is closer to page 1's line — without per-page scoping, findLineAtY
+      // would return page 1's line and the click would land in PM range
+      // [100, 110] instead of page 0's [5, 15].
+      // X=10 is left of visualLeft=50 so the resolver snaps to lineStart,
+      // sidestepping the char-level path that JSDOM cannot run.
+      mockRect(page0Line, { left: 50, top: 50, width: 80, height: 16 });
+      mockRect(page0Span, { left: 50, top: 50, width: 80, height: 16 });
+      mockRect(page1Line, { left: 50, top: 200, width: 80, height: 16 });
+      mockRect(page1Span, { left: 50, top: 200, width: 80, height: 16 });
+
+      withMockedElementsFromPoint(
+        [page0Content, page0Fragment, page0, container, document.body, document.documentElement],
+        () => {
+          const result = clickToPositionDom(container, 10, 180);
+          // Must land in page 0's PM range, never page 1's (>= 100).
+          expect(result).toBeGreaterThanOrEqual(5);
+          expect(result).toBeLessThanOrEqual(15);
+        },
+      );
+    });
+
     it('returns a position when a line IS in the hit chain', () => {
       container.innerHTML = `
         <div class="superdoc-page" data-page-index="0">

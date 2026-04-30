@@ -437,12 +437,12 @@ describe('table live xml test', () => {
       },
       tableStyleId: 'TableGrid',
       borders: {
-        top: { size: 0.66665 },
-        left: { size: 0.66665 },
-        bottom: { size: 0.66665 },
-        right: { size: 0.66665 },
-        insideH: { size: 0.66665 },
-        insideV: { size: 0.66665 },
+        top: { size: 0.6666666666666666 },
+        left: { size: 0.6666666666666666 },
+        bottom: { size: 0.6666666666666666 },
+        right: { size: 0.6666666666666666 },
+        insideH: { size: 0.6666666666666666 },
+        insideV: { size: 0.6666666666666666 },
       },
       grid: [
         {

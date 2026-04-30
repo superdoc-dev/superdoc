@@ -119,7 +119,7 @@ export const createToolbarRegistry = (): Partial<Record<PublicToolbarItemId, Bui
     },
     'bullet-list': {
       id: 'bullet-list',
-      directCommandName: 'toggleBulletList',
+      directCommandName: 'toggleBulletListStyle',
       state: createListStateDeriver('bullet'),
     },
     'numbered-list': {

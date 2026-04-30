@@ -1428,7 +1428,7 @@ export class SuperDoc extends EventEmitter {
    * @returns {Object[]} The search results
    */
   search(text) {
-    return this.activeEditor?.commands.search(text);
+    return this.activeEditor?.commands.search(text, { searchModel: 'visible' });
   }
 
   /**

@@ -16,6 +16,7 @@ export {
   normalizeShadingColor,
   mapBorderStyle,
   normalizeBorderSide,
+  borderSizeToPx,
 } from './borders.js';
 
 // Spacing and indent

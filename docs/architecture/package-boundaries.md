@@ -155,7 +155,7 @@ If a type does not satisfy one of these, it must not appear. The audit gate (SD-
 
 **Recommendation (delivery).** Publish the package. The published name is the only choice that remains, and it is a real trade-off:
 
-- **Fast path: keep the name `@superdoc/document-api`.** Drop `private: true` and add it to the release pipeline. No source rewrites because every existing public-declaration site already references `@superdoc/document-api`. Estimated cost: about one day. The downside is taxonomy: `@superdoc/*` was meant to read as "internal" in this RFC, and one published `@superdoc/*` package weakens that signal.
+- **Fast path: keep the name `@superdoc/document-api`.** Drop `private: true` and add it to the release pipeline. No source rewrites because every existing public-declaration site already references `@superdoc/document-api`. Estimated cost: about one day. The downside is taxonomy: `@superdoc/*` was meant to read as "internal" in this RFC, and one published `@superdoc/*` package weakens that signal. If we take this path, the published `@superdoc/document-api` should be documented as an explicit exception to the default rule that `@superdoc/*` packages are internal, so the rule does not become muddy.
 - **Taxonomy-clean path: rename to `@superdoc-dev/document-api`.** Aligns with the convention used by the other public packages (`@superdoc-dev/react`, `esign`, `template-builder`, `sdk`, `collaboration-yjs`). Requires migrating every public-declaration import that references `@superdoc/document-api` to the new name. Estimated cost: a few days, with a migration window for any external consumers who may have written their own type-only paths.
 
 The fast path solves the customer-facing complaint immediately; the taxonomy-clean path is the better long-term shape. The team should pick one explicitly. The RFC's other decisions are unaffected by the choice.
@@ -197,9 +197,22 @@ Future PRs that violate these rules fail CI with a message that points back to t
 
 If we adopt D1 (curated emit) for any portion of the surface in the future, an additional audit rule applies: **no private implementation concept exposed as a named public type unless deliberately allowed.** Inlining a type via the bundler removes the package specifier from the import but does not make the inlined shape publicly contracted. The audit gate would maintain an explicit allowlist of types that are intentionally part of the public surface (e.g. `FlowBlock` if we choose to expose it) so that an accidental inline of an implementation-detail type fails CI even when the package-name leak rule is satisfied.
 
+## Recommended sequencing
+
+The order in which the work lands matters. The RFC and the gate tickets are useful only if the customer-acute fixes happen on top of them, and the structural follow-ups happen on top of green gates.
+
+1. **Land the boundary and gate work** (SD-2829, SD-2831, SD-2832).
+2. **Fix the acute Document API issue.** Publish or otherwise expose Document API as a real type contract. This removes the worst `any` collapse and unblocks the customers most often filing TypeScript reports.
+3. **Drive the supported entries to green** against the gates. No `_internal-shims.d.ts` for public contracts. No private `@superdoc/*` imports in any `.d.ts` reachable from a public entry. `skipLibCheck: false` passes for the supported entries in the consumer matrix.
+4. **Folder reorganization** (SD-2835). The structural change becomes lower risk after step 3 because the gates catch any regression that the move might introduce. See SD-2835 for the proposed shape.
+5. **Surgical TypeScript migration** of the public contract files: configuration, command surfaces, toolbar/UI types, the supported `superdoc/super-editor` facade. Do not start with a 1,800-file repo-wide migration; that is expensive and would not on its own guarantee the published artifact works.
+6. **Long-tail TypeScript migration** opportunistically, where new work touches a file or `checkJs` surfaces real drift between JSDoc and implementation.
+
+Steps 1-3 are days to weeks. Step 4 should wait for at least one release running with the gates, so the team has confidence the boundary holds before moving files. Steps 5-6 run on their own cadence, evidence-driven rather than calendar-driven.
+
 ## Out of scope
 
-- Physical reorganization (renaming or moving packages). Tracked as SD-2835, blocked by this RFC plus the bundling and gate work.
+- Physical reorganization (renaming or moving packages) is **out of scope for the current type-contract PRs**, but recommended as the next structural follow-up once the gates are passing on the supported entries. Tracked as SD-2835.
 - Migrating internal source from JS to TS. The customer-visible problem is the published declaration boundary, not the source language.
 - The internal taxonomies of the other `@superdoc-dev/*` published packages (`react`, `esign`, `template-builder`, `sdk`, `collaboration-yjs`). The inventory above acknowledges they exist as public packages with their own version streams; this RFC governs the `superdoc` package and the workspace packages whose types might leak into `superdoc`'s published surface, not the internals of the other public packages.
 

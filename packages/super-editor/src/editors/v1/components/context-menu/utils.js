@@ -10,6 +10,7 @@ import {
 import { isList } from '@core/commands/list-helpers';
 import { isCellSelection } from '@extensions/table/tableHelpers/isCellSelection.js';
 import { hasExpandedSelection } from '@utils/selectionUtils.js';
+import { DOM_CLASS_NAMES } from '@superdoc/dom-contract';
 import { selectedRect } from 'prosemirror-tables';
 /**
  * Get props by item id
@@ -124,7 +125,7 @@ export async function getEditorContext(editor, event) {
   const isInList = structureFromResolvedPos?.isInList ?? selectionIncludesListParagraph(state);
   // .superdoc-list-marker = DomPainter markerContainer / presentation mode
   // .list-marker = ParagraphNodeView / flow editor mode
-  const isOnListMarker = Boolean(event?.target?.closest?.('.superdoc-list-marker, .list-marker'));
+  const isOnListMarker = Boolean(event?.target?.closest?.(`.${DOM_CLASS_NAMES.LIST_MARKER}, .list-marker`));
   const isInSectionNode =
     structureFromResolvedPos?.isInSectionNode ??
     selectionHasNodeOrMark(state, 'documentSection', { requireEnds: true });

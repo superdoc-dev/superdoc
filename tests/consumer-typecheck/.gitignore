@@ -1,6 +1,2 @@
 # Build artifact: written per-scenario by typecheck-matrix.mjs
 tsconfig.matrix.json
-
-# pnpm install --ignore-workspace generates this; the fixture's
-# package-lock.json is the committed lockfile of record.
-pnpm-lock.yaml

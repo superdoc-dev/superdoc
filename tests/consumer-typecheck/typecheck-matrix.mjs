@@ -48,14 +48,23 @@ if (!skipPack) {
     process.exit(1);
   }
   // The fixture is intentionally outside the pnpm workspace so it exercises
-  // the published tarball's contract, not workspace symlinks. Running plain
-  // `pnpm install` here would walk up to the workspace root; --ignore-workspace
-  // forces a standalone install so node_modules lands inside the fixture.
+  // the published tarball's contract, not workspace symlinks. Use the same
+  // install strategy the pre-SD-2831 workflow used: `npm install` with the
+  // tarball passed as an argument and `--no-save`. This bypasses the
+  // tarball-content hash that strict-mode installs (`npm ci`,
+  // `pnpm install --frozen-lockfile`) would enforce; without it, every
+  // fresh pack invalidates the committed lockfile because the tarball's
+  // bytes change on each rebuild. The fixture's dev deps are still
+  // installed from `package.json`'s semver ranges; locking them strictly
+  // is a separate concern (see `.gitignore` notes).
   try {
-    execSync('pnpm install --ignore-workspace --no-frozen-lockfile --silent', {
-      cwd: __dirname,
-      stdio: 'inherit',
-    });
+    execSync(
+      'npm install ../../packages/superdoc/superdoc.tgz --no-save --prefer-offline --no-audit --no-fund --silent',
+      {
+        cwd: __dirname,
+        stdio: 'inherit',
+      },
+    );
   } catch (e) {
     console.error('Failed to install fixture from tarball.');
     process.exit(1);
@@ -243,6 +252,33 @@ const scenarios = [
     files: ['src/informational/guarded-public-types.ts'],
     mustPass: false,
   },
+  // The broad public API compatibility assertions in `customer-scenario.ts`
+  // were previously only exercised by a bare `tsc --noEmit` over the
+  // fixture's tsconfig.json (which compiles every file under `src/`).
+  // The matrix replaced that step, so the scenario was no longer being
+  // run. Restore it as a required matrix entry, propagating the strict
+  // `noPropertyAccessFromIndexSignature: true` setting from the base
+  // tsconfig.
+  {
+    name: 'bundler / customer scenario (broad API compat)',
+    module: 'ESNext',
+    moduleResolution: 'bundler',
+    skipLibCheck: true,
+    strict: true,
+    noPropertyAccessFromIndexSignature: true,
+    files: ['src/customer-scenario.ts'],
+    mustPass: true,
+  },
+  {
+    name: 'node16 / customer scenario (broad API compat)',
+    module: 'Node16',
+    moduleResolution: 'node16',
+    skipLibCheck: true,
+    strict: true,
+    noPropertyAccessFromIndexSignature: true,
+    files: ['src/customer-scenario.ts'],
+    mustPass: true,
+  },
 ];
 
 const tscPath = join(__dirname, 'node_modules', '.bin', 'tsc');
@@ -265,6 +301,12 @@ for (const scenario of scenarios) {
       noEmit: true,
       esModuleInterop: true,
       types: ['node'],
+      // Optional per-scenario stricter flags. Propagated only when the
+      // scenario explicitly opts in so the base set of scenarios stays
+      // unchanged.
+      ...(scenario.noPropertyAccessFromIndexSignature
+        ? { noPropertyAccessFromIndexSignature: true }
+        : {}),
     },
     include: scenario.files,
   };

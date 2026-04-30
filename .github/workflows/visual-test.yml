@@ -11,12 +11,12 @@ on:
       - 'packages/superdoc/**'
       - 'packages/layout-engine/**'
       - 'packages/super-editor/**'
-      - 'packages/ai/**'
       - 'packages/word-layout/**'
       - 'packages/preset-geometry/**'
       - 'tests/visual/**'
       - 'shared/**'
       - '!**/*.md'
+  merge_group:
   workflow_dispatch:
 
 concurrency:
@@ -126,12 +126,14 @@ jobs:
             }
 
   validate:
+    name: Visual Tests / validate
     if: always()
     needs: [visual]
     runs-on: ubuntu-latest
     steps:
       - name: Check results
         run: |
-          if [[ "${{ contains(needs.*.result, 'failure') }}" == "true" ]]; then
+          if [[ "${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped') }}" == "true" ]]; then
+            echo "One or more required jobs did not succeed."
             exit 1
           fi

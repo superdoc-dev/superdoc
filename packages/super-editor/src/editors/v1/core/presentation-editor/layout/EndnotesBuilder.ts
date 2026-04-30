@@ -3,9 +3,11 @@ import type { FlowBlock, Run as LayoutRun, TextRun } from '@superdoc/contracts';
 import { toFlowBlocks, type ConverterContext } from '@superdoc/pm-adapter';
 import { SUBSCRIPT_SUPERSCRIPT_SCALE } from '@superdoc/pm-adapter/constants.js';
 
+import type { ProseMirrorJSON } from '../../types/EditorTypes.js';
 import { findNoteEntryById } from '../../../document-api-adapters/helpers/note-entry-lookup.js';
 import { normalizeNotePmJson } from '../../../document-api-adapters/helpers/note-pm-json.js';
 import { buildStoryKey } from '../../../document-api-adapters/story-runtime/story-key.js';
+import type { NoteRenderOverride } from './FootnotesBuilder.js';
 
 export type EndnoteConverterLike = {
   endnotes?: Array<{ id?: unknown; content?: unknown[] }>;
@@ -25,6 +27,7 @@ export function buildEndnoteBlocks(
   converter: EndnoteConverterLike | null | undefined,
   converterContext: ConverterContext | undefined,
   themeColors: unknown,
+  renderOverride: NoteRenderOverride | null = null,
 ): FlowBlock[] {
   if (!editorState) return [];
 
@@ -50,13 +53,10 @@ export function buildEndnoteBlocks(
   const blocks: FlowBlock[] = [];
 
   orderedEndnoteIds.forEach((id) => {
-    const entry = findNoteEntryById(importedEndnotes, id);
-    const content = entry?.content;
-    if (!Array.isArray(content) || content.length === 0) return;
-
     try {
-      const clonedContent = JSON.parse(JSON.stringify(content));
-      const endnoteDoc = normalizeNotePmJson({ type: 'doc', content: clonedContent });
+      const endnoteDoc = resolveEndnoteDocJson(id, importedEndnotes, renderOverride);
+      if (!endnoteDoc) return;
+
       const result = toFlowBlocks(endnoteDoc, {
         blockIdPrefix: `endnote-${id}-`,
         storyKey: buildStoryKey({ kind: 'story', storyType: 'endnote', noteId: id }),
@@ -140,6 +140,35 @@ function syncMarkerRun(target: TextRun, source: TextRun): void {
   target.baselineShift = source.baselineShift;
   delete target.pmStart;
   delete target.pmEnd;
+}
+
+function cloneJsonValue<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
+}
+
+function cloneNoteContentJson(content: unknown[]): ProseMirrorJSON[] {
+  return cloneJsonValue(content) as ProseMirrorJSON[];
+}
+
+function resolveEndnoteDocJson(
+  id: string,
+  importedEndnotes: Array<{ id?: unknown; content?: unknown[] }>,
+  renderOverride: NoteRenderOverride | null,
+): ProseMirrorJSON | null {
+  if (renderOverride && renderOverride.noteId === id) {
+    return normalizeNotePmJson(cloneJsonValue(renderOverride.docJson));
+  }
+
+  const entry = findNoteEntryById(importedEndnotes, id);
+  const content = entry?.content;
+  if (!Array.isArray(content) || content.length === 0) {
+    return null;
+  }
+
+  return normalizeNotePmJson({
+    type: 'doc',
+    content: cloneNoteContentJson(content),
+  });
 }
 
 function ensureEndnoteMarker(

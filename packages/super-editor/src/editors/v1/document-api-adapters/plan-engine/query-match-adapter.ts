@@ -196,9 +196,29 @@ function buildMatchBlocks(
     const sorted = [...ranges].sort((a, b) => a.range.start - b.range.start);
     for (let i = 0; i < sorted.length - 1; i++) {
       if (sorted[i].range.end < sorted[i + 1].range.start) {
+        const gapStart = sorted[i].range.end;
+        const gapEnd = sorted[i + 1].range.start;
+        const coveringStart = Math.min(...sorted.map((r) => r.range.start));
+        const coveringEnd = Math.max(...sorted.map((r) => r.range.end));
         throw planError(
           'INVALID_INPUT',
-          `discontiguous text ranges in block ${blockId}: gap between ${sorted[i].range.end} and ${sorted[i + 1].range.start}`,
+          `discontiguous text ranges in block ${blockId}: gap between ${gapStart} and ${gapEnd}. ` +
+            `Two or more edits target the same block with untouched text between them and cannot be coalesced safely. ` +
+            `Fix by: (a) splitting the edits across separate superdoc_mutations batches — preferred, works in both direct and tracked change modes; ` +
+            `or (b) combining the edits into a single text.rewrite covering offsets ${coveringStart}..${coveringEnd} — direct mode only, since in tracked mode the untouched middle would be recorded as deleted+reinserted.`,
+          undefined,
+          {
+            blockId,
+            gap: { start: gapStart, end: gapEnd },
+            coveringRange: { start: coveringStart, end: coveringEnd },
+            rangeCount: sorted.length,
+            ranges: sorted.map((r) => ({ start: r.range.start, end: r.range.end })),
+            remediation: {
+              preferred: 'split-batches',
+              optionA: 'Split into separate superdoc_mutations batches (works in direct and tracked modes).',
+              optionB: `Combine into one text.rewrite covering offsets ${coveringStart}..${coveringEnd} (direct mode only — pollutes tracked history).`,
+            },
+          },
         );
       }
     }

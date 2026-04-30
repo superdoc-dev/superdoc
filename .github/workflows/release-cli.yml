@@ -14,7 +14,6 @@ on:
       - 'packages/superdoc/**'
       - 'packages/super-editor/**'
       - 'packages/layout-engine/**'
-      - 'packages/ai/**'
       - 'packages/word-layout/**'
       - 'packages/preset-geometry/**'
       - 'shared/**'
@@ -63,7 +62,12 @@ jobs:
 
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.3.12
+          # DO NOT BUMP without verifying macOS darwin-arm64 binary signing.
+          # Bun 1.3.12+ regressed `bun build --compile` macOS code signing
+          # (oven-sh/bun#29120, oven-sh/bun#29361), which causes the embedded
+          # CLI in the Python SDK wheel to be SIGKILL'd by Gatekeeper on macOS.
+          # Tracked in SD-2784 — unpin once explicit codesign step lands.
+          bun-version: 1.3.11
 
       - name: Cache apt packages
         uses: actions/cache@v5

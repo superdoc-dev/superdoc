@@ -15,6 +15,7 @@ import {
 } from '@superdoc/super-editor';
 import useComment from '@superdoc/components/CommentsLayer/use-comment';
 import { groupChanges } from '../helpers/group-changes.js';
+import { buildFloatingCommentInstances } from './helpers/floating-comment-instances.js';
 
 export const useCommentsStore = defineStore('comments', () => {
   const BODY_TRACKED_CHANGE_STORY = { kind: 'story', storyType: 'body' };
@@ -54,6 +55,7 @@ export const useCommentsStore = defineStore('comments', () => {
   const commentsParentElement = ref(null);
   const hasInitializedLocations = ref(false);
   const activeComment = ref(null);
+  const activeFloatingCommentInstanceId = ref(null);
   const editingCommentId = ref(null);
   const commentDialogs = ref([]);
   const overlappingComments = ref([]);
@@ -75,6 +77,7 @@ export const useCommentsStore = defineStore('comments', () => {
   const generalCommentIds = ref([]);
   const instantSidebarAlignmentTargetY = ref(null);
   const instantSidebarAlignmentThreadId = ref(null);
+  const instantSidebarAlignmentInstanceId = ref(null);
 
   const pendingComment = ref(null);
   const isViewingMode = computed(() => viewingVisibility.documentMode === 'viewing');
@@ -355,7 +358,7 @@ export const useCommentsStore = defineStore('comments', () => {
 
       const isActiveStale = Array.from(activeAliases).some((id) => staleRootAliasIds.has(id));
       if (isActiveStale || activeParentKeys.some((id) => staleRootAliasIds.has(id))) {
-        activeComment.value = null;
+        clearActiveCommentSelection();
       }
     }
 
@@ -489,13 +492,18 @@ export const useCommentsStore = defineStore('comments', () => {
 
     // If no ID, we clear any focused comments
     if (id === undefined || id === null) {
-      activeComment.value = null;
+      clearActiveCommentSelection();
       activeEditor?.commands?.setActiveComment({ commentId: null });
       return;
     }
 
     const comment = getComment(id);
-    if (comment) activeComment.value = comment.commentId;
+    if (!comment) {
+      return;
+    }
+
+    activeComment.value = comment.commentId;
+    syncActiveFloatingInstanceWithComment(comment.commentId);
     activeEditor?.commands?.setActiveComment({ commentId: activeComment.value });
   };
 
@@ -678,10 +686,13 @@ export const useCommentsStore = defineStore('comments', () => {
     }
   };
 
-  const requestInstantSidebarAlignment = (targetY = null, threadId = null) => {
+  const requestInstantSidebarAlignment = (targetY = null, threadId = null, instanceId = null) => {
     const hasTargetY = Number.isFinite(targetY);
     instantSidebarAlignmentTargetY.value = hasTargetY ? targetY : null;
     instantSidebarAlignmentThreadId.value = hasTargetY && threadId != null ? String(threadId) : null;
+    const resolvedInstanceId = instanceId ?? threadId;
+    instantSidebarAlignmentInstanceId.value =
+      hasTargetY && resolvedInstanceId != null ? String(resolvedInstanceId) : null;
   };
 
   const peekInstantSidebarAlignment = () => {
@@ -692,6 +703,7 @@ export const useCommentsStore = defineStore('comments', () => {
   const clearInstantSidebarAlignment = () => {
     instantSidebarAlignmentTargetY.value = null;
     instantSidebarAlignmentThreadId.value = null;
+    instantSidebarAlignmentInstanceId.value = null;
   };
 
   const debounceEmit = (commentId, event, superdoc, delay = 1000) => {
@@ -734,6 +746,7 @@ export const useCommentsStore = defineStore('comments', () => {
     }
 
     requestInstantSidebarAlignment(targetClientY, 'pending');
+    setActiveFloatingCommentInstance(null);
     activeComment.value = pendingComment.value.commentId;
   };
 
@@ -917,7 +930,7 @@ export const useCommentsStore = defineStore('comments', () => {
     // Replies and edits also call this to reset currentCommentText, but
     // clearing activeComment would deactivate the thread (SD-2035).
     if (hadPending) {
-      activeComment.value = null;
+      clearActiveCommentSelection();
     }
 
     superdoc?.activeEditor?.commands?.removeComment({ commentId: 'pending' });
@@ -995,7 +1008,7 @@ export const useCommentsStore = defineStore('comments', () => {
 
     // Clear active state so floating layout doesn't reference a deleted comment
     if (activeComment.value === commentId || childCommentIds.includes(activeComment.value)) {
-      activeComment.value = null;
+      clearActiveCommentSelection();
     }
 
     const event = {
@@ -1388,7 +1401,7 @@ export const useCommentsStore = defineStore('comments', () => {
       );
     });
     if (activeCommentId && removedIds.has(activeCommentId) && activeCommentBelongsToActiveDocument) {
-      activeComment.value = null;
+      clearActiveCommentSelection();
     }
   };
 
@@ -1674,6 +1687,51 @@ export const useCommentsStore = defineStore('comments', () => {
     return comments;
   });
 
+  const getFloatingCommentInstances = computed(() => {
+    return getFloatingComments.value.flatMap((comment) => {
+      const { key, entry } = resolveCommentPositionEntry(comment);
+      const fallbackId = getCommentAliasIds(comment)[0] ?? normalizeCommentId(comment?.commentId) ?? null;
+
+      return buildFloatingCommentInstances({
+        comment,
+        positionKey: key,
+        positionEntry: entry,
+        fallbackId,
+      });
+    });
+  });
+
+  const normalizeFloatingCommentInstanceId = (instanceId) => {
+    return instanceId == null ? null : String(instanceId);
+  };
+
+  const setActiveFloatingCommentInstance = (instanceId = null) => {
+    activeFloatingCommentInstanceId.value = normalizeFloatingCommentInstanceId(instanceId);
+  };
+
+  const clearActiveCommentSelection = () => {
+    activeComment.value = null;
+    setActiveFloatingCommentInstance(null);
+  };
+
+  const doesFloatingInstanceBelongToComment = (instanceId, commentId) => {
+    if (instanceId == null || commentId == null) {
+      return false;
+    }
+
+    return getFloatingCommentInstances.value.some(
+      (instance) =>
+        String(instance.id) === String(instanceId) &&
+        String(instance.comment?.commentId ?? instance.threadId ?? '') === String(commentId),
+    );
+  };
+
+  const syncActiveFloatingInstanceWithComment = (commentId) => {
+    if (!doesFloatingInstanceBelongToComment(activeFloatingCommentInstanceId.value, commentId)) {
+      setActiveFloatingCommentInstance(null);
+    }
+  };
+
   const setViewingVisibility = ({ documentMode, commentsVisible, trackChangesVisible } = {}) => {
     if (typeof documentMode === 'string') {
       viewingVisibility.documentMode = documentMode;
@@ -1794,6 +1852,7 @@ export const useCommentsStore = defineStore('comments', () => {
     hasSyncedCollaborationComments,
     editingCommentId,
     activeComment,
+    activeFloatingCommentInstanceId,
     commentDialogs,
     overlappingComments,
     overlappedIds,
@@ -1817,12 +1876,14 @@ export const useCommentsStore = defineStore('comments', () => {
     isFloatingCommentsReady,
     instantSidebarAlignmentTargetY,
     instantSidebarAlignmentThreadId,
+    instantSidebarAlignmentInstanceId,
     // Getters
     getConfig,
     documentsWithConverations,
     getGroupedComments,
     getCommentsByPosition,
     getFloatingComments,
+    getFloatingCommentInstances,
     getCommentAliasIds,
     getCommentPositionKey,
     getCommentPosition,
@@ -1851,6 +1912,7 @@ export const useCommentsStore = defineStore('comments', () => {
     clearEditorCommentPositions,
     handleTrackedChangeUpdate,
     syncTrackedChangePositionsWithDocument,
+    setActiveFloatingCommentInstance,
     requestInstantSidebarAlignment,
     peekInstantSidebarAlignment,
     clearInstantSidebarAlignment,

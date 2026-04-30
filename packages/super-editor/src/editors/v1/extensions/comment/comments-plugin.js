@@ -5,6 +5,7 @@ import { CommentMarkName } from './comments-constants.js';
 import {
   getHighlightColor,
   removeCommentsById,
+  reopenCommentById,
   resolveCommentById,
   translateFormatChangesToEnglish,
 } from './comments-helpers.js';
@@ -299,6 +300,12 @@ export const CommentsPlugin = Extension.create({
           tr.setMeta(CommentsPluginKey, { event: 'update' });
           return resolveCommentById({ commentId, importedId, state, tr, dispatch });
         },
+      reopenComment:
+        ({ commentId, importedId, internal }) =>
+        ({ tr, dispatch, state }) => {
+          tr.setMeta(CommentsPluginKey, { event: 'update' });
+          return reopenCommentById({ commentId, importedId, internal, state, tr, dispatch });
+        },
       editComment:
         ({ commentId, importedId, content, text }) =>
         ({ editor }) => {
@@ -507,11 +514,10 @@ export const CommentsPlugin = Extension.create({
           }
 
           // Check for changes in the actively selected comment
-          const trChangedActiveComment = meta?.type === 'setActiveComment';
-          if ((!tr.docChanged && tr.selectionSet) || trChangedActiveComment) {
+          if (!tr.docChanged && tr.selectionSet) {
             const { selection } = tr;
+
             let currentActiveThread = getActiveCommentId(newEditorState.doc, selection);
-            if (trChangedActiveComment) currentActiveThread = meta.activeThreadId;
             if (
               meta?.type === 'setCursorById' &&
               meta.preferredActiveThreadId &&
@@ -521,7 +527,20 @@ export const CommentsPlugin = Extension.create({
             }
 
             const previousSelectionId = pluginState.activeThreadId;
-            if (previousSelectionId !== currentActiveThread) {
+            // getActiveCommentId returns undefined for any non-collapsed selection
+            // (its first line is `if ($from.pos !== $to.pos) return;`), and that
+            // undefined gets coerced to null below, which would emit
+            // commentsUpdate({activeCommentId: null}) and clear an active comment.
+            // For tracked-change comments, presentation.navigateTo dispatches a
+            // collapsed cursor placement immediately followed by a non-collapsed
+            // NodeSelection on the SDT wrapper. That second tx would otherwise
+            // overwrite the just-activated comment, the host's commentsUpdate
+            // listener would re-assert it, and the loop would flicker forever
+            // (issue #2861). Treat "undefined from non-collapsed" as "no
+            // information" rather than "no active comment".
+            const isNonCollapsedClear =
+              currentActiveThread == null && selection && selection.$from.pos !== selection.$to.pos;
+            if (previousSelectionId !== currentActiveThread && !isNonCollapsedClear) {
               // Update both the plugin state and the local variable
               pluginState.activeThreadId = currentActiveThread;
               const update = {

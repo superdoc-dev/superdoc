@@ -1,16 +1,17 @@
 {
   "files": [],
   "references": [
+    { "path": "packages/docx-evidence-contracts/tsconfig.json" },
     { "path": "packages/word-layout/tsconfig.json" },
     { "path": "packages/layout-engine/contracts/tsconfig.json" },
     { "path": "packages/layout-engine/dom-contract/tsconfig.json" },
     { "path": "packages/layout-engine/layout-resolved/tsconfig.json" },
     { "path": "packages/layout-engine/geometry-utils/tsconfig.json" },
     { "path": "packages/layout-engine/layout-engine/tsconfig.json" },
+    { "path": "packages/layout-engine/layout-bridge/tsconfig.types.json" },
     { "path": "packages/layout-engine/measuring/dom/tsconfig.json" },
     { "path": "packages/layout-engine/painters/dom/tsconfig.json" },
     { "path": "packages/layout-engine/style-engine/tsconfig.json" },
-    { "path": "packages/layout-engine/layout-bridge/tsconfig.types.json" },
     { "path": "packages/document-api/tsconfig.json" },
     { "path": "packages/super-editor/tsconfig.types.json" },
     { "path": "packages/superdoc/tsconfig.types.json" }

@@ -84,6 +84,8 @@ import { syncPackageMetadata } from './opc/sync-package-metadata.js';
 import { readSettingsRoot, parseProtectionState } from '../document-api-adapters/document-settings.js';
 import { applyEffectiveEditability, getProtectionStorage } from '../extensions/protection/editability.js';
 import { getViewModeSelectionWithoutStructuredContent } from './helpers/getViewModeSelectionWithoutStructuredContent.js';
+import { resolveMainBodyEditor } from '../document-api-adapters/helpers/word-statistics.js';
+import { commitLiveStorySessionRuntimes } from '../document-api-adapters/story-runtime/live-story-session-runtime-registry.js';
 
 declare const __APP_VERSION__: string | undefined;
 declare const version: string | undefined;
@@ -424,6 +426,9 @@ export class Editor extends EventEmitter<EditorEventMap> {
     onCommentsLoaded: () => null,
     onCommentClicked: () => null,
     onCommentLocationsUpdate: () => null,
+    onPointerDown: () => null,
+    onPointerUp: () => null,
+    onRightClick: () => null,
     onDocumentLocked: () => null,
     onFirstRender: () => null,
     onCollaborationReady: () => null,
@@ -600,7 +605,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
     }
 
     // Skip for sub-editors that are not primary document editors
-    if (this.options.mode === 'text' || this.options.isHeaderOrFooter) {
+    if (this.options.mode === 'text' || this.options.isHeaderOrFooter || this.options.isChildEditor) {
       return;
     }
 
@@ -761,6 +766,9 @@ export class Editor extends EventEmitter<EditorEventMap> {
     this.on('list-definitions-change', this.options.onListDefinitionsChange!);
     this.on('fonts-resolved', this.options.onFontsResolved!);
     this.on('exception', this.options.onException!);
+    this.on('pointerDown', this.options.onPointerDown!);
+    this.on('pointerUp', this.options.onPointerUp!);
+    this.on('rightClick', this.options.onRightClick!);
   }
 
   /**
@@ -1159,6 +1167,9 @@ export class Editor extends EventEmitter<EditorEventMap> {
     this.on('list-definitions-change', this.options.onListDefinitionsChange!);
     this.on('fonts-resolved', this.options.onFontsResolved!);
     this.on('exception', this.options.onException!);
+    this.on('pointerDown', this.options.onPointerDown!);
+    this.on('pointerUp', this.options.onPointerUp!);
+    this.on('rightClick', this.options.onRightClick!);
 
     if (!shouldMountRenderer) {
       this.#emitCreateAsync();
@@ -1235,6 +1246,9 @@ export class Editor extends EventEmitter<EditorEventMap> {
     this.on('commentClick', this.options.onCommentClicked!);
     this.on('locked', this.options.onDocumentLocked!);
     this.on('list-definitions-change', this.options.onListDefinitionsChange!);
+    this.on('pointerDown', this.options.onPointerDown!);
+    this.on('pointerUp', this.options.onPointerUp!);
+    this.on('rightClick', this.options.onRightClick!);
 
     if (!shouldMountRenderer) {
       this.#emitCreateAsync();
@@ -1926,7 +1940,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
       }
     }
 
-    if (emitUpdate) {
+    if (emitUpdate && this.state) {
       this.emit('update', { editor: this, transaction: this.state.tr });
     }
   }
@@ -3149,6 +3163,9 @@ export class Editor extends EventEmitter<EditorEventMap> {
     compression,
   }: ExportDocxParams = {}): Promise<Blob | Buffer | Record<string, string | null> | string | undefined> {
     try {
+      const exportHostEditor = resolveMainBodyEditor(this);
+      commitLiveStorySessionRuntimes(exportHostEditor);
+
       // Use provided comments, or fall back to imported comments from converter
       const effectiveComments = comments ?? this.converter.comments ?? [];
 

@@ -1,5 +1,8 @@
 import 'superdoc/style.css';
 import { SuperDoc } from 'superdoc';
+import { createSuperDocUI } from 'superdoc/ui';
+
+type SuperDocUIInstance = ReturnType<typeof createSuperDocUI>;
 
 type SuperDocConfig = ConstructorParameters<typeof SuperDoc>[0];
 type SuperDocInstance = InstanceType<typeof SuperDoc>;
@@ -43,6 +46,15 @@ type HarnessWindow = Window &
     editor?: unknown;
     behaviorHarness?: BehaviorHarnessApi;
     behaviorHarnessInit?: (input?: ContentOverrideInput) => void;
+    /**
+     * Optional `superdoc/ui` controller — created lazily by behavior
+     * tests that exercise `createSuperDocUI`. Tests call
+     * `window.__bootSuperDocUI()` after `superdocReady` flips, then
+     * read state through `window.superdocUI` (or call its action
+     * methods directly).
+     */
+    superdocUI?: SuperDocUIInstance;
+    __bootSuperDocUI?: () => SuperDocUIInstance;
   };
 
 const harnessWindow = window as HarnessWindow;
@@ -168,6 +180,17 @@ function init(file?: File, content?: ContentOverrideInput) {
         harnessWindow.editor = (payload as { editor: unknown }).editor;
       });
       harnessWindow.behaviorHarness = buildBehaviorHarnessApi();
+      // Lazy-construct the `superdoc/ui` controller on first request.
+      // We don't auto-build it because most behavior tests don't need
+      // it, and constructing it eagerly would add edge events to the
+      // editor for every test run. Tests that exercise `createSuperDocUI`
+      // call `window.__bootSuperDocUI()` after `superdocReady`.
+      harnessWindow.__bootSuperDocUI = () => {
+        if (!harnessWindow.superdocUI) {
+          harnessWindow.superdocUI = createSuperDocUI({ superdoc });
+        }
+        return harnessWindow.superdocUI;
+      };
       harnessWindow.superdocReady = true;
     },
   };

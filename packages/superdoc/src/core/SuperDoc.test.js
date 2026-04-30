@@ -409,6 +409,30 @@ describe('SuperDoc core', () => {
     expect(readySpy).toHaveBeenCalledTimes(1);
   });
 
+  it('uses visible search model in SuperDoc.search()', async () => {
+    createAppHarness();
+
+    const instance = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: {}, toolbar: {} },
+      colors: ['red'],
+      user: { name: 'Jane', email: 'jane@example.com' },
+      onException: vi.fn(),
+    });
+    await flushMicrotasks();
+
+    const searchResult = [{ from: 1, to: 4 }];
+    const searchMock = vi.fn(() => searchResult);
+    instance.activeEditor = { commands: { search: searchMock } };
+
+    const result = instance.search('test');
+
+    expect(searchMock).toHaveBeenCalledWith('test', { searchModel: 'visible' });
+    expect(result).toBe(searchResult);
+  });
+
   it('locks superdoc via ydoc metadata and emits event', async () => {
     createAppHarness();
 

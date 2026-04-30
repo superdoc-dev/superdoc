@@ -4,6 +4,14 @@ type PmJsonNode = {
   [key: string]: unknown;
 };
 
+type NotePmJsonRoot = {
+  type?: unknown;
+  content?: unknown;
+  attrs?: unknown;
+  marks?: unknown;
+  text?: unknown;
+};
+
 function isPmJsonNode(value: unknown): value is PmJsonNode {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -161,7 +169,7 @@ function normalizeNotePmNode(value: unknown): unknown {
  * Keeping both paths on the same normalized PM JSON fixes the mismatch at the
  * source.
  */
-export function normalizeNotePmJson<T extends Record<string, unknown>>(docJson: T): T {
+export function normalizeNotePmJson<T extends NotePmJsonRoot>(docJson: T): T {
   const normalized = normalizeNotePmNode(docJson);
   return (isPmJsonNode(normalized) ? normalized : docJson) as T;
 }

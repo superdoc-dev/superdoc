@@ -16,6 +16,7 @@ import type {
   SdtMetadata,
   DrawingBlock,
   TrackedChangeMeta,
+  SourceAnchor,
 } from '@superdoc/contracts';
 import type {
   PMNode,
@@ -74,6 +75,13 @@ import {
 import { chartNodeToDrawingBlock } from './chart.js';
 import { tableNodeToBlock } from './table.js';
 
+function sourceAnchorFromNode(node: PMNode): SourceAnchor | undefined {
+  const sourceAnchor = (node.attrs as Record<string, unknown> | undefined)?.sourceAnchor;
+  return sourceAnchor && typeof sourceAnchor === 'object' && !Array.isArray(sourceAnchor)
+    ? (sourceAnchor as SourceAnchor)
+    : undefined;
+}
+
 // ============================================================================
 // Helper functions for inline image detection and conversion
 // ============================================================================
@@ -90,7 +98,7 @@ const isHiddenShape = (node: PMNode): boolean => {
 /**
  * Helper to check if a run is a text run.
  */
-const isTextRun = (run: Run): run is TextRun => {
+export const isTextRun = (run: Run): run is TextRun => {
   const kind = (run as { kind?: string }).kind;
   return (kind === undefined || kind === 'text') && 'text' in run;
 };
@@ -211,6 +219,43 @@ export function mergeAdjacentRuns(runs: Run[]): Run[] {
   // Push the last run
   merged.push(current);
   return merged;
+}
+
+/**
+ * Expands text runs that contain inline newlines into multiple runs.
+ *
+ * @param {Run[]} runs - The runs to expand
+ * @returns {Run[]} The expanded runs
+ */
+export function expandRunsForInlineNewlines(runs: Run[]): Run[] {
+  const result: Run[] = [];
+  for (const run of runs) {
+    const textRun = run as TextRun;
+    if ('text' in run && typeof textRun.text === 'string' && textRun.text.includes('\n')) {
+      const segments = textRun.text.split('\n');
+      let cursor = textRun.pmStart ?? 0;
+      segments.forEach((segment, idx) => {
+        if (segment.length > 0) {
+          result.push({ ...textRun, text: segment, pmStart: cursor, pmEnd: cursor + segment.length });
+          cursor += segment.length;
+        }
+        if (idx !== segments.length - 1) {
+          result.push({
+            kind: 'break',
+            breakType: 'line',
+            pmStart: cursor,
+            pmEnd: cursor + 1,
+            sdt: textRun.sdt,
+            trackedChange: textRun.trackedChange,
+          });
+          cursor += 1;
+        }
+      });
+    } else {
+      result.push(run);
+    }
+  }
+  return result;
 }
 
 /**
@@ -546,6 +591,7 @@ export function paragraphToFlowBlocks({
 
   const blocks: FlowBlock[] = [];
   const paraAttrs = (para.attrs ?? {}) as Record<string, unknown>;
+  const sourceAnchor = sourceAnchorFromNode(para);
   const rawParagraphProps =
     typeof paraAttrs.paragraphProperties === 'object' && paraAttrs.paragraphProperties !== null
       ? (paraAttrs.paragraphProperties as Record<string, unknown>)
@@ -607,6 +653,7 @@ export function paragraphToFlowBlocks({
       id: baseBlockId,
       runs: [emptyRun],
       attrs: emptyParagraphAttrs,
+      sourceAnchor,
     });
     if (!trackedChangesConfig) {
       return blocks;
@@ -710,6 +757,7 @@ export function paragraphToFlowBlocks({
       id: nextId(),
       runs,
       attrs: deepClone(paragraphAttrs),
+      sourceAnchor,
     });
     partIndex += 1;
   };
@@ -841,6 +889,7 @@ export function paragraphToFlowBlocks({
         },
       ],
       attrs: deepClone(paragraphAttrs),
+      sourceAnchor,
     });
   }
 
@@ -850,6 +899,21 @@ export function paragraphToFlowBlocks({
     if (block.kind === 'paragraph' && block.runs.length > 1) {
       block.runs = mergeAdjacentRuns(block.runs);
       // Silent optimization: no console noise in tests/production
+    }
+  });
+
+  // Expand text runs containing inline '\n' into separate text + break runs.
+  // The measurer does the same expansion locally and emits fromRun/toRun indices
+  // relative to the expanded array. By expanding here, all downstream consumers
+  // (measurer, renderer, computeLinePmRange, selectionToRects) see consistent indices.
+  blocks.forEach((block) => {
+    if (
+      block.kind === 'paragraph' &&
+      block.runs.some(
+        (r) => 'text' in r && typeof (r as TextRun).text === 'string' && (r as TextRun).text.includes('\n'),
+      )
+    ) {
+      block.runs = expandRunsForInlineNewlines(block.runs);
     }
   });
 

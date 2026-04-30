@@ -571,6 +571,7 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.getHtml` | `get-html` | Extract the document content as an HTML string. |
 | `doc.markdownToFragment` | `markdown-to-fragment` | Convert a Markdown string into an SDM/1 structural fragment. |
 | `doc.info` | `info` | Return document summary info including word, character, paragraph, heading, table, image, comment, tracked-change, SDT-field, list, and page counts, plus outline and capabilities. |
+| `doc.extract` | `extract` | Extract all document content with stable IDs for RAG pipelines. Returns blocks with full text, comments, and tracked changes — each with an ID compatible with scrollToElement(). |
 | `doc.clearContent` | `clear-content` | Clear all document body content, leaving a single empty paragraph. |
 | `doc.insert` | `insert` | Insert content into the document. Two input shapes: text-based (value + type) inserts inline content at a SelectionTarget or ref position within an existing block; structural SDFragment (content) inserts one or more blocks as siblings relative to a BlockNodeAddress target. When target/ref is omitted, content appends at the end of the document. Text mode supports text (default), markdown, and html content types via the `type` field. Structural mode uses `placement` (before/after/insideStart/insideEnd) to position relative to the target block. |
 | `doc.replace` | `replace` | Replace content at a contiguous document selection. Text path accepts a SelectionTarget or ref plus replacement text. Structural path accepts a BlockNodeAddress (replaces whole block), SelectionTarget (expands to full covered block boundaries), or ref plus SDFragment content. |
@@ -580,6 +581,7 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.blocks.deleteRange` | `blocks delete-range` | Delete a contiguous range of top-level blocks between two endpoints (inclusive). Both endpoints must be direct children of the document node. Supports dry-run preview. |
 | `doc.query.match` | `query match` | Deterministic selector-based search returning mutation-grade addresses and text ranges. Use this to discover targets before any mutation. |
 | `doc.ranges.resolve` | `ranges resolve` | Resolve two explicit anchors into a contiguous document range. Returns a transparent SelectionTarget, a mutation-ready ref, and preview metadata. Stateless and deterministic. |
+| `doc.selection.current` | `selection current` | Read the editor's current selection as a portable SelectionInfo with a text-anchored TextTarget. Primitive for building custom comments UIs, floating toolbars, and other selection-driven components without reaching into ProseMirror internals. |
 | `doc.mutations.preview` | `mutations preview` | Dry-run a mutation plan, returning resolved targets without applying changes. |
 | `doc.mutations.apply` | `mutations apply` | Execute a mutation plan atomically against the document. |
 | `doc.capabilities.get` | `capabilities` | Query runtime capabilities supported by the current document engine. |
@@ -851,6 +853,8 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.lists.join` | `lists join` | Merge two adjacent list sequences into one. |
 | `doc.lists.canJoin` | `lists can-join` | Check whether two adjacent list sequences can be joined. |
 | `doc.lists.separate` | `lists separate` | Split a list sequence at the target item, creating a new sequence from that point forward. |
+| `doc.lists.merge` | `lists merge` | Compound: merge two adjacent list sequences into one. Reassigns numId on the absorbed sequence (no strict abstractNumId check — absorbed items adopt the absorbing definition) and deletes empty paragraphs between the two sequences. Use this instead of lists.join for the user-facing "merge these lists" intent. |
+| `doc.lists.split` | `lists split` | Compound: split a list sequence at the target item into two independent sequences. Runs lists.separate then (by default) lists.setValue(1) so the new half starts numbering fresh at 1. Pass restartNumbering:false for raw separate semantics (new half continues the previous count). |
 | `doc.lists.setLevel` | `lists set-level` | Set the absolute nesting level (0..8) of a list item. |
 | `doc.lists.setValue` | `lists set-value` | Set an explicit numbering value at the target item. Mid-sequence targets are atomically separated first. |
 | `doc.lists.continuePrevious` | `lists continue-previous` | Continue numbering from the nearest compatible previous list sequence. |
@@ -996,9 +1000,9 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 
 | Operation | CLI command | Description |
 | --- | --- | --- |
-| `doc.history.get` | `history get` | Query the current undo/redo history state of the active editor. |
-| `doc.history.undo` | `history undo` | Undo the most recent history-safe mutation in the active editor. |
-| `doc.history.redo` | `history redo` | Redo the most recently undone action in the active editor. |
+| `doc.history.get` | `history get` | Query the current undo/redo history state of the document. |
+| `doc.history.undo` | `history undo` | Undo the most recent history-safe mutation in the document. |
+| `doc.history.redo` | `history redo` | Redo the most recently undone action in the document. |
 
 #### Lifecycle
 
@@ -1031,6 +1035,7 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.get_html` | `get-html` | Extract the document content as an HTML string. |
 | `doc.markdown_to_fragment` | `markdown-to-fragment` | Convert a Markdown string into an SDM/1 structural fragment. |
 | `doc.info` | `info` | Return document summary info including word, character, paragraph, heading, table, image, comment, tracked-change, SDT-field, list, and page counts, plus outline and capabilities. |
+| `doc.extract` | `extract` | Extract all document content with stable IDs for RAG pipelines. Returns blocks with full text, comments, and tracked changes — each with an ID compatible with scrollToElement(). |
 | `doc.clear_content` | `clear-content` | Clear all document body content, leaving a single empty paragraph. |
 | `doc.insert` | `insert` | Insert content into the document. Two input shapes: text-based (value + type) inserts inline content at a SelectionTarget or ref position within an existing block; structural SDFragment (content) inserts one or more blocks as siblings relative to a BlockNodeAddress target. When target/ref is omitted, content appends at the end of the document. Text mode supports text (default), markdown, and html content types via the `type` field. Structural mode uses `placement` (before/after/insideStart/insideEnd) to position relative to the target block. |
 | `doc.replace` | `replace` | Replace content at a contiguous document selection. Text path accepts a SelectionTarget or ref plus replacement text. Structural path accepts a BlockNodeAddress (replaces whole block), SelectionTarget (expands to full covered block boundaries), or ref plus SDFragment content. |
@@ -1040,6 +1045,7 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.blocks.delete_range` | `blocks delete-range` | Delete a contiguous range of top-level blocks between two endpoints (inclusive). Both endpoints must be direct children of the document node. Supports dry-run preview. |
 | `doc.query.match` | `query match` | Deterministic selector-based search returning mutation-grade addresses and text ranges. Use this to discover targets before any mutation. |
 | `doc.ranges.resolve` | `ranges resolve` | Resolve two explicit anchors into a contiguous document range. Returns a transparent SelectionTarget, a mutation-ready ref, and preview metadata. Stateless and deterministic. |
+| `doc.selection.current` | `selection current` | Read the editor's current selection as a portable SelectionInfo with a text-anchored TextTarget. Primitive for building custom comments UIs, floating toolbars, and other selection-driven components without reaching into ProseMirror internals. |
 | `doc.mutations.preview` | `mutations preview` | Dry-run a mutation plan, returning resolved targets without applying changes. |
 | `doc.mutations.apply` | `mutations apply` | Execute a mutation plan atomically against the document. |
 | `doc.capabilities.get` | `capabilities` | Query runtime capabilities supported by the current document engine. |
@@ -1311,6 +1317,8 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.lists.join` | `lists join` | Merge two adjacent list sequences into one. |
 | `doc.lists.can_join` | `lists can-join` | Check whether two adjacent list sequences can be joined. |
 | `doc.lists.separate` | `lists separate` | Split a list sequence at the target item, creating a new sequence from that point forward. |
+| `doc.lists.merge` | `lists merge` | Compound: merge two adjacent list sequences into one. Reassigns numId on the absorbed sequence (no strict abstractNumId check — absorbed items adopt the absorbing definition) and deletes empty paragraphs between the two sequences. Use this instead of lists.join for the user-facing "merge these lists" intent. |
+| `doc.lists.split` | `lists split` | Compound: split a list sequence at the target item into two independent sequences. Runs lists.separate then (by default) lists.setValue(1) so the new half starts numbering fresh at 1. Pass restartNumbering:false for raw separate semantics (new half continues the previous count). |
 | `doc.lists.set_level` | `lists set-level` | Set the absolute nesting level (0..8) of a list item. |
 | `doc.lists.set_value` | `lists set-value` | Set an explicit numbering value at the target item. Mid-sequence targets are atomically separated first. |
 | `doc.lists.continue_previous` | `lists continue-previous` | Continue numbering from the nearest compatible previous list sequence. |
@@ -1456,9 +1464,9 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 
 | Operation | CLI command | Description |
 | --- | --- | --- |
-| `doc.history.get` | `history get` | Query the current undo/redo history state of the active editor. |
-| `doc.history.undo` | `history undo` | Undo the most recent history-safe mutation in the active editor. |
-| `doc.history.redo` | `history redo` | Redo the most recently undone action in the active editor. |
+| `doc.history.get` | `history get` | Query the current undo/redo history state of the document. |
+| `doc.history.undo` | `history undo` | Undo the most recent history-safe mutation in the document. |
+| `doc.history.redo` | `history redo` | Redo the most recently undone action in the document. |
 
 #### Lifecycle
 

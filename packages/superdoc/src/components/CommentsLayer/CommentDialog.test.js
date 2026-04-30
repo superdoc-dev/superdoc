@@ -146,6 +146,7 @@ const mountDialog = async ({
     removePendingComment: vi.fn(),
     requestInstantSidebarAlignment: vi.fn(),
     clearInstantSidebarAlignment: vi.fn(),
+    setActiveFloatingCommentInstance: vi.fn(),
     decideTrackedChangeFromSidebar: vi.fn(() => ({ ok: true, success: true })),
     getCommentDocumentId: vi.fn(
       (comment) => comment?.fileId ?? comment?.documentId ?? comment?.selection?.documentId ?? null,
@@ -183,6 +184,7 @@ const mountDialog = async ({
     suppressInternalExternal: ref(false),
     getConfig: ref({ readOnly: false }),
     activeComment: ref(null),
+    activeFloatingCommentInstanceId: ref(null),
     floatingCommentsOffset: ref(0),
     pendingComment: ref(null),
     currentCommentText: ref('<p>Pending</p>'),
@@ -344,6 +346,100 @@ describe('CommentDialog.vue', () => {
       entityId: 'imported-tracked-change-story-1',
       story: trackedChangeStory,
     });
+  });
+
+  it('navigates repeated header/footer tracked changes to the clicked floating page instance', async () => {
+    const presentation = {
+      navigateTo: vi.fn().mockResolvedValue(true),
+    };
+    PresentationEditor.getInstance.mockReturnValue(presentation);
+
+    const trackedChangeStory = { kind: 'story', storyType: 'headerFooterPart', refId: 'rId-repeat' };
+    const floatingInstanceId = 'tc::hf:part:rId-repeat::tracked-change-story-repeat::page:2';
+
+    const { wrapper } = await mountDialog({
+      props: {
+        autoFocus: false,
+        floatingInstanceId,
+        floatingPageIndex: 2,
+        floatingPositionEntry: {
+          pageIndex: 2,
+          bounds: { top: 240, left: 12, right: 64, bottom: 264, width: 52, height: 24 },
+        },
+      },
+      baseCommentOverrides: {
+        commentId: 'tracked-change-story-repeat',
+        importedId: 'imported-tracked-change-story-repeat',
+        trackedChange: true,
+        trackedChangeStory,
+      },
+    });
+
+    await wrapper.trigger('click');
+
+    expect(presentation.navigateTo).toHaveBeenCalledWith({
+      kind: 'entity',
+      entityType: 'trackedChange',
+      entityId: 'imported-tracked-change-story-repeat',
+      story: trackedChangeStory,
+      pageIndex: 2,
+    });
+    expect(commentsStoreStub.requestInstantSidebarAlignment).toHaveBeenCalledWith(
+      expect.any(Number),
+      'tracked-change-story-repeat',
+      floatingInstanceId,
+    );
+    expect(commentsStoreStub.setActiveFloatingCommentInstance).toHaveBeenCalledWith(floatingInstanceId);
+  });
+
+  it('honors explicit floating instance active overrides', async () => {
+    const inactiveMount = await mountDialog({
+      props: {
+        autoFocus: false,
+        floatingInstanceId: 'thread-1::page:0',
+        isFloatingInstanceActive: false,
+      },
+      commentsStoreOverrides: {
+        activeComment: ref('comment-1'),
+        activeFloatingCommentInstanceId: ref('thread-1::page:0'),
+      },
+    });
+
+    expect(inactiveMount.wrapper.classes()).not.toContain('is-active');
+
+    const activeMount = await mountDialog({
+      props: {
+        autoFocus: false,
+        floatingInstanceId: 'thread-1::page:0',
+        isFloatingInstanceActive: true,
+      },
+      commentsStoreOverrides: {
+        activeComment: ref('comment-1'),
+        activeFloatingCommentInstanceId: ref('thread-1::page:0'),
+      },
+    });
+
+    expect(activeMount.wrapper.classes()).toContain('is-active');
+  });
+
+  it('clears instant alignment instead of re-requesting it when the active dialog is clicked again', async () => {
+    const { wrapper } = await mountDialog({
+      props: {
+        autoFocus: false,
+        floatingInstanceId: 'thread-1::page:2',
+      },
+      commentsStoreOverrides: {
+        activeComment: ref('comment-1'),
+        activeFloatingCommentInstanceId: ref('thread-1::page:2'),
+      },
+    });
+
+    commentsStoreStub.requestInstantSidebarAlignment.mockClear();
+    commentsStoreStub.clearInstantSidebarAlignment.mockClear();
+    await wrapper.trigger('click');
+
+    expect(commentsStoreStub.requestInstantSidebarAlignment).not.toHaveBeenCalled();
+    expect(commentsStoreStub.clearInstantSidebarAlignment).toHaveBeenCalled();
   });
 
   it('falls back to setCursorById for resolved tracked changes when PresentationEditor navigation is unavailable', async () => {
@@ -944,6 +1040,49 @@ describe('CommentDialog.vue', () => {
     expect(baseComment.setIsInternal).toHaveBeenCalledWith({ isInternal: false, superdoc: superdocStub });
   });
 
+  it('marks the active floating instance when edit mode opens from a repeated instance bubble', async () => {
+    const floatingInstanceId = 'tc::hf:part:rId-repeat::comment-1::page:2';
+    const { wrapper, superdocStub } = await mountDialog({
+      props: {
+        autoFocus: false,
+        floatingInstanceId,
+        floatingPageIndex: 2,
+      },
+    });
+
+    const header = wrapper.findComponent(CommentHeaderStub);
+    header.vm.$emit('overflow-select', 'edit');
+    await nextTick();
+
+    expect(commentsStoreStub.setActiveFloatingCommentInstance).toHaveBeenCalledWith(floatingInstanceId);
+    expect(commentsStoreStub.setActiveComment).toHaveBeenCalledWith(superdocStub, 'comment-1');
+  });
+
+  it('updates pending-comment internal state without mutating the persisted comment', async () => {
+    const { wrapper, baseComment } = await mountDialog({
+      baseCommentOverrides: {
+        isInternal: true,
+      },
+      commentsStoreOverrides: {
+        pendingComment: ref({
+          commentId: 'comment-1',
+          selection: {
+            getValues: () => ({ selectionBounds: { top: 110, bottom: 130, left: 15, right: 30 } }),
+            selectionBounds: { top: 110, bottom: 130, left: 15, right: 30 },
+          },
+          isInternal: true,
+        }),
+      },
+    });
+
+    const dropdown = wrapper.findComponent(InternalDropdownStub);
+    dropdown.vm.$emit('select', 'external');
+    await nextTick();
+
+    expect(commentsStoreStub.pendingComment.value.isInternal).toBe(false);
+    expect(baseComment.setIsInternal).not.toHaveBeenCalled();
+  });
+
   it('prepopulates edit text from a ref-based commentText value', async () => {
     const baseCommentWithRef = {
       commentText: { value: '<p>Ref text</p>' },
@@ -984,6 +1123,44 @@ describe('CommentDialog.vue', () => {
     await nextTick();
 
     expect(commentInputFocusSpies.at(-1)).toHaveBeenCalled();
+  });
+
+  it('auto-focuses the pending comment input on mount', async () => {
+    commentInputFocusSpies = [];
+
+    await mountDialog({
+      commentsStoreOverrides: {
+        pendingComment: ref({
+          commentId: 'comment-1',
+          selection: {
+            getValues: () => ({ selectionBounds: { top: 110, bottom: 130, left: 15, right: 30 } }),
+            selectionBounds: { top: 110, bottom: 130, left: 15, right: 30 },
+          },
+          isInternal: true,
+        }),
+      },
+    });
+    await nextTick();
+
+    expect(commentInputFocusSpies.at(-1)).toHaveBeenCalled();
+  });
+
+  it('filters reply suggestions to internal users for internal comments', async () => {
+    const { wrapper, baseComment } = await mountDialog({
+      baseCommentOverrides: {
+        isInternal: true,
+      },
+    });
+    commentsStoreStub.activeComment.value = baseComment.commentId;
+    await nextTick();
+
+    await wrapper.find('.reply-pill').trigger('click');
+    await nextTick();
+
+    const input = wrapper.findComponent(CommentInputStub);
+    expect(input.props('users')).toEqual([
+      { name: 'Internal', email: 'internal@example.com', access: { role: 'internal' } },
+    ]);
   });
 
   it('emits dialog-exit when clicking outside active comment and no track changes highlighted', async () => {

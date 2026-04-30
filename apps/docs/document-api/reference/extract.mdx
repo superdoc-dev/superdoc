@@ -49,16 +49,18 @@ _No fields._
     {
       "headingLevel": 1,
       "nodeId": "node-def456",
-      "tableContext": {
-        "colspan": 1,
-        "columnIndex": 1,
-        "parentRowIndex": 1,
-        "parentTableOrdinal": 1,
-        "rowIndex": 1,
-        "rowspan": 1,
-        "tableOrdinal": 1
-      },
       "text": "Hello, world.",
+      "textSpans": [
+        {
+          "text": "Hello, world.",
+          "trackedChanges": [
+            {
+              "entityId": "entity-789",
+              "type": "insert"
+            }
+          ]
+        }
+      ],
       "type": "example"
     }
   ],
@@ -73,10 +75,15 @@ _No fields._
   "revision": "example",
   "trackedChanges": [
     {
-      "author": "Jane Doe",
+      "blockIds": [
+        "example"
+      ],
       "entityId": "entity-789",
-      "excerpt": "Sample excerpt...",
-      "type": "insert"
+      "type": "insert",
+      "wordRevisionIds": {
+        "delete": "example",
+        "insert": "example"
+      }
     }
   ]
 }
@@ -112,7 +119,7 @@ _No fields._
         "additionalProperties": false,
         "properties": {
           "headingLevel": {
-            "description": "Heading level (1–6). Only present for headings.",
+            "description": "Heading level (1-6). Only present for headings.",
             "type": "integer"
           },
           "nodeId": {
@@ -167,6 +174,49 @@ _No fields._
           "text": {
             "description": "Full plain text content of the block.",
             "type": "string"
+          },
+          "textSpans": {
+            "description": "Block text broken into runs with tracked-change marks preserved per run. Present only when the block contains at least one tracked change. Concatenating span text yields `text`.",
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "text": {
+                  "description": "Raw text of the run.",
+                  "type": "string"
+                },
+                "trackedChanges": {
+                  "description": "Tracked-change marks applied to this run.",
+                  "items": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "entityId": {
+                        "description": "Tracked change entity ID matching an entry in trackedChanges[].",
+                        "type": "string"
+                      },
+                      "type": {
+                        "enum": [
+                          "insert",
+                          "delete",
+                          "format"
+                        ],
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "entityId",
+                      "type"
+                    ],
+                    "type": "object"
+                  },
+                  "type": "array"
+                }
+              },
+              "required": [
+                "text"
+              ],
+              "type": "object"
+            },
+            "type": "array"
           },
           "type": {
             "description": "Block type: paragraph, heading, listItem, image, tableOfContents.",
@@ -234,25 +284,51 @@ _No fields._
             "description": "Change author name.",
             "type": "string"
           },
+          "blockIds": {
+            "description": "Block IDs whose textSpans carry this change.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
           "date": {
             "description": "Change date (ISO string).",
             "type": "string"
           },
           "entityId": {
-            "description": "Tracked change entity ID — pass to scrollToElement() for navigation.",
+            "description": "Tracked change entity ID. Pass to scrollToElement() for navigation.",
             "type": "string"
           },
           "excerpt": {
-            "description": "Short text excerpt of the changed content.",
+            "description": "Short text excerpt of the changed content. Omitted for paired replacements; read block.textSpans for the per-half text.",
             "type": "string"
           },
           "type": {
+            "description": "Aggregate type at the entity level. In paired replacement mode, a delete+insert pair shares one entity and this collapses to 'insert'; per-half type lives on block.textSpans[].trackedChanges[].",
             "enum": [
               "insert",
               "delete",
               "format"
             ],
             "type": "string"
+          },
+          "wordRevisionIds": {
+            "additionalProperties": false,
+            "properties": {
+              "delete": {
+                "description": "Original OOXML w:id from a w:del mark.",
+                "type": "string"
+              },
+              "format": {
+                "description": "Original OOXML w:id from a w:rPrChange mark.",
+                "type": "string"
+              },
+              "insert": {
+                "description": "Original OOXML w:id from a w:ins mark.",
+                "type": "string"
+              }
+            },
+            "type": "object"
           }
         },
         "required": [

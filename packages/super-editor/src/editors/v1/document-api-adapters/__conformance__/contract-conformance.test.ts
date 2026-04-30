@@ -152,6 +152,8 @@ import {
   listsDetachWrapper,
   listsJoinWrapper,
   listsSeparateWrapper,
+  listsMergeWrapper,
+  listsSplitWrapper,
   listsSetLevelWrapper,
   listsSetValueWrapper,
   listsContinuePreviousWrapper,
@@ -4987,6 +4989,110 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       return result;
     },
   },
+  'lists.merge': {
+    throwCase: () => {
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      return listsMergeWrapper(
+        editor,
+        { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' }, direction: 'withNext' },
+        { changeMode: 'tracked' },
+      );
+    },
+    failureCase: () => {
+      const adjacentSpy = vi.spyOn(listSequenceHelpers, 'findAdjacentSequence').mockReturnValue(null);
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      const result = listsMergeWrapper(editor, {
+        target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+        direction: 'withNext',
+      });
+      adjacentSpy.mockRestore();
+      return result;
+    },
+    applyCase: () => {
+      const adjacentSpy = vi.spyOn(listSequenceHelpers, 'findAdjacentSequence').mockReturnValue({
+        numId: 2,
+        sequence: [
+          {
+            address: { kind: 'block', nodeType: 'listItem', nodeId: 'li-2' },
+            candidate: {
+              nodeId: 'li-2',
+              nodeType: 'listItem',
+              pos: 4,
+              end: 8,
+              node: {
+                attrs: { paragraphProperties: { numberingProperties: { numId: 2, ilvl: 0 } } },
+                nodeSize: 4,
+              } as any,
+            },
+            numId: 2,
+            level: 0,
+          } as any,
+        ],
+      });
+      const sequenceSpy = vi.spyOn(listSequenceHelpers, 'getContiguousSequence').mockReturnValue([
+        {
+          address: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+          candidate: {
+            nodeId: 'li-1',
+            nodeType: 'listItem',
+            pos: 0,
+            end: 4,
+            node: {
+              attrs: { paragraphProperties: { numberingProperties: { numId: 1, ilvl: 0 } } },
+              nodeSize: 4,
+            } as any,
+          },
+          numId: 1,
+          level: 0,
+        } as any,
+      ]);
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      const result = listsMergeWrapper(editor, {
+        target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+        direction: 'withNext',
+      });
+      adjacentSpy.mockRestore();
+      sequenceSpy.mockRestore();
+      return result;
+    },
+  },
+  'lists.split': {
+    throwCase: () => {
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      return listsSplitWrapper(
+        editor,
+        { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' } },
+        { changeMode: 'tracked' },
+      );
+    },
+    failureCase: () => {
+      const firstInSeqSpy = vi.spyOn(listSequenceHelpers, 'isFirstInSequence').mockReturnValue(true);
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      const result = listsSplitWrapper(editor, {
+        target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+      });
+      firstInSeqSpy.mockRestore();
+      return result;
+    },
+    applyCase: () => {
+      const firstInSeqSpy = vi.spyOn(listSequenceHelpers, 'isFirstInSequence').mockReturnValue(false);
+      const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
+      const seqSpy = vi.spyOn(listSequenceHelpers, 'getSequenceFromTarget').mockReturnValue([]);
+      const createNumSpy = vi
+        .spyOn(ListHelpers, 'createNumDefinition')
+        .mockReturnValue({ numId: 99, numDef: {} } as any);
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      const result = listsSplitWrapper(editor, {
+        target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+        restartNumbering: false, // skip the second mutation in the conformance harness
+      });
+      firstInSeqSpy.mockRestore();
+      abstractSpy.mockRestore();
+      seqSpy.mockRestore();
+      createNumSpy.mockRestore();
+      return result;
+    },
+  },
   'lists.setLevel': {
     throwCase: () => {
       const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
@@ -8956,6 +9062,66 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
     const seqSpy = vi.spyOn(listSequenceHelpers, 'getSequenceFromTarget').mockReturnValue([]);
     const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
     const result = listsSeparateWrapper(
+      editor,
+      { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' } },
+      { changeMode: 'direct', dryRun: true },
+    );
+    firstInSeqSpy.mockRestore();
+    abstractSpy.mockRestore();
+    seqSpy.mockRestore();
+    return result;
+  },
+  'lists.merge': () => {
+    const adjacentSpy = vi.spyOn(listSequenceHelpers, 'findAdjacentSequence').mockReturnValue({
+      numId: 2,
+      sequence: [
+        {
+          address: { kind: 'block', nodeType: 'listItem', nodeId: 'li-2' },
+          candidate: {
+            nodeId: 'li-2',
+            nodeType: 'listItem',
+            pos: 4,
+            end: 8,
+            node: {
+              attrs: { paragraphProperties: { numberingProperties: { numId: 2, ilvl: 0 } } },
+              nodeSize: 4,
+            } as any,
+          },
+          numId: 2,
+          level: 0,
+        } as any,
+      ],
+    });
+    const sequenceSpy = vi.spyOn(listSequenceHelpers, 'getContiguousSequence').mockReturnValue([
+      {
+        address: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+        candidate: {
+          nodeId: 'li-1',
+          nodeType: 'listItem',
+          pos: 0,
+          end: 4,
+          node: { attrs: { paragraphProperties: { numberingProperties: { numId: 1, ilvl: 0 } } }, nodeSize: 4 } as any,
+        },
+        numId: 1,
+        level: 0,
+      } as any,
+    ]);
+    const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+    const result = listsMergeWrapper(
+      editor,
+      { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' }, direction: 'withNext' },
+      { changeMode: 'direct', dryRun: true },
+    );
+    adjacentSpy.mockRestore();
+    sequenceSpy.mockRestore();
+    return result;
+  },
+  'lists.split': () => {
+    const firstInSeqSpy = vi.spyOn(listSequenceHelpers, 'isFirstInSequence').mockReturnValue(false);
+    const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
+    const seqSpy = vi.spyOn(listSequenceHelpers, 'getSequenceFromTarget').mockReturnValue([]);
+    const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+    const result = listsSplitWrapper(
       editor,
       { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' } },
       { changeMode: 'direct', dryRun: true },

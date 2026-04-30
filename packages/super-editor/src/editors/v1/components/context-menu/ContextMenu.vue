@@ -3,7 +3,7 @@ import { ref, onMounted, onBeforeUnmount, watch, nextTick, computed, markRaw } f
 import { Selection } from 'prosemirror-state';
 import { isCellSelection } from '@extensions/table/tableHelpers/isCellSelection.js';
 import { ContextMenuPluginKey } from '../../extensions/context-menu/context-menu.js';
-import { getPropsByItemId } from './utils.js';
+import { getPropsByItemId, resolveContextMenuCommandEditor } from './utils.js';
 import { shouldBypassContextMenu } from '../../utils/contextmenu-helpers.js';
 import { moveCursorToMouseEvent } from '../cursor-helpers.js';
 import { getEditorSurfaceElement } from '../../core/helpers/editorSurface.js';
@@ -312,9 +312,36 @@ const shouldHandleContextMenu = (event) => {
  *
  * @param {MouseEvent} event - The context menu event in capture phase
  */
+const getContextMenuTargets = () => {
+  const targets = new Set();
+  const surface = getEditorSurfaceElement(props.editor);
+  if (surface) {
+    targets.add(surface);
+  }
+
+  const activeEditor = resolveContextMenuCommandEditor(props.editor);
+  const activeDom = activeEditor?.view?.dom;
+  if (activeDom instanceof HTMLElement) {
+    targets.add(activeDom);
+  }
+
+  return [...targets];
+};
+
+const isEventWithinContextMenuTargets = (event) => {
+  const target = event?.target;
+  if (!(target instanceof Node)) {
+    return false;
+  }
+
+  return getContextMenuTargets().some(
+    (surface) => surface === target || (typeof surface?.contains === 'function' && surface.contains(target)),
+  );
+};
+
 const handleRightClickCapture = (event) => {
   try {
-    if (shouldHandleContextMenu(event)) {
+    if (isEventWithinContextMenuTargets(event) && shouldHandleContextMenu(event)) {
       event[CONTEXT_MENU_HANDLED_FLAG] = true;
     }
   } catch (error) {
@@ -325,6 +352,10 @@ const handleRightClickCapture = (event) => {
 };
 
 const handleRightClick = async (event) => {
+  if (!isEventWithinContextMenuTargets(event)) {
+    return;
+  }
+
   if (!shouldHandleContextMenu(event)) {
     return;
   }
@@ -393,6 +424,7 @@ const handleRightClick = async (event) => {
 
 const executeCommand = async (item) => {
   if (props.editor) {
+    const commandEditor = resolveContextMenuCommandEditor(props.editor);
     const currentPos = currentContext.value?.pos;
     const shouldReseatTableSelection =
       currentContext.value?.event?.type === 'contextmenu' &&
@@ -406,11 +438,14 @@ const executeCommand = async (item) => {
     }
 
     // First call the action if needed on the item
-    item.action ? await item.action(props.editor, currentContext.value) : null;
+    item.action ? await item.action(commandEditor, currentContext.value) : null;
 
     if (item.component) {
       const menuElement = menuRef.value;
-      const componentProps = getPropsByItemId(item.id, props);
+      const componentProps = getPropsByItemId(item.id, {
+        ...props,
+        editor: commandEditor,
+      });
 
       // Convert viewport-relative coordinates (used by fixed-position ContextMenu)
       // to container-relative coordinates (used by absolute-position GenericPopover)
@@ -469,7 +504,6 @@ const closeMenu = (options = { restoreCursor: true }) => {
 /**
  * Lifecycle hooks on mount and onBeforeUnmount
  */
-let contextMenuTarget = null;
 let contextMenuOpenHandler = null;
 let contextMenuCloseHandler = null;
 
@@ -481,6 +515,8 @@ onMounted(() => {
   // call event.preventDefault() which suppresses mousedown events
   document.addEventListener('keydown', handleGlobalKeyDown);
   document.addEventListener('pointerdown', handleGlobalOutsideClick);
+  document.addEventListener('contextmenu', handleRightClickCapture, true);
+  document.addEventListener('contextmenu', handleRightClick);
 
   // Close menu if the editor becomes read-only while it's open
   props.editor.on('update', handleEditorUpdate);
@@ -507,13 +543,6 @@ onMounted(() => {
   };
   props.editor.on('contextMenu:open', contextMenuOpenHandler);
 
-  // Attach context menu to the active surface (flow view.dom or presentation host)
-  contextMenuTarget = getEditorSurfaceElement(props.editor);
-  if (contextMenuTarget) {
-    contextMenuTarget.addEventListener('contextmenu', handleRightClickCapture, true);
-    contextMenuTarget.addEventListener('contextmenu', handleRightClick);
-  }
-
   contextMenuCloseHandler = () => {
     cleanupCustomItems();
     isOpen.value = false;
@@ -527,6 +556,8 @@ onMounted(() => {
 onBeforeUnmount(() => {
   document.removeEventListener('keydown', handleGlobalKeyDown);
   document.removeEventListener('pointerdown', handleGlobalOutsideClick);
+  document.removeEventListener('contextmenu', handleRightClickCapture, true);
+  document.removeEventListener('contextmenu', handleRightClick);
 
   cleanupCustomItems();
 
@@ -540,8 +571,6 @@ onBeforeUnmount(() => {
         props.editor.off('contextMenu:close', contextMenuCloseHandler);
       }
       props.editor.off('update', handleEditorUpdate);
-      contextMenuTarget?.removeEventListener('contextmenu', handleRightClickCapture, true);
-      contextMenuTarget?.removeEventListener('contextmenu', handleRightClick);
     } catch (error) {
       console.warn('[ContextMenu] Error during cleanup:', error);
     }

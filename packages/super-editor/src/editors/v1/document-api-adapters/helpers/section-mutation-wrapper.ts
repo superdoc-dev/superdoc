@@ -84,7 +84,14 @@ function getConverter(editor: Editor): ConverterLike | undefined {
   return (editor as unknown as { converter?: ConverterLike }).converter;
 }
 
-export function applySectPrToProjection(editor: Editor, projection: SectionProjection, sectPr: XmlElement): void {
+export function applySectPrToProjection(
+  editor: Editor,
+  projection: SectionProjection,
+  sectPr: XmlElement,
+  options?: { addToHistory?: boolean },
+): void {
+  const addToHistory = options?.addToHistory ?? true;
+
   if (projection.target.kind === 'paragraph') {
     const paragraph = projection.target.node;
     const attrs = (paragraph.attrs ?? {}) as Record<string, unknown>;
@@ -100,6 +107,9 @@ export function applySectPrToProjection(editor: Editor, projection: SectionProje
     };
 
     const tr = applyDirectMutationMeta(editor.state.tr);
+    if (!addToHistory) {
+      tr.setMeta('addToHistory', false);
+    }
     tr.setNodeMarkup(projection.target.pos, undefined, nextAttrs, paragraph.marks);
     tr.setMeta('forceUpdatePagination', true);
     editor.dispatch(tr);
@@ -107,6 +117,9 @@ export function applySectPrToProjection(editor: Editor, projection: SectionProje
   }
 
   const tr = applyDirectMutationMeta(editor.state.tr);
+  if (!addToHistory) {
+    tr.setMeta('addToHistory', false);
+  }
   tr.setDocAttribute('bodySectPr', sectPr);
   tr.setMeta('forceUpdatePagination', true);
   editor.dispatch(tr);

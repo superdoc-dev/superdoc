@@ -4,8 +4,11 @@ import {
   useSuperDocCommand,
   useSuperDocSelection,
   useSuperDocHost,
+  useSuperDocSlice,
 } from 'superdoc/ui/react';
 import { InsertClauseButton } from './InsertClauseButton';
+
+type DocumentMode = 'editing' | 'suggesting' | 'viewing';
 
 interface ToolbarProps {
   /** Called when the user clicks the comment button to start composing. */
@@ -93,11 +96,57 @@ export function Toolbar({ onComposeComment }: ToolbarProps) {
         <InsertClauseButton />
       </div>
 
+      <div className="toolbar-group">
+        <ModeToggle />
+      </div>
+
       <div className="toolbar-group" style={{ marginLeft: 'auto' }}>
         <ReimportButton />
         <ExportButton />
       </div>
     </div>
+  );
+}
+
+/**
+ * Edit / Suggest mode toggle. Edits in Suggest mode are recorded as
+ * tracked changes (insertions / deletions) and surface in the activity
+ * sidebar for accept / reject. Until a typed `ui.document.setMode()`
+ * lands (SD-2816), the setter is on the SuperDoc instance via
+ * `useSuperDocHost()`. Current mode is read from the controller's
+ * `state.documentMode` slice so the active style stays in sync if
+ * something else flips the mode.
+ */
+function ModeToggle() {
+  const host = useSuperDocHost();
+  const mode = useSuperDocSlice<DocumentMode | null>(
+    (ui) => ui.select((s) => s.documentMode, Object.is) as never,
+    null,
+  );
+  const setMode = (next: DocumentMode) => {
+    if (!host) return;
+    (host as unknown as { setDocumentMode?: (m: DocumentMode) => void }).setDocumentMode?.(next);
+  };
+  const current: DocumentMode = mode ?? 'editing';
+  return (
+    <>
+      <button
+        className={`tb-btn ${current === 'editing' ? 'active' : ''}`}
+        disabled={!host}
+        title="Edit normally"
+        onClick={() => setMode('editing')}
+      >
+        Edit
+      </button>
+      <button
+        className={`tb-btn ${current === 'suggesting' ? 'active' : ''}`}
+        disabled={!host}
+        title="Record edits as tracked changes"
+        onClick={() => setMode('suggesting')}
+      >
+        Suggest
+      </button>
+    </>
   );
 }
 

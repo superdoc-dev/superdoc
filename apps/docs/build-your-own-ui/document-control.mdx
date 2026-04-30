@@ -7,4 +7,4 @@ description: 'Switch between editing and suggesting. Export to DOCX. Replace the
   This page is being written. Stub for navigation. Track progress on [SD-2669](https://linear.app/superdocworkspace/issue/SD-2669).
 </Note>
 
-`useSuperDocDocument()` exposes `{ ready, mode }`. `ui.document.setMode('suggesting')` flips the editor into Suggest mode. `ui.document.export({ exportType: ['docx'] })` returns a downloadable DOCX. `ui.document.replaceFile(file)` swaps the open document — handy for round-trip testing.
+`useSuperDocDocument()` exposes `{ ready, mode }`. `ui.document.setMode('suggesting')` flips the editor into Suggest mode. `ui.document.export({ exportType: ['docx'] })` returns a downloadable DOCX. `ui.document.replaceFile(file)` swaps the open document, which is handy for round-trip testing.

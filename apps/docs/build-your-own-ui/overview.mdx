@@ -1,51 +1,71 @@
 ---
-title: 'Overview'
-description: 'When to build your own UI on top of SuperDoc, and the layer model that makes it possible.'
+title: 'Build your own UI'
+sidebarTitle: Overview
+keywords: 'build your own ui, byo ui, custom toolbar, custom comments, custom review, superdoc/ui, controller, react hooks'
 ---
 
-<Note>
-  This section is being written. The pages exist so cross-links can land before content does. Track progress on [SD-2669](https://linear.app/superdocworkspace/issue/SD-2669).
-</Note>
-
-SuperDoc ships with built-in UI for the toolbar, comments panel, and tracked-change review. When that UI fits, use it. When you need your own — a custom toolbar with your design system, a sidebar that lives where your product wants it, a review surface that matches your workflow — `superdoc/ui` gives you the state and actions to drive it.
+SuperDoc ships built-in UI for the toolbar, comments panel, and tracked-change review. When you need your own design system, your own layout, or your own workflow, `superdoc/ui` gives you the state and actions to drive it.
 
 ## The layer model
 
-Three layers, each with a clear job:
+Three layers, each with one job:
 
 | Layer | What it is | When you reach for it |
 |---|---|---|
-| **Document API** (`editor.doc.*`) | Stateless request/response contract. Runs in the browser and on the server. | Read or mutate document content: comments, tracked changes, formatting, structure. |
-| **`superdoc/ui`** | Browser-only UI controller. Subscriptions, viewport geometry, per-command state. | Bind your UI to live editor state. Drive your toolbar, sidebar, review panel. |
-| **Built-in modules** | Optional UI SuperDoc renders for you (comments panel, toolbar, floating bubble). | You want SuperDoc's UI as-is. Skip this layer when you're building your own. |
+| **Document API** (`editor.doc.*`) | Stateless request/response contract. Runs in the browser and on the server. | Read or mutate document content. |
+| **`superdoc/ui`** | Browser-only UI controller. Subscriptions, viewport geometry, per-command state. | Bind your UI to live editor state. |
+| **Built-in modules** | Optional UI SuperDoc renders for you. | You want SuperDoc's UI as-is. |
 
-The Document API is what mutates the document. `superdoc/ui` is what your UI subscribes to. Built-in modules are SuperDoc's own consumer of those layers — turn them off when you're providing your own.
+The Document API mutates the document. `superdoc/ui` is what your UI subscribes to. Built-in modules are SuperDoc's own consumer of those layers. Turn them off when you're providing your own.
+
+## What it looks like
+
+```tsx
+import { useSuperDocCommand, useSuperDocUI } from 'superdoc/ui/react';
+
+function BoldButton() {
+  const ui = useSuperDocUI();
+  const bold = useSuperDocCommand('bold');
+
+  return (
+    <button
+      className={bold.active ? 'active' : ''}
+      disabled={bold.disabled}
+      onClick={() => ui?.commands.get('bold')?.execute()}
+    >
+      B
+    </button>
+  );
+}
+```
+
+One hook. One button. Subscribes only to that command's state. Re-renders only when `bold` flips `active` or `disabled`.
 
 ## What's in this section
 
 <CardGroup cols={2}>
-  <Card title="React setup" href="/build-your-own-ui/react-setup">
+  <Card title="React setup" icon="react" href="/build-your-own-ui/react-setup">
     Provider, onReady, hooks. The scaffolding every page below builds on.
   </Card>
-  <Card title="Toolbar and commands" href="/build-your-own-ui/toolbar-and-commands">
-    Wire your buttons to bold, italic, lists, undo, redo — every built-in command.
+  <Card title="Toolbar and commands" icon="bold" href="/build-your-own-ui/toolbar-and-commands">
+    Wire your buttons to bold, italic, lists, undo, redo, and every other built-in command.
   </Card>
-  <Card title="Custom commands" href="/build-your-own-ui/custom-commands">
+  <Card title="Custom commands" icon="code" href="/build-your-own-ui/custom-commands">
     Register your own commands. Override built-ins. Drive AI actions, clause inserts, business logic.
   </Card>
-  <Card title="Comments" href="/build-your-own-ui/comments">
+  <Card title="Comments" icon="message" href="/build-your-own-ui/comments">
     Custom comments sidebar with the typed selection-capture flow.
   </Card>
-  <Card title="Review" href="/build-your-own-ui/review">
+  <Card title="Review" icon="circle-check" href="/build-your-own-ui/review">
     Custom tracked-change review panel. Accept, reject, navigate.
   </Card>
-  <Card title="Selection and viewport" href="/build-your-own-ui/selection-and-viewport">
+  <Card title="Selection and viewport" icon="crosshairs" href="/build-your-own-ui/selection-and-viewport">
     Read the selection. Scroll an entity into view. Capture selections that survive focus changes.
   </Card>
-  <Card title="Document control" href="/build-your-own-ui/document-control">
+  <Card title="Document control" icon="file-export" href="/build-your-own-ui/document-control">
     Switch between editing and suggesting. Export to DOCX. Replace the open file.
   </Card>
-  <Card title="Reference demo" href="/build-your-own-ui/reference-demo">
+  <Card title="Reference demo" icon="layout-dashboard" href="/build-your-own-ui/reference-demo">
     A full reference workspace that composes every surface above.
   </Card>
 </CardGroup>

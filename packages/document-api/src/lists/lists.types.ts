@@ -223,6 +223,16 @@ export interface ListsSeparateInput {
   copyOverrides?: boolean;
 }
 
+export interface ListsMergeInput {
+  target: ListItemAddress;
+  direction: JoinDirection;
+}
+
+export interface ListsSplitInput {
+  target: ListItemAddress;
+  restartNumbering?: boolean;
+}
+
 export interface ListsSetLevelInput {
   target: ListItemAddress;
   level: number;
@@ -488,6 +498,20 @@ export interface ListsSeparateSuccessResult {
   numId: number;
 }
 
+export interface ListsMergeSuccessResult {
+  success: true;
+  listId: string;
+  absorbedCount: number;
+  removedEmptyBlocks: number;
+}
+
+export interface ListsSplitSuccessResult {
+  success: true;
+  listId: string;
+  numId: number;
+  restartedAt: number | null;
+}
+
 export interface ListsDetachSuccessResult {
   success: true;
   paragraph: {
@@ -528,5 +552,7 @@ export type ListsMutateItemResult = ListsMutateItemSuccessResult | ListsFailureR
 export type ListsCreateResult = ListsCreateSuccessResult | ListsFailureResult;
 export type ListsJoinResult = ListsJoinSuccessResult | ListsFailureResult;
 export type ListsSeparateResult = ListsSeparateSuccessResult | ListsFailureResult;
+export type ListsMergeResult = ListsMergeSuccessResult | ListsFailureResult;
+export type ListsSplitResult = ListsSplitSuccessResult | ListsFailureResult;
 export type ListsDetachResult = ListsDetachSuccessResult | ListsFailureResult;
 export type ListsConvertToTextResult = ListsConvertToTextSuccessResult | ListsFailureResult;

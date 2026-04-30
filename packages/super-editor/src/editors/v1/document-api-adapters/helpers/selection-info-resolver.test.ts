@@ -1,7 +1,24 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { Node as ProseMirrorNode } from 'prosemirror-model';
 import type { Editor } from '../../core/Editor.js';
-import { resolveCurrentSelectionInfo, subscribeToSelection } from './selection-info-resolver.js';
+import { resolveCurrentSelectionInfo } from './selection-info-resolver.js';
+
+// Stub `groupTrackedChanges` so tests don't need a fully PM-shaped
+// editor with `editor.state.doc.textBetween` and the tracked-change
+// mark walker. Each test that exercises tracked-change ids configures
+// the raw → canonical mapping it expects.
+const groupTrackedChangesMock = vi.hoisted(() =>
+  vi.fn(() => [] as Array<{ rawId: string; id: string; from: number; to: number }>),
+);
+vi.mock('./tracked-change-resolver.js', () => ({
+  groupTrackedChanges: groupTrackedChangesMock,
+}));
+
+const setTrackedChangeMapping = (mappings: Array<{ rawId: string; canonical: string }>) => {
+  groupTrackedChangesMock.mockReturnValue(
+    mappings.map((m) => ({ rawId: m.rawId, id: m.canonical, from: 0, to: 0 })) as never,
+  );
+};
 
 // ---------------------------------------------------------------------------
 // PM node stub builder
@@ -21,6 +38,12 @@ type NodeOptions = {
   attrs?: Record<string, unknown>;
   /** Mark names applied to this node (only used for text nodes). */
   markNames?: string[];
+  /**
+   * Marks with attrs (commentMark, trackInsert, etc). Coexists with
+   * `markNames` — both end up in `node.marks`. Use this for tests that
+   * exercise per-mark attribute-driven id collection.
+   */
+  marksWithAttrs?: Array<{ name: string; attrs: Record<string, unknown> }>;
 };
 
 function createNode(typeName: string, children: ProseMirrorNode[] = [], options: NodeOptions = {}): ProseMirrorNode {
@@ -50,7 +73,10 @@ function createNode(typeName: string, children: ProseMirrorNode[] = [], options:
     child(index: number) {
       return children[index]!;
     },
-    marks: (options.markNames ?? []).map((name) => ({ type: { name } })),
+    marks: [
+      ...(options.markNames ?? []).map((name) => ({ type: { name }, attrs: {} as Record<string, unknown> })),
+      ...(options.marksWithAttrs ?? []).map((m) => ({ type: { name: m.name }, attrs: m.attrs })),
+    ],
     // `nodesBetween` walks the whole subtree. A minimal correct
     // implementation for our test shapes: visit self first, then recurse
     // into children with the right child-position accounting.
@@ -154,7 +180,7 @@ describe('resolveCurrentSelectionInfo', () => {
   it('returns an empty info with null target when the editor has no state', () => {
     const editor = { state: null } as unknown as Editor;
     const info = resolveCurrentSelectionInfo(editor, {});
-    expect(info).toEqual({ empty: true, target: null, activeMarks: [] });
+    expect(info).toEqual({ empty: true, target: null, activeMarks: [], activeCommentIds: [], activeChangeIds: [] });
   });
 
   it('projects a single-block selection into a one-segment TextTarget', () => {
@@ -326,112 +352,207 @@ describe('resolveCurrentSelectionInfo', () => {
 });
 
 // ---------------------------------------------------------------------------
-// subscribeToSelection
+// activeCommentIds / activeChangeIds (SD-2792)
 // ---------------------------------------------------------------------------
 
-describe('subscribeToSelection', () => {
-  it('fires the listener once per tick when selection updates', async () => {
-    const docNode = doc([textBlock('p1', 'Hi')]);
-    const editor = makeEditor(docNode, { from: 1, to: 3 }) as Editor & { __fire(event: string): void };
-    const listener = vi.fn();
+/**
+ * Marked-text helper that lets each run carry attribute-bearing marks
+ * (commentMark with commentId, trackInsert/Delete/Format with id).
+ */
+function entityMarkedTextBlock(
+  blockId: string,
+  runs: Array<{
+    text: string;
+    marks?: string[];
+    marksWithAttrs?: Array<{ name: string; attrs: Record<string, unknown> }>;
+  }>,
+): ProseMirrorNode {
+  const children = runs.map((r) =>
+    createNode('text', [], {
+      text: r.text,
+      markNames: r.marks ?? [],
+      marksWithAttrs: r.marksWithAttrs ?? [],
+    }),
+  );
+  return createNode('paragraph', children, {
+    isBlock: true,
+    inlineContent: true,
+    attrs: { sdBlockId: blockId },
+  });
+}
 
-    const unsubscribe = subscribeToSelection(editor, listener);
-    editor.__fire('selectionUpdate');
-    editor.__fire('selectionUpdate');
-    // Multiple events in one tick coalesce via queueMicrotask.
+describe('resolveCurrentSelectionInfo > entity ids', () => {
+  it('collects commentIds from commentMarks across the selection (union)', () => {
+    const docNode = doc([
+      entityMarkedTextBlock('p1', [
+        { text: 'Hello ', marksWithAttrs: [{ name: 'commentMark', attrs: { commentId: 'c1' } }] },
+        {
+          text: 'world',
+          marksWithAttrs: [
+            { name: 'commentMark', attrs: { commentId: 'c1' } },
+            { name: 'commentMark', attrs: { commentId: 'c2' } },
+          ],
+        },
+      ]),
+    ]);
+    // Select the whole text "Hello world" (PM positions 2..13).
+    const editor = makeEditor(docNode, { from: 2, to: 13 });
 
-    await Promise.resolve(); // flush the microtask
-    expect(listener).toHaveBeenCalledTimes(1);
+    const info = resolveCurrentSelectionInfo(editor, {});
 
-    unsubscribe();
+    expect([...info.activeCommentIds].sort()).toEqual(['c1', 'c2']);
+    expect(info.activeChangeIds).toEqual([]);
   });
 
-  it('stops firing after unsubscribe', async () => {
-    const docNode = doc([textBlock('p1', 'Hi')]);
-    const editor = makeEditor(docNode, { from: 1, to: 3 }) as Editor & { __fire(event: string): void };
-    const listener = vi.fn();
+  it('collects changeIds from trackInsert/trackDelete/trackFormat marks (translated through canonical resolver)', () => {
+    // Raw mark ids and canonical Document API ids differ: the canonical
+    // id is a derived hash from `groupTrackedChanges`. We mock that map
+    // so the resolver sees raw 'tc1' / 'tc2' / 'tc3' and returns the
+    // canonical 'tcA' / 'tcB' / 'tcC' that consumers see in
+    // `trackChanges.list().items[].id`.
+    setTrackedChangeMapping([
+      { rawId: 'tc1', canonical: 'tcA' },
+      { rawId: 'tc2', canonical: 'tcB' },
+      { rawId: 'tc3', canonical: 'tcC' },
+    ]);
+    const docNode = doc([
+      entityMarkedTextBlock('p1', [
+        { text: 'inserted ', marksWithAttrs: [{ name: 'trackInsert', attrs: { id: 'tc1' } }] },
+        { text: 'deleted ', marksWithAttrs: [{ name: 'trackDelete', attrs: { id: 'tc2' } }] },
+        { text: 'reformat', marksWithAttrs: [{ name: 'trackFormat', attrs: { id: 'tc3' } }] },
+      ]),
+    ]);
+    const editor = makeEditor(docNode, { from: 2, to: 27 });
 
-    const unsubscribe = subscribeToSelection(editor, listener);
-    unsubscribe();
-    editor.__fire('selectionUpdate');
-    await Promise.resolve();
+    const info = resolveCurrentSelectionInfo(editor, {});
 
-    expect(listener).not.toHaveBeenCalled();
+    expect([...info.activeChangeIds].sort()).toEqual(['tcA', 'tcB', 'tcC']);
+    expect(info.activeCommentIds).toEqual([]);
   });
 
-  it('cancels a microtask queued just before unsubscribe (no stale fire)', async () => {
-    // Regression: before the cancel flag, a microtask queued by the last
-    // pre-unmount event could still invoke the listener after unsubscribe
-    // returned — a classic source of stale state updates during React
-    // component unmount.
-    const docNode = doc([textBlock('p1', 'Hi')]);
-    const editor = makeEditor(docNode, { from: 1, to: 3 }) as Editor & { __fire(event: string): void };
-    const listener = vi.fn();
+  it('drops raw change ids that have no canonical mapping (defensive)', () => {
+    // Raw id present in the document but missing from groupTrackedChanges
+    // (mid-construction editor, or a mark that wasn't grouped). Leaking
+    // the raw id past the resolver would silently produce no-match
+    // highlights in consumer sidebars; drop it instead.
+    setTrackedChangeMapping([{ rawId: 'tc1', canonical: 'tcA' }]);
+    const docNode = doc([
+      entityMarkedTextBlock('p1', [
+        { text: 'mapped ', marksWithAttrs: [{ name: 'trackInsert', attrs: { id: 'tc1' } }] },
+        { text: 'orphan', marksWithAttrs: [{ name: 'trackInsert', attrs: { id: 'orphan-id' } }] },
+      ]),
+    ]);
+    const editor = makeEditor(docNode, { from: 2, to: 14 });
 
-    const unsubscribe = subscribeToSelection(editor, listener);
-    editor.__fire('selectionUpdate'); // queues a microtask
-    unsubscribe(); // must mark the queued microtask as no-op
-    await Promise.resolve();
+    const info = resolveCurrentSelectionInfo(editor, {});
 
-    expect(listener).not.toHaveBeenCalled();
+    expect(info.activeChangeIds).toEqual(['tcA']);
   });
 
-  it('dedupes events that produce identical SelectionInfo (typing without moving caret)', async () => {
-    // Regression: the `transaction` subscription is needed to catch
-    // programmatic selection changes that don't emit `selectionUpdate`,
-    // but it ALSO fires on every keystroke. Without content dedupe the
-    // listener ran per character even when the projected SelectionInfo
-    // was unchanged. Multiple ticks emitting the same selection state
-    // should fire the listener exactly once.
-    const docNode = doc([textBlock('p1', 'Hi')]);
-    const editor = makeEditor(docNode, { from: 1, to: 3 }) as Editor & { __fire(event: string): void };
-    const listener = vi.fn();
+  it('dedupes canonical ids when two raw ids map to the same canonical (paired tracked changes)', () => {
+    // Tracked replace produces paired insert + delete halves whose
+    // raw mark ids both group to a single canonical id. A range
+    // selection across both halves must surface the canonical id
+    // once, not twice — otherwise sidebar counts and union-driven
+    // highlights would double-count the change.
+    setTrackedChangeMapping([
+      { rawId: 'tc1-insert', canonical: 'tcA' },
+      { rawId: 'tc1-delete', canonical: 'tcA' },
+    ]);
+    const docNode = doc([
+      entityMarkedTextBlock('p1', [
+        { text: 'inserted ', marksWithAttrs: [{ name: 'trackInsert', attrs: { id: 'tc1-insert' } }] },
+        { text: 'deleted', marksWithAttrs: [{ name: 'trackDelete', attrs: { id: 'tc1-delete' } }] },
+      ]),
+    ]);
+    const editor = makeEditor(docNode, { from: 2, to: 16 });
 
-    const unsubscribe = subscribeToSelection(editor, listener);
+    const info = resolveCurrentSelectionInfo(editor, {});
 
-    // First tick: a transaction event with the selection at [1, 3].
-    editor.__fire('transaction');
-    await Promise.resolve();
-    expect(listener).toHaveBeenCalledTimes(1);
-
-    // Second tick: another transaction with no selection change.
-    // Without dedupe this would re-fire; with dedupe it skips.
-    editor.__fire('transaction');
-    await Promise.resolve();
-    expect(listener).toHaveBeenCalledTimes(1);
-
-    // Third tick: same again — still one call.
-    editor.__fire('transaction');
-    await Promise.resolve();
-    expect(listener).toHaveBeenCalledTimes(1);
-
-    unsubscribe();
+    expect(info.activeChangeIds).toEqual(['tcA']);
   });
 
-  it('fires again when SelectionInfo changes after a deduped tick', async () => {
-    // Dedupe must not become sticky: a real selection change after a
-    // deduped tick must still invoke the listener.
+  it('reports both comment and change ids when a span carries both', () => {
+    setTrackedChangeMapping([{ rawId: 'tc1', canonical: 'tcA' }]);
+    const docNode = doc([
+      entityMarkedTextBlock('p1', [
+        {
+          text: 'reviewed',
+          marksWithAttrs: [
+            { name: 'commentMark', attrs: { commentId: 'c1' } },
+            { name: 'trackInsert', attrs: { id: 'tc1' } },
+          ],
+        },
+      ]),
+    ]);
+    const editor = makeEditor(docNode, { from: 2, to: 10 });
+
+    const info = resolveCurrentSelectionInfo(editor, {});
+
+    expect(info.activeCommentIds).toEqual(['c1']);
+    expect(info.activeChangeIds).toEqual(['tcA']);
+  });
+
+  it('returns empty id arrays when no entity marks overlap the selection', () => {
+    const docNode = doc([entityMarkedTextBlock('p1', [{ text: 'Plain text', marks: ['bold'] }])]);
+    const editor = makeEditor(docNode, { from: 2, to: 12 });
+
+    const info = resolveCurrentSelectionInfo(editor, {});
+
+    expect(info.activeCommentIds).toEqual([]);
+    expect(info.activeChangeIds).toEqual([]);
+    expect(info.activeMarks).toEqual(['bold']);
+  });
+
+  it('uses union semantics, not intersection (one comment touching part of the selection counts)', () => {
+    // Run 1 has comment c1; run 2 is plain. activeMarks would not include
+    // a "bold" if it only touched run 1, but activeCommentIds should
+    // include c1 because we use union semantics.
+    const docNode = doc([
+      entityMarkedTextBlock('p1', [
+        { text: 'commented', marksWithAttrs: [{ name: 'commentMark', attrs: { commentId: 'c1' } }] },
+        { text: ' tail', marks: [] },
+      ]),
+    ]);
+    const editor = makeEditor(docNode, { from: 2, to: 16 });
+
+    const info = resolveCurrentSelectionInfo(editor, {});
+
+    expect(info.activeCommentIds).toEqual(['c1']);
+  });
+
+  it('resolves comment ids from importedId / w:id when commentId is absent (legacy DOCX imports)', () => {
+    // Imported / legacy comment marks may carry the id on
+    // `importedId` or `w:id` instead of the post-import canonical
+    // `commentId`. The resolver must honor the same fallback chain
+    // the rest of the comment adapter graph uses
+    // (`resolveCommentIdFromAttrs`); without it,
+    // `selection.current().activeCommentIds` would stay empty over a
+    // run that `comments.list()` reports as a real comment.
+    const docNode = doc([
+      entityMarkedTextBlock('p1', [
+        { text: 'imported ', marksWithAttrs: [{ name: 'commentMark', attrs: { importedId: 'imp-1' } }] },
+        { text: 'legacy', marksWithAttrs: [{ name: 'commentMark', attrs: { 'w:id': 'leg-2' } }] },
+      ]),
+    ]);
+    const editor = makeEditor(docNode, { from: 2, to: 17 });
+
+    const info = resolveCurrentSelectionInfo(editor, {});
+
+    expect([...info.activeCommentIds].sort()).toEqual(['imp-1', 'leg-2']);
+  });
+
+  it('empty arrays survive a JSON round-trip (serialization-stable shape)', () => {
+    // Schema and dispatch tests assume the SelectionInfo output is JSON-
+    // serializable with stable field presence. Empty arrays should
+    // serialize and parse back as empty arrays, not be elided.
     const docNode = doc([textBlock('p1', 'Hello')]);
-    const editor = makeEditor(docNode, { from: 1, to: 3 }) as Editor & {
-      __fire(event: string): void;
-    };
-    const listener = vi.fn();
+    const editor = makeEditor(docNode, { from: 2, to: 7 });
 
-    const unsubscribe = subscribeToSelection(editor, listener);
-    editor.__fire('transaction');
-    await Promise.resolve();
-    expect(listener).toHaveBeenCalledTimes(1);
+    const info = resolveCurrentSelectionInfo(editor, {});
+    const roundTripped = JSON.parse(JSON.stringify(info));
 
-    // Change the selection on the editor stub, then fire again.
-    (editor.state as { selection: { from: number; to: number; empty: boolean } }).selection = {
-      from: 2,
-      to: 4,
-      empty: false,
-    };
-    editor.__fire('transaction');
-    await Promise.resolve();
-    expect(listener).toHaveBeenCalledTimes(2);
-
-    unsubscribe();
+    expect(roundTripped.activeCommentIds).toEqual([]);
+    expect(roundTripped.activeChangeIds).toEqual([]);
   });
 });

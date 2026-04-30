@@ -101,10 +101,43 @@ const BAD_SUBPATH_RE = /(['"])([^'"]*\/index\.js)(\/[^'"]+)\1/g;
 let fixedFiles = 0;
 let totalReplacements = 0;
 
+// SD-2815: rewrite `@superdoc/document-api` bare specifiers to point
+// at the document-api dist that vite-plugin-dts now emits at
+// `dist/document-api/`. Without this, packed consumers see the bare
+// specifier in the .d.ts files, fail to resolve it, and fall through
+// to the `_internal-shims.d.ts` `any` shim that is generated below.
+// The doc-api types re-exported via `superdoc/ui` would then be
+// useless (every value assignable, no checking), defeating the public
+// re-export surface added in SD-2815.
+const DOC_API_PATH_RE = /(['"])@superdoc\/document-api(\/[^'"]+)?\1/g;
+function rewriteDocApiPaths(fileContent, filePath) {
+  return fileContent.replace(DOC_API_PATH_RE, (_match, quote, subpath = '') => {
+    const target = path.join(distRoot, 'document-api/src/index.d.ts');
+    let rel = path.relative(path.dirname(filePath), target).split(path.sep).join('/');
+    if (!rel.startsWith('.')) rel = './' + rel;
+    // Drop the trailing `.d.ts` so the import path follows the
+    // module-resolution convention used everywhere else in the dist
+    // (`...index.js` form, which TS resolves to `index.d.ts`).
+    rel = rel.replace(/\.d\.ts$/, '.js');
+    if (subpath) rel = rel.replace(/\/index\.js$/, subpath);
+    return `${quote}${rel}${quote}`;
+  });
+}
+
 const dtsFiles = findDtsFiles(distRoot);
 for (const filePath of dtsFiles) {
   let fileContent = fs.readFileSync(filePath, 'utf8');
   let changed = false;
+
+  // Rewrite @superdoc/document-api → relative path to dist/document-api.
+  // Run BEFORE the pnpm path rewrite so imports surface as bare paths
+  // pointing at the dist tree, not at node_modules.
+  const beforeDocApi = fileContent;
+  fileContent = rewriteDocApiPaths(fileContent, filePath);
+  if (fileContent !== beforeDocApi) {
+    changed = true;
+    totalReplacements++;
+  }
 
   // Fix pnpm node_modules paths → bare specifiers
   fileContent = fileContent.replace(PNPM_PATH_RE, (match, quote, _fullPath, packageName) => {
@@ -207,7 +240,7 @@ for (const filePath of dtsFiles) {
     const mod = m[2];
 
     // Skip relative imports and already-handled packages
-    if (mod.startsWith('.') || mod.startsWith('@superdoc/common') || mod.startsWith('@superdoc/super-editor')) continue;
+    if (mod.startsWith('.') || mod.startsWith('@superdoc/common') || mod.startsWith('@superdoc/super-editor') || mod.startsWith('@superdoc/document-api')) continue;
 
     if (mod.startsWith('@superdoc/')) {
       if (!workspaceImports.has(mod)) workspaceImports.set(mod, new Set());
@@ -220,7 +253,7 @@ for (const filePath of dtsFiles) {
   const dynamicImports = fileContent.matchAll(/import\(['"]([^'"]+)['"]\)\.(\w+)/g);
   for (const m of dynamicImports) {
     const mod = m[1];
-    if (mod.startsWith('.') || mod.startsWith('@superdoc/common') || mod.startsWith('@superdoc/super-editor')) continue;
+    if (mod.startsWith('.') || mod.startsWith('@superdoc/common') || mod.startsWith('@superdoc/super-editor') || mod.startsWith('@superdoc/document-api')) continue;
 
     if (mod.startsWith('@superdoc/')) {
       if (!workspaceImports.has(mod)) workspaceImports.set(mod, new Set());
@@ -235,7 +268,7 @@ for (const filePath of dtsFiles) {
     // Skip @superdoc/super-editor (consumer-facing, not internal)
     // Skip @superdoc/common root module (inlined separately), but allow subpath
     // imports like @superdoc/common/components/BasicUpload.vue to be shimmed
-    if (mod === '@superdoc/common' || mod.startsWith('@superdoc/super-editor')) continue;
+    if (mod === '@superdoc/common' || mod.startsWith('@superdoc/super-editor') || mod.startsWith('@superdoc/document-api')) continue;
     if (!workspaceImports.has(mod)) workspaceImports.set(mod, new Set());
   }
 }

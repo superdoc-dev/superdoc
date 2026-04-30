@@ -129,6 +129,8 @@ export function buildDispatchTable(api: DocumentApi): TypedDispatchTable {
     'lists.join': (input, options) => api.lists.join(input, options),
     'lists.canJoin': (input) => api.lists.canJoin(input),
     'lists.separate': (input, options) => api.lists.separate(input, options),
+    'lists.merge': (input, options) => api.lists.merge(input, options),
+    'lists.split': (input, options) => api.lists.split(input, options),
     'lists.setLevel': (input, options) => api.lists.setLevel(input, options),
     'lists.setValue': (input, options) => api.lists.setValue(input, options),
     'lists.continuePrevious': (input, options) => api.lists.continuePrevious(input, options),

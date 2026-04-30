@@ -1,7 +1,7 @@
 {
   "name": "superdoc",
   "type": "module",
-  "version": "1.29.0",
+  "version": "1.29.1",
   "license": "AGPL-3.0",
   "repository": {
     "type": "git",
@@ -47,6 +47,16 @@
       "source": "./src/headless-toolbar.js",
       "import": "./dist/headless-toolbar.es.js"
     },
+    "./ui": {
+      "types": "./dist/superdoc/src/ui.d.ts",
+      "source": "./src/ui.js",
+      "import": "./dist/ui.es.js"
+    },
+    "./ui/react": {
+      "types": "./dist/superdoc/src/ui-react.d.ts",
+      "source": "./src/ui-react.js",
+      "import": "./dist/ui-react.es.js"
+    },
     "./headless-toolbar/react": {
       "types": "./dist/superdoc/src/headless-toolbar-react.d.ts",
       "source": "./src/headless-toolbar-react.js",
@@ -67,6 +77,12 @@
     "*": {
       "headless-toolbar": [
         "./dist/superdoc/src/headless-toolbar.d.ts"
+      ],
+      "ui": [
+        "./dist/superdoc/src/ui.d.ts"
+      ],
+      "ui/react": [
+        "./dist/superdoc/src/ui-react.d.ts"
       ],
       "headless-toolbar/react": [
         "./dist/superdoc/src/headless-toolbar-react.d.ts"

@@ -5821,7 +5821,7 @@ describe('alternateHeaders (odd/even header differentiation)', () => {
     expect(layout.pages[1].margins?.bottom).toBeCloseTo(70, 0);
   });
 
-  it('falls back to default header when only default is defined with alternateHeaders', () => {
+  it('uses default as the odd header when only default is defined with alternateHeaders', () => {
     // Production path: a document with `w:evenAndOddHeaders` on but only a
     // `default` header authored. sectionMetadata supplies the `default` ref and
     // the per-rId height map supplies its measurement. Step-3 fallback at
@@ -5838,15 +5838,14 @@ describe('alternateHeaders (odd/even header differentiation)', () => {
 
     expect(layout.pages).toHaveLength(2);
 
-    // Both pages fall back to the default header (60px), so body start is the
-    // same on odd and even: max(50, 30+60) = 90.
     const p1Fragment = layout.pages[0].fragments.find((f) => f.blockId === 'p1');
     const p2Fragment = layout.pages[1].fragments.find((f) => f.blockId === 'p2');
     expect(p1Fragment!.y).toBeCloseTo(90, 0);
-    expect(p2Fragment!.y).toBeCloseTo(90, 0);
-    // Effective top margin is also 90 on both pages.
+    expect(p2Fragment!.y).toBeCloseTo(50, 0);
+    // Page 1 uses the default/odd header. Page 2 has no even header and resets
+    // to the base top margin.
     expect(layout.pages[0].margins?.top).toBeCloseTo(90, 0);
-    expect(layout.pages[1].margins?.top).toBeCloseTo(90, 0);
+    expect(layout.pages[1].margins?.top).toBeCloseTo(50, 0);
   });
 
   it('prefers section-aware header heights over the plain rId fallback', () => {

@@ -307,6 +307,65 @@ describe('mergeDrawingChildren', () => {
       const docPr = result.find((el) => el.name === 'wp:docPr');
       expect(docPr.attributes.id).toBe(0);
     });
+
+    it('patches pic:cNvPr id=0 when graphic uses a non-a DrawingML prefix', () => {
+      const result = mergeDrawingChildren({
+        order: ['wp:extent', 'wp:docPr', 'ns6:graphic'],
+        generated: [
+          { name: 'wp:extent', attributes: { cx: 100 } },
+          { name: 'wp:docPr', attributes: { id: 11 } },
+          {
+            name: 'ns6:graphic',
+            elements: [
+              {
+                name: 'ns6:graphicData',
+                elements: [
+                  {
+                    name: 'pic:pic',
+                    elements: [
+                      {
+                        name: 'pic:nvPicPr',
+                        elements: [{ name: 'pic:cNvPr', attributes: { id: 11 } }],
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+        original: [
+          { index: 1, xml: { name: 'wp:docPr', attributes: { id: 0 } } },
+          {
+            index: 2,
+            xml: {
+              name: 'ns6:graphic',
+              elements: [
+                {
+                  name: 'ns6:graphicData',
+                  elements: [
+                    {
+                      name: 'pic:pic',
+                      elements: [
+                        {
+                          name: 'pic:nvPicPr',
+                          elements: [{ name: 'pic:cNvPr', attributes: { id: 0, name: 'Original' } }],
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          },
+        ],
+      });
+
+      const graphic = result.find((el) => el.name === 'ns6:graphic');
+      const cNvPr = graphic.elements[0].elements[0].elements[0].elements[0];
+      expect(cNvPr.attributes.id).toBe(11);
+      expect(cNvPr.attributes.name).toBe('Original');
+    });
   });
 
   describe('deep copy behavior', () => {

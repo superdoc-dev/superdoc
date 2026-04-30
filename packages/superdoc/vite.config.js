@@ -85,6 +85,11 @@ export const getAliases = (_isDev) => {
     { find: '@superdoc/super-editor/headless-toolbar/react', replacement: path.resolve(__dirname, '../super-editor/src/headless-toolbar/react.ts') },
     { find: '@superdoc/super-editor/headless-toolbar/vue', replacement: path.resolve(__dirname, '../super-editor/src/headless-toolbar/vue.ts') },
     { find: '@superdoc/super-editor/presentation-editor', replacement: path.resolve(__dirname, '../super-editor/src/index.ts') },
+    // The longer `/ui/react` alias must come before `/ui` so the
+    // prefix match resolves it first; otherwise `/ui` would swallow
+    // `/ui/react` and the React entry would resolve to the controller.
+    { find: '@superdoc/super-editor/ui/react', replacement: path.resolve(__dirname, '../super-editor/src/ui/react/index.ts') },
+    { find: '@superdoc/super-editor/ui', replacement: path.resolve(__dirname, '../super-editor/src/ui/index.ts') },
     { find: '@superdoc/super-editor', replacement: path.resolve(__dirname, '../super-editor/src/index.ts') },
 
     // Map @superdoc/<name> to ./src/<name> for internal paths
@@ -108,7 +113,15 @@ export default defineConfig(({ mode, command }) => {
   const plugins = [
     vue(),
     !skipDts && dts({
-      include: ['src/**/*', '../super-editor/src/**/*'],
+      // SD-2815: include `../document-api/src/**/*` so the doc-api
+      // types re-exported from `superdoc/ui` (CommentInfo, Receipt,
+      // SelectionInfo, TextTarget, etc.) emit real declarations into
+      // the published dist instead of falling through to the
+      // `_internal-shims.d.ts` `any` fallback that ensure-types.cjs
+      // generates for every unshipped `@superdoc/*` package. Without
+      // this, packed consumers see `any` for those public types and
+      // the new re-export surface adds no actual checking.
+      include: ['src/**/*', '../super-editor/src/**/*', '../document-api/src/**/*'],
       outDir: 'dist',
       // vite-plugin-dts still gathers diagnostics for this mixed JS/Vue source
       // tree, but we do not use this build as the authoritative type-check gate.
@@ -180,6 +193,13 @@ export default defineConfig(({ mode, command }) => {
           'src/headless-toolbar.js',
           'src/headless-toolbar-react.js',
           'src/headless-toolbar-vue.js',
+          'src/ui.js',
+          // Same pattern as the other public re-export barrels above:
+          // `ui-react.js` is a thin pass-through to
+          // `@superdoc/super-editor/ui/react`. The provider / hook
+          // implementations are tested in the super-editor package
+          // (`src/ui/react/*.test.tsx`).
+          'src/ui-react.js',
           // Pure JSDoc typedef files (body is `export {}`, no runtime code)
           'src/core/types/**',
           '**/types.js',
@@ -202,6 +222,8 @@ export default defineConfig(({ mode, command }) => {
           'headless-toolbar': 'src/headless-toolbar.js',
           'headless-toolbar-react': 'src/headless-toolbar-react.js',
           'headless-toolbar-vue': 'src/headless-toolbar-vue.js',
+          'ui': 'src/ui.js',
+          'ui-react': 'src/ui-react.js',
           'super-editor': 'src/super-editor.js',
           'types': 'src/types.ts',
           'super-editor/docx-zipper': '@core/DocxZipper',
@@ -216,6 +238,7 @@ export default defineConfig(({ mode, command }) => {
           'pdfjs-dist/legacy/build/pdf.mjs',
           'pdfjs-dist/web/pdf_viewer.mjs',
           'react',
+          'react/jsx-runtime',
           'vue',
         ],
         output: [

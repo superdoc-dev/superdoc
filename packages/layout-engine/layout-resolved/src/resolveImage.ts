@@ -30,6 +30,7 @@ export function resolveImageItem(
     blockId: fragment.blockId,
     fragmentIndex,
     block,
+    sourceAnchor: fragment.sourceAnchor ?? block.sourceAnchor,
   };
   if (fragment.pmStart != null) item.pmStart = fragment.pmStart;
   if (fragment.pmEnd != null) item.pmEnd = fragment.pmEnd;

@@ -333,6 +333,7 @@ export const Paragraph = OxmlNode.create({
       toggleBulletListStyle: (style) => (params) => {
         return toggleList('bulletList', style)(params);
       },
+
       /**
        * Toggle an ordered list with a specific numbering style at the current selection
        * @category Command

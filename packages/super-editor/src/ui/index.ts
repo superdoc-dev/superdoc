@@ -1,0 +1,122 @@
+/**
+ * `superdoc/ui` — browser-only UI controller for SuperDoc.
+ *
+ * The architectural counterpart to the Document API contract:
+ *
+ *   - `editor.doc.*` — request/response operations, runs server + client
+ *   - `createSuperDocUI({ superdoc })` — browser-only state controller
+ *
+ * Domain namespaces (`ui.toolbar`, `ui.commands`, `ui.comments`,
+ * `ui.review`, `ui.viewport`, `ui.selection`) are filed as sibling
+ * tickets under SD-2667 and layer on top of the `ui.select` substrate
+ * exported here.
+ *
+ * Source lives in `packages/super-editor/src/ui/`; the public sub-entry
+ * is `superdoc/ui` (re-exported from `packages/superdoc/src/ui.js`),
+ * mirroring the `superdoc/headless-toolbar` pattern.
+ */
+
+export { createSuperDocUI } from './create-super-doc-ui.js';
+export { shallowEqual } from './equality.js';
+
+// Re-export the document-side shapes the controller surfaces so
+// consumers can type their components without reaching into the
+// `@superdoc/document-api` package directly. The set tracks what
+// `ui.*` actually returns / accepts: address shapes for the selection
+// slice and entity targets, list-result shapes for the comments and
+// review snapshots, and the receipt union for action methods. Add a
+// new export here when a controller method's return type or argument
+// type pulls in another doc-api shape.
+export type {
+  // Address / target shapes for selection + viewport + entity ops.
+  // `state.selection.target` returns TextTarget; .selectionTarget
+  // returns SelectionTarget; viewport.getRect / scrollIntoView take
+  // EntityAddress / ScrollIntoViewInput.
+  TextTarget,
+  TextSegment,
+  TextAddress,
+  SelectionTarget,
+  SelectionPoint,
+  EntityAddress,
+  CommentAddress,
+  TrackedChangeAddress,
+  // The full SelectionInfo projection. The controller mirrors a
+  // subset of this onto state.selection, but consumers integrating
+  // with editor.doc.selection.current() directly may want the full
+  // shape for typing custom resolvers.
+  SelectionInfo,
+
+  // Comments slice items and action shapes. `state.comments.items`
+  // is `CommentsListResult['items']`; consumers iterating over it can
+  // type the element parameter as `CommentInfo`. Query / result /
+  // create / patch shapes are useful for sidebars that drive the
+  // doc-api directly via `editor.doc.comments.*`.
+  CommentInfo,
+  CommentsListQuery,
+  CommentsListResult,
+
+  // Review slice items. `TrackChangeInfo` is the per-item shape on
+  // `state.review.items` for tracked-change entries; the result
+  // wrapper carries pagination + total.
+  TrackChangeInfo,
+  TrackChangesListResult,
+
+  // Receipt union returned by every doc-api mutation routed through
+  // ui.comments / ui.review action methods (createFromSelection,
+  // resolve, reopen, delete, accept, reject, acceptAll, rejectAll).
+  Receipt,
+
+  // Viewport scroll API shapes. ui.viewport.scrollIntoView /
+  // ui.comments.scrollTo / ui.review.scrollTo return / accept these.
+  ScrollIntoViewInput,
+  ScrollIntoViewOutput,
+} from '@superdoc/document-api';
+
+export type {
+  // Substrate
+  EqualityFn,
+  SelectorFn,
+  Subscribable,
+
+  // Host shapes (structural)
+  SuperDocEditorLike,
+  SuperDocLike,
+
+  // Controller
+  SuperDocUI,
+  SuperDocUIOptions,
+  SuperDocUIState,
+
+  // Selection
+  SelectionCapture,
+  SelectionHandle,
+  SelectionSlice,
+
+  // Toolbar + commands
+  CommandHandle,
+  CommandsHandle,
+  CustomCommandHandle,
+  CustomCommandHandleState,
+  CustomCommandRegistration,
+  CustomCommandRegistrationResult,
+  DynamicCommandHandle,
+  ToolbarCommandHandleState,
+  ToolbarHandle,
+  ToolbarSnapshotSlice,
+  UIToolbarCommandState,
+
+  // Comments
+  CommentsHandle,
+  CommentsSlice,
+
+  // Review
+  ReviewHandle,
+  ReviewItem,
+  ReviewSlice,
+
+  // Viewport
+  ViewportGetRectInput,
+  ViewportHandle,
+  ViewportRect,
+  ViewportRectResult,
+} from './types.js';

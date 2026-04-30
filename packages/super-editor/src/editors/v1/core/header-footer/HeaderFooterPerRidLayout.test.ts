@@ -27,6 +27,12 @@ const makeBlock = (id: string): FlowBlock => ({
   runs: [{ text: id, fontFamily: 'Arial', fontSize: 12 }],
 });
 
+const makeParagraph = (id: string, text: string): FlowBlock => ({
+  kind: 'paragraph',
+  id,
+  runs: [{ text, fontFamily: 'Arial', fontSize: 12 }],
+});
+
 const makeMeasure = (): Measure => ({
   kind: 'paragraph',
   lines: [
@@ -200,5 +206,73 @@ describe('layoutPerRIdHeaderFooters', () => {
     expect(deps.headerLayoutsByRId.has('rId-header-default::s0')).toBe(true);
     expect(deps.headerLayoutsByRId.has('rId-header-first::s0')).toBe(true);
     expect(deps.headerLayoutsByRId.has('rId-header-section-1::s1')).toBe(true);
+  });
+
+  it('lays out referenced default/odd/even variants in per-section mode', async () => {
+    const headerBlocksByRId = new Map<string, FlowBlock[]>([
+      ['rId-header-default', [makeBlock('block-default')]],
+      ['rId-header-odd', [makeBlock('block-odd')]],
+      ['rId-header-even', [makeBlock('block-even')]],
+      ['rId-header-orphan', [makeBlock('block-orphan')]],
+    ]);
+
+    const headerFooterInput = {
+      headerBlocksByRId,
+      footerBlocksByRId: undefined,
+      headerBlocks: undefined,
+      footerBlocks: undefined,
+      constraints: {
+        width: 400,
+        height: 80,
+        pageWidth: 600,
+        pageHeight: 800,
+        margins: {
+          top: 50,
+          right: 50,
+          bottom: 50,
+          left: 50,
+          header: 20,
+        },
+      },
+    };
+
+    const layout = {
+      pages: [{ number: 1, fragments: [], sectionIndex: 0 }],
+    } as unknown as Layout;
+
+    const sectionMetadata: SectionMetadata[] = [
+      {
+        sectionIndex: 0,
+        margins: { left: 50, right: 50, top: 50, bottom: 50, header: 20 },
+        headerRefs: {
+          default: 'rId-header-default',
+          odd: 'rId-header-odd',
+        },
+      },
+      {
+        sectionIndex: 1,
+        margins: { left: 60, right: 60, top: 50, bottom: 50, header: 20 },
+        headerRefs: {
+          even: 'rId-header-even',
+        },
+      },
+    ];
+
+    const deps = {
+      headerLayoutsByRId: new Map(),
+      footerLayoutsByRId: new Map(),
+    };
+
+    await layoutPerRIdHeaderFooters(headerFooterInput, layout, sectionMetadata, deps);
+
+    const laidOutBlockIds = new Set(
+      mockLayoutHeaderFooterWithCache.mock.calls.map((call) => call[0].default?.[0]?.id).filter(Boolean),
+    );
+
+    expect(laidOutBlockIds).toEqual(new Set(['block-default', 'block-odd', 'block-even']));
+    expect(deps.headerLayoutsByRId.has('rId-header-default::s0')).toBe(true);
+    expect(deps.headerLayoutsByRId.has('rId-header-odd::s0')).toBe(true);
+    expect(deps.headerLayoutsByRId.has('rId-header-even::s1')).toBe(true);
+    expect(deps.headerLayoutsByRId.has('rId-header-orphan::s0')).toBe(false);
   });
 });

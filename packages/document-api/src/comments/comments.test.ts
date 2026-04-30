@@ -14,6 +14,7 @@ const stubAdapter = () =>
     reply: mock(() => ({ success: true })),
     move: mock(() => ({ success: true })),
     resolve: mock(() => ({ success: true })),
+    reopen: mock(() => ({ success: true })),
     remove: mock(() => ({ success: true })),
     setInternal: mock(() => ({ success: true })),
     setActive: mock(() => ({ success: true })),
@@ -60,7 +61,7 @@ describe('executeCommentsPatch validation', () => {
 
   it('rejects invalid status', () => {
     expect(() => executeCommentsPatch(stubAdapter(), { commentId: 'c1', status: 'open' } as any)).toThrow(
-      /must be "resolved"/,
+      /must be "resolved" or "active"/,
     );
   });
 
@@ -74,6 +75,20 @@ describe('executeCommentsPatch validation', () => {
     const adapter = stubAdapter();
     executeCommentsPatch(adapter, { commentId: 'c1', isInternal: true });
     expect(adapter.setInternal).toHaveBeenCalled();
+  });
+
+  it('routes status:"resolved" to adapter.resolve', () => {
+    const adapter = stubAdapter();
+    executeCommentsPatch(adapter, { commentId: 'c1', status: 'resolved' });
+    expect(adapter.resolve).toHaveBeenCalledWith({ commentId: 'c1' }, undefined);
+    expect(adapter.reopen).not.toHaveBeenCalled();
+  });
+
+  it('routes status:"active" to adapter.reopen (lifecycle inverse of resolve)', () => {
+    const adapter = stubAdapter();
+    executeCommentsPatch(adapter, { commentId: 'c1', status: 'active' });
+    expect(adapter.reopen).toHaveBeenCalledWith({ commentId: 'c1' }, undefined);
+    expect(adapter.resolve).not.toHaveBeenCalled();
   });
 });
 

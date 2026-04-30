@@ -90,7 +90,7 @@ import { collectTrackInsertRefsInRange } from './helpers/tracked-change-refs.js'
 import { applyDirectMutationMeta, applyTrackedMutationMeta } from './helpers/transaction-meta.js';
 import { DocumentApiAdapterError } from './errors.js';
 import { toBlockAddress, findBlockById, findBlockByNodeIdOnly } from './helpers/node-address-resolver.js';
-import { twipsToPixels } from '../core/super-converter/helpers.js';
+import { twipsToPixels, eighthPointsToPixels } from '../core/super-converter/helpers.js';
 import { resolvePreferredNewTableStyleId, isKnownTableStyleId } from '@superdoc/style-engine/ooxml';
 import { generateDocxHexId } from '../utils/generateDocxHexId.js';
 import {
@@ -104,6 +104,7 @@ import {
 import { readTranslatedLinkedStyles } from '../core/parts/adapters/styles-read.js';
 import { mutatePart } from '../core/parts/mutation/mutate-part.js';
 import type { PartId } from '../core/parts/types.js';
+import { cloneBorders, mapBorderSizes } from '../extensions/table/tableHelpers/border-utils.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -166,7 +167,8 @@ function syncExtractedTableAttrs(tp: Record<string, unknown>): Record<string, un
   extracted.tableStyleId = tp.tableStyleId ?? null;
   extracted.justification = tp.justification ?? null;
   extracted.tableLayout = tp.tableLayout ?? null;
-  extracted.borders = tp.borders ?? null;
+  const pixelBorders = convertTableBordersToPixelUnits(tp.borders);
+  extracted.borders = pixelBorders ?? tp.borders ?? null;
 
   // tableIndent — importer converts twips→pixels (line 89)
   const indent = tp.tableIndent as { value?: number; type?: string } | undefined;
@@ -210,6 +212,13 @@ function syncExtractedTableAttrs(tp: Record<string, unknown>): Record<string, un
   }
 
   return extracted;
+}
+
+function convertTableBordersToPixelUnits(value: unknown): Record<string, unknown> | undefined {
+  const clone = cloneBorders(value);
+  if (!clone || Object.keys(clone).length === 0) return undefined;
+  mapBorderSizes(clone, eighthPointsToPixels);
+  return Object.keys(clone).length > 0 ? clone : undefined;
 }
 
 function normalizeGridWidth(width: unknown): { col: number } {

@@ -14,11 +14,7 @@ vi.mock('@helpers/list-numbering-helpers.js', () => ({
     setListLevelStyle: vi.fn(() => true),
     setListLevelStyles: vi.fn(() => true),
   },
-  // Standalone exports added in PR-2873 — toggleList.js imports these directly
-  markerTextToBulletStyle: vi.fn((markerText) => {
-    const map = { '•': 'disc', '◦': 'circle', '▪': 'square' };
-    return map[markerText] ?? null;
-  }),
+  markerTextToBulletStyle: vi.fn((m) => ({ '•': 'disc', '◦': 'circle', '▪': 'square' })[m] ?? null),
   numberingInfoToOrderedStyle: vi.fn((numberingType, markerText) => {
     const suffix = markerText?.slice(-1);
     const map = {
@@ -213,6 +209,8 @@ describe('toggleList', () => {
       numId: 42,
       listType: 'orderedList',
       editor,
+      bulletStyle: undefined,
+      bulletStyleLevel: 0,
     });
     const expectedNumbering = { numId: 42, ilvl: 0 };
     for (const [index, { node, pos }] of paragraphs.entries()) {
@@ -244,6 +242,8 @@ describe('toggleList', () => {
       numId: 99,
       listType: 'orderedList',
       editor,
+      bulletStyle: undefined,
+      bulletStyleLevel: 0,
     });
     expect(dispatch).toHaveBeenCalledWith(tr);
   });
@@ -376,13 +376,13 @@ describe('toggleList', () => {
   });
 
   // -------------------------------------------------------------------------
-  // PR-2873 (SD-2527): style param threading
+  // SD-2526 + SD-2527: style param threading
   //
-  // toggleList now accepts (listType, bulletStyle, orderedStyle) and passes
-  // them through to ListHelpers.generateNewListDefinition. These tests verify
-  // that thread-through for every style the PR claims to support.
+  // toggleList accepts (listType, bulletStyle, orderedStyle) and passes them
+  // through to ListHelpers.generateNewListDefinition. These tests verify that
+  // thread-through for every style the toolbar exposes.
   // -------------------------------------------------------------------------
-  describe('style parameter threading (PR-2873)', () => {
+  describe('style parameter threading', () => {
     it.each(['disc', 'circle', 'square'])(
       'passes bulletStyle="%s" through to generateNewListDefinition',
       (bulletStyle) => {
@@ -399,6 +399,7 @@ describe('toggleList', () => {
           listType: 'bulletList',
           editor,
           bulletStyle,
+          bulletStyleLevel: 0,
           orderedStyle: undefined,
         });
       },
@@ -427,6 +428,7 @@ describe('toggleList', () => {
         listType: 'orderedList',
         editor,
         bulletStyle: null,
+        bulletStyleLevel: 0,
         orderedStyle,
       });
     });
@@ -451,6 +453,29 @@ describe('toggleList', () => {
 
       expect(result).toBe(true);
       // Predicate matched (kind=bullet, style=disc) → mode is 'remove', not 'create'
+      expect(ListHelpers.generateNewListDefinition).not.toHaveBeenCalled();
+    });
+
+    it('falls back to type-only matching when no bulletStyle is requested', () => {
+      // No style argument: any bullet marker should be treated as "already a bullet list",
+      // so toggling with no style toggles off regardless of which marker the list uses.
+      ListHelpers.getListDefinitionDetails.mockReturnValue({ listNumberingType: 'bullet' });
+      const paragraphs = [
+        createParagraph(
+          {
+            paragraphProperties: { numberingProperties: { numId: 5, ilvl: 0 } },
+            listRendering: { numberingType: 'bullet', markerText: '▪' },
+          },
+          1,
+        ),
+      ];
+      const state = createState(paragraphs);
+      const handler = toggleList('bulletList');
+
+      const result = handler({ editor, state, tr, dispatch });
+
+      expect(result).toBe(true);
+      expect(updateNumberingProperties).toHaveBeenCalledWith(null, paragraphs[0].node, paragraphs[0].pos, editor, tr);
       expect(ListHelpers.generateNewListDefinition).not.toHaveBeenCalled();
     });
 
@@ -586,6 +611,9 @@ describe('toggleList', () => {
         numId: 77,
         listType: 'orderedList',
         editor,
+        bulletStyle: undefined,
+        bulletStyleLevel: 0,
+        orderedStyle: undefined,
       });
       const expectedNumbering = { numId: 77, ilvl: 0 };
       expect(updateNumberingProperties).toHaveBeenCalledTimes(2);
@@ -633,6 +661,9 @@ describe('toggleList', () => {
         numId: 88,
         listType: 'bulletList',
         editor,
+        bulletStyle: undefined,
+        bulletStyleLevel: 0,
+        orderedStyle: undefined,
       });
       expect(updateNumberingProperties).toHaveBeenCalledTimes(2);
       const expectedNumbering = { numId: 88, ilvl: 0 };

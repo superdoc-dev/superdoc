@@ -3,7 +3,7 @@
  * engine's revision management and execution path.
  *
  * Read operations (list, get, goTo) are pure queries or non-mutating navigation.
- * Mutating operations (add, edit, reply, move, resolve, remove, setInternal, setActive)
+ * Mutating operations (add, edit, reply, move, resolve, reopen, remove, setInternal, setActive)
  * delegate to editor commands with plan-engine revision tracking.
  */
 
@@ -20,6 +20,7 @@ import type {
   MoveCommentInput,
   Receipt,
   RemoveCommentInput,
+  ReopenCommentInput,
   ReplyToCommentInput,
   ResolveCommentInput,
   RevisionGuardOptions,
@@ -756,6 +757,68 @@ function resolveCommentHandler(editor: Editor, input: ResolveCommentInput, optio
   return { success: true, updated: [toCommentAddress(identity.commentId)] };
 }
 
+function reopenCommentHandler(editor: Editor, input: ReopenCommentInput, options?: RevisionGuardOptions): Receipt {
+  const reopenComment = requireEditorCommand(editor.commands?.reopenComment, 'comments.patch (reopenComment)');
+
+  const store = getCommentEntityStore(editor);
+  const identity = resolveCommentIdentity(editor, input.commentId);
+  const existing = findCommentEntity(store, identity.commentId);
+  // Idempotent on the no-op path: reopening an already-active comment
+  // (no anchor nodes in the doc, entity store doesn't show resolved)
+  // returns NO_OP rather than running a command that would fail
+  // silently.
+  const isAnchored = identity.anchors.length > 0;
+  const isResolvedInStore = existing ? isCommentResolved(existing) : false;
+  const isResolvedInDoc = isAnchored && identity.anchors.every((a) => a.status === 'resolved');
+  if (!isResolvedInStore && !isResolvedInDoc) {
+    return {
+      success: false,
+      failure: { code: 'NO_OP', message: 'Comment is already active.' },
+    };
+  }
+
+  // Recover the original `internal` flag from the entity store when
+  // present; the engine helper falls back to the value stamped on
+  // `commentRangeStart` when this is undefined, so a runtime-resolved
+  // comment with no entity record still round-trips correctly.
+  const storedInternal = (existing as { isInternal?: unknown } | undefined)?.isInternal;
+  const internalOverride = typeof storedInternal === 'boolean' ? storedInternal : undefined;
+
+  const receipt = executeDomainCommand(
+    editor,
+    () => {
+      const didReopen = reopenComment({
+        commentId: identity.commentId,
+        importedId: identity.importedId,
+        internal: internalOverride,
+      });
+      if (didReopen) {
+        // Clear the resolved markers in the entity store so subsequent
+        // `comments.list()` reflects the reopen. `resolvedTime` is
+        // dropped explicitly because `upsertCommentEntity` merges
+        // partials and would otherwise leave the prior timestamp in
+        // place.
+        upsertCommentEntity(store, identity.commentId, {
+          importedId: identity.importedId,
+          isDone: false,
+          resolvedTime: null,
+        });
+      }
+      return Boolean(didReopen);
+    },
+    { expectedRevision: options?.expectedRevision },
+  );
+
+  if (receipt.steps[0]?.effect !== 'changed') {
+    return {
+      success: false,
+      failure: { code: 'NO_OP', message: 'Comment reopen produced no change.' },
+    };
+  }
+
+  return { success: true, updated: [toCommentAddress(identity.commentId)] };
+}
+
 function removeCommentHandler(editor: Editor, input: RemoveCommentInput, options?: RevisionGuardOptions): Receipt {
   const removeComment = requireEditorCommand(editor.commands?.removeComment, 'comments.remove (removeComment)');
 
@@ -986,6 +1049,7 @@ export function createCommentsWrapper(editor: Editor): CommentsAdapter {
     move: (input: MoveCommentInput, options?: RevisionGuardOptions) => moveCommentHandler(editor, input, options),
     resolve: (input: ResolveCommentInput, options?: RevisionGuardOptions) =>
       resolveCommentHandler(editor, input, options),
+    reopen: (input: ReopenCommentInput, options?: RevisionGuardOptions) => reopenCommentHandler(editor, input, options),
     remove: (input: RemoveCommentInput, options?: RevisionGuardOptions) => removeCommentHandler(editor, input, options),
     setInternal: (input: SetCommentInternalInput, options?: RevisionGuardOptions) =>
       setCommentInternalHandler(editor, input, options),

@@ -605,7 +605,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
     }
 
     // Skip for sub-editors that are not primary document editors
-    if (this.options.mode === 'text' || this.options.isHeaderOrFooter) {
+    if (this.options.mode === 'text' || this.options.isHeaderOrFooter || this.options.isChildEditor) {
       return;
     }
 

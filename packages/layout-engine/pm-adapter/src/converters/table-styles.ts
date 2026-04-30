@@ -1,9 +1,10 @@
-import type { BoxSpacing } from '@superdoc/contracts';
+import type { BoxSpacing, TableBorders } from '@superdoc/contracts';
 import { resolveTableProperties } from '@superdoc/style-engine/ooxml';
 import type { TableProperties, TableCellMargins } from '@superdoc/style-engine/ooxml';
 import type { PMNode } from '../types.js';
 import type { ConverterContext } from '../converter-context.js';
 import { twipsToPx, normalizeCellPaddingTopBottom } from '../utilities.js';
+import { convertTableBorderValue, borderSizeToPx } from '../attributes/borders.js';
 
 export type TableStyleHydration = {
   borders?: Record<string, unknown>;
@@ -31,7 +32,7 @@ export const hydrateTableStyleAttrs = (
   const tableProps = (tableNode.attrs?.tableProperties ?? null) as Record<string, unknown> | null;
 
   // Collect inline values first, then merge with style-resolved values below.
-  let inlineBorders: Record<string, unknown> | undefined;
+  let inlineBorders: TableBorders | undefined;
   let inlinePadding: BoxSpacing | undefined;
 
   // 1. Inline properties (highest priority)
@@ -40,7 +41,7 @@ export const hydrateTableStyleAttrs = (
     if (padding) inlinePadding = normalizeCellPaddingTopBottom(padding);
 
     if (tableProps.borders && typeof tableProps.borders === 'object') {
-      inlineBorders = clonePlainObject(tableProps.borders as Record<string, unknown>);
+      inlineBorders = normalizeTableBorders(tableProps.borders as Record<string, unknown>);
     }
 
     if (typeof tableProps.justification === 'string') {
@@ -68,8 +69,9 @@ export const hydrateTableStyleAttrs = (
 
     // Per-side merge: inline sides win, style fills missing sides.
     if (resolved.borders) {
-      const styleBorders = clonePlainObject(resolved.borders as unknown as Record<string, unknown>);
-      hydration.borders = inlineBorders ? { ...styleBorders, ...inlineBorders } : styleBorders;
+      const styleBorders = normalizeTableBorders(resolved.borders as unknown as Record<string, unknown>);
+      hydration.borders =
+        inlineBorders && styleBorders ? { ...styleBorders, ...inlineBorders } : (inlineBorders ?? styleBorders);
     } else if (inlineBorders) {
       hydration.borders = inlineBorders;
     }
@@ -107,7 +109,26 @@ export const hydrateTableStyleAttrs = (
   return Object.keys(hydration).length > 0 ? hydration : null;
 };
 
-const clonePlainObject = (value: Record<string, unknown>): Record<string, unknown> => ({ ...value });
+const normalizeTableBorders = (value?: Record<string, unknown>): TableBorders | undefined => {
+  if (!value) return undefined;
+
+  const sides = ['top', 'bottom', 'left', 'right', 'insideH', 'insideV'] as const;
+  const result: TableBorders = {};
+
+  for (const side of sides) {
+    const border = value[side];
+    if (!border || typeof border !== 'object') continue;
+    const converted = convertTableBorderValue(adjustBorderSize(border as Record<string, unknown>));
+    if (converted) result[side] = converted;
+  }
+
+  return Object.keys(result).length > 0 ? result : undefined;
+};
+
+const adjustBorderSize = (border: Record<string, unknown>): Record<string, unknown> => {
+  const size = typeof border.size === 'number' ? borderSizeToPx(border.size) : undefined;
+  return size != null ? { ...border, size } : border;
+};
 
 const convertCellMarginsToPx = (margins: Record<string, unknown>): BoxSpacing | undefined => {
   if (!margins || typeof margins !== 'object') return undefined;

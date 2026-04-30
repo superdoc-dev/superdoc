@@ -21,7 +21,7 @@ vi.mock('@core/super-converter/v2/importer/listImporter.js', () => ({
 import { getStyleTagFromStyleId } from '@core/super-converter/v2/importer/listImporter.js';
 
 // Import the function we want to test
-const { getListDefinitionDetails, createNewList, ListHelpers } = listHelpers;
+const { getListDefinitionDetails, createNewList, ListHelpers, markerTextToBulletStyle } = listHelpers;
 
 // Global parts runtime setup — needed because helpers now route through mutatePart
 beforeEach(() => {
@@ -1566,29 +1566,20 @@ describe('createNewList', () => {
 });
 
 describe('markerTextToBulletStyle', () => {
-  const { markerTextToBulletStyle } = listHelpers;
-
   it.each([
     ['•', 'disc'],
     ['◦', 'circle'],
     ['▪', 'square'],
-  ])('maps %s to %s', (markerText, expected) => {
+  ])('maps marker char %s to %s', (markerText, expected) => {
     expect(markerTextToBulletStyle(markerText)).toBe(expected);
   });
 
-  it.each([
-    ['·', 'legacy Symbol-font middle dot (U+00B7)'],
-    ['●', 'filled circle (U+25CF)'],
-    ['', 'empty string'],
-    ['1.', 'ordered marker'],
-    ['•1', 'multi-char string starting with bullet'],
-  ])('returns null for unrecognized input %s (%s)', (markerText) => {
-    expect(markerTextToBulletStyle(markerText)).toBeNull();
-  });
-
-  it.each([[null], [undefined]])('returns null for %s', (markerText) => {
-    expect(markerTextToBulletStyle(markerText)).toBeNull();
-  });
+  it.each([[null], [undefined], [''], ['o'], ['\uF0B7'], ['\uF0A7'], ['x'], ['·'], ['●'], ['1.'], ['•1']])(
+    'returns null for unrecognized marker %p',
+    (markerText) => {
+      expect(markerTextToBulletStyle(markerText)).toBeNull();
+    },
+  );
 });
 
 describe('numberingInfoToOrderedStyle', () => {

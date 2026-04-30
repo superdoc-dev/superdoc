@@ -191,6 +191,136 @@ export const resolveCommentById = ({ commentId, importedId, state, tr, dispatch 
 };
 
 /**
+ * Collect all `commentRangeStart` / `commentRangeEnd` anchor nodes for a
+ * given comment id and pair them up into ranges in document order.
+ *
+ * Handles split / multi-segment anchors the same way `resolveCommentById`
+ * inserts them: starts and ends are matched by document order so a
+ * comment that originally spanned multiple disjoint inline ranges
+ * round-trips as a sequence of `(start, end)` pairs. Mismatched counts
+ * (extra start with no matching end, or vice versa) are dropped to
+ * avoid leaving the doc in a partially-anchored state — the caller
+ * receives the well-formed pairs only.
+ *
+ * @param {string} commentId The canonical comment ID (matches `w:id` attr)
+ * @param {string} [importedId] Optional imported alias to also match
+ * @param {import('prosemirror-model').Node} doc The ProseMirror document
+ * @returns {{ pairs: Array<{ from: number; to: number; internal: boolean }>, anchorNodePositions: number[] }}
+ */
+const getCommentRangeAnchorsById = (commentId, doc, importedId) => {
+  /** @type {Array<{ pos: number; type: 'start' | 'end'; internal: boolean }>} */
+  const anchors = [];
+
+  doc.descendants((node, pos) => {
+    const typeName = node.type?.name;
+    if (typeName !== 'commentRangeStart' && typeName !== 'commentRangeEnd') return;
+    const wid = node.attrs?.['w:id'];
+    if (wid !== commentId && (!importedId || wid !== importedId)) return;
+    anchors.push({
+      pos,
+      type: typeName === 'commentRangeStart' ? 'start' : 'end',
+      internal: !!node.attrs?.internal,
+    });
+  });
+
+  /** @type {Array<{ from: number; to: number; internal: boolean }>} */
+  const pairs = [];
+  /** @type {Array<{ pos: number; internal: boolean }>} */
+  const stack = [];
+  for (const anchor of anchors) {
+    if (anchor.type === 'start') {
+      stack.push({ pos: anchor.pos, internal: anchor.internal });
+      continue;
+    }
+    const opener = stack.shift();
+    if (!opener) continue;
+    pairs.push({ from: opener.pos, to: anchor.pos, internal: opener.internal });
+  }
+
+  return {
+    pairs,
+    anchorNodePositions: anchors.map((a) => a.pos),
+  };
+};
+
+/**
+ * Reopen a previously-resolved comment by removing its
+ * `commentRangeStart` / `commentRangeEnd` anchor nodes and re-inserting
+ * a live `comment` mark across the same range(s). Symmetric inverse of
+ * {@link resolveCommentById}.
+ *
+ * The mark is re-inserted with the original `(commentId, importedId,
+ * internal)` attrs so subsequent export, search, and entity-store
+ * lookups see the same shape as a never-resolved comment. The caller
+ * supplies `importedId` and `internal` because they aren't fully
+ * recoverable from the doc alone (`commentRangeStart` keeps `internal`
+ * but `importedId` lives in the entity store, and the public `comments.patch`
+ * input doesn't take it).
+ *
+ * Idempotent on the no-op path: if no matching anchor nodes exist,
+ * returns `false` without dispatching.
+ *
+ * @param {Object} param0
+ * @param {string} param0.commentId The canonical comment ID
+ * @param {string} [param0.importedId] The imported alias (matched against `w:id` for legacy docs)
+ * @param {boolean} [param0.internal] Override for the restored mark's `internal` flag — falls back to the value stamped on `commentRangeStart` so import-resolved comments keep their flag
+ * @param {import('prosemirror-state').EditorState} param0.state Current editor state
+ * @param {import('prosemirror-state').Transaction} param0.tr Current transaction
+ * @param {Function} param0.dispatch The dispatch function
+ * @returns {boolean} True when the anchor nodes existed and the mark was restored
+ */
+export const reopenCommentById = ({ commentId, importedId, internal, state, tr, dispatch }) => {
+  const { schema } = state;
+  const markType = schema.marks?.[CommentMarkName];
+  if (!markType) return false;
+
+  const { pairs, anchorNodePositions } = getCommentRangeAnchorsById(commentId, state.doc, importedId);
+  if (!pairs.length) return false;
+
+  // Re-add the comment mark first, working in *original* document
+  // coordinates. Because subsequent deletes will shift positions, we
+  // map the inserts forward through `tr.mapping` after each step. The
+  // pairs array is already in document order; restoring the mark from
+  // first to last keeps mappings monotonic.
+  pairs.forEach(({ from, to, internal: anchorInternal }) => {
+    const mappedFrom = tr.mapping.map(from);
+    const mappedTo = tr.mapping.map(to);
+    if (mappedTo <= mappedFrom) return;
+    const attrs = {
+      commentId,
+      importedId,
+      internal: typeof internal === 'boolean' ? internal : anchorInternal,
+    };
+    // The mark must cover the inline content *between* the anchor
+    // nodes, not the anchor nodes themselves. `commentRangeStart` sits
+    // at `from` (one node-size wide) and `commentRangeEnd` sits at
+    // `to`. Adding the mark from `from + 1` to `to` covers exactly the
+    // text that was originally marked before resolve.
+    tr.addMark(mappedFrom + 1, mappedTo, markType.create(attrs));
+  });
+
+  // Delete the anchor nodes in descending order so earlier deletes
+  // don't shift later positions. `getCommentRangeAnchorsById` returns
+  // raw doc-positions; map each through `tr.mapping` so previous
+  // mark insertions are accounted for, then sort the *mapped*
+  // positions descending.
+  const mappedAnchorPositions = anchorNodePositions.map((pos) => tr.mapping.map(pos)).sort((a, b) => b - a);
+  mappedAnchorPositions.forEach((pos) => {
+    // Each anchor node is one node-size wide. Recompute the node size
+    // defensively in case mapping collapsed the range to zero width
+    // (e.g. concurrent delete elsewhere).
+    const node = tr.doc.nodeAt(pos);
+    if (!node) return;
+    const typeName = node.type?.name;
+    if (typeName !== 'commentRangeStart' && typeName !== 'commentRangeEnd') return;
+    tr.delete(pos, pos + node.nodeSize);
+  });
+
+  dispatch(tr);
+  return true;
+};
+
+/**
  * Prepare comments for export by converting the marks back to commentRange nodes
  * This function handles both Word format (via commentsExtended.xml) and Google Docs format
  * (via nested comment ranges). For threaded comments from Google Docs, it maintains the

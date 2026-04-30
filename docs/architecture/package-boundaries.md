@@ -2,7 +2,7 @@
 
 **Status:** Draft (SD-2829)
 **Owner:** Caio Pizzol
-**Last updated:** 2026-04-29
+**Last updated:** 2026-04-30
 
 ## Why this exists
 
@@ -140,7 +140,7 @@ If a type does not satisfy one of these, it must not appear. The audit gate (SD-
 
 **Context.** The `super-editor` subpath was effectively public in earlier versions because there was no other way to use SuperDoc headlessly (server-side, AI agents, batch processing, custom toolbars). That necessity is gone: `superdoc` itself now re-exports `Editor`, `PresentationEditor`, `getStarterExtensions`, `getRichTextExtensions`, `Extensions`, `defineNode`, `defineMark`, `isNodeType`, `assertNodeType`, `isMarkType`, `SuperToolbar`, `CommentsPluginKey`, `TrackChangesBasePluginKey`, `SuperConverter`, `DocxZipper`, and `createZip`. Almost everything customers reached for from the subpath is now reachable from the main package.
 
-**Decision.** Both the standalone `@superdoc/super-editor` package and the `superdoc/super-editor` subpath are classified as **legacy public compatibility surface**. We do not break them. We do not advertise them. New customer guidance, docs, and examples point at `superdoc`. The audit gate enforces no growth (no new exports added through this surface), but minimal type coverage is preserved so existing imports keep compiling.
+**Decision.** Both the standalone `@superdoc/super-editor` package and the `superdoc/super-editor` subpath are classified as **legacy public compatibility surface**. We do not break them. We do not advertise them. New customer guidance, docs, and examples point at `superdoc`. Existing imports keep compiling with real types. A future "no growth" gate (no new exports added through this surface) is a follow-up; the audit script does not enforce that constraint today.
 
 **Pending inputs that refine the migration plan but do not change the classification.**
 - Usage scrape across Slack and public GitHub channels to confirm which symbols are actually depended on. (See deliverables below; first cut is captured in the SD-2829 thread comments.)
@@ -200,7 +200,7 @@ Once this RFC lands, the audit gate (SD-2832) becomes a literal encoding of the 
 - No collapse to `any` on a guarded list of public types (Document API, configuration, command props).
 - Pack-and-install consumer typecheck (SD-2831) with `skipLibCheck: false` across resolution modes and frameworks.
 
-Future PRs that violate these rules fail CI with a message that points back to this document.
+Once strict mode is enabled (the audit script defaults to informational while a small set of pre-existing leaks is being closed), future PRs that violate these rules fail CI with a message that points back to this document.
 
 If we adopt D1 (curated emit) for any portion of the surface in the future, an additional audit rule applies: **no private implementation concept exposed as a named public type unless deliberately allowed.** Inlining a type via the bundler removes the package specifier from the import but does not make the inlined shape publicly contracted. The audit gate would maintain an explicit allowlist of types that are intentionally part of the public surface (e.g. `FlowBlock` if we choose to expose it) so that an accidental inline of an implementation-detail type fails CI even when the package-name leak rule is satisfied.
 
@@ -208,14 +208,22 @@ If we adopt D1 (curated emit) for any portion of the surface in the future, an a
 
 The order in which the work lands matters. The RFC and the gate tickets are useful only if the customer-acute fixes happen on top of them, and the structural follow-ups happen on top of green gates.
 
-1. **Land the boundary and gate work** (SD-2829, SD-2831, SD-2832).
-2. **Fix the acute Document API issue.** Make Document API types resolvable from `superdoc` so `editor.doc.<method>` returns real types and `import type { DocumentApi } from 'superdoc'` resolves to a real interface. Implementation per Decision 2 (relocation into `superdoc`'s published declaration graph; publishing as a named package remains a future option).
-3. **Drive the supported entries to green** against the gates. No public type resolves through `_internal-shims.d.ts`. No private `@superdoc/*` imports in any `.d.ts` reachable from a public entry. `skipLibCheck: false` passes for the supported entries in the consumer matrix.
+**Done:**
+
+1. **Boundary and gate work merged together** (SD-2829 RFC, SD-2831 consumer matrix, SD-2832 audit script). The RFC defines the contract; the matrix proves the published package compiles for consumers; the audit reports declaration drift. Bundled into a single integration PR so the contract is documented and immediately exercised by CI.
+2. **Document API types resolvable from `superdoc`** (SD-2842). `editor.doc.<method>` returns real types; `import type { DocumentApi } from 'superdoc'` resolves to a real interface. Implementation per Decision 2 (relocation into `superdoc`'s published declaration graph). Publishing as a named package remains a future option.
+
+**In progress:**
+
+3. **Drive the supported entries to fully green** against the gates. The audit defaults to informational mode while a small set of pre-existing leaks is closed: an `@superdoc/common` reference the inlining missed, and two deep `@superdoc/super-editor/converter/internal/...` paths the rewrite missed. Once those are fixed, strict mode is the default.
+
+**Future work:**
+
 4. **Folder reorganization** (SD-2835). The structural change becomes lower risk after step 3 because the gates catch any regression that the move might introduce. See SD-2835 for the proposed shape.
 5. **Surgical TypeScript migration** of the public contract files: configuration, command surfaces, toolbar/UI types, the supported `superdoc/super-editor` facade. Do not start with a 1,800-file repo-wide migration; that is expensive and would not on its own guarantee the published artifact works.
 6. **Long-tail TypeScript migration** opportunistically, where new work touches a file or `checkJs` surfaces real drift between JSDoc and implementation.
 
-Steps 1-3 are days to weeks. Step 4 should wait for at least one release running with the gates, so the team has confidence the boundary holds before moving files. Steps 5-6 run on their own cadence, evidence-driven rather than calendar-driven.
+Step 4 should wait for at least one release running with strict gates, so the team has confidence the boundary holds before moving files. Steps 5-6 run on their own cadence, evidence-driven rather than calendar-driven.
 
 ## Out of scope
 

@@ -160,7 +160,7 @@ function ExportButton() {
 
   return (
     <button className="tb-btn export-btn" disabled={!host} title="Download as DOCX" onClick={onClick}>
-      Export DOCX
+      Export
     </button>
   );
 }
@@ -238,7 +238,7 @@ function ReimportButton() {
         title='Replace the current document with a DOCX file (round-trip test)'
         onClick={() => inputRef.current?.click()}
       >
-        {busy ? 'Reimporting…' : 'Reimport DOCX'}
+        {busy ? 'Importing…' : 'Import'}
       </button>
     </>
   );

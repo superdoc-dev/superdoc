@@ -144,15 +144,24 @@ Scrolls the editor viewport to the comment's anchor. Story-aware: comments ancho
 
 ## Threads and replies
 
-Comments form threads via `parentCommentId`. The reply payload uses the same `create` operation.
+Comments form threads via `parentCommentId`. Each item from `useSuperDocComments()` carries one if it's a reply; group your sidebar by `parentCommentId` to render thread roots with their replies stacked underneath.
 
-```ts
-const editor = host?.activeEditor;
-const commentsApi = editor?.doc?.comments;
-commentsApi?.create({ parentCommentId: parent.id, text: 'Replying' });
+```tsx
+const { items } = useSuperDocComments();
+const roots = items.filter((c) => !c.parentCommentId);
+const repliesByParent = items.reduce((map, c) => {
+  if (c.parentCommentId) {
+    const list = map.get(c.parentCommentId) ?? [];
+    list.push(c);
+    map.set(c.parentCommentId, list);
+  }
+  return map;
+}, new Map<string, typeof items>());
 ```
 
-A typed `ui.comments.reply()` is in flight as part of [SD-2817](https://linear.app/superdocworkspace/issue/SD-2817). For now, [`useSuperDocHost()`](/build-your-own-ui/react-setup) is the documented path.
+<Warning>
+  **Posting a reply isn't on `ui.comments` yet.** A typed `ui.comments.reply()` is filed as a follow-up (SD-2817). Until it lands, the reference demo posts replies through `useSuperDocHost()` as an escape hatch — see `ActivitySidebar.tsx` in `demos/build-your-own-ui/`. Treat that snippet as a temporary workaround, not the canonical pattern.
+</Warning>
 
 ## Trade-offs
 

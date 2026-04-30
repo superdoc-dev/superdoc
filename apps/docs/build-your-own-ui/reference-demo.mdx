@@ -14,7 +14,7 @@ The reference workspace at [`demos/build-your-own-ui/`](https://github.com/super
 | Insert clause custom command | `src/components/InsertClauseButton.tsx` | [Custom commands](/build-your-own-ui/custom-commands) |
 | Comments sidebar with capture-based composer and reply threads | `src/components/CommentComposer.tsx`, `src/components/ActivitySidebar.tsx` | [Comments](/build-your-own-ui/comments) |
 | Track-changes feed with accept / reject | `src/components/ActivitySidebar.tsx` | [Track changes](/build-your-own-ui/track-changes) |
-| Merged comments + tracked-changes panel | `src/components/ActivitySidebar.tsx` | [Track changes › A merged feed](/build-your-own-ui/track-changes#a-merged-comments--changes-feed) |
+| Merged comments + tracked-changes panel | `src/components/ActivitySidebar.tsx` | (App-level pattern; see below) |
 | Active-card highlight from selection | `src/components/ActivitySidebar.tsx` | [Selection and viewport](/build-your-own-ui/selection-and-viewport) |
 | Edit / Suggest mode toggle, Export, Import | `src/components/Toolbar.tsx` | [Document control](/build-your-own-ui/document-control) |
 
@@ -29,7 +29,7 @@ For copy-paste, start from the per-domain pages above. Each one teaches one conc
 - No design system. Plain React, plain CSS. Drop the same patterns into your Tailwind / shadcn / MUI / Mantine stack.
 - No backend. The clause library in `<InsertClauseButton>` is hardcoded. Real consumers fetch from their own API and call `reg.invalidate()` when permissions or availability change.
 - No AI provider. Custom commands can call any LLM from `execute`; the demo picked "Insert clause" because it's concrete and self-contained.
-- No floating bubble menu or link popover. Those need viewport text-rect helpers, tracked under [SD-2822](https://linear.app/superdocworkspace/issue/SD-2822).
+- No floating bubble menu or link popover. Those need viewport text-rect helpers (planned follow-up, SD-2822).
 
 ## Run it locally
 
@@ -41,6 +41,32 @@ pnpm --filter build-your-own-ui run dev
 ```
 
 Open http://localhost:5189.
+
+## App-level pattern: a merged Activity feed
+
+Word and Google Docs ship one Activity panel that interleaves comments and tracked changes. The controller deliberately keeps the two as separate slices (`ui.comments` / `ui.trackChanges`) so apps that only render one don't pay for the other. If you want the merged view, compose it in your component:
+
+```tsx
+import { useMemo } from 'react';
+import { useSuperDocComments, useSuperDocTrackChanges } from 'superdoc/ui/react';
+
+function useActivityFeed() {
+  const comments = useSuperDocComments();
+  const trackChanges = useSuperDocTrackChanges();
+
+  return useMemo(() => {
+    const feed: Array<
+      | { kind: 'comment'; id: string; comment: typeof comments.items[number] }
+      | { kind: 'change'; id: string; change: typeof trackChanges.items[number]['change'] }
+    > = [];
+    for (const c of comments.items) feed.push({ kind: 'comment', id: c.id, comment: c });
+    for (const tc of trackChanges.items) feed.push({ kind: 'change', id: tc.id, change: tc.change });
+    return feed;
+  }, [comments.items, trackChanges.items]);
+}
+```
+
+Sort or partition the result however the UI wants. The demo's `ActivitySidebar` partitions by Active vs Resolved, threads replies under their parent, and tracks locally-decided changes in a roll-up so accepted suggestions still show as audit rows. Roughly thirty lines of merge logic on top of the two slices.
 
 ## What the demo says about your own UI
 

@@ -103,32 +103,6 @@ function ActiveAwareList() {
 }
 ```
 
-## A merged comments + changes feed
-
-The controller exposes `ui.comments` and `ui.trackChanges` as separate slices on purpose. Word and Google Docs ship a single Activity panel that interleaves both; if that's what you want, compose the two slices yourself:
-
-```tsx
-import { useMemo } from 'react';
-import { useSuperDocComments, useSuperDocTrackChanges } from 'superdoc/ui/react';
-
-function useActivityFeed() {
-  const comments = useSuperDocComments();
-  const trackChanges = useSuperDocTrackChanges();
-
-  return useMemo(() => {
-    const feed: Array<
-      | { kind: 'comment'; id: string; comment: typeof comments.items[number] }
-      | { kind: 'change'; id: string; change: typeof trackChanges.items[number]['change'] }
-    > = [];
-    for (const c of comments.items) feed.push({ kind: 'comment', id: c.id, comment: c });
-    for (const tc of trackChanges.items) feed.push({ kind: 'change', id: tc.id, change: tc.change });
-    return feed;
-  }, [comments.items, trackChanges.items]);
-}
-```
-
-Sort or partition the feed how the UI wants (Active vs Resolved, by author, by document position). The reference demo's `ActivitySidebar` does exactly this.
-
 ## What the snapshot looks like
 
 | Field | Type | Meaning |
@@ -142,5 +116,5 @@ Sort or partition the feed how the UI wants (Active vs Resolved, by author, by d
 ## Trade-offs
 
 - `acceptAll` and `rejectAll` apply across every story. To scope to body only, call `accept` / `reject` per id.
-- Tracked changes in headers, footers, and footnotes route correctly through `scrollTo`. Smooth scroll for those is being threaded as part of [SD-2841](https://linear.app/superdocworkspace/issue/SD-2841); for now they snap.
+- Tracked changes in headers, footers, and footnotes route correctly through `scrollTo`. Smooth scroll for those is a planned follow-up (SD-2841); for now they snap.
 - The merged Activity feed pattern is consumer-owned. The controller stays minimal so apps that only render tracked changes don't pay for comment merging, and apps that want an Activity panel decide their own ordering rules.

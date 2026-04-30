@@ -125,4 +125,4 @@ export function ImportButton() {
 - `setMode` forwards to the host. SSR / non-browser stubs that omit the setter fall back to a no-op.
 - `export` is async and rejects on host errors. Unhandled rejections are noisy; always wrap.
 - `replaceFile` rebuilds the document model. Selection, scroll position, and undo history reset.
-- A typed dirty-state indicator is filed under [SD-2667](https://linear.app/superdocworkspace/issue/SD-2667) as a follow-up. Today the controller doesn't track unsaved changes.
+- A typed dirty-state indicator is a planned follow-up (SD-2667). Today the controller doesn't track unsaved changes.

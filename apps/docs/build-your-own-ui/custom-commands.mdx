@@ -86,47 +86,112 @@ function onPermissionsChange() {
 
 ## execute
 
-`execute` receives `{ payload, superdoc }`.
+`execute` receives `{ payload, superdoc }`. The cleanest custom commands are additive: they call your services, open your modals, fire telemetry, and don't mutate the document. The runtime cares about the return value (`boolean` or `Promise<boolean>`); the engine doesn't see the work.
 
 ```ts
-execute: async ({ payload, superdoc }) => {
-  const editor = (superdoc as any).activeEditor;
-  if (!editor) return false;
-  const target = editor.doc.selection.current()?.target;
-  if (!target) return false;
-
-  const receipt = editor.doc.insert({
-    target,
-    type: 'text',
-    value: payload?.text ?? '',
-  });
-  return receipt.success;
-}
-```
-
-<Warning>
-  The `superdoc` parameter typing is being tightened in [SD-2844](https://linear.app/superdocworkspace/issue/SD-2844). For now, reaching `editor.doc.*` from inside `execute` is the documented escape hatch when you need direct Document API access.
-</Warning>
-
-Return `boolean` for sync commands. Return `Promise<boolean>` for async. The runtime awaits internally.
-
-## Override a built-in
-
-Pass `override: true` to deliberately replace a built-in. Without it, registrations colliding with a built-in id are refused with a console warning.
-
-```ts
-ui.commands.register({
-  id: 'bold',
-  override: true,
-  execute: ({ superdoc }) => {
-    // Add telemetry, then defer to the original behavior.
-    track('bold-pressed');
+ui.commands.register<{ clauseId: string }>({
+  id: 'company.openClauseLibrary',
+  execute: ({ payload }) => {
+    if (!payload) return false;
+    openClauseModal(payload.clauseId);
     return true;
   },
 });
 ```
 
-Once registered, every surface routes through your override: `useSuperDocCommand('bold')`, `ui.commands.get('bold')?.execute()`, `ui.toolbar.execute('bold')`. One registration, one source of truth.
+Async work is fine. The runtime awaits internally.
+
+```ts
+execute: async ({ payload }) => {
+  const result = await postReviewRequest(payload);
+  return result.ok;
+}
+```
+
+### Mutating the document from a custom command
+
+Custom commands that need to insert, replace, or format content reach the Document API through the host instance today. Use the public `ui.selection` slice for positional shapes; pull `superdoc.activeEditor` for the doc-API call. The reference demo's `InsertClauseButton` shows the full pattern.
+
+```ts
+ui.commands.register<{ clauseId: string }>({
+  id: 'company.insertClause',
+  getState: ({ state }) => ({
+    disabled: !state.ready || state.selection.target === null,
+  }),
+  execute: ({ payload, superdoc }) => {
+    if (!payload) return false;
+    const clause = clauseLibrary.find((c) => c.id === payload.clauseId);
+    if (!clause) return false;
+
+    const selectionTarget = ui.selection.getSnapshot().selectionTarget;
+    if (!selectionTarget) return false;
+
+    const host = superdoc as {
+      activeEditor?: {
+        doc?: {
+          insert(input: { value: string; type: 'text'; target: typeof selectionTarget }): { success: boolean };
+        };
+      };
+    };
+    const receipt = host.activeEditor?.doc?.insert({
+      value: clause.body,
+      type: 'text',
+      target: selectionTarget,
+    });
+    return receipt?.success === true;
+  },
+});
+```
+
+<Warning>
+  Reaching `superdoc.activeEditor?.doc?.*` from inside `execute` is the current escape hatch. Tracked under SD-2844: a typed Document API context is on the way. The pattern above is what works today and is what the reference demo ships.
+</Warning>
+
+Two things make the snippet safe to copy:
+
+- The positional target comes from `ui.selection.getSnapshot().selectionTarget` (a public `SelectionTarget` shape that `editor.doc.insert` accepts). Don't pass `selection.current().target` — that's a `TextTarget`, the wrong shape for `insert`.
+- The structural cast on `superdoc` declares only the call you're about to make. When SD-2844 lands, you delete the cast and reach the typed context directly.
+
+## Override a built-in
+
+Pass `override: true` to deliberately replace a built-in. Without it, registrations colliding with a built-in id are refused with a console warning.
+
+<Warning>
+  Override fully replaces the built-in's `execute`. There is no "call original" delegation today: if you override `'bold'`, the only thing that happens when a user clicks the Bold button is whatever your `execute` does. Add behavior; don't trust the original to still run.
+</Warning>
+
+Two ways to reach the same toolbar effect:
+
+```ts
+// Pattern A: register a sibling, dispatch both. Built-in stays untouched.
+ui.commands.register({
+  id: 'company.boldTelemetry',
+  execute: () => {
+    track('bold-pressed');
+    return true;
+  },
+});
+
+// In your Bold button handler:
+ui.commands.get('company.boldTelemetry')?.execute();
+ui.commands.get('bold')?.execute();
+```
+
+```ts
+// Pattern B: replace bold entirely. You own the full behavior, including
+// hitting the editor to actually toggle the mark.
+ui.commands.register({
+  id: 'bold',
+  override: true,
+  execute: ({ superdoc }) => {
+    track('bold-pressed');
+    const host = superdoc as { activeEditor?: { commands?: { toggleBold?(): boolean } } };
+    return host.activeEditor?.commands?.toggleBold?.() ?? false;
+  },
+});
+```
+
+Pattern A is what you want most of the time. Pattern B exists for the rare case where you genuinely need to gate the built-in (audit, RBAC, "ask before formatting"). Once you override, every surface routes through your handler: `useSuperDocCommand('bold')`, `ui.commands.get('bold')?.execute()`, `ui.toolbar.execute('bold')`.
 
 ## Trade-offs
 

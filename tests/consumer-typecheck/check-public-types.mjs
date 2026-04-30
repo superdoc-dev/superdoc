@@ -81,7 +81,13 @@ console.log();
 
 if (missingFromTest.length === 0 && extraInTest.length === 0) {
   console.log('OK    Test list matches the public-type surface.');
-  process.exit(0);
+  // In `--write` mode, fall through to the regeneration block. The file may
+  // be in semantic sync (every typedef has an assertion) but stale on
+  // formatting or comments; `--write` is the explicit "force regenerate"
+  // path, not "regenerate only when names diverged."
+  if (mode !== 'write') {
+    process.exit(0);
+  }
 }
 
 if (missingFromTest.length > 0) {
@@ -121,8 +127,9 @@ const header = `/**
  *
  * THIS FILE IS GENERATED from the JSDoc @typedef block in
  * packages/superdoc/src/index.js. Edit the typedef block (or run
- *   pnpm --filter consumer-typecheck run check:types -- --write
- * to regenerate this file) and commit both. SD-2860's check script enforces
+ *   node tests/consumer-typecheck/check-public-types.mjs --write
+ * from the repo root, or \`npm run check:types:write\` from inside
+ * tests/consumer-typecheck) and commit both. SD-2860's check script enforces
  * that the two stay in sync; a missing assertion fails CI with a message
  * pointing at this script.
  */

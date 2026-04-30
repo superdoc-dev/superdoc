@@ -45,7 +45,8 @@ if (!skipTypeCheck) {
     });
   } catch (e) {
     console.error('\nPublic-type surface check failed (see message above).');
-    console.error('Run `pnpm --filter consumer-typecheck run check:types:write` locally to regenerate the assertion list, then commit the result.');
+    console.error('Run `node tests/consumer-typecheck/check-public-types.mjs --write` from the repo root (or `npm run check:types:write` from inside `tests/consumer-typecheck/`) to regenerate the assertion list, then commit the result.');
+    console.error('(`tests/consumer-typecheck` is intentionally outside the pnpm workspace, so `pnpm --filter` cannot reach it.)');
     process.exit(1);
   }
   console.log();

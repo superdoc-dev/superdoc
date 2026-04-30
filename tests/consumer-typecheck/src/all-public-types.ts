@@ -8,8 +8,9 @@
  *
  * THIS FILE IS GENERATED from the JSDoc @typedef block in
  * packages/superdoc/src/index.js. Edit the typedef block (or run
- *   pnpm --filter consumer-typecheck run check:types -- --write
- * to regenerate this file) and commit both. SD-2860's check script enforces
+ *   node tests/consumer-typecheck/check-public-types.mjs --write
+ * from the repo root, or `npm run check:types:write` from inside
+ * tests/consumer-typecheck) and commit both. SD-2860's check script enforces
  * that the two stay in sync; a missing assertion fails CI with a message
  * pointing at this script.
  */

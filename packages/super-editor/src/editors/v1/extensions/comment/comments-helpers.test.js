@@ -158,23 +158,52 @@ describe('resolveCommentById — anchor atom emission', () => {
     expect(countByIdAndType(result.doc, 'commentRangeEnd', 'c3p')).toBe(1);
   });
 
-  it('discontinuous mark (same id, gap of uncommented content): one pair covering the full extent', () => {
-    // PM may store a comment as multiple non-adjacent mark segments
-    // (e.g. format edits inside the comment split the original mark).
-    // Spec semantics: the annotation is still one annotation with one
-    // id, so it emits one anchor pair. The pair must cover the full
-    // logical extent (first segment start → last segment end).
-    const mark = schema.marks.commentMark.create({ commentId: 'c-disc', internal: false });
+  it('disjoint same-id (paste-preserved): two ranges, scope of each is preserved', () => {
+    // The user copy-pastes a commented region; PM preserves the
+    // commentMark attrs (no clipboard hook on the mark), so the
+    // same commentId now sits on two non-adjacent regions with
+    // uncommented content between them. They are logically TWO
+    // annotations sharing an id — collapsing them into a single
+    // envelope range would expand the comment to cover the
+    // unrelated middle content.
+    //
+    // The OOXML output is still imperfect (two range pairs sharing
+    // an id is non-conformant per spec; ids should be unique). A
+    // follow-up should remap to fresh ids on resolve. Keeping the
+    // ranges separate is strictly better than collapsing them: the
+    // anchored extent of each region is preserved, matching the
+    // pre-fix behavior for this case while still fixing the
+    // paragraph-crossing case.
+    const mark = schema.marks.commentMark.create({ commentId: 'c-paste', internal: false });
     const p1 = schema.nodes.paragraph.create(null, schema.text('First', [mark]));
-    const p2 = schema.nodes.paragraph.create(null, schema.text('Middle (no comment)'));
+    const p2 = schema.nodes.paragraph.create(null, schema.text('Uncommented middle paragraph'));
     const p3 = schema.nodes.paragraph.create(null, schema.text('Third', [mark]));
     const doc = schema.nodes.doc.create(null, [p1, p2, p3]);
 
-    const result = runResolve(doc, 'c-disc');
+    const result = runResolve(doc, 'c-paste');
 
     expect(result.ok).toBe(true);
-    expect(countByIdAndType(result.doc, 'commentRangeStart', 'c-disc')).toBe(1);
-    expect(countByIdAndType(result.doc, 'commentRangeEnd', 'c-disc')).toBe(1);
+    // Two pairs, one per anchored region. Scope of each is the
+    // originally-marked text — uncommented middle is NOT inside
+    // either range.
+    expect(countByIdAndType(result.doc, 'commentRangeStart', 'c-paste')).toBe(2);
+    expect(countByIdAndType(result.doc, 'commentRangeEnd', 'c-paste')).toBe(2);
+
+    // Confirm the scope: walk the doc and verify the uncommented
+    // middle paragraph is NOT between any START and END of c-paste.
+    const events = [];
+    result.doc.descendants((node, pos) => {
+      if (node.type.name === 'commentRangeStart' && node.attrs['w:id'] === 'c-paste') {
+        events.push({ kind: 'start', pos });
+      } else if (node.type.name === 'commentRangeEnd' && node.attrs['w:id'] === 'c-paste') {
+        events.push({ kind: 'end', pos });
+      } else if (node.isText) {
+        events.push({ kind: 'text', pos, text: node.text });
+      }
+    });
+    // Expect ordering: start, "First", end, "Uncommented...", start, "Third", end
+    const seq = events.map((e) => (e.kind === 'text' ? `T(${e.text})` : e.kind.toUpperCase()));
+    expect(seq).toEqual(['START', 'T(First)', 'END', 'T(Uncommented middle paragraph)', 'START', 'T(Third)', 'END']);
   });
 
   it('two distinct comments side-by-side: two independent pairs, ids unique per annotation', () => {

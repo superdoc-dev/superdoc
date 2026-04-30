@@ -6,6 +6,7 @@ import { assertDocumentApiReady, getDocumentText, listTrackChanges } from '../..
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DOC_PATH = path.resolve(__dirname, 'fixtures/sd-1960-word-replacement-no-comments.docx');
+const TRACKED_CHANGE_DIALOGS = '.comment-placeholder .comments-dialog, #comments-panel .comments-dialog';
 
 test.use({ config: { toolbar: 'full', comments: 'panel', trackChanges: true } });
 
@@ -101,7 +102,7 @@ async function loadImportedReplacement(page: Page, loadDocument: (filePath: stri
   const deleteSegment = deleteSegments.length > 0 ? combineSegments(deleteSegments) : null;
   const insertSegment = insertSegments.length > 0 ? combineSegments(insertSegments) : null;
 
-  const replacementDialog = page.locator('.comment-placeholder .comments-dialog', {
+  const replacementDialog = page.locator(TRACKED_CHANGE_DIALOGS, {
     has: page.locator('.change-type', { hasText: 'Replaced' }),
   });
 

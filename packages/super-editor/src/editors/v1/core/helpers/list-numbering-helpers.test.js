@@ -21,7 +21,7 @@ vi.mock('@core/super-converter/v2/importer/listImporter.js', () => ({
 import { getStyleTagFromStyleId } from '@core/super-converter/v2/importer/listImporter.js';
 
 // Import the function we want to test
-const { getListDefinitionDetails, createNewList, ListHelpers } = listHelpers;
+const { getListDefinitionDetails, createNewList, ListHelpers, markerTextToBulletStyle } = listHelpers;
 
 // Global parts runtime setup — needed because helpers now route through mutatePart
 beforeEach(() => {
@@ -1563,4 +1563,21 @@ describe('createNewList', () => {
       expect(ol.textContent).toBe('abc 123');
     });
   });
+});
+
+describe('markerTextToBulletStyle', () => {
+  it.each([
+    ['•', 'disc'],
+    ['◦', 'circle'],
+    ['▪', 'square'],
+  ])('maps marker char %s to %s', (markerText, expected) => {
+    expect(markerTextToBulletStyle(markerText)).toBe(expected);
+  });
+
+  it.each([[null], [undefined], [''], ['o'], ['\uF0B7'], ['\uF0A7'], ['x']])(
+    'returns null for unrecognized marker %p',
+    (markerText) => {
+      expect(markerTextToBulletStyle(markerText)).toBeNull();
+    },
+  );
 });

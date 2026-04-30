@@ -190,3 +190,55 @@ export function shouldRequirePageBoundary(current: SectionRange, next: SectionRa
 export function hasIntrinsicBoundarySignals(_: SectionRange): boolean {
   return false;
 }
+
+/**
+ * Minimal mutable sectionState shape used by section-break emission helpers.
+ * Kept local so callers can pass `NodeHandlerContext['sectionState']` directly.
+ */
+interface SectionStateMutable {
+  ranges: SectionRange[];
+  currentSectionIndex: number;
+  currentParagraphIndex: number;
+}
+
+/**
+ * Emit a pending section break before a paragraph if the current paragraph
+ * index matches the start of the next section.
+ *
+ * Centralizes the "check, emit, advance" pattern used by paragraph and SDT
+ * handlers. SDT handlers that process children as an opaque block (e.g.
+ * TOC/docPartObj where child paragraphs aren't counted by
+ * `findParagraphsWithSectPr`) should call this ONCE at the SDT boundary —
+ * if the SDT sits at a section boundary, this emits the break so the SDT's
+ * contents render on the new page.
+ *
+ * No-op when:
+ *   - sectionState is undefined or has no ranges
+ *   - currentParagraphIndex doesn't match the next section's startParagraphIndex
+ *
+ * Side effects (when emitted):
+ *   - Pushes a sectionBreak block onto `blocks`
+ *   - Invokes `recordBlockKind`
+ *   - Increments `sectionState.currentSectionIndex`
+ */
+export function emitPendingSectionBreakForParagraph(args: {
+  sectionState: SectionStateMutable | undefined;
+  nextBlockId: BlockIdGenerator;
+  blocks: FlowBlock[];
+  recordBlockKind?: (kind: FlowBlock['kind']) => void;
+}): void {
+  const { sectionState, nextBlockId, blocks, recordBlockKind } = args;
+  if (!sectionState || sectionState.ranges.length === 0) return;
+
+  const nextSection = sectionState.ranges[sectionState.currentSectionIndex + 1];
+  if (!nextSection || sectionState.currentParagraphIndex !== nextSection.startParagraphIndex) return;
+
+  const currentSection = sectionState.ranges[sectionState.currentSectionIndex];
+  const requiresPageBoundary =
+    shouldRequirePageBoundary(currentSection, nextSection) || hasIntrinsicBoundarySignals(nextSection);
+  const extraAttrs = requiresPageBoundary ? { requirePageBoundary: true } : undefined;
+  const sectionBreak = createSectionBreakBlock(nextSection, nextBlockId, extraAttrs);
+  blocks.push(sectionBreak);
+  recordBlockKind?.(sectionBreak.kind);
+  sectionState.currentSectionIndex++;
+}

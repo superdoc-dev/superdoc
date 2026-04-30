@@ -5,7 +5,7 @@ permissions:
 
 on:
   pull_request:
-    branches: [main, 'release/**']
+    branches: [main, stable, 'release/**']
     paths-ignore:
       - 'apps/docs/**'
       - 'apps/mcp/**'
@@ -16,6 +16,7 @@ on:
       - 'packages/sdk/**'
       - 'packages/template-builder/**'
       - 'packages/esign/**'
+      - 'packages/ai/**'
       - 'evals/**'
       - '**/*.md'
   merge_group:
@@ -40,7 +41,7 @@ jobs:
 
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.3.12
+          bun-version: 1.3.13
 
       - name: Install canvas system dependencies
         run: |
@@ -72,12 +73,17 @@ jobs:
       - name: Typecheck
         run: pnpm run type-check
 
-      - name: Consumer typecheck
+      - name: Consumer typecheck (matrix)
+        # The matrix script owns the published-package validation path:
+        # it packs superdoc, installs the tarball into the standalone
+        # fixture (`pnpm install --ignore-workspace`), then runs every
+        # scenario under its declared resolution mode and strictness
+        # settings. Replaces the pre-SD-2831 bare `tsc --noEmit` step
+        # so the new pack-and-install scenarios are actually exercised
+        # in CI, not just locally.
         run: |
-          cd packages/superdoc && pnpm pack --pack-destination .
-          cd ../../tests/consumer-typecheck
-          npm install ../../packages/superdoc/superdoc-*.tgz --no-save
-          npx tsc --noEmit
+          cd tests/consumer-typecheck
+          node typecheck-matrix.mjs
 
   unit-tests:
     needs: build
@@ -108,7 +114,7 @@ jobs:
 
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.3.12
+          bun-version: 1.3.13
 
       - name: Install canvas system dependencies
         run: |
@@ -195,7 +201,7 @@ jobs:
 
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.3.12
+          bun-version: 1.3.13
 
       - name: Install dependencies
         run: pnpm install
@@ -232,12 +238,14 @@ jobs:
           flags: superdoc
 
   validate:
+    name: CI SuperDoc / validate
     if: always()
     needs: [build, unit-tests, cli-tests, coverage]
     runs-on: ubuntu-latest
     steps:
       - name: Check results
         run: |
-          if [[ "${{ contains(needs.*.result, 'failure') }}" == "true" ]]; then
+          if [[ "${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped') }}" == "true" ]]; then
+            echo "One or more required jobs did not succeed."
             exit 1
           fi

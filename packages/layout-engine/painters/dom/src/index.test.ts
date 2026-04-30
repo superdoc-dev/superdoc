@@ -1,6 +1,7 @@
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
 import { createDomPainter, sanitizeUrl, linkMetrics, applyRunDataAttributes } from './index.js';
 import { DomPainter } from './renderer.js';
+import { resolveLayout } from '@superdoc/layout-resolved';
 import type { DomPainterOptions, DomPainterInput, PaintSnapshot } from './index.js';
 import { resolveListMarkerGeometry } from '../../../../../shared/common/list-marker-utils.js';
 import type {
@@ -26,14 +27,9 @@ const emptyResolved: ResolvedLayout = { version: 1, flowMode: 'paginated', pageG
  * rewriting every call site.
  */
 function createTestPainter(opts: { blocks?: FlowBlock[]; measures?: Measure[] } & DomPainterOptions) {
-  const { blocks: initBlocks, measures: initMeasures, ...painterOpts } = opts;
+  const { blocks: initBlocks, measures: initMeasures, headerProvider, footerProvider, ...painterOpts } = opts;
   let lastPaintSnapshot: PaintSnapshot | null = null;
-  const painter = createDomPainter({
-    ...painterOpts,
-    onPaintSnapshot: (snapshot) => {
-      lastPaintSnapshot = snapshot;
-    },
-  });
+
   let currentBlocks: FlowBlock[] = initBlocks ?? [];
   let currentMeasures: Measure[] = initMeasures ?? [];
   let currentResolved: ResolvedLayout = emptyResolved;
@@ -41,18 +37,75 @@ function createTestPainter(opts: { blocks?: FlowBlock[]; measures?: Measure[] } 
   let headerMeasures: Measure[] | undefined;
   let footerBlocks: FlowBlock[] | undefined;
   let footerMeasures: Measure[] | undefined;
+  let resolvedLayoutOverridden = false;
+
+  /**
+   * Resolve decoration items from the currently-registered decoration blocks/measures
+   * (plus body blocks, which historically also carry decoration block ids in tests).
+   * This lets tests keep using providers that return `{ fragments, height }` without items:
+   * the wrapper synthesizes `items` by running the fragments through `resolveLayout`.
+   */
+  const resolveDecorationItems = (
+    fragments: readonly import('@superdoc/contracts').Fragment[],
+    kind: 'header' | 'footer',
+  ): import('@superdoc/contracts').ResolvedPaintItem[] | undefined => {
+    const decorationBlocks = kind === 'header' ? headerBlocks : footerBlocks;
+    const decorationMeasures = kind === 'header' ? headerMeasures : footerMeasures;
+    const mergedBlocks = [...(currentBlocks ?? []), ...(decorationBlocks ?? [])];
+    const mergedMeasures = [...(currentMeasures ?? []), ...(decorationMeasures ?? [])];
+    if (mergedBlocks.length !== mergedMeasures.length || mergedBlocks.length === 0) {
+      return undefined;
+    }
+    const fakeLayout: Layout = { pageSize: { w: 400, h: 500 }, pages: [{ number: 1, fragments: [...fragments] }] };
+    try {
+      const resolved = resolveLayout({
+        layout: fakeLayout,
+        flowMode: opts.flowMode ?? 'paginated',
+        blocks: mergedBlocks,
+        measures: mergedMeasures,
+      });
+      return resolved.pages[0]?.items;
+    } catch {
+      return undefined;
+    }
+  };
+
+  const wrapProvider = (
+    provider: import('./renderer.js').PageDecorationProvider | undefined,
+    kind: 'header' | 'footer',
+  ): import('./renderer.js').PageDecorationProvider | undefined => {
+    if (!provider) return undefined;
+    return (pageNumber, pageMargins, page) => {
+      const payload = provider(pageNumber, pageMargins, page);
+      if (!payload) return payload;
+      if (payload.items) return payload;
+      const items = resolveDecorationItems(payload.fragments, kind);
+      return items ? { ...payload, items } : payload;
+    };
+  };
+
+  const painter = createDomPainter({
+    ...painterOpts,
+    headerProvider: wrapProvider(headerProvider, 'header'),
+    footerProvider: wrapProvider(footerProvider, 'footer'),
+    onPaintSnapshot: (snapshot) => {
+      lastPaintSnapshot = snapshot;
+    },
+  });
 
   return {
     paint(layout: Layout, mount: HTMLElement, mapping?: unknown) {
+      const effectiveResolved = resolvedLayoutOverridden
+        ? currentResolved
+        : resolveLayout({
+            layout,
+            flowMode: opts.flowMode ?? 'paginated',
+            blocks: currentBlocks,
+            measures: currentMeasures,
+          });
       const input: DomPainterInput = {
-        resolvedLayout: currentResolved,
+        resolvedLayout: effectiveResolved,
         sourceLayout: layout,
-        blocks: currentBlocks,
-        measures: currentMeasures,
-        headerBlocks,
-        headerMeasures,
-        footerBlocks,
-        footerMeasures,
       };
       painter.paint(input, mount, mapping as any);
     },
@@ -73,6 +126,7 @@ function createTestPainter(opts: { blocks?: FlowBlock[]; measures?: Measure[] } 
     },
     setResolvedLayout(rl: ResolvedLayout | null) {
       currentResolved = rl ?? emptyResolved;
+      resolvedLayoutOverridden = true;
     },
     setProviders: painter.setProviders,
     setVirtualizationPins: painter.setVirtualizationPins,
@@ -442,7 +496,7 @@ describe('DomPainter', () => {
     expect(lines[1].style.wordSpacing).toBe('');
   });
 
-  it('skips justify for lines with manual tab runs but no explicit segment positions', () => {
+  it('applies justify for manual tab runs that use default positioning', () => {
     const tabBlock: FlowBlock = {
       kind: 'paragraph',
       id: 'tab-justify-block',
@@ -467,7 +521,7 @@ describe('DomPainter', () => {
           ascent: 12,
           descent: 4,
           lineHeight: 20,
-          // No segments with x — this is the "manual tab without segments" case
+          segments: [{ runIndex: 2, fromChar: 0, toChar: 7, width: 60, x: 40 }],
         },
         {
           fromRun: 2,
@@ -508,7 +562,76 @@ describe('DomPainter', () => {
 
     const lines = Array.from(mount.querySelectorAll('.superdoc-line')) as HTMLElement[];
     expect(lines.length).toBeGreaterThanOrEqual(1);
-    // Manual tab without explicit segment positions should skip justify
+    expect(parseFloat(lines[0].style.wordSpacing)).toBeGreaterThan(0);
+  });
+
+  it('skips justify for lines that used author-defined tab stops', () => {
+    const tabBlock: FlowBlock = {
+      kind: 'paragraph',
+      id: 'explicit-tab-justify-block',
+      runs: [
+        { text: 'A', fontFamily: 'Arial', fontSize: 16 },
+        { kind: 'tab', text: '\t', width: 48 },
+        { text: 'a b c d', fontFamily: 'Arial', fontSize: 16 },
+      ],
+      attrs: { alignment: 'justify' },
+    };
+
+    const tabMeasure: Measure = {
+      kind: 'paragraph',
+      lines: [
+        {
+          fromRun: 0,
+          fromChar: 0,
+          toRun: 2,
+          toChar: 7,
+          width: 60,
+          maxWidth: 100,
+          ascent: 12,
+          descent: 4,
+          lineHeight: 20,
+          hasExplicitTabStops: true,
+          segments: [{ runIndex: 2, fromChar: 0, toChar: 7, width: 60, x: 40 }],
+        },
+        {
+          fromRun: 2,
+          fromChar: 7,
+          toRun: 2,
+          toChar: 7,
+          width: 0,
+          ascent: 12,
+          descent: 4,
+          lineHeight: 20,
+        },
+      ],
+      totalHeight: 40,
+    };
+
+    const tabLayout: Layout = {
+      pageSize: { w: 200, h: 200 },
+      pages: [
+        {
+          number: 1,
+          fragments: [
+            {
+              kind: 'para',
+              blockId: 'explicit-tab-justify-block',
+              fromLine: 0,
+              toLine: 2,
+              x: 0,
+              y: 0,
+              width: 100,
+            },
+          ],
+        },
+      ],
+    };
+
+    const painter = createTestPainter({ blocks: [tabBlock], measures: [tabMeasure] });
+    painter.paint(tabLayout, mount);
+
+    const lines = Array.from(mount.querySelectorAll('.superdoc-line')) as HTMLElement[];
+    expect(lines.length).toBeGreaterThanOrEqual(1);
     expect(lines[0].style.wordSpacing).toBe('');
   });
 
@@ -1357,7 +1480,10 @@ describe('DomPainter', () => {
     expect(lines[1].style.wordSpacing).toBe('');
   });
 
-  it('renders an error placeholder when a legacy table fragment is missing its lookup entry', () => {
+  it('surfaces a missing-block error from resolveLayout when a table fragment references an unknown block', () => {
+    // Previous behavior: painter rendered a placeholder for missing lookup entries.
+    // New behavior: resolveLayout validates block/measure integrity upstream and throws
+    // before the painter runs. Missing-block bugs are now caught at the resolved stage.
     const missingTableLayout: Layout = {
       pageSize: { w: 300, h: 300 },
       pages: [
@@ -1379,19 +1505,8 @@ describe('DomPainter', () => {
       ],
     };
 
-    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {
-      // Intentionally empty - suppress expected error logging during this regression test.
-    });
-
     const painter = createTestPainter({ blocks: [], measures: [] });
-    expect(() => painter.paint(missingTableLayout, mount)).not.toThrow();
-
-    const placeholder = mount.querySelector('.render-error-placeholder') as HTMLElement | null;
-    expect(placeholder).toBeTruthy();
-    expect(placeholder?.textContent).toContain('[Render Error: missing-table]');
-    expect(consoleErrorSpy).toHaveBeenCalled();
-
-    consoleErrorSpy.mockRestore();
+    expect(() => painter.paint(missingTableLayout, mount)).toThrow(/Missing block\/measure/);
   });
 
   it('renders an error placeholder when table-cell line rendering throws', () => {
@@ -1680,8 +1795,9 @@ describe('DomPainter', () => {
   });
 
   it('throws if blocks and measures length mismatch', () => {
+    // Block/measure integrity is now validated at the resolve-layout stage.
     const painter = createTestPainter({ blocks: [block], measures: [] });
-    expect(() => painter.paint(layout, mount)).toThrow(/same number of blocks/);
+    expect(() => painter.paint(layout, mount)).toThrow();
   });
 
   it('renders placeholder content for empty lines', () => {
@@ -2296,6 +2412,185 @@ describe('DomPainter', () => {
 
     // Verify text content (label text + run text)
     expect(wrapper.textContent).toContain('controlled text');
+  });
+
+  it('keeps inline SDT wrapper font-size in sync when run font-size changes', () => {
+    const block: FlowBlock = {
+      kind: 'paragraph',
+      id: 'inline-sdt-font-sync',
+      runs: [
+        {
+          text: 'Company Address',
+          fontFamily: 'Arial, sans-serif',
+          fontSize: 14.6667,
+          pmStart: 2044,
+          pmEnd: 2059,
+          sdt: {
+            type: 'structuredContent',
+            scope: 'inline',
+            id: '574416526',
+            tag: 'inline_text_sdt',
+            alias: 'Company Address',
+            lockMode: 'unlocked',
+          },
+        },
+      ],
+      attrs: {},
+    };
+
+    const measure: Measure = {
+      kind: 'paragraph',
+      lines: [
+        {
+          fromRun: 0,
+          fromChar: 0,
+          toRun: 0,
+          toChar: 15,
+          width: 180,
+          ascent: 12,
+          descent: 4,
+          lineHeight: 20,
+        },
+      ],
+      totalHeight: 20,
+    };
+
+    const layout: Layout = {
+      pageSize: { w: 612, h: 792 },
+      pages: [
+        {
+          number: 1,
+          fragments: [
+            {
+              kind: 'para',
+              blockId: 'inline-sdt-font-sync',
+              fromLine: 0,
+              toLine: 1,
+              x: 30,
+              y: 40,
+              width: 552,
+              pmStart: 2044,
+              pmEnd: 2059,
+            },
+          ],
+        },
+      ],
+    };
+
+    const painter = createTestPainter({ blocks: [block], measures: [measure] });
+    painter.paint(layout, mount);
+
+    const getInlineSdtWrapper = () =>
+      mount.querySelector('.superdoc-structured-content-inline[data-sdt-id="574416526"]') as HTMLElement | null;
+
+    const wrapperBefore = getInlineSdtWrapper();
+    expect(wrapperBefore).toBeTruthy();
+    expect(wrapperBefore?.style.fontSize).toBe('14.6667px');
+
+    const updatedBlock: FlowBlock = {
+      ...block,
+      runs: [
+        {
+          ...block.runs[0],
+          fontSize: 10,
+        },
+      ],
+    };
+
+    painter.setData([updatedBlock], [measure]);
+    painter.paint(layout, mount);
+
+    const wrapperAfter = getInlineSdtWrapper();
+    expect(wrapperAfter).toBeTruthy();
+    expect(wrapperAfter?.style.fontSize).toBe('10px');
+  });
+
+  it('uses first run font-size for inline SDT wrapper when a field has mixed run sizes', () => {
+    const mixedSizeBlock: FlowBlock = {
+      kind: 'paragraph',
+      id: 'inline-sdt-mixed-font-size',
+      runs: [
+        {
+          text: 'Big',
+          fontFamily: 'Arial, sans-serif',
+          fontSize: 36,
+          pmStart: 100,
+          pmEnd: 103,
+          sdt: {
+            type: 'structuredContent',
+            scope: 'inline',
+            id: 'mixed-size-sdt',
+            tag: 'inline_text_sdt',
+            alias: 'Mixed Size Field',
+            lockMode: 'unlocked',
+          },
+        },
+        {
+          text: ' small',
+          fontFamily: 'Arial, sans-serif',
+          fontSize: 10,
+          pmStart: 103,
+          pmEnd: 109,
+          sdt: {
+            type: 'structuredContent',
+            scope: 'inline',
+            id: 'mixed-size-sdt',
+            tag: 'inline_text_sdt',
+            alias: 'Mixed Size Field',
+            lockMode: 'unlocked',
+          },
+        },
+      ],
+      attrs: {},
+    };
+
+    const mixedSizeMeasure: Measure = {
+      kind: 'paragraph',
+      lines: [
+        {
+          fromRun: 0,
+          fromChar: 0,
+          toRun: 1,
+          toChar: 6,
+          width: 180,
+          ascent: 12,
+          descent: 4,
+          lineHeight: 20,
+        },
+      ],
+      totalHeight: 20,
+    };
+
+    const mixedSizeLayout: Layout = {
+      pageSize: { w: 612, h: 792 },
+      pages: [
+        {
+          number: 1,
+          fragments: [
+            {
+              kind: 'para',
+              blockId: 'inline-sdt-mixed-font-size',
+              fromLine: 0,
+              toLine: 1,
+              x: 30,
+              y: 40,
+              width: 552,
+              pmStart: 100,
+              pmEnd: 109,
+            },
+          ],
+        },
+      ],
+    };
+
+    const painter = createTestPainter({ blocks: [mixedSizeBlock], measures: [mixedSizeMeasure] });
+    painter.paint(mixedSizeLayout, mount);
+
+    const wrapper = mount.querySelector(
+      '.superdoc-structured-content-inline[data-sdt-id="mixed-size-sdt"]',
+    ) as HTMLElement | null;
+    expect(wrapper).toBeTruthy();
+    expect(wrapper?.style.fontSize).toBe('36px');
   });
 
   it('positions word-layout markers relative to the text start', () => {
@@ -3029,7 +3324,7 @@ describe('DomPainter', () => {
     expect(appliedWordSpacing).toBeCloseTo(expectedWordSpacing, 5);
   });
 
-  it('reuses fragment DOM nodes when layout geometry changes', () => {
+  it('rebuilds fragment DOM nodes when layout geometry changes to keep line epochs in sync', () => {
     const painter = createTestPainter({ blocks: [block], measures: [measure] });
     painter.paint(layout, mount);
 
@@ -3051,9 +3346,12 @@ describe('DomPainter', () => {
 
     painter.paint(movedLayout, mount);
     const fragmentAfter = mount.querySelector('.superdoc-fragment') as HTMLElement;
+    const lineAfter = fragmentAfter.querySelector('.superdoc-line') as HTMLElement;
 
-    expect(fragmentAfter).toBe(fragmentBefore);
+    expect(fragmentAfter).not.toBe(fragmentBefore);
     expect(fragmentAfter.style.left).toBe('60px');
+    expect(fragmentAfter.dataset.layoutEpoch).toBeTruthy();
+    expect(lineAfter.dataset.layoutEpoch).toBe(fragmentAfter.dataset.layoutEpoch);
   });
 
   it('rebuilds fragment DOM when block content changes via setData', () => {
@@ -4586,9 +4884,70 @@ describe('DomPainter', () => {
       expect(footerFragmentEl).toBeTruthy();
       // Footer container is at effectiveOffset (400px)
       expect(footerEl.style.top).toBe(`${footerOffset}px`);
-      // Fragment uses band-local Y + container offset from band origin
-      // The exact top depends on getDecorationAnchorPageOriginY, but the
-      // key invariant is that the absolute page position is correct.
+      // Fragment uses band-local Y + container offset from band origin.
+      // With footer distance provided, anchors convert back to absolute page-space
+      // using the physical footer reference point (pageHeight - footerDistance).
+      const renderedPageTop = parseFloat(footerEl.style.top || '0') + parseFloat(footerFragmentEl.style.top || '0');
+      expect(renderedPageTop).toBe((layout.pageSize?.h ?? 0) - 20 + footerFragment.y);
+    });
+
+    it('falls back to bottom margin origin when footer distance is missing', () => {
+      const footerImageBlock: FlowBlock = {
+        kind: 'image',
+        id: 'footer-page-relative-img-missing',
+        src: 'data:image/png;base64,xxx',
+        anchor: {
+          isAnchored: true,
+          hRelativeFrom: 'page',
+          vRelativeFrom: 'page',
+        },
+      };
+      const footerImageMeasure: Measure = {
+        kind: 'image',
+        width: 20,
+        height: 20,
+      };
+      const footerOffset = 400;
+      const footerFragment: Fragment = {
+        kind: 'image',
+        blockId: footerImageBlock.id,
+        x: 0,
+        y: 25,
+        width: 20,
+        height: 20,
+        isAnchored: true,
+      };
+
+      const painter = createTestPainter({
+        blocks: [block, footerImageBlock],
+        measures: [measure, footerImageMeasure],
+        footerProvider: () => ({
+          fragments: [footerFragment],
+          height: 80,
+          offset: footerOffset,
+        }),
+      });
+
+      painter.paint(
+        {
+          ...layout,
+          pages: [
+            {
+              ...layout.pages[0],
+              number: 1,
+              margins: { left: 0, right: 0, bottom: 100 },
+            },
+          ],
+        },
+        mount,
+      );
+
+      const footerEl = mount.querySelector('.superdoc-page-footer') as HTMLElement;
+      const footerFragmentEl = footerEl.querySelector(
+        '[data-block-id="footer-page-relative-img-missing"]',
+      ) as HTMLElement;
+
+      expect(footerFragmentEl).toBeTruthy();
       const renderedPageTop = parseFloat(footerEl.style.top || '0') + parseFloat(footerFragmentEl.style.top || '0');
       expect(renderedPageTop).toBe(footerOffset + footerFragment.y);
     });
@@ -4967,6 +5326,8 @@ describe('DomPainter', () => {
               fragmentKind: 'list-item',
               blockId: 'list-1',
               fragmentIndex: 0,
+              block: listBlock as import('@superdoc/contracts').ListBlock,
+              measure: listMeasure as import('@superdoc/contracts').ListMeasure,
             },
           ],
         },
@@ -4996,6 +5357,8 @@ describe('DomPainter', () => {
               fragmentKind: 'list-item',
               blockId: 'list-1',
               fragmentIndex: 0,
+              block: listBlock as import('@superdoc/contracts').ListBlock,
+              measure: listMeasure as import('@superdoc/contracts').ListMeasure,
             },
           ],
         },
@@ -5016,10 +5379,13 @@ describe('DomPainter', () => {
     painter.paint(updatedLayout, mount);
 
     const updatedWrapper = mount.querySelector('.superdoc-fragment-list-item') as HTMLElement;
-    expect(updatedWrapper).toBe(initialWrapper);
+    const updatedLine = updatedWrapper.querySelector('.superdoc-line') as HTMLElement;
+    expect(updatedWrapper).not.toBe(initialWrapper);
     expect(updatedWrapper.style.left).toBe('90px');
     expect(updatedWrapper.style.top).toBe('55px');
     expect(updatedWrapper.style.width).toBe('310px');
+    expect(updatedWrapper.dataset.layoutEpoch).toBeTruthy();
+    expect(updatedLine.dataset.layoutEpoch).toBe(updatedWrapper.dataset.layoutEpoch);
   });
 
   it('applies resolved zIndex only to anchored media fragments', () => {
@@ -5110,6 +5476,7 @@ describe('DomPainter', () => {
               fragmentKind: 'drawing',
               blockId: 'drawing-anchored',
               fragmentIndex: 0,
+              block: anchoredDrawingBlock as import('@superdoc/contracts').DrawingBlock,
             },
             {
               kind: 'fragment',
@@ -5123,6 +5490,7 @@ describe('DomPainter', () => {
               fragmentKind: 'drawing',
               blockId: 'drawing-inline',
               fragmentIndex: 1,
+              block: inlineDrawingBlock as import('@superdoc/contracts').DrawingBlock,
             },
           ],
         },
@@ -5261,6 +5629,8 @@ describe('DomPainter', () => {
         fragmentKind: 'para',
         blockId: 'resolved-indent',
         fragmentIndex: 0,
+        block: paragraphBlock as import('@superdoc/contracts').ParagraphBlock,
+        measure: paragraphMeasure as import('@superdoc/contracts').ParagraphMeasure,
         content: {
           lines: [
             {
@@ -5354,6 +5724,8 @@ describe('DomPainter', () => {
         fragmentKind: 'para',
         blockId: 'resolved-marker',
         fragmentIndex: 0,
+        block: paragraphBlock as import('@superdoc/contracts').ParagraphBlock,
+        measure: paragraphMeasure as import('@superdoc/contracts').ParagraphMeasure,
         content: {
           lines: [
             {
@@ -5447,6 +5819,8 @@ describe('DomPainter', () => {
         fragmentKind: 'para',
         blockId: 'resolved-drop-cap',
         fragmentIndex: 0,
+        block: paragraphBlock as import('@superdoc/contracts').ParagraphBlock,
+        measure: paragraphMeasure as import('@superdoc/contracts').ParagraphMeasure,
         content: {
           lines: [
             {
@@ -10477,6 +10851,181 @@ describe('applyRunDataAttributes', () => {
     });
   });
 
+  describe('decoration item synthesis', () => {
+    let mount: HTMLElement;
+
+    beforeEach(() => {
+      mount = document.createElement('div');
+      document.body.appendChild(mount);
+    });
+
+    afterEach(() => {
+      document.body.removeChild(mount);
+    });
+
+    it('synthesizes missing header items from legacy setData bridge data', () => {
+      const mainBlock: FlowBlock = {
+        kind: 'paragraph',
+        id: 'main-block',
+        runs: [{ text: 'Main', fontFamily: 'Arial', fontSize: 16, pmStart: 0, pmEnd: 4 }],
+      };
+      const mainMeasure: Measure = {
+        kind: 'paragraph',
+        lines: [{ fromRun: 0, fromChar: 0, toRun: 0, toChar: 4, width: 40, ascent: 12, descent: 4, lineHeight: 20 }],
+        totalHeight: 20,
+      };
+      const headerBlock: FlowBlock = {
+        kind: 'paragraph',
+        id: 'hf-header-synth',
+        runs: [{ text: 'Synth Header', fontFamily: 'Arial', fontSize: 14, pmStart: 0, pmEnd: 12 }],
+      };
+      const headerMeasure: Measure = {
+        kind: 'paragraph',
+        lines: [{ fromRun: 0, fromChar: 0, toRun: 0, toChar: 12, width: 90, ascent: 10, descent: 3, lineHeight: 16 }],
+        totalHeight: 16,
+      };
+      const layout: Layout = {
+        pageSize: { w: 400, h: 500 },
+        pages: [{ number: 1, fragments: [] }],
+      };
+
+      const painter = createDomPainter({
+        blocks: [mainBlock],
+        measures: [mainMeasure],
+        headerProvider: () => ({
+          height: 16,
+          offset: 0,
+          fragments: [{ kind: 'para', blockId: 'hf-header-synth', fromLine: 0, toLine: 1, x: 0, y: 0, width: 120 }],
+        }),
+      });
+
+      painter.setData([mainBlock], [mainMeasure], [headerBlock], [headerMeasure]);
+      painter.paint(layout, mount);
+
+      expect(mount.querySelector('.superdoc-page-header')?.textContent).toContain('Synth Header');
+      expect(mount.querySelector('.render-error-placeholder')).toBeNull();
+    });
+
+    it('synthesizes missing footer items from direct DomPainterInput bridge data', () => {
+      const footerBlock: FlowBlock = {
+        kind: 'paragraph',
+        id: 'hf-footer-synth',
+        runs: [{ text: 'Synth Footer', fontFamily: 'Arial', fontSize: 14, pmStart: 0, pmEnd: 12 }],
+      };
+      const footerMeasure: Measure = {
+        kind: 'paragraph',
+        lines: [{ fromRun: 0, fromChar: 0, toRun: 0, toChar: 12, width: 88, ascent: 10, descent: 3, lineHeight: 16 }],
+        totalHeight: 16,
+      };
+      const layout: Layout = {
+        pageSize: { w: 400, h: 500 },
+        pages: [{ number: 1, fragments: [] }],
+      };
+
+      const painter = createDomPainter({
+        footerProvider: () => ({
+          height: 16,
+          offset: 460,
+          fragments: [{ kind: 'para', blockId: 'hf-footer-synth', fromLine: 0, toLine: 1, x: 0, y: 0, width: 120 }],
+        }),
+      });
+
+      painter.paint(
+        {
+          resolvedLayout: emptyResolved,
+          sourceLayout: layout,
+          footerBlocks: [footerBlock],
+          footerMeasures: [footerMeasure],
+        },
+        mount,
+      );
+
+      expect(mount.querySelector('.superdoc-page-footer')?.textContent).toContain('Synth Footer');
+      expect(mount.querySelector('.render-error-placeholder')).toBeNull();
+    });
+
+    it('validates optional decoration block/measure pairs on direct input', () => {
+      const painter = createDomPainter({});
+      const layout: Layout = {
+        pageSize: { w: 400, h: 500 },
+        pages: [{ number: 1, fragments: [] }],
+      };
+
+      expect(() =>
+        painter.paint(
+          {
+            resolvedLayout: emptyResolved,
+            sourceLayout: layout,
+            headerBlocks: [
+              {
+                kind: 'paragraph',
+                id: 'hf-header-invalid',
+                runs: [{ text: 'Invalid', fontFamily: 'Arial', fontSize: 12, pmStart: 0, pmEnd: 7 }],
+              },
+            ],
+          },
+          mount,
+        ),
+      ).toThrow('headerBlocks and headerMeasures must both be provided or both be omitted.');
+    });
+
+    it('validates optional decoration block/measure pairs in setData', () => {
+      const painter = createDomPainter({});
+
+      expect(() =>
+        painter.setData(
+          [
+            {
+              kind: 'paragraph',
+              id: 'body',
+              runs: [{ text: 'Body', fontFamily: 'Arial', fontSize: 12, pmStart: 0, pmEnd: 4 }],
+            },
+          ],
+          [
+            {
+              kind: 'paragraph',
+              lines: [
+                { fromRun: 0, fromChar: 0, toRun: 0, toChar: 4, width: 30, ascent: 10, descent: 3, lineHeight: 16 },
+              ],
+              totalHeight: 16,
+            },
+          ],
+          [
+            {
+              kind: 'paragraph',
+              id: 'hf-header-invalid',
+              runs: [{ text: 'Invalid', fontFamily: 'Arial', fontSize: 12, pmStart: 0, pmEnd: 7 }],
+            },
+          ],
+        ),
+      ).toThrow('headerBlocks and headerMeasures must both be provided or both be omitted.');
+    });
+
+    it('uses setResolvedLayout for legacy layout paints', () => {
+      const painter = createDomPainter({});
+      const layout: Layout = {
+        pageSize: { w: 400, h: 500 },
+        pages: [{ number: 1, fragments: [] }],
+      };
+
+      painter.setResolvedLayout(emptyResolved);
+
+      expect(() => painter.paint(layout, mount)).not.toThrow();
+      expect(mount.querySelector('.superdoc-page')).toBeTruthy();
+    });
+
+    it('creates an empty resolved layout for legacy paints without block data', () => {
+      const painter = createDomPainter({});
+      const layout: Layout = {
+        pageSize: { w: 400, h: 500 },
+        pages: [{ number: 1, fragments: [] }],
+      };
+
+      expect(() => painter.paint(layout, mount)).not.toThrow();
+      expect(mount.querySelector('.superdoc-page')).toBeTruthy();
+    });
+  });
+
   describe('footer alignment logic', () => {
     let mount: HTMLElement;
 
@@ -11290,6 +11839,95 @@ describe('applyRunDataAttributes', () => {
       expect(() => {
         painter.paint(lineBreakLayout, mount);
       }).not.toThrow();
+    });
+
+    it('renders all lines when measure indices come from inline-newline expansion', () => {
+      const inlineNewlineBlock: FlowBlock = {
+        kind: 'paragraph',
+        id: 'inline-newline-slice',
+        runs: [{ text: 'first\nsecond\nthird', fontFamily: 'Arial', fontSize: 16, pmStart: 0, pmEnd: 18 }],
+      };
+
+      // Measurer expands inline '\n' into: text, break, text, break, text.
+      const inlineNewlineMeasure: ParagraphMeasure = {
+        kind: 'paragraph',
+        lines: [
+          {
+            fromRun: 0,
+            fromChar: 0,
+            toRun: 0,
+            toChar: 5,
+            width: 40,
+            ascent: 12,
+            descent: 4,
+            lineHeight: 20,
+          },
+          {
+            fromRun: 2,
+            fromChar: 0,
+            toRun: 2,
+            toChar: 6,
+            width: 50,
+            ascent: 12,
+            descent: 4,
+            lineHeight: 20,
+          },
+          {
+            fromRun: 4,
+            fromChar: 0,
+            toRun: 4,
+            toChar: 5,
+            width: 40,
+            ascent: 12,
+            descent: 4,
+            lineHeight: 20,
+          },
+        ],
+        totalHeight: 60,
+      };
+
+      const inlineNewlineLayout: Layout = {
+        pageSize: { w: 400, h: 500 },
+        pages: [
+          {
+            number: 1,
+            fragments: [
+              {
+                kind: 'para',
+                blockId: 'inline-newline-slice',
+                fromLine: 0,
+                toLine: 3,
+                x: 20,
+                y: 20,
+                width: 300,
+              },
+            ],
+          },
+        ],
+      };
+
+      const painter = createTestPainter({
+        blocks: [inlineNewlineBlock],
+        measures: [inlineNewlineMeasure],
+      });
+
+      expect(() => {
+        painter.paint(inlineNewlineLayout, mount);
+      }).not.toThrow();
+
+      const fragment = mount.querySelector<HTMLElement>('.superdoc-fragment');
+      expect(fragment).not.toBeNull();
+      expect(fragment?.textContent).toContain('first');
+      expect(fragment?.textContent).toContain('second');
+      expect(fragment?.textContent).toContain('third');
+      const lines = fragment?.querySelectorAll<HTMLElement>('.superdoc-line');
+      expect(lines?.length).toBe(3);
+      expect(lines?.[0].dataset.pmStart).toEqual('0');
+      expect(lines?.[0].dataset.pmEnd).toEqual('5');
+      expect(lines?.[1].dataset.pmStart).toEqual('6');
+      expect(lines?.[1].dataset.pmEnd).toEqual('12');
+      expect(lines?.[2].dataset.pmStart).toEqual('13');
+      expect(lines?.[2].dataset.pmEnd).toEqual('18');
     });
 
     it('preserves PM positions for lineBreak runs', () => {

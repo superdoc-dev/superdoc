@@ -152,6 +152,8 @@ import {
   listsDetachWrapper,
   listsJoinWrapper,
   listsSeparateWrapper,
+  listsMergeWrapper,
+  listsSplitWrapper,
   listsSetLevelWrapper,
   listsSetValueWrapper,
   listsContinuePreviousWrapper,
@@ -328,9 +330,14 @@ vi.mock('prosemirror-model', async (importOriginal) => {
 const refResolverMocks = vi.hoisted(() => ({
   // Bookmark
   findAllBookmarks: vi.fn(() => []),
+  findAllBookmarkMarkersInDocument: vi.fn(() => []),
+  findAllBookmarksInDocument: vi.fn(() => []),
   resolveBookmarkTarget: vi.fn(),
   extractBookmarkInfo: vi.fn(),
   buildBookmarkDiscoveryItem: vi.fn(),
+  buildBookmarkAddress: vi.fn((name: string, story?: unknown) =>
+    story ? { kind: 'entity', entityType: 'bookmark', name, story } : { kind: 'entity', entityType: 'bookmark', name },
+  ),
   // Link
   findAllLinks: vi.fn(() => []),
   resolveLinkTarget: vi.fn(),
@@ -392,9 +399,12 @@ const refResolverMocks = vi.hoisted(() => ({
 
 vi.mock('../helpers/bookmark-resolver.js', () => ({
   findAllBookmarks: refResolverMocks.findAllBookmarks,
+  findAllBookmarkMarkersInDocument: refResolverMocks.findAllBookmarkMarkersInDocument,
+  findAllBookmarksInDocument: refResolverMocks.findAllBookmarksInDocument,
   resolveBookmarkTarget: refResolverMocks.resolveBookmarkTarget,
   extractBookmarkInfo: refResolverMocks.extractBookmarkInfo,
   buildBookmarkDiscoveryItem: refResolverMocks.buildBookmarkDiscoveryItem,
+  buildBookmarkAddress: refResolverMocks.buildBookmarkAddress,
 }));
 
 vi.mock('../helpers/footnote-resolver.js', () => ({
@@ -3061,6 +3071,10 @@ function mockResolvedNode(pos: number, nodeId: string, typeName: string, attrs: 
   };
 }
 
+function seedConformanceBookmark(name = 'bm1'): void {
+  refResolverMocks.findAllBookmarksInDocument.mockReturnValue([{ name, bookmarkId: name, storyKey: 'body' }]);
+}
+
 /** Spies on executeDomainCommand to return an applied receipt, then calls `fn`, then restores. */
 function withAppliedReceipt<T>(fn: () => T): T {
   const spy = vi.spyOn(planWrappers, 'executeDomainCommand').mockReturnValue(REF_APPLIED_RECEIPT as any);
@@ -3107,6 +3121,7 @@ const refNamespaceMutationVectors: Partial<Record<OperationId, MutationVector>> 
         { changeMode: 'tracked' },
       ),
     applyCase: () => {
+      seedConformanceBookmark('bm1');
       refResolverMocks.resolveBookmarkTarget.mockReturnValueOnce(
         mockResolvedNode(1, 'bm1', 'bookmarkStart', { name: 'bm1' }),
       );
@@ -3127,6 +3142,7 @@ const refNamespaceMutationVectors: Partial<Record<OperationId, MutationVector>> 
         { changeMode: 'tracked' },
       ),
     applyCase: () => {
+      seedConformanceBookmark('bm1');
       refResolverMocks.resolveBookmarkTarget.mockReturnValueOnce(
         mockResolvedNode(1, 'bm1', 'bookmarkStart', { name: 'bm1' }),
       );
@@ -4979,6 +4995,110 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
       const result = listsSeparateWrapper(editor, {
         target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+      });
+      firstInSeqSpy.mockRestore();
+      abstractSpy.mockRestore();
+      seqSpy.mockRestore();
+      createNumSpy.mockRestore();
+      return result;
+    },
+  },
+  'lists.merge': {
+    throwCase: () => {
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      return listsMergeWrapper(
+        editor,
+        { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' }, direction: 'withNext' },
+        { changeMode: 'tracked' },
+      );
+    },
+    failureCase: () => {
+      const adjacentSpy = vi.spyOn(listSequenceHelpers, 'findAdjacentSequence').mockReturnValue(null);
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      const result = listsMergeWrapper(editor, {
+        target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+        direction: 'withNext',
+      });
+      adjacentSpy.mockRestore();
+      return result;
+    },
+    applyCase: () => {
+      const adjacentSpy = vi.spyOn(listSequenceHelpers, 'findAdjacentSequence').mockReturnValue({
+        numId: 2,
+        sequence: [
+          {
+            address: { kind: 'block', nodeType: 'listItem', nodeId: 'li-2' },
+            candidate: {
+              nodeId: 'li-2',
+              nodeType: 'listItem',
+              pos: 4,
+              end: 8,
+              node: {
+                attrs: { paragraphProperties: { numberingProperties: { numId: 2, ilvl: 0 } } },
+                nodeSize: 4,
+              } as any,
+            },
+            numId: 2,
+            level: 0,
+          } as any,
+        ],
+      });
+      const sequenceSpy = vi.spyOn(listSequenceHelpers, 'getContiguousSequence').mockReturnValue([
+        {
+          address: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+          candidate: {
+            nodeId: 'li-1',
+            nodeType: 'listItem',
+            pos: 0,
+            end: 4,
+            node: {
+              attrs: { paragraphProperties: { numberingProperties: { numId: 1, ilvl: 0 } } },
+              nodeSize: 4,
+            } as any,
+          },
+          numId: 1,
+          level: 0,
+        } as any,
+      ]);
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      const result = listsMergeWrapper(editor, {
+        target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+        direction: 'withNext',
+      });
+      adjacentSpy.mockRestore();
+      sequenceSpy.mockRestore();
+      return result;
+    },
+  },
+  'lists.split': {
+    throwCase: () => {
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      return listsSplitWrapper(
+        editor,
+        { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' } },
+        { changeMode: 'tracked' },
+      );
+    },
+    failureCase: () => {
+      const firstInSeqSpy = vi.spyOn(listSequenceHelpers, 'isFirstInSequence').mockReturnValue(true);
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      const result = listsSplitWrapper(editor, {
+        target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+      });
+      firstInSeqSpy.mockRestore();
+      return result;
+    },
+    applyCase: () => {
+      const firstInSeqSpy = vi.spyOn(listSequenceHelpers, 'isFirstInSequence').mockReturnValue(false);
+      const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
+      const seqSpy = vi.spyOn(listSequenceHelpers, 'getSequenceFromTarget').mockReturnValue([]);
+      const createNumSpy = vi
+        .spyOn(ListHelpers, 'createNumDefinition')
+        .mockReturnValue({ numId: 99, numDef: {} } as any);
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      const result = listsSplitWrapper(editor, {
+        target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+        restartNumbering: false, // skip the second mutation in the conformance harness
       });
       firstInSeqSpy.mockRestore();
       abstractSpy.mockRestore();
@@ -8965,6 +9085,66 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
     seqSpy.mockRestore();
     return result;
   },
+  'lists.merge': () => {
+    const adjacentSpy = vi.spyOn(listSequenceHelpers, 'findAdjacentSequence').mockReturnValue({
+      numId: 2,
+      sequence: [
+        {
+          address: { kind: 'block', nodeType: 'listItem', nodeId: 'li-2' },
+          candidate: {
+            nodeId: 'li-2',
+            nodeType: 'listItem',
+            pos: 4,
+            end: 8,
+            node: {
+              attrs: { paragraphProperties: { numberingProperties: { numId: 2, ilvl: 0 } } },
+              nodeSize: 4,
+            } as any,
+          },
+          numId: 2,
+          level: 0,
+        } as any,
+      ],
+    });
+    const sequenceSpy = vi.spyOn(listSequenceHelpers, 'getContiguousSequence').mockReturnValue([
+      {
+        address: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' },
+        candidate: {
+          nodeId: 'li-1',
+          nodeType: 'listItem',
+          pos: 0,
+          end: 4,
+          node: { attrs: { paragraphProperties: { numberingProperties: { numId: 1, ilvl: 0 } } }, nodeSize: 4 } as any,
+        },
+        numId: 1,
+        level: 0,
+      } as any,
+    ]);
+    const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+    const result = listsMergeWrapper(
+      editor,
+      { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' }, direction: 'withNext' },
+      { changeMode: 'direct', dryRun: true },
+    );
+    adjacentSpy.mockRestore();
+    sequenceSpy.mockRestore();
+    return result;
+  },
+  'lists.split': () => {
+    const firstInSeqSpy = vi.spyOn(listSequenceHelpers, 'isFirstInSequence').mockReturnValue(false);
+    const abstractSpy = vi.spyOn(listSequenceHelpers, 'getAbstractNumId').mockReturnValue(1);
+    const seqSpy = vi.spyOn(listSequenceHelpers, 'getSequenceFromTarget').mockReturnValue([]);
+    const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+    const result = listsSplitWrapper(
+      editor,
+      { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' } },
+      { changeMode: 'direct', dryRun: true },
+    );
+    firstInSeqSpy.mockRestore();
+    abstractSpy.mockRestore();
+    seqSpy.mockRestore();
+    return result;
+  },
   'lists.setLevel': () => {
     const hasDefinitionSpy = vi.spyOn(ListHelpers, 'hasListDefinition').mockReturnValue(true);
     const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
@@ -10433,6 +10613,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
     }
   },
   'bookmarks.rename': () => {
+    seedConformanceBookmark('bm1');
     refResolverMocks.resolveBookmarkTarget.mockReturnValueOnce(
       mockResolvedNode(1, 'bm1', 'bookmarkStart', { name: 'bm1' }),
     );
@@ -10443,6 +10624,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
     );
   },
   'bookmarks.remove': () => {
+    seedConformanceBookmark('bm1');
     refResolverMocks.resolveBookmarkTarget.mockReturnValueOnce(
       mockResolvedNode(1, 'bm1', 'bookmarkStart', { name: 'bm1' }),
     );
@@ -10929,6 +11111,11 @@ const resetMocks = () => {
   }
   // Restore list-returning defaults
   refResolverMocks.findAllBookmarks.mockImplementation(() => []);
+  refResolverMocks.findAllBookmarkMarkersInDocument.mockImplementation(() => []);
+  refResolverMocks.findAllBookmarksInDocument.mockImplementation(() => []);
+  refResolverMocks.buildBookmarkAddress.mockImplementation((name: string, story?: unknown) =>
+    story ? { kind: 'entity', entityType: 'bookmark', name, story } : { kind: 'entity', entityType: 'bookmark', name },
+  );
   refResolverMocks.findAllLinks.mockImplementation(() => []);
   refResolverMocks.findAllFootnotes.mockImplementation(() => []);
   refResolverMocks.findAllCrossRefs.mockImplementation(() => []);

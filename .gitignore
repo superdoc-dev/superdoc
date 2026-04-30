@@ -109,3 +109,4 @@ packages/sdk/tools/*.json
 
 .playwright-cli/
 .prqrc.json
+tmp/

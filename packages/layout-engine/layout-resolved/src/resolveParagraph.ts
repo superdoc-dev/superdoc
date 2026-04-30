@@ -199,6 +199,7 @@ export function resolveParagraphContent(
         color: m.run?.color,
         letterSpacing: m.run?.letterSpacing,
       },
+      sourceAnchor: block.sourceAnchor,
     };
   }
 

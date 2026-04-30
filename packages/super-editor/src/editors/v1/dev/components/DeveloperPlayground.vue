@@ -1,5 +1,7 @@
 <script setup>
-import '@superdoc/super-editor/style.css';
+// Local editor development should read the stylesheet from source so visual
+// changes stay in sync without rebuilding the package dist.
+import '../../../../style.css';
 import '@superdoc/common/styles/common-styles.css';
 
 import { ref, computed, onMounted } from 'vue';

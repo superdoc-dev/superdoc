@@ -322,6 +322,8 @@ export async function layoutHeaderFooterWithCache(
       pages: pages.map((p) => ({
         number: p.number,
         fragments: p.fragments,
+        blocks: p.blocks,
+        measures: p.measures,
       })),
     };
 

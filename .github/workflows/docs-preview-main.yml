@@ -1,0 +1,55 @@
+# Refreshes the persistent Mintlify preview for `main` so the team can see the
+# current "next" state of the docs at superdoc-main.mintlify.app without
+# opening a draft PR. Mintlify reuses the URL per branch, so each push
+# refreshes content in place. Production docs stay on docs-stable; this is
+# unrelated to the production gate.
+name: 📖 Docs preview (main)
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'apps/docs/**'
+      - 'packages/document-api/src/contract/**'
+      - 'scripts/generate-all.mjs'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: refresh-main-docs-preview
+  cancel-in-progress: true
+
+jobs:
+  trigger-preview:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Mintlify preview for main
+        env:
+          MINTLIFY_API_KEY: ${{ secrets.MINTLIFY_API_KEY }}
+          MINTLIFY_PROJECT_ID: ${{ secrets.MINTLIFY_PROJECT_ID }}
+        run: |
+          set -euo pipefail
+          if [ -z "${MINTLIFY_API_KEY}" ] || [ -z "${MINTLIFY_PROJECT_ID}" ]; then
+            echo "MINTLIFY_API_KEY or MINTLIFY_PROJECT_ID not set; skipping."
+            exit 0
+          fi
+
+          response=$(curl -sS -X POST \
+            -H "Authorization: Bearer ${MINTLIFY_API_KEY}" \
+            -H "Content-Type: application/json" \
+            -d '{"branch": "main"}' \
+            "https://api.mintlify.com/v1/project/preview/${MINTLIFY_PROJECT_ID}")
+
+          echo "Mintlify response: ${response}"
+          preview_url=$(echo "${response}" | jq -r '.previewUrl // empty')
+
+          if [ -n "$preview_url" ]; then
+            {
+              echo "## Next docs preview refreshed"
+              echo
+              echo "URL: $preview_url"
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi

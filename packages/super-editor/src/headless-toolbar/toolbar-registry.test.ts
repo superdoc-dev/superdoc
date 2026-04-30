@@ -542,6 +542,57 @@ describe('createToolbarRegistry', () => {
     expect(state).toEqual({
       active: true,
       disabled: false,
+      value: null,
+    });
+  });
+
+  it.each([
+    ['•', '•'],
+    ['◦', '◦'],
+    ['▪', '▪'],
+  ])('exposes raw markerText %s as bullet-list value when paragraph is active', (markerText, expected) => {
+    const registry = createToolbarRegistry();
+    const state = registry['bullet-list']?.state({
+      context: {
+        ...createContext(),
+        editor: {
+          state: {
+            doc: {
+              resolve: vi.fn(() => '$resolved-pos'),
+            },
+            selection: {
+              $from: {
+                depth: 1,
+                node: vi.fn((depth) =>
+                  depth === 1
+                    ? {
+                        type: { name: 'paragraph' },
+                        attrs: {
+                          listRendering: {
+                            numberingType: 'bullet',
+                            markerText,
+                          },
+                          paragraphProperties: {
+                            numberingProperties: { numId: 1 },
+                          },
+                        },
+                      }
+                    : null,
+                ),
+                before: vi.fn(() => 5),
+                start: vi.fn(() => 6),
+              },
+            },
+          },
+        } as any,
+      },
+      superdoc: {},
+    });
+
+    expect(state).toEqual({
+      active: true,
+      disabled: false,
+      value: expected,
     });
   });
 

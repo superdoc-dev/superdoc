@@ -4,7 +4,22 @@ import { isCommandDisabled } from './general.js';
 import { resolveStateEditor } from './context.js';
 import type { ToolbarCommandState, ToolbarContext } from '../types.js';
 
+/**
+ * Document-wide history state takes precedence when a PresentationEditor
+ * with an active unified-history coordinator is wired up — it reports the
+ * cross-surface stack depths instead of whichever editor currently holds
+ * focus.
+ */
+const readCoordinatorDepths = (context: ToolbarContext | null): { undoDepth: number; redoDepth: number } | null => {
+  const state = context?.presentationEditor?.getHistoryState?.();
+  if (!state) return null;
+  return { undoDepth: state.undoDepth, redoDepth: state.redoDepth };
+};
+
 export const getCurrentUndoDepth = (context: ToolbarContext | null) => {
+  const coordinatorDepths = readCoordinatorDepths(context);
+  if (coordinatorDepths) return coordinatorDepths.undoDepth;
+
   const stateEditor = resolveStateEditor(context);
 
   if (!stateEditor?.state) {
@@ -24,6 +39,9 @@ export const getCurrentUndoDepth = (context: ToolbarContext | null) => {
 };
 
 export const getCurrentRedoDepth = (context: ToolbarContext | null) => {
+  const coordinatorDepths = readCoordinatorDepths(context);
+  if (coordinatorDepths) return coordinatorDepths.redoDepth;
+
   const stateEditor = resolveStateEditor(context);
 
   if (!stateEditor?.state) {

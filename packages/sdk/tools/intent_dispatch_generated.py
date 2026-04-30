@@ -21,6 +21,8 @@ def dispatch_intent_tool(
             return execute('doc.getHtml', rest)
         elif action == 'info':
             return execute('doc.info', rest)
+        elif action == 'extract':
+            return execute('doc.extract', rest)
         elif action == 'blocks':
             return execute('doc.blocks.list', rest)
         else:
@@ -77,14 +79,24 @@ def dispatch_intent_tool(
             return execute('doc.lists.insert', rest)
         elif action == 'create':
             return execute('doc.lists.create', rest)
+        elif action == 'attach':
+            return execute('doc.lists.attach', rest)
         elif action == 'detach':
             return execute('doc.lists.detach', rest)
         elif action == 'indent':
             return execute('doc.lists.indent', rest)
         elif action == 'outdent':
             return execute('doc.lists.outdent', rest)
+        elif action == 'merge':
+            return execute('doc.lists.merge', rest)
+        elif action == 'split':
+            return execute('doc.lists.split', rest)
         elif action == 'set_level':
             return execute('doc.lists.setLevel', rest)
+        elif action == 'set_value':
+            return execute('doc.lists.setValue', rest)
+        elif action == 'continue_previous':
+            return execute('doc.lists.continuePrevious', rest)
         elif action == 'set_type':
             return execute('doc.lists.setType', rest)
         else:

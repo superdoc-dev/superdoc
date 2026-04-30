@@ -24,6 +24,81 @@ function resolveSegmentPosition(
 }
 
 /**
+ * Converts an absolute ProseMirror position inside a block to the block's
+ * flattened text offset (same model as {@link resolveTextRangeInBlock}:
+ * text = length, leaf atoms = 1, block separators = 1, inline wrapper
+ * tokens = 0). Returns the total flattened length when `pmPos` is at or
+ * past the end of the block.
+ *
+ * Use this for any PM-selection → TextTarget conversion — subtracting
+ * `pmPos - blockPos - 1` is wrong for blocks with inline wrappers
+ * (`run`, etc.) or leaf atoms, because PM positions include wrapper
+ * boundary tokens that the flattened model does not.
+ */
+export function pmPositionToTextOffset(blockNode: ProseMirrorNode, blockPos: number, pmPos: number): number {
+  const contentStart = blockPos + 1;
+  if (pmPos <= contentStart) return 0;
+
+  let offset = 0;
+  let done = false;
+
+  const visit = (node: ProseMirrorNode, docPos: number): void => {
+    if (done) return;
+
+    if (node.isText) {
+      const text = node.text ?? '';
+      const endPos = docPos + text.length;
+      if (pmPos >= endPos) {
+        offset += text.length;
+      } else {
+        offset += Math.max(0, pmPos - docPos);
+        done = true;
+      }
+      return;
+    }
+
+    if (node.isLeaf) {
+      const endPos = docPos + node.nodeSize;
+      if (pmPos >= endPos) {
+        offset += 1;
+      } else {
+        // pmPos falls inside (or at the start of) the leaf; snap to start.
+        done = true;
+      }
+      return;
+    }
+
+    visitContent(node, docPos + 1);
+  };
+
+  const visitContent = (node: ProseMirrorNode, contentPos: number): void => {
+    let isFirst = true;
+    let childOffset = 0;
+    for (let i = 0; i < node.childCount; i += 1) {
+      if (done) return;
+      const child = node.child(i);
+      const childPos = contentPos + childOffset;
+
+      if (child.isBlock && !isFirst) {
+        if (pmPos >= childPos + 1) {
+          offset += 1;
+        } else {
+          done = true;
+          return;
+        }
+      }
+
+      visit(child, childPos);
+      childOffset += child.nodeSize;
+      isFirst = false;
+    }
+  };
+
+  visitContent(blockNode, contentStart);
+  return offset;
+}
+
+/**
  * Computes the total flattened text length of a block node using the same
  * offset model as {@link resolveTextRangeInBlock}: text contributes its
  * length, leaf atoms contribute 1, block separators contribute 1.

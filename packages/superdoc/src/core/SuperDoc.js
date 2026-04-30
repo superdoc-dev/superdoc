@@ -67,6 +67,7 @@ const DEFAULT_AWARENESS_PALETTE = Object.freeze([
 /** @typedef {import('./types').UpgradeToCollaborationOptions} UpgradeToCollaborationOptions */
 /** @typedef {import('./types').SurfaceRequest} SurfaceRequest */
 /** @typedef {import('./types').SurfaceHandle} SurfaceHandle */
+/** @typedef {import('./types').NavigableAddress} NavigableAddress */
 
 /**
  * SuperDoc class
@@ -1194,6 +1195,23 @@ export class SuperDoc extends EventEmitter {
   }
 
   /**
+   * Navigate to a block, bookmark, comment, or tracked change target.
+   *
+   * Story-aware navigation is currently supported for bookmark and tracked
+   * change targets. Block and comment targets are body-only.
+   *
+   * @param {NavigableAddress} target
+   * @returns {Promise<boolean>} Whether the target was found and navigated to.
+   */
+  async navigateTo(target) {
+    const storeDocs = this.superdocStore?.documents;
+    if (!storeDocs?.length) return false;
+    const presentationEditor = storeDocs[0].getPresentationEditor?.();
+    if (!presentationEditor?.navigateTo) return false;
+    return presentationEditor.navigateTo(target);
+  }
+
+  /**
    * Scroll to any document element by its ID.
    *
    * Pass any element ID — paragraph nodeId, comment entityId, or tracked
@@ -1237,6 +1255,25 @@ export class SuperDoc extends EventEmitter {
       if (editor?.setOptions) {
         editor.setOptions({ disableContextMenu: nextValue });
       }
+    });
+  }
+
+  /**
+   * SD-2454: Toggle bookmark bracket indicators (opt-in, off by default).
+   * Matches Word's "Show bookmarks" option. Triggers a re-layout on change
+   * because the brackets are visible characters participating in text flow.
+   * @param {boolean} show
+   * @returns {void}
+   */
+  setShowBookmarks(show = true) {
+    const nextValue = Boolean(show);
+    const layoutOptions = (this.config.layoutEngineOptions = this.config.layoutEngineOptions || {});
+    if (layoutOptions.showBookmarks === nextValue) return;
+    layoutOptions.showBookmarks = nextValue;
+
+    this.superdocStore?.documents?.forEach((doc) => {
+      const presentationEditor = doc.getPresentationEditor?.();
+      presentationEditor?.setShowBookmarks?.(nextValue);
     });
   }
 
@@ -1391,7 +1428,7 @@ export class SuperDoc extends EventEmitter {
    * @returns {Object[]} The search results
    */
   search(text) {
-    return this.activeEditor?.commands.search(text);
+    return this.activeEditor?.commands.search(text, { searchModel: 'visible' });
   }
 
   /**
@@ -1532,12 +1569,51 @@ export class SuperDoc extends EventEmitter {
    * @returns {Promise<Array<Blob>>}
    */
   async exportEditorsToDOCX({ commentsType, isFinalDoc, fieldsHighlightColor } = {}) {
-    const comments = [];
-    if (commentsType !== 'clean') {
-      if (this.commentsStore && typeof this.commentsStore.translateCommentsForExport === 'function') {
-        comments.push(...this.commentsStore.translateCommentsForExport());
-      }
+    // The export's job is to pick the correct source of truth for
+    // comments. There are three branches; the third had a latent
+    // ambiguity that resurrected deleted comments and is the
+    // reason this logic looks so fiddly.
+    //
+    // 1. `commentsType === 'clean'`: strip everything. Pass `[]`,
+    //    which `Editor.exportDocx`'s
+    //    `effectiveComments = comments ?? this.converter.comments ?? []`
+    //    treats as authoritative-empty (`??` falls through on
+    //    `null`/`undefined` only).
+    //
+    // 2. `modules.comments === false` (UI store NEVER hydrates).
+    //    The store is not the source of truth because it never
+    //    held comments at all. Pass `undefined` so the engine
+    //    fallback to `converter.comments` fires and
+    //    DOCX-imported comments survive the round-trip. This is
+    //    the BYO UI story: consumers driving `ui.comments` from
+    //    their own React tree shouldn't lose imports just because
+    //    the built-in floating UI is hidden.
+    //
+    // 3. UI store IS hydrated (`modules.comments` truthy or
+    //    omitted). The store is authoritative: a user who deleted
+    //    every comment through the built-in UI ends up with an
+    //    empty store, and the export MUST honor that as
+    //    "no comments" rather than silently resurrect them from
+    //    `converter.comments` (which the legacy delete path doesn't
+    //    clear today; tracked separately under SD-2839). Pass
+    //    whatever the store returns, including `[]`.
+    let comments;
+    const commentsModuleConfig = this.config?.modules?.comments;
+    const uiStoreHydrated = commentsModuleConfig !== false;
+    if (commentsType === 'clean') {
+      comments = [];
+    } else if (
+      uiStoreHydrated &&
+      this.commentsStore &&
+      typeof this.commentsStore.translateCommentsForExport === 'function'
+    ) {
+      // UI store is the source of truth; trust whatever it says,
+      // including an authoritative-empty array.
+      comments = this.commentsStore.translateCommentsForExport();
+      if (!Array.isArray(comments)) comments = [];
     }
+    // else: UI store unhydrated → leave `comments` undefined and
+    // let the engine's `converter.comments` fallback fire.
 
     const docxPromises = this.superdocStore.documents.map(async (doc) => {
       if (!doc || doc.type !== DOCX) return null;

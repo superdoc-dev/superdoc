@@ -267,6 +267,25 @@ describe('SuperToolbar sticky mark persistence', () => {
 
     expect(item.activate).toHaveBeenCalledWith();
   });
+
+  it('executes mark toggles immediately for header/footer editors instead of queueing', () => {
+    mockEditor.options.isHeaderOrFooter = true;
+    mockEditor.view.hasFocus = vi.fn(() => false);
+    const setFontSize = vi.fn();
+    mockEditor.commands.setFontSize = setFontSize;
+
+    const item = {
+      command: 'setFontSize',
+      name: { value: 'fontSize' },
+      labelAttr: { value: 'fontSize' },
+      activate: vi.fn(),
+    };
+
+    toolbar.emitCommand({ item, argument: '24pt' });
+
+    expect(toolbar.pendingMarkCommands).toHaveLength(0);
+    expect(setFontSize).toHaveBeenCalledWith('24pt');
+  });
 });
 
 describe('SuperToolbar error handling for command failures', () => {

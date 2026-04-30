@@ -13,6 +13,8 @@
 
 import type { ParagraphIndent } from './paragraph.js';
 
+const TAB_POSITION_TOLERANCE_TWIPS = 20;
+
 /**
  * OOXML-aligned tab stop definition.
  * Positions are in twips (1/1440 inch) to preserve exact OOXML values.
@@ -135,7 +137,9 @@ export function computeTabStops(context: TabContext): TabStop[] {
   const stops: TabStop[] = [...filteredExplicitStops];
   const hasStartAlignedExplicit = filteredExplicitStops.some((stop) => stop.val === 'start');
   const hasExplicitStops = filteredExplicitStops.length > 0;
-  const hasClearAtLeftIndent = clearPositions.some((clearPos) => Math.abs(clearPos - leftIndent) < 20);
+  const hasClearAtLeftIndent = clearPositions.some(
+    (clearPos) => Math.abs(clearPos - leftIndent) < TAB_POSITION_TOLERANCE_TWIPS,
+  );
 
   // Word treats the body text start of a hanging-indent paragraph as an implicit
   // tab target. This is what lets manual numbering like "1.\tText" align the
@@ -163,8 +167,8 @@ export function computeTabStops(context: TabContext): TabStop[] {
     pos += defaultTabInterval;
 
     // Don't add if there's already a stop OR a cleared position at this position
-    const hasExistingStop = stops.some((s) => Math.abs(s.pos - pos) < 20);
-    const hasClearStop = clearPositions.some((clearPos) => Math.abs(clearPos - pos) < 20);
+    const hasExistingStop = stops.some((s) => Math.abs(s.pos - pos) < TAB_POSITION_TOLERANCE_TWIPS);
+    const hasClearStop = clearPositions.some((clearPos) => Math.abs(clearPos - pos) < TAB_POSITION_TOLERANCE_TWIPS);
 
     // Default stops must be >= leftIndent (for body text alignment)
     const isValidDefault = pos >= leftIndent;

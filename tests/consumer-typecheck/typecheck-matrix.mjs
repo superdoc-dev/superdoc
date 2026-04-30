@@ -50,13 +50,14 @@ if (!skipPack) {
   // The fixture is intentionally outside the pnpm workspace so it exercises
   // the published tarball's contract, not workspace symlinks. Use the same
   // install strategy the pre-SD-2831 workflow used: `npm install` with the
-  // tarball passed as an argument and `--no-save`. This bypasses the
-  // tarball-content hash that strict-mode installs (`npm ci`,
-  // `pnpm install --frozen-lockfile`) would enforce; without it, every
-  // fresh pack invalidates the committed lockfile because the tarball's
-  // bytes change on each rebuild. The fixture's dev deps are still
-  // installed from `package.json`'s semver ranges; locking them strictly
-  // is a separate concern (see `.gitignore` notes).
+  // tarball passed as an argument and `--no-save`. The committed
+  // `package-lock.json` pins the fixture's dev deps (typescript, @types/node,
+  // prosemirror-*) so they install at deterministic versions. The reason for
+  // `--no-save` instead of a strict-mode install (`npm ci`,
+  // `pnpm --frozen-lockfile`) is that strict modes hash the file: tarball
+  // and the tarball's bytes change on every rebuild, which would invalidate
+  // the lockfile on every CI run. `--no-save` keeps the dev-dep pinning while
+  // accepting whatever bytes the fresh tarball has.
   try {
     execSync(
       'npm install ../../packages/superdoc/superdoc.tgz --no-save --prefer-offline --no-audit --no-fund --silent',
@@ -228,29 +229,6 @@ const scenarios = [
     strict: true,
     files: ['src/editor-doc-runtime.ts'],
     mustPass: true,
-  },
-  // SD-2831: guarded public types must not collapse to `any`.
-  // The SD-2842 work moved most of these from any to real, so this
-  // probe largely overlaps with the all-public-types scenarios above.
-  // Kept informational for now as a separate vantage point; revisit
-  // whether it adds signal once SD-2842 is fully shipped.
-  {
-    name: 'bundler / guarded public types not any (SD-2831)',
-    module: 'ESNext',
-    moduleResolution: 'bundler',
-    skipLibCheck: true,
-    strict: true,
-    files: ['src/informational/guarded-public-types.ts'],
-    mustPass: false,
-  },
-  {
-    name: 'node16 / guarded public types not any (SD-2831)',
-    module: 'Node16',
-    moduleResolution: 'node16',
-    skipLibCheck: true,
-    strict: true,
-    files: ['src/informational/guarded-public-types.ts'],
-    mustPass: false,
   },
   // The broad public API compatibility assertions in `customer-scenario.ts`
   // were previously only exercised by a bare `tsc --noEmit` over the

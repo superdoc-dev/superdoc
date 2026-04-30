@@ -9,6 +9,5 @@
     "noEmit": true,
     "esModuleInterop": true
   },
-  "include": ["src/**/*.ts"],
-  "exclude": ["src/informational/**"]
+  "include": ["src/**/*.ts"]
 }

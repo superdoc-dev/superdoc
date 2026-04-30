@@ -958,6 +958,8 @@ describe('createToolbarRegistry', () => {
       ['upperRoman', 'XIV.', 'upper-roman'],
       ['lowerRoman', 'i.', 'lower-roman'],
       ['upperLetter', 'A.', 'upper-alpha'],
+      ['upperLetter', 'A)', 'upper-alpha-paren'],
+      ['upperLetter', 'Z)', 'upper-alpha-paren'],
       ['lowerLetter', 'a.', 'lower-alpha'],
       ['lowerLetter', 'a)', 'lower-alpha-paren'],
       ['lowerLetter', 'z)', 'lower-alpha-paren'],
@@ -971,7 +973,6 @@ describe('createToolbarRegistry', () => {
     });
 
     it.each([
-      ['upperLetter', 'A)', 'upper-alpha-paren is omitted from the PR'],
       ['decimalZero', '01.', 'decimalZero numFmt is not in the lookup'],
       ['decimal', 'Step 1:', 'unrecognized suffix ":"'],
     ])('returns value=null for unsupported combo (%s, %s) — %s', (numberingType, markerText) => {

@@ -10,6 +10,7 @@ export type OrderedListStyle =
   | 'upper-roman'
   | 'lower-roman'
   | 'upper-alpha'
+  | 'upper-alpha-paren'
   | 'lower-alpha'
   | 'lower-alpha-paren';
 

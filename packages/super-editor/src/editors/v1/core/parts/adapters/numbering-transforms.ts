@@ -47,6 +47,7 @@ const ORDERED_LIST_STYLES: Record<string, { fmt: string; text: string }> = {
   'upper-roman': { fmt: 'upperRoman', text: '%1.' },
   'lower-roman': { fmt: 'lowerRoman', text: '%1.' },
   'upper-alpha': { fmt: 'upperLetter', text: '%1.' },
+  'upper-alpha-paren': { fmt: 'upperLetter', text: '%1)' },
   'lower-alpha': { fmt: 'lowerLetter', text: '%1.' },
   'lower-alpha-paren': { fmt: 'lowerLetter', text: '%1)' },
 };

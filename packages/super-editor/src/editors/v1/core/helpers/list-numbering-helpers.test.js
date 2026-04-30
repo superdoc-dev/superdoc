@@ -1607,17 +1607,13 @@ describe('numberingInfoToOrderedStyle', () => {
     ['lowerRoman', 'iv.', 'lower-roman'],
     ['upperLetter', 'A.', 'upper-alpha'],
     ['upperLetter', 'C.', 'upper-alpha'],
+    ['upperLetter', 'A)', 'upper-alpha-paren'],
+    ['upperLetter', 'Z)', 'upper-alpha-paren'],
     ['lowerLetter', 'a.', 'lower-alpha'],
     ['lowerLetter', 'a)', 'lower-alpha-paren'],
     ['lowerLetter', 'z)', 'lower-alpha-paren'],
   ])('maps (%s, %s) to %s', (numberingType, markerText, expected) => {
     expect(numberingInfoToOrderedStyle(numberingType, markerText)).toBe(expected);
-  });
-
-  it('returns null for upperLetter + ")" (PR omits upper-alpha-paren)', () => {
-    // This documents an intentional gap: A) B) C) is valid OOXML but the PR's
-    // dropdown does not expose it, so the mapper returns null.
-    expect(numberingInfoToOrderedStyle('upperLetter', 'A)')).toBeNull();
   });
 
   it.each([

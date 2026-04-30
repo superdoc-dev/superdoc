@@ -101,6 +101,7 @@ test.describe('PR-2873 list style changes', () => {
       { style: 'upper-roman', expectedFmt: 'upperRoman', expectedLvlText: '%1.', firstMarker: 'I.' },
       { style: 'lower-roman', expectedFmt: 'lowerRoman', expectedLvlText: '%1.', firstMarker: 'i.' },
       { style: 'upper-alpha', expectedFmt: 'upperLetter', expectedLvlText: '%1.', firstMarker: 'A.' },
+      { style: 'upper-alpha-paren', expectedFmt: 'upperLetter', expectedLvlText: '%1)', firstMarker: 'A)' },
       { style: 'lower-alpha', expectedFmt: 'lowerLetter', expectedLvlText: '%1.', firstMarker: 'a.' },
       { style: 'lower-alpha-paren', expectedFmt: 'lowerLetter', expectedLvlText: '%1)', firstMarker: 'a)' },
     ] as const;

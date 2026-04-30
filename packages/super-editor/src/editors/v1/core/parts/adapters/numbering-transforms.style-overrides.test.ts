@@ -77,6 +77,7 @@ describe('generateNewListDefinition - ordered style override', () => {
     ['upper-roman', 'upperRoman', '%1.'],
     ['lower-roman', 'lowerRoman', '%1.'],
     ['upper-alpha', 'upperLetter', '%1.'],
+    ['upper-alpha-paren', 'upperLetter', '%1)'],
     ['lower-alpha', 'lowerLetter', '%1.'],
     ['lower-alpha-paren', 'lowerLetter', '%1)'],
   ] as const)('writes numFmt=%s and lvlText=%s for orderedStyle="%s"', (orderedStyle, expectedFmt, expectedText) => {
@@ -123,7 +124,7 @@ describe('generateNewListDefinition - ordered style override', () => {
       numId: 1,
       listType: 'orderedList',
       // @ts-expect-error testing the runtime-defensive branch
-      orderedStyle: 'upper-alpha-paren',
+      orderedStyle: 'klingon-numerals',
     });
     const lvl0 = findLvl0(result.abstractDef);
     expect(findChild(lvl0, 'w:numFmt').attributes['w:val']).toBe('decimal');

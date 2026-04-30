@@ -10,6 +10,7 @@ import listDecimalParenIconSvg from '@superdoc/common/icons/list-decimal-paren-s
 import listUpperRomanIconSvg from '@superdoc/common/icons/list-upper-roman-solid.svg?raw';
 import listLowerRomanIconSvg from '@superdoc/common/icons/list-lower-roman-solid.svg?raw';
 import listUpperAlphaIconSvg from '@superdoc/common/icons/list-upper-alpha-solid.svg?raw';
+import listUpperAlphaParenIconSvg from '@superdoc/common/icons/list-upper-alpha-paren-solid.svg?raw';
 import listLowerAlphaIconSvg from '@superdoc/common/icons/list-lower-alpha-solid.svg?raw';
 import listLowerAlphaParenIconSvg from '@superdoc/common/icons/list-lower-alpha-paren-solid.svg?raw';
 import imageIconSvg from '@superdoc/common/icons/image-solid.svg?raw';
@@ -82,6 +83,7 @@ export const toolbarIcons = {
   numberedListUpperRoman: listUpperRomanIconSvg,
   numberedListLowerRoman: listLowerRomanIconSvg,
   numberedListUpperAlpha: listUpperAlphaIconSvg,
+  numberedListUpperAlphaParen: listUpperAlphaParenIconSvg,
   numberedListLowerAlpha: listLowerAlphaIconSvg,
   numberedListLowerAlphaParen: listLowerAlphaParenIconSvg,
   indentLeft: outdentIconSvg,

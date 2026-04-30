@@ -20,6 +20,7 @@ const numberedButtons = [
   { key: 'upper-roman', icon: toolbarIcons.numberedListUpperRoman, ariaLabel: 'I. II. III.' },
   { key: 'lower-roman', icon: toolbarIcons.numberedListLowerRoman, ariaLabel: 'i. ii. iii.' },
   { key: 'upper-alpha', icon: toolbarIcons.numberedListUpperAlpha, ariaLabel: 'A. B. C.' },
+  { key: 'upper-alpha-paren', icon: toolbarIcons.numberedListUpperAlphaParen, ariaLabel: 'A) B) C)' },
   { key: 'lower-alpha', icon: toolbarIcons.numberedListLowerAlpha, ariaLabel: 'a. b. c.' },
   { key: 'lower-alpha-paren', icon: toolbarIcons.numberedListLowerAlphaParen, ariaLabel: 'a) b) c)' },
 ];

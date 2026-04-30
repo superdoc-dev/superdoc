@@ -12,10 +12,11 @@ const DOC_PATH = DOC_PATH_CANDIDATES.find((candidate) => fs.existsSync(candidate
 
 test.skip(!fs.existsSync(DOC_PATH), 'Test document not available');
 
-// SD-2527: PR #2873 introduces 3 bullet styles (disc, circle, square) and 7 ordered styles
-// (decimal, decimal-paren, upper-roman, lower-roman, upper-alpha, lower-alpha, lower-alpha-paren).
+// SD-2527: PR #2873 introduces 3 bullet styles (disc, circle, square) and 8 ordered styles
+// (decimal, decimal-paren, upper-roman, lower-roman, upper-alpha, upper-alpha-paren,
+// lower-alpha, lower-alpha-paren).
 // This fixture should contain one section per style, 3 items each, so visual baselines can
-// catch regressions in marker rendering for any of the 10 styles.
+// catch regressions in marker rendering for any of the 11 styles.
 //
 // To generate baselines:
 //   pnpm --filter @superdoc-testing/visual docs:upload <fixture path> \

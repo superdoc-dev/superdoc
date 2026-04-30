@@ -54,7 +54,7 @@ export function numberingInfoToOrderedStyle(numberingType, markerText) {
     decimal: { '.': 'decimal', ')': 'decimal-paren' },
     upperRoman: { '.': 'upper-roman' },
     lowerRoman: { '.': 'lower-roman' },
-    upperLetter: { '.': 'upper-alpha' },
+    upperLetter: { '.': 'upper-alpha', ')': 'upper-alpha-paren' },
     lowerLetter: { '.': 'lower-alpha', ')': 'lower-alpha-paren' },
   };
   return map[numberingType]?.[suffix] ?? null;

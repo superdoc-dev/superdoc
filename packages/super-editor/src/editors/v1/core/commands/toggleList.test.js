@@ -25,7 +25,7 @@ vi.mock('@helpers/list-numbering-helpers.js', () => ({
       decimal: { '.': 'decimal', ')': 'decimal-paren' },
       upperRoman: { '.': 'upper-roman' },
       lowerRoman: { '.': 'lower-roman' },
-      upperLetter: { '.': 'upper-alpha' },
+      upperLetter: { '.': 'upper-alpha', ')': 'upper-alpha-paren' },
       lowerLetter: { '.': 'lower-alpha', ')': 'lower-alpha-paren' },
     };
     return map[numberingType]?.[suffix] ?? null;
@@ -410,6 +410,7 @@ describe('toggleList', () => {
       'upper-roman',
       'lower-roman',
       'upper-alpha',
+      'upper-alpha-paren',
       'lower-alpha',
       'lower-alpha-paren',
     ])('passes orderedStyle="%s" through to generateNewListDefinition', (orderedStyle) => {

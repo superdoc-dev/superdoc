@@ -33,9 +33,10 @@
  *    drift is visible and the surface can be tightened over time, but its
  *    contents do not fail the audit.
  *
- * Default mode is informational: findings are printed and the script exits
- * zero. Pass `--strict` (or set `SUPERDOC_AUDIT_REQUIRED=1`) to exit non-zero
- * on any FAIL-level finding (rules 1, 2, or 3).
+ * Default mode is strict: findings exit non-zero so a regression cannot
+ * ship silently. Pass `--informational` (or set
+ * `SUPERDOC_AUDIT_INFORMATIONAL=1`) for an explicit opt-out when iterating
+ * locally on a known leak before the fix is ready.
  */
 
 const fs = require('node:fs');
@@ -43,8 +44,14 @@ const path = require('node:path');
 
 const distRoot = path.resolve(__dirname, '..', 'dist');
 
-const isStrict =
-  process.argv.includes('--strict') || process.env.SUPERDOC_AUDIT_REQUIRED === '1';
+// SD-2859: strict is the default. The audit fails the build on any
+// FAIL-level finding so a regression in the published declaration
+// surface cannot ship silently. Pass `--informational` (or set
+// `SUPERDOC_AUDIT_INFORMATIONAL=1`) for an explicit opt-out — useful
+// when iterating locally on a known leak before the fix is ready.
+const isInformational =
+  process.argv.includes('--informational') || process.env.SUPERDOC_AUDIT_INFORMATIONAL === '1';
+const isStrict = !isInformational;
 
 if (!fs.existsSync(distRoot)) {
   console.error(`[audit-declarations] dist/ not found at ${distRoot}; run the build first.`);
@@ -221,12 +228,12 @@ console.log(`FAIL findings: ${violations.join(', ')}`);
 console.log();
 
 if (isStrict) {
-  console.log('Strict mode is on; exiting non-zero.');
+  console.log('Exiting non-zero (strict mode is the default since SD-2859).');
   console.log('See docs/architecture/package-boundaries.md for what each rule means.');
+  console.log('Pass --informational (or SUPERDOC_AUDIT_INFORMATIONAL=1) to opt out for local iteration on a known leak.');
   process.exit(1);
 }
 
-console.log('Strict mode is off; exiting zero (informational).');
-console.log('Pass --strict (or SUPERDOC_AUDIT_REQUIRED=1) to fail on FAIL-level findings.');
+console.log('Exiting zero (informational mode).');
 console.log('See docs/architecture/package-boundaries.md for what each rule means.');
 process.exit(0);

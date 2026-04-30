@@ -14,6 +14,19 @@ const repoRoot = path.resolve(__dirname, '..', '..', '..');
 // emitted `.d.ts`, the consumer hits an unresolved-module error. Copy
 // every hand-written `.d.ts` from the source trees we publish into the
 // matching dist location so those imports resolve.
+// Hand-written `.d.ts` files we know are internal-only and must NOT ship
+// in `superdoc`'s published dist. The copy step is opt-in via filename
+// blocklist (rather than e.g. a per-file directive) so future hand-written
+// declarations land in dist by default and the cost of skipping one is one
+// line here. Each entry should have a comment explaining why.
+const HANDWRITTEN_DTS_BLOCKLIST = new Set([
+  // Ambient module declarations for internal `@superdoc/super-editor/converter/internal/...`
+  // subpaths. Nothing in `superdoc`'s shipped surface actually imports those subpaths,
+  // so the declarations would only leak the bare specifiers into published d.ts.
+  // Keep the file in source for super-editor's own typecheck; just don't ship it. (SD-2859)
+  'converter-internal.d.ts',
+]);
+
 function copyHandwrittenDtsFiles(srcDir, destDir) {
   let copied = 0;
   function walk(currentSrc, currentDest) {
@@ -27,6 +40,8 @@ function copyHandwrittenDtsFiles(srcDir, destDir) {
         continue;
       }
       if (!entry.name.endsWith('.d.ts')) continue;
+      // Skip blocklisted files (see HANDWRITTEN_DTS_BLOCKLIST above).
+      if (HANDWRITTEN_DTS_BLOCKLIST.has(entry.name)) continue;
       // Skip if the dist already has this file (vite-plugin-dts may have
       // generated its own version from a co-located .ts file)
       if (fs.existsSync(destPath)) continue;
@@ -72,7 +87,12 @@ if (!hasSuperDocExport) {
 }
 
 // Fix workspace package imports that aren't resolvable by consumers.
-// @superdoc/common is a private workspace package — inline its types.
+// @superdoc/common is a private workspace package — inline its types in
+// the main entry. Other reachable d.ts files that import from
+// @superdoc/common fall through to the ambient shim block below; those
+// imports surface internal types (Comment, CommentContent, CommentJSON)
+// that are not on the public surface, so collapsing them to `any` via
+// the shim is correct.
 const hadWorkspaceImport = content.includes('@superdoc/common');
 if (hadWorkspaceImport) {
   // Replace the @superdoc/common import with inline declarations
@@ -325,7 +345,7 @@ for (const filePath of dtsFiles) {
     const mod = m[2];
 
     // Skip relative imports and already-handled packages
-    if (mod.startsWith('.') || mod.startsWith('@superdoc/common') || mod.startsWith('@superdoc/super-editor') || mod.startsWith('@superdoc/document-api') || RELOCATION_RULES.some((r) => mod === r.pkg || mod.startsWith(r.pkg + '/'))) continue;
+    if (mod.startsWith('.') || mod.startsWith('@superdoc/super-editor') || mod.startsWith('@superdoc/document-api') || RELOCATION_RULES.some((r) => mod === r.pkg || mod.startsWith(r.pkg + '/'))) continue;
 
     if (mod.startsWith('@superdoc/')) {
       if (!workspaceImports.has(mod)) workspaceImports.set(mod, new Set());
@@ -338,7 +358,7 @@ for (const filePath of dtsFiles) {
   const dynamicImports = fileContent.matchAll(/import\(['"]([^'"]+)['"]\)\.(\w+)/g);
   for (const m of dynamicImports) {
     const mod = m[1];
-    if (mod.startsWith('.') || mod.startsWith('@superdoc/common') || mod.startsWith('@superdoc/super-editor') || mod.startsWith('@superdoc/document-api') || RELOCATION_RULES.some((r) => mod === r.pkg || mod.startsWith(r.pkg + '/'))) continue;
+    if (mod.startsWith('.') || mod.startsWith('@superdoc/super-editor') || mod.startsWith('@superdoc/document-api') || RELOCATION_RULES.some((r) => mod === r.pkg || mod.startsWith(r.pkg + '/'))) continue;
 
     if (mod.startsWith('@superdoc/')) {
       if (!workspaceImports.has(mod)) workspaceImports.set(mod, new Set());
@@ -350,10 +370,15 @@ for (const filePath of dtsFiles) {
   const bareRefs = fileContent.matchAll(/['"](@superdoc\/[^'"]+)['"]/g);
   for (const m of bareRefs) {
     const mod = m[1];
-    // Skip @superdoc/super-editor (consumer-facing, not internal)
-    // Skip @superdoc/common root module (inlined separately), but allow subpath
-    // imports like @superdoc/common/components/BasicUpload.vue to be shimmed
-    if (mod === '@superdoc/common' || mod.startsWith('@superdoc/super-editor') || mod.startsWith('@superdoc/document-api') || RELOCATION_RULES.some((r) => mod === r.pkg || mod.startsWith(r.pkg + '/'))) continue;
+    // Skip @superdoc/super-editor (consumer-facing, not internal). All
+    // other @superdoc/* references (including @superdoc/common root and
+    // its subpaths) fall through to shim generation. The strip-and-inline
+    // step above handles `superdoc/src/index.d.ts`'s @superdoc/common
+    // import explicitly; other files importing from @superdoc/common
+    // resolve through the shim and collapse internal-only types
+    // (Comment, CommentContent, CommentJSON) to `any`. None of those
+    // appear on superdoc's public surface, so the collapse is safe.
+    if (mod.startsWith('@superdoc/super-editor') || mod.startsWith('@superdoc/document-api') || RELOCATION_RULES.some((r) => mod === r.pkg || mod.startsWith(r.pkg + '/'))) continue;
     if (!workspaceImports.has(mod)) workspaceImports.set(mod, new Set());
   }
 }
@@ -391,8 +416,20 @@ if (workspaceImports.size > 0) {
   for (const [mod, names] of [...workspaceImports.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
     wsCount++;
     const sortedNames = [...names].sort();
-    const exportLines = sortedNames
-      .map(n => `  export type ${n} = any;`);
+    const exportLines = [];
+    for (const n of sortedNames) {
+      // `default` is a reserved word and cannot appear in `export type
+      // default = any;`. When a file imports the default export of a
+      // private module (e.g. `import { default as Foo } from '@superdoc/common/components/Foo.vue'`),
+      // the named-imports collector picks up `default` as a name; emit
+      // a proper `export default` declaration instead.
+      if (n === 'default') {
+        exportLines.push('  const _default: any;');
+        exportLines.push('  export default _default;');
+      } else {
+        exportLines.push(`  export type ${n} = any;`);
+      }
+    }
     if (exportLines.length > 0) {
       shimLines.push(`declare module '${mod}' {\n${exportLines.join('\n')}\n}`);
     } else {

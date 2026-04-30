@@ -143,6 +143,14 @@ export const determineColumn = (layout: Layout, fragmentX: number): number => {
   return Math.max(0, Math.min(columns.count - 1, raw));
 };
 
+const determineTableColumn = (layout: Layout, fragment: TableFragment): number => {
+  if (typeof fragment.columnIndex === 'number') {
+    const count = layout.columns?.count ?? 1;
+    return Math.max(0, Math.min(Math.max(0, count - 1), fragment.columnIndex));
+  }
+  return determineColumn(layout, fragment.x);
+};
+
 // ---------------------------------------------------------------------------
 // Line / position helpers
 // ---------------------------------------------------------------------------
@@ -935,7 +943,7 @@ export function clickToPositionGeometry(
           layoutEpoch,
           blockId: tableHit.fragment.blockId,
           pageIndex,
-          column: determineColumn(layout, tableHit.fragment.x),
+          column: determineTableColumn(layout, tableHit.fragment),
           lineIndex,
         };
       }
@@ -949,7 +957,7 @@ export function clickToPositionGeometry(
         layoutEpoch,
         blockId: tableHit.fragment.blockId,
         pageIndex,
-        column: determineColumn(layout, tableHit.fragment.x),
+        column: determineTableColumn(layout, tableHit.fragment),
         lineIndex: 0,
       };
     }

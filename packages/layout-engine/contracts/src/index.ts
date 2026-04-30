@@ -5,7 +5,12 @@ export { computeTabStops, layoutWithTabs, calculateTabWidth } from './engines/ta
 export type { TabStop };
 
 // Export table contracts
-export { OOXML_PCT_DIVISOR, type TableWidthAttr, type TableColumnSpec } from './engines/tables.js';
+export {
+  OOXML_PCT_DIVISOR,
+  resolveTableWidthAttr,
+  type TableWidthAttr,
+  type TableColumnSpec,
+} from './engines/tables.js';
 
 export { effectiveTableCellSpacing } from './table-cell-spacing.js';
 
@@ -1887,6 +1892,8 @@ export type PartialRowInfo = {
 export type TableFragment = {
   kind: 'table';
   blockId: BlockId;
+  /** Flow column that owns this fragment, distinct from visual x when overflow crosses margins. */
+  columnIndex?: number;
   fromRow: number;
   toRow: number;
   x: number;

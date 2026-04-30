@@ -324,7 +324,7 @@ export const makeDefaultItems = ({
 
   const renderSearchDropdown = () => {
     const handleSubmit = ({ value }) => {
-      superToolbar.activeEditor.commands.search(value);
+      superToolbar.activeEditor.commands.search(value, { searchModel: 'visible' });
     };
 
     return h('div', {}, [

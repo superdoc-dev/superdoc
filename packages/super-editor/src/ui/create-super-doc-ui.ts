@@ -21,6 +21,9 @@ import type {
   CommandHandle,
   CommandsHandle,
   CommentsHandle,
+  DocumentExportInput,
+  DocumentHandle,
+  DocumentSlice,
   DynamicCommandHandle,
   EqualityFn,
   ReviewHandle,
@@ -454,6 +457,14 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
   let selectionMemo: { key: string; slice: SelectionSlice } | null = null;
 
   /**
+   * Memoized document slice. Object identity stable while `ready`
+   * and `mode` are unchanged so `shallowEqual` on `state.document`
+   * short-circuits subscribers (typing-only transactions don't move
+   * either field, but they do trigger computeState rebuilds).
+   */
+  let documentMemo: { slice: DocumentSlice } | null = null;
+
+  /**
    * Stable string key over a SelectionInfo for slice memoization. Two
    * infos producing the same key represent the same observable
    * selection state, so the slice can be reused.
@@ -637,9 +648,21 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
       }
     }
 
+    // Memoize the document slice. Reference stays stable while
+    // (ready, mode) are unchanged so `shallowEqual` on `state.document`
+    // short-circuits ui.document.subscribe per transaction.
+    let documentSlice: DocumentSlice;
+    if (documentMemo && documentMemo.slice.ready === ready && documentMemo.slice.mode === documentMode) {
+      documentSlice = documentMemo.slice;
+    } else {
+      documentSlice = { ready, mode: documentMode };
+      documentMemo = { slice: documentSlice };
+    }
+
     const partial: SuperDocUIState = {
       ready,
       documentMode,
+      document: documentSlice,
       selection: selectionSlice,
       toolbar: { context: toolbarSnapshot.context, commands: builtInCommands } as ToolbarSnapshotSlice,
       comments: {
@@ -1488,6 +1511,52 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     },
   };
 
+  // ---- ui.document -------------------------------------------------------
+  //
+  // Session-level surface (Export DOCX, document-mode toggle, ready
+  // state). Sugar over `state.document` plus passthroughs to the host
+  // SuperDoc instance's setDocumentMode / export. Lifts the operations
+  // that previously forced consumers to wire a separate "host" hook
+  // through their React context (the SuperDocHost interface that
+  // SD-2813's React provider exposes today; that becomes a thin
+  // backwards-compat shim once consumers migrate to ui.document).
+  const document: DocumentHandle = {
+    getSnapshot: () => computeState().document,
+    subscribe(listener) {
+      return select((state) => state.document, shallowEqual).subscribe((snapshot) => {
+        try {
+          listener({ snapshot });
+        } catch {
+          // see scheduleNotify
+        }
+      });
+    },
+    setMode(mode) {
+      // Routes through the host setter; ignored when the stub omits
+      // it (test stubs / SSR). The host emits 'document-mode-change'
+      // which is already in SUPERDOC_EVENTS, so the next snapshot
+      // reflects the new mode without explicit notify here.
+      const setter = superdoc.setDocumentMode;
+      if (typeof setter !== 'function') return;
+      try {
+        setter.call(superdoc, mode);
+      } catch (err) {
+        console.error('[superdoc/ui] ui.document.setMode failed:', err);
+      }
+    },
+    async export(options?: DocumentExportInput): Promise<unknown> {
+      const exportFn = superdoc.export;
+      if (typeof exportFn !== 'function') {
+        // Surface a clear error rather than a silent no-op: a
+        // consumer that wired up an Export button has every right
+        // to know the host doesn't implement export. Same posture
+        // as the requireDocComments helper used by ui.comments.
+        throw new Error('ui.document.export: host SuperDoc instance does not implement export().');
+      }
+      return exportFn.call(superdoc, options);
+    },
+  };
+
   const destroy = () => {
     if (destroyed) return;
     destroyed = true;
@@ -1505,5 +1574,5 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     teardown.length = 0;
   };
 
-  return { select, toolbar, commands, comments, review, selection, viewport, destroy };
+  return { select, toolbar, commands, comments, review, selection, viewport, document, destroy };
 }

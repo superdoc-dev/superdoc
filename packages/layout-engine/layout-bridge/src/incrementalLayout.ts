@@ -9,7 +9,7 @@ import type {
   SectionBreakBlock,
   NormalizedColumnLayout,
 } from '@superdoc/contracts';
-import { cloneColumnLayout, normalizeColumnLayout } from '@superdoc/contracts';
+import { cloneColumnLayout, normalizeColumnLayout, rescaleColumnWidths } from '@superdoc/contracts';
 import {
   layoutDocument,
   layoutHeaderFooter,
@@ -20,6 +20,7 @@ import {
   type NumberingContext,
   SEMANTIC_PAGE_HEIGHT_PX,
   SINGLE_COLUMN_DEFAULT,
+  resolveTableFrame,
 } from '@superdoc/layout-engine';
 import { remeasureParagraph } from './remeasure';
 import { computeDirtyRegions } from './diff';
@@ -228,7 +229,9 @@ const assignFootnotesToColumns = (
 
     if (columns && columns.count > 1 && page) {
       const fragment = findFragmentForPos(page, ref.pos);
-      if (fragment && typeof fragment.x === 'number') {
+      if (fragment?.kind === 'table' && typeof fragment.columnIndex === 'number') {
+        columnIndex = Math.max(0, Math.min(columns.count - 1, fragment.columnIndex));
+      } else if (fragment && typeof fragment.x === 'number') {
         const widths = Array.isArray(columns.widths) && columns.widths.length > 0 ? columns.widths : undefined;
         if (widths) {
           let cursorX = columns.left;
@@ -1728,46 +1731,27 @@ export async function incrementalLayout(
                   const block = blockById.get(range.blockId);
                   if (!measure || measure.kind !== 'table') return;
                   if (!block || block.kind !== 'table') return;
-                  const tableWidthRaw = Math.max(0, measure.totalWidth ?? 0);
-                  let tableWidth = Math.min(contentWidth, tableWidthRaw);
-                  let tableX = columnX;
-                  const justification =
-                    typeof block.attrs?.justification === 'string' ? block.attrs.justification : undefined;
-                  if (justification === 'center') {
-                    tableX = columnX + Math.max(0, (contentWidth - tableWidth) / 2);
-                  } else if (justification === 'right' || justification === 'end') {
-                    tableX = columnX + Math.max(0, contentWidth - tableWidth);
-                  } else {
-                    const indentValue = (block.attrs?.tableIndent as { width?: unknown } | undefined)?.width;
-                    const indent = typeof indentValue === 'number' && Number.isFinite(indentValue) ? indentValue : 0;
-                    tableX += indent;
-                    tableWidth = Math.max(0, tableWidth - indent);
-                  }
-                  // Rescale column widths when table was clamped to section width.
-                  // This happens in mixed-orientation docs where measurement uses the
-                  // widest section but rendering is per-section (SD-1859).
-                  let fragmentColumnWidths: number[] | undefined;
-                  if (
-                    tableWidthRaw > tableWidth &&
-                    measure.columnWidths &&
-                    measure.columnWidths.length > 0 &&
-                    tableWidthRaw > 0
-                  ) {
-                    const scale = tableWidth / tableWidthRaw;
-                    fragmentColumnWidths = measure.columnWidths.map((w: number) => Math.max(1, Math.round(w * scale)));
-                    const scaledSum = fragmentColumnWidths.reduce((a: number, b: number) => a + b, 0);
-                    const target = Math.round(tableWidth);
-                    if (scaledSum !== target && fragmentColumnWidths.length > 0) {
-                      fragmentColumnWidths[fragmentColumnWidths.length - 1] = Math.max(
-                        1,
-                        fragmentColumnWidths[fragmentColumnWidths.length - 1] + (target - scaledSum),
-                      );
-                    }
-                  }
+                  const tableWidthRaw = Math.max(0, measure.totalWidth ?? contentWidth);
+                  const { x: tableX, width: tableWidth } = resolveTableFrame(
+                    columnX,
+                    contentWidth,
+                    tableWidthRaw,
+                    block.attrs,
+                  );
+                  // Rescale column widths only when the resolved fragment width is narrower
+                  // than the measured table width. Today that primarily happens for
+                  // percentage-width tables rendered in a narrower section (SD-1859),
+                  // while non-percent wide tables keep their measured overflow width.
+                  const fragmentColumnWidths = rescaleColumnWidths(
+                    measure.columnWidths,
+                    measure.totalWidth,
+                    tableWidth,
+                  );
 
                   page.fragments.push({
                     kind: 'table',
                     blockId: range.blockId,
+                    columnIndex,
                     fromRow: 0,
                     toRow: block.rows.length,
                     x: tableX,

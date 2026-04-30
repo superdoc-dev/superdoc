@@ -105,6 +105,7 @@ export function executeTextSelector(
     highlight: false,
     caseSensitive: selector.caseSensitive ?? false,
     maxMatches: Infinity,
+    searchModel: 'visible',
   });
 
   if (!Array.isArray(rawResult)) {

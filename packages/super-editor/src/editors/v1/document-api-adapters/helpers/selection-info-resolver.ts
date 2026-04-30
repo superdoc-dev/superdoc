@@ -1,6 +1,7 @@
 import type { Node as ProseMirrorNode } from 'prosemirror-model';
 import type { SelectionCurrentInput, SelectionInfo, TextTarget, TextSegment } from '@superdoc/document-api';
 import type { Editor } from '../../core/Editor.js';
+import { NodeSelection } from 'prosemirror-state';
 import { pmPositionToTextOffset } from './text-offset-resolver.js';
 import { groupTrackedChanges } from './tracked-change-resolver.js';
 import { resolveCommentIdFromAttrs } from './value-utils.js';
@@ -42,7 +43,7 @@ export function resolveCurrentSelectionInfo(editor: Editor, input: SelectionCurr
   // `collectTextSegments` returns null when any selected block lacks a
   // stable id — in that case the caller should treat the selection as
   // unaddressable rather than receive a partial TextTarget.
-  const segments = collectTextSegments(state.doc, from, to);
+  const segments = shouldProjectTextTarget(sel) ? collectTextSegments(state.doc, from, to) : null;
   const target: TextTarget | null = segments && segments.length > 0 ? buildTextTarget(segments) : null;
 
   const activeMarks = collectActiveMarks(state, from, to);
@@ -78,6 +79,13 @@ function buildTextTarget(segments: TextSegment[]): TextTarget {
     kind: 'text',
     segments: segments as [TextSegment, ...TextSegment[]],
   };
+}
+
+function shouldProjectTextTarget(selection: unknown): boolean {
+  if (!selection || typeof selection !== 'object') return false;
+  if (selection instanceof NodeSelection) return false;
+  if ('$anchorCell' in selection) return false;
+  return true;
 }
 
 /**

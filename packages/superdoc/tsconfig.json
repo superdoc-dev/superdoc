@@ -22,5 +22,12 @@
       "@shared/*": ["shared/*"]
     }
   },
-  "include": ["src", "../super-editor/src", "../document-api/src"]
+  "include": [
+    "src",
+    "../super-editor/src",
+    "../document-api/src",
+    "../layout-engine/contracts/src",
+    "../layout-engine/layout-bridge/src",
+    "../layout-engine/painters/dom/src"
+  ]
 }

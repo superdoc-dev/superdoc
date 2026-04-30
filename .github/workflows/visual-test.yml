@@ -16,7 +16,6 @@ on:
       - 'tests/visual/**'
       - 'shared/**'
       - '!**/*.md'
-  merge_group:
   workflow_dispatch:
 
 concurrency:

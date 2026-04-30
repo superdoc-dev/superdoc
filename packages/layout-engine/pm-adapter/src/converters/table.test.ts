@@ -179,6 +179,110 @@ describe('table converter', () => {
       expect(result.rows[0].cells[0].paragraph.kind).toBe('paragraph');
     });
 
+    it('does not emit imported gridBefore/gridAfter placeholder cells into TableBlock rows', () => {
+      const node: PMNode = {
+        type: 'table',
+        attrs: {
+          tableLayout: 'fixed',
+          tableProperties: {
+            tableLayout: 'fixed',
+            tableWidth: { value: 11384, type: 'dxa' },
+          },
+          grid: [{ col: 8 }, { col: 3974 }, { col: 2844 }, { col: 4558 }],
+        },
+        content: [
+          {
+            type: 'tableRow',
+            attrs: {
+              tableRowProperties: {
+                gridBefore: 1,
+                wBefore: { value: 8, type: 'dxa' },
+              },
+            },
+            content: [
+              {
+                type: 'tableCell',
+                attrs: {
+                  __placeholder: 'gridBefore',
+                  colspan: 1,
+                  colwidth: [0.533],
+                },
+                content: [{ type: 'paragraph', content: [] }],
+              },
+              {
+                type: 'tableCell',
+                attrs: {
+                  colspan: 3,
+                  colwidth: [264.933, 189.6, 303.867],
+                  tableCellProperties: {
+                    cellWidth: { value: 11376, type: 'dxa' },
+                    gridSpan: 3,
+                  },
+                },
+                content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Client Information' }] }],
+              },
+            ],
+          },
+          {
+            type: 'tableRow',
+            attrs: {
+              tableRowProperties: {
+                gridAfter: 1,
+                wAfter: { value: 4558, type: 'dxa' },
+              },
+            },
+            content: [
+              {
+                type: 'tableCell',
+                attrs: {
+                  colspan: 2,
+                  colwidth: [0.533, 264.933],
+                },
+                content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Contract ACC' }] }],
+              },
+              {
+                type: 'tableCell',
+                attrs: {
+                  __placeholder: 'gridAfter',
+                  colspan: 1,
+                  colwidth: [303.867],
+                },
+                content: [{ type: 'paragraph', content: [] }],
+              },
+            ],
+          },
+        ],
+      };
+
+      const result = tableNodeToBlock(
+        node,
+        mockBlockIdGenerator,
+        mockPositionMap,
+        'Arial',
+        16,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        mockParagraphConverter,
+      ) as TableBlock;
+
+      expect(result.rows[0].attrs?.tableRowProperties).toMatchObject({
+        gridBefore: 1,
+        wBefore: { value: 8, type: 'dxa' },
+      });
+      expect(result.rows[0].cells).toHaveLength(1);
+      expect(result.rows[0].cells[0].blocks[0].kind).toBe('paragraph');
+      expect((result.rows[0].cells[0].blocks[0] as ParagraphBlock).runs[0].text).toBe('Client Information');
+
+      expect(result.rows[1].attrs?.tableRowProperties).toMatchObject({
+        gridAfter: 1,
+        wAfter: { value: 4558, type: 'dxa' },
+      });
+      expect(result.rows[1].cells).toHaveLength(1);
+      expect((result.rows[1].cells[0].blocks[0] as ParagraphBlock).runs[0].text).toBe('Contract ACC');
+    });
+
     it('converts table with multiple rows and cells', () => {
       const node: PMNode = {
         type: 'table',
@@ -1199,6 +1303,128 @@ describe('table converter', () => {
       expect(result.attrs?.tableIndent).toEqual(tableIndent);
     });
 
+    it('fills missing layout attrs from hydrated table style properties', () => {
+      const converterContext: ConverterContext = {
+        translatedNumbering: {},
+        translatedLinkedStyles: {
+          docDefaults: {},
+          latentStyles: {},
+          styles: {
+            TableGrid: {
+              type: 'table',
+              tableProperties: {
+                tableCellSpacing: { value: 24, type: 'dxa' },
+                tableIndent: { value: 720, type: 'dxa' },
+                tableLayout: 'autofit',
+                tableWidth: { value: 2500, type: 'pct' },
+                cellMargins: { marginLeft: { value: 108, type: 'dxa' } },
+              },
+            },
+          },
+        },
+      } as ConverterContext;
+
+      const node: PMNode = {
+        type: 'table',
+        attrs: {
+          tableStyleId: 'TableGrid',
+        },
+        content: [
+          {
+            type: 'tableRow',
+            content: [
+              {
+                type: 'tableCell',
+                content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Styled cell' }] }],
+              },
+            ],
+          },
+        ],
+      };
+
+      const result = tableNodeToBlock(
+        node,
+        mockBlockIdGenerator,
+        mockPositionMap,
+        'Arial',
+        16,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        mockParagraphConverter,
+        converterContext,
+      ) as TableBlock;
+
+      expect(result.attrs?.cellSpacing).toEqual({ value: 24, type: 'dxa' });
+      expect(result.attrs?.tableIndent).toEqual({ width: 48, type: 'dxa' });
+      expect(result.attrs?.tableLayout).toBe('autofit');
+      expect(result.attrs?.tableWidth).toEqual({ width: 2500, type: 'pct' });
+      expect(result.attrs?.defaultCellPadding?.left).toBeCloseTo(twipsToPx(108));
+    });
+
+    it('keeps inline layout attrs ahead of hydrated fallbacks', () => {
+      const converterContext: ConverterContext = {
+        translatedNumbering: {},
+        translatedLinkedStyles: {
+          docDefaults: {},
+          latentStyles: {},
+          styles: {
+            TableGrid: {
+              type: 'table',
+              tableProperties: {
+                tableCellSpacing: { value: 24, type: 'dxa' },
+                tableIndent: { value: 720, type: 'dxa' },
+                tableLayout: 'autofit',
+                tableWidth: { value: 5000, type: 'pct' },
+              },
+            },
+          },
+        },
+      } as ConverterContext;
+
+      const node: PMNode = {
+        type: 'table',
+        attrs: {
+          tableStyleId: 'TableGrid',
+          tableCellSpacing: { value: 10, type: 'dxa' },
+          tableIndent: { width: 96, type: 'dxa' },
+          tableLayout: 'fixed',
+          tableWidth: { width: 320, type: 'px' },
+        },
+        content: [
+          {
+            type: 'tableRow',
+            content: [
+              {
+                type: 'tableCell',
+                content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Inline cell' }] }],
+              },
+            ],
+          },
+        ],
+      };
+
+      const result = tableNodeToBlock(
+        node,
+        mockBlockIdGenerator,
+        mockPositionMap,
+        'Arial',
+        16,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        mockParagraphConverter,
+        converterContext,
+      ) as TableBlock;
+
+      expect(result.attrs?.cellSpacing).toEqual({ value: 10, type: 'dxa' });
+      expect(result.attrs?.tableIndent).toEqual({ width: 96, type: 'dxa' });
+      expect(result.attrs?.tableLayout).toBe('fixed');
+      expect(result.attrs?.tableWidth).toEqual({ width: 320, type: 'px' });
+    });
+
     it('converts column widths from twips to pixels', () => {
       const node: PMNode = {
         type: 'table',
@@ -1677,6 +1903,62 @@ describe('table converter', () => {
       const tableBlock = result as TableBlock;
       // columnWidths should be undefined (auto-calculate from content)
       expect(tableBlock.columnWidths).toBeUndefined();
+    });
+
+    it('Priority 3: should use only first-row colwidth values when grid is absent', () => {
+      const node: PMNode = {
+        type: 'table',
+        attrs: {},
+        content: [
+          {
+            type: 'tableRow',
+            content: [
+              {
+                type: 'tableCell',
+                attrs: { colwidth: [100] },
+                content: [{ type: 'paragraph', content: [] }],
+              },
+              {
+                type: 'tableCell',
+                attrs: { colwidth: [150] },
+                content: [{ type: 'paragraph', content: [] }],
+              },
+            ],
+          },
+          {
+            type: 'tableRow',
+            content: [
+              {
+                type: 'tableCell',
+                attrs: { colwidth: [999] },
+                content: [{ type: 'paragraph', content: [] }],
+              },
+              {
+                type: 'tableCell',
+                attrs: { colwidth: [888] },
+                content: [{ type: 'paragraph', content: [] }],
+              },
+            ],
+          },
+        ],
+      };
+
+      const result = tableNodeToBlock(
+        node,
+        mockBlockIdGenerator,
+        mockPositionMap,
+        'Arial',
+        12,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        mockParagraphConverter,
+      );
+
+      expect(result).not.toBeNull();
+      const tableBlock = result as TableBlock;
+      expect(tableBlock.columnWidths).toEqual([100, 150]);
     });
 
     it('should handle colspan cells with colwidth arrays', () => {

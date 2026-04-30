@@ -23,6 +23,7 @@ import { compoundMutation } from '../../core/parts/mutation/compound-mutation.js
 import { removePart, hasPart } from '../../core/parts/store/part-store.js';
 import { removeInvalidationHandler } from '../../core/parts/invalidation/part-invalidation-registry.js';
 import type { PartId } from '../../core/parts/types.js';
+export { normalizeVariant } from '../../core/presentation-editor/header-footer/header-footer-variant.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -49,29 +50,6 @@ export type EnsureExplicitHeaderFooterSlotResult = {
   /** Whether a new slot was actually created (false means it already existed). */
   created: boolean;
 };
-
-// ---------------------------------------------------------------------------
-// Variant normalization
-// ---------------------------------------------------------------------------
-
-const VALID_VARIANTS: ReadonlySet<string> = new Set(['default', 'first', 'even']);
-
-/**
- * Normalize a section type from the UI to a valid OOXML variant.
- *
- * In Word's OOXML model, odd-page headers are represented by the `default`
- * slot — there is no explicit `w:headerReference` with `w:type="odd"`.
- *
- * This is the caller's responsibility — the materialization helper rejects
- * unrecognized variants rather than silently mapping them.
- */
-export function normalizeVariant(sectionType: string): SectionHeaderFooterVariant {
-  if (sectionType === 'odd') return 'default';
-  if (!VALID_VARIANTS.has(sectionType)) {
-    throw new Error(`Unrecognized header/footer variant: "${sectionType}". Expected default, first, or even.`);
-  }
-  return sectionType as SectionHeaderFooterVariant;
-}
 
 // ---------------------------------------------------------------------------
 // Rollback cleanup

@@ -121,7 +121,18 @@ export default defineConfig(({ mode, command }) => {
       // generates for every unshipped `@superdoc/*` package. Without
       // this, packed consumers see `any` for those public types and
       // the new re-export surface adds no actual checking.
-      include: ['src/**/*', '../super-editor/src/**/*', '../document-api/src/**/*'],
+      include: [
+        'src/**/*',
+        '../super-editor/src/**/*',
+        '../document-api/src/**/*',
+        // SD-2842: relocate workspace packages whose types appear on the
+        // public surface so they emit into superdoc's dist and the
+        // rewrite step in ensure-types can redirect bare specifiers to
+        // local relative paths. Same pattern as @superdoc/document-api.
+        '../layout-engine/contracts/src/**/*',
+        '../layout-engine/layout-bridge/src/**/*',
+        '../layout-engine/painters/dom/src/**/*',
+      ],
       outDir: 'dist',
       // vite-plugin-dts still gathers diagnostics for this mixed JS/Vue source
       // tree, but we do not use this build as the authoritative type-check gate.

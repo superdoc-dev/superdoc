@@ -314,6 +314,99 @@ describe('SuperDoc core', () => {
     expect(instance.scrollToComment('nonexistent-id')).toBe(false);
   });
 
+  it('forwards navigateTo to the first presentation editor', async () => {
+    const { superdocStore } = createAppHarness();
+    const navigateTo = vi.fn(async () => true);
+
+    superdocStore.documents = [
+      {
+        getPresentationEditor: vi.fn(() => ({ navigateTo })),
+      },
+    ];
+
+    const instance = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: {}, toolbar: {} },
+      onException: vi.fn(),
+    });
+    await flushMicrotasks();
+
+    const target = {
+      kind: 'entity',
+      entityType: 'bookmark',
+      name: 'bookmark-1',
+      story: { kind: 'story', storyType: 'body' },
+    };
+
+    await expect(instance.navigateTo(target)).resolves.toBe(true);
+    expect(navigateTo).toHaveBeenCalledWith(target);
+  });
+
+  it('returns false from navigateTo when presentation navigation is unavailable', async () => {
+    const { superdocStore } = createAppHarness();
+    superdocStore.documents = [
+      {
+        getPresentationEditor: vi.fn(() => null),
+      },
+    ];
+
+    const instance = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: {}, toolbar: {} },
+      onException: vi.fn(),
+    });
+    await flushMicrotasks();
+
+    await expect(instance.navigateTo({ kind: 'block', nodeId: 'node-1' })).resolves.toBe(false);
+  });
+
+  it('forwards scrollToElement to the first presentation editor', async () => {
+    const { superdocStore } = createAppHarness();
+    const scrollToElement = vi.fn(async () => true);
+
+    superdocStore.documents = [
+      {
+        getPresentationEditor: vi.fn(() => ({ scrollToElement })),
+      },
+    ];
+
+    const instance = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: {}, toolbar: {} },
+      onException: vi.fn(),
+    });
+    await flushMicrotasks();
+
+    await expect(instance.scrollToElement('element-1')).resolves.toBe(true);
+    expect(scrollToElement).toHaveBeenCalledWith('element-1');
+  });
+
+  it('returns false from scrollToElement when presentation navigation is unavailable', async () => {
+    const { superdocStore } = createAppHarness();
+    superdocStore.documents = [
+      {
+        getPresentationEditor: vi.fn(() => null),
+      },
+    ];
+
+    const instance = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: {}, toolbar: {} },
+      onException: vi.fn(),
+    });
+    await flushMicrotasks();
+
+    await expect(instance.scrollToElement('element-1')).resolves.toBe(false);
+  });
+
   it('warns when both document object and documents list provided', async () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     createAppHarness();
@@ -407,6 +500,30 @@ describe('SuperDoc core', () => {
 
     instance.broadcastEditorCreate(editor);
     expect(readySpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses visible search model in SuperDoc.search()', async () => {
+    createAppHarness();
+
+    const instance = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: {}, toolbar: {} },
+      colors: ['red'],
+      user: { name: 'Jane', email: 'jane@example.com' },
+      onException: vi.fn(),
+    });
+    await flushMicrotasks();
+
+    const searchResult = [{ from: 1, to: 4 }];
+    const searchMock = vi.fn(() => searchResult);
+    instance.activeEditor = { commands: { search: searchMock } };
+
+    const result = instance.search('test');
+
+    expect(searchMock).toHaveBeenCalledWith('test', { searchModel: 'visible' });
+    expect(result).toBe(searchResult);
   });
 
   it('locks superdoc via ydoc metadata and emits event', async () => {

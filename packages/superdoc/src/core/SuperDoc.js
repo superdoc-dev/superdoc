@@ -67,6 +67,7 @@ const DEFAULT_AWARENESS_PALETTE = Object.freeze([
 /** @typedef {import('./types').UpgradeToCollaborationOptions} UpgradeToCollaborationOptions */
 /** @typedef {import('./types').SurfaceRequest} SurfaceRequest */
 /** @typedef {import('./types').SurfaceHandle} SurfaceHandle */
+/** @typedef {import('./types').NavigableAddress} NavigableAddress */
 
 /**
  * SuperDoc class
@@ -1194,6 +1195,23 @@ export class SuperDoc extends EventEmitter {
   }
 
   /**
+   * Navigate to a block, bookmark, comment, or tracked change target.
+   *
+   * Story-aware navigation is currently supported for bookmark and tracked
+   * change targets. Block and comment targets are body-only.
+   *
+   * @param {NavigableAddress} target
+   * @returns {Promise<boolean>} Whether the target was found and navigated to.
+   */
+  async navigateTo(target) {
+    const storeDocs = this.superdocStore?.documents;
+    if (!storeDocs?.length) return false;
+    const presentationEditor = storeDocs[0].getPresentationEditor?.();
+    if (!presentationEditor?.navigateTo) return false;
+    return presentationEditor.navigateTo(target);
+  }
+
+  /**
    * Scroll to any document element by its ID.
    *
    * Pass any element ID — paragraph nodeId, comment entityId, or tracked
@@ -1410,7 +1428,7 @@ export class SuperDoc extends EventEmitter {
    * @returns {Object[]} The search results
    */
   search(text) {
-    return this.activeEditor?.commands.search(text);
+    return this.activeEditor?.commands.search(text, { searchModel: 'visible' });
   }
 
   /**

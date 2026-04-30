@@ -24,10 +24,18 @@ export type {
   SelectionCurrentInput,
   ScrollIntoViewInput,
   ScrollIntoViewOutput,
+  StoryLocator,
   TextAddress,
   TextTarget,
   TextSegment,
   EntityAddress,
+  BlockNavigationAddress,
+  CommentAddress,
+  TrackedChangeAddress,
+  NavigableAddress,
+  BlocksListResult,
+  BookmarkInfo,
+  BookmarkAddress,
 } from '@superdoc/document-api';
 
 // Selection handle types

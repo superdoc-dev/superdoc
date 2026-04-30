@@ -231,6 +231,7 @@ const SHARED_DEFS: Record<string, JsonSchema> = {
     {
       kind: { const: 'text' },
       segments: { type: 'array', items: ref('TextSegment'), minItems: 1 },
+      story: ref('StoryLocator'),
     },
     ['kind', 'segments'],
   ),
@@ -2520,10 +2521,12 @@ function buildContentControlSchemas(): Record<ContentControlOperationId, Operati
 // ---------------------------------------------------------------------------
 
 // --- Shared patterns ---
-const refListQuerySchema = objectSchema({
+const refListQueryProperties = {
   limit: { type: 'integer', minimum: 1 },
   offset: { type: 'integer', minimum: 0 },
-});
+} satisfies Record<string, JsonSchema>;
+
+const refListQuerySchema = objectSchema(refListQueryProperties);
 
 const discoveryOutputSchema: JsonSchema = { type: 'object' };
 
@@ -2567,7 +2570,12 @@ function refConfigSchemas(): { output: JsonSchema; success: JsonSchema; failure:
 
 // --- Bookmark schemas ---
 const bookmarkAddressSchema: JsonSchema = objectSchema(
-  { kind: { const: 'entity' }, entityType: { const: 'bookmark' }, name: { type: 'string' } },
+  {
+    kind: { const: 'entity' },
+    entityType: { const: 'bookmark' },
+    name: { type: 'string' },
+    story: ref('StoryLocator'),
+  },
   ['kind', 'entityType', 'name'],
 );
 
@@ -6993,7 +7001,10 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
   // Bookmarks
   // -------------------------------------------------------------------------
   'bookmarks.list': {
-    input: refListQuerySchema,
+    input: objectSchema({
+      ...refListQueryProperties,
+      in: storyLocatorSchema,
+    }),
     output: discoveryOutputSchema,
   },
   'bookmarks.get': {

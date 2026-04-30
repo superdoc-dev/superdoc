@@ -320,8 +320,11 @@ function testPresentationEditorCommands(pe: PresentationEditor) {
   // Track changes
   pe.commands.enableTrackChanges();
   pe.commands.disableTrackChanges();
-  pe.commands.acceptTrackedChange();
-  pe.commands.rejectTrackedChange();
+  // Selection-based variants need no arguments. The `acceptTrackedChange`
+  // and `rejectTrackedChange` commands take an explicit TrackedChangeOptions
+  // payload; consumer code typically reaches for the selection variants here.
+  pe.commands.acceptTrackedChangeBySelection();
+  pe.commands.rejectTrackedChangeOnSelection();
 }
 
 // ============================================
@@ -439,6 +442,7 @@ function testPresentationEditorMethods(pe: PresentationEditor) {
   pe.scrollToElement('paraId-ABC123');
   pe.navigateTo({ kind: 'block', nodeId: 'paraId-ABC123' });
   pe.navigateTo({ kind: 'block', nodeId: 'paraId-ABC123', nodeType: 'paragraph' });
+  pe.navigateTo({ kind: 'entity', entityType: 'bookmark', name: 'bookmark-1' });
   pe.navigateTo({ kind: 'entity', entityType: 'comment', entityId: 'comment-1' });
   pe.navigateTo({ kind: 'entity', entityType: 'trackedChange', entityId: 'tc-1' });
 

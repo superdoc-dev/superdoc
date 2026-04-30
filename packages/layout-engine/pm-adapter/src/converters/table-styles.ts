@@ -10,6 +10,8 @@ export type TableStyleHydration = {
   borders?: Record<string, unknown>;
   cellPadding?: BoxSpacing;
   justification?: string;
+  tableIndent?: { width?: number; type?: string };
+  tableLayout?: string;
   tableWidth?: { width?: number; type?: string };
   tableCellSpacing?: { value?: number; type?: string };
 };
@@ -48,9 +50,25 @@ export const hydrateTableStyleAttrs = (
       hydration.justification = tableProps.justification;
     }
 
+    // Inline tableIndent is already importer-normalized to { width, type } in some paths,
+    // while style-engine properties still arrive as raw OOXML-ish { value, type }.
+    const tableIndent = normalizeTableIndent(tableProps.tableIndent);
+    if (tableIndent) {
+      hydration.tableIndent = tableIndent;
+    }
+
+    if (typeof tableProps.tableLayout === 'string') {
+      hydration.tableLayout = tableProps.tableLayout;
+    }
+
     const tableWidth = normalizeTableWidth(tableProps.tableWidth);
     if (tableWidth) {
       hydration.tableWidth = tableWidth;
+    }
+
+    const tableCellSpacing = normalizeTableSpacing(tableProps.tableCellSpacing);
+    if (tableCellSpacing) {
+      hydration.tableCellSpacing = tableCellSpacing;
     }
   }
 
@@ -93,8 +111,16 @@ export const hydrateTableStyleAttrs = (
     if (!hydration.justification && resolved.justification) {
       hydration.justification = resolved.justification;
     }
-    if (resolved.tableCellSpacing) {
-      hydration.tableCellSpacing = resolved.tableCellSpacing as { value?: number; type?: string };
+    if (!hydration.tableIndent && resolved.tableIndent) {
+      const tableIndent = normalizeTableIndent(resolved.tableIndent);
+      if (tableIndent) hydration.tableIndent = tableIndent;
+    }
+    if (!hydration.tableLayout && resolved.tableLayout) {
+      hydration.tableLayout = resolved.tableLayout;
+    }
+    if (!hydration.tableCellSpacing && resolved.tableCellSpacing) {
+      const tableCellSpacing = normalizeTableSpacing(resolved.tableCellSpacing);
+      if (tableCellSpacing) hydration.tableCellSpacing = tableCellSpacing;
     }
     if (!hydration.tableWidth && resolved.tableWidth) {
       const tableWidth = normalizeTableWidth(resolved.tableWidth);
@@ -178,4 +204,28 @@ const normalizeTableWidth = (value: unknown): { width?: number; type?: string } 
     return { width: twipsToPx(raw), type: 'px' };
   }
   return { width: raw, type: measurement.type };
+};
+
+const normalizeTableIndent = (value: unknown): { width?: number; type?: string } | undefined => {
+  if (!value || typeof value !== 'object') return undefined;
+  const measurement = value as { value?: number; width?: number; type?: string };
+  const raw = typeof measurement.width === 'number' ? measurement.width : measurement.value;
+  if (typeof raw !== 'number') return undefined;
+  if (!measurement.type || measurement.type === 'px' || measurement.type === 'pixel') {
+    return { width: raw, type: measurement.type ?? 'px' };
+  }
+  if (measurement.type === 'dxa') {
+    return { width: twipsToPx(raw), type: 'dxa' };
+  }
+  return { width: raw, type: measurement.type };
+};
+
+const normalizeTableSpacing = (value: unknown): { value?: number; type?: string } | undefined => {
+  if (!value || typeof value !== 'object') return undefined;
+  const measurement = value as { value?: number; type?: string };
+  if (typeof measurement.value !== 'number') return undefined;
+  return {
+    value: measurement.value,
+    type: measurement.type ?? 'px',
+  };
 };

@@ -158,6 +158,11 @@ const isTableCellNode = (node: PMNode): boolean =>
   node.type === 'tableHeader' ||
   node.type === 'table_header';
 
+const isTableSkipPlaceholderCell = (node: PMNode): boolean => {
+  const placeholder = node.attrs?.__placeholder;
+  return placeholder === 'gridBefore' || placeholder === 'gridAfter';
+};
+
 const convertResolvedCellBorder = (value: unknown): BorderSpec | undefined => {
   if (!value || typeof value !== 'object') return undefined;
 
@@ -638,6 +643,10 @@ const parseTableRow = (args: ParseTableRowArgs): TableRow | null => {
     | Record<string, unknown>
     | undefined;
   rowNode.content.forEach((cellNode, cellIndex) => {
+    if (isTableCellNode(cellNode) && isTableSkipPlaceholderCell(cellNode)) {
+      return;
+    }
+
     const parsedCell = parseTableCell({
       cellNode,
       rowIndex,
@@ -943,16 +952,19 @@ export function tableNodeToBlock(
 
   if (node.attrs?.tableIndent && typeof node.attrs.tableIndent === 'object') {
     tableAttrs.tableIndent = { ...node.attrs.tableIndent };
+  } else if (hydratedTableStyle?.tableIndent) {
+    tableAttrs.tableIndent = { ...hydratedTableStyle.tableIndent };
   }
 
   if (defaultCellPadding && typeof defaultCellPadding === 'object') {
     tableAttrs.defaultCellPadding = { ...defaultCellPadding };
   }
 
-  // Pass tableLayout through (extracted by tblLayout-translator.js)
   const tableLayout = node.attrs?.tableLayout;
   if (tableLayout) {
     tableAttrs.tableLayout = tableLayout;
+  } else if (hydratedTableStyle?.tableLayout) {
+    tableAttrs.tableLayout = hydratedTableStyle.tableLayout;
   }
 
   // Preserve tableProperties for floating table detection and other OOXML metadata

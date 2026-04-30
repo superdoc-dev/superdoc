@@ -6146,17 +6146,16 @@ export class DomPainter {
 
     // Check if any segments have explicit X positioning (from tab stops)
     const hasExplicitPositioning = line.segments?.some((seg) => seg.x !== undefined);
-    const lineContainsTabRun = runsForLine.some((run) => run.kind === 'tab');
-    const manualTabWithoutSegments = lineContainsTabRun && !hasExplicitPositioning;
     const availableWidth = availableWidthOverride ?? line.maxWidth ?? line.width;
 
     const justifyShouldApply = shouldApplyJustify({
       alignment: (block as ParagraphBlock).attrs?.alignment,
       hasExplicitPositioning: hasExplicitPositioning ?? false,
+      hasExplicitTabStops: line.hasExplicitTabStops === true,
       // Caller already folds last-line + trailing lineBreak behavior into skipJustify.
       isLastLineOfParagraph: false,
       paragraphEndsWithLineBreak: false,
-      skipJustifyOverride: skipJustify || manualTabWithoutSegments,
+      skipJustifyOverride: skipJustify,
     });
 
     const countSpaces = (text: string): number => {

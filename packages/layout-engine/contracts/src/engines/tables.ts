@@ -36,6 +36,29 @@ export interface TableWidthAttr {
   type?: 'pct' | 'px' | 'pixel' | string;
 }
 
+/**
+ * Extract a validated numeric width from a table width attribute object.
+ *
+ * Supports either `width` or `value` fields and rejects non-finite or non-positive
+ * values so callers can safely use the result in layout calculations.
+ */
+export function resolveTableWidthAttr(value: unknown): { width: number; type?: TableWidthAttr['type'] } | null {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+
+  const measurement = value as TableWidthAttr;
+  const width = measurement.width ?? measurement.value;
+  if (typeof width !== 'number' || !Number.isFinite(width) || width <= 0) {
+    return null;
+  }
+
+  return {
+    width,
+    type: measurement.type,
+  };
+}
+
 export interface TableColumnSpec {
   type: 'auto' | 'fixed' | 'pct';
   width?: number; // pt or percentage (0-100)

@@ -73,12 +73,17 @@ jobs:
       - name: Typecheck
         run: pnpm run type-check
 
-      - name: Consumer typecheck
+      - name: Consumer typecheck (matrix)
+        # The matrix script owns the published-package validation path:
+        # it packs superdoc, installs the tarball into the standalone
+        # fixture (`pnpm install --ignore-workspace`), then runs every
+        # scenario under its declared resolution mode and strictness
+        # settings. Replaces the pre-SD-2831 bare `tsc --noEmit` step
+        # so the new pack-and-install scenarios are actually exercised
+        # in CI, not just locally.
         run: |
-          cd packages/superdoc && pnpm pack --pack-destination .
-          cd ../../tests/consumer-typecheck
-          npm install ../../packages/superdoc/superdoc-*.tgz --no-save
-          npx tsc --noEmit
+          cd tests/consumer-typecheck
+          node typecheck-matrix.mjs
 
   unit-tests:
     needs: build

@@ -8,16 +8,60 @@
  *   - strict: true and false
  *   - Import paths: "superdoc", "superdoc/super-editor"
  *   - Node.js headless usage (Buffer return types)
+ *   - Guarded public types must not collapse to `any` (SD-2831)
+ *
+ * The fixture installs superdoc from the packed tarball at
+ * ../../packages/superdoc/superdoc.tgz, so the matrix tests the
+ * customer-visible surface, not the source repo.
  *
  * Run: npm run typecheck:matrix
+ *
+ * By default, the matrix re-packs superdoc and reinstalls the fixture so
+ * results reflect the current source. Pass --skip-pack to use whatever
+ * tarball is already installed (faster local iteration; risky in CI).
  */
 
 import { execSync } from 'child_process';
-import { writeFileSync, mkdirSync } from 'fs';
+import { writeFileSync, existsSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+const repoRoot = join(__dirname, '..', '..');
+
+const skipPack = process.argv.includes('--skip-pack');
+
+if (!skipPack) {
+  console.log('Packing superdoc and reinstalling fixture...');
+  const tarballPath = join(repoRoot, 'packages', 'superdoc', 'superdoc.tgz');
+  try {
+    execSync('pnpm --filter superdoc run pack:es', {
+      cwd: repoRoot,
+      stdio: 'inherit',
+    });
+  } catch (e) {
+    console.error('Failed to pack superdoc. Run with --skip-pack to use the existing tarball.');
+    process.exit(1);
+  }
+  if (!existsSync(tarballPath)) {
+    console.error(`Expected tarball at ${tarballPath} but it is missing.`);
+    process.exit(1);
+  }
+  // The fixture is intentionally outside the pnpm workspace so it exercises
+  // the published tarball's contract, not workspace symlinks. Running plain
+  // `pnpm install` here would walk up to the workspace root; --ignore-workspace
+  // forces a standalone install so node_modules lands inside the fixture.
+  try {
+    execSync('pnpm install --ignore-workspace --no-frozen-lockfile --silent', {
+      cwd: __dirname,
+      stdio: 'inherit',
+    });
+  } catch (e) {
+    console.error('Failed to install fixture from tarball.');
+    process.exit(1);
+  }
+  console.log('Fresh tarball installed.\n');
+}
 
 const scenarios = [
   // Core scenarios — must all pass
@@ -176,6 +220,29 @@ const scenarios = [
     files: ['src/editor-doc-runtime.ts'],
     mustPass: true,
   },
+  // SD-2831: guarded public types must not collapse to `any`.
+  // The SD-2842 work moved most of these from any to real, so this
+  // probe largely overlaps with the all-public-types scenarios above.
+  // Kept informational for now as a separate vantage point; revisit
+  // whether it adds signal once SD-2842 is fully shipped.
+  {
+    name: 'bundler / guarded public types not any (SD-2831)',
+    module: 'ESNext',
+    moduleResolution: 'bundler',
+    skipLibCheck: true,
+    strict: true,
+    files: ['src/informational/guarded-public-types.ts'],
+    mustPass: false,
+  },
+  {
+    name: 'node16 / guarded public types not any (SD-2831)',
+    module: 'Node16',
+    moduleResolution: 'node16',
+    skipLibCheck: true,
+    strict: true,
+    files: ['src/informational/guarded-public-types.ts'],
+    mustPass: false,
+  },
 ];
 
 const tscPath = join(__dirname, 'node_modules', '.bin', 'tsc');
@@ -230,21 +297,26 @@ for (const scenario of scenarios) {
     icon = '⚠';
     status = `DEPS (nm:${nmErrors})`;
     warnings++;
+  } else if (!scenario.mustPass) {
+    // Scenario is informational. Src-level errors are the regression target,
+    // not a CI failure today; report as a warning so the matrix can run green
+    // until the implementation work flips the scenario to mustPass: true.
+    icon = '⚠';
+    status = `INFO (src:${srcErrors} nm:${nmErrors})`;
+    warnings++;
   } else {
     icon = '✗';
     status = `FAIL (src:${srcErrors} nm:${nmErrors})`;
     failed++;
-    if (scenario.mustPass) {
-      console.log(`  ${icon} ${scenario.name}: ${status}`);
-      console.log(
-        output
-          .split('\n')
-          .filter((l) => l.startsWith('src/'))
-          .map((l) => `    ${l}`)
-          .join('\n'),
-      );
-      continue;
-    }
+    console.log(`  ${icon} ${scenario.name}: ${status}`);
+    console.log(
+      output
+        .split('\n')
+        .filter((l) => l.startsWith('src/'))
+        .map((l) => `    ${l}`)
+        .join('\n'),
+    );
+    continue;
   }
 
   console.log(`  ${icon} ${scenario.name}: ${status}`);

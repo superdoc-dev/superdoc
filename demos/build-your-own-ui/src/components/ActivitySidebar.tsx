@@ -1,9 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { SuperDoc } from 'superdoc';
 import type { CommentsListResult, TrackChangeInfo } from 'superdoc/ui';
 import {
   useSuperDocComments,
-  useSuperDocHost,
   useSuperDocSelection,
   useSuperDocTrackChanges,
   useSuperDocUI,
@@ -271,7 +269,6 @@ function CommentBody({
   replies?: ActivityItem[];
   ui: NonNullable<ReturnType<typeof useSuperDocUI>>;
 }) {
-  const host = useSuperDocHost() as SuperDoc | null;
   const [replyOpen, setReplyOpen] = useState(false);
   const [replyText, setReplyText] = useState('');
   const [replying, setReplying] = useState(false);
@@ -294,17 +291,15 @@ function CommentBody({
   };
 
   const postReply = () => {
-    const editor = host?.activeEditor;
-    const commentsApi = editor?.doc?.comments;
-    if (!commentsApi || typeof commentsApi.create !== 'function' || !replyText.trim()) return;
+    if (!replyText.trim()) return;
     setReplying(true);
     try {
-      // Reply uses the doc-api `create({ parentCommentId, text })`
-      // path. `ui.comments` doesn't yet expose a typed `reply()`
-      // method (filed as a follow-up under SD-2817); the `host`
-      // surface is the documented escape hatch until then.
-      commentsApi.create({ parentCommentId: comment.id, text: replyText.trim() });
-      cancelReply();
+      const receipt = ui.comments.reply(comment.id, { text: replyText.trim() });
+      if (receipt.success) {
+        cancelReply();
+      } else {
+        console.error('[ActivitySidebar] reply rejected', receipt);
+      }
     } catch (err) {
       console.error('[ActivitySidebar] reply failed', err);
     } finally {
@@ -359,7 +354,7 @@ function CommentBody({
             <button onClick={cancelReply}>Cancel</button>
             <button
               className="primary"
-              disabled={!host || replying || !replyText.trim()}
+              disabled={replying || !replyText.trim()}
               onClick={postReply}
             >
               {replying ? 'Posting…' : 'Reply'}
@@ -376,9 +371,7 @@ function CommentBody({
           <>
             <button onClick={() => ui.comments.resolve(comment.id)}>Resolve</button>
             {!replyOpen && (
-              <button disabled={!host} onClick={openReply}>
-                Reply
-              </button>
+              <button onClick={openReply}>Reply</button>
             )}
           </>
         )}

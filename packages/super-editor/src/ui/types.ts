@@ -912,6 +912,21 @@ export interface CommentsHandle {
    * lacks a positional target.
    */
   createFromCapture(capture: SelectionCapture, input: { text: string }): import('@superdoc/document-api').Receipt;
+  /**
+   * Post a reply to an existing thread. Routes through
+   * `editor.doc.comments.create({ parentCommentId, text })`; the
+   * reply inherits the parent's anchor, so callers don't pass a
+   * target. The next `useSuperDocComments()` snapshot includes the
+   * reply with `parentCommentId` set, which sidebars can group under
+   * the thread root.
+   *
+   * Returns a `NO_OP` receipt when `text` is empty or whitespace-only,
+   * matching the doc-api's text-required contract for top-level
+   * comments. Returns a failure receipt when the parent id has been
+   * deleted between the time the user opened the reply composer and
+   * pressed Send.
+   */
+  reply(parentCommentId: string, input: { text: string }): import('@superdoc/document-api').Receipt;
   /** Resolve a comment via `editor.doc.comments.patch`. */
   resolve(commentId: string): import('@superdoc/document-api').Receipt;
   /**

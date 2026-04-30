@@ -1171,6 +1171,27 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
       refreshAndNotify();
       return receipt;
     },
+    reply(parentCommentId, { text }) {
+      // Reply uses the same `create` operation as a top-level comment;
+      // discrimination is `parentCommentId` set vs absent. Replies
+      // inherit the parent's anchor, so callers don't pass a target —
+      // the doc-api adapter resolves the parent's positional address
+      // and stamps it on the new comment.
+      const trimmed = typeof text === 'string' ? text.trim() : '';
+      if (!trimmed) {
+        return {
+          success: false,
+          failure: { code: 'NO_OP', message: 'ui.comments.reply: text is empty.' },
+        };
+      }
+      const api = requireDocComments();
+      const receipt = (api.create as (input: unknown, options?: unknown) => Receipt).call(api, {
+        parentCommentId,
+        text,
+      });
+      refreshAndNotify();
+      return receipt;
+    },
     resolve(commentId) {
       const api = requireDocComments();
       const receipt = (api.patch as (input: unknown, options?: unknown) => Receipt).call(api, {

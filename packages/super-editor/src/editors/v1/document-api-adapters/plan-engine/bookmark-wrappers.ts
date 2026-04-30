@@ -19,6 +19,7 @@ import type {
 import { buildDiscoveryResult } from '@superdoc/document-api';
 import {
   findAllBookmarks,
+  findAllBookmarkMarkersInDocument,
   findAllBookmarksInDocument,
   resolveBookmarkTarget,
   extractBookmarkInfo,
@@ -61,8 +62,8 @@ function parseBookmarkId(raw: unknown): number | null {
   return Number.isInteger(parsed) && parsed >= 0 ? parsed : null;
 }
 
-function allocateBookmarkId(editor: Editor, preCollected?: DocumentBookmarkEntry[]): string {
-  const entries = preCollected ?? findAllBookmarksInDocument(editor);
+function allocateBookmarkId(editor: Editor): string {
+  const entries = findAllBookmarkMarkersInDocument(editor);
   let maxId = -1;
   for (const entry of entries) {
     const id = parseBookmarkId(entry.bookmarkId);
@@ -132,24 +133,25 @@ function getDocumentBookmarkRevision(editor: Editor, preCollected?: DocumentBook
   return buildDocumentBookmarkRevision(hostRevision, snapshots);
 }
 
+function expectedRevisionMatchesStory(storyEditor: Editor, expectedRevision: string): boolean {
+  return expectedRevision === getRevision(storyEditor);
+}
+
+function expectedRevisionMatchesDocumentScan(hostEditor: Editor, expectedRevision: string): boolean {
+  return (
+    expectedRevision.startsWith(BOOKMARK_SCAN_REVISION_PREFIX) &&
+    expectedRevision === getDocumentBookmarkRevision(hostEditor)
+  );
+}
+
 function checkBookmarkRevision(hostEditor: Editor, storyEditor: Editor, expectedRevision: string | undefined): void {
   if (expectedRevision === undefined) return;
 
-  if (hostEditor === storyEditor) {
-    checkRevision(storyEditor, expectedRevision);
+  if (expectedRevisionMatchesStory(storyEditor, expectedRevision)) {
     return;
   }
 
-  const storyRevision = getRevision(storyEditor);
-  if (expectedRevision === storyRevision) {
-    return;
-  }
-
-  const documentBookmarkRevision = getDocumentBookmarkRevision(hostEditor);
-  if (
-    documentBookmarkRevision.startsWith(BOOKMARK_SCAN_REVISION_PREFIX) &&
-    expectedRevision === documentBookmarkRevision
-  ) {
+  if (expectedRevisionMatchesDocumentScan(hostEditor, expectedRevision)) {
     return;
   }
 
@@ -286,7 +288,7 @@ export function bookmarksInsertWrapper(
     const resolved = resolveInlineInsertPosition(storyEditor, input.at, 'bookmarks.insert');
 
     const receipt = executeDomainCommand(storyEditor, () => {
-      const bookmarkId = allocateBookmarkId(editor, allBookmarks);
+      const bookmarkId = allocateBookmarkId(editor);
       const startAttrs: Record<string, unknown> = {
         name: input.name,
         id: bookmarkId,

@@ -3,6 +3,7 @@ import type { Editor } from '../../core/Editor.js';
 import { registerLiveStorySessionRuntime } from '../story-runtime/live-story-session-runtime-registry.js';
 import {
   findAllBookmarksInDocument,
+  findAllBookmarkMarkersInDocument,
   findAllBookmarks,
   resolveBookmarkTarget,
   extractBookmarkInfo,
@@ -12,7 +13,8 @@ import {
 } from './bookmark-resolver.js';
 
 type BookmarkSeed = {
-  name: string;
+  type?: 'bookmarkStart' | 'bookmarkEnd';
+  name?: string;
   id: string;
 };
 
@@ -24,8 +26,8 @@ function makeDoc(bookmarks: BookmarkSeed[]) {
       for (const [index, bookmark] of bookmarks.entries()) {
         cb(
           {
-            type: { name: 'bookmarkStart' },
-            attrs: { name: bookmark.name, id: bookmark.id },
+            type: { name: bookmark.type ?? 'bookmarkStart' },
+            attrs: { ...(bookmark.name !== undefined ? { name: bookmark.name } : {}), id: bookmark.id },
           },
           index + 1,
         );
@@ -242,6 +244,33 @@ describe('findAllBookmarksInDocument', () => {
     } finally {
       unregister();
     }
+  });
+
+  it('collects bookmarkEnd marker ids for document-wide id allocation', () => {
+    const editor = makeEditor(
+      [
+        { name: 'body-start', id: '1' },
+        { type: 'bookmarkEnd', id: '9' },
+      ],
+      {
+        headers: {
+          rIdHeader: {
+            type: 'doc',
+            content: [{ type: 'bookmarkEnd', attrs: { id: '10' } }],
+          },
+        },
+        footnotes: [{ id: 'fn-1', content: [{ type: 'bookmarkEnd', attrs: { id: '11' } }] }],
+      },
+    );
+
+    expect(findAllBookmarkMarkersInDocument(editor)).toEqual(
+      expect.arrayContaining([
+        { bookmarkId: '1', storyKey: 'body', markerType: 'bookmarkStart' },
+        { bookmarkId: '9', storyKey: 'body', markerType: 'bookmarkEnd' },
+        { bookmarkId: '10', storyKey: 'hf:part:rIdHeader', markerType: 'bookmarkEnd' },
+        { bookmarkId: '11', storyKey: 'fn:fn-1', markerType: 'bookmarkEnd' },
+      ]),
+    );
   });
 });
 

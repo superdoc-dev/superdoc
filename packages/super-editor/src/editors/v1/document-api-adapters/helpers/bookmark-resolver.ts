@@ -1,5 +1,5 @@
 /**
- * Bookmark node resolver — finds, resolves, and extracts info from bookmarkStart nodes.
+ * Bookmark node resolver — finds, resolves, and extracts info from bookmark marker nodes.
  */
 
 import type { Editor } from '../../core/Editor.js';
@@ -36,6 +36,14 @@ export interface DocumentBookmarkEntry {
   storyKey: string;
 }
 
+export type BookmarkMarkerType = 'bookmarkStart' | 'bookmarkEnd';
+
+export interface DocumentBookmarkMarkerEntry {
+  bookmarkId: string;
+  storyKey: string;
+  markerType: BookmarkMarkerType;
+}
+
 type StoryEditorEntry = {
   id?: unknown;
   editor?: Editor;
@@ -56,6 +64,11 @@ type ConverterWithStories = {
   endnotes?: NoteEntry[];
 };
 
+type StoryBookmarkCollector<T> = {
+  collectFromDoc: (doc: ProseMirrorNode, storyKey: string, results: T[]) => void;
+  collectFromPmJson: (pmJson: unknown, storyKey: string, results: T[]) => void;
+};
+
 export function normalizeStory(locator?: StoryLocator): StoryLocator | undefined {
   if (!locator || locator.storyType === 'body') return undefined;
   return locator;
@@ -69,19 +82,33 @@ export function buildBookmarkAddress(name: string, story?: StoryLocator): Bookma
 }
 
 export function findAllBookmarksInDocument(editor: Editor): DocumentBookmarkEntry[] {
-  const results: DocumentBookmarkEntry[] = [];
+  return collectFromDocumentStories(editor, {
+    collectFromDoc: collectBookmarksFromDoc,
+    collectFromPmJson: collectBookmarksFromPmJson,
+  });
+}
+
+export function findAllBookmarkMarkersInDocument(editor: Editor): DocumentBookmarkMarkerEntry[] {
+  return collectFromDocumentStories(editor, {
+    collectFromDoc: collectBookmarkMarkersFromDoc,
+    collectFromPmJson: collectBookmarkMarkersFromPmJson,
+  });
+}
+
+function collectFromDocumentStories<T>(editor: Editor, collector: StoryBookmarkCollector<T>): T[] {
+  const results: T[] = [];
   const seenStoryKeys = new Set<string>();
   const converter = (editor as unknown as { converter?: ConverterWithStories }).converter;
 
   seenStoryKeys.add(BODY_STORY_KEY);
-  collectBookmarksFromDoc(editor.state.doc, BODY_STORY_KEY, results);
+  collector.collectFromDoc(editor.state.doc, BODY_STORY_KEY, results);
 
-  collectBookmarksFromHeaderFooterEditors(editor, converter?.headerEditors, results, seenStoryKeys);
-  collectBookmarksFromHeaderFooterEditors(editor, converter?.footerEditors, results, seenStoryKeys);
-  collectBookmarksFromHeaderFooterCache(editor, converter?.headers, results, seenStoryKeys);
-  collectBookmarksFromHeaderFooterCache(editor, converter?.footers, results, seenStoryKeys);
-  collectBookmarksFromNotes(editor, converter?.footnotes, 'footnote', results, seenStoryKeys);
-  collectBookmarksFromNotes(editor, converter?.endnotes, 'endnote', results, seenStoryKeys);
+  collectFromHeaderFooterEditors(editor, converter?.headerEditors, results, seenStoryKeys, collector);
+  collectFromHeaderFooterEditors(editor, converter?.footerEditors, results, seenStoryKeys, collector);
+  collectFromHeaderFooterCache(editor, converter?.headers, results, seenStoryKeys, collector);
+  collectFromHeaderFooterCache(editor, converter?.footers, results, seenStoryKeys, collector);
+  collectFromNotes(editor, converter?.footnotes, 'footnote', results, seenStoryKeys, collector);
+  collectFromNotes(editor, converter?.endnotes, 'endnote', results, seenStoryKeys, collector);
 
   return results;
 }
@@ -129,8 +156,8 @@ function collectBookmarksFromDoc(doc: ProseMirrorNode, storyKey: string, results
   doc.descendants((node) => {
     if (node.type.name === 'bookmarkStart') {
       results.push({
-        name: (node.attrs?.name as string) ?? '',
-        bookmarkId: (node.attrs?.id as string) ?? '',
+        name: readBookmarkName(node.attrs),
+        bookmarkId: readBookmarkId(node.attrs),
         storyKey,
       });
     }
@@ -138,11 +165,29 @@ function collectBookmarksFromDoc(doc: ProseMirrorNode, storyKey: string, results
   });
 }
 
-function collectBookmarksFromHeaderFooterEditors(
+function collectBookmarkMarkersFromDoc(
+  doc: ProseMirrorNode,
+  storyKey: string,
+  results: DocumentBookmarkMarkerEntry[],
+): void {
+  doc.descendants((node) => {
+    if (!isBookmarkMarkerType(node.type.name)) return true;
+
+    const bookmarkId = readBookmarkId(node.attrs);
+    if (bookmarkId) {
+      results.push({ bookmarkId, storyKey, markerType: node.type.name });
+    }
+
+    return true;
+  });
+}
+
+function collectFromHeaderFooterEditors<T>(
   hostEditor: Editor,
   editors: StoryEditorEntry[] | undefined,
-  results: DocumentBookmarkEntry[],
+  results: T[],
   seenStoryKeys: Set<string>,
+  collector: StoryBookmarkCollector<T>,
 ): void {
   if (!Array.isArray(editors)) return;
 
@@ -154,15 +199,16 @@ function collectBookmarksFromHeaderFooterEditors(
     const storyKey = buildStoryKey({ kind: 'story', storyType: 'headerFooterPart', refId });
     if (seenStoryKeys.has(storyKey)) continue;
     seenStoryKeys.add(storyKey);
-    collectBookmarksFromLiveOrDoc(hostEditor, storyKey, storyEditor.state.doc, results);
+    collectFromLiveOrDoc(hostEditor, storyKey, storyEditor.state.doc, results, collector);
   }
 }
 
-function collectBookmarksFromHeaderFooterCache(
+function collectFromHeaderFooterCache<T>(
   hostEditor: Editor,
   collection: Record<string, unknown> | undefined,
-  results: DocumentBookmarkEntry[],
+  results: T[],
   seenStoryKeys: Set<string>,
+  collector: StoryBookmarkCollector<T>,
 ): void {
   if (!collection || typeof collection !== 'object') return;
 
@@ -172,16 +218,17 @@ function collectBookmarksFromHeaderFooterCache(
     const storyKey = buildStoryKey({ kind: 'story', storyType: 'headerFooterPart', refId });
     if (seenStoryKeys.has(storyKey)) continue;
     seenStoryKeys.add(storyKey);
-    collectBookmarksFromLiveOrPmJson(hostEditor, storyKey, pmJson, results);
+    collectFromLiveOrPmJson(hostEditor, storyKey, pmJson, results, collector);
   }
 }
 
-function collectBookmarksFromNotes(
+function collectFromNotes<T>(
   hostEditor: Editor,
   notes: NoteEntry[] | undefined,
   storyType: 'footnote' | 'endnote',
-  results: DocumentBookmarkEntry[],
+  results: T[],
   seenStoryKeys: Set<string>,
+  collector: StoryBookmarkCollector<T>,
 ): void {
   for (const note of enumerateEffectiveNoteEntries(notes)) {
     const noteId = note?.id != null ? String(note.id) : '';
@@ -194,33 +241,35 @@ function collectBookmarksFromNotes(
     if (seenStoryKeys.has(storyKey)) continue;
     seenStoryKeys.add(storyKey);
 
-    collectBookmarksFromLiveOrPmJson(hostEditor, storyKey, pmJson, results);
+    collectFromLiveOrPmJson(hostEditor, storyKey, pmJson, results, collector);
   }
 }
 
-function collectBookmarksFromLiveOrDoc(
+function collectFromLiveOrDoc<T>(
   hostEditor: Editor,
   storyKey: string,
   fallbackDoc: ProseMirrorNode,
-  results: DocumentBookmarkEntry[],
+  results: T[],
+  collector: StoryBookmarkCollector<T>,
 ): void {
   const liveDoc = resolveLiveStorySessionRuntime(hostEditor, storyKey)?.editor?.state?.doc;
-  collectBookmarksFromDoc(liveDoc ?? fallbackDoc, storyKey, results);
+  collector.collectFromDoc(liveDoc ?? fallbackDoc, storyKey, results);
 }
 
-function collectBookmarksFromLiveOrPmJson(
+function collectFromLiveOrPmJson<T>(
   hostEditor: Editor,
   storyKey: string,
   fallbackPmJson: unknown,
-  results: DocumentBookmarkEntry[],
+  results: T[],
+  collector: StoryBookmarkCollector<T>,
 ): void {
   const liveDoc = resolveLiveStorySessionRuntime(hostEditor, storyKey)?.editor?.state?.doc;
   if (liveDoc) {
-    collectBookmarksFromDoc(liveDoc, storyKey, results);
+    collector.collectFromDoc(liveDoc, storyKey, results);
     return;
   }
 
-  collectBookmarksFromPmJson(fallbackPmJson, storyKey, results);
+  collector.collectFromPmJson(fallbackPmJson, storyKey, results);
 }
 
 function getNotePmJson(note: NoteEntry): Record<string, unknown> | null {
@@ -244,10 +293,26 @@ function collectBookmarksFromPmJson(pmJson: unknown, storyKey: string, results: 
   visitPmJson(pmJson, (node) => {
     if (node.type !== 'bookmarkStart') return;
 
-    const attrs = isObjectRecord(node.attrs) ? node.attrs : undefined;
-    const name = typeof attrs?.name === 'string' ? attrs.name : '';
-    const bookmarkId = attrs?.id != null ? String(attrs.id) : '';
+    const name = readBookmarkName(node.attrs);
+    const bookmarkId = readBookmarkId(node.attrs);
     results.push({ name, bookmarkId, storyKey });
+  });
+}
+
+function collectBookmarkMarkersFromPmJson(
+  pmJson: unknown,
+  storyKey: string,
+  results: DocumentBookmarkMarkerEntry[],
+): void {
+  if (!isObjectRecord(pmJson)) return;
+
+  visitPmJson(pmJson, (node) => {
+    if (!isBookmarkMarkerType(node.type)) return;
+
+    const bookmarkId = readBookmarkId(node.attrs);
+    if (bookmarkId) {
+      results.push({ bookmarkId, storyKey, markerType: node.type });
+    }
   });
 }
 
@@ -266,6 +331,20 @@ function visitPmJson(node: Record<string, unknown>, visitor: (node: Record<strin
 
 function isObjectRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
+}
+
+function isBookmarkMarkerType(type: unknown): type is BookmarkMarkerType {
+  return type === 'bookmarkStart' || type === 'bookmarkEnd';
+}
+
+function readBookmarkId(attrs: unknown): string {
+  if (!isObjectRecord(attrs) || attrs.id == null) return '';
+  return String(attrs.id);
+}
+
+function readBookmarkName(attrs: unknown): string {
+  if (!isObjectRecord(attrs) || typeof attrs.name !== 'string') return '';
+  return attrs.name;
 }
 
 /**

@@ -238,6 +238,7 @@ export interface NodeHandlerContext {
     ranges: SectionRange[];
     currentSectionIndex: number;
     currentParagraphIndex: number;
+    currentNodeIndex: number;
   };
   converters?: {
     paragraphToFlowBlocks?: (

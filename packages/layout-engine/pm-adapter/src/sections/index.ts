@@ -41,4 +41,5 @@ export {
   isSectionBreakBlock,
   signaturesEqual,
   shallowObjectEquals,
+  maybeEmitNextSectionBreakForNode,
 } from './breaks.js';

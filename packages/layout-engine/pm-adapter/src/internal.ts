@@ -12,7 +12,12 @@
 
 import type { FlowBlock, ParagraphBlock } from '@superdoc/contracts';
 import { isValidTrackedMode } from './tracked-changes.js';
-import { analyzeSectionRanges, createSectionBreakBlock, publishSectionMetadata } from './sections/index.js';
+import {
+  analyzeSectionRanges,
+  createSectionBreakBlock,
+  maybeEmitNextSectionBreakForNode,
+  publishSectionMetadata,
+} from './sections/index.js';
 import { normalizePrefix, buildPositionMap, createBlockIdGenerator } from './utilities.js';
 import {
   paragraphToFlowBlocks,
@@ -208,6 +213,7 @@ export function toFlowBlocks(pmDoc: PMNode | object, options?: AdapterOptions): 
       ranges: sectionRanges,
       currentSectionIndex: 0,
       currentParagraphIndex: 0,
+      currentNodeIndex: 0,
     },
     converters,
     themeColors,
@@ -216,12 +222,24 @@ export function toFlowBlocks(pmDoc: PMNode | object, options?: AdapterOptions): 
     trackedListLastOrdinals: new Map<string, number>(),
   };
 
-  // Process nodes using handler dispatch pattern
+  // Process nodes using handler dispatch pattern. Before each top-level node
+  // we flush any pending section break whose `startNodeIndex` matches the
+  // current position — this keeps non-paragraph nodes (tables, top-level
+  // drawings) in their correct end-tagged section per ECMA-376 §17.6.17.
   doc.content.forEach((node) => {
+    maybeEmitNextSectionBreakForNode({
+      sectionState: handlerContext.sectionState!,
+      nextBlockId,
+      pushBlock: (block) => {
+        blocks.push(block);
+        recordBlockKind(block.kind);
+      },
+    });
     const handler = nodeHandlers[node.type];
     if (handler) {
       handler(node, handlerContext);
     }
+    handlerContext.sectionState!.currentNodeIndex++;
   });
 
   // Ensure final body section is emitted only if not already emitted during paragraph processing.

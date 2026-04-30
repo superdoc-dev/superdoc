@@ -2964,29 +2964,104 @@ describe('layoutDocument', () => {
       expect(afterSectionPara!.y).toBe(expectedBalancedBottom);
     });
 
-    it('balances the section-ending page even when the section spans multiple pages', () => {
-      // A section big enough to fill page 1 completely then spill onto page 2.
-      // Word balances only the FINAL page (earlier pages are already full).
-      // Use paragraphs each large enough that col-1 alone will overflow.
-      const lineHeight = 120;
-      const paraCount = 10;
+    it('fills BOTH columns on every page of a multi-page 2-col continuous section', () => {
+      // ECMA-376 §17.18.77 (ST_SectionMark): a continuous section break
+      // "balances content of the previous section." Word's observable behavior
+      // is to fill col 0 to the balanced target, wrap to col 1 to the same
+      // target, then wrap to the next page — on EVERY page, not only the last.
+      // Regression for SD-2646: earlier pages must not stack content in col 0.
+      const lineHeight = 20;
+      const paraCount = 100; // ≈ 2000px, exceeds one page's content area
       const { blocks, measures } = buildTwoColumnSection(paraCount, lineHeight);
 
       const layout = layoutDocument(blocks, measures, PAGE);
 
-      // Multiple pages due to content size.
-      expect(layout.pages.length).toBeGreaterThan(1);
+      expect(layout.pages.length).toBeGreaterThanOrEqual(2);
 
-      // On the final page, fragments of the section should span both columns.
-      const finalPage = layout.pages[layout.pages.length - 1];
-      const sectionFragments = finalPage.fragments.filter(
-        (f): f is ParaFragment => f.kind === 'para' && f.blockId.startsWith('p') && f.blockId !== 'p-after',
-      );
-      if (sectionFragments.length > 1) {
-        const uniqueX = new Set(sectionFragments.map((f) => Math.round(f.x)));
-        // Either balanced into both columns, or single-column if only 1 fragment
-        expect(uniqueX.size).toBeGreaterThanOrEqual(1);
+      for (const page of layout.pages) {
+        const sectionFragments = page.fragments.filter(
+          (f): f is ParaFragment => f.kind === 'para' && f.blockId.startsWith('p') && f.blockId !== 'p-after',
+        );
+        if (sectionFragments.length < 2) continue; // tail of last page may have <2 fragments
+        const col0 = sectionFragments.filter((f) => Math.round(f.x) === LEFT_MARGIN);
+        const col1 = sectionFragments.filter((f) => Math.round(f.x) === TWO_COL_RIGHT_X);
+        expect(col0.length).toBeGreaterThan(0);
+        expect(col1.length).toBeGreaterThan(0);
       }
+    });
+
+    it('flows a narrow multi-page table across both columns on every page (SD-2646 regression)', () => {
+      // IT-945 shape: a narrow table (one column wide) inside a 2-col continuous
+      // section, spanning multiple pages. Regression guard for the layout path
+      // once pm-adapter correctly places the table in the 2-col section.
+      const rowCount = 114;
+      const rowHeight = 18.4;
+      const cellWidth = TWO_COL_WIDTH / 2;
+
+      const rows = Array.from({ length: rowCount }, (_, r) => ({
+        id: `tbl-row-${r}`,
+        cells: [
+          { id: `tbl-cell-${r}-0`, paragraph: { kind: 'paragraph' as const, id: `tbl-cell-${r}-0-p`, runs: [] } },
+          { id: `tbl-cell-${r}-1`, paragraph: { kind: 'paragraph' as const, id: `tbl-cell-${r}-1-p`, runs: [] } },
+        ],
+      }));
+      const tbl: TableBlock = {
+        kind: 'table',
+        id: 'tbl',
+        rows,
+        attrs: { sectionIndex: 0 },
+      } as TableBlock;
+      const tblM: TableMeasure = {
+        kind: 'table',
+        rows: Array.from({ length: rowCount }, () => ({
+          height: rowHeight,
+          cells: [
+            { paragraph: makeMeasure([rowHeight]), width: cellWidth, height: rowHeight },
+            { paragraph: makeMeasure([rowHeight]), width: cellWidth, height: rowHeight },
+          ],
+        })),
+        columnWidths: [cellWidth, cellWidth],
+        totalWidth: cellWidth * 2,
+        totalHeight: rowHeight * rowCount,
+      };
+
+      const blocks: FlowBlock[] = [
+        {
+          kind: 'sectionBreak',
+          id: 'sb-start',
+          type: 'continuous',
+          columns: { count: 2, gap: COLUMN_GAP },
+          margins: {},
+          attrs: { source: 'sectPr', sectionIndex: 0, isFirstSection: true },
+        } as FlowBlock,
+        tbl as FlowBlock,
+        {
+          kind: 'sectionBreak',
+          id: 'sb-end',
+          type: 'continuous',
+          columns: { count: 1, gap: 0 },
+          margins: {},
+          attrs: { source: 'sectPr', sectionIndex: 1 },
+        } as FlowBlock,
+      ];
+      const measures: Measure[] = [{ kind: 'sectionBreak' }, tblM, { kind: 'sectionBreak' }];
+
+      const layout = layoutDocument(blocks, measures, PAGE);
+
+      expect(layout.pages.length).toBeGreaterThanOrEqual(2);
+
+      let pagesWithBothColumns = 0;
+      for (const page of layout.pages) {
+        const tableFragments = page.fragments.filter((f) => f.kind === 'table');
+        if (tableFragments.length === 0) continue;
+        const col0 = tableFragments.filter((f) => Math.round(f.x) === LEFT_MARGIN);
+        const col1 = tableFragments.filter((f) => Math.round(f.x) === TWO_COL_RIGHT_X);
+        if (col0.length > 0 && col1.length > 0) pagesWithBothColumns++;
+      }
+      // At least one page must have fragments in both columns. A stricter
+      // assertion (every page) is made invalid by the tail of the final page
+      // which can reasonably hold <1 column's worth of content.
+      expect(pagesWithBothColumns).toBeGreaterThan(0);
     });
 
     it('distributes 6 paragraphs across 3 columns (no column is empty)', () => {

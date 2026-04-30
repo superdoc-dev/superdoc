@@ -1269,6 +1269,72 @@ describe('toFlowBlocks', () => {
         [first, second, third].forEach((b) => expect(b?.type).toBe('continuous'));
       });
     });
+
+    describe('end-tagged section membership for non-paragraph nodes (SD-2646, ECMA-376 §17.6.17)', () => {
+      it('emits the next section break BEFORE a table that sits between two sectPr-marker paragraphs', () => {
+        // IT-945 shape: table lives between the paragraph that ends section A
+        // and the paragraph that ends section B. Per §17.6.17 the table
+        // belongs to section B, so the sectionBreak introducing B's columns
+        // must precede the table in the flow stream.
+        const pmDoc: PMNode = {
+          type: 'doc',
+          attrs: { bodySectPr: createTestBodySectPr() },
+          content: [
+            { type: 'paragraph', content: [{ type: 'text', text: 'This is my first section' }] },
+            {
+              type: 'paragraph',
+              attrs: {
+                paragraphProperties: {
+                  sectPr: {
+                    elements: [
+                      { name: 'w:type', attributes: { 'w:val': 'nextPage' } },
+                      { name: 'w:cols', attributes: { 'w:num': '1', 'w:space': '720' } },
+                    ],
+                  },
+                },
+              },
+              content: [],
+            },
+            {
+              type: 'table',
+              attrs: {},
+              content: [
+                {
+                  type: 'tableRow',
+                  content: [
+                    { type: 'tableCell', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'A' }] }] },
+                    { type: 'tableCell', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'B' }] }] },
+                  ],
+                },
+              ],
+            },
+            {
+              type: 'paragraph',
+              attrs: {
+                paragraphProperties: {
+                  sectPr: {
+                    elements: [
+                      { name: 'w:type', attributes: { 'w:val': 'continuous' } },
+                      { name: 'w:cols', attributes: { 'w:num': '2', 'w:space': '720' } },
+                    ],
+                  },
+                },
+              },
+              content: [],
+            },
+            { type: 'paragraph', content: [{ type: 'text', text: 'This is my third section' }] },
+          ],
+        } as never;
+
+        const { blocks } = toFlowBlocks(pmDoc, { emitSectionBreaks: true });
+
+        const tableIndex = blocks.findIndex((b) => b.kind === 'table');
+        const twoColBreakIndex = blocks.findIndex((b) => b.kind === 'sectionBreak' && b.columns?.count === 2);
+        expect(tableIndex).toBeGreaterThan(-1);
+        expect(twoColBreakIndex).toBeGreaterThan(-1);
+        expect(twoColBreakIndex).toBeLessThan(tableIndex);
+      });
+    });
   });
 
   describe('block id prefixing', () => {

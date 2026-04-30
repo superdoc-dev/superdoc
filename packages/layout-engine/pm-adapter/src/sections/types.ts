@@ -89,11 +89,22 @@ export type SectionVerticalAlign = 'top' | 'center' | 'bottom' | 'both';
 
 /**
  * Section range represents a contiguous section in the document.
- * Word uses "end-tagged" section semantics: a paragraph's sectPr defines
- * properties for the section ENDING at that paragraph, not starting after it.
+ *
+ * Word uses "end-tagged" section semantics (ECMA-376 §17.6.17): a paragraph's
+ * sectPr defines properties for the section ENDING at that paragraph, not
+ * starting after it. All body children preceding the section-terminating
+ * paragraph — paragraphs, tables, top-level drawings — belong to that section.
+ *
+ * `startNodeIndex`/`endNodeIndex` are computed over every top-level
+ * `doc.content` child and are the authoritative boundaries for dispatching
+ * section breaks at emission time. `startParagraphIndex`/`endParagraphIndex`
+ * are retained for callers (SDT handlers) that count only paragraphs during
+ * recursive descent.
  */
 export interface SectionRange {
   sectionIndex: number;
+  startNodeIndex: number;
+  endNodeIndex: number;
   startParagraphIndex: number;
   endParagraphIndex: number;
   sectPr: SectPrElement | null;

@@ -4,7 +4,7 @@
  *
  * Ships the provider, the lifecycle-correct context, and a typed
  * subscription helper. Domain-specific convenience hooks (selection,
- * comments, review, toolbar, per-command) are sugar on top of
+ * comments, track changes, toolbar, per-command) are sugar on top of
  * `useSuperDocSlice` so consumers don't repeat the same `useEffect +
  * setState + cleanup` boilerplate per slice.
  *
@@ -14,7 +14,7 @@
  *   useSuperDocUI,
  *   useSuperDocSelection,
  *   useSuperDocComments,
- *   useSuperDocReview,
+ *   useSuperDocTrackChanges,
  *   useSuperDocToolbar,
  *   useSuperDocCommand,
  * } from 'superdoc/ui/react';
@@ -33,7 +33,7 @@ export {
 export {
   useSuperDocSelection,
   useSuperDocComments,
-  useSuperDocReview,
+  useSuperDocTrackChanges,
   useSuperDocToolbar,
   useSuperDocCommand,
   useSuperDocDocument,

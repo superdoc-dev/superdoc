@@ -3,7 +3,7 @@ import { shallowEqual } from '../equality.js';
 import type {
   CommentsSlice,
   DocumentSlice,
-  ReviewSlice,
+  TrackChangesSlice,
   SelectionSlice,
   ToolbarSnapshotSlice,
   UIToolbarCommandState,
@@ -22,7 +22,7 @@ const EMPTY_SELECTION: SelectionSlice = {
 
 const EMPTY_COMMENTS: CommentsSlice = { items: [], activeIds: [], total: 0 };
 
-const EMPTY_REVIEW: ReviewSlice = { items: [], openCount: 0, activeId: null };
+const EMPTY_TRACK_CHANGES: TrackChangesSlice = { items: [], total: 0, activeId: null };
 
 const EMPTY_TOOLBAR: ToolbarSnapshotSlice = { context: null, commands: {} };
 
@@ -45,9 +45,9 @@ export function useSuperDocComments(): CommentsSlice {
   return useSuperDocSlice((ui) => ui.select((state) => state.comments, shallowEqual), EMPTY_COMMENTS);
 }
 
-/** Subscribe to the merged review feed (comments + tracked changes). */
-export function useSuperDocReview(): ReviewSlice {
-  return useSuperDocSlice((ui) => ui.select((state) => state.review, shallowEqual), EMPTY_REVIEW);
+/** Subscribe to the tracked-changes feed. */
+export function useSuperDocTrackChanges(): TrackChangesSlice {
+  return useSuperDocSlice((ui) => ui.select((state) => state.trackChanges, shallowEqual), EMPTY_TRACK_CHANGES);
 }
 
 /** Subscribe to the full toolbar snapshot (context + per-command states). */

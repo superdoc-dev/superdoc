@@ -4,7 +4,7 @@
  * tracked-change ids — story-aware) and
  * `presentation.scrollToPositionAsync()` for text targets (body-only
  * today). Used by `ui.viewport.scrollIntoView`, `ui.comments.scrollTo`,
- * and `ui.review.scrollTo`.
+ * and `ui.trackChanges.scrollTo`.
  */
 
 import type { ScrollIntoViewInput, ScrollIntoViewOutput } from '@superdoc/document-api';
@@ -18,7 +18,7 @@ import { resolveTextTarget } from '../editors/v1/document-api-adapters/helpers/a
  *   handles paginated layouts, virtualized page mounting, AND story
  *   activation for entities in header/footer/footnote/endnote stories.
  *   The viewport surface defaults `behavior` to `'smooth'` so a
- *   review-sidebar click animates instead of teleporting; the underlying
+ *   sidebar click animates instead of teleporting; the underlying
  *   virtualized-page mount step is unaffected because the mount-trigger
  *   scroll is internal to `scrollToPositionAsync` and only the final
  *   alignment retry honors caller behavior.

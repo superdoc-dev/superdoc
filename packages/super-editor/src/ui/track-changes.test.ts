@@ -4,9 +4,9 @@ import { createSuperDocUI } from './create-super-doc-ui.js';
 import type { SuperDocLike } from './types.js';
 
 /**
- * Stub builder for `ui.review` tests. Models the merged feed shape
- * — `editor.doc.comments.list()` + `editor.doc.trackChanges.list()`
- * + `editor.doc.trackChanges.decide()` + selection routing.
+ * Stub builder for `ui.trackChanges` tests. Models
+ * `editor.doc.trackChanges.list()` + `editor.doc.trackChanges.decide()`
+ * + selection routing.
  */
 function makeStubs(
   initial: {
@@ -30,9 +30,6 @@ function makeStubs(
   const listComments = vi.fn(() => ({
     evaluatedRevision: 'r1',
     total: commentsList.length,
-    // Mirror the production discovery-item shape: canonical id is on
-    // `id`, set from the underlying commentId by the adapter. There is
-    // no `commentId` field on `DiscoveryItem<CommentDomain>` itself.
     items: commentsList.map((c) => ({
       id: c.commentId,
       handle: { ref: `comment:${c.commentId}`, refStability: 'stable' as const, targetKind: 'comment' as const },
@@ -96,8 +93,6 @@ function makeStubs(
       comments: { list: listComments, create: vi.fn(), patch: vi.fn(), delete: vi.fn() },
       trackChanges: { list: listChanges, decide },
     },
-    // Self-reference assigned below so toolbar source resolution sees
-    // the same routed editor as the rest of the stub.
     presentationEditor: undefined as never,
   };
   editor.presentationEditor = { navigateTo, getActiveEditor: () => editor };
@@ -143,13 +138,9 @@ function makeStubs(
   return { superdoc, editor, mocks: { listComments, listChanges, decide, navigateTo, setDocumentMode } };
 }
 
-describe('ui.review — snapshot', () => {
-  it('merges comments and tracked changes into one feed with dense documentOrder', () => {
+describe('ui.trackChanges — snapshot', () => {
+  it('items mirror trackChanges.list() in document order', () => {
     const { superdoc } = makeStubs({
-      comments: [
-        { id: 'c1', commentId: 'c1' },
-        { id: 'c2', commentId: 'c2' },
-      ],
       trackedChanges: [
         { id: 'tc1', type: 'insert' },
         { id: 'tc2', type: 'delete' },
@@ -157,35 +148,53 @@ describe('ui.review — snapshot', () => {
     });
     const ui = createSuperDocUI({ superdoc });
 
-    const snap = ui.review.getSnapshot();
-    expect(snap.items).toHaveLength(4);
-    expect(snap.items.map((i) => ({ kind: i.kind, id: i.id, order: i.documentOrder }))).toEqual([
-      { kind: 'comment', id: 'c1', order: 0 },
-      { kind: 'comment', id: 'c2', order: 1 },
-      { kind: 'change', id: 'tc1', order: 2 },
-      { kind: 'change', id: 'tc2', order: 3 },
-    ]);
+    const snap = ui.trackChanges.getSnapshot();
+    expect(snap.items.map((i) => i.id)).toEqual(['tc1', 'tc2']);
+    expect(snap.total).toBe(2);
 
     ui.destroy();
   });
 
-  it('openCount counts every tracked change + every non-resolved comment', () => {
+  it('items expose the full change record under .change', () => {
     const { superdoc } = makeStubs({
-      comments: [
-        { id: 'c1', commentId: 'c1' },
-        { id: 'c2', commentId: 'c2', status: 'resolved' },
-        { id: 'c3', commentId: 'c3' },
-      ],
-      trackedChanges: [{ id: 'tc1' }, { id: 'tc2' }],
+      trackedChanges: [{ id: 'tc1', type: 'insert', excerpt: 'hi' }],
     });
     const ui = createSuperDocUI({ superdoc });
 
-    expect(ui.review.getSnapshot().openCount).toBe(4); // 2 open comments + 2 changes
+    const item = ui.trackChanges.getSnapshot().items[0]!;
+    expect(item.id).toBe('tc1');
+    expect(item.change.type).toBe('insert');
+    expect(item.change.excerpt).toBe('hi');
 
     ui.destroy();
   });
 
-  it('activeId mirrors selection.activeCommentIds[0] when on a comment', () => {
+  it('comments do not appear in trackChanges items', () => {
+    const { superdoc } = makeStubs({
+      comments: [{ id: 'c1', commentId: 'c1' }],
+      trackedChanges: [{ id: 'tc1' }],
+    });
+    const ui = createSuperDocUI({ superdoc });
+
+    const ids = ui.trackChanges.getSnapshot().items.map((i) => i.id);
+    expect(ids).toEqual(['tc1']);
+
+    ui.destroy();
+  });
+
+  it('activeId mirrors selection.activeChangeIds[0]', () => {
+    const { superdoc } = makeStubs({
+      trackedChanges: [{ id: 'tc1' }, { id: 'tc2' }],
+      activeChangeIds: ['tc2'],
+    });
+    const ui = createSuperDocUI({ superdoc });
+
+    expect(ui.trackChanges.getSnapshot().activeId).toBe('tc2');
+
+    ui.destroy();
+  });
+
+  it('activeId stays null when only comments are active', () => {
     const { superdoc } = makeStubs({
       comments: [{ id: 'c1', commentId: 'c1' }],
       trackedChanges: [{ id: 'tc1' }],
@@ -193,30 +202,17 @@ describe('ui.review — snapshot', () => {
     });
     const ui = createSuperDocUI({ superdoc });
 
-    expect(ui.review.getSnapshot().activeId).toBe('c1');
-
-    ui.destroy();
-  });
-
-  it('activeId falls back to selection.activeChangeIds[0] when no active comment', () => {
-    const { superdoc } = makeStubs({
-      comments: [{ id: 'c1', commentId: 'c1' }],
-      trackedChanges: [{ id: 'tc1' }],
-      activeChangeIds: ['tc1'],
-    });
-    const ui = createSuperDocUI({ superdoc });
-
-    expect(ui.review.getSnapshot().activeId).toBe('tc1');
+    expect(ui.trackChanges.getSnapshot().activeId).toBe(null);
 
     ui.destroy();
   });
 
   it('subscribe fires once with the initial snapshot', () => {
-    const { superdoc } = makeStubs({ comments: [{ id: 'c1', commentId: 'c1' }] });
+    const { superdoc } = makeStubs({ trackedChanges: [{ id: 'tc1' }] });
     const ui = createSuperDocUI({ superdoc });
 
     const cb = vi.fn();
-    const off = ui.review.subscribe(cb);
+    const off = ui.trackChanges.subscribe(cb);
 
     expect(cb).toHaveBeenCalledTimes(1);
     const arg = cb.mock.calls[0][0] as { snapshot: { items: unknown[] } };
@@ -227,12 +223,12 @@ describe('ui.review — snapshot', () => {
   });
 });
 
-describe('ui.review — decide actions route through editor.doc.trackChanges.*', () => {
+describe('ui.trackChanges — decide actions route through editor.doc.trackChanges.*', () => {
   it('accept(id) routes to decide({ decision: "accept", target: { id } })', () => {
     const { superdoc, mocks } = makeStubs({ trackedChanges: [{ id: 'tc1' }] });
     const ui = createSuperDocUI({ superdoc });
 
-    ui.review.accept('tc1');
+    ui.trackChanges.accept('tc1');
 
     expect(mocks.decide).toHaveBeenCalledWith({ decision: 'accept', target: { id: 'tc1' } });
     ui.destroy();
@@ -242,7 +238,7 @@ describe('ui.review — decide actions route through editor.doc.trackChanges.*',
     const { superdoc, mocks } = makeStubs({ trackedChanges: [{ id: 'tc1' }] });
     const ui = createSuperDocUI({ superdoc });
 
-    ui.review.reject('tc1');
+    ui.trackChanges.reject('tc1');
 
     expect(mocks.decide).toHaveBeenCalledWith({ decision: 'reject', target: { id: 'tc1' } });
     ui.destroy();
@@ -252,7 +248,7 @@ describe('ui.review — decide actions route through editor.doc.trackChanges.*',
     const { superdoc, mocks } = makeStubs({ trackedChanges: [{ id: 'tc1' }, { id: 'tc2' }] });
     const ui = createSuperDocUI({ superdoc });
 
-    ui.review.acceptAll();
+    ui.trackChanges.acceptAll();
 
     expect(mocks.decide).toHaveBeenCalledWith({ decision: 'accept', target: { scope: 'all' } });
     ui.destroy();
@@ -262,177 +258,129 @@ describe('ui.review — decide actions route through editor.doc.trackChanges.*',
     const { superdoc, mocks } = makeStubs({ trackedChanges: [{ id: 'tc1' }, { id: 'tc2' }] });
     const ui = createSuperDocUI({ superdoc });
 
-    ui.review.rejectAll();
+    ui.trackChanges.rejectAll();
 
     expect(mocks.decide).toHaveBeenCalledWith({ decision: 'reject', target: { scope: 'all' } });
     ui.destroy();
   });
 });
 
-describe('ui.review — next/previous navigation', () => {
+describe('ui.trackChanges — next/previous navigation', () => {
   it('next() advances activeId in document order', () => {
     const { superdoc } = makeStubs({
-      comments: [
-        { id: 'c1', commentId: 'c1' },
-        { id: 'c2', commentId: 'c2' },
-      ],
-      trackedChanges: [{ id: 'tc1' }],
+      trackedChanges: [{ id: 'tc1' }, { id: 'tc2' }, { id: 'tc3' }],
     });
     const ui = createSuperDocUI({ superdoc });
 
-    expect(ui.review.next()).toBe('c1');
-    expect(ui.review.getSnapshot().activeId).toBe('c1');
+    expect(ui.trackChanges.next()).toBe('tc1');
+    expect(ui.trackChanges.getSnapshot().activeId).toBe('tc1');
 
-    expect(ui.review.next()).toBe('c2');
-    expect(ui.review.next()).toBe('tc1');
+    expect(ui.trackChanges.next()).toBe('tc2');
+    expect(ui.trackChanges.next()).toBe('tc3');
   });
 
   it('next() wraps from the last item to the first', () => {
     const { superdoc } = makeStubs({
-      comments: [{ id: 'c1', commentId: 'c1' }],
-      trackedChanges: [{ id: 'tc1' }],
-    });
-    const ui = createSuperDocUI({ superdoc });
-
-    ui.review.next(); // c1
-    ui.review.next(); // tc1
-    expect(ui.review.next()).toBe('c1'); // wrap
-  });
-
-  it('previous() walks backward and wraps from first to last', () => {
-    const { superdoc } = makeStubs({
-      comments: [{ id: 'c1', commentId: 'c1' }],
       trackedChanges: [{ id: 'tc1' }, { id: 'tc2' }],
     });
     const ui = createSuperDocUI({ superdoc });
 
-    expect(ui.review.previous()).toBe('tc2'); // null → wrap to last
-    expect(ui.review.previous()).toBe('tc1');
-    expect(ui.review.previous()).toBe('c1');
-    expect(ui.review.previous()).toBe('tc2'); // wrap
+    ui.trackChanges.next(); // tc1
+    ui.trackChanges.next(); // tc2
+    expect(ui.trackChanges.next()).toBe('tc1'); // wrap
+  });
+
+  it('previous() walks backward and wraps from first to last', () => {
+    const { superdoc } = makeStubs({
+      trackedChanges: [{ id: 'tc1' }, { id: 'tc2' }, { id: 'tc3' }],
+    });
+    const ui = createSuperDocUI({ superdoc });
+
+    expect(ui.trackChanges.previous()).toBe('tc3'); // null → wrap to last
+    expect(ui.trackChanges.previous()).toBe('tc2');
+    expect(ui.trackChanges.previous()).toBe('tc1');
+    expect(ui.trackChanges.previous()).toBe('tc3'); // wrap
   });
 
   it('next() / previous() return null when the feed is empty', () => {
     const { superdoc } = makeStubs();
     const ui = createSuperDocUI({ superdoc });
 
-    expect(ui.review.next()).toBe(null);
-    expect(ui.review.previous()).toBe(null);
-    expect(ui.review.getSnapshot().activeId).toBe(null);
+    expect(ui.trackChanges.next()).toBe(null);
+    expect(ui.trackChanges.previous()).toBe(null);
+    expect(ui.trackChanges.getSnapshot().activeId).toBe(null);
 
     ui.destroy();
   });
 });
 
-describe('ui.review — scrollTo', () => {
+describe('ui.trackChanges — scrollTo', () => {
   it('scrollTo(id) navigates to the right EntityAddress via the presentation editor', async () => {
     const { superdoc, mocks } = makeStubs({
-      comments: [{ id: 'c1', commentId: 'c1' }],
       trackedChanges: [{ id: 'tc1' }],
     });
     const ui = createSuperDocUI({ superdoc });
 
-    await ui.review.scrollTo('c1');
-    let target = mocks.navigateTo.mock.calls[0][0] as { kind: string; entityType: string; entityId: string };
-    expect(target).toEqual({ kind: 'entity', entityType: 'comment', entityId: 'c1' });
-
-    await ui.review.scrollTo('tc1');
-    target = mocks.navigateTo.mock.calls[1][0] as { kind: string; entityType: string; entityId: string };
+    await ui.trackChanges.scrollTo('tc1');
+    const target = mocks.navigateTo.mock.calls[0][0] as { kind: string; entityType: string; entityId: string };
     expect(target).toEqual({ kind: 'entity', entityType: 'trackedChange', entityId: 'tc1' });
 
     ui.destroy();
   });
 });
 
-describe('ui.review — regression: comment row id sourced from discovery.id', () => {
-  it('comment ReviewItem.id mirrors the discovery item id (not undefined commentId)', () => {
+describe('ui.trackChanges — regression: navigation persists past the selected change', () => {
+  it('next() while the cursor is on the active change is not overwritten by the unchanged selection', async () => {
     const { superdoc } = makeStubs({
-      comments: [
-        { id: 'c1', commentId: 'c1' },
-        { id: 'c2', commentId: 'c2' },
-      ],
+      trackedChanges: [{ id: 'tc1' }, { id: 'tc2' }, { id: 'tc3' }],
+      activeChangeIds: ['tc1'],
     });
     const ui = createSuperDocUI({ superdoc });
 
-    const ids = ui.review.getSnapshot().items.map((i) => i.id);
-    // Without the fix every comment row would expose `id: undefined`
-    // because `DiscoveryItem<CommentDomain>` has no `commentId` field.
-    expect(ids).toEqual(['c1', 'c2']);
-    expect(ids.every((id) => typeof id === 'string' && id.length > 0)).toBe(true);
+    expect(ui.trackChanges.getSnapshot().activeId).toBe('tc1');
 
-    // And navigation must work on those ids end-to-end.
-    expect(ui.review.next()).toBe('c1');
-    expect(ui.review.next()).toBe('c2');
+    expect(ui.trackChanges.next()).toBe('tc2');
+    expect(ui.trackChanges.getSnapshot().activeId).toBe('tc2');
 
-    ui.destroy();
-  });
-});
-
-describe('ui.review — regression: navigation persists past the selected item', () => {
-  it('next() while the cursor is on the active item is not overwritten by the unchanged selection', async () => {
-    const { superdoc } = makeStubs({
-      comments: [
-        { id: 'c1', commentId: 'c1' },
-        { id: 'c2', commentId: 'c2' },
-      ],
-      trackedChanges: [{ id: 'tc1' }],
-      activeCommentIds: ['c1'],
-    });
-    const ui = createSuperDocUI({ superdoc });
-
-    // Selection lands on c1 → activeId mirrors selection
-    expect(ui.review.getSnapshot().activeId).toBe('c1');
-
-    // User clicks "Next" in the sidebar — selection has not moved (still on c1)
-    expect(ui.review.next()).toBe('c2');
-    expect(ui.review.getSnapshot().activeId).toBe('c2');
-
-    // A subsequent recompute (e.g. typing emits transaction → selectionUpdate)
-    // must NOT snap activeReviewId back to the selection-driven id, because
-    // the selection has not moved since the last computeState.
     superdoc.fireEditor('selectionUpdate');
     await Promise.resolve();
-    expect(ui.review.getSnapshot().activeId).toBe('c2');
+    expect(ui.trackChanges.getSnapshot().activeId).toBe('tc2');
 
     superdoc.fireEditor('transaction');
     await Promise.resolve();
-    expect(ui.review.getSnapshot().activeId).toBe('c2');
+    expect(ui.trackChanges.getSnapshot().activeId).toBe('tc2');
 
     ui.destroy();
   });
 });
 
-describe('ui.review — regression: tracked-changes-changed refreshes cache', () => {
+describe('ui.trackChanges — regression: tracked-changes-changed refreshes cache', () => {
   it('a tracked-changes-changed event surfaces fresh items in the next snapshot', async () => {
     const { superdoc } = makeStubs({
       trackedChanges: [{ id: 'tc1' }],
     });
     const ui = createSuperDocUI({ superdoc });
 
-    expect(ui.review.getSnapshot().items.map((i) => i.id)).toEqual(['tc1']);
+    expect(ui.trackChanges.getSnapshot().items.map((i) => i.id)).toEqual(['tc1']);
 
     superdoc.setTrackedChanges([{ id: 'tc1' }, { id: 'tc2' }]);
-    // The tracked-change index broadcasts `tracked-changes-changed`
-    // (not `trackedChangesUpdate`) on every transaction that adds /
-    // removes / invalidates changes. The controller listens to that
-    // event so collaborator-driven mutations refresh the cache too.
     superdoc.fireEditor('tracked-changes-changed');
     await Promise.resolve();
 
-    expect(ui.review.getSnapshot().items.map((i) => i.id)).toEqual(['tc1', 'tc2']);
+    expect(ui.trackChanges.getSnapshot().items.map((i) => i.id)).toEqual(['tc1', 'tc2']);
 
     ui.destroy();
   });
 });
 
-describe('ui.review — regression: decide carries non-body story', () => {
+describe('ui.trackChanges — regression: decide carries non-body story', () => {
   it('accept(id) on a header change includes target.story so the adapter routes correctly', () => {
     const { superdoc, mocks } = makeStubs({
       trackedChanges: [{ id: 'tc-header', story: 'header:rId1' }],
     });
     const ui = createSuperDocUI({ superdoc });
 
-    ui.review.accept('tc-header');
+    ui.trackChanges.accept('tc-header');
 
     expect(mocks.decide).toHaveBeenCalledWith({
       decision: 'accept',
@@ -448,7 +396,7 @@ describe('ui.review — regression: decide carries non-body story', () => {
     });
     const ui = createSuperDocUI({ superdoc });
 
-    ui.review.reject('tc-footer');
+    ui.trackChanges.reject('tc-footer');
 
     expect(mocks.decide).toHaveBeenCalledWith({
       decision: 'reject',
@@ -464,7 +412,7 @@ describe('ui.review — regression: decide carries non-body story', () => {
     });
     const ui = createSuperDocUI({ superdoc });
 
-    ui.review.accept('tc-body');
+    ui.trackChanges.accept('tc-body');
 
     expect(mocks.decide).toHaveBeenCalledWith({
       decision: 'accept',
@@ -475,14 +423,14 @@ describe('ui.review — regression: decide carries non-body story', () => {
   });
 });
 
-describe('ui.review — regression: scrollTo carries non-body story', () => {
+describe('ui.trackChanges — regression: scrollTo carries non-body story', () => {
   it('scrollTo on a header change passes target.story to navigateTo', async () => {
     const { superdoc, mocks } = makeStubs({
       trackedChanges: [{ id: 'tc-header', story: 'header:rId1' }],
     });
     const ui = createSuperDocUI({ superdoc });
 
-    await ui.review.scrollTo('tc-header');
+    await ui.trackChanges.scrollTo('tc-header');
 
     expect(mocks.navigateTo).toHaveBeenCalledTimes(1);
     expect(mocks.navigateTo).toHaveBeenCalledWith(
@@ -503,7 +451,7 @@ describe('ui.review — regression: scrollTo carries non-body story', () => {
     });
     const ui = createSuperDocUI({ superdoc });
 
-    await ui.review.scrollTo('tc-body');
+    await ui.trackChanges.scrollTo('tc-body');
 
     expect(mocks.navigateTo).toHaveBeenCalledWith(
       {
@@ -517,16 +465,12 @@ describe('ui.review — regression: scrollTo carries non-body story', () => {
   });
 });
 
-describe('ui.review — regression: decisions route through the host editor', () => {
+describe('ui.trackChanges — regression: decisions route through the host editor', () => {
   it('accept(id) goes through superdoc.activeEditor (host) even when toolbar routing returns a child story editor', () => {
     const { superdoc, mocks } = makeStubs({
       trackedChanges: [{ id: 'tc1' }],
     });
 
-    // Plant a child story editor that the toolbar source resolver
-    // would return (simulating "focus is in a header"). Its decide
-    // mock must NEVER be called — review decisions are document-wide
-    // and must route through the host editor.
     const childDecide = vi.fn((_input: unknown) => ({ success: false as const }));
     const childEditor = {
       doc: { trackChanges: { decide: childDecide } },
@@ -538,10 +482,10 @@ describe('ui.review — regression: decisions route through the host editor', ()
 
     const ui = createSuperDocUI({ superdoc });
 
-    ui.review.accept('tc1');
+    ui.trackChanges.accept('tc1');
 
-    expect(mocks.decide).toHaveBeenCalledTimes(1); // host editor's decide
-    expect(childDecide).not.toHaveBeenCalled(); // child editor's decide untouched
+    expect(mocks.decide).toHaveBeenCalledTimes(1);
+    expect(childDecide).not.toHaveBeenCalled();
 
     ui.destroy();
   });
@@ -560,7 +504,7 @@ describe('ui.review — regression: decisions route through the host editor', ()
 
     const ui = createSuperDocUI({ superdoc });
 
-    ui.review.acceptAll();
+    ui.trackChanges.acceptAll();
 
     expect(mocks.decide).toHaveBeenCalledWith({ decision: 'accept', target: { scope: 'all' } });
     expect(childDecide).not.toHaveBeenCalled();
@@ -569,25 +513,22 @@ describe('ui.review — regression: decisions route through the host editor', ()
   });
 });
 
-describe('ui.review — regression: subscribers are not re-fired on unrelated transactions', () => {
-  it('a typing-only event (transaction without comments/trackedChanges change) does not re-fire ui.review subscribers', async () => {
+describe('ui.trackChanges — regression: subscribers are not re-fired on unrelated transactions', () => {
+  it('a typing-only event does not re-fire ui.trackChanges subscribers', async () => {
     const { superdoc } = makeStubs({
-      comments: [{ id: 'c1', commentId: 'c1' }],
       trackedChanges: [{ id: 'tc1' }],
     });
     const ui = createSuperDocUI({ superdoc });
 
     const cb = vi.fn();
-    const off = ui.review.subscribe(cb);
-    expect(cb).toHaveBeenCalledTimes(1); // initial snapshot
+    const off = ui.trackChanges.subscribe(cb);
+    expect(cb).toHaveBeenCalledTimes(1);
 
     superdoc.fireEditor('transaction');
     await Promise.resolve();
     superdoc.fireEditor('selectionUpdate');
     await Promise.resolve();
 
-    // Memoization keeps the slice identity-stable when the source caches and
-    // activeReviewId have not changed, so shallowEqual short-circuits.
     expect(cb).toHaveBeenCalledTimes(1);
 
     off();

@@ -30,7 +30,7 @@ Open http://localhost:5189.
 SuperDocUIProvider          one controller per app
 └── EditorMount             <SuperDocEditor> + onReady
     ├── Toolbar             ui.commands + setDocumentMode
-    └── ActivitySidebar     ui.review + ui.selection
+    └── ActivitySidebar     ui.comments + ui.trackChanges + ui.selection
         └── CommentComposer ui.selection.capture()
 ```
 

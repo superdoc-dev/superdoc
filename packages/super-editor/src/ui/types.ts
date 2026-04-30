@@ -3,7 +3,7 @@
  *
  * The controller exposes a single observation pipeline (the **selector
  * substrate** at `ui.select(...)`) that the domain namespaces
- * (`ui.toolbar`, `ui.commands`, `ui.comments`, `ui.review`,
+ * (`ui.toolbar`, `ui.commands`, `ui.comments`, `ui.trackChanges`,
  * `ui.viewport`, `ui.selection`) are implemented on top of. Consumers
  * building their own UI typically reach for the domain handles
  * (`ui.comments.subscribe(...)`, `ui.commands.bold.observe(...)`)
@@ -106,7 +106,7 @@ export interface SuperDocEditorLike {
     };
     /**
      * Tracked-changes member on the Document API. Used by
-     * `ui.review.*` for accept/reject and the merged feed.
+     * `ui.trackChanges.*` for accept/reject and the live feed.
      */
     trackChanges?: {
       list?(query?: unknown): unknown;
@@ -140,7 +140,7 @@ export interface SuperDocEditorLike {
  * Read individual fields via {@link SuperDocUI.select} or pull whole
  * slices through the domain handles (`ui.selection.subscribe`,
  * `ui.comments.subscribe`, etc.). Each slice is memoized so a typing
- * only transaction (which leaves selection / comments / review
+ * only transaction (which leaves selection / comments / track-changes
  * unchanged) does not re-fire downstream subscribers.
  *
  * Implementation note: the selector substrate recomputes the full
@@ -180,12 +180,11 @@ export interface SuperDocUIState {
    */
   comments: CommentsSlice;
   /**
-   * Review slice — merged comments + tracked-changes feed for the
-   * Word / Google Docs review sidebar pattern. Cached at controller
-   * level alongside the comments slice; refreshes on the same events
-   * plus tracked-change events.
+   * Tracked-changes slice. Items + activeId for the tracked-changes
+   * sidebar pattern. Cached at controller level alongside the comments
+   * slice; refreshes on tracked-change events.
    */
-  review: ReviewSlice;
+  trackChanges: TrackChangesSlice;
 }
 
 /**
@@ -291,8 +290,8 @@ export interface SelectionSlice {
   /**
    * Tracked-change ids whose mark (`trackInsert` / `trackDelete` /
    * `trackFormat`) overlaps the selection. Union semantics. Mirrors
-   * `state.review.activeId` (which picks the first id) for consumers
-   * that want the full set.
+   * `state.trackChanges.activeId` (which picks the first id) for
+   * consumers that want the full set.
    */
   activeChangeIds: string[];
   /**
@@ -326,54 +325,36 @@ export interface CommentsSlice {
 }
 
 /**
- * One item in the merged review feed (comments + tracked changes).
+ * One tracked-change item exposed on `state.trackChanges.items`.
  *
- * Discriminated by `kind`. `documentOrder` is a dense rank within the
- * snapshot — comparing two items' `documentOrder` tells you which
- * appears first; consuming UIs don't need to recompute it.
+ * Mirrors `editor.doc.trackChanges.list()` output (one entry per
+ * change). UIs that want a merged comments-and-changes sidebar
+ * compose their own feed from `ui.comments.items` and
+ * `ui.trackChanges.items`.
  */
-export type ReviewItem =
-  | {
-      kind: 'comment';
-      id: string;
-      documentOrder: number;
-      comment: import('@superdoc/document-api').CommentsListResult['items'][number];
-    }
-  | {
-      kind: 'change';
-      id: string;
-      documentOrder: number;
-      change: import('@superdoc/document-api').TrackChangesListResult['items'][number];
-    };
+export interface TrackChangesItem {
+  /** Tracked-change id. */
+  id: string;
+  /** Full change record from `editor.doc.trackChanges.list()`. */
+  change: import('@superdoc/document-api').TrackChangesListResult['items'][number];
+}
 
 /**
- * Snapshot of the merged review feed exposed on `state.review`.
+ * Snapshot of the tracked-changes feed exposed on `state.trackChanges`.
  *
- * Document-order ranking note (per SD-2791 ticket): both
- * `editor.doc.trackChanges.list()` and tracked-change groupings are
- * already returned in PM-position order, but cross-list interleaving
- * between comments and tracked changes is *not* fully resolved
- * because public `TrackChangeInfo` lacks a positional `target` today
- * (separate ticket). The initial implementation interleaves comments
- * (in their `comments.list()` order) ahead of tracked changes (in
- * their `list()` order); migration-guide consumers get a stable
- * iteration order and dense `documentOrder` ranks for next/previous
- * navigation. When `TrackChangeInfo.target` lands, the merge sort
- * gets refined transparently.
+ * `editor.doc.trackChanges.list()` returns items in PM-position order;
+ * `items` mirrors that order so next/previous navigation tracks the
+ * document.
  */
-export interface ReviewSlice {
-  /** Merged feed, sorted by `documentOrder`. */
-  items: ReviewItem[];
+export interface TrackChangesSlice {
+  /** Tracked changes in document order. */
+  items: TrackChangesItem[];
+  /** Convenience count of `items.length`. */
+  total: number;
   /**
-   * Number of unresolved review items (open comments + every tracked
-   * change). Drives sidebar-header counts.
-   */
-  openCount: number;
-  /**
-   * The currently active item id — driven by selection
-   * (`activeCommentIds[0] ?? activeChangeIds[0]`) plus
-   * `ui.review.next/previous/scrollTo` calls. `null` when nothing is
-   * focused.
+   * The currently active change id. Driven by selection
+   * (`activeChangeIds[0]`) plus `ui.trackChanges.next/previous/
+   * scrollTo` calls. `null` when nothing is focused.
    */
   activeId: string | null;
 }
@@ -423,11 +404,13 @@ export interface SuperDocUI {
   comments: CommentsHandle;
 
   /**
-   * Review domain — merged comments + tracked-changes feed for
-   * Word/Google-Docs review sidebars. Same shape as `comments` but
-   * with accept/reject/next/previous semantics.
+   * Tracked-changes domain. Accept/reject and navigation over the
+   * tracked-change list. Mirrors `editor.doc.trackChanges` for verbs;
+   * `next/previous/scrollTo` are UI-only navigation helpers. UIs that
+   * want a merged comments-and-changes sidebar compose
+   * `ui.comments.items` and `ui.trackChanges.items` themselves.
    */
-  review: ReviewHandle;
+  trackChanges: TrackChangesHandle;
 
   /**
    * Selection domain — single subscription + read surface for
@@ -584,7 +567,7 @@ export interface DocumentHandle {
 
 /**
  * Selection domain handle exposed on `ui.selection`. Same shape as
- * `CommentsHandle` / `ReviewHandle`: snapshot + subscription. Mirrors
+ * `CommentsHandle` / `TrackChangesHandle`: snapshot + subscription. Mirrors
  * the full `SelectionInfo` projection through the memoized
  * `state.selection` slice.
  */
@@ -949,21 +932,21 @@ export interface CommentsHandle {
 }
 
 /**
- * Review domain handle exposed on `ui.review`. Same architectural
- * posture as `CommentsHandle`: every mutation routes through
- * `editor.doc.trackChanges.*` (the Document API contract); next /
- * previous / scrollTo are UI-only navigation helpers.
+ * Tracked-changes domain handle exposed on `ui.trackChanges`. Same
+ * architectural posture as `CommentsHandle`: every mutation routes
+ * through `editor.doc.trackChanges.*` (the Document API contract);
+ * `next` / `previous` / `scrollTo` are UI-only navigation helpers.
  */
-export interface ReviewHandle {
-  /** Snapshot the merged review feed synchronously. */
-  getSnapshot(): ReviewSlice;
+export interface TrackChangesHandle {
+  /** Snapshot the tracked-changes feed synchronously. */
+  getSnapshot(): TrackChangesSlice;
   /**
-   * Subscribe to review-snapshot changes (items, openCount, activeId).
-   * Listener fires once synchronously with the current snapshot, then
-   * again whenever the slice changes by shallow equality. Returns an
-   * unsubscribe.
+   * Subscribe to track-changes snapshot updates (items, total,
+   * activeId). Listener fires once synchronously with the current
+   * snapshot, then again whenever the slice changes by shallow
+   * equality. Returns an unsubscribe.
    */
-  subscribe(listener: (event: { snapshot: ReviewSlice }) => void): () => void;
+  subscribe(listener: (event: { snapshot: TrackChangesSlice }) => void): () => void;
   /** Accept a single tracked change via `trackChanges.decide`. */
   accept(changeId: string): import('@superdoc/document-api').Receipt;
   /** Reject a single tracked change via `trackChanges.decide`. */
@@ -973,20 +956,20 @@ export interface ReviewHandle {
   /** Reject every tracked change via `trackChanges.decide({ scope: 'all' })`. */
   rejectAll(): import('@superdoc/document-api').Receipt;
   /**
-   * Move `activeId` to the next item in the merged feed (document
-   * order). Wraps to the first item past the last. Returns the new
-   * active id, or `null` if the feed is empty.
+   * Move `activeId` to the next tracked change in document order.
+   * Wraps to the first item past the last. Returns the new active
+   * id, or `null` when there are no changes.
    */
   next(): string | null;
   /**
-   * Move `activeId` to the previous item in the merged feed. Wraps
-   * to the last item past the first. Returns the new active id, or
-   * `null` if the feed is empty.
+   * Move `activeId` to the previous tracked change in document order.
+   * Wraps to the last item past the first. Returns the new active id,
+   * or `null` when there are no changes.
    */
   previous(): string | null;
   /**
-   * Scroll the viewport to the given item (comment or tracked
-   * change) and set it as `activeId`. Routes through
+   * Scroll the viewport to the given tracked change and set it as
+   * `activeId`. Routes through
    * `ui.viewport.scrollIntoView({ target: EntityAddress })`.
    */
   scrollTo(id: string): Promise<import('@superdoc/document-api').ScrollIntoViewOutput>;

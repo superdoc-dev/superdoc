@@ -1,13 +1,26 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { SuperDoc } from 'superdoc';
-import type { ReviewItem, ReviewSlice } from 'superdoc/ui';
-import { useSuperDocHost, useSuperDocReview, useSuperDocSelection, useSuperDocUI } from 'superdoc/ui/react';
+import type { CommentsListResult, TrackChangeInfo } from 'superdoc/ui';
+import {
+  useSuperDocComments,
+  useSuperDocHost,
+  useSuperDocSelection,
+  useSuperDocTrackChanges,
+  useSuperDocUI,
+} from 'superdoc/ui/react';
 import { CommentComposer } from './CommentComposer';
 
-type ReviewCommentItem = Extract<ReviewItem, { kind: 'comment' }>;
-type ReviewChangeItem = Extract<ReviewItem, { kind: 'change' }>;
-type ReviewComment = ReviewCommentItem['comment'];
-type ReviewChange = ReviewChangeItem['change'];
+type CommentItem = CommentsListResult['items'][number];
+
+/**
+ * Local merged-feed item. The controller exposes comments and tracked
+ * changes as separate slices (`ui.comments` / `ui.trackChanges`) so
+ * each consumer can decide whether to merge them. This panel wants the
+ * Google-Docs-style single feed, so we compose the two locally.
+ */
+type ActivityItem =
+  | { kind: 'comment'; id: string; comment: CommentItem }
+  | { kind: 'change'; id: string; change: TrackChangeInfo };
 
 interface Props {
   /** When true, render the inline composer at the top of the panel. */
@@ -16,19 +29,6 @@ interface Props {
   onCloseComposer(): void;
 }
 
-/**
- * Single Activity feed merging comments + tracked changes in document
- * order. Replaces the earlier dual Comments/Review tab split — that
- * was an internal-tooling convention; consumers want one panel showing
- * everything that needs attention.
- *
- * Active-card highlight is driven by the document selection: clicking
- * a comment or tracked change in the editor surfaces the matching id
- * via `ui.selection.activeCommentIds` / `activeChangeIds`, and the
- * panel highlights that card and scrolls it into view. No separate
- * event needed — SD-2792 already exposed the active ids on the
- * selection slice.
- */
 interface DecidedChange {
   id: string;
   decision: 'accepted' | 'rejected';
@@ -37,67 +37,87 @@ interface DecidedChange {
   snapshot: { type?: string; author?: string; authorEmail?: string; excerpt?: string };
 }
 
+/**
+ * Single Activity feed merging comments + tracked changes in document
+ * order. Composes `ui.comments.items` and `ui.trackChanges.items` so
+ * the panel renders one card per row regardless of source.
+ *
+ * Active-card highlight is driven by the document selection: clicking
+ * a comment or tracked change in the editor surfaces the matching id
+ * via `ui.selection.activeCommentIds` / `activeChangeIds`, and the
+ * panel highlights that card and scrolls it into view.
+ */
 export function ActivitySidebar({ composeOpen, onCloseComposer }: Props) {
   const ui = useSuperDocUI();
-  const review = useSuperDocReview();
+  const comments = useSuperDocComments();
+  const trackChanges = useSuperDocTrackChanges();
   const selection = useSuperDocSelection();
 
   // Track tracked-changes that the user has accepted/rejected. Once
-  // decided, the change leaves the live `ui.review` feed (the
+  // decided, the change leaves the live `ui.trackChanges` feed (the
   // tracked-change row in the document is gone — accepted means
   // applied, rejected means discarded). To mimic the Google Docs
-  // experience the user asked for, we capture the change snapshot
-  // before calling accept/reject and render it in the Resolved
-  // section as an audit row. State is component-local: refresh wipes
-  // it, which is fine for a demo.
+  // experience, we capture the change snapshot before calling
+  // accept/reject and render it in the Resolved section as an audit
+  // row. State is component-local: refresh wipes it, which is fine
+  // for a demo.
   const [decidedChanges, setDecidedChanges] = useState<Map<string, DecidedChange>>(() => new Map());
 
   // Track which entity (if any) is currently under the editor cursor.
-  // Multiple ids can be active when marks overlap; the example picks
-  // the first for highlight purposes.
   const activeEntityId = useMemo<string | null>(() => {
     if (selection.activeCommentIds.length > 0) return selection.activeCommentIds[0]!;
     if (selection.activeChangeIds.length > 0) return selection.activeChangeIds[0]!;
     return null;
   }, [selection.activeCommentIds, selection.activeChangeIds]);
 
-  // Partition the live feed into active vs resolved-comment buckets,
-  // and fold reply comments under their parent. Word/Google Docs thread
-  // a comment by `parentCommentId` (DOCX persists this in
+  // Merge the two slices into a single local feed. Comments are
+  // emitted in `comments.list()` order, then tracked changes in
+  // `trackChanges.list()` order. When `TrackChangeInfo.target` lands
+  // (separate ticket), we'll be able to interleave by document
+  // position; until then this stable two-bucket ordering matches what
+  // the controller used to do internally.
+  const feed = useMemo<ActivityItem[]>(() => {
+    const items: ActivityItem[] = [];
+    for (const c of comments.items) items.push({ kind: 'comment', id: c.id, comment: c });
+    for (const tc of trackChanges.items) items.push({ kind: 'change', id: tc.id, change: tc.change });
+    return items;
+  }, [comments.items, trackChanges.items]);
+
+  // Partition the feed into active vs resolved-comment buckets, and
+  // fold reply comments under their parent. Word/Google Docs thread a
+  // comment by `parentCommentId` (DOCX persists this in
   // commentsExtended.xml as `paraIdParent`). The doc-api surfaces
   // `parentCommentId` on each item; we group it here so the sidebar
   // renders one card per thread root with its replies stacked under
   // it. Replies whose parent is missing (resolved or pruned) fall
   // back to top-level so we don't lose them.
   const { active, resolvedComments } = useMemo(() => {
-    const a: ReviewSlice['items'] = [];
-    const r: ReviewSlice['items'] = [];
+    const a: ActivityItem[] = [];
+    const r: ActivityItem[] = [];
     const commentRoots = new Set<string>();
-    for (const item of review.items) {
+    for (const item of feed) {
       if (item.kind === 'comment') {
         const c = item.comment as { parentCommentId?: string };
         if (!c.parentCommentId) commentRoots.add(item.id);
       }
     }
-    for (const item of review.items) {
+    for (const item of feed) {
       const isResolvedComment =
         item.kind === 'comment' && (item.comment as { status?: string }).status === 'resolved';
       if (item.kind === 'comment') {
         const c = item.comment as { parentCommentId?: string };
-        // Reply rows are rendered inline inside the parent card —
-        // skip them at the top level if the parent is also visible.
         if (c.parentCommentId && commentRoots.has(c.parentCommentId)) continue;
       }
       if (isResolvedComment) r.push(item);
       else a.push(item);
     }
     return { active: a, resolvedComments: r };
-  }, [review.items]);
+  }, [feed]);
 
   // Replies indexed by parent id. Built once per snapshot.
   const repliesByParent = useMemo(() => {
-    const map = new Map<string, ReviewSlice['items']>();
-    for (const item of review.items) {
+    const map = new Map<string, ActivityItem[]>();
+    for (const item of feed) {
       if (item.kind !== 'comment') continue;
       const c = item.comment as { parentCommentId?: string };
       if (!c.parentCommentId) continue;
@@ -106,19 +126,16 @@ export function ActivitySidebar({ composeOpen, onCloseComposer }: Props) {
       map.set(c.parentCommentId, list);
     }
     return map;
-  }, [review.items]);
+  }, [feed]);
 
   const decideChange = (id: string, decision: 'accepted' | 'rejected') => {
     if (!ui) return;
     // Capture a snapshot from the live feed BEFORE we mutate, since
     // accept/reject removes the tracked-change row entirely.
-    const liveItem = review.items.find((it) => it.id === id);
-    const change =
-      liveItem?.kind === 'change'
-        ? (liveItem.change as DecidedChange['snapshot'])
-        : null;
-    if (decision === 'accepted') ui.review.accept(id);
-    else ui.review.reject(id);
+    const liveItem = trackChanges.items.find((it) => it.id === id);
+    const change = (liveItem?.change ?? null) as DecidedChange['snapshot'] | null;
+    if (decision === 'accepted') ui.trackChanges.accept(id);
+    else ui.trackChanges.reject(id);
     if (change) {
       setDecidedChanges((prev) => {
         const next = new Map(prev);
@@ -128,19 +145,15 @@ export function ActivitySidebar({ composeOpen, onCloseComposer }: Props) {
     }
   };
 
-  // Reconcile `decidedChanges` against the live review feed: when a
-  // tracked change we previously decided reappears in `review.items`
-  // (undo of the accept/reject, collaborator restore, etc.), drop it
-  // from the local decided roll-up. Without this prune, the same
-  // change renders in both the Active and Resolved sections with a
-  // stale "accepted" / "rejected" label.
+  // Reconcile `decidedChanges` against the live track-changes feed:
+  // when a tracked change we previously decided reappears in
+  // `trackChanges.items` (undo of the accept/reject, collaborator
+  // restore, etc.), drop it from the local decided roll-up.
   useEffect(() => {
     setDecidedChanges((prev) => {
       if (prev.size === 0) return prev;
       const liveChangeIds = new Set<string>();
-      for (const item of review.items) {
-        if (item.kind === 'change') liveChangeIds.add(item.id);
-      }
+      for (const item of trackChanges.items) liveChangeIds.add(item.id);
       let mutated = false;
       const next = new Map(prev);
       for (const id of prev.keys()) {
@@ -151,7 +164,7 @@ export function ActivitySidebar({ composeOpen, onCloseComposer }: Props) {
       }
       return mutated ? next : prev;
     });
-  }, [review.items]);
+  }, [trackChanges.items]);
 
   // Auto-scroll the matching card into view when the active entity changes.
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -165,9 +178,6 @@ export function ActivitySidebar({ composeOpen, onCloseComposer }: Props) {
     return <div className="card">Loading editor…</div>;
   }
 
-  // Resolved roll-up: comments resolved in-document + tracked changes
-  // we've decided locally. Sorted by most recently resolved first so
-  // the latest action floats to the top of the resolved section.
   const decidedList = [...decidedChanges.values()].sort((a, b) => b.decidedAt - a.decidedAt);
   const resolvedCount = resolvedComments.length + decidedList.length;
   const empty = active.length === 0 && resolvedCount === 0 && !composeOpen;
@@ -196,7 +206,7 @@ export function ActivitySidebar({ composeOpen, onCloseComposer }: Props) {
               onDecideChange={decideChange}
               onClick={() => {
                 if (item.kind === 'comment') ui.comments.scrollTo(item.id);
-                else ui.review.scrollTo(item.id);
+                else ui.trackChanges.scrollTo(item.id);
               }}
             />
           ))}
@@ -227,10 +237,10 @@ export function ActivitySidebar({ composeOpen, onCloseComposer }: Props) {
 }
 
 interface CardProps {
-  item: ReviewSlice['items'][number];
+  item: ActivityItem;
   active: boolean;
   resolved: boolean;
-  replies?: ReviewSlice['items'];
+  replies?: ActivityItem[];
   onClick(): void;
   onDecideChange(id: string, decision: 'accepted' | 'rejected'): void;
 }
@@ -256,9 +266,9 @@ function CommentBody({
   replies,
   ui,
 }: {
-  comment: ReviewComment;
+  comment: CommentItem;
   resolved: boolean;
-  replies?: ReviewSlice['items'];
+  replies?: ActivityItem[];
   ui: NonNullable<ReturnType<typeof useSuperDocUI>>;
 }) {
   const host = useSuperDocHost() as SuperDoc | null;
@@ -391,7 +401,7 @@ function ChangeBody({
   change,
   onDecide,
 }: {
-  change: ReviewChange;
+  change: TrackChangeInfo;
   onDecide: (decision: 'accepted' | 'rejected') => void;
 }) {
   const kind = change.type === 'insert' ? 'insertion' : change.type === 'delete' ? 'deletion' : 'format';
@@ -413,9 +423,9 @@ function ChangeBody({
 
 /**
  * Resolved-section row for a tracked change the user already
- * accepted/rejected. The live `ui.review` feed drops decided changes
- * (the row is gone from the document either way), so this row is
- * rendered from the local snapshot we captured before deciding —
+ * accepted/rejected. The live `ui.trackChanges` feed drops decided
+ * changes (the row is gone from the document either way), so this row
+ * is rendered from the local snapshot we captured before deciding —
  * mimicking the Google Docs "Suggestion accepted" trail.
  */
 function DecidedChangeCard({ entry }: { entry: DecidedChange }) {

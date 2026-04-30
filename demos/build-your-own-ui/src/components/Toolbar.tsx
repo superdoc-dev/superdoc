@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import type { DocumentMode, SuperDoc } from 'superdoc';
+import type { DocumentSlice } from 'superdoc/ui';
 import {
   useSuperDocUI,
   useSuperDocCommand,
@@ -110,37 +111,32 @@ export function Toolbar({ onComposeComment }: ToolbarProps) {
 /**
  * Edit / Suggest mode toggle. Edits in Suggest mode are recorded as
  * tracked changes (insertions / deletions) and surface in the activity
- * sidebar for accept / reject. Until a typed `ui.document.setMode()`
- * lands (SD-2816), the setter is on the SuperDoc instance via
- * `useSuperDocHost()`. Current mode is read from the controller's
- * `state.documentMode` slice so the active style stays in sync if
- * something else flips the mode.
+ * sidebar for accept / reject. Reads the current mode from the
+ * `ui.document` snapshot and writes through `ui.document.setMode`
+ * (SD-2816); no host-instance access required.
  */
 function ModeToggle() {
-  const host = useSuperDocHost() as SuperDoc | null;
-  const mode = useSuperDocSlice<DocumentMode | null>(
-    (ui) => ui.select((s) => s.documentMode, Object.is),
-    null,
+  const ui = useSuperDocUI();
+  const document = useSuperDocSlice<DocumentSlice>(
+    (handle) => handle.select((s) => s.document, Object.is),
+    { ready: false, mode: null },
   );
-  const setMode = (next: DocumentMode) => {
-    host?.setDocumentMode(next);
-  };
-  const current: DocumentMode = mode ?? 'editing';
+  const current: DocumentMode = document.mode ?? 'editing';
   return (
     <>
       <button
         className={`tb-btn ${current === 'editing' ? 'active' : ''}`}
-        disabled={!host}
+        disabled={!ui}
         title="Edit normally"
-        onClick={() => setMode('editing')}
+        onClick={() => ui?.document.setMode('editing')}
       >
         Edit
       </button>
       <button
         className={`tb-btn ${current === 'suggesting' ? 'active' : ''}`}
-        disabled={!host}
+        disabled={!ui}
         title="Record edits as tracked changes"
-        onClick={() => setMode('suggesting')}
+        onClick={() => ui?.document.setMode('suggesting')}
       >
         Suggest
       </button>
@@ -189,12 +185,12 @@ function ToolbarButton({
  * actually keeps.
  */
 function ExportButton() {
-  const host = useSuperDocHost();
+  const ui = useSuperDocUI();
 
   const onClick = async () => {
-    if (!host) return;
+    if (!ui) return;
     try {
-      await host.export({
+      await ui.document.export({
         exportType: ['docx'],
         commentsType: 'external',
         triggerDownload: true,
@@ -206,7 +202,7 @@ function ExportButton() {
   };
 
   return (
-    <button className="tb-btn export-btn" disabled={!host} title="Download as DOCX" onClick={onClick}>
+    <button className="tb-btn export-btn" disabled={!ui} title="Download as DOCX" onClick={onClick}>
       Export
     </button>
   );

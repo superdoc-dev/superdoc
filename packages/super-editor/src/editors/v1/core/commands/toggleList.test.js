@@ -11,7 +11,6 @@ vi.mock('@helpers/list-numbering-helpers.js', () => ({
     getNewListId: vi.fn(),
     generateNewListDefinition: vi.fn(),
     getListDefinitionDetails: vi.fn(() => null),
-    setListLevelStyle: vi.fn(() => true),
     setListLevelStyles: vi.fn(() => true),
   },
   markerTextToBulletStyle: vi.fn((m) => ({ '•': 'disc', '◦': 'circle', '▪': 'square' })[m] ?? null),
@@ -502,7 +501,7 @@ describe('toggleList', () => {
       expect(ListHelpers.setListLevelStyles).toHaveBeenCalledTimes(1);
       expect(ListHelpers.setListLevelStyles).toHaveBeenCalledWith({
         editor,
-        levels: [{ numId: 3, ilvl: 0, bulletStyle: 'square', orderedStyle: undefined }],
+        levels: [{ numId: 3, ilvl: 0, bulletStyle: 'square', orderedStyle: null }],
       });
       expect(updateNumberingProperties).not.toHaveBeenCalled();
       expect(tr.setMeta).toHaveBeenCalledWith('preventDispatch', true);
@@ -584,9 +583,8 @@ describe('toggleList', () => {
 
     it('switches the whole list kind when caret is in one item (bullet → ordered)', () => {
       // Two-item bullet list (numId=5, ilvl=0). Caret in item 1 only.
-      // Clicking "ordered list" should flip both items into a new ordered list,
-      // not just the one with the caret.
-      ListHelpers.getNewListId.mockReturnValue('77');
+      // Kind switch goes through the abstract-mutation gate: numId is preserved, the
+      // abstract's level 0 flips to ordered/decimal so both items render as numbered.
       const item1 = createParagraph(
         {
           paragraphProperties: { numberingProperties: { numId: 5, ilvl: 0 } },
@@ -607,36 +605,16 @@ describe('toggleList', () => {
       const result = handler({ editor, state, tr, dispatch });
 
       expect(result).toBe(true);
-      expect(ListHelpers.generateNewListDefinition).toHaveBeenCalledWith({
-        numId: 77,
-        listType: 'orderedList',
+      expect(ListHelpers.generateNewListDefinition).not.toHaveBeenCalled();
+      expect(ListHelpers.setListLevelStyles).toHaveBeenCalledWith({
         editor,
-        bulletStyle: undefined,
-        bulletStyleLevel: 0,
-        orderedStyle: undefined,
+        levels: [{ numId: 5, ilvl: 0, bulletStyle: null, orderedStyle: 'decimal' }],
       });
-      const expectedNumbering = { numId: 77, ilvl: 0 };
-      expect(updateNumberingProperties).toHaveBeenCalledTimes(2);
-      expect(updateNumberingProperties).toHaveBeenNthCalledWith(
-        1,
-        expectedNumbering,
-        item1.node,
-        item1.pos,
-        editor,
-        tr,
-      );
-      expect(updateNumberingProperties).toHaveBeenNthCalledWith(
-        2,
-        expectedNumbering,
-        item2.node,
-        item2.pos,
-        editor,
-        tr,
-      );
+      expect(updateNumberingProperties).not.toHaveBeenCalled();
+      expect(tr.setMeta).toHaveBeenCalledWith('preventDispatch', true);
     });
 
     it('switches the whole list kind when caret is in one item (ordered → bullet)', () => {
-      ListHelpers.getNewListId.mockReturnValue('88');
       const item1 = createParagraph(
         {
           paragraphProperties: { numberingProperties: { numId: 9, ilvl: 0 } },
@@ -657,32 +635,13 @@ describe('toggleList', () => {
       const result = handler({ editor, state, tr, dispatch });
 
       expect(result).toBe(true);
-      expect(ListHelpers.generateNewListDefinition).toHaveBeenCalledWith({
-        numId: 88,
-        listType: 'bulletList',
+      expect(ListHelpers.generateNewListDefinition).not.toHaveBeenCalled();
+      expect(ListHelpers.setListLevelStyles).toHaveBeenCalledWith({
         editor,
-        bulletStyle: undefined,
-        bulletStyleLevel: 0,
-        orderedStyle: undefined,
+        levels: [{ numId: 9, ilvl: 0, bulletStyle: 'disc', orderedStyle: null }],
       });
-      expect(updateNumberingProperties).toHaveBeenCalledTimes(2);
-      const expectedNumbering = { numId: 88, ilvl: 0 };
-      expect(updateNumberingProperties).toHaveBeenNthCalledWith(
-        1,
-        expectedNumbering,
-        item1.node,
-        item1.pos,
-        editor,
-        tr,
-      );
-      expect(updateNumberingProperties).toHaveBeenNthCalledWith(
-        2,
-        expectedNumbering,
-        item2.node,
-        item2.pos,
-        editor,
-        tr,
-      );
+      expect(updateNumberingProperties).not.toHaveBeenCalled();
+      expect(tr.setMeta).toHaveBeenCalledWith('preventDispatch', true);
     });
 
     it('restyles the whole abstract level when caret is in one item of a multi-item list', () => {
@@ -712,7 +671,7 @@ describe('toggleList', () => {
       expect(ListHelpers.setListLevelStyles).toHaveBeenCalledTimes(1);
       expect(ListHelpers.setListLevelStyles).toHaveBeenCalledWith({
         editor,
-        levels: [{ numId: 5, ilvl: 0, bulletStyle: 'square', orderedStyle: undefined }],
+        levels: [{ numId: 5, ilvl: 0, bulletStyle: 'square', orderedStyle: null }],
       });
       expect(updateNumberingProperties).not.toHaveBeenCalled();
     });

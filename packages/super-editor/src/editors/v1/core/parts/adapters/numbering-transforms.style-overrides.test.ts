@@ -167,6 +167,32 @@ describe('setLvlStyleOnAbstract', () => {
     expect(findChild(lvl0, 'w:lvlText').attributes['w:val']).toBe('%1.');
   });
 
+  it('strips inherited rFonts when switching a bullet level to ordered', () => {
+    // Regression: a level minted from baseBulletList carries a Symbol/Wingdings rFonts
+    // entry. Switching that level to ordered must drop it — otherwise the numeric marker
+    // ("1.", "I.") renders in the bullet font and looks wrong.
+    const numbering = freshModel();
+    const { abstractId } = generateNewListDefinition(numbering, {
+      numId: 1,
+      listType: 'bulletList',
+      bulletStyle: 'disc',
+    });
+    // Sanity: the bullet abstract starts WITH an rFonts entry (the Symbol font on the
+    // level-0 bullet). Re-add it directly since the disc override strips the level-0 one;
+    // sublevels still carry their original fonts. We test ilvl=2 (Wingdings square level).
+    const lvl2 = numbering.abstracts[abstractId].elements.find(
+      (el: any) => el.name === 'w:lvl' && el.attributes['w:ilvl'] === '2',
+    );
+    const rPrBefore = lvl2.elements.find((el: any) => el.name === 'w:rPr');
+    expect(rPrBefore?.elements?.some((el: any) => el.name === 'w:rFonts')).toBe(true);
+
+    const ok = setLvlStyleOnAbstract(numbering, abstractId, 2, { orderedStyle: 'decimal' });
+    expect(ok).toBe(true);
+
+    const rPrAfter = lvl2.elements.find((el: any) => el.name === 'w:rPr');
+    expect(rPrAfter?.elements?.some((el: any) => el.name === 'w:rFonts')).toBe(false);
+  });
+
   it('returns false for unknown abstract or missing level', () => {
     const numbering = freshModel();
     expect(setLvlStyleOnAbstract(numbering, 99, 0, { bulletStyle: 'disc' })).toBe(false);

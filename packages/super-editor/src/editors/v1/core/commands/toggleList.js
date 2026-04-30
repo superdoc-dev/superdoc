@@ -111,39 +111,29 @@ export const toggleList =
 
     // Expand to every sibling paragraph at the same `(numId, ilvl)` when the selection is
     // entirely inside a list, so a caret in one item flips every item at that level.
-    // Each entry caches numId/ilvl so the abstract-gate loop below doesn't re-walk attrs.
-    let paragraphsInSelection = originalParagraphsInSelection.map((p) => ({ ...p }));
+    let paragraphsInSelection = originalParagraphsInSelection;
     const seenLevels = new Set();
     let allListItems = paragraphsInSelection.length > 0;
-    for (const p of paragraphsInSelection) {
-      const np = getResolvedParagraphProperties(p.node)?.numberingProperties;
+    for (const { node } of paragraphsInSelection) {
+      const np = getResolvedParagraphProperties(node)?.numberingProperties;
       if (!np?.numId) {
         allListItems = false;
         break;
       }
-      p.numId = Number(np.numId);
-      p.ilvl = Number(np.ilvl ?? 0);
-      seenLevels.add(`${p.numId}:${p.ilvl}`);
+      seenLevels.add(`${Number(np.numId)}:${Number(np.ilvl ?? 0)}`);
     }
 
     if (allListItems && seenLevels.size > 0) {
-      const expanded = new Map();
-      for (const p of paragraphsInSelection) expanded.set(p.pos, p);
-
+      const expanded = new Map(paragraphsInSelection.map((p) => [p.pos, p]));
       state.doc.descendants((node, pos) => {
         if (node.type.name !== 'paragraph') return true;
         if (expanded.has(pos)) return false;
         const np = getResolvedParagraphProperties(node)?.numberingProperties;
-        if (np?.numId) {
-          const numId = Number(np.numId);
-          const ilvl = Number(np.ilvl ?? 0);
-          if (seenLevels.has(`${numId}:${ilvl}`)) {
-            expanded.set(pos, { node, pos, numId, ilvl });
-          }
+        if (np?.numId && seenLevels.has(`${Number(np.numId)}:${Number(np.ilvl ?? 0)}`)) {
+          expanded.set(pos, { node, pos });
         }
         return false;
       });
-
       paragraphsInSelection = [...expanded.values()].sort((a, b) => a.pos - b.pos);
     }
 
@@ -154,14 +144,9 @@ export const toggleList =
         hasNonListParagraphs = true;
       }
     }
-    // Only borrow numbering from a preceding list paragraph when the selection
-    // is made up of *plain* paragraphs (no numbering yet). The borrow is meant
-    // to extend a previous list onto adjacent non-list paragraphs. If a
-    // paragraph in the selection is already a list item — even one whose
-    // marker doesn't match the requested style — we should not reuse a
-    // neighbor's numId, because that throws away the existing nesting and
-    // overrides the user's style choice with the neighbor's level. Falling
-    // through to `create` mints a fresh abstract instead.
+    // Only borrow numbering from a preceding list paragraph when the selection is made up
+    // entirely of plain paragraphs. If any selected paragraph already has numbering, fall
+    // through to `create` so we mint a fresh abstract and don't clobber existing nesting.
     const selectionAlreadyHasListNumbering = paragraphsInSelection.some(
       ({ node }) => getResolvedParagraphProperties(node)?.numberingProperties != null,
     );
@@ -172,33 +157,38 @@ export const toggleList =
       }
     }
 
-    // When every paragraph is already a list of the requested kind and a specific style is
-    // requested, mutate the abstract definition once per unique (numId, ilvl). That restyles
-    // every item at that level without allocating a new numId — preserving list identity
-    // and continuous numbering across siblings.
-    const styleRequested = listType === 'bulletList' ? bulletStyle : orderedStyle;
-    if (styleRequested && firstListNode == null && allListItems && paragraphsInSelection.length > 0) {
-      const targetKind = listType === 'bulletList' ? 'bullet' : 'ordered';
-      let allMatchKind = true;
+    // Whole-list restyle: when every selected paragraph is already a list (and none match
+    // the requested kind+style as-is), mutate the abstract once per unique (numId, ilvl)
+    // instead of minting a new numId. This covers two cases:
+    //   - Style swap within the same kind (e.g. disc → square, decimal → upper-roman).
+    //   - Kind switch (e.g. bullet → ordered) — the level keeps its numId and ilvl, so a
+    //     mixed-kind list (level 0 bullet, level 1 ordered) renders correctly when the
+    //     caret moves between levels.
+    if (firstListNode == null && allListItems) {
+      // Default each kind to its canonical style when the caller didn't specify one,
+      // so plain `toggleOrderedList()` / `toggleBulletList()` still flips the level.
+      const effectiveBulletStyle = listType === 'bulletList' ? (bulletStyle ?? 'disc') : null;
+      const effectiveOrderedStyle = listType === 'orderedList' ? (orderedStyle ?? 'decimal') : null;
+
       const levelMap = new Map();
-      for (const { node, numId, ilvl } of paragraphsInSelection) {
-        if (getParagraphListKind(node, editor) !== targetKind) {
-          allMatchKind = false;
-          break;
-        }
-        levelMap.set(`${numId}:${ilvl}`, { numId, ilvl, bulletStyle, orderedStyle });
+      for (const { node } of paragraphsInSelection) {
+        const np = getResolvedParagraphProperties(node).numberingProperties;
+        const numId = Number(np.numId);
+        const ilvl = Number(np.ilvl ?? 0);
+        levelMap.set(`${numId}:${ilvl}`, {
+          numId,
+          ilvl,
+          bulletStyle: effectiveBulletStyle,
+          orderedStyle: effectiveOrderedStyle,
+        });
       }
 
-      if (allMatchKind && levelMap.size > 0) {
+      if (levelMap.size > 0) {
         if (!dispatch) return true;
-
         ListHelpers.setListLevelStyles({ editor, levels: [...levelMap.values()] });
-
-        // `mutateNumbering`'s invalidation handler synchronously dispatches a fresh tr
-        // that advances `state.doc`, leaving the captured `tr` with a stale `before`.
-        // CommandService's auto-dispatch would then throw "Applying a mismatched
-        // transaction". The invalidation pass already triggers the marker recompute,
-        // so we just opt out of the auto-dispatch.
+        // `mutateNumbering`'s invalidation handler synchronously dispatches a fresh tr,
+        // which advances state.doc and leaves our captured `tr` stale. Skip the auto-
+        // dispatch so CommandService doesn't throw "Applying a mismatched transaction".
         tr.setMeta('preventDispatch', true);
         return true;
       }

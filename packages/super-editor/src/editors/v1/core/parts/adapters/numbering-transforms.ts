@@ -469,38 +469,40 @@ export function setLvlStyleOnAbstract(
     return true;
   };
 
+  // Strip any inherited `w:rFonts` so the marker renders in the document's default font.
+  // Required when switching kinds (bullet ↔ ordered) — Symbol/Wingdings on a bullet level
+  // would carry over to a numeric marker and warp it into glyphs.
+  const stripMarkerFont = (): boolean => {
+    const rPr = lvlEl.elements.find((el: any) => el.name === 'w:rPr');
+    if (!rPr?.elements?.some((el: any) => el.name === 'w:rFonts')) return false;
+    rPr.elements = rPr.elements.filter((el: any) => el.name !== 'w:rFonts');
+    return true;
+  };
+
+  let numFmtValue: string | null = null;
+  let lvlTextValue: string | null = null;
+
   if (options.bulletStyle) {
     const char = BULLET_STYLE_CHARS[options.bulletStyle];
     if (!char) return false;
-
-    let changed = false;
-    if (setOrAddChild('w:numFmt', 'bullet')) changed = true;
-    if (setOrAddChild('w:lvlText', char)) changed = true;
-
-    // Drop the inherited bullet font so the Unicode glyph renders in the document's default font.
-    const rPr = lvlEl.elements.find((el: any) => el.name === 'w:rPr');
-    if (rPr?.elements?.some((el: any) => el.name === 'w:rFonts')) {
-      rPr.elements = rPr.elements.filter((el: any) => el.name !== 'w:rFonts');
-      changed = true;
-    }
-    return changed;
-  }
-
-  if (options.orderedStyle) {
+    numFmtValue = 'bullet';
+    lvlTextValue = char;
+  } else if (options.orderedStyle) {
     const config = ORDERED_LIST_STYLES[options.orderedStyle];
     if (!config) return false;
     // OOXML `%N` references counter level N-1 (1-indexed from the top), so at ilvl=N we
     // need `%(N+1)`. Preserve the style's suffix (e.g. ".", ")") so paren styles stay paren.
-    const suffix = config.text.replace(/^%\d+/, '');
-    const lvlTextValue = `%${ilvl + 1}${suffix}`;
-
-    let changed = false;
-    if (setOrAddChild('w:numFmt', config.fmt)) changed = true;
-    if (setOrAddChild('w:lvlText', lvlTextValue)) changed = true;
-    return changed;
+    numFmtValue = config.fmt;
+    lvlTextValue = `%${ilvl + 1}${config.text.replace(/^%\d+/, '')}`;
+  } else {
+    return false;
   }
 
-  return false;
+  let changed = false;
+  if (setOrAddChild('w:numFmt', numFmtValue)) changed = true;
+  if (setOrAddChild('w:lvlText', lvlTextValue)) changed = true;
+  if (stripMarkerFont()) changed = true;
+  return changed;
 }
 
 // Re-export ID allocation for external callers that need just IDs

@@ -41,13 +41,14 @@ export function markerTextToBulletStyle(markerText) {
 }
 
 /**
- * Maps `listRendering.numberingType` + last char of `listRendering.markerText` to a named ordered style.
- * Returns null for unrecognized combinations.
- * @param {import('../../extensions/types/paragraph-commands.js').OrderedListStyle|null|undefined} numberingType
+ * Map a `(numFmt, markerText)` pair from `listRendering` to a named ordered style.
+ * The last char of `markerText` disambiguates suffix variants (e.g. "1." vs "1)").
+ * Returns null for combinations not exposed in the toolbar.
+ * @param {string|null|undefined} numFmt OOXML numFmt value, e.g. 'decimal', 'upperRoman'.
  * @param {string|null|undefined} markerText
  * @returns {import('../../extensions/types/paragraph-commands.js').OrderedListStyle|null}
  */
-export function numberingInfoToOrderedStyle(numberingType, markerText) {
+export function numberingInfoToOrderedStyle(numFmt, markerText) {
   const suffix = markerText?.slice(-1);
   /** @type {Record<string, Record<string, import('../../extensions/types/paragraph-commands.js').OrderedListStyle>>} */
   const map = {
@@ -57,7 +58,7 @@ export function numberingInfoToOrderedStyle(numberingType, markerText) {
     upperLetter: { '.': 'upper-alpha', ')': 'upper-alpha-paren' },
     lowerLetter: { '.': 'lower-alpha', ')': 'lower-alpha-paren' },
   };
-  return map[numberingType]?.[suffix] ?? null;
+  return map[numFmt]?.[suffix] ?? null;
 }
 
 /**
@@ -517,45 +518,10 @@ export const setLvlRestartOnAbstract = (editor, abstractNumId, ilvl, restartAfte
 };
 
 /**
- * Resolve the abstractNumId a numId points to. Follows `w:numStyleLink` redirects
- * via {@link getListDefinitionDetails} so style-linked lists land on the real abstract.
- * @param {import('../Editor').Editor} editor
- * @param {number} numId
- * @param {number} ilvl
- * @returns {number | null}
- */
-const resolveAbstractIdForLevel = (editor, numId, ilvl) => {
-  const details = getListDefinitionDetails({ numId, level: ilvl, editor });
-  const raw = details?.abstractId;
-  const id = raw != null ? Number(raw) : NaN;
-  return Number.isFinite(id) ? id : null;
-};
-
-/**
- * Update the bullet/ordered style on a list level for an existing numId.
- *
- * @param {Object} param0
- * @param {import('../Editor').Editor} param0.editor
- * @param {number} param0.numId
- * @param {number} param0.ilvl
- * @param {'disc'|'circle'|'square'|null} [param0.bulletStyle]
- * @param {import('../../extensions/types/paragraph-commands.js').OrderedListStyle|null} [param0.orderedStyle]
- * @returns {boolean} `true` when the abstract was actually changed.
- */
-export const setListLevelStyle = ({ editor, numId, ilvl, bulletStyle, orderedStyle }) => {
-  const abstractNumId = resolveAbstractIdForLevel(editor, numId, ilvl);
-  if (abstractNumId == null) return false;
-
-  let updated = false;
-  mutateNumbering(editor, 'list-numbering-helpers:setListLevelStyle', (numbering) => {
-    updated = pureSetLvlStyleOnAbstract(numbering, abstractNumId, ilvl, { bulletStyle, orderedStyle });
-  });
-  return updated;
-};
-
-/**
- * Batched variant of {@link setListLevelStyle}. Runs every level update inside a single
- * `mutateNumberingBatch` so multi-level selections cost one invalidation cycle, not N.
+ * Apply bullet/ordered style overrides to one or more list levels. Each entry resolves
+ * its own abstract via `w:numStyleLink` (style-linked lists land on the real abstract);
+ * all updates run in a single `mutateNumberingBatch` so a multi-level selection costs
+ * one invalidation cycle.
  *
  * @param {Object} param0
  * @param {import('../Editor').Editor} param0.editor
@@ -567,8 +533,9 @@ export const setListLevelStyles = ({ editor, levels }) => {
 
   const resolved = [];
   for (const level of levels) {
-    const abstractNumId = resolveAbstractIdForLevel(editor, level.numId, level.ilvl);
-    if (abstractNumId == null) continue;
+    const abstractIdRaw = getListDefinitionDetails({ numId: level.numId, level: level.ilvl, editor })?.abstractId;
+    const abstractNumId = abstractIdRaw != null ? Number(abstractIdRaw) : NaN;
+    if (!Number.isFinite(abstractNumId)) continue;
     resolved.push({
       abstractNumId,
       ilvl: level.ilvl,
@@ -614,7 +581,6 @@ export const ListHelpers = {
   // Numbering definition helpers
   createNumDefinition,
   setLvlRestartOnAbstract,
-  setListLevelStyle,
   setListLevelStyles,
   rebuildRawNumberingFromTranslated,
 

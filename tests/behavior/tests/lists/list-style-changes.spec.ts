@@ -283,6 +283,55 @@ test.describe('PR-2873 list style changes', () => {
       expect(visibleMarkers.map((t) => t.trim())).toEqual(['1.', 'I.', 'II.']);
     });
 
+    test('switching kind on a nested item preserves the level — going back to level 0 continues the parent list', async ({
+      superdoc,
+    }) => {
+      // Reproduces the user-reported scenario:
+      //   1. type "first" and toggle bullet list   -> "• first" at level 0
+      //   2. enter, tab, type "nested"             -> "◦ nested" at level 1
+      //   3. with caret in "nested", click numbered list  -> level 1 becomes ordered
+      //   4. enter (still level 1), shift+tab (back to level 0)
+      // Expectation: the new paragraph at level 0 continues the bullet list — i.e. it is
+      // a level-0 bullet, NOT a level-0 ordered marker.
+      await superdoc.type('first');
+      await superdoc.waitForStable();
+      await superdoc.executeCommand('toggleBulletList');
+      await superdoc.waitForStable();
+
+      await superdoc.newLine();
+      await superdoc.waitForStable();
+      await superdoc.press('Tab');
+      await superdoc.waitForStable();
+      await superdoc.type('nested');
+      await superdoc.waitForStable();
+
+      const nestedBefore = await getListItemSnapshots(superdoc, 'nested');
+      expect(nestedBefore[0].numberingType).toBe('bullet');
+
+      await superdoc.executeCommand('toggleOrderedList');
+      await superdoc.waitForStable();
+
+      const nestedAfter = await getListItemSnapshots(superdoc, 'nested');
+      // After kind switch, "nested" should still be at level 1 (not collapsed to level 0)
+      // and should now be ordered.
+      expect(nestedAfter[0].numberingType).not.toBe('bullet');
+
+      await superdoc.newLine();
+      await superdoc.waitForStable();
+      await superdoc.press('Shift+Tab');
+      await superdoc.waitForStable();
+      await superdoc.type('continued');
+      await superdoc.waitForStable();
+
+      const continued = await getListItemSnapshots(superdoc, 'continued');
+      const firstSnap = await getListItemSnapshots(superdoc, 'first');
+
+      // "continued" is at level 0. It should belong to the original bullet list (same numId
+      // as "first") so the bullet at level 0 keeps rendering.
+      expect(continued[0].numId).toBe(firstSnap[0].numId);
+      expect(continued[0].numberingType).toBe('bullet');
+    });
+
     test('applying a different ordered style restyles every item at the same level', async ({ superdoc }) => {
       await createOrderedList(superdoc, ['one', 'two', 'three']);
 

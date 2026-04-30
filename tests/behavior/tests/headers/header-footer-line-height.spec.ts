@@ -1,12 +1,7 @@
-import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { test, expect } from '../../fixtures/superdoc.js';
+import { H_F_NORMAL_DOC_PATH as DOC_PATH } from '../../helpers/story-fixtures.js';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DOC_PATH = path.resolve(__dirname, '../../test-data/pagination/longer-header.docx');
-
-test.skip(!fs.existsSync(DOC_PATH), 'Test document not available — run pnpm corpus:pull');
+test.use({ config: { showCaret: true, showSelection: true } });
 
 test('header editor uses line-height 1, not the default 1.2', async ({ superdoc }) => {
   await superdoc.loadDocument(DOC_PATH);
@@ -21,15 +16,10 @@ test('header editor uses line-height 1, not the default 1.2', async ({ superdoc 
   await superdoc.page.mouse.dblclick(box!.x + box!.width / 2, box!.y + box!.height / 2);
   await superdoc.waitForStable();
 
-  const editorHost = superdoc.page.locator('.superdoc-header-editor-host').first();
-  await editorHost.waitFor({ state: 'visible', timeout: 10_000 });
-
-  // The ProseMirror element inside the header editor should have lineHeight: 1
-  // (matching OOXML Header style w:line="240" w:lineRule="auto" = 240/240 = 1.0)
-  const pm = editorHost.locator('.ProseMirror');
-  await expect(pm).toHaveCSS('line-height', /^\d+(\.\d+)?px$/);
-
-  const lineHeight = await pm.evaluate((el) => el.style.lineHeight);
+  const pm = superdoc.page
+    .locator('.presentation-editor__story-hidden-host[data-story-kind="headerFooter"] .ProseMirror')
+    .first();
+  const lineHeight = await pm.evaluate((el) => (el as HTMLElement).style.lineHeight);
   expect(lineHeight).toBe('1');
 });
 
@@ -47,11 +37,10 @@ test('footer editor uses line-height 1, not the default 1.2', async ({ superdoc 
   await superdoc.page.mouse.dblclick(box!.x + box!.width / 2, box!.y + box!.height / 2);
   await superdoc.waitForStable();
 
-  const editorHost = superdoc.page.locator('.superdoc-footer-editor-host').first();
-  await editorHost.waitFor({ state: 'visible', timeout: 10_000 });
-
-  const pm = editorHost.locator('.ProseMirror');
-  const lineHeight = await pm.evaluate((el) => el.style.lineHeight);
+  const pm = superdoc.page
+    .locator('.presentation-editor__story-hidden-host[data-story-kind="headerFooter"] .ProseMirror')
+    .first();
+  const lineHeight = await pm.evaluate((el) => (el as HTMLElement).style.lineHeight);
   expect(lineHeight).toBe('1');
 });
 
@@ -68,12 +57,14 @@ test('body editor still uses default line-height 1.2', async ({ superdoc }) => {
   expect(lineHeight).toBe('1.2');
 });
 
-test('header content is not clipped when entering edit mode', async ({ superdoc }) => {
+test('header content remains visible while hidden-host editing is active', async ({ superdoc }) => {
   await superdoc.loadDocument(DOC_PATH);
   await superdoc.waitForStable();
 
   const header = superdoc.page.locator('.superdoc-page-header').first();
   await header.waitFor({ state: 'visible', timeout: 15_000 });
+  const beforeBox = await header.boundingBox();
+  expect(beforeBox).toBeTruthy();
 
   // Double-click to enter header edit mode
   const box = await header.boundingBox();
@@ -81,20 +72,13 @@ test('header content is not clipped when entering edit mode', async ({ superdoc 
   await superdoc.page.mouse.dblclick(box!.x + box!.width / 2, box!.y + box!.height / 2);
   await superdoc.waitForStable();
 
-  const editorHost = superdoc.page.locator('.superdoc-header-editor-host').first();
-  await editorHost.waitFor({ state: 'visible', timeout: 10_000 });
+  const storyHost = superdoc.page
+    .locator('.presentation-editor__story-hidden-host[data-story-kind="headerFooter"]')
+    .first();
+  await expect(storyHost).toHaveAttribute('data-story-key', /.+/);
 
-  // The ProseMirror content should not overflow the editor host container
-  const overflow = await editorHost.evaluate((host) => {
-    const pm = host.querySelector('.ProseMirror') as HTMLElement;
-    if (!pm) return { error: 'no PM' };
-    return {
-      pmScrollHeight: pm.scrollHeight,
-      pmOffsetHeight: pm.offsetHeight,
-      hostHeight: host.offsetHeight,
-      isOverflowing: pm.scrollHeight > host.offsetHeight,
-    };
-  });
-  expect(overflow).not.toHaveProperty('error');
-  expect(overflow.isOverflowing).toBe(false);
+  const afterBox = await header.boundingBox();
+  expect(afterBox).toBeTruthy();
+  expect(afterBox!.height).toBeGreaterThan(0);
+  expect(Math.abs((afterBox?.height ?? 0) - (beforeBox?.height ?? 0))).toBeLessThan(1);
 });

@@ -27,12 +27,17 @@ Returns a TrackChangeInfo object with the change type, author, date, affected co
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `id` | string | yes |  |
+| `story` | StoryLocator | no | StoryLocator |
 
 ### Example request
 
 ```json
 {
-  "id": "id-001"
+  "id": "id-001",
+  "story": {
+    "kind": "story",
+    "storyType": "body"
+  }
 }
 ```
 
@@ -44,6 +49,7 @@ Returns a TrackChangeInfo object with the change type, author, date, affected co
 | `address.entityId` | string | yes |  |
 | `address.entityType` | `"trackedChange"` | yes | Constant: `"trackedChange"` |
 | `address.kind` | `"entity"` | yes | Constant: `"entity"` |
+| `address.story` | StoryLocator | no | StoryLocator |
 | `author` | string | no |  |
 | `authorEmail` | string | no |  |
 | `authorImage` | string | no |  |
@@ -63,7 +69,11 @@ Returns a TrackChangeInfo object with the change type, author, date, affected co
   "address": {
     "entityId": "entity-789",
     "entityType": "trackedChange",
-    "kind": "entity"
+    "kind": "entity",
+    "story": {
+      "kind": "story",
+      "storyType": "body"
+    }
   },
   "author": "Jane Doe",
   "id": "id-001",
@@ -92,6 +102,9 @@ Returns a TrackChangeInfo object with the change type, author, date, affected co
   "properties": {
     "id": {
       "type": "string"
+    },
+    "story": {
+      "$ref": "#/$defs/StoryLocator"
     }
   },
   "required": [

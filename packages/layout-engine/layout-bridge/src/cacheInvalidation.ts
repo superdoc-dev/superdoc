@@ -136,6 +136,9 @@ export function computeConstraintsHash(constraints: HeaderFooterConstraints): st
     if (margins.header !== undefined) {
       parts.push(`mh:${margins.header}`);
     }
+    if (margins.footer !== undefined) {
+      parts.push(`mf:${margins.footer}`);
+    }
   }
 
   return parts.join('|');

@@ -8,7 +8,17 @@ import { listComments } from './document-api.js';
 
 /** Locator for the active (clicked/focused) floating comment dialog. */
 export const activeCommentDialog = (page: Page): Locator =>
-  page.locator('.comment-placeholder .comments-dialog.is-active, .comment-placeholder .comments-dialog').last();
+  page
+    .locator(
+      '.comment-placeholder .comments-dialog.is-active, #comments-panel .comments-dialog.is-active, .comment-placeholder .comments-dialog, #comments-panel .comments-dialog',
+    )
+    .last();
+
+const commentDialogLocator = (page: Page): Locator =>
+  page.locator('.comment-placeholder .comments-dialog, #comments-panel .comments-dialog');
+
+const activeCommentDialogLocator = (page: Page): Locator =>
+  page.locator('.comment-placeholder .comments-dialog.is-active, #comments-panel .comments-dialog.is-active');
 
 const locatorTop = async (locator: Locator): Promise<number> => {
   const target = locator.first();
@@ -83,17 +93,17 @@ export async function activateCommentDialog(
     await superdoc.waitForStable();
   }
 
-  const activeDialog = superdoc.page.locator('.comment-placeholder .comments-dialog.is-active').last();
+  const activeDialog = activeCommentDialogLocator(superdoc.page).last();
   const dialog = activeCommentDialog(superdoc.page);
   const hasActiveDialog = (await activeDialog.count()) > 0;
 
   if (!hasActiveDialog) {
     // Fallback: click the floating dialog directly to trigger setFocus → is-active
-    const floatingDialog = superdoc.page.locator('.comment-placeholder .comments-dialog').last();
-    await expect(floatingDialog).toBeVisible({ timeout: timeoutMs });
+    const visibleDialog = commentDialogLocator(superdoc.page).last();
+    await expect(visibleDialog).toBeVisible({ timeout: timeoutMs });
     // Click near the top-left to avoid accidentally hitting interactive controls
     // such as the "N more replies" collapse/expand pill in the middle of the card.
-    await floatingDialog.click({ position: { x: 12, y: 12 } });
+    await visibleDialog.click({ position: { x: 12, y: 12 }, force: true });
     await superdoc.waitForStable();
 
     const hasActiveDialogNow = (await activeDialog.count()) > 0;

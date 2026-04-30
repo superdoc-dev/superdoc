@@ -8,6 +8,8 @@ import {
 } from '@superdoc/style-engine/ooxml';
 import { readDefaultTableStyle, readSettingsRoot } from '../../../document-api-adapters/document-settings.js';
 import { readTranslatedLinkedStyles } from '../../../core/parts/adapters/styles-read.js';
+import { eighthPointsToPixels } from '../../../core/super-converter/helpers.js';
+import { cloneBorders, mapBorderSizes } from './border-utils.js';
 
 /**
  * @typedef {Object} NormalizedTableAttrs
@@ -53,9 +55,12 @@ export function normalizeNewTableAttrs(editor) {
   const resolved = resolvePreferredNewTableStyleIdFromEditor(editor);
 
   if (resolved.source === 'none') {
+    const fallbackPixelBorders = cloneBorders(TABLE_FALLBACK_BORDERS, TABLE_BORDER_SIDES);
+    mapBorderSizes(fallbackPixelBorders, eighthPointsToPixels);
+
     return {
       tableStyleId: null,
-      borders: { ...TABLE_FALLBACK_BORDERS },
+      borders: fallbackPixelBorders,
       tableProperties: {
         borders: { ...TABLE_FALLBACK_BORDERS },
         cellMargins: {
@@ -82,3 +87,5 @@ export function normalizeNewTableAttrs(editor) {
  * Matches Word behavior where `TableGrid` is always the default.
  */
 export const STANDALONE_TABLE_STYLE_ID = TABLE_STYLE_ID_TABLE_GRID;
+
+const TABLE_BORDER_SIDES = ['top', 'bottom', 'left', 'right', 'insideH', 'insideV'];

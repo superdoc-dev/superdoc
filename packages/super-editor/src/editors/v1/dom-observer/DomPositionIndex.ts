@@ -18,6 +18,20 @@ export type DomPositionIndexEntry = {
   el: HTMLElement;
 };
 
+function isExcludedFromBodyDomIndex(node: HTMLElement): boolean {
+  if (node.closest('.superdoc-page-header, .superdoc-page-footer')) {
+    return true;
+  }
+
+  const blockId = node.closest<HTMLElement>('[data-block-id]')?.dataset.blockId ?? '';
+  return (
+    blockId.startsWith('footnote-') ||
+    blockId.startsWith('__sd_semantic_footnote-') ||
+    blockId.startsWith('endnote-') ||
+    blockId.startsWith('__sd_semantic_endnote-')
+  );
+}
+
 /**
  * Options for controlling how the DOM position index is rebuilt.
  */
@@ -98,7 +112,7 @@ export class DomPositionIndex {
 
     for (const node of pmNodes) {
       if (node.classList.contains(DOM_CLASS_NAMES.INLINE_SDT_WRAPPER)) continue;
-      if (node.closest('.superdoc-page-header, .superdoc-page-footer')) continue;
+      if (isExcludedFromBodyDomIndex(node)) continue;
       if (leafOnly && nonLeaf.has(node)) continue;
 
       const pmStart = Number(node.dataset.pmStart ?? 'NaN');

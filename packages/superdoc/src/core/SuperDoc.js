@@ -1241,6 +1241,25 @@ export class SuperDoc extends EventEmitter {
   }
 
   /**
+   * SD-2454: Toggle bookmark bracket indicators (opt-in, off by default).
+   * Matches Word's "Show bookmarks" option. Triggers a re-layout on change
+   * because the brackets are visible characters participating in text flow.
+   * @param {boolean} show
+   * @returns {void}
+   */
+  setShowBookmarks(show = true) {
+    const nextValue = Boolean(show);
+    const layoutOptions = (this.config.layoutEngineOptions = this.config.layoutEngineOptions || {});
+    if (layoutOptions.showBookmarks === nextValue) return;
+    layoutOptions.showBookmarks = nextValue;
+
+    this.superdocStore?.documents?.forEach((doc) => {
+      const presentationEditor = doc.getPresentationEditor?.();
+      presentationEditor?.setShowBookmarks?.(nextValue);
+    });
+  }
+
+  /**
    * Set the document mode.
    * @param {DocumentMode} type
    * @returns {void}
@@ -1391,7 +1410,7 @@ export class SuperDoc extends EventEmitter {
    * @returns {Object[]} The search results
    */
   search(text) {
-    return this.activeEditor?.commands.search(text);
+    return this.activeEditor?.commands.search(text, { searchModel: 'visible' });
   }
 
   /**

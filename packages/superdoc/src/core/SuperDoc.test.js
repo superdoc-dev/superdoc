@@ -409,6 +409,30 @@ describe('SuperDoc core', () => {
     expect(readySpy).toHaveBeenCalledTimes(1);
   });
 
+  it('uses visible search model in SuperDoc.search()', async () => {
+    createAppHarness();
+
+    const instance = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: {}, toolbar: {} },
+      colors: ['red'],
+      user: { name: 'Jane', email: 'jane@example.com' },
+      onException: vi.fn(),
+    });
+    await flushMicrotasks();
+
+    const searchResult = [{ from: 1, to: 4 }];
+    const searchMock = vi.fn(() => searchResult);
+    instance.activeEditor = { commands: { search: searchMock } };
+
+    const result = instance.search('test');
+
+    expect(searchMock).toHaveBeenCalledWith('test', { searchModel: 'visible' });
+    expect(result).toBe(searchResult);
+  });
+
   it('locks superdoc via ydoc metadata and emits event', async () => {
     createAppHarness();
 
@@ -866,6 +890,50 @@ describe('SuperDoc core', () => {
     expect(instance.config.disableContextMenu).toBe(false);
     expect(setContextMenuDisabled).toHaveBeenLastCalledWith(false);
     expect(setOptions).toHaveBeenLastCalledWith({ disableContextMenu: false });
+  });
+
+  it('propagates setShowBookmarks to presentation editors and skips no-op toggles', async () => {
+    const { superdocStore } = createAppHarness();
+    const setShowBookmarks = vi.fn();
+    const docStub = {
+      getPresentationEditor: vi.fn(() => ({ setShowBookmarks })),
+    };
+
+    const instance = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: {}, toolbar: {} },
+      colors: ['red'],
+      role: 'editor',
+      user: { name: 'Jane', email: 'jane@example.com' },
+      onException: vi.fn(),
+    });
+    await flushMicrotasks();
+
+    superdocStore.documents = [docStub];
+
+    // Enabling flips the flag and reaches the presentation editor.
+    instance.setShowBookmarks(true);
+    expect(instance.config.layoutEngineOptions.showBookmarks).toBe(true);
+    expect(setShowBookmarks).toHaveBeenCalledWith(true);
+
+    // Same value again is a no-op.
+    instance.setShowBookmarks(true);
+    expect(setShowBookmarks).toHaveBeenCalledTimes(1);
+
+    // Disabling flips it back.
+    instance.setShowBookmarks(false);
+    expect(instance.config.layoutEngineOptions.showBookmarks).toBe(false);
+    expect(setShowBookmarks).toHaveBeenLastCalledWith(false);
+
+    // Default argument coerces to true.
+    instance.setShowBookmarks();
+    expect(setShowBookmarks).toHaveBeenLastCalledWith(true);
+
+    // Non-boolean values go through Boolean().
+    instance.setShowBookmarks(null);
+    expect(setShowBookmarks).toHaveBeenLastCalledWith(false);
   });
 
   it('skips rendering comments list when role is viewer', async () => {

@@ -29,14 +29,31 @@ describe('SD-1797: autofit tables with colspan should not drop columns', () => {
       // Verify no row has more than 3 physical cells
       // (this is the condition that triggers the bug — physical cells < grid columns)
       let maxPhysicalCells = 0;
+      const rowPatterns = [];
       table.forEach((row) => {
         let cellCount = 0;
         row.forEach(() => {
           cellCount++;
         });
         maxPhysicalCells = Math.max(maxPhysicalCells, cellCount);
+        rowPatterns.push(
+          row.content.content.map((cell) => ({
+            colspan: cell.attrs?.colspan ?? 1,
+            colwidthLength: Array.isArray(cell.attrs?.colwidth) ? cell.attrs.colwidth.length : 0,
+          })),
+        );
       });
       expect(maxPhysicalCells).toBeLessThan(grid.length);
+      expect(rowPatterns).toContainEqual([
+        { colspan: 3, colwidthLength: 3 },
+        { colspan: 1, colwidthLength: 1 },
+      ]);
+      expect(rowPatterns).toContainEqual([
+        { colspan: 1, colwidthLength: 1 },
+        { colspan: 2, colwidthLength: 2 },
+        { colspan: 1, colwidthLength: 1 },
+      ]);
+      expect(rowPatterns).toContainEqual([{ colspan: 4, colwidthLength: 4 }]);
 
       // The key assertion: all cells should have valid colwidth arrays with positive values
       // If the bug is present, cells in the last grid column would be missing or have zero width
@@ -44,7 +61,8 @@ describe('SD-1797: autofit tables with colspan should not drop columns', () => {
       table.forEach((row) => {
         row.forEach((cell) => {
           const colwidth = cell.attrs?.colwidth;
-          if (!colwidth || !Array.isArray(colwidth) || colwidth.some((w) => w <= 0)) {
+          const colspan = cell.attrs?.colspan ?? 1;
+          if (!colwidth || !Array.isArray(colwidth) || colwidth.length !== colspan || colwidth.some((w) => w <= 0)) {
             allColwidthsValid = false;
           }
         });

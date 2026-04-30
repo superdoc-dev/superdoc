@@ -28,6 +28,7 @@ import { resolveNoteRuntime } from './note-story-runtime.js';
 import { isHeaderFooterPartId } from '../../core/parts/adapters/header-footer-part-descriptor.js';
 import { initRevision, trackRevisions, restoreRevision } from '../plan-engine/revision-tracker.js';
 import { getStoryRevisionStore, getStoryRevision, incrementStoryRevision } from './story-revision-store.js';
+import { resolveLiveStorySessionRuntime } from './live-story-session-runtime-registry.js';
 
 // ---------------------------------------------------------------------------
 // Cache — one per host editor, attached via WeakMap
@@ -191,6 +192,10 @@ export function resolveStoryRuntime(
   // Non-body stories — validate key and dispatch
   // -----------------------------------------------------------------------
   const storyKey = buildStoryKey(locator);
+  const liveSessionRuntime = resolveLiveStorySessionRuntime(hostEditor, storyKey);
+  if (liveSessionRuntime) {
+    return liveSessionRuntime;
+  }
 
   // Check the cache first.
   const cache = getOrCreateCache(hostEditor);

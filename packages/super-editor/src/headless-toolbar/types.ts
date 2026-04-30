@@ -2,7 +2,14 @@ import type { Editor } from '../editors/v1/core/Editor.js';
 import type { PresentationEditor } from '../editors/v1/core/presentation-editor/index.js';
 import type { DocumentApi } from '@superdoc/document-api';
 
-export type HeadlessToolbarSurface = 'body' | 'header' | 'footer';
+/**
+ * The editable surface that currently owns the toolbar context.
+ *
+ * `note` and `endnote` were added in Phase 2 of the unified-history rollout
+ * so toolbar consumers can distinguish note-session typing from header/footer
+ * typing. Exhaustive switches on this union must handle all five values.
+ */
+export type HeadlessToolbarSurface = 'body' | 'header' | 'footer' | 'note' | 'endnote';
 
 export type PublicToolbarItemId =
   | 'bold'

@@ -27,6 +27,9 @@ function redirectedWriteGeneratedFile(filePath, content) {
   } else if (relToRepo.startsWith(path.join('packages', 'sdk', 'tools'))) {
     const relPart = path.relative(path.join(REPO_ROOT, 'packages/sdk/tools'), filePath);
     destPath = path.join(outputRoot, 'tools', relPart);
+  } else if (relToRepo.startsWith(path.join('apps', 'mcp', 'src', 'generated'))) {
+    const relPart = path.relative(path.join(REPO_ROOT, 'apps/mcp/src/generated'), filePath);
+    destPath = path.join(outputRoot, 'mcp-generated', relPart);
   } else {
     destPath = path.join(outputRoot, 'other', path.basename(filePath));
   }

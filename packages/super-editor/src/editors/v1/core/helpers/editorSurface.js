@@ -18,8 +18,12 @@ export function getEditorSurfaceElement(editor) {
     return editor.element;
   }
 
+  const parentEditor = editor.options?.parentEditor ?? null;
+  const presentationEditor =
+    editor.presentationEditor ?? parentEditor?.presentationEditor ?? parentEditor?._presentationEditor ?? null;
+
   // For flow Editor: check for attached PresentationEditor, then fall back to view.dom or options.element
-  return editor.presentationEditor?.element ?? editor.view?.dom ?? editor.options?.element ?? null;
+  return presentationEditor?.element ?? editor.view?.dom ?? editor.options?.element ?? null;
 }
 
 /**

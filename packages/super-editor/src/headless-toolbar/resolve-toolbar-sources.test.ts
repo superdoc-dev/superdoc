@@ -53,4 +53,43 @@ describe('resolveToolbarSources', () => {
     expect(result.context?.surface).toBe('header');
     expect(result.context?.target.doc).toBe(headerEditor.doc);
   });
+
+  it('classifies note sessions from canonical story keys and resolves PresentationEditor directly from the editor', () => {
+    const noteEditor = {
+      commands: { toggleBold: () => true },
+      doc: { kind: 'footnote-doc' },
+      isEditable: true,
+      state: {
+        selection: {
+          empty: true,
+        },
+      },
+      options: {
+        documentId: 'fn:12',
+      },
+    };
+    const presentationEditor = {
+      commands: { toggleBold: () => true },
+      isEditable: true,
+      state: {
+        selection: {
+          empty: true,
+        },
+      },
+      getActiveEditor: () => noteEditor,
+    };
+    (noteEditor as typeof noteEditor & { presentationEditor?: unknown }).presentationEditor = presentationEditor;
+
+    const result = resolveToolbarSources({
+      activeEditor: noteEditor as any,
+      superdocStore: {
+        documents: [],
+      },
+    });
+
+    expect(result.presentationEditor).toBe(presentationEditor);
+    expect(result.activeEditor).toBe(noteEditor);
+    expect(result.context?.surface).toBe('note');
+    expect(result.context?.target.doc).toBe(noteEditor.doc);
+  });
 });

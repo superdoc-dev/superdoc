@@ -2,7 +2,7 @@
  * Shared header/footer types.
  *
  * Canonical definitions for header/footer region data used across
- * PresentationEditor, EditorOverlayManager, and HeaderFooterSessionManager.
+ * PresentationEditor and HeaderFooterSessionManager.
  */
 
 /**

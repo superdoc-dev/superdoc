@@ -28,6 +28,8 @@ type TrackedSegment = {
   type: TrackChangeType;
 };
 
+const TRACKED_CHANGE_DIALOGS = '.comment-placeholder .comments-dialog, #comments-panel .comments-dialog';
+
 async function listTrackedSegments(page: Page): Promise<TrackedSegment[]> {
   return page.evaluate(() => {
     const segments: Array<{ from: number; id: string; text: string; to: number; type: TrackChangeType }> = [];
@@ -95,18 +97,18 @@ test.describe("trackedChanges.replacements='independent'", () => {
 
     await expect.poll(async () => (await listTrackChanges(superdoc.page)).total).toBeGreaterThanOrEqual(2);
 
-    const dialogs = superdoc.page.locator('.comment-placeholder .comments-dialog', {
+    const dialogs = superdoc.page.locator(TRACKED_CHANGE_DIALOGS, {
       has: superdoc.page.locator('.tracked-change-text'),
     });
     await expect(dialogs).toHaveCount(2);
-    await expect(
-      superdoc.page.locator('.comment-placeholder .comments-dialog .change-type', { hasText: 'Replaced' }),
-    ).toHaveCount(0);
+    await expect(superdoc.page.locator(`${TRACKED_CHANGE_DIALOGS} .change-type`, { hasText: 'Replaced' })).toHaveCount(
+      0,
+    );
 
-    const deletedDialog = superdoc.page.locator('.comment-placeholder .comments-dialog', {
+    const deletedDialog = superdoc.page.locator(TRACKED_CHANGE_DIALOGS, {
       has: superdoc.page.locator('.tracked-change-text.is-deleted', { hasText: 'ME' }),
     });
-    const insertedDialog = superdoc.page.locator('.comment-placeholder .comments-dialog', {
+    const insertedDialog = superdoc.page.locator(TRACKED_CHANGE_DIALOGS, {
       has: superdoc.page.locator('.tracked-change-text.is-inserted', { hasText: 'it' }),
     });
 

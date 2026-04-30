@@ -39,30 +39,37 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  compactSideGroups: {
+    type: Boolean,
+    default: false,
+  },
 });
 
 const currentItem = ref(null);
 const { isHighContrastMode } = useHighContrastMode();
 // Matches media query from SuperDoc.vue
 const isMobile = window.matchMedia('(max-width: 768px)').matches;
-const styleMap = {
-  left: {
-    minWidth: '120px',
-    justifyContent: 'flex-start',
-  },
-  right: {
-    minWidth: '120px',
-    justifyContent: 'flex-end',
-  },
-  default: {
+
+const getPositionStyle = computed(() => {
+  if (props.position === 'left') {
+    return {
+      minWidth: props.compactSideGroups ? 'auto' : '120px',
+      justifyContent: 'flex-start',
+    };
+  }
+
+  if (props.position === 'right') {
+    return {
+      minWidth: props.compactSideGroups ? 'auto' : '120px',
+      justifyContent: 'flex-end',
+    };
+  }
+
+  return {
     // Only grow if not on a mobile device
     flexGrow: isMobile ? 0 : 1,
     justifyContent: 'center',
-  },
-};
-
-const getPositionStyle = computed(() => {
-  return styleMap[props.position] || styleMap.default;
+  };
 });
 
 const isButton = (item) => item.type === 'button';
@@ -114,6 +121,21 @@ const handleToolbarButtonTextSubmit = (item, argument) => {
   if (item.disabled.value) return;
   currentItem.value = null;
   emit('command', { item, argument });
+};
+
+const handleSplitButtonMainClick = (item) => {
+  if (item.disabled.value) return;
+
+  closeDropdowns();
+
+  const splitCommand = item.splitButtonCommand;
+  const dropdownCommand = item.command;
+  const targetCommand = splitCommand || dropdownCommand;
+  if (!targetCommand) return;
+
+  const commandItem = { ...item, command: targetCommand };
+  emit('item-clicked');
+  emit('command', { item: commandItem, argument: null });
 };
 
 const closeDropdowns = () => {
@@ -352,6 +374,7 @@ onBeforeUnmount(() => {
                 :toolbar-item="item"
                 :disabled="item.disabled.value"
                 @textSubmit="handleToolbarButtonTextSubmit(item, $event)"
+                @mainClick="handleSplitButtonMainClick(item)"
               />
             </template>
             <div>

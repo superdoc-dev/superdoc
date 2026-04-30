@@ -12,6 +12,14 @@ You write the agentic loop and control the conversation directly.
 |----------|---------|--------|------|
 | [AWS Bedrock](./bedrock) | `index.ts` | `index.py` | AWS credentials (`aws configure`) |
 
+## Streaming
+
+Stream LLM text into a live SuperDoc editor through the Document API.
+
+| Example | What it shows |
+|---------|---------------|
+| [streaming](./streaming) | Token-by-token generation into an in-browser SuperDoc via `editor.doc.insert()`, with a small Node proxy that keeps the OpenAI key server-side |
+
 ## Run
 
 ```bash

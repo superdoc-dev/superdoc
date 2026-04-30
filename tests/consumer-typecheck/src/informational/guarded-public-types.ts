@@ -30,8 +30,9 @@ import type {
   // Document API surface (subset reachable from `superdoc` today;
   // `DocumentApi`, `BlocksListResult`, `BookmarkInfo` are not yet
   // exported from `superdoc` and are tracked separately under the RFC's
-  // Decision 2 -- they belong in `@superdoc-dev/document-api` once that
-  // package ships).
+  // Decision 2 -- once Document API is published as a real public package,
+  // those types come from there. The team picks between the fast-path name
+  // `@superdoc/document-api` and the taxonomy-clean `@superdoc-dev/document-api`).
   TextSegment,
   ResolveRangeOutput,
   // Selection / range primitives

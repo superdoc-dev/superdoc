@@ -42,4 +42,5 @@ export {
   signaturesEqual,
   shallowObjectEquals,
   maybeEmitNextSectionBreakForNode,
+  emitPendingSectionBreakForParagraph,
 } from './breaks.js';

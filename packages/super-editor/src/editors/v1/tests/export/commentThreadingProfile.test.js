@@ -109,20 +109,21 @@ describe('Partial threading profile (nested-comments.docx)', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Scenario 2 – Google Docs profile, no threading (comments.xml only)
-// gdocs-single-comment.docx has: comments.xml with 1 non-threaded comment.
-// No commentsExtended / commentsIds / commentsExtensible.
-// Since there are no threaded comments, the exporter should NOT fabricate
-// auxiliary files — the range-based threading model is preserved.
+// Scenario 2 – Range-based profile without a shipped commentsExtended.xml
+// (gdocs-single-comment.docx: comments.xml + 1 non-threaded comment, no
+// commentsExtended / commentsIds / commentsExtensible).
+// The exporter must synthesize commentsExtended.xml so re-import does not
+// reconstruct threads from range overlaps. commentsIds / commentsExtensible
+// stay absent: they were not in the import file-set.
 // ---------------------------------------------------------------------------
-describe('Google Docs profile without threading (gdocs-single-comment.docx)', () => {
+describe('Range-based profile without commentsExtended (gdocs-single-comment.docx)', () => {
   let docx, media, mediaFiles, fonts;
 
   beforeAll(async () => {
     ({ docx, media, mediaFiles, fonts } = await loadTestDataForEditorTests('gdocs-single-comment.docx'));
   });
 
-  it('emits only comments.xml — no auxiliary files fabricated', async () => {
+  it('synthesizes commentsExtended.xml and leaves commentsIds/Extensible absent', async () => {
     const { editor } = initTestEditor({ content: docx, media, mediaFiles, fonts });
 
     try {
@@ -135,11 +136,8 @@ describe('Google Docs profile without threading (gdocs-single-comment.docx)', ()
         getUpdatedDocs: true,
       });
 
-      // comments.xml must be present
       expect(updatedDocs['word/comments.xml']).toEqual(expect.any(String));
-
-      // The three auxiliary files must all be null (removed / never existed)
-      expect(updatedDocs['word/commentsExtended.xml']).toBeNull();
+      expect(updatedDocs['word/commentsExtended.xml']).toEqual(expect.any(String));
       expect(updatedDocs['word/commentsIds.xml']).toBeNull();
       expect(updatedDocs['word/commentsExtensible.xml']).toBeNull();
     } finally {
@@ -147,7 +145,7 @@ describe('Google Docs profile without threading (gdocs-single-comment.docx)', ()
     }
   });
 
-  it('produces a zip with only comments.xml', async () => {
+  it('produces a zip with comments.xml and the synthesized commentsExtended.xml', async () => {
     const { editor } = initTestEditor({ content: docx, media, mediaFiles, fonts });
 
     try {
@@ -161,13 +159,18 @@ describe('Google Docs profile without threading (gdocs-single-comment.docx)', ()
       const zip = await zipper.unzip(blob);
 
       expect(zip.file('word/comments.xml')).not.toBeNull();
-      expect(zip.file('word/commentsExtended.xml')).toBeNull();
+      expect(zip.file('word/commentsExtended.xml')).not.toBeNull();
       expect(zip.file('word/commentsIds.xml')).toBeNull();
       expect(zip.file('word/commentsExtensible.xml')).toBeNull();
 
+      const extendedXml = await zip.file('word/commentsExtended.xml').async('string');
+      const paraIdMatches = extendedXml.match(/w15:paraId="/g) ?? [];
+      expect(paraIdMatches.length).toBe(comments.length);
+      expect(extendedXml).not.toContain('w15:paraIdParent');
+
       const contentTypes = await zip.file('[Content_Types].xml').async('string');
       expect(contentTypes).toContain('/word/comments.xml');
-      expect(contentTypes).not.toContain('/word/commentsExtended.xml');
+      expect(contentTypes).toContain('/word/commentsExtended.xml');
       expect(contentTypes).not.toContain('/word/commentsIds.xml');
       expect(contentTypes).not.toContain('/word/commentsExtensible.xml');
     } finally {

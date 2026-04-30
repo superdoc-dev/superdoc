@@ -141,3 +141,113 @@ describe('SearchIndex.searchIgnoringDiacritics', () => {
     expect(matches[1].text).toBe('résumé');
   });
 });
+
+describe('SearchIndex searchModel: visible', () => {
+  function textNode(text, { deleted = false } = {}) {
+    return {
+      isText: true,
+      isLeaf: false,
+      isBlock: false,
+      text,
+      nodeSize: text.length,
+      marks: deleted ? [{ type: { name: 'trackDelete' } }] : [],
+      forEach: () => {},
+    };
+  }
+
+  function containerNode(children, { isBlock = false, textBetween = '' } = {}) {
+    return {
+      isText: false,
+      isLeaf: false,
+      isBlock,
+      nodeSize: children.reduce((sum, child) => sum + child.nodeSize, 0) + 2,
+      content: { size: children.reduce((sum, child) => sum + child.nodeSize, 0) },
+      forEach(cb) {
+        let offset = 0;
+        for (const child of children) {
+          cb(child, offset);
+          offset += child.nodeSize;
+        }
+      },
+      textBetween: () => textBetween,
+    };
+  }
+
+  function buildDocWithTrackedDeletion() {
+    const paragraph = containerNode([textNode('before'), textNode('DELETE', { deleted: true }), textNode('after')], {
+      isBlock: true,
+      textBetween: 'beforeDELETEafter',
+    });
+
+    const doc = containerNode([paragraph], {
+      isBlock: false,
+      textBetween: 'beforeDELETEafter',
+    });
+
+    return { doc };
+  }
+
+  function buildDocWithSplitTrackedDeletion() {
+    const paragraph = containerNode(
+      [textNode('before'), textNode('DEL', { deleted: true }), textNode('ETE', { deleted: true }), textNode('after')],
+      {
+        isBlock: true,
+        textBetween: 'beforeDELETEafter',
+      },
+    );
+
+    const doc = containerNode([paragraph], {
+      isBlock: false,
+      textBetween: 'beforeDELETEafter',
+    });
+
+    return { doc };
+  }
+
+  it('excludes pending tracked deletions in visible model', () => {
+    const { doc } = buildDocWithTrackedDeletion();
+    const index = new SearchIndex();
+
+    index.ensureValid(doc, { searchModel: 'visible' });
+    const matches = index.search('DELETE');
+
+    expect(matches).toHaveLength(0);
+  });
+
+  it('does not match collapsed impossible strings across deleted spans', () => {
+    const { doc } = buildDocWithTrackedDeletion();
+    const index = new SearchIndex();
+
+    index.ensureValid(doc, { searchModel: 'visible' });
+    const matches = index.search('beforeafter');
+
+    expect(matches).toHaveLength(0);
+  });
+
+  it('keeps raw model behavior unchanged by default', () => {
+    const { doc } = buildDocWithTrackedDeletion();
+    const index = new SearchIndex();
+
+    index.ensureValid(doc);
+    const matches = index.search('DELETE');
+
+    expect(matches).toHaveLength(1);
+  });
+
+  it('keeps offset mapping aligned after contiguous deleted text nodes', () => {
+    const { doc } = buildDocWithSplitTrackedDeletion();
+    const index = new SearchIndex();
+
+    index.ensureValid(doc, { searchModel: 'visible' });
+
+    expect(index.segments[index.segments.length - 1]?.offsetEnd).toBe(index.text.length);
+
+    const start = index.text.indexOf('after');
+    expect(start).toBeGreaterThanOrEqual(0);
+
+    const ranges = index.offsetRangeToDocRanges(start, start + 'after'.length);
+    expect(ranges).toHaveLength(1);
+    expect(ranges[0].to - ranges[0].from).toBe('after'.length);
+    expect(ranges[0]).toEqual({ from: 13, to: 18 });
+  });
+});

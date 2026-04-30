@@ -27,10 +27,13 @@ function applySelectionCleanup(editor, tr) {
   return cleaned;
 }
 
-function createHistoryDispatch(editor, dispatch) {
+function createHistoryDispatch(editor, dispatch, inputType) {
   if (!dispatch) return dispatch;
   return (historyTr) => {
-    const cleaned = applySelectionCleanup(editor, historyTr);
+    let cleaned = applySelectionCleanup(editor, historyTr);
+    if (inputType) {
+      cleaned = cleaned.setMeta('inputType', inputType);
+    }
     dispatch(cleaned);
   };
 }
@@ -44,6 +47,69 @@ function runSelectionCleanupAfterCollabHistory(editor) {
   // Avoid creating a new undo step for this synthetic cleanup transaction.
   tr = tr.setMeta('addToHistory', false);
   view.dispatch(tr);
+}
+
+function getPresentationHistoryProxy(editor) {
+  const presentationEditor = editor?.presentationEditor ?? editor?._presentationEditor ?? null;
+  if (!presentationEditor || typeof presentationEditor.getActiveEditor !== 'function') {
+    return null;
+  }
+
+  return presentationEditor.getActiveEditor() === editor ? presentationEditor : null;
+}
+
+function resolveHistoryDispatch(editor, allowDispatch) {
+  if (!allowDispatch) {
+    return undefined;
+  }
+
+  return editor?.view?.dispatch?.bind(editor.view) ?? editor?.dispatch?.bind(editor);
+}
+
+export function runEditorUndo(editor, options = {}) {
+  const state = editor?.state;
+  const tr = state?.tr;
+  const allowDispatch = options.allowDispatch !== false;
+  const inputType = 'historyUndo';
+  if (!state || !tr) {
+    return false;
+  }
+
+  const dispatch = resolveHistoryDispatch(editor, allowDispatch);
+
+  if (editor.options.collaborationProvider && editor.options.ydoc) {
+    const result = yUndo(state, dispatch);
+    if (allowDispatch && result) {
+      runSelectionCleanupAfterCollabHistory(editor);
+    }
+    return result;
+  }
+
+  const wrappedDispatch = createHistoryDispatch(editor, dispatch, allowDispatch ? inputType : undefined);
+  return originalUndo(state, wrappedDispatch);
+}
+
+export function runEditorRedo(editor, options = {}) {
+  const state = editor?.state;
+  const tr = state?.tr;
+  const allowDispatch = options.allowDispatch !== false;
+  const inputType = 'historyRedo';
+  if (!state || !tr) {
+    return false;
+  }
+
+  const dispatch = resolveHistoryDispatch(editor, allowDispatch);
+
+  if (editor.options.collaborationProvider && editor.options.ydoc) {
+    const result = yRedo(state, dispatch);
+    if (allowDispatch && result) {
+      runSelectionCleanupAfterCollabHistory(editor);
+    }
+    return result;
+  }
+
+  const wrappedDispatch = createHistoryDispatch(editor, dispatch, allowDispatch ? inputType : undefined);
+  return originalRedo(state, wrappedDispatch);
 }
 
 /**
@@ -92,16 +158,17 @@ export const History = Extension.create({
        * editor.commands.undo()
        * @note Groups changes within the newGroupDelay window
        */
-      undo: () => ({ state, dispatch, tr }) => {
-        if (this.editor.options.collaborationProvider && this.editor.options.ydoc) {
-          tr.setMeta('preventDispatch', true);
-          const result = yUndo(state);
-          runSelectionCleanupAfterCollabHistory(this.editor);
-          return result;
+      undo: () => ({ tr, dispatch }) => {
+        tr?.setMeta('preventDispatch', true);
+        const allowDispatch = typeof dispatch === 'function';
+        const presentationEditor = getPresentationHistoryProxy(this.editor);
+        if (presentationEditor) {
+          if (allowDispatch && typeof presentationEditor.undo === 'function') {
+            return Boolean(presentationEditor.undo());
+          }
+          return typeof presentationEditor.canUndo === 'function' ? Boolean(presentationEditor.canUndo()) : false;
         }
-        tr.setMeta('inputType', 'historyUndo');
-        const wrappedDispatch = createHistoryDispatch(this.editor, dispatch);
-        return originalUndo(state, wrappedDispatch);
+        return runEditorUndo(this.editor, { allowDispatch });
       },
 
       /**
@@ -111,16 +178,17 @@ export const History = Extension.create({
        * editor.commands.redo()
        * @note Only available after an undo action
        */
-      redo: () => ({ state, dispatch, tr }) => {
-        if (this.editor.options.collaborationProvider && this.editor.options.ydoc) {
-          tr.setMeta('preventDispatch', true);
-          const result = yRedo(state);
-          runSelectionCleanupAfterCollabHistory(this.editor);
-          return result;
+      redo: () => ({ tr, dispatch }) => {
+        tr?.setMeta('preventDispatch', true);
+        const allowDispatch = typeof dispatch === 'function';
+        const presentationEditor = getPresentationHistoryProxy(this.editor);
+        if (presentationEditor) {
+          if (allowDispatch && typeof presentationEditor.redo === 'function') {
+            return Boolean(presentationEditor.redo());
+          }
+          return typeof presentationEditor.canRedo === 'function' ? Boolean(presentationEditor.canRedo()) : false;
         }
-        tr.setMeta('inputType', 'historyRedo');
-        const wrappedDispatch = createHistoryDispatch(this.editor, dispatch);
-        return originalRedo(state, wrappedDispatch);
+        return runEditorRedo(this.editor, { allowDispatch });
       },
     };
   },

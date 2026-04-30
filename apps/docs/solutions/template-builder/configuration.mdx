@@ -100,6 +100,37 @@ Each color controls the field's border and label in the document. The sidebar ba
 
 The `fieldType` value flows through all callbacks (`onFieldInsert`, `onFieldsChange`, `onExport`, etc.) and is stored in the SDT tag metadata.
 
+### Preset block content
+
+Use `presetContent` to prefill block fields with a structure such as a table or list:
+
+```tsx
+<SuperDocTemplateBuilder
+  fields={{
+    available: [
+      {
+        id: "sample_table",
+        label: "Sample Table",
+        mode: "block",
+        fieldType: "data",
+        lockMode: "contentLocked",
+        presetContent: {
+          html: "<table style=\"border-collapse: collapse; width: 100%;\"><tr><th style=\"border: 1px solid #000;\">Column A</th><th style=\"border: 1px solid #000;\">Column B</th></tr><tr><td style=\"border: 1px solid #000;\"></td><td style=\"border: 1px solid #000;\"></td></tr></table>",
+          // or json: { ...ProseMirror JSON... }
+        },
+      },
+    ],
+  }}
+/>
+```
+
+`presetContent` is passed into the existing block insertion command. For `mode: "inline"` fields, `presetContent` is ignored.
+
+<Note>
+  - `presetContent.json` is recommended when you need the most reliable preservation of structure, semantics, and editor-compatible styling.
+  - With `presetContent.html`, include required attributes and inline styles explicitly so the HTML parser can map them into node attributes.
+</Note>
+
 ### Field creation
 
 Allow users to create new fields while building templates:

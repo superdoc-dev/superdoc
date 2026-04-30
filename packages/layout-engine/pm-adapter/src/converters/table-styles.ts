@@ -1,14 +1,17 @@
-import type { BoxSpacing } from '@superdoc/contracts';
+import type { BoxSpacing, TableBorders } from '@superdoc/contracts';
 import { resolveTableProperties } from '@superdoc/style-engine/ooxml';
 import type { TableProperties, TableCellMargins } from '@superdoc/style-engine/ooxml';
 import type { PMNode } from '../types.js';
 import type { ConverterContext } from '../converter-context.js';
 import { twipsToPx, normalizeCellPaddingTopBottom } from '../utilities.js';
+import { convertTableBorderValue, borderSizeToPx } from '../attributes/borders.js';
 
 export type TableStyleHydration = {
   borders?: Record<string, unknown>;
   cellPadding?: BoxSpacing;
   justification?: string;
+  tableIndent?: { width?: number; type?: string };
+  tableLayout?: string;
   tableWidth?: { width?: number; type?: string };
   tableCellSpacing?: { value?: number; type?: string };
 };
@@ -31,7 +34,7 @@ export const hydrateTableStyleAttrs = (
   const tableProps = (tableNode.attrs?.tableProperties ?? null) as Record<string, unknown> | null;
 
   // Collect inline values first, then merge with style-resolved values below.
-  let inlineBorders: Record<string, unknown> | undefined;
+  let inlineBorders: TableBorders | undefined;
   let inlinePadding: BoxSpacing | undefined;
 
   // 1. Inline properties (highest priority)
@@ -40,16 +43,32 @@ export const hydrateTableStyleAttrs = (
     if (padding) inlinePadding = normalizeCellPaddingTopBottom(padding);
 
     if (tableProps.borders && typeof tableProps.borders === 'object') {
-      inlineBorders = clonePlainObject(tableProps.borders as Record<string, unknown>);
+      inlineBorders = normalizeTableBorders(tableProps.borders as Record<string, unknown>);
     }
 
     if (typeof tableProps.justification === 'string') {
       hydration.justification = tableProps.justification;
     }
 
+    // Inline tableIndent is already importer-normalized to { width, type } in some paths,
+    // while style-engine properties still arrive as raw OOXML-ish { value, type }.
+    const tableIndent = normalizeTableIndent(tableProps.tableIndent);
+    if (tableIndent) {
+      hydration.tableIndent = tableIndent;
+    }
+
+    if (typeof tableProps.tableLayout === 'string') {
+      hydration.tableLayout = tableProps.tableLayout;
+    }
+
     const tableWidth = normalizeTableWidth(tableProps.tableWidth);
     if (tableWidth) {
       hydration.tableWidth = tableWidth;
+    }
+
+    const tableCellSpacing = normalizeTableSpacing(tableProps.tableCellSpacing);
+    if (tableCellSpacing) {
+      hydration.tableCellSpacing = tableCellSpacing;
     }
   }
 
@@ -68,8 +87,9 @@ export const hydrateTableStyleAttrs = (
 
     // Per-side merge: inline sides win, style fills missing sides.
     if (resolved.borders) {
-      const styleBorders = clonePlainObject(resolved.borders as unknown as Record<string, unknown>);
-      hydration.borders = inlineBorders ? { ...styleBorders, ...inlineBorders } : styleBorders;
+      const styleBorders = normalizeTableBorders(resolved.borders as unknown as Record<string, unknown>);
+      hydration.borders =
+        inlineBorders && styleBorders ? { ...styleBorders, ...inlineBorders } : (inlineBorders ?? styleBorders);
     } else if (inlineBorders) {
       hydration.borders = inlineBorders;
     }
@@ -91,8 +111,16 @@ export const hydrateTableStyleAttrs = (
     if (!hydration.justification && resolved.justification) {
       hydration.justification = resolved.justification;
     }
-    if (resolved.tableCellSpacing) {
-      hydration.tableCellSpacing = resolved.tableCellSpacing as { value?: number; type?: string };
+    if (!hydration.tableIndent && resolved.tableIndent) {
+      const tableIndent = normalizeTableIndent(resolved.tableIndent);
+      if (tableIndent) hydration.tableIndent = tableIndent;
+    }
+    if (!hydration.tableLayout && resolved.tableLayout) {
+      hydration.tableLayout = resolved.tableLayout;
+    }
+    if (!hydration.tableCellSpacing && resolved.tableCellSpacing) {
+      const tableCellSpacing = normalizeTableSpacing(resolved.tableCellSpacing);
+      if (tableCellSpacing) hydration.tableCellSpacing = tableCellSpacing;
     }
     if (!hydration.tableWidth && resolved.tableWidth) {
       const tableWidth = normalizeTableWidth(resolved.tableWidth);
@@ -107,7 +135,26 @@ export const hydrateTableStyleAttrs = (
   return Object.keys(hydration).length > 0 ? hydration : null;
 };
 
-const clonePlainObject = (value: Record<string, unknown>): Record<string, unknown> => ({ ...value });
+const normalizeTableBorders = (value?: Record<string, unknown>): TableBorders | undefined => {
+  if (!value) return undefined;
+
+  const sides = ['top', 'bottom', 'left', 'right', 'insideH', 'insideV'] as const;
+  const result: TableBorders = {};
+
+  for (const side of sides) {
+    const border = value[side];
+    if (!border || typeof border !== 'object') continue;
+    const converted = convertTableBorderValue(adjustBorderSize(border as Record<string, unknown>));
+    if (converted) result[side] = converted;
+  }
+
+  return Object.keys(result).length > 0 ? result : undefined;
+};
+
+const adjustBorderSize = (border: Record<string, unknown>): Record<string, unknown> => {
+  const size = typeof border.size === 'number' ? borderSizeToPx(border.size) : undefined;
+  return size != null ? { ...border, size } : border;
+};
 
 const convertCellMarginsToPx = (margins: Record<string, unknown>): BoxSpacing | undefined => {
   if (!margins || typeof margins !== 'object') return undefined;
@@ -157,4 +204,28 @@ const normalizeTableWidth = (value: unknown): { width?: number; type?: string } 
     return { width: twipsToPx(raw), type: 'px' };
   }
   return { width: raw, type: measurement.type };
+};
+
+const normalizeTableIndent = (value: unknown): { width?: number; type?: string } | undefined => {
+  if (!value || typeof value !== 'object') return undefined;
+  const measurement = value as { value?: number; width?: number; type?: string };
+  const raw = typeof measurement.width === 'number' ? measurement.width : measurement.value;
+  if (typeof raw !== 'number') return undefined;
+  if (!measurement.type || measurement.type === 'px' || measurement.type === 'pixel') {
+    return { width: raw, type: measurement.type ?? 'px' };
+  }
+  if (measurement.type === 'dxa') {
+    return { width: twipsToPx(raw), type: 'dxa' };
+  }
+  return { width: raw, type: measurement.type };
+};
+
+const normalizeTableSpacing = (value: unknown): { value?: number; type?: string } | undefined => {
+  if (!value || typeof value !== 'object') return undefined;
+  const measurement = value as { value?: number; type?: string };
+  if (typeof measurement.value !== 'number') return undefined;
+  return {
+    value: measurement.value,
+    type: measurement.type ?? 'px',
+  };
 };

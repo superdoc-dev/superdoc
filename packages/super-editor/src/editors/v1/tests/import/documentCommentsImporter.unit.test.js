@@ -45,6 +45,7 @@ const buildDocx = ({ comments = [], extended = [], documentRanges = [] } = {}) =
       'custom:trackedChangeType': comment.trackedChangeType,
       'custom:trackedChangeDisplayType': comment.trackedChangeDisplayType,
       'custom:trackedDeletedText': comment.trackedDeletedText,
+      ...(comment.customEmail ? { 'custom:email': comment.customEmail } : {}),
     },
     elements: comment.elements ?? [{ fakeParaId: comment.paraId ?? `para-${comment.id}` }],
   }));
@@ -279,6 +280,22 @@ describe('importCommentData metadata parsing', () => {
 
     const [comment] = importCommentData({ docx });
     expect(comment.elements).toHaveLength(2);
+  });
+
+  it('reads custom:email when w:email is absent', () => {
+    const docx = buildDocx({
+      comments: [
+        {
+          id: 6,
+          author: 'Custom Email',
+          customEmail: 'custom@example.com',
+        },
+      ],
+    });
+    delete docx['word/comments.xml'].elements[0].elements[0].attributes['w:email'];
+
+    const [comment] = importCommentData({ docx });
+    expect(comment.creatorEmail).toBe('custom@example.com');
   });
 });
 

@@ -606,6 +606,33 @@ Use `chooseTools({ provider: 'anthropic' })` and convert to Bedrock's `toolSpec`
 
 **Auth**: AWS credentials via `aws configure`, env vars, or IAM role. No API key needed.
 
+## Streaming generated text into a visible editor
+
+Sometimes you don't need a full agent loop. You just want the model to write into the document while the user watches. Stream the output through a small backend proxy and append each delta to the editor:
+
+```ts
+for await (const chunk of streamFromServer(prompt, signal)) {
+  buffer += chunk;
+  if (chunk.includes('\n')) flush();
+  else if (!pendingFlush) pendingFlush = setTimeout(flush, 150);
+}
+
+function flush() {
+  editor.doc.insert({ value: buffer, type: 'text' });
+  buffer = '';
+}
+```
+
+`editor.doc.insert` is the public Document API. With no `target`, content appends at the end. Newlines from the model become real paragraph breaks.
+
+A few things to get right:
+
+- **Keep the model key on the server.** A small Node proxy that forwards Server-Sent Events keeps the key out of client bundles.
+- **Buffer deltas.** Inserting on every token causes one document mutation per token, which floods the layout engine and undo stack. Flush on a timer (~150ms) or whenever a newline arrives.
+- **Abort on unmount and Stop.** Tie an `AbortController` to the fetch and call it from your cleanup. The server should also abort upstream when the client disconnects so neither side burns tokens.
+
+Full working example: [examples/ai/streaming](https://github.com/superdoc-dev/superdoc/tree/main/examples/ai/streaming).
+
 ## Related
 
 - [LLM tools](/ai/agents/llm-tools) — tool catalog and SDK functions

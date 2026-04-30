@@ -2968,7 +2968,32 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
                 description: 'Block type: paragraph, heading, listItem, image, tableOfContents.',
               },
               text: { type: 'string', description: 'Full plain text content of the block.' },
-              headingLevel: { type: 'integer', description: 'Heading level (1–6). Only present for headings.' },
+              textSpans: {
+                type: 'array',
+                description:
+                  'Block text broken into runs with tracked-change marks preserved per run. Present only when the block contains at least one tracked change. Concatenating span text yields `text`.',
+                items: objectSchema(
+                  {
+                    text: { type: 'string', description: 'Raw text of the run.' },
+                    trackedChanges: {
+                      type: 'array',
+                      description: 'Tracked-change marks applied to this run.',
+                      items: objectSchema(
+                        {
+                          entityId: {
+                            type: 'string',
+                            description: 'Tracked change entity ID matching an entry in trackedChanges[].',
+                          },
+                          type: { type: 'string', enum: ['insert', 'delete', 'format'] },
+                        },
+                        ['entityId', 'type'],
+                      ),
+                    },
+                  },
+                  ['text'],
+                ),
+              },
+              headingLevel: { type: 'integer', description: 'Heading level (1-6). Only present for headings.' },
               tableContext: objectSchema(
                 {
                   tableOrdinal: {
@@ -3024,10 +3049,32 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
             {
               entityId: {
                 type: 'string',
-                description: 'Tracked change entity ID — pass to scrollToElement() for navigation.',
+                description: 'Tracked change entity ID. Pass to scrollToElement() for navigation.',
               },
-              type: { type: 'string', enum: ['insert', 'delete', 'format'] },
-              excerpt: { type: 'string', description: 'Short text excerpt of the changed content.' },
+              type: {
+                type: 'string',
+                enum: ['insert', 'delete', 'format'],
+                description:
+                  "Aggregate type at the entity level. In paired replacement mode, a delete+insert pair shares one entity and this collapses to 'insert'; per-half type lives on block.textSpans[].trackedChanges[].",
+              },
+              blockIds: {
+                type: 'array',
+                description: 'Block IDs whose textSpans carry this change.',
+                items: { type: 'string' },
+              },
+              wordRevisionIds: objectSchema(
+                {
+                  insert: { type: 'string', description: 'Original OOXML w:id from a w:ins mark.' },
+                  delete: { type: 'string', description: 'Original OOXML w:id from a w:del mark.' },
+                  format: { type: 'string', description: 'Original OOXML w:id from a w:rPrChange mark.' },
+                },
+                [],
+              ),
+              excerpt: {
+                type: 'string',
+                description:
+                  'Short text excerpt of the changed content. Omitted for paired replacements; read block.textSpans for the per-half text.',
+              },
               author: { type: 'string', description: 'Change author name.' },
               date: { type: 'string', description: 'Change date (ISO string).' },
             },
@@ -4193,6 +4240,72 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     ]),
     failure: listsFailureSchemaFor('lists.separate'),
   },
+  'lists.merge': {
+    input: objectSchema(
+      {
+        target: listItemAddressSchema,
+        direction: { enum: ['withPrevious', 'withNext'] },
+      },
+      ['target', 'direction'],
+    ),
+    output: {
+      oneOf: [
+        objectSchema(
+          {
+            success: { const: true },
+            listId: { type: 'string' },
+            absorbedCount: { type: 'integer' },
+            removedEmptyBlocks: { type: 'integer' },
+          },
+          ['success', 'listId', 'absorbedCount', 'removedEmptyBlocks'],
+        ),
+        listsFailureSchemaFor('lists.merge'),
+      ],
+    },
+    success: objectSchema(
+      {
+        success: { const: true },
+        listId: { type: 'string' },
+        absorbedCount: { type: 'integer' },
+        removedEmptyBlocks: { type: 'integer' },
+      },
+      ['success', 'listId', 'absorbedCount', 'removedEmptyBlocks'],
+    ),
+    failure: listsFailureSchemaFor('lists.merge'),
+  },
+  'lists.split': {
+    input: objectSchema(
+      {
+        target: listItemAddressSchema,
+        restartNumbering: { type: 'boolean' },
+      },
+      ['target'],
+    ),
+    output: {
+      oneOf: [
+        objectSchema(
+          {
+            success: { const: true },
+            listId: { type: 'string' },
+            numId: { type: 'integer' },
+            restartedAt: { type: ['integer', 'null'] },
+          },
+          ['success', 'listId', 'numId', 'restartedAt'],
+        ),
+        listsFailureSchemaFor('lists.split'),
+      ],
+    },
+    success: objectSchema(
+      {
+        success: { const: true },
+        listId: { type: 'string' },
+        numId: { type: 'integer' },
+        restartedAt: { type: ['integer', 'null'] },
+      },
+      ['success', 'listId', 'numId', 'restartedAt'],
+    ),
+    failure: listsFailureSchemaFor('lists.split'),
+  },
   'lists.setLevel': {
     input: objectSchema(
       {
@@ -4678,8 +4791,9 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
       {
         text: { type: 'string', description: 'Comment text content.' },
         target: {
-          ...textAddressSchema,
-          description: "Text range to anchor the comment: {kind:'text', blockId:'...', range:{start:N, end:N}}.",
+          oneOf: [textAddressSchema, textTargetSchema],
+          description:
+            "Text range to anchor the comment. Accepts either a single-block TextAddress {kind:'text', blockId, range} or a multi-segment TextTarget {kind:'text', segments:[{blockId, range}, ...]} for selections that span blocks.",
         },
         parentCommentId: {
           type: 'string',
@@ -4698,7 +4812,11 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
         commentId: { type: 'string' },
         text: { type: 'string', description: 'Updated comment text.' },
         target: textAddressSchema,
-        status: { enum: ['resolved'], description: "Set comment status. Use 'resolved' to mark as resolved." },
+        status: {
+          enum: ['resolved', 'active'],
+          description:
+            "Set comment status. Use 'resolved' to resolve a comment, or 'active' to reopen a previously resolved comment (lifecycle inverse).",
+        },
         isInternal: {
           type: 'boolean',
           description: 'When true, marks the comment as internal (hidden from external collaborators).',
@@ -5167,6 +5285,26 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
           ['start', 'end'],
         ),
         output: resolveRangeOutputSchema,
+      },
+
+      'selection.current': {
+        input: objectSchema(
+          {
+            includeText: { type: 'boolean' },
+          },
+          [],
+        ),
+        output: objectSchema(
+          {
+            empty: { type: 'boolean' },
+            target: { oneOf: [textTargetSchema, { type: 'null' }] },
+            activeMarks: arraySchema({ type: 'string' }),
+            activeCommentIds: arraySchema({ type: 'string' }),
+            activeChangeIds: arraySchema({ type: 'string' }),
+            text: { type: 'string' },
+          },
+          ['empty', 'target', 'activeMarks', 'activeCommentIds', 'activeChangeIds'],
+        ),
       },
 
       'mutations.preview': {

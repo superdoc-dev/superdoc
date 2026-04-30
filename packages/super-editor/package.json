@@ -29,6 +29,16 @@
       "source": "./src/editors/v1/core/helpers/markdown/index.ts",
       "types": "./dist/src/editors/v1/core/helpers/markdown/index.d.ts"
     },
+    "./ui": {
+      "source": "./src/ui/index.ts",
+      "types": "./dist/src/ui/index.d.ts",
+      "import": "./dist/ui.es.js"
+    },
+    "./ui/react": {
+      "source": "./src/ui/react/index.ts",
+      "types": "./dist/src/ui/react/index.d.ts",
+      "import": "./dist/ui-react.es.js"
+    },
     "./parts-runtime": {
       "source": "./src/editors/v1/core/parts/init-parts-runtime.ts",
       "types": "./dist/src/editors/v1/core/parts/init-parts-runtime.d.ts"
@@ -97,6 +107,8 @@
     "types:build": "tsc -p tsconfig.build.json",
     "test": "vitest",
     "test:debug": "vitest --inspect-brk --pool threads --poolOptions.threads.singleThread",
+    "test:ui": "vitest run src/ui",
+    "test:ui:watch": "vitest src/ui",
     "preview": "vite preview",
     "clean": "rm -rf dist types",
     "pack": "rm *.tgz 2>/dev/null || true && pnpm run build && pnpm pack && mv harbour-enterprises-super-editor-0.0.1-alpha.0.tgz ./super-editor.tgz"
@@ -159,8 +171,10 @@
   },
   "devDependencies": {
     "@floating-ui/dom": "catalog:",
+    "@testing-library/react": "catalog:",
     "@types/mdast": "catalog:",
     "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
     "@vitejs/plugin-vue": "catalog:",
     "@vue/test-utils": "catalog:",
     "canvas": "catalog:",
@@ -169,6 +183,7 @@
     "postcss-nested-import": "catalog:",
     "prosemirror-test-builder": "catalog:",
     "react": "catalog:",
+    "react-dom": "catalog:",
     "tippy.js": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",

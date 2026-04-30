@@ -327,14 +327,21 @@ describe('PresentationEditor.decorationSync', () => {
     });
 
   /**
-   * Extracts an event handler that PresentationEditor registered on the mock editor.
-   * Tests use this to simulate real editor events without reaching into private state.
+   * Replays a mock editor event through every registered subscriber for that
+   * event name. The real Editor emitter fans out to all listeners, so tests
+   * should do the same instead of picking one arbitrary callback.
    */
   const getRegisteredEditorHandler = <THandler extends (...args: unknown[]) => void>(eventName: string): THandler => {
     const onCalls: Array<[string, THandler]> = mockEditorOn.mock.calls;
-    const match = onCalls.find(([event]) => event === eventName);
-    if (!match) throw new Error(`No ${eventName} handler registered on mock editor`);
-    return match[1];
+    const handlers = onCalls.filter(([registeredEvent]) => registeredEvent === eventName).map(([, handler]) => handler);
+
+    if (handlers.length === 0) throw new Error(`No ${eventName} handler registered on mock editor`);
+
+    return ((...args: unknown[]) => {
+      for (const handler of handlers) {
+        handler(...args);
+      }
+    }) as unknown as THandler;
   };
 
   /**
@@ -557,7 +564,8 @@ describe('PresentationEditor.decorationSync', () => {
      * on the mock editor. This simulates the real customer flow: a command dispatches
      * a setMeta transaction → Editor fires 'transaction' → bridge syncs.
      */
-    const getTransactionHandler = (): (() => void) => getRegisteredEditorHandler('transaction');
+    const getTransactionHandler = (): ((event: { transaction: { docChanged: boolean } }) => void) =>
+      getRegisteredEditorHandler('transaction');
 
     it('syncs decorations when a transaction fires (setMeta customer flow)', async () => {
       const { plugin, setDecorations } = createMutableMockPlugin();
@@ -574,7 +582,7 @@ describe('PresentationEditor.decorationSync', () => {
       // Simulate the customer command: plugin state updates, then transaction fires.
       setDecorations([{ from: 5, to: 15, class: 'highlight-selection' }]);
       const fireTransaction = getTransactionHandler();
-      fireTransaction();
+      fireTransaction({ transaction: { docChanged: false } });
 
       await waitForSync();
       expect(span.classList.contains('highlight-selection')).toBe(true);
@@ -596,7 +604,7 @@ describe('PresentationEditor.decorationSync', () => {
       // Clear decorations and fire transaction (simulates clearHighlight command).
       setDecorations([]);
       const fireTransaction = getTransactionHandler();
-      fireTransaction();
+      fireTransaction({ transaction: { docChanged: false } });
 
       await waitForSync();
       expect(span.classList.contains('highlight-selection')).toBe(false);

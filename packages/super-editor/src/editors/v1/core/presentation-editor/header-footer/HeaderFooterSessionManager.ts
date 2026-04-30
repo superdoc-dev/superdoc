@@ -1021,7 +1021,11 @@ export class HeaderFooterSessionManager {
 
     const bodyPageCount = this.#deps?.getBodyPageCount() ?? 1;
     const session = storySessionManager.activate(locator, {
-      commitPolicy: 'continuous',
+      // Presentation-mode header/footer sessions now reuse the manager-backed
+      // per-refId editor, which already exports on update. Commit once on exit
+      // to avoid double-syncing every keystroke while still flushing the final
+      // state if the session closes mid-batch.
+      commitPolicy: 'onExit',
       preferHiddenHost: true,
       hostWidthPx: Math.max(1, region.width),
       editorContext: {
@@ -1063,6 +1067,7 @@ export class HeaderFooterSessionManager {
           sectionId: region.sectionId,
           kind: region.kind,
           variant: normalizeVariant(region.sectionType ?? 'default'),
+          addToHistory: false,
         });
         if (materializationResult) {
           // Refresh registry so the new refId is discoverable
@@ -2265,6 +2270,38 @@ export class HeaderFooterSessionManager {
     this.rebuildRegions(layout);
   }
 
+  private resolveAlignedDecorationItems(
+    fragments: Fragment[],
+    slotPageNumber: number,
+    result: HeaderFooterLayoutResult,
+    cachedResolvedLayout: ResolvedHeaderFooterLayout | undefined,
+    contextLabel: string,
+  ): ResolvedPaintItem[] | undefined {
+    const cachedPage = cachedResolvedLayout?.pages.find((page) => page.number === slotPageNumber);
+    const cachedItems = cachedPage?.items;
+    if (cachedItems && cachedItems.length === fragments.length) {
+      return cachedItems;
+    }
+    if (cachedItems) {
+      console.warn(
+        `[HeaderFooterSessionManager] Resolved items length (${cachedItems.length}) does not match fragments length (${fragments.length}) for ${contextLabel}. Recomputing items.`,
+      );
+    }
+
+    const freshResolvedLayout = resolveHeaderFooterLayout(result.layout, result.blocks, result.measures);
+    const freshPage = freshResolvedLayout.pages.find((page) => page.number === slotPageNumber);
+    const freshItems = freshPage?.items;
+    if (freshItems && freshItems.length === fragments.length) {
+      return freshItems;
+    }
+    if (freshItems) {
+      console.warn(
+        `[HeaderFooterSessionManager] Fresh resolved items length (${freshItems.length}) does not match fragments length (${fragments.length}) for ${contextLabel}. Dropping items.`,
+      );
+    }
+    return undefined;
+  }
+
   /**
    * Create a decoration provider for header or footer rendering.
    */
@@ -2313,7 +2350,11 @@ export class HeaderFooterSessionManager {
           const prevSectionIds = multiSectionId.sectionHeaderIds.get(sectionIndex - 1);
           sectionRId = prevSectionIds?.[headerFooterType as keyof typeof prevSectionIds] ?? undefined;
         }
-        if (!sectionRId && headerFooterType !== 'default') {
+        const shouldUseDefaultHeaderRef =
+          headerFooterType !== 'default' &&
+          page.sectionRefs.headerRefs?.default &&
+          (!multiSectionId?.alternateHeaders || headerFooterType === 'odd');
+        if (!sectionRId && shouldUseDefaultHeaderRef) {
           sectionRId = page.sectionRefs.headerRefs?.default;
         }
       } else if (page?.sectionRefs && kind === 'footer') {
@@ -2322,7 +2363,11 @@ export class HeaderFooterSessionManager {
           const prevSectionIds = multiSectionId.sectionFooterIds.get(sectionIndex - 1);
           sectionRId = prevSectionIds?.[headerFooterType as keyof typeof prevSectionIds] ?? undefined;
         }
-        if (!sectionRId && headerFooterType !== 'default') {
+        const shouldUseDefaultFooterRef =
+          headerFooterType !== 'default' &&
+          page.sectionRefs.footerRefs?.default &&
+          (!multiSectionId?.alternateHeaders || headerFooterType === 'odd');
+        if (!sectionRId && shouldUseDefaultFooterRef) {
           sectionRId = page.sectionRefs.footerRefs?.default;
         }
       }
@@ -2348,14 +2393,13 @@ export class HeaderFooterSessionManager {
           if (slotPage) {
             const fragments = slotPage.fragments ?? [];
             const resolvedLayout = resolvedByRId.get(rIdLayoutKey);
-            const resolvedSlotPage = resolvedLayout?.pages.find((p) => p.number === slotPage.number);
-            const resolvedItems = resolvedSlotPage?.items;
-            if (resolvedItems && resolvedItems.length !== fragments.length) {
-              console.warn(
-                `[HeaderFooterSessionManager] Resolved items length (${resolvedItems.length}) does not match fragments length (${fragments.length}) for rId '${rIdLayoutKey}' page ${pageNumber}. Dropping items.`,
-              );
-            }
-            const alignedItems = resolvedItems && resolvedItems.length === fragments.length ? resolvedItems : undefined;
+            const alignedItems = this.resolveAlignedDecorationItems(
+              fragments,
+              slotPage.number,
+              rIdLayout,
+              resolvedLayout,
+              `rId '${rIdLayoutKey}' page ${pageNumber}`,
+            );
             const pageHeight = page?.size?.h ?? layout.pageSize?.h ?? layoutOptions.pageSize?.h ?? defaultPageSize.h;
             const margins = pageMargins ?? layout.pages[0]?.margins ?? layoutOptions.margins ?? defaultMargins;
             const decorationMargins =
@@ -2409,15 +2453,13 @@ export class HeaderFooterSessionManager {
       const fragments = slotPage.fragments ?? [];
 
       const resolvedVariant = resolvedResults?.[variantIndex];
-      const resolvedVariantPage = resolvedVariant?.pages.find((p) => p.number === slotPage.number);
-      const resolvedVariantItems = resolvedVariantPage?.items;
-      if (resolvedVariantItems && resolvedVariantItems.length !== fragments.length) {
-        console.warn(
-          `[HeaderFooterSessionManager] Resolved items length (${resolvedVariantItems.length}) does not match fragments length (${fragments.length}) for variant '${headerFooterType}' page ${pageNumber}. Dropping items.`,
-        );
-      }
-      const alignedVariantItems =
-        resolvedVariantItems && resolvedVariantItems.length === fragments.length ? resolvedVariantItems : undefined;
+      const alignedVariantItems = this.resolveAlignedDecorationItems(
+        fragments,
+        slotPage.number,
+        variant,
+        resolvedVariant,
+        `variant '${headerFooterType}' page ${pageNumber}`,
+      );
 
       const pageHeight = page?.size?.h ?? layout.pageSize?.h ?? layoutOptions.pageSize?.h ?? defaultPageSize.h;
       const margins = pageMargins ?? layout.pages[0]?.margins ?? layoutOptions.margins ?? defaultMargins;

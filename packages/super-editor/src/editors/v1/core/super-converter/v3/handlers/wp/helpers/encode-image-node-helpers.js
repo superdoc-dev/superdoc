@@ -20,6 +20,7 @@ import {
 } from './textbox-content-helpers.js';
 import { parseRelativeHeight } from './relative-height.js';
 import { CHART_URI, resolveChartPart, parseChartXml } from './chart-helpers.js';
+import { findChildByLocalName, someChildHasLocalName, hasLocalName } from './drawingml-utils.js';
 
 const DRAWING_XML_TAG = 'w:drawing';
 const SHAPE_URI = 'http://schemas.microsoft.com/office/word/2010/wordprocessingShape';
@@ -275,8 +276,8 @@ export function handleImageNode(node, params, isAnchor) {
     };
   }
 
-  const graphic = node.elements.find((el) => el.name === 'a:graphic');
-  const graphicData = graphic?.elements.find((el) => el.name === 'a:graphicData');
+  const graphic = findChildByLocalName(node.elements, 'graphic');
+  const graphicData = findChildByLocalName(graphic?.elements, 'graphicData');
   const { uri } = graphicData?.attributes || {};
   if (!graphicData) {
     return null;
@@ -321,14 +322,14 @@ export function handleImageNode(node, params, isAnchor) {
   }
 
   const blipFill = picture.elements.find((el) => el.name === 'pic:blipFill');
-  const blip = blipFill?.elements.find((el) => el.name === 'a:blip');
+  const blip = findChildByLocalName(blipFill?.elements, 'blip');
   if (!blip) {
     return null;
   }
 
   // Check for image effects (grayscale, luminance, etc.)
-  const hasGrayscale = blip.elements?.some((el) => el.name === 'a:grayscl');
-  const lumEl = blip.elements?.find((el) => el.name === 'a:lum');
+  const hasGrayscale = someChildHasLocalName(blip.elements, 'grayscl');
+  const lumEl = findChildByLocalName(blip.elements, 'lum');
   const rawBright = Number(lumEl?.attributes?.bright);
   const rawContrast = Number(lumEl?.attributes?.contrast);
   const lum =
@@ -349,9 +350,9 @@ export function handleImageNode(node, params, isAnchor) {
   //
   // Skip cover mode when srcRect already emitted explicit clipping or when srcRect has
   // negative values (Word already adjusted the mapping).
-  const stretch = blipFill?.elements?.find((el) => el.name === 'a:stretch');
-  const fillRect = stretch?.elements?.find((el) => el.name === 'a:fillRect');
-  const srcRect = blipFill?.elements?.find((el) => el.name === 'a:srcRect');
+  const stretch = findChildByLocalName(blipFill?.elements, 'stretch');
+  const fillRect = findChildByLocalName(stretch?.elements, 'fillRect');
+  const srcRect = findChildByLocalName(blipFill?.elements, 'srcRect');
   const srcRectAttrs = srcRect?.attributes || {};
   const clipPath = buildClipPathFromSrcRect(srcRectAttrs);
 
@@ -370,7 +371,7 @@ export function handleImageNode(node, params, isAnchor) {
 
   const spPr = picture.elements.find((el) => el.name === 'pic:spPr');
   if (spPr) {
-    const xfrm = spPr.elements?.find((el) => el.name === 'a:xfrm');
+    const xfrm = findChildByLocalName(spPr.elements, 'xfrm');
     if (xfrm?.attributes) {
       transformData = {
         ...transformData,
@@ -384,7 +385,7 @@ export function handleImageNode(node, params, isAnchor) {
   // --- Parse pic:nvPicPr for lockAspectRatio, hyperlink ---
   const nvPicPr = picture.elements.find((el) => el.name === 'pic:nvPicPr');
   const cNvPicPr = nvPicPr?.elements?.find((el) => el.name === 'pic:cNvPicPr');
-  const picLocks = cNvPicPr?.elements?.find((el) => el.name === 'a:picLocks');
+  const picLocks = findChildByLocalName(cNvPicPr?.elements, 'picLocks');
   // Per OOXML §20.1.2.2.31, noChangeAspect defaults to false when not specified.
   // When a:picLocks is absent entirely, there is no lock → false.
   const lockAspectRatio = picLocks
@@ -395,8 +396,7 @@ export function handleImageNode(node, params, isAnchor) {
   // wp:docPr > a:hlinkClick (Word's canonical placement per §20.4.2.5).
   const cNvPr = nvPicPr?.elements?.find((el) => el.name === 'pic:cNvPr');
   const hlinkClick =
-    cNvPr?.elements?.find((el) => el.name === 'a:hlinkClick') ||
-    docPr?.elements?.find((el) => el.name === 'a:hlinkClick');
+    findChildByLocalName(cNvPr?.elements, 'hlinkClick') || findChildByLocalName(docPr?.elements, 'hlinkClick');
   let hyperlink = null;
   if (hlinkClick?.attributes?.['r:id']) {
     const hlinkRId = hlinkClick.attributes['r:id'];
@@ -415,11 +415,11 @@ export function handleImageNode(node, params, isAnchor) {
 
   // --- Parse decorative flag from wp:docPr > a:extLst > a:ext > adec:decorative ---
   let decorative = false;
-  const docPrExtLst = docPr?.elements?.find((el) => el.name === 'a:extLst');
+  const docPrExtLst = findChildByLocalName(docPr?.elements, 'extLst');
   if (docPrExtLst) {
     for (const ext of docPrExtLst.elements || []) {
-      if (ext.name !== 'a:ext') continue;
-      const decEl = ext.elements?.find((el) => el.name === 'adec:decorative' || el.name === 'a16:decorative');
+      if (!hasLocalName(ext, 'ext')) continue;
+      const decEl = findChildByLocalName(ext.elements, 'decorative');
       if (decEl && (decEl.attributes?.['val'] === '1' || decEl.attributes?.['val'] === 1)) {
         decorative = true;
         break;
@@ -603,7 +603,7 @@ const handleShapeDrawing = (
   const textBoxContent = textBox?.elements?.find((el) => el.name === 'w:txbxContent');
 
   const spPr = wsp.elements.find((el) => el.name === 'wps:spPr');
-  const prstGeom = spPr?.elements.find((el) => el.name === 'a:prstGeom');
+  const prstGeom = findChildByLocalName(spPr?.elements, 'prstGeom');
   const shapeType = prstGeom?.attributes['prst'];
 
   // Check for custom geometry when no preset geometry is found
@@ -681,15 +681,15 @@ const handleShapeGroup = (params, node, graphicData, size, padding, marginOffset
 
   // Extract group properties
   const grpSpPr = wgp.elements.find((el) => el.name === 'wpg:grpSpPr');
-  const xfrm = grpSpPr?.elements?.find((el) => el.name === 'a:xfrm');
+  const xfrm = findChildByLocalName(grpSpPr?.elements, 'xfrm');
 
   // Get group transform data
   const groupTransform = {};
   if (xfrm) {
-    const off = xfrm.elements?.find((el) => el.name === 'a:off');
-    const ext = xfrm.elements?.find((el) => el.name === 'a:ext');
-    const chOff = xfrm.elements?.find((el) => el.name === 'a:chOff');
-    const chExt = xfrm.elements?.find((el) => el.name === 'a:chExt');
+    const off = findChildByLocalName(xfrm.elements, 'off');
+    const ext = findChildByLocalName(xfrm.elements, 'ext');
+    const chOff = findChildByLocalName(xfrm.elements, 'chOff');
+    const chExt = findChildByLocalName(xfrm.elements, 'chExt');
 
     if (off) {
       groupTransform.x = emuToPixels(off.attributes?.['x'] || 0);
@@ -723,14 +723,14 @@ const handleShapeGroup = (params, node, graphicData, size, padding, marginOffset
       if (!spPr) return null;
 
       // Extract shape kind (preset geometry) or custom geometry
-      const prstGeom = spPr.elements?.find((el) => el.name === 'a:prstGeom');
+      const prstGeom = findChildByLocalName(spPr.elements, 'prstGeom');
       const shapeKind = prstGeom?.attributes?.['prst'];
       const customGeom = !shapeKind ? extractCustomGeometry(spPr) : null;
 
       // Extract size and transformations
-      const shapeXfrm = spPr.elements?.find((el) => el.name === 'a:xfrm');
-      const shapeOff = shapeXfrm?.elements?.find((el) => el.name === 'a:off');
-      const shapeExt = shapeXfrm?.elements?.find((el) => el.name === 'a:ext');
+      const shapeXfrm = findChildByLocalName(spPr.elements, 'xfrm');
+      const shapeOff = findChildByLocalName(shapeXfrm?.elements, 'off');
+      const shapeExt = findChildByLocalName(shapeXfrm?.elements, 'ext');
 
       // Get raw child coordinates in EMU
       const rawX = shapeOff?.attributes?.['x'] ? parseFloat(shapeOff.attributes['x']) : 0;
@@ -826,9 +826,9 @@ const handleShapeGroup = (params, node, graphicData, size, padding, marginOffset
       if (!spPr) return null;
 
       // Extract size and transformations
-      const xfrm = spPr.elements?.find((el) => el.name === 'a:xfrm');
-      const off = xfrm?.elements?.find((el) => el.name === 'a:off');
-      const ext = xfrm?.elements?.find((el) => el.name === 'a:ext');
+      const xfrm = findChildByLocalName(spPr.elements, 'xfrm');
+      const off = findChildByLocalName(xfrm?.elements, 'off');
+      const ext = findChildByLocalName(xfrm?.elements, 'ext');
 
       // Get raw coordinates in EMU
       const rawX = off?.attributes?.['x'] ? parseFloat(off.attributes['x']) : 0;
@@ -857,7 +857,7 @@ const handleShapeGroup = (params, node, graphicData, size, padding, marginOffset
 
       // Extract image reference from blipFill
       const blipFill = pic.elements?.find((el) => el.name === 'pic:blipFill');
-      const blip = blipFill?.elements?.find((el) => el.name === 'a:blip');
+      const blip = findChildByLocalName(blipFill?.elements, 'blip');
       if (!blip) return null;
 
       const rEmbed = blip.attributes?.['r:embed'];
@@ -1300,7 +1300,7 @@ export function getVectorShape({
   }
 
   // Extract shape kind (preset geometry) or custom geometry
-  const prstGeom = spPr.elements?.find((el) => el.name === 'a:prstGeom');
+  const prstGeom = findChildByLocalName(spPr.elements, 'prstGeom');
   const shapeKind = prstGeom?.attributes?.['prst'];
   schemaAttrs.kind = shapeKind;
 
@@ -1320,7 +1320,7 @@ export function getVectorShape({
   const height = size?.height ?? DEFAULT_SHAPE_HEIGHT;
 
   // Extract transformations from a:xfrm (rotation and flips are still valid)
-  const xfrm = spPr.elements?.find((el) => el.name === 'a:xfrm');
+  const xfrm = findChildByLocalName(spPr.elements, 'xfrm');
   const rotation = xfrm?.attributes?.['rot'] ? rotToDegrees(xfrm.attributes['rot']) : 0;
   const flipH = xfrm?.attributes?.['flipH'] === '1';
   const flipV = xfrm?.attributes?.['flipV'] === '1';

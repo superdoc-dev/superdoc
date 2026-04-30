@@ -5,7 +5,7 @@ import { loadTestDataForEditorTests, initTestEditor } from '@tests/helpers/helpe
 import { createTable } from './tableHelpers/createTable.js';
 import { normalizeNewTableAttrs } from './tableHelpers/normalizeNewTableAttrs.js';
 import { DEFAULT_TBL_LOOK } from '@superdoc/style-engine/ooxml';
-import { promises as fs } from 'fs';
+import { eighthPointsToPixels } from '../../core/super-converter/helpers.js';
 
 // Cache DOCX data to avoid repeated file loading
 let cachedBlankDoc = null;
@@ -1479,6 +1479,24 @@ describe('Table commands', async () => {
       const result = normalizeNewTableAttrs(editor);
       expect(result.tableStyleId).toBeNull();
       expect(result.tableProperties?.tblLook).toBeUndefined();
+
+      editor.converter = originalConverter;
+    });
+
+    it('converts fallback borders to px for layout while preserving OOXML sizes', async () => {
+      const { docx, media, mediaFiles, fonts } = cachedBlankDoc;
+      ({ editor } = initTestEditor({ content: docx, media, mediaFiles, fonts }));
+
+      const originalConverter = editor.converter;
+      editor.converter = { translatedLinkedStyles: { styles: {} } };
+
+      const result = normalizeNewTableAttrs(editor);
+      expect(result.tableStyleId).toBeNull();
+      expect(result.borders?.top?.size).toBeCloseTo(
+        eighthPointsToPixels(result.tableProperties?.borders?.top?.size ?? 0),
+        4,
+      );
+      expect(result.tableProperties?.borders?.top?.size).toBe(4);
 
       editor.converter = originalConverter;
     });

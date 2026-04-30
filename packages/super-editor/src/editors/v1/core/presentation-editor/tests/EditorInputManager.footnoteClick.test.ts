@@ -79,6 +79,15 @@ describe('EditorInputManager - Footnote click selection behavior', () => {
   beforeEach(() => {
     originalElementFromPoint = document.elementFromPoint?.bind(document);
     mockCommentsPluginState.activeThreadId = null;
+    (resolvePointerPositionHit as unknown as Mock).mockReturnValue({
+      pos: 12,
+      layoutEpoch: 1,
+      pageIndex: 0,
+      blockId: 'body-1',
+      column: 0,
+      lineIndex: -1,
+    });
+    (clickToPosition as unknown as Mock).mockReturnValue({ pos: 12, layoutEpoch: 1, pageIndex: 0, blockId: 'body-1' });
     viewportHost = document.createElement('div');
     viewportHost.className = 'presentation-editor__viewport';
     visibleHost = document.createElement('div');
@@ -592,6 +601,60 @@ describe('EditorInputManager - Footnote click selection behavior', () => {
     expect(activeHeaderEditor.view.focus).toHaveBeenCalled();
   });
 
+  it('replays active header editor focus when native focus is already inside the hidden editor', () => {
+    const activeHeaderEditor = createActiveSessionEditor();
+    const pageContainer = document.createElement('div');
+    pageContainer.className = 'superdoc-page';
+    viewportHost.appendChild(pageContainer);
+
+    activeHeaderEditor.view.dom.tabIndex = -1;
+    document.body.appendChild(activeHeaderEditor.view.dom);
+    activeHeaderEditor.view.dom.focus();
+
+    (mockDeps.getActiveEditor as Mock).mockReturnValue(activeHeaderEditor);
+    (mockDeps.getHeaderFooterSession as Mock).mockReturnValue({
+      session: { mode: 'header' },
+    });
+    mockCallbacks.hitTest = vi.fn(() => ({
+      pos: 18,
+      layoutEpoch: 3,
+      pageIndex: 0,
+      blockId: 'header-1',
+      column: 0,
+      lineIndex: -1,
+    }));
+    mockCallbacks.hitTestHeaderFooterRegion = vi.fn(() => ({
+      kind: 'header',
+      pageIndex: 0,
+      pageNumber: 1,
+      sectionType: 'default',
+      localX: 0,
+      localY: 0,
+      width: 200,
+      height: 40,
+    }));
+    stubElementsFromPoint([pageContainer]);
+
+    expect(document.activeElement).toBe(activeHeaderEditor.view.dom);
+
+    const target = document.createElement('span');
+    viewportHost.appendChild(target);
+
+    const PointerEventImpl = getPointerEventImpl();
+    target.dispatchEvent(
+      new PointerEventImpl('pointerdown', {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        buttons: 1,
+        clientX: 24,
+        clientY: 12,
+      } as PointerEventInit),
+    );
+
+    expect(activeHeaderEditor.view.focus).toHaveBeenCalled();
+  });
+
   it('keeps active header editing when the pointer stack only exposes the page container', () => {
     const activeHeaderEditor = createActiveSessionEditor();
     const exitHeaderFooterMode = vi.fn();
@@ -1091,5 +1154,88 @@ describe('EditorInputManager - Footnote click selection behavior', () => {
 
     expect(selectWordAt).not.toHaveBeenCalled();
     expect(TextSelection.create as unknown as Mock).toHaveBeenCalledTimes(2);
+  });
+
+  it('exits the active footnote session when the resolved hit lands in an endnote with the same note id', () => {
+    // Bug: the post-hit-test guard at handlePointerDown only compares
+    // `noteId`, not `storyType`. A footnote-1 session that receives a
+    // resolved hit on endnote-1 should exit, but currently does not.
+    const activeNoteEditor = createActiveSessionEditor();
+    const exitActiveStorySession = vi.fn();
+
+    (mockDeps.getActiveStorySession as Mock).mockReturnValue({
+      kind: 'note',
+      locator: { kind: 'story', storyType: 'footnote', noteId: '1' },
+      editor: activeNoteEditor,
+    });
+    (mockDeps.getActiveEditor as Mock).mockReturnValue(activeNoteEditor);
+
+    // Hit-test (active surface) resolves to an endnote with the same noteId
+    // as the active footnote — exposes the storyType-only guard.
+    mockCallbacks.hitTest = vi.fn(() => ({
+      pos: 18,
+      layoutEpoch: 3,
+      pageIndex: 0,
+      blockId: 'endnote-1-0',
+      column: 0,
+      lineIndex: -1,
+    }));
+    mockCallbacks.exitActiveStorySession = exitActiveStorySession;
+    manager.setCallbacks(mockCallbacks);
+
+    // Target carries the active footnote's block id so the early
+    // clickedNoteTarget branch sees "same active note" and falls through
+    // to the post-hit-test guard.
+    const fragmentEl = document.createElement('span');
+    fragmentEl.setAttribute('data-block-id', 'footnote-1-0');
+    const nestedEl = document.createElement('span');
+    fragmentEl.appendChild(nestedEl);
+    viewportHost.appendChild(fragmentEl);
+
+    const PointerEventImpl = getPointerEventImpl();
+    nestedEl.dispatchEvent(
+      new PointerEventImpl('pointerdown', {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        buttons: 1,
+        clientX: 24,
+        clientY: 12,
+      } as PointerEventInit),
+    );
+
+    expect(exitActiveStorySession).toHaveBeenCalled();
+  });
+
+  it('does not suppress caret placement on a direct .track-insert[data-id] click when the same thread is active', () => {
+    // Bug: isDirectTrackedChangeHit only matches `[data-track-change-id]`,
+    // but resolveTrackChangeThreadId also matches PM-style selectors like
+    // `.track-insert[data-id]`. A click directly on a PM-selector element
+    // for the active comment thread gets swallowed by the repeat-click
+    // suppression instead of placing a caret.
+    mockCommentsPluginState.activeThreadId = 'tc-1';
+
+    const trackedChangeEl = document.createElement('span');
+    trackedChangeEl.className = 'track-insert';
+    trackedChangeEl.setAttribute('data-id', 'tc-1');
+    viewportHost.appendChild(trackedChangeEl);
+    stubBoundingRect(trackedChangeEl, { left: 8, top: 10, width: 40, height: 20 });
+    stubElementsFromPoint([trackedChangeEl]);
+
+    const PointerEventImpl = getPointerEventImpl();
+    trackedChangeEl.dispatchEvent(
+      new PointerEventImpl('pointerdown', {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        buttons: 1,
+        clientX: 12,
+        clientY: 14,
+      } as PointerEventInit),
+    );
+
+    // With the bug, the early repeat-click short-circuit consumes the
+    // event before the hit resolver runs, so caret placement is lost.
+    expect(resolvePointerPositionHit).toHaveBeenCalled();
   });
 });

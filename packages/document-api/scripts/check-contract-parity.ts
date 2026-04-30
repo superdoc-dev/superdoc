@@ -21,7 +21,10 @@ import { OPERATION_DEFINITIONS } from '../src/contract/operation-definitions.js'
 import { OPERATION_REFERENCE_DOC_PATH_MAP } from '../src/contract/reference-doc-map.js';
 import { buildDispatchTable } from '../src/invoke/invoke.js';
 
-/** Meta-methods and helper methods on DocumentApi that are not contract operations. */
+/**
+ * Meta-methods on DocumentApi that are not contract operations: the
+ * dispatcher itself plus the documented reference aliases.
+ */
 const META_MEMBER_PATHS = ['invoke', ...REFERENCE_OPERATION_ALIASES.map((alias) => alias.memberPath)];
 
 function collectFunctionMemberPaths(value: unknown, prefix = ''): string[] {

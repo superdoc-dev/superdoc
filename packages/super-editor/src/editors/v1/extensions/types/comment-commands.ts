@@ -84,6 +84,25 @@ export type ResolveCommentOptions = {
   importedId?: string;
 };
 
+/**
+ * Options for the `reopenComment` command — symmetric inverse of
+ * `resolveComment`. Restores the live `comment` mark across the
+ * range previously anchored by `commentRangeStart`/`commentRangeEnd`.
+ */
+export type ReopenCommentOptions = {
+  /** The comment ID to reopen */
+  commentId: string;
+  /** The imported comment ID — matched against `w:id` for legacy DOCX */
+  importedId?: string;
+  /**
+   * Override for the restored mark's `internal` flag. When omitted,
+   * the helper falls back to the value stamped on the resolve-time
+   * `commentRangeStart` anchor so import-resolved comments keep their
+   * flag without needing the entity store.
+   */
+  internal?: boolean;
+};
+
 /** Options for editComment command */
 export type EditCommentOptions = {
   /** The comment ID to edit */
@@ -187,6 +206,23 @@ export interface CommentCommands {
    * editor.commands.resolveComment({ commentId: 'comment-123' })
    */
   resolveComment: (options: ResolveCommentOptions) => boolean;
+
+  /**
+   * Reopen a previously-resolved comment — the symmetric inverse of
+   * `resolveComment`. Removes the `commentRangeStart` /
+   * `commentRangeEnd` anchor nodes inserted at resolve time and
+   * restores the live `comment` mark across the same range so the
+   * comment surfaces again on the editing surface and in
+   * `comments.list()` / `selection.current().activeCommentIds`.
+   *
+   * Surfaced on the public Document API as
+   * `editor.doc.comments.patch({ commentId, status: 'active' })`.
+   *
+   * @param options - Object containing commentId and optional importedId / internal override
+   * @example
+   * editor.commands.reopenComment({ commentId: 'comment-123' })
+   */
+  reopenComment: (options: ReopenCommentOptions) => boolean;
 
   /**
    * Edit an existing comment payload.

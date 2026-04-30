@@ -397,6 +397,147 @@
         if (!hasListCall) return { pass: false, score: 0, reason: `No superdoc_list call. Tools: ${tools.join(' → ')}` };
         return { pass: true, score: 1, reason: `Used list tool` };
       metric: tool_selection
+    # Regression guard: after bullet→ordered conversion, no level's rFonts
+    # should still point at a symbol font (Wingdings / Symbol / Webdings) —
+    # those produce pictographic glyphs instead of digits in Word.
+    # Reads word/numbering.xml from the saved .docx and flags violations.
+    - type: javascript
+      value: file://../shared/checks.cjs:checkNoSymbolFontsOnOrderedLevels
+      metric: numbering_font_consistency
+
+# --- Compound-op execution tests (merge / split / restart / subpoint) ---
+#
+# document.docx contains two separate lists:
+#   - Bullet list (listId 5:...): "All sorts of bullets." → "Nested lists" → "With" → "Lots of plenty of different icons"
+#   - Numbered list (listId 6:...): "Numbers" → "Or letters" → "All sorts of lists are supported"
+# These tests exercise the compound list ops (merge / split / set_value / insert+indent)
+# and the paraId roundtrip — insert receipt nodeId must survive OOXML export/import.
+
+- description: 'List: merge two adjacent lists into one'
+  vars:
+    fixture: document.docx
+    keepFile: true
+    task: 'The document has two adjacent lists. Merge the second list (starting with "Numbers") into the first list (starting with "All sorts of bullets.") so they become one continuous list.'
+  assert:
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        const t = d.documentText || '';
+        // All original list-item texts must still be present
+        const items = ['All sorts of bullets.', 'Nested lists', 'Numbers', 'Or letters', 'All sorts of lists are supported'];
+        const missing = items.filter(s => !t.includes(s));
+        if (missing.length) return { pass: false, score: 0, reason: `Missing items after merge: ${missing.join(', ')}` };
+        return { pass: true, score: 1, reason: 'All original items preserved' };
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        const listCalls = (d.toolCalls || []).filter(tc => tc.tool === 'superdoc_list');
+        const actions = listCalls.map(tc => tc.args?.action).filter(Boolean);
+        if (!actions.includes('merge')) return { pass: false, score: 0, reason: `Expected action "merge", got [${actions.join(', ')}]` };
+        return { pass: true, score: 1, reason: 'Used superdoc_list({action:"merge"})' };
+      metric: action_selection
+    - type: javascript
+      value: file://../shared/checks.cjs:checkBulletsAndNumbersMerged
+      metric: structural_change
+    - type: javascript
+      value: file://../shared/checks.cjs:traceAllOk
+    - type: javascript
+      value: file://../shared/checks.cjs:traceLog
+
+- description: 'List: split a list at a specific item'
+  vars:
+    fixture: document.docx
+    keepFile: true
+    task: 'In the bullet list, split at the item "With" so that "With" and everything after it become a new separate list. Use the list-split operation, not a workaround.'
+  assert:
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        const t = d.documentText || '';
+        // Target text must remain in the document after split — split only reassigns numId, doesn't delete content
+        const items = ['All sorts of bullets.', 'Nested lists', 'With', 'Lots of plenty of different icons'];
+        const missing = items.filter(s => !t.includes(s));
+        if (missing.length) return { pass: false, score: 0, reason: `Content damaged: missing ${missing.join(', ')}` };
+        return { pass: true, score: 1, reason: 'All items preserved' };
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        const listCalls = (d.toolCalls || []).filter(tc => tc.tool === 'superdoc_list');
+        const actions = listCalls.map(tc => tc.args?.action).filter(Boolean);
+        if (!actions.includes('split')) return { pass: false, score: 0, reason: `Expected action "split", got [${actions.join(', ')}]` };
+        return { pass: true, score: 1, reason: 'Used superdoc_list({action:"split"})' };
+      metric: action_selection
+    - type: javascript
+      value: file://../shared/checks.cjs:checkBulletListSplitAtWith
+      metric: structural_change
+    - type: javascript
+      value: file://../shared/checks.cjs:traceAllOk
+    - type: javascript
+      value: file://../shared/checks.cjs:traceLog
+
+- description: 'List: restart numbering at a specific item'
+  vars:
+    fixture: document.docx
+    keepFile: true
+    task: 'In the numbered list, restart the numbering at the item "All sorts of lists are supported" so it counts from 1 again from that point forward. Use the set-value operation, not split or continue-previous.'
+  assert:
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        const t = d.documentText || '';
+        const items = ['Numbers', 'Or letters', 'All sorts of lists are supported'];
+        const missing = items.filter(s => !t.includes(s));
+        if (missing.length) return { pass: false, score: 0, reason: `Content damaged: missing ${missing.join(', ')}` };
+        return { pass: true, score: 1, reason: 'All items preserved' };
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        const listCalls = (d.toolCalls || []).filter(tc => tc.tool === 'superdoc_list');
+        const actions = listCalls.map(tc => tc.args?.action).filter(Boolean);
+        if (!actions.includes('set_value')) return { pass: false, score: 0, reason: `Expected action "set_value", got [${actions.join(', ')}]` };
+        return { pass: true, score: 1, reason: 'Used superdoc_list({action:"set_value"})' };
+      metric: action_selection
+    - type: javascript
+      value: file://../shared/checks.cjs:checkRestartAtAllSorts
+      metric: structural_change
+    - type: javascript
+      value: file://../shared/checks.cjs:traceAllOk
+    - type: javascript
+      value: file://../shared/checks.cjs:traceLog
+
+- description: 'List: add a sub-point under an existing item (exercises paraId fix)'
+  vars:
+    fixture: document.docx
+    keepFile: true
+    task: 'Under the list item "All sorts of bullets.", add a new sub-point with text "Freshly nested" that is nested one level deeper than it. Use lists.insert for the new item, then indent it.'
+  assert:
+    - type: javascript
+      value: |
+        const d = JSON.parse(output);
+        const t = d.documentText || '';
+        if (!t.includes('Freshly nested')) return { pass: false, score: 0, reason: 'New sub-point text missing' };
+        if (!t.includes('All sorts of bullets.')) return { pass: false, score: 0, reason: 'Parent item damaged' };
+        return { pass: true, score: 1, reason: 'Sub-point text present with parent intact' };
+    - type: javascript
+      value: |
+        // Key assertion: both "insert" and a nesting call (indent OR set_level)
+        // must have succeeded against the SAME new list item. If the insert
+        // receipt returned an unresolvable UUID (pre-paraId fix), the indent
+        // step would have failed with TARGET_NOT_FOUND and shown up in trace
+        // errors or caused the agent to retry.
+        const d = JSON.parse(output);
+        const listCalls = (d.toolCalls || []).filter(tc => tc.tool === 'superdoc_list');
+        const actions = listCalls.map(tc => tc.args?.action).filter(Boolean);
+        const hasInsert = actions.includes('insert');
+        const hasNest = actions.includes('indent') || actions.includes('set_level');
+        if (!hasInsert) return { pass: false, score: 0, reason: `Expected action "insert", got [${actions.join(', ')}]` };
+        if (!hasNest) return { pass: false, score: 0, reason: `Expected follow-up "indent" or "set_level" after insert, got [${actions.join(', ')}]` };
+        return { pass: true, score: 1, reason: `Sequence: ${actions.join(' → ')}` };
+      metric: action_sequence
+    - type: javascript
+      value: file://../shared/checks.cjs:traceAllOk
+    - type: javascript
+      value: file://../shared/checks.cjs:traceLog
 
 # =============================================================================
 # ASPIRATIONAL

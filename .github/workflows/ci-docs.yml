@@ -15,6 +15,7 @@ on:
 
 jobs:
   validate:
+    name: CI Docs / validate
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6

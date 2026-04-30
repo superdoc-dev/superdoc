@@ -147,3 +147,115 @@ test('switching highlighted threads does not trigger a second delayed floating-s
   await expect(targetDialog.locator('.comment-body .comment').nth(0)).toContainText('abc');
   await expect(targetDialog.locator('.comment-body .comment').nth(1)).toContainText('xyz');
 });
+
+// SD-2861 regression: explicit comment activation followed by a non-collapsed selection
+// (the shape `presentation.navigateTo` produces when landing a NodeSelection on the SDT
+// wrapper around a tracked change) must not enter a feedback loop. The plugin used to
+// coerce `getActiveCommentId`'s `undefined` return for non-collapsed selections into
+// `commentsUpdate({activeCommentId: null})`. The Vue host re-asserted the comment, the
+// plugin re-emitted, and `.track-change-focused` toggled ~400 times/second.
+//
+// This test programmatically reproduces the two-transaction pattern at the live editor
+// level so it covers the integrated path (plugin -> PresentationEditor bridge -> store
+// listener -> commands.setActiveComment) without depending on a fixture that happens to
+// have an SDT-wrapped tracked change.
+test('explicit comment activation survives a follow-up non-collapsed selection', async ({ superdoc }) => {
+  await superdoc.loadDocument(DOC_PATH);
+  await superdoc.page.waitForSelector('.superdoc-comment-highlight', { timeout: 30_000 });
+  await superdoc.waitForStable();
+  await assertDocumentApiReady(superdoc.page);
+
+  const result = await superdoc.page.evaluate(async () => {
+    const editor = (window as any).editor;
+    const view = editor?.view;
+    if (!view?.dispatch) throw new Error('editor.view.dispatch not available');
+
+    // Find the first comment-marked range in the doc and capture its id + bounds.
+    const commentInfo = ((): { id: string; from: number; to: number } | null => {
+      let id: string | null = null;
+      let from = -1;
+      let to = -1;
+      view.state.doc.descendants((node: any, pos: number) => {
+        for (const mark of node.marks ?? []) {
+          if (mark.type.name !== 'commentMark') continue;
+          const candidateId = mark.attrs?.commentId ?? mark.attrs?.importedId;
+          if (!candidateId) continue;
+          if (id === null) {
+            id = candidateId;
+            from = pos;
+            to = pos + node.nodeSize;
+          } else if (candidateId === id) {
+            to = Math.max(to, pos + node.nodeSize);
+          }
+        }
+      });
+      return id !== null ? { id, from, to } : null;
+    })();
+    if (!commentInfo) throw new Error('No comment-marked range found in fixture');
+
+    let dispatchCount = 0;
+    const originalDispatch = view.dispatch.bind(view);
+    view.dispatch = (tr: unknown) => {
+      dispatchCount += 1;
+      return originalDispatch(tr);
+    };
+
+    let toggles = 0;
+    const observer = new MutationObserver((muts) => {
+      muts.forEach((m) => {
+        if (m.attributeName !== 'class') return;
+        const oldVal = String(m.oldValue ?? '');
+        const newVal = String((m.target as Element).className ?? '');
+        if (oldVal === newVal) return;
+        const before = oldVal.includes('track-change-focused');
+        const after = newVal.includes('track-change-focused');
+        if (before !== after) toggles += 1;
+      });
+    });
+    const pages = document.querySelector('.presentation-editor__pages');
+    if (pages) {
+      observer.observe(pages, {
+        attributes: true,
+        attributeOldValue: true,
+        subtree: true,
+        attributeFilter: ['class'],
+      });
+    }
+
+    try {
+      // Tx 1: explicit activation, mirrors the sidebar-click path.
+      editor.commands.setActiveComment({ commentId: commentInfo.id });
+
+      // Tx 2: non-collapsed selection that wraps the comment range, mirrors the
+      // NodeSelection from `presentation.navigateTo` on an SDT wrapper.
+      const SelectionCtor = view.state.selection.constructor as any;
+      view.dispatch(view.state.tr.setSelection(SelectionCtor.create(view.state.doc, commentInfo.from, commentInfo.to)));
+
+      // Sample for 800ms. With the bug, the (id, null) emit pair plus the host re-assert
+      // produces 200+ toggles/sec; the fix keeps it bounded.
+      await new Promise((r) => setTimeout(r, 800));
+    } finally {
+      observer.disconnect();
+      view.dispatch = originalDispatch;
+    }
+
+    const activePluginState = view.state.plugins
+      .map((p: any) => p.getState?.(view.state))
+      .find((s: any) => s && 'activeThreadId' in s);
+
+    return {
+      dispatchCount,
+      toggles,
+      finalActiveThreadId: activePluginState?.activeThreadId ?? null,
+      expectedActiveCommentId: commentInfo.id,
+    };
+  });
+
+  await superdoc.waitForStable();
+
+  // Without the fix: dispatchCount climbs into the dozens (the host re-asserts on every
+  // commentsUpdate emit) and toggles climbs into the hundreds. With the fix: bounded.
+  expect(result.dispatchCount).toBeLessThanOrEqual(15);
+  expect(result.toggles).toBeLessThanOrEqual(3);
+  expect(result.finalActiveThreadId).toBe(result.expectedActiveCommentId);
+});

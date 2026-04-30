@@ -38,6 +38,7 @@ import type {
   ShapeGroupDrawing,
   ShapeTextContent,
   SolidFillWithAlpha,
+  SourceAnchor,
   TableAttrs,
   TableBlock,
   TableCellAttrs,
@@ -112,23 +113,17 @@ import {
   resolvePainterListMarkerGeometry,
   resolvePainterListTextStartPx,
 } from './utils/marker-helpers.js';
-import {
-  applySdtContainerStyling,
-  getSdtContainerKey,
-  shouldRebuildForSdtBoundary,
-  type SdtBoundaryOptions,
-} from './utils/sdt-helpers.js';
+import { applySdtContainerStyling, shouldRebuildForSdtBoundary, type SdtBoundaryOptions } from './utils/sdt-helpers.js';
 import {
   computeBetweenBorderFlags,
   createParagraphDecorationLayers,
-  applyParagraphBorderStyles,
-  applyParagraphShadingStyles,
-  getParagraphBorderBox,
   stampBetweenBorderDataset,
   type BetweenBorderInfo,
 } from './features/paragraph-borders/index.js';
 import { applyRtlStyles, shouldUseSegmentPositioning } from './features/rtl-paragraph/index.js';
 import { convertOmmlToMathml } from './features/math/index.js';
+import { expandRunsForInlineNewlines } from '@superdoc/pm-adapter';
+import { sliceRunsForLine } from '@superdoc/layout-bridge';
 
 /**
  * Minimal type for WordParagraphLayoutOutput marker data used in rendering.
@@ -254,6 +249,17 @@ export type DomPainterInput = {
   resolvedLayout: ResolvedLayout;
   /** Raw Layout for internal fragment access. */
   sourceLayout: Layout;
+  /**
+   * Optional bridge data used only when a decoration provider omits `items`.
+   * Body rendering reads from `resolvedLayout`; these arrays exist solely so
+   * header/footer fragments can synthesize resolved items on demand.
+   */
+  blocks?: FlowBlock[];
+  measures?: Measure[];
+  headerBlocks?: FlowBlock[];
+  headerMeasures?: Measure[];
+  footerBlocks?: FlowBlock[];
+  footerMeasures?: Measure[];
 };
 
 export type PageDecorationPayload = {
@@ -386,6 +392,7 @@ export type PaintSnapshotMarkerStyle = {
   fontWeight?: string;
   fontStyle?: string;
   color?: string;
+  sourceAnchor?: SourceAnchor;
 };
 
 export type PaintSnapshotTabStyle = {
@@ -428,6 +435,7 @@ export type PaintSnapshotImageEntity = {
   pmStart?: number;
   pmEnd?: number;
   blockId?: string;
+  sourceAnchor?: SourceAnchor;
 };
 
 export type PaintSnapshotEntities = {
@@ -444,6 +452,7 @@ export type PaintSnapshotLine = {
   style: PaintSnapshotLineStyle;
   markers?: PaintSnapshotMarkerStyle[];
   tabs?: PaintSnapshotTabStyle[];
+  sourceAnchor?: SourceAnchor;
 };
 
 export type PaintSnapshotPage = {
@@ -482,6 +491,7 @@ type PaintSnapshotCaptureOptions = {
   inTableFragment?: boolean;
   inTableParagraph?: boolean;
   wrapperEl?: HTMLElement;
+  sourceAnchor?: SourceAnchor;
 };
 
 function roundSnapshotMetric(value: number): number | null {
@@ -531,6 +541,52 @@ function compactSnapshotObject<T extends Record<string, unknown>>(input: T): T {
   return out;
 }
 
+function applySourceAnchorDataset(element: HTMLElement, sourceAnchor?: SourceAnchor): void {
+  if (!sourceAnchor) {
+    delete element.dataset.sourceAnchor;
+    delete element.dataset.sourceNodeId;
+    delete element.dataset.sourceOccurrenceId;
+    return;
+  }
+
+  try {
+    element.dataset.sourceAnchor = JSON.stringify(sourceAnchor);
+  } catch {
+    delete element.dataset.sourceAnchor;
+  }
+  if (sourceAnchor.sourceNodeId) {
+    element.dataset.sourceNodeId = sourceAnchor.sourceNodeId;
+  } else {
+    delete element.dataset.sourceNodeId;
+  }
+  if (sourceAnchor.occurrenceId) {
+    element.dataset.sourceOccurrenceId = sourceAnchor.occurrenceId;
+  } else {
+    delete element.dataset.sourceOccurrenceId;
+  }
+}
+
+function readSourceAnchorDataset(element: HTMLElement | null | undefined): SourceAnchor | undefined {
+  if (!element) return undefined;
+  const encoded = element.dataset?.sourceAnchor;
+  if (typeof encoded !== 'string' || encoded.length === 0) return undefined;
+
+  try {
+    const parsed = JSON.parse(encoded) as SourceAnchor;
+    return parsed && typeof parsed === 'object' ? parsed : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function readNearestSourceAnchor(element: HTMLElement | null | undefined): SourceAnchor | undefined {
+  if (!element) return undefined;
+  return (
+    readSourceAnchorDataset(element) ??
+    readSourceAnchorDataset(element.closest(`.${CLASS_NAMES.fragment}`) as HTMLElement | null)
+  );
+}
+
 function shouldIncludeInlineImageSnapshotElement(element: HTMLElement): boolean {
   if (element.classList.contains(DOM_CLASS_NAMES.INLINE_IMAGE_CLIP_WRAPPER)) {
     return true;
@@ -541,6 +597,15 @@ function shouldIncludeInlineImageSnapshotElement(element: HTMLElement): boolean 
   }
 
   return !element.closest(`.${DOM_CLASS_NAMES.INLINE_IMAGE_CLIP_WRAPPER}`);
+}
+
+function resolvedPaintCacheSignature(resolvedItem: ResolvedPaintItem | undefined): string {
+  if (!resolvedItem) return '';
+  return (
+    (resolvedItem as { paintCacheVersion?: string }).paintCacheVersion ??
+    (resolvedItem as { version?: string }).version ??
+    ''
+  );
 }
 
 function collectPaintSnapshotEntitiesFromDomRoot(rootEl: HTMLElement): PaintSnapshotEntities {
@@ -622,6 +687,7 @@ function collectPaintSnapshotEntitiesFromDomRoot(rootEl: HTMLElement): PaintSnap
         kind: 'inline',
         pmStart: readSnapshotDatasetNumber(element.dataset.pmStart),
         pmEnd: readSnapshotDatasetNumber(element.dataset.pmEnd),
+        sourceAnchor: readNearestSourceAnchor(element),
       }) as PaintSnapshotImageEntity,
     );
   }
@@ -641,6 +707,7 @@ function collectPaintSnapshotEntitiesFromDomRoot(rootEl: HTMLElement): PaintSnap
         pmStart: readSnapshotDatasetNumber(element.dataset.pmStart),
         pmEnd: readSnapshotDatasetNumber(element.dataset.pmEnd),
         blockId: element.getAttribute('data-sd-block-id'),
+        sourceAnchor: readNearestSourceAnchor(element),
       }) as PaintSnapshotImageEntity,
     );
   }
@@ -695,6 +762,7 @@ function snapshotMarkerStyleFromElement(markerEl: HTMLElement): PaintSnapshotMar
     fontWeight: readSnapshotStyleValue(style.fontWeight),
     fontStyle: readSnapshotStyleValue(style.fontStyle),
     color: readSnapshotStyleValue(style.color),
+    sourceAnchor: readNearestSourceAnchor(markerEl),
   }) as PaintSnapshotMarkerStyle;
 }
 
@@ -1501,6 +1569,8 @@ export class DomPainter {
         style,
         markers,
         tabs,
+        sourceAnchor:
+          readNearestSourceAnchor(lineEl) ?? readNearestSourceAnchor(options.wrapperEl) ?? options.sourceAnchor,
       }) as PaintSnapshotLine,
     );
 
@@ -1544,6 +1614,7 @@ export class DomPainter {
             style: snapshotLineStyleFromElement(lineEl),
             markers,
             tabs,
+            sourceAnchor: readNearestSourceAnchor(lineEl),
           }) as PaintSnapshotLine,
         );
       }
@@ -2393,6 +2464,17 @@ export class DomPainter {
     }
 
     const pageMargins = resolvedPage?.margins ?? page.margins;
+    const styledPageHeight = Number.parseFloat(pageEl.style.height || '');
+    const pageHeight =
+      page.size?.h ??
+      this.currentLayout?.pageSize?.h ??
+      (Number.isFinite(styledPageHeight) ? styledPageHeight : pageEl.clientHeight);
+
+    const footerDistance = pageMargins?.footer;
+    if (typeof footerDistance === 'number' && Number.isFinite(footerDistance)) {
+      return Math.max(0, pageHeight - Math.max(0, footerDistance));
+    }
+
     const bottomMargin = pageMargins?.bottom;
     if (bottomMargin == null) {
       return effectiveOffset;
@@ -2400,11 +2482,6 @@ export class DomPainter {
 
     const footnoteReserve = resolvedPage?.footnoteReserved ?? page.footnoteReserved ?? 0;
     const adjustedBottomMargin = Math.max(0, bottomMargin - footnoteReserve);
-    const styledPageHeight = Number.parseFloat(pageEl.style.height || '');
-    const pageHeight =
-      page.size?.h ??
-      this.currentLayout?.pageSize?.h ??
-      (Number.isFinite(styledPageHeight) ? styledPageHeight : pageEl.clientHeight);
 
     return Math.max(0, pageHeight - adjustedBottomMargin);
   }
@@ -2716,7 +2793,7 @@ export class DomPainter {
       const sdtBoundary = sdtBoundaries.get(index);
       const betweenInfo = betweenBorderFlags.get(index);
       const resolvedItem = this.getResolvedFragmentItem(pageIndex, index);
-      const resolvedSig = (resolvedItem as { version?: string } | undefined)?.version ?? '';
+      const resolvedSig = resolvedPaintCacheSignature(resolvedItem);
 
       if (current) {
         existing.delete(key);
@@ -2881,7 +2958,7 @@ export class DomPainter {
         resolvedItem,
       );
       el.appendChild(fragmentEl);
-      const initSig = (resolvedItem as { version?: string } | undefined)?.version ?? '';
+      const initSig = resolvedPaintCacheSignature(resolvedItem);
       return {
         key: fragmentKey(fragment),
         signature: initSig,
@@ -3104,6 +3181,7 @@ export class DomPainter {
       if (content) {
         // ── Resolved path: read pre-computed values from ResolvedParagraphContent ──
         const resolvedMarker = content.marker;
+        const expandedRunsForBlock = expandRunsForInlineNewlines(block.runs);
 
         content.lines.forEach((resolvedLine) => {
           const lineEl = this.renderLine(
@@ -3113,6 +3191,7 @@ export class DomPainter {
             resolvedLine.availableWidth,
             resolvedLine.lineIndex,
             resolvedLine.skipJustify,
+            expandedRunsForBlock,
             resolvedLine.resolvedListTextStartPx,
             resolvedLine.indentOffset,
           );
@@ -3151,6 +3230,10 @@ export class DomPainter {
               const markerEl = this.doc!.createElement('span');
               markerEl.classList.add('superdoc-paragraph-marker');
               markerEl.textContent = resolvedMarker.text;
+              applySourceAnchorDataset(
+                markerEl,
+                resolvedMarker.sourceAnchor ?? resolvedItem?.sourceAnchor ?? fragment.sourceAnchor,
+              );
               markerEl.style.pointerEvents = 'none';
 
               markerContainer.style.position = 'relative';
@@ -3198,6 +3281,7 @@ export class DomPainter {
           this.capturePaintSnapshotLine(lineEl, context, {
             inTableFragment: false,
             inTableParagraph: false,
+            sourceAnchor: resolvedItem?.sourceAnchor ?? fragment.sourceAnchor,
           });
           fragmentEl.appendChild(lineEl);
         });
@@ -3209,6 +3293,7 @@ export class DomPainter {
         const suppressFirstLineIndent = (block.attrs as Record<string, unknown>)?.suppressFirstLineIndent === true;
         const firstLineOffset = suppressFirstLineIndent ? 0 : (paraIndent?.firstLine ?? 0) - (paraIndent?.hanging ?? 0);
 
+        const expandedRunsForBlock = expandRunsForInlineNewlines(block.runs);
         const lastRun = block.runs.length > 0 ? block.runs[block.runs.length - 1] : null;
         const paragraphEndsWithLineBreak = lastRun?.kind === 'lineBreak';
 
@@ -3313,6 +3398,7 @@ export class DomPainter {
             availableWidthOverride,
             fragment.fromLine + index,
             shouldSkipJustifyForLastLine,
+            expandedRunsForBlock,
             shouldUseResolvedListTextStart ? listFirstLineTextStartPx : undefined,
           );
 
@@ -3362,6 +3448,10 @@ export class DomPainter {
               const markerEl = this.doc!.createElement('span');
               markerEl.classList.add('superdoc-paragraph-marker');
               markerEl.textContent = marker.markerText ?? '';
+              applySourceAnchorDataset(
+                markerEl,
+                block.sourceAnchor ?? resolvedItem?.sourceAnchor ?? fragment.sourceAnchor,
+              );
               markerEl.style.pointerEvents = 'none';
 
               const markerJustification = marker.justification ?? 'left';
@@ -3410,6 +3500,7 @@ export class DomPainter {
           this.capturePaintSnapshotLine(lineEl, context, {
             inTableFragment: false,
             inTableParagraph: false,
+            sourceAnchor: resolvedItem?.sourceAnchor ?? fragment.sourceAnchor,
           });
           fragmentEl.appendChild(lineEl);
         });
@@ -3549,6 +3640,7 @@ export class DomPainter {
         fragmentEl.style.top = `${fragment.y}px`;
         fragmentEl.style.width = `${fragment.markerWidth + fragment.width}px`;
         fragmentEl.dataset.blockId = fragment.blockId;
+        applySourceAnchorDataset(fragmentEl, fragment.sourceAnchor);
       }
       fragmentEl.dataset.itemId = fragment.itemId;
 
@@ -3573,6 +3665,10 @@ export class DomPainter {
 
       const markerEl = this.doc.createElement('span');
       markerEl.classList.add('superdoc-list-marker');
+      applySourceAnchorDataset(
+        markerEl,
+        item.marker.sourceAnchor ?? item.sourceAnchor ?? resolvedItem?.sourceAnchor ?? fragment.sourceAnchor,
+      );
 
       // Track B: Use marker styling from wordLayout if available
       const wordLayout: MinimalWordLayout | undefined = item.paragraph.attrs?.wordLayout as
@@ -3639,11 +3735,21 @@ export class DomPainter {
         ...item.paragraph,
         attrs: { ...(item.paragraph.attrs || {}), alignment: 'left' },
       };
+      const expandedRunsForList = expandRunsForInlineNewlines(paraForList.runs);
       lines.forEach((line, idx) => {
-        const lineEl = this.renderLine(paraForList, line, context, fragment.width, fragment.fromLine + idx, true);
+        const lineEl = this.renderLine(
+          paraForList,
+          line,
+          context,
+          fragment.width,
+          fragment.fromLine + idx,
+          true,
+          expandedRunsForList,
+        );
         this.capturePaintSnapshotLine(lineEl, context, {
           inTableFragment: false,
           inTableParagraph: false,
+          sourceAnchor: resolvedItem?.sourceAnchor ?? fragment.sourceAnchor,
         });
         contentEl.appendChild(lineEl);
       });
@@ -4899,6 +5005,7 @@ export class DomPainter {
 
       // Word justifies text inside table cells, but not the final line unless the
       // paragraph ends with an explicit line break.
+      const tableCellExpandedRunsCache = new WeakMap<ParagraphBlock, Run[]>();
       const renderLineForTableCell = (
         block: ParagraphBlock,
         line: Line,
@@ -4911,7 +5018,22 @@ export class DomPainter {
         const paragraphEndsWithLineBreak = lastRun?.kind === 'lineBreak';
         const shouldSkipJustify = isLastLine && !paragraphEndsWithLineBreak;
 
-        return this.renderLine(block, line, ctx, undefined, lineIndex, shouldSkipJustify, resolvedListTextStartPx);
+        let expandedRuns = tableCellExpandedRunsCache.get(block);
+        if (!expandedRuns) {
+          expandedRuns = expandRunsForInlineNewlines(block.runs);
+          tableCellExpandedRunsCache.set(block, expandedRuns);
+        }
+
+        return this.renderLine(
+          block,
+          line,
+          ctx,
+          undefined,
+          lineIndex,
+          shouldSkipJustify,
+          expandedRuns,
+          resolvedListTextStartPx,
+        );
       };
 
       /**
@@ -5913,6 +6035,7 @@ export class DomPainter {
    * @param availableWidthOverride - Optional override for available width used in justification calculations
    * @param lineIndex - Optional zero-based index of the line within the fragment
    * @param skipJustify - When true, prevents justification even if alignment is 'justify'
+   * @param preExpandedRuns - Pre-computed result of expandRunsForInlineNewlines; pass when rendering multiple lines of the same paragraph to avoid recomputing per line
    * @param resolvedListTextStartPx - Optional canonical text-start override for list first lines
    * @param indentOffsetOverride - When defined, used instead of re-deriving indentOffset from block attrs in the segment positioning path
    * @returns The rendered line element
@@ -5924,6 +6047,7 @@ export class DomPainter {
     availableWidthOverride?: number,
     lineIndex?: number,
     skipJustify?: boolean,
+    preExpandedRuns?: Run[],
     resolvedListTextStartPx?: number,
     indentOffsetOverride?: number,
   ): HTMLElement {
@@ -5931,8 +6055,9 @@ export class DomPainter {
       throw new Error('DomPainter: document is not available');
     }
 
-    const lineRange = computeLinePmRange(block, line);
-    let runsForLine = sliceRunsForLine(block, line);
+    const expandedBlock = { ...block, runs: preExpandedRuns ?? expandRunsForInlineNewlines(block.runs) };
+    const lineRange = computeLinePmRange(expandedBlock, line);
+    let runsForLine = sliceRunsForLine(expandedBlock, line);
 
     const el = this.doc.createElement('div');
     el.classList.add(CLASS_NAMES.line);
@@ -6327,6 +6452,7 @@ export class DomPainter {
             geoSdtWrapper.style.top = '0px';
             geoSdtWrapper.style.height = `${line.lineHeight}px`;
           }
+          this.syncInlineSdtWrapperTypography(geoSdtWrapper, runForSdt);
           elem.style.left = `${elemLeftPx - geoSdtWrapperLeft}px`;
           geoSdtMaxRight = Math.max(geoSdtMaxRight, elemLeftPx + elemWidthPx);
           this.expandSdtWrapperPmRange(geoSdtWrapper, (runForSdt as TextRun).pmStart, (runForSdt as TextRun).pmEnd);
@@ -6614,8 +6740,11 @@ export class DomPainter {
           if (resolved && this.doc) {
             if (!currentInlineSdtWrapper) {
               currentInlineSdtWrapper = this.createInlineSdtWrapper(resolved.sdt);
+              this.syncInlineSdtWrapperTypography(currentInlineSdtWrapper, run);
               currentInlineSdtId = runSdtId;
             }
+            // Typography is set when wrapper is created from the first run.
+            // Follow-up (SD-2744): define a deterministic mixed-typography rule.
             this.expandSdtWrapperPmRange(currentInlineSdtWrapper, run.pmStart, run.pmEnd);
             currentInlineSdtWrapper.appendChild(elem);
           } else {
@@ -6741,6 +6870,7 @@ export class DomPainter {
     el.style.width = `${fragment.width}px`;
     el.dataset.blockId = fragment.blockId;
     el.dataset.layoutEpoch = String(this.layoutEpoch);
+    applySourceAnchorDataset(el, fragment.sourceAnchor);
 
     // Footnote content is read-only: prevent cursor placement and typing (blockId prefix from FootnotesBuilder)
     if (typeof fragment.blockId === 'string' && fragment.blockId.startsWith('footnote-')) {
@@ -6844,11 +6974,7 @@ export class DomPainter {
       return true;
     }
 
-    return (
-      section === 'header' &&
-      fragment.kind === 'drawing' &&
-      this.isHeaderWordArtWatermark(resolvedItem?.block)
-    );
+    return section === 'header' && fragment.kind === 'drawing' && this.isHeaderWordArtWatermark(resolvedItem?.block);
   }
 
   private isHeaderWordArtWatermark(block: DrawingBlock | undefined): boolean {
@@ -6900,6 +7026,7 @@ export class DomPainter {
     el.style.width = `${item.width}px`;
     el.dataset.blockId = item.blockId;
     el.dataset.layoutEpoch = String(this.layoutEpoch);
+    applySourceAnchorDataset(el, item.sourceAnchor ?? fragment.sourceAnchor);
     this.applyFragmentWrapperZIndex(el, fragment, item.zIndex);
 
     if (item.fragmentKind === 'image' || item.fragmentKind === 'drawing' || item.fragmentKind === 'table') {
@@ -7018,6 +7145,17 @@ export class DomPainter {
     labelEl.textContent = alias;
     wrapper.appendChild(labelEl);
     return wrapper;
+  }
+
+  private syncInlineSdtWrapperTypography(wrapper: HTMLElement, runForSizing?: Run): void {
+    // The line container sets fontSize:0 (strut fix). Keep wrapper typography
+    // synced with the current run so border height tracks text-size edits.
+    const runFontSize =
+      runForSizing && 'fontSize' in runForSizing && typeof runForSizing.fontSize === 'number'
+        ? `${runForSizing.fontSize}px`
+        : BROWSER_DEFAULT_FONT_SIZE;
+    wrapper.style.fontSize = runFontSize;
+    wrapper.style.lineHeight = 'normal';
   }
 
   /**
@@ -7937,109 +8075,6 @@ const stripListIndent = (attrs?: ParagraphAttrs): ParagraphAttrs | undefined => 
 };
 
 // applyParagraphShadingStyles — moved to features/paragraph-borders/border-layer.ts
-
-/**
- * Extracts and slices text runs that belong to a specific line within a paragraph block.
- * Handles partial runs at line boundaries by creating sliced copies with correct character ranges.
- *
- * @param {ParagraphBlock} block - The paragraph block containing runs
- * @param {Line} line - The line definition with fromRun/toRun and fromChar/toChar ranges
- * @returns {Run[]} Array of runs (or sliced run portions) that comprise the line
- *
- * @remarks
- * - Preserves run styling and metadata (pmStart, pmEnd positions) in sliced runs
- * - Tab runs are only included if the slice contains the actual tab character
- * - Text runs are sliced to match exact character boundaries of the line
- * - Returns empty array if no valid runs are found within the line range
- *
- * @example
- * ```typescript
- * const line = { fromRun: 0, toRun: 2, fromChar: 5, toChar: 10 };
- * const runs = sliceRunsForLine(paragraphBlock, line);
- * // Returns runs or run slices that fall within the specified character range
- * ```
- */
-export const sliceRunsForLine = (block: ParagraphBlock, line: Line): Run[] => {
-  const result: Run[] = [];
-
-  for (let runIndex = line.fromRun; runIndex <= line.toRun; runIndex += 1) {
-    const run = block.runs[runIndex];
-    if (!run) continue;
-
-    // FIXED: ImageRun handling - images are atomic units, no slicing needed
-    if (run.kind === 'image') {
-      result.push(run);
-      continue;
-    }
-
-    // LineBreakRun handling - line breaks don't have text content and are handled
-    // by the measurer creating new lines. Include them for PM position tracking.
-    if (run.kind === 'lineBreak') {
-      result.push(run);
-      continue;
-    }
-
-    // BreakRun handling - similar to LineBreakRun
-    if (run.kind === 'break') {
-      result.push(run);
-      continue;
-    }
-
-    // TabRun handling - tabs don't need slicing
-    if (run.kind === 'tab') {
-      result.push(run);
-      continue;
-    }
-
-    // FieldAnnotationRun handling - field annotations are atomic units like images
-    if (run.kind === 'fieldAnnotation') {
-      result.push(run);
-      continue;
-    }
-
-    // MathRun handling - math runs are atomic units like images
-    if (run.kind === 'math') {
-      result.push(run);
-      continue;
-    }
-
-    // At this point, run must be TextRun (has .text property)
-    if (!('text' in run)) {
-      continue;
-    }
-
-    const text = run.text ?? '';
-    const isFirstRun = runIndex === line.fromRun;
-    const isLastRun = runIndex === line.toRun;
-    const runLength = text.length;
-    const runPmStart = run.pmStart ?? null;
-    const fallbackPmEnd = runPmStart != null && run.pmEnd == null ? runPmStart + runLength : (run.pmEnd ?? null);
-
-    if (isFirstRun || isLastRun) {
-      const start = isFirstRun ? line.fromChar : 0;
-      const end = isLastRun ? line.toChar : text.length;
-      const slice = text.slice(start, end);
-      if (!slice) continue;
-
-      const pmSliceStart = runPmStart != null ? runPmStart + start : undefined;
-      const pmSliceEnd = runPmStart != null ? runPmStart + end : (fallbackPmEnd ?? undefined);
-
-      // TextRun: return a sliced TextRun preserving styles
-      const sliced: TextRun = {
-        ...(run as TextRun),
-        text: slice,
-        pmStart: pmSliceStart,
-        pmEnd: pmSliceEnd,
-        comments: (run as TextRun).comments ? [...(run as TextRun).comments!] : undefined,
-      };
-      result.push(sliced);
-    } else {
-      result.push(run);
-    }
-  }
-
-  return result;
-};
 
 const applyStyles = (el: HTMLElement, styles: Partial<CSSStyleDeclaration>): void => {
   Object.entries(styles).forEach(([key, value]) => {

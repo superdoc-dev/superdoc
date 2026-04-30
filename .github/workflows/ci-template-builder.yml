@@ -16,6 +16,7 @@ concurrency:
 
 jobs:
   validate:
+    name: CI Template Builder / validate
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6

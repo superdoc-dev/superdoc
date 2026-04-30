@@ -387,6 +387,37 @@ describe('PresentationEditor', () => {
     }
   });
 
+  describe('unified history defaults', () => {
+    it('enables the coordinator by default', async () => {
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'unified-history-default-doc',
+        content: { type: 'doc', content: [{ type: 'paragraph' }] },
+        mode: 'docx',
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(editor.historyCoordinator).not.toBeNull();
+    });
+
+    it('allows callers to disable the coordinator explicitly', async () => {
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'unified-history-disabled-doc',
+        content: { type: 'doc', content: [{ type: 'paragraph' }] },
+        mode: 'docx',
+        experimental: {
+          unifiedHistory: false,
+        },
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(editor.historyCoordinator).toBeNull();
+    });
+  });
+
   describe('scrollToPosition', () => {
     let originalScrollIntoView: unknown;
 
@@ -2437,8 +2468,12 @@ describe('PresentationEditor', () => {
 
       viewport.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, clientX: 120, clientY: 50, button: 0 }));
 
-      await vi.waitFor(() => expect(createdStoryEditors.length).toBeGreaterThan(0));
-      await vi.waitFor(() => expect(editor.getActiveEditor()).toBe(createdStoryEditors.at(-1)?.editor));
+      await vi.waitFor(() => expect(createdSectionEditors.length).toBeGreaterThan(0));
+      await vi.waitFor(() =>
+        expect(
+          createdSectionEditors.some(({ editor: sectionEditor }) => sectionEditor === editor.getActiveEditor()),
+        ).toBe(true),
+      );
 
       const sourceEditor = editor.getActiveEditor();
       expect(sourceEditor).toBeDefined();
@@ -2505,8 +2540,12 @@ describe('PresentationEditor', () => {
 
       viewport.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, clientX: 120, clientY: 50, button: 0 }));
 
-      await vi.waitFor(() => expect(createdStoryEditors.length).toBeGreaterThan(0));
-      await vi.waitFor(() => expect(editor.getActiveEditor()).toBe(createdStoryEditors.at(-1)?.editor));
+      await vi.waitFor(() => expect(createdSectionEditors.length).toBeGreaterThan(0));
+      await vi.waitFor(() =>
+        expect(
+          createdSectionEditors.some(({ editor: sectionEditor }) => sectionEditor === editor.getActiveEditor()),
+        ).toBe(true),
+      );
 
       const sourceEditor = editor.getActiveEditor();
       const transaction = { docChanged: true };
@@ -2563,8 +2602,12 @@ describe('PresentationEditor', () => {
 
       viewport.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, clientX: 120, clientY: 740, button: 0 }));
 
-      await vi.waitFor(() => expect(createdStoryEditors.length).toBeGreaterThan(0));
-      await vi.waitFor(() => expect(editor.getActiveEditor()).toBe(createdStoryEditors.at(-1)?.editor));
+      await vi.waitFor(() => expect(createdSectionEditors.length).toBeGreaterThan(0));
+      await vi.waitFor(() =>
+        expect(
+          createdSectionEditors.some(({ editor: sectionEditor }) => sectionEditor === editor.getActiveEditor()),
+        ).toBe(true),
+      );
 
       const sourceEditor = editor.getActiveEditor();
       expect(sourceEditor).toBeDefined();

@@ -19,7 +19,7 @@ import type {
 } from '@superdoc/contracts';
 import { effectiveTableCellSpacing, rescaleColumnWidths, normalizeZIndex, getCellSpacingPx } from '@superdoc/contracts';
 import { toCssFontFamily } from '@superdoc/font-utils';
-import type { FragmentRenderContext, RenderedLineInfo } from '../renderer.js';
+import { LIST_MARKER_CLASS_NAME, type FragmentRenderContext, type RenderedLineInfo } from '../renderer.js';
 import { applyParagraphBorderStyles, applyParagraphShadingStyles } from '../features/paragraph-borders/index.js';
 import { applySquareWrapExclusionsToLines } from '../utils/anchor-helpers';
 import { applyImageClipPath } from '../utils/image-clip-path.js';
@@ -353,7 +353,7 @@ function renderListMarker(params: MarkerRenderParams): void {
 
   // Create marker container (inline-block to isolate from word-spacing used for justification)
   const markerContainer = doc.createElement('span');
-  markerContainer.classList.add('superdoc-list-marker');
+  markerContainer.classList.add(LIST_MARKER_CLASS_NAME);
   markerContainer.style.display = 'inline-block';
   markerContainer.style.wordSpacing = '0px';
 

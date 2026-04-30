@@ -517,6 +517,8 @@ const SDT_CONTAINER_STYLES = `
   border: 1px solid transparent;
   position: relative;
   display: inline;
+  font-size: initial;
+  line-height: normal;
   z-index: 10;
 }
 

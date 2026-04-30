@@ -40,6 +40,16 @@ describe('StructuredContentSelectPlugin', () => {
     );
   }
 
+  function pressArrow(key) {
+    const event = new KeyboardEvent('keydown', { key, bubbles: true });
+    let handled = false;
+    editor.view.someProp('handleKeyDown', (handler) => {
+      handled = handler(editor.view, event);
+      return handled;
+    });
+    return handled;
+  }
+
   it('selects inline SDT content on first click in editing mode', () => {
     const inlineSdt = schema.nodes.structuredContent.create({ id: 'inline-1' }, schema.text('Field'));
     const paragraph = schema.nodes.paragraph.create(null, [schema.text('A '), inlineSdt, schema.text(' Z')]);
@@ -159,6 +169,63 @@ describe('StructuredContentSelectPlugin', () => {
     // Editable slot insertion should add exactly one zero-width character.
     const text = editor.state.doc.textContent;
     expect((text.match(/\u200B/g) ?? []).length).toBe(1);
+  });
+
+  it('exits inline SDT with one ArrowRight when only trailing ZWSP slots remain', () => {
+    const inlineSdt = schema.nodes.structuredContent.create({ id: 'inline-1' }, schema.text('Field\u200B\u200B'));
+    const paragraph = schema.nodes.paragraph.create(null, [schema.text('A '), inlineSdt, schema.text(' Z')]);
+    applyDoc(schema.nodes.doc.create(null, [paragraph]));
+
+    const sdt = findNode(editor.state.doc, 'structuredContent');
+    expect(sdt).not.toBeNull();
+
+    const contentFrom = sdt.pos + 1;
+    const afterVisibleText = contentFrom + 'Field'.length;
+    const afterSdt = sdt.pos + sdt.node.nodeSize;
+    editor.view.dispatch(editor.state.tr.setSelection(TextSelection.create(editor.state.doc, afterVisibleText)));
+
+    const event = new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true });
+    editor.view.someProp('handleKeyDown', (handler) => handler(editor.view, event));
+
+    expect(editor.state.selection.empty).toBe(true);
+    expect(editor.state.selection.from).toBe(afterSdt);
+    expect(editor.state.selection.to).toBe(afterSdt);
+  });
+
+  it('does not exit inline SDT with ArrowRight when a trailing inline leaf remains before ZWSP slots', () => {
+    const image = schema.nodes.image.create({ src: 'image.png' });
+    const inlineSdt = schema.nodes.structuredContent.create({ id: 'inline-1' }, [image, schema.text('\u200B')]);
+    const paragraph = schema.nodes.paragraph.create(null, [schema.text('A '), inlineSdt, schema.text(' Z')]);
+    applyDoc(schema.nodes.doc.create(null, [paragraph]));
+
+    const sdt = findNode(editor.state.doc, 'structuredContent');
+    expect(sdt).not.toBeNull();
+
+    const contentFrom = sdt.pos + 1;
+    editor.view.dispatch(editor.state.tr.setSelection(TextSelection.create(editor.state.doc, contentFrom)));
+    const beforePos = editor.state.selection.from;
+
+    expect(pressArrow('ArrowRight')).toBe(false);
+    expect(editor.state.selection.empty).toBe(true);
+    expect(editor.state.selection.from).toBe(beforePos);
+  });
+
+  it('does not exit inline SDT with ArrowLeft when a leading inline leaf remains after ZWSP slots', () => {
+    const image = schema.nodes.image.create({ src: 'image.png' });
+    const inlineSdt = schema.nodes.structuredContent.create({ id: 'inline-1' }, [schema.text('\u200B'), image]);
+    const paragraph = schema.nodes.paragraph.create(null, [schema.text('A '), inlineSdt, schema.text(' Z')]);
+    applyDoc(schema.nodes.doc.create(null, [paragraph]));
+
+    const sdt = findNode(editor.state.doc, 'structuredContent');
+    expect(sdt).not.toBeNull();
+
+    const contentTo = sdt.pos + sdt.node.nodeSize - 1;
+    editor.view.dispatch(editor.state.tr.setSelection(TextSelection.create(editor.state.doc, contentTo)));
+    const beforePos = editor.state.selection.from;
+
+    expect(pressArrow('ArrowLeft')).toBe(false);
+    expect(editor.state.selection.empty).toBe(true);
+    expect(editor.state.selection.from).toBe(beforePos);
   });
 
   it('ArrowLeft exit does not insert zero-width text before inline SDT', () => {

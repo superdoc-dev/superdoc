@@ -2,26 +2,40 @@
 /**
  * Audit the published declaration surface for leaks the package boundary RFC
  * (SD-2829) classifies as forbidden. Walks every `.d.ts` file under `dist/`
- * and reports any of the following:
+ * and reports:
  *
- *  1. Private workspace specifier in an emitted declaration.
- *     A consumer cannot install `@superdoc/<internal>`, so any such import
- *     either fails to resolve or collapses to `any` via the shim file.
+ *  Rule 1 (FAIL in strict mode): private workspace specifier in an emitted
+ *    declaration that is NOT covered by `_internal-shims.d.ts` and NOT a
+ *    legacy public surface. The shim file is the registry of "known
+ *    unresolved" private modules whose types the RFC tolerates collapsing
+ *    to `any`; legacy public surfaces (currently `@superdoc/super-editor`)
+ *    resolve through the published dist tree. Anything outside that
+ *    allowlist is a leak the RFC forbids: a consumer's strict-mode build
+ *    fails to resolve the import.
  *
- *  2. Package-manager-internal paths.
- *     `node_modules/.pnpm/...` paths leak the local install layout into a
- *     declaration that consumers cannot resolve.
+ *  Rule 2 (FAIL in strict mode): package-manager-internal paths.
+ *    `node_modules/.pnpm/...` paths leak the local install layout into a
+ *    declaration that consumers cannot resolve.
  *
- *  3. Internal shim file shipped in `dist/`.
- *     `_internal-shims.d.ts` is a postbuild containment workaround, not a
- *     long-term solution. The audit treats its presence as a finding.
+ *  Rule 3 (FAIL in strict mode): a relocated package reappears in
+ *    `_internal-shims.d.ts`. The RFC's relocation pattern (SD-2842) routes
+ *    Document API, contracts, layout-bridge, and painter-dom types through
+ *    `superdoc`'s own dist tree; if any of those packages collapse back into
+ *    an `any` shim, customers see the regression. This rule overlaps with
+ *    the build-time check in `ensure-types.cjs`; keeping both lets the audit
+ *    run as a standalone gate against any tarball, not just during a fresh
+ *    build.
  *
- * STATE: this script is currently INFORMATIONAL by default. The published
- * surface has all three classes of leak today; making the audit required
- * would break the build until the curated emit work in SD-2830 lands. Pass
- * `--strict` (or set `SUPERDOC_AUDIT_REQUIRED=1`) to exit non-zero on any
- * finding. Once SD-2830 ships and the leaks are gone, flip the default to
- * strict and remove this notice.
+ *  Informational: the set of modules still declared in `_internal-shims.d.ts`.
+ *    The shim file may legitimately exist for legacy or internal-only
+ *    declarations; the RFC's audit-gate rule is "no public type may resolve
+ *    through it", not "the file must not exist". This list is reported so
+ *    drift is visible and the surface can be tightened over time, but its
+ *    contents do not fail the audit.
+ *
+ * Default mode is informational: findings are printed and the script exits
+ * zero. Pass `--strict` (or set `SUPERDOC_AUDIT_REQUIRED=1`) to exit non-zero
+ * on any FAIL-level finding (rules 1, 2, or 3).
  */
 
 const fs = require('node:fs');
@@ -35,6 +49,38 @@ const isStrict =
 if (!fs.existsSync(distRoot)) {
   console.error(`[audit-declarations] dist/ not found at ${distRoot}; run the build first.`);
   process.exit(1);
+}
+
+// Packages whose types have been relocated into `superdoc`'s published
+// declaration tree. They must NEVER appear as a `declare module` block in
+// `_internal-shims.d.ts` — if they do, their types collapse to `any` for
+// consumers and we have a regression. Mirror of SD-2842's `RELOCATION_RULES`
+// in `ensure-types.cjs`; keep the two lists in sync.
+const RELOCATED_PACKAGES = [
+  '@superdoc/document-api',
+  '@superdoc/contracts',
+  '@superdoc/layout-bridge',
+  '@superdoc/painter-dom',
+];
+
+// Specifiers that may appear as bare imports in published d.ts files even
+// though they are private workspace packages. Each entry has a documented
+// reason; anything outside this allowlist (and outside the shim file) is a
+// real leak per Rule 1.
+const RULE1_ALLOWLIST = {
+  // Legacy public surface per the RFC. Resolves through `superdoc`'s
+  // published dist tree at runtime via the existing rewrite/include rules.
+  // Deep subpaths beyond the curated public surface are NOT allowlisted.
+  '@superdoc/super-editor': 'legacy public surface (RFC Decision 1)',
+};
+
+function isRule1Allowed(specifier, shimmedSet) {
+  if (RULE1_ALLOWLIST[specifier]) return true;
+  if (shimmedSet.has(specifier)) return true;
+  // Subpaths of allowlisted top-level packages are NOT auto-allowed.
+  // Subpaths of shimmed modules also need their own shim entry, so do not
+  // implicitly allow them here.
+  return false;
 }
 
 /**
@@ -58,14 +104,19 @@ function collectDtsFiles(dir) {
 
 const PRIVATE_SPECIFIER_RE = /['"](@superdoc\/[^'"]+)['"]/g;
 const PNPM_PATH_RE = /['"]([^'"]*node_modules\/\.pnpm\/[^'"]+)['"]/g;
+const SHIM_DECLARED_MODULE_RE = /declare module ['"]([^'"]+)['"]/g;
 
 const privateSpecifierFindings = new Map(); // file -> Set<specifier>
 const pnpmPathFindings = new Map(); // file -> Set<path>
-let internalShimsPresent = false;
+const shimmedModules = new Set(); // module specifiers declared in the shim file
 
 const internalShimsPath = path.join(distRoot, '_internal-shims.d.ts');
-if (fs.existsSync(internalShimsPath)) {
-  internalShimsPresent = true;
+const internalShimsPresent = fs.existsSync(internalShimsPath);
+if (internalShimsPresent) {
+  const shimContent = fs.readFileSync(internalShimsPath, 'utf8');
+  for (const match of shimContent.matchAll(SHIM_DECLARED_MODULE_RE)) {
+    shimmedModules.add(match[1]);
+  }
 }
 
 const dtsFiles = collectDtsFiles(distRoot);
@@ -80,6 +131,7 @@ for (const file of dtsFiles) {
 
   for (const match of content.matchAll(PRIVATE_SPECIFIER_RE)) {
     const specifier = match[1];
+    if (isRule1Allowed(specifier, shimmedModules)) continue;
     if (!privateSpecifierFindings.has(rel)) {
       privateSpecifierFindings.set(rel, new Set());
     }
@@ -106,6 +158,10 @@ const totalPnpmOccurrences = [...pnpmPathFindings.values()].reduce(
   0,
 );
 
+const relocatedInShim = RELOCATED_PACKAGES.filter((pkg) =>
+  [...shimmedModules].some((mod) => mod === pkg || mod.startsWith(pkg + '/')),
+);
+
 console.log('[audit-declarations] Declaration surface audit');
 console.log('='.repeat(72));
 console.log(`Scanned: ${dtsFiles.length} .d.ts files under ${path.relative(process.cwd(), distRoot)}/`);
@@ -116,46 +172,52 @@ const violations = [];
 // Rule 1: private workspace specifiers
 if (totalPrivateFiles > 0) {
   violations.push('private-specifiers');
-  console.log(`Private @superdoc/* specifiers: ${totalPrivateFiles} files / ${totalPrivateOccurrences} occurrences`);
+  console.log(`FAIL  Private @superdoc/* specifiers: ${totalPrivateFiles} files / ${totalPrivateOccurrences} occurrences`);
   const distinctSpecifiers = new Set();
   for (const set of privateSpecifierFindings.values()) {
     for (const s of set) distinctSpecifiers.add(s);
   }
-  console.log(`  distinct: ${[...distinctSpecifiers].sort().join(', ')}`);
-  console.log();
+  console.log(`      distinct: ${[...distinctSpecifiers].sort().join(', ')}`);
 } else {
-  console.log('Private @superdoc/* specifiers: none');
+  console.log('OK    Private @superdoc/* specifiers: none');
 }
 
 // Rule 2: pnpm paths
 if (totalPnpmFiles > 0) {
   violations.push('pnpm-paths');
-  console.log(`Package-manager-internal paths: ${totalPnpmFiles} files / ${totalPnpmOccurrences} occurrences`);
-  console.log();
+  console.log(`FAIL  Package-manager-internal paths: ${totalPnpmFiles} files / ${totalPnpmOccurrences} occurrences`);
 } else {
-  console.log('Package-manager-internal paths: none');
+  console.log('OK    Package-manager-internal paths: none');
 }
 
-// Rule 3: internal shims file
-if (internalShimsPresent) {
-  violations.push('internal-shims');
-  const stat = fs.statSync(internalShimsPath);
-  const content = fs.readFileSync(internalShimsPath, 'utf8');
-  const anyAliases = (content.match(/= any;/g) || []).length;
-  console.log(`Internal shims file: present (${stat.size} bytes, ${anyAliases} \`= any\` aliases)`);
+// Rule 3: relocated packages must not reappear in the shim file
+if (relocatedInShim.length > 0) {
+  violations.push('relocated-in-shim');
+  console.log(`FAIL  Relocated packages reappeared in _internal-shims.d.ts: ${relocatedInShim.join(', ')}`);
+  console.log('      These packages have dedicated relocation rules in ensure-types.cjs and must not fall back to ambient any shims.');
 } else {
-  console.log('Internal shims file: not present');
+  console.log(`OK    Relocated packages do not appear in shim file (${RELOCATED_PACKAGES.length} guarded)`);
+}
+
+// Informational: remaining shimmed modules
+if (internalShimsPresent && shimmedModules.size > 0) {
+  console.log();
+  console.log(`INFO  _internal-shims.d.ts declares ${shimmedModules.size} module${shimmedModules.size === 1 ? '' : 's'}:`);
+  for (const mod of [...shimmedModules].sort()) {
+    console.log(`        ${mod}`);
+  }
+  console.log('      These types are not on the public surface today. Tightening the surface (relocate, publish, or remove) shrinks this list.');
 }
 
 console.log();
 console.log('='.repeat(72));
 
 if (violations.length === 0) {
-  console.log('No findings. Declaration surface is clean against current rules.');
+  console.log('No FAIL-level findings. Declaration surface is clean against current rules.');
   process.exit(0);
 }
 
-console.log(`Findings: ${violations.join(', ')}`);
+console.log(`FAIL findings: ${violations.join(', ')}`);
 console.log();
 
 if (isStrict) {
@@ -165,6 +227,6 @@ if (isStrict) {
 }
 
 console.log('Strict mode is off; exiting zero (informational).');
-console.log('Pass --strict (or SUPERDOC_AUDIT_REQUIRED=1) to fail on findings.');
+console.log('Pass --strict (or SUPERDOC_AUDIT_REQUIRED=1) to fail on FAIL-level findings.');
 console.log('See docs/architecture/package-boundaries.md for what each rule means.');
 process.exit(0);

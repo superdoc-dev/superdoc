@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { findNoteEntryById } from './note-entry-lookup.js';
+import { enumerateEffectiveNoteEntries, findNoteEntryById } from './note-entry-lookup.js';
 
 describe('findNoteEntryById', () => {
   it('returns the matching regular entry', () => {
@@ -53,5 +53,47 @@ describe('findNoteEntryById', () => {
     expect(
       findNoteEntryById(entries as { id: string | number; type: null; content: string[] }[], '5')?.content,
     ).toEqual(['five']);
+  });
+});
+
+describe('enumerateEffectiveNoteEntries', () => {
+  it('returns one effective entry per id', () => {
+    const entries = [
+      { id: '1', type: null, content: ['one'] },
+      { id: '2', type: null, content: ['two'] },
+    ];
+
+    expect(enumerateEffectiveNoteEntries(entries)).toEqual(entries);
+  });
+
+  it('prefers the regular note when both special and regular entries share the same id', () => {
+    const entries = [
+      { id: '0', type: 'continuationSeparator', content: [] },
+      { id: '0', type: null, content: ['real note zero'] },
+      { id: '1', type: null, content: ['note one'] },
+    ];
+
+    expect(enumerateEffectiveNoteEntries(entries)).toEqual([
+      { id: '0', type: null, content: ['real note zero'] },
+      { id: '1', type: null, content: ['note one'] },
+    ]);
+  });
+
+  it('preserves first-seen id order while upgrading special entries to regular entries', () => {
+    const entries = [
+      { id: '2', type: 'continuationSeparator', content: [] },
+      { id: '1', type: null, content: ['one'] },
+      { id: '2', type: null, content: ['two'] },
+    ];
+
+    expect(enumerateEffectiveNoteEntries(entries)).toEqual([
+      { id: '2', type: null, content: ['two'] },
+      { id: '1', type: null, content: ['one'] },
+    ]);
+  });
+
+  it('returns an empty array for nullish inputs', () => {
+    expect(enumerateEffectiveNoteEntries(undefined)).toEqual([]);
+    expect(enumerateEffectiveNoteEntries(null)).toEqual([]);
   });
 });

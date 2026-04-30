@@ -496,7 +496,7 @@ describe('DomPainter', () => {
     expect(lines[1].style.wordSpacing).toBe('');
   });
 
-  it('skips justify for lines with manual tab runs but no explicit segment positions', () => {
+  it('applies justify for manual tab runs that use default positioning', () => {
     const tabBlock: FlowBlock = {
       kind: 'paragraph',
       id: 'tab-justify-block',
@@ -521,7 +521,7 @@ describe('DomPainter', () => {
           ascent: 12,
           descent: 4,
           lineHeight: 20,
-          // No segments with x — this is the "manual tab without segments" case
+          segments: [{ runIndex: 2, fromChar: 0, toChar: 7, width: 60, x: 40 }],
         },
         {
           fromRun: 2,
@@ -562,7 +562,76 @@ describe('DomPainter', () => {
 
     const lines = Array.from(mount.querySelectorAll('.superdoc-line')) as HTMLElement[];
     expect(lines.length).toBeGreaterThanOrEqual(1);
-    // Manual tab without explicit segment positions should skip justify
+    expect(parseFloat(lines[0].style.wordSpacing)).toBeGreaterThan(0);
+  });
+
+  it('skips justify for lines that used author-defined tab stops', () => {
+    const tabBlock: FlowBlock = {
+      kind: 'paragraph',
+      id: 'explicit-tab-justify-block',
+      runs: [
+        { text: 'A', fontFamily: 'Arial', fontSize: 16 },
+        { kind: 'tab', text: '\t', width: 48 },
+        { text: 'a b c d', fontFamily: 'Arial', fontSize: 16 },
+      ],
+      attrs: { alignment: 'justify' },
+    };
+
+    const tabMeasure: Measure = {
+      kind: 'paragraph',
+      lines: [
+        {
+          fromRun: 0,
+          fromChar: 0,
+          toRun: 2,
+          toChar: 7,
+          width: 60,
+          maxWidth: 100,
+          ascent: 12,
+          descent: 4,
+          lineHeight: 20,
+          hasExplicitTabStops: true,
+          segments: [{ runIndex: 2, fromChar: 0, toChar: 7, width: 60, x: 40 }],
+        },
+        {
+          fromRun: 2,
+          fromChar: 7,
+          toRun: 2,
+          toChar: 7,
+          width: 0,
+          ascent: 12,
+          descent: 4,
+          lineHeight: 20,
+        },
+      ],
+      totalHeight: 40,
+    };
+
+    const tabLayout: Layout = {
+      pageSize: { w: 200, h: 200 },
+      pages: [
+        {
+          number: 1,
+          fragments: [
+            {
+              kind: 'para',
+              blockId: 'explicit-tab-justify-block',
+              fromLine: 0,
+              toLine: 2,
+              x: 0,
+              y: 0,
+              width: 100,
+            },
+          ],
+        },
+      ],
+    };
+
+    const painter = createTestPainter({ blocks: [tabBlock], measures: [tabMeasure] });
+    painter.paint(tabLayout, mount);
+
+    const lines = Array.from(mount.querySelectorAll('.superdoc-line')) as HTMLElement[];
+    expect(lines.length).toBeGreaterThanOrEqual(1);
     expect(lines[0].style.wordSpacing).toBe('');
   });
 

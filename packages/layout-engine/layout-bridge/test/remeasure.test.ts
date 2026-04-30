@@ -276,6 +276,7 @@ describe('remeasureParagraph', () => {
       // "A" = 10px, tab advances to 48px, "B" starts at 48px
       // Total width should be ~48px + 10px = 58px
       expect(measure.lines[0].width).toBeGreaterThan(48);
+      expect(measure.lines[0].hasExplicitTabStops).toBe(true);
     });
 
     it('advances cursor for multiple tabs in same line sequentially', () => {
@@ -329,6 +330,7 @@ describe('remeasureParagraph', () => {
 
       expect(measure.lines).toHaveLength(1);
       expect(measure.lines[0].width).toBeGreaterThan(48);
+      expect(measure.lines[0].hasExplicitTabStops).toBeUndefined();
     });
 
     it('keeps right-aligned tab groups on the same line', () => {

@@ -364,6 +364,8 @@ type TabStopPx = {
   val: TabStop['val'];
   /** Optional leader character style (dots, dashes, etc.) */
   leader?: TabStop['leader'];
+  /** Whether this came from author-defined tabs or the default tab grid. */
+  source?: TabStop['source'];
 };
 
 /**
@@ -466,6 +468,7 @@ const buildTabStopsPx = (indent?: ParagraphIndent, tabs?: TabStop[], tabInterval
     pos: twipsToPx(stop.pos),
     val: stop.val,
     leader: stop.leader,
+    source: stop.source,
   }));
 };
 
@@ -845,6 +848,9 @@ const applyTabLayoutToLines = (
       const clampedTarget = Number.isFinite(maxAbsWidth) ? Math.min(target, maxAbsWidth) : target;
       const relativeTarget = clampedTarget - effectiveIndent;
       lineWidth = Math.max(lineWidth, relativeTarget);
+      if (stop?.source === 'explicit') {
+        line.hasExplicitTabStops = true;
+      }
       let currentLeader: LeaderDecoration | null = null;
 
       // Add leader if specified

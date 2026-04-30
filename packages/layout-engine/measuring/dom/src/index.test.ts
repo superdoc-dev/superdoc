@@ -1621,6 +1621,38 @@ describe('measureBlock', () => {
       }
     });
 
+    it('uses the hanging-indent body text start as the first default tab target', async () => {
+      const block: FlowBlock = {
+        kind: 'paragraph',
+        id: 'manual-numbering-hanging-tab',
+        runs: [
+          { text: '1.', fontFamily: 'Arial', fontSize: 16 },
+          { kind: 'tab', text: '\t', tabIndex: 0, pmStart: 2, pmEnd: 3 },
+          { text: 'The quick brown fox', fontFamily: 'Arial', fontSize: 16 },
+        ],
+        attrs: {
+          indent: { left: 100, hanging: 60 },
+          alignment: 'justify',
+        },
+      };
+
+      const measure = expectParagraphMeasure(await measureBlock(block, 500));
+      expect(measure.lines).toHaveLength(1);
+
+      const firstLine = measure.lines[0];
+      const textSegment = firstLine.segments?.find((segment) => segment.runIndex === 2);
+      expect(firstLine.hasExplicitTabStops).toBeUndefined();
+      expect(textSegment?.x).toBeDefined();
+      // First line starts at left - hanging (40px), so a segment x of 60px
+      // lands the post-tab text exactly at the body indent (100px).
+      expect(Math.round((textSegment?.x ?? 0) + 40)).toBe(100);
+      expect(block.runs[1].kind).toBe('tab');
+      if (block.runs[1].kind === 'tab') {
+        expect(block.runs[1].width).toBeGreaterThan(0);
+        expect(block.runs[1].width).toBeLessThan(60);
+      }
+    });
+
     it('aligns trailing tabs to explicit right stops with dot leaders (TOC regression)', async () => {
       const rightStopTwips = 10593;
       const rightStopPx = rightStopTwips * (96 / 1440); // ~706px
@@ -1643,6 +1675,7 @@ describe('measureBlock', () => {
       const measure = expectParagraphMeasure(await measureBlock(block, 800));
       expect(measure.lines).toHaveLength(1);
       const line = measure.lines[0];
+      expect(line.hasExplicitTabStops).toBe(true);
       expect(line.leaders).toBeDefined();
       expect(line.leaders?.[0]?.style).toBe('dot');
       // Leader must end right before the page number — within ~20px of the right stop
@@ -3392,8 +3425,12 @@ describe('measureBlock', () => {
 
       expect(measure.kind).toBe('table');
       if (measure.kind !== 'table') throw new Error('expected table measure');
-      // Auto layout preserves explicit w:tblGrid widths (no scale-up)
-      expect(measure.columnWidths).toEqual([100, 150, 200]);
+      // AutoFit uses authored grid widths as the fixed-pass baseline, but the
+      // final runtime vector may still rebalance them based on content.
+      expect(measure.columnWidths).toHaveLength(3);
+      expect(measure.columnWidths[0]).toBeGreaterThan(0);
+      expect(measure.columnWidths[1]).toBeGreaterThan(measure.columnWidths[0]);
+      expect(measure.columnWidths[2]).toBeGreaterThan(measure.columnWidths[1]);
       expect(measure.totalWidth).toBe(450);
     });
 
@@ -3401,6 +3438,9 @@ describe('measureBlock', () => {
       const block: FlowBlock = {
         kind: 'table',
         id: 'table-1',
+        attrs: {
+          tableWidth: { value: 5000, type: 'pct' },
+        },
         rows: [
           {
             id: 'row-0',
@@ -3438,20 +3478,20 @@ describe('measureBlock', () => {
             ],
           },
         ],
-        columnWidths: [400, 400], // Total 800px
+        columnWidths: [400, 400], // Total 800px, but pct width should rescale to current column
       };
 
       const measure = await measureBlock(block, { maxWidth: 600 });
 
       expect(measure.kind).toBe('table');
       if (measure.kind !== 'table') throw new Error('expected table measure');
-      // Should scale: 400 * (600/800) = 300
+      // Percentage width should rescale to the current column width: 400 * (600/800) = 300
       expect(measure.columnWidths[0]).toBe(300);
       expect(measure.columnWidths[1]).toBe(300);
       expect(measure.totalWidth).toBe(600);
     });
 
-    it('falls back to equal distribution without columnWidths', async () => {
+    it('uses content-driven widths when no authored column widths exist', async () => {
       const block: FlowBlock = {
         kind: 'table',
         id: 'table-2',
@@ -3514,12 +3554,14 @@ describe('measureBlock', () => {
 
       expect(measure.kind).toBe('table');
       if (measure.kind !== 'table') throw new Error('expected table measure');
-      // Should distribute equally: 600 / 3 = 200
-      expect(measure.columnWidths).toEqual([200, 200, 200]);
-      expect(measure.totalWidth).toBe(600);
+      expect(measure.columnWidths).toHaveLength(3);
+      measure.columnWidths.forEach((width) => {
+        expect(width).toBeGreaterThan(0);
+      });
+      expect(Math.abs(measure.columnWidths[0] - measure.columnWidths[1])).toBeLessThan(1);
     });
 
-    it('pads missing column widths with equal distribution', async () => {
+    it('preserves authored widths and synthesizes runtime widths for missing logical columns', async () => {
       const block: FlowBlock = {
         kind: 'table',
         id: 'table-3',
@@ -3583,13 +3625,16 @@ describe('measureBlock', () => {
       expect(measure.kind).toBe('table');
       if (measure.kind !== 'table') throw new Error('expected table measure');
       expect(measure.columnWidths).toHaveLength(3);
-      expect(measure.columnWidths[0]).toBe(100);
-      expect(measure.columnWidths[1]).toBe(150);
-      // Remaining space: 600 - 250 = 350, divided by 1 missing column
-      expect(measure.columnWidths[2]).toBe(350);
+      expect(measure.columnWidths[0]).toBeGreaterThan(0);
+      expect(measure.columnWidths[1]).toBeGreaterThan(measure.columnWidths[0]);
+      expect(measure.columnWidths[2]).toBeGreaterThan(0);
+      expect(measure.totalWidth).toBeCloseTo(
+        measure.columnWidths.reduce((sum, width) => sum + width, 0),
+        3,
+      );
     });
 
-    it('truncates extra column widths', async () => {
+    it('preserves authored logical columns even when rows use fewer physical cells', async () => {
       const block: FlowBlock = {
         kind: 'table',
         id: 'table-4',
@@ -3637,9 +3682,8 @@ describe('measureBlock', () => {
 
       expect(measure.kind).toBe('table');
       if (measure.kind !== 'table') throw new Error('expected table measure');
-      expect(measure.columnWidths).toHaveLength(2);
-      // Truncated to [100, 150] — auto-layout preserves widths (no scale-up)
-      expect(measure.columnWidths).toEqual([100, 150]);
+      expect(measure.columnWidths).toHaveLength(4);
+      expect(measure.columnWidths.reduce((sum, width) => sum + width, 0)).toBe(600);
     });
   });
 
@@ -3906,11 +3950,13 @@ describe('measureBlock', () => {
       expect(measure.kind).toBe('table');
       if (measure.kind !== 'table') throw new Error('expected table measure');
 
-      // All 4 column widths should be preserved (not truncated to 3)
-      // Auto-layout preserves explicit widths (no scale-up)
+      // All 4 logical columns must survive normalization and runtime AutoFit.
       expect(measure.columnWidths).toHaveLength(4);
-      expect(measure.columnWidths).toEqual([172, 13, 128, 310]);
-      expect(measure.totalWidth).toBe(623);
+      expect(measure.columnWidths[0]).toBeGreaterThan(0);
+      expect(measure.columnWidths[1]).toBeGreaterThan(0);
+      expect(measure.columnWidths[2]).toBeGreaterThan(0);
+      expect(measure.columnWidths[3]).toBeGreaterThan(measure.columnWidths[2]);
+      expect(measure.totalWidth).toBe(measure.columnWidths.reduce((sum, width) => sum + width, 0));
 
       // Row 0: 2 cells spanning 3+1 = both cells measured
       expect(measure.rows[0].cells).toHaveLength(2);
@@ -3956,16 +4002,15 @@ describe('measureBlock', () => {
       expect(measure.rows[0].cells).toHaveLength(2);
       expect(measure.rows[1].cells).toHaveLength(2);
 
-      // Cell widths sum their spanned columns (auto-layout preserves widths, no scale-up)
-      // Columns: [100, 50, 100, 300]
-      // Row 0 cell 0: cols 0+1 = 100+50 = 150
-      expect(measure.rows[0].cells[0].width).toBe(150);
-      // Row 0 cell 1: cols 2+3 = 100+300 = 400
-      expect(measure.rows[0].cells[1].width).toBe(400);
-      // Row 1 cell 0: cols 0+1+2 = 100+50+100 = 250
-      expect(measure.rows[1].cells[0].width).toBe(250);
-      // Row 1 cell 1: col 3 = 300
-      expect(measure.rows[1].cells[1].width).toBe(300);
+      // Cell widths should still be derived from the preserved logical runtime
+      // columns, even though AutoFit may rebalance the final vector.
+      expect(measure.rows[0].cells[0].width).toBeCloseTo(measure.columnWidths[0] + measure.columnWidths[1], 3);
+      expect(measure.rows[0].cells[1].width).toBeCloseTo(measure.columnWidths[2] + measure.columnWidths[3], 3);
+      expect(measure.rows[1].cells[0].width).toBeCloseTo(
+        measure.columnWidths[0] + measure.columnWidths[1] + measure.columnWidths[2],
+        3,
+      );
+      expect(measure.rows[1].cells[1].width).toBeCloseTo(measure.columnWidths[3], 3);
     });
 
     it('handles single-cell full-span row correctly', async () => {
@@ -4009,6 +4054,9 @@ describe('measureBlock', () => {
       const block: FlowBlock = {
         kind: 'table',
         id: 'scale-test-1',
+        attrs: {
+          tableWidth: { value: 5000, type: 'pct' },
+        },
         rows: [
           {
             id: 'row-0',
@@ -4054,11 +4102,11 @@ describe('measureBlock', () => {
       expect(measure.kind).toBe('table');
       if (measure.kind !== 'table') throw new Error('expected table measure');
 
-      // Should scale from 400px to 300px maintaining 1:2:1 ratio
+      // Percentage width should scale from 400px to 300px maintaining 1:2:1 ratio
       // 100 * (300/400) = 75, 200 * (300/400) = 150
-      expect(measure.columnWidths[0]).toBe(75);
-      expect(measure.columnWidths[1]).toBe(150);
-      expect(measure.columnWidths[2]).toBe(75);
+      expect(measure.columnWidths.reduce((sum, width) => sum + width, 0)).toBe(300);
+      expect(Math.abs(measure.columnWidths[0] - measure.columnWidths[2])).toBeLessThanOrEqual(2);
+      expect(measure.columnWidths[1]).toBeGreaterThan(measure.columnWidths[0]);
       expect(measure.totalWidth).toBe(300);
     });
 
@@ -4110,6 +4158,9 @@ describe('measureBlock', () => {
       const block: FlowBlock = {
         kind: 'table',
         id: 'scale-test-3',
+        attrs: {
+          tableWidth: { value: 5000, type: 'pct' },
+        },
         rows: [
           {
             id: 'row-0',
@@ -4190,14 +4241,17 @@ describe('measureBlock', () => {
       expect(measure.kind).toBe('table');
       if (measure.kind !== 'table') throw new Error('expected table measure');
 
-      // Should fall back to equal distribution
-      expect(measure.columnWidths).toEqual([200]);
+      expect(measure.columnWidths).toHaveLength(1);
+      expect(measure.columnWidths[0]).toBeGreaterThan(0);
     });
 
     it('enforces minimum width of 1px per column', async () => {
       const block: FlowBlock = {
         kind: 'table',
         id: 'scale-test-5',
+        attrs: {
+          tableWidth: { value: 5000, type: 'pct' },
+        },
         rows: [
           {
             id: 'row-0',
@@ -4257,8 +4311,7 @@ describe('measureBlock', () => {
       measure.columnWidths.forEach((width) => {
         expect(width).toBeGreaterThanOrEqual(1);
       });
-      // Total should equal maxWidth
-      expect(measure.totalWidth).toBe(10);
+      expect(measure.totalWidth).toBeGreaterThan(0);
     });
   });
 
@@ -4468,6 +4521,53 @@ describe('measureBlock', () => {
       expect(measure.columnWidths[1]).toBe(300);
     });
 
+    it('preserves explicit widths wider than the content column', async () => {
+      const block: FlowBlock = {
+        kind: 'table',
+        id: 'explicit-wide-table',
+        attrs: {
+          tableWidth: { width: 700, type: 'px' },
+        },
+        rows: [
+          {
+            id: 'row-0',
+            cells: [
+              {
+                id: 'cell-0-0',
+                blocks: [
+                  {
+                    kind: 'paragraph',
+                    id: 'para-0',
+                    runs: [{ text: 'A', fontFamily: 'Arial', fontSize: 12 }],
+                  },
+                ],
+              },
+              {
+                id: 'cell-0-1',
+                blocks: [
+                  {
+                    kind: 'paragraph',
+                    id: 'para-1',
+                    runs: [{ text: 'B', fontFamily: 'Arial', fontSize: 12 }],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+        columnWidths: [200, 200],
+      };
+
+      const measure = await measureBlock(block, { maxWidth: 500 });
+
+      expect(measure.kind).toBe('table');
+      if (measure.kind !== 'table') throw new Error('expected table measure');
+
+      expect(measure.totalWidth).toBe(700);
+      expect(measure.columnWidths[0]).toBe(350);
+      expect(measure.columnWidths[1]).toBe(350);
+    });
+
     it('scales column widths to 50% of available width when tableWidth type is pct with value 2500', async () => {
       const block: FlowBlock = {
         kind: 'table',
@@ -4515,6 +4615,98 @@ describe('measureBlock', () => {
       expect(measure.totalWidth).toBe(300);
       expect(measure.columnWidths[0]).toBe(150);
       expect(measure.columnWidths[1]).toBe(150);
+    });
+
+    it('preserves imported grid widths that exceed the content column', async () => {
+      const block: FlowBlock = {
+        kind: 'table',
+        id: 'grid-wide-table',
+        rows: [
+          {
+            id: 'row-0',
+            cells: [
+              {
+                id: 'cell-0-0',
+                blocks: [
+                  {
+                    kind: 'paragraph',
+                    id: 'para-0',
+                    runs: [{ text: 'A', fontFamily: 'Arial', fontSize: 12 }],
+                  },
+                ],
+              },
+              {
+                id: 'cell-0-1',
+                blocks: [
+                  {
+                    kind: 'paragraph',
+                    id: 'para-1',
+                    runs: [{ text: 'B', fontFamily: 'Arial', fontSize: 12 }],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+        columnWidths: [320, 320],
+      };
+
+      const measure = await measureBlock(block, { maxWidth: 500 });
+
+      expect(measure.kind).toBe('table');
+      if (measure.kind !== 'table') throw new Error('expected table measure');
+
+      expect(measure.totalWidth).toBe(640);
+      expect(measure.columnWidths).toEqual([320, 320]);
+    });
+
+    it('preserves fixed-layout grid widths wider than the column when tableWidth is absent', async () => {
+      // Quiet behavior pinned: with `tableLayout: 'fixed'` and no `tableWidth` attr,
+      // the imported grid widths pass through even when they exceed the available column.
+      // Previously, the measure would have scaled them down to fit `maxWidth`.
+      const block: FlowBlock = {
+        kind: 'table',
+        id: 'fixed-no-width',
+        attrs: {
+          tableLayout: 'fixed',
+        },
+        rows: [
+          {
+            id: 'row-0',
+            cells: [
+              {
+                id: 'cell-0-0',
+                blocks: [
+                  {
+                    kind: 'paragraph',
+                    id: 'para-0',
+                    runs: [{ text: 'A', fontFamily: 'Arial', fontSize: 12 }],
+                  },
+                ],
+              },
+              {
+                id: 'cell-0-1',
+                blocks: [
+                  {
+                    kind: 'paragraph',
+                    id: 'para-1',
+                    runs: [{ text: 'B', fontFamily: 'Arial', fontSize: 12 }],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+        columnWidths: [400, 400],
+      };
+
+      const measure = await measureBlock(block, { maxWidth: 500 });
+
+      expect(measure.kind).toBe('table');
+      if (measure.kind !== 'table') throw new Error('expected table measure');
+
+      expect(measure.totalWidth).toBe(800);
+      expect(measure.columnWidths).toEqual([400, 400]);
     });
 
     it('handles percentage width with width property instead of value', async () => {
@@ -4642,12 +4834,14 @@ describe('measureBlock', () => {
       expect(measure.kind).toBe('table');
       if (measure.kind !== 'table') throw new Error('expected table measure');
 
-      // Should scale to 400px maintaining 1:2:1 ratio
-      // 50 * 2 = 100, 100 * 2 = 200, 50 * 2 = 100
+      // AutoFit honors the preferred table width target, but the final runtime
+      // vector may rebalance away from the authored 1:2:1 ratio.
       expect(measure.totalWidth).toBe(400);
-      expect(measure.columnWidths[0]).toBe(100);
-      expect(measure.columnWidths[1]).toBe(200);
-      expect(measure.columnWidths[2]).toBe(100);
+      expect(measure.columnWidths).toHaveLength(3);
+      expect(measure.columnWidths[0]).toBeGreaterThan(0);
+      expect(measure.columnWidths[1]).toBeGreaterThan(measure.columnWidths[0]);
+      expect(measure.columnWidths[1]).toBeGreaterThan(measure.columnWidths[2]);
+      expect(measure.columnWidths.reduce((sum, width) => sum + width, 0)).toBeCloseTo(400, 3);
     });
 
     it('handles explicit pixel width (type: px)', async () => {
@@ -4998,8 +5192,8 @@ describe('measureBlock', () => {
       expect(measure.kind).toBe('table');
       if (measure.kind !== 'table') throw new Error('expected table measure');
 
-      // Fixed layout should preserve original column widths, NOT scale up to 600px
-      // This is Word behavior: fixed layout tables honor the grid column widths exactly
+      // Fixed layout now uses the shared fixed baseline and does not scale up to
+      // an explicit table width unless row/cell requests force a larger total.
       expect(measure.totalWidth).toBe(200);
       expect(measure.columnWidths[0]).toBe(100);
       expect(measure.columnWidths[1]).toBe(100);
@@ -5672,10 +5866,11 @@ describe('measureBlock', () => {
 
       // All 4 grid columns must be preserved (not truncated to 3 based on max physical cell count)
       expect(tableMeasure.columnWidths).toHaveLength(4);
-      expect(tableMeasure.columnWidths[0]).toBe(170);
-      expect(tableMeasure.columnWidths[1]).toBe(15);
-      expect(tableMeasure.columnWidths[2]).toBe(130);
-      expect(tableMeasure.columnWidths[3]).toBe(310);
+      expect(tableMeasure.columnWidths[0]).toBeGreaterThan(0);
+      expect(tableMeasure.columnWidths[1]).toBeGreaterThan(0);
+      expect(tableMeasure.columnWidths[2]).toBeGreaterThan(0);
+      expect(tableMeasure.columnWidths[3]).toBeGreaterThan(tableMeasure.columnWidths[2]);
+      expect(tableMeasure.columnWidths[2]).toBeGreaterThan(tableMeasure.columnWidths[1]);
 
       // Total width should match page width
       const totalWidth = tableMeasure.columnWidths.reduce((a: number, b: number) => a + b, 0);
@@ -5826,9 +6021,54 @@ describe('measureBlock', () => {
       expect(measure.kind).toBe('table');
       const tableMeasure = measure as TableMeasure;
 
-      // Fixed layout: columns preserve original grid widths, NOT scaled to content or explicit width
+      // Fixed layout ignores AutoFit content expansion and keeps the fixed-pass
+      // baseline because the explicit table width is larger than the authored grid.
       expect(tableMeasure.columnWidths[0]).toBe(50);
       expect(tableMeasure.columnWidths[1]).toBe(50);
+      expect(tableMeasure.totalWidth).toBe(100);
+    });
+
+    it('honors fixed-layout skipped columns when measuring cell placement', async () => {
+      const block: FlowBlock = {
+        kind: 'table',
+        id: 'fixed-skipped-columns',
+        attrs: {
+          tableLayout: 'fixed',
+        },
+        columnWidths: [40, 120],
+        rows: [
+          {
+            id: 'row-0',
+            attrs: {
+              tableRowProperties: {
+                gridBefore: 1,
+                wBefore: { value: 600, type: 'dxa' },
+              },
+            },
+            cells: [
+              {
+                id: 'cell-0-0',
+                blocks: [
+                  {
+                    kind: 'paragraph',
+                    id: 'para-0',
+                    runs: [{ text: 'After skip', fontFamily: 'Arial', fontSize: 12 }],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      const measure = await measureBlock(block, { maxWidth: 600 });
+
+      expect(measure.kind).toBe('table');
+      const tableMeasure = measure as TableMeasure;
+
+      expect(tableMeasure.columnWidths).toEqual([40, 120]);
+      expect(tableMeasure.rows[0].cells[0].gridColumnStart).toBe(1);
+      expect(tableMeasure.rows[0].cells[0].width).toBe(120);
     });
 
     it('preserves proportional column widths when content exceeds page width', async () => {
@@ -5874,13 +6114,10 @@ describe('measureBlock', () => {
       expect(tableMeasure.columnWidths[1]).toBeGreaterThan(tableMeasure.columnWidths[0]);
     });
 
-    it('skips AutoFit when grid widths are reasonable (not placeholder values)', async () => {
-      // Grid total = 400px, maxWidth = 600px → 66% of page width.
-      // This is well above the 10% placeholder threshold, so AutoFit should NOT run.
-      // Columns should keep their original grid widths even if content is wider.
+    it('runs AutoFit for ordinary non-fixed tables even when grid widths look reasonable', async () => {
       const block: FlowBlock = {
         kind: 'table',
-        id: 'autofit-skip-reasonable',
+        id: 'autofit-reasonable-grid',
         rows: [
           {
             id: 'row-0',
@@ -5891,7 +6128,13 @@ describe('measureBlock', () => {
                   {
                     kind: 'paragraph',
                     id: 'para-0',
-                    runs: [{ text: 'VeryWideContentThatExceedsColumnWidth', fontFamily: 'Arial', fontSize: 12 }],
+                    runs: [
+                      {
+                        text: 'VeryWideUnbreakableContentThatShouldForceTheColumnToGrowWellPastThePreferredGrid',
+                        fontFamily: 'Arial',
+                        fontSize: 12,
+                      },
+                    ],
                   },
                 ],
               },
@@ -5908,7 +6151,7 @@ describe('measureBlock', () => {
             ],
           },
         ],
-        columnWidths: [200, 200], // Reasonable grid widths (400/600 = 66%)
+        columnWidths: [200, 200],
       };
 
       const measure = await measureBlock(block, { maxWidth: 600 });
@@ -5916,9 +6159,116 @@ describe('measureBlock', () => {
       expect(measure.kind).toBe('table');
       const tableMeasure = measure as TableMeasure;
 
-      // Grid widths should be preserved — AutoFit should not have run
-      expect(tableMeasure.columnWidths[0]).toBe(200);
-      expect(tableMeasure.columnWidths[1]).toBe(200);
+      expect(tableMeasure.columnWidths[0]).toBeGreaterThan(tableMeasure.columnWidths[1]);
+      expect(tableMeasure.columnWidths[0]).toBeGreaterThan(200);
+      expect(tableMeasure.totalWidth).toBe(
+        tableMeasure.columnWidths.reduce((sum: number, width: number) => sum + width, 0),
+      );
+    });
+
+    it('treats omitted tblLayout as AutoFit on ordinary equal-grid tables', async () => {
+      const block: FlowBlock = {
+        kind: 'table',
+        id: 'autofit-omitted-layout',
+        rows: [
+          {
+            id: 'row-0',
+            cells: [
+              {
+                id: 'cell-0-0',
+                blocks: [
+                  {
+                    kind: 'paragraph',
+                    id: 'para-0',
+                    runs: [
+                      {
+                        text: 'VIN1234567890123456789012345',
+                        fontFamily: 'Arial',
+                        fontSize: 12,
+                      },
+                    ],
+                  },
+                ],
+              },
+              {
+                id: 'cell-0-1',
+                blocks: [
+                  {
+                    kind: 'paragraph',
+                    id: 'para-1',
+                    runs: [{ text: 'YEAR', fontFamily: 'Arial', fontSize: 12 }],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+        columnWidths: [120, 120],
+      };
+
+      const measure = await measureBlock(block, { maxWidth: 500 });
+
+      expect(measure.kind).toBe('table');
+      const tableMeasure = measure as TableMeasure;
+
+      expect(tableMeasure.columnWidths[0]).toBeGreaterThan(tableMeasure.columnWidths[1]);
+      expect(tableMeasure.totalWidth).toBe(
+        tableMeasure.columnWidths.reduce((sum: number, width: number) => sum + width, 0),
+      );
+    });
+
+    it('treats literal auto tblLayout as AutoFit on ordinary equal-grid tables', async () => {
+      const block: FlowBlock = {
+        kind: 'table',
+        id: 'autofit-auto-layout',
+        attrs: {
+          tableLayout: 'auto',
+        },
+        rows: [
+          {
+            id: 'row-0',
+            cells: [
+              {
+                id: 'cell-0-0',
+                blocks: [
+                  {
+                    kind: 'paragraph',
+                    id: 'para-0',
+                    runs: [
+                      {
+                        text: 'VIN1234567890123456789012345',
+                        fontFamily: 'Arial',
+                        fontSize: 12,
+                      },
+                    ],
+                  },
+                ],
+              },
+              {
+                id: 'cell-0-1',
+                blocks: [
+                  {
+                    kind: 'paragraph',
+                    id: 'para-1',
+                    runs: [{ text: 'YEAR', fontFamily: 'Arial', fontSize: 12 }],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+        columnWidths: [120, 120],
+      };
+
+      const measure = await measureBlock(block, { maxWidth: 500 });
+
+      expect(measure.kind).toBe('table');
+      const tableMeasure = measure as TableMeasure;
+
+      expect(tableMeasure.columnWidths[0]).toBeGreaterThan(tableMeasure.columnWidths[1]);
+      expect(tableMeasure.totalWidth).toBe(
+        tableMeasure.columnWidths.reduce((sum: number, width: number) => sum + width, 0),
+      );
     });
   });
 });

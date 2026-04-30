@@ -442,6 +442,7 @@ function testPresentationEditorMethods(pe: PresentationEditor) {
   pe.scrollToElement('paraId-ABC123');
   pe.navigateTo({ kind: 'block', nodeId: 'paraId-ABC123' });
   pe.navigateTo({ kind: 'block', nodeId: 'paraId-ABC123', nodeType: 'paragraph' });
+  pe.navigateTo({ kind: 'entity', entityType: 'bookmark', name: 'bookmark-1' });
   pe.navigateTo({ kind: 'entity', entityType: 'comment', entityId: 'comment-1' });
   pe.navigateTo({ kind: 'entity', entityType: 'trackedChange', entityId: 'tc-1' });
 
@@ -862,9 +863,6 @@ import {
   type EntityAddress as UIEntityAddress,
   type EqualityFn,
   type Receipt as UIReceipt,
-  type ReviewHandle,
-  type ReviewItem,
-  type ReviewSlice,
   type ScrollIntoViewInput as UIScrollIntoViewInput,
   type ScrollIntoViewOutput as UIScrollIntoViewOutput,
   type SelectionInfo as UISelectionInfo,
@@ -878,7 +876,10 @@ import {
   type SuperDocUIState,
   type TextTarget as UITextTarget,
   type TrackChangeInfo as UITrackChangeInfo,
+  type TrackChangesHandle,
+  type TrackChangesItem,
   type TrackChangesListResult as UITrackChangesListResult,
+  type TrackChangesSlice,
   type TrackedChangeAddress as UITrackedChangeAddress,
   type ViewportGetRectInput,
   type ViewportHandle,
@@ -898,15 +899,15 @@ function testSuperDocUISubEntry() {
     toolbar: SuperDocUI['toolbar'];
     commands: SuperDocUI['commands'];
     comments: CommentsHandle;
-    review: ReviewHandle;
+    trackChanges: TrackChangesHandle;
     viewport: ViewportHandle;
     state: SuperDocUIState;
   };
   type AssertSlices = {
     selection: SelectionSlice;
     comments: CommentsSlice;
-    review: ReviewSlice;
-    reviewItem: ReviewItem;
+    trackChanges: TrackChangesSlice;
+    trackChangesItem: TrackChangesItem;
   };
   type AssertViewportShapes = {
     input: ViewportGetRectInput;

@@ -154,7 +154,7 @@ export function useSetSuperDoc() {
  * etc.) emit a `{ snapshot }` event instead of the raw value — prefer
  * `ui.select(...)` when you need a single field, or use the typed
  * domain hooks (`useSuperDocSelection`, `useSuperDocComments`,
- * `useSuperDocReview`).
+ * `useSuperDocTrackChanges`).
  *
  * The hook re-emits the most recent value on every change. While the
  * controller is null (before the editor reports ready), the hook

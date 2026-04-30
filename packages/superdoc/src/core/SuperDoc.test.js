@@ -314,6 +314,99 @@ describe('SuperDoc core', () => {
     expect(instance.scrollToComment('nonexistent-id')).toBe(false);
   });
 
+  it('forwards navigateTo to the first presentation editor', async () => {
+    const { superdocStore } = createAppHarness();
+    const navigateTo = vi.fn(async () => true);
+
+    superdocStore.documents = [
+      {
+        getPresentationEditor: vi.fn(() => ({ navigateTo })),
+      },
+    ];
+
+    const instance = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: {}, toolbar: {} },
+      onException: vi.fn(),
+    });
+    await flushMicrotasks();
+
+    const target = {
+      kind: 'entity',
+      entityType: 'bookmark',
+      name: 'bookmark-1',
+      story: { kind: 'story', storyType: 'body' },
+    };
+
+    await expect(instance.navigateTo(target)).resolves.toBe(true);
+    expect(navigateTo).toHaveBeenCalledWith(target);
+  });
+
+  it('returns false from navigateTo when presentation navigation is unavailable', async () => {
+    const { superdocStore } = createAppHarness();
+    superdocStore.documents = [
+      {
+        getPresentationEditor: vi.fn(() => null),
+      },
+    ];
+
+    const instance = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: {}, toolbar: {} },
+      onException: vi.fn(),
+    });
+    await flushMicrotasks();
+
+    await expect(instance.navigateTo({ kind: 'block', nodeId: 'node-1' })).resolves.toBe(false);
+  });
+
+  it('forwards scrollToElement to the first presentation editor', async () => {
+    const { superdocStore } = createAppHarness();
+    const scrollToElement = vi.fn(async () => true);
+
+    superdocStore.documents = [
+      {
+        getPresentationEditor: vi.fn(() => ({ scrollToElement })),
+      },
+    ];
+
+    const instance = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: {}, toolbar: {} },
+      onException: vi.fn(),
+    });
+    await flushMicrotasks();
+
+    await expect(instance.scrollToElement('element-1')).resolves.toBe(true);
+    expect(scrollToElement).toHaveBeenCalledWith('element-1');
+  });
+
+  it('returns false from scrollToElement when presentation navigation is unavailable', async () => {
+    const { superdocStore } = createAppHarness();
+    superdocStore.documents = [
+      {
+        getPresentationEditor: vi.fn(() => null),
+      },
+    ];
+
+    const instance = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: {}, toolbar: {} },
+      onException: vi.fn(),
+    });
+    await flushMicrotasks();
+
+    await expect(instance.scrollToElement('element-1')).resolves.toBe(false);
+  });
+
   it('warns when both document object and documents list provided', async () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     createAppHarness();
@@ -407,6 +500,30 @@ describe('SuperDoc core', () => {
 
     instance.broadcastEditorCreate(editor);
     expect(readySpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses visible search model in SuperDoc.search()', async () => {
+    createAppHarness();
+
+    const instance = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: {}, toolbar: {} },
+      colors: ['red'],
+      user: { name: 'Jane', email: 'jane@example.com' },
+      onException: vi.fn(),
+    });
+    await flushMicrotasks();
+
+    const searchResult = [{ from: 1, to: 4 }];
+    const searchMock = vi.fn(() => searchResult);
+    instance.activeEditor = { commands: { search: searchMock } };
+
+    const result = instance.search('test');
+
+    expect(searchMock).toHaveBeenCalledWith('test', { searchModel: 'visible' });
+    expect(result).toBe(searchResult);
   });
 
   it('locks superdoc via ydoc metadata and emits event', async () => {
@@ -506,6 +623,189 @@ describe('SuperDoc core', () => {
 
     expect(exportDocxMock).toHaveBeenCalledTimes(1);
     expect(results).toEqual([originalBlob]);
+  });
+
+  it('passes comments: undefined when the UI store is unhydrated (modules.comments: false)', async () => {
+    // Regression for the BYO UI story. With the built-in comments
+    // module disabled, the UI store never holds the imported
+    // comments, so the export must hand off `undefined` and let
+    // `Editor.exportDocx`'s `comments ?? this.converter.comments`
+    // fallback fire. Passing `[]` here would silently drop every
+    // imported comment from the round-trip.
+    createAppHarness();
+    const instance = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: false, toolbar: {} },
+      colors: [],
+      user: { name: 'Jane', email: 'jane@example.com' },
+      onException: vi.fn(),
+    });
+    await flushMicrotasks();
+
+    const exportDocxMock = vi.fn().mockResolvedValue(new Blob(['out']));
+    instance.superdocStore.documents = [
+      { id: 'doc-1', type: DOCX, data: null, getEditor: () => ({ exportDocx: exportDocxMock }) },
+    ];
+
+    await instance.exportEditorsToDOCX();
+
+    expect(exportDocxMock).toHaveBeenCalledTimes(1);
+    const passed = exportDocxMock.mock.calls[0][0];
+    expect(passed.comments).toBeUndefined();
+  });
+
+  it('passes comments: [] when the UI store IS hydrated and the user deleted every comment', async () => {
+    // Regression for the deletion-resurrection bug a reviewer
+    // spotted on the first patch. When `modules.comments` is
+    // enabled (default), the UI store IS the source of truth: an
+    // authoritative-empty array means "user deleted everything,"
+    // not "store is unhydrated." Passing `undefined` here would
+    // route through `Editor.exportDocx`'s `converter.comments`
+    // fallback and resurrect every imported comment that the user
+    // had explicitly deleted via the built-in UI.
+    createAppHarness();
+    const instance = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: {}, toolbar: {} },
+      colors: [],
+      user: { name: 'Jane', email: 'jane@example.com' },
+      onException: vi.fn(),
+    });
+    await flushMicrotasks();
+
+    instance.commentsStore.translateCommentsForExport = vi.fn(() => []);
+    const exportDocxMock = vi.fn().mockResolvedValue(new Blob(['out']));
+    instance.superdocStore.documents = [
+      { id: 'doc-1', type: DOCX, data: null, getEditor: () => ({ exportDocx: exportDocxMock }) },
+    ];
+
+    await instance.exportEditorsToDOCX();
+
+    expect(exportDocxMock).toHaveBeenCalledTimes(1);
+    const passed = exportDocxMock.mock.calls[0][0];
+    expect(passed.comments).toEqual([]);
+  });
+
+  it('passes comments: [] when commentsType is "clean" so the engine emits no comments', async () => {
+    createAppHarness();
+    const instance = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: {}, toolbar: {} },
+      colors: [],
+      user: { name: 'Jane', email: 'jane@example.com' },
+      onException: vi.fn(),
+    });
+    await flushMicrotasks();
+
+    // Even when the UI store would yield comments, `'clean'` is the
+    // explicit "strip all comments" signal and must override.
+    instance.commentsStore.translateCommentsForExport = vi.fn(() => [
+      { commentId: 'c1', creatorEmail: 'x@y.z', elements: [] },
+    ]);
+    const exportDocxMock = vi.fn().mockResolvedValue(new Blob(['out']));
+    instance.superdocStore.documents = [
+      { id: 'doc-1', type: DOCX, data: null, getEditor: () => ({ exportDocx: exportDocxMock }) },
+    ];
+
+    await instance.exportEditorsToDOCX({ commentsType: 'clean' });
+
+    expect(exportDocxMock).toHaveBeenCalledTimes(1);
+    const passed = exportDocxMock.mock.calls[0][0];
+    expect(passed.comments).toEqual([]);
+  });
+
+  it("commentsType: 'clean' wins even when modules.comments is disabled", async () => {
+    // 'clean' is the explicit "strip all comments" signal. When the
+    // UI store is unhydrated AND the consumer asks for clean, the
+    // engine fallback to `converter.comments` must NOT fire; that
+    // would silently re-include imported comments the consumer
+    // explicitly asked to drop. This branch is the one place where
+    // module-disabled + clean must pass `[]` instead of `undefined`.
+    createAppHarness();
+    const instance = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: false, toolbar: {} },
+      colors: [],
+      user: { name: 'Jane', email: 'jane@example.com' },
+      onException: vi.fn(),
+    });
+    await flushMicrotasks();
+
+    const exportDocxMock = vi.fn().mockResolvedValue(new Blob(['out']));
+    instance.superdocStore.documents = [
+      { id: 'doc-1', type: DOCX, data: null, getEditor: () => ({ exportDocx: exportDocxMock }) },
+    ];
+
+    await instance.exportEditorsToDOCX({ commentsType: 'clean' });
+
+    expect(exportDocxMock).toHaveBeenCalledTimes(1);
+    expect(exportDocxMock.mock.calls[0][0].comments).toEqual([]);
+  });
+
+  it('falls back to undefined when commentsStore is missing entirely (no race throw)', async () => {
+    // Defensive: during certain init phases or in test stubs, the
+    // commentsStore may be absent. The export must not throw and must
+    // route to the engine fallback (undefined). The original code
+    // already guarded with `this.commentsStore && typeof ...`; this
+    // test pins that the guard survives the rewrite.
+    createAppHarness();
+    const instance = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: {}, toolbar: {} },
+      colors: [],
+      user: { name: 'Jane', email: 'jane@example.com' },
+      onException: vi.fn(),
+    });
+    await flushMicrotasks();
+
+    // Simulate a missing commentsStore (the Pinia store was never
+    // attached, e.g., a partial init path).
+    instance.commentsStore = null;
+    const exportDocxMock = vi.fn().mockResolvedValue(new Blob(['out']));
+    instance.superdocStore.documents = [
+      { id: 'doc-1', type: DOCX, data: null, getEditor: () => ({ exportDocx: exportDocxMock }) },
+    ];
+
+    await expect(instance.exportEditorsToDOCX()).resolves.toBeDefined();
+    expect(exportDocxMock).toHaveBeenCalledTimes(1);
+    expect(exportDocxMock.mock.calls[0][0].comments).toBeUndefined();
+  });
+
+  it('passes UI-store comments when the store has them', async () => {
+    createAppHarness();
+    const instance = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: {}, toolbar: {} },
+      colors: [],
+      user: { name: 'Jane', email: 'jane@example.com' },
+      onException: vi.fn(),
+    });
+    await flushMicrotasks();
+
+    const fromStore = [{ commentId: 'c1', creatorEmail: 'a@b.c', elements: [] }];
+    instance.commentsStore.translateCommentsForExport = vi.fn(() => fromStore);
+    const exportDocxMock = vi.fn().mockResolvedValue(new Blob(['out']));
+    instance.superdocStore.documents = [
+      { id: 'doc-1', type: DOCX, data: null, getEditor: () => ({ exportDocx: exportDocxMock }) },
+    ];
+
+    await instance.exportEditorsToDOCX();
+
+    expect(exportDocxMock).toHaveBeenCalledTimes(1);
+    const passed = exportDocxMock.mock.calls[0][0];
+    expect(passed.comments).toEqual(fromStore);
   });
 
   it('skips non-DOCX documents when exporting editors to DOCX', async () => {

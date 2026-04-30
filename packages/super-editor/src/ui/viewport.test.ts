@@ -290,7 +290,10 @@ describe('ui.viewport.scrollIntoView', () => {
     const result = await ui.viewport.scrollIntoView(input);
 
     expect(result).toEqual({ success: true });
-    expect(mocks.navigateTo).toHaveBeenCalledWith(input.target);
+    expect(mocks.navigateTo).toHaveBeenCalledWith(input.target, {
+      behavior: 'smooth',
+      block: 'center',
+    });
     ui.destroy();
   });
 

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { NodeSelection } from 'prosemirror-state';
 import type { Node as ProseMirrorNode } from 'prosemirror-model';
 import type { Editor } from '../../core/Editor.js';
 import { resolveCurrentSelectionInfo } from './selection-info-resolver.js';
@@ -143,14 +144,31 @@ function doc(blocks: ProseMirrorNode[]): ProseMirrorNode {
   return createNode('doc', blocks, { isBlock: false, inlineContent: false });
 }
 
+function makeRealNodeSelection(
+  from: number,
+  to: number,
+  node: { type: { name: string }; isBlock: boolean; isLeaf: boolean; isInline: boolean; nodeSize: number },
+): NodeSelection {
+  const sel = Object.create(NodeSelection.prototype);
+  Object.defineProperty(sel, 'from', { value: from, configurable: true });
+  Object.defineProperty(sel, 'to', { value: to, configurable: true });
+  Object.defineProperty(sel, 'empty', { value: false, configurable: true });
+  Object.defineProperty(sel, 'node', { value: node, configurable: true });
+  return sel as NodeSelection;
+}
+
 /** Minimal editor stub whose doc + selection are controllable per test. */
-function makeEditor(docNode: ProseMirrorNode, selection: { from: number; to: number; empty?: boolean }): Editor {
+function makeEditor(
+  docNode: ProseMirrorNode,
+  selection: { from: number; to: number; empty?: boolean; node?: unknown },
+): Editor {
   const empty = selection.empty ?? selection.from === selection.to;
+  const pmSelection = 'node' in selection ? selection : { from: selection.from, to: selection.to, empty };
   const listeners = new Map<string, Array<() => void>>();
   return {
     state: {
       doc: docNode,
-      selection: { from: selection.from, to: selection.to, empty },
+      selection: pmSelection,
       storedMarks: null,
     },
     on(event: string, listener: () => void) {
@@ -213,6 +231,41 @@ describe('resolveCurrentSelectionInfo', () => {
       { blockId: 'p1', range: { start: 0, end: 3 } },
       { blockId: 'p2', range: { start: 0, end: 2 } },
     ]);
+  });
+
+  it('returns null target for a NodeSelection over an addressable text block', () => {
+    // SelectionInfo.target is only for text selections. A NodeSelection
+    // over a text-bearing block still represents the node, not a user text
+    // range that can safely feed comments.create.
+    const paragraph = textBlock('p1', 'Hello');
+    const docNode = doc([paragraph]);
+    const selection = makeRealNodeSelection(1, 1 + paragraph.nodeSize, paragraph as any);
+    const editor = makeEditor(docNode, selection);
+
+    const info = resolveCurrentSelectionInfo(editor, {});
+
+    expect(info.empty).toBe(false);
+    expect(info.target).toBeNull();
+  });
+
+  it('returns null target for a NodeSelection over a text-bearing structured content block', () => {
+    // Presentation clicks can select a block SDT as a NodeSelection. Even
+    // though the wrapper contains textblocks, the selection itself is not
+    // a text selection and should not be projected into a TextTarget.
+    const innerParagraph = textBlock('p-inside-sdt', 'Field text');
+    const blockSdt = createNode('structuredContentBlock', [innerParagraph], {
+      isBlock: true,
+      inlineContent: false,
+      attrs: { sdBlockId: 'sdt-1' },
+    });
+    const docNode = doc([blockSdt]);
+    const selection = makeRealNodeSelection(1, 1 + blockSdt.nodeSize, blockSdt as any);
+    const editor = makeEditor(docNode, selection);
+
+    const info = resolveCurrentSelectionInfo(editor, {});
+
+    expect(info.empty).toBe(false);
+    expect(info.target).toBeNull();
   });
 
   it('returns null target when no selected block has an addressable blockId', () => {

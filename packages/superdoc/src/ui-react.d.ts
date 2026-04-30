@@ -6,8 +6,9 @@ export {
   useSuperDocSlice,
   useSuperDocSelection,
   useSuperDocComments,
-  useSuperDocReview,
+  useSuperDocTrackChanges,
   useSuperDocToolbar,
   useSuperDocCommand,
+  useSuperDocDocument,
   type SuperDocHost,
 } from '@superdoc/super-editor/ui/react';

@@ -41,6 +41,12 @@
 
 /** @typedef {import('@superdoc/super-editor').Editor} Editor */
 /** @typedef {import('../SuperDoc.js').SuperDoc} SuperDoc */
+/** @typedef {import('@superdoc/super-editor').StoryLocator} StoryLocator */
+/** @typedef {import('@superdoc/super-editor').BookmarkAddress} BookmarkAddress */
+/** @typedef {import('@superdoc/super-editor').BlockNavigationAddress} BlockNavigationAddress */
+/** @typedef {import('@superdoc/super-editor').CommentAddress} CommentAddress */
+/** @typedef {import('@superdoc/super-editor').TrackedChangeAddress} TrackedChangeAddress */
+/** @typedef {import('@superdoc/super-editor').NavigableAddress} NavigableAddress */
 
 /**
  * @typedef {Object} UpgradeToCollaborationOptions Options for `upgradeToCollaboration()`

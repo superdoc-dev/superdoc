@@ -33,6 +33,11 @@ jobs:
       - name: Build superdoc
         run: pnpm build:superdoc
 
+      - name: Build @superdoc-dev/react
+        # build-your-own-ui imports the React wrapper from its dist/.
+        # Other demos don't need this; cheap enough to run unconditionally.
+        run: pnpm --filter @superdoc-dev/react run build
+
       - name: Install Playwright
         working-directory: demos/__tests__
         run: npx playwright install chromium
@@ -52,6 +57,7 @@ jobs:
       fail-fast: false
       matrix:
         demo:
+          - build-your-own-ui
           - cdn
           - custom-mark
           - custom-node

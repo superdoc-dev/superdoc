@@ -8,16 +8,70 @@
  *   - strict: true and false
  *   - Import paths: "superdoc", "superdoc/super-editor"
  *   - Node.js headless usage (Buffer return types)
+ *   - Guarded public types must not collapse to `any` (SD-2831)
+ *
+ * The fixture installs superdoc from the packed tarball at
+ * ../../packages/superdoc/superdoc.tgz, so the matrix tests the
+ * customer-visible surface, not the source repo.
  *
  * Run: npm run typecheck:matrix
+ *
+ * By default, the matrix re-packs superdoc and reinstalls the fixture so
+ * results reflect the current source. Pass --skip-pack to use whatever
+ * tarball is already installed (faster local iteration; risky in CI).
  */
 
 import { execSync } from 'child_process';
-import { writeFileSync, mkdirSync } from 'fs';
+import { writeFileSync, existsSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+const repoRoot = join(__dirname, '..', '..');
+
+const skipPack = process.argv.includes('--skip-pack');
+
+if (!skipPack) {
+  console.log('Packing superdoc and reinstalling fixture...');
+  const tarballPath = join(repoRoot, 'packages', 'superdoc', 'superdoc.tgz');
+  try {
+    execSync('pnpm --filter superdoc run pack:es', {
+      cwd: repoRoot,
+      stdio: 'inherit',
+    });
+  } catch (e) {
+    console.error('Failed to pack superdoc. Run with --skip-pack to use the existing tarball.');
+    process.exit(1);
+  }
+  if (!existsSync(tarballPath)) {
+    console.error(`Expected tarball at ${tarballPath} but it is missing.`);
+    process.exit(1);
+  }
+  // The fixture is intentionally outside the pnpm workspace so it exercises
+  // the published tarball's contract, not workspace symlinks. Use the same
+  // install strategy the pre-SD-2831 workflow used: `npm install` with the
+  // tarball passed as an argument and `--no-save`. The committed
+  // `package-lock.json` pins the fixture's dev deps (typescript, @types/node,
+  // prosemirror-*) so they install at deterministic versions. The reason for
+  // `--no-save` instead of a strict-mode install (`npm ci`,
+  // `pnpm --frozen-lockfile`) is that strict modes hash the file: tarball
+  // and the tarball's bytes change on every rebuild, which would invalidate
+  // the lockfile on every CI run. `--no-save` keeps the dev-dep pinning while
+  // accepting whatever bytes the fresh tarball has.
+  try {
+    execSync(
+      'npm install ../../packages/superdoc/superdoc.tgz --no-save --prefer-offline --no-audit --no-fund --silent',
+      {
+        cwd: __dirname,
+        stdio: 'inherit',
+      },
+    );
+  } catch (e) {
+    console.error('Failed to install fixture from tarball.');
+    process.exit(1);
+  }
+  console.log('Fresh tarball installed.\n');
+}
 
 const scenarios = [
   // Core scenarios — must all pass
@@ -130,7 +184,10 @@ const scenarios = [
     files: ['src/prosemirror-coexistence.ts'],
     mustPass: true,
   },
-  // skipLibCheck=false — informational only (pre-existing dep errors)
+  // skipLibCheck=false — informational. Existing dep noise from
+  // node_modules (~30 errors at last count) is expected here; the
+  // `allowNodeModuleErrors` flag opts this scenario into the DEPS
+  // classification rather than INFO so the failure mode stays explicit.
   {
     name: 'bundler / skipLibCheck=false',
     module: 'ESNext',
@@ -138,7 +195,8 @@ const scenarios = [
     skipLibCheck: false,
     strict: true,
     files: ['src/imports-main.ts'],
-    mustPass: false, // may fail from dep errors in node_modules
+    mustPass: false,
+    allowNodeModuleErrors: true,
   },
   // SD-2842: every public type re-exported via `superdoc` must resolve
   // to a real interface, not collapse to `any` and not be missing.
@@ -176,6 +234,33 @@ const scenarios = [
     files: ['src/editor-doc-runtime.ts'],
     mustPass: true,
   },
+  // The broad public API compatibility assertions in `customer-scenario.ts`
+  // were previously only exercised by a bare `tsc --noEmit` over the
+  // fixture's tsconfig.json (which compiles every file under `src/`).
+  // The matrix replaced that step, so the scenario was no longer being
+  // run. Restore it as a required matrix entry, propagating the strict
+  // `noPropertyAccessFromIndexSignature: true` setting from the base
+  // tsconfig.
+  {
+    name: 'bundler / customer scenario (broad API compat)',
+    module: 'ESNext',
+    moduleResolution: 'bundler',
+    skipLibCheck: true,
+    strict: true,
+    noPropertyAccessFromIndexSignature: true,
+    files: ['src/customer-scenario.ts'],
+    mustPass: true,
+  },
+  {
+    name: 'node16 / customer scenario (broad API compat)',
+    module: 'Node16',
+    moduleResolution: 'node16',
+    skipLibCheck: true,
+    strict: true,
+    noPropertyAccessFromIndexSignature: true,
+    files: ['src/customer-scenario.ts'],
+    mustPass: true,
+  },
 ];
 
 const tscPath = join(__dirname, 'node_modules', '.bin', 'tsc');
@@ -198,6 +283,12 @@ for (const scenario of scenarios) {
       noEmit: true,
       esModuleInterop: true,
       types: ['node'],
+      // Optional per-scenario stricter flags. Propagated only when the
+      // scenario explicitly opts in so the base set of scenarios stays
+      // unchanged.
+      ...(scenario.noPropertyAccessFromIndexSignature
+        ? { noPropertyAccessFromIndexSignature: true }
+        : {}),
     },
     include: scenario.files,
   };
@@ -226,25 +317,38 @@ for (const scenario of scenarios) {
     icon = '✓';
     status = 'PASS';
     passed++;
-  } else if (srcErrors === 0) {
+  } else if (!scenario.mustPass) {
+    // Informational scenario: any kind of error (src-level or in
+    // node_modules) is reported as a warning. The `allowNodeModuleErrors`
+    // flag is the explicit opt-in for scenarios where dep noise is the
+    // expected outcome (e.g. the existing skipLibCheck=false probe whose
+    // job is to surface 30+ pre-existing errors in node_modules).
     icon = '⚠';
-    status = `DEPS (nm:${nmErrors})`;
+    if (scenario.allowNodeModuleErrors && srcErrors === 0) {
+      status = `DEPS (nm:${nmErrors})`;
+    } else {
+      status = `INFO (src:${srcErrors} nm:${nmErrors})`;
+    }
     warnings++;
   } else {
+    // Required scenario failed. Any error class fails CI. A broken
+    // published declaration surfaces under `node_modules/superdoc/...`
+    // even with `skipLibCheck: true` (parse errors are not skipped by
+    // lib-check), so a `mustPass: true` scenario with all errors in
+    // node_modules is exactly the regression class this gate exists to
+    // catch.
     icon = '✗';
     status = `FAIL (src:${srcErrors} nm:${nmErrors})`;
     failed++;
-    if (scenario.mustPass) {
-      console.log(`  ${icon} ${scenario.name}: ${status}`);
-      console.log(
-        output
-          .split('\n')
-          .filter((l) => l.startsWith('src/'))
-          .map((l) => `    ${l}`)
-          .join('\n'),
-      );
-      continue;
+    console.log(`  ${icon} ${scenario.name}: ${status}`);
+    const errorLines = output
+      .split('\n')
+      .filter((l) => l.startsWith('src/') || l.startsWith('node_modules/'))
+      .slice(0, 20);
+    if (errorLines.length > 0) {
+      console.log(errorLines.map((l) => `    ${l}`).join('\n'));
     }
+    continue;
   }
 
   console.log(`  ${icon} ${scenario.name}: ${status}`);

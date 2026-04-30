@@ -90,7 +90,6 @@ import { collectTrackInsertRefsInRange } from './helpers/tracked-change-refs.js'
 import { applyDirectMutationMeta, applyTrackedMutationMeta } from './helpers/transaction-meta.js';
 import { DocumentApiAdapterError } from './errors.js';
 import { toBlockAddress, findBlockById, findBlockByNodeIdOnly } from './helpers/node-address-resolver.js';
-import { twipsToPixels, eighthPointsToPixels } from '../core/super-converter/helpers.js';
 import { resolvePreferredNewTableStyleId, isKnownTableStyleId } from '@superdoc/style-engine/ooxml';
 import { generateDocxHexId } from '../utils/generateDocxHexId.js';
 import {
@@ -104,7 +103,7 @@ import {
 import { readTranslatedLinkedStyles } from '../core/parts/adapters/styles-read.js';
 import { mutatePart } from '../core/parts/mutation/mutate-part.js';
 import type { PartId } from '../core/parts/types.js';
-import { cloneBorders, mapBorderSizes } from '../extensions/table/tableHelpers/border-utils.js';
+import { buildWidthAuthoringTableAttrs, syncExtractedTableAttrs } from './helpers/table-attr-sync.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -144,81 +143,6 @@ function buildTableSuccess(
     table: tableAddress,
     trackedChangeRefs,
   };
-}
-
-/**
- * Produces top-level node attrs that pm-adapter reads for rendering.
- * Mirrors the extraction logic in tbl-translator.js (lines 84-140).
- *
- * INVARIANT: every setter that writes tableProperties on a TABLE NODE
- * via setNodeMarkup MUST spread the return value into the attrs object.
- * This ensures layout/rendering sees updated values immediately.
- *
- * SCOPE: table nodes only. Do NOT call this for cell-node mutations
- * (those use tableCellProperties, not tableProperties).
- *
- * See also: tbl-translator.js lines 84-140 (import-time extraction).
- * If you change one, you must change the other.
- */
-function syncExtractedTableAttrs(tp: Record<string, unknown>): Record<string, unknown> {
-  const extracted: Record<string, unknown> = {};
-
-  // Direct pass-through fields (importer lines 85-88)
-  extracted.tableStyleId = tp.tableStyleId ?? null;
-  extracted.justification = tp.justification ?? null;
-  extracted.tableLayout = tp.tableLayout ?? null;
-  const pixelBorders = convertTableBordersToPixelUnits(tp.borders);
-  extracted.borders = pixelBorders ?? tp.borders ?? null;
-
-  // tableIndent — importer converts twips→pixels (line 89)
-  const indent = tp.tableIndent as { value?: number; type?: string } | undefined;
-  if (indent?.value != null) {
-    extracted.tableIndent = {
-      width: twipsToPixels(indent.value),
-      type: indent.type,
-    };
-  } else {
-    extracted.tableIndent = null;
-  }
-
-  // tableCellSpacing + borderCollapse derivation (importer lines 90, 109-111)
-  const spacing = tp.tableCellSpacing as { value?: number; type?: string } | undefined;
-  if (spacing?.value != null) {
-    extracted.tableCellSpacing = {
-      w: String(spacing.value),
-      type: spacing.type ?? 'dxa',
-    };
-    extracted.borderCollapse = 'separate';
-  } else {
-    extracted.tableCellSpacing = null;
-    extracted.borderCollapse = null;
-  }
-
-  // tableWidth — importer handles pct vs dxa vs auto (lines 113-140)
-  const tw = tp.tableWidth as { value?: number; type?: string } | undefined;
-  if (tw) {
-    if (tw.type === 'pct' && typeof tw.value === 'number') {
-      extracted.tableWidth = { value: tw.value, type: 'pct' };
-    } else if (tw.type === 'auto') {
-      extracted.tableWidth = { width: 0, type: 'auto' };
-    } else if (tw.value != null) {
-      const widthPx = twipsToPixels(tw.value);
-      extracted.tableWidth = widthPx != null ? { width: widthPx, type: tw.type } : null;
-    } else {
-      extracted.tableWidth = null;
-    }
-  } else {
-    extracted.tableWidth = null;
-  }
-
-  return extracted;
-}
-
-function convertTableBordersToPixelUnits(value: unknown): Record<string, unknown> | undefined {
-  const clone = cloneBorders(value);
-  if (!clone || Object.keys(clone).length === 0) return undefined;
-  mapBorderSizes(clone, eighthPointsToPixels);
-  return Object.keys(clone).length > 0 ? clone : undefined;
 }
 
 function normalizeGridWidth(width: unknown): { col: number } {
@@ -286,6 +210,51 @@ function removeGridColumnWidth(grid: unknown, deleteIndex: number): unknown | nu
   colWidths.splice(boundedIndex, 1);
 
   return serializeGridColumns(grid, { ...normalized, columns: colWidths });
+}
+
+function buildFirstRowCellWidthProps(
+  attrs: Record<string, unknown>,
+  cellStartCol: number,
+  colspan: number,
+  colwidth: number[],
+  gridColumns?: { col: number }[],
+): Record<string, unknown> | undefined {
+  const currentCellProps =
+    attrs.tableCellProperties && typeof attrs.tableCellProperties === 'object'
+      ? (attrs.tableCellProperties as Record<string, unknown>)
+      : {};
+
+  const spanTwips = resolveSpanWidthTwips(cellStartCol, colspan, colwidth, gridColumns);
+  if (spanTwips == null) return Object.keys(currentCellProps).length > 0 ? currentCellProps : undefined;
+
+  return {
+    ...currentCellProps,
+    cellWidth: { value: spanTwips, type: 'dxa' },
+  };
+}
+
+function resolveSpanWidthTwips(
+  cellStartCol: number,
+  colspan: number,
+  colwidth: number[],
+  gridColumns?: { col: number }[],
+): number | undefined {
+  const boundedSpan = Math.max(1, colspan);
+  if (Array.isArray(gridColumns) && cellStartCol >= 0 && cellStartCol + boundedSpan <= gridColumns.length) {
+    const gridSpanTwips = gridColumns
+      .slice(cellStartCol, cellStartCol + boundedSpan)
+      .reduce((sum, column) => sum + normalizeGridWidth(column).col, 0);
+    if (gridSpanTwips > 0) return gridSpanTwips;
+  }
+
+  const spanWidthPx = colwidth
+    .slice(0, boundedSpan)
+    .reduce((sum, width) => sum + (Number.isFinite(width) ? width : 0), 0);
+  if (spanWidthPx > 0) {
+    return Math.round(spanWidthPx * PIXELS_TO_TWIPS);
+  }
+
+  return undefined;
 }
 
 function normalizeCellAttrsForSingleCell(attrs: Record<string, unknown>): Record<string, unknown> {
@@ -1566,8 +1535,15 @@ export function tablesSetColumnWidthAdapter(
     const tablePos = table.candidate.pos;
     const tableStart = tablePos + 1;
     const tableNode = table.candidate.node;
+    const tableAttrs = tableNode.attrs as Record<string, unknown>;
     const map = TableMap.get(tableNode);
     const widthPx = Math.round(input.widthPt * (96 / 72)); // Points → pixels at 96 DPI
+    const normalizedGrid = normalizeGridColumns(tableAttrs.grid);
+    const nextGridColumns = normalizedGrid?.columns.slice();
+
+    if (nextGridColumns && columnIndex < nextGridColumns.length) {
+      nextGridColumns[columnIndex] = { col: Math.round(input.widthPt * POINTS_TO_TWIPS) }; // points → twips
+    }
 
     // Set colwidth on all cells at this column.
     const processed = new Set<number>();
@@ -1589,21 +1565,26 @@ export function tablesSetColumnWidthAdapter(
       while (colwidth.length < colspan) colwidth.push(0);
       colwidth[withinCol] = widthPx;
 
-      tr.setNodeMarkup(tableStart + pos, null, { ...attrs, colwidth });
+      const nextAttrs: Record<string, unknown> = { ...attrs, colwidth };
+      if (row === 0) {
+        const nextCellProps = buildFirstRowCellWidthProps(attrs, cellStartCol, colspan, colwidth, nextGridColumns);
+        if (nextCellProps) {
+          nextAttrs.tableCellProperties = nextCellProps;
+        } else {
+          delete nextAttrs.tableCellProperties;
+        }
+      }
+
+      tr.setNodeMarkup(tableStart + pos, null, nextAttrs);
     }
 
-    // Also update the table grid if present.
-    const tableAttrs = tableNode.attrs as Record<string, unknown>;
-    const normalizedGrid = normalizeGridColumns(tableAttrs.grid);
-    if (normalizedGrid && columnIndex < normalizedGrid.columns.length) {
-      const newColumns = normalizedGrid.columns.slice();
-      newColumns[columnIndex] = { col: Math.round(input.widthPt * POINTS_TO_TWIPS) }; // points → twips
-      tr.setNodeMarkup(tablePos, null, {
-        ...tableAttrs,
-        grid: serializeGridColumns(tableAttrs.grid, { ...normalizedGrid, columns: newColumns }),
-        userEdited: true,
-      });
+    const tableAttrUpdates: Record<string, unknown> = {};
+
+    if (normalizedGrid && nextGridColumns) {
+      tableAttrUpdates.grid = serializeGridColumns(tableAttrs.grid, { ...normalizedGrid, columns: nextGridColumns });
     }
+
+    tr.setNodeMarkup(tablePos, null, buildWidthAuthoringTableAttrs(tableAttrs, tableAttrUpdates));
 
     applyDirectMutationMeta(tr);
     editor.dispatch(tr);
@@ -1639,7 +1620,10 @@ export function tablesDistributeColumnsAdapter(
     const tablePos = candidate.pos;
     const tableStart = tablePos + 1;
     const tableNode = candidate.node;
+    const tableAttrs = tableNode.attrs as Record<string, unknown>;
     const map = TableMap.get(tableNode);
+    const normalizedGrid = normalizeGridColumns(tableAttrs.grid);
+    const nextGridColumns = normalizedGrid?.columns.slice();
 
     const rangeStart = input.columnRange?.start ?? 0;
     const rangeEnd = input.columnRange?.end ?? map.width - 1;
@@ -1658,6 +1642,14 @@ export function tablesDistributeColumnsAdapter(
     }
 
     const evenWidth = Math.round(totalWidth / rangeWidth);
+    if (nextGridColumns) {
+      const evenWidthTwips = Math.max(1, Math.round(evenWidth * PIXELS_TO_TWIPS));
+      const maxColumn = Math.min(rangeEnd, nextGridColumns.length - 1);
+
+      for (let col = Math.max(rangeStart, 0); col <= maxColumn; col++) {
+        nextGridColumns[col] = { col: evenWidthTwips };
+      }
+    }
 
     // Apply even width to all cells in the range.
     const processed = new Set<number>();
@@ -1684,29 +1676,29 @@ export function tablesDistributeColumnsAdapter(
           }
         }
 
-        tr.setNodeMarkup(tableStart + pos, null, { ...attrs, colwidth: newColwidth });
+        const nextAttrs: Record<string, unknown> = { ...attrs, colwidth: newColwidth };
+        if (row === 0) {
+          const nextCellProps = buildFirstRowCellWidthProps(attrs, cellStartCol, colspan, newColwidth, nextGridColumns);
+          if (nextCellProps) {
+            nextAttrs.tableCellProperties = nextCellProps;
+          } else {
+            delete nextAttrs.tableCellProperties;
+          }
+        }
+
+        tr.setNodeMarkup(tableStart + pos, null, nextAttrs);
       }
     }
 
     // Keep table grid in sync with distributed column widths so DOCX export
     // emits uniform <w:gridCol> values rather than stale grid widths.
-    const tableAttrs = tableNode.attrs as Record<string, unknown>;
-    const normalizedGrid = normalizeGridColumns(tableAttrs.grid);
-    const tableAttrUpdates: Record<string, unknown> = { ...tableAttrs, userEdited: true };
+    const tableAttrUpdates: Record<string, unknown> = {};
 
-    if (normalizedGrid) {
-      const newColumns = normalizedGrid.columns.slice();
-      const evenWidthTwips = Math.max(1, Math.round(evenWidth * PIXELS_TO_TWIPS));
-      const maxColumn = Math.min(rangeEnd, newColumns.length - 1);
-
-      for (let col = Math.max(rangeStart, 0); col <= maxColumn; col++) {
-        newColumns[col] = { col: evenWidthTwips };
-      }
-
-      tableAttrUpdates.grid = serializeGridColumns(tableAttrs.grid, { ...normalizedGrid, columns: newColumns });
+    if (normalizedGrid && nextGridColumns) {
+      tableAttrUpdates.grid = serializeGridColumns(tableAttrs.grid, { ...normalizedGrid, columns: nextGridColumns });
     }
 
-    tr.setNodeMarkup(tablePos, null, tableAttrUpdates);
+    tr.setNodeMarkup(tablePos, null, buildWidthAuthoringTableAttrs(tableAttrs, tableAttrUpdates));
 
     applyDirectMutationMeta(tr);
     editor.dispatch(tr);
@@ -2672,6 +2664,12 @@ export function tablesSetCellPropertiesAdapter(
     };
 
     tr.setNodeMarkup(cellPos, null, newAttrs);
+
+    if (input.preferredWidthPt !== undefined) {
+      const tableAttrs = table.candidate.node.attrs as Record<string, unknown>;
+      tr.setNodeMarkup(table.candidate.pos, null, buildWidthAuthoringTableAttrs(tableAttrs));
+    }
+
     applyDirectMutationMeta(tr);
     editor.dispatch(tr);
     clearIndexCache(editor);

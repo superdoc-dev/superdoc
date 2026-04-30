@@ -578,6 +578,18 @@ describe('useFindReplace', () => {
       findReplace.open();
       expect(focusFn).toHaveBeenCalled();
     });
+
+    it('runs search sessions with visible search model', async () => {
+      handle.findQuery.value = 'tracked';
+      await new Promise((resolve) => setTimeout(resolve, 180));
+
+      expect(editor.commands.setSearchSession).toHaveBeenCalledWith(
+        'tracked',
+        expect.objectContaining({
+          searchModel: 'visible',
+        }),
+      );
+    });
   });
 
   describe('handle reactive state', () => {

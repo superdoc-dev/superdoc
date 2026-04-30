@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import type { SuperDoc } from 'superdoc';
 import type { ReviewItem, ReviewSlice } from 'superdoc/ui';
-import { useSuperDocReview, useSuperDocSelection, useSuperDocUI } from 'superdoc/ui/react';
+import { useSuperDocHost, useSuperDocReview, useSuperDocSelection, useSuperDocUI } from 'superdoc/ui/react';
 import { CommentComposer } from './CommentComposer';
 
 type ReviewCommentItem = Extract<ReviewItem, { kind: 'comment' }>;
@@ -260,10 +261,46 @@ function CommentBody({
   replies?: ReviewSlice['items'];
   ui: NonNullable<ReturnType<typeof useSuperDocUI>>;
 }) {
+  const host = useSuperDocHost() as SuperDoc | null;
+  const [replyOpen, setReplyOpen] = useState(false);
+  const [replyText, setReplyText] = useState('');
+  const [replying, setReplying] = useState(false);
+  const replyInputRef = useRef<HTMLTextAreaElement | null>(null);
+
   const author = comment.creatorName ?? comment.creatorEmail ?? 'Unknown';
   const time = comment.createdTime
     ? new Date(comment.createdTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     : '';
+
+  const openReply = () => {
+    setReplyOpen(true);
+    setReplyText('');
+    queueMicrotask(() => replyInputRef.current?.focus());
+  };
+
+  const cancelReply = () => {
+    setReplyOpen(false);
+    setReplyText('');
+  };
+
+  const postReply = () => {
+    const editor = host?.activeEditor;
+    const commentsApi = editor?.doc?.comments;
+    if (!commentsApi || typeof commentsApi.create !== 'function' || !replyText.trim()) return;
+    setReplying(true);
+    try {
+      // Reply uses the doc-api `create({ parentCommentId, text })`
+      // path. `ui.comments` doesn't yet expose a typed `reply()`
+      // method (filed as a follow-up under SD-2817); the `host`
+      // surface is the documented escape hatch until then.
+      commentsApi.create({ parentCommentId: comment.id, text: replyText.trim() });
+      cancelReply();
+    } catch (err) {
+      console.error('[ActivitySidebar] reply failed', err);
+    } finally {
+      setReplying(false);
+    }
+  };
 
   return (
     <>
@@ -294,13 +331,46 @@ function CommentBody({
           })}
         </ul>
       ) : null}
+      {replyOpen ? (
+        <div className="reply-composer" onClick={(e) => e.stopPropagation()}>
+          <textarea
+            ref={replyInputRef}
+            className="reply-input"
+            rows={2}
+            placeholder="Write a reply…"
+            value={replyText}
+            onChange={(e) => setReplyText(e.target.value)}
+            onKeyDown={(e) => {
+              if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') postReply();
+              if (e.key === 'Escape') cancelReply();
+            }}
+          />
+          <div className="reply-actions">
+            <button onClick={cancelReply}>Cancel</button>
+            <button
+              className="primary"
+              disabled={!host || replying || !replyText.trim()}
+              onClick={postReply}
+            >
+              {replying ? 'Posting…' : 'Reply'}
+            </button>
+          </div>
+        </div>
+      ) : null}
       <div className="card-actions" onClick={(e) => e.stopPropagation()}>
         {resolved ? (
           <button className="primary" onClick={() => ui.comments.reopen(comment.id)}>
             Reopen
           </button>
         ) : (
-          <button onClick={() => ui.comments.resolve(comment.id)}>Resolve</button>
+          <>
+            <button onClick={() => ui.comments.resolve(comment.id)}>Resolve</button>
+            {!replyOpen && (
+              <button disabled={!host} onClick={openReply}>
+                Reply
+              </button>
+            )}
+          </>
         )}
       </div>
     </>

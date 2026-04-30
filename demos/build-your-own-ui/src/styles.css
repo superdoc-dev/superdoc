@@ -397,6 +397,53 @@ button {
   color: var(--danger);
 }
 
+.reply-composer {
+  margin-top: 8px;
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+}
+
+.reply-input {
+  width: 100%;
+  resize: vertical;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 6px 8px;
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.reply-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.reply-actions {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+  margin-top: 6px;
+}
+
+.reply-actions button {
+  padding: 4px 10px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.reply-actions button.primary {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.reply-actions button.primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /* Tracked-change kind badge */
 
 .change-badge {

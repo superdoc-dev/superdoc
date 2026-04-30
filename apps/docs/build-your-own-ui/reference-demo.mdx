@@ -3,8 +3,48 @@ title: 'Reference demo'
 description: 'A full reference workspace that composes every Build Your Own UI surface.'
 ---
 
-<Note>
-  This page is being written. Stub for navigation. Track progress on [SD-2669](https://linear.app/superdocworkspace/issue/SD-2669).
-</Note>
+The reference workspace at [`demos/build-your-own-ui/`](https://github.com/superdoc-dev/superdoc/tree/main/demos/build-your-own-ui) shows toolbar, custom commands, comment threads, tracked-change review, selection capture, document control, and DOCX round-trip in one app.
 
-The reference demo at [`demos/build-your-own-ui/`](https://github.com/superdoc-dev/superdoc/tree/main/demos/build-your-own-ui) shows toolbar, custom commands, comment threads, tracked-change review, selection capture, document control, and DOCX round-trip in one app. Read it for composition. Copy patterns, not lines. Canonical single-concept snippets live on the pages above.
+## What it covers
+
+| Surface | File | Page that documents the pattern |
+|---|---|---|
+| Provider, onReady, hooks | `src/App.tsx`, `src/editor/EditorMount.tsx` | [React setup](/build-your-own-ui/react-setup) |
+| Toolbar buttons (bold, italic, lists, undo, redo) | `src/components/Toolbar.tsx` | [Toolbar and commands](/build-your-own-ui/toolbar-and-commands) |
+| Insert clause custom command | `src/components/InsertClauseButton.tsx` | [Custom commands](/build-your-own-ui/custom-commands) |
+| Comments sidebar with capture-based composer and reply threads | `src/components/CommentComposer.tsx`, `src/components/ActivitySidebar.tsx` | [Comments](/build-your-own-ui/comments) |
+| Merged review feed with accept / reject | `src/components/ActivitySidebar.tsx` | [Review](/build-your-own-ui/review) |
+| Active-card highlight from selection | `src/components/ActivitySidebar.tsx` | [Selection and viewport](/build-your-own-ui/selection-and-viewport) |
+| Edit / Suggest mode toggle, Export, Import | `src/components/Toolbar.tsx` | [Document control](/build-your-own-ui/document-control) |
+
+## How to read it
+
+The workspace composes every surface at once. Useful for understanding how the pieces fit. Less useful as copy-paste source.
+
+For copy-paste, start from the per-domain pages above. Each one teaches one concept with a small snippet that uses public APIs only. The reference workspace sometimes reaches through `useSuperDocHost()` to call APIs the controller doesn't bridge yet (custom-command Document API access, replies). The demo labels those reaches in comments. The docs label them as known limitations and link to the relevant Linear ticket.
+
+## What it deliberately doesn't do
+
+- No design system. Plain React, plain CSS. Drop the same patterns into your Tailwind / shadcn / MUI / Mantine stack.
+- No backend. The clause library in `<InsertClauseButton>` is hardcoded. Real consumers fetch from their own API and call `reg.invalidate()` when permissions or availability change.
+- No AI provider. Custom commands can call any LLM from `execute`; the demo picked "Insert clause" because it's concrete and self-contained.
+- No floating bubble menu or link popover. Those need viewport text-rect helpers, tracked under [SD-2822](https://linear.app/superdocworkspace/issue/SD-2822).
+
+## Run it locally
+
+```bash
+pnpm install
+pnpm --filter superdoc run build
+pnpm --filter @superdoc-dev/react run build
+pnpm --filter build-your-own-ui run dev
+```
+
+Open http://localhost:5189.
+
+## What the demo says about your own UI
+
+Three things worth carrying into your own implementation:
+
+1. **One provider, many components.** The toolbar, sidebar, and review panel all subscribe to the same controller via hooks. They don't pass props down a tree.
+2. **`modules.comments: false` and your own panel.** The demo turns off the built-in comments UI and renders its own. Imported comments still flow through export and import.
+3. **Capture, then post.** Composers freeze the selection at open and pass the snapshot at submit. The textarea taking focus doesn't lose the anchor.

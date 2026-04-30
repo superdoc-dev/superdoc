@@ -1,10 +1,136 @@
 ---
 title: 'Custom commands'
-description: 'Register your own commands by id. Drive AI actions, clause inserts, business logic alongside built-ins.'
+description: 'Register your own commands by id. Drive AI actions, clause inserts, and business logic alongside built-ins.'
 ---
 
-<Note>
-  This page is being written. Stub for navigation. Track progress on [SD-2669](https://linear.app/superdocworkspace/issue/SD-2669).
-</Note>
+`ui.commands.register({ id, execute, getState })` puts your command on the same surface as built-ins. Bind to it with `useSuperDocCommand(id)` exactly like a bold button. Override built-ins when you need to. Recompute state when something outside the editor changes.
 
-`ui.commands.register({ id, execute, getState })` puts your command on the same surface as built-ins. Bind to it from `useSuperDocCommand(id)` exactly like a bold button.
+## Register a command
+
+```tsx
+import { useEffect } from 'react';
+import { useSuperDocUI } from 'superdoc/ui/react';
+
+export function RegisterClauseCommand() {
+  const ui = useSuperDocUI();
+
+  useEffect(() => {
+    if (!ui) return;
+
+    const reg = ui.commands.register({
+      id: 'company.insertClause',
+      execute: ({ payload, superdoc }) => {
+        // Run any logic. Return a boolean for the toolbar.
+        console.log('inserting clause', payload);
+        return true;
+      },
+      getState: ({ state }) => ({
+        disabled: state.selection.empty,
+      }),
+    });
+
+    return () => reg.unregister();
+  }, [ui]);
+
+  return null;
+}
+```
+
+The returned registration cleans itself up on `unregister()`. Always tear down in the effect's cleanup so unmounting the component removes the command.
+
+## Bind a button to it
+
+Same hook as built-ins.
+
+```tsx
+function InsertClauseButton() {
+  const ui = useSuperDocUI();
+  const cmd = useSuperDocCommand('company.insertClause');
+
+  return (
+    <button
+      disabled={cmd.disabled}
+      onClick={() => ui?.commands.get('company.insertClause')?.execute({ clauseId: 'nda' })}
+    >
+      Insert NDA
+    </button>
+  );
+}
+```
+
+## Naming
+
+Use a namespace to avoid colliding with future built-ins. `company.insertClause`, `acme.aiRewrite`, `support.translate`. Bare names like `'rewrite'` will warn if SuperDoc later adds a built-in with the same id.
+
+## getState
+
+`getState` runs on every snapshot rebuild. Keep it cheap. The argument is the full controller state, so you can read `state.selection`, `state.documentMode`, `state.comments` without subscribing yourself.
+
+```ts
+getState: ({ state }) => ({
+  active: state.selection.activeMarks.includes('aiHighlight'),
+  disabled: state.selection.empty || state.documentMode === 'viewing',
+  value: state.selection.quotedText,
+})
+```
+
+`getState` is sync. Async work belongs in `execute`. If app state outside the editor changes (auth flip, quota tick), call `reg.invalidate()` to re-run `getState`.
+
+```ts
+const reg = ui.commands.register({ ... });
+
+function onPermissionsChange() {
+  reg.invalidate();
+}
+```
+
+## execute
+
+`execute` receives `{ payload, superdoc }`.
+
+```ts
+execute: async ({ payload, superdoc }) => {
+  const editor = (superdoc as any).activeEditor;
+  if (!editor) return false;
+  const target = editor.doc.selection.current()?.target;
+  if (!target) return false;
+
+  const receipt = editor.doc.insert({
+    target,
+    type: 'text',
+    value: payload?.text ?? '',
+  });
+  return receipt.success;
+}
+```
+
+<Warning>
+  The `superdoc` parameter typing is being tightened in [SD-2844](https://linear.app/superdocworkspace/issue/SD-2844). For now, reaching `editor.doc.*` from inside `execute` is the documented escape hatch when you need direct Document API access.
+</Warning>
+
+Return `boolean` for sync commands. Return `Promise<boolean>` for async. The runtime awaits internally.
+
+## Override a built-in
+
+Pass `override: true` to deliberately replace a built-in. Without it, registrations colliding with a built-in id are refused with a console warning.
+
+```ts
+ui.commands.register({
+  id: 'bold',
+  override: true,
+  execute: ({ superdoc }) => {
+    // Add telemetry, then defer to the original behavior.
+    track('bold-pressed');
+    return true;
+  },
+});
+```
+
+Once registered, every surface routes through your override: `useSuperDocCommand('bold')`, `ui.commands.get('bold')?.execute()`, `ui.toolbar.execute('bold')`. One registration, one source of truth.
+
+## Trade-offs
+
+- `getState` runs on every snapshot rebuild. Keep it pure and fast.
+- `execute` errors are caught and logged; they don't crash the toolbar.
+- `unregister()` is idempotent. Calling twice is safe.
+- The lifecycle is component-scoped. Hold the registration for as long as the command should be available.

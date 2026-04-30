@@ -892,6 +892,18 @@ export interface CommentsHandle {
    * `editor.doc.comments.create`. Returns the operation receipt.
    */
   createFromSelection(input: { text: string }): import('@superdoc/document-api').Receipt;
+  /**
+   * Create a comment anchored to a captured selection snapshot.
+   * Use when the live selection is gone by the time the user submits
+   * (the canonical case: a composer textarea takes focus, the editor
+   * loses its visible selection, and `createFromSelection` would see
+   * a null target). Capture the selection at composer-open via
+   * `ui.selection.capture()`, hold it across the user's typing, then
+   * pass it here. Routes through `editor.doc.comments.create` with
+   * the captured `target`. Returns a `NO_OP` receipt when the capture
+   * lacks a positional target.
+   */
+  createFromCapture(capture: SelectionCapture, input: { text: string }): import('@superdoc/document-api').Receipt;
   /** Resolve a comment via `editor.doc.comments.patch`. */
   resolve(commentId: string): import('@superdoc/document-api').Receipt;
   /**

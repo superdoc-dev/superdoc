@@ -1173,6 +1173,19 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
       refreshAndNotify();
       return receipt;
     },
+    createFromCapture(capture, { text }) {
+      const target = capture?.target ?? null;
+      if (!target) {
+        return {
+          success: false,
+          failure: { code: 'NO_OP', message: 'ui.comments.createFromCapture: capture has no addressable target.' },
+        };
+      }
+      const api = requireDocComments();
+      const receipt = (api.create as (input: unknown, options?: unknown) => Receipt).call(api, { target, text });
+      refreshAndNotify();
+      return receipt;
+    },
     resolve(commentId) {
       const api = requireDocComments();
       const receipt = (api.patch as (input: unknown, options?: unknown) => Receipt).call(api, {

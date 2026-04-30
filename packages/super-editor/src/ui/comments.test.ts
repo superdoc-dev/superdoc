@@ -336,6 +336,49 @@ describe('ui.comments — actions route through editor.doc.*', () => {
     ui.destroy();
   });
 
+  it('createFromCapture forwards the captured target even when live selection is gone', () => {
+    const captured = {
+      kind: 'text' as const,
+      segments: [{ blockId: 'p1', range: { start: 7, end: 12 } }],
+    };
+    // Stubs intentionally have no live selectionTarget — mimics the
+    // composer flow where focus has moved off the editor.
+    const { superdoc, mocks } = makeStubs();
+    const ui = createSuperDocUI({ superdoc });
+
+    const capture = {
+      empty: false,
+      target: captured,
+      selectionTarget: null,
+      activeMarks: [],
+      activeCommentIds: [],
+      activeChangeIds: [],
+      quotedText: 'hello',
+    } as unknown as Parameters<typeof ui.comments.createFromCapture>[0];
+
+    const receipt = ui.comments.createFromCapture(capture, { text: 'pinned' });
+
+    expect(receipt.success).toBe(true);
+    expect(mocks.create).toHaveBeenCalledWith({ target: captured, text: 'pinned' });
+
+    ui.destroy();
+  });
+
+  it('createFromCapture returns a NO_OP receipt when the capture has no target', () => {
+    const { superdoc, mocks } = makeStubs();
+    const ui = createSuperDocUI({ superdoc });
+
+    const receipt = ui.comments.createFromCapture(
+      { target: null } as unknown as Parameters<typeof ui.comments.createFromCapture>[0],
+      { text: 'orphan' },
+    );
+
+    expect(receipt.success).toBe(false);
+    expect(mocks.create).not.toHaveBeenCalled();
+
+    ui.destroy();
+  });
+
   it('resolve forwards to comments.patch({ commentId, status: "resolved" })', () => {
     const { superdoc, mocks } = makeStubs();
     const ui = createSuperDocUI({ superdoc });

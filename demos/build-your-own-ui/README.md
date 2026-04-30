@@ -2,7 +2,7 @@
 
 A reference workspace built on the `superdoc/ui/react` surface. Toolbar, comment threads, tracked-change review, custom commands, DOCX round-trip - in one app.
 
-This is a demo, not a minimal canonical recipe. It shows how the pieces compose in a real product, and it carries a few documented workarounds where the public API isn't yet enough on its own. For copy-paste-ready single-concept patterns (toolbar only, comments only, etc.), see the `examples/` folder once those land.
+This is a demo, not a minimal canonical recipe. It shows how the pieces compose in a real product. For copy-paste-ready single-concept patterns (toolbar only, comments only, etc.), see the `examples/` folder once those land.
 
 ## Run
 
@@ -34,12 +34,6 @@ SuperDocUIProvider          one controller per app
 ```
 
 Components consume the controller via `useSuperDocUI()`. They never reach into `editor.state` or `editor.view`.
-
-## Caveats this app reveals
-
-- Comment composer routes through `editor.doc.comments.create` directly. A typed `ui.comments.createFromCapture` is on the way (SD-2817).
-- Reimport with `modules.comments: false` needs a manual `commentsLoaded` re-emit. Tracked under SD-2839.
-- Smooth scroll for tracked changes in headers and footers still snaps. Tracked under SD-2841.
 
 ## Telemetry
 

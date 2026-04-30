@@ -164,22 +164,39 @@ function rewriteDocApiPaths(fileContent, filePath) {
   });
 }
 
-// SD-2842: rewrite `@superdoc/contracts` bare specifiers to point at
-// the contracts dist that vite-plugin-dts now emits at
-// `dist/layout-engine/contracts/src/`. Layout, FlowBlock, etc. were
-// collapsing to `any` via the shim file because the bare specifier
-// could not resolve. Same idea as the document-api rewrite above.
-const CONTRACTS_PATH_RE = /(['"])@superdoc\/contracts(\/[^'"]+)?\1/g;
-function rewriteContractsPaths(fileContent, filePath) {
-  return fileContent.replace(CONTRACTS_PATH_RE, (_match, quote, subpath = '') => {
-    const target = path.join(distRoot, 'layout-engine/contracts/src/index.d.ts');
-    let rel = path.relative(path.dirname(filePath), target).split(path.sep).join('/');
-    if (!rel.startsWith('.')) rel = './' + rel;
-    rel = rel.replace(/\.d\.ts$/, '.js');
-    if (subpath) rel = rel.replace(/\/index\.js$/, subpath);
-    return `${quote}${rel}${quote}`;
-  });
+// SD-2842: relocate workspace packages whose types appear on the
+// public surface. Same idea as the document-api rewrite above: emit
+// their declarations into superdoc's dist (via vite-plugin-dts include)
+// and redirect bare specifiers in emitted .d.ts files to relative
+// paths the consumer can resolve.
+const RELOCATION_RULES = [
+  { pkg: '@superdoc/contracts',     distEntry: 'layout-engine/contracts/src/index.d.ts' },
+  { pkg: '@superdoc/layout-bridge', distEntry: 'layout-engine/layout-bridge/src/index.d.ts' },
+  { pkg: '@superdoc/painter-dom',   distEntry: 'layout-engine/painters/dom/src/index.d.ts' },
+];
+
+function makeRelocationRewriter({ pkg, distEntry }) {
+  // Match the package name with optional subpath, e.g. `@superdoc/contracts` or
+  // `@superdoc/contracts/engines/tabs.js`. Anchored to either side of the
+  // package segment so `@superdoc/contracts-something` is not matched.
+  const escaped = pkg.replace(/\//g, '\\/');
+  const re = new RegExp(`(['"])${escaped}(\\/[^'"]+)?\\1`, 'g');
+  return (fileContent, filePath) => {
+    return fileContent.replace(re, (_match, quote, subpath = '') => {
+      const target = path.join(distRoot, distEntry);
+      let rel = path.relative(path.dirname(filePath), target).split(path.sep).join('/');
+      if (!rel.startsWith('.')) rel = './' + rel;
+      rel = rel.replace(/\.d\.ts$/, '.js');
+      if (subpath) rel = rel.replace(/\/index\.js$/, subpath);
+      return `${quote}${rel}${quote}`;
+    });
+  };
 }
+
+const RELOCATION_REWRITERS = RELOCATION_RULES.map((rule) => ({
+  pkg: rule.pkg,
+  rewrite: makeRelocationRewriter(rule),
+}));
 
 const dtsFiles = findDtsFiles(distRoot);
 for (const filePath of dtsFiles) {
@@ -196,12 +213,15 @@ for (const filePath of dtsFiles) {
     totalReplacements++;
   }
 
-  // SD-2842: same treatment for @superdoc/contracts.
-  const beforeContracts = fileContent;
-  fileContent = rewriteContractsPaths(fileContent, filePath);
-  if (fileContent !== beforeContracts) {
-    changed = true;
-    totalReplacements++;
+  // SD-2842: apply each relocation rewriter in turn. Each one redirects
+  // its own private-package specifier to a relative path in the local dist.
+  for (const { rewrite } of RELOCATION_REWRITERS) {
+    const before = fileContent;
+    fileContent = rewrite(fileContent, filePath);
+    if (fileContent !== before) {
+      changed = true;
+      totalReplacements++;
+    }
   }
 
   // Fix pnpm node_modules paths → bare specifiers
@@ -305,7 +325,7 @@ for (const filePath of dtsFiles) {
     const mod = m[2];
 
     // Skip relative imports and already-handled packages
-    if (mod.startsWith('.') || mod.startsWith('@superdoc/common') || mod.startsWith('@superdoc/super-editor') || mod.startsWith('@superdoc/document-api') || mod.startsWith('@superdoc/contracts')) continue;
+    if (mod.startsWith('.') || mod.startsWith('@superdoc/common') || mod.startsWith('@superdoc/super-editor') || mod.startsWith('@superdoc/document-api') || RELOCATION_RULES.some((r) => mod === r.pkg || mod.startsWith(r.pkg + '/'))) continue;
 
     if (mod.startsWith('@superdoc/')) {
       if (!workspaceImports.has(mod)) workspaceImports.set(mod, new Set());
@@ -318,7 +338,7 @@ for (const filePath of dtsFiles) {
   const dynamicImports = fileContent.matchAll(/import\(['"]([^'"]+)['"]\)\.(\w+)/g);
   for (const m of dynamicImports) {
     const mod = m[1];
-    if (mod.startsWith('.') || mod.startsWith('@superdoc/common') || mod.startsWith('@superdoc/super-editor') || mod.startsWith('@superdoc/document-api') || mod.startsWith('@superdoc/contracts')) continue;
+    if (mod.startsWith('.') || mod.startsWith('@superdoc/common') || mod.startsWith('@superdoc/super-editor') || mod.startsWith('@superdoc/document-api') || RELOCATION_RULES.some((r) => mod === r.pkg || mod.startsWith(r.pkg + '/'))) continue;
 
     if (mod.startsWith('@superdoc/')) {
       if (!workspaceImports.has(mod)) workspaceImports.set(mod, new Set());
@@ -333,7 +353,7 @@ for (const filePath of dtsFiles) {
     // Skip @superdoc/super-editor (consumer-facing, not internal)
     // Skip @superdoc/common root module (inlined separately), but allow subpath
     // imports like @superdoc/common/components/BasicUpload.vue to be shimmed
-    if (mod === '@superdoc/common' || mod.startsWith('@superdoc/super-editor') || mod.startsWith('@superdoc/document-api') || mod.startsWith('@superdoc/contracts')) continue;
+    if (mod === '@superdoc/common' || mod.startsWith('@superdoc/super-editor') || mod.startsWith('@superdoc/document-api') || RELOCATION_RULES.some((r) => mod === r.pkg || mod.startsWith(r.pkg + '/'))) continue;
     if (!workspaceImports.has(mod)) workspaceImports.set(mod, new Set());
   }
 }

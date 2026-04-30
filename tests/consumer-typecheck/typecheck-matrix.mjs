@@ -140,6 +140,28 @@ const scenarios = [
     files: ['src/imports-main.ts'],
     mustPass: false, // may fail from dep errors in node_modules
   },
+  // SD-2842: every public type re-exported via `superdoc` must resolve
+  // to a real interface, not collapse to `any` and not be missing.
+  // This guards the customer-acute fix that landed alongside SD-2815
+  // and SD-2842 against future regressions.
+  {
+    name: 'bundler / all public types are real (SD-2842)',
+    module: 'ESNext',
+    moduleResolution: 'bundler',
+    skipLibCheck: true,
+    strict: true,
+    files: ['src/all-public-types.ts'],
+    mustPass: true,
+  },
+  {
+    name: 'node16 / all public types are real (SD-2842)',
+    module: 'Node16',
+    moduleResolution: 'node16',
+    skipLibCheck: true,
+    strict: true,
+    files: ['src/all-public-types.ts'],
+    mustPass: true,
+  },
 ];
 
 const tscPath = join(__dirname, 'node_modules', '.bin', 'tsc');

@@ -125,10 +125,13 @@ export default defineConfig(({ mode, command }) => {
         'src/**/*',
         '../super-editor/src/**/*',
         '../document-api/src/**/*',
-        // SD-2842: relocate @superdoc/contracts so its types
-        // (Layout, FlowBlock, etc.) emit into superdoc's dist and
-        // resolve via the same rewrite path as @superdoc/document-api.
+        // SD-2842: relocate workspace packages whose types appear on the
+        // public surface so they emit into superdoc's dist and the
+        // rewrite step in ensure-types can redirect bare specifiers to
+        // local relative paths. Same pattern as @superdoc/document-api.
         '../layout-engine/contracts/src/**/*',
+        '../layout-engine/layout-bridge/src/**/*',
+        '../layout-engine/painters/dom/src/**/*',
       ],
       outDir: 'dist',
       // vite-plugin-dts still gathers diagnostics for this mixed JS/Vue source

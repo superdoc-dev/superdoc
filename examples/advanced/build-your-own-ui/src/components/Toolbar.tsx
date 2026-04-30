@@ -332,4 +332,3 @@ function CommentIcon() {
     </svg>
   );
 }
-

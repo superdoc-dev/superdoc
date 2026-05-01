@@ -1501,8 +1501,13 @@ export class SuperDoc extends EventEmitter {
    */
   setLocked(lock = true) {
     this.config.documents.forEach((doc) => {
-      const metaMap = doc.ydoc.getMap('meta');
-      doc.ydoc.transact(() => {
+      // setLocked is a collaboration-only API; the surrounding flow only
+      // calls it once each document has a Yjs doc attached. Cast away the
+      // optional shape on the public Document typedef without changing
+      // runtime behavior.
+      const ydoc = /** @type {import('yjs').Doc} */ (doc.ydoc);
+      const metaMap = ydoc.getMap('meta');
+      ydoc.transact(() => {
         metaMap.set('locked', lock);
         metaMap.set('lockedBy', this.user);
       });

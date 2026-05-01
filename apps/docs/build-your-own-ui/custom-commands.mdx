@@ -138,7 +138,7 @@ ui.commands.register<{ clauseId: string }>({
 
 Two things make the snippet safe to copy:
 
-- The positional target comes from `ui.selection.getSnapshot().selectionTarget` (a public `SelectionTarget` shape that `editor.doc.insert` accepts). Don't pass `selection.current().target` — that's a `TextTarget`, the wrong shape for `insert`.
+- The positional target comes from `ui.selection.getSnapshot().selectionTarget` (a public `SelectionTarget` shape that `editor.doc.insert` accepts). Don't pass `selection.current().target`. That's a `TextTarget`, the wrong shape for `insert`.
 - `editor` is typed and resolved late-bound by the controller. It tracks header / footer / footnote focus the same way every other `ui.*` mutation does, so a custom command run from a header-focused composer hits the right story.
 
 The reference demo's `InsertClauseButton` ships this exact pattern.

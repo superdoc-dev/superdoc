@@ -9,6 +9,7 @@ import type { Node as ProseMirrorNode } from 'prosemirror-model';
 import type { TocSwitchConfig } from '@superdoc/document-api';
 import { parseTcInstruction } from '../../core/super-converter/field-references/shared/tc-switches.js';
 import { getHeadingLevel } from './node-address-resolver.js';
+import { buildFallbackBlockNodeId } from './deterministic-node-id.js';
 import { generateTocBookmarkName } from './toc-bookmark-sync.js';
 
 // ---------------------------------------------------------------------------
@@ -57,7 +58,7 @@ export function collectTocSources(doc: ProseMirrorNode, config: TocSwitchConfig)
   // Track the current paragraph context for TC field collection
   let currentParagraphSdBlockId: string | undefined;
 
-  doc.descendants((node, _pos) => {
+  doc.descendants((node, pos) => {
     // Skip TOC nodes themselves — don't collect entries from within a TOC
     if (node.type.name === 'tableOfContents') return false;
 
@@ -65,18 +66,34 @@ export function collectTocSources(doc: ProseMirrorNode, config: TocSwitchConfig)
       const attrs = node.attrs as Record<string, unknown> | undefined;
       const paragraphProps = attrs?.paragraphProperties as Record<string, unknown> | undefined;
       const styleId = paragraphProps?.styleId as string | undefined;
-      const sdBlockId = (attrs?.sdBlockId ?? attrs?.paraId) as string | undefined;
+      // Pasted/new paragraphs intentionally have null paraId/sdBlockId (see
+      // InputRule.js SUPERDOC_SLICE_PASTE_IDENTITY_RESETS) to avoid public-id
+      // duplicates. Synthesize a deterministic position-based id so they still
+      // appear in the rebuilt TOC and round-trip via OOXML bookmarks.
+      const sdBlockId =
+        ((attrs?.sdBlockId ?? attrs?.paraId) as string | undefined) ?? buildFallbackBlockNodeId('paragraph', pos);
 
       // Update paragraph context for TC field collection
       currentParagraphSdBlockId = sdBlockId;
 
       if (!sdBlockId) return true;
 
+      const text = flattenText(node);
+      // Word's TOC field skips paragraphs that are styled as headings but
+      // contain no visible text (page-break-only spacers, empty stubs).
+      // Including them produces ghost entries that look like a regression.
+      const hasVisibleText = text.trim().length > 0;
+
       // Check heading by style (\o switch)
       if (outlineLevels) {
         const headingLevel = getHeadingLevel(styleId);
-        if (headingLevel != null && headingLevel >= outlineLevels.from && headingLevel <= outlineLevels.to) {
-          sources.push({ text: flattenText(node), level: headingLevel, sdBlockId, kind: 'heading' });
+        if (
+          headingLevel != null &&
+          headingLevel >= outlineLevels.from &&
+          headingLevel <= outlineLevels.to &&
+          hasVisibleText
+        ) {
+          sources.push({ text, level: headingLevel, sdBlockId, kind: 'heading' });
           // Continue descending to find TC fields within this paragraph
           return true;
         }
@@ -88,8 +105,8 @@ export function collectTocSources(doc: ProseMirrorNode, config: TocSwitchConfig)
         const rawOutlineLevel = paragraphProps?.outlineLevel as number | undefined;
         if (rawOutlineLevel != null) {
           const tocLevel = rawOutlineLevel + 1;
-          if (tocLevel >= effectiveLevels.from && tocLevel <= effectiveLevels.to) {
-            sources.push({ text: flattenText(node), level: tocLevel, sdBlockId, kind: 'appliedOutline' });
+          if (tocLevel >= effectiveLevels.from && tocLevel <= effectiveLevels.to && hasVisibleText) {
+            sources.push({ text, level: tocLevel, sdBlockId, kind: 'appliedOutline' });
             return true;
           }
         }
@@ -164,8 +181,24 @@ export interface EntryParagraphJson {
  * - Page number placeholder "0" with tocPageNumber mark
  * - Separator: custom (\p switch) or default tab
  */
-export function buildTocEntryParagraphs(sources: TocSource[], config: TocSwitchConfig): EntryParagraphJson[] {
-  return sources.map((source) => buildEntryParagraph(source, config));
+/**
+ * Optional context that lets the entry builder produce final-looking output
+ * without a follow-up `mode: 'pageNumbers'` pass and without losing layout
+ * particulars from the existing TOC.
+ */
+export interface BuildTocEntryOptions {
+  /** sdBlockId → page number map from PresentationEditor's last layout cycle. */
+  pageMap?: Map<string, number>;
+  /** Right-tab stop position (twips) to mirror the existing TOC's spacing. */
+  tabPos?: number;
+}
+
+export function buildTocEntryParagraphs(
+  sources: TocSource[],
+  config: TocSwitchConfig,
+  options: BuildTocEntryOptions = {},
+): EntryParagraphJson[] {
+  return sources.map((source) => buildEntryParagraph(source, config, options));
 }
 
 /** Default right-margin position for right-aligned tab stops (twips). ~6.5 inches. */
@@ -179,7 +212,11 @@ const TAB_LEADER_MAP: Record<string, string> = {
   middleDot: 'middleDot',
 };
 
-function buildEntryParagraph(source: TocSource, config: TocSwitchConfig): EntryParagraphJson {
+function buildEntryParagraph(
+  source: TocSource,
+  config: TocSwitchConfig,
+  options: BuildTocEntryOptions = {},
+): EntryParagraphJson {
   const { display } = config;
   const content: Array<Record<string, unknown>> = [];
 
@@ -218,10 +255,14 @@ function buildEntryParagraph(source: TocSource, config: TocSwitchConfig): EntryP
       content.push({ type: 'tab' });
     }
 
-    // Page number placeholder with tocPageNumber mark for surgical updates
+    // Page number — resolved from the page map when available so a single
+    // mode 'all' rebuild produces final numbers; falls back to '0' placeholder
+    // when the source paragraph is not yet in the page map (freshly pasted
+    // headings whose synthetic id has not been seen by a layout cycle).
+    const resolvedPage = options.pageMap?.get(source.sdBlockId);
     content.push({
       type: 'text',
-      text: '0',
+      text: resolvedPage != null ? String(resolvedPage) : '0',
       marks: [{ type: 'tocPageNumber' }],
     });
   }
@@ -233,11 +274,13 @@ function buildEntryParagraph(source: TocSource, config: TocSwitchConfig): EntryP
 
   const rightAlign = display.rightAlignPageNumbers !== false; // default true
   if (rightAlign && !omitPageNumber) {
+    // Word's default TOC tab leader is dots. The \p switch is only emitted
+    // when a non-default separator is used, so an absent tabLeader means the
+    // user expects dots, not "no leader". Honor an explicit 'none' to opt out.
     const leader =
-      display.tabLeader && display.tabLeader !== 'none' ? (TAB_LEADER_MAP[display.tabLeader] ?? undefined) : undefined;
-    paragraphProperties.tabStops = [
-      { tab: { tabType: 'right', pos: DEFAULT_RIGHT_TAB_POS, ...(leader ? { leader } : {}) } },
-    ];
+      display.tabLeader === 'none' ? undefined : (display.tabLeader && TAB_LEADER_MAP[display.tabLeader]) || 'dot';
+    const pos = options.tabPos ?? DEFAULT_RIGHT_TAB_POS;
+    paragraphProperties.tabStops = [{ tab: { tabType: 'right', pos, ...(leader ? { leader } : {}) } }];
   }
 
   return {

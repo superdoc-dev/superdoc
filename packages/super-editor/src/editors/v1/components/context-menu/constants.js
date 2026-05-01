@@ -13,6 +13,7 @@ import pasteIconSvg from '@superdoc/common/icons/paste-solid.svg?raw';
 import checkIconSvg from '@superdoc/common/icons/check-solid.svg?raw';
 import xMarkIconSvg from '@superdoc/common/icons/xmark-solid.svg?raw';
 import paintRollerIconSvg from '@superdoc/common/icons/paint-roller-solid.svg?raw';
+import rotateRightIconSvg from '@superdoc/common/icons/rotate-right-solid.svg?raw';
 
 export const ICONS = {
   addRowBefore: plusIconSvg,
@@ -37,6 +38,7 @@ export const ICONS = {
   trackChangesAccept: checkIconSvg,
   trackChangesReject: xMarkIconSvg,
   cellBackground: paintRollerIconSvg,
+  updateTableOfContents: rotateRightIconSvg,
 };
 
 // Table actions constant
@@ -65,6 +67,7 @@ export const TEXTS = {
   trackChangesAccept: 'Accept change',
   trackChangesReject: 'Reject change',
   cellBackground: 'Cell background',
+  updateTableOfContents: 'Update table of contents',
 };
 
 export const tableActionsOptions = [

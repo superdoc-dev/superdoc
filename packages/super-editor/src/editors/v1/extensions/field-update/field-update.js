@@ -5,6 +5,7 @@ import {
   resolveDocumentStatFieldValue,
   resolveMainBodyEditor,
 } from '../../document-api-adapters/helpers/word-statistics.js';
+import { findTocAncestor } from '../table-of-contents/find-toc-ancestor.js';
 
 /** Field types eligible for value updates via F9. */
 const UPDATABLE_FIELD_TYPES = new Set(['NUMWORDS', 'NUMCHARS', 'NUMPAGES']);
@@ -36,6 +37,25 @@ export const FieldUpdate = Extension.create({
         () =>
         ({ editor, state, dispatch }) => {
           const { from, to } = state.selection;
+
+          // F9 inside a TOC rebuilds the TOC via the document-api wrapper.
+          // The wrapper handles content materialization, NO_OP detection, and
+          // bookmark sync. Mode 'all' is used because it does not depend on a
+          // completed layout cycle (mode 'pageNumbers' can fail with
+          // CAPABILITY_UNAVAILABLE in headless contexts).
+          const toc = findTocAncestor(state.doc, from);
+          if (toc?.sdBlockId && editor?.documentApi?.toc?.update) {
+            if (!dispatch) return true;
+            try {
+              const target = { kind: 'block', nodeType: 'tableOfContents', nodeId: toc.sdBlockId };
+              editor.documentApi.toc.update({ target, mode: 'all' });
+            } catch (error) {
+              console.warn('[FieldUpdate] toc.update failed:', error);
+              return false;
+            }
+            return true;
+          }
+
           const fields = findFieldsInRange(state.doc, from, to);
 
           const updatable = fields.filter((f) => UPDATABLE_FIELD_TYPES.has(f.fieldType));

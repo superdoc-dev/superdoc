@@ -52,16 +52,16 @@ describe('buildTocEntryParagraphs', () => {
   });
 
   describe('rightAlignPageNumbers', () => {
-    it('adds a right-aligned tab stop when rightAlignPageNumbers is true', () => {
+    it('adds a right-aligned tab stop with default dot leader when rightAlignPageNumbers is true', () => {
       const paragraphs = buildTocEntryParagraphs([BASE_SOURCE], makeConfig({ rightAlignPageNumbers: true }));
       const tabStops = paragraphs[0]!.attrs.paragraphProperties as Record<string, unknown>;
-      expect(tabStops.tabStops).toEqual([{ tab: { tabType: 'right', pos: 9350 } }]);
+      expect(tabStops.tabStops).toEqual([{ tab: { tabType: 'right', pos: 9350, leader: 'dot' } }]);
     });
 
-    it('adds a right-aligned tab stop by default (undefined)', () => {
+    it('adds a right-aligned tab stop with default dot leader by default (undefined)', () => {
       const paragraphs = buildTocEntryParagraphs([BASE_SOURCE], makeConfig());
       const tabStops = paragraphs[0]!.attrs.paragraphProperties as Record<string, unknown>;
-      expect(tabStops.tabStops).toEqual([{ tab: { tabType: 'right', pos: 9350 } }]);
+      expect(tabStops.tabStops).toEqual([{ tab: { tabType: 'right', pos: 9350, leader: 'dot' } }]);
     });
 
     it('omits tab stop when rightAlignPageNumbers is false', () => {
@@ -96,6 +96,36 @@ describe('buildTocEntryParagraphs', () => {
       const props = paragraphs[0]!.attrs.paragraphProperties as Record<string, unknown>;
       expect(props.tabStops).toBeUndefined();
     });
+
+    it('honours options.tabPos when provided', () => {
+      const paragraphs = buildTocEntryParagraphs([BASE_SOURCE], makeConfig({ rightAlignPageNumbers: true }), {
+        tabPos: 12345,
+      });
+      const props = paragraphs[0]!.attrs.paragraphProperties as Record<string, unknown>;
+      expect(props.tabStops).toEqual([{ tab: { tabType: 'right', pos: 12345, leader: 'dot' } }]);
+    });
+  });
+
+  describe('page numbers (SD-2664)', () => {
+    it('substitutes page numbers from options.pageMap when present', () => {
+      const pageMap = new Map<string, number>([['h-1', 7]]);
+      const paragraphs = buildTocEntryParagraphs([BASE_SOURCE], makeConfig({ hyperlinks: true }), { pageMap });
+      const pageNode = paragraphs[0]!.content.find(
+        (n: Record<string, unknown>) =>
+          Array.isArray(n.marks) && n.marks?.some((m) => (m as { type: string }).type === 'tocPageNumber'),
+      ) as { text: string };
+      expect(pageNode.text).toBe('7');
+    });
+
+    it('falls back to "0" placeholder when the source is not in the page map', () => {
+      const pageMap = new Map<string, number>(); // empty
+      const paragraphs = buildTocEntryParagraphs([BASE_SOURCE], makeConfig({ hyperlinks: true }), { pageMap });
+      const pageNode = paragraphs[0]!.content.find(
+        (n: Record<string, unknown>) =>
+          Array.isArray(n.marks) && n.marks?.some((m) => (m as { type: string }).type === 'tocPageNumber'),
+      ) as { text: string };
+      expect(pageNode.text).toBe('0');
+    });
   });
 });
 
@@ -104,7 +134,7 @@ describe('buildTocEntryParagraphs', () => {
 // ---------------------------------------------------------------------------
 
 interface MockParagraph {
-  sdBlockId: string;
+  sdBlockId: string | null;
   text: string;
   styleId?: string;
   outlineLevel?: number;
@@ -251,5 +281,47 @@ describe('collectTocSources', () => {
 
     const sources = collectTocSources(doc, config);
     expect(sources.length).toBe(0);
+  });
+
+  it('skips heading-styled paragraphs whose visible text is empty (SD-2664)', () => {
+    // Page-break / spacer paragraphs that inherit Heading1 must not produce
+    // ghost TOC entries on rebuild.
+    const docWithEmptyHeading = mockDoc([
+      { sdBlockId: 'p1', text: 'Part 1', styleId: 'Heading1' },
+      { sdBlockId: 'p2', text: '', styleId: 'Heading1' },
+      { sdBlockId: 'p3', text: '   ', styleId: 'Heading1' },
+      { sdBlockId: 'p4', text: 'Part 2', styleId: 'Heading1' },
+    ]);
+
+    const config: TocSwitchConfig = {
+      source: { outlineLevels: { from: 1, to: 3 } },
+      display: { hyperlinks: true },
+      preserved: {},
+    };
+
+    const sources = collectTocSources(docWithEmptyHeading, config);
+    expect(sources.map((s) => s.text)).toEqual(['Part 1', 'Part 2']);
+  });
+
+  it('collects pasted heading paragraphs that lack sdBlockId/paraId (SD-2664)', () => {
+    // SuperDoc's slice paste resets paraId/sdBlockId to null on pasted paragraphs
+    // (InputRule.js SUPERDOC_SLICE_PASTE_IDENTITY_RESETS) to avoid public-id
+    // duplicates. The TOC rebuild must still pick those paragraphs up via a
+    // synthetic deterministic id so toc.update mode 'all' reflects new entries.
+    const docWithPastedHeading = mockDoc([
+      { sdBlockId: 'p1', text: 'Part 3', styleId: 'Heading1' },
+      { sdBlockId: null, text: 'Part 4', styleId: 'Heading1' },
+    ]);
+
+    const config: TocSwitchConfig = {
+      source: { outlineLevels: { from: 1, to: 3 } },
+      display: { hyperlinks: true },
+      preserved: {},
+    };
+
+    const sources = collectTocSources(docWithPastedHeading, config);
+
+    expect(sources.map((s) => s.text)).toEqual(['Part 3', 'Part 4']);
+    expect(sources[1].sdBlockId).toMatch(/^para-auto-/);
   });
 });

@@ -23,11 +23,11 @@ export const TocPageNumber = Mark.create({
     };
   },
 
-  parseHTML() {
+  parseDOM() {
     return [{ tag: 'span[data-toc-page-number]' }];
   },
 
-  renderHTML() {
+  renderDOM() {
     return ['span', { 'data-toc-page-number': '' }, 0];
   },
 });

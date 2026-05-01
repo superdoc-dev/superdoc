@@ -257,11 +257,43 @@ interface MaterializedToc {
   sources: TocSource[];
 }
 
-function materializeTocContent(doc: ProseMirrorNode, config: TocSwitchConfig, editor: Editor): MaterializedToc {
+interface MaterializeTocOptions {
+  /** sdBlockId → page number map to fold into the rebuilt entries. */
+  pageMap?: Map<string, number>;
+  /** Right-tab stop position (twips) sampled from the existing TOC. */
+  tabPos?: number;
+}
+
+function materializeTocContent(
+  doc: ProseMirrorNode,
+  config: TocSwitchConfig,
+  editor: Editor,
+  options: MaterializeTocOptions = {},
+): MaterializedToc {
   const sources = collectTocSources(doc, config);
-  const entryParagraphs = buildTocEntryParagraphs(sources, config);
+  const entryParagraphs = buildTocEntryParagraphs(sources, config, options);
   const content = entryParagraphs.length > 0 ? entryParagraphs : NO_ENTRIES_PLACEHOLDER;
   return { content: sanitizeTocContentForSchema(content, editor), sources };
+}
+
+/**
+ * Sample the right-tab stop position from the existing TOC's first child
+ * paragraph so the rebuilt entries keep the same column for page numbers.
+ * Returns `undefined` when no usable tab stop is present, in which case the
+ * builder falls back to the default position.
+ */
+function readExistingTocTabPos(node: ProseMirrorNode): number | undefined {
+  const first = node.firstChild;
+  if (!first) return undefined;
+  const tabStops = (
+    first.attrs as
+      | { paragraphProperties?: { tabStops?: Array<{ tab?: { pos?: number; tabType?: string } }> } }
+      | undefined
+  )?.paragraphProperties?.tabStops;
+  if (!Array.isArray(tabStops)) return undefined;
+  const right = tabStops.find((t) => t?.tab?.tabType === 'right');
+  const pos = right?.tab?.pos;
+  return typeof pos === 'number' ? pos : undefined;
 }
 
 // ---------------------------------------------------------------------------
@@ -378,7 +410,10 @@ function tocUpdateAll(editor: Editor, input: TocUpdateInput, options?: MutationO
   const resolved = resolveTocTarget(editor.state.doc, input.target);
   const config = parseTocInstruction(resolved.node.attrs?.instruction ?? '');
   const rightAlign = resolved.node.attrs?.rightAlignPageNumbers as boolean | undefined;
-  const { content, sources } = materializeTocContent(editor.state.doc, withRightAlign(config, rightAlign), editor);
+  const { content, sources } = materializeTocContent(editor.state.doc, withRightAlign(config, rightAlign), editor, {
+    pageMap: getPageMap(editor) ?? undefined,
+    tabPos: readExistingTocTabPos(resolved.node),
+  });
 
   // NO_OP detection: compare new content against existing before executing.
   // The PM command returns "found" (not "content changed"), so receipt-based

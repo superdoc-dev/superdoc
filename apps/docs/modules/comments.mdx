@@ -286,6 +286,10 @@ const superdoc = new SuperDoc({
 
 ## API methods
 
+<Note>
+**For new code, prefer the typed paths.** Use `editor.doc.comments.*` for document mutations (server-and-client compatible, returns receipts) or `ui.comments.*` for React UI work (`createFromSelection`, `createFromCapture`, `reply`, `resolve`, `reopen`, `delete`). The chain commands below are kept for backwards compatibility and for code already written against `superdoc.activeEditor.commands.*`. See [Document API › Comments](/document-api/reference/index) and [Bring Your Own UI › Comments](/bring-your-own-ui/comments).
+</Note>
+
 These methods are available on the active editor's commands:
 
 ### `addComment`

@@ -46,13 +46,20 @@ export type FieldSnapshot = {
 export function snapshotFromXml(elements: unknown[]): FieldSnapshot[] {
   const { processedNodes } = preProcessNodesForFldChar(elements as never[], {});
   const nodeListHandler = defaultNodeListHandler();
+  // The destructured nodeListHandler param shape inferred from the V2
+  // importer's nodeListHandlerFn does not include `nodeListHandler`
+  // itself, but downstream importers (passthroughNodeImporter,
+  // paragraphNodeImporter) DO read params.nodeListHandler to recurse.
+  // The .js test fixtures pass it without complaint; this .ts harness
+  // needs an explicit cast to satisfy strict TS checks for the same
+  // pattern.
   const result = nodeListHandler.handler({
     nodes: processedNodes,
     docx: {},
     nodeListHandler,
     converter: {},
     path: [],
-  });
+  } as unknown as Parameters<typeof nodeListHandler.handler>[0]);
 
   const registry = new Map<string, FieldInstance>();
   collectFieldInstances(result, registry);

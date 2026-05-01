@@ -512,9 +512,11 @@ export class SuperDoc extends EventEmitter {
   }
 
   /**
-   * Initialize collaboration if configured
-   * @param {Object} config
-   * @returns {Promise<Object[]>} The processed documents with collaboration enabled
+   * Initialize collaboration if configured. Accepts the full
+   * `Config.modules` block so it can read both the collaboration
+   * subkey and the comments subkey at once.
+   * @param {Modules} [modules]
+   * @returns {Promise<Document[] | undefined>} The processed documents with collaboration enabled. Caller awaits for side effects; the return value is informational.
    */
   async #initCollaboration({ collaboration: collaborationModuleConfig, comments: commentsConfig = {} } = {}) {
     if (!collaborationModuleConfig) return this.config.documents;

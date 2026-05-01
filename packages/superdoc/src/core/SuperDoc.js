@@ -1001,8 +1001,10 @@ export class SuperDoc extends EventEmitter {
     const doc = this.superdocStore.documents.find((d) => d.id === documentId);
     // `onContentError` is typed as optional on the public Config typedef
     // because consumers don't have to wire a handler. The class field
-    // initializer always installs a `() => null` default, so the call
-    // is defined at runtime; the optional chain is a no-op there.
+    // initializer installs a `() => null` default, but `#init` spreads
+    // the consumer-supplied config over it (`{ ...this.config, ...config }`),
+    // so an explicit `onContentError: undefined` can still strip the
+    // default. The optional chain keeps the call safe in that case.
     this.config.onContentError?.({ error, editor, documentId: doc.id, file: doc.data });
   }
 

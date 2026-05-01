@@ -97,7 +97,7 @@ export const createListMarkerElement = (
   doc: Document,
   markerText: string,
   run: MarkerRunStyle,
-  sourceAnchor: SourceAnchor,
+  sourceAnchor?: SourceAnchor,
 ): HTMLElement => {
   const markerContainer = doc.createElement('span');
   markerContainer.classList.add(DOM_CLASS_NAMES.LIST_MARKER);
@@ -124,6 +124,8 @@ export const createListMarkerElement = (
   }
 
   markerContainer.appendChild(markerEl);
-  applySourceAnchorDataset(markerEl, sourceAnchor);
+  if (sourceAnchor) {
+    applySourceAnchorDataset(markerEl, sourceAnchor);
+  }
   return markerContainer;
 };

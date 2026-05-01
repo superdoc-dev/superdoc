@@ -531,7 +531,8 @@ export function useFindReplace({ getSurfaceManager, getActiveEditor, activeEdito
         surfaceHandle = manager.open({
           mode: 'floating',
           ariaLabel: config.texts.findAriaLabel,
-          floating: { placement: 'top-right', closeOnEscape: true, autoFocus: true },
+          closeOnEscape: true,
+          floating: { placement: 'top-right', autoFocus: true },
           component: markRaw(resolution.component),
           props: { ...resolution.props, findReplace: handle },
         });
@@ -541,7 +542,8 @@ export function useFindReplace({ getSurfaceManager, getActiveEditor, activeEdito
         surfaceHandle = manager.open({
           mode: 'floating',
           ariaLabel: config.texts.findAriaLabel,
-          floating: { placement: 'top-right', closeOnEscape: true, autoFocus: true },
+          closeOnEscape: true,
+          floating: { placement: 'top-right', autoFocus: true },
           render: (ctx) =>
             userRender({
               container: ctx.container,
@@ -579,7 +581,8 @@ export function useFindReplace({ getSurfaceManager, getActiveEditor, activeEdito
           mode: 'floating',
           ariaLabel: config.texts.findAriaLabel,
           component: markRaw(FindReplaceSurface),
-          floating: { placement: 'top-right', closeOnEscape: true, autoFocus: true },
+          closeOnEscape: true,
+          floating: { placement: 'top-right', autoFocus: true },
           props: { findReplace: handle },
         });
       }

@@ -171,7 +171,7 @@
  * @property {string} [title] Optional title rendered in the surface chrome
  * @property {string} [ariaLabel] Accessible name for the surface when no visible title is provided. Used as aria-label fallback when neither title nor ariaLabelledBy is set.
  * @property {string} [ariaLabelledBy] ID of the element that labels the surface. Takes precedence over ariaLabel. Use this when the content component renders its own heading that should serve as the accessible name.
- * @property {boolean} [closeOnEscape] Whether Escape closes the surface (default: true)
+ * @property {boolean} [closeOnEscape] Whether Escape closes the surface (default: true). Set at the request top level — the runtime does not read `floating.closeOnEscape` on a per-request basis.
  * @property {boolean} [closeOnBackdrop] Whether backdrop click closes a dialog (default: true)
  * @property {{ maxWidth?: string | number }} [dialog] Dialog-specific overrides
  * @property {Object} [floating] Floating-specific overrides
@@ -196,7 +196,7 @@
  * @property {string} [title] Optional title rendered in the surface chrome
  * @property {string} [ariaLabel] Accessible name for the surface when no visible title is provided. Used as aria-label fallback when neither title nor ariaLabelledBy is set.
  * @property {string} [ariaLabelledBy] ID of the element that labels the surface. Takes precedence over ariaLabel. Use this when the content component renders its own heading that should serve as the accessible name.
- * @property {boolean} [closeOnEscape] Whether Escape closes the surface (default: true)
+ * @property {boolean} [closeOnEscape] Whether Escape closes the surface (default: true). Set at the request top level — the runtime does not read `floating.closeOnEscape` on a per-request basis.
  * @property {boolean} [closeOnBackdrop] Whether backdrop click closes a dialog (default: true)
  * @property {{ maxWidth?: string | number }} [dialog] Dialog-specific overrides
  * @property {Object} [floating] Floating-specific overrides

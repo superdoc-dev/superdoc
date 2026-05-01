@@ -116,9 +116,7 @@
                   "editor/built-in-ui/track-changes",
                   "editor/built-in-ui/toolbar",
                   "editor/built-in-ui/links",
-                  "editor/built-in-ui/context-menu",
-                  "editor/built-in-ui/pdf",
-                  "editor/built-in-ui/whiteboard"
+                  "editor/built-in-ui/context-menu"
                 ]
               },
               {
@@ -137,6 +135,10 @@
                     ]
                   }
                 ]
+              },
+              {
+                "group": "PDF",
+                "pages": ["editor/pdf", "editor/pdf/whiteboard"]
               }
             ]
           },
@@ -383,6 +385,22 @@
     {
       "source": "/editor/built-in-ui/toolbar/overview",
       "destination": "/editor/built-in-ui/toolbar"
+    },
+    {
+      "source": "/modules/pdf",
+      "destination": "/editor/pdf"
+    },
+    {
+      "source": "/modules/whiteboard",
+      "destination": "/editor/pdf/whiteboard"
+    },
+    {
+      "source": "/editor/built-in-ui/pdf",
+      "destination": "/editor/pdf"
+    },
+    {
+      "source": "/editor/built-in-ui/whiteboard",
+      "destination": "/editor/pdf/whiteboard"
     },
     {
       "source": "/modules",

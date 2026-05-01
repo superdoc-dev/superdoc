@@ -45,7 +45,7 @@ export function useSuperDocComments(): CommentsSlice {
   return useSuperDocSlice((ui) => ui.select((state) => state.comments, shallowEqual), EMPTY_COMMENTS);
 }
 
-/** Subscribe to the tracked-changes feed. */
+/** Subscribe to the tracked-changes slice (items, total, activeId). */
 export function useSuperDocTrackChanges(): TrackChangesSlice {
   return useSuperDocSlice((ui) => ui.select((state) => state.trackChanges, shallowEqual), EMPTY_TRACK_CHANGES);
 }

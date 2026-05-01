@@ -59,6 +59,7 @@ const DEFAULT_AWARENESS_PALETTE = Object.freeze([
 
 /** @typedef {import('./types/index.js').User} User */
 /** @typedef {import('./types/index.js').Document} Document */
+/** @typedef {import('./types/index.js').RuntimeDocument} RuntimeDocument */
 /** @typedef {import('./types/index.js').Modules} Modules */
 /** @typedef {import('./types/index.js').Editor} Editor */
 /** @typedef {import('./types/index.js').DocumentMode} DocumentMode */
@@ -1304,8 +1305,8 @@ export class SuperDoc extends EventEmitter {
   /**
    * Set the document mode on a document's editor (PresentationEditor or Editor).
    * Tries PresentationEditor first, falls back to Editor for backward compatibility.
-   * @param {Object} doc - The document object
-   * @param {string} mode - The document mode ('editing', 'viewing', 'suggesting')
+   * @param {RuntimeDocument} doc - The document object
+   * @param {DocumentMode} mode - The document mode ('editing', 'viewing', 'suggesting')
    */
   #applyDocumentMode(doc, mode) {
     const presentationEditor = typeof doc.getPresentationEditor === 'function' ? doc.getPresentationEditor() : null;

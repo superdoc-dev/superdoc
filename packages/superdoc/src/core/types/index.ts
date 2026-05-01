@@ -17,6 +17,7 @@ import type { Ref, ComputedRef } from 'vue';
 
 import type {
   Editor as SuperEditor,
+  PresentationEditor as SuperEditorPresentationEditor,
   StoryLocator as SuperEditorStoryLocator,
   BookmarkAddress as SuperEditorBookmarkAddress,
   BlockNavigationAddress as SuperEditorBlockNavigationAddress,
@@ -85,6 +86,50 @@ export interface Document {
  * `CollaborationProvider` from `superdoc`.
  */
 export type CollaborationProvider = SuperEditorCollaborationProvider;
+
+/**
+ * Internal augmentation of `Document` for runtime-only fields that the
+ * SuperDoc instance attaches to each document during initialization. The
+ * public `Document` interface above is what consumers pass in via
+ * `Config.documents`; this type adds the fields SuperDoc itself sets and
+ * reads internally (per-document `role` propagation, the live `getEditor`
+ * and `getPresentationEditor` accessors that the surface manager and
+ * mode-switch helpers walk).
+ *
+ * Internal use only: not part of any public typedef. Consumers cannot
+ * import this through `superdoc` and should not pass any of these fields
+ * into `Config.documents` from outside.
+ */
+export interface RuntimeDocument extends Document {
+  /**
+   * Per-document role. `useDocument()` reads `params.role` from the input
+   * config and exposes it on the smart-doc object; once collaboration
+   * setup runs, SuperDoc unconditionally writes `doc.role = config.role`,
+   * silently replacing whatever was passed. SD-2872 removed this from
+   * the public `Document` interface so consumers stop trying to use it
+   * as a stable per-document override; it lives on `RuntimeDocument`
+   * only so internal SuperDoc.js callsites can type the assignment.
+   */
+  role?: 'editor' | 'viewer' | 'suggester';
+  /**
+   * Returns the body Editor for this document, when the runtime has
+   * created one. Set by the editor-create lifecycle.
+   *
+   * @deprecated Direct editor access will be removed in a future version.
+   * Use the Document API (`editor.doc`) instead. This typedef carries the
+   * deprecation marker forward from the source accessor in
+   * `packages/superdoc/src/composables/use-document.js`.
+   */
+  getEditor?: () => SuperEditor | null | undefined;
+  /**
+   * Returns the PresentationEditor for this document, when the runtime
+   * has created one. Set by the editor-create lifecycle.
+   *
+   * @deprecated Direct editor access will be removed in a future version.
+   * Use the Document API (`editor.doc`) instead.
+   */
+  getPresentationEditor?: () => SuperEditorPresentationEditor | null | undefined;
+}
 
 /** Collaboration module configuration. */
 export interface CollaborationConfig {

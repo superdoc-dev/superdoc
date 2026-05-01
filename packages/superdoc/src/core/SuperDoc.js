@@ -414,7 +414,10 @@ export class SuperDoc extends EventEmitter {
 
   #initDocuments() {
     const doc = this.config.document;
-    const hasDocumentConfig = !!doc && typeof doc === 'object' && Object.keys(this.config.document)?.length;
+    // Pass the narrowed `doc` to `Object.keys` so the `!!doc && typeof doc === 'object'`
+    // gate carries through; refetching `this.config.document` would re-widen to
+    // `string | object | File | Blob | undefined` and trip noImplicitAny.
+    const hasDocumentConfig = !!doc && typeof doc === 'object' && Object.keys(doc)?.length;
     const hasDocumentUrl = !!doc && typeof doc === 'string' && doc.length > 0;
     const hasDocumentFile = !!doc && typeof File === 'function' && doc instanceof File;
     const hasDocumentBlob = !!doc && doc instanceof Blob && !(doc instanceof File);

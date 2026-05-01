@@ -145,7 +145,7 @@ describe('readFieldFlags', () => {
     });
   });
 
-  it('reads "on" as true (ECMA-376 ST_OnOff form Word commonly emits)', () => {
+  it('reads "on" as true (Word-compat form, not spec-defined per §22.9.2.7)', () => {
     expect(readFieldFlags({ attributes: { 'w:dirty': 'on', 'w:fldLock': 'on' } })).toEqual({
       dirty: true,
       locked: true,

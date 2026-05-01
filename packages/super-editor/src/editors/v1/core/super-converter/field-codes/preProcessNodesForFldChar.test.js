@@ -119,6 +119,35 @@ describe('preProcessNodesForFldChar', () => {
     ]);
   });
 
+  it('preserves instrText / w:tab ordering and multi-segment runs in rawInstruction (sd:rawField path)', () => {
+    // A single run can carry multiple <w:instrText> segments interleaved
+    // with <w:tab/>. The substrate's rawInstruction (used by the rebuild
+    // path on edited fields) must reflect the source order, not just the
+    // first instrText segment with a trailing tab.
+    const nodes = [
+      { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'begin' } }] },
+      {
+        name: 'w:r',
+        elements: [
+          { name: 'w:instrText', elements: [{ type: 'text', text: 'CUSTOMFIELD foo' }] },
+          { name: 'w:tab', elements: [] },
+          { name: 'w:instrText', elements: [{ type: 'text', text: 'bar' }] },
+        ],
+      },
+      { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'separate' } }] },
+      { name: 'w:r', elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'value' }] }] },
+      { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'end' } }] },
+    ];
+
+    const { processedNodes } = preProcessNodesForFldChar(nodes, mockDocx);
+    expect(processedNodes).toHaveLength(1);
+    expect(processedNodes[0].name).toBe('sd:rawField');
+    const fi = processedNodes[0].attributes.fieldInstance;
+    // rawInstruction reflects source order: text + tab + text. .trim() at
+    // the end of finalizeField does not alter the interior.
+    expect(fi.rawInstruction).toBe('CUSTOMFIELD foo\tbar');
+  });
+
   it('processes TOC fields when begin, instrText, separate, and end share a single run', () => {
     const nodes = [
       {

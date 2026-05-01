@@ -244,7 +244,6 @@ export const preProcessNodesForFldChar = (nodes = [], docx, options = {}) => {
 
     const fldCharEl = node.elements?.find((el) => el.name === 'w:fldChar');
     const fldType = fldCharEl?.attributes?.['w:fldCharType'];
-    const instrTextEl = node.elements?.find((el) => el.name === 'w:instrText');
 
     if (node.name === 'w:fldSimple') {
       const instr = node.attributes?.['w:instr'];
@@ -328,13 +327,20 @@ export const preProcessNodesForFldChar = (nodes = [], docx, options = {}) => {
             fieldRunRPrStack[fieldRunRPrStack.length - 1] = fieldRunRPr;
           }
           currentField.instructionTokens.push(...instructionTokens);
-          const instrTextValue = instrTextEl?.elements?.[0]?.text;
-          if (instrTextValue != null) {
-            currentField.instrText += `${instrTextValue} `;
+          // Build instrText from the ordered tokens this run produced —
+          // not from `instrTextEl?.elements?.[0]?.text` (find() returns
+          // only the first w:instrText) and not by appending tabs at the
+          // end (tabs may sit BETWEEN instrText segments, e.g. INDEX \e
+          // "<tab>"). Walking instructionTokens preserves both the
+          // multi-segment and tab-position cases. The trailing space
+          // separates this run's text from the next run's so consecutive
+          // runs do not smash together; the final .trim() in finalizeField
+          // strips outer whitespace.
+          for (const token of instructionTokens) {
+            if (token.type === 'tab') currentField.instrText += '\t';
+            else if (typeof token.text === 'string') currentField.instrText += token.text;
           }
-          if (instructionTokens.some((token) => token.type === 'tab')) {
-            currentField.instrText += '\t';
-          }
+          currentField.instrText += ' ';
           // We can ignore instruction nodes
           return;
         }

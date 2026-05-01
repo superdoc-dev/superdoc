@@ -40,12 +40,17 @@ const QUOTES = new Set(['"', "'"]);
 /**
  * Tokenize a raw field instruction string into its linear token stream.
  *
- * The stream concatenates back to the input character-for-character: walk
- * the tokens and emit `text` (identifiers, whitespace, opaque), `quote +
- * text + quote` (quoted), or `\\ + flag` (switches), and the result equals
- * the input. Switches do not consume their arguments at this layer — they
- * appear as their own tokens with following whitespace and arg tokens
- * preserved separately. Switch-to-arg pairing lives in {@link deriveParsedArgs}.
+ * The stream is round-trippable via {@link reconstructInstruction} per the
+ * contract documented on that function (byte-faithful for identifiers,
+ * whitespace, opaque, switch, and the spec-defined `\"` / `\\` escapes
+ * inside quoted tokens; non-spec backslash sequences canonicalize). Note
+ * that quoted tokens store the unescaped text, so direct concatenation of
+ * `quote + token.text + quote` does NOT reproduce the source — call
+ * {@link reconstructInstruction} for round-trip emission.
+ *
+ * Switches do not consume their arguments at this layer — they appear as
+ * their own tokens with following whitespace and arg tokens preserved
+ * separately. Switch-to-arg pairing lives in {@link deriveParsedArgs}.
  *
  * Examples:
  *   "PAGE"
@@ -198,11 +203,15 @@ function renderToken(t: InstructionToken): string {
 /**
  * Escape a quoted token's `text` payload back to its source form.
  *
- * Spec-defined escapes (`\"` / `\'` and `\\`) round-trip byte-for-byte.
- * For non-spec `\X` sequences in the source the tokenizer preserves both
- * characters in `text`; reconstruction always emits backslashes as `\\`,
- * so `"path\nbreak"` becomes `"path\\nbreak"` on round-trip — different
- * bytes, same canonical meaning.
+ * ECMA-376 §17.16.1 defines `field-argument` quoting with double quotes;
+ * `\"` and `\\` are the spec-defined escapes. We additionally accept
+ * single-quoted strings as a permissive Word-compat extension and apply
+ * the analogous `\'` / `\\` escape rule for them. Spec-defined and
+ * compat-defined escapes round-trip byte-for-byte. For non-spec `\X`
+ * sequences in the source the tokenizer preserves both characters in
+ * `text`; reconstruction always emits backslashes as `\\`, so
+ * `"path\nbreak"` becomes `"path\\nbreak"` on round-trip — different
+ * bytes, same canonical meaning under §17.16.1's escape rules.
  */
 function escapeQuotedText(text: string, quote: '"' | "'"): string {
   let out = '';

@@ -521,7 +521,7 @@
     },
     {
       "source": "/guide/integration",
-      "destination": "/getting-started/installation"
+      "destination": "/getting-started/quickstart"
     },
     {
       "source": "/guide/collaboration",
@@ -541,7 +541,7 @@
     },
     {
       "source": "/resources/storage",
-      "destination": "/guides/general/storage"
+      "destination": "/editor/collaboration/storage"
     },
     {
       "source": "/resources/migration",
@@ -549,7 +549,7 @@
     },
     {
       "source": "/resources/guides",
-      "destination": "/guides/general"
+      "destination": "/getting-started/introduction"
     },
     {
       "source": "/guide/resources#migrate-from-prosemirror",
@@ -561,11 +561,11 @@
     },
     {
       "source": "/getting-started/ai-ready",
-      "destination": "/getting-started/ai-agents"
+      "destination": "/ai/agents/llm-tools"
     },
     {
       "source": "/api-reference/documents/sign",
-      "destination": "/api-reference/signature/sign"
+      "destination": "/solutions/esign/api-reference"
     },
     {
       "source": "/extensions/slash-menu",

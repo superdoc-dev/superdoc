@@ -1189,7 +1189,11 @@ export class SuperDoc extends EventEmitter {
     this.toolbar = new SuperToolbar(config);
 
     this.toolbar.on('exception', this.config.onException);
-    this.once('editorCreate', () => this.toolbar.updateToolbarState());
+    // `this.toolbar` is typed `SuperToolbar | null` because `#addToolbar`
+    // sets it to `null` before reassigning. The closure captures the live
+    // reference, so the optional chain only fires if `destroy()` cleared
+    // the toolbar between editorCreate scheduling and emission.
+    this.once('editorCreate', () => this.toolbar?.updateToolbarState());
   }
 
   /**
@@ -1421,7 +1425,11 @@ export class SuperDoc extends EventEmitter {
   }
 
   #setModeViewing() {
-    this.toolbar.activeEditor = null;
+    // `this.toolbar` is typed `SuperToolbar | null` because `#addToolbar`
+    // briefly nulls it before reassigning. By the time mode changes run
+    // through public API the toolbar is constructed; the guard here
+    // keeps the assignment a no-op in any transient null state.
+    if (this.toolbar) this.toolbar.activeEditor = null;
 
     const commentsVisible = this.config.comments?.visible === true;
     const trackChangesVisible = this.config.trackChanges?.visible === true;

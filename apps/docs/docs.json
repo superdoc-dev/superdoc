@@ -329,6 +329,30 @@
       "destination": "/editor/custom-ui/:path*"
     },
     {
+      "source": "/modules/collaboration/backend",
+      "destination": "/editor/collaboration/configuration"
+    },
+    {
+      "source": "/modules/collaboration/client",
+      "destination": "/editor/collaboration/configuration"
+    },
+    {
+      "source": "/modules/collaboration/cloud/liveblocks",
+      "destination": "/guides/collaboration/liveblocks"
+    },
+    {
+      "source": "/modules/collaboration/self-hosted/superdoc-yjs",
+      "destination": "/guides/collaboration/superdoc-yjs"
+    },
+    {
+      "source": "/modules/collaboration/self-hosted/hocuspocus",
+      "destination": "/guides/collaboration/hocuspocus"
+    },
+    {
+      "source": "/modules/collaboration/self-hosted/overview",
+      "destination": "/guides/collaboration/self-hosted-overview"
+    },
+    {
       "source": "/modules/collaboration",
       "destination": "/editor/collaboration/overview"
     },
@@ -361,12 +385,24 @@
       "destination": "/editor/built-in-ui/:path*"
     },
     {
+      "source": "/core/superdoc/properties",
+      "destination": "/editor/superdoc/methods#properties"
+    },
+    {
+      "source": "/core/superdoc/types",
+      "destination": "/editor/superdoc/methods#typescript-types"
+    },
+    {
       "source": "/core/superdoc/:path*",
       "destination": "/editor/superdoc/:path*"
     },
     {
       "source": "/core/react/:path*",
       "destination": "/editor/react/:path*"
+    },
+    {
+      "source": "/core/supereditor/hooks",
+      "destination": "/advanced/supereditor/events"
     },
     {
       "source": "/core/supereditor",
@@ -427,18 +463,6 @@
     {
       "source": "/document-engine/ai-agents/skills",
       "destination": "/ai/agents/skills"
-    },
-    {
-      "source": "/core/superdoc/properties",
-      "destination": "/editor/superdoc/methods#properties"
-    },
-    {
-      "source": "/core/superdoc/types",
-      "destination": "/editor/superdoc/methods#typescript-types"
-    },
-    {
-      "source": "/core/supereditor/hooks",
-      "destination": "/advanced/supereditor/events"
     },
     {
       "source": "/guide/quick-start",
@@ -511,30 +535,6 @@
     {
       "source": "/api-reference/documents/sign",
       "destination": "/api-reference/signature/sign"
-    },
-    {
-      "source": "/modules/collaboration/backend",
-      "destination": "/editor/collaboration/configuration"
-    },
-    {
-      "source": "/modules/collaboration/client",
-      "destination": "/editor/collaboration/configuration"
-    },
-    {
-      "source": "/modules/collaboration/cloud/liveblocks",
-      "destination": "/guides/collaboration/liveblocks"
-    },
-    {
-      "source": "/modules/collaboration/self-hosted/superdoc-yjs",
-      "destination": "/guides/collaboration/superdoc-yjs"
-    },
-    {
-      "source": "/modules/collaboration/self-hosted/hocuspocus",
-      "destination": "/guides/collaboration/hocuspocus"
-    },
-    {
-      "source": "/modules/collaboration/self-hosted/overview",
-      "destination": "/guides/collaboration/self-hosted-overview"
     },
     {
       "source": "/extensions/slash-menu",

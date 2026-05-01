@@ -173,6 +173,36 @@ describe('preProcessNodesForFldChar', () => {
     expect(fi.source.originalXml).toBeDefined();
   });
 
+  it('falls back to raw runs when an unknown field spans paragraph boundaries (rawField is inline-only)', () => {
+    // Multi-paragraph IF / unsupported complex fields can include w:p in
+    // their result content. Wrapping them in inline-only sd:rawField
+    // would produce a PM tree that fails schema validation; fall back
+    // to passing the raw runs through unchanged for that case.
+    const nodes = [
+      { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'begin' } }] },
+      { name: 'w:r', elements: [{ name: 'w:instrText', elements: [{ type: 'text', text: 'IF \\* MERGEFORMAT' }] }] },
+      { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'separate' } }] },
+      // Block-level content inside the field (legal in OOXML for some
+      // unsupported fields but not for an inline rawField PM node).
+      {
+        name: 'w:p',
+        elements: [{ name: 'w:r', elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'first' }] }] }],
+      },
+      {
+        name: 'w:p',
+        elements: [{ name: 'w:r', elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'second' }] }] }],
+      },
+      { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'end' } }] },
+    ];
+
+    const { processedNodes } = preProcessNodesForFldChar(nodes, mockDocx);
+
+    // No sd:rawField wrapper — the runs pass through unchanged so the
+    // PM importer can produce valid block content.
+    expect(processedNodes.some((n) => n.name === 'sd:rawField')).toBe(false);
+    expect(processedNodes.some((n) => n.name === 'w:p')).toBe(true);
+  });
+
   it('does not duplicate later fields when an unknown field and a TOC share one run', () => {
     const nodes = [
       {

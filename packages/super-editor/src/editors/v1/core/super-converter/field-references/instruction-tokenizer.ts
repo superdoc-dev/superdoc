@@ -2,13 +2,23 @@
  * Tokenizing parser for Word field instructions.
  *
  * The tokenizer's job is fidelity, not semantics:
- *   - preserves the raw instruction text byte-for-byte (the linear token
- *     stream concatenates back to the input verbatim);
  *   - captures order, quoting, and whitespace so the original instruction
  *     can be reconstructed token-by-token;
  *   - derives a best-effort {@link ParsedArgs} view for evaluator
- *     convenience (family, positional args, normalized switches with attached
- *     args).
+ *     convenience (family, positional args, normalized switches with
+ *     attached args).
+ *
+ * Round-trip contract: the linear token stream concatenates back to the
+ * input byte-for-byte for every token kind EXCEPT non-spec backslash
+ * sequences inside quoted strings. ECMA-376 §17.16.1 only defines `\"`
+ * and `\\` as escapes; any other `\X` in the source is preserved as the
+ * literal two characters in the token text but reconstruction always
+ * re-escapes via `\\X`. So `"line\nbreak"` round-trips through the
+ * tokenizer as `"line\\nbreak"` — different bytes, same canonical
+ * meaning under the spec's escape rules. See {@link escapeQuotedText}
+ * for the exact rule. Production import/export does not call
+ * {@link reconstructInstruction}; this contract is exercised by tests
+ * and is the relevant invariant for any future caller that does.
  *
  * What it does NOT do:
  *   - interpret family-specific semantics (no SEQ / REF / TOC / DATE
@@ -150,8 +160,17 @@ export function tokenizeInstruction(raw: string): InstructionToken[] {
  * linear stream), but callers that build tokens manually (for example
  * synthesizing an instruction for a legacy `<w:pgNum/>` run) can attach an
  * arg directly. Reconstruction emits the embedded arg adjacent to its
- * switch so its source text is preserved. Every other token kind
- * round-trips byte-for-byte.
+ * switch so its source text is preserved.
+ *
+ * Round-trip is byte-faithful for `identifier`, `whitespace`, `opaque`,
+ * `switch` (without embedded arg), and the spec-defined `\"` / `\\`
+ * escapes inside `quoted` tokens. Non-spec backslash sequences inside
+ * quoted strings (e.g. literal `\n`, Windows paths like
+ * `INCLUDEPICTURE "C:\Images\logo.png"`) preserve content but
+ * canonicalize on reconstruction: every literal backslash is re-emitted
+ * as `\\`. The two forms are semantically equivalent under ECMA-376
+ * §17.16.1 escape rules; if you need exact byte fidelity for an
+ * unmodified field, use `source.originalXml` from `FieldInstance`.
  */
 export function reconstructInstruction(tokens: InstructionToken[]): string {
   let out = '';

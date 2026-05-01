@@ -9,6 +9,35 @@ import { attachFieldInstanceToFieldNodes } from './attach-field-instance.js';
 const SKIP_FIELD_PROCESSING_NODE_NAMES = new Set(['w:drawing', 'w:pict']);
 
 const shouldSkipFieldProcessing = (node) => SKIP_FIELD_PROCESSING_NODE_NAMES.has(node?.name);
+
+/**
+ * Block-level OOXML node names that cannot legally appear as inline
+ * content. The unhandled-complex-field path uses this to detect when an
+ * unsupported field straddles paragraph boundaries (and therefore cannot
+ * be wrapped in the inline-only sd:rawField carrier).
+ */
+const BLOCK_LEVEL_OOXML_NAMES = new Set([
+  'w:p',
+  'w:tbl',
+  'sd:tableOfContents',
+  'sd:index',
+  'sd:bibliography',
+  'sd:tableOfAuthorities',
+]);
+
+/**
+ * Returns true when the collected field content includes any block-level
+ * element. Used by the unhandled-complex-field path to decide between
+ * wrapping in sd:rawField (inline-only) and passing the raw runs through
+ * unchanged for schema validity.
+ *
+ * @param {OpenXmlNode[]} nodes
+ * @returns {boolean}
+ */
+const containsBlockLevelNode = (nodes) => {
+  if (!Array.isArray(nodes)) return false;
+  return nodes.some((node) => typeof node?.name === 'string' && BLOCK_LEVEL_OOXML_NAMES.has(node.name));
+};
 /**
  * @typedef {object} FldCharProcessResult
  * @property {OpenXmlNode[]} processedNodes - The list of nodes after processing.
@@ -110,21 +139,35 @@ export const preProcessNodesForFldChar = (nodes = [], docx) => {
         });
         attachFieldInstanceToFieldNodes(outputNodes, fieldInstance);
       } else {
-        // Unknown / unsupported field family: wrap the result content in a
-        // sd:rawField element holding the canonical FieldInstance payload.
-        // The original begin/instr/separate/result/end span is preserved
-        // as source.originalXml so the exporter can passthrough verbatim
+        // Unknown / unsupported field family. The default path wraps the
+        // result content in a sd:rawField element holding the canonical
+        // FieldInstance payload, so the exporter can passthrough verbatim
         // when nothing has been edited.
-        outputNodes = [
-          buildRawFieldElement({
-            representation: 'complex',
-            instructionText: currentField.instrText.trim(),
-            resultElements: collectedNodes,
-            originalXml: rawCollectedNodes,
-            dirty: currentField.dirty ?? false,
-            locked: currentField.locked ?? false,
-          }),
-        ];
+        //
+        // BUT: rawField is an inline-only PM node (group: 'inline',
+        // content: 'inline*'). When the field's collected content
+        // straddles paragraph boundaries (e.g. a multi-paragraph IF
+        // field, or any unsupported complex field that contains <w:p> or
+        // <w:tbl>), wrapping it would produce an inline node holding
+        // block children, which fails ProseMirror schema validation.
+        // For that rare case, fall back to the pre-substrate behavior:
+        // pass the raw runs through unchanged. We lose the FieldInstance
+        // for this field, but the document loads and round-trips. A
+        // block-level rawField carrier is future work.
+        if (containsBlockLevelNode(collectedNodes)) {
+          outputNodes = rawCollectedNodes;
+        } else {
+          outputNodes = [
+            buildRawFieldElement({
+              representation: 'complex',
+              instructionText: currentField.instrText.trim(),
+              resultElements: collectedNodes,
+              originalXml: rawCollectedNodes,
+              dirty: currentField.dirty ?? false,
+              locked: currentField.locked ?? false,
+            }),
+          ];
+        }
       }
       if (collectedNodesStack.length === 0) {
         // We have completed a top-level field, add the combined nodes to the output.

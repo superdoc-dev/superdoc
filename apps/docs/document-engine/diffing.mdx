@@ -1,19 +1,17 @@
 ---
-title: SDK Diffing
+title: Compare documents
 sidebarTitle: Diffing
-description: Generate tracked-change redlines from two documents with the Node.js and Python SDKs
-keywords: "sdk diffing, tracked changes, redline, compare documents, node sdk, python sdk"
+description: Compare two DOCX files and produce a redlined output as a reviewable third document.
+keywords: "diffing, document comparison, tracked changes, redline, compare documents, diff capture, diff compare, diff apply"
 ---
 
-SuperDoc SDKs expose snapshot-based diffing through `doc.diff.capture`, `doc.diff.compare`, and `doc.diff.apply`.
+Diffing compares two DOCX files and produces a third document as a reviewable redline. The workflow uses Document Engine diff operations: `diff.capture`, `diff.compare`, and `diff.apply`.
 
-This page covers the main file-to-file workflow:
+The examples below use the Node and Python SDKs because file-to-file comparison usually runs in backend automation, but the feature isn't SDK-specific — the same operations are available through the [Document API](/document-api/overview) and [CLI](/document-engine/cli).
 
-- You already have a base document, `Doc1`
-- A new document, `Doc2`, arrives later
-- You want to produce `Doc3`, which starts from `Doc1` and contains all `Doc2` changes as tracked changes
+## File-to-file workflow
 
-## Recommended workflow
+You already have a base document, `Doc1`. A new document, `Doc2`, arrives later. You want to produce `Doc3`, which starts from `Doc1` and contains all `Doc2` changes as tracked changes.
 
 Use two sessions:
 

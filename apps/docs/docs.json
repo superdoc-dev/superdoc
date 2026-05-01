@@ -171,11 +171,9 @@
                   "document-api/migration"
                 ]
               },
-              {
-                "group": "SDKs",
-                "pages": ["document-engine/sdks", "document-engine/sdk-diffing"]
-              },
-              "document-engine/cli"
+              "document-engine/sdks",
+              "document-engine/cli",
+              "document-engine/diffing"
             ]
           },
           {
@@ -295,6 +293,10 @@
     "dismissible": true
   },
   "redirects": [
+    {
+      "source": "/document-engine/sdk-diffing",
+      "destination": "/document-engine/diffing"
+    },
     {
       "source": "/guides/general/storage",
       "destination": "/editor/collaboration/storage"

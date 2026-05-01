@@ -96,10 +96,22 @@ Example:
 
 Don't add Tips, Warnings, or deep explanations in overview pages. Keep examples concise.
 
+## Layer model
+
+When documenting a customer-facing operation, name the right layer:
+
+- **Document API** (`editor.doc.*`) — request/response document operations: comments, tracked changes, format apply, insert/replace/delete, mark up. Same shape on server, client, and AI agents. **Use this for any document mutation.**
+- **`superdoc/ui` and `superdoc/ui/react`** — browser UI controller for custom toolbar, comments sidebar, review panel, selection capture, viewport, document controls (export / mode toggle / dirty indicator). **Use this for new custom React UI.**
+- **Modules** (`modules/*`) — built-in SuperDoc-rendered UI. Use this when the customer is happy with the built-in look and just wants config.
+- **Core** (`core/*`) — low-level instance/reference surface. Lifecycle, refs, host events. Reach for it when the higher layers don't cover the case (rare).
+
+Recommend the highest layer that solves the problem. Mutate documents through the Document API. Build custom React UI through `superdoc/ui/react`. Reach `superdoc.activeEditor.*` only when documenting legacy compat or a known escape hatch (and call it out as such).
+
 ## API naming
 
 - `superdoc.export()` for SuperDoc-level methods
-- `superdoc.activeEditor.commands.X()` for editor commands
+- `editor.doc.*` for document operations (the recommended path)
+- `superdoc.activeEditor.commands.X()` for editor chain commands. **Legacy/compat only — prefer `editor.doc.*` for mutations and `ui.commands.*` for UI dispatch.**
 - `superdoc.activeEditor.getHTML()` for editor-level methods
 - `superdoc.getHTML()` returns `Array<string>` (one per document section)
 
@@ -111,6 +123,9 @@ Always verify API names against the source code before documenting. Key source f
 | SuperDoc config | `packages/superdoc/src/core/types/index.js` |
 | Editor methods | `packages/super-editor/src/editors/v1/core/Editor.ts` |
 | Extensions | `packages/super-editor/src/editors/v1/extensions/` |
+| Document API contract | `packages/document-api/src/contract/operation-definitions.ts` |
+| `superdoc/ui` controller | `packages/super-editor/src/ui/types.ts`, `create-super-doc-ui.ts` |
+| `superdoc/ui/react` hooks | `packages/super-editor/src/ui/react/` |
 
 ## Mintlify components
 

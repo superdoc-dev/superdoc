@@ -34,6 +34,7 @@ npm install @superdoc-dev/sdk
 - MCP server: https://docs.superdoc.dev/document-engine/ai-agents/mcp-server
 - Document API: https://docs.superdoc.dev/document-api/overview
 - Available operations: https://docs.superdoc.dev/document-api/available-operations
+- Bring Your Own UI (custom React UI): https://docs.superdoc.dev/bring-your-own-ui/overview
 - API reference (backend): https://docs.superdoc.dev/api-reference/introduction
 - SDK docs: https://docs.superdoc.dev/document-engine/sdks
 - CLI: https://docs.superdoc.dev/document-engine/cli
@@ -41,6 +42,12 @@ npm install @superdoc-dev/sdk
 - npm: https://www.npmjs.com/package/superdoc
 - Examples: https://github.com/superdoc-dev/superdoc/tree/main/examples
 - Full context: https://docs.superdoc.dev/llms-full.txt
+
+## Layer model (use the right surface)
+
+- **Document API** (`editor.doc.*`): request/response document operations: comments, tracked changes, formatting, insert/replace. Same shape on server, client, and AI agents. Use for any document mutation.
+- **`superdoc/ui` and `superdoc/ui/react`**: typed browser controller for custom toolbar, comments sidebar, review panel, selection, viewport, document controls. **Use for custom React UI** — not `superdoc.activeEditor.commands.*`.
+- **Built-in modules** (`modules/*`): SuperDoc renders the UI. Use when the built-in look is fine.
 
 ## Packages
 

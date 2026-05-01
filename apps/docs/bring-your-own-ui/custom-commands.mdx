@@ -168,24 +168,11 @@ ui.commands.get('company.boldTelemetry')?.execute();
 ui.commands.get('bold')?.execute();
 ```
 
-```ts
-// Pattern B: replace bold entirely. You own the full behavior, including
-// hitting the editor to actually toggle the mark.
-ui.commands.register({
-  id: 'bold',
-  override: true,
-  execute: ({ editor }) => {
-    track('bold-pressed');
-    // editor.commands holds the underlying tiptap-style chain commands.
-    // The structural editor type doesn't expose them today, so narrow
-    // to just the call you need.
-    const chain = editor as (typeof editor & { commands?: { toggleBold?(): boolean } }) | null;
-    return chain?.commands?.toggleBold?.() ?? false;
-  },
-});
-```
+Pattern A is the right choice for almost every case. Once you override, every surface routes through your handler: `useSuperDocCommand('bold')`, `ui.commands.get('bold')?.execute()`, `ui.toolbar.execute('bold')`.
 
-Pattern A is what you want most of the time. Pattern B exists for the rare case where you genuinely need to gate the built-in (audit, RBAC, "ask before formatting"). Once you override, every surface routes through your handler: `useSuperDocCommand('bold')`, `ui.commands.get('bold')?.execute()`, `ui.toolbar.execute('bold')`.
+<Warning>
+**Replacing a built-in entirely is an advanced escape hatch.** The Document API is the recommended way to mutate the document; if your override needs to actually toggle a mark, you have to reach into the underlying engine's chain commands, which aren't part of the public typed surface. Use this only when you genuinely need to gate the built-in (audit, RBAC, "ask before formatting") and you understand that the built-in's behavior is now your responsibility to maintain. Most teams should pick Pattern A.
+</Warning>
 
 ## Trade-offs
 

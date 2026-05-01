@@ -6,9 +6,11 @@ keywords: "headless toolbar, custom toolbar, toolbar api, createHeadlessToolbar,
 
 Build your own toolbar UI. SuperDoc provides the state and commands — you render whatever you want.
 
-<Tip>
-On React? `superdoc/headless-toolbar` is the framework-agnostic substrate. The typed React surface is `useSuperDocCommand` from `superdoc/ui/react`. See [Bring Your Own UI › Toolbar and commands](/bring-your-own-ui/toolbar-and-commands). It re-renders one button per command instead of the whole toolbar on every change, and `ui.commands.register` lets you add custom commands alongside the built-ins.
-</Tip>
+## Using React?
+
+`superdoc/headless-toolbar` is the framework-agnostic substrate. **For new React apps, reach for `useSuperDocCommand` from `superdoc/ui/react` instead.** It re-renders one button per command (not the whole toolbar) and ships alongside companion hooks for selection, comments, and tracked changes. See [Bring Your Own UI › Toolbar and commands](/bring-your-own-ui/toolbar-and-commands).
+
+`superdoc/headless-toolbar` stays supported for existing integrations and framework-agnostic toolbar-only use cases. Both paths read from the same internal substrate.
 
 ## Quick start
 

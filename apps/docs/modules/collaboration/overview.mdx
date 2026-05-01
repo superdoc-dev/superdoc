@@ -6,6 +6,10 @@ keywords: "real-time document editing, collaborative word editing, websocket doc
 
 Enable multiple users to edit the same document simultaneously with real-time collaboration powered by [Yjs](https://docs.yjs.dev/).
 
+<Note>
+Collaboration is configured through `modules.collaboration` today, but it isn't a built-in UI surface. It controls document sync, providers, presence, and persistence for collaborative editing — infrastructure, not rendering. Use it alongside any UI choice ([Custom UI](/bring-your-own-ui/overview), built-in UI, or both).
+</Note>
+
 <iframe
   src={`https://superdoc-collab-example.pages.dev/doc/example?hide-toolbar=true`}
   title="Embedded content"

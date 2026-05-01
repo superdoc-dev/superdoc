@@ -70,7 +70,7 @@
             ]
           },
           {
-            "group": "Core",
+            "group": "Editor",
             "pages": [
               {
                 "group": "SuperDoc",
@@ -83,17 +83,58 @@
                 ]
               },
               {
-                "group": "SuperEditor",
+                "group": "React",
+                "pages": ["core/react/overview", "core/react/configuration", "core/react/methods", "core/react/types"]
+              },
+              {
+                "group": "Custom UI",
+                "tag": "NEW",
                 "pages": [
-                  "core/supereditor/overview",
-                  "core/supereditor/configuration",
-                  "core/supereditor/methods",
-                  "core/supereditor/events"
+                  "bring-your-own-ui/overview",
+                  "bring-your-own-ui/react-setup",
+                  {
+                    "group": "Toolbar and commands",
+                    "pages": ["bring-your-own-ui/toolbar-and-commands", "bring-your-own-ui/custom-commands"]
+                  },
+                  "bring-your-own-ui/comments",
+                  "bring-your-own-ui/track-changes",
+                  "bring-your-own-ui/selection-and-viewport",
+                  "bring-your-own-ui/document-control",
+                  "bring-your-own-ui/api-reference"
                 ]
               },
               {
-                "group": "React",
-                "pages": ["core/react/overview", "core/react/configuration", "core/react/methods", "core/react/types"]
+                "group": "Built-in UI",
+                "pages": [
+                  "modules/overview",
+                  "modules/comments",
+                  "modules/track-changes",
+                  {
+                    "group": "Toolbar",
+                    "pages": ["modules/toolbar/overview", "modules/toolbar/built-in", "modules/toolbar/examples"]
+                  },
+                  "modules/links",
+                  "modules/context-menu",
+                  "modules/pdf",
+                  "modules/whiteboard"
+                ]
+              },
+              {
+                "group": "Collaboration",
+                "pages": [
+                  "modules/collaboration/overview",
+                  "modules/collaboration/quickstart",
+                  "modules/collaboration/upgrade-to-collaboration",
+                  "modules/collaboration/configuration",
+                  {
+                    "group": "Guides",
+                    "pages": [
+                      "guides/collaboration/liveblocks",
+                      "guides/collaboration/superdoc-yjs",
+                      "guides/collaboration/hocuspocus"
+                    ]
+                  }
+                ]
               }
             ]
           },
@@ -141,54 +182,6 @@
             ]
           },
           {
-            "group": "Modules",
-            "pages": [
-              "modules/overview",
-              {
-                "group": "Collaboration",
-                "pages": [
-                  "modules/collaboration/overview",
-                  "modules/collaboration/quickstart",
-                  "modules/collaboration/upgrade-to-collaboration",
-                  "modules/collaboration/configuration"
-                ]
-              },
-              "modules/comments",
-              "modules/track-changes",
-              {
-                "group": "Toolbar",
-                "tag": "NEW",
-                "pages": [
-                  "modules/toolbar/overview",
-                  "modules/toolbar/built-in",
-                  "modules/toolbar/headless",
-                  "modules/toolbar/examples"
-                ]
-              },
-              "modules/links",
-              "modules/context-menu",
-              "modules/pdf",
-              "modules/whiteboard"
-            ]
-          },
-          {
-            "group": "Bring Your Own UI",
-            "tag": "NEW",
-            "pages": [
-              "bring-your-own-ui/overview",
-              "bring-your-own-ui/react-setup",
-              {
-                "group": "Toolbar and commands",
-                "pages": ["bring-your-own-ui/toolbar-and-commands", "bring-your-own-ui/custom-commands"]
-              },
-              "bring-your-own-ui/comments",
-              "bring-your-own-ui/track-changes",
-              "bring-your-own-ui/selection-and-viewport",
-              "bring-your-own-ui/document-control",
-              "bring-your-own-ui/api-reference"
-            ]
-          },
-          {
             "group": "Solutions",
             "pages": [
               "solutions/overview",
@@ -224,14 +217,6 @@
                 "pages": ["guides/general/proofing", "guides/general/custom-proofing-provider"]
               },
               {
-                "group": "Collaboration",
-                "pages": [
-                  "guides/collaboration/liveblocks",
-                  "guides/collaboration/superdoc-yjs",
-                  "guides/collaboration/hocuspocus"
-                ]
-              },
-              {
                 "group": "Migration",
                 "pages": [
                   "guides/migration/document-api",
@@ -241,6 +226,22 @@
                   "guides/migration/css-variables"
                 ]
               }
+            ]
+          },
+          {
+            "group": "Advanced",
+            "pages": [
+              {
+                "group": "SuperEditor",
+                "pages": [
+                  "core/supereditor/overview",
+                  "core/supereditor/configuration",
+                  "core/supereditor/methods",
+                  "core/supereditor/events"
+                ]
+              },
+              "modules/toolbar/headless",
+              "extensions/creating-extensions"
             ]
           },
           {

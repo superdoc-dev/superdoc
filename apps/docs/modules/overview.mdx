@@ -1,10 +1,12 @@
 ---
-title: Modules
+title: Built-in UI
 sidebarTitle: Overview
-keywords: "superdoc modules, editor modules, document features, modular architecture, plugin system"
+keywords: "superdoc built-in ui, modules, editor modules, document features, plugin system"
 ---
 
-Modules are opt-in features configured through the SuperDoc `modules` option. Enable only what you need.
+SuperDoc ships ready-made UI for the toolbar, comments panel, tracked-change review, and a few other surfaces. Configure it through the `modules` option — enable only what you need, swap any piece for your own component when you want to.
+
+For new React apps that want full control over the UI, [Custom UI](/bring-your-own-ui/overview) is the recommended path. Built-in UI stays supported for apps that prefer SuperDoc's components as-is.
 
 ```javascript
 const superdoc = new SuperDoc({
@@ -20,12 +22,9 @@ const superdoc = new SuperDoc({
 });
 ```
 
-## Available modules
+## Available built-in UI
 
 <CardGroup cols={2}>
-  <Card title="Collaboration" icon="users" href="/modules/collaboration/overview">
-    Real-time multi-user editing with Yjs
-  </Card>
   <Card title="Comments" icon="message-square" href="/modules/comments">
     Threaded discussions and annotations
   </Card>
@@ -49,17 +48,18 @@ const superdoc = new SuperDoc({
   </Card>
 </CardGroup>
 
-Each module is configured via `modules.<name>` in the [SuperDoc configuration](/core/superdoc/configuration). See individual module pages for all available options.
+Each surface is configured via `modules.<name>` in the [SuperDoc configuration](/core/superdoc/configuration). See individual pages for all available options.
 
-## Related features
-
-These features are configured at the top level rather than through `modules`, but are commonly used alongside modules.
+## Related
 
 <CardGroup cols={3}>
+  <Card title="Custom UI" icon="layout-dashboard" href="/bring-your-own-ui/overview">
+    Build your own toolbar, comments sidebar, and review panel with typed React hooks
+  </Card>
+  <Card title="Collaboration" icon="users" href="/modules/collaboration/overview">
+    Real-time multi-user editing with Yjs (separate top-level section)
+  </Card>
   <Card title="Proofing" icon="check-check" href="/guides/general/proofing">
     Provider-based spell check on the layout-engine editor surface
-  </Card>
-  <Card title="AI Agents" icon="sparkles" href="/getting-started/ai-agents">
-    Headless mode for server-side document processing and LLM workflows
   </Card>
 </CardGroup>

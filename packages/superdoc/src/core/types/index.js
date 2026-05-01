@@ -530,7 +530,15 @@
  * @property {boolean} [pdf.textLayer] Enable text layer rendering (default: false)
  * @property {number} [pdf.outputScale] Canvas render scale (quality)
  * @property {CollaborationConfig} [collaboration] Collaboration module configuration
- * @property {Object} [toolbar] Toolbar module configuration
+ * @property {Object} [toolbar] Toolbar module configuration. Each field has a top-level `Config.toolbar*` alias kept for backwards compatibility; the `modules.toolbar.*` form is preferred for new code.
+ * @property {string | HTMLElement} [toolbar.selector] DOM element (or selector) to render the toolbar into. Falls back to `Config.toolbar` if omitted.
+ * @property {string[]} [toolbar.excludeItems] Toolbar item ids to hide from the default set.
+ * @property {string[]} [toolbar.groups] Ordered list of toolbar group ids (e.g. `['edit', 'format', 'insert']`). Falls back to `Config.toolbarGroups`.
+ * @property {Record<string, unknown>} [toolbar.icons] Icon overrides keyed by toolbar item id. Falls back to `Config.toolbarIcons`.
+ * @property {Record<string, string>} [toolbar.texts] Text/label overrides keyed by toolbar item id. Falls back to `Config.toolbarTexts`.
+ * @property {Array<{ name: string, value: string }>} [toolbar.fonts] Custom font list rendered in the font-family dropdown.
+ * @property {boolean} [toolbar.hideButtons] Hide buttons that overflow the available width (default: true).
+ * @property {boolean} [toolbar.responsiveToContainer] Recompute the visible toolbar item set on container resize (default: false).
  * @property {Object} [links] Link click popover configuration
  * @property {LinkPopoverResolver} [links.popoverResolver] Custom resolver for the link click popover.
  * @property {ContextMenuConfig} [contextMenu] Context menu module configuration

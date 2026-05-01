@@ -46,20 +46,33 @@ export type FieldSnapshot = {
 export function snapshotFromXml(elements: unknown[]): FieldSnapshot[] {
   const { processedNodes } = preProcessNodesForFldChar(elements as never[], {});
   const nodeListHandler = defaultNodeListHandler();
-  // The destructured nodeListHandler param shape inferred from the V2
-  // importer's nodeListHandlerFn does not include `nodeListHandler`
-  // itself, but downstream importers (passthroughNodeImporter,
-  // paragraphNodeImporter) DO read params.nodeListHandler to recurse.
-  // The .js test fixtures pass it without complaint; this .ts harness
-  // needs an explicit cast to satisfy strict TS checks for the same
-  // pattern.
+  // The dispatcher (createNodeListHandler in docxImporter.js) injects
+  // `nodeListHandler` into every individual handler's params before
+  // calling them, so passthroughNodeImporter / paragraphNodeImporter
+  // receive it when they need to recurse. The top-level entry call
+  // into nodeListHandlerFn itself does not need to thread it.
+  //
+  // The destructured param shape inferred from nodeListHandlerFn marks
+  // every non-defaulted field as required, so we pass `undefined`
+  // explicitly for fields the harness never supplies (numbering,
+  // editor, lists, etc.). The handler never reads them; the harness
+  // only exercises field-code import paths, which depend on
+  // `nodes` + `docx` + `converter`.
   const result = nodeListHandler.handler({
     nodes: processedNodes,
     docx: {},
-    nodeListHandler,
     converter: {},
+    insideTrackChange: undefined,
+    numbering: undefined,
+    translatedNumbering: undefined,
+    translatedLinkedStyles: undefined,
+    editor: undefined,
+    filename: undefined,
+    parentStyleId: undefined,
+    lists: undefined,
+    inlineDocumentFonts: undefined,
     path: [],
-  } as unknown as Parameters<typeof nodeListHandler.handler>[0]);
+  });
 
   const registry = new Map<string, FieldInstance>();
   collectFieldInstances(result, registry);

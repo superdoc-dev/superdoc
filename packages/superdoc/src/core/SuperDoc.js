@@ -813,7 +813,13 @@ export class SuperDoc extends EventEmitter {
     const TIMEOUT_MS = 10_000;
 
     // PresentationEditor wraps Editor; get the underlying editor for event listening.
-    const editor = editorInstance.editor ?? editorInstance;
+    // PresentationEditor exposes a `get editor(): Editor` accessor; plain
+    // Editor has no such property, so the runtime `??` fallback returns
+    // the instance itself in that case. The cast names the structural
+    // `.editor` lookup without claiming the field exists on the Editor
+    // arm of the union, so the access type-checks once SuperDoc.js is
+    // brought under the SD-2863 checkJs gate.
+    const editor = /** @type {Editor} */ (/** @type {{ editor?: Editor }} */ (editorInstance).editor ?? editorInstance);
 
     // If collaborationReady already fired (options flag set by collaboration extension)
     if (editor.options?.collaborationIsReady) {

@@ -233,22 +233,6 @@
             ]
           },
           {
-            "group": "Advanced",
-            "pages": [
-              {
-                "group": "SuperEditor",
-                "pages": [
-                  "advanced/supereditor/overview",
-                  "advanced/supereditor/configuration",
-                  "advanced/supereditor/methods",
-                  "advanced/supereditor/events"
-                ]
-              },
-              "advanced/headless-toolbar",
-              "advanced/headless-toolbar-examples"
-            ]
-          },
-          {
             "group": "Resources",
             "pages": [
               "guides/general/accessibility",

@@ -1,5 +1,6 @@
 import { createProvider } from '../collaboration/collaboration';
 import useComment from '../../components/CommentsLayer/use-comment';
+import { comments_module_events } from '@superdoc/common';
 
 import { addYComment, updateYComment, deleteYComment } from './collaboration-comments';
 
@@ -99,8 +100,28 @@ export const initCollaborationComments = (superdoc) => {
 
     if (currentUser.name === user.name && currentUser.email === user.email) return;
 
+    // Capture existing comment IDs before loading new state
+    const existingIds = new Set(superdoc.commentsStore.commentsList?.map((c) => c.commentId || c.importedId) || []);
+
     // Update conversations
     updateCommentsStore();
+
+    // Emit events for comments added via collaboration
+    // This allows consumers to react to remotely-added comments (e.g., scroll to them)
+    const newComments = superdoc.commentsStore.commentsList?.filter((c) => {
+      const id = c.commentId || c.importedId;
+      return id && !existingIds.has(id);
+    });
+
+    if (newComments?.length && superdoc.emit) {
+      newComments.forEach((comment) => {
+        const commentValues = typeof comment.getValues === 'function' ? comment.getValues() : comment;
+        superdoc.emit('comments-update', {
+          type: comments_module_events.ADD,
+          comment: commentValues,
+        });
+      });
+    }
   });
 };
 

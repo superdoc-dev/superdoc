@@ -351,6 +351,60 @@ describe('collaboration helpers', () => {
     expect(superdoc.provider.on).not.toHaveBeenCalled();
   });
 
+  it('initCollaborationComments emits comments-update for new comments added via collaboration', () => {
+    // Mock useComment to return an object with getValues
+    useCommentMock.mockImplementation((comment) => ({
+      commentId: comment.commentId,
+      normalized: comment.commentId,
+      getValues: () => ({ commentId: comment.commentId, text: comment.text }),
+    }));
+
+    // Start with one existing comment
+    commentsArray.items = [new MockYMap(Object.entries({ commentId: 'existing-1', text: 'Existing' }))];
+    initCollaborationComments(superdoc);
+
+    // Verify existing comment loaded
+    expect(superdoc.commentsStore.commentsList).toHaveLength(1);
+    expect(superdoc.emit).not.toHaveBeenCalled();
+
+    // Simulate remote user adding a new comment
+    commentsArray.items = [
+      new MockYMap(Object.entries({ commentId: 'existing-1', text: 'Existing' })),
+      new MockYMap(Object.entries({ commentId: 'new-from-agent', text: 'Agent comment' })),
+    ];
+
+    const event = {
+      transaction: { origin: { user: { name: 'Agent', email: 'agent@example.com' } } },
+    };
+    commentsArray.emit(event);
+
+    // Should emit comments-update for the new comment
+    expect(superdoc.emit).toHaveBeenCalledWith('comments-update', {
+      type: 'add',
+      comment: expect.objectContaining({ commentId: 'new-from-agent' }),
+    });
+  });
+
+  it('initCollaborationComments does not emit for comments that already exist', () => {
+    useCommentMock.mockImplementation((comment) => ({
+      commentId: comment.commentId,
+      normalized: comment.commentId,
+      getValues: () => ({ commentId: comment.commentId, text: comment.text }),
+    }));
+
+    commentsArray.items = [new MockYMap(Object.entries({ commentId: 'c1', text: 'Comment 1' }))];
+    initCollaborationComments(superdoc);
+
+    // Simulate update event that doesn't add new comments
+    const event = {
+      transaction: { origin: { user: { name: 'Other', email: 'other@example.com' } } },
+    };
+    commentsArray.emit(event);
+
+    // Should not emit since no new comments were added
+    expect(superdoc.emit).not.toHaveBeenCalled();
+  });
+
   it('initSuperdocYdoc delegates to createProvider with derived document id', () => {
     const mockProvider = { provider: 'p', ydoc: 'y' };
     const spy = vi.spyOn(collaborationModule, 'createProvider').mockReturnValue(mockProvider);

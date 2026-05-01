@@ -6,12 +6,6 @@ keywords: 'bring your own ui, byo ui, custom toolbar, custom comments, custom re
 
 SuperDoc ships built-in UI for the toolbar, comments panel, and tracked-change review. When you need your own design system, your own layout, or your own workflow, `superdoc/ui` gives you the state and actions to drive it.
 
-import { BringYourOwnUIDemo } from '/snippets/components/byo-ui-demo.jsx'
-
-<BringYourOwnUIDemo variant="overview" />
-
-The toolbar, the Activity sidebar, and the comment composer above are not SuperDoc's built-in UI. They're plain React components subscribing to `superdoc/ui` observables. The embed wires the controller directly with `createSuperDocUI({ superdoc })` because Mintlify components live outside your bundler. In your React app, [`superdoc/ui/react`](#what-it-looks-like) gives you the typed hooks (`useSuperDocCommand`, `useSuperDocComments`, `useSuperDocTrackChanges`) that do the same wiring with one line each.
-
 ## The layer model
 
 Three layers, each with one job:

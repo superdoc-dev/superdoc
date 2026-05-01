@@ -114,10 +114,7 @@
                   "editor/built-in-ui/overview",
                   "editor/built-in-ui/comments",
                   "editor/built-in-ui/track-changes",
-                  {
-                    "group": "Toolbar",
-                    "pages": ["editor/built-in-ui/toolbar/overview", "editor/built-in-ui/toolbar/built-in"]
-                  },
+                  "editor/built-in-ui/toolbar",
                   "editor/built-in-ui/links",
                   "editor/built-in-ui/context-menu",
                   "editor/built-in-ui/pdf",
@@ -246,8 +243,7 @@
                 ]
               },
               "advanced/headless-toolbar",
-              "advanced/headless-toolbar-examples",
-              "advanced/custom-extensions"
+              "advanced/headless-toolbar-examples"
             ]
           },
           {
@@ -370,11 +366,23 @@
     },
     {
       "source": "/modules/toolbar",
-      "destination": "/editor/built-in-ui/toolbar/overview"
+      "destination": "/editor/built-in-ui/toolbar"
     },
     {
-      "source": "/modules/toolbar/:path*",
-      "destination": "/editor/built-in-ui/toolbar/:path*"
+      "source": "/modules/toolbar/built-in",
+      "destination": "/editor/built-in-ui/toolbar"
+    },
+    {
+      "source": "/modules/toolbar/overview",
+      "destination": "/editor/built-in-ui/toolbar"
+    },
+    {
+      "source": "/editor/built-in-ui/toolbar/built-in",
+      "destination": "/editor/built-in-ui/toolbar"
+    },
+    {
+      "source": "/editor/built-in-ui/toolbar/overview",
+      "destination": "/editor/built-in-ui/toolbar"
     },
     {
       "source": "/modules",

@@ -425,6 +425,30 @@ const scenarios = [
     files: ['src/internal-fields-stripped.ts'],
     mustPass: true,
   },
+  // SD-2867 phase B: SuperDoc.canPerformPermission forwards `comment` and
+  // `trackedChange` to isAllowed() unchanged, so the public contract must
+  // accept the wide payloads the editor's permission helper produces
+  // (tracked-change `type`, `attrs`, `from`, `to`, `segments`, etc.). The
+  // fixture pins this so a future PR cannot re-narrow the typedef into a
+  // closed shape that rejects valid runtime payloads.
+  {
+    name: 'bundler / canPerformPermission wide payloads (SD-2867)',
+    module: 'ESNext',
+    moduleResolution: 'bundler',
+    skipLibCheck: true,
+    strict: true,
+    files: ['src/can-perform-permission-payload.ts'],
+    mustPass: true,
+  },
+  {
+    name: 'node16 / canPerformPermission wide payloads (SD-2867)',
+    module: 'Node16',
+    moduleResolution: 'node16',
+    skipLibCheck: true,
+    strict: true,
+    files: ['src/can-perform-permission-payload.ts'],
+    mustPass: true,
+  },
 ];
 
 const tscPath = join(__dirname, 'node_modules', '.bin', 'tsc');

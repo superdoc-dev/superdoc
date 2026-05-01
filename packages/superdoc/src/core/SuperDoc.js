@@ -960,7 +960,7 @@ export class SuperDoc extends EventEmitter {
 
   /**
    * Add a user to the shared users list
-   * @param {Object} user The user to add
+   * @param {User} user The user to add
    * @returns {void}
    */
   addSharedUser(user) {
@@ -979,9 +979,7 @@ export class SuperDoc extends EventEmitter {
 
   /**
    * Triggered when there is an error in the content
-   * @param {Object} param0
-   * @param {Error} param0.error The error that occurred
-   * @param {Editor} param0.editor The editor that caused the error
+   * @param {{ error: Error, editor: Editor }} params
    */
   onContentError({ error, editor }) {
     const { documentId } = editor.options;
@@ -1078,12 +1076,19 @@ export class SuperDoc extends EventEmitter {
    * Used by downstream consumers (toolbar, context menu, commands) to keep
    * tracked-change affordances consistent with customer overrides.
    *
-   * @param {Object} params
-   * @param {string} params.permission Permission key to evaluate
-   * @param {string} [params.role=this.config.role] Role to evaluate against
-   * @param {boolean} [params.isInternal=this.config.isInternal] Internal/external flag
-   * @param {Object|null} [params.comment] Comment object (if already resolved)
-   * @param {Object|null} [params.trackedChange] Tracked change metadata (id, attrs, etc.)
+   * `comment` and `trackedChange` carry an open index signature because
+   * the function forwards the full payload to `isAllowed()`; tracked-change
+   * payloads from the editor include `type`, `attrs`, `from`, `to`,
+   * `segments`, and the comment objects passed by consumers vary in shape.
+   * The named fields below are the ones this method reads directly.
+   *
+   * @param {{
+   *   permission?: string,
+   *   role?: string,
+   *   isInternal?: boolean,
+   *   comment?: (object & Record<string, unknown>) | null,
+   *   trackedChange?: ({ id?: string, commentId?: string, comment?: unknown } & Record<string, unknown>) | null,
+   * }} [params]
    * @returns {boolean}
    */
   canPerformPermission({
@@ -1436,7 +1441,7 @@ export class SuperDoc extends EventEmitter {
 
   /**
    * Go to the next search result
-   * @param {Object} match The match object
+   * @param {Object} match The match object (returned as-is by `superdoc.search()`; pass it through unchanged). Stays loose here because the upstream `commands.goToSearchResult` expects a private `SearchMatch` shape that is not yet on the public surface; tightening this is a separate follow-up.
    * @returns {void}
    */
   goToSearchResult(match) {

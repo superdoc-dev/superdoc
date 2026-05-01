@@ -159,7 +159,6 @@
           },
           {
             "group": "Document Engine",
-            "tag": "NEW",
             "pages": [
               "document-engine/overview",
               {

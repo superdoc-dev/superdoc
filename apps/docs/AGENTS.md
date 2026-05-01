@@ -171,6 +171,27 @@ const superdoc = new SuperDoc({
 
 **When NOT to use CodeGroup:** Snippets that are already complete (have imports + initialization), config-only blocks, bash commands, XML/HTML examples.
 
+## Icons
+
+`docs.json` sets `"icons": { "library": "lucide" }`. Mintlify resolves every `icon="..."` value (in `<Card>`, `<CardGroup>`, `<Icon>`, etc.) against **Lucide only** — there is no per-icon library override. Names from Font Awesome, Material Design, Tabler, or brand icon sets silently render as a blank box.
+
+**Rule of thumb:** before adding an icon, check the name exists at https://lucide.dev/icons/. If it doesn't, pick a Lucide alternative or use a custom SVG path.
+
+Common name traps when migrating from Font Awesome:
+
+| Don't use (FA only) | Use this (Lucide) |
+|---|---|
+| `gear` | `cog` or `settings` |
+| `crosshairs` | `crosshair` (singular) |
+| `compass-drafting` | `compass` |
+| `screwdriver-wrench` | `wrench` |
+| `arrow-up-right-from-square` | `external-link` or `square-arrow-out-up-right` |
+| `arrow-right-arrow-left` | `arrow-left-right` |
+| `file-export` | `file-output` or `download` |
+| `react`, `vuejs`, `js`, `microsoft`, `google` | No Lucide brand icons — pick a generic (`code`, `book`, `file-text`) or use an SVG path |
+
+For brand/language icons (React, Vue.js, Microsoft, etc.), Lucide doesn't ship them. Either use a generic Lucide icon that fits the context, or supply an SVG via `icon="/path/to/icon.svg"` or an external URL.
+
 ## Testing
 
 Code examples are tested automatically via pre-commit hooks and CI. Two checks run when `.mdx` files change:

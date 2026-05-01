@@ -1087,11 +1087,6 @@ export interface SuperDocLayoutEngineOptions {
    */
   flowMode?: 'paginated' | 'semantic';
   /**
-   * Internal-only semantic mode tuning options. This shape is intentionally
-   * not a stable public API in v1.
-   */
-  semanticOptions?: object;
-  /**
    * Deprecated. Use `modules.trackChanges` instead. Optional override for
    * paginated track-changes rendering (e.g., `{ mode: 'original' }` or
    * `{ enabled: false }`).
@@ -1313,12 +1308,39 @@ export interface Config {
    * back, warn, or block printing on unsupported faces.
    */
   onFontsResolved?: (payload: FontsResolvedPayload) => void;
+}
+
+/**
+ * Internal augmentation of `Config` for runtime-only fields that must not
+ * appear on the published consumer surface. The `Config` interface above is
+ * the public contract; this type adds the fields SuperDoc sets/reads
+ * internally so the implementation can be type-checked without leaking the
+ * fields into customer IDE autocomplete.
+ *
+ * Use this from internal SuperDoc.js callsites that need the augmented shape
+ * (e.g. `/** @type {InternalConfig} *\/ (this.config).socket = ...`).
+ */
+export interface InternalConfig extends Config {
   /**
-   * Internal: the shared websocket instance created by SuperDoc when
+   * The shared websocket instance created by SuperDoc when
    * `modules.collaboration.providerType === 'hocuspocus'`. Set automatically;
-   * do not pass from outside.
+   * not part of the public Config surface.
    */
   socket?: HocuspocusProviderWebsocket;
+}
+
+/**
+ * Internal augmentation of `SuperDocLayoutEngineOptions` for unstable tuning
+ * fields. The public `SuperDocLayoutEngineOptions` interface above is the
+ * customer-facing contract; this type adds fields the implementation may
+ * read but that are intentionally not part of the v1 stable API.
+ */
+export interface InternalSuperDocLayoutEngineOptions extends SuperDocLayoutEngineOptions {
+  /**
+   * Internal-only semantic mode tuning options. Shape may change without
+   * notice; not part of the public surface.
+   */
+  semanticOptions?: object;
 }
 
 export type ProofingStatus = 'idle' | 'checking' | 'disabled' | 'degraded';

@@ -402,6 +402,29 @@ const scenarios = [
     files: ['src/modules-config-passthrough.ts'],
     mustPass: true,
   },
+  // SD-2886: internal-only fields on Config / SuperDocLayoutEngineOptions
+  // must not appear on the published surface. They are hidden via
+  // `Omit<...>` re-exports in `packages/superdoc/src/index.js`. The fixture
+  // relies on `@ts-expect-error` markers that stop erroring (TS2578) if a
+  // future change leaks an internal field back onto the public surface.
+  {
+    name: 'bundler / internal fields stripped (SD-2886)',
+    module: 'ESNext',
+    moduleResolution: 'bundler',
+    skipLibCheck: true,
+    strict: true,
+    files: ['src/internal-fields-stripped.ts'],
+    mustPass: true,
+  },
+  {
+    name: 'node16 / internal fields stripped (SD-2886)',
+    module: 'Node16',
+    moduleResolution: 'node16',
+    skipLibCheck: true,
+    strict: true,
+    files: ['src/internal-fields-stripped.ts'],
+    mustPass: true,
+  },
 ];
 
 const tscPath = join(__dirname, 'node_modules', '.bin', 'tsc');

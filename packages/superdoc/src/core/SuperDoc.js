@@ -57,17 +57,17 @@ const DEFAULT_AWARENESS_PALETTE = Object.freeze([
   '#F39C12',
 ]);
 
-/** @typedef {import('./types').User} User */
-/** @typedef {import('./types').Document} Document */
-/** @typedef {import('./types').Modules} Modules */
-/** @typedef {import('./types').Editor} Editor */
-/** @typedef {import('./types').DocumentMode} DocumentMode */
-/** @typedef {import('./types').Config} Config */
-/** @typedef {import('./types').ExportParams} ExportParams */
-/** @typedef {import('./types').UpgradeToCollaborationOptions} UpgradeToCollaborationOptions */
-/** @typedef {import('./types').SurfaceRequest} SurfaceRequest */
-/** @typedef {import('./types').SurfaceHandle} SurfaceHandle */
-/** @typedef {import('./types').NavigableAddress} NavigableAddress */
+/** @typedef {import('./types/index.js').User} User */
+/** @typedef {import('./types/index.js').Document} Document */
+/** @typedef {import('./types/index.js').Modules} Modules */
+/** @typedef {import('./types/index.js').Editor} Editor */
+/** @typedef {import('./types/index.js').DocumentMode} DocumentMode */
+/** @typedef {import('./types/index.js').Config} Config */
+/** @typedef {import('./types/index.js').ExportParams} ExportParams */
+/** @typedef {import('./types/index.js').UpgradeToCollaborationOptions} UpgradeToCollaborationOptions */
+/** @typedef {import('./types/index.js').SurfaceRequest} SurfaceRequest */
+/** @typedef {import('./types/index.js').SurfaceHandle} SurfaceHandle */
+/** @typedef {import('./types/index.js').NavigableAddress} NavigableAddress */
 
 /**
  * SuperDoc class
@@ -585,7 +585,7 @@ export class SuperDoc extends EventEmitter {
    * or explicitly after this call during construction.
    *
    * @param {import('yjs').Doc} ydoc
-   * @param {import('./types').CollaborationProvider} provider
+   * @param {import('./types/index.js').CollaborationProvider} provider
    */
   #attachExternalCollaboration(ydoc, provider) {
     this.isCollaborative = true;
@@ -750,7 +750,7 @@ export class SuperDoc extends EventEmitter {
    * underlying ref objects.
    *
    * @param {import('yjs').Doc | null} ydoc
-   * @param {import('./types').CollaborationProvider | null} provider
+   * @param {import('./types/index.js').CollaborationProvider | null} provider
    */
   #setStoreDocumentCollaboration(ydoc, provider) {
     const storeDocs = this.superdocStore?.documents;
@@ -862,7 +862,7 @@ export class SuperDoc extends EventEmitter {
    * provider that exposes on/off but never emits sync cannot hang forever.
    * destroy() can abort this wait early via #abortUpgrade.
    *
-   * @param {import('./types').CollaborationProvider} provider
+   * @param {import('./types/index.js').CollaborationProvider} provider
    * @returns {Promise<void>}
    */
   #waitForProviderSync(provider) {

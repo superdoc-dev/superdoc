@@ -197,8 +197,11 @@ Aggregate toolbar surface. Mirrors the headless-toolbar shape.
 ```ts
 ui.toolbar.getSnapshot();
 ui.toolbar.subscribe(({ snapshot }) => {});
-ui.toolbar.execute(id, payload?);
+ui.toolbar.execute(id);                  // built-ins that take no payload
+ui.toolbar.execute(id, payload);         // built-ins that take a payload
 ```
+
+`payload` is optional. Pass it for built-ins like `font-size`, `font-family`, and `link` that accept a value; omit it for togglable built-ins like `bold` or `italic`.
 
 ### `ui.select(selector, equality?)`
 

@@ -74,7 +74,7 @@ const { items, total, activeId } = useSuperDocTrackChanges();
 Returns the document slice. See [Document control](/build-your-own-ui/document-control).
 
 ```ts
-const { ready, mode } = useSuperDocDocument();
+const { ready, mode, dirty } = useSuperDocDocument();
 ```
 
 ### `useSuperDocToolbar()`
@@ -120,7 +120,7 @@ ui.commands.bold.observe(({ active, disabled }) => { ... });
 
 const reg = ui.commands.register({         // custom command
   id: 'company.insertClause',
-  execute: ({ payload, superdoc }) => true,
+  execute: ({ payload, superdoc, editor }) => true,
   getState: ({ state }) => ({ disabled: state.selection.empty }),
 });
 reg.invalidate();
@@ -136,6 +136,7 @@ ui.comments.getSnapshot();                   // sync read
 ui.comments.subscribe(({ snapshot }) => {});
 ui.comments.createFromSelection({ text });
 ui.comments.createFromCapture(capture, { text });
+ui.comments.reply(parentCommentId, { text });
 ui.comments.resolve(commentId);
 ui.comments.reopen(commentId);
 ui.comments.delete(commentId);
@@ -163,7 +164,7 @@ ui.trackChanges.scrollTo(changeId);
 Mode, export, replace.
 
 ```ts
-ui.document.getSnapshot();                   // { ready, mode }
+ui.document.getSnapshot();                   // { ready, mode, dirty }
 ui.document.subscribe(({ snapshot }) => {});
 ui.document.setMode('suggesting');
 await ui.document.export({ exportType: ['docx'], commentsType: 'external', triggerDownload: true });

@@ -118,22 +118,15 @@ ui.commands.register<{ clauseId: string }>({
   getState: ({ state }) => ({
     disabled: !state.ready || state.selection.target === null,
   }),
-  execute: ({ payload, superdoc }) => {
-    if (!payload) return false;
+  execute: ({ payload, editor }) => {
+    if (!payload || !editor) return false;
     const clause = clauseLibrary.find((c) => c.id === payload.clauseId);
     if (!clause) return false;
 
     const selectionTarget = ui.selection.getSnapshot().selectionTarget;
     if (!selectionTarget) return false;
 
-    const host = superdoc as {
-      activeEditor?: {
-        doc?: {
-          insert(input: { value: string; type: 'text'; target: typeof selectionTarget }): { success: boolean };
-        };
-      };
-    };
-    const receipt = host.activeEditor?.doc?.insert({
+    const receipt = editor.doc?.insert?.({
       value: clause.body,
       type: 'text',
       target: selectionTarget,
@@ -146,7 +139,7 @@ ui.commands.register<{ clauseId: string }>({
 Two things make the snippet safe to copy:
 
 - The positional target comes from `ui.selection.getSnapshot().selectionTarget` (a public `SelectionTarget` shape that `editor.doc.insert` accepts). Don't pass `selection.current().target` — that's a `TextTarget`, the wrong shape for `insert`.
-- The structural cast on `superdoc` declares only the one call you're about to make. Keep it narrow: `{ activeEditor?: { doc?: { insert(...) } } }`, not a wholesale `as SuperDoc` lift. A scoped cast stays accurate as the controller surface grows; a broad cast quietly drifts.
+- `editor` is typed and resolved late-bound by the controller. It tracks header / footer / footnote focus the same way every other `ui.*` mutation does, so a custom command run from a header-focused composer hits the right story.
 
 The reference demo's `InsertClauseButton` ships this exact pattern.
 
@@ -181,10 +174,13 @@ ui.commands.get('bold')?.execute();
 ui.commands.register({
   id: 'bold',
   override: true,
-  execute: ({ superdoc }) => {
+  execute: ({ editor }) => {
     track('bold-pressed');
-    const host = superdoc as { activeEditor?: { commands?: { toggleBold?(): boolean } } };
-    return host.activeEditor?.commands?.toggleBold?.() ?? false;
+    // editor.commands holds the underlying tiptap-style chain commands.
+    // The structural editor type doesn't expose them today, so narrow
+    // to just the call you need.
+    const chain = editor as (typeof editor & { commands?: { toggleBold?(): boolean } }) | null;
+    return chain?.commands?.toggleBold?.() ?? false;
   },
 });
 ```

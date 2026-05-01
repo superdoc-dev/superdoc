@@ -159,28 +159,25 @@ const repliesByParent = items.reduce((map, c) => {
 }, new Map<string, typeof items>());
 ```
 
-To post a reply, route through `editor.doc.comments.create({ parentCommentId, text })` via `useSuperDocHost()`. The same `create` operation handles top-level comments and replies, discriminated by whether `parentCommentId` is set.
+To post a reply, call `ui.comments.reply(parentCommentId, { text })`. The reply inherits the parent's anchor, so you don't pass a target. Empty or whitespace-only text returns a `NO_OP` receipt instead of hitting the API.
 
 ```tsx
-import { useSuperDocHost } from 'superdoc/ui/react';
+import { useSuperDocUI } from 'superdoc/ui/react';
 
 function ReplyComposer({ parent }: { parent: { id: string } }) {
-  const host = useSuperDocHost();
+  const ui = useSuperDocUI();
   const [text, setText] = useState('');
 
   const post = () => {
-    if (!host?.activeEditor || !text.trim()) return;
-    host.activeEditor.doc?.comments?.create({
-      parentCommentId: parent.id,
-      text: text.trim(),
-    });
-    setText('');
+    if (!ui || !text.trim()) return;
+    const receipt = ui.comments.reply(parent.id, { text: text.trim() });
+    if (receipt.success) setText('');
   };
 
   return (
     <>
       <textarea value={text} onChange={(e) => setText(e.target.value)} />
-      <button onClick={post} disabled={!host || !text.trim()}>Reply</button>
+      <button onClick={post} disabled={!ui || !text.trim()}>Reply</button>
     </>
   );
 }

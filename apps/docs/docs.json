@@ -281,10 +281,8 @@
         "href": "https://github.com/superdoc-dev/superdoc"
       },
       {
-        "type": "button",
-        "href": "https://discord.com/invite/b9UuaZRyaB",
-        "label": "Discord",
-        "icon": "/public/icons/discord.svg"
+        "type": "discord",
+        "href": "https://discord.com/invite/b9UuaZRyaB"
       }
     ]
   },

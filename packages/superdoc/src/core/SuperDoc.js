@@ -1189,10 +1189,13 @@ export class SuperDoc extends EventEmitter {
     this.toolbar = new SuperToolbar(config);
 
     this.toolbar.on('exception', this.config.onException);
-    // `this.toolbar` is typed `SuperToolbar | null` because `#addToolbar`
-    // sets it to `null` before reassigning. The closure captures the live
-    // reference, so the optional chain only fires if `destroy()` cleared
-    // the toolbar between editorCreate scheduling and emission.
+    // `this.toolbar` infers as `SuperToolbar | null` from the field's
+    // first assignment in `#addToolbar` (the `null` placeholder a few
+    // lines up). The closure registers after the SuperToolbar instance
+    // is in place and reads `this.toolbar` at emission time, so under
+    // normal flow it will see the live instance; the optional chain
+    // is here to satisfy TS's typedef and to no-op if a future
+    // `destroy()` ever clears the field.
     this.once('editorCreate', () => this.toolbar?.updateToolbarState());
   }
 
@@ -1425,10 +1428,13 @@ export class SuperDoc extends EventEmitter {
   }
 
   #setModeViewing() {
-    // `this.toolbar` is typed `SuperToolbar | null` because `#addToolbar`
-    // briefly nulls it before reassigning. By the time mode changes run
-    // through public API the toolbar is constructed; the guard here
-    // keeps the assignment a no-op in any transient null state.
+    // `this.toolbar` infers as `SuperToolbar | null` from the field's
+    // first assignment in `#addToolbar` (the `null` placeholder before
+    // the SuperToolbar is constructed). `#addToolbar` runs once during
+    // init and unconditionally installs the instance, so by the time
+    // mode changes are reachable the toolbar is non-null. The guard
+    // keeps TS satisfied and stays a no-op if a future destroy/teardown
+    // ever clears the field.
     if (this.toolbar) this.toolbar.activeEditor = null;
 
     const commentsVisible = this.config.comments?.visible === true;

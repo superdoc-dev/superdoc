@@ -123,7 +123,10 @@ export const toggleList =
       seenLevels.add(`${Number(np.numId)}:${Number(np.ilvl ?? 0)}`);
     }
 
-    if (allListItems && seenLevels.size > 0) {
+    // Bare-caret toggles target the whole list level (every sibling at the same
+    // (numId, ilvl) is restyled together). A non-empty selection narrows the scope
+    // to exactly the paragraphs the user picked.
+    if (allListItems && seenLevels.size > 0 && selection.empty) {
       const expanded = new Map(paragraphsInSelection.map((p) => [p.pos, p]));
       state.doc.descendants((node, pos) => {
         if (node.type.name !== 'paragraph') return true;
@@ -157,14 +160,16 @@ export const toggleList =
       }
     }
 
-    // Whole-list restyle: when every selected paragraph is already a list (and none match
-    // the requested kind+style as-is), mutate the abstract once per unique (numId, ilvl)
-    // instead of minting a new numId. This covers two cases:
+    // Whole-list restyle: with a bare caret on a list paragraph (and none of the matched
+    // paragraphs already in the requested kind+style), mutate the abstract once per unique
+    // (numId, ilvl) instead of minting a new numId. A non-empty selection falls through to
+    // `create` and scopes the change to the selected paragraphs only.
+    // This covers two bare-caret cases:
     //   - Style swap within the same kind (e.g. disc → square, decimal → upper-roman).
     //   - Kind switch (e.g. bullet → ordered) — the level keeps its numId and ilvl, so a
     //     mixed-kind list (level 0 bullet, level 1 ordered) renders correctly when the
     //     caret moves between levels.
-    if (firstListNode == null && allListItems) {
+    if (firstListNode == null && allListItems && selection.empty) {
       // Default each kind to its canonical style when the caller didn't specify one,
       // so plain `toggleOrderedList()` / `toggleBulletList()` still flips the level.
       const effectiveBulletStyle = listType === 'bulletList' ? (bulletStyle ?? 'disc') : null;

@@ -88,7 +88,9 @@ test.describe('bullet style picker (SD-2526)', () => {
     expect(await getMarkerTextForParagraph(superdoc, 'gamma')).toBe('◦');
   });
 
-  test('AC5: swapping to a different style changes the marker but preserves numId (SD-2527)', async ({ superdoc }) => {
+  test('AC5: swapping to a different style with a bare caret preserves numId (SD-2527)', async ({ superdoc }) => {
+    // SD-2527 takes the whole-list-restyle path with a bare caret on a list paragraph,
+    // mutating the abstract for (numId, ilvl) instead of fragmenting the list.
     await superdoc.type('alpha');
     await superdoc.waitForStable();
     await pickStyle(superdoc, 'disc');
@@ -102,9 +104,8 @@ test.describe('bullet style picker (SD-2526)', () => {
     expect(await getMarkerTextForParagraph(superdoc, 'alpha')).toBe('▪');
     const after = await getParagraphNumberingByText(superdoc, 'alpha');
     expect(after?.numId).not.toBeNull();
-    // SD-2527 mutates the abstract for the (numId, ilvl) pair so the whole list re-renders
-    // with the new style. numId is preserved — fragmenting the list would break continuous
-    // numbering for any sibling at the same level.
+    // The abstract for (numId, ilvl) was mutated, so numId is preserved — fragmenting
+    // the list would break continuous numbering for any sibling at the same level.
     expect(after?.numId).toBe(before?.numId);
   });
 

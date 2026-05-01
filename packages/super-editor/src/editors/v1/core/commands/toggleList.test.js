@@ -479,7 +479,7 @@ describe('toggleList', () => {
     });
 
     it('restyles the whole list level when the existing bullet style differs', () => {
-      // Cursor is in a 'disc' bullet list and the caller asks for 'square'. Instead of
+      // Bare caret in a 'disc' bullet list and the caller asks for 'square'. Instead of
       // fragmenting the list with a fresh numId, we mutate the abstract definition for
       // (numId=3, ilvl=0) so every item at that level re-renders as a square.
       const paragraphs = [
@@ -491,7 +491,7 @@ describe('toggleList', () => {
           1,
         ),
       ];
-      const state = createState(paragraphs);
+      const state = createState(paragraphs, { from: 2, to: 2 });
       const handler = toggleList('bulletList', 'square');
 
       const result = handler({ editor, state, tr, dispatch });
@@ -509,7 +509,7 @@ describe('toggleList', () => {
     });
 
     it('restyles the whole list level when the existing ordered style differs', () => {
-      // Cursor is on a 'decimal' paragraph (1.) and the caller asks for 'upper-roman'.
+      // Bare caret on a 'decimal' paragraph (1.) and the caller asks for 'upper-roman'.
       // The abstract definition for (numId=5, ilvl=0) is rewritten so every sibling at the
       // same level renumbers as roman — Word's whole-list-conversion behavior.
       const paragraphs = [
@@ -521,7 +521,7 @@ describe('toggleList', () => {
           1,
         ),
       ];
-      const state = createState(paragraphs);
+      const state = createState(paragraphs, { from: 2, to: 2 });
       const handler = toggleList('orderedList', null, 'upper-roman');
 
       const result = handler({ editor, state, tr, dispatch });
@@ -539,8 +539,8 @@ describe('toggleList', () => {
     });
 
     it('restyles each unique (numId, ilvl) once even with multiple selected items', () => {
-      // Selection covers three items at two levels. The batch should contain one entry
-      // per unique (numId, ilvl) — not one per paragraph — and a single batched call.
+      // Bare caret in a list with sublevels. The expansion + abstract gate should produce
+      // one entry per unique (numId, ilvl) — not one per paragraph — in a single batch.
       const paragraphs = [
         createParagraph(
           {
@@ -564,7 +564,7 @@ describe('toggleList', () => {
           9,
         ),
       ];
-      const state = createState(paragraphs);
+      const state = createState(paragraphs, { from: 2, to: 2 });
       const handler = toggleList('orderedList', null, 'upper-roman');
 
       const result = handler({ editor, state, tr, dispatch });
@@ -674,6 +674,39 @@ describe('toggleList', () => {
         levels: [{ numId: 5, ilvl: 0, bulletStyle: 'square', orderedStyle: null }],
       });
       expect(updateNumberingProperties).not.toHaveBeenCalled();
+    });
+
+    it('with a non-empty selection, scopes the change to the selected paragraphs only (no abstract mutation)', () => {
+      // A non-empty selection bypasses the whole-list-restyle gate: the abstract is NOT
+      // mutated, and a fresh numId is minted via the create path so only the selected
+      // paragraphs migrate. Siblings outside the selection keep their original numId/style.
+      ListHelpers.getNewListId.mockReturnValue('77');
+      const item1 = createParagraph(
+        {
+          paragraphProperties: { numberingProperties: { numId: 5, ilvl: 0 } },
+          listRendering: { numberingType: 'bullet', markerText: '•' },
+        },
+        1,
+      );
+      const item2 = createParagraph(
+        {
+          paragraphProperties: { numberingProperties: { numId: 5, ilvl: 0 } },
+          listRendering: { numberingType: 'bullet', markerText: '•' },
+        },
+        5,
+      );
+      const state = createState([item1], { from: 2, to: 3, allDocParagraphs: [item1, item2] });
+      const handler = toggleList('bulletList', 'square');
+
+      const result = handler({ editor, state, tr, dispatch });
+
+      expect(result).toBe(true);
+      // Abstract gate did NOT fire — sibling items are not touched.
+      expect(ListHelpers.setListLevelStyles).not.toHaveBeenCalled();
+      // A fresh numId is minted for just the selected paragraph.
+      expect(ListHelpers.generateNewListDefinition).toHaveBeenCalledTimes(1);
+      expect(updateNumberingProperties).toHaveBeenCalledTimes(1);
+      expect(updateNumberingProperties).toHaveBeenCalledWith({ numId: 77, ilvl: 0 }, item1.node, item1.pos, editor, tr);
     });
 
     it('does not mutate when the requested style change has no dispatch', () => {

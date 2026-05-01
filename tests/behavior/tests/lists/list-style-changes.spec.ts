@@ -338,6 +338,9 @@ test.describe('PR-2873 list style changes', () => {
       const nestedBefore = await getListItemSnapshots(superdoc, 'nested');
       expect(nestedBefore[0].numberingType).toBe('bullet');
 
+      // Select "nested" so the kind switch hits the whole-list-restyle path
+      // (SD-2527 gates broad scope on a non-empty selection).
+      await placeCursorIn(superdoc, 'nested');
       await superdoc.executeCommand('toggleOrderedList');
       await superdoc.waitForStable();
 

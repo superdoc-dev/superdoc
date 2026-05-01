@@ -107,14 +107,18 @@ Common ids you'll wire to buttons:
 
 | Group | Ids |
 |---|---|
-| Text | `bold`, `italic`, `underline`, `strike` |
+| Text | `bold`, `italic`, `underline`, `strikethrough` |
+| Inline | `link`, `font-family`, `font-size`, `text-color`, `highlight-color` |
+| Layout | `text-align`, `line-height`, `indent-increase`, `indent-decrease` |
 | Lists | `bullet-list`, `numbered-list` |
+| Style | `linked-style`, `clear-formatting`, `copy-format` |
 | History | `undo`, `redo` |
-| Block | `heading-1`, `heading-2`, `heading-3`, `paragraph` |
-| Inline | `link`, `font-family`, `font-size`, `color`, `highlight` |
-| Layout | `text-align`, `line-height` |
+| Tracked changes | `track-changes-accept-selection`, `track-changes-reject-selection` |
+| View | `ruler`, `zoom`, `document-mode` |
+| Tables | `table-insert`, `table-add-row-before`, `table-add-row-after`, `table-delete-row`, `table-add-column-before`, `table-add-column-after`, `table-delete-column`, `table-merge-cells`, `table-split-cell`, `table-delete` |
+| Insert | `image` |
 
-The full list lives in the [headless toolbar reference](/modules/toolbar/headless#command-reference). Anything you can pass to `createHeadlessToolbar({ commands })` works as a `useSuperDocCommand` id.
+`PublicToolbarItemId` in `superdoc/ui` is the source of truth. Anything you can pass to `createHeadlessToolbar({ commands })` works as a `useSuperDocCommand` id.
 
 ## Aggregate snapshots
 

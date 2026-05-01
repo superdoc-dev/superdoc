@@ -140,7 +140,7 @@ All three return a Document API receipt. The next snapshot from `useSuperDocComm
 ui.comments.scrollTo(commentId);
 ```
 
-Scrolls the editor viewport to the comment's anchor. Story-aware: comments anchored in headers and footers route correctly.
+Scrolls the editor viewport to the comment's anchor. Body-scoped today: the comment-address contract carries no `story` field, so a comment anchored in a header, footer, or note doesn't navigate through this call. For now, scroll those manually via `ui.viewport.scrollIntoView({ target: ... })` once you've resolved the right address yourself.
 
 ## Threads and replies
 

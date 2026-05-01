@@ -12,6 +12,10 @@ vi.mock('@helpers/list-numbering-helpers.js', () => ({
     generateNewListDefinition: vi.fn(),
     getListDefinitionDetails: vi.fn(() => null),
     setListLevelStyles: vi.fn(() => true),
+    cloneListDefinitionWithLevelStyle: vi.fn(({ sourceNumId }) => ({
+      newNumId: 1000 + sourceNumId,
+      newAbstractId: 2000 + sourceNumId,
+    })),
   },
   markerTextToBulletStyle: vi.fn((m) => ({ '•': 'disc', '◦': 'circle', '▪': 'square' })[m] ?? null),
   numberingInfoToOrderedStyle: vi.fn((numberingType, markerText) => {
@@ -478,10 +482,10 @@ describe('toggleList', () => {
       expect(ListHelpers.generateNewListDefinition).not.toHaveBeenCalled();
     });
 
-    it('restyles the whole list level when the existing bullet style differs', () => {
-      // Bare caret in a 'disc' bullet list and the caller asks for 'square'. Instead of
-      // fragmenting the list with a fresh numId, we mutate the abstract definition for
-      // (numId=3, ilvl=0) so every item at that level re-renders as a square.
+    it('clones the abstract and migrates the paragraph when bullet style differs', () => {
+      // Bare caret in a 'disc' bullet list and the caller asks for 'square'. The abstract
+      // is cloned (with the new style applied at lvl0) and the paragraph is migrated to
+      // the new numId via PM-tracked setNodeMarkup so undo can revert the change.
       const paragraphs = [
         createParagraph(
           {
@@ -497,21 +501,31 @@ describe('toggleList', () => {
       const result = handler({ editor, state, tr, dispatch });
 
       expect(result).toBe(true);
-      expect(ListHelpers.generateNewListDefinition).not.toHaveBeenCalled();
-      expect(ListHelpers.setListLevelStyles).toHaveBeenCalledTimes(1);
-      expect(ListHelpers.setListLevelStyles).toHaveBeenCalledWith({
+      expect(ListHelpers.cloneListDefinitionWithLevelStyle).toHaveBeenCalledTimes(1);
+      expect(ListHelpers.cloneListDefinitionWithLevelStyle).toHaveBeenCalledWith({
         editor,
-        levels: [{ numId: 3, ilvl: 0, bulletStyle: 'square', orderedStyle: null }],
+        sourceNumId: 3,
+        ilvl: 0,
+        bulletStyle: 'square',
+        orderedStyle: null,
       });
-      expect(updateNumberingProperties).not.toHaveBeenCalled();
-      expect(tr.setMeta).toHaveBeenCalledWith('preventDispatch', true);
-      expect(dispatch).not.toHaveBeenCalled();
+      // The mock returns newNumId = 1000 + sourceNumId = 1003.
+      expect(updateNumberingProperties).toHaveBeenCalledTimes(1);
+      expect(updateNumberingProperties).toHaveBeenCalledWith(
+        { numId: 1003, ilvl: 0 },
+        paragraphs[0].node,
+        paragraphs[0].pos,
+        editor,
+        tr,
+      );
+      expect(ListHelpers.setListLevelStyles).not.toHaveBeenCalled();
+      expect(ListHelpers.generateNewListDefinition).not.toHaveBeenCalled();
+      expect(tr.setMeta).not.toHaveBeenCalledWith('preventDispatch', true);
     });
 
-    it('restyles the whole list level when the existing ordered style differs', () => {
-      // Bare caret on a 'decimal' paragraph (1.) and the caller asks for 'upper-roman'.
-      // The abstract definition for (numId=5, ilvl=0) is rewritten so every sibling at the
-      // same level renumbers as roman — Word's whole-list-conversion behavior.
+    it('clones the abstract and migrates the paragraph when ordered style differs', () => {
+      // Bare caret on a 'decimal' paragraph and the caller asks for 'upper-roman'. The
+      // cloned abstract carries the new ordered style at the paragraph's existing ilvl.
       const paragraphs = [
         createParagraph(
           {
@@ -527,20 +541,25 @@ describe('toggleList', () => {
       const result = handler({ editor, state, tr, dispatch });
 
       expect(result).toBe(true);
-      expect(ListHelpers.generateNewListDefinition).not.toHaveBeenCalled();
-      expect(ListHelpers.setListLevelStyles).toHaveBeenCalledTimes(1);
-      expect(ListHelpers.setListLevelStyles).toHaveBeenCalledWith({
+      expect(ListHelpers.cloneListDefinitionWithLevelStyle).toHaveBeenCalledWith({
         editor,
-        levels: [{ numId: 5, ilvl: 0, bulletStyle: null, orderedStyle: 'upper-roman' }],
+        sourceNumId: 5,
+        ilvl: 0,
+        bulletStyle: null,
+        orderedStyle: 'upper-roman',
       });
-      expect(updateNumberingProperties).not.toHaveBeenCalled();
-      expect(tr.setMeta).toHaveBeenCalledWith('preventDispatch', true);
-      expect(dispatch).not.toHaveBeenCalled();
+      expect(updateNumberingProperties).toHaveBeenCalledWith(
+        { numId: 1005, ilvl: 0 },
+        paragraphs[0].node,
+        paragraphs[0].pos,
+        editor,
+        tr,
+      );
     });
 
-    it('restyles each unique (numId, ilvl) once even with multiple selected items', () => {
-      // Bare caret in a list with sublevels. The expansion + abstract gate should produce
-      // one entry per unique (numId, ilvl) — not one per paragraph — in a single batch.
+    it('clones once per unique (numId, ilvl) when the list spans multiple levels', () => {
+      // Bare caret in a list with sublevels. Each unique (numId, ilvl) gets its own clone
+      // so the new numIds for level 0 and level 1 are different.
       const paragraphs = [
         createParagraph(
           {
@@ -570,21 +589,30 @@ describe('toggleList', () => {
       const result = handler({ editor, state, tr, dispatch });
 
       expect(result).toBe(true);
-      expect(ListHelpers.generateNewListDefinition).not.toHaveBeenCalled();
-      expect(ListHelpers.setListLevelStyles).toHaveBeenCalledTimes(1);
-      expect(ListHelpers.setListLevelStyles).toHaveBeenCalledWith({
+      expect(ListHelpers.cloneListDefinitionWithLevelStyle).toHaveBeenCalledTimes(2);
+      expect(ListHelpers.cloneListDefinitionWithLevelStyle).toHaveBeenNthCalledWith(1, {
         editor,
-        levels: [
-          { numId: 5, ilvl: 0, bulletStyle: null, orderedStyle: 'upper-roman' },
-          { numId: 5, ilvl: 1, bulletStyle: null, orderedStyle: 'upper-roman' },
-        ],
+        sourceNumId: 5,
+        ilvl: 0,
+        bulletStyle: null,
+        orderedStyle: 'upper-roman',
       });
+      expect(ListHelpers.cloneListDefinitionWithLevelStyle).toHaveBeenNthCalledWith(2, {
+        editor,
+        sourceNumId: 5,
+        ilvl: 1,
+        bulletStyle: null,
+        orderedStyle: 'upper-roman',
+      });
+      // Three paragraphs migrate; both lvl-0 paragraphs share the lvl-0 clone's newNumId.
+      expect(updateNumberingProperties).toHaveBeenCalledTimes(3);
     });
 
     it('switches the whole list kind when caret is in one item (bullet → ordered)', () => {
       // Two-item bullet list (numId=5, ilvl=0). Caret in item 1 only.
-      // Kind switch goes through the abstract-mutation gate: numId is preserved, the
-      // abstract's level 0 flips to ordered/decimal so both items render as numbered.
+      // Kind switch clones the abstract with `orderedStyle: 'decimal'` at lvl 0, then
+      // migrates BOTH siblings (the cursor's paragraph + its expansion-discovered sibling)
+      // to the new numId.
       const item1 = createParagraph(
         {
           paragraphProperties: { numberingProperties: { numId: 5, ilvl: 0 } },
@@ -605,13 +633,31 @@ describe('toggleList', () => {
       const result = handler({ editor, state, tr, dispatch });
 
       expect(result).toBe(true);
-      expect(ListHelpers.generateNewListDefinition).not.toHaveBeenCalled();
-      expect(ListHelpers.setListLevelStyles).toHaveBeenCalledWith({
+      expect(ListHelpers.cloneListDefinitionWithLevelStyle).toHaveBeenCalledWith({
         editor,
-        levels: [{ numId: 5, ilvl: 0, bulletStyle: null, orderedStyle: 'decimal' }],
+        sourceNumId: 5,
+        ilvl: 0,
+        bulletStyle: null,
+        orderedStyle: 'decimal',
       });
-      expect(updateNumberingProperties).not.toHaveBeenCalled();
-      expect(tr.setMeta).toHaveBeenCalledWith('preventDispatch', true);
+      const expectedNumbering = { numId: 1005, ilvl: 0 };
+      expect(updateNumberingProperties).toHaveBeenCalledTimes(2);
+      expect(updateNumberingProperties).toHaveBeenNthCalledWith(
+        1,
+        expectedNumbering,
+        item1.node,
+        item1.pos,
+        editor,
+        tr,
+      );
+      expect(updateNumberingProperties).toHaveBeenNthCalledWith(
+        2,
+        expectedNumbering,
+        item2.node,
+        item2.pos,
+        editor,
+        tr,
+      );
     });
 
     it('switches the whole list kind when caret is in one item (ordered → bullet)', () => {
@@ -635,18 +681,36 @@ describe('toggleList', () => {
       const result = handler({ editor, state, tr, dispatch });
 
       expect(result).toBe(true);
-      expect(ListHelpers.generateNewListDefinition).not.toHaveBeenCalled();
-      expect(ListHelpers.setListLevelStyles).toHaveBeenCalledWith({
+      expect(ListHelpers.cloneListDefinitionWithLevelStyle).toHaveBeenCalledWith({
         editor,
-        levels: [{ numId: 9, ilvl: 0, bulletStyle: 'disc', orderedStyle: null }],
+        sourceNumId: 9,
+        ilvl: 0,
+        bulletStyle: 'disc',
+        orderedStyle: null,
       });
-      expect(updateNumberingProperties).not.toHaveBeenCalled();
-      expect(tr.setMeta).toHaveBeenCalledWith('preventDispatch', true);
+      const expectedNumbering = { numId: 1009, ilvl: 0 };
+      expect(updateNumberingProperties).toHaveBeenCalledTimes(2);
+      expect(updateNumberingProperties).toHaveBeenNthCalledWith(
+        1,
+        expectedNumbering,
+        item1.node,
+        item1.pos,
+        editor,
+        tr,
+      );
+      expect(updateNumberingProperties).toHaveBeenNthCalledWith(
+        2,
+        expectedNumbering,
+        item2.node,
+        item2.pos,
+        editor,
+        tr,
+      );
     });
 
-    it('restyles the whole abstract level when caret is in one item of a multi-item list', () => {
-      // Two disc bullets at the same level. Caret in item 1.
-      // Clicking "square" must update the abstract definition only once for (numId=5, ilvl=0).
+    it('expands across siblings when caret is in one item of a multi-item list', () => {
+      // Two disc bullets at the same level. Caret in item 1; expansion picks up item 2.
+      // One clone is minted for (numId=5, ilvl=0) and BOTH paragraphs migrate to it.
       const item1 = createParagraph(
         {
           paragraphProperties: { numberingProperties: { numId: 5, ilvl: 0 } },
@@ -667,13 +731,8 @@ describe('toggleList', () => {
       const result = handler({ editor, state, tr, dispatch });
 
       expect(result).toBe(true);
-      expect(ListHelpers.generateNewListDefinition).not.toHaveBeenCalled();
-      expect(ListHelpers.setListLevelStyles).toHaveBeenCalledTimes(1);
-      expect(ListHelpers.setListLevelStyles).toHaveBeenCalledWith({
-        editor,
-        levels: [{ numId: 5, ilvl: 0, bulletStyle: 'square', orderedStyle: null }],
-      });
-      expect(updateNumberingProperties).not.toHaveBeenCalled();
+      expect(ListHelpers.cloneListDefinitionWithLevelStyle).toHaveBeenCalledTimes(1);
+      expect(updateNumberingProperties).toHaveBeenCalledTimes(2);
     });
 
     it('with a non-empty selection, scopes the change to the selected paragraphs only (no abstract mutation)', () => {

@@ -505,5 +505,44 @@ export function setLvlStyleOnAbstract(
   return changed;
 }
 
+/**
+ * Deep-clone the abstract a `sourceNumId` points to, apply a style override at the given
+ * level, and register both the cloned abstract and a fresh num definition that points to
+ * it. Returns the new num/abstract IDs (or `null` if the source is missing).
+ *
+ * Used by toggle-list paths that need PM-tracked undo: callers migrate paragraphs from
+ * the source num to the new num via `setNodeMarkup`, so reversing the markup steps
+ * naturally reverts the style change — the source abstract is never touched.
+ */
+export function cloneListDefinitionWithLevelStyle(
+  numbering: NumberingModel,
+  sourceNumId: number,
+  ilvl: number,
+  options: { bulletStyle?: 'disc' | 'circle' | 'square' | null; orderedStyle?: OrderedListStyle | null },
+): { newNumId: number; newAbstractId: number } | null {
+  const sourceNumDef = numbering.definitions[sourceNumId];
+  const sourceAbstractIdRaw = sourceNumDef?.elements?.find((el: any) => el.name === 'w:abstractNumId')?.attributes?.[
+    'w:val'
+  ];
+  const sourceAbstractId = sourceAbstractIdRaw != null ? Number(sourceAbstractIdRaw) : NaN;
+  const sourceAbstract = Number.isFinite(sourceAbstractId) ? numbering.abstracts[sourceAbstractId] : undefined;
+  if (!sourceAbstract) return null;
+
+  const newAbstractId = getNextId(numbering.abstracts);
+  const newAbstractDef = JSON.parse(JSON.stringify(sourceAbstract));
+  newAbstractDef.attributes = {
+    ...(newAbstractDef.attributes || {}),
+    'w:abstractNumId': String(newAbstractId),
+  };
+  numbering.abstracts[newAbstractId] = newAbstractDef;
+
+  setLvlStyleOnAbstract(numbering, newAbstractId, ilvl, options);
+
+  const newNumId = getNextId(numbering.definitions);
+  numbering.definitions[newNumId] = buildNumDef(newNumId, newAbstractId);
+
+  return { newNumId, newAbstractId };
+}
+
 // Re-export ID allocation for external callers that need just IDs
 export { getNextId as getNextNumberingId };

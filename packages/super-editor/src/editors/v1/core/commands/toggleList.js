@@ -160,41 +160,48 @@ export const toggleList =
       }
     }
 
-    // Whole-list restyle: with a bare caret on a list paragraph (and none of the matched
-    // paragraphs already in the requested kind+style), mutate the abstract once per unique
-    // (numId, ilvl) instead of minting a new numId. A non-empty selection falls through to
-    // `create` and scopes the change to the selected paragraphs only.
-    // This covers two bare-caret cases:
-    //   - Style swap within the same kind (e.g. disc → square, decimal → upper-roman).
-    //   - Kind switch (e.g. bullet → ordered) — the level keeps its numId and ilvl, so a
-    //     mixed-kind list (level 0 bullet, level 1 ordered) renders correctly when the
-    //     caret moves between levels.
+    // Whole-list restyle: with a bare caret on a list paragraph (and none already in the
+    // requested kind+style), clone the abstract per unique (numId, ilvl) and migrate every
+    // sibling at that level to the new numId via PM-tracked `setNodeMarkup`. The original
+    // abstract is never mutated, so PM history undo can revert the migration → siblings
+    // return to the source numId → markers go back to the original style.
+    //   - Style swap within the same kind (disc → square, decimal → upper-roman).
+    //   - Kind switch (bullet → ordered) — the new abstract carries the new kind at the
+    //     paragraph's existing ilvl, so the parent level (e.g. level 0 bullet) is preserved.
     if (firstListNode == null && allListItems && selection.empty) {
       // Default each kind to its canonical style when the caller didn't specify one,
       // so plain `toggleOrderedList()` / `toggleBulletList()` still flips the level.
       const effectiveBulletStyle = listType === 'bulletList' ? (bulletStyle ?? 'disc') : null;
       const effectiveOrderedStyle = listType === 'orderedList' ? (orderedStyle ?? 'decimal') : null;
 
-      const levelMap = new Map();
-      for (const { node } of paragraphsInSelection) {
-        const np = getResolvedParagraphProperties(node).numberingProperties;
-        const numId = Number(np.numId);
+      // Group paragraphs by (sourceNumId, ilvl) so each unique level mints exactly one clone.
+      const groups = new Map();
+      for (const p of paragraphsInSelection) {
+        const np = getResolvedParagraphProperties(p.node).numberingProperties;
+        const sourceNumId = Number(np.numId);
         const ilvl = Number(np.ilvl ?? 0);
-        levelMap.set(`${numId}:${ilvl}`, {
-          numId,
-          ilvl,
-          bulletStyle: effectiveBulletStyle,
-          orderedStyle: effectiveOrderedStyle,
-        });
+        const key = `${sourceNumId}:${ilvl}`;
+        if (!groups.has(key)) groups.set(key, { sourceNumId, ilvl, paragraphs: [] });
+        groups.get(key).paragraphs.push(p);
       }
 
-      if (levelMap.size > 0) {
+      if (groups.size > 0) {
         if (!dispatch) return true;
-        ListHelpers.setListLevelStyles({ editor, levels: [...levelMap.values()] });
-        // `mutateNumbering`'s invalidation handler synchronously dispatches a fresh tr,
-        // which advances state.doc and leaves our captured `tr` stale. Skip the auto-
-        // dispatch so CommandService doesn't throw "Applying a mismatched transaction".
-        tr.setMeta('preventDispatch', true);
+
+        for (const { sourceNumId, ilvl, paragraphs } of groups.values()) {
+          const minted = ListHelpers.cloneListDefinitionWithLevelStyle({
+            editor,
+            sourceNumId,
+            ilvl,
+            bulletStyle: effectiveBulletStyle,
+            orderedStyle: effectiveOrderedStyle,
+          });
+          if (!minted) continue;
+          for (const { node, pos } of paragraphs) {
+            updateNumberingProperties({ numId: minted.newNumId, ilvl }, node, pos, editor, tr);
+          }
+        }
+
         return true;
       }
     }

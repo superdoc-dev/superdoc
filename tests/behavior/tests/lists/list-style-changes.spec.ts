@@ -157,6 +157,39 @@ test.describe('PR-2873 list style changes', () => {
   });
 
   test.describe('whole-list style switch', () => {
+    test('cmd+Z reverts the style change instead of removing characters', async ({ superdoc }) => {
+      // Reproduces the user-reported bug: with a bare caret on a list paragraph, change
+      // the style — then undo. The first undo should put the markers back to their
+      // original style; it must NOT skip the style change and start removing typed text.
+      await createBulletList(superdoc, ['alpha', 'beta']);
+
+      // Confirm we start as discs.
+      const beforeMarkers = await Promise.all(['alpha', 'beta'].map((t) => getListItemSnapshots(superdoc, t)));
+      expect(beforeMarkers[0][0].markerText).toBe('•');
+      expect(beforeMarkers[1][0].markerText).toBe('•');
+
+      await placeCursorIn(superdoc, 'alpha');
+      await superdoc.executeCommand('toggleBulletListStyle', 'square' as unknown as Record<string, unknown>);
+      await superdoc.waitForStable();
+
+      // Style change applied to both siblings.
+      const afterMarkers = await Promise.all(['alpha', 'beta'].map((t) => getListItemSnapshots(superdoc, t)));
+      expect(afterMarkers[0][0].markerText).toBe('▪');
+      expect(afterMarkers[1][0].markerText).toBe('▪');
+
+      // Undo. First undo MUST revert the style — not remove text.
+      await superdoc.undo();
+      await superdoc.waitForStable();
+
+      const undoneMarkers = await Promise.all(['alpha', 'beta'].map((t) => getListItemSnapshots(superdoc, t)));
+      expect(undoneMarkers[0][0].markerText).toBe('•');
+      expect(undoneMarkers[1][0].markerText).toBe('•');
+
+      // The text content should be intact — undo didn't reach into the typing.
+      await superdoc.assertTextContains('alpha');
+      await superdoc.assertTextContains('beta');
+    });
+
     test('applying a different bullet style restyles every item at the same level', async ({ superdoc }) => {
       await createBulletList(superdoc, ['alpha', 'beta', 'gamma']);
 
@@ -171,11 +204,12 @@ test.describe('PR-2873 list style changes', () => {
       const after = await Promise.all(['alpha', 'beta', 'gamma'].map((t) => getParagraphNumberingByText(superdoc, t)));
       const snapshots = await Promise.all(['alpha', 'beta', 'gamma'].map((t) => getListItemSnapshots(superdoc, t)));
 
-      // Word-compatible behavior: caret in one item restyles the abstract definition for
-      // (numId, ilvl=0) so every sibling at that level picks up the new bullet character.
-      expect(after[0]?.numId).toBe(before[0]?.numId);
-      expect(after[1]?.numId).toBe(before[1]?.numId);
-      expect(after[2]?.numId).toBe(before[2]?.numId);
+      // Caret in one item migrates every sibling at the same (numId, ilvl) to a fresh
+      // numId whose abstract carries the new style at that level. The new numId is shared
+      // so all siblings still continue numbering together.
+      expect(after[0]?.numId).toBe(after[1]?.numId);
+      expect(after[1]?.numId).toBe(after[2]?.numId);
+      expect(after[0]?.numId).not.toBe(before[0]?.numId);
       for (const snap of snapshots) {
         expect(snap[0].markerText).toBe('▪');
         expect(snap[0].lvlText).toBe('▪');
@@ -338,8 +372,9 @@ test.describe('PR-2873 list style changes', () => {
       const nestedBefore = await getListItemSnapshots(superdoc, 'nested');
       expect(nestedBefore[0].numberingType).toBe('bullet');
 
-      // Select "nested" so the kind switch hits the whole-list-restyle path
-      // (SD-2527 gates broad scope on a non-empty selection).
+      // Bare caret on "nested" — kind switch hits the whole-list-restyle path. The level-1
+      // abstract is cloned (preserving level 0 = bullet) so going back to level 0 keeps
+      // rendering as a bullet.
       await placeCursorIn(superdoc, 'nested');
       await superdoc.executeCommand('toggleOrderedList');
       await superdoc.waitForStable();
@@ -357,11 +392,10 @@ test.describe('PR-2873 list style changes', () => {
       await superdoc.waitForStable();
 
       const continued = await getListItemSnapshots(superdoc, 'continued');
-      const firstSnap = await getListItemSnapshots(superdoc, 'first');
 
-      // "continued" is at level 0. It should belong to the original bullet list (same numId
-      // as "first") so the bullet at level 0 keeps rendering.
-      expect(continued[0].numId).toBe(firstSnap[0].numId);
+      // "continued" is at level 0. The cloned abstract preserves the parent bullet at
+      // level 0 so the marker still renders as a bullet — visual continuity is intact
+      // even though list identity (numId) has migrated.
       expect(continued[0].numberingType).toBe('bullet');
     });
 
@@ -392,10 +426,12 @@ test.describe('PR-2873 list style changes', () => {
       expect(afterTwo[0].markerText).toBe('II.');
       expect(afterThree[0].markerText).toBe('III.');
 
-      // numId is preserved — we mutated the abstract, not the paragraph references.
-      expect(afterOne[0].numId).toBe(beforeOne[0].numId);
-      expect(afterTwo[0].numId).toBe(beforeTwo[0].numId);
-      expect(afterThree[0].numId).toBe(beforeThree[0].numId);
+      // All three siblings migrate to a fresh shared numId whose cloned abstract carries
+      // the new style. They keep continuous numbering together; the original numId is
+      // left untouched so PM history can revert this on undo.
+      expect(afterOne[0].numId).toBe(afterTwo[0].numId);
+      expect(afterTwo[0].numId).toBe(afterThree[0].numId);
+      expect(afterOne[0].numId).not.toBe(beforeOne[0].numId);
     });
   });
 });

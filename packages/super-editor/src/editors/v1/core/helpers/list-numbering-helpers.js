@@ -14,6 +14,7 @@ import {
   createNumDefinition as pureCreateNumDefinition,
   setLvlRestartOnAbstract as pureSetLvlRestartOnAbstract,
   setLvlStyleOnAbstract as pureSetLvlStyleOnAbstract,
+  cloneListDefinitionWithLevelStyle as pureCloneListDefinitionWithLevelStyle,
   getNextNumberingId,
 } from '@core/parts/adapters/numbering-transforms';
 import { mutateNumbering, mutateNumberingBatch } from '@core/parts/adapters/numbering-mutation';
@@ -559,6 +560,28 @@ export const setListLevelStyles = ({ editor, levels }) => {
 };
 
 /**
+ * Clone the abstract behind `sourceNumId`, apply a style override at `ilvl`, and register
+ * the cloned abstract + a fresh numId pointing to it. Returns the new IDs (or `null` if
+ * the source was missing). Callers migrate paragraphs to the new numId via PM-tracked
+ * `setNodeMarkup` so undo can reverse the migration.
+ *
+ * @param {Object} param0
+ * @param {import('../Editor').Editor} param0.editor
+ * @param {number} param0.sourceNumId
+ * @param {number} param0.ilvl
+ * @param {'disc'|'circle'|'square'|null} [param0.bulletStyle]
+ * @param {import('../../extensions/types/paragraph-commands.js').OrderedListStyle|null} [param0.orderedStyle]
+ * @returns {{ newNumId: number, newAbstractId: number } | null}
+ */
+export const cloneListDefinitionWithLevelStyle = ({ editor, sourceNumId, ilvl, bulletStyle, orderedStyle }) => {
+  let result = null;
+  mutateNumbering(editor, 'list-numbering-helpers:cloneListDefinitionWithLevelStyle', (numbering) => {
+    result = pureCloneListDefinitionWithLevelStyle(numbering, sourceNumId, ilvl, { bulletStyle, orderedStyle });
+  });
+  return result;
+};
+
+/**
  * ListHelpers is a collection of utility functions for managing lists in the editor.
  */
 export const ListHelpers = {
@@ -582,6 +605,7 @@ export const ListHelpers = {
   createNumDefinition,
   setLvlRestartOnAbstract,
   setListLevelStyles,
+  cloneListDefinitionWithLevelStyle,
   rebuildRawNumberingFromTranslated,
 
   // Schema helpers

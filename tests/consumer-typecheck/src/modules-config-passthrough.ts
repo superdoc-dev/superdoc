@@ -16,20 +16,13 @@
  *     keys forwarded to SuperToolbar via `...moduleConfig`.
  *   - SD-2869 review pass flagged `onAwarenessUpdate.states` narrowed from
  *     JSDoc `Array` (= `any[]`) to `unknown[]`.
- *
- * Note: `Config`, `Modules`, `FindReplaceConfig`, and `PasswordPromptConfig`
- * are not yet exported from the public `superdoc` surface — a separate
- * follow-up ticket. This fixture works around that by typing the config
- * literal off the SuperDoc constructor parameter, which is reachable.
  */
-import { SuperDoc } from 'superdoc';
-
-type SuperDocConfig = ConstructorParameters<typeof SuperDoc>[0];
+import type { Config } from 'superdoc';
 
 // A realistic config with the documented fields plus the pass-through extras
 // the runtime accepts. If any of these stops compiling under strict mode,
 // existing consumer code regresses.
-const config: SuperDocConfig = {
+const config: Config = {
   selector: '#editor',
 
   modules: {
@@ -146,8 +139,29 @@ const config: SuperDocConfig = {
 void config;
 
 // Whiteboard accepts the structured form too.
-const enabledWhiteboard: SuperDocConfig = {
+const enabledWhiteboard: Config = {
   selector: '#editor',
   modules: { whiteboard: { enabled: true } },
 };
 void enabledWhiteboard;
+
+// CollaborationProvider interop: a value typed as the publicly-exported
+// CollaborationProvider must be assignable to Config.modules.collaboration.provider
+// (also typed against CollaborationProvider). Pre-SD-2880 these were two
+// different shapes — super-editor's allowed `awareness: null`, core/types'
+// did not — and a strict-mode consumer setting both at once got an error.
+import type { CollaborationProvider } from 'superdoc';
+
+const provider: CollaborationProvider = {
+  awareness: null,
+  on(event, handler) {
+    void event;
+    void handler;
+  },
+};
+
+const collabConfig: Config = {
+  selector: '#editor',
+  modules: { collaboration: { provider } },
+};
+void collabConfig;

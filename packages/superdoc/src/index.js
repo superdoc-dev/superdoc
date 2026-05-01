@@ -40,9 +40,10 @@ import { getSchemaIntrospection } from './helpers/schema-introspection.js';
 
 // ============================================
 // TYPE RE-EXPORTS
-// These types are defined in @superdoc/super-editor and re-exported for consumers.
-// vite-plugin-dts picks up these JSDoc @typedef imports and generates
-// corresponding `export type` declarations in the consumer-facing .d.ts.
+// These types are defined in @superdoc/super-editor and ./core/types/, and
+// re-exported for consumers. vite-plugin-dts picks up these JSDoc @typedef
+// imports and generates corresponding `export type` declarations in the
+// consumer-facing .d.ts.
 // ============================================
 
 /**
@@ -186,6 +187,47 @@ import { getSchemaIntrospection } from './helpers/schema-introspection.js';
  * @typedef {import('./core/types/index.js').CommentAddress} CommentAddress
  * @typedef {import('./core/types/index.js').TrackedChangeAddress} TrackedChangeAddress
  * @typedef {import('./core/types/index.js').NavigableAddress} NavigableAddress
+ *
+ * @typedef {import('./core/types/index.js').Config} Config
+ * @typedef {import('./core/types/index.js').Modules} Modules
+ * @typedef {import('./core/types/index.js').CollaborationConfig} CollaborationConfig
+ * @typedef {import('./core/types/index.js').UpgradeToCollaborationOptions} UpgradeToCollaborationOptions
+ * @typedef {import('./core/types/index.js').ExternalPopoverRenderContext} ExternalPopoverRenderContext
+ * @typedef {import('./core/types/index.js').IntentSurfaceRequest} IntentSurfaceRequest
+ * @typedef {import('./core/types/index.js').DirectSurfaceRequest} DirectSurfaceRequest
+ * @typedef {import('./core/types/index.js').SurfaceRequest} SurfaceRequest
+ * @typedef {import('./core/types/index.js').SurfaceResolution} SurfaceResolution
+ * @typedef {import('./core/types/index.js').SurfaceResolver} SurfaceResolver
+ * @typedef {import('./core/types/index.js').SurfaceOutcome} SurfaceOutcome
+ * @typedef {import('./core/types/index.js').SurfaceHandle} SurfaceHandle
+ * @typedef {import('./core/types/index.js').SurfaceComponentProps} SurfaceComponentProps
+ * @typedef {import('./core/types/index.js').ExternalSurfaceRenderContext} ExternalSurfaceRenderContext
+ * @typedef {import('./core/types/index.js').SurfacesModuleConfig} SurfacesModuleConfig
+ * @typedef {import('./core/types/index.js').SurfaceMode} SurfaceMode
+ * @typedef {import('./core/types/index.js').SurfaceFloatingPlacement} SurfaceFloatingPlacement
+ * @typedef {import('./core/types/index.js').ResolvedPasswordPromptTexts} ResolvedPasswordPromptTexts
+ * @typedef {import('./core/types/index.js').PasswordPromptAttemptResult} PasswordPromptAttemptResult
+ * @typedef {import('./core/types/index.js').PasswordPromptHandle} PasswordPromptHandle
+ * @typedef {import('./core/types/index.js').PasswordPromptContext} PasswordPromptContext
+ * @typedef {import('./core/types/index.js').PasswordPromptRenderContext} PasswordPromptRenderContext
+ * @typedef {import('./core/types/index.js').PasswordPromptResolution} PasswordPromptResolution
+ * @typedef {import('./core/types/index.js').PasswordPromptConfig} PasswordPromptConfig
+ * @typedef {import('./core/types/index.js').ResolvedFindReplaceTexts} ResolvedFindReplaceTexts
+ * @typedef {import('./core/types/index.js').FindReplaceHandle} FindReplaceHandle
+ * @typedef {import('./core/types/index.js').FindReplaceContext} FindReplaceContext
+ * @typedef {import('./core/types/index.js').FindReplaceRenderContext} FindReplaceRenderContext
+ * @typedef {import('./core/types/index.js').FindReplaceResolution} FindReplaceResolution
+ * @typedef {import('./core/types/index.js').FindReplaceConfig} FindReplaceConfig
+ * @typedef {import('./core/types/index.js').TrackChangesModuleConfig} TrackChangesModuleConfig
+ * @typedef {import('./core/types/index.js').ViewingVisibilityConfig} ViewingVisibilityConfig
+ * @typedef {import('./core/types/index.js').SuperDocLayoutEngineOptions} SuperDocLayoutEngineOptions
+ * @typedef {import('./core/types/index.js').EditorSurface} EditorSurface
+ * @typedef {import('./core/types/index.js').EditorUpdateEvent} EditorUpdateEvent
+ * @typedef {import('./core/types/index.js').EditorTransactionEvent} EditorTransactionEvent
+ * @typedef {import('./core/types/index.js').ExportType} ExportType
+ * @typedef {import('./core/types/index.js').CommentsType} CommentsType
+ * @typedef {import('./core/types/index.js').ExportParams} ExportParams
+ * @typedef {import('./core/types/index.js').SuperDocTelemetryConfig} SuperDocTelemetryConfig
  */
 
 // Public exports

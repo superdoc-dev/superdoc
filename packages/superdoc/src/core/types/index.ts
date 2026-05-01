@@ -23,6 +23,7 @@ import type {
   CommentAddress as SuperEditorCommentAddress,
   TrackedChangeAddress as SuperEditorTrackedChangeAddress,
   NavigableAddress as SuperEditorNavigableAddress,
+  CollaborationProvider as SuperEditorCollaborationProvider,
   FontConfig,
   FontsResolvedPayload,
   ProofingProvider,
@@ -79,24 +80,11 @@ export interface Document {
 /**
  * External collaboration provider interface. Accepts any Yjs-compatible
  * provider (HocuspocusProvider, LiveblocksYjsProvider, TiptapCollabProvider,
- * etc.).
+ * etc.). Re-exported from `@superdoc/super-editor` so `Config.modules.collaboration.provider`
+ * (typed against this) accepts values typed against the publicly-exported
+ * `CollaborationProvider` from `superdoc`.
  */
-export interface CollaborationProvider {
-  /** The Yjs awareness instance (optional, may be null). */
-  awareness?: object;
-  /** Event listener. */
-  on?: (event: string, handler: (...args: unknown[]) => unknown) => void;
-  /** Event unsubscriber. */
-  off?: (event: string, handler: (...args: unknown[]) => unknown) => void;
-  /** Disconnect from the provider. */
-  disconnect?: () => void;
-  /** Destroy the provider. */
-  destroy?: () => void;
-  /** Whether the provider has synced. */
-  synced?: boolean;
-  /** Alternative sync property (used by some providers). */
-  isSynced?: boolean;
-}
+export type CollaborationProvider = SuperEditorCollaborationProvider;
 
 /** Collaboration module configuration. */
 export interface CollaborationConfig {

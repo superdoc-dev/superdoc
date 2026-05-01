@@ -24,6 +24,7 @@ import type {
   CanObject,
   ChainableCommandObject,
   ChainedCommand,
+  CollaborationConfig,
   CollaborationProvider,
   Command,
   CommandProps,
@@ -33,11 +34,14 @@ import type {
   CommentElement,
   CommentLocationsPayload,
   CommentsPayload,
+  CommentsType,
+  Config,
   ContextMenuConfig,
   ContextMenuContext,
   ContextMenuItem,
   ContextMenuSection,
   CoreCommandMap,
+  DirectSurfaceRequest,
   DocumentApi,
   DocumentMode,
   DocumentProtectionState,
@@ -48,19 +52,32 @@ import type {
   EditorLifecycleState,
   EditorOptions,
   EditorState,
+  EditorSurface,
+  EditorTransactionEvent,
+  EditorUpdateEvent,
   EditorView,
   EntityAddress,
   ExportDocxParams,
   ExportFormat,
   ExportOptions,
+  ExportParams,
+  ExportType,
   ExtensionCommandMap,
+  ExternalPopoverRenderContext,
+  ExternalSurfaceRenderContext,
   FieldValue,
+  FindReplaceConfig,
+  FindReplaceContext,
+  FindReplaceHandle,
+  FindReplaceRenderContext,
+  FindReplaceResolution,
   FlowBlock,
   FlowMode,
   FontConfig,
   FontsResolvedPayload,
   ImageDeselectedEvent,
   ImageSelectedEvent,
+  IntentSurfaceRequest,
   Layout,
   LayoutEngineOptions,
   LayoutError,
@@ -75,6 +92,7 @@ import type {
   LinkPopoverResolver,
   ListDefinitionsPayload,
   Measure,
+  Modules,
   NavigableAddress,
   OpenOptions,
   PageMargins,
@@ -85,6 +103,12 @@ import type {
   PartChangedEvent,
   PartId,
   PartSectionId,
+  PasswordPromptAttemptResult,
+  PasswordPromptConfig,
+  PasswordPromptContext,
+  PasswordPromptHandle,
+  PasswordPromptRenderContext,
+  PasswordPromptResolution,
   PermissionParams,
   PositionHit,
   PresenceOptions,
@@ -107,6 +131,8 @@ import type {
   RemoteCursorsRenderPayload,
   RemoteUserInfo,
   ResolveRangeOutput,
+  ResolvedFindReplaceTexts,
+  ResolvedPasswordPromptTexts,
   SaveOptions,
   Schema,
   ScrollIntoViewInput,
@@ -118,18 +144,32 @@ import type {
   SelectionHandle,
   SelectionInfo,
   StoryLocator,
+  SuperDocLayoutEngineOptions,
+  SuperDocTelemetryConfig,
+  SurfaceComponentProps,
+  SurfaceFloatingPlacement,
+  SurfaceHandle,
+  SurfaceMode,
+  SurfaceOutcome,
+  SurfaceRequest,
+  SurfaceResolution,
+  SurfaceResolver,
+  SurfacesModuleConfig,
   TelemetryEvent,
   TextAddress,
   TextSegment,
   TextTarget,
+  TrackChangesModuleConfig,
   TrackedChangeAddress,
   TrackedChangesMode,
   TrackedChangesOverrides,
   Transaction,
   UnsupportedContentItem,
+  UpgradeToCollaborationOptions,
   User,
   ViewLayout,
   ViewOptions,
+  ViewingVisibilityConfig,
   VirtualizationOptions,
 } from 'superdoc';
 
@@ -149,6 +189,7 @@ const _real_BoundingRect: AssertNotAny<BoundingRect> = true;
 const _real_CanObject: AssertNotAny<CanObject> = true;
 const _real_ChainableCommandObject: AssertNotAny<ChainableCommandObject> = true;
 const _real_ChainedCommand: AssertNotAny<ChainedCommand> = true;
+const _real_CollaborationConfig: AssertNotAny<CollaborationConfig> = true;
 const _real_CollaborationProvider: AssertNotAny<CollaborationProvider> = true;
 const _real_Command: AssertNotAny<Command> = true;
 const _real_CommandProps: AssertNotAny<CommandProps> = true;
@@ -158,11 +199,14 @@ const _real_CommentConfig: AssertNotAny<CommentConfig> = true;
 const _real_CommentElement: AssertNotAny<CommentElement> = true;
 const _real_CommentLocationsPayload: AssertNotAny<CommentLocationsPayload> = true;
 const _real_CommentsPayload: AssertNotAny<CommentsPayload> = true;
+const _real_CommentsType: AssertNotAny<CommentsType> = true;
+const _real_Config: AssertNotAny<Config> = true;
 const _real_ContextMenuConfig: AssertNotAny<ContextMenuConfig> = true;
 const _real_ContextMenuContext: AssertNotAny<ContextMenuContext> = true;
 const _real_ContextMenuItem: AssertNotAny<ContextMenuItem> = true;
 const _real_ContextMenuSection: AssertNotAny<ContextMenuSection> = true;
 const _real_CoreCommandMap: AssertNotAny<CoreCommandMap> = true;
+const _real_DirectSurfaceRequest: AssertNotAny<DirectSurfaceRequest> = true;
 const _real_DocumentApi: AssertNotAny<DocumentApi> = true;
 const _real_DocumentMode: AssertNotAny<DocumentMode> = true;
 const _real_DocumentProtectionState: AssertNotAny<DocumentProtectionState> = true;
@@ -173,19 +217,32 @@ const _real_EditorExtension: AssertNotAny<EditorExtension> = true;
 const _real_EditorLifecycleState: AssertNotAny<EditorLifecycleState> = true;
 const _real_EditorOptions: AssertNotAny<EditorOptions> = true;
 const _real_EditorState: AssertNotAny<EditorState> = true;
+const _real_EditorSurface: AssertNotAny<EditorSurface> = true;
+const _real_EditorTransactionEvent: AssertNotAny<EditorTransactionEvent> = true;
+const _real_EditorUpdateEvent: AssertNotAny<EditorUpdateEvent> = true;
 const _real_EditorView: AssertNotAny<EditorView> = true;
 const _real_EntityAddress: AssertNotAny<EntityAddress> = true;
 const _real_ExportDocxParams: AssertNotAny<ExportDocxParams> = true;
 const _real_ExportFormat: AssertNotAny<ExportFormat> = true;
 const _real_ExportOptions: AssertNotAny<ExportOptions> = true;
+const _real_ExportParams: AssertNotAny<ExportParams> = true;
+const _real_ExportType: AssertNotAny<ExportType> = true;
 const _real_ExtensionCommandMap: AssertNotAny<ExtensionCommandMap> = true;
+const _real_ExternalPopoverRenderContext: AssertNotAny<ExternalPopoverRenderContext> = true;
+const _real_ExternalSurfaceRenderContext: AssertNotAny<ExternalSurfaceRenderContext> = true;
 const _real_FieldValue: AssertNotAny<FieldValue> = true;
+const _real_FindReplaceConfig: AssertNotAny<FindReplaceConfig> = true;
+const _real_FindReplaceContext: AssertNotAny<FindReplaceContext> = true;
+const _real_FindReplaceHandle: AssertNotAny<FindReplaceHandle> = true;
+const _real_FindReplaceRenderContext: AssertNotAny<FindReplaceRenderContext> = true;
+const _real_FindReplaceResolution: AssertNotAny<FindReplaceResolution> = true;
 const _real_FlowBlock: AssertNotAny<FlowBlock> = true;
 const _real_FlowMode: AssertNotAny<FlowMode> = true;
 const _real_FontConfig: AssertNotAny<FontConfig> = true;
 const _real_FontsResolvedPayload: AssertNotAny<FontsResolvedPayload> = true;
 const _real_ImageDeselectedEvent: AssertNotAny<ImageDeselectedEvent> = true;
 const _real_ImageSelectedEvent: AssertNotAny<ImageSelectedEvent> = true;
+const _real_IntentSurfaceRequest: AssertNotAny<IntentSurfaceRequest> = true;
 const _real_Layout: AssertNotAny<Layout> = true;
 const _real_LayoutEngineOptions: AssertNotAny<LayoutEngineOptions> = true;
 const _real_LayoutError: AssertNotAny<LayoutError> = true;
@@ -200,6 +257,7 @@ const _real_LinkPopoverResolution: AssertNotAny<LinkPopoverResolution> = true;
 const _real_LinkPopoverResolver: AssertNotAny<LinkPopoverResolver> = true;
 const _real_ListDefinitionsPayload: AssertNotAny<ListDefinitionsPayload> = true;
 const _real_Measure: AssertNotAny<Measure> = true;
+const _real_Modules: AssertNotAny<Modules> = true;
 const _real_NavigableAddress: AssertNotAny<NavigableAddress> = true;
 const _real_OpenOptions: AssertNotAny<OpenOptions> = true;
 const _real_PageMargins: AssertNotAny<PageMargins> = true;
@@ -210,6 +268,12 @@ const _real_PaintSnapshot: AssertNotAny<PaintSnapshot> = true;
 const _real_PartChangedEvent: AssertNotAny<PartChangedEvent> = true;
 const _real_PartId: AssertNotAny<PartId> = true;
 const _real_PartSectionId: AssertNotAny<PartSectionId> = true;
+const _real_PasswordPromptAttemptResult: AssertNotAny<PasswordPromptAttemptResult> = true;
+const _real_PasswordPromptConfig: AssertNotAny<PasswordPromptConfig> = true;
+const _real_PasswordPromptContext: AssertNotAny<PasswordPromptContext> = true;
+const _real_PasswordPromptHandle: AssertNotAny<PasswordPromptHandle> = true;
+const _real_PasswordPromptRenderContext: AssertNotAny<PasswordPromptRenderContext> = true;
+const _real_PasswordPromptResolution: AssertNotAny<PasswordPromptResolution> = true;
 const _real_PermissionParams: AssertNotAny<PermissionParams> = true;
 const _real_PositionHit: AssertNotAny<PositionHit> = true;
 const _real_PresenceOptions: AssertNotAny<PresenceOptions> = true;
@@ -232,6 +296,8 @@ const _real_RemoteCursorState: AssertNotAny<RemoteCursorState> = true;
 const _real_RemoteCursorsRenderPayload: AssertNotAny<RemoteCursorsRenderPayload> = true;
 const _real_RemoteUserInfo: AssertNotAny<RemoteUserInfo> = true;
 const _real_ResolveRangeOutput: AssertNotAny<ResolveRangeOutput> = true;
+const _real_ResolvedFindReplaceTexts: AssertNotAny<ResolvedFindReplaceTexts> = true;
+const _real_ResolvedPasswordPromptTexts: AssertNotAny<ResolvedPasswordPromptTexts> = true;
 const _real_SaveOptions: AssertNotAny<SaveOptions> = true;
 const _real_Schema: AssertNotAny<Schema> = true;
 const _real_ScrollIntoViewInput: AssertNotAny<ScrollIntoViewInput> = true;
@@ -243,16 +309,30 @@ const _real_SelectionCurrentInput: AssertNotAny<SelectionCurrentInput> = true;
 const _real_SelectionHandle: AssertNotAny<SelectionHandle> = true;
 const _real_SelectionInfo: AssertNotAny<SelectionInfo> = true;
 const _real_StoryLocator: AssertNotAny<StoryLocator> = true;
+const _real_SuperDocLayoutEngineOptions: AssertNotAny<SuperDocLayoutEngineOptions> = true;
+const _real_SuperDocTelemetryConfig: AssertNotAny<SuperDocTelemetryConfig> = true;
+const _real_SurfaceComponentProps: AssertNotAny<SurfaceComponentProps> = true;
+const _real_SurfaceFloatingPlacement: AssertNotAny<SurfaceFloatingPlacement> = true;
+const _real_SurfaceHandle: AssertNotAny<SurfaceHandle> = true;
+const _real_SurfaceMode: AssertNotAny<SurfaceMode> = true;
+const _real_SurfaceOutcome: AssertNotAny<SurfaceOutcome> = true;
+const _real_SurfaceRequest: AssertNotAny<SurfaceRequest> = true;
+const _real_SurfaceResolution: AssertNotAny<SurfaceResolution> = true;
+const _real_SurfaceResolver: AssertNotAny<SurfaceResolver> = true;
+const _real_SurfacesModuleConfig: AssertNotAny<SurfacesModuleConfig> = true;
 const _real_TelemetryEvent: AssertNotAny<TelemetryEvent> = true;
 const _real_TextAddress: AssertNotAny<TextAddress> = true;
 const _real_TextSegment: AssertNotAny<TextSegment> = true;
 const _real_TextTarget: AssertNotAny<TextTarget> = true;
+const _real_TrackChangesModuleConfig: AssertNotAny<TrackChangesModuleConfig> = true;
 const _real_TrackedChangeAddress: AssertNotAny<TrackedChangeAddress> = true;
 const _real_TrackedChangesMode: AssertNotAny<TrackedChangesMode> = true;
 const _real_TrackedChangesOverrides: AssertNotAny<TrackedChangesOverrides> = true;
 const _real_Transaction: AssertNotAny<Transaction> = true;
 const _real_UnsupportedContentItem: AssertNotAny<UnsupportedContentItem> = true;
+const _real_UpgradeToCollaborationOptions: AssertNotAny<UpgradeToCollaborationOptions> = true;
 const _real_User: AssertNotAny<User> = true;
 const _real_ViewLayout: AssertNotAny<ViewLayout> = true;
 const _real_ViewOptions: AssertNotAny<ViewOptions> = true;
+const _real_ViewingVisibilityConfig: AssertNotAny<ViewingVisibilityConfig> = true;
 const _real_VirtualizationOptions: AssertNotAny<VirtualizationOptions> = true;

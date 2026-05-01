@@ -20,6 +20,10 @@ pre-commit:
       root: "apps/docs/"
       glob: "apps/docs/**/*.mdx"
       run: pnpm run check:imports
+    docs-check-icons:
+      root: "apps/docs/"
+      glob: "apps/docs/**/*.{mdx,json}"
+      run: pnpm run check:icons
     docs-test-examples:
       root: "apps/docs/"
       glob: "apps/docs/**/*.mdx"

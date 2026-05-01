@@ -37,7 +37,7 @@
       {
         "title": "Ask on Discord",
         "description": "Join our support channel",
-        "icon": "discord",
+        "icon": "messages-square",
         "href": "https://discord.com/channels/1299087524056010902/1299436491839246409"
       }
     ]
@@ -286,7 +286,7 @@
         "type": "button",
         "href": "https://discord.com/invite/b9UuaZRyaB",
         "label": "Discord",
-        "icon": "discord"
+        "icon": "messages-square"
       }
     ]
   },

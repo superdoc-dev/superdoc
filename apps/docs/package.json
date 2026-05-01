@@ -9,6 +9,7 @@
     "gen:all": "pnpm run gen:api && pnpm run gen:docs",
     "check:links": "mintlify broken-links",
     "check:imports": "bun scripts/validate-code-imports.ts",
+    "check:icons": "bun scripts/validate-icons.ts",
     "test:examples": "bun test __tests__/doctest.test.ts"
   },
   "devDependencies": {

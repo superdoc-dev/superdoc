@@ -192,6 +192,8 @@ Common name traps when migrating from Font Awesome:
 
 For brand/language icons (React, Vue.js, Microsoft, etc.), Lucide doesn't ship them. Either use a generic Lucide icon that fits the context, or supply an SVG via `icon="/path/to/icon.svg"` or an external URL.
 
+A `pnpm run check:icons` validator runs in pre-commit and walks every `<Card icon="...">`, `<Icon icon="...">`, and `docs.json` icon reference against the locally installed Lucide set. Catches drift before deploy. Add new icons through this validator — if it complains, the name isn't in the Lucide library.
+
 ## Testing
 
 Code examples are tested automatically via pre-commit hooks and CI. Two checks run when `.mdx` files change:

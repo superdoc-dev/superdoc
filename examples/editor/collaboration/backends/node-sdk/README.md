@@ -18,12 +18,12 @@ It reuses the FastAPI sample assets:
 - `../fastapi/assets/doc-template.docx`
 - `../fastapi/assets/fake-nda.md`
 
-and writes `/download` output to `examples/collaboration/node-sdk/.superdoc-state/download.docx`.
+and writes `/download` output to `examples/editor/collaboration/backends/node-sdk/.superdoc-state/download.docx`.
 
 ## 1) Install
 
 ```bash
-cd /path/to/superdoc/examples/collaboration/node-sdk
+cd /path/to/superdoc/examples/editor/collaboration/backends/node-sdk
 npm install
 ```
 
@@ -32,7 +32,7 @@ npm install
 From the FastAPI sample folder:
 
 ```bash
-cd /path/to/superdoc/examples/collaboration/fastapi
+cd /path/to/superdoc/examples/editor/collaboration/backends/fastapi
 ./run-yjs-hub.sh
 ```
 
@@ -45,7 +45,7 @@ export YHUB_AUTH_TOKEN="my-demo-token"
 ## 3) Start the Node API
 
 ```bash
-cd /path/to/superdoc/examples/collaboration/node-sdk
+cd /path/to/superdoc/examples/editor/collaboration/backends/node-sdk
 npm run dev
 ```
 

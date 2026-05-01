@@ -22,7 +22,9 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[4]
+# Script lives at examples/editor/collaboration/providers/liveblocks/scripts/.
+# parents[6] = repo root, parents[1] = the example folder.
+REPO_ROOT = Path(__file__).resolve().parents[6]
 EXAMPLE_ROOT = Path(__file__).resolve().parents[1]
 SDK_ROOT = REPO_ROOT / "packages" / "sdk" / "langs" / "python"
 
@@ -80,11 +82,11 @@ def build_config() -> SmokeConfig:
 
     public_api_key = require_env(
         "VITE_LIVEBLOCKS_PUBLIC_KEY",
-        "Missing VITE_LIVEBLOCKS_PUBLIC_KEY. Create examples/collaboration/liveblocks/.env first.",
+        "Missing VITE_LIVEBLOCKS_PUBLIC_KEY. Create examples/editor/collaboration/providers/liveblocks/.env first.",
     )
     room_id = require_env(
         "VITE_ROOM_ID",
-        "Missing VITE_ROOM_ID. Create examples/collaboration/liveblocks/.env first.",
+        "Missing VITE_ROOM_ID. Create examples/editor/collaboration/providers/liveblocks/.env first.",
     )
 
     cli_bin = Path(os.environ.get("SUPERDOC_CLI_BIN", REPO_ROOT / "apps" / "cli" / "dist" / "superdoc")).resolve()

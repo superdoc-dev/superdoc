@@ -87,11 +87,11 @@ npm run smoke:python
 The output document is written to:
 
 ```bash
-examples/collaboration/liveblocks/.superdoc-state/python-sdk-liveblocks-smoke.docx
+examples/editor/collaboration/providers/liveblocks/.superdoc-state/python-sdk-liveblocks-smoke.docx
 ```
 
 Notes:
-- `smoke:python` reads `examples/collaboration/liveblocks/.env` directly.
+- `smoke:python` reads `examples/editor/collaboration/providers/liveblocks/.env` directly.
 - It uses the repo-local Python SDK source from `packages/sdk/langs/python`.
 - It defaults to the repo-local CLI binary at `apps/cli/dist/superdoc`.
 - Set `SUPERDOC_CLI_BIN` to override the CLI path.

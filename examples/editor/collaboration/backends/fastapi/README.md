@@ -5,7 +5,7 @@ Tiny demo focused on one thing: open a realtime collaboration session from Pytho
 `main.py` is currently hardcoded for the local `@y/hub` server in `./yjs-hub`.
 It uses the pip-installed `superdoc-sdk` CLI companion by default
 and the async Python SDK client (`AsyncSuperDocClient`)
-and writes `/download` output to `examples/collaboration/fastapi/.superdoc-state/download.docx`.
+and writes `/download` output to `examples/editor/collaboration/backends/fastapi/.superdoc-state/download.docx`.
 
 ## 1) FastAPI setup
 

@@ -656,6 +656,10 @@ const superdoc = new SuperDoc({
 
 ## Comments methods
 
+<Note>
+**`addCommentsList` and `removeCommentsList` mount the built-in comments sidebar.** For custom React UI, render your own panel from `useSuperDocComments` instead — see [Bring Your Own UI › Comments](/bring-your-own-ui/comments). The methods below stay supported for apps using the built-in sidebar.
+</Note>
+
 ### `addCommentsList`
 
 Add a comments list to the specified element.
@@ -1093,6 +1097,10 @@ const superdoc = new SuperDoc({
 </CodeGroup>
 
 <Warning>Always check for `null` before accessing.</Warning>
+
+<Note>
+**For new code, prefer the typed surfaces.** `superdoc.activeEditor.commands.X()` is the chain-command path; it stays supported for backwards compatibility but isn't the recommended starting point. Use [`editor.doc.*`](/document-api/overview) for document mutations (insert, replace, format, comments, tracked changes) and [`ui.commands.*`](/bring-your-own-ui/toolbar-and-commands) for React UI dispatch (typed, memoized per command).
+</Note>
 
 | Property | Type | Description |
 |---|---|---|

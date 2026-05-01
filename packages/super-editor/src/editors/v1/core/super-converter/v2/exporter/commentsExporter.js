@@ -37,7 +37,6 @@ export const getCommentDefinition = (comment, commentId, allComments, editor) =>
   const attributes = {
     'w:id': String(commentId),
     'w:author': comment.creatorName || comment.importedAuthor?.name,
-    'w:email': comment.creatorEmail || comment.importedAuthor?.email,
     'w:date': toIsoNoFractional(comment.createdTime),
     'w:initials': getInitials(comment.creatorName),
     'w:done': comment.resolvedTime ? '1' : '0',
@@ -48,6 +47,7 @@ export const getCommentDefinition = (comment, commentId, allComments, editor) =>
     'custom:trackedChangeType': comment.trackedChangeType,
     'custom:trackedChangeDisplayType': comment.trackedChangeDisplayType || null,
     'custom:trackedDeletedText': comment.deletedText || null,
+    'custom:email': comment.creatorEmail || comment.importedAuthor?.email,
   };
 
   // Add the w15:paraIdParent attribute if the comment has a parent
@@ -132,7 +132,6 @@ export const updateCommentsXml = (commentDefs = [], commentsXml) => {
     commentDef.attributes = {
       'w:id': commentDef.attributes['w:id'],
       'w:author': commentDef.attributes['w:author'],
-      'w:email': commentDef.attributes['w:email'],
       'w:date': commentDef.attributes['w:date'],
       'w:initials': commentDef.attributes['w:initials'],
       'custom:internalId': commentDef.attributes['custom:internalId'],
@@ -141,6 +140,7 @@ export const updateCommentsXml = (commentDefs = [], commentsXml) => {
       'custom:trackedChangeType': commentDef.attributes['custom:trackedChangeType'],
       'custom:trackedChangeDisplayType': commentDef.attributes['custom:trackedChangeDisplayType'],
       'custom:trackedDeletedText': commentDef.attributes['custom:trackedDeletedText'],
+      'custom:email': commentDef.attributes['custom:email'],
       'xmlns:custom': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main',
     };
   });
@@ -400,10 +400,17 @@ export const prepareCommentsXmlFilesForExport = ({
   relationships.push(generateRelationship('comments.xml'));
   emittedTargets.add('comments.xml');
 
+  // Key off the file-set capability, not exportStrategy: the importer tags
+  // every file missing commentsExtended.xml as origin='google-docs', including
+  // legacy Word range-based files, so exportStrategy can't distinguish them.
+  const forceWordThreadingProfile =
+    threadingProfile?.defaultStyle === 'range-based' && threadingProfile?.fileSet?.hasCommentsExtended === false;
+  const effectiveThreadingProfile = forceWordThreadingProfile ? 'word' : threadingProfile || exportStrategy;
+
   const commentsExtendedXml = updateCommentsExtendedXml(
     commentsWithParaIds,
     updatedXml['word/commentsExtended.xml'],
-    threadingProfile || exportStrategy,
+    effectiveThreadingProfile,
   );
 
   // Only add the file and relationship if we're actually generating commentsExtended.xml

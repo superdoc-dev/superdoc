@@ -1,7 +1,7 @@
 {
   "name": "superdoc",
   "type": "module",
-  "version": "1.28.0",
+  "version": "1.29.1",
   "license": "AGPL-3.0",
   "repository": {
     "type": "git",
@@ -47,6 +47,16 @@
       "source": "./src/headless-toolbar.js",
       "import": "./dist/headless-toolbar.es.js"
     },
+    "./ui": {
+      "types": "./dist/superdoc/src/ui.d.ts",
+      "source": "./src/ui.js",
+      "import": "./dist/ui.es.js"
+    },
+    "./ui/react": {
+      "types": "./dist/superdoc/src/ui-react.d.ts",
+      "source": "./src/ui-react.js",
+      "import": "./dist/ui-react.es.js"
+    },
     "./headless-toolbar/react": {
       "types": "./dist/superdoc/src/headless-toolbar-react.d.ts",
       "source": "./src/headless-toolbar-react.js",
@@ -67,6 +77,12 @@
     "*": {
       "headless-toolbar": [
         "./dist/superdoc/src/headless-toolbar.d.ts"
+      ],
+      "ui": [
+        "./dist/superdoc/src/ui.d.ts"
+      ],
+      "ui/react": [
+        "./dist/superdoc/src/ui-react.d.ts"
       ],
       "headless-toolbar/react": [
         "./dist/superdoc/src/headless-toolbar-react.d.ts"
@@ -93,7 +109,10 @@
     "word-benchmark-sidecar": "node ../../devtools/word-benchmark-sidecar/server.js",
     "build": "vite build && pnpm run build:cdn",
     "build:dev": "SUPERDOC_SKIP_DTS=1 vite build",
-    "postbuild": "node ./scripts/ensure-types.cjs && node ./scripts/audit-bundle.cjs",
+    "postbuild": "node ./scripts/ensure-types.cjs && node ./scripts/audit-bundle.cjs && node ./scripts/audit-declarations.cjs",
+    "audit:declarations": "node ./scripts/audit-declarations.cjs",
+    "audit:declarations:informational": "node ./scripts/audit-declarations.cjs --informational",
+    "check:jsdoc": "node ./scripts/check-jsdoc.cjs",
     "build:es": "vite build && pnpm run postbuild",
     "watch:es": "vite build --watch",
     "build:cdn": "vite build --config vite.config.cdn.js",

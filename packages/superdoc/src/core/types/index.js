@@ -41,6 +41,12 @@
 
 /** @typedef {import('@superdoc/super-editor').Editor} Editor */
 /** @typedef {import('../SuperDoc.js').SuperDoc} SuperDoc */
+/** @typedef {import('@superdoc/super-editor').StoryLocator} StoryLocator */
+/** @typedef {import('@superdoc/super-editor').BookmarkAddress} BookmarkAddress */
+/** @typedef {import('@superdoc/super-editor').BlockNavigationAddress} BlockNavigationAddress */
+/** @typedef {import('@superdoc/super-editor').CommentAddress} CommentAddress */
+/** @typedef {import('@superdoc/super-editor').TrackedChangeAddress} TrackedChangeAddress */
+/** @typedef {import('@superdoc/super-editor').NavigableAddress} NavigableAddress */
 
 /**
  * @typedef {Object} UpgradeToCollaborationOptions Options for `upgradeToCollaboration()`
@@ -165,7 +171,7 @@
  * @property {string} [title] Optional title rendered in the surface chrome
  * @property {string} [ariaLabel] Accessible name for the surface when no visible title is provided. Used as aria-label fallback when neither title nor ariaLabelledBy is set.
  * @property {string} [ariaLabelledBy] ID of the element that labels the surface. Takes precedence over ariaLabel. Use this when the content component renders its own heading that should serve as the accessible name.
- * @property {boolean} [closeOnEscape] Whether Escape closes the surface (default: true)
+ * @property {boolean} [closeOnEscape] Whether Escape closes the surface (default: true). Set at the request top level — the runtime does not read `floating.closeOnEscape` on a per-request basis.
  * @property {boolean} [closeOnBackdrop] Whether backdrop click closes a dialog (default: true)
  * @property {{ maxWidth?: string | number }} [dialog] Dialog-specific overrides
  * @property {Object} [floating] Floating-specific overrides
@@ -190,7 +196,7 @@
  * @property {string} [title] Optional title rendered in the surface chrome
  * @property {string} [ariaLabel] Accessible name for the surface when no visible title is provided. Used as aria-label fallback when neither title nor ariaLabelledBy is set.
  * @property {string} [ariaLabelledBy] ID of the element that labels the surface. Takes precedence over ariaLabel. Use this when the content component renders its own heading that should serve as the accessible name.
- * @property {boolean} [closeOnEscape] Whether Escape closes the surface (default: true)
+ * @property {boolean} [closeOnEscape] Whether Escape closes the surface (default: true). Set at the request top level — the runtime does not read `floating.closeOnEscape` on a per-request basis.
  * @property {boolean} [closeOnBackdrop] Whether backdrop click closes a dialog (default: true)
  * @property {{ maxWidth?: string | number }} [dialog] Dialog-specific overrides
  * @property {Object} [floating] Floating-specific overrides
@@ -673,6 +679,7 @@
  * @property {boolean} [isDev] Whether the SuperDoc is in development mode
  * @property {boolean} [disablePiniaDevtools=false] Disable Pinia/Vue devtools plugin setup for this SuperDoc instance (useful in non-Vue hosts)
  * @property {SuperDocLayoutEngineOptions} [layoutEngineOptions] Layout engine overrides passed through to PresentationEditor (page size, margins, virtualization, zoom, debug label, etc.)
+ * @property {{ unifiedHistory?: boolean }} [experimental] Advanced PresentationEditor feature toggles. `unifiedHistory` is enabled by default; set it to `false` to force legacy active-surface undo routing.
  * @property {(editor: Editor) => void} [onEditorBeforeCreate] Callback before an editor is created
  * @property {(editor: Editor) => void} [onEditorCreate] Callback after an editor is created
  * @property {(params: EditorTransactionEvent) => void} [onTransaction] Callback when a transaction is made

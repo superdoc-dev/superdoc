@@ -74,7 +74,7 @@ export type { HeaderFooterLayoutResult, IncrementalLayoutResult } from './increm
 export { computeDisplayPageNumber } from '@superdoc/layout-engine';
 export type { DisplayPageInfo, HeaderFooterConstraints } from '@superdoc/layout-engine';
 export { remeasureParagraph } from './remeasure';
-export { measureCharacterX } from './text-measurement';
+export { measureCharacterX, sliceRunsForLine } from './text-measurement';
 export { clickToPositionDom, findPageElement } from './dom-mapping';
 export { isListItem, getWordLayoutConfig, calculateTextStartIndent, extractParagraphIndent } from './list-indent-utils';
 export type { TextIndentCalculationParams } from './list-indent-utils';
@@ -143,10 +143,6 @@ export type { FallbackReason, SafetyConfig } from './safety-net';
 // Focus Watchdog
 export { FocusWatchdog } from './focus-watchdog';
 export type { FocusWatchdogConfig } from './focus-watchdog';
-
-// Benchmarks
-export { TypingPerfBenchmark } from './benchmarks';
-export type { BenchmarkResult, BenchmarkScenario } from './benchmarks';
 
 // Paragraph Hash Utilities
 export {
@@ -1537,76 +1533,6 @@ const mapPmToX = (
 
   // Use shared text measurement utility for pixel-perfect accuracy
   return measureCharacterX(block, line, offset, availableWidth, alignmentOverride);
-};
-
-const _sliceRunsForLine = (block: FlowBlock, line: Line): Run[] => {
-  const result: Run[] = [];
-
-  if (block.kind !== 'paragraph') return result;
-
-  for (let runIndex = line.fromRun; runIndex <= line.toRun; runIndex += 1) {
-    const run = block.runs[runIndex];
-    if (!run) continue;
-
-    if (run.kind === 'tab') {
-      result.push(run);
-      continue;
-    }
-
-    // FIXED: ImageRun handling - images are atomic units, no slicing needed
-    if ('src' in run) {
-      result.push(run);
-      continue;
-    }
-
-    // LineBreakRun handling - line breaks are atomic units, no slicing needed
-    if (run.kind === 'lineBreak') {
-      result.push(run);
-      continue;
-    }
-
-    // BreakRun handling - breaks are atomic units, no slicing needed
-    if (run.kind === 'break') {
-      result.push(run);
-      continue;
-    }
-
-    // FieldAnnotationRun handling - field annotations are atomic units, no slicing needed
-    if (run.kind === 'fieldAnnotation') {
-      result.push(run);
-      continue;
-    }
-
-    // MathRun handling - math runs are atomic units, no slicing needed
-    if (run.kind === 'math') {
-      result.push(run);
-      continue;
-    }
-
-    const text = run.text ?? '';
-    const isFirstRun = runIndex === line.fromRun;
-    const isLastRun = runIndex === line.toRun;
-
-    if (isFirstRun || isLastRun) {
-      const start = isFirstRun ? line.fromChar : 0;
-      const end = isLastRun ? line.toChar : text.length;
-      const slice = text.slice(start, end);
-      const pmStart =
-        run.pmStart != null ? run.pmStart + start : run.pmEnd != null ? run.pmEnd - (text.length - start) : undefined;
-      const pmEnd =
-        run.pmStart != null ? run.pmStart + end : run.pmEnd != null ? run.pmEnd - (text.length - end) : undefined;
-      result.push({
-        ...run,
-        text: slice,
-        pmStart,
-        pmEnd,
-      });
-    } else {
-      result.push(run);
-    }
-  }
-
-  return result;
 };
 
 // isRtlBlock is now in position-hit.ts and re-exported above.

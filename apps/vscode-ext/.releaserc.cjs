@@ -1,4 +1,9 @@
 /* eslint-env node */
+const {
+  createCommitAnalyzer,
+  createReleaseNotesGenerator,
+} = require('../../scripts/semantic-release/strict-breaking-parser.cjs');
+
 /*
  * Commit filter: vscode-ext bundles superdoc, so git log must include
  * commits touching superdoc's sub-packages. This shared helper patches
@@ -13,7 +18,6 @@ require('../../scripts/semantic-release/patch-commit-filter.cjs')([
   'packages/superdoc',
   'packages/super-editor',
   'packages/layout-engine',
-  'packages/ai',
   'packages/word-layout',
   'packages/preset-geometry',
   'shared',
@@ -30,29 +34,24 @@ const branches = [
 const isPrerelease = branches.some((b) => typeof b === 'object' && b.name === branch && b.prerelease);
 
 // Use AI-powered notes for stable releases, conventional generator for prereleases
-const notesPlugin = isPrerelease
-  ? '@semantic-release/release-notes-generator'
-  : ['semantic-release-ai-notes', { style: 'concise' }];
+const notesPlugin = isPrerelease ? createReleaseNotesGenerator() : ['semantic-release-ai-notes', { style: 'concise' }];
 
 const config = {
   branches,
   tagFormat: 'vscode-v${version}',
   plugins: [
-    [
-      '@semantic-release/commit-analyzer',
-      {
-        // Cap at minor — the extension bundles superdoc, so upstream breaking
-        // changes don't break the extension's public API (it has none).
-        // Prevents accidental major bumps from superdoc feat!/BREAKING CHANGE commits.
-        releaseRules: [
-          { breaking: true, release: 'minor' },
-          { type: 'feat', release: 'minor' },
-          { type: 'fix', release: 'patch' },
-          { type: 'perf', release: 'patch' },
-          { type: 'revert', release: 'patch' },
-        ],
-      },
-    ],
+    createCommitAnalyzer({
+      // Cap at minor — the extension bundles superdoc, so upstream breaking
+      // changes don't break the extension's public API (it has none).
+      // Prevents accidental major bumps from superdoc feat!/BREAKING CHANGE commits.
+      releaseRules: [
+        { breaking: true, release: 'minor' },
+        { type: 'feat', release: 'minor' },
+        { type: 'fix', release: 'patch' },
+        { type: 'perf', release: 'patch' },
+        { type: 'revert', release: 'patch' },
+      ],
+    }),
     notesPlugin,
     ['semantic-release-pnpm', { npmPublish: false }], // Version bump only, handles workspace:* versions
   ],

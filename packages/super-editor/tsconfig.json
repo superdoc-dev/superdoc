@@ -6,6 +6,7 @@
     "declaration": true,
     "emitDeclarationOnly": true,
     "outDir": "dist",
+    "jsx": "react-jsx",
     "baseUrl": ".",
     "paths": {
       "@": ["./src/*"],

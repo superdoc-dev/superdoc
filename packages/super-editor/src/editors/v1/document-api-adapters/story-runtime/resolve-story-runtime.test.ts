@@ -67,6 +67,7 @@ vi.mock('./story-revision-store.js', () => ({
 
 import { resolveStoryRuntime, invalidateStoryRuntime } from './resolve-story-runtime.js';
 import {
+  commitLiveStorySessionRuntimes,
   registerLiveStorySessionRuntime,
   unregisterLiveStorySessionRuntime,
 } from './live-story-session-runtime-registry.js';
@@ -435,5 +436,23 @@ describe('resolveStoryRuntime — active story sessions', () => {
     expect(live.editor).toBe(secondSessionEditor);
 
     unregisterLiveStorySessionRuntime(hostEditor, 'hf:part:rId11', secondSessionEditor);
+  });
+
+  it('commits registered live sessions through their active editors', () => {
+    const hostEditor = makeHostEditor();
+    const commitEditor = vi.fn();
+    const runtime = {
+      locator: { kind: 'story', storyType: 'footnote', noteId: '9' },
+      storyKey: 'fn:9',
+      editor: { id: 'cached-editor', on: vi.fn(), state: { doc: { content: { size: 5 } } } } as any,
+      kind: 'note' as const,
+      commitEditor,
+    };
+    const sessionEditor = { id: 'session-editor', on: vi.fn(), state: { doc: { content: { size: 5 } } } } as any;
+
+    registerLiveStorySessionRuntime(hostEditor, runtime, sessionEditor);
+
+    expect(commitLiveStorySessionRuntimes(hostEditor)).toBe(1);
+    expect(commitEditor).toHaveBeenCalledWith(hostEditor, sessionEditor);
   });
 });

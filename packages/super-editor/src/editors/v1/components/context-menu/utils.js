@@ -12,6 +12,10 @@ import { isCellSelection } from '@extensions/table/tableHelpers/isCellSelection.
 import { hasExpandedSelection } from '@utils/selectionUtils.js';
 import { DOM_CLASS_NAMES } from '@superdoc/dom-contract';
 import { selectedRect } from 'prosemirror-tables';
+
+export const resolveContextMenuCommandEditor = (editor) => {
+  return typeof editor?.getActiveEditor === 'function' ? editor.getActiveEditor() : editor;
+};
 /**
  * Get props by item id
  *
@@ -23,10 +27,10 @@ import { selectedRect } from 'prosemirror-tables';
  */
 export const getPropsByItemId = (itemId, props) => {
   // Common props that are needed regardless of trigger type
-  const editor = props.editor;
+  const editor = resolveContextMenuCommandEditor(props.editor);
 
   const baseProps = {
-    editor: markRaw(props.editor),
+    editor: markRaw(editor),
   };
 
   switch (itemId) {

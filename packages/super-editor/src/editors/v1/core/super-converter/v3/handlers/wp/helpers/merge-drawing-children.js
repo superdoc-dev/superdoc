@@ -1,4 +1,5 @@
 import { carbonCopy } from '@core/utilities/carbonCopy.js';
+import { findChildByLocalName } from './drawingml-utils.js';
 
 /**
  * Merge drawing children while ensuring:
@@ -102,8 +103,8 @@ function fixZeroDrawingIds(merged, generated) {
     docPr.attributes.id = validId;
   }
 
-  const graphic = merged.find((el) => el?.name === 'a:graphic');
-  const graphicData = graphic?.elements?.find((el) => el?.name === 'a:graphicData');
+  const graphic = findChildByLocalName(merged, 'graphic');
+  const graphicData = findChildByLocalName(graphic?.elements, 'graphicData');
   const pic = graphicData?.elements?.find((el) => el?.name === 'pic:pic');
   const nvPicPr = pic?.elements?.find((el) => el?.name === 'pic:nvPicPr');
   const cNvPr = nvPicPr?.elements?.find((el) => el?.name === 'pic:cNvPr');

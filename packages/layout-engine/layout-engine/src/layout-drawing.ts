@@ -136,6 +136,7 @@ export function layoutDrawingBlock({
     zIndex: getFragmentZIndex(block),
     pmStart: pmRange.pmStart,
     pmEnd: pmRange.pmEnd,
+    sourceAnchor: block.sourceAnchor,
   };
 
   state.page.fragments.push(fragment);

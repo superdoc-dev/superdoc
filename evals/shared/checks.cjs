@@ -274,6 +274,31 @@ module.exports.usesCreateAction = (output, context) => {
   return { pass: true, score: 1, reason: `superdoc_create with action "${expectedAction}"` };
 };
 
+module.exports.usesListAction = (output, context) => {
+  const expectedAction = context?.vars?.expectedListAction;
+  // Fail loudly on malformed input — Promptfoo's matrix-expansion of array vars
+  // can turn `[a, b]` into a string, which would silently bypass this check.
+  if (expectedAction === undefined || expectedAction === null) return true;
+  if (typeof expectedAction !== 'string' || expectedAction.length === 0) {
+    return {
+      pass: false,
+      score: 0,
+      reason: `expectedListAction var must be a non-empty string; got ${typeof expectedAction} (${JSON.stringify(expectedAction)})`,
+    };
+  }
+  const calls = findTools(output, LIST);
+  if (calls.length === 0) return { pass: false, score: 0, reason: 'superdoc_list not called' };
+  const actions = calls.map((c) => getArgs(c).action).filter(Boolean);
+  if (!actions.includes(expectedAction)) {
+    return {
+      pass: false,
+      score: 0,
+      reason: `superdoc_list called with actions [${actions.join(', ')}], expected "${expectedAction}"`,
+    };
+  }
+  return { pass: true, score: 1, reason: `superdoc_list with action "${expectedAction}"` };
+};
+
 module.exports.usesCommentCreate = (output) => {
   const call = findTool(output, COMMENT);
   if (!call) return { pass: false, score: 0, reason: 'superdoc_comment not called' };
@@ -748,3 +773,290 @@ console.log(JSON.stringify(diff));
 
   return { pass: true, score: diff.ratio, reason: diff.reason };
 };
+
+// ---------------------------------------------------------------------------
+// OOXML numbering-consistency check (symbol-font-on-ordered-level regression guard)
+//
+// After a list mutation that converts bullet → ordered (e.g. lists.set_type),
+// Word-level fidelity requires that no level ends up with an ordered numFmt
+// paired with a symbol font (Wingdings, Symbol, Webdings, Zapf Dingbats).
+// Symbol fonts have no numeric/alphabetic glyphs at ASCII codepoints — Word
+// then renders "1.", "2.", etc. through the symbol font and shows unrelated
+// pictographic glyphs (envelopes, scissors, folders, etc.) instead of digits.
+// SuperDoc's internal projection hides the bug because it normalizes markers
+// to logical strings. Only visible when real OOXML is rendered.
+// ---------------------------------------------------------------------------
+
+const ORDERED_NUM_FMTS = new Set([
+  'decimal',
+  'decimalZero',
+  'decimalEnclosedCircle',
+  'decimalEnclosedFullstop',
+  'decimalEnclosedParen',
+  'lowerLetter',
+  'upperLetter',
+  'lowerRoman',
+  'upperRoman',
+  'ordinal',
+  'ordinalText',
+  'cardinalText',
+  'chicago',
+]);
+
+const SYMBOL_MARKER_FONTS = new Set([
+  'Wingdings',
+  'Wingdings 2',
+  'Wingdings 3',
+  'Symbol',
+  'Webdings',
+  'ZapfDingbats',
+  'Zapf Dingbats',
+]);
+
+/** Read just `word/numbering.xml` out of a `.docx` via `unzip -p`. */
+function readNumberingXml(docxPath) {
+  try {
+    return execSync(`unzip -p ${JSON.stringify(docxPath)} word/numbering.xml`, {
+      encoding: 'utf8',
+      timeout: 10000,
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+  } catch (_) {
+    return null;
+  }
+}
+
+/** Regex-scan numbering.xml for <w:lvl> nodes that pair an ordered numFmt with a symbol font. */
+function scanNumberingXmlForSymbolFontsOnOrderedLevels(xml) {
+  if (!xml) return [];
+  const violations = [];
+  const absRegex = /<w:abstractNum\b[^>]*w:abstractNumId="(\d+)"[^>]*>([\s\S]*?)<\/w:abstractNum>/g;
+  let absMatch;
+  while ((absMatch = absRegex.exec(xml)) !== null) {
+    const abstractId = Number(absMatch[1]);
+    const body = absMatch[2];
+    const lvlRegex = /<w:lvl\b[^>]*w:ilvl="(\d+)"[^>]*>([\s\S]*?)<\/w:lvl>/g;
+    let lvlMatch;
+    while ((lvlMatch = lvlRegex.exec(body)) !== null) {
+      const ilvl = Number(lvlMatch[1]);
+      const lvlBody = lvlMatch[2];
+      const numFmtMatch = lvlBody.match(/<w:numFmt\b[^/]*w:val="([^"]*)"/);
+      const numFmt = numFmtMatch?.[1];
+      if (!numFmt || !ORDERED_NUM_FMTS.has(numFmt)) continue;
+      const fontMatch =
+        lvlBody.match(/<w:rFonts\b[^/]*w:ascii="([^"]*)"/) ||
+        lvlBody.match(/<w:rFonts\b[^/]*w:hAnsi="([^"]*)"/) ||
+        lvlBody.match(/<w:rFonts\b[^/]*w:cs="([^"]*)"/) ||
+        lvlBody.match(/<w:rFonts\b[^/]*w:eastAsia="([^"]*)"/);
+      const font = fontMatch?.[1];
+      if (font && SYMBOL_MARKER_FONTS.has(font)) {
+        violations.push({ abstractId, ilvl, numFmt, font });
+      }
+    }
+  }
+  return violations;
+}
+
+/**
+ * Assertion for Level 2 execution tests that convert a bullet list into an
+ * ordered list. Requires the test to set `vars.keepFile: true` so the provider
+ * exposes `outputFile` in its JSON response. Reads the saved `.docx`, scans
+ * `word/numbering.xml`, and fails if any level has an ordered `numFmt` paired
+ * with a symbol-family `rFonts` — the bug signature where Word renders
+ * digits as pictographic glyphs (folder, envelope, scissors, etc.) because
+ * the marker character is drawn through a font with no numeric codepoints.
+ *
+ * Returns a skip (`true`) when the output isn't a keepFile path, so adding
+ * this assertion to a test that doesn't produce a file is a no-op rather
+ * than a spurious failure.
+ */
+module.exports.checkNoSymbolFontsOnOrderedLevels = (output) => {
+  let parsed;
+  try {
+    parsed = JSON.parse(output);
+  } catch {
+    return { pass: false, score: 0, reason: 'output is not JSON' };
+  }
+  const outputFile = parsed?.outputFile;
+  if (!outputFile || typeof outputFile !== 'string') {
+    return true; // No keepFile → nothing to inspect; skip rather than fail.
+  }
+  const xml = readNumberingXml(outputFile);
+  if (!xml) {
+    return {
+      pass: false,
+      score: 0,
+      reason: `Could not read word/numbering.xml from ${outputFile} (unzip failed or file absent)`,
+    };
+  }
+  const violations = scanNumberingXmlForSymbolFontsOnOrderedLevels(xml);
+  if (violations.length === 0) {
+    return { pass: true, score: 1, reason: 'No ordered-format levels with symbol-font rFonts' };
+  }
+  return {
+    pass: false,
+    score: 0,
+    reason:
+      `Found ${violations.length} ordered-format level(s) with symbol-font rFonts. ` +
+      `Word will render these as pictograph glyphs instead of digits. ` +
+      `Violations: ${JSON.stringify(violations)}`,
+  };
+};
+
+// ---------------------------------------------------------------------------
+// List structural checks for merge / split / restart evals.
+//
+// The text-and-action-name asserts in execution.yaml prove the agent picked
+// the right tool, but they do not prove the list itself changed. These read
+// `word/document.xml` from the saved `.docx` and inspect each paragraph's
+// `<w:numId>` / `<w:ilvl>` so a no-op or wrong-direction edit fails loudly.
+// ---------------------------------------------------------------------------
+
+function readDocumentXml(docxPath) {
+  try {
+    return execSync(`unzip -p ${JSON.stringify(docxPath)} word/document.xml`, {
+      encoding: 'utf8',
+      timeout: 10000,
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+  } catch (_) {
+    return null;
+  }
+}
+
+function extractListItems(documentXml) {
+  if (!documentXml) return [];
+  const items = [];
+  const pRegex = /<w:p\b[^>]*>([\s\S]*?)<\/w:p>/g;
+  let m;
+  while ((m = pRegex.exec(documentXml)) !== null) {
+    const body = m[1];
+    const numIdMatch = body.match(/<w:numId\b[^/]*w:val="(\d+)"/);
+    if (!numIdMatch) continue;
+    const ilvlMatch = body.match(/<w:ilvl\b[^/]*w:val="(\d+)"/);
+    const textParts = [...body.matchAll(/<w:t[^>]*>([\s\S]*?)<\/w:t>/g)].map((x) => x[1]);
+    items.push({
+      text: textParts.join(''),
+      numId: Number(numIdMatch[1]),
+      ilvl: ilvlMatch ? Number(ilvlMatch[1]) : 0,
+    });
+  }
+  return items;
+}
+
+function loadListItems(output) {
+  let parsed;
+  try { parsed = JSON.parse(output); } catch { return { skip: true, reason: 'output is not JSON' }; }
+  const outputFile = parsed?.outputFile;
+  if (!outputFile || typeof outputFile !== 'string') return { skip: true, reason: 'no outputFile (keepFile not set?)' };
+  const xml = readDocumentXml(outputFile);
+  if (!xml) return { fail: true, reason: `Could not read word/document.xml from ${outputFile}` };
+  return { items: extractListItems(xml), outputFile };
+}
+
+function findItem(items, snippet) {
+  return items.find((it) => it.text.includes(snippet));
+}
+
+function assertSingleNumIdAcross(output, itemTexts) {
+  const loaded = loadListItems(output);
+  if (loaded.skip) return true;
+  if (loaded.fail) return { pass: false, score: 0, reason: loaded.reason };
+  const numIds = itemTexts.map((t) => {
+    const found = findItem(loaded.items, t);
+    return found ? found.numId : null;
+  });
+  const missing = itemTexts.filter((_, i) => numIds[i] == null);
+  if (missing.length) return { pass: false, score: 0, reason: `List items not found: ${missing.join(', ')}` };
+  const distinct = new Set(numIds);
+  if (distinct.size > 1) {
+    return {
+      pass: false,
+      score: 0,
+      reason: `Expected one numId across all items, got ${distinct.size}: ${[...distinct].join(', ')}`,
+    };
+  }
+  return { pass: true, score: 1, reason: `All items share numId ${numIds[0]}` };
+}
+
+function assertDistinctNumIds(output, beforeText, afterText) {
+  const loaded = loadListItems(output);
+  if (loaded.skip) return true;
+  if (loaded.fail) return { pass: false, score: 0, reason: loaded.reason };
+  const before = findItem(loaded.items, beforeText);
+  const after = findItem(loaded.items, afterText);
+  if (!before || !after) {
+    return {
+      pass: false,
+      score: 0,
+      reason: `Could not find both items as list items: before=${!!before}, after=${!!after}`,
+    };
+  }
+  if (before.numId === after.numId) {
+    return {
+      pass: false,
+      score: 0,
+      reason: `Expected split: "${beforeText}" and "${afterText}" both still on numId ${before.numId}`,
+    };
+  }
+  return {
+    pass: true,
+    score: 1,
+    reason: `Split: "${beforeText}" on ${before.numId}, "${afterText}" on ${after.numId}`,
+  };
+}
+
+function assertRestartedNumbering(output, priorText, targetText) {
+  const loaded = loadListItems(output);
+  if (loaded.skip) return true;
+  if (loaded.fail) return { pass: false, score: 0, reason: loaded.reason };
+  const prior = findItem(loaded.items, priorText);
+  const target = findItem(loaded.items, targetText);
+  if (!prior || !target) {
+    return {
+      pass: false,
+      score: 0,
+      reason: `Could not find items: prior=${!!prior}, target=${!!target}`,
+    };
+  }
+  // Restart can show up two ways:
+  //  (a) target moved to a new numId (the new numId starts at 1)
+  //  (b) target stays on the same numId but numbering.xml gains a startOverride
+  if (prior.numId !== target.numId) {
+    return {
+      pass: true,
+      score: 1,
+      reason: `Restart via new numId: prior=${prior.numId}, target=${target.numId}`,
+    };
+  }
+  const numXml = readNumberingXml(loaded.outputFile);
+  if (numXml && /<w:startOverride\b[^/]*w:val="1"/.test(numXml)) {
+    return {
+      pass: true,
+      score: 1,
+      reason: `Restart via startOverride on numId ${target.numId}`,
+    };
+  }
+  return {
+    pass: false,
+    score: 0,
+    reason: `No restart detected: target on same numId ${target.numId} as prior, no startOverride found`,
+  };
+}
+
+// Test-specific wrappers used by execution.yaml. Each is bound to the
+// fixture document.docx; if that fixture changes, update the texts here.
+module.exports.checkBulletsAndNumbersMerged = (output) =>
+  assertSingleNumIdAcross(output, [
+    'All sorts of bullets.',
+    'Nested lists',
+    'Numbers',
+    'Or letters',
+    'All sorts of lists are supported',
+  ]);
+
+module.exports.checkBulletListSplitAtWith = (output) =>
+  assertDistinctNumIds(output, 'All sorts of bullets.', 'With');
+
+module.exports.checkRestartAtAllSorts = (output) =>
+  assertRestartedNumbering(output, 'Numbers', 'All sorts of lists are supported');

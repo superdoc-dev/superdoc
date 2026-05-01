@@ -1641,6 +1641,149 @@ describe('SD-1940: no recursive dispatch from apply() on selection change', () =
   });
 });
 
+// Issue #2861: clicking a comment whose range overlaps a tracked change inside an inline
+// SDT triggers `presentation.navigateTo`, which dispatches a collapsed cursor placement
+// followed by a non-collapsed NodeSelection on the SDT wrapper. `getActiveCommentId` early-
+// returns `undefined` for any non-collapsed selection, and the plugin used to coerce that
+// `undefined` into `commentsUpdate({activeCommentId: null})`, clearing the just-activated
+// comment. The host's `commentsUpdate` listener then re-asserts the comment, the plugin
+// re-emits, and the highlight class flickers ~400 times/second until something else changes.
+describe('SD-2861: non-collapsed selection does not clear active comment', () => {
+  it('preserves activeThreadId when a non-collapsed selection follows explicit activation', () => {
+    const schema = createCommentSchema();
+    const commentMark = schema.marks[CommentMarkName].create({ commentId: 'thread-1', internal: true });
+    // "Hello" (1..6) carries the comment, " World" (6..12) does not.
+    const paragraph = schema.node('paragraph', null, [schema.text('Hello', [commentMark]), schema.text(' World')]);
+    const doc = schema.node('doc', null, [paragraph]);
+    const { view, editor } = createPluginStateEnvironment({ schema, doc });
+
+    // Step 1: Explicitly activate the comment (mirrors the sidebar click path).
+    view.dispatch(
+      view.state.tr.setMeta(CommentsPluginKey, {
+        type: 'setActiveComment',
+        activeThreadId: 'thread-1',
+        forceUpdate: true,
+      }),
+    );
+    expect(CommentsPluginKey.getState(view.state).activeThreadId).toBe('thread-1');
+    editor.emit.mockClear();
+
+    // Step 2: Non-collapsed selection that straddles the comment boundary, mimicking the
+    // NodeSelection that `presentation.navigateTo` produces on the SDT wrapper.
+    view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, 1, 8)));
+
+    // The active comment must survive. `getActiveCommentId` returned undefined (because the
+    // selection was non-collapsed); the plugin used to treat that as "no comment" and emit
+    // commentsUpdate({activeCommentId: null}). It must not.
+    expect(CommentsPluginKey.getState(view.state).activeThreadId).toBe('thread-1');
+    expect(editor.emit).not.toHaveBeenCalledWith('commentsUpdate', expect.objectContaining({ activeCommentId: null }));
+  });
+
+  it('preserves activeThreadId when a follow-up non-collapsed selection sits entirely within the comment range', () => {
+    const schema = createCommentSchema();
+    const commentMark = schema.marks[CommentMarkName].create({ commentId: 'thread-1', internal: true });
+    const trackedMark = schema.marks[TrackInsertMarkName].create({ id: 'tc-1' });
+    // The repro case from #2861: text carries both a comment mark and a tracked-change mark.
+    const paragraph = schema.node('paragraph', null, [schema.text('WYSIWYG', [commentMark, trackedMark])]);
+    const doc = schema.node('doc', null, [paragraph]);
+    const { view, editor } = createPluginStateEnvironment({ schema, doc });
+
+    view.dispatch(
+      view.state.tr.setMeta(CommentsPluginKey, {
+        type: 'setActiveComment',
+        activeThreadId: 'thread-1',
+        forceUpdate: true,
+      }),
+    );
+    editor.emit.mockClear();
+
+    // Non-collapsed selection that wraps the entire comment range — what navigateTo
+    // produces when it lands a NodeSelection on the SDT containing the tracked change.
+    view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, 1, 8)));
+
+    expect(CommentsPluginKey.getState(view.state).activeThreadId).toBe('thread-1');
+    expect(editor.emit).not.toHaveBeenCalledWith('commentsUpdate', expect.objectContaining({ activeCommentId: null }));
+  });
+
+  it('still clears activeThreadId when a collapsed cursor moves outside the comment range', () => {
+    // Regression guard: the fix only suppresses clears for non-collapsed selections.
+    // A real "user moved off the comment" interaction (collapsed cursor outside any comment)
+    // must still propagate.
+    const schema = createCommentSchema();
+    const commentMark = schema.marks[CommentMarkName].create({ commentId: 'thread-1', internal: true });
+    const paragraph = schema.node('paragraph', null, [schema.text('Hello', [commentMark]), schema.text(' World')]);
+    const doc = schema.node('doc', null, [paragraph]);
+    const { view, editor } = createPluginStateEnvironment({ schema, doc });
+
+    view.dispatch(
+      view.state.tr.setMeta(CommentsPluginKey, {
+        type: 'setActiveComment',
+        activeThreadId: 'thread-1',
+        forceUpdate: true,
+      }),
+    );
+    editor.emit.mockClear();
+
+    // Collapsed cursor at pos 9 lands inside " World", which has no comment mark.
+    view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, 9)));
+
+    expect(CommentsPluginKey.getState(view.state).activeThreadId).toBeNull();
+    expect(editor.emit).toHaveBeenCalledWith('commentsUpdate', expect.objectContaining({ activeCommentId: null }));
+  });
+
+  it('does not enter a dispatch loop when a host listener re-asserts after each commentsUpdate', () => {
+    // Models the live system: SuperDoc.vue's onEditorCommentsUpdate calls
+    // commentsStore.setActiveComment(superdoc, payload.activeCommentId), which dispatches
+    // another setActiveComment meta back into the editor. Before the fix, the cursor + range
+    // tx pair from navigateTo emitted (id, null) which the listener echoed back, looping.
+    const schema = createCommentSchema();
+    const commentMark = schema.marks[CommentMarkName].create({ commentId: 'thread-1', internal: true });
+    const paragraph = schema.node('paragraph', null, [schema.text('Hello', [commentMark])]);
+    const doc = schema.node('doc', null, [paragraph]);
+
+    const { editor, view, extension } = createEditorEnvironment(schema, doc);
+    const plugins = extension.addPmPlugins();
+    view.state = EditorState.create({ schema, doc, selection: TextSelection.create(doc, 1), plugins });
+
+    let dispatchCount = 0;
+    const originalDispatch = (tr) => {
+      view.state = view.state.apply(tr);
+    };
+    view.dispatch = vi.fn((tr) => {
+      dispatchCount += 1;
+      if (dispatchCount > 10) throw new Error('Dispatch loop detected — exceeded 10 dispatches');
+      originalDispatch(tr);
+    });
+
+    // Mirror the host's reaction: every commentsUpdate triggers a setActiveComment meta back
+    // into the editor. The store does this even when the payload's activeCommentId === null.
+    editor.emit = vi.fn((eventName, payload) => {
+      if (eventName !== 'commentsUpdate') return;
+      view.dispatch(
+        view.state.tr.setMeta(CommentsPluginKey, {
+          type: 'setActiveComment',
+          activeThreadId: payload?.activeCommentId ?? null,
+          forceUpdate: true,
+        }),
+      );
+    });
+
+    // Tx 1: cursor placement at pos 3 inside the comment.
+    view.dispatch(
+      view.state.tr
+        .setSelection(TextSelection.create(view.state.doc, 3))
+        .setMeta(CommentsPluginKey, { type: 'setCursorById', preferredActiveThreadId: 'thread-1' }),
+    );
+    // Tx 2: non-collapsed selection — the SDT-wrapper case from navigateTo.
+    view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, 1, 6)));
+
+    // Without the fix, dispatchCount would explode (each clear emit triggers another
+    // setActiveComment dispatch). The non-collapsed-clear suppression keeps it bounded.
+    expect(dispatchCount).toBeLessThanOrEqual(5);
+    expect(CommentsPluginKey.getState(view.state).activeThreadId).toBe('thread-1');
+  });
+});
+
 describe('Headless mode plugin behavior', () => {
   it('creates a state-only plugin in headless mode (no props or view)', () => {
     const editor = {

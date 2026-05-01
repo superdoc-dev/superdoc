@@ -18,6 +18,7 @@ import {
   headlessToolbarConstants,
   headlessToolbarHelpers,
 } from '../../headless-toolbar/index.js';
+import { createSuperDocUI, shallowEqual } from '../../ui/index.js';
 import { SuperToolbar } from './components/toolbar/super-toolbar.js';
 import { DocxEncryptionError, DocxEncryptionErrorCode, DocxZipper, helpers } from './core/index.js';
 import { Editor } from './core/Editor.js';
@@ -120,6 +121,8 @@ export {
   createHeadlessToolbar,
   headlessToolbarConstants,
   headlessToolbarHelpers,
+  createSuperDocUI,
+  shallowEqual,
   getStarterExtensions,
   /** @internal */
   getRichTextExtensions,

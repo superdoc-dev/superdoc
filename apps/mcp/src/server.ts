@@ -2,14 +2,12 @@
 import { createRequire } from 'node:module';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { getMcpPrompt } from '@superdoc-dev/sdk';
+import { MCP_SYSTEM_PROMPT } from './generated/mcp-prompt.js';
 import { SessionManager } from './session-manager.js';
 import { registerAllTools } from './tools/index.js';
 
 const require = createRequire(import.meta.url);
 const { version } = require('../package.json');
-
-const mcpInstructions = await getMcpPrompt();
 
 const server = new McpServer(
   {
@@ -17,13 +15,13 @@ const server = new McpServer(
     version,
   },
   {
-    instructions: mcpInstructions,
+    instructions: MCP_SYSTEM_PROMPT,
   },
 );
 
 const sessions = new SessionManager();
 
-await registerAllTools(server, sessions);
+registerAllTools(server, sessions);
 
 const transport = new StdioServerTransport();
 

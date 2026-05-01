@@ -2088,7 +2088,7 @@ describe('createDocumentApi', () => {
       const api = makeApi();
       expectValidationError(
         () => api.comments.create({ target: { kind: 'text', blockId: 'p1' }, text: 'comment' } as any),
-        'target must be a text address object',
+        'target must be a TextAddress or TextTarget object',
       );
     });
 
@@ -2114,6 +2114,64 @@ describe('createDocumentApi', () => {
       const target = { kind: 'text', blockId: 'p1', range: { start: 0, end: 5 } } as const;
       api.comments.create({ target, text: 'comment' });
       expect(commentsAdpt.add).toHaveBeenCalledWith({ target, text: 'comment' }, undefined);
+    });
+
+    it('accepts a multi-segment TextTarget and forwards it unchanged', () => {
+      const commentsAdpt = makeCommentsAdapter();
+      const api = createDocumentApi({
+        find: makeFindAdapter(FIND_RESULT),
+        get: makeGetAdapter(),
+        getNode: makeGetNodeAdapter(PARAGRAPH_NODE_RESULT),
+        getText: makeGetTextAdapter(),
+        info: makeInfoAdapter(),
+        capabilities: makeCapabilitiesAdapter(),
+        comments: commentsAdpt,
+        write: makeWriteAdapter(),
+        selectionMutation: makeSelectionMutationAdapter(),
+        trackChanges: makeTrackChangesAdapter(),
+        create: makeCreateAdapter(),
+        lists: makeListsAdapter(),
+      });
+
+      const target = {
+        kind: 'text',
+        segments: [
+          { blockId: 'p1', range: { start: 3, end: 10 } },
+          { blockId: 'p2', range: { start: 0, end: 7 } },
+        ],
+      } as const;
+      api.comments.create({ target, text: 'comment' });
+      expect(commentsAdpt.add).toHaveBeenCalledWith({ target, text: 'comment' }, undefined);
+    });
+  });
+
+  describe('selection adapter', () => {
+    function makeApiWithoutSelection() {
+      return createDocumentApi({
+        find: makeFindAdapter(FIND_RESULT),
+        get: makeGetAdapter(),
+        getNode: makeGetNodeAdapter(PARAGRAPH_NODE_RESULT),
+        getText: makeGetTextAdapter(),
+        info: makeInfoAdapter(),
+        comments: makeCommentsAdapter(),
+        write: makeWriteAdapter(),
+        selectionMutation: makeSelectionMutationAdapter(),
+        trackChanges: makeTrackChangesAdapter(),
+        create: makeCreateAdapter(),
+        lists: makeListsAdapter(),
+      });
+    }
+
+    it('throws SELECTION_ADAPTER_UNAVAILABLE when selection.current is called without a selection adapter', () => {
+      const api = makeApiWithoutSelection();
+      try {
+        api.selection.current();
+        expect.fail('expected SELECTION_ADAPTER_UNAVAILABLE to be thrown');
+      } catch (err: unknown) {
+        const e = err as { name: string; code: string };
+        expect(e.name).toBe('DocumentApiValidationError');
+        expect(e.code).toBe('SELECTION_ADAPTER_UNAVAILABLE');
+      }
     });
   });
 

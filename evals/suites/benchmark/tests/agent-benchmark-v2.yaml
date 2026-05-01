@@ -288,3 +288,261 @@
     - type: javascript
       metric: path
       value: file://../shared/checks.cjs:benchmarkPath
+
+# ═══════════════════════════════════════════════════════════════
+# CATEGORY D: List workflows — compound ops (merge / split / restart / subpoint / nested)
+#
+# Fixtures:
+#   document.docx  — two adjacent lists: bullet (4 items, nested) + ordered (3 items, lettered)
+#                    Source of truth for merge / split / restart tasks.
+#   basic-list.docx — simple nested bullet list (4 items L0/L1) + a 4-item ordered list.
+#                    Used for sub-point and nested-construction tasks.
+#
+# All tasks set keepFile: true so the saved .docx feeds the fidelity + numbering-
+# consistency guards below. Assertions follow the Level 3 pattern (correctness +
+# collateral + fidelity + observational-zero-weight metrics).
+# ═══════════════════════════════════════════════════════════════
+
+- description: 'List: merge two adjacent lists into one'
+  vars:
+    fixture: document.docx
+    keepFile: true
+    task: 'The document has two adjacent lists — a bullet list that starts with "All sorts of bullets." and a numbered list that starts with "Numbers". Merge the numbered list into the bullet list so they become one continuous list. All item texts must be preserved.'
+  assert:
+    - type: javascript
+      metric: correctness
+      value: |
+        const d = JSON.parse(output);
+        const t = d.documentText || '';
+        const required = ['All sorts of bullets.', 'Nested lists', 'With', 'Lots of plenty of different icons', 'Numbers', 'Or letters', 'All sorts of lists are supported'];
+        const missing = required.filter((s) => !t.includes(s));
+        if (missing.length) return { pass: false, score: 0, reason: `Missing after merge: ${missing.join(', ')}` };
+        return { pass: true, score: 1, reason: 'All 7 item texts preserved' };
+    - type: javascript
+      metric: collateral
+      value: |
+        const d = JSON.parse(output);
+        if (d.documentChanged !== true) return { pass: false, score: 0, reason: 'documentChanged should be true' };
+        const t = d.documentText || '';
+        if (!t.includes('A list of list features')) return { pass: false, score: 0, reason: 'Document preamble removed' };
+        return { pass: true, score: 1, reason: 'Preamble intact' };
+    - type: javascript
+      metric: numbering_font_consistency
+      value: file://../shared/checks.cjs:checkNoSymbolFontsOnOrderedLevels
+    - type: javascript
+      metric: fidelity
+      value: file://../shared/checks.cjs:benchmarkFidelity
+    - type: javascript
+      metric: diff
+      weight: 0
+      value: file://../shared/checks.cjs:benchmarkDiff
+    - type: javascript
+      metric: steps
+      weight: 0
+      value: file://../shared/checks.cjs:benchmarkSteps
+    - type: javascript
+      metric: latency
+      weight: 0
+      value: file://../shared/checks.cjs:benchmarkLatency
+    - type: javascript
+      metric: tokens
+      weight: 0
+      value: file://../shared/checks.cjs:benchmarkTokens
+    - type: javascript
+      metric: path
+      value: file://../shared/checks.cjs:benchmarkPath
+
+- description: 'List: split a list at a specific item'
+  vars:
+    fixture: document.docx
+    keepFile: true
+    task: 'In the bullet list, split the list at the item "With" so that "With" and the item after it become a new separate list. All original item texts must remain in the document.'
+  assert:
+    - type: javascript
+      metric: correctness
+      value: |
+        const d = JSON.parse(output);
+        const t = d.documentText || '';
+        const required = ['All sorts of bullets.', 'Nested lists', 'With', 'Lots of plenty of different icons'];
+        const missing = required.filter((s) => !t.includes(s));
+        if (missing.length) return { pass: false, score: 0, reason: `Content damaged: missing ${missing.join(', ')}` };
+        return { pass: true, score: 1, reason: 'All items preserved' };
+    - type: javascript
+      metric: collateral
+      value: |
+        const d = JSON.parse(output);
+        if (d.documentChanged !== true) return { pass: false, score: 0, reason: 'documentChanged should be true' };
+        const t = d.documentText || '';
+        if (!t.includes('Numbers') || !t.includes('Or letters')) return { pass: false, score: 0, reason: 'Second (numbered) list damaged' };
+        return { pass: true, score: 1, reason: 'Numbered list untouched' };
+    - type: javascript
+      metric: numbering_font_consistency
+      value: file://../shared/checks.cjs:checkNoSymbolFontsOnOrderedLevels
+    - type: javascript
+      metric: fidelity
+      value: file://../shared/checks.cjs:benchmarkFidelity
+    - type: javascript
+      metric: diff
+      weight: 0
+      value: file://../shared/checks.cjs:benchmarkDiff
+    - type: javascript
+      metric: steps
+      weight: 0
+      value: file://../shared/checks.cjs:benchmarkSteps
+    - type: javascript
+      metric: latency
+      weight: 0
+      value: file://../shared/checks.cjs:benchmarkLatency
+    - type: javascript
+      metric: tokens
+      weight: 0
+      value: file://../shared/checks.cjs:benchmarkTokens
+    - type: javascript
+      metric: path
+      value: file://../shared/checks.cjs:benchmarkPath
+
+- description: 'List: restart numbering at a specific item'
+  vars:
+    fixture: document.docx
+    keepFile: true
+    task: 'In the numbered list, restart the numbering at the item "All sorts of lists are supported" so it counts from 1 again from that point forward. Keep all item texts unchanged.'
+  assert:
+    - type: javascript
+      metric: correctness
+      value: |
+        const d = JSON.parse(output);
+        const t = d.documentText || '';
+        const required = ['Numbers', 'Or letters', 'All sorts of lists are supported'];
+        const missing = required.filter((s) => !t.includes(s));
+        if (missing.length) return { pass: false, score: 0, reason: `Content damaged: missing ${missing.join(', ')}` };
+        return { pass: true, score: 1, reason: 'All items preserved' };
+    - type: javascript
+      metric: collateral
+      value: |
+        const d = JSON.parse(output);
+        if (d.documentChanged !== true) return { pass: false, score: 0, reason: 'documentChanged should be true' };
+        const t = d.documentText || '';
+        if (!t.includes('All sorts of bullets.') || !t.includes('Nested lists')) {
+          return { pass: false, score: 0, reason: 'Bullet list damaged' };
+        }
+        return { pass: true, score: 1, reason: 'Bullet list untouched' };
+    - type: javascript
+      metric: numbering_font_consistency
+      value: file://../shared/checks.cjs:checkNoSymbolFontsOnOrderedLevels
+    - type: javascript
+      metric: fidelity
+      value: file://../shared/checks.cjs:benchmarkFidelity
+    - type: javascript
+      metric: diff
+      weight: 0
+      value: file://../shared/checks.cjs:benchmarkDiff
+    - type: javascript
+      metric: steps
+      weight: 0
+      value: file://../shared/checks.cjs:benchmarkSteps
+    - type: javascript
+      metric: latency
+      weight: 0
+      value: file://../shared/checks.cjs:benchmarkLatency
+    - type: javascript
+      metric: tokens
+      weight: 0
+      value: file://../shared/checks.cjs:benchmarkTokens
+    - type: javascript
+      metric: path
+      value: file://../shared/checks.cjs:benchmarkPath
+
+- description: 'List: add a sub-point under an existing item'
+  vars:
+    fixture: basic-list.docx
+    keepFile: true
+    task: 'Under the bullet list item "List item 1", add a new sub-point with the text "Added sub-point" that is nested one level deeper than "List item 1". Do not change any other content.'
+  assert:
+    - type: javascript
+      metric: correctness
+      value: |
+        const d = JSON.parse(output);
+        const t = d.documentText || '';
+        if (!t.includes('Added sub-point')) return { pass: false, score: 0, reason: 'Sub-point text not in document' };
+        if (!t.includes('List item 1')) return { pass: false, score: 0, reason: 'Parent item damaged' };
+        return { pass: true, score: 1, reason: 'Sub-point added; parent intact' };
+    - type: javascript
+      metric: collateral
+      value: |
+        const d = JSON.parse(output);
+        if (d.documentChanged !== true) return { pass: false, score: 0, reason: 'documentChanged should be true' };
+        const t = d.documentText || '';
+        const originals = ['List item 1', 'List item 2', 'Indentation 1', 'Back'];
+        const missing = originals.filter((s) => !t.includes(s));
+        if (missing.length) return { pass: false, score: 0, reason: `Original items missing: ${missing.join(', ')}` };
+        return { pass: true, score: 1, reason: 'All original items preserved' };
+    - type: javascript
+      metric: fidelity
+      value: file://../shared/checks.cjs:benchmarkFidelity
+    - type: javascript
+      metric: diff
+      weight: 0
+      value: file://../shared/checks.cjs:benchmarkDiff
+    - type: javascript
+      metric: steps
+      weight: 0
+      value: file://../shared/checks.cjs:benchmarkSteps
+    - type: javascript
+      metric: latency
+      weight: 0
+      value: file://../shared/checks.cjs:benchmarkLatency
+    - type: javascript
+      metric: tokens
+      weight: 0
+      value: file://../shared/checks.cjs:benchmarkTokens
+    - type: javascript
+      metric: path
+      value: file://../shared/checks.cjs:benchmarkPath
+
+- description: 'List: build nested bullets at multiple levels'
+  vars:
+    fixture: basic-list.docx
+    keepFile: true
+    task: 'After the last bullet item in the existing bullet list, add three new bullet items in sequence: "Top new" at the top level (level 0), then "Child of top new" nested one level deeper (level 1), then "Grandchild" nested two levels deeper (level 2). Do not touch any existing content.'
+  assert:
+    - type: javascript
+      metric: correctness
+      value: |
+        const d = JSON.parse(output);
+        const t = d.documentText || '';
+        const required = ['Top new', 'Child of top new', 'Grandchild'];
+        const missing = required.filter((s) => !t.includes(s));
+        if (missing.length) return { pass: false, score: 0, reason: `Missing new items: ${missing.join(', ')}` };
+        return { pass: true, score: 1, reason: 'All three new items present' };
+    - type: javascript
+      metric: collateral
+      value: |
+        const d = JSON.parse(output);
+        if (d.documentChanged !== true) return { pass: false, score: 0, reason: 'documentChanged should be true' };
+        const t = d.documentText || '';
+        const originals = ['List item 1', 'List item 2', 'Indentation 1', 'Back'];
+        const missing = originals.filter((s) => !t.includes(s));
+        if (missing.length) return { pass: false, score: 0, reason: `Original items lost: ${missing.join(', ')}` };
+        return { pass: true, score: 1, reason: 'All original items preserved' };
+    - type: javascript
+      metric: fidelity
+      value: file://../shared/checks.cjs:benchmarkFidelity
+    - type: javascript
+      metric: diff
+      weight: 0
+      value: file://../shared/checks.cjs:benchmarkDiff
+    - type: javascript
+      metric: steps
+      weight: 0
+      value: file://../shared/checks.cjs:benchmarkSteps
+    - type: javascript
+      metric: latency
+      weight: 0
+      value: file://../shared/checks.cjs:benchmarkLatency
+    - type: javascript
+      metric: tokens
+      weight: 0
+      value: file://../shared/checks.cjs:benchmarkTokens
+    - type: javascript
+      metric: path
+      value: file://../shared/checks.cjs:benchmarkPath

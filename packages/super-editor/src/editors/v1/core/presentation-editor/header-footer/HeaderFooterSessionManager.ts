@@ -59,10 +59,8 @@ import { selectionToRects } from '@superdoc/layout-bridge';
 import { deduplicateOverlappingRects } from '../../../dom-observer/DomSelectionGeometry.js';
 import { resolveSectionProjections } from '../../../document-api-adapters/helpers/sections-resolver.js';
 import { computeCaretLayoutRectGeometry as computeCaretLayoutRectGeometryFromHelper } from '../selection/CaretGeometry.js';
-import {
-  ensureExplicitHeaderFooterSlot,
-  normalizeVariant,
-} from '../../../document-api-adapters/helpers/header-footer-slot-materialization.js';
+import { ensureExplicitHeaderFooterSlot } from '../../../document-api-adapters/helpers/header-footer-slot-materialization.js';
+import { normalizeVariant } from './header-footer-variant.js';
 
 // =============================================================================
 // Types
@@ -447,6 +445,7 @@ export class HeaderFooterSessionManager {
   #hoverOverlay: HTMLElement | null = null;
   #hoverTooltip: HTMLElement | null = null;
   #modeBanner: HTMLElement | null = null;
+  #activeBorderLine: HTMLElement | null = null;
   #hoverRegion: HeaderFooterRegion | null = null;
 
   // Document mode
@@ -817,6 +816,8 @@ export class HeaderFooterSessionManager {
         if (!region.sectionId) console.error('[HeaderFooterSessionManager] Footer region missing sectionId', region);
       }
     }
+
+    this.#syncActiveBorder();
   }
 
   /**
@@ -1018,7 +1019,11 @@ export class HeaderFooterSessionManager {
 
     const bodyPageCount = this.#deps?.getBodyPageCount() ?? 1;
     const session = storySessionManager.activate(locator, {
-      commitPolicy: 'continuous',
+      // Presentation-mode header/footer sessions now reuse the manager-backed
+      // per-refId editor, which already exports on update. Commit once on exit
+      // to avoid double-syncing every keystroke while still flushing the final
+      // state if the session closes mid-batch.
+      commitPolicy: 'onExit',
       preferHiddenHost: true,
       hostWidthPx: Math.max(1, region.width),
       editorContext: {
@@ -1060,6 +1065,7 @@ export class HeaderFooterSessionManager {
           sectionId: region.sectionId,
           kind: region.kind,
           variant: normalizeVariant(region.sectionType ?? 'default'),
+          addToHistory: false,
         });
         if (materializationResult) {
           // Refresh registry so the new refId is discoverable
@@ -1154,20 +1160,13 @@ export class HeaderFooterSessionManager {
         return null;
       }
 
+      const shouldRestoreInitialSelection = options?.initialSelection !== 'defer';
+
       try {
         this.#applyChildEditorDocumentMode(editor, this.#documentMode);
 
-        if (options?.initialSelection !== 'defer') {
-          try {
-            const doc = editor.state?.doc;
-            if (doc) {
-              const endPos = doc.content.size - 1;
-              const pos = Math.max(1, endPos);
-              editor.commands?.setTextSelection?.({ from: pos, to: pos });
-            }
-          } catch (cursorError) {
-            console.warn('[HeaderFooterSessionManager] Could not set cursor to end:', cursorError);
-          }
+        if (shouldRestoreInitialSelection) {
+          this.#applyDefaultSelectionAtStoryEnd(editor, 'Could not set cursor to end');
         }
       } catch (editableError) {
         console.error('[HeaderFooterSessionManager] Error setting editor editable:', editableError);
@@ -1196,6 +1195,19 @@ export class HeaderFooterSessionManager {
         editor.view?.focus();
       } catch (focusError) {
         console.warn('[HeaderFooterSessionManager] Could not focus editor:', focusError);
+      }
+
+      if (shouldRestoreInitialSelection) {
+        // WebKit can keep a stale DOM selection when the hidden story editor
+        // receives focus. Re-applying the PM selection after focus keeps the
+        // first keyboard event aligned with the intended caret position.
+        this.#applyDefaultSelectionAtStoryEnd(editor, 'Could not restore cursor after focus');
+        try {
+          editor.view?.focus();
+        } catch (focusError) {
+          console.warn('[HeaderFooterSessionManager] Could not refocus editor after restoring selection:', focusError);
+        }
+        this.#scheduleSelectionRestoreAfterFocus(editor);
       }
 
       this.#emitModeChanged();
@@ -1250,6 +1262,47 @@ export class HeaderFooterSessionManager {
     }
   }
 
+  #getDefaultSelectionAtStoryEnd(editor: Editor): { from: number; to: number } | null {
+    const doc = editor.state?.doc;
+    if (!doc) return null;
+
+    const endPos = doc.content.size - 1;
+    const pos = Math.max(1, endPos);
+    return { from: pos, to: pos };
+  }
+
+  #applyEditorTextSelection(editor: Editor, selection: { from: number; to: number }, warningMessage: string): void {
+    try {
+      editor.commands?.setTextSelection?.(selection);
+    } catch (error) {
+      console.warn(`[HeaderFooterSessionManager] ${warningMessage}:`, error);
+    }
+  }
+
+  #applyDefaultSelectionAtStoryEnd(editor: Editor, warningMessage: string): void {
+    const selection = this.#getDefaultSelectionAtStoryEnd(editor);
+    if (!selection) return;
+    this.#applyEditorTextSelection(editor, selection, warningMessage);
+  }
+
+  #scheduleSelectionRestoreAfterFocus(editor: Editor): void {
+    const win = editor.view?.dom?.ownerDocument?.defaultView;
+    if (!win) return;
+
+    win.requestAnimationFrame(() => {
+      if (this.#activeEditor !== editor || this.#session.mode === 'body') {
+        return;
+      }
+
+      this.#applyDefaultSelectionAtStoryEnd(editor, 'Could not restore cursor on the next frame');
+      try {
+        editor.view?.focus();
+      } catch (focusError) {
+        console.warn('[HeaderFooterSessionManager] Could not refocus editor on the next frame:', focusError);
+      }
+    });
+  }
+
   #validateEditPermission(): { allowed: boolean; reason?: string } {
     if (this.#deps?.isViewLocked()) {
       return { allowed: false, reason: 'documentMode' };
@@ -1286,6 +1339,7 @@ export class HeaderFooterSessionManager {
     this.#callbacks.onModeChanged?.(this.#session);
     this.#callbacks.onUpdateAwarenessSession?.(this.#session);
     this.#updateModeBanner();
+    this.#syncActiveBorder();
   }
 
   #emitEditingContext(editor: Editor): void {
@@ -1417,6 +1471,55 @@ export class HeaderFooterSessionManager {
   /** Get current hover region */
   get hoverRegion(): HeaderFooterRegion | null {
     return this.#hoverRegion;
+  }
+
+  #getActiveRegion(): HeaderFooterRegion | null {
+    if (this.#session.mode === 'header') {
+      return this.#headerRegions.get(this.#session.pageIndex ?? -1) ?? null;
+    }
+
+    if (this.#session.mode === 'footer') {
+      return this.#footerRegions.get(this.#session.pageIndex ?? -1) ?? null;
+    }
+
+    return null;
+  }
+
+  #hideActiveBorder(): void {
+    if (this.#activeBorderLine) {
+      this.#activeBorderLine.remove();
+      this.#activeBorderLine = null;
+    }
+  }
+
+  #syncActiveBorder(): void {
+    this.#hideActiveBorder();
+
+    const region = this.#getActiveRegion();
+    if (!region || this.#session.mode === 'body') {
+      return;
+    }
+
+    const pageElement = this.#deps?.getPageElement(region.pageIndex);
+    if (!pageElement) {
+      return;
+    }
+
+    const borderLine = pageElement.ownerDocument.createElement('div');
+    borderLine.className = 'superdoc-header-footer-border';
+    Object.assign(borderLine.style, {
+      position: 'absolute',
+      left: '0',
+      right: '0',
+      top: `${region.kind === 'header' ? region.localY + region.height : region.localY}px`,
+      height: '1px',
+      backgroundColor: '#4472c4',
+      pointerEvents: 'none',
+      zIndex: '8',
+    });
+
+    pageElement.appendChild(borderLine);
+    this.#activeBorderLine = borderLine;
   }
 
   // ===========================================================================
@@ -2165,6 +2268,38 @@ export class HeaderFooterSessionManager {
     this.rebuildRegions(layout);
   }
 
+  private resolveAlignedDecorationItems(
+    fragments: Fragment[],
+    slotPageNumber: number,
+    result: HeaderFooterLayoutResult,
+    cachedResolvedLayout: ResolvedHeaderFooterLayout | undefined,
+    contextLabel: string,
+  ): ResolvedPaintItem[] | undefined {
+    const cachedPage = cachedResolvedLayout?.pages.find((page) => page.number === slotPageNumber);
+    const cachedItems = cachedPage?.items;
+    if (cachedItems && cachedItems.length === fragments.length) {
+      return cachedItems;
+    }
+    if (cachedItems) {
+      console.warn(
+        `[HeaderFooterSessionManager] Resolved items length (${cachedItems.length}) does not match fragments length (${fragments.length}) for ${contextLabel}. Recomputing items.`,
+      );
+    }
+
+    const freshResolvedLayout = resolveHeaderFooterLayout(result.layout, result.blocks, result.measures);
+    const freshPage = freshResolvedLayout.pages.find((page) => page.number === slotPageNumber);
+    const freshItems = freshPage?.items;
+    if (freshItems && freshItems.length === fragments.length) {
+      return freshItems;
+    }
+    if (freshItems) {
+      console.warn(
+        `[HeaderFooterSessionManager] Fresh resolved items length (${freshItems.length}) does not match fragments length (${fragments.length}) for ${contextLabel}. Dropping items.`,
+      );
+    }
+    return undefined;
+  }
+
   /**
    * Create a decoration provider for header or footer rendering.
    */
@@ -2213,7 +2348,11 @@ export class HeaderFooterSessionManager {
           const prevSectionIds = multiSectionId.sectionHeaderIds.get(sectionIndex - 1);
           sectionRId = prevSectionIds?.[headerFooterType as keyof typeof prevSectionIds] ?? undefined;
         }
-        if (!sectionRId && headerFooterType !== 'default') {
+        const shouldUseDefaultHeaderRef =
+          headerFooterType !== 'default' &&
+          page.sectionRefs.headerRefs?.default &&
+          (!multiSectionId?.alternateHeaders || headerFooterType === 'odd');
+        if (!sectionRId && shouldUseDefaultHeaderRef) {
           sectionRId = page.sectionRefs.headerRefs?.default;
         }
       } else if (page?.sectionRefs && kind === 'footer') {
@@ -2222,7 +2361,11 @@ export class HeaderFooterSessionManager {
           const prevSectionIds = multiSectionId.sectionFooterIds.get(sectionIndex - 1);
           sectionRId = prevSectionIds?.[headerFooterType as keyof typeof prevSectionIds] ?? undefined;
         }
-        if (!sectionRId && headerFooterType !== 'default') {
+        const shouldUseDefaultFooterRef =
+          headerFooterType !== 'default' &&
+          page.sectionRefs.footerRefs?.default &&
+          (!multiSectionId?.alternateHeaders || headerFooterType === 'odd');
+        if (!sectionRId && shouldUseDefaultFooterRef) {
           sectionRId = page.sectionRefs.footerRefs?.default;
         }
       }
@@ -2248,14 +2391,13 @@ export class HeaderFooterSessionManager {
           if (slotPage) {
             const fragments = slotPage.fragments ?? [];
             const resolvedLayout = resolvedByRId.get(rIdLayoutKey);
-            const resolvedSlotPage = resolvedLayout?.pages.find((p) => p.number === slotPage.number);
-            const resolvedItems = resolvedSlotPage?.items;
-            if (resolvedItems && resolvedItems.length !== fragments.length) {
-              console.warn(
-                `[HeaderFooterSessionManager] Resolved items length (${resolvedItems.length}) does not match fragments length (${fragments.length}) for rId '${rIdLayoutKey}' page ${pageNumber}. Dropping items.`,
-              );
-            }
-            const alignedItems = resolvedItems && resolvedItems.length === fragments.length ? resolvedItems : undefined;
+            const alignedItems = this.resolveAlignedDecorationItems(
+              fragments,
+              slotPage.number,
+              rIdLayout,
+              resolvedLayout,
+              `rId '${rIdLayoutKey}' page ${pageNumber}`,
+            );
             const pageHeight = page?.size?.h ?? layout.pageSize?.h ?? layoutOptions.pageSize?.h ?? defaultPageSize.h;
             const margins = pageMargins ?? layout.pages[0]?.margins ?? layoutOptions.margins ?? defaultMargins;
             const decorationMargins =
@@ -2309,15 +2451,13 @@ export class HeaderFooterSessionManager {
       const fragments = slotPage.fragments ?? [];
 
       const resolvedVariant = resolvedResults?.[variantIndex];
-      const resolvedVariantPage = resolvedVariant?.pages.find((p) => p.number === slotPage.number);
-      const resolvedVariantItems = resolvedVariantPage?.items;
-      if (resolvedVariantItems && resolvedVariantItems.length !== fragments.length) {
-        console.warn(
-          `[HeaderFooterSessionManager] Resolved items length (${resolvedVariantItems.length}) does not match fragments length (${fragments.length}) for variant '${headerFooterType}' page ${pageNumber}. Dropping items.`,
-        );
-      }
-      const alignedVariantItems =
-        resolvedVariantItems && resolvedVariantItems.length === fragments.length ? resolvedVariantItems : undefined;
+      const alignedVariantItems = this.resolveAlignedDecorationItems(
+        fragments,
+        slotPage.number,
+        variant,
+        resolvedVariant,
+        `variant '${headerFooterType}' page ${pageNumber}`,
+      );
 
       const pageHeight = page?.size?.h ?? layout.pageSize?.h ?? layoutOptions.pageSize?.h ?? defaultPageSize.h;
       const margins = pageMargins ?? layout.pages[0]?.margins ?? layoutOptions.margins ?? defaultMargins;
@@ -2435,6 +2575,7 @@ export class HeaderFooterSessionManager {
     this.#activeEditor = null;
 
     // Clear UI references
+    this.#hideActiveBorder();
     this.#hoverOverlay = null;
     this.#hoverTooltip = null;
     this.#modeBanner = null;

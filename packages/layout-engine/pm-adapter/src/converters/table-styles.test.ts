@@ -5,6 +5,7 @@ import type { ConverterContext } from '../converter-context.js';
 import type { StylesDocumentProperties } from '@superdoc/style-engine/ooxml';
 
 const emptyStyles: StylesDocumentProperties = { docDefaults: {}, latentStyles: {}, styles: {} };
+const PX_PER_PT = 96 / 72;
 
 const buildContext = (styles?: StylesDocumentProperties): ConverterContext =>
   ({
@@ -21,6 +22,9 @@ describe('hydrateTableStyleAttrs', () => {
             marginLeft: { value: 108, type: 'dxa' },
             top: { value: 12, type: 'px' },
           },
+          tableCellSpacing: { value: 24, type: 'dxa' },
+          tableIndent: { value: 1440, type: 'dxa' },
+          tableLayout: 'fixed',
           tableWidth: { value: 1440, type: 'dxa' },
         },
       },
@@ -29,6 +33,9 @@ describe('hydrateTableStyleAttrs', () => {
     const result = hydrateTableStyleAttrs(table, undefined);
     expect(result?.cellPadding?.left).toBeCloseTo((108 / 1440) * 96);
     expect(result?.cellPadding?.top).toBe(12);
+    expect(result?.tableCellSpacing).toEqual({ value: 24, type: 'dxa' });
+    expect(result?.tableIndent).toEqual({ width: 96, type: 'dxa' });
+    expect(result?.tableLayout).toBe('fixed');
     expect(result?.tableWidth).toEqual({ width: 96, type: 'px' });
   });
 
@@ -43,6 +50,8 @@ describe('hydrateTableStyleAttrs', () => {
             cellMargins: { marginLeft: { value: 72, type: 'dxa' } },
             justification: 'center',
             tableCellSpacing: { value: 24, type: 'dxa' },
+            tableIndent: { value: 720, type: 'dxa' },
+            tableLayout: 'autofit',
           },
         },
       },
@@ -58,10 +67,13 @@ describe('hydrateTableStyleAttrs', () => {
     } as unknown as PMNode;
 
     const result = hydrateTableStyleAttrs(table, buildContext(styles));
-    expect(result?.borders).toEqual({ top: { val: 'single', size: 8 } });
+    expect(result?.borders?.top?.style).toBe('single');
+    expect(result?.borders?.top?.width).toBeCloseTo((8 / 8) * PX_PER_PT);
     expect(result?.justification).toBe('center');
     expect(result?.cellPadding?.left).toBeCloseTo((72 / 1440) * 96);
     expect(result?.tableCellSpacing).toEqual({ value: 24, type: 'dxa' });
+    expect(result?.tableIndent).toEqual({ width: 48, type: 'dxa' });
+    expect(result?.tableLayout).toBe('autofit');
     expect(result?.tableWidth).toEqual({ width: 500, type: 'px' });
   });
 
@@ -74,6 +86,9 @@ describe('hydrateTableStyleAttrs', () => {
           tableProperties: {
             borders: { top: { val: 'single', size: 4 } } as Record<string, unknown>,
             justification: 'center',
+            tableCellSpacing: { value: 24, type: 'dxa' },
+            tableIndent: { value: 720, type: 'dxa' },
+            tableLayout: 'autofit',
           },
         },
       },
@@ -85,15 +100,45 @@ describe('hydrateTableStyleAttrs', () => {
         tableProperties: {
           borders: { top: { val: 'single', size: 12 } },
           justification: 'left',
+          tableCellSpacing: { value: 12, type: 'dxa' },
+          tableIndent: { value: 1440, type: 'dxa' },
+          tableLayout: 'fixed',
         },
       },
     } as unknown as PMNode;
 
     const result = hydrateTableStyleAttrs(table, buildContext(styles));
     // Inline borders win over style
-    expect(result?.borders).toEqual({ top: { val: 'single', size: 12 } });
+    expect(result?.borders?.top?.style).toBe('single');
+    expect(result?.borders?.top?.width).toBeCloseTo((12 / 8) * PX_PER_PT);
     // Inline justification wins over style
     expect(result?.justification).toBe('left');
+    expect(result?.tableCellSpacing).toEqual({ value: 12, type: 'dxa' });
+    expect(result?.tableIndent).toEqual({ width: 96, type: 'dxa' });
+    expect(result?.tableLayout).toBe('fixed');
+  });
+
+  it("preserves the OOXML 'auto' tableLayout literal during hydration", () => {
+    const styles: StylesDocumentProperties = {
+      ...emptyStyles,
+      styles: {
+        TableGrid: {
+          type: 'table',
+          tableProperties: {
+            tableLayout: 'auto',
+          },
+        },
+      },
+    };
+
+    const table = {
+      attrs: {
+        tableStyleId: 'TableGrid',
+      },
+    } as unknown as PMNode;
+
+    const result = hydrateTableStyleAttrs(table, buildContext(styles));
+    expect(result?.tableLayout).toBe('auto');
   });
 
   it('per-side merge: partial inline borders preserve style borders on other sides', () => {
@@ -125,11 +170,15 @@ describe('hydrateTableStyleAttrs', () => {
 
     const result = hydrateTableStyleAttrs(table, buildContext(styles));
     // Inline top wins
-    expect(result?.borders?.top).toEqual({ val: 'double', size: 8 });
+    expect(result?.borders?.top?.style).toBe('double');
+    expect(result?.borders?.top?.width).toBeCloseTo((8 / 8) * PX_PER_PT);
     // Style fills other sides
-    expect(result?.borders?.bottom).toEqual({ val: 'single', size: 4 });
-    expect(result?.borders?.left).toEqual({ val: 'single', size: 4 });
-    expect(result?.borders?.right).toEqual({ val: 'single', size: 4 });
+    expect(result?.borders?.bottom?.style).toBe('single');
+    expect(result?.borders?.bottom?.width).toBeCloseTo((4 / 8) * PX_PER_PT);
+    expect(result?.borders?.left?.style).toBe('single');
+    expect(result?.borders?.left?.width).toBeCloseTo((4 / 8) * PX_PER_PT);
+    expect(result?.borders?.right?.style).toBe('single');
+    expect(result?.borders?.right?.width).toBeCloseTo((4 / 8) * PX_PER_PT);
   });
 
   it('per-side merge: partial inline cellPadding preserves style padding on other sides', () => {
@@ -225,7 +274,8 @@ describe('hydrateTableStyleAttrs', () => {
 
     const result = hydrateTableStyleAttrs(table, buildContext(styles));
     // From TableGrid
-    expect(result?.borders).toEqual({ top: { val: 'single', size: 4 } });
+    expect(result?.borders?.top?.style).toBe('single');
+    expect(result?.borders?.top?.width).toBeCloseTo((4 / 8) * PX_PER_PT);
     // Inherited from TableNormal via basedOn
     expect(result?.cellPadding?.left).toBeCloseTo((108 / 1440) * 96);
     expect(result?.justification).toBe('left');

@@ -246,6 +246,69 @@ function setLevelTabStop(editor, abstractNumId, ilvl, value) {
 // ──────────────────────────────────────────────────────────────────────────────
 
 /**
+ * Fonts whose glyph tables remap ASCII letters and digits to pictures. If one
+ * of these is left on a level whose numFmt is not `bullet`, Word renders the
+ * ordered marker (`1.`, `A.`, `I.`) through the symbol font and the user sees
+ * icon glyphs instead of digits/letters.
+ *
+ * Stored lowercase so lookups via `isSymbolFont()` are case-insensitive — Word
+ * always writes canonical casing, but third-party tools and hand-authored XML
+ * may not.
+ */
+const SYMBOL_FONT_NAMES = new Set([
+  'wingdings',
+  'wingdings 2',
+  'wingdings 3',
+  'symbol',
+  'webdings',
+  'zapfdingbats',
+  'zapf dingbats',
+]);
+
+/** @param {string | undefined | null} fontName */
+function isSymbolFont(fontName) {
+  return typeof fontName === 'string' && SYMBOL_FONT_NAMES.has(fontName.toLowerCase());
+}
+
+/** rFonts attribute names that hold a typeface — any of them can carry a symbol font. */
+const RFONTS_FAMILY_ATTRS = ['w:ascii', 'w:hAnsi', 'w:eastAsia', 'w:cs'];
+
+/**
+ * Return true if any of the rFonts family attributes (ascii/hAnsi/eastAsia/cs)
+ * names a symbol font. Word always sets all four consistently, but malformed
+ * input may only set hAnsi — we still want to strip in that case.
+ *
+ * @param {Object} rFontsEl
+ * @returns {boolean}
+ */
+function rFontsHasSymbolFont(rFontsEl) {
+  const attrs = rFontsEl.attributes;
+  if (!attrs) return false;
+  for (const attr of RFONTS_FAMILY_ATTRS) {
+    if (isSymbolFont(attrs[attr])) return true;
+  }
+  return false;
+}
+
+/**
+ * Read the primary typeface name from a rFonts element, preferring `w:ascii`
+ * and falling back through the other family attributes. Used to pick a donor
+ * font value for propagation.
+ *
+ * @param {Object} rFontsEl
+ * @returns {string | undefined}
+ */
+function readRFontsFamily(rFontsEl) {
+  const attrs = rFontsEl.attributes;
+  if (!attrs) return undefined;
+  for (const attr of RFONTS_FAMILY_ATTRS) {
+    const val = attrs[attr];
+    if (val) return val;
+  }
+  return undefined;
+}
+
+/**
  * Clear the `w:lvlPicBulletId` element from a level if it exists.
  * Used for marker-mode normalization when switching away from picture bullets.
  * @param {Object} lvlEl
@@ -260,6 +323,66 @@ function clearPictureBulletId(lvlEl) {
 }
 
 /**
+ * Check whether a level element carries a `w:rPr/w:rFonts` child.
+ * @param {Object} lvlEl
+ * @returns {boolean}
+ */
+function levelHasRFonts(lvlEl) {
+  const rPr = lvlEl.elements?.find((el) => el.name === 'w:rPr');
+  return !!rPr?.elements?.find((el) => el.name === 'w:rFonts');
+}
+
+/**
+ * Find a surviving legitimate (non-symbol) marker font within the abstract.
+ * Used as the donor for levels whose symbol-font rFonts was stripped during
+ * a bullet→ordered transition — so nested ordered markers match the top-level
+ * marker font instead of falling back to the paragraph body font.
+ *
+ * Walks every level in the abstract (not just target levels), lowest ilvl first.
+ *
+ * @param {Object} abstract
+ * @returns {string | undefined}
+ */
+function findDonorMarkerFont(abstract) {
+  if (!abstract?.elements) return undefined;
+  const lvls = abstract.elements.filter((el) => el.name === 'w:lvl');
+  lvls.sort((a, b) => Number(a.attributes?.['w:ilvl'] ?? 0) - Number(b.attributes?.['w:ilvl'] ?? 0));
+  for (const lvl of lvls) {
+    const rPr = lvl.elements?.find((el) => el.name === 'w:rPr');
+    const rFonts = rPr?.elements?.find((el) => el.name === 'w:rFonts');
+    if (!rFonts) continue;
+    if (rFontsHasSymbolFont(rFonts)) continue;
+    const family = readRFontsFamily(rFonts);
+    if (family) return family;
+  }
+  return undefined;
+}
+
+/**
+ * When a level transitions to a non-bullet numFmt, a symbol-font `w:rFonts`
+ * left over from the prior bullet configuration would make Word render the
+ * ordered marker through that symbol font. Drop it; preserve legitimate text
+ * fonts (Courier New, Arial, …). Removes the enclosing `w:rPr` if now empty.
+ *
+ * @param {Object} lvlEl
+ * @param {string} newNumFmt
+ * @returns {boolean} True if a rFonts element was removed.
+ */
+function normalizeLevelFontForNumFmt(lvlEl, newNumFmt) {
+  if (newNumFmt === 'bullet' || !lvlEl.elements) return false;
+  const rPrIdx = lvlEl.elements.findIndex((el) => el.name === 'w:rPr');
+  if (rPrIdx === -1) return false;
+  const rPr = lvlEl.elements[rPrIdx];
+  if (!rPr.elements) return false;
+  const rFontsIdx = rPr.elements.findIndex((el) => el.name === 'w:rFonts');
+  if (rFontsIdx === -1) return false;
+  if (!rFontsHasSymbolFont(rPr.elements[rFontsIdx])) return false;
+  rPr.elements.splice(rFontsIdx, 1);
+  if (rPr.elements.length === 0) lvlEl.elements.splice(rPrIdx, 1);
+  return true;
+}
+
+/**
  * Set numFmt only (for setLevelNumberStyle). Rejects 'bullet'.
  * Clears lvlPicBulletId if present (marker-mode normalization).
  * @param {Object} lvlEl
@@ -267,7 +390,8 @@ function clearPictureBulletId(lvlEl) {
  * @returns {boolean}
  */
 function mutateLevelNumberStyle(lvlEl, numFmt) {
-  let changed = setChildAttr(lvlEl, 'w:numFmt', numFmt);
+  let changed = normalizeLevelFontForNumFmt(lvlEl, numFmt);
+  changed = setChildAttr(lvlEl, 'w:numFmt', numFmt) || changed;
   changed = clearPictureBulletId(lvlEl) || changed;
   return changed;
 }
@@ -334,7 +458,10 @@ function applyLevelPropertiesToElement(lvlEl, entry) {
     if (fmtParams.numFmt != null && fmtParams.lvlText != null) {
       changed = mutateLevelNumberingFormat(lvlEl, fmtParams) || changed;
     } else {
-      if (fmtParams.numFmt != null) changed = setChildAttr(lvlEl, 'w:numFmt', fmtParams.numFmt) || changed;
+      if (fmtParams.numFmt != null) {
+        changed = normalizeLevelFontForNumFmt(lvlEl, fmtParams.numFmt) || changed;
+        changed = setChildAttr(lvlEl, 'w:numFmt', fmtParams.numFmt) || changed;
+      }
       if (fmtParams.lvlText != null) changed = setChildAttr(lvlEl, 'w:lvlText', fmtParams.lvlText) || changed;
       if (fmtParams.start != null) changed = setChildAttr(lvlEl, 'w:start', String(fmtParams.start)) || changed;
     }
@@ -363,7 +490,7 @@ function applyLevelPropertiesToElement(lvlEl, entry) {
  * @returns {boolean}
  */
 function mutateLevelNumberingFormat(lvlEl, { numFmt, lvlText, start }) {
-  let changed = false;
+  let changed = normalizeLevelFontForNumFmt(lvlEl, numFmt);
   changed = setChildAttr(lvlEl, 'w:numFmt', numFmt) || changed;
   changed = setChildAttr(lvlEl, 'w:lvlText', lvlText) || changed;
   if (start != null) {
@@ -733,11 +860,33 @@ function applyTemplateToAbstract(editor, abstractNumId, template, levels) {
   }
 
   let anyChanged = false;
+  // Track the levels whose rFonts the normalizer strips during this call.
+  // Only these are eligible for donor propagation — we must not inject a font
+  // onto levels that were already bare (partial-update intent) or that kept a
+  // legitimate text-font rFonts through the transition.
+  const strippedLevels = [];
 
   for (const ilvl of targetLevels) {
     const entry = templateByLevel.get(ilvl);
     const lvlEl = findLevelElement(abstract, ilvl);
+    const hadRFontsBefore = levelHasRFonts(lvlEl);
     anyChanged = applyLevelPropertiesToElement(lvlEl, entry) || anyChanged;
+    if (hadRFontsBefore && !levelHasRFonts(lvlEl)) {
+      strippedLevels.push({ ilvl, lvlEl });
+    }
+  }
+
+  // Propagate a surviving legitimate marker font onto levels whose symbol-font
+  // rFonts the normalizer just stripped. Without this, nested ordered markers
+  // fall back to the paragraph body font and end up mismatched with the top-level
+  // marker (e.g., "1." in Courier New, nested "2." in Arial).
+  if (strippedLevels.length > 0) {
+    const donorFont = findDonorMarkerFont(abstract);
+    if (donorFont) {
+      for (const { lvlEl } of strippedLevels) {
+        anyChanged = mutateLevelMarkerFont(lvlEl, donorFont) || anyChanged;
+      }
+    }
   }
 
   return { changed: anyChanged };

@@ -249,6 +249,112 @@ describe('comments-store', () => {
     expect(setActiveCommentSpy).toHaveBeenCalledWith({ commentId: null });
   });
 
+  it('preserves the active floating instance when it belongs to the activated thread', () => {
+    const setActiveCommentSpy = vi.fn();
+    const superdoc = {
+      activeEditor: {
+        commands: {
+          setActiveComment: setActiveCommentSpy,
+        },
+      },
+    };
+    const anchorKey = 'tc::hf:part:rId-footer::change-repeat';
+
+    store.commentsList = [
+      {
+        commentId: 'change-repeat',
+        trackedChange: true,
+        trackedChangeAnchorKey: anchorKey,
+        trackedChangeStory: { kind: 'story', storyType: 'headerFooterPart', refId: 'rId-footer' },
+        selection: { source: 'super-editor', selectionBounds: {} },
+      },
+    ];
+    store.editorCommentPositions = {
+      [anchorKey]: {
+        pageIndex: 2,
+        bounds: { top: 300, left: 12, right: 64, bottom: 324, width: 52, height: 24 },
+        rects: [
+          { pageIndex: 0, top: 20, left: 12, right: 64, bottom: 44, width: 52, height: 24 },
+          { pageIndex: 1, top: 140, left: 12, right: 64, bottom: 164, width: 52, height: 24 },
+          { pageIndex: 2, top: 300, left: 12, right: 64, bottom: 324, width: 52, height: 24 },
+        ],
+      },
+    };
+    store.activeFloatingCommentInstanceId = `${anchorKey}::page:2`;
+
+    store.setActiveComment(superdoc, 'change-repeat');
+
+    expect(store.activeFloatingCommentInstanceId).toBe(`${anchorKey}::page:2`);
+    expect(setActiveCommentSpy).toHaveBeenCalledWith({ commentId: 'change-repeat' });
+  });
+
+  it('clears stale floating instances when activating a different thread', () => {
+    const setActiveCommentSpy = vi.fn();
+    const superdoc = {
+      activeEditor: {
+        commands: {
+          setActiveComment: setActiveCommentSpy,
+        },
+      },
+    };
+    const anchorKey = 'tc::hf:part:rId-footer::change-repeat';
+
+    store.commentsList = [
+      {
+        commentId: 'change-repeat',
+        trackedChange: true,
+        trackedChangeAnchorKey: anchorKey,
+        trackedChangeStory: { kind: 'story', storyType: 'headerFooterPart', refId: 'rId-footer' },
+        selection: { source: 'super-editor', selectionBounds: {} },
+      },
+      {
+        commentId: 'comment-2',
+        trackedChange: false,
+        selection: { source: 'pdf', selectionBounds: {} },
+      },
+    ];
+    store.editorCommentPositions = {
+      [anchorKey]: {
+        pageIndex: 2,
+        bounds: { top: 300, left: 12, right: 64, bottom: 324, width: 52, height: 24 },
+        rects: [
+          { pageIndex: 0, top: 20, left: 12, right: 64, bottom: 44, width: 52, height: 24 },
+          { pageIndex: 1, top: 140, left: 12, right: 64, bottom: 164, width: 52, height: 24 },
+          { pageIndex: 2, top: 300, left: 12, right: 64, bottom: 324, width: 52, height: 24 },
+        ],
+      },
+    };
+    store.activeFloatingCommentInstanceId = `${anchorKey}::page:2`;
+
+    store.setActiveComment(superdoc, 'comment-2');
+
+    expect(store.activeFloatingCommentInstanceId).toBeNull();
+    expect(setActiveCommentSpy).toHaveBeenCalledWith({ commentId: 'comment-2' });
+  });
+
+  it('tracks instant sidebar alignment by thread and instance id', () => {
+    store.requestInstantSidebarAlignment(144, 'thread-1');
+    expect(store.peekInstantSidebarAlignment()).toBe(144);
+    expect(store.instantSidebarAlignmentThreadId).toBe('thread-1');
+    expect(store.instantSidebarAlignmentInstanceId).toBe('thread-1');
+
+    store.requestInstantSidebarAlignment(188, 'thread-1', 'thread-1::page:2');
+    expect(store.peekInstantSidebarAlignment()).toBe(188);
+    expect(store.instantSidebarAlignmentThreadId).toBe('thread-1');
+    expect(store.instantSidebarAlignmentInstanceId).toBe('thread-1::page:2');
+
+    store.requestInstantSidebarAlignment(null, 'thread-1', 'thread-1::page:2');
+    expect(store.peekInstantSidebarAlignment()).toBeNull();
+    expect(store.instantSidebarAlignmentThreadId).toBeNull();
+    expect(store.instantSidebarAlignmentInstanceId).toBeNull();
+
+    store.requestInstantSidebarAlignment(199, 'thread-2', 'thread-2::page:1');
+    store.clearInstantSidebarAlignment();
+    expect(store.peekInstantSidebarAlignment()).toBeNull();
+    expect(store.instantSidebarAlignmentThreadId).toBeNull();
+    expect(store.instantSidebarAlignmentInstanceId).toBeNull();
+  });
+
   it('does not throw when superdoc is unavailable during active comment updates', () => {
     const comment = { commentId: 'comment-2' };
     store.commentsList = [comment];
@@ -806,6 +912,58 @@ describe('comments-store', () => {
 
     expect(store.getFloatingComments).toEqual([
       expect.objectContaining({ commentId: 'comment-2a', importedId: 'import-2a' }),
+    ]);
+  });
+
+  it('fans repeated header/footer tracked changes into one floating bubble instance per page', () => {
+    const anchorKey = 'tc::hf:part:rId-footer::change-repeat';
+    store.commentsList = [
+      {
+        commentId: 'change-repeat',
+        fileId: 'doc-1',
+        trackedChange: true,
+        trackedChangeAnchorKey: anchorKey,
+        trackedChangeStory: { kind: 'story', storyType: 'headerFooterPart', refId: 'rId-footer' },
+        resolvedTime: null,
+        selection: { source: 'super-editor', selectionBounds: {} },
+      },
+    ];
+    store.editorCommentPositions = {
+      [anchorKey]: {
+        key: anchorKey,
+        threadId: 'change-repeat',
+        storyKey: 'hf:part:rId-footer',
+        kind: 'trackedChange',
+        pageIndex: 2,
+        bounds: { top: 300, left: 12, right: 64, bottom: 324, width: 52, height: 24 },
+        rects: [
+          { pageIndex: 0, top: 20, left: 12, right: 64, bottom: 44, width: 52, height: 24 },
+          { pageIndex: 1, top: 140, left: 12, right: 64, bottom: 164, width: 52, height: 24 },
+          { pageIndex: 2, top: 300, left: 12, right: 64, bottom: 324, width: 52, height: 24 },
+        ],
+      },
+    };
+
+    expect(store.getFloatingComments).toHaveLength(1);
+    expect(store.getFloatingCommentInstances).toEqual([
+      expect.objectContaining({
+        id: `${anchorKey}::page:0`,
+        threadId: 'change-repeat',
+        pageIndex: 0,
+        isPrimary: false,
+      }),
+      expect.objectContaining({
+        id: `${anchorKey}::page:1`,
+        threadId: 'change-repeat',
+        pageIndex: 1,
+        isPrimary: false,
+      }),
+      expect.objectContaining({
+        id: `${anchorKey}::page:2`,
+        threadId: 'change-repeat',
+        pageIndex: 2,
+        isPrimary: true,
+      }),
     ]);
   });
 

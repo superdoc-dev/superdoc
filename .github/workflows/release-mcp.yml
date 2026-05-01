@@ -7,7 +7,19 @@ on:
     branches:
       - main
     paths:
+      # MCP depends on SDK (workspace:*) and imports engine/session code directly.
+      # Keep in sync with apps/mcp/.releaserc.cjs include list and
+      # .github/package-impact-map.md.
       - 'apps/mcp/**'
+      - 'packages/sdk/**'
+      - 'apps/cli/**'
+      - 'packages/document-api/**'
+      - 'packages/superdoc/**'
+      - 'packages/super-editor/**'
+      - 'packages/layout-engine/**'
+      - 'packages/word-layout/**'
+      - 'packages/preset-geometry/**'
+      - 'shared/**'
       - 'pnpm-workspace.yaml'
       - '!**/*.md'
   workflow_dispatch:

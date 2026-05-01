@@ -1,5 +1,11 @@
 # @superdoc-dev/ai
 
+> **Deprecated.** `@superdoc-dev/ai` is no longer maintained. For AI-powered document workflows, use [`@superdoc-dev/mcp`](https://www.npmjs.com/package/@superdoc-dev/mcp) (MCP server) or [`@superdoc-dev/sdk`](https://www.npmjs.com/package/@superdoc-dev/sdk) with the SuperDoc Document API. See the [SuperDoc docs](https://docs.superdoc.dev) for migration guidance.
+>
+> This package will not receive new features or compatibility updates. Existing published versions remain installable but are flagged as deprecated on npm.
+
+---
+
 > AI integration package for SuperDoc - Add powerful AI capabilities to your document editor
 
 ## Features

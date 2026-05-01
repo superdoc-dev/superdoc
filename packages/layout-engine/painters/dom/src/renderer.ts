@@ -3228,7 +3228,7 @@ export class DomPainter {
                 this.doc!,
                 resolvedMarker.text,
                 resolvedMarker.run,
-                block.sourceAnchor ?? resolvedItem?.sourceAnchor ?? (fragment.sourceAnchor as SourceAnchor),
+                resolvedMarker.sourceAnchor ?? resolvedItem?.sourceAnchor ?? (fragment.sourceAnchor as SourceAnchor),
               );
 
               markerContainer.style.position = 'relative';

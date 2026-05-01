@@ -1,49 +1,56 @@
 ---
-title: Theming
+title: Theme SuperDoc
 sidebarTitle: Theming
 keywords: "theming, css variables, custom theme, dark mode, design tokens, branding, createTheme"
 ---
 
-Five-minute setup for matching SuperDoc to your brand. For the full token catalog and `createTheme()` reference, see [Editor > Theming](/editor/theming/overview).
+SuperDoc's UI is styled with CSS variables. `createTheme()` generates a class name that sets those variables; you apply the class to `<html>` and every SuperDoc surface picks it up — toolbar, comments, dropdowns, context menu, popovers.
 
-## Set your brand colors
+## The fast path
 
 ```javascript
 import { SuperDoc, createTheme } from 'superdoc';
 
 const theme = createTheme({
   colors: {
-    action: '#6366f1', // buttons, links, active states
-    bg: '#ffffff', // panels, dropdowns
-    text: '#1e293b',
-    border: '#e2e8f0',
+    action: '#1355FF', // buttons, links, active states
+    bg: '#ffffff',
+    text: '#1f2937',
+    border: '#d1d5db',
   },
   font: 'Inter, sans-serif',
-  radius: '8px',
+  radius: '6px',
 });
 
-new SuperDoc({
-  selector: '#editor',
-  document: 'contract.docx',
-  theme,
-});
+document.documentElement.classList.add(theme);
+
+new SuperDoc({ selector: '#editor', document: 'contract.docx' });
 ```
 
-The toolbar, comments sidebar, dropdowns, and every other built-in surface pick up the theme automatically.
+`theme` is a className string. Apply it to `<html>` (not the editor container) so popovers, dropdowns, and the comments sidebar — which can render outside the editor element — pick up the same tokens.
 
-## Common patterns
+## What themes affect
 
-**Dark mode**: pass a different theme when your app's color scheme changes.
+Toolbar buttons, comments sidebar, dropdowns, context menu, search bar, dialog surfaces. Any chrome SuperDoc renders. The document content itself (paragraphs, headings, tables) renders with its own styles from the DOCX.
+
+## When to drop to CSS variables
+
+`createTheme()` covers the common case. For component-level overrides, use the `vars` option or set raw `--sd-*` variables in your stylesheet:
 
 ```javascript
-const dark = createTheme({
-  colors: { action: '#818cf8', bg: '#0f172a', text: '#f1f5f9', border: '#334155' },
+const theme = createTheme({
+  colors: { action: '#1355FF', bg: '#ffffff', text: '#1f2937', border: '#d1d5db' },
+  vars: {
+    '--sd-ui-toolbar-bg': '#f8fafc',
+    '--sd-comments-resolved-bg': '#ecfdf5',
+  },
 });
 ```
 
-**Per-instance override**: each `SuperDoc` instance can have its own theme.
+## Common pitfalls
 
-**CSS variable escape hatch**: every theme value is a CSS custom property (`--sd-color-action`, `--sd-color-bg`, etc.). You can override individual variables in your stylesheet without rewriting the whole theme.
+- **Theme class on the wrong element.** Add it to `document.documentElement` (the `<html>` tag), not the editor's container. Popovers render at the body level and won't pick up the theme otherwise.
+- **CSP environments.** `createTheme()` injects a `<style>` tag. If you serve with a strict CSP, use `buildTheme()` instead — it returns `{ className, css }` so you can inject the CSS yourself with the right nonce.
 
 ## Where to next
 

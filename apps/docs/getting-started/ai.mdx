@@ -1,47 +1,58 @@
 ---
-title: AI
+title: Use SuperDoc with AI
 sidebarTitle: AI
 keywords: "ai, mcp, claude, cursor, llm tools, ai agents, document automation, ai sdk"
 ---
 
-Pick the AI integration that matches what you're building. For the full AI section, see [AI Overview](/ai/overview).
+SuperDoc gives AI models structured access to real Word documents. Use MCP when a coding agent is working on files. Use LLM tools when you're building document editing into your own app. Use the SDK or CLI for backend automation.
 
-## Pick your path
+## Pick the path
 
-<CardGroup cols={2}>
-  <Card title="I want Claude/Cursor to edit DOCX" icon="terminal" href="/ai/mcp/overview">
-    **MCP server.** Drop SuperDoc's MCP server into Claude Desktop, Cursor, or any MCP-compatible host. Claude can then open, read, and edit DOCX files locally.
-  </Card>
-  <Card title="I want AI editing inside my app" icon="bot" href="/ai/agents/llm-tools">
-    **LLM tools.** SuperDoc ships pre-typed tool catalogs for OpenAI, Anthropic, Vercel AI SDK, Mastra, and others. Wire them into your existing agent.
-  </Card>
-  <Card title="I want scripts or CI to edit DOCX" icon="code" href="/document-engine/cli">
-    **CLI or SDKs.** Run DOCX operations from a script, GitHub Action, or backend job. No browser needed.
-  </Card>
-  <Card title="I want LLM-friendly content from DOCX" icon="file-export" href="/getting-started/import-export">
-    **Markdown/JSON export.** Pull document content out as Markdown or JSON to feed into your own LLM context.
-  </Card>
-</CardGroup>
+| You want to | Use |
+|---|---|
+| Let Claude/Cursor edit DOCX files | [MCP server](/ai/mcp/overview) |
+| Build AI editing into your app | [LLM tools](/ai/agents/llm-tools) |
+| Automate DOCX from scripts or CI | [SDK](/document-engine/sdks) or [CLI](/document-engine/cli) |
+| Stream generated content into the editor | Browser editor + [`editor.doc.insert`](/document-api/overview) |
 
-## What ships with SuperDoc
+## Coding agents (MCP)
 
-SuperDoc treats AI as a first-class consumer. Three packages, all driven by the same Document API:
+The fastest path. SuperDoc ships an MCP server that any MCP-aware host can use.
 
-- **`@superdoc-dev/mcp`** — Model Context Protocol server. Lets MCP-aware hosts (Claude Desktop, Cursor) read and edit DOCX files.
-- **`@superdoc-dev/sdk`** — Node and Python SDKs for server-side automation. Same operations as the browser editor.
-- **`@superdoc-dev/cli`** — Command-line tool for scripts, CI, and one-off operations.
+```bash
+claude mcp add superdoc -- npx @superdoc-dev/mcp
+```
 
-All three share the [Document API](/document-api/overview) under the hood — the same `editor.doc.*` operations you use in the browser.
+Then ask Claude to open, read, or edit a DOCX file. The agent calls SuperDoc's typed tools — no HTML wrangling, no re-uploads.
 
-## Why this is different
+## App integration (LLM tools)
 
-Most editors expose AI via "ask the AI to write something." SuperDoc exposes the document itself: AI can list comments, decide tracked changes, replace text by selection, insert tables, format runs — all as discrete typed operations. No HTML wrangling, no re-uploading the file after each change.
+For agent editing inside your own app, SuperDoc ships pre-typed tool catalogs for OpenAI, Anthropic, Vercel AI SDK, Mastra, and others. Wire them into your existing model loop.
 
-For the agent best-practices guide and the full tool catalog, see [AI > Agents](/ai/agents/llm-tools).
+```javascript
+import { tools } from '@superdoc-dev/sdk';
+// pass tools to your model, dispatch tool calls against the SuperDoc SDK
+```
+
+## Browser editor + AI output
+
+If you're already running the SuperDoc editor in the browser and want AI-generated content to land in the document:
+
+```javascript
+const html = await callYourLLM(prompt);
+editor.doc.insert({ target: cursor, html });
+```
+
+The same Document API the editor uses internally — typed inputs, structured outputs, no string parsing.
+
+## Common pitfalls
+
+- **MCP server in the wrong host context.** The MCP server runs on the same machine as the agent. Configure it in Claude Desktop / Cursor / your MCP host, not in the SuperDoc browser app.
+- **Tool dispatch with stale schemas.** SDK tool catalogs are versioned with the SDK. Pin both packages together to keep types and runtime in sync.
 
 ## Where to next
 
 - [AI Overview](/ai/overview) — the full AI section
-- [AI > MCP](/ai/mcp/overview) — Model Context Protocol setup
-- [AI > Agents > LLM tools](/ai/agents/llm-tools) — typed tool catalogs for OpenAI, Anthropic, etc.
+- [AI > MCP > Overview](/ai/mcp/overview) — MCP setup for Claude Desktop, Cursor, and other hosts
+- [AI > Agents > LLM tools](/ai/agents/llm-tools) — typed tool catalogs and integration patterns
 - [Document API](/document-api/overview) — the operations all AI integrations share

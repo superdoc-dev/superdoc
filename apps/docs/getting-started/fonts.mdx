@@ -4,39 +4,25 @@ sidebarTitle: Font Support
 keywords: "fonts, font loading, calibri, cambria, aptos, font fallback, custom fonts, font dropdown, office fonts"
 ---
 
-How fonts work in SuperDoc, and what to do when a document looks different from how it looks in Word.
+SuperDoc keeps the font name from the Word document. Rendering that font is the browser's job. If the browser can't find Calibri, Cambria, Aptos, or your brand font, it falls back to another font and the layout shifts.
 
-## How SuperDoc handles fonts
+## Load fonts in your app
 
-SuperDoc preserves the font names that come from your DOCX. It does **not** load font files for you. Whether `Calibri Light` actually renders as Calibri Light depends on whether that font is available to the browser running your app.
-
-Three things you control:
-
-1. **Loading font files** — your app's responsibility (CSS `@font-face`, `<link>` tags, font CDNs).
-2. **Toolbar dropdown options** — which fonts users can pick from in the built-in toolbar.
-3. **Font fallbacks** — what happens when the requested font isn't available.
-
-## The "why does it look different from Word?" question
-
-Most of the time, the document references Microsoft fonts (Calibri, Cambria, Aptos, Times New Roman) that aren't on the user's system or aren't loaded by your host page. The browser falls back to a default font and the layout shifts.
-
-Two common fixes:
-
-- **License the actual fonts** and load them via `@font-face`. This gives pixel-accurate rendering.
-- **Load free substitutes** with similar metrics. [Carlito](https://fonts.google.com/specimen/Carlito) for Calibri, [Caladea](https://fonts.google.com/specimen/Caladea) for Cambria are common Google Fonts swaps.
+Fonts are your host page's responsibility. `@font-face`, a hosted stylesheet, or a font CDN — anything the browser can resolve.
 
 ```css
-/* Example: load Carlito as a Calibri substitute */
 @font-face {
   font-family: 'Calibri';
-  src: url('https://fonts.gstatic.com/s/carlito/...') format('woff2');
+  src: url('/fonts/Carlito-Regular.woff2') format('woff2');
   font-display: swap;
 }
 ```
 
-## Configuring the toolbar font dropdown
+For Office fonts that aren't free (Calibri, Cambria, Aptos), either license them or alias compatible substitutes — [Carlito](https://fonts.google.com/specimen/Carlito) for Calibri, [Caladea](https://fonts.google.com/specimen/Caladea) for Cambria.
 
-The built-in toolbar has a font picker. By default it shows a curated list. To customize the available fonts:
+## Register fonts in the toolbar
+
+The toolbar's font dropdown shows whatever you register in `modules.toolbar.fonts`. Each entry is a `{ label, key }` pair where `key` is the CSS `font-family` value:
 
 ```javascript
 new SuperDoc({
@@ -44,30 +30,34 @@ new SuperDoc({
   document: 'contract.docx',
   modules: {
     toolbar: {
-      fonts: ['Inter', 'Calibri', 'Times New Roman', 'Custom Brand Font'],
+      fonts: [
+        { label: 'Calibri', key: 'Calibri, sans-serif' },
+        { label: 'Inter', key: 'Inter, sans-serif' },
+        { label: 'Times New Roman', key: '"Times New Roman", serif' },
+      ],
     },
   },
 });
 ```
 
-<Note>
-  Adding a font to the toolbar dropdown does **not** load the font file. You still need to make the font available to the browser via CSS. The dropdown only controls which fonts the user can select.
-</Note>
+Registering a font makes it **selectable** in the dropdown. It does **not** load the font file. You still need the `@font-face` (or equivalent) on your host page.
 
-For the full toolbar font configuration options, see [Built-in UI > Toolbar](/editor/built-in-ui/toolbar#font-configuration).
+## Programmatic font changes
 
-## Setting fonts programmatically
-
-To set fonts from code (e.g. an AI agent applying a brand font), use the Document API:
+For AI agents or scripts setting a brand font:
 
 ```javascript
 editor.doc.format.fontFamily({ target, value: 'Inter' });
 ```
 
-For the full font formatting API surface, see [Document API > Available operations](/document-api/available-operations).
+## Common pitfalls
+
+- **Font name preserved, browser falls back.** The font name from the DOCX is intact, but the actual file isn't loaded. Add `@font-face`.
+- **Dropdown doesn't show a font.** Imported documents don't auto-populate the toolbar list. If a `.docx` uses Cambria but Cambria isn't in `fonts`, the user can't pick it from the dropdown — even though the current selection indicator may show "Cambria" if that's what the run uses.
+- **Office font licensing.** Calibri, Cambria, and Aptos are licensed Microsoft fonts. Self-hosting requires a license. Free substitutes are common in non-pixel-perfect contexts.
 
 ## Where to next
 
-- [Built-in UI > Toolbar](/editor/built-in-ui/toolbar) — toolbar font configuration
+- [Built-in UI > Toolbar](/editor/built-in-ui/toolbar#font-configuration) — full toolbar font configuration options
 - [Document API > Available operations](/document-api/available-operations) — programmatic font formatting
 - [Editor > Theming](/editor/theming/overview) — set the default font for SuperDoc's UI chrome

@@ -4,7 +4,9 @@ sidebarTitle: Import/Export
 keywords: "import, export, docx export, html import, markdown import, document formats"
 ---
 
-Five-minute orientation for getting documents in and out of SuperDoc. For the full reference, see [Editor > SuperDoc > Import/Export](/editor/superdoc/import-export).
+SuperDoc treats DOCX as the real document, not an export target. Load a Word file, edit it in the browser, and export a Word file again — tracked changes, comments, complex tables, all preserved. HTML and Markdown are useful for AI-generated content, but DOCX is the full-fidelity path.
+
+For the full reference, see [Editor > SuperDoc > Import/Export](/editor/superdoc/import-export).
 
 ## Loading a document
 
@@ -64,6 +66,12 @@ DOCX preserves tracked changes, comments, complex tables, and section breaks. HT
 ## What should I store in my backend?
 
 Store the **DOCX blob** if you want full fidelity (recommended). Store JSON if you want programmatic search/diff and don't need round-tripping with Word users. Don't store HTML or Markdown unless you accept losing fidelity.
+
+## Common pitfalls
+
+- **Duplicate downloads.** `superdoc.export()` triggers a browser download by default. If you want to upload to a backend, pass `{ triggerDownload: false }` — otherwise you get the file twice.
+- **HTML import without a base DOCX.** The `html` and `markdown` options need a `document` (a base `.docx`) for styles. Without one, headings and lists fall back to defaults.
+- **HTML round-trips lose styling.** Importing HTML, exporting DOCX, and then importing the resulting HTML back will not produce the original Word styling. For round-tripping, use DOCX or JSON.
 
 ## Where to next
 

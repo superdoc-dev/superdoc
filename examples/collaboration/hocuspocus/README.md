@@ -2,7 +2,7 @@
 
 Self-hosted collaboration using [Hocuspocus](https://hocuspocus.dev/).
 
-**Docs:** [Hocuspocus Guide](https://docs.superdoc.dev/guides/hocuspocus)
+**Docs:** [Hocuspocus Guide](https://docs.superdoc.dev/guides/collaboration/hocuspocus)
 
 ## Getting started
 

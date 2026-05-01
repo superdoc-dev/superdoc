@@ -69,6 +69,7 @@
     "corpus:update-registry": "node scripts/corpus/update-registry.mjs",
     "watch": "pnpm --prefix packages/superdoc run watch:es",
     "check:all": "pnpm run format && pnpm run lint:fix && pnpm --prefix packages/super-editor run types:build && pnpm run test",
+    "check:examples-demos": "bun scripts/validate-examples-demos.ts",
     "local:publish": "pnpm --prefix packages/superdoc version prerelease --preid=local && pnpm --prefix packages/superdoc publish --registry http://localhost:4873",
     "update-preset-geometry": "ROOT=$(pwd) && cd ../superdoc-devtools/preset-geometry && pnpm run build && cp ./dist/index.js ./dist/index.js.map ./dist/index.d.ts \"$ROOT/packages/preset-geometry/\"",
     "manual-tag": "bash scripts/manual-tag.sh",

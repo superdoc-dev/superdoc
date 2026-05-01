@@ -6,12 +6,12 @@ Real-time collaboration examples using Yjs. Each example maps to a guide in the 
 
 | Provider                       | Docs                                                               |
 | ------------------------------ | ------------------------------------------------------------------ |
-| [Liveblocks](./liveblocks)     | [Guide](https://docs.superdoc.dev/guides/liveblocks)               |
+| [Liveblocks](./liveblocks)     | [Guide](https://docs.superdoc.dev/guides/collaboration/liveblocks)               |
 
 ## Self-Hosted
 
 | Example                            | Docs                                                               |
 | ---------------------------------- | ------------------------------------------------------------------ |
-| [SuperDoc Yjs](./superdoc-yjs)     | [Guide](https://docs.superdoc.dev/guides/superdoc-yjs)             |
-| [Hocuspocus](./hocuspocus)         | [Guide](https://docs.superdoc.dev/guides/hocuspocus)               |
+| [SuperDoc Yjs](./superdoc-yjs)     | [Guide](https://docs.superdoc.dev/guides/collaboration/superdoc-yjs)             |
+| [Hocuspocus](./hocuspocus)         | [Guide](https://docs.superdoc.dev/guides/collaboration/hocuspocus)               |
 | [Node SDK](./node-sdk)             | [SDKs](https://docs.superdoc.dev/document-engine/sdks)             |

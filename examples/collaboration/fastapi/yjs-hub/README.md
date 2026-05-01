@@ -10,7 +10,7 @@ This is intentionally local-only:
 ## Run
 
 ```bash
-cd /Users/nickjbernal/dev/superdoc/examples/collaboration/fastapi/yjs-hub
+cd examples/collaboration/fastapi/yjs-hub
 pnpm install --ignore-workspace --lockfile=false
 pnpm run deps:up
 pnpm run dev

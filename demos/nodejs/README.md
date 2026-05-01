@@ -27,4 +27,4 @@ http://localhost:3000?html=<p>I am a paragraph</p><p><strong>I AM BOLD!</strong>
 
 ## Additional docs
 
-See the [SuperDoc docs](https://docs.superdoc.dev/core/supereditor/methods) for all available editor commands and hooks.
+See the [SuperDoc docs](https://docs.superdoc.dev/advanced/supereditor/methods) for all available editor commands and hooks.

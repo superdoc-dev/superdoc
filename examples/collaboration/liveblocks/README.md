@@ -44,13 +44,13 @@ This example includes a server-side seeding script that:
 Run this exact seed command:
 
 ```bash
-npm run seed -- /Users/nickjbernal/Desktop/justify-test.docx
+npm run seed -- justify-test.docx
 ```
 
 To guarantee a brand-new room before seeding (delete if exists), use:
 
 ```bash
-npm run seed -- --fresh /Users/nickjbernal/Desktop/justify-test.docx
+npm run seed -- --fresh justify-test.docx
 ```
 
 Then start the browser client and connect to the same room:

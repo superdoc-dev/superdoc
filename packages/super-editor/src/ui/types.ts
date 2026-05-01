@@ -451,14 +451,14 @@ export interface SuperDocUI {
 
   /**
    * Document domain. Session-level operations a custom toolbar
-   * needs (Export DOCX, document-mode toggle, ready state). Sugar
-   * over `state.document` plus passthroughs to the host SuperDoc
-   * instance's `setDocumentMode` / `export`. Lifts the operations
-   * that previously forced consumers to wire a separate "host" hook
-   * through their React context just so a toolbar button could call
-   * `superdoc.export(...)`. Dirty / unsaved-changes is intentionally
-   * not on this slice today: SuperDoc has no host-side dirty primitive,
-   * and adding one is a separate ticket.
+   * needs (Export DOCX, document-mode toggle, ready state, unsaved-
+   * changes indicator). Sugar over `state.document` plus passthroughs
+   * to the host SuperDoc instance's `setDocumentMode` / `export` /
+   * `replaceFile`. Lifts the operations that previously forced
+   * consumers to wire a separate "host" hook through their React
+   * context just so a toolbar button could call `superdoc.export(...)`.
+   * The slice's `dirty` flag is transaction-driven and cleared on a
+   * successful `export` or `replaceFile`; see {@link DocumentSlice}.
    */
   document: DocumentHandle;
 

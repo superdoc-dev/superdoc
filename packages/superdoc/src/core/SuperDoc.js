@@ -110,6 +110,14 @@ export class SuperDoc extends EventEmitter {
   /** @type {Whiteboard | null} */
   whiteboard;
 
+  /**
+   * Awareness palette assigned to local users when no explicit color is set.
+   * Defaults to an empty array so `#assignUserColor` falls back to the
+   * built-in `DEFAULT_AWARENESS_PALETTE`.
+   * @type {string[]}
+   */
+  colors = [];
+
   /** @type {Config} */
   config = {
     superdocId: null,
@@ -279,7 +287,9 @@ export class SuperDoc extends EventEmitter {
     this.#log('🦋 [superdoc] Using SuperDoc version:', this.version);
 
     this.superdocId = config.superdocId || uuidv4();
-    this.colors = this.config.colors;
+    // Default to an empty palette when no colors are configured so downstream
+    // assignment logic doesn't have to null-check on every access.
+    this.colors = this.config.colors ?? [];
 
     // Preprocess document
     this.#initDocuments();
@@ -643,15 +653,21 @@ export class SuperDoc extends EventEmitter {
    * identity so different users get different colors.
    */
   #assignUserColor() {
-    if (this.config.user.color) return;
+    // `#init` always populates `this.config.user` (defaults to DEFAULT_USER
+    // when the consumer didn't pass one). The guard is here for the
+    // strictNullChecks contract on the public Config.user typedef, which
+    // must stay optional because consumers should not be required to pass
+    // a user up front.
+    const user = this.config.user;
+    if (!user || user.color) return;
 
     const palette = this.colors.length > 0 ? this.colors : DEFAULT_AWARENESS_PALETTE;
-    const userKey = this.config.user.email || this.config.user.name || '';
+    const userKey = user.email || user.name || '';
     let hash = 5381;
     for (let i = 0; i < userKey.length; i++) {
       hash = ((hash << 5) + hash) ^ userKey.charCodeAt(i);
     }
-    this.config.user.color = palette[Math.abs(hash) % palette.length];
+    user.color = palette[Math.abs(hash) % palette.length];
   }
 
   // ---------------------------------------------------------------------------

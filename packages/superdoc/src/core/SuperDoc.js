@@ -487,7 +487,10 @@ export class SuperDoc extends EventEmitter {
     }
     this.superdocStore.init(this.config);
     const commentsModuleConfig = this.config.modules.comments;
-    this.commentsStore.init(commentsModuleConfig && commentsModuleConfig !== false ? commentsModuleConfig : {});
+    // `commentsModuleConfig` is `false | object | undefined`. A truthy
+    // check already rules out both `false` and `undefined`, so an
+    // explicit `!== false` afterwards is redundant.
+    this.commentsStore.init(commentsModuleConfig || {});
     if (this.isCollaborative) {
       initCollaborationComments(this);
     }
@@ -1201,7 +1204,10 @@ export class SuperDoc extends EventEmitter {
    */
   scrollToComment(commentId, options = {}) {
     const commentsConfig = this.config?.modules?.comments;
-    if (!commentsConfig || commentsConfig === false) return false;
+    // `commentsConfig` can be `false | object | undefined`; `!commentsConfig`
+    // already covers both `false` and `undefined`, so the secondary
+    // `=== false` check below is redundant.
+    if (!commentsConfig) return false;
     if (!commentId || typeof commentId !== 'string') return false;
 
     const root = this.element || document;

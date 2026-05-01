@@ -70,7 +70,7 @@ Render the document in the browser editor for selection and visual feedback. Gen
 
 ```javascript
 const html = await callYourLLM(prompt);
-editor.doc.insert({ target: cursor, html });
+editor.doc.insert({ target: cursor, value: html, type: 'html' });
 ```
 
 [Streaming editor pattern →](/ai/agents/integrations)

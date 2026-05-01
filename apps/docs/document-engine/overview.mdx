@@ -29,7 +29,7 @@ The Document API is the operation contract. It defines every document action Sup
 
 - The **browser editor** exposes those operations as `editor.doc.*`.
 - The **SDKs** manage a CLI process and expose the same operations as typed Node and Python methods.
-- The **CLI** runs each operation as a one-shot command, with arguments and JSON output.
+- The **CLI** runs in persistent sessions: open a document, run operations, save and close. Each operation takes arguments and emits JSON output.
 
 All three call the same underlying engine. A redline written by your backend, a CI script, and a browser editor produce the same result on the same `.docx` file.
 
@@ -46,14 +46,17 @@ All three call the same underlying engine. A redline written by your backend, a 
 
 ## Where to next
 
-<CardGroup cols={3}>
+<CardGroup cols={2}>
   <Card title="Document API" icon="code" href="/document-api/overview">
-    The operation contract — every method the editor and SDKs share
+    The operation contract. Every method the editor and SDKs share.
   </Card>
   <Card title="SDKs" icon="box" href="/document-engine/sdks">
     Node and Python typed methods for backend automation
   </Card>
   <Card title="CLI" icon="terminal" href="/document-engine/cli">
     Scriptable DOCX operations from the shell
+  </Card>
+  <Card title="Diffing" icon="git-compare" href="/document-engine/diffing">
+    Compare two DOCX files. Produce a redlined third document.
   </Card>
 </CardGroup>

@@ -10,7 +10,7 @@ This is intentionally local-only:
 ## Run
 
 ```bash
-cd examples/collaboration/fastapi/yjs-hub
+cd examples/editor/collaboration/backends/fastapi/yjs-hub
 pnpm install --ignore-workspace --lockfile=false
 pnpm run deps:up
 pnpm run dev

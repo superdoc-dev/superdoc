@@ -29,7 +29,7 @@ import {
   areTocConfigsEqual,
   deriveIncludePageNumbers,
   DEFAULT_TOC_CONFIG,
-} from '../../core/super-converter/field-references/shared/toc-switches.js';
+} from '../../core/super-converter/field-codes/shared/toc-switches.js';
 import {
   findAllTocNodes,
   resolveTocTarget,

@@ -4,7 +4,7 @@ import { citationEntity } from './citationImporter.js';
 import { authorityEntryEntity } from './authorityEntryImporter.js';
 import { tableOfAuthoritiesEntity } from './tableOfAuthoritiesImporter.js';
 import { tableOfContentsEntryEntity } from './tableOfContentsEntryImporter.js';
-import { preProcessNodesForFldChar } from '../../field-references/preProcessNodesForFldChar.js';
+import { preProcessNodesForFldChar } from '../../field-codes/preProcessNodesForFldChar.js';
 
 /**
  * Regression guards for the four V2 importer entities added alongside

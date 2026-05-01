@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { defaultNodeListHandler } from './docxImporter.js';
 import { rawFieldEntity } from './rawFieldImporter.js';
-import { preProcessNodesForFldChar } from '../../field-references/preProcessNodesForFldChar.js';
+import { preProcessNodesForFldChar } from '../../field-codes/preProcessNodesForFldChar.js';
 
 describe('rawField v2 importer wiring (regression guard)', () => {
   it('registers rawFieldEntity in defaultNodeListHandler', () => {

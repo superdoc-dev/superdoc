@@ -7,7 +7,7 @@
 
 import type { Node as ProseMirrorNode } from 'prosemirror-model';
 import type { TocSwitchConfig } from '@superdoc/document-api';
-import { parseTcInstruction } from '../../core/super-converter/field-references/shared/tc-switches.js';
+import { parseTcInstruction } from '../../core/super-converter/field-codes/shared/tc-switches.js';
 import { getHeadingLevel } from './node-address-resolver.js';
 import { generateTocBookmarkName } from './toc-bookmark-sync.js';
 

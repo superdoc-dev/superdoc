@@ -1,6 +1,6 @@
 import { carbonCopy } from '@core/utilities/carbonCopy.js';
-import { preProcessNodesForFldChar } from '@converter/field-references/preProcessNodesForFldChar.js';
-import { preProcessPageFieldsOnly } from '@converter/field-references/preProcessPageFieldsOnly.js';
+import { preProcessNodesForFldChar } from '@converter/field-codes/preProcessNodesForFldChar.js';
+import { preProcessPageFieldsOnly } from '@converter/field-codes/preProcessPageFieldsOnly.js';
 import { resolveParagraphProperties, resolveRunProperties } from '@converter/styles';
 import { twipsToPixels } from '@converter/helpers.js';
 import { translator as w_pPrTranslator } from '@converter/v3/handlers/w/pPr';
@@ -13,6 +13,28 @@ import { SuperConverter } from '@converter/SuperConverter.js';
  * Matches: header.xml, header1.xml, footer.xml, footer2.xml, etc.
  */
 const HEADER_FOOTER_FILENAME_PATTERN = /^(header|footer)\d*\.xml$/i;
+
+/**
+ * Map a DOCX part XML filename to the FieldInstance `source.part` value.
+ * A textbox living in `footnotes.xml` (etc.) routes its field-code
+ * preprocessing through this file rather than through the dedicated
+ * footnote importer, so the `part` must be inferred from the filename
+ * to keep the substrate's `source.part` faithful.
+ *
+ * @param {string} filename
+ * @returns {import('@converter/field-codes/build-field-instance.js').BuildFieldInstanceArgs['part']}
+ */
+function partFromFilename(filename) {
+  if (typeof filename !== 'string') return 'body';
+  const lower = filename.toLowerCase();
+  if (lower === 'footnotes.xml') return 'footnotes';
+  if (lower === 'endnotes.xml') return 'endnotes';
+  if (lower === 'comments.xml') return 'comments';
+  // header*.xml / footer*.xml are routed through preProcessPageFieldsOnly
+  // by isHeaderFooter above, so they never reach this mapper. The default
+  // covers document.xml plus any unrecognized part name.
+  return 'body';
+}
 
 /**
  * Recursively collects all paragraph nodes (w:p) from a text box content structure.
@@ -73,7 +95,9 @@ export function preProcessTextBoxContent(textBoxContent, params = {}) {
     return clone;
   }
 
-  const { processedNodes } = preProcessNodesForFldChar(clone.elements, params.docx);
+  const { processedNodes } = preProcessNodesForFldChar(clone.elements, params.docx, {
+    part: partFromFilename(filename),
+  });
   clone.elements = processedNodes;
   return clone;
 }

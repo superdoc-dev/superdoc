@@ -43,7 +43,7 @@ import type {
 import type { Editor } from '../../core/Editor.js';
 import type { ParagraphAttrs, TableAttrs, TableCellAttrs, ImageAttrs } from '../../extensions/types/node-attributes.js';
 import { getHeadingLevel } from './node-address-resolver.js';
-import { parseTocInstruction } from '../../core/super-converter/field-references/shared/toc-switches.js';
+import { parseTocInstruction } from '../../core/super-converter/field-codes/shared/toc-switches.js';
 import { resolveSectionProjections, type SectionProjection } from './sections-resolver.js';
 
 // ---------------------------------------------------------------------------

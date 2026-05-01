@@ -9,7 +9,7 @@ import type { Node as ProseMirrorNode } from 'prosemirror-model';
 import type { Editor } from '../../core/Editor.js';
 import type { TocEntryAddress, TocEntryDomain, DiscoveryItem, TocEntryInfo } from '@superdoc/document-api';
 import { buildDiscoveryItem, buildResolvedHandle } from '@superdoc/document-api';
-import { parseTcInstruction } from '../../core/super-converter/field-references/shared/tc-switches.js';
+import { parseTcInstruction } from '../../core/super-converter/field-codes/shared/tc-switches.js';
 import { DocumentApiAdapterError } from '../errors.js';
 import { resolvePublicTcEntryNodeId } from './toc-entry-node-id.js';
 import { buildBlockIndex, findBlockByNodeIdOnly } from './node-address-resolver.js';

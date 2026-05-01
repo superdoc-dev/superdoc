@@ -28,7 +28,7 @@ import {
   applyTcPatch,
   areTcConfigsEqual,
   parseTcInstruction,
-} from '../../core/super-converter/field-references/shared/tc-switches.js';
+} from '../../core/super-converter/field-codes/shared/tc-switches.js';
 import {
   findAllTcEntryNodes,
   resolveTcEntryTarget,

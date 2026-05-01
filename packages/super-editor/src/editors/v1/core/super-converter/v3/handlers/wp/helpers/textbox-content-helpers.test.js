@@ -9,17 +9,17 @@ import {
   extractParagraphAlignment,
   extractBodyPrProperties,
 } from './textbox-content-helpers.js';
-import { preProcessNodesForFldChar } from '@converter/field-references/preProcessNodesForFldChar.js';
-import { preProcessPageFieldsOnly } from '@converter/field-references/preProcessPageFieldsOnly.js';
+import { preProcessNodesForFldChar } from '@converter/field-codes/preProcessNodesForFldChar.js';
+import { preProcessPageFieldsOnly } from '@converter/field-codes/preProcessPageFieldsOnly.js';
 import { resolveRunProperties } from '@converter/styles';
 import { translator as rPrTranslator } from '@converter/v3/handlers/w/rpr';
 
 // Mock all dependencies
-vi.mock('@converter/field-references/preProcessNodesForFldChar.js', () => ({
+vi.mock('@converter/field-codes/preProcessNodesForFldChar.js', () => ({
   preProcessNodesForFldChar: vi.fn((nodes) => ({ processedNodes: nodes })),
 }));
 
-vi.mock('@converter/field-references/preProcessPageFieldsOnly.js', () => ({
+vi.mock('@converter/field-codes/preProcessPageFieldsOnly.js', () => ({
   preProcessPageFieldsOnly: vi.fn((nodes) => ({ processedNodes: nodes })),
 }));
 
@@ -189,6 +189,25 @@ describe('textbox-content-helpers', () => {
       const content = { elements: [{ name: 'w:p' }] };
       preProcessTextBoxContent(content, {});
       expect(preProcessNodesForFldChar).toHaveBeenCalled();
+    });
+
+    it.each([
+      ['document.xml', 'body'],
+      ['footnotes.xml', 'footnotes'],
+      ['endnotes.xml', 'endnotes'],
+      ['comments.xml', 'comments'],
+      ['unknown.xml', 'body'],
+      [undefined, 'body'],
+    ])('threads source.part = %s for filename %s', (filename, expectedPart) => {
+      const content = { elements: [{ name: 'w:p' }] };
+      const params = filename === undefined ? {} : { filename };
+      preProcessTextBoxContent(content, params);
+      // The third positional arg to preProcessNodesForFldChar carries
+      // the part option; verify it matches the part inferred from the
+      // filename so a textbox in a non-body part records the correct
+      // source.part on its FieldInstance.
+      const call = preProcessNodesForFldChar.mock.calls.at(-1);
+      expect(call?.[2]).toEqual({ part: expectedPart });
     });
 
     it('should match header.xml without number', () => {

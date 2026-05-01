@@ -9,7 +9,7 @@ import {
   filterOutRootInlineNodes,
 } from './v2/importer/docxImporter.js';
 import { normalizeDuplicateBlockIdentitiesInContent } from './v2/importer/normalizeDuplicateBlockIdentitiesInContent.js';
-import { preProcessPageFieldsOnly } from './field-references/preProcessPageFieldsOnly.js';
+import { preProcessPageFieldsOnly } from './field-codes/preProcessPageFieldsOnly.js';
 import { carbonCopy } from '../utilities/carbonCopy.js';
 import { deobfuscateFont, getArrayBufferFromUrl, computeCrc32Hex } from './helpers.js';
 import { baseNumbering } from './v2/exporter/helpers/base-list.definitions.js';

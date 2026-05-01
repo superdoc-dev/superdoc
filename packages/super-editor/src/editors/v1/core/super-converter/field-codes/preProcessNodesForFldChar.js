@@ -57,9 +57,15 @@ const containsBlockLevelNode = (nodes) => {
  *
  * @param {OpenXmlNode[]} [nodes=[]] - The nodes to process.
  * @param {import('../v2/docxHelper').ParsedDocx} [docx] - The docx object.
+ * @param {object} [options] - Per-call options.
+ * @param {import('./build-field-instance.js').BuildFieldInstanceArgs['part']} [options.part='body']
+ *   The DOCX part this content originated from. Threaded into every
+ *   FieldInstance built from this call so `source.part` is faithful for
+ *   textboxes living in footnotes / endnotes / comments and any other
+ *   non-body part. Defaults to `'body'` for the document root.
  * @returns {FldCharProcessResult} The processed nodes and whether there were unpaired begin or end fldChar nodes.
  */
-export const preProcessNodesForFldChar = (nodes = [], docx) => {
+export const preProcessNodesForFldChar = (nodes = [], docx, options = {}) => {
   const processedNodes = [];
   let collectedNodesStack = [];
   let rawCollectedNodesStack = [];
@@ -72,7 +78,7 @@ export const preProcessNodesForFldChar = (nodes = [], docx) => {
   // chunks of the substrate carry FieldInstance on every typed node and the
   // round-trip harness assigns a globally-stable ordering.
   let importIndex = 0;
-  const FIELD_PART = 'body';
+  const FIELD_PART = options.part ?? 'body';
   const rawNodeSourceTokens = new WeakMap();
 
   /**
@@ -360,7 +366,7 @@ export const preProcessNodesForFldChar = (nodes = [], docx) => {
     if (Array.isArray(node.elements)) {
       // Recurse into child nodes for nodes that are not 'begin' or 'end' markers,
       // as they may contain nested fields too.
-      const childResult = preProcessNodesForFldChar(node.elements, docx);
+      const childResult = preProcessNodesForFldChar(node.elements, docx, options);
       node.elements = childResult.processedNodes;
 
       if (childResult.unpairedBegin) {

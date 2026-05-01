@@ -19,7 +19,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { defaultNodeListHandler } from './docxImporter.js';
-import { preProcessNodesForFldChar } from '../../field-references/index.js';
+import { preProcessNodesForFldChar } from '../../field-codes/index.js';
 import { crossReferenceEntity } from './crossReferenceImporter.js';
 
 const createEditorStub = () => ({

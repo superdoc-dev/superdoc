@@ -35,7 +35,7 @@ import type {
   TableCellAttrs,
   TableMeasurement,
 } from '../../extensions/types/node-attributes.js';
-import { parseTocInstruction } from '../../core/super-converter/field-references/shared/toc-switches.js';
+import { parseTocInstruction } from '../../core/super-converter/field-codes/shared/toc-switches.js';
 import { buildContentControlInfoFromAttrs } from './content-controls/sdt-info-builder.js';
 
 function resolveMeasurement(value: number | TableMeasurement | null | undefined): number | undefined {

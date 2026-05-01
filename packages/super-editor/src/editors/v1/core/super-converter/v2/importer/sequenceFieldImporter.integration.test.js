@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { defaultNodeListHandler } from './docxImporter.js';
 import { sequenceFieldEntity } from './sequenceFieldImporter.js';
-import { preProcessNodesForFldChar } from '../../field-references/preProcessNodesForFldChar.js';
+import { preProcessNodesForFldChar } from '../../field-codes/preProcessNodesForFldChar.js';
 
 describe('sequenceField v2 importer wiring (regression guard)', () => {
   it('registers sequenceFieldEntity in defaultNodeListHandler', () => {

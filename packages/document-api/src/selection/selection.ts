@@ -1,5 +1,5 @@
 /**
- * `selection.current` operation — reads the editor's current selection
+ * `selection.current` operation: reads the editor's current selection
  * and projects it into the Document API's text-address model.
  *
  * This is the primitive consumers use to build custom comments UIs,

@@ -16,7 +16,7 @@ export const DocCounter = ({ height = '350px' }) => {
     link.href = 'https://cdn.jsdelivr.net/npm/superdoc@latest/dist/style.css';
     document.head.appendChild(link);
 
-    // Buffer polyfill — required for document hashing
+    // Buffer polyfill: required for document hashing
     const bufferScript = document.createElement('script');
     bufferScript.src = 'https://cdn.jsdelivr.net/npm/buffer@6/index.min.js';
     bufferScript.onload = () => {
@@ -59,10 +59,10 @@ export const DocCounter = ({ height = '350px' }) => {
         if (next.has(identifier)) {
           const existing = next.get(identifier);
           next.set(identifier, { ...existing, opens: existing.opens + 1 });
-          addLog(`Re-opened "${name}" — same identifier, still counts as 1`);
+          addLog(`Re-opened "${name}": same identifier, still counts as 1`);
         } else {
           next.set(identifier, { name, opens: 1, hasGuid: !!guid });
-          addLog(`New document "${name}" — identifier: ${identifier.slice(0, 12)}...`);
+          addLog(`New document "${name}": identifier: ${identifier.slice(0, 12)}...`);
         }
         return next;
       });
@@ -203,7 +203,7 @@ export const DocCounter = ({ height = '350px' }) => {
               >
                 <span style={{ fontWeight: 500 }}>{doc.name}</span>
                 {doc.opens > 1 && (
-                  <span style={{ color: '#3b82f6', marginLeft: '4px' }}>(opened {doc.opens}x — still 1)</span>
+                  <span style={{ color: '#3b82f6', marginLeft: '4px' }}>(opened {doc.opens}x: still 1)</span>
                 )}
               </div>
             ))}

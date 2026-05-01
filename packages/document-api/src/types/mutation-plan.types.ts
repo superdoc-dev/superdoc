@@ -1,5 +1,5 @@
 /**
- * Mutation plan types — core input model for the plan engine.
+ * Mutation plan types: core input model for the plan engine.
  *
  * All mutating behavior executes through `mutations.apply`. Every operation
  * that changes document state is a step dispatched by the plan engine.
@@ -65,10 +65,10 @@ export type ReplacementBlock = {
 /**
  * Replacement payload for text.rewrite steps.
  *
- * - `{ text }` — flat string. For single-block (range) targets, used as-is.
+ * - `{ text }`: flat string. For single-block (range) targets, used as-is.
  *   For cross-block (span) targets, normalized via deterministic paragraph
  *   boundary detection (\n\n+).
- * - `{ blocks }` — structured multi-paragraph payload, authoritative when provided.
+ * - `{ blocks }`: structured multi-paragraph payload, authoritative when provided.
  *   Use this for explicit control over paragraph structure.
  *
  * Exactly one of `text` or `blocks` must be provided.
@@ -204,7 +204,7 @@ export type MutationsPreviewInput = {
 };
 
 // ---------------------------------------------------------------------------
-// Plan output — receipts
+// Plan output: receipts
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
@@ -218,7 +218,7 @@ export const MAX_PLAN_STEPS = 200;
 export const MAX_PLAN_RESOLVED_TARGETS = 500;
 
 // ---------------------------------------------------------------------------
-// Plan output — receipts
+// Plan output: receipts
 // ---------------------------------------------------------------------------
 
 export type StepEffect = 'changed' | 'noop' | 'error' | 'assert_passed' | 'assert_failed';
@@ -338,7 +338,7 @@ export type PlanExecutionError = {
 };
 
 // ---------------------------------------------------------------------------
-// Revision guard options — canonical definitions in write/write.ts
+// Revision guard options: canonical definitions in write/write.ts
 // ---------------------------------------------------------------------------
 
 export type { RevisionGuardOptions, MutationOptions } from '../write/write.js';

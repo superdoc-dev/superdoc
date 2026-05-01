@@ -14,7 +14,7 @@ export interface CrossRefAddress {
 }
 
 // ---------------------------------------------------------------------------
-// Target types (deterministic — all fields required)
+// Target types (deterministic: all fields required)
 // Amendments 4 & 5: includes numberedItem and styledParagraph
 // ---------------------------------------------------------------------------
 

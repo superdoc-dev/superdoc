@@ -115,7 +115,7 @@ export type TableCreateLocation =
  *
  * For non-destructive table-targeted mutations, `table` is the canonical
  * post-mutation table reference. Use `table.nodeId` to target the same table
- * in subsequent operations — no intermediate `find()` needed.
+ * in subsequent operations: no intermediate `find()` needed.
  *
  * `table` is `undefined` for destructive operations (delete, convertToText)
  * and in rare cases where post-mutation re-resolution fails.
@@ -332,7 +332,7 @@ export type TablesClearStyleInput = TableLocator;
 export type TableStyleOptionFlag =
   | 'headerRow'
   | 'lastRow'
-  | 'totalRow' // deprecated alias for 'lastRow' — will be removed in a future release
+  | 'totalRow' // deprecated alias for 'lastRow': will be removed in a future release
   | 'firstColumn'
   | 'lastColumn'
   | 'bandedRows'
@@ -556,7 +556,7 @@ export type TablesClearCellSpacingInput = TableLocator;
 // Document-level style queries & mutations
 // ---------------------------------------------------------------------------
 
-/** Input for `tables.getStyles` — document-level query, no locator needed. */
+/** Input for `tables.getStyles`: document-level query, no locator needed. */
 export type TablesGetStylesInput = Record<string, never>;
 
 /** Per-style metadata returned by `tables.getStyles`. */
@@ -592,10 +592,10 @@ export type TablesClearDefaultStyleInput = Record<string, never>;
 // Read operations (B4: ref handoff)
 // ---------------------------------------------------------------------------
 
-/** Input for `tables.get` — locates a single table. */
+/** Input for `tables.get`: locates a single table. */
 export type TablesGetInput = TableLocator;
 
-/** Output for `tables.get` — table structure with stable refs. */
+/** Output for `tables.get`: table structure with stable refs. */
 export interface TablesGetOutput {
   nodeId: string;
   address: TableAddress;
@@ -603,7 +603,7 @@ export interface TablesGetOutput {
   columns: number;
 }
 
-/** Input for `tables.getCells` — locates a table and optionally filters cells. */
+/** Input for `tables.getCells`: locates a table and optionally filters cells. */
 export interface TablesGetCellsInput extends TableLocator {
   /** Optional row filter. */
   rowIndex?: number;
@@ -613,9 +613,9 @@ export interface TablesGetCellsInput extends TableLocator {
 
 /** Per-cell info with stable ref for write handoff. */
 export interface TableCellInfo {
-  /** Shorthand cell identifier — convenient for logging, Map keys, and display. */
+  /** Shorthand cell identifier: convenient for logging, Map keys, and display. */
   nodeId: string;
-  /** Mutation-ready address — pass directly as `target` in follow-up cell operations. */
+  /** Mutation-ready address: pass directly as `target` in follow-up cell operations. */
   address: TableCellAddress;
   rowIndex: number;
   columnIndex: number;
@@ -630,14 +630,14 @@ export interface TablesGetCellsOutput {
   cells: TableCellInfo[];
 }
 
-/** Input for `tables.getProperties` — locates a single table. */
+/** Input for `tables.getProperties`: locates a single table. */
 export type TablesGetPropertiesInput = TableLocator;
 
 /**
- * Output for `tables.getProperties` — table layout/style metadata.
+ * Output for `tables.getProperties`: table layout/style metadata.
  *
  * All fields reflect **direct formatting only**. Properties inherited from
- * the table style are not included — use `styleId` and `styleOptions` to
+ * the table style are not included: use `styleId` and `styleOptions` to
  * determine which style is active.
  */
 export interface TablesGetPropertiesOutput {

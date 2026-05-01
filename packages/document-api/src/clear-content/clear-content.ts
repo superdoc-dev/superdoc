@@ -16,7 +16,7 @@ export interface ClearContentAdapter {
 /**
  * Execute a clearContent operation through the provided adapter.
  *
- * clearContent is a destructive reset — tracked mode and dry run are not
+ * clearContent is a destructive reset: tracked mode and dry run are not
  * meaningful, so this accepts {@link RevisionGuardOptions} rather than
  * `MutationOptions`.
  *

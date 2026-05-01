@@ -3,7 +3,7 @@
  *
  * Each parser produces a typed result: either a canonical value or a structured
  * `InvalidInlineTokenError` record. The same parser is used by both runtime and
- * import paths — the caller decides fatality (runtime: throw; import: collect).
+ * import paths: the caller decides fatality (runtime: throw; import: collect).
  */
 
 import type { CoreTogglePropertyId } from './property-ids.js';

@@ -1,9 +1,10 @@
+// @ts-check
 import { Editor, getRichTextExtensions, getStarterExtensions } from '@superdoc/super-editor';
 
 /**
  * @typedef {Object} SchemaIntrospectionOptions
  * @property {import('@superdoc/super-editor').Editor} [editor] - Existing Editor instance to introspect.
- * @property {Array} [extensions] - Extension list to build a schema from.
+ * @property {NonNullable<import('@superdoc/super-editor').EditorOptions['extensions']>} [extensions] - Extension list to build a schema from.
  * @property {'docx' | 'text' | 'html'} [mode] - Editor mode when building a schema. Defaults to 'docx'.
  */
 

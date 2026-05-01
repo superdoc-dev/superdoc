@@ -113,6 +113,13 @@ jobs:
       - name: Typecheck
         run: pnpm run type-check
 
+      - name: Public-contract checkJs (SD-2863)
+        # Gated subset of public-contract files run with `// @ts-check`. The
+        # script greps tsc output for errors in the curated file list and
+        # ignores the wider 1500+ errors from the broader super-editor source
+        # tree (those are tracked under SD-2863 follow-up tickets).
+        run: pnpm --filter superdoc run check:jsdoc
+
       - name: Consumer typecheck (matrix)
         # The matrix script owns the published-package validation path:
         # it packs superdoc, installs the tarball into the standalone

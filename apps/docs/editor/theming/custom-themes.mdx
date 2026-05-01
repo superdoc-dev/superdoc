@@ -29,7 +29,7 @@ const theme = createTheme({
     textDisabled: '#94a3b8',
     border: '#e2e8f0',
   },
-  // Escape hatch — any --sd-* CSS variable
+  // Escape hatch: any --sd-* CSS variable
   vars: {
     '--sd-ui-toolbar-bg': '#f8fafc',
     '--sd-ui-comments-card-bg': '#f0f0ff',
@@ -316,7 +316,7 @@ If you also want tracked-change text inside comment threads to match, set `--sd-
 
 ### Content controls
 
-DOCX content controls (SDTs) — form fields, dropdowns, date pickers.
+DOCX content controls (SDTs): form fields, dropdowns, date pickers.
 
 | Variable | Default | Controls |
 |----------|---------|----------|
@@ -352,7 +352,7 @@ The floating action toolbar for AI and insert actions.
 
 ### Surfaces
 
-Dialog and floating overlays rendered above document content. Style with CSS variables — the stable classes `.sd-surface-dialog` and `.sd-surface-floating` are also available for stylesheet targeting.
+Dialog and floating overlays rendered above document content. Style with CSS variables: the stable classes `.sd-surface-dialog` and `.sd-surface-floating` are also available for stylesheet targeting.
 
 | Variable | Default | Controls |
 |----------|---------|----------|
@@ -452,6 +452,6 @@ The built-in password dialog for encrypted DOCX files. All variables default to 
 
 Token definitions live in your `node_modules/superdoc/` package:
 
-- `src/assets/styles/helpers/variables.css` — defaults
-- `src/assets/styles/helpers/themes.css` — preset themes
-- `src/assets/styles/helpers/compat.css` — aliases for old names that map to a different concept
+- `src/assets/styles/helpers/variables.css`: defaults
+- `src/assets/styles/helpers/themes.css`: preset themes
+- `src/assets/styles/helpers/compat.css`: aliases for old names that map to a different concept

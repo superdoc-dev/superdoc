@@ -6,7 +6,7 @@ keywords: "superdoc react, react docx editor, @superdoc-dev/react, react word co
 
 `@superdoc-dev/react` is a first-party React wrapper for SuperDoc. It handles lifecycle management, SSR safety, and React Strict Mode compatibility so you can drop a DOCX editor into any React app.
 
-Building your own toolbar, comments sidebar, or review panel? Pair `<SuperDocEditor>` with `superdoc/ui/react`. See [Bring Your Own UI](/editor/custom-ui/overview).
+Building your own toolbar, comments sidebar, or review panel? Pair `<SuperDocEditor>` with `superdoc/ui/react`. See [Custom UI](/editor/custom-ui/overview).
 
 ## Installation
 
@@ -15,7 +15,7 @@ npm install @superdoc-dev/react
 ```
 
 <Note>
-`superdoc` is included as a dependency — no need to install it separately.
+`superdoc` is included as a dependency: no need to install it separately.
 </Note>
 
 ## Quick start
@@ -37,11 +37,11 @@ function App() {
 
 ## What the component handles
 
-- **Mounting** — Creates a SuperDoc instance when the component mounts
-- **Updates** — Rebuilds automatically when the `document` prop changes
-- **Cleanup** — Destroys the instance on unmount
-- **SSR** — Renders container structure on server, initializes SuperDoc after hydration
-- **Strict Mode** — Internal cleanup flag prevents issues from React 18 double-invocation
+- **Mounting**: Creates a SuperDoc instance when the component mounts
+- **Updates**: Rebuilds automatically when the `document` prop changes
+- **Cleanup**: Destroys the instance on unmount
+- **SSR**: Renders container structure on server, initializes SuperDoc after hydration
+- **Strict Mode**: Internal cleanup flag prevents issues from React 18 double-invocation
 
 ## Requirements
 
@@ -52,6 +52,6 @@ function App() {
 
 ## API structure
 
-- **[Configuration](/editor/react/configuration)** — All props reference
-- **[Methods](/editor/react/methods)** — Ref API, instance methods, and patterns
-- **[Types](/editor/react/types)** — TypeScript types, framework integration, troubleshooting
+- **[Configuration](/editor/react/configuration)**: All props reference
+- **[Methods](/editor/react/methods)**: Ref API, instance methods, and patterns
+- **[Types](/editor/react/types)**: TypeScript types, framework integration, troubleshooting

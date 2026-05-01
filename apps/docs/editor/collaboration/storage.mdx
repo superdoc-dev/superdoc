@@ -19,7 +19,7 @@ How and when a document is stored often depends on the level of document collabo
 For real-time, multi-user collaboration (similar to Google Docs) using Yjs/CRDT, each client connects to a [realtime collaboration service](/editor/collaboration/overview) that merges all user updates.
 
 <Info>
-**Complexity: Medium** — Requires a server-side [Yjs/CRDT service](/guides/collaboration/self-hosted-overview)
+**Complexity: Medium**: Requires a server-side [Yjs/CRDT service](/guides/collaboration/self-hosted-overview)
 </Info>
 
 **How it works:**
@@ -32,7 +32,7 @@ For real-time, multi-user collaboration (similar to Google Docs) using Yjs/CRDT,
 For scenarios where only one user edits at a time (like SharePoint), implement a locking mechanism where users check out documents before editing.
 
 <Info>
-**Complexity: Low** — Requires storing and querying document lock/unlock state
+**Complexity: Low**: Requires storing and querying document lock/unlock state
 </Info>
 
 **How it works:**

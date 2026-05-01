@@ -495,7 +495,7 @@ const superdoc = new SuperDoc({
 
 <ParamField path="togglePagination" type="string" deprecated>
 
-<Warning>**Removed in v1.0** — Pagination is now handled by the layout engine. Use `viewOptions.layout` in [configuration](/editor/superdoc/configuration) instead.</Warning>
+<Warning>**Removed in v1.0**: Pagination is now handled by the layout engine. Use `viewOptions.layout` in [configuration](/editor/superdoc/configuration) instead.</Warning>
 
 </ParamField>
 
@@ -657,7 +657,7 @@ const superdoc = new SuperDoc({
 ## Comments methods
 
 <Note>
-**`addCommentsList` and `removeCommentsList` mount the built-in comments sidebar.** For custom React UI, render your own panel from `useSuperDocComments` instead — see [Bring Your Own UI › Comments](/editor/custom-ui/comments). The methods below stay supported for apps using the built-in sidebar.
+**`addCommentsList` and `removeCommentsList` mount the built-in comments sidebar.** For custom React UI, render your own panel from `useSuperDocComments` instead: see [Custom UI › Comments](/editor/custom-ui/comments). The methods below stay supported for apps using the built-in sidebar.
 </Note>
 
 ### `addCommentsList`
@@ -726,15 +726,15 @@ Scroll to a comment in the document and set it as active.
   Scroll behavior options
   <Expandable>
     <ParamField path="behavior" type="ScrollBehavior" default="smooth">
-      Scroll behavior — `"smooth"`, `"instant"`, or `"auto"`
+      Scroll behavior: `"smooth"`, `"instant"`, or `"auto"`
     </ParamField>
     <ParamField path="block" type="ScrollLogicalPosition" default="start">
-      Vertical alignment — `"start"`, `"center"`, `"end"`, or `"nearest"`
+      Vertical alignment: `"start"`, `"center"`, `"end"`, or `"nearest"`
     </ParamField>
   </Expandable>
 </ParamField>
 
-**Returns:** `boolean` — `true` if the comment was found, `false` otherwise.
+**Returns:** `boolean`: `true` if the comment was found, `false` otherwise.
 
 <CodeGroup>
 
@@ -771,13 +771,13 @@ const superdoc = new SuperDoc({
 
 ### `scrollToElement`
 
-Scroll to any document element by its ID. Pass a paragraph `nodeId`, comment `entityId`, or tracked change `entityId` — the method figures out what kind of element it is and scrolls there.
+Scroll to any document element by its ID. Pass a paragraph `nodeId`, comment `entityId`, or tracked change `entityId`: the method figures out what kind of element it is and scrolls there.
 
 <ParamField path="elementId" type="string" required>
   The element's stable ID. Get this from `query.match` results (`address.nodeId`), `comments.list` (`entityId`), or `trackChanges.list` (`entityId`).
 </ParamField>
 
-**Returns:** `Promise<boolean>` — `true` if the element was found and scrolled to, `false` otherwise. Never throws.
+**Returns:** `Promise<boolean>`: `true` if the element was found and scrolled to, `false` otherwise. Never throws.
 
 <CodeGroup>
 
@@ -789,7 +789,7 @@ const result = editor.doc.query.match({
 });
 const nodeId = result.items[0].address.nodeId;
 
-// Scroll to it — one call, any element type
+// Scroll to it: one call, any element type
 await superdoc.scrollToElement(nodeId);
 ```
 

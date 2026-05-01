@@ -4,7 +4,7 @@ sidebarTitle: Telemetry
 keywords: "telemetry, analytics, usage tracking, billing, license key, document tracking"
 ---
 
-SuperDoc collects lightweight telemetry to track document opens for usage-based billing. Telemetry is enabled by default and runs silently in the background — it never blocks rendering or breaks your app.
+SuperDoc collects lightweight telemetry to track document opens for usage-based billing. Telemetry is enabled by default and runs silently in the background: it never blocks rendering or breaks your app.
 
 ## What gets collected
 
@@ -27,7 +27,7 @@ SuperDoc does **not** collect:
 ## How it works
 
 1. You open or import a document
-2. SuperDoc generates a **document identifier** — a hash derived from the file's metadata (not its content)
+2. SuperDoc generates a **document identifier**: a hash derived from the file's metadata (not its content)
 3. A single `POST` request fires to the telemetry endpoint
 4. If the request fails (network error, blocked by firewall), it fails silently
 
@@ -113,7 +113,7 @@ No network requests will be made. Document metadata (GUID and timestamp) is stil
 
 ### Self-reporting
 
-You can route telemetry through your own server using `telemetry.endpoint`. SuperDoc sends the same JSON payload to whatever URL you provide — inspect it, store it, forward it, or drop it.
+You can route telemetry through your own server using `telemetry.endpoint`. SuperDoc sends the same JSON payload to whatever URL you provide: inspect it, store it, forward it, or drop it.
 
 ```javascript
 const superdoc = new SuperDoc({
@@ -127,7 +127,7 @@ const superdoc = new SuperDoc({
 });
 ```
 
-Your server receives a `POST` with the payload described in [Payload example](#payload-example). From there you can aggregate usage on your side — count document opens per customer, track adoption across teams, or feed the data into your own billing pipeline.
+Your server receives a `POST` with the payload described in [Payload example](#payload-example). From there you can aggregate usage on your side: count document opens per customer, track adoption across teams, or feed the data into your own billing pipeline.
 
 <Note>
 A dedicated self-reporting API with dashboards and usage summaries is under development and will be available by Feb 28, 2026. In the meantime, proxying via `telemetry.endpoint` gives you full control over the raw data.
@@ -139,7 +139,7 @@ The license key identifies your organization. It's sent as an `X-License-Key` he
 
 | License type | Key | How to get it |
 |-------------|-----|---------------|
-| Community / evaluation | `community-and-eval-agplv3` (default) | No action needed — used automatically |
+| Community / evaluation | `community-and-eval-agplv3` (default) | No action needed: used automatically |
 | Commercial | Your organization key | Email [q@superdoc.dev](mailto:q@superdoc.dev) |
 
 If you're evaluating SuperDoc or using it under AGPLv3, you don't need to configure a license key. The community key is applied automatically.
@@ -154,7 +154,7 @@ SuperDoc needs to identify each document uniquely so that opening the same file 
 
 SuperDoc uses two strategies depending on what metadata the file contains:
 
-**1. Metadata hash — file already has a GUID and timestamp**
+**1. Metadata hash: file already has a GUID and timestamp**
 
 DOCX files created by Microsoft Word (and other tools) typically contain a unique GUID and a creation timestamp in their internal metadata (`docProps/` and `word/settings.xml`). When both are present, SuperDoc hashes them together:
 
@@ -164,7 +164,7 @@ documentId = hash(GUID | creationTimestamp)   →   "HASH-A1B2C3D4"
 
 This is the most stable strategy. The same file always produces the same identifier regardless of content edits, because the hash is derived from metadata, not content.
 
-**2. Generated identifier — file is missing metadata**
+**2. Generated identifier: file is missing metadata**
 
 Some tools produce DOCX files without a GUID or timestamp. When either is missing, SuperDoc does two things:
 
@@ -215,7 +215,7 @@ X-License-Key: your-license-key
 
 ## Try it: document counting demo
 
-See document uniqueness in action. Upload a DOCX file and watch the counter — then try the steps below.
+See document uniqueness in action. Upload a DOCX file and watch the counter: then try the steps below.
 
 import { DocCounter } from '/snippets/components/doc-counter.jsx'
 
@@ -226,10 +226,10 @@ import { DocCounter } from '/snippets/components/doc-counter.jsx'
     Click **Upload DOCX** and pick any `.docx` file. The counter goes to **1**. SuperDoc reads the file's internal metadata and generates a document identifier.
   </Step>
   <Step title="Edit the document">
-    Make some changes in the editor — add text, delete a paragraph, change formatting. The identifier stays the same because it's based on metadata, not content.
+    Make some changes in the editor: add text, delete a paragraph, change formatting. The identifier stays the same because it's based on metadata, not content.
   </Step>
   <Step title="Export and re-import">
-    Click **Export & re-import**. SuperDoc exports the document to DOCX and immediately re-imports it. The counter stays at **1** — same metadata, same identifier.
+    Click **Export & re-import**. SuperDoc exports the document to DOCX and immediately re-imports it. The counter stays at **1**: same metadata, same identifier.
   </Step>
   <Step title="Upload a different file">
     Upload a second DOCX file. The counter goes to **2**. Each file with distinct metadata gets its own identifier.

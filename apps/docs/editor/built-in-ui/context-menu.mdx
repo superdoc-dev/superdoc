@@ -87,7 +87,7 @@ modules: {
           label: 'Insert Signature',
           icon: '<svg>...</svg>',
           action: (editor, context) => {
-            editor.commands.insertContent('— Signed');
+            editor.commands.insertContent('- Signed');
           },
           showWhen: (context) => {
             return context.trigger === 'click';

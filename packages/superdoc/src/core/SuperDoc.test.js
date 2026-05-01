@@ -626,7 +626,7 @@ describe('SuperDoc core', () => {
   });
 
   it('passes comments: undefined when the UI store is unhydrated (modules.comments: false)', async () => {
-    // Regression for the BYO UI story. With the built-in comments
+    // Regression for the Custom UI story. With the built-in comments
     // module disabled, the UI store never holds the imported
     // comments, so the export must hand off `undefined` and let
     // `Editor.exportDocx`'s `comments ?? this.converter.comments`

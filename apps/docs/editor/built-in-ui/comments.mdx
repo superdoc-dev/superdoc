@@ -6,7 +6,7 @@ keywords: "word comments api, document annotations, threaded discussions, commen
 Add Word-style commenting to documents with threaded discussions, replies, and resolution workflows.
 
 <Tip>
-Building your own comments sidebar in React? Skip this module and read [Bring Your Own UI › Comments](/editor/custom-ui/comments) instead. It documents `useSuperDocComments`, `ui.selection.capture()`, and the typed posting flow.
+Building your own comments sidebar in React? Skip this module and read [Custom UI › Comments](/editor/custom-ui/comments) instead. It documents `useSuperDocComments`, `ui.selection.capture()`, and the typed posting flow.
 </Tip>
 
 ## Quick start
@@ -208,7 +208,7 @@ const superdoc = new SuperDoc({
 
 Customize who can resolve comments or accept tracked changes. The resolver receives the permission type, current user, and any tracked-change metadata. Return `false` to block the action.
 
-By default, editors can resolve, edit, and delete any user's comments and tracked changes — regardless of authorship. Use `permissionResolver` to restrict actions when needed.
+By default, editors can resolve, edit, and delete any user's comments and tracked changes: regardless of authorship. Use `permissionResolver` to restrict actions when needed.
 
 ```javascript
 modules: {
@@ -287,7 +287,7 @@ const superdoc = new SuperDoc({
 ## API methods
 
 <Note>
-**For new code, prefer the typed paths.** Use `editor.doc.comments.*` for document mutations (server-and-client compatible, returns receipts) or `ui.comments.*` for React UI work (`createFromSelection`, `createFromCapture`, `reply`, `resolve`, `reopen`, `delete`). The chain commands below are kept for backwards compatibility and for code already written against `superdoc.activeEditor.commands.*`. See [Document API › Comments](/document-api/reference/index) and [Bring Your Own UI › Comments](/editor/custom-ui/comments).
+**For new code, prefer the typed paths.** Use `editor.doc.comments.*` for document mutations (server-and-client compatible, returns receipts) or `ui.comments.*` for React UI work (`createFromSelection`, `createFromCapture`, `reply`, `resolve`, `reopen`, `delete`). The chain commands below are kept for backwards compatibility and for code already written against `superdoc.activeEditor.commands.*`. See [Document API › Comments](/document-api/reference/index) and [Custom UI › Comments](/editor/custom-ui/comments).
 </Note>
 
 These methods are available on the active editor's commands:

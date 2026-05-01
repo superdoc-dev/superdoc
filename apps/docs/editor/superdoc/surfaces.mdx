@@ -14,8 +14,8 @@ Use them for things like:
 
 SuperDoc supports two surface modes:
 
-- `dialog` — modal, centered, blocks interaction behind it
-- `floating` — non-modal, pinned to the visible document area
+- `dialog`: modal, centered, blocks interaction behind it
+- `floating`: non-modal, pinned to the visible document area
 
 ## When to configure surfaces up front
 
@@ -477,7 +477,7 @@ modules: {
       Framework-agnostic renderer for React or manual DOM mounting. Mutually exclusive with `component`.
     </ParamField>
     <ParamField path="resolver" type="(ctx: FindReplaceContext) => FindReplaceResolution | null | undefined">
-      Runtime resolver for choosing built-in, custom, external, or suppressed rendering. Can coexist with `component`/`render` — the resolver runs first, and `null`/`undefined`/`{ type: 'default' }` falls through to the direct component/render or built-in UI.
+      Runtime resolver for choosing built-in, custom, external, or suppressed rendering. Can coexist with `component`/`render`: the resolver runs first, and `null`/`undefined`/`{ type: 'default' }` falls through to the direct component/render or built-in UI.
     </ParamField>
   </Expandable>
 </ParamField>
@@ -580,7 +580,7 @@ modules: {
 | Type | Behavior |
 |------|----------|
 | `null` / `undefined` | Fall through to `component`/`render` or built-in |
-| `{ type: 'default' }` | Same as `null` — fall through |
+| `{ type: 'default' }` | Same as `null`: fall through |
 | `{ type: 'none' }` | Suppress SuperDoc's find/replace surface for this open attempt |
 | `{ type: 'custom', component, props? }` | Mount a Vue component in the floating shell |
 | `{ type: 'external', render }` | Mount framework-agnostic UI in the floating shell |
@@ -627,7 +627,7 @@ new SuperDoc({
   document: encryptedFile,
   modules: {
     surfaces: {
-      passwordPrompt: true, // default — can omit
+      passwordPrompt: true, // default: can omit
     },
   },
 });
@@ -652,7 +652,7 @@ modules: {
   surfaces: {
     passwordPrompt: {
       title: 'Unlock document',
-      invalidTitle: 'Wrong password — try again',
+      invalidTitle: 'Wrong password: try again',
       description: 'This file requires a password.',
       submitLabel: 'Unlock',
       cancelLabel: 'Dismiss',
@@ -715,7 +715,7 @@ modules: {
       Framework-agnostic renderer for React or manual DOM mounting. Mutually exclusive with `component`.
     </ParamField>
     <ParamField path="resolver" type="(ctx: PasswordPromptContext) => PasswordPromptResolution | null | undefined">
-      Conditional resolver for per-document customization. Can coexist with `component`/`render` — the resolver runs first, and `null`/`undefined`/`{ type: 'default' }` falls through to the direct component/render or built-in.
+      Conditional resolver for per-document customization. Can coexist with `component`/`render`: the resolver runs first, and `null`/`undefined`/`{ type: 'default' }` falls through to the direct component/render or built-in.
     </ParamField>
   </Expandable>
 </ParamField>
@@ -765,10 +765,10 @@ modules: {
   surfaces: {
     passwordPrompt: {
       render: (ctx) => {
-        // ctx.container — empty DOM element to render into
-        // ctx.passwordPrompt — the handle (documentId, errorCode, texts, attemptPassword)
-        // ctx.resolve — call on success
-        // ctx.close — call to dismiss
+        // ctx.container: empty DOM element to render into
+        // ctx.passwordPrompt: the handle (documentId, errorCode, texts, attemptPassword)
+        // ctx.resolve: call on success
+        // ctx.close: call to dismiss
 
         const root = ReactDOM.createRoot(ctx.container);
         root.render(<MyPasswordPrompt passwordPrompt={ctx.passwordPrompt} resolve={ctx.resolve} close={ctx.close} />);
@@ -803,7 +803,7 @@ modules: {
 | Type | Behavior |
 |------|----------|
 | `null` / `undefined` | Fall through to `component`/`render` or built-in |
-| `{ type: 'default' }` | Same as `null` — fall through |
+| `{ type: 'default' }` | Same as `null`: fall through |
 | `{ type: 'none' }` | Suppress the password prompt for this document |
 | `{ type: 'custom', component, props? }` | Mount a Vue component in the dialog shell |
 | `{ type: 'external', render }` | Mount framework-agnostic UI in the dialog shell |
@@ -827,8 +827,8 @@ Every custom UI (component or render) receives a `passwordPrompt` handle with th
 
 **Submit / unlock button:**
 1. Call `await passwordPrompt.attemptPassword(password)`
-2. If `{ success: true }` — call `resolve()` to close the dialog
-3. If `{ success: false, errorCode }` — keep the dialog open, show your error state
+2. If `{ success: true }`: call `resolve()` to close the dialog
+3. If `{ success: false, errorCode }`: keep the dialog open, show your error state
 
 `resolve()` with no arguments is sufficient. The password flow does not consume the resolved data.
 
@@ -838,14 +838,14 @@ Every custom UI (component or render) receives a `passwordPrompt` handle with th
 **Other actions** (forgot password, help links): app-owned. Keep the dialog open or close with a custom reason.
 
 <Warning>
-  Do not set `doc.password` or increment `editorMountNonce` directly. Use `passwordPrompt.attemptPassword(password)` — it handles the document mutation and remount internally.
+  Do not set `doc.password` or increment `editorMountNonce` directly. Use `passwordPrompt.attemptPassword(password)`: it handles the document mutation and remount internally.
 </Warning>
 
 ### `{ type: 'none' }` semantics
 
 `{ type: 'none' }` means **suppress SuperDoc's password prompt**. The resolver context does not expose `attemptPassword`, so `none` cannot be used to build a self-hosted modal that retries passwords through SuperDoc.
 
-Use this when your app handles passwords entirely outside SuperDoc — for example, pre-prompting before instantiation or server-side decryption. For global suppression, use `passwordPrompt: false` instead.
+Use this when your app handles passwords entirely outside SuperDoc: for example, pre-prompting before instantiation or server-side decryption. For global suppression, use `passwordPrompt: false` instead.
 
 ### Relationship with the exception event
 

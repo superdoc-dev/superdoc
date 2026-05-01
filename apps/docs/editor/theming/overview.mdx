@@ -4,7 +4,7 @@ sidebarTitle: Overview
 keywords: "theming, css variables, custom theme, dark mode, design tokens, branding, css customization, createTheme, styling"
 ---
 
-Set your brand colors in JavaScript and every SuperDoc component updates — toolbar, comments, dropdowns, everything. For a five-minute walkthrough, see [Getting Started > Theming](/getting-started/theming).
+Set your brand colors in JavaScript and every SuperDoc component updates: toolbar, comments, dropdowns, everything. For a five-minute walkthrough, see [Getting Started > Theming](/getting-started/theming).
 
 ```javascript
 import { createTheme } from 'superdoc';
@@ -27,7 +27,7 @@ Pass a config object, get back a CSS class name. Apply it to `<html>`.
 import { createTheme } from 'superdoc';
 
 const theme = createTheme({
-  name: 'my-brand',               // optional — generates sd-theme-my-brand
+  name: 'my-brand',               // optional: generates sd-theme-my-brand
   font: 'Inter, sans-serif',
   radius: '8px',
   colors: {
@@ -38,7 +38,7 @@ const theme = createTheme({
     textMuted: '#64748b',          // secondary text
     border: '#e2e8f0',             // all borders
   },
-  // Escape hatch — any CSS variable
+  // Escape hatch: any CSS variable
   vars: {
     '--sd-ui-toolbar-bg': '#f8fafc',
     '--sd-ui-comments-card-bg': '#f0f0ff',
@@ -48,7 +48,7 @@ const theme = createTheme({
 document.documentElement.classList.add(theme);
 ```
 
-`colors` controls the semantic tier — every component inherits from it. The `vars` escape hatch lets you set any `--sd-*` CSS variable directly for fine-grained control.
+`colors` controls the semantic tier: every component inherits from it. The `vars` escape hatch lets you set any `--sd-*` CSS variable directly for fine-grained control.
 
 ## SSR support
 
@@ -71,7 +71,7 @@ const html = `
 
 ## Preset themes
 
-Three presets ship out of the box. Add the class to `<html>` — some SuperDoc elements (popovers, dropdowns) are appended to `<body>`, so they need to inherit from `<html>`.
+Three presets ship out of the box. Add the class to `<html>`: some SuperDoc elements (popovers, dropdowns) are appended to `<body>`, so they need to inherit from `<html>`.
 
 <CardGroup cols={3}>
   <Card title="Docs" icon="book">

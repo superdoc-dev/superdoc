@@ -152,11 +152,11 @@ CSS resolves `var()` at computed-value time. If you set `--sd-comment-bg` on any
 
 ```css
 .my-overrides {
-  --sd-comment-bg: #f0f0f0; /* works — --sd-ui-comments-card-bg resolves to #f0f0f0 */
+  --sd-comment-bg: #f0f0f0; /* works: --sd-ui-comments-card-bg resolves to #f0f0f0 */
 }
 ```
 
-Setting the new name directly works too — it overrides the whole fallback expression.
+Setting the new name directly works too: it overrides the whole fallback expression.
 
 <Warning>
 Old-name fallbacks will be removed in the next major version. Migrate to the new names when convenient.

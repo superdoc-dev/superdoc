@@ -4,10 +4,10 @@ sidebarTitle: Track changes
 keywords: "word track changes, document revisions, accept reject edits, docx tracked changes, review workflow, suggesting mode"
 ---
 
-Word-style revision tracking. Every edit carries an author, a timestamp, and an id. Accept or reject one at a time, by selection, or in bulk. Changes round-trip through DOCX as native Word revisions — import, edit, export, nothing lost.
+Word-style revision tracking. Every edit carries an author, a timestamp, and an id. Accept or reject one at a time, by selection, or in bulk. Changes round-trip through DOCX as native Word revisions: import, edit, export, nothing lost.
 
 <Tip>
-Building your own review panel in React? Skip the built-in UI and read [Bring Your Own UI › Track changes](/editor/custom-ui/track-changes) instead. It documents `useSuperDocTrackChanges` plus accept / reject / next / previous and the typed surface for accept-all / reject-all flows.
+Building your own review panel in React? Skip the built-in UI and read [Custom UI › Track changes](/editor/custom-ui/track-changes) instead. It documents `useSuperDocTrackChanges` plus accept / reject / next / previous and the typed surface for accept-all / reject-all flows.
 </Tip>
 
 ## Quick start
@@ -51,10 +51,10 @@ const superdoc = new SuperDoc({
   Rendering mode.
 
   <Expandable title="Values">
-    - `'review'` — show insertions and deletions inline (default for editing and suggesting).
-    - `'original'` — show the document as it was before tracked changes (default for viewing when `visible` is `false`).
-    - `'final'` — show the document with all changes applied.
-    - `'off'` — suppress tracked-change rendering entirely.
+    - `'review'`: show insertions and deletions inline (default for editing and suggesting).
+    - `'original'`: show the document as it was before tracked changes (default for viewing when `visible` is `false`).
+    - `'final'`: show the document with all changes applied.
+    - `'off'`: suppress tracked-change rendering entirely.
   </Expandable>
 </ParamField>
 
@@ -70,8 +70,8 @@ const superdoc = new SuperDoc({
   How a tracked replacement (typing over selected text) surfaces in the API and UI. See [Revision model](#revision-model).
 
   <Expandable title="Values">
-    - `'paired'` (default, Google Docs model) — the insertion and deletion share one id and resolve together.
-    - `'independent'` (Microsoft Word / ECMA-376 §17.13.5) — each side has its own id and resolves on its own.
+    - `'paired'` (default, Google Docs model): the insertion and deletion share one id and resolve together.
+    - `'independent'` (Microsoft Word / ECMA-376 §17.13.5): each side has its own id and resolves on its own.
   </Expandable>
 </ParamField>
 
@@ -100,10 +100,10 @@ SuperDoc supports two models for how a tracked replacement (an insertion paired 
 
 | Model | `modules.trackChanges.replacements` | Behavior |
 | --- | --- | --- |
-| **Paired** (default — Google Docs) | `'paired'` | Both halves share one id. One accept/reject resolves both. One sidebar row per replacement. |
+| **Paired** (default: Google Docs) | `'paired'` | Both halves share one id. One accept/reject resolves both. One sidebar row per replacement. |
 | **Independent** (Microsoft Word / ECMA-376 §17.13.5) | `'independent'` | Each insertion and each deletion has its own id. Accept/reject resolves one side at a time. A replacement produces two sidebar rows. |
 
-Both modes round-trip cleanly through DOCX — the OOXML always emits one `<w:ins>` / `<w:del>` per mark. The difference is how the API surfaces the revisions at runtime.
+Both modes round-trip cleanly through DOCX: the OOXML always emits one `<w:ins>` / `<w:del>` per mark. The difference is how the API surfaces the revisions at runtime.
 
 ### Paired (default)
 
@@ -127,7 +127,7 @@ const superdoc = new SuperDoc({
 });
 ```
 
-With `replacements: 'independent'`, `editor.doc.trackChanges.list()` returns one entry per revision and `decide({ id })` resolves exactly that one side. The other half of the replacement stays in the document, still addressable by its own id — useful when you're building a custom sidebar and want each revision as a separate row.
+With `replacements: 'independent'`, `editor.doc.trackChanges.list()` returns one entry per revision and `decide({ id })` resolves exactly that one side. The other half of the replacement stays in the document, still addressable by its own id: useful when you're building a custom sidebar and want each revision as a separate row.
 
 ## Document API
 
@@ -162,7 +162,7 @@ Every entry returned by `list()` and `get()` has this shape:
       SuperDoc's internal id for the revision. Stable across calls.
     </ResponseField>
     <ResponseField name="address" type="Object">
-      Entity address — `{ kind: 'entity', entityType: 'trackedChange', entityId: id }`.
+      Entity address: `{ kind: 'entity', entityType: 'trackedChange', entityId: id }`.
     </ResponseField>
     <ResponseField name="type" type="'insert' | 'delete' | 'format'">
       Revision kind. In `'paired'` mode a replacement reports as `'insert'` (both halves grouped). In `'independent'` mode the insertion and deletion are separate entries.
@@ -212,7 +212,7 @@ superdoc.setDocumentMode("viewing"); // read-only
 | Deletion | `trackDelete` | Strikethrough in the reviewer's color |
 | Format change | `trackFormat` | Records the before/after formatting on the run |
 
-Each mark carries `id`, `author`, `authorEmail`, `date`, and — for imports from Word — the original `w:id` as `sourceId` so you can round-trip revision provenance.
+Each mark carries `id`, `author`, `authorEmail`, `date`, and: for imports from Word: the original `w:id` as `sourceId` so you can round-trip revision provenance.
 
 ## Events
 
@@ -283,13 +283,13 @@ onCommentsUpdate: (payload) => {
       Source document id.
     </ResponseField>
     <ResponseField name="importedAuthor" type="Object | null">
-      Original author info from the imported DOCX, when available — `{ name }`.
+      Original author info from the imported DOCX, when available: `{ name }`.
     </ResponseField>
   </Expandable>
 </ResponseField>
 
 <Note>
-  Events fire once per user action, not once per mark. A tracked replacement in paired mode emits one event with `trackedChangeType: 'both'`. To enumerate the current set of revisions, use `editor.doc.trackChanges.list()` — not the event stream.
+  Events fire once per user action, not once per mark. A tracked replacement in paired mode emits one event with `trackedChangeType: 'both'`. To enumerate the current set of revisions, use `editor.doc.trackChanges.list()`: not the event stream.
 </Note>
 
 ## Permissions
@@ -343,7 +343,7 @@ const cleanBlob = await superdoc.export();
 Imported Word revisions preserve their original `w:id` values as `wordRevisionIds` on each `TrackChangeInfo` entry, so you can correlate SuperDoc revisions with the source document or an external review system.
 
 <Note>
-  Round-trip support today covers inserted run content (`<w:ins>`), deleted run content (`<w:del>`), and run-level format changes (`<w:rPrChange>`). Paragraph-level property changes, tracked table row and cell edits, and tracked moves are on the roadmap — they import as accepted content today.
+  Round-trip support today covers inserted run content (`<w:ins>`), deleted run content (`<w:del>`), and run-level format changes (`<w:rPrChange>`). Paragraph-level property changes, tracked table row and cell edits, and tracked moves are on the roadmap: they import as accepted content today.
 </Note>
 
 ## Legacy editor commands
@@ -424,7 +424,7 @@ superdoc.activeEditor.commands.insertTrackedChange({
 
 ### View modes
 
-Temporarily render the document without applying revisions — useful for previewing the accepted or original state:
+Temporarily render the document without applying revisions: useful for previewing the accepted or original state:
 
 ```javascript
 // Show the document as it was before tracked changes.

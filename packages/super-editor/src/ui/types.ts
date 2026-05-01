@@ -116,7 +116,7 @@ export interface SuperDocEditorLike {
      * Insert content at a positional target. Surfaces the typed
      * doc-API signature so custom commands can call
      * `editor.doc.insert(...)` without a structural cast. The control
-     * surface needs `editor.doc.insert` for the BYO-UI custom-command
+     * surface needs `editor.doc.insert` for the Custom UI custom-command
      * pattern (Insert clause, AI-generated text); other doc-API
      * mutation methods stay loose unless a similar use case lands.
      */
@@ -276,7 +276,7 @@ export interface SelectionSlice {
    * root, so non-body selections route correctly. Today the selection
    * resolver does NOT yet stamp `target.story` for non-body surfaces
    * (header / footer / footnote / endnote); a doc-api follow-up
-   * tracks this. Until it lands, consumers building BYO UI on top of
+   * tracks this. Until it lands, consumers building Custom UI on top of
    * non-body content should detect the routed surface themselves and
    * stamp the right `StoryLocator` before passing the target into a
    * doc-api operation.

@@ -9,7 +9,7 @@ SuperEditor is the low-level DOCX editing engine that powers SuperDoc. Most apps
 
 ## Pick the right layer
 
-**Use SuperDoc + Bring Your Own UI for custom React UI.** `<SuperDocEditor>` (or `new SuperDoc(...)`) plus `superdoc/ui/react` gives you typed hooks for toolbar, comments, tracked changes, selection, and document control. See [Bring Your Own UI](/editor/custom-ui/overview).
+**Use SuperDoc + Custom UI for custom React UI.** `<SuperDocEditor>` (or `new SuperDoc(...)`) plus `superdoc/ui/react` gives you typed hooks for toolbar, comments, tracked changes, selection, and document control. See [Custom UI](/editor/custom-ui/overview).
 
 **Use the Document API for document mutations.** [`editor.doc.*`](/document-api/overview) is the stable, request/response surface that's identical on server, client, and AI agents. It's the recommended path for any insert / replace / format / comment / tracked-change operation.
 
@@ -22,7 +22,7 @@ SuperEditor is the low-level DOCX editing engine that powers SuperDoc. Most apps
 - You're building a custom extension that taps into ProseMirror plugins or schemas.
 - You explicitly need engine internals the higher layers don't surface.
 
-For a typical React DOCX editor with a custom UI, you don't need this page — start at [Bring Your Own UI](/editor/custom-ui/overview).
+For a typical React DOCX editor with a custom UI, you don't need this page — start at [Custom UI](/editor/custom-ui/overview).
 
 ## Quick start
 

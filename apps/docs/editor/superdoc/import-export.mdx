@@ -29,13 +29,13 @@ HTML and Markdown imports preserve structure (headings, lists, links, tables) bu
 Pass content when creating the SuperDoc instance.
 
 ```javascript
-// DOCX file — full fidelity
+// DOCX file: full fidelity
 new SuperDoc({
   selector: '#editor',
   document: docxFile  // File, Blob, URL string, or config object
 });
 
-// HTML content — requires a base DOCX for styles
+// HTML content: requires a base DOCX for styles
 new SuperDoc({
   selector: '#editor',
   document: blankDocx,
@@ -78,7 +78,7 @@ new SuperDoc({
 Insert content into an existing document using editor commands.
 
 <Note>
-For new code, prefer [`editor.doc.insert`](/document-api/overview) — it accepts a positional target and returns a typed receipt. The chain command shown below stays supported for apps already wired to `activeEditor.commands.*`.
+For new code, prefer [`editor.doc.insert`](/document-api/overview): it accepts a positional target and returns a typed receipt. The chain command shown below stays supported for apps already wired to `activeEditor.commands.*`.
 </Note>
 
 <CodeGroup>
@@ -117,7 +117,7 @@ const superdoc = new SuperDoc({
 ### DOCX export
 
 <Note>
-  `superdoc.export()` **triggers a browser download by default**. If you need the raw `Blob` (e.g. to upload to a server), pass `triggerDownload: false` — otherwise you'll get a duplicate download.
+  `superdoc.export()` **triggers a browser download by default**. If you need the raw `Blob` (e.g. to upload to a server), pass `triggerDownload: false`: otherwise you'll get a duplicate download.
 </Note>
 
 <CodeGroup>

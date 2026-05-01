@@ -6,7 +6,7 @@ keywords: "superdoc events, document events, editor callbacks, word editor liste
 SuperDoc uses an event system for lifecycle hooks and change notifications.
 
 <Note>
-**Driving live React UI state? Prefer `superdoc/ui` subscriptions.** `useSuperDocSelection`, `useSuperDocComments`, `useSuperDocTrackChanges`, `useSuperDocDocument`, and `useSuperDocCommand` give you typed, memoized, per-slice state with one re-render per change instead of a manual `superdoc.on('editor-update', ...)` loop. See [Bring Your Own UI](/editor/custom-ui/overview).
+**Driving live React UI state? Prefer `superdoc/ui` subscriptions.** `useSuperDocSelection`, `useSuperDocComments`, `useSuperDocTrackChanges`, `useSuperDocDocument`, and `useSuperDocCommand` give you typed, memoized, per-slice state with one re-render per change instead of a manual `superdoc.on('editor-update', ...)` loop. See [Custom UI](/editor/custom-ui/overview).
 
 The events on this page are for lifecycle (`ready`, `editor-create`), integration (`error`, `comment-changed`), analytics, and compatibility with code that doesn't use the React surface.
 </Note>
@@ -358,7 +358,7 @@ superdoc.on('locked', ({ isLocked, lockedBy }) => {
 
 ### `pagination-update`
 
-Fired after each layout pass with the current page count. Use this to know when page data is available — `activeEditor.currentTotalPages` is only populated after the first layout completes, which happens *after* the `ready` event.
+Fired after each layout pass with the current page count. Use this to know when page data is available: `activeEditor.currentTotalPages` is only populated after the first layout completes, which happens *after* the `ready` event.
 
 <CodeGroup>
 ```javascript Usage
@@ -486,10 +486,10 @@ new SuperDoc({
 
 ## Event order
 
-1. `editorBeforeCreate` — Before editor mounts
-2. `editorCreate` — Editor ready
-3. `ready` — All editors ready
-4. `collaboration-ready` — If collaboration enabled
-5. `pagination-update` — After each layout pass (page count available)
+1. `editorBeforeCreate`: Before editor mounts
+2. `editorCreate`: Editor ready
+3. `ready`: All editors ready
+4. `collaboration-ready`: If collaboration enabled
+5. `pagination-update`: After each layout pass (page count available)
 6. Runtime events (`editor-update`, `comments-update`, `sidebar-toggle`, etc.)
-7. `editorDestroy` — Cleanup
+7. `editorDestroy`: Cleanup

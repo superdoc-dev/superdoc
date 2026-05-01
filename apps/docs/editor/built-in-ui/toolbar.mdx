@@ -7,7 +7,7 @@ keywords: "word toolbar, document formatting controls, custom toolbar, editor ui
 SuperDoc ships with a ready-made toolbar. Point it at a container, and you get formatting controls, font pickers, and document actions out of the box.
 
 <Tip>
-  Want full control over the toolbar UI? On React, use [Bring Your Own UI](/editor/custom-ui/toolbar-and-commands) — typed hooks (`useSuperDocCommand`), per-command re-renders, custom commands. For non-React stacks, use the [headless toolbar](/advanced/headless-toolbar).
+  Want full control over the toolbar UI? On React, use [Custom UI](/editor/custom-ui/toolbar-and-commands): typed hooks (`useSuperDocCommand`), per-command re-renders, custom commands. For non-React stacks, use the [headless toolbar](/advanced/headless-toolbar).
 </Tip>
 
 ## Quick start
@@ -99,7 +99,7 @@ Use button names with `excludeItems`, `groups`, and `icons` configuration.
 </ResponseField>
 
 <ResponseField name="copyFormat" type="button">
-  Format painter — copy formatting from selection
+  Format painter: copy formatting from selection
 </ResponseField>
 
 ### Font controls
@@ -323,12 +323,12 @@ Icons should be 24x24 viewBox SVGs with `fill="currentColor"` for proper theming
 
 ## Font configuration
 
-The toolbar dropdown lists only what you register in `fonts`. Imported documents don't auto-populate the list — if a user opens a `.docx` that uses Cambria and Cambria isn't registered, the current-selection indicator shows "Cambria" but the user can't pick it from the dropdown.
+The toolbar dropdown lists only what you register in `fonts`. Imported documents don't auto-populate the list: if a user opens a `.docx` that uses Cambria and Cambria isn't registered, the current-selection indicator shows "Cambria" but the user can't pick it from the dropdown.
 
 <ParamField path="fonts" type="Array">
   <Expandable title="Font object properties">
     <ParamField path="label" type="string" required>
-      Display name shown in the dropdown, and the value applied to the selected text. Must match the first family name in `key` — otherwise the dropdown won't light up the current font when the cursor is inside a run that uses it.
+      Display name shown in the dropdown, and the value applied to the selected text. Must match the first family name in `key`: otherwise the dropdown won't light up the current font when the cursor is inside a run that uses it.
     </ParamField>
     <ParamField path="key" type="string" required>
       Stable identity for the option. Also used as the row's preview `font-family` so each row renders in its own typeface. Typically a full CSS stack (e.g. `'Cambria, serif'`).
@@ -372,15 +372,15 @@ modules: {
 
 ### Substituting Microsoft Office fonts
 
-Most `.docx` files use Cambria, Calibri, or Aptos — fonts bundled with Word on desktop but not present in browsers. Google hosts free metric-compatible replacements:
+Most `.docx` files use Cambria, Calibri, or Aptos: fonts bundled with Word on desktop but not present in browsers. Google hosts free metric-compatible replacements:
 
 | Office font | Free substitute | Notes |
 |---|---|---|
-| Calibri | [Carlito](https://fonts.google.com/specimen/Carlito) | Sans-serif, metric-identical — designed as a direct drop-in |
+| Calibri | [Carlito](https://fonts.google.com/specimen/Carlito) | Sans-serif, metric-identical: designed as a direct drop-in |
 | Cambria | [Tinos](https://fonts.google.com/specimen/Tinos) or [Gelasio](https://fonts.google.com/specimen/Gelasio) | Serif |
-| Aptos | [Carlito](https://fonts.google.com/specimen/Carlito) or [Inter](https://fonts.google.com/specimen/Inter) | Sans-serif — no free metric-identical match exists yet |
+| Aptos | [Carlito](https://fonts.google.com/specimen/Carlito) or [Inter](https://fonts.google.com/specimen/Inter) | Sans-serif: no free metric-identical match exists yet |
 
-Download the `.woff2` files from Google Fonts, host them with your app, and alias each substitute to the original Word name via `@font-face`. The browser will then render real Carlito/Tinos glyphs whenever the document asks for Calibri/Cambria — no document or SuperDoc changes needed.
+Download the `.woff2` files from Google Fonts, host them with your app, and alias each substitute to the original Word name via `@font-face`. The browser will then render real Carlito/Tinos glyphs whenever the document asks for Calibri/Cambria: no document or SuperDoc changes needed.
 
 ```html
 <style>
@@ -397,7 +397,7 @@ Download the `.woff2` files from Google Fonts, host them with your app, and alia
 </style>
 ```
 
-Self-hosting the `.woff2` files is more reliable than linking to Google Fonts CDN URLs directly — those URLs change when Google updates a font version.
+Self-hosting the `.woff2` files is more reliable than linking to Google Fonts CDN URLs directly: those URLs change when Google updates a font version.
 
 ## Responsive behavior
 

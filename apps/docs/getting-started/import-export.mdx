@@ -4,7 +4,7 @@ sidebarTitle: Import/Export
 keywords: "import, export, docx export, html import, markdown import, document formats"
 ---
 
-SuperDoc treats DOCX as the real document, not an export target. Load a Word file, edit it in the browser, and export a Word file again — tracked changes, comments, complex tables, all preserved. HTML and Markdown are useful for AI-generated content, but DOCX is the full-fidelity path.
+SuperDoc treats DOCX as the real document, not an export target. Load a Word file, edit it in the browser, and export a Word file again. Tracked changes, comments, and complex tables all stay intact. HTML and Markdown are useful for AI-generated content; DOCX is the full-fidelity path.
 
 For the full reference, see [Editor > SuperDoc > Import/Export](/editor/superdoc/import-export).
 
@@ -39,7 +39,7 @@ Default `superdoc.export()` triggers a browser download. To upload to your backe
 // Download
 await superdoc.export();
 
-// Upload — get the Blob, send it yourself
+// Upload: get the Blob, send it yourself
 const blob = await superdoc.export({ triggerDownload: false });
 await fetch('/api/save', { method: 'POST', body: blob });
 ```
@@ -56,12 +56,12 @@ const markdown = await superdoc.activeEditor.getMarkdown();
 
 | Format | Round-trip fidelity | Use it for |
 |---|---|---|
-| **DOCX** | Full | Real Word documents — open in Word with nothing lost |
+| **DOCX** | Full | Real Word documents: open in Word with nothing lost |
 | **JSON** | Full | Programmatic control, AI/agent input/output |
 | **HTML** | Structure only (no CSS) | Web content, AI-generated HTML |
 | **Markdown** | Structure only | Documentation, simple AI input |
 
-DOCX preserves tracked changes, comments, complex tables, and section breaks. HTML and Markdown are structure-first — they don't preserve Word-specific formatting.
+DOCX preserves tracked changes, comments, complex tables, and section breaks. HTML and Markdown are structure-first: they don't preserve Word-specific formatting.
 
 ## What should I store in my backend?
 
@@ -69,14 +69,14 @@ Store the **DOCX blob** if you want full fidelity (recommended). Store JSON if y
 
 ## Common pitfalls
 
-- **Duplicate downloads.** `superdoc.export()` triggers a browser download by default. If you want to upload to a backend, pass `{ triggerDownload: false }` — otherwise you get the file twice.
+- **Duplicate downloads.** `superdoc.export()` triggers a browser download by default. If you want to upload to a backend, pass `{ triggerDownload: false }`: otherwise you get the file twice.
 - **HTML import without a base DOCX.** The `html` and `markdown` options need a `document` (a base `.docx`) for styles. Without one, headings and lists fall back to defaults.
 - **HTML round-trips lose styling.** Importing HTML, exporting DOCX, and then importing the resulting HTML back will not produce the original Word styling. For round-tripping, use DOCX or JSON.
 
 ## Where to next
 
-- [Editor > SuperDoc > Import/Export](/editor/superdoc/import-export) — full API reference (every option, every export flag)
-- [Editor > SuperDoc > Configuration](/editor/superdoc/configuration) — `document`, `html`, `markdown`, `jsonOverride` config
-- [Editor > SuperDoc > Methods](/editor/superdoc/methods) — `superdoc.export()`, `getHTML()`, `getJSON()`, `getMarkdown()`
-- [Document Engine](/document-engine/overview) — server-side import/export via SDKs and CLI
-- [Editor > Collaboration > Storage](/editor/collaboration/storage) — persistence patterns for collaborative docs
+- [Editor > SuperDoc > Import/Export](/editor/superdoc/import-export): full API reference (every option, every export flag)
+- [Editor > SuperDoc > Configuration](/editor/superdoc/configuration): `document`, `html`, `markdown`, `jsonOverride` config
+- [Editor > SuperDoc > Methods](/editor/superdoc/methods): `superdoc.export()`, `getHTML()`, `getJSON()`, `getMarkdown()`
+- [Document Engine](/document-engine/overview): server-side import/export via SDKs and CLI
+- [Editor > Collaboration > Storage](/editor/collaboration/storage): persistence patterns for collaborative docs

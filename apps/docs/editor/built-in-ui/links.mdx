@@ -8,7 +8,7 @@ Control what happens when a user clicks a link in the editor. By default, SuperD
 
 ## Quick start
 
-No configuration needed for the default behavior — click a link and the built-in popover appears.
+No configuration needed for the default behavior: click a link and the built-in popover appears.
 
 To customize, add a `popoverResolver` to the `links` module:
 
@@ -156,7 +156,7 @@ The `render` function receives an `ExternalPopoverRenderContext`:
 | `href` | `string` | The href of the clicked link |
 
 <Note>
-The popover automatically closes on click-outside and Escape key — matching the built-in popover behavior. Your `destroy` callback is called in both cases.
+The popover automatically closes on click-outside and Escape key: matching the built-in popover behavior. Your `destroy` callback is called in both cases.
 </Note>
 
 ## Framework examples
@@ -317,7 +317,7 @@ Override just the external link popover without affecting other popovers:
 | `--sd-external-link-popover-min-width` | `--sd-popover-min-width` | Minimum width |
 | `--sd-external-link-popover-min-height` | `--sd-popover-min-height` | Minimum height |
 
-Example — dark theme for external link popovers:
+Example: dark theme for external link popovers:
 
 ```css
 .superdoc-root {
@@ -351,19 +351,19 @@ Use resolver context to show different popovers based on link type, document mod
 
 ```javascript
 popoverResolver: (ctx) => {
-  // Anchor links — navigate without a popover
+  // Anchor links: navigate without a popover
   if (ctx.isAnchorLink) {
     document.getElementById(ctx.href.slice(1))?.scrollIntoView();
     return { type: 'none' };
   }
 
-  // Viewing mode — open links directly
+  // Viewing mode: open links directly
   if (ctx.documentMode === 'viewing') {
     window.open(ctx.href, '_blank');
     return { type: 'none' };
   }
 
-  // Internal links — custom component
+  // Internal links: custom component
   if (ctx.href.startsWith('https://internal.app/')) {
     return {
       type: 'custom',
@@ -372,7 +372,7 @@ popoverResolver: (ctx) => {
     };
   }
 
-  // Everything else — default popover
+  // Everything else: default popover
   return { type: 'default' };
 }
 ```

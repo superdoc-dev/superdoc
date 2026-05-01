@@ -4,7 +4,7 @@ sidebarTitle: Theming
 keywords: "theming, css variables, custom theme, dark mode, design tokens, branding, createTheme"
 ---
 
-SuperDoc's UI is styled with CSS variables. `createTheme()` generates a class name that sets those variables; you apply the class to `<html>` and every SuperDoc surface picks it up — toolbar, comments, dropdowns, context menu, popovers.
+SuperDoc's UI is styled with CSS variables. `createTheme()` generates a class name that sets those variables; you apply the class to `<html>` and every SuperDoc surface picks it up: toolbar, comments, dropdowns, context menu, popovers.
 
 ## The fast path
 
@@ -27,7 +27,7 @@ document.documentElement.classList.add(theme);
 new SuperDoc({ selector: '#editor', document: 'contract.docx' });
 ```
 
-`theme` is a className string. Apply it to `<html>` (not the editor container) so popovers, dropdowns, and the comments sidebar — which can render outside the editor element — pick up the same tokens.
+`theme` is a className string. Apply it to `<html>` (not the editor container) so popovers, dropdowns, and the comments sidebar all pick up the same tokens. Some of those surfaces render outside the editor element.
 
 ## What themes affect
 
@@ -50,10 +50,10 @@ const theme = createTheme({
 ## Common pitfalls
 
 - **Theme class on the wrong element.** Add it to `document.documentElement` (the `<html>` tag), not the editor's container. Popovers render at the body level and won't pick up the theme otherwise.
-- **CSP environments.** `createTheme()` injects a `<style>` tag. If you serve with a strict CSP, use `buildTheme()` instead — it returns `{ className, css }` so you can inject the CSS yourself with the right nonce.
+- **CSP environments.** `createTheme()` injects a `<style>` tag. If you serve with a strict CSP, use `buildTheme()` instead: it returns `{ className, css }` so you can inject the CSS yourself with the right nonce.
 
 ## Where to next
 
-- [Editor > Theming > Overview](/editor/theming/overview) — the full theming guide
-- [Editor > Theming > Custom themes](/editor/theming/custom-themes) — every `createTheme()` option and CSS variable
-- [Editor > Theming > CSS variable migration](/editor/theming/css-variable-migration) — old → new token mapping for v1
+- [Editor > Theming > Overview](/editor/theming/overview): the full theming guide
+- [Editor > Theming > Custom themes](/editor/theming/custom-themes): every `createTheme()` option and CSS variable
+- [Editor > Theming > CSS variable migration](/editor/theming/css-variable-migration): old → new token mapping for v1

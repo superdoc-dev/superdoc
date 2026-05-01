@@ -1585,7 +1585,7 @@ export class SuperDoc extends EventEmitter {
     //    held comments at all. Pass `undefined` so the engine
     //    fallback to `converter.comments` fires and
     //    DOCX-imported comments survive the round-trip. This is
-    //    the BYO UI story: consumers driving `ui.comments` from
+    //    the Custom UI story: consumers driving `ui.comments` from
     //    their own React tree shouldn't lose imports just because
     //    the built-in floating UI is hidden.
     //

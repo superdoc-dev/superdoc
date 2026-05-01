@@ -1,6 +1,8 @@
-# Bring your own SuperDoc UI
+# SuperDoc Custom UI demo
 
-A reference workspace built on the `superdoc/ui/react` surface. Toolbar, comment threads, tracked-change review, custom commands, DOCX round-trip - in one app.
+A reference workspace built on the `superdoc/ui/react` surface. Toolbar, comment threads, tracked-change review, custom commands, DOCX round-trip, in one app.
+
+See the [Custom UI docs](https://docs.superdoc.dev/editor/custom-ui/overview) for the conceptual guide.
 
 This is a demo, not a minimal canonical recipe. It shows how the pieces compose in a real product. For copy-paste-ready single-concept patterns (toolbar only, comments only, etc.), see the `examples/` folder once those land.
 

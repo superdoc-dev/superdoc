@@ -125,7 +125,7 @@ new SuperDoc({
 </ParamField>
 
 <ParamField path="trackChanges" type="Object" deprecated>
-  <Warning>**Deprecated** — Use [`modules.trackChanges`](#track-changes-module) instead. This top-level key remains supported as an alias and will emit a one-time console warning.</Warning>
+  <Warning>**Deprecated**: Use [`modules.trackChanges`](#track-changes-module) instead. This top-level key remains supported as an alias and will emit a one-time console warning.</Warning>
   <Expandable title="properties" defaultOpen>
     <ParamField path="trackChanges.visible" type="boolean" default="false">
       Show tracked-change markup and threads when `documentMode` is `viewing`.
@@ -325,10 +325,10 @@ new SuperDoc({
       Move focus into the first focusable child on open
     </ParamField>
     <ParamField path="modules.surfaces.findReplace" type="false | true | Object" default="false">
-      Built-in find/replace popover for editor-backed documents. Disabled by default; set to `true` for the built-in UI, or pass an object to customize text, disable replace actions, provide a custom component or render function, or add a runtime resolver. See [Surfaces — Built-in Find and Replace](/editor/superdoc/surfaces#built-in-find-and-replace).
+      Built-in find/replace popover for editor-backed documents. Disabled by default; set to `true` for the built-in UI, or pass an object to customize text, disable replace actions, provide a custom component or render function, or add a runtime resolver. See [Surfaces: Built-in Find and Replace](/editor/superdoc/surfaces#built-in-find-and-replace).
     </ParamField>
     <ParamField path="modules.surfaces.passwordPrompt" type="false | true | Object" default="true">
-      Built-in password prompt for encrypted DOCX files. Enabled by default when omitted; set to `false` to disable, `true` for defaults, or pass an object to customize text, provide a custom component or render function, or add a per-document resolver. See [Surfaces — Built-in password prompt](/editor/superdoc/surfaces#built-in-password-prompt).
+      Built-in password prompt for encrypted DOCX files. Enabled by default when omitted; set to `false` to disable, `true` for defaults, or pass an object to customize text, provide a custom component or render function, or add a per-document resolver. See [Surfaces: Built-in password prompt](/editor/superdoc/surfaces#built-in-password-prompt).
     </ParamField>
   </Expandable>
 </ParamField>
@@ -340,7 +340,7 @@ new SuperDoc({
 See [Surfaces](/editor/superdoc/surfaces) for the full API and examples.
 
 <ParamField path="modules.slashMenu" type="Object" deprecated>
-  <Warning>**Deprecated** — Use `modules.contextMenu` instead. See the [Context Menu module](/editor/built-in-ui/context-menu) for configuration options.</Warning>
+  <Warning>**Deprecated**: Use `modules.contextMenu` instead. See the [Context Menu module](/editor/built-in-ui/context-menu) for configuration options.</Warning>
 </ParamField>
 
 ## Proofing
@@ -482,11 +482,11 @@ new SuperDoc({
 </ParamField>
 
 <ParamField path="layoutMode" type="string" deprecated>
-  <Warning>**Removed in v1.0** — Use `viewOptions.layout` instead. `'paginated'` → `'print'`, `'responsive'` → `'web'`.</Warning>
+  <Warning>**Removed in v1.0**: Use `viewOptions.layout` instead. `'paginated'` → `'print'`, `'responsive'` → `'web'`.</Warning>
 </ParamField>
 
 <ParamField path="layoutMargins" type="Object" deprecated>
-  <Warning>**Removed in v1.0** — Use CSS to control margins in web layout mode.</Warning>
+  <Warning>**Removed in v1.0**: Use CSS to control margins in web layout mode.</Warning>
 </ParamField>
 
 <ParamField path="rulers" type="boolean" default="false">
@@ -496,7 +496,7 @@ new SuperDoc({
 <ParamField path="toolbar" type="string">
   CSS selector for the built-in toolbar container (e.g. `'#toolbar'`). Shorthand for `modules.toolbar.selector`.
 
-  Omit this to skip the built-in toolbar — for example, when using the [headless toolbar](/advanced/headless-toolbar) to build your own UI.
+  Omit this to skip the built-in toolbar: for example, when using the [headless toolbar](/advanced/headless-toolbar) to build your own UI.
 </ParamField>
 
 ## Advanced options
@@ -523,7 +523,7 @@ new SuperDoc({
 </ParamField>
 
 <ParamField path="telemetry" type="Object" deprecated>
-  <Warning>**Deprecated since v1.8** — This option is no longer supported and will be ignored.</Warning>
+  <Warning>**Deprecated since v1.8**: This option is no longer supported and will be ignored.</Warning>
 </ParamField>
 
 <ParamField path="jsonOverride" type="Object">

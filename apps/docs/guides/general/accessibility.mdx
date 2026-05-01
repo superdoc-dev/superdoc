@@ -135,10 +135,8 @@ Tables and lists use standard HTML elements that are accessible by default:
 ## Testing your implementation
 
 ```javascript
-// Check if high contrast is enabled
-if (superdoc.isHighContrastMode) {
-  console.log('High contrast active');
-}
+// Toggle high contrast mode
+superdoc.setHighContrastMode(true);
 
 // Ensure toolbar is keyboard accessible
 document.querySelector('.super-toolbar').setAttribute('tabindex', '0');

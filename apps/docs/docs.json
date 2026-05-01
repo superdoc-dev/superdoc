@@ -104,6 +104,7 @@
                   "editor/custom-ui/comments",
                   "editor/custom-ui/track-changes",
                   "editor/custom-ui/selection-and-viewport",
+                  "editor/custom-ui/navigation",
                   "editor/custom-ui/document-control",
                   "editor/custom-ui/api-reference"
                 ]
@@ -126,6 +127,7 @@
                   "editor/collaboration/quickstart",
                   "editor/collaboration/upgrade-to-collaboration",
                   "editor/collaboration/configuration",
+                  "editor/collaboration/storage",
                   {
                     "group": "Guides",
                     "pages": [
@@ -135,6 +137,14 @@
                     ]
                   }
                 ]
+              },
+              {
+                "group": "Proofing",
+                "pages": ["editor/proofing/overview", "editor/proofing/custom-provider"]
+              },
+              {
+                "group": "Theming",
+                "pages": ["editor/theming/custom-themes", "editor/theming/css-variable-migration"]
               },
               {
                 "group": "PDF",
@@ -153,7 +163,8 @@
                   "document-api/overview",
                   "document-api/reference/index",
                   "document-api/common-workflows",
-                  "document-api/available-operations"
+                  "document-api/available-operations",
+                  "document-api/migration"
                 ]
               },
               {
@@ -211,34 +222,16 @@
             ]
           },
           {
-            "group": "Guides",
-            "pages": [
-              "guides/general/storage",
-              "guides/general/stable-navigation",
-              "guides/general/custom-themes",
-              {
-                "group": "Proofing",
-                "pages": ["guides/general/proofing", "guides/general/custom-proofing-provider"]
-              },
-              {
-                "group": "Migration",
-                "pages": [
-                  "guides/migration/document-api",
-                  "guides/migration/prosemirror",
-                  "guides/migration/breaking-changes-v1",
-                  "guides/migration/typescript-migration",
-                  "guides/migration/css-variables"
-                ]
-              }
-            ]
-          },
-          {
             "group": "Resources",
             "pages": [
               "guides/general/accessibility",
               "resources/telemetry",
               "guides/general/security",
-              "resources/license"
+              "resources/license",
+              {
+                "group": "Upgrade guides",
+                "pages": ["guides/migration/breaking-changes-v1", "guides/migration/prosemirror"]
+              }
             ]
           }
         ]
@@ -298,6 +291,34 @@
     "dismissible": true
   },
   "redirects": [
+    {
+      "source": "/guides/general/storage",
+      "destination": "/editor/collaboration/storage"
+    },
+    {
+      "source": "/guides/general/stable-navigation",
+      "destination": "/editor/custom-ui/navigation"
+    },
+    {
+      "source": "/guides/general/custom-themes",
+      "destination": "/editor/theming/custom-themes"
+    },
+    {
+      "source": "/guides/general/proofing",
+      "destination": "/editor/proofing/overview"
+    },
+    {
+      "source": "/guides/general/custom-proofing-provider",
+      "destination": "/editor/proofing/custom-provider"
+    },
+    {
+      "source": "/guides/migration/document-api",
+      "destination": "/document-api/migration"
+    },
+    {
+      "source": "/guides/migration/css-variables",
+      "destination": "/editor/theming/css-variable-migration"
+    },
     {
       "source": "/bring-your-own-ui/:path*",
       "destination": "/editor/custom-ui/:path*"

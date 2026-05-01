@@ -878,6 +878,7 @@ export class SuperDoc extends EventEmitter {
     const SYNC_TIMEOUT_MS = 10_000;
 
     return new Promise((resolve, reject) => {
+      /** @type {ReturnType<typeof setTimeout> | undefined} */
       let timer;
       let settled = false;
       let syncCleanup = () => {};
@@ -1507,6 +1508,7 @@ export class SuperDoc extends EventEmitter {
    * @returns {Array<string>} The HTML content of all editors
    */
   getHTML(options = {}) {
+    /** @type {Editor[]} */
     const editors = [];
     this.superdocStore.documents.forEach((doc) => {
       const editor = doc.getEditor();
@@ -1611,6 +1613,7 @@ export class SuperDoc extends EventEmitter {
     //    `converter.comments` (which the legacy delete path doesn't
     //    clear today; tracked separately under SD-2839). Pass
     //    whatever the store returns, including `[]`.
+    /** @type {unknown[] | undefined} */
     let comments;
     const commentsModuleConfig = this.config?.modules?.comments;
     const uiStoreHydrated = commentsModuleConfig !== false;

@@ -353,6 +353,28 @@ test('docs promotion is keyed to SuperDoc only', async () => {
   );
 });
 
+test('docs promotion supports manual workflow_dispatch with optional sha input', async () => {
+  const promoteWorkflow = await readRepoFile('.github/workflows/promote-stable-docs.yml');
+  assert.ok(
+    promoteWorkflow.includes('workflow_dispatch:'),
+    '.github/workflows/promote-stable-docs.yml: must expose workflow_dispatch for manual promotion',
+  );
+  assert.ok(
+    /sha:\s*\n\s*description:/.test(promoteWorkflow),
+    '.github/workflows/promote-stable-docs.yml: must accept an optional sha input',
+  );
+  assert.ok(
+    promoteWorkflow.includes("github.event_name == 'workflow_dispatch'"),
+    '.github/workflows/promote-stable-docs.yml: job must allow workflow_dispatch in addition to workflow_run',
+  );
+  // Manual path must NOT depend on the auto-path detect step output, otherwise
+  // a manual run would skip the push (detect only runs on workflow_run).
+  assert.ok(
+    /Push docs-stable \(manual\)[\s\S]*if:\s*github\.event_name == 'workflow_dispatch'/.test(promoteWorkflow),
+    '.github/workflows/promote-stable-docs.yml: manual push step must gate on workflow_dispatch only, not on detect.outputs',
+  );
+});
+
 test('stable release workflows and commit filters include shared workspace coverage', async () => {
   const workflowFiles = [
     '.github/workflows/release-superdoc.yml',

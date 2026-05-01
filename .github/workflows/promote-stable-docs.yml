@@ -1,15 +1,16 @@
-# Advances docs-stable when SuperDoc itself ships a stable release.
+# Advances docs-stable to the current stable HEAD (or a chosen SHA).
 #
-# Scope is intentionally narrow: only release-superdoc.yml. The CLI/SDK/MCP
-# bundle and the React/esign/template-builder/vscode-ext wrappers do not
-# advance docs-stable, even when they release successfully — docs-stable
-# represents the documentation for the stable SuperDoc release, not every
-# stable package release.
+# Auto path (workflow_run): only release-superdoc.yml triggers a promotion,
+# and only when a real v* tag actually appeared on stable. The CLI/SDK/MCP
+# tooling bundle and the React/esign/template-builder/vscode-ext wrappers do
+# not advance docs-stable - docs-stable represents the documentation for
+# the stable SuperDoc release.
 #
-# A successful release-superdoc.yml run is not enough on its own: the run
-# could have been a semantic-release no-op (no qualifying commits). Check
-# that a v* tag actually appeared between the run's head_sha and
-# origin/stable before pushing.
+# Manual path (workflow_dispatch): for cases the auto path cannot cover,
+# e.g. the first stable bundle run that ships CLI/SDK/MCP without a SuperDoc
+# release, or a docs-only refresh between SuperDoc versions. Defaults to
+# pushing the current origin/stable head; an optional `sha` input promotes
+# a specific commit instead.
 name: 🚀 Promote stable docs
 
 on:
@@ -18,6 +19,12 @@ on:
       - "📦 Release superdoc"
     types:
       - completed
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: 'Commit SHA to promote to docs-stable. Leave empty to promote the current origin/stable head.'
+        required: false
+        type: string
 
 permissions:
   contents: write
@@ -28,7 +35,9 @@ concurrency:
 
 jobs:
   promote:
-    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'stable'
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'stable')
     runs-on: ubuntu-24.04
     steps:
       - name: Generate token
@@ -43,7 +52,11 @@ jobs:
           fetch-depth: 0
           token: ${{ steps.generate_token.outputs.token }}
 
+      # Auto path: gate on a real SuperDoc release between the triggering
+      # run's head_sha and origin/stable. A no-op semantic-release run must
+      # not advance docs-stable.
       - name: Detect SuperDoc release
+        if: github.event_name == 'workflow_run'
         id: detect
         env:
           HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
@@ -51,9 +64,6 @@ jobs:
           set -euo pipefail
           git fetch origin stable --tags --force
 
-          # v* tags reachable from origin/stable that were NOT reachable from
-          # the run's head_sha. If empty, the release-superdoc.yml run was a
-          # semantic-release no-op and docs-stable must not advance.
           tags_at_stable=$(git tag --merged origin/stable --list 'v[0-9]*' | sort -u)
           tags_at_head=$(git tag --merged "${HEAD_SHA}" --list 'v[0-9]*' | sort -u)
           new_tags=$(comm -23 <(echo "${tags_at_stable}") <(echo "${tags_at_head}"))
@@ -66,6 +76,27 @@ jobs:
             echo "New SuperDoc tag(s) detected: $(echo "${new_tags}" | tr '\n' ' ')"
           fi
 
-      - name: Push docs-stable
-        if: steps.detect.outputs.released == 'true'
+      - name: Push docs-stable (auto)
+        if: github.event_name == 'workflow_run' && steps.detect.outputs.released == 'true'
         run: git push origin "refs/remotes/origin/stable:refs/heads/docs-stable"
+
+      # Manual path: trust the operator. Promote either the requested SHA
+      # or the current origin/stable head. The push is rejected by GitHub
+      # if it isn't a fast-forward, so this stays safe even on operator
+      # error - no `--force`.
+      - name: Push docs-stable (manual)
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          REQUESTED_SHA: ${{ inputs.sha }}
+        run: |
+          set -euo pipefail
+          git fetch origin stable --tags --force
+
+          if [ -n "${REQUESTED_SHA}" ]; then
+            target="${REQUESTED_SHA}"
+          else
+            target=$(git rev-parse origin/stable)
+          fi
+
+          echo "Promoting ${target} to docs-stable."
+          git push origin "${target}:refs/heads/docs-stable"

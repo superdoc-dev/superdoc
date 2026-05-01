@@ -286,6 +286,7 @@ export class SuperDoc extends EventEmitter {
     }
 
     this.config.colors = shuffleArray(this.config.colors);
+    /** @type {Map<unknown, unknown>} */
     this.userColorMap = new Map();
     this.colorIndex = 0;
 
@@ -293,6 +294,7 @@ export class SuperDoc extends EventEmitter {
     this.version = __APP_VERSION__;
     this.#log('🦋 [superdoc] Using SuperDoc version:', this.version);
 
+    /** @type {string} */
     this.superdocId = config.superdocId || uuidv4();
     // Default to an empty palette when no colors are configured so downstream
     // assignment logic doesn't have to null-check on every access.

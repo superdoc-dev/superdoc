@@ -1,3 +1,4 @@
+// @ts-check
 import { ref, computed, markRaw, watch } from 'vue';
 
 /** @typedef {import('../core/types').FindReplaceConfig} FindReplaceConfig */
@@ -30,24 +31,48 @@ const DEFAULT_TEXTS = {
 };
 
 /**
+ * @typedef {Object} SearchResult The shape of `setSearchSession`,
+ *   `nextSearchMatch`, `previousSearchMatch`, `replaceSearchMatch` returns.
+ *   The Search extension lives in super-editor; this composable only consumes
+ *   the two fields below.
+ * @property {{ length: number }[]} matches
+ * @property {number} activeMatchIndex
+ */
+
+/**
+ * @typedef {Object} SearchStorage The Search extension's storage shape.
+ *   The Search extension is internal to super-editor; this composable only
+ *   needs the fields it reads to detect a live search session and resync
+ *   from external mutations.
+ * @property {unknown} [searchIndex]
+ * @property {unknown} [searchResults]
+ * @property {number} [activeMatchIndex]
+ * @property {{ length: number }[]} [matches]
+ */
+
+/**
  * Resolve the Search extension storage from the editor.
  * The storage is keyed by extension name in editor.extensionStorage;
  * we find it by looking for the object with our known storage shape.
+ * @param {import('@superdoc/super-editor').Editor | null | undefined} editor
+ * @returns {SearchStorage | null}
  */
 function getSearchStorage(editor) {
   if (!editor) return null;
 
-  // Try direct access by common name first
-  const byName = editor.extensionStorage?.Search ?? editor.storage?.Search;
+  // Try direct access by common name first. The Search extension's storage
+  // shape is internal to super-editor; cast to the local SearchStorage type
+  // so the field probes type-check.
+  const byName = /** @type {SearchStorage | undefined} */ (editor.extensionStorage?.Search ?? editor.storage?.Search);
   if (byName?.searchIndex || byName?.searchResults) return byName;
 
   // Fall back to scanning extensionStorage for the Search extension's storage
   const store = editor.extensionStorage ?? editor.storage;
   if (store) {
     for (const key of Object.keys(store)) {
-      const val = store[key];
+      const val = /** @type {Record<string, unknown>} */ (store)[key];
       if (val && typeof val === 'object' && 'searchIndex' in val && 'searchResults' in val) {
-        return val;
+        return /** @type {SearchStorage} */ (val);
       }
     }
   }
@@ -72,13 +97,17 @@ export function useFindReplace({ getSurfaceManager, getActiveEditor, activeEdito
 
   /** @type {import('../core/surface-manager.js').SurfaceHandle | null} */
   let currentSurfaceHandle = null;
+  /** @type {import('@superdoc/super-editor').Editor | null} */
   let currentEditor = null;
   let destroyed = false;
   let opening = false; // sync guard against double-open across the await gap
 
   const isOpen = ref(false);
 
-  /** Ref to the find input element, set by the renderer via handle.registerFocusFn. */
+  /**
+   * Ref to the find input element, set by the renderer via handle.registerFocusFn.
+   * @type {(() => void) | null}
+   */
   let focusFindInputFn = null;
 
   // ---- reactive state (owned by composable, consumed by renderers) ----------
@@ -104,7 +133,9 @@ export function useFindReplace({ getSurfaceManager, getActiveEditor, activeEdito
 
   // ---- timers ---------------------------------------------------------------
 
+  /** @type {ReturnType<typeof setTimeout> | null} */
   let debounceTimer = null;
+  /** @type {ReturnType<typeof setInterval> | null} */
   let syncInterval = null;
 
   // ---- search logic ---------------------------------------------------------
@@ -123,12 +154,14 @@ export function useFindReplace({ getSurfaceManager, getActiveEditor, activeEdito
     }
 
     try {
-      const result = currentEditor.commands.setSearchSession(findQuery.value, {
-        caseSensitive: caseSensitive.value,
-        ignoreDiacritics: ignoreDiacritics.value,
-        highlight: true,
-        searchModel: 'visible',
-      });
+      const result = /** @type {SearchResult} */ (
+        currentEditor.commands.setSearchSession(findQuery.value, {
+          caseSensitive: caseSensitive.value,
+          ignoreDiacritics: ignoreDiacritics.value,
+          highlight: true,
+          searchModel: 'visible',
+        })
+      );
       matchCount.value = result.matches.length;
       activeMatchIndex.value = result.activeMatchIndex;
     } catch {
@@ -137,7 +170,7 @@ export function useFindReplace({ getSurfaceManager, getActiveEditor, activeEdito
   }
 
   function debouncedSearch() {
-    clearTimeout(debounceTimer);
+    if (debounceTimer) clearTimeout(debounceTimer);
     debounceTimer = setTimeout(runSearch, 150);
   }
 
@@ -161,7 +194,7 @@ export function useFindReplace({ getSurfaceManager, getActiveEditor, activeEdito
   function goNext() {
     if (!hasMatches.value || !currentEditor) return;
     try {
-      const result = currentEditor.commands.nextSearchMatch();
+      const result = /** @type {SearchResult} */ (currentEditor.commands.nextSearchMatch());
       activeMatchIndex.value = result.activeMatchIndex;
     } catch {
       /* destroyed */
@@ -171,7 +204,7 @@ export function useFindReplace({ getSurfaceManager, getActiveEditor, activeEdito
   function goPrev() {
     if (!hasMatches.value || !currentEditor) return;
     try {
-      const result = currentEditor.commands.previousSearchMatch();
+      const result = /** @type {SearchResult} */ (currentEditor.commands.previousSearchMatch());
       activeMatchIndex.value = result.activeMatchIndex;
     } catch {
       /* destroyed */
@@ -182,7 +215,7 @@ export function useFindReplace({ getSurfaceManager, getActiveEditor, activeEdito
     if (!currentReplaceEnabled) return;
     if (!hasMatches.value || !currentEditor) return;
     try {
-      const result = currentEditor.commands.replaceSearchMatch(replaceText.value);
+      const result = /** @type {SearchResult} */ (currentEditor.commands.replaceSearchMatch(replaceText.value));
       matchCount.value = result.matches.length;
       activeMatchIndex.value = result.activeMatchIndex;
     } catch {
@@ -222,9 +255,9 @@ export function useFindReplace({ getSurfaceManager, getActiveEditor, activeEdito
   }
 
   function stopPolling() {
-    clearTimeout(debounceTimer);
+    if (debounceTimer) clearTimeout(debounceTimer);
     debounceTimer = null;
-    clearInterval(syncInterval);
+    if (syncInterval) clearInterval(syncInterval);
     syncInterval = null;
   }
 
@@ -368,6 +401,7 @@ export function useFindReplace({ getSurfaceManager, getActiveEditor, activeEdito
   /**
    * Wrap a FindReplaceHandle for external (non-Vue) renderers.
    * Converts Vue refs to JavaScript getter/setter properties.
+   * @param {FindReplaceHandle} handle
    */
   function wrapHandleForExternal(handle) {
     return {
@@ -429,6 +463,7 @@ export function useFindReplace({ getSurfaceManager, getActiveEditor, activeEdito
   /**
    * Clear the search session on the given editor, swallowing errors
    * (the editor may already be destroyed).
+   * @param {import('@superdoc/super-editor').Editor | null | undefined} editor
    */
   function clearEditorSession(editor) {
     if (!editor) return;
@@ -520,6 +555,7 @@ export function useFindReplace({ getSurfaceManager, getActiveEditor, activeEdito
       focusFindInputFn = null;
 
       // Late-wired close — the handle is created before the surface opens
+      /** @type {(reason?: unknown) => void} */
       let lateCloseFn = () => {};
 
       const handle = createHandle(config, (reason) => lateCloseFn(reason));
@@ -555,10 +591,14 @@ export function useFindReplace({ getSurfaceManager, getActiveEditor, activeEdito
             }),
         });
       } else {
-        // Built-in — lazy import
+        // Built-in — lazy import. The `.vue` shim types the default export as
+        // `unknown`; narrow to `object` for `markRaw()` since the Vue compiler
+        // guarantees the SFC default export is a component definition object.
+        /** @type {object | undefined} */
         let FindReplaceSurface;
         try {
-          ({ default: FindReplaceSurface } = await import('../components/surfaces/FindReplaceSurface.vue'));
+          const mod = await import('../components/surfaces/FindReplaceSurface.vue');
+          FindReplaceSurface = /** @type {object} */ (mod.default);
         } catch {
           opening = false;
           return;

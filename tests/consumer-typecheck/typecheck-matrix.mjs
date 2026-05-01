@@ -377,6 +377,31 @@ const scenarios = [
     files: ['src/customer-scenario.ts'],
     mustPass: true,
   },
+  // SD-2869 review found the JSDoc → TS conversion silently narrowed
+  // `Modules.comments`, `Modules.toolbar`, etc. into closed object literals,
+  // rejecting pass-through fields the runtime forwards via `...moduleConfig`
+  // spread. This fixture pins a realistic Config with the documented fields
+  // plus the runtime-supported extras (useInternalExternalComments,
+  // toolbar.pagination, awareness state.user, etc.) so future regressions of
+  // the same shape fail CI before reaching customers.
+  {
+    name: 'bundler / modules config pass-through (SD-2869)',
+    module: 'ESNext',
+    moduleResolution: 'bundler',
+    skipLibCheck: true,
+    strict: true,
+    files: ['src/modules-config-passthrough.ts'],
+    mustPass: true,
+  },
+  {
+    name: 'node16 / modules config pass-through (SD-2869)',
+    module: 'Node16',
+    moduleResolution: 'node16',
+    skipLibCheck: true,
+    strict: true,
+    files: ['src/modules-config-passthrough.ts'],
+    mustPass: true,
+  },
 ];
 
 const tscPath = join(__dirname, 'node_modules', '.bin', 'tsc');

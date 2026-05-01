@@ -35,11 +35,11 @@ Patterns for the browser editor surface.
 |---------|------|
 | [theming](./editor/theming) | [docs](https://docs.superdoc.dev/editor/theming/overview) |
 
-### Proofing
+### Spell check
 
 | Example | Docs |
 |---------|------|
-| [proofing](./editor/proofing) | [docs](https://docs.superdoc.dev/editor/proofing/overview) |
+| [proofing](./editor/proofing) | [docs](https://docs.superdoc.dev/editor/spell-check/overview) |
 
 ### Collaboration
 

@@ -323,11 +323,11 @@
     },
     {
       "source": "/guides/general/proofing",
-      "destination": "/editor/proofing/overview"
+      "destination": "/editor/spell-check/overview"
     },
     {
       "source": "/guides/general/custom-proofing-provider",
-      "destination": "/editor/proofing/custom-provider"
+      "destination": "/editor/spell-check/custom-provider"
     },
     {
       "source": "/guides/migration/document-api",

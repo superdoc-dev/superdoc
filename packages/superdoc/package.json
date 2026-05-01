@@ -112,6 +112,7 @@
     "postbuild": "node ./scripts/ensure-types.cjs && node ./scripts/audit-bundle.cjs && node ./scripts/audit-declarations.cjs",
     "audit:declarations": "node ./scripts/audit-declarations.cjs",
     "audit:declarations:informational": "node ./scripts/audit-declarations.cjs --informational",
+    "check:jsdoc": "node ./scripts/check-jsdoc.cjs",
     "build:es": "vite build && pnpm run postbuild",
     "watch:es": "vite build --watch",
     "build:cdn": "vite build --config vite.config.cdn.js",

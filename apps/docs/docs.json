@@ -75,57 +75,62 @@
               {
                 "group": "SuperDoc",
                 "pages": [
-                  "core/superdoc/overview",
-                  "core/superdoc/configuration",
-                  "core/superdoc/methods",
-                  "core/superdoc/surfaces",
-                  "core/superdoc/events"
+                  "editor/superdoc/overview",
+                  "editor/superdoc/configuration",
+                  "editor/superdoc/methods",
+                  "editor/superdoc/surfaces",
+                  "editor/superdoc/events"
                 ]
               },
               {
                 "group": "React",
-                "pages": ["core/react/overview", "core/react/configuration", "core/react/methods", "core/react/types"]
+                "pages": [
+                  "editor/react/overview",
+                  "editor/react/configuration",
+                  "editor/react/methods",
+                  "editor/react/types"
+                ]
               },
               {
                 "group": "Custom UI",
                 "tag": "NEW",
                 "pages": [
-                  "bring-your-own-ui/overview",
-                  "bring-your-own-ui/react-setup",
+                  "editor/custom-ui/overview",
+                  "editor/custom-ui/react-setup",
                   {
                     "group": "Toolbar and commands",
-                    "pages": ["bring-your-own-ui/toolbar-and-commands", "bring-your-own-ui/custom-commands"]
+                    "pages": ["editor/custom-ui/toolbar-and-commands", "editor/custom-ui/custom-commands"]
                   },
-                  "bring-your-own-ui/comments",
-                  "bring-your-own-ui/track-changes",
-                  "bring-your-own-ui/selection-and-viewport",
-                  "bring-your-own-ui/document-control",
-                  "bring-your-own-ui/api-reference"
+                  "editor/custom-ui/comments",
+                  "editor/custom-ui/track-changes",
+                  "editor/custom-ui/selection-and-viewport",
+                  "editor/custom-ui/document-control",
+                  "editor/custom-ui/api-reference"
                 ]
               },
               {
                 "group": "Built-in UI",
                 "pages": [
-                  "modules/overview",
-                  "modules/comments",
-                  "modules/track-changes",
+                  "editor/built-in-ui/overview",
+                  "editor/built-in-ui/comments",
+                  "editor/built-in-ui/track-changes",
                   {
                     "group": "Toolbar",
-                    "pages": ["modules/toolbar/overview", "modules/toolbar/built-in", "modules/toolbar/examples"]
+                    "pages": ["editor/built-in-ui/toolbar/overview", "editor/built-in-ui/toolbar/built-in"]
                   },
-                  "modules/links",
-                  "modules/context-menu",
-                  "modules/pdf",
-                  "modules/whiteboard"
+                  "editor/built-in-ui/links",
+                  "editor/built-in-ui/context-menu",
+                  "editor/built-in-ui/pdf",
+                  "editor/built-in-ui/whiteboard"
                 ]
               },
               {
                 "group": "Collaboration",
                 "pages": [
-                  "modules/collaboration/overview",
-                  "modules/collaboration/quickstart",
-                  "modules/collaboration/upgrade-to-collaboration",
-                  "modules/collaboration/configuration",
+                  "editor/collaboration/overview",
+                  "editor/collaboration/quickstart",
+                  "editor/collaboration/upgrade-to-collaboration",
+                  "editor/collaboration/configuration",
                   {
                     "group": "Guides",
                     "pages": [
@@ -234,14 +239,15 @@
               {
                 "group": "SuperEditor",
                 "pages": [
-                  "core/supereditor/overview",
-                  "core/supereditor/configuration",
-                  "core/supereditor/methods",
-                  "core/supereditor/events"
+                  "advanced/supereditor/overview",
+                  "advanced/supereditor/configuration",
+                  "advanced/supereditor/methods",
+                  "advanced/supereditor/events"
                 ]
               },
-              "modules/toolbar/headless",
-              "extensions/creating-extensions"
+              "advanced/headless-toolbar",
+              "advanced/headless-toolbar-examples",
+              "advanced/custom-extensions"
             ]
           },
           {
@@ -311,8 +317,68 @@
   },
   "redirects": [
     {
+      "source": "/bring-your-own-ui/:path*",
+      "destination": "/editor/custom-ui/:path*"
+    },
+    {
+      "source": "/build-your-own-ui/:path*",
+      "destination": "/editor/custom-ui/:path*"
+    },
+    {
+      "source": "/custom-ui/:path*",
+      "destination": "/editor/custom-ui/:path*"
+    },
+    {
+      "source": "/modules/collaboration",
+      "destination": "/editor/collaboration/overview"
+    },
+    {
+      "source": "/modules/collaboration/:path*",
+      "destination": "/editor/collaboration/:path*"
+    },
+    {
+      "source": "/modules/toolbar/headless",
+      "destination": "/advanced/headless-toolbar"
+    },
+    {
+      "source": "/modules/toolbar/examples",
+      "destination": "/advanced/headless-toolbar-examples"
+    },
+    {
       "source": "/modules/toolbar",
-      "destination": "/modules/toolbar/overview"
+      "destination": "/editor/built-in-ui/toolbar/overview"
+    },
+    {
+      "source": "/modules/toolbar/:path*",
+      "destination": "/editor/built-in-ui/toolbar/:path*"
+    },
+    {
+      "source": "/modules",
+      "destination": "/editor/built-in-ui/overview"
+    },
+    {
+      "source": "/modules/:path*",
+      "destination": "/editor/built-in-ui/:path*"
+    },
+    {
+      "source": "/core/superdoc/:path*",
+      "destination": "/editor/superdoc/:path*"
+    },
+    {
+      "source": "/core/react/:path*",
+      "destination": "/editor/react/:path*"
+    },
+    {
+      "source": "/core/supereditor",
+      "destination": "/advanced/supereditor/overview"
+    },
+    {
+      "source": "/core/supereditor/:path*",
+      "destination": "/advanced/supereditor/:path*"
+    },
+    {
+      "source": "/extensions/creating-extensions",
+      "destination": "/advanced/custom-extensions"
     },
     {
       "source": "/getting-started/ai",
@@ -364,15 +430,15 @@
     },
     {
       "source": "/core/superdoc/properties",
-      "destination": "/core/superdoc/methods#properties"
+      "destination": "/editor/superdoc/methods#properties"
     },
     {
       "source": "/core/superdoc/types",
-      "destination": "/core/superdoc/methods#typescript-types"
+      "destination": "/editor/superdoc/methods#typescript-types"
     },
     {
       "source": "/core/supereditor/hooks",
-      "destination": "/core/supereditor/events"
+      "destination": "/advanced/supereditor/events"
     },
     {
       "source": "/guide/quick-start",
@@ -384,19 +450,19 @@
     },
     {
       "source": "/guide/modes-roles",
-      "destination": "/core/superdoc/configuration#setting-priority"
+      "destination": "/editor/superdoc/configuration#setting-priority"
     },
     {
       "source": "/guide/components",
-      "destination": "/core/superdoc/overview"
+      "destination": "/editor/superdoc/overview"
     },
     {
       "source": "/guide/field-annotation",
-      "destination": "/core/extensions/field-annotation"
+      "destination": "/extensions/field-annotation"
     },
     {
       "source": "/guide/modules",
-      "destination": "/modules/overview"
+      "destination": "/editor/built-in-ui/overview"
     },
     {
       "source": "/guide/integration",
@@ -404,7 +470,7 @@
     },
     {
       "source": "/guide/collaboration",
-      "destination": "/modules/collaboration"
+      "destination": "/editor/collaboration/overview"
     },
     {
       "source": "/guide/accessibility",
@@ -436,7 +502,7 @@
     },
     {
       "source": "/guide/advanced",
-      "destination": "/core/supereditor/overview"
+      "destination": "/advanced/supereditor/overview"
     },
     {
       "source": "/getting-started/ai-ready",
@@ -448,11 +514,11 @@
     },
     {
       "source": "/modules/collaboration/backend",
-      "destination": "/modules/collaboration/configuration"
+      "destination": "/editor/collaboration/configuration"
     },
     {
       "source": "/modules/collaboration/client",
-      "destination": "/modules/collaboration/configuration"
+      "destination": "/editor/collaboration/configuration"
     },
     {
       "source": "/modules/collaboration/cloud/liveblocks",
@@ -476,7 +542,7 @@
     },
     {
       "source": "/extensions/track-changes",
-      "destination": "/modules/track-changes"
+      "destination": "/editor/built-in-ui/track-changes"
     },
     {
       "source": "/guides/breaking-changes-v1",

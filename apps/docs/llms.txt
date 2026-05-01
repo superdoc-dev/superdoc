@@ -34,7 +34,7 @@ npm install @superdoc-dev/sdk
 - MCP server: https://docs.superdoc.dev/document-engine/ai-agents/mcp-server
 - Document API: https://docs.superdoc.dev/document-api/overview
 - Available operations: https://docs.superdoc.dev/document-api/available-operations
-- Bring Your Own UI (custom React UI): https://docs.superdoc.dev/bring-your-own-ui/overview
+- Bring Your Own UI (custom React UI): https://docs.superdoc.dev/editor/custom-ui/overview
 - API reference (backend): https://docs.superdoc.dev/api-reference/introduction
 - SDK docs: https://docs.superdoc.dev/document-engine/sdks
 - CLI: https://docs.superdoc.dev/document-engine/cli

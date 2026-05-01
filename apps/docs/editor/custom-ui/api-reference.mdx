@@ -1,0 +1,240 @@
+---
+title: 'API reference'
+description: 'Every hook and handle on the superdoc/ui surface.'
+---
+
+Handwritten reference for the controller surface. Mirrors the page order above.
+
+## Provider and hooks
+
+Imported from `superdoc/ui/react`.
+
+### `<SuperDocUIProvider>`
+
+Holds one controller per editor mount. Wrap your app once.
+
+```tsx
+<SuperDocUIProvider>{children}</SuperDocUIProvider>
+```
+
+### `useSetSuperDoc()`
+
+Returns the setter the editor mount component calls in `onReady`. Most components don't use this directly.
+
+```tsx
+const setSuperDoc = useSetSuperDoc();
+<SuperDocEditor onReady={({ superdoc }) => setSuperDoc(superdoc)} />
+```
+
+### `useSuperDocUI()`
+
+Returns the controller, or `null` until ready.
+
+```tsx
+const ui = useSuperDocUI();
+ui?.commands.get('bold')?.execute();
+```
+
+### `useSuperDocCommand(id)`
+
+Subscribes to one command's state. See [Toolbar and commands](/editor/custom-ui/toolbar-and-commands).
+
+```ts
+const bold = useSuperDocCommand('bold');
+// { active: boolean; disabled: boolean; value: unknown; source: 'built-in' | 'custom' }
+```
+
+### `useSuperDocSelection()`
+
+Returns the live selection slice. See [Selection and viewport](/editor/custom-ui/selection-and-viewport).
+
+```ts
+const selection = useSuperDocSelection();
+// { empty, target, selectionTarget, activeMarks, activeCommentIds, activeChangeIds, quotedText }
+```
+
+### `useSuperDocComments()`
+
+Returns the comments slice. See [Comments](/editor/custom-ui/comments).
+
+```ts
+const { items, total, activeIds } = useSuperDocComments();
+```
+
+### `useSuperDocTrackChanges()`
+
+Returns the tracked-changes slice. See [Track changes](/editor/custom-ui/track-changes).
+
+```ts
+const { items, total, activeId } = useSuperDocTrackChanges();
+```
+
+### `useSuperDocDocument()`
+
+Returns the document slice. See [Document control](/editor/custom-ui/document-control).
+
+```ts
+const { ready, mode, dirty } = useSuperDocDocument();
+```
+
+### `useSuperDocToolbar()`
+
+Returns the full toolbar snapshot. Re-renders on any command change. Prefer `useSuperDocCommand` per button when possible.
+
+```ts
+const toolbar = useSuperDocToolbar();
+// { context, commands: Record<string, UIToolbarCommandState> }
+```
+
+### `useSuperDocSlice(picker, initial)`
+
+Subscribe to any slice from `ui.select(...)`. Use when the typed hooks above don't cover what you need.
+
+```ts
+const documentMode = useSuperDocSlice(
+  (ui) => ui.select((state) => state.documentMode, Object.is),
+  null,
+);
+```
+
+### `useSuperDocHost()`
+
+Returns the host SuperDoc instance. Reserved for operations the controller doesn't bridge yet.
+
+```ts
+const host = useSuperDocHost();
+```
+
+## Controller handles
+
+Imported from `superdoc/ui`. The provider handles construction; you typically reach these through `useSuperDocUI()` + the typed hooks.
+
+### `ui.commands`
+
+Built-in dispatch and custom-command registration.
+
+```ts
+ui.commands.get('bold')?.execute();        // dynamic dispatch
+ui.commands.bold.execute();                // typed per-built-in handle
+ui.commands.bold.observe(({ active, disabled }) => { ... });
+
+const reg = ui.commands.register({         // custom command
+  id: 'company.insertClause',
+  execute: ({ payload, superdoc, editor }) => true,
+  getState: ({ state }) => ({ disabled: state.selection.empty }),
+});
+reg.invalidate();
+reg.unregister();
+```
+
+### `ui.comments`
+
+Live snapshot, mutations, navigation.
+
+```ts
+ui.comments.getSnapshot();                   // sync read
+ui.comments.subscribe(({ snapshot }) => {});
+ui.comments.createFromSelection({ text });
+ui.comments.createFromCapture(capture, { text });
+ui.comments.reply(parentCommentId, { text });
+ui.comments.resolve(commentId);
+ui.comments.reopen(commentId);
+ui.comments.delete(commentId);
+ui.comments.scrollTo(commentId);
+```
+
+### `ui.trackChanges`
+
+Live list, accept / reject, navigation.
+
+```ts
+ui.trackChanges.getSnapshot();
+ui.trackChanges.subscribe(({ snapshot }) => {});
+ui.trackChanges.accept(changeId);
+ui.trackChanges.reject(changeId);
+ui.trackChanges.acceptAll();
+ui.trackChanges.rejectAll();
+ui.trackChanges.next();
+ui.trackChanges.previous();
+ui.trackChanges.scrollTo(changeId);
+```
+
+### `ui.document`
+
+Mode, export, replace.
+
+```ts
+ui.document.getSnapshot();                   // { ready, mode, dirty }
+ui.document.subscribe(({ snapshot }) => {});
+ui.document.setMode('suggesting');
+await ui.document.export({ exportType: ['docx'], commentsType: 'external', triggerDownload: true });
+await ui.document.replaceFile(file);
+```
+
+### `ui.selection`
+
+Live slice and capture.
+
+```ts
+ui.selection.getSnapshot();
+ui.selection.subscribe(({ snapshot }) => {});
+const captured = ui.selection.capture();    // frozen, holds across focus changes
+```
+
+### `ui.viewport`
+
+Geometry. Browser-only.
+
+```ts
+ui.viewport.getRect({ target: { kind: 'entity', entityType: 'comment', entityId } });
+await ui.viewport.scrollIntoView({ target, block: 'center', behavior: 'smooth' });
+```
+
+### `ui.toolbar`
+
+Aggregate toolbar surface. Mirrors the headless-toolbar shape.
+
+```ts
+ui.toolbar.getSnapshot();
+ui.toolbar.subscribe(({ snapshot }) => {});
+ui.toolbar.execute(id);                  // built-ins that take no payload
+ui.toolbar.execute(id, payload);         // built-ins that take a payload
+```
+
+`payload` is optional. Pass it for built-ins like `font-size`, `font-family`, and `link` that accept a value; omit it for togglable built-ins like `bold` or `italic`.
+
+### `ui.select(selector, equality?)`
+
+Raw selector substrate underlying every domain handle.
+
+```ts
+const sub = ui.select((state) => state.selection, shallowEqual);
+sub.subscribe((selection) => { ... });
+```
+
+### `ui.destroy()`
+
+Tears down every subscription. The provider calls this on unmount.
+
+## Types
+
+Imported from `superdoc/ui`.
+
+| Type | Shape |
+|---|---|
+| `SuperDocUI` | The controller. |
+| `SuperDocUIState` | The unified state model. |
+| `SelectionSlice` | `useSuperDocSelection()` return shape. |
+| `SelectionCapture` | Output of `ui.selection.capture()`. |
+| `CommentsSlice` | `useSuperDocComments()` return shape. |
+| `TrackChangesSlice` | `useSuperDocTrackChanges()` return shape. |
+| `TrackChangesItem` | `{ id, change }`. |
+| `DocumentSlice` | `useSuperDocDocument()` return shape. |
+| `ToolbarSnapshotSlice` | `useSuperDocToolbar()` return shape. |
+| `UIToolbarCommandState` | Per-command state shape. |
+| `CustomCommandRegistration` | Input to `ui.commands.register`. |
+| `CustomCommandRegistrationResult` | Return from `ui.commands.register`. |
+| `ScrollIntoViewInput` | Input to `ui.viewport.scrollIntoView`. |
+| `ViewportRect` | Plain value rectangle returned by `ui.viewport.getRect`. |
+
+For the source of truth, the types ship with the `superdoc` package and are exported alongside the runtime values.

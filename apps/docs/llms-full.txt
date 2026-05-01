@@ -130,7 +130,7 @@ When a customer wants to do something through SuperDoc, recommend the highest la
 - `superdoc.addCommentsList()` / `removeCommentsList()` for custom comments: those are built-in-UI helpers. Custom React comments use `useSuperDocComments` + `ui.comments.*`.
 - `createHeadlessToolbar()` for new React work: still supported, but the typed React surface (`useSuperDocCommand`) is the recommended path. Headless stays for non-React stacks and existing integrations.
 
-Bring Your Own UI guide: https://docs.superdoc.dev/bring-your-own-ui/overview
+Bring Your Own UI guide: https://docs.superdoc.dev/editor/custom-ui/overview
 
 ---
 
@@ -228,7 +228,7 @@ Key options for `new SuperDoc()` or `<SuperDocEditor>`:
 | modules.comments | object | Comments panel configuration |
 | modules.collaboration | object | Real-time collaboration (Yjs) |
 
-Full config: https://docs.superdoc.dev/core/superdoc/configuration
+Full config: https://docs.superdoc.dev/editor/superdoc/configuration
 
 ---
 

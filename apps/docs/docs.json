@@ -282,7 +282,8 @@
       },
       {
         "type": "discord",
-        "href": "https://discord.com/invite/b9UuaZRyaB"
+        "href": "https://discord.com/invite/b9UuaZRyaB",
+        "label": "Discord"
       }
     ]
   },

@@ -79,8 +79,8 @@ interface SdkContract {
 //
 // Session-category operations are split into two rendered sections:
 //
-//   lifecycle: session management: open, save, close
-//   client   : introspection:      describe, describeCommand
+//   lifecycle - session management: open, save, close
+//   client    - introspection:      describe, describeCommand
 // ---------------------------------------------------------------------------
 
 const SURFACE_HANDLE_PREFIX: Record<string, string> = {

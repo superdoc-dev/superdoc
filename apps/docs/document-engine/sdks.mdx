@@ -477,9 +477,9 @@ What happens when you pass `doc`:
 
 | Parameter | Type | Default | Description |
 | --- | --- | --- | --- |
-| `collabUrl` | `string` |: | WebSocket URL. Shorthand for `y-websocket` only. |
+| `collabUrl` | `string` | none | WebSocket URL. Shorthand for `y-websocket` only. |
 | `collabDocumentId` | `string` | session ID | Room/document ID on the provider. |
-| `doc` | `string` |: | Local `.docx` used only when the room is empty. |
+| `doc` | `string` | none | Local `.docx` used only when the room is empty. |
 | `onMissing` | `string` | `seedFromDoc` | `seedFromDoc`, `blank`, or `error`. |
 | `bootstrapSettlingMs` | `number` | `1500` | Wait time (ms) before seeding to avoid race conditions. |
 
@@ -1489,7 +1489,7 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 
 The SDKs are request/response wrappers around the CLI. They do **not** expose browser event subscriptions like `editor.on('update', ...)` or `superdoc.on('editor-update', ...)`.
 
-- Call `doc.info()` at workflow boundaries: after opening, after edits, or before saving: not in a polling loop.
+- Call `doc.info()` at workflow boundaries (after opening, after edits, or before saving), not in a polling loop.
 - If you are building a browser live counter, use the [SuperEditor events](/advanced/supereditor/events) or [SuperDoc events](/editor/superdoc/events) instead.
 
 ```ts

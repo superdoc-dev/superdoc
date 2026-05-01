@@ -25,9 +25,8 @@ pre-commit:
       glob: "apps/docs/**/*.{mdx,json}"
       run: pnpm run check:icons
     docs-check-em-dashes:
-      root: "apps/docs/"
-      glob: "apps/docs/**/*.{mdx,txt,json}"
-      run: pnpm run check:em-dashes
+      glob: "{apps/docs/**/*.{mdx,txt,json},apps/docs/scripts/*.ts,packages/document-api/src/contract/operation-definitions.ts}"
+      run: pnpm --prefix apps/docs run check:em-dashes
     examples-demos-validate:
       glob: "{demos,examples}/**/*.{md,mdx,js,ts,tsx,jsx,json,html}"
       run: pnpm run check:examples-demos

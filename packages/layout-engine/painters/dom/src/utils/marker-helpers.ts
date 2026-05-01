@@ -8,6 +8,8 @@ import {
   type MinimalWordLayout,
   type ResolvedListMarkerGeometry,
 } from '@superdoc/common/list-marker-utils';
+import { applySourceAnchorDataset } from '../renderer';
+import { SourceAnchor } from '@superdoc/contracts';
 
 type PainterListTextStartParams = {
   wordLayout: MinimalWordLayout | undefined;
@@ -91,7 +93,12 @@ type MarkerRunStyle = {
  * `<span class="superdoc-paragraph-marker">` already appended and styled from the
  * given run. Callers handle positioning, suffix separators, and the final prepend.
  */
-export const createListMarkerElement = (doc: Document, markerText: string, run: MarkerRunStyle): HTMLElement => {
+export const createListMarkerElement = (
+  doc: Document,
+  markerText: string,
+  run: MarkerRunStyle,
+  sourceAnchor: SourceAnchor,
+): HTMLElement => {
   const markerContainer = doc.createElement('span');
   markerContainer.classList.add(DOM_CLASS_NAMES.LIST_MARKER);
   markerContainer.style.display = 'inline-block';
@@ -117,5 +124,6 @@ export const createListMarkerElement = (doc: Document, markerText: string, run: 
   }
 
   markerContainer.appendChild(markerEl);
+  applySourceAnchorDataset(markerEl, sourceAnchor);
   return markerContainer;
 };

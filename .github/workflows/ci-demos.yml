@@ -33,7 +33,7 @@ jobs:
         run: pnpm build:superdoc
 
       - name: Build @superdoc-dev/react
-        # bring-your-own-ui imports the React wrapper from its dist/.
+        # custom-ui imports the React wrapper from its dist/.
         # Other demos don't need this; cheap enough to run unconditionally.
         run: pnpm --filter @superdoc-dev/react run build
 
@@ -56,7 +56,7 @@ jobs:
       fail-fast: false
       matrix:
         demo:
-          - bring-your-own-ui
+          - custom-ui
           - cdn
           - custom-mark
           - custom-node

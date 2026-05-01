@@ -12,7 +12,7 @@ This is a demo, not a minimal canonical recipe. It shows how the pieces compose 
 pnpm install
 pnpm --filter superdoc run build
 pnpm --filter @superdoc-dev/react run build
-pnpm --filter bring-your-own-ui run dev
+pnpm --filter custom-ui run dev
 ```
 
 Open http://localhost:5189.

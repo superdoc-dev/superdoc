@@ -41,6 +41,7 @@ const { spawnSync } = require('child_process');
 const CHECKED_FILES = [
   'src/helpers/schema-introspection.js',
   'src/composables/use-find-replace.js',
+  'src/composables/use-password-prompt.js',
 ];
 
 const packageDir = path.resolve(__dirname, '..');

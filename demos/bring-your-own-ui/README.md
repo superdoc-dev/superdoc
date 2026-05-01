@@ -1,4 +1,4 @@
-# Build your own SuperDoc UI
+# Bring your own SuperDoc UI
 
 A reference workspace built on the `superdoc/ui/react` surface. Toolbar, comment threads, tracked-change review, custom commands, DOCX round-trip - in one app.
 
@@ -10,7 +10,7 @@ This is a demo, not a minimal canonical recipe. It shows how the pieces compose 
 pnpm install
 pnpm --filter superdoc run build
 pnpm --filter @superdoc-dev/react run build
-pnpm --filter build-your-own-ui run dev
+pnpm --filter bring-your-own-ui run dev
 ```
 
 Open http://localhost:5189.

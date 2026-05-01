@@ -37,7 +37,7 @@ ui?.commands.get('bold')?.execute();
 
 ### `useSuperDocCommand(id)`
 
-Subscribes to one command's state. See [Toolbar and commands](/build-your-own-ui/toolbar-and-commands).
+Subscribes to one command's state. See [Toolbar and commands](/bring-your-own-ui/toolbar-and-commands).
 
 ```ts
 const bold = useSuperDocCommand('bold');
@@ -46,7 +46,7 @@ const bold = useSuperDocCommand('bold');
 
 ### `useSuperDocSelection()`
 
-Returns the live selection slice. See [Selection and viewport](/build-your-own-ui/selection-and-viewport).
+Returns the live selection slice. See [Selection and viewport](/bring-your-own-ui/selection-and-viewport).
 
 ```ts
 const selection = useSuperDocSelection();
@@ -55,7 +55,7 @@ const selection = useSuperDocSelection();
 
 ### `useSuperDocComments()`
 
-Returns the comments slice. See [Comments](/build-your-own-ui/comments).
+Returns the comments slice. See [Comments](/bring-your-own-ui/comments).
 
 ```ts
 const { items, total, activeIds } = useSuperDocComments();
@@ -63,7 +63,7 @@ const { items, total, activeIds } = useSuperDocComments();
 
 ### `useSuperDocTrackChanges()`
 
-Returns the tracked-changes slice. See [Track changes](/build-your-own-ui/track-changes).
+Returns the tracked-changes slice. See [Track changes](/bring-your-own-ui/track-changes).
 
 ```ts
 const { items, total, activeId } = useSuperDocTrackChanges();
@@ -71,7 +71,7 @@ const { items, total, activeId } = useSuperDocTrackChanges();
 
 ### `useSuperDocDocument()`
 
-Returns the document slice. See [Document control](/build-your-own-ui/document-control).
+Returns the document slice. See [Document control](/bring-your-own-ui/document-control).
 
 ```ts
 const { ready, mode, dirty } = useSuperDocDocument();

@@ -631,7 +631,7 @@ importers:
         specifier: ^1.50.0
         version: 1.58.2
 
-  demos/build-your-own-ui:
+  demos/bring-your-own-ui:
     dependencies:
       '@superdoc-dev/react':
         specifier: workspace:*

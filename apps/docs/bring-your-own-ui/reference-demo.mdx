@@ -1,22 +1,22 @@
 ---
 title: 'Reference demo'
-description: 'A full reference workspace that composes every Build Your Own UI surface.'
+description: 'A full reference workspace that composes every Bring Your Own UI surface.'
 ---
 
-The reference workspace at [`demos/build-your-own-ui/`](https://github.com/superdoc-dev/superdoc/tree/main/demos/build-your-own-ui) shows toolbar, custom commands, comment threads, tracked-change review, selection capture, document control, and DOCX round-trip in one app.
+The reference workspace at [`demos/bring-your-own-ui/`](https://github.com/superdoc-dev/superdoc/tree/main/demos/bring-your-own-ui) shows toolbar, custom commands, comment threads, tracked-change review, selection capture, document control, and DOCX round-trip in one app.
 
 ## What it covers
 
 | Surface | File | Page that documents the pattern |
 |---|---|---|
-| Provider, onReady, hooks | `src/App.tsx`, `src/editor/EditorMount.tsx` | [React setup](/build-your-own-ui/react-setup) |
-| Toolbar buttons (bold, italic, lists, undo, redo) | `src/components/Toolbar.tsx` | [Toolbar and commands](/build-your-own-ui/toolbar-and-commands) |
-| Insert clause custom command | `src/components/InsertClauseButton.tsx` | [Custom commands](/build-your-own-ui/custom-commands) |
-| Comments sidebar with capture-based composer and reply threads | `src/components/CommentComposer.tsx`, `src/components/ActivitySidebar.tsx` | [Comments](/build-your-own-ui/comments) |
-| Track-changes feed with accept / reject | `src/components/ActivitySidebar.tsx` | [Track changes](/build-your-own-ui/track-changes) |
+| Provider, onReady, hooks | `src/App.tsx`, `src/editor/EditorMount.tsx` | [React setup](/bring-your-own-ui/react-setup) |
+| Toolbar buttons (bold, italic, lists, undo, redo) | `src/components/Toolbar.tsx` | [Toolbar and commands](/bring-your-own-ui/toolbar-and-commands) |
+| Insert clause custom command | `src/components/InsertClauseButton.tsx` | [Custom commands](/bring-your-own-ui/custom-commands) |
+| Comments sidebar with capture-based composer and reply threads | `src/components/CommentComposer.tsx`, `src/components/ActivitySidebar.tsx` | [Comments](/bring-your-own-ui/comments) |
+| Track-changes feed with accept / reject | `src/components/ActivitySidebar.tsx` | [Track changes](/bring-your-own-ui/track-changes) |
 | Merged comments + tracked-changes panel | `src/components/ActivitySidebar.tsx` | (App-level pattern; see below) |
-| Active-card highlight from selection | `src/components/ActivitySidebar.tsx` | [Selection and viewport](/build-your-own-ui/selection-and-viewport) |
-| Edit / Suggest mode toggle, Export, Import | `src/components/Toolbar.tsx` | [Document control](/build-your-own-ui/document-control) |
+| Active-card highlight from selection | `src/components/ActivitySidebar.tsx` | [Selection and viewport](/bring-your-own-ui/selection-and-viewport) |
+| Edit / Suggest mode toggle, Export, Import | `src/components/Toolbar.tsx` | [Document control](/bring-your-own-ui/document-control) |
 
 ## How to read it
 
@@ -37,7 +37,7 @@ For copy-paste, start from the per-domain pages above. Each one teaches one conc
 pnpm install
 pnpm --filter superdoc run build
 pnpm --filter @superdoc-dev/react run build
-pnpm --filter build-your-own-ui run dev
+pnpm --filter bring-your-own-ui run dev
 ```
 
 Open http://localhost:5189.

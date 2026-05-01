@@ -343,9 +343,9 @@ See [Surfaces](/editor/superdoc/surfaces) for the full API and examples.
   <Warning>**Deprecated**: Use `modules.contextMenu` instead. See the [Context Menu module](/editor/built-in-ui/context-menu) for configuration options.</Warning>
 </ParamField>
 
-## Proofing
+## Spell check
 
-Provider-based spell check and proofing for the layout-engine editor surface.
+Provider-based spell check for the layout-engine editor surface. The configuration key is `proofing` because the provider contract is designed to support spelling, grammar, and style; the current UI renders spelling only.
 
 ```javascript
 new SuperDoc({
@@ -361,19 +361,19 @@ new SuperDoc({
 ```
 
 <Note>
-  Bring your own provider. SuperDoc handles the editor UI, while your app controls the proofing engine or API. See [Proofing](/editor/proofing/overview) and [Custom proofing provider](/editor/proofing/custom-provider).
+  Bring your own provider. SuperDoc handles the editor UI; your app controls the spell-check engine or API. See [Spell check](/editor/spell-check/overview) and [Custom spell-check provider](/editor/spell-check/custom-provider).
 </Note>
 
 <Info>
-  Proofing is available when the layout engine is active. In `print` layout this works out of the box. In `web` layout, keep the layout engine enabled with `layoutEngineOptions.flowMode: 'semantic'`.
+  Spell check runs when the layout engine is active. In `print` layout this works out of the box. In `web` layout, keep the layout engine enabled with `layoutEngineOptions.flowMode: 'semantic'`.
 </Info>
 
 <Note>
-  In the current UI, only spelling issues are rendered. Grammar and style issues can still be returned by your provider, but they are not shown yet.
+  Only spelling issues render in v1. Grammar and style issues can still be returned by your provider but are not shown yet.
 </Note>
 
 <ParamField path="proofing" type="Object">
-  Proofing configuration
+  Spell-check configuration
 
   <Expandable title="properties" defaultOpen>
     <ParamField path="proofing.enabled" type="boolean" default="false">

@@ -2057,7 +2057,7 @@ importers:
         specifier: npm:rolldown-vite@7.3.1
         version: rolldown-vite@7.3.1(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@25.6.0)(esbuild@0.27.7)(jiti@2.6.1)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)
 
-  examples/editor/proofing/language-tool-self-hosted:
+  examples/editor/spell-check/language-tool-self-hosted:
     dependencies:
       react:
         specifier: ^19.2.1
@@ -2085,7 +2085,7 @@ importers:
         specifier: npm:rolldown-vite@7.3.1
         version: rolldown-vite@7.3.1(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@25.6.0)(esbuild@0.27.7)(jiti@2.6.1)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)
 
-  examples/editor/proofing/typo-js:
+  examples/editor/spell-check/typo-js:
     dependencies:
       react:
         specifier: ^19.2.1

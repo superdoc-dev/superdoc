@@ -140,8 +140,8 @@
                 ]
               },
               {
-                "group": "Proofing",
-                "pages": ["editor/proofing/overview", "editor/proofing/custom-provider"]
+                "group": "Spell check",
+                "pages": ["editor/spell-check/overview", "editor/spell-check/custom-provider"]
               },
               {
                 "group": "Theming",
@@ -293,6 +293,18 @@
     "dismissible": true
   },
   "redirects": [
+    {
+      "source": "/editor/proofing/overview",
+      "destination": "/editor/spell-check/overview"
+    },
+    {
+      "source": "/editor/proofing/custom-provider",
+      "destination": "/editor/spell-check/custom-provider"
+    },
+    {
+      "source": "/editor/proofing/:path*",
+      "destination": "/editor/spell-check/:path*"
+    },
     {
       "source": "/document-engine/sdk-diffing",
       "destination": "/document-engine/diffing"

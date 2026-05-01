@@ -1,10 +1,14 @@
 ---
-title: Custom proofing provider
+title: Custom spell-check provider
 sidebarTitle: Custom provider
-keywords: "custom proofing provider, spellcheck api, proofing provider, spelling api"
+keywords: "custom spell-check provider, custom proofing provider, spellcheck api, proofing provider, spelling api"
 ---
 
-SuperDoc uses a provider-agnostic proofing contract. Your provider receives text segments and returns structured issues. SuperDoc owns the editor UI and document-range mapping.
+A spell-check provider receives text segments and returns spelling issues. SuperDoc owns the editor UI and document-range mapping.
+
+<Note>
+The TypeScript types use `Proofing*` names because the provider contract is broader than spelling. The current UI renders `kind: 'spelling'` only.
+</Note>
 
 ## Provider shape
 
@@ -18,7 +22,7 @@ const provider = {
 };
 ```
 
-If you want TypeScript help, the proofing types are available from `superdoc/super-editor`.
+If you want TypeScript help, the `Proofing*` types are available from `superdoc/super-editor`.
 
 ## Request model
 
@@ -137,7 +141,7 @@ const provider = {
 
 ## Troubleshooting
 
-If proofing markers do not appear:
+If spelling underlines do not appear:
 
 - Confirm `proofing.enabled` is `true`
 - Confirm the provider returns `kind: 'spelling'`
@@ -149,5 +153,5 @@ If proofing markers do not appear:
 
 If you want a concrete starting point, see the repo examples:
 
-- [Typo.js example](https://github.com/superdoc-dev/superdoc/tree/main/examples/editor/proofing/typo-js) - Minimal local spell-check provider
-- [LanguageTool self-hosted example](https://github.com/superdoc-dev/superdoc/tree/main/examples/editor/proofing/language-tool-self-hosted) - Minimal self-hosted HTTP provider
+- [Typo.js example](https://github.com/superdoc-dev/superdoc/tree/main/examples/editor/spell-check/typo-js) - Minimal local spell-check provider
+- [LanguageTool self-hosted example](https://github.com/superdoc-dev/superdoc/tree/main/examples/editor/spell-check/language-tool-self-hosted) - Minimal self-hosted HTTP provider

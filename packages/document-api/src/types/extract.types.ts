@@ -100,7 +100,7 @@ export interface ExtractBlock {
 }
 
 export interface ExtractComment {
-  /** Comment entity ID — pass to `scrollToElement()` for navigation. */
+  /** Comment entity ID: pass to `scrollToElement()` for navigation. */
   entityId: string;
   /** Comment body text. */
   text?: string;
@@ -120,7 +120,7 @@ export interface ExtractTrackedChange {
   /**
    * Change type at the entity level.
    *
-   * In paired replacement mode (the default — set
+   * In paired replacement mode (the default: set
    * `modules.trackChanges.replacements: 'independent'` for one entity per
    * `<w:ins>` / `<w:del>` instead), a delete + insert pair shares one entity
    * and the aggregate `type` collapses to `'insert'`. Per-half information

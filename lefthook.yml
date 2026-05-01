@@ -24,6 +24,10 @@ pre-commit:
       root: "apps/docs/"
       glob: "apps/docs/**/*.{mdx,json}"
       run: pnpm run check:icons
+    docs-check-em-dashes:
+      root: "apps/docs/"
+      glob: "apps/docs/**/*.{mdx,txt,json}"
+      run: pnpm run check:em-dashes
     docs-test-examples:
       root: "apps/docs/"
       glob: "apps/docs/**/*.mdx"

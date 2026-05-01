@@ -29,6 +29,7 @@ Returns a FootnoteMutationResult indicating success with the footnote address or
 | `at` | TextTarget | yes | TextTarget |
 | `at.kind` | `"text"` | yes | Constant: `"text"` |
 | `at.segments` | TextSegment[] | yes |  |
+| `at.story` | StoryLocator | no | StoryLocator |
 | `content` | string | yes |  |
 | `type` | enum | yes | `"footnote"`, `"endnote"` |
 
@@ -46,7 +47,11 @@ Returns a FootnoteMutationResult indicating success with the footnote address or
           "start": 0
         }
       }
-    ]
+    ],
+    "story": {
+      "kind": "story",
+      "storyType": "body"
+    }
   },
   "content": "example",
   "type": "footnote"

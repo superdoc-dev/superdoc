@@ -124,7 +124,7 @@ export interface ParagraphsAdapter {
   clearDirection(input: ParagraphsClearDirectionInput, options?: MutationOptions): ParagraphMutationResult;
 }
 
-/** Public API surface for `format.paragraph.*` — direct paragraph formatting. */
+/** Public API surface for `format.paragraph.*`: direct paragraph formatting. */
 export interface ParagraphFormatApi {
   resetDirectFormatting(
     input: ParagraphsResetDirectFormattingInput,
@@ -150,7 +150,7 @@ export interface ParagraphFormatApi {
   clearDirection(input: ParagraphsClearDirectionInput, options?: MutationOptions): ParagraphMutationResult;
 }
 
-/** Public API surface for `styles.paragraph.*` — Word-like paragraph style application operations. */
+/** Public API surface for `styles.paragraph.*`: Word-like paragraph style application operations. */
 export interface ParagraphStylesApi {
   setStyle(input: ParagraphsSetStyleInput, options?: MutationOptions): ParagraphMutationResult;
   clearStyle(input: ParagraphsClearStyleInput, options?: MutationOptions): ParagraphMutationResult;
@@ -534,7 +534,7 @@ function validateClearDirection(input: unknown): asserts input is ParagraphsClea
 }
 
 // ---------------------------------------------------------------------------
-// Execute functions — validate then delegate
+// Execute functions: validate then delegate
 // ---------------------------------------------------------------------------
 
 export function executeParagraphsSetStyle(

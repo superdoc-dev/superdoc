@@ -10,6 +10,7 @@
     "check:links": "mintlify broken-links",
     "check:imports": "bun scripts/validate-code-imports.ts",
     "check:icons": "bun scripts/validate-icons.ts",
+    "check:em-dashes": "bun scripts/validate-em-dashes.ts",
     "test:examples": "bun test __tests__/doctest.test.ts"
   },
   "devDependencies": {

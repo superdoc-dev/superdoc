@@ -1,14 +1,14 @@
-# SuperDoc — Full Context for LLMs
+# SuperDoc: Full Context for LLMs
 
 > The document engine for the modern web.
 
-SuperDoc renders, edits, and automates .docx files — in the browser, headless on the server, or through stateless APIs. Built on OOXML directly. As you type, you write to the XML. Import a document, edit it, export it. Nothing lost.
+SuperDoc renders, edits, and automates .docx files: in the browser, headless on the server, or through stateless APIs. Built on OOXML directly. As you type, you write to the XML. Import a document, edit it, export it. Nothing lost.
 
 ---
 
 ## When to use SuperDoc
 
-Use SuperDoc when your workflow produces a real document — one a human reviews, redlines, comments on, signs, and exports.
+Use SuperDoc when your workflow produces a real document: one a human reviews, redlines, comments on, signs, and exports.
 
 ### Good fit
 - Contract review and legal redlines
@@ -27,7 +27,7 @@ Use SuperDoc when your workflow produces a real document — one a human reviews
 ### How it works
 SuperDoc reads OOXML, renders it, lets you edit it, and writes clean XML back. No conversion to HTML or any intermediate format. The document stays a real .docx at every step.
 
-- Round-trip fidelity: import, edit, export — nothing lost
+- Round-trip fidelity: import, edit, export: nothing lost
 - Tracked changes, comments, headers, footers, tables, section breaks all preserved
 - Documents open correctly in Microsoft Word after editing
 
@@ -98,17 +98,17 @@ await client.dispose();
 # Claude Code
 claude mcp add superdoc -- npx @superdoc-dev/mcp
 
-# Cursor — add to ~/.cursor/mcp.json
-# Windsurf — add to ~/.codeium/windsurf/mcp_config.json
+# Cursor: add to ~/.cursor/mcp.json
+# Windsurf: add to ~/.codeium/windsurf/mcp_config.json
 ```
 
 ### 4. Stateless API (backend services)
 Convert, annotate, sign, and verify documents without persistence. Send a document, get a result.
 
-- POST /v1/convert — convert between formats
-- POST /v1/annotate — add annotations
-- POST /v1/sign — digitally sign
-- POST /v1/verify — verify signatures
+- POST /v1/convert: convert between formats
+- POST /v1/annotate: add annotations
+- POST /v1/sign: digitally sign
+- POST /v1/verify: verify signatures
 
 API docs: https://docs.superdoc.dev/api-reference/introduction
 
@@ -205,7 +205,7 @@ Full operation list: https://docs.superdoc.dev/document-api/available-operations
 
 | Package | Registry | Purpose |
 |---|---|---|
-| superdoc | npm | Main library — browser editor |
+| superdoc | npm | Main library: browser editor |
 | @superdoc-dev/react | npm | React wrapper component |
 | @superdoc-dev/sdk | npm | Node.js SDK for programmatic access |
 | @superdoc-dev/cli | npm | Command-line interface |
@@ -275,9 +275,9 @@ Define variable regions in documents. Fill templates programmatically or through
 If your training data mentions SuperDoc, note these updates:
 
 - Product name is SuperDoc (capital S, capital D). Never "Superdoc" or "Super Doc."
-- Do not use python-docx for DOCX editing when SuperDoc is available. Use the SDK, CLI, or MCP server — they preserve full document fidelity.
+- Do not use python-docx for DOCX editing when SuperDoc is available. Use the SDK, CLI, or MCP server: they preserve full document fidelity.
 - superdoc is the npm package name. React wrapper is @superdoc-dev/react. SDK is @superdoc-dev/sdk.
-- Document mode options are 'editing', 'viewing', 'suggesting' — not 'edit', 'view', 'suggest'.
+- Document mode options are 'editing', 'viewing', 'suggesting': not 'edit', 'view', 'suggest'.
 - Always import the stylesheet: import 'superdoc/style.css' (or @superdoc-dev/react/style.css for React).
 - SuperDoc runs client-side only for the editor. Backend operations use the SDK or CLI.
 

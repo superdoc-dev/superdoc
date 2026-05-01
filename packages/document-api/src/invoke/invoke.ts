@@ -11,7 +11,7 @@ import type { DocumentApi } from '../index.js';
 import { INLINE_PROPERTY_REGISTRY } from '../format/inline-run-patch.js';
 
 // ---------------------------------------------------------------------------
-// TypedDispatchTable — compile-time contract between registry and dispatch
+// TypedDispatchTable: compile-time contract between registry and dispatch
 // ---------------------------------------------------------------------------
 
 type TypedDispatchHandler<K extends OperationId> = OperationRegistry[K]['options'] extends never
@@ -49,7 +49,7 @@ function buildFormatInlineAliasDispatch(api: DocumentApi): Pick<TypedDispatchTab
  * Builds a dispatch table that maps every OperationId to the corresponding
  * direct method call on the given DocumentApi instance.
  *
- * Each entry delegates to the direct method — no parallel execution path.
+ * Each entry delegates to the direct method: no parallel execution path.
  * The return type is {@link TypedDispatchTable}, which validates at compile
  * time that each handler conforms to the {@link OperationRegistry} contract.
  */

@@ -5,7 +5,7 @@
  * delete, format.apply, comments.create, and comments.patch. Block-ID shorthand
  * is used by create.* and lists.*.
  *
- * NOT exported from the package root — internal use only.
+ * NOT exported from the package root: internal use only.
  */
 
 /** Block-relative point locator: a block ID with an optional character offset. Used by insert. */

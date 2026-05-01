@@ -31,7 +31,7 @@ export interface MutationOptions extends RevisionGuardOptions {
 }
 
 /**
- * Text insertion request — target-less insert at document end.
+ * Text insertion request: target-less insert at document end.
  *
  * Targeted inserts now route through `SelectionMutationAdapter`. This
  * request type only handles the no-target fallback (append to document end).

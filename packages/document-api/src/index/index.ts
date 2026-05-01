@@ -87,7 +87,7 @@ function validateIndexEntryTarget(target: unknown, operationName: string): asser
 }
 
 // ---------------------------------------------------------------------------
-// Execute wrappers — INDEX lifecycle
+// Execute wrappers: INDEX lifecycle
 // ---------------------------------------------------------------------------
 
 export function executeIndexList(adapter: IndexAdapter, input?: IndexListInput): IndexListResult {
@@ -136,7 +136,7 @@ export function executeIndexRemove(
 }
 
 // ---------------------------------------------------------------------------
-// Execute wrappers — XE entry operations
+// Execute wrappers: XE entry operations
 // ---------------------------------------------------------------------------
 
 export function executeIndexEntryList(adapter: IndexAdapter, input?: IndexEntryListInput): IndexEntryListResult {

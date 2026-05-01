@@ -289,7 +289,7 @@
     ]
   },
   "banner": {
-    "content": "**Introducing Document Engine** — edit DOCX files from code, CLI, SDKs, or AI agents. [Read the announcement →](https://www.superdoc.dev/changelog/2026-03-22-document-engine)",
+    "content": "**Introducing Document Engine** edit DOCX files from code, CLI, SDKs, or AI agents. [Read the announcement →](https://www.superdoc.dev/changelog/2026-03-22-document-engine)",
     "dismissible": true
   },
   "redirects": [

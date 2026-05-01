@@ -47,9 +47,9 @@ export interface TrackChangesListQuery {
   type?: TrackChangeType;
   /**
    * Story scope.
-   * - `undefined` (default) — body only (backward compatible).
-   * - A {@link StoryLocator} — only that story.
-   * - `'all'` — flat list across body + every revision-capable non-body story.
+   * - `undefined` (default): body only (backward compatible).
+   * - A {@link StoryLocator}: only that story.
+   * - `'all'`: flat list across body + every revision-capable non-body story.
    */
   in?: StoryLocator | TrackChangesInAll;
 }

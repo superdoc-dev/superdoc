@@ -92,7 +92,7 @@ export interface DocumentSnapshotBlock {
   headingLevel?: number;
 }
 
-/** Full document snapshot — structure, blocks with formatting, and defaults. */
+/** Full document snapshot: structure, blocks with formatting, and defaults. */
 export interface DocumentSnapshot {
   /** Total block count. */
   total: number;

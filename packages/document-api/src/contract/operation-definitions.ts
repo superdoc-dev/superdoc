@@ -1,5 +1,5 @@
 /**
- * Canonical operation definitions — single source of truth for keys, metadata, and paths.
+ * Canonical operation definitions: single source of truth for keys, metadata, and paths.
  *
  * Every operation in the Document API is defined exactly once here.
  * All downstream artifacts (COMMAND_CATALOG, OPERATION_MEMBER_PATH_MAP,
@@ -8,20 +8,20 @@
  *
  * ## Adding a new operation
  *
- * 1. **Here** (`operation-definitions.ts`) — add an entry to `OPERATION_DEFINITIONS`
+ * 1. **Here** (`operation-definitions.ts`): add an entry to `OPERATION_DEFINITIONS`
  *    with `memberPath`, `description`, `expectedResult`, `metadata`, `referenceDocPath`, and `referenceGroup`.
- * 2. **`operation-registry.ts`** — add a type entry (`input`, `options`, `output`).
+ * 2. **`operation-registry.ts`**: add a type entry (`input`, `options`, `output`).
  *    The bidirectional `Assert` checks will error until this is done.
- * 3. **`invoke.ts`** (`buildDispatchTable`) — add a one-line dispatch entry calling
+ * 3. **`invoke.ts`** (`buildDispatchTable`): add a one-line dispatch entry calling
  *    the API method. `TypedDispatchTable` will error until this is done.
- * 4. **Implement** — the API method on `DocumentApi` + its adapter.
+ * 4. **Implement**: the API method on `DocumentApi` + its adapter.
  *
  * That's 4 touch points. The catalog, maps, and reference docs are derived
  * automatically. If you forget step 1 or 2, compile-time assertions fail.
  * If you forget step 3, the `TypedDispatchTable` mapped type errors.
  *
  * Import DAG: this file imports only from `metadata-types.ts` and
- * `../types/receipt.js` — no contract-internal circular deps.
+ * `../types/receipt.js`: no contract-internal circular deps.
  */
 
 import type { ReceiptFailureCode } from '../types/receipt.js';
@@ -88,7 +88,7 @@ export interface OperationDefinitionEntry {
 }
 
 // ---------------------------------------------------------------------------
-// Intent group metadata — tool-level names and descriptions
+// Intent group metadata: tool-level names and descriptions
 // ---------------------------------------------------------------------------
 
 export interface IntentGroupMeta {
@@ -148,13 +148,13 @@ export const INTENT_GROUP_META: Record<string, IntentGroupMeta> = {
     toolName: 'superdoc_edit',
     description:
       'The primary tool for inserting content into documents. ' +
-      'ALWAYS use action "insert" with type "markdown" to create headings, paragraphs, or any block content — this is faster and creates proper document structure in one call. Do NOT use superdoc_create for headings or paragraphs. ' +
+      'ALWAYS use action "insert" with type "markdown" to create headings, paragraphs, or any block content: this is faster and creates proper document structure in one call. Do NOT use superdoc_create for headings or paragraphs. ' +
       'The markdown parser creates headings from # markers (# = Heading1, ## = Heading2), bold from **text**, italic from *text*, and numbered/bullet lists. ' +
       'Position markdown inserts with "target" (a BlockNodeAddress like {kind:"block", nodeType, nodeId}) and "placement" (before, after, insideStart, insideEnd). Without a target, content appends at the end of the document. ' +
       'IMPORTANT: After a markdown insert, analyze the document context (what kind of document, how titles and body text are styled) and follow up with ONE superdoc_mutations call to format inserted blocks so they look like they belong. ' +
       'Each format.apply step accepts "inline" (fontFamily, fontSize, bold, underline, color), "alignment", and "scope" in the same step. ' +
       'Use scope: "block" so formatting covers the entire paragraph. ' +
-      'Copy the exact property values from the existing get_content blocks (fontFamily, fontSize, color, alignment, bold, underline). Do NOT invent values — use what the blocks show. ' +
+      'Copy the exact property values from the existing get_content blocks (fontFamily, fontSize, color, alignment, bold, underline). Do NOT invent values: use what the blocks show. ' +
       'Also supports replace, delete, and undo/redo. For replace and delete, pass a "ref" from superdoc_search or superdoc_get_content blocks. ' +
       'A search ref covers only the matched substring; a block ref covers the entire block text, so use block refs when rewriting or shortening whole paragraphs. ' +
       'For multi-step redlines or whole-clause rewrites, prefer superdoc_mutations with where:{by:"block", nodeType, nodeId} from superdoc_get_content action "blocks" includeText:true rather than relying on text selectors. ' +
@@ -184,7 +184,7 @@ export const INTENT_GROUP_META: Record<string, IntentGroupMeta> = {
   create: {
     toolName: 'superdoc_create',
     description:
-      'IMPORTANT: For headings and paragraphs, use superdoc_edit with type "markdown" instead — it is faster, creates proper styles, and handles positioning via target + placement. ' +
+      'IMPORTANT: For headings and paragraphs, use superdoc_edit with type "markdown" instead: it is faster, creates proper styles, and handles positioning via target + placement. ' +
       'Only use superdoc_create for tables or when markdown cannot express the content. ' +
       'Creates a single paragraph, heading, or table. Returns nodeId and ref for the created block. ' +
       'After creating, the returned ref is valid for ONE immediate superdoc_format call. For subsequent operations, re-fetch blocks with superdoc_get_content to get fresh refs (refs expire after any mutation). ' +
@@ -253,30 +253,30 @@ export const INTENT_GROUP_META: Record<string, IntentGroupMeta> = {
       'Create and manipulate bullet and numbered lists. ' +
       'Most actions require a list-item target: {kind:"block", nodeType:"listItem", nodeId:"<id>"}. ' +
       'Exceptions: "create" and "attach" operate on paragraph targets (they turn paragraphs into list items). ' +
-      'Find nodeIds via superdoc_get_content({action:"blocks"}) — pick listItem blocks for most actions, paragraph blocks for create/attach.\n' +
+      'Find nodeIds via superdoc_get_content({action:"blocks"}): pick listItem blocks for most actions, paragraph blocks for create/attach.\n' +
       '\n' +
       'CREATE & CONVERT:\n' +
-      '• "create" — make a NEW list from paragraphs. Two modes: ' +
+      '• "create": make a NEW list from paragraphs. Two modes: ' +
       'mode:"empty" with at:{kind:"block", nodeType:"paragraph", nodeId} converts a single paragraph; ' +
-      'mode:"fromParagraphs" with target:{from:{...paragraph block address}, to:{...paragraph block address}} converts a range — ALL paragraphs between from and to become items, so make sure no other content sits between them. ' +
+      'mode:"fromParagraphs" with target:{from:{...paragraph block address}, to:{...paragraph block address}} converts a range: ALL paragraphs between from and to become items, so make sure no other content sits between them. ' +
       'Pass a preset ("disc"|"circle"|"square"|"dash" for bullets; "decimal"|"decimalParenthesis"|"lowerLetter"|"upperLetter"|"lowerRoman"|"upperRoman" for ordered) or a custom style. ' +
-      'Use "create" to start a fresh list — NOT to extend an existing one (use "attach" for that).\n' +
-      '• "attach" — add paragraphs to an EXISTING list, inheriting its numbering definition. Pass target:{paragraph block address} (or {from, to} range of paragraphs) + attachTo:{kind:"block", nodeType:"listItem", nodeId:"<any item in destination list>"} + optional level:0..8. Use this to extend a list or as the second half of a merge workflow (see "join" below).\n' +
-      '• "set_type" — convert an existing list between ordered and bullet. Pass target:{listItem} + kind:"ordered" or "bullet". Adjacent compatible sequences are merged automatically to preserve continuous numbering.\n' +
-      '• "detach" — convert a list item back to a plain paragraph. Pass target:{listItem}.\n' +
+      'Use "create" to start a fresh list: NOT to extend an existing one (use "attach" for that).\n' +
+      '• "attach": add paragraphs to an EXISTING list, inheriting its numbering definition. Pass target:{paragraph block address} (or {from, to} range of paragraphs) + attachTo:{kind:"block", nodeType:"listItem", nodeId:"<any item in destination list>"} + optional level:0..8. Use this to extend a list or as the second half of a merge workflow (see "join" below).\n' +
+      '• "set_type": convert an existing list between ordered and bullet. Pass target:{listItem} + kind:"ordered" or "bullet". Adjacent compatible sequences are merged automatically to preserve continuous numbering.\n' +
+      '• "detach": convert a list item back to a plain paragraph. Pass target:{listItem}.\n' +
       '\n' +
       'ITEMS & NESTING:\n' +
-      '• "insert" — add a new list item adjacent to an existing item in the same list. Pass target:{listItem} + position:"before"|"after" + optional text. Use this (NOT superdoc_create) to add items to an existing list.\n' +
-      '• "indent" / "outdent" — bump the target item\'s nesting level by one (0-8 range). Pass target:{listItem}.\n' +
-      '• "set_level" — jump the target item to an explicit level. Pass target:{listItem} + level:0..8.\n' +
+      '• "insert": add a new list item adjacent to an existing item in the same list. Pass target:{listItem} + position:"before"|"after" + optional text. Use this (NOT superdoc_create) to add items to an existing list.\n' +
+      '• "indent" / "outdent": bump the target item\'s nesting level by one (0-8 range). Pass target:{listItem}.\n' +
+      '• "set_level": jump the target item to an explicit level. Pass target:{listItem} + level:0..8.\n' +
       '\n' +
       'NUMBERING (ordered lists):\n' +
-      '• "set_value" — restart numbering at the target. Pass target:{listItem} + value:<number> (e.g. value:1 to start over) or value:null to clear a previous override. Mid-sequence targets are atomically split off into their own sequence.\n' +
-      '• "continue_previous" — make the target\'s sequence continue numbering from the nearest compatible previous sequence (same abstract definition). Pass target:{listItem of the sequence you want to renumber}. Fails with NO_COMPATIBLE_PREVIOUS or INCOMPATIBLE_DEFINITIONS if no matching prior sequence exists.\n' +
+      '• "set_value": restart numbering at the target. Pass target:{listItem} + value:<number> (e.g. value:1 to start over) or value:null to clear a previous override. Mid-sequence targets are atomically split off into their own sequence.\n' +
+      '• "continue_previous": make the target\'s sequence continue numbering from the nearest compatible previous sequence (same abstract definition). Pass target:{listItem of the sequence you want to renumber}. Fails with NO_COMPATIBLE_PREVIOUS or INCOMPATIBLE_DEFINITIONS if no matching prior sequence exists.\n' +
       '\n' +
       'SEQUENCE SHAPE (merge / split):\n' +
-      '• "merge" — merge the target\'s sequence with an adjacent one into one continuous list. Pass target:{listItem} + direction:"withPrevious" or "withNext". Absorbed items adopt the absorbing sequence\'s numbering definition, and empty paragraphs between the two sequences are removed so numbering flows continuously.\n' +
-      '• "split" — split the target\'s sequence at the target item into two independent lists. The target and everything after become a new sequence that restarts numbering at 1. Pass target:{listItem}; add restartNumbering:false to keep the count continuing instead of restarting.',
+      '• "merge": merge the target\'s sequence with an adjacent one into one continuous list. Pass target:{listItem} + direction:"withPrevious" or "withNext". Absorbed items adopt the absorbing sequence\'s numbering definition, and empty paragraphs between the two sequences are removed so numbering flows continuously.\n' +
+      '• "split": split the target\'s sequence at the target item into two independent lists. The target and everything after become a new sequence that restarts numbering at 1. Pass target:{listItem}; add restartNumbering:false to keep the count continuing instead of restarting.',
     inputExamples: [
       {
         action: 'create',
@@ -625,7 +625,7 @@ export const OPERATION_DEFINITIONS = {
   find: {
     memberPath: 'find',
     description:
-      'Search the document for text or node matches using SDM/1 selectors. Returns discovery-grade results — for mutation targeting, use query.match instead.',
+      'Search the document for text or node matches using SDM/1 selectors. Returns discovery-grade results: for mutation targeting, use query.match instead.',
     expectedResult:
       'Returns an SDFindResult envelope ({ total, limit, offset, items }). Each item is an SDNodeResult ({ node, address }).',
     requiresDocumentContext: true,
@@ -727,7 +727,7 @@ export const OPERATION_DEFINITIONS = {
   extract: {
     memberPath: 'extract',
     description:
-      'Extract all document content with stable IDs for RAG pipelines. Returns blocks with full text, comments, and tracked changes — each with an ID compatible with scrollToElement().',
+      'Extract all document content with stable IDs for RAG pipelines. Returns blocks with full text, comments, and tracked changes: each with an ID compatible with scrollToElement().',
     expectedResult:
       'Returns an ExtractResult with blocks (nodeId, type, text, headingLevel), comments (entityId, text, anchoredText, blockId, status, author), tracked changes (entityId, type, excerpt, author, date), and revision.',
     requiresDocumentContext: true,
@@ -1692,7 +1692,7 @@ export const OPERATION_DEFINITIONS = {
   'lists.create': {
     memberPath: 'lists.create',
     description:
-      'Create a new list from one or more paragraphs. Supports optional preset or style for new sequences. When sequence.mode is "continuePrevious", preset and style are not allowed — the new items inherit formatting from the previous sequence.',
+      'Create a new list from one or more paragraphs. Supports optional preset or style for new sequences. When sequence.mode is "continuePrevious", preset and style are not allowed: the new items inherit formatting from the previous sequence.',
     expectedResult: 'Returns a ListsCreateResult with the new listId and the first item address.',
     requiresDocumentContext: true,
     metadata: mutationOperation({
@@ -1826,7 +1826,7 @@ export const OPERATION_DEFINITIONS = {
   'lists.merge': {
     memberPath: 'lists.merge',
     description:
-      'Compound: merge two adjacent list sequences into one. Reassigns numId on the absorbed sequence (no strict abstractNumId check — absorbed items adopt the absorbing definition) and deletes empty paragraphs between the two sequences. Use this instead of lists.join for the user-facing "merge these lists" intent.',
+      'Compound: merge two adjacent list sequences into one. Reassigns numId on the absorbed sequence (no strict abstractNumId check: absorbed items adopt the absorbing definition) and deletes empty paragraphs between the two sequences. Use this instead of lists.join for the user-facing "merge these lists" intent.',
     expectedResult: 'Returns a ListsMergeResult with the merged listId, absorbedCount, and removedEmptyBlocks count.',
     requiresDocumentContext: true,
     metadata: mutationOperation({
@@ -1954,7 +1954,7 @@ export const OPERATION_DEFINITIONS = {
     referenceGroup: 'lists',
   },
 
-  // SD-1973 — List formatting and templates
+  // SD-1973: List formatting and templates
   'lists.applyTemplate': {
     memberPath: 'lists.applyTemplate',
     description:
@@ -2148,7 +2148,7 @@ export const OPERATION_DEFINITIONS = {
     referenceGroup: 'lists',
   },
 
-  // SD-2025 — User-facing list style operations
+  // SD-2025: User-facing list style operations
   'lists.getStyle': {
     memberPath: 'lists.getStyle',
     description:
@@ -2198,7 +2198,7 @@ export const OPERATION_DEFINITIONS = {
   'lists.setLevelNumberStyle': {
     memberPath: 'lists.setLevelNumberStyle',
     description:
-      'Set the numbering style (e.g. decimal, lowerLetter, upperRoman) for a specific list level. Rejects "bullet" — use setLevelBullet instead. Sequence-local: clones shared definitions.',
+      'Set the numbering style (e.g. decimal, lowerLetter, upperRoman) for a specific list level. Rejects "bullet": use setLevelBullet instead. Sequence-local: clones shared definitions.',
     expectedResult: 'Returns a ListsMutateItemResult receipt; reports NO_OP if the value already matches.',
     requiresDocumentContext: true,
     metadata: mutationOperation({
@@ -2246,7 +2246,7 @@ export const OPERATION_DEFINITIONS = {
   'lists.setLevelLayout': {
     memberPath: 'lists.setLevelLayout',
     description:
-      'Set the layout properties (alignment, indentation, trailing character, tab stop) for a specific list level. Accepts partial updates — omitted fields are left unchanged. Sequence-local: clones shared definitions.',
+      'Set the layout properties (alignment, indentation, trailing character, tab stop) for a specific list level. Accepts partial updates: omitted fields are left unchanged. Sequence-local: clones shared definitions.',
     expectedResult: 'Returns a ListsMutateItemResult receipt; reports NO_OP if all values already match.',
     requiresDocumentContext: true,
     metadata: mutationOperation({

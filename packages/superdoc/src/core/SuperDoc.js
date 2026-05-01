@@ -999,7 +999,11 @@ export class SuperDoc extends EventEmitter {
   onContentError({ error, editor }) {
     const { documentId } = editor.options;
     const doc = this.superdocStore.documents.find((d) => d.id === documentId);
-    this.config.onContentError({ error, editor, documentId: doc.id, file: doc.data });
+    // `onContentError` is typed as optional on the public Config typedef
+    // because consumers don't have to wire a handler. The class field
+    // initializer always installs a `() => null` default, so the call
+    // is defined at runtime; the optional chain is a no-op there.
+    this.config.onContentError?.({ error, editor, documentId: doc.id, file: doc.data });
   }
 
   /**
@@ -1839,7 +1843,11 @@ export class SuperDoc extends EventEmitter {
    */
   setHighContrastMode(isHighContrast) {
     if (!this.activeEditor) return;
-    this.activeEditor.setHighContrastMode(isHighContrast);
+    // `setHighContrastMode` is typed as optional on Editor because the
+    // method is only present once the editor's mount hooks run. By the
+    // time this entry point is reachable the editor is fully constructed
+    // and the method is installed, so the optional chain is a no-op.
+    this.activeEditor.setHighContrastMode?.(isHighContrast);
     this.highContrastModeStore.setHighContrastMode(isHighContrast);
   }
 }

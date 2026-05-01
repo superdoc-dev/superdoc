@@ -52,6 +52,15 @@ const result = spawnSync(tscBin, ['--noEmit', '-p', tsconfigPath], {
   cwd: repoRoot,
 });
 
+// Fail fast if tsc itself could not run (ENOENT on the binary, signal,
+// permission denied, etc.). Without this guard, a missing `tsc` returns
+// `result.error` set, empty stdout/stderr, and the rest of the script
+// would happily report "OK" because it found zero parseable errors.
+if (result.error) {
+  console.error(`[check-jsdoc] failed to invoke tsc at ${tscBin}: ${result.error.message}`);
+  process.exit(1);
+}
+
 const output = `${result.stdout || ''}${result.stderr || ''}`;
 
 // Match each `path/to/file(line,col): error TSxxxx: ...` row. tsc emits
@@ -59,6 +68,17 @@ const output = `${result.stdout || ''}${result.stderr || ''}`;
 const allErrors = output
   .split('\n')
   .filter((line) => /\.[jt]sx?\(\d+,\d+\):\s+error\s+TS\d+:/.test(line));
+
+// Catch the second silent-pass mode: tsc exited non-zero but produced no
+// parseable diagnostics. That means the failure is structural (config
+// error, internal compiler crash, etc.) rather than a normal type-check
+// fail, and the gate cannot reason about it.
+if (result.status !== 0 && allErrors.length === 0) {
+  console.error('[check-jsdoc] tsc exited with a non-zero status but produced no parseable diagnostics.');
+  console.error(`Status: ${result.status}`);
+  console.error(`Output:\n${output || '(empty)'}`);
+  process.exit(1);
+}
 
 const checkedAbsolute = CHECKED_FILES.map((rel) => path.join(packageDir, rel));
 

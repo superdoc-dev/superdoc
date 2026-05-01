@@ -1,7 +1,73 @@
 ---
-title: Font Support
+title: Font support
+sidebarTitle: Font Support
+keywords: "fonts, font loading, calibri, cambria, aptos, font fallback, custom fonts, font dropdown, office fonts"
 ---
 
-Loading toolbar <a href="/editor/built-in-ui/toolbar#font-configuration">font config</a>...
+How fonts work in SuperDoc, and what to do when a document looks different from how it looks in Word.
 
-{(() => { window.location.href = '/editor/built-in-ui/toolbar#font-configuration'; })()}
+## How SuperDoc handles fonts
+
+SuperDoc preserves the font names that come from your DOCX. It does **not** load font files for you. Whether `Calibri Light` actually renders as Calibri Light depends on whether that font is available to the browser running your app.
+
+Three things you control:
+
+1. **Loading font files** — your app's responsibility (CSS `@font-face`, `<link>` tags, font CDNs).
+2. **Toolbar dropdown options** — which fonts users can pick from in the built-in toolbar.
+3. **Font fallbacks** — what happens when the requested font isn't available.
+
+## The "why does it look different from Word?" question
+
+Most of the time, the document references Microsoft fonts (Calibri, Cambria, Aptos, Times New Roman) that aren't on the user's system or aren't loaded by your host page. The browser falls back to a default font and the layout shifts.
+
+Two common fixes:
+
+- **License the actual fonts** and load them via `@font-face`. This gives pixel-accurate rendering.
+- **Load free substitutes** with similar metrics. [Carlito](https://fonts.google.com/specimen/Carlito) for Calibri, [Caladea](https://fonts.google.com/specimen/Caladea) for Cambria are common Google Fonts swaps.
+
+```css
+/* Example: load Carlito as a Calibri substitute */
+@font-face {
+  font-family: 'Calibri';
+  src: url('https://fonts.gstatic.com/s/carlito/...') format('woff2');
+  font-display: swap;
+}
+```
+
+## Configuring the toolbar font dropdown
+
+The built-in toolbar has a font picker. By default it shows a curated list. To customize the available fonts:
+
+```javascript
+new SuperDoc({
+  selector: '#editor',
+  document: 'contract.docx',
+  modules: {
+    toolbar: {
+      fonts: ['Inter', 'Calibri', 'Times New Roman', 'Custom Brand Font'],
+    },
+  },
+});
+```
+
+<Note>
+  Adding a font to the toolbar dropdown does **not** load the font file. You still need to make the font available to the browser via CSS. The dropdown only controls which fonts the user can select.
+</Note>
+
+For the full toolbar font configuration options, see [Built-in UI > Toolbar](/editor/built-in-ui/toolbar#font-configuration).
+
+## Setting fonts programmatically
+
+To set fonts from code (e.g. an AI agent applying a brand font), use the Document API:
+
+```javascript
+editor.doc.format.fontFamily({ target, value: 'Inter' });
+```
+
+For the full font formatting API surface, see [Document API > Available operations](/document-api/available-operations).
+
+## Where to next
+
+- [Built-in UI > Toolbar](/editor/built-in-ui/toolbar) — toolbar font configuration
+- [Document API > Available operations](/document-api/available-operations) — programmatic font formatting
+- [Editor > Theming](/editor/theming/overview) — set the default font for SuperDoc's UI chrome

@@ -530,15 +530,16 @@
  * @property {boolean} [pdf.textLayer] Enable text layer rendering (default: false)
  * @property {number} [pdf.outputScale] Canvas render scale (quality)
  * @property {CollaborationConfig} [collaboration] Collaboration module configuration
- * @property {Object} [toolbar] Toolbar module configuration. Each field has a top-level `Config.toolbar*` alias kept for backwards compatibility; the `modules.toolbar.*` form is preferred for new code.
- * @property {string | HTMLElement} [toolbar.selector] DOM element (or selector) to render the toolbar into. Falls back to `Config.toolbar` if omitted.
+ * @property {Object} [toolbar] Toolbar module configuration. The `selector`, `groups`, `icons`, and `texts` fields fall back to the top-level `Config.toolbar`, `Config.toolbarGroups`, `Config.toolbarIcons`, and `Config.toolbarTexts` aliases respectively if not set here.
+ * @property {string} [toolbar.selector] CSS selector (id or class) for the DOM element to render the toolbar into. Must be a string selector, not an `HTMLElement` reference. Falls back to `Config.toolbar` if omitted.
  * @property {string[]} [toolbar.excludeItems] Toolbar item ids to hide from the default set.
- * @property {string[]} [toolbar.groups] Ordered list of toolbar group ids (e.g. `['edit', 'format', 'insert']`). Falls back to `Config.toolbarGroups`.
+ * @property {string[] | Record<string, string[]>} [toolbar.groups] Either an ordered list of group ids (`['left', 'center', 'right']`) or an object map of group id to item ids (`{ left: [...], center: [...], right: [...] }`) that overrides the default group composition. Default groups are `'left' | 'center' | 'right'`. Falls back to `Config.toolbarGroups`.
  * @property {Record<string, unknown>} [toolbar.icons] Icon overrides keyed by toolbar item id. Falls back to `Config.toolbarIcons`.
  * @property {Record<string, string>} [toolbar.texts] Text/label overrides keyed by toolbar item id. Falls back to `Config.toolbarTexts`.
  * @property {Array<{ name: string, value: string }>} [toolbar.fonts] Custom font list rendered in the font-family dropdown.
  * @property {boolean} [toolbar.hideButtons] Hide buttons that overflow the available width (default: true).
  * @property {boolean} [toolbar.responsiveToContainer] Recompute the visible toolbar item set on container resize (default: false).
+ * @property {Array<Record<string, unknown>>} [toolbar.customButtons] Custom toolbar buttons appended to the default item set. Each entry is a `ToolbarItem`-shaped object (see the consumer-facing toolbar docs for the full shape). The internal `ToolbarItem` type is not yet on the public surface; this typedef accepts the structural shape consumers already pass through `modules.toolbar.customButtons`.
  * @property {Object} [links] Link click popover configuration
  * @property {LinkPopoverResolver} [links.popoverResolver] Custom resolver for the link click popover.
  * @property {ContextMenuConfig} [contextMenu] Context menu module configuration

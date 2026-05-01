@@ -2,7 +2,7 @@
 
 Self-hosted collaboration using `@superdoc-dev/superdoc-yjs-collaboration` with a Fastify WebSocket server.
 
-**Docs:** [Self-hosted with SuperDoc Yjs](https://docs.superdoc.dev/guides/superdoc-yjs)
+**Docs:** [Self-hosted with SuperDoc Yjs](https://docs.superdoc.dev/guides/collaboration/superdoc-yjs)
 
 ## Getting started
 

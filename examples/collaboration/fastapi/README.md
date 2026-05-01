@@ -10,7 +10,7 @@ and writes `/download` output to `examples/collaboration/fastapi/.superdoc-state
 ## 1) FastAPI setup
 
 ```bash
-cd /Users/nickjbernal/dev/superdoc/examples/collaboration/fastapi
+cd examples/collaboration/fastapi
 uv venv .venv
 source .venv/bin/activate
 uv pip install -r requirements.txt
@@ -23,14 +23,14 @@ uv pip install -r requirements.txt
 From the FastAPI folder:
 
 ```bash
-cd /Users/nickjbernal/dev/superdoc/examples/collaboration/fastapi
+cd examples/collaboration/fastapi
 ./run-yjs-hub.sh
 ```
 
 Or manually:
 
 ```bash
-cd /Users/nickjbernal/dev/superdoc/examples/collaboration/fastapi/yjs-hub
+cd examples/collaboration/fastapi/yjs-hub
 pnpm install --ignore-workspace --lockfile=false
 pnpm run deps:up
 pnpm run dev
@@ -62,7 +62,7 @@ export YHUB_AUTH_TOKEN="my-demo-token"
 ### Option B: Internal repo dev collab server
 
 ```bash
-cd /Users/nickjbernal/dev/superdoc
+cd <repo-root>
 pnpm dev:collab
 ```
 
@@ -71,7 +71,7 @@ If you use Option B, update `main.py` to point back to that server URL.
 ## 3) Start FastAPI
 
 ```bash
-cd /Users/nickjbernal/dev/superdoc/examples/collaboration/fastapi
+cd examples/collaboration/fastapi
 uvicorn main:app --reload --port 8000
 ```
 

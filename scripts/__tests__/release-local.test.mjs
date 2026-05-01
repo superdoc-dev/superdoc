@@ -215,35 +215,13 @@ test('stable tooling bundle emits SDK release coordinates so Python publish does
   );
 });
 
-test('stable tooling bundle workflow has its own concurrency slot', async () => {
-  const content = await readRepoFile('.github/workflows/release-stable.yml');
-  assert.equal(
-    content.includes('    paths:'),
-    false,
-    '.github/workflows/release-stable.yml: tooling bundle must run on every stable push, not a filtered path subset',
-  );
-  assert.ok(
-    content.includes("contains(github.event.head_commit.message, '[skip ci]')"),
-    '.github/workflows/release-stable.yml: concurrency must detect [skip ci] writeback pushes',
-  );
-  assert.ok(
-    content.includes("|| 'release-stable-tooling'"),
-    '.github/workflows/release-stable.yml: tooling bundle must have its own concurrency group, not share with per-package workflows',
-  );
-  assert.ok(
-    content.includes('id-token: write'),
-    '.github/workflows/release-stable.yml: must request id-token: write so SDK PyPI OIDC publish works',
-  );
-  assert.ok(
-    content.includes(
-      "if: github.event_name == 'workflow_dispatch' || !contains(github.event.head_commit.message, '[skip ci]')",
-    ),
-    '.github/workflows/release-stable.yml: skip-ci writeback runs must still no-op when they start',
-  );
-});
-
-test('per-package stable workflows trigger on stable with their own concurrency groups', async () => {
-  const perPackageStableWorkflows = [
+test('stable release workflows serialize on the shared release-stable concurrency group', async () => {
+  // All stable release workflows must share `release-stable` so
+  // @semantic-release/git pushes to `stable` queue instead of racing on
+  // `git push origin stable`. Per-workflow groups parallelize and leave
+  // npm/PyPI tarballs published with no corresponding tag/commit pushed.
+  const stableWorkflows = [
+    '.github/workflows/release-stable.yml',
     '.github/workflows/release-superdoc.yml',
     '.github/workflows/release-react.yml',
     '.github/workflows/release-esign.yml',
@@ -251,22 +229,57 @@ test('per-package stable workflows trigger on stable with their own concurrency 
     '.github/workflows/release-vscode-ext.yml',
   ];
 
+  for (const file of stableWorkflows) {
+    const content = await readRepoFile(file);
+    assert.ok(
+      content.includes("'release-stable'"),
+      `${file}: stable runs must use the shared 'release-stable' concurrency group`,
+    );
+  }
+
+  const bundle = await readRepoFile('.github/workflows/release-stable.yml');
+  assert.equal(
+    bundle.includes('    paths:'),
+    false,
+    '.github/workflows/release-stable.yml: tooling bundle must run on every stable push, not a filtered path subset',
+  );
+  assert.ok(
+    bundle.includes("contains(github.event.head_commit.message, '[skip ci]')"),
+    '.github/workflows/release-stable.yml: concurrency must detect [skip ci] writeback pushes',
+  );
+  assert.ok(
+    bundle.includes('id-token: write'),
+    '.github/workflows/release-stable.yml: must request id-token: write so SDK PyPI OIDC publish works',
+  );
+  assert.ok(
+    bundle.includes(
+      "if: github.event_name == 'workflow_dispatch' || !contains(github.event.head_commit.message, '[skip ci]')",
+    ),
+    '.github/workflows/release-stable.yml: skip-ci writeback runs must still no-op when they start',
+  );
+
+  const perPackageStableWorkflows = [
+    '.github/workflows/release-superdoc.yml',
+    '.github/workflows/release-react.yml',
+    '.github/workflows/release-esign.yml',
+    '.github/workflows/release-template-builder.yml',
+    '.github/workflows/release-vscode-ext.yml',
+  ];
   for (const file of perPackageStableWorkflows) {
     const content = await readRepoFile(file);
     assert.ok(
       /branches:\s*\n\s*-\s*main\s*\n\s*-\s*stable/.test(content),
-      `${file}: must trigger on push to both main and stable so wrappers release independently of the tooling bundle`,
-    );
-    assert.equal(
-      content.includes("github.ref_name == 'stable' && 'release-stable'"),
-      false,
-      `${file}: must NOT share the release-stable group - GitHub cancels pending peers, dropping releases on multi-trigger pushes`,
-    );
-    assert.ok(
-      /group:\s*\$\{\{\s*format\('\{0\}-\{1\}',\s*github\.workflow,\s*github\.ref\)\s*\}\}/.test(content),
-      `${file}: must use a per-workflow concurrency group keyed on github.workflow + github.ref`,
+      `${file}: must trigger on push to both main and stable`,
     );
   }
+});
+
+test('MCP releaserc builds the package before publish so the tarball ships dist/', async () => {
+  const content = await readRepoFile('apps/mcp/.releaserc.cjs');
+  assert.ok(
+    content.includes("prepareCmd: 'pnpm run build'"),
+    'apps/mcp/.releaserc.cjs: must build apps/mcp/dist before publish - the root pnpm run build does not produce it',
+  );
 });
 
 test('stable recovery filters prerelease tags so *-next.* never resumes as @latest', async () => {

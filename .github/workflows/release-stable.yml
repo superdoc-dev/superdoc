@@ -19,12 +19,15 @@ permissions:
   id-token: write
 
 concurrency:
-  # Bundle has its own queue slot. Per-package stable workflows for superdoc
-  # and the wrappers use their own concurrency groups so they don't cancel
-  # each other (or the bundle) in pending.
+  # All stable release workflows (this bundle + superdoc + react/esign/
+  # template-builder/vscode-ext) share the `release-stable` group so that
+  # @semantic-release/git pushes to `stable` serialize. Per-workflow groups
+  # would let multiple workflows publish in parallel and race on
+  # `git push origin stable`, leaving npm/PyPI tarballs published without
+  # a corresponding tag/commit pushed.
   # [skip ci] writeback runs use a per-run group so they cannot evict a real
   # pending stable push while the bundle is active.
-  group: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[skip ci]') && format('release-stable-tooling-skip-{0}', github.run_id) || 'release-stable-tooling' }}
+  group: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[skip ci]') && format('release-stable-skip-{0}', github.run_id) || 'release-stable' }}
   cancel-in-progress: false
 
 jobs:

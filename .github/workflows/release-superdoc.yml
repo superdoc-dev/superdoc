@@ -31,11 +31,10 @@ permissions:
   pull-requests: write
 
 concurrency:
-  # Per-workflow concurrency on stable so this workflow doesn't share a queue
-  # slot with the tooling bundle or the wrapper workflows. GitHub allows
-  # only one running + one pending per group, so a shared `release-stable`
-  # group would cancel pending peers on multi-trigger pushes.
-  group: ${{ format('{0}-{1}', github.workflow, github.ref) }}
+  # Stable releases share the `release-stable` group so @semantic-release/git
+  # pushes to `stable` serialize across workflows; per-workflow groups would
+  # let releases race on `git push origin stable`.
+  group: ${{ github.ref_name == 'stable' && 'release-stable' || format('{0}-{1}', github.workflow, github.ref) }}
   cancel-in-progress: ${{ github.ref_name != 'stable' }}
 
 jobs:

@@ -3,6 +3,29 @@ title: Quick start
 keywords: "superdoc quickstart, docx editor tutorial, word editor setup, javascript docx quick start, mcp docx, ai agent docx, llm document editing, superdoc init"
 ---
 
+## Pick your surface
+
+```mermaid
+flowchart TD
+    Start{What are you building?}
+    Agent[AI agent or LLM tool<br/>that edits DOCX]
+    Server[Server / script<br/>editing DOCX]
+    Editor[Embedded DOCX editor<br/>in a web app]
+    UI{Custom UI<br/>or built-in?}
+
+    Start -->|AI agents| Agent
+    Start -->|Backend code| Server
+    Start -->|Browser editor| Editor
+    Editor --> UI
+    UI -->|Built-in is fine| BuiltIn[SuperDoc + Modules]
+    UI -->|My own React UI| BYO[SuperDoc + Bring Your Own UI]
+
+    Agent --> AgentTools["MCP server<br/>or @superdoc-dev/sdk"]
+    Server --> SDK["@superdoc-dev/sdk<br/>or @superdoc-dev/cli"]
+```
+
+Each branch below maps to a specific section.
+
 ## Using an AI coding agent?
 
 Run this first. It generates an AGENTS.md that teaches your agent how to use SuperDoc.

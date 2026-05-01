@@ -16,6 +16,22 @@ Three layers, each with one job:
 | **`superdoc/ui`** | Browser-only UI controller. Subscriptions, viewport geometry, per-command state. | Bind your UI to live editor state. |
 | **Built-in modules** | Optional UI SuperDoc renders for you. | You want SuperDoc's UI as-is. |
 
+```mermaid
+flowchart TD
+    YourUI["Your React components<br/>toolbar, sidebar, panels"]
+    Modules["Built-in modules<br/>SuperDoc-rendered UI"]
+    Hooks["superdoc/ui/react<br/>useSuperDocCommand, useSuperDocComments,<br/>useSuperDocTrackChanges, ..."]
+    Controller["superdoc/ui<br/>browser controller<br/>(createSuperDocUI)"]
+    DocAPI["Document API<br/>editor.doc.*"]
+    Engine["SuperDoc engine<br/>OOXML, layout, editor state"]
+
+    YourUI --> Hooks
+    Hooks --> Controller
+    Controller --> DocAPI
+    Modules --> DocAPI
+    DocAPI --> Engine
+```
+
 The Document API mutates the document. `superdoc/ui` is what your UI subscribes to. Built-in modules are SuperDoc's own consumer of those layers. Turn them off when you're providing your own.
 
 ## What it looks like

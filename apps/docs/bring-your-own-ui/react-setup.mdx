@@ -90,6 +90,28 @@ export function BoldButton() {
 
 `createSuperDocUI({ superdoc })` runs once when the editor reports ready. It tears down on unmount. You don't manage the lifecycle.
 
+```mermaid
+flowchart TD
+    Provider["SuperDocUIProvider<br/>(at app root)"]
+    Mount["Editor mount<br/>SuperDocEditor + onReady"]
+    Controller["Controller<br/>createSuperDocUI"]
+    Toolbar["Toolbar<br/>useSuperDocCommand"]
+    Comments["Comments sidebar<br/>useSuperDocComments"]
+    Review["Review panel<br/>useSuperDocTrackChanges"]
+    Selection["Selection-aware buttons<br/>useSuperDocSelection"]
+    DocBar["Document bar<br/>useSuperDocDocument"]
+
+    Mount -. setSuperDoc on ready .-> Provider
+    Provider --> Controller
+    Controller --> Toolbar
+    Controller --> Comments
+    Controller --> Review
+    Controller --> Selection
+    Controller --> DocBar
+```
+
+One provider, one controller, many components. Each hook subscribes to the slice it needs and re-renders only when that slice changes.
+
 <Tip>
 Components that render before the editor is ready see `useSuperDocUI()` return `null`. Guard with `if (!ui) return null;` or render a pending state.
 </Tip>

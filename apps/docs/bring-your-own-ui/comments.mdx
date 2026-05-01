@@ -78,6 +78,27 @@ function AddCommentButton() {
 
 A textarea takes focus. The editor selection clears. By the time the user presses "Post", the live selection is gone. Capture it first.
 
+```mermaid
+sequenceDiagram
+    actor User
+    participant Editor
+    participant Composer as Composer<br/>(textarea)
+    participant Capture as ui.selection.capture()
+    participant API as ui.comments.createFromCapture
+
+    User->>Editor: select "review this"
+    Editor-->>User: live selection visible
+    User->>Composer: click "Comment"
+    Composer->>Capture: capture()
+    Note over Capture: snapshot frozen<br/>(target, marks, quotedText)
+    Composer->>Composer: textarea.focus()
+    Note over Editor: live selection clears
+    User->>Composer: type, click Submit
+    Composer->>API: createFromCapture(captured, { text })
+    API->>Editor: comment created at captured.target
+    Editor-->>User: comment marker rendered
+```
+
 ```tsx
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { SelectionCapture } from 'superdoc/ui';

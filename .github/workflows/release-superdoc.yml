@@ -1,5 +1,6 @@
-# Auto-releases on push to main (@next channel).
-# Stable releases are orchestrated centrally by release-stable.yml.
+# Auto-releases on push to main (@next) and stable (@latest).
+# docs-stable is advanced by promote-stable-docs.yml when this workflow
+# completes a real release on stable (not a no-op or PR preview).
 # Manual PR preview: dispatch with pr_number to publish @pr-<number>
 name: 📦 Release superdoc
 
@@ -7,6 +8,7 @@ on:
   push:
     branches:
       - main
+      - stable
     paths:
       - 'packages/superdoc/**'
       - 'packages/layout-engine/**'
@@ -29,7 +31,11 @@ permissions:
   pull-requests: write
 
 concurrency:
-  group: ${{ github.ref_name == 'stable' && 'release-stable' || format('{0}-{1}', github.workflow, github.ref) }}
+  # Per-workflow concurrency on stable so this workflow doesn't share a queue
+  # slot with the tooling bundle or the wrapper workflows. GitHub allows
+  # only one running + one pending per group, so a shared `release-stable`
+  # group would cancel pending peers on multi-trigger pushes.
+  group: ${{ format('{0}-{1}', github.workflow, github.ref) }}
   cancel-in-progress: ${{ github.ref_name != 'stable' }}
 
 jobs:

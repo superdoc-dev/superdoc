@@ -4,27 +4,24 @@ sidebarTitle: Overview
 keywords: "supereditor class, prosemirror docx, tiptap alternative, editor commands, document manipulation api"
 ---
 
-<Tip>
-**Looking for programmatic document access?** The [Document API](/document-api/overview) is coming soon with a stable, engine-agnostic interface for querying and manipulating documents.
-</Tip>
+SuperEditor is the low-level DOCX editing engine that powers SuperDoc. Most apps reach for one of the higher layers first; this page documents what's underneath when you need it.
 
-SuperEditor is the core DOCX editing engine that powers SuperDoc. Use it directly when you need fine-grained control.
+## Pick the right layer
 
-## When to use SuperEditor vs SuperDoc
+**Use SuperDoc + Bring Your Own UI for custom React UI.** `<SuperDocEditor>` (or `new SuperDoc(...)`) plus `superdoc/ui/react` gives you typed hooks for toolbar, comments, tracked changes, selection, and document control. See [Bring Your Own UI](/bring-your-own-ui/overview).
 
-**Use SuperDoc (recommended):**
+**Use the Document API for document mutations.** [`editor.doc.*`](/document-api/overview) is the stable, request/response surface that's identical on server, client, and AI agents. It's the recommended path for any insert / replace / format / comment / tracked-change operation.
 
-- Standard DOCX editing needs
-- Built-in UI and modules
-- Collaboration and comments
-- Quick integration
+**Use SuperDoc with built-in modules** when the standard look is fine. See the [Modules](/modules/overview) section.
 
-**Use SuperEditor directly:**
+**Reach for SuperEditor directly when:**
 
-- Custom UI implementation
-- Framework-specific integrations
-- [Headless/server-side processing](/core/supereditor/configuration#headless-converter-nodejs)
-- Custom extension development
+- You're integrating with a framework SuperDoc doesn't yet wrap.
+- You need [headless/server-side processing](/core/supereditor/configuration#headless-converter-nodejs).
+- You're building a custom extension that taps into ProseMirror plugins or schemas.
+- You explicitly need engine internals the higher layers don't surface.
+
+For a typical React DOCX editor with a custom UI, you don't need this page — start at [Bring Your Own UI](/bring-your-own-ui/overview).
 
 ## Quick start
 

@@ -432,6 +432,7 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
           behindDoc: entry.block.anchor?.behindDoc === true,
           zIndex: getFragmentZIndex(entry.block),
           metadata,
+          sourceAnchor: entry.block.sourceAnchor,
         };
         if (pmRange.pmStart != null) fragment.pmStart = pmRange.pmStart;
         if (pmRange.pmEnd != null) fragment.pmEnd = pmRange.pmEnd;
@@ -451,6 +452,7 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
           behindDoc: entry.block.anchor?.behindDoc === true,
           zIndex: getFragmentZIndex(entry.block),
           drawingContentId: entry.block.drawingContentId,
+          sourceAnchor: entry.block.sourceAnchor,
         };
         if (pmRange.pmStart != null) fragment.pmStart = pmRange.pmStart;
         if (pmRange.pmEnd != null) fragment.pmEnd = pmRange.pmEnd;
@@ -553,6 +555,7 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
       x,
       y: state.cursorY + yOffset,
       width: fragmentWidth,
+      sourceAnchor: block.sourceAnchor,
       ...computeFragmentPmRange(block, lines, 0, lines.length),
     };
 
@@ -789,6 +792,7 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
 
         if (neededSpacingBefore > 0) {
           state.cursorY += neededSpacingBefore;
+          state.maxCursorY = Math.max(state.maxCursorY, state.cursorY);
           if (spacingDebugEnabled) {
             spacingDebugLog('spacingBefore applied', {
               blockId: block.id,
@@ -860,6 +864,7 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
       x: adjustedX,
       y: state.cursorY + borderExpansion.top,
       width: adjustedWidth,
+      sourceAnchor: block.sourceAnchor,
       ...computeFragmentPmRange(block, lines, fromLine, slice.toLine),
     };
 
@@ -907,6 +912,7 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
     state.page.fragments.push(fragment);
 
     state.cursorY += borderExpansion.top + fragmentHeight + borderExpansion.bottom;
+    state.maxCursorY = Math.max(state.maxCursorY, state.cursorY);
     lastState = state;
     fromLine = slice.toLine;
   }
@@ -929,6 +935,7 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
         appliedSpacingAfter = 0;
       } else {
         targetState.cursorY += spacingAfter;
+        targetState.maxCursorY = Math.max(targetState.maxCursorY, targetState.cursorY);
       }
       targetState.trailingSpacing = appliedSpacingAfter;
       if (spacingDebugEnabled) {

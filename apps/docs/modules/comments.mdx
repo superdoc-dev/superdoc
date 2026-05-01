@@ -5,6 +5,10 @@ keywords: "word comments api, document annotations, threaded discussions, commen
 
 Add Word-style commenting to documents with threaded discussions, replies, and resolution workflows.
 
+<Tip>
+Building your own comments sidebar in React? Skip this module and read [Bring Your Own UI › Comments](/bring-your-own-ui/comments) instead. It documents `useSuperDocComments`, `ui.selection.capture()`, and the typed posting flow.
+</Tip>
+
 ## Quick start
 
 ```javascript
@@ -140,19 +144,26 @@ modules: {
 
 ## Viewing mode visibility
 
-Comments are hidden by default when `documentMode` is `viewing`. Use the
-top-level `comments.visible` and `trackChanges.visible` flags to control what
-renders in read-only mode.
+Comments are hidden by default when `documentMode` is `viewing`. Use
+`comments.visible` and `modules.trackChanges.visible` to control what renders
+in read-only mode.
 
 ```javascript
 new SuperDoc({
   selector: "#viewer",
   document: "contract.docx",
   documentMode: "viewing",
-  comments: { visible: true },      // Standard comment threads
-  trackChanges: { visible: false }, // Tracked-change markup + threads
+  comments: { visible: true }, // Standard comment threads
+  modules: {
+    trackChanges: { visible: false }, // Tracked-change markup + threads
+  },
 });
 ```
+
+<Note>
+  The top-level `trackChanges` key still works as a deprecated alias for
+  `modules.trackChanges` and will emit a one-time console warning.
+</Note>
 
 ## Setting up the comments UI
 
@@ -274,6 +285,10 @@ const superdoc = new SuperDoc({
 </CodeGroup>
 
 ## API methods
+
+<Note>
+**For new code, prefer the typed paths.** Use `editor.doc.comments.*` for document mutations (server-and-client compatible, returns receipts) or `ui.comments.*` for React UI work (`createFromSelection`, `createFromCapture`, `reply`, `resolve`, `reopen`, `delete`). The chain commands below are kept for backwards compatibility and for code already written against `superdoc.activeEditor.commands.*`. See [Document API › Comments](/document-api/reference/index) and [Bring Your Own UI › Comments](/bring-your-own-ui/comments).
+</Note>
 
 These methods are available on the active editor's commands:
 

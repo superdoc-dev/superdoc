@@ -986,6 +986,10 @@ export interface ContentBlockAttrs extends InlineNodeAttributes {
   size?: ContentBlockSize | null;
   /** Background color */
   background?: string | null;
+  /** @internal VML attributes for legacy w:pict round-trip */
+  vmlAttributes?: Record<string, unknown> | null;
+  /** @internal Preserved inline style for legacy VML content */
+  style?: string | null;
   /** @internal Drawing content data */
   drawingContent?: unknown;
   /** @internal Attributes storage */

@@ -30,6 +30,7 @@ const NATIVE_SELECTION_STYLES = `
 .superdoc-layout *::-moz-selection {
   background: transparent;
 }
+
 `;
 
 let nativeSelectionStylesInjected = false;

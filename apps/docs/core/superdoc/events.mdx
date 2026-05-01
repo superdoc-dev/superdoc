@@ -5,6 +5,12 @@ keywords: "superdoc events, document events, editor callbacks, word editor liste
 
 SuperDoc uses an event system for lifecycle hooks and change notifications.
 
+<Note>
+**Driving live React UI state? Prefer `superdoc/ui` subscriptions.** `useSuperDocSelection`, `useSuperDocComments`, `useSuperDocTrackChanges`, `useSuperDocDocument`, and `useSuperDocCommand` give you typed, memoized, per-slice state with one re-render per change instead of a manual `superdoc.on('editor-update', ...)` loop. See [Bring Your Own UI](/bring-your-own-ui/overview).
+
+The events on this page are for lifecycle (`ready`, `editor-create`), integration (`error`, `comment-changed`), analytics, and compatibility with code that doesn't use the React surface.
+</Note>
+
 ## Subscribing to events
 
 <CodeGroup>

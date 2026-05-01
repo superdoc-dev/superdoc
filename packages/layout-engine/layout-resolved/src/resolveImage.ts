@@ -17,7 +17,7 @@ export function resolveImageItem(
 ): ResolvedImageItem {
   const { block } = requireResolvedBlockAndMeasure(blockMap, fragment.blockId, 'image', 'image', 'image');
 
-  return {
+  const item: ResolvedImageItem = {
     kind: 'fragment',
     fragmentKind: 'image',
     id: resolveImageFragmentId(fragment),
@@ -30,5 +30,10 @@ export function resolveImageItem(
     blockId: fragment.blockId,
     fragmentIndex,
     block,
+    sourceAnchor: fragment.sourceAnchor ?? block.sourceAnchor,
   };
+  if (fragment.pmStart != null) item.pmStart = fragment.pmStart;
+  if (fragment.pmEnd != null) item.pmEnd = fragment.pmEnd;
+  if (fragment.metadata != null) item.metadata = fragment.metadata;
+  return item;
 }

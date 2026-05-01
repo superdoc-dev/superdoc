@@ -32,7 +32,6 @@
 
 import {
   Engines,
-  OOXML_PCT_DIVISOR,
   type FlowBlock,
   type ParagraphBlock,
   type ParagraphSpacing,
@@ -59,7 +58,6 @@ import {
   type DrawingMeasure,
   type DrawingGeometry,
   type DropCapDescriptor,
-  type TableWidthAttr,
   type CellSpacing,
   type TableBorders,
   type TableBorderValue,
@@ -81,6 +79,18 @@ import { toCssFontFamily } from '@superdoc/font-utils';
 export { installNodeCanvasPolyfill } from './setup.js';
 import { clearMeasurementCache, getMeasuredTextWidth, setCacheSize } from './measurementCache.js';
 import { getFontMetrics, clearFontMetricsCache, type FontInfo } from './fontMetricsCache.js';
+import { computeAutoFitColumnWidths } from './autofit-columns.js';
+import { buildAutoFitWorkingGridInput, type WorkingTableGridInput } from './autofit-normalize.js';
+import { computeFixedTableColumnWidths } from './fixed-table-columns.js';
+import type { FixedLayoutResult } from './fixed-table-columns.js';
+import {
+  buildAutoFitTableResultCacheKey,
+  buildTableCellContentMetricsCacheKey,
+  getCachedAutoFitTableResult,
+  type TableAutoFitContentMetricsResult,
+  measureTableAutoFitContentMetrics,
+  setCachedAutoFitTableResult,
+} from './table-autofit-metrics.js';
 
 export { clearFontMetricsCache };
 
@@ -222,6 +232,7 @@ type TabStopPx = {
   pos: number; // px
   val: TabStop['val'];
   leader?: TabStop['leader'];
+  source?: TabStop['source'];
 };
 
 // Unused type - may be needed for future decimal tab implementation
@@ -982,6 +993,9 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
     block.attrs?.tabs as TabStop[],
     block.attrs?.tabIntervalTwips as number | undefined,
   );
+  const alignmentTabStopsPx = tabStops
+    .map((stop, index) => ({ stop, index }))
+    .filter(({ stop }) => stop.val === 'end' || stop.val === 'center' || stop.val === 'decimal');
   const decimalSeparator = sanitizeDecimalSeparator(block.attrs?.decimalSeparator);
 
   // Extract bar tab stops for paragraph-level rendering (OOXML: bars on all lines)
@@ -1077,10 +1091,13 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
     /** Tallest inline image on this line (pixels) */
     maxImageHeight?: number;
     maxWidth: number;
+    hasExplicitTabStops?: boolean;
     segments: Line['segments'];
     leaders?: Line['leaders'];
     /** Count of breakable spaces already included on this line (for justify-aware fitting) */
     spaceCount: number;
+    /** Internal marker for an empty line seeded by an explicit line break. */
+    isLineBreakPlaceholder?: boolean;
   } | null = null;
 
   // Helper to calculate effective available width based on current line count.
@@ -1230,7 +1247,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
   };
 
   // Expand runs to handle inline newlines as explicit break runs
-  const runsToProcess: Run[] = [];
+  let runsToProcess: Run[] = [];
   for (const run of normalizedRuns as Run[]) {
     if ((run as TextRun).text && typeof (run as TextRun).text === 'string' && (run as TextRun).text.includes('\n')) {
       const textRun = run as TextRun;
@@ -1259,6 +1276,58 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
       runsToProcess.push(run as Run);
     }
   }
+  if (runsToProcess.some((run) => isTextRun(run) && typeof run.text === 'string' && run.text.includes('\t'))) {
+    const expandedRuns: Run[] = [];
+    for (const run of runsToProcess) {
+      if (!isTextRun(run) || typeof run.text !== 'string' || !run.text.includes('\t')) {
+        expandedRuns.push(run);
+        continue;
+      }
+      const textRun = run as TextRun;
+      let buffer = '';
+      let cursor = textRun.pmStart ?? 0;
+      const text = textRun.text;
+      for (let i = 0; i < text.length; i += 1) {
+        const char = text[i];
+        if (char === '\t') {
+          if (buffer.length > 0) {
+            expandedRuns.push({
+              ...textRun,
+              text: buffer,
+              pmStart: cursor - buffer.length,
+              pmEnd: cursor,
+            });
+            buffer = '';
+          }
+          const tabRun: TabRun = {
+            kind: 'tab',
+            text: '\t',
+            pmStart: cursor,
+            pmEnd: cursor + 1,
+            tabStops: block.attrs?.tabs as TabStop[] | undefined,
+            indent,
+            leader: (textRun as unknown as TabRun)?.leader ?? null,
+            sdt: textRun.sdt,
+          };
+          expandedRuns.push(tabRun);
+          cursor += 1;
+          continue;
+        }
+        buffer += char;
+        cursor += 1;
+      }
+      if (buffer.length > 0) {
+        expandedRuns.push({
+          ...textRun,
+          text: buffer,
+          pmStart: cursor - buffer.length,
+          pmEnd: cursor,
+        });
+      }
+    }
+    runsToProcess = expandedRuns;
+  }
+  const totalTabRuns = runsToProcess.reduce((count, run) => (isTabRun(run) ? count + 1 : count), 0);
 
   /**
    * Trims trailing regular spaces from a line when it is finalized.
@@ -1306,7 +1375,23 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
     }
   };
 
-  // Process each run
+  // Word-compat heuristic (not ECMA-376 17.3.3.32): the last N tab characters in a
+  // paragraph bind to the last N explicit end/center/decimal stops. Needed for TOC
+  // entries where a right-aligned dot-leader stop coexists with default grid stops —
+  // strict greedy next-stop resolution would land the trailing tab on a default stop
+  // instead of the leader stop. Mirrored in layout-bridge/src/remeasure.ts.
+  const getAlignmentStopForOrdinal = (ordinal: number): { stop: TabStopPx; index: number } | null => {
+    if (alignmentTabStopsPx.length === 0 || totalTabRuns === 0 || !Number.isFinite(ordinal)) {
+      return null;
+    }
+    if (ordinal < 0 || ordinal >= totalTabRuns) return null;
+    const remainingTabs = totalTabRuns - ordinal - 1;
+    const targetIndex = alignmentTabStopsPx.length - 1 - remainingTabs;
+    if (targetIndex < 0 || targetIndex >= alignmentTabStopsPx.length) return null;
+    return alignmentTabStopsPx[targetIndex];
+  };
+
+  let sequentialTabIndex = 0;
   for (let runIndex = 0; runIndex < runsToProcess.length; runIndex++) {
     const run = runsToProcess[runIndex];
 
@@ -1388,6 +1473,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
         maxWidth: nextLineMaxWidth,
         segments: [],
         spaceCount: 0,
+        isLineBreakPlaceholder: true,
       };
       tabStopCursor = 0;
       pendingTabAlignment = null;
@@ -1395,6 +1481,15 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
       lastAppliedTabAlign = null;
       pendingRunSpacing = 0;
       continue;
+    }
+
+    // When a text/tab/atomic run follows an explicit lineBreak, currentLine is a
+    // placeholder line seeded with the break run index. Re-anchor it so line ranges
+    // start at the first visible run on the new line.
+    if (currentLine?.isLineBreakPlaceholder) {
+      currentLine.fromRun = runIndex;
+      currentLine.toRun = runIndex;
+      currentLine.isLineBreakPlaceholder = false;
     }
 
     // Handle tab runs specially
@@ -1411,28 +1506,51 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
           toRun: runIndex,
           toChar: 1,
           width: 0,
-          maxFontSize: 12, // Default font size for tabs
+          maxFontSize: lastFontSize,
+          maxFontInfo: hasSeenTextRun ? undefined : fallbackFontInfo,
           maxWidth: getEffectiveWidth(lines.length === 0 ? initialAvailableWidth : bodyContentWidth),
           segments: [],
           spaceCount: 0,
         };
       }
 
-      // Advance to next tab stop using the same logic as inline "\t" handling
+      // Advance to the appropriate tab stop (explicit alignment stops take precedence for trailing tabs)
       const originX = currentLine.width;
       // Use first-line effective indent (accounts for hanging) on first line, body indent otherwise
       const effectiveIndent = lines.length === 0 ? indentLeft + rawFirstLineOffset : indentLeft;
       const absCurrentX = currentLine.width + effectiveIndent;
-      const { target, nextIndex, stop } = getNextTabStopPx(absCurrentX, tabStops, tabStopCursor);
-      tabStopCursor = nextIndex;
+      let stop: TabStopPx | undefined;
+      let target: number;
+      const resolvedTabIndex =
+        typeof (run as TabRun).tabIndex === 'number' && Number.isFinite((run as TabRun).tabIndex)
+          ? (run as TabRun).tabIndex!
+          : sequentialTabIndex;
+      // Keep the sequential counter in sync with explicit tabIndex values so mixed
+      // inputs (explicit + synthetic TabRuns) don't produce out-of-order ordinals.
+      // Mirrors consumeTabOrdinal() in layout-bridge/src/remeasure.ts.
+      sequentialTabIndex = Math.max(sequentialTabIndex, resolvedTabIndex + 1);
+      const forcedAlignment = getAlignmentStopForOrdinal(resolvedTabIndex);
+      if (forcedAlignment && forcedAlignment.stop.pos > absCurrentX + TAB_EPSILON) {
+        stop = forcedAlignment.stop;
+        target = forcedAlignment.stop.pos;
+        tabStopCursor = forcedAlignment.index + 1;
+      } else {
+        const nextStop = getNextTabStopPx(absCurrentX, tabStops, tabStopCursor);
+        target = nextStop.target;
+        tabStopCursor = nextStop.nextIndex;
+        stop = nextStop.stop;
+      }
       const maxAbsWidth = currentLine.maxWidth + effectiveIndent;
       const clampedTarget = Math.min(target, maxAbsWidth);
       const tabAdvance = Math.max(0, clampedTarget - absCurrentX);
       currentLine.width = roundValue(currentLine.width + tabAdvance);
+      if (stop?.source === 'explicit') {
+        currentLine.hasExplicitTabStops = true;
+      }
       // Persist measured tab width on the TabRun for downstream consumers/tests
       (run as TabRun & { width?: number }).width = tabAdvance;
 
-      currentLine.maxFontSize = Math.max(currentLine.maxFontSize, 12);
+      currentLine.maxFontSize = Math.max(currentLine.maxFontSize, lastFontSize);
       currentLine.toRun = runIndex;
       currentLine.toChar = 1; // tab is a single character
       let currentLeader: LeaderDecoration | null = null;
@@ -2430,6 +2548,9 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
         const clampedTarget = Math.min(target, maxAbsWidth);
         const tabAdvance = Math.max(0, clampedTarget - absCurrentX);
         currentLine.width = roundValue(currentLine.width + tabAdvance);
+        if (stop?.source === 'explicit') {
+          currentLine.hasExplicitTabStops = true;
+        }
 
         currentLine.maxFontInfo = updateMaxFontInfo(currentLine.maxFontSize, currentLine.maxFontInfo, run);
         currentLine.maxFontSize = Math.max(currentLine.maxFontSize, lineHeightFontSize(run));
@@ -2500,331 +2621,10 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
   };
 }
 
-/**
- * Validates and extracts a numeric value from a table width attribute.
- *
- * Performs runtime validation to ensure the value is a valid, finite number
- * that can be used in calculations. This guards against NaN, Infinity, and
- * invalid numeric values that could break layout calculations.
- *
- * @param attr - Table width attribute object (potentially unsafe)
- * @returns Valid numeric value or undefined if validation fails
- *
- * @example
- * ```typescript
- * validateTableWidthValue({ width: 2500, type: 'pct' }) // Returns: 2500
- * validateTableWidthValue({ value: 300, type: 'px' }) // Returns: 300
- * validateTableWidthValue({ width: NaN, type: 'pct' }) // Returns: undefined
- * validateTableWidthValue({ width: -100, type: 'pct' }) // Returns: undefined
- * validateTableWidthValue({}) // Returns: undefined
- * ```
- */
-function validateTableWidthValue(attr: TableWidthAttr): number | undefined {
-  const value = attr.width ?? attr.value;
-
-  // Must be a number, finite (not NaN/Infinity), and positive
-  if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
-    return value;
-  }
-
-  return undefined;
-}
-
-/**
- * Resolves table width from OOXML attributes to actual pixel width.
- *
- * Handles two types of width specifications:
- * 1. Percentage width (type: 'pct'): OOXML stores percentages as 1/50ths of a percent
- *    - 5000 = 100% (full width)
- *    - 2500 = 50% (half width)
- *    - 1000 = 20% (one-fifth width)
- *    The percentage is applied to the available maxWidth to get pixel width.
- *
- * 2. Explicit pixel width (type: 'px' or 'pixel'): Direct pixel value used as-is.
- *
- * Includes runtime validation to guard against invalid values (NaN, Infinity, negative).
- *
- * @param attrs - Table block attributes (may be undefined)
- * @param maxWidth - Available width in pixels for percentage calculations
- * @returns Resolved pixel width or undefined if no valid width specified
- *
- * @example
- * ```typescript
- * // 50% of 600px = 300px
- * resolveTableWidth({ tableWidth: { value: 2500, type: 'pct' } }, 600) // Returns: 300
- *
- * // Explicit 400px
- * resolveTableWidth({ tableWidth: { width: 400, type: 'px' } }, 600) // Returns: 400
- *
- * // Invalid: NaN value
- * resolveTableWidth({ tableWidth: { value: NaN, type: 'pct' } }, 600) // Returns: undefined
- * ```
- */
-function resolveTableWidth(attrs: TableBlock['attrs'], maxWidth: number): number | undefined {
-  // Type guard: validate attrs.tableWidth matches TableWidthAttr structure
-  const tableWidthAttr = attrs?.tableWidth;
-  if (!tableWidthAttr || typeof tableWidthAttr !== 'object') {
-    return undefined;
-  }
-
-  const typedAttr = tableWidthAttr as TableWidthAttr;
-  const validValue = validateTableWidthValue(typedAttr);
-
-  if (validValue === undefined) {
-    return undefined;
-  }
-
-  if (typedAttr.type === 'pct') {
-    // Convert OOXML percentage to pixels
-    // OOXML_PCT_DIVISOR (5000) = 100%
-    return Math.round(maxWidth * (validValue / OOXML_PCT_DIVISOR));
-  } else if (typedAttr.type === 'px' || typedAttr.type === 'pixel' || typedAttr.type === 'dxa') {
-    // Explicit pixel width - use directly
-    // Note: 'dxa' values are already converted to pixels by tbl-translator during import
-    return validValue;
-  }
-
-  return undefined;
-}
-
 async function measureTableBlock(block: TableBlock, constraints: MeasureConstraints): Promise<TableMeasure> {
   const maxWidth = typeof constraints === 'number' ? constraints : constraints.maxWidth;
-  // Resolve percentage or explicit pixel table width
-  const resolvedTableWidth = resolveTableWidth(block.attrs, maxWidth);
-
-  let columnWidths: number[];
-
-  // Determine actual column count from table structure (accounting for colspan)
-  const maxCellCount = Math.max(
-    1,
-    Math.max(...block.rows.map((r) => r.cells.reduce((sum, cell) => sum + (cell.colSpan ?? 1), 0))),
-  );
-
-  // Effective target width: use resolvedTableWidth if set (from percentage or explicit px),
-  // but never exceed maxWidth (available column space)
-  const effectiveTargetWidth = resolvedTableWidth != null ? Math.min(resolvedTableWidth, maxWidth) : maxWidth;
-
-  // Use provided column widths from OOXML w:tblGrid if available
-  if (block.columnWidths && block.columnWidths.length > 0) {
-    columnWidths = [...block.columnWidths];
-
-    // Check if table has fixed layout (preserves exact widths)
-    // Use resolvedTableWidth to check for valid explicit width (validated and non-undefined)
-    const hasExplicitWidth = resolvedTableWidth != null;
-    const hasFixedLayout = block.attrs?.tableLayout === 'fixed';
-
-    // For tables with explicit/percentage width or fixed layout, scale to target width
-    if (hasExplicitWidth || hasFixedLayout) {
-      const totalWidth = columnWidths.reduce((a, b) => a + b, 0);
-      const tableWidthType = (block.attrs?.tableWidth as TableWidthAttr | undefined)?.type;
-      const shouldScaleDown = totalWidth > effectiveTargetWidth;
-      const shouldScaleUp =
-        totalWidth < effectiveTargetWidth &&
-        effectiveTargetWidth > 0 &&
-        (tableWidthType === 'pct' || (hasExplicitWidth && !hasFixedLayout));
-
-      // Scale to effectiveTargetWidth (resolved percentage or explicit width)
-      // - Always scale down if too wide
-      // - Only scale up for percentage widths or auto-layout tables
-      if ((shouldScaleDown || shouldScaleUp) && effectiveTargetWidth > 0 && totalWidth > 0) {
-        const scale = effectiveTargetWidth / totalWidth;
-        columnWidths = columnWidths.map((w) => Math.max(1, Math.round(w * scale)));
-        // Normalize to exact target width (handle rounding errors)
-        const scaledSum = columnWidths.reduce((a, b) => a + b, 0);
-        if (scaledSum !== effectiveTargetWidth && columnWidths.length > 0) {
-          const diff = effectiveTargetWidth - scaledSum;
-          columnWidths[columnWidths.length - 1] = Math.max(1, columnWidths[columnWidths.length - 1] + diff);
-        }
-      }
-    } else {
-      // For auto-layout tables, adjust column widths to match actual column count
-      if (columnWidths.length < maxCellCount) {
-        // Pad missing columns with equal distribution of remaining space
-        const usedWidth = columnWidths.reduce((a, b) => a + b, 0);
-        const remainingWidth = Math.max(0, effectiveTargetWidth - usedWidth);
-        const missingColumns = maxCellCount - columnWidths.length;
-        const paddingWidth = Math.max(1, Math.floor(remainingWidth / missingColumns));
-        columnWidths.push(...Array.from({ length: missingColumns }, () => paddingWidth));
-      } else if (columnWidths.length > maxCellCount) {
-        // Truncate extra column widths
-        columnWidths = columnWidths.slice(0, maxCellCount);
-      }
-
-      // Auto-layout: only scale DOWN if columns exceed available width.
-      // Do NOT scale up — explicit w:tblGrid column widths are authoritative.
-      // Tables without w:tblGrid already arrive with page-width columns via
-      // the fallback grid builder in tableFallbackHelpers.
-      const totalWidth = columnWidths.reduce((a, b) => a + b, 0);
-      if (totalWidth > effectiveTargetWidth && effectiveTargetWidth > 0) {
-        const scale = effectiveTargetWidth / totalWidth;
-        columnWidths = columnWidths.map((w) => Math.max(1, Math.round(w * scale)));
-        const scaledSum = columnWidths.reduce((a, b) => a + b, 0);
-        if (scaledSum !== effectiveTargetWidth && columnWidths.length > 0) {
-          const diff = effectiveTargetWidth - scaledSum;
-          columnWidths[columnWidths.length - 1] = Math.max(1, columnWidths[columnWidths.length - 1] + diff);
-        }
-      }
-    }
-  } else {
-    // Fallback: Equal distribution based on max cells in any row
-    const columnWidth = Math.max(1, Math.floor(effectiveTargetWidth / maxCellCount));
-    columnWidths = Array.from({ length: maxCellCount }, () => columnWidth);
-  }
-
-  // AutoFit: content-based column sizing for auto-layout tables (ECMA-376 §17.18.87).
-  // When tableLayout is not 'fixed', columns must be wide enough to fit their content.
-  // The spec algorithm:
-  //   1. Calculate maximum content width per column (natural width, no line wrapping)
-  //   2. Use max content widths as target column widths
-  //   3. If total exceeds available width, proportionally scale down
-  //   4. Table can grow up to page width to accommodate content
-  //
-  // IMPORTANT — INTENTIONALLY LIMITED SCOPE (SD-2174):
-  // We only apply AutoFit when the grid column widths are clearly placeholder values
-  // (total grid width < 10% of available page width). Some DOCX generators (e.g. non-Word
-  // tools) emit dummy w:gridCol values like w=100 for every column, paired with a tiny
-  // w:tblW percentage, producing columns of ~7px that render as vertical slivers.
-  //
-  // A full AutoFit implementation would run on ALL non-fixed tables, but doing so today
-  // changes the layout of ~30 documents in our test corpus because the rest of the table
-  // pipeline (grid priority, percentage width scaling, cell measurement) was built without
-  // AutoFit in mind. Broadening this to all tables requires:
-  //   - VRT baselines for every affected document
-  //   - Verifying each change improves Word parity (not just "different")
-  //   - Possibly adjusting the column width priority logic in pm-adapter
-  //
-  // Until then, we only rescue tables that are clearly broken. If you're here because a
-  // table renders too narrow, consider lowering the threshold or removing this gate — but
-  // run pnpm test:layout first to understand the blast radius.
-  const isFixedLayout = block.attrs?.tableLayout === 'fixed';
-  const totalGridWidth = columnWidths.reduce((a, b) => a + b, 0);
-  const gridLooksLikePlaceholder = totalGridWidth < maxWidth * 0.1;
-
-  if (!isFixedLayout && gridLooksLikePlaceholder) {
-    const gridColCount = columnWidths.length;
-    const maxContentWidths = new Array(gridColCount).fill(0);
-
-    // Measure maximum content width per column (natural width with no wrapping).
-    // For each single-span cell, measure content with unconstrained width. The widest
-    // resulting line is the maximum content width per ECMA-376 §17.18.87.
-    const autoFitRowspanTracker: number[] = new Array(gridColCount).fill(0);
-
-    for (const row of block.rows) {
-      let colIndex = 0;
-
-      for (const cell of row.cells) {
-        const colspan = cell.colSpan ?? 1;
-        const rowspan = cell.rowSpan ?? 1;
-
-        // Skip columns occupied by rowspans
-        while (colIndex < gridColCount && autoFitRowspanTracker[colIndex] > 0) {
-          autoFitRowspanTracker[colIndex]--;
-          colIndex++;
-        }
-        if (colIndex >= gridColCount) break;
-
-        // Per spec: only single-span cells define column widths directly
-        if (colspan === 1) {
-          const cellPadding = cell.attrs?.padding ?? DEFAULT_CELL_PADDING;
-          const paddingH = (cellPadding.left ?? 4) + (cellPadding.right ?? 4);
-
-          const cellBlocks = cell.blocks ?? (cell.paragraph ? [cell.paragraph] : []);
-          let cellMaxWidth = 0;
-
-          for (const cellBlock of cellBlocks) {
-            // Measure with large maxWidth to get natural content width (no wrapping)
-            const maxMeasure = await measureBlock(cellBlock, { maxWidth: 99999, maxHeight: Infinity });
-
-            let blockMaxWidth = 0;
-            if (maxMeasure.kind === 'paragraph') {
-              for (const line of (maxMeasure as ParagraphMeasure).lines) {
-                if (line.width > blockMaxWidth) blockMaxWidth = line.width;
-              }
-            } else if (maxMeasure.kind === 'image' || maxMeasure.kind === 'drawing') {
-              blockMaxWidth = maxMeasure.width;
-            } else if (maxMeasure.kind === 'table') {
-              blockMaxWidth = maxMeasure.totalWidth;
-            } else if (maxMeasure.kind === 'list') {
-              for (const item of (maxMeasure as ListMeasure).items) {
-                if (item.paragraph) {
-                  // line.width is text-only; add marker and indent space back
-                  const gutterWidth = (item.indentLeft ?? 0) + (item.markerWidth ?? 0);
-                  for (const line of item.paragraph.lines) {
-                    const lineTotal = gutterWidth + line.width;
-                    if (lineTotal > blockMaxWidth) blockMaxWidth = lineTotal;
-                  }
-                }
-              }
-            }
-
-            if (blockMaxWidth > cellMaxWidth) cellMaxWidth = blockMaxWidth;
-          }
-
-          const totalWidth = cellMaxWidth + paddingH;
-          if (totalWidth > maxContentWidths[colIndex]) {
-            maxContentWidths[colIndex] = totalWidth;
-          }
-        }
-
-        // Track rowspans
-        if (rowspan > 1) {
-          for (let c = 0; c < colspan && colIndex + c < gridColCount; c++) {
-            autoFitRowspanTracker[colIndex + c] = rowspan - 1;
-          }
-        }
-
-        colIndex += colspan;
-      }
-
-      // Decrement remaining rowspan trackers
-      for (let col = colIndex; col < gridColCount; col++) {
-        if (autoFitRowspanTracker[col] > 0) {
-          autoFitRowspanTracker[col]--;
-        }
-      }
-    }
-
-    // Apply content-based widths: expand columns that are narrower than their
-    // maximum content width, capped at available width (maxWidth = page width).
-    const contentTotal = maxContentWidths.reduce((a, b) => a + b, 0);
-
-    if (contentTotal > 0) {
-      if (contentTotal <= maxWidth) {
-        // All content fits within the page — use natural content widths directly.
-        for (let i = 0; i < gridColCount; i++) {
-          if (maxContentWidths[i] > columnWidths[i]) {
-            columnWidths[i] = maxContentWidths[i];
-          }
-        }
-        // Guard: per-column max(content, grid) can exceed maxWidth even when
-        // contentTotal alone fits. Scale down if the expanded total overflows.
-        const expandedTotal = columnWidths.reduce((a, b) => a + b, 0);
-        if (expandedTotal > maxWidth && gridColCount > 0) {
-          const scale = maxWidth / expandedTotal;
-          for (let i = 0; i < gridColCount; i++) {
-            columnWidths[i] = Math.max(1, Math.round(columnWidths[i] * scale));
-          }
-          const scaledSum = columnWidths.reduce((a, b) => a + b, 0);
-          if (scaledSum !== maxWidth) {
-            const diff = maxWidth - scaledSum;
-            columnWidths[gridColCount - 1] = Math.max(1, columnWidths[gridColCount - 1] + diff);
-          }
-        }
-      } else {
-        // Content exceeds page width — proportionally scale to fit within maxWidth.
-        const scale = maxWidth / contentTotal;
-        for (let i = 0; i < gridColCount; i++) {
-          columnWidths[i] = Math.max(1, Math.round(maxContentWidths[i] * scale));
-        }
-        // Normalize to exact target width
-        const scaledSum = columnWidths.reduce((a, b) => a + b, 0);
-        if (scaledSum !== maxWidth && gridColCount > 0) {
-          const diff = maxWidth - scaledSum;
-          columnWidths[gridColCount - 1] = Math.max(1, columnWidths[gridColCount - 1] + diff);
-        }
-      }
-    }
-  }
+  const workingInput = buildAutoFitWorkingGridInput(block, { maxWidth });
+  const columnWidths = await resolveRuntimeTableColumnWidths(block, workingInput);
 
   // Derive grid column count from computed columnWidths (handles both explicit tblGrid and fallback cases)
   const gridColumnCount = columnWidths.length;
@@ -2853,15 +2653,26 @@ async function measureTableBlock(block: TableBlock, constraints: MeasureConstrai
   const spanConstraints: Array<{ startRow: number; rowSpan: number; requiredHeight: number }> = [];
   for (let rowIndex = 0; rowIndex < block.rows.length; rowIndex++) {
     const row = block.rows[rowIndex];
+    const normalizedRow = workingInput.rows[rowIndex];
     const cellMeasures: TableCellMeasure[] = [];
     let gridColIndex = 0; // Track position in the grid
 
-    for (const cell of row.cells) {
+    for (let cellIndex = 0; cellIndex < row.cells.length; cellIndex++) {
+      const cell = row.cells[cellIndex];
       const colspan = cell.colSpan ?? 1;
       const rowspan = cell.rowSpan ?? 1;
+      const normalizedCell = normalizedRow?.cells?.[cellIndex];
+      const preferredStartColumn = normalizedCell?.startColumn ?? gridColIndex;
 
       // Skip grid columns that are occupied by rowspans from previous rows
-      // before processing this cell
+      // and advance to the fixed-layout logical start column before processing this cell.
+      while (gridColIndex < gridColumnCount && gridColIndex < preferredStartColumn) {
+        if (rowspanTracker[gridColIndex] > 0) {
+          rowspanTracker[gridColIndex]--;
+        }
+        gridColIndex++;
+      }
+
       while (gridColIndex < gridColumnCount && rowspanTracker[gridColIndex] > 0) {
         rowspanTracker[gridColIndex]--;
         gridColIndex++;
@@ -3053,6 +2864,72 @@ async function measureTableBlock(block: TableBlock, constraints: MeasureConstrai
     totalHeight,
     cellSpacingPx: cellSpacingPx > 0 ? cellSpacingPx : undefined,
     tableBorderWidths: borderWidthH > 0 || borderWidthV > 0 ? tableBorderWidths : undefined,
+  };
+}
+
+/**
+ * Resolve the final runtime width vector for a table before downstream cell
+ * measurement begins.
+ *
+ * This is the single measurement-stage switch between:
+ * - fixed layout: preferred widths remain authoritative
+ * - AutoFit: content metrics participate in width resolution
+ */
+async function resolveRuntimeTableColumnWidths(
+  block: TableBlock,
+  workingInput: WorkingTableGridInput,
+): Promise<number[]> {
+  const fixedLayout = computeFixedTableColumnWidths(workingInput);
+  if (workingInput.layoutMode === 'fixed') {
+    return fixedLayout.columnWidths;
+  }
+
+  const { contentMetrics, cellMetricKeys } = await buildMeasuredAutoFitContentMetrics(block, workingInput, fixedLayout);
+  const cacheKey = buildAutoFitTableResultCacheKey(block, {
+    maxWidth: workingInput.maxTableWidth,
+    cellMetricKeys,
+    workingInput,
+    fixedLayout,
+  });
+  const cached = getCachedAutoFitTableResult(cacheKey);
+  if (cached) {
+    return cached.columnWidths;
+  }
+
+  const result = computeAutoFitColumnWidths({
+    workingInput,
+    fixedLayout,
+    contentMetrics: {
+      rowMetrics: contentMetrics.rowMetrics,
+    },
+  });
+
+  setCachedAutoFitTableResult(cacheKey, {
+    columnWidths: result.columnWidths,
+    totalWidth: result.totalWidth,
+  });
+  return result.columnWidths;
+}
+
+/**
+ * Attach measured min/max content widths to normalized AutoFit rows.
+ *
+ * The normalization layer already contributes skipped-column metadata and
+ * preferred widths. This helper supplies the remaining content metrics required
+ * by the pure AutoFit solver.
+ */
+async function buildMeasuredAutoFitContentMetrics(
+  block: TableBlock,
+  workingInput: WorkingTableGridInput,
+  fixedLayout: FixedLayoutResult,
+): Promise<{
+  contentMetrics: TableAutoFitContentMetricsResult;
+  cellMetricKeys: string[];
+}> {
+  const contentMetrics = await measureTableAutoFitContentMetrics(block, workingInput, fixedLayout, measureBlock);
+  return {
+    contentMetrics,
+    cellMetricKeys: contentMetrics.cellMetricKeys,
   };
 }
 
@@ -3657,6 +3534,7 @@ const buildTabStopsPx = (indent?: ParagraphIndent, tabs?: TabStop[], tabInterval
     pos: twipsToPx(stop.pos),
     val: stop.val,
     leader: stop.leader,
+    source: stop.source,
   }));
 };
 

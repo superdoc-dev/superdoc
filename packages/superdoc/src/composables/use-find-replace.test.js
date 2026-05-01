@@ -93,7 +93,11 @@ describe('useFindReplace', () => {
       const call = manager.open.mock.calls[0][0];
       expect(call.mode).toBe('floating');
       expect(call.floating.placement).toBe('top-right');
-      expect(call.floating.closeOnEscape).toBe(true);
+      // closeOnEscape lives at the request top level — surface-manager
+      // only reads `request.closeOnEscape`, not `request.floating.closeOnEscape`.
+      // Asserting the nested location (as this test did before SD-2870) was
+      // verifying the call shape but not the runtime effect.
+      expect(call.closeOnEscape).toBe(true);
     });
 
     it('does not create second surface when already open', async () => {
@@ -577,6 +581,18 @@ describe('useFindReplace', () => {
       // We can verify by opening again
       findReplace.open();
       expect(focusFn).toHaveBeenCalled();
+    });
+
+    it('runs search sessions with visible search model', async () => {
+      handle.findQuery.value = 'tracked';
+      await new Promise((resolve) => setTimeout(resolve, 180));
+
+      expect(editor.commands.setSearchSession).toHaveBeenCalledWith(
+        'tracked',
+        expect.objectContaining({
+          searchModel: 'visible',
+        }),
+      );
     });
   });
 

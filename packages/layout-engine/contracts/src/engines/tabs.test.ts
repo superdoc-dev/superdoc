@@ -14,6 +14,7 @@ describe('engines-tabs computeTabStops', () => {
 
     expect(stops[0].pos).toBeGreaterThanOrEqual(360);
     expect(stops.find((stop) => stop.pos === 1440)?.val).toBe('end');
+    expect(stops.find((stop) => stop.pos === 1440)?.source).toBe('explicit');
   });
 
   it('filters out clear tabs', () => {
@@ -72,6 +73,7 @@ describe('engines-tabs computeTabStops', () => {
     const firstDefault = stops.find((stop) => stop.pos === 720);
     expect(firstDefault?.val).toBe('start');
     expect(firstDefault?.leader).toBe('none');
+    expect(firstDefault?.source).toBe('default');
   });
 
   it('preserves tab stops between (left - hanging) and left when hanging indent exists', () => {
@@ -145,6 +147,45 @@ describe('engines-tabs computeTabStops', () => {
     expect(stops.find((stop) => stop.pos === 4320)).toBeDefined(); // Second default at 4320
   });
 
+  it('adds an implicit stop at the hanging-indent body text start', () => {
+    const stops = computeTabStops({
+      explicitStops: [],
+      defaultTabInterval: 720,
+      paragraphIndent: { left: 1000, hanging: 500 },
+    });
+
+    const implicitBodyStop = stops.find((stop) => stop.pos === 1000);
+    expect(implicitBodyStop).toMatchObject({
+      val: 'start',
+      leader: 'none',
+      source: 'default',
+    });
+    expect(stops[0]?.pos).toBe(1000);
+    expect(stops.find((stop) => stop.pos === 720)).toBeUndefined();
+    expect(stops.find((stop) => stop.pos === 1440)).toBeDefined();
+  });
+
+  it('does not duplicate the implicit hanging stop when it lands on the default grid', () => {
+    const stops = computeTabStops({
+      explicitStops: [],
+      defaultTabInterval: 720,
+      paragraphIndent: { left: 3600, hanging: 3600 },
+    });
+
+    expect(stops.filter((stop) => stop.pos === 3600)).toHaveLength(1);
+  });
+
+  it('does not synthesize the implicit hanging stop when it was explicitly cleared', () => {
+    const stops = computeTabStops({
+      explicitStops: [{ val: 'clear', pos: 1000 }],
+      defaultTabInterval: 720,
+      paragraphIndent: { left: 1000, hanging: 500 },
+    });
+
+    expect(stops.find((stop) => stop.pos === 1000)).toBeUndefined();
+    expect(stops.find((stop) => stop.pos === 1440)).toBeDefined();
+  });
+
   it('combines explicit stops in hanging range with defaults starting at leftIndent', () => {
     // When explicit stops exist in the hanging indent range AND there's a gap before leftIndent,
     // explicit stops should be preserved, but defaults should start from leftIndent.
@@ -161,10 +202,48 @@ describe('engines-tabs computeTabStops', () => {
     expect(stops.find((stop) => stop.pos === 340)).toBeDefined();
     // Explicit stop at 709 should be preserved
     expect(stops.find((stop) => stop.pos === 709)).toBeDefined();
-    // First default should be at 709 + 720 = 1429
+    // First default should align with Word's 0.5" grid offset from leftIndent (709 + 720 = 1429).
     expect(stops.find((stop) => stop.pos === 1429)).toBeDefined();
-    // No default at 720 (before leftIndent, and no explicit stop there)
+    // No duplicate default at 720 because explicit stop at 709 occupies that slot
     expect(stops.filter((stop) => stop.pos === 720).length).toBe(0);
+  });
+
+  it('still generates default start tabs before explicit right tabs (TOC regression)', () => {
+    const stops = computeTabStops({
+      explicitStops: [{ val: 'end', pos: 10593, leader: 'dot' }], // TOC1 style tab
+      defaultTabInterval: 720,
+      paragraphIndent: { left: 454, hanging: 454 }, // first line begins near 0"
+    });
+
+    const firstDefault = stops.find((stop) => stop.val === 'start' && stop.leader === 'none');
+    expect(firstDefault).toBeDefined();
+    expect(firstDefault?.pos).toBe(720); // Word default 0.5" tab stop
+    expect(firstDefault!.pos).toBeLessThan(10593);
+    expect(stops.find((stop) => stop.val === 'end' && stop.pos === 10593)).toBeDefined();
+  });
+
+  it('preserves legacy defaults-after-rightmost behavior when a start stop is present', () => {
+    // Paragraphs with a start-aligned explicit stop (e.g. signature lines, invoice
+    // headers) must keep the pre-fix behavior: defaults begin after the rightmost
+    // explicit stop, not from zero. Regression guard for the hasStartAlignedExplicit
+    // branch added alongside the TOC fix.
+    const explicitStops = [
+      { val: 'start' as const, pos: 500, leader: 'none' as const },
+      { val: 'end' as const, pos: 5000, leader: 'dot' as const },
+    ];
+    const stops = computeTabStops({
+      explicitStops,
+      defaultTabInterval: 720,
+      paragraphIndent: { left: 0 },
+    });
+
+    const explicitPositions = new Set(explicitStops.map((s) => s.pos));
+    // No *default* (non-explicit) stop should appear between 0 and the rightmost
+    // explicit stop (5000). Explicit stops themselves are allowed.
+    const generatedBelowEnd = stops.filter((stop) => stop.pos < 5000 && !explicitPositions.has(stop.pos));
+    expect(generatedBelowEnd).toHaveLength(0);
+    // Defaults should resume at 5720 (5000 + 720 interval).
+    expect(stops.find((stop) => stop.val === 'start' && stop.pos === 5720)).toBeDefined();
   });
 });
 

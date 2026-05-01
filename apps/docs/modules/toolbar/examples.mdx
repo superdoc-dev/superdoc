@@ -1,80 +1,14 @@
 ---
 title: Headless Toolbar Examples
 sidebarTitle: Examples
-keywords: "toolbar examples, react toolbar, vue toolbar, svelte toolbar, shadcn toolbar, mui toolbar, custom toolbar examples"
+keywords: "toolbar examples, vue toolbar, svelte toolbar, custom toolbar examples"
 ---
 
-Five examples, five frameworks, five toolbar patterns. Pick the one closest to your stack.
+Framework-agnostic patterns built on `createHeadlessToolbar()`. Pick the one closest to your stack.
 
-## React + shadcn/ui
-
-Classic top ribbon, like Google Docs. Toggle groups for formatting, select dropdowns for fonts, popovers for colors.
-
-**Stack:** React, Radix primitives + Tailwind CSS, Lucide icons
-
-```tsx
-const toolbar = createHeadlessToolbar({ superdoc, commands: COMMANDS });
-const [snapshot, setSnapshot] = useState(toolbar.getSnapshot());
-
-useEffect(() => {
-  const unsub = toolbar.subscribe(({ snapshot: s }) => setSnapshot(s));
-  return unsub;
-}, []);
-
-// In JSX:
-<ToggleGroup value={activeFormats} onValueChange={() => {}}>
-  <ToggleGroup.Item value="bold" onClick={() => toolbar.execute('bold')}>
-    <Bold />
-  </ToggleGroup.Item>
-  <ToggleGroup.Item value="italic" onClick={() => toolbar.execute('italic')}>
-    <Italic />
-  </ToggleGroup.Item>
-</ToggleGroup>
-```
-
-<Card
-  title="Full source"
-  icon="external-link"
-  href="https://github.com/superdoc-dev/superdoc/tree/main/examples/advanced/headless-toolbar/react-shadcn"
->
-  React + shadcn/ui example
-</Card>
-
-## React + MUI
-
-Floating bubble bar. Compact Material Design Paper component above the editor with toggle buttons and selects.
-
-**Stack:** React, MUI Material, Material Icons
-
-```tsx
-<Paper elevation={3} sx={{ borderRadius: 3, px: 1, py: 0.5 }}>
-  <ToggleButtonGroup value={activeFormats} onChange={handleFormats}>
-    <ToggleButton value="bold"><FormatBold /></ToggleButton>
-    <ToggleButton value="italic"><FormatItalic /></ToggleButton>
-    <ToggleButton value="underline"><FormatUnderlined /></ToggleButton>
-  </ToggleButtonGroup>
-
-  <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
-
-  <Select
-    value={fontFamily}
-    size="small"
-    onChange={(e) => toolbar.execute('font-family', e.target.value)}
-  >
-    {FONT_FAMILIES.map(f => (
-      <MenuItem key={f.value} value={f.value}>{f.label}</MenuItem>
-    ))}
-  </Select>
-</Paper>
-```
-
-<Card
-  title="Full source"
-  icon="external-link"
-  href="https://github.com/superdoc-dev/superdoc/tree/main/examples/advanced/headless-toolbar/react-mui"
->
-  React + MUI example
-</Card>
+<Note>
+**On React?** Reach for [Bring Your Own UI › Toolbar and commands](/bring-your-own-ui/toolbar-and-commands) instead. The typed React surface (`useSuperDocCommand`, `ui.commands.register`) re-renders one button per command, ships with selection / comments / track-changes hooks, and works with any design system (shadcn, MUI, Mantine, Tailwind). The headless examples below are for non-React stacks.
+</Note>
 
 ## Vue + Vuetify
 
@@ -201,10 +135,15 @@ pnpm install
 pnpm dev
 ```
 
-Replace `<example-name>` with `react-shadcn`, `react-mui`, `vue-vuetify`, `svelte-shadcn`, or `vanilla`.
+Replace `<example-name>` with `vue-vuetify`, `svelte-shadcn`, or `vanilla`.
 
 ## Next steps
 
-<Card title="Headless toolbar API reference" icon="code" href="/modules/toolbar/headless">
-  Full command table, snapshot shape, and helper utilities
-</Card>
+<CardGroup cols={2}>
+  <Card title="Bring Your Own UI (React)" icon="react" href="/bring-your-own-ui/toolbar-and-commands">
+    The recommended path for React apps. Typed hooks, custom commands, selection-aware buttons.
+  </Card>
+  <Card title="Headless toolbar API reference" icon="code" href="/modules/toolbar/headless">
+    Full command table, snapshot shape, and helper utilities.
+  </Card>
+</CardGroup>

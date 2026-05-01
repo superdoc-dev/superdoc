@@ -25,7 +25,7 @@ export function resolveTableItem(
 ): ResolvedTableItem {
   const { block, measure } = requireResolvedBlockAndMeasure(blockMap, fragment.blockId, 'table', 'table', 'table');
 
-  return {
+  const item: ResolvedTableItem = {
     kind: 'fragment',
     fragmentKind: 'table',
     id: resolveTableFragmentId(fragment),
@@ -41,5 +41,11 @@ export function resolveTableItem(
     measure,
     cellSpacingPx: measure.cellSpacingPx ?? getCellSpacingPx(block.attrs?.cellSpacing),
     effectiveColumnWidths: fragment.columnWidths ?? measure.columnWidths,
+    sourceAnchor: fragment.sourceAnchor ?? block.sourceAnchor,
   };
+  if (fragment.pmStart != null) item.pmStart = fragment.pmStart;
+  if (fragment.pmEnd != null) item.pmEnd = fragment.pmEnd;
+  if (fragment.continuesFromPrev != null) item.continuesFromPrev = fragment.continuesFromPrev;
+  if (fragment.continuesOnNext != null) item.continuesOnNext = fragment.continuesOnNext;
+  return item;
 }

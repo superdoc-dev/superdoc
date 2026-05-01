@@ -1,7 +1,25 @@
-import type { FlowBlock, Fragment, Layout, Measure, Page, PageMargins, ResolvedLayout } from '@superdoc/contracts';
+import type {
+  FlowBlock,
+  Fragment,
+  Layout,
+  Measure,
+  PageMargins,
+  ResolvedLayout,
+  Page,
+  ResolvedPaintItem,
+} from '@superdoc/contracts';
 import { DomPainter } from './renderer.js';
+import { resolveLayout } from '@superdoc/layout-resolved';
 import type { PageStyles } from './styles.js';
-import type { DomPainterInput, PaintSnapshot, PositionMapping, RulerOptions, FlowMode } from './renderer.js';
+import type {
+  DomPainterInput,
+  PageDecorationPayload,
+  PageDecorationProvider,
+  PaintSnapshot,
+  PositionMapping,
+  RulerOptions,
+  FlowMode,
+} from './renderer.js';
 
 // Re-export constants
 export { DOM_CLASS_NAMES } from './constants.js';
@@ -55,32 +73,7 @@ export type { PmPositionValidationStats } from './pm-position-validation.js';
 
 export type LayoutMode = 'vertical' | 'horizontal' | 'book';
 export type { FlowMode } from './renderer.js';
-export type PageDecorationPayload = {
-  fragments: Fragment[];
-  height: number;
-  /**
-   * Decoration fragments are expressed in header/footer-local coordinates.
-   * Header/footer layout normalizes page- and margin-relative anchors before
-   * they reach the painter.
-   */
-  /** Optional measured content height; when provided, footer content will be bottom-aligned within its box. */
-  contentHeight?: number;
-  offset?: number;
-  marginLeft?: number;
-  contentWidth?: number;
-  headerFooterRefId?: string;
-  sectionType?: string;
-  /** Minimum Y coordinate from layout; negative when content extends above y=0 */
-  minY?: number;
-  box?: { x: number; y: number; width: number; height: number };
-  hitRegion?: { x: number; y: number; width: number; height: number };
-};
-
-export type PageDecorationProvider = (
-  pageNumber: number,
-  pageMargins?: PageMargins,
-  page?: Page,
-) => PageDecorationPayload | null;
+export type { PageDecorationPayload, PageDecorationProvider } from './renderer.js';
 
 export type DomPainterOptions = {
   /**
@@ -139,7 +132,7 @@ type LegacyDomPainterState = {
   resolvedLayout: ResolvedLayout | null;
 };
 
-type BlockMeasurePair = {
+type OptionalBlockMeasurePair = {
   blocks: FlowBlock[];
   measures: Measure[];
 };
@@ -178,14 +171,17 @@ function assertRequiredBlockMeasurePair(label: string, blocks: FlowBlock[], meas
 }
 
 function normalizeOptionalBlockMeasurePair(
-  label: 'header' | 'footer',
+  label: 'body' | 'header' | 'footer',
   blocks: FlowBlock[] | undefined,
   measures: Measure[] | undefined,
-): BlockMeasurePair | undefined {
+): OptionalBlockMeasurePair | undefined {
   const hasBlocks = blocks !== undefined;
   const hasMeasures = measures !== undefined;
 
   if (hasBlocks !== hasMeasures) {
+    if (label === 'body') {
+      throw new Error('blocks and measures must both be provided or both be omitted.');
+    }
     throw new Error(`${label}Blocks and ${label}Measures must both be provided or both be omitted.`);
   }
 
@@ -207,7 +203,23 @@ function createEmptyResolvedLayout(flowMode: FlowMode | undefined, pageGap: numb
 }
 
 function isDomPainterInput(value: DomPainterInput | Layout): value is DomPainterInput {
-  return 'resolvedLayout' in value && 'sourceLayout' in value && 'blocks' in value && 'measures' in value;
+  return 'resolvedLayout' in value && 'sourceLayout' in value;
+}
+
+function normalizeDomPainterInput(input: DomPainterInput): DomPainterInput {
+  const body = normalizeOptionalBlockMeasurePair('body', input.blocks, input.measures);
+  const header = normalizeOptionalBlockMeasurePair('header', input.headerBlocks, input.headerMeasures);
+  const footer = normalizeOptionalBlockMeasurePair('footer', input.footerBlocks, input.footerMeasures);
+
+  return {
+    ...input,
+    blocks: body?.blocks,
+    measures: body?.measures,
+    headerBlocks: header?.blocks,
+    headerMeasures: header?.measures,
+    footerBlocks: footer?.blocks,
+    footerMeasures: footer?.measures,
+  };
 }
 
 function buildLegacyPaintInput(
@@ -216,8 +228,25 @@ function buildLegacyPaintInput(
   flowMode: FlowMode | undefined,
   pageGap: number | undefined,
 ): DomPainterInput {
+  // Derive a resolved layout from the legacy block/measure state when the caller
+  // has not supplied one via `setResolvedLayout`. The painter now reads all body
+  // fragment data from the resolved layout, so an empty resolved layout would
+  // produce a blank render.
+  let resolvedLayout: ResolvedLayout;
+  if (legacyState.resolvedLayout) {
+    resolvedLayout = legacyState.resolvedLayout;
+  } else if (legacyState.blocks.length === 0 && legacyState.measures.length === 0) {
+    resolvedLayout = createEmptyResolvedLayout(flowMode, pageGap);
+  } else {
+    resolvedLayout = resolveLayout({
+      layout,
+      flowMode: flowMode ?? 'paginated',
+      blocks: legacyState.blocks,
+      measures: legacyState.measures,
+    });
+  }
   return {
-    resolvedLayout: legacyState.resolvedLayout ?? createEmptyResolvedLayout(flowMode, pageGap),
+    resolvedLayout,
     sourceLayout: layout,
     blocks: legacyState.blocks,
     measures: legacyState.measures,
@@ -233,29 +262,83 @@ export const createDomPainter = (options: DomPainterOptions): DomPainterHandle =
     throw new Error('DomPainter requires the same number of blocks and measures');
   }
 
+  const legacyState: LegacyDomPainterState = {
+    blocks: options.blocks ?? [],
+    measures: options.measures ?? [],
+    headerBlocks: undefined,
+    headerMeasures: undefined,
+    footerBlocks: undefined,
+    footerMeasures: undefined,
+    resolvedLayout: null,
+  };
+
+  let currentPaintInput: DomPainterInput | null = null;
+
+  const resolveDecorationItems = (
+    fragments: readonly Fragment[],
+    kind: 'header' | 'footer',
+  ): ResolvedPaintItem[] | undefined => {
+    const input = currentPaintInput;
+    if (!input) return undefined;
+
+    const decorationBlocks = kind === 'header' ? input.headerBlocks : input.footerBlocks;
+    const decorationMeasures = kind === 'header' ? input.headerMeasures : input.footerMeasures;
+    const mergedBlocks = [...(input.blocks ?? []), ...(decorationBlocks ?? [])];
+    const mergedMeasures = [...(input.measures ?? []), ...(decorationMeasures ?? [])];
+    if (mergedBlocks.length === 0 || mergedBlocks.length !== mergedMeasures.length) {
+      return undefined;
+    }
+
+    const fakeLayout: Layout = {
+      pageSize: input.sourceLayout.pageSize,
+      pages: [{ number: 1, fragments: [...fragments] as Fragment[] }] as Page[],
+    } as Layout;
+
+    try {
+      const resolved = resolveLayout({
+        layout: fakeLayout,
+        flowMode: input.resolvedLayout.flowMode,
+        blocks: mergedBlocks,
+        measures: mergedMeasures,
+      });
+      return resolved.pages[0]?.items;
+    } catch {
+      return undefined;
+    }
+  };
+
+  const wrapProvider = (
+    provider: PageDecorationProvider | undefined,
+    kind: 'header' | 'footer',
+  ): PageDecorationProvider | undefined => {
+    if (!provider) return undefined;
+
+    return (pageNumber, pageMargins, page) => {
+      const payload = provider(pageNumber, pageMargins, page);
+      if (!payload || payload.items) return payload;
+      const items = resolveDecorationItems(payload.fragments, kind);
+      return items ? { ...payload, items } : payload;
+    };
+  };
+
   const painter = new DomPainter({
     pageStyles: options.pageStyles,
     layoutMode: options.layoutMode,
     flowMode: options.flowMode,
     pageGap: options.pageGap,
-    headerProvider: options.headerProvider,
-    footerProvider: options.footerProvider,
+    headerProvider: wrapProvider(options.headerProvider, 'header'),
+    footerProvider: wrapProvider(options.footerProvider, 'footer'),
     virtualization: options.virtualization,
     ruler: options.ruler,
     onPaintSnapshot: options.onPaintSnapshot,
   });
 
-  const legacyState: LegacyDomPainterState = {
-    blocks: options.blocks ?? [],
-    measures: options.measures ?? [],
-    resolvedLayout: null,
-  };
-
   return {
     paint(input: DomPainterInput | Layout, mount: HTMLElement, mapping?: PositionMapping) {
       const normalizedInput = isDomPainterInput(input)
-        ? input
+        ? normalizeDomPainterInput(input)
         : buildLegacyPaintInput(input, legacyState, options.flowMode, options.pageGap);
+      currentPaintInput = normalizedInput;
       painter.paint(normalizedInput, mount, mapping);
     },
     setData(
@@ -269,7 +352,6 @@ export const createDomPainter = (options: DomPainterOptions): DomPainterHandle =
       assertRequiredBlockMeasurePair('body', blocks, measures);
       const normalizedHeader = normalizeOptionalBlockMeasurePair('header', headerBlocks, headerMeasures);
       const normalizedFooter = normalizeOptionalBlockMeasurePair('footer', footerBlocks, footerMeasures);
-
       legacyState.blocks = blocks;
       legacyState.measures = measures;
       legacyState.headerBlocks = normalizedHeader?.blocks;
@@ -281,7 +363,7 @@ export const createDomPainter = (options: DomPainterOptions): DomPainterHandle =
       legacyState.resolvedLayout = resolvedLayout;
     },
     setProviders(header?: PageDecorationProvider, footer?: PageDecorationProvider) {
-      painter.setProviders(header, footer);
+      painter.setProviders(wrapProvider(header, 'header'), wrapProvider(footer, 'footer'));
     },
     setVirtualizationPins(pageIndices: number[] | null | undefined) {
       painter.setVirtualizationPins(pageIndices);

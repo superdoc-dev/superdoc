@@ -276,6 +276,7 @@ describe('remeasureParagraph', () => {
       // "A" = 10px, tab advances to 48px, "B" starts at 48px
       // Total width should be ~48px + 10px = 58px
       expect(measure.lines[0].width).toBeGreaterThan(48);
+      expect(measure.lines[0].hasExplicitTabStops).toBe(true);
     });
 
     it('advances cursor for multiple tabs in same line sequentially', () => {
@@ -329,6 +330,7 @@ describe('remeasureParagraph', () => {
 
       expect(measure.lines).toHaveLength(1);
       expect(measure.lines[0].width).toBeGreaterThan(48);
+      expect(measure.lines[0].hasExplicitTabStops).toBeUndefined();
     });
 
     it('keeps right-aligned tab groups on the same line', () => {
@@ -445,6 +447,27 @@ describe('remeasureParagraph', () => {
       expect(measure.lines[0].segments?.length).toBeGreaterThan(0);
     });
 
+    it('aligns trailing TOC-style tab to explicit right stop with leader', () => {
+      const rightStopPx = 300;
+      const block = createBlock(
+        [textRun('1.'), tabRun({ tabIndex: 0 }), textRun('Generalities'), tabRun({ tabIndex: 1 }), textRun('5')],
+        {
+          tabs: [{ pos: pxToTwips(rightStopPx), val: 'end', leader: 'dot' }],
+          indent: { left: 30, hanging: 30 },
+          tabIntervalTwips: DEFAULT_TAB_INTERVAL_TWIPS,
+        },
+      );
+
+      const measure = remeasureParagraph(block, 800);
+      expect(measure.lines).toHaveLength(1);
+      const leaders = measure.lines[0].leaders;
+      expect(leaders).toBeDefined();
+      expect(leaders?.length).toBe(1);
+      const leader = leaders![0];
+      expect(leader.style).toBe('dot');
+      expect(leader.to).toBeCloseTo(rightStopPx - CHAR_WIDTH, 0);
+    });
+
     it('handles tab at various positions within text', () => {
       // Tab after some text should advance to next stop after current position
       const tabStop: TabStop = { pos: 720, val: 'start' }; // 48px
@@ -481,7 +504,6 @@ describe('remeasureParagraph', () => {
       const tabStop: TabStop = { pos: 1440, val: 'start' };
       const block = createBlock([textRun('A'), tabRun(), textRun('B')], { tabs: [tabStop] });
       const measure = remeasureParagraph(block, 200);
-
       expect(measure.lines).toHaveLength(1);
       // Tab should advance to 96px (1 inch)
       expect(measure.lines[0].width).toBeGreaterThan(96);
@@ -872,7 +894,111 @@ describe('remeasureParagraph', () => {
       const block = createBlock([textRun('Hello'), { kind: 'lineBreak' } as Run, textRun('World')]);
       const measure = remeasureParagraph(block, 200);
 
-      expect(measure.lines.length).toBeGreaterThanOrEqual(1);
+      expect(measure.lines).toHaveLength(2);
+      expect(measure.lines[0].fromRun).toBe(0);
+      expect(measure.lines[0].toRun).toBe(0);
+      expect(measure.lines[1].fromRun).toBe(2);
+      expect(measure.lines[1].toRun).toBe(2);
+    });
+
+    it('creates an empty line for leading lineBreak at start of paragraph', () => {
+      const block = createBlock([{ kind: 'lineBreak' } as Run, textRun('Text')]);
+      const measure = remeasureParagraph(block, 200);
+
+      expect(measure.lines).toHaveLength(2);
+      expect(measure.lines[0].fromRun).toBe(0);
+      expect(measure.lines[0].toRun).toBe(0);
+      expect(measure.lines[0].toChar).toBe(0);
+      expect(measure.lines[1].fromRun).toBe(1);
+      expect(measure.lines[1].toRun).toBe(1);
+    });
+
+    it('preserves multiple explicit lineBreak boundaries', () => {
+      const block = createBlock([
+        textRun('One'),
+        { kind: 'lineBreak' } as Run,
+        textRun('Two'),
+        { kind: 'lineBreak' } as Run,
+        textRun('Three'),
+      ]);
+      const measure = remeasureParagraph(block, 200);
+
+      expect(measure.lines).toHaveLength(3);
+      expect(measure.lines[0].fromRun).toBe(0);
+      expect(measure.lines[0].toRun).toBe(0);
+      expect(measure.lines[1].fromRun).toBe(2);
+      expect(measure.lines[1].toRun).toBe(2);
+      expect(measure.lines[2].fromRun).toBe(4);
+      expect(measure.lines[2].toRun).toBe(4);
+    });
+
+    it('preserves trailing explicit lineBreak as final empty line', () => {
+      const block = createBlock([textRun('Hello'), { kind: 'lineBreak' } as Run]);
+      const measure = remeasureParagraph(block, 200);
+
+      expect(measure.lines).toHaveLength(2);
+      expect(measure.lines[0].fromRun).toBe(0);
+      expect(measure.lines[0].toRun).toBe(0);
+      // Final empty line should be anchored to trailing break run.
+      expect(measure.lines[1].fromRun).toBe(1);
+      expect(measure.lines[1].toRun).toBe(1);
+      expect(measure.lines[1].toChar).toBe(0);
+    });
+
+    it('handles a single explicit lineBreak run as the only paragraph content', () => {
+      const block = createBlock([{ kind: 'lineBreak' } as Run]);
+      const measure = remeasureParagraph(block, 200);
+
+      expect(measure.lines).toHaveLength(1);
+      expect(measure.lines[0].fromRun).toBe(0);
+      expect(measure.lines[0].toRun).toBe(0);
+      expect(measure.lines[0].fromChar).toBe(0);
+      expect(measure.lines[0].toChar).toBe(0);
+    });
+
+    it('uses previous text font size for trailing explicit lineBreak empty line height', () => {
+      const block = createBlock([textRun('Heading', { fontSize: 24 }), { kind: 'lineBreak' } as Run]);
+      const measure = remeasureParagraph(block, 200);
+
+      expect(measure.lines).toHaveLength(2);
+      expect(measure.lines[0].lineHeight).toBe(24 * 1.2);
+      expect(measure.lines[1].fromRun).toBe(1);
+      expect(measure.lines[1].toRun).toBe(1);
+      expect(measure.lines[1].lineHeight).toBe(24 * 1.2);
+    });
+
+    it('preserves multiple trailing explicit lineBreak runs as multiple empty lines', () => {
+      const block = createBlock([textRun('Hello'), { kind: 'lineBreak' } as Run, { kind: 'lineBreak' } as Run]);
+      const measure = remeasureParagraph(block, 200);
+
+      expect(measure.lines).toHaveLength(3);
+      expect(measure.lines[0].fromRun).toBe(0);
+      expect(measure.lines[0].toRun).toBe(0);
+      expect(measure.lines[1].fromRun).toBe(1);
+      expect(measure.lines[1].toRun).toBe(1);
+      expect(measure.lines[1].toChar).toBe(0);
+      expect(measure.lines[2].fromRun).toBe(2);
+      expect(measure.lines[2].toRun).toBe(2);
+      expect(measure.lines[2].toChar).toBe(0);
+    });
+
+    it('matches measureParagraphBlock for text + break + break + text', () => {
+      const block = createBlock([
+        textRun('A'),
+        { kind: 'lineBreak' } as Run,
+        { kind: 'lineBreak' } as Run,
+        textRun('B'),
+      ]);
+      const measure = remeasureParagraph(block, 200);
+
+      expect(measure.lines).toHaveLength(3);
+      expect(measure.lines[0].fromRun).toBe(0);
+      expect(measure.lines[0].toRun).toBe(0);
+      expect(measure.lines[1].fromRun).toBe(2);
+      expect(measure.lines[1].toRun).toBe(2);
+      expect(measure.lines[1].toChar).toBe(0);
+      expect(measure.lines[2].fromRun).toBe(3);
+      expect(measure.lines[2].toRun).toBe(3);
     });
 
     it('handles tabs followed immediately by line break', () => {

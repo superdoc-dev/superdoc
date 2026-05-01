@@ -68,10 +68,13 @@ export function getFirstTextPosition(doc: ProseMirrorNode | null): number {
   }
 
   let validPos = 1;
+  let found = false;
 
   doc.nodesBetween(0, doc.content.size, (node, pos) => {
+    if (found) return false;
     if (node.isTextblock) {
       validPos = pos + 1;
+      found = true;
       return false;
     }
     return true;

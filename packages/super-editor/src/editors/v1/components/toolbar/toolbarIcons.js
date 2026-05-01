@@ -2,6 +2,8 @@ import boldIconSvg from '@superdoc/common/icons/bold-solid.svg?raw';
 import italicIconSvg from '@superdoc/common/icons/italic-solid.svg?raw';
 import underlineIconSvg from '@superdoc/common/icons/underline-solid.svg?raw';
 import listIconSvg from '@superdoc/common/icons/list-solid.svg?raw';
+import listCircleIconSvg from '@superdoc/common/icons/list-circle-solid.svg?raw';
+import listSquareIconSvg from '@superdoc/common/icons/list-square-solid.svg?raw';
 import listOlIconSvg from '@superdoc/common/icons/list-ol-solid.svg?raw';
 import imageIconSvg from '@superdoc/common/icons/image-solid.svg?raw';
 import linkIconSvg from '@superdoc/common/icons/link-solid.svg?raw';
@@ -64,6 +66,9 @@ export const toolbarIcons = {
   alignCenter: alignCenterIconSvg,
   alignJustify: alignJustifyIconSvg,
   bulletList: listIconSvg,
+  bulletListDisc: listIconSvg,
+  bulletListCircle: listCircleIconSvg,
+  bulletListSquare: listSquareIconSvg,
   numberedList: listOlIconSvg,
   indentLeft: outdentIconSvg,
   indentRight: indentIconSvg,

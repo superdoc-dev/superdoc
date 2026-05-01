@@ -3,6 +3,29 @@ title: Quick start
 keywords: "superdoc quickstart, docx editor tutorial, word editor setup, javascript docx quick start, mcp docx, ai agent docx, llm document editing, superdoc init"
 ---
 
+## Pick your surface
+
+```mermaid actions={false}
+flowchart TD
+    Start{What are you building?}
+    Agent[AI agent or LLM tool<br/>that edits DOCX]
+    Server[Server / script<br/>editing DOCX]
+    Editor[Embedded DOCX editor<br/>in a web app]
+    UI{Custom UI<br/>or built-in?}
+
+    Start -->|AI agents| Agent
+    Start -->|Backend code| Server
+    Start -->|Browser editor| Editor
+    Editor --> UI
+    UI -->|Built-in is fine| BuiltIn[SuperDoc + Modules]
+    UI -->|My own React UI| BYO[SuperDoc + Bring Your Own UI]
+
+    Agent --> AgentTools["MCP server<br/>or @superdoc-dev/sdk"]
+    Server --> SDK["@superdoc-dev/sdk<br/>or @superdoc-dev/cli"]
+```
+
+Each branch below maps to a specific section.
+
 ## Using an AI coding agent?
 
 Run this first. It generates an AGENTS.md that teaches your agent how to use SuperDoc.
@@ -123,27 +146,41 @@ Done. Ask your agent to open a `.docx` file and make an edit.
       <Tab title="CDN">
         ```html
         <link href="https://cdn.jsdelivr.net/npm/superdoc/dist/style.css" rel="stylesheet">
-        <script type="module">
-          import { SuperDoc } from 'https://cdn.jsdelivr.net/npm/superdoc/dist/superdoc.es.js';
-        </script>
+        <script src="https://cdn.jsdelivr.net/npm/superdoc/dist/superdoc.min.js"></script>
         ```
+        `SuperDoc` becomes a global — use `new SuperDoc({...})` directly.
       </Tab>
     </Tabs>
   </Step>
 
   <Step title="Mount the editor">
-    ```html
-    <div id="editor" style="height: 100vh"></div>
+    <Tabs>
+      <Tab title="npm">
+        ```html
+        <div id="editor" style="height: 100vh"></div>
 
-    <script type="module">
-      import { SuperDoc } from 'superdoc';
-      import 'superdoc/style.css';
+        <script type="module">
+          import { SuperDoc } from 'superdoc';
+          import 'superdoc/style.css';
 
-      const superdoc = new SuperDoc({
-        selector: '#editor',
-      });
-    </script>
-    ```
+          const superdoc = new SuperDoc({
+            selector: '#editor',
+          });
+        </script>
+        ```
+      </Tab>
+      <Tab title="CDN">
+        ```html
+        <div id="editor" style="height: 100vh"></div>
+
+        <script>
+          const superdoc = new SuperDoc({
+            selector: '#editor',
+          });
+        </script>
+        ```
+      </Tab>
+    </Tabs>
     That's a blank editor. Now give it a file.
   </Step>
 
@@ -207,6 +244,8 @@ function App() {
 
 Install with `npm install @superdoc-dev/react`. [Full React guide →](/getting-started/frameworks/react)
 
+Want a custom toolbar, comments sidebar, or review panel instead of the built-in UI? See [Bring Your Own UI](/bring-your-own-ui/overview).
+
 ---
 
 ## What's next
@@ -214,6 +253,9 @@ Install with `npm install @superdoc-dev/react`. [Full React guide →](/getting-
 <CardGroup cols={2}>
   <Card title="Document Engine" icon="screwdriver-wrench" href="/document-engine/overview">
     Architecture and how to choose a surface
+  </Card>
+  <Card title="Bring Your Own UI" icon="layout-dashboard" href="/bring-your-own-ui/overview">
+    Custom React toolbar, comments, review panel
   </Card>
   <Card title="LLM tools" icon="sparkles" href="/document-engine/ai-agents/llm-tools">
     Build custom AI agents with the SDK

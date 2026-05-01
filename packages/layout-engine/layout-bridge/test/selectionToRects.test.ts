@@ -74,6 +74,104 @@ describe('selectionToRects', () => {
     expect(rects[0].x).toBeGreaterThan(tableLayout.pages[0].fragments[0].x);
   });
 
+  it('accounts for visual-only prefix runs when mapping PM selections to X coordinates', () => {
+    const blockWithoutMarker: FlowBlock = {
+      kind: 'paragraph',
+      id: 'note-without-marker',
+      runs: [{ text: ' simple footnote', fontFamily: 'Arial', fontSize: 16, pmStart: 2, pmEnd: 18 }],
+      attrs: {},
+    };
+
+    const blockWithMarker: FlowBlock = {
+      kind: 'paragraph',
+      id: 'note-with-marker',
+      runs: [
+        { text: '1', fontFamily: 'Arial', fontSize: 10 },
+        { text: ' simple footnote', fontFamily: 'Arial', fontSize: 16, pmStart: 2, pmEnd: 18 },
+      ],
+      attrs: {},
+    };
+
+    const measureWithoutMarker: Measure = {
+      kind: 'paragraph',
+      lines: [{ fromRun: 0, fromChar: 0, toRun: 0, toChar: 16, width: 100, ascent: 12, descent: 4, lineHeight: 20 }],
+      totalHeight: 20,
+    };
+
+    const measureWithMarker: Measure = {
+      kind: 'paragraph',
+      lines: [{ fromRun: 0, fromChar: 0, toRun: 1, toChar: 16, width: 110, ascent: 12, descent: 4, lineHeight: 20 }],
+      totalHeight: 20,
+    };
+
+    const layoutWithoutMarker: Layout = {
+      pageSize: { w: 300, h: 300 },
+      pages: [
+        {
+          number: 1,
+          fragments: [
+            {
+              kind: 'para',
+              blockId: 'note-without-marker',
+              fromLine: 0,
+              toLine: 1,
+              x: 10,
+              y: 20,
+              width: 200,
+              pmStart: 2,
+              pmEnd: 18,
+            },
+          ],
+        },
+      ],
+    };
+
+    const layoutWithMarker: Layout = {
+      pageSize: { w: 300, h: 300 },
+      pages: [
+        {
+          number: 1,
+          fragments: [
+            {
+              kind: 'para',
+              blockId: 'note-with-marker',
+              fromLine: 0,
+              toLine: 1,
+              x: 10,
+              y: 20,
+              width: 200,
+              pmStart: 2,
+              pmEnd: 18,
+            },
+          ],
+        },
+      ],
+    };
+
+    const selectionFrom = 3;
+    const selectionTo = 9;
+
+    const rectWithoutMarker = selectionToRects(
+      layoutWithoutMarker,
+      [blockWithoutMarker],
+      [measureWithoutMarker],
+      selectionFrom,
+      selectionTo,
+    )[0];
+    const rectWithMarker = selectionToRects(
+      layoutWithMarker,
+      [blockWithMarker],
+      [measureWithMarker],
+      selectionFrom,
+      selectionTo,
+    )[0];
+
+    expect(rectWithoutMarker).toBeTruthy();
+    expect(rectWithMarker).toBeTruthy();
+    expect(rectWithMarker.x).toBeGreaterThan(rectWithoutMarker.x);
+    expect(rectWithMarker.x - rectWithoutMarker.x).toBeGreaterThan(1);
+  });
+
   describe('table cell spacing.before', () => {
     it('includes effective spacing.before in rect Y when paragraph has spacing.before', () => {
       const rects = selectionToRects(

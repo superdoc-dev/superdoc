@@ -10,11 +10,11 @@ on:
       - 'packages/document-api/scripts/**'
       - 'scripts/generate-all.mjs'
       - 'package.json'
-  merge_group:
   workflow_dispatch:
 
 jobs:
   validate:
+    name: CI Docs / validate
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6

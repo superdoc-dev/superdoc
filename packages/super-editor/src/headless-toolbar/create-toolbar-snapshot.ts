@@ -32,7 +32,23 @@ const buildCommandStateMap = ({
       ] as const;
     }
 
-    return [command, entry.state({ context, superdoc })] as const;
+    // Per-command resilience: if a single deriver throws (editor
+    // mid-construction, partial PresentationEditor route, test stub
+    // not modelling full PM state), default that command to disabled
+    // rather than killing the whole snapshot. Other commands still
+    // resolve, and the next event tick re-derives once the editor is
+    // stable.
+    try {
+      return [command, entry.state({ context, superdoc })] as const;
+    } catch {
+      return [
+        command,
+        {
+          active: false,
+          disabled: true,
+        },
+      ] as const;
+    }
   });
 
   return Object.fromEntries(entries) as ToolbarCommandStates;

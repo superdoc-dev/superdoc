@@ -5,6 +5,7 @@ import type {
   LineSegment,
   Run,
   TextRun,
+  TabRun,
   TabStop,
   ParagraphIndent,
   LeaderDecoration,
@@ -363,6 +364,8 @@ type TabStopPx = {
   val: TabStop['val'];
   /** Optional leader character style (dots, dashes, etc.) */
   leader?: TabStop['leader'];
+  /** Whether this came from author-defined tabs or the default tab grid. */
+  source?: TabStop['source'];
 };
 
 /**
@@ -465,6 +468,7 @@ const buildTabStopsPx = (indent?: ParagraphIndent, tabs?: TabStop[], tabInterval
     pos: twipsToPx(stop.pos),
     val: stop.val,
     leader: stop.leader,
+    source: stop.source,
   }));
 };
 
@@ -781,6 +785,33 @@ const applyTabLayoutToLines = (
   indentLeft: number,
   rawFirstLineOffset: number,
 ): void => {
+  const totalTabRuns = runs.reduce((count, run) => (run.kind === 'tab' ? count + 1 : count), 0);
+  const alignmentTabStopsPx = tabStops
+    .map((stop, index) => ({ stop, index }))
+    .filter(({ stop }) => stop.val === 'end' || stop.val === 'center' || stop.val === 'decimal');
+  // Word-compat heuristic (not ECMA-376 17.3.3.32): the last N tab characters in a
+  // paragraph bind to the last N explicit end/center/decimal stops. Needed for TOC
+  // entries where a right-aligned dot-leader stop coexists with default grid stops.
+  // Mirrored in measuring/dom/src/index.ts.
+  const getAlignmentStopForOrdinal = (ordinal: number): { stop: TabStopPx; index: number } | null => {
+    if (alignmentTabStopsPx.length === 0 || totalTabRuns === 0 || !Number.isFinite(ordinal)) return null;
+    if (ordinal < 0 || ordinal >= totalTabRuns) return null;
+    const remainingTabs = totalTabRuns - ordinal - 1;
+    const targetIndex = alignmentTabStopsPx.length - 1 - remainingTabs;
+    if (targetIndex < 0 || targetIndex >= alignmentTabStopsPx.length) return null;
+    return alignmentTabStopsPx[targetIndex];
+  };
+  let sequentialTabIndex = 0;
+  const consumeTabOrdinal = (explicitIndex?: number): number => {
+    if (typeof explicitIndex === 'number' && Number.isFinite(explicitIndex)) {
+      sequentialTabIndex = Math.max(sequentialTabIndex, explicitIndex + 1);
+      return explicitIndex;
+    }
+    const ordinal = sequentialTabIndex;
+    sequentialTabIndex += 1;
+    return ordinal;
+  };
+
   lines.forEach((line, lineIndex) => {
     let cursorX = 0;
     let lineWidth = 0;
@@ -797,14 +828,29 @@ const applyTabLayoutToLines = (
     /**
      * Processes a tab character, calculating position and handling alignment.
      */
-    const applyTab = (startRunIndex: number, startChar: number, run?: Run): void => {
+    const applyTab = (startRunIndex: number, startChar: number, run?: Run, tabOrdinal?: number): void => {
       const originX = cursorX;
       const absCurrentX = cursorX + effectiveIndent;
-      const { target, nextIndex, stop } = getNextTabStopPx(absCurrentX, tabStops, tabStopCursor);
-      tabStopCursor = nextIndex;
+      let stop: TabStopPx | undefined;
+      let target: number;
+      const forcedAlignment =
+        typeof tabOrdinal === 'number' && Number.isFinite(tabOrdinal) ? getAlignmentStopForOrdinal(tabOrdinal) : null;
+      if (forcedAlignment && forcedAlignment.stop.pos > absCurrentX + TAB_EPSILON) {
+        stop = forcedAlignment.stop;
+        target = forcedAlignment.stop.pos;
+        tabStopCursor = forcedAlignment.index + 1;
+      } else {
+        const next = getNextTabStopPx(absCurrentX, tabStops, tabStopCursor);
+        stop = next.stop;
+        target = next.target;
+        tabStopCursor = next.nextIndex;
+      }
       const clampedTarget = Number.isFinite(maxAbsWidth) ? Math.min(target, maxAbsWidth) : target;
       const relativeTarget = clampedTarget - effectiveIndent;
       lineWidth = Math.max(lineWidth, relativeTarget);
+      if (stop?.source === 'explicit') {
+        line.hasExplicitTabStops = true;
+      }
       let currentLeader: LeaderDecoration | null = null;
 
       // Add leader if specified
@@ -853,7 +899,9 @@ const applyTabLayoutToLines = (
       const run = runs[runIndex];
       if (!run) continue;
       if (run.kind === 'tab') {
-        applyTab(runIndex + 1, 0, run);
+        const tabRun = run as TabRun;
+        const ordinal = consumeTabOrdinal(tabRun.tabIndex);
+        applyTab(runIndex + 1, 0, run, ordinal);
         continue;
       }
 
@@ -889,7 +937,8 @@ const applyTabLayoutToLines = (
           lineWidth = Math.max(lineWidth, cursorX);
           segments.push(segment);
         }
-        applyTab(runIndex, i + 1);
+        const ordinal = consumeTabOrdinal();
+        applyTab(runIndex, i + 1, undefined, ordinal);
         segmentStart = i + 1;
       }
 
@@ -951,12 +1000,12 @@ const applyTabLayoutToLines = (
  * @returns Line height in pixels (fontSize * 1.2 of the largest font in the range).
  *   For example: 16px font returns 19.2px line height, 24px font returns 28.8px.
  */
-function lineHeightForRuns(runs: Run[], fromRun: number, toRun: number): number {
+function lineHeightForRuns(runs: Run[], fromRun: number, toRun: number, fallbackFontSize: number = 16): number {
   let maxSize = 0;
   for (let i = fromRun; i <= toRun; i += 1) {
     const run = runs[i];
     const textRun = run && isTextRun(run) ? run : null;
-    const size = textRun?.fontSize ?? 16;
+    const size = textRun?.fontSize ?? 0;
     if (size > maxSize) maxSize = size;
   }
   // Calculate line height as 120% of the maximum font size (maxSize * 1.2).
@@ -971,7 +1020,8 @@ function lineHeightForRuns(runs: Run[], fromRun: number, toRun: number): number 
   // Note: This is a simplified calculation. Full typography measurement
   // (in measuring/dom) uses actual font metrics (ascent, descent, lineGap)
   // for more accurate line heights.
-  return maxSize * 1.2;
+  const resolvedSize = maxSize > 0 ? maxSize : fallbackFontSize;
+  return resolvedSize * 1.2;
 }
 
 /**
@@ -1137,6 +1187,10 @@ export function remeasureParagraph(
 
   let currentRun = 0;
   let currentChar = 0;
+  // Match measuring/dom behavior: explicit line breaks without text should use
+  // the most recent text font size (or first text run size for leading breaks).
+  const firstTextRunWithSize = runs.find((run): run is TextRun => isTextRun(run) && typeof run.fontSize === 'number');
+  let lastMeasuredFontSize = firstTextRunWithSize?.fontSize ?? 16;
 
   while (currentRun < runs.length) {
     const isFirstLine = lines.length === 0;
@@ -1156,11 +1210,23 @@ export function remeasureParagraph(
     let endChar = currentChar;
     let tabStopCursor = 0;
     let didBreakInThisLine = false;
+    let explicitLineBreakRun = -1;
     let resumeRun = -1;
     let resumeChar = 0;
+    let lineMaxTextFontSize = 0;
 
     for (let r = currentRun; r < runs.length; r += 1) {
       const run = runs[r];
+      if (isLineBreakRun(run)) {
+        explicitLineBreakRun = r;
+        if (startRun === r && startChar === 0 && width === 0) {
+          // Preserve leading/manual explicit break as an empty line.
+          endRun = r;
+          endChar = 0;
+        }
+        didBreakInThisLine = true;
+        break;
+      }
       if (run.kind === 'tab') {
         const absCurrentX = width + effectiveIndent;
         const { target, nextIndex, stop } = getNextTabStopPx(absCurrentX, tabStops, tabStopCursor);
@@ -1213,6 +1279,9 @@ export function remeasureParagraph(
       const start = r === currentRun ? currentChar : r === resumeRun ? resumeChar : 0;
       if (r === resumeRun) {
         resumeRun = -1;
+      }
+      if (text.length > 0 && isTextRun(run)) {
+        lineMaxTextFontSize = Math.max(lineMaxTextFontSize, run.fontSize ?? 16);
       }
       for (let c = start; c < text.length; c += 1) {
         const ch = text[c];
@@ -1302,7 +1371,7 @@ export function remeasureParagraph(
     }
 
     // If we didn't consume any chars (e.g., very long single char), force one char
-    if (startRun === endRun && startChar === endChar) {
+    if (explicitLineBreakRun < 0 && startRun === endRun && startChar === endChar) {
       endRun = startRun;
       endChar = startChar + 1;
     }
@@ -1315,18 +1384,43 @@ export function remeasureParagraph(
       width,
       ascent: 0,
       descent: 0,
-      lineHeight: lineHeightForRuns(runs, startRun, endRun),
+      lineHeight: lineHeightForRuns(runs, startRun, endRun, lastMeasuredFontSize),
       maxWidth: effectiveMaxWidth,
     };
     lines.push(line);
+    if (lineMaxTextFontSize > 0) {
+      lastMeasuredFontSize = lineMaxTextFontSize;
+    }
 
     // Advance to next line start
-    currentRun = endRun;
-    currentChar = endChar;
+    if (explicitLineBreakRun >= 0) {
+      // Preserve trailing/manual break boundaries:
+      // - If this line started on the break, we've already emitted its empty-line boundary,
+      //   so advance past it.
+      // - If this line ended before the break (text + break), keep the break for the next
+      //   iteration only when the remaining tail is all breaks (trailing break chain).
+      //   This avoids creating an extra empty line for [text, break, break, text].
+      const emittedBreakBoundary =
+        startRun === explicitLineBreakRun && startChar === 0 && endRun === explicitLineBreakRun && endChar === 0;
+      if (emittedBreakBoundary) {
+        currentRun = explicitLineBreakRun + 1;
+      } else {
+        let nextNonBreakRun = explicitLineBreakRun + 1;
+        while (nextNonBreakRun < runs.length && isLineBreakRun(runs[nextNonBreakRun])) {
+          nextNonBreakRun += 1;
+        }
+        const preserveBoundaryForNextIteration = nextNonBreakRun >= runs.length;
+        currentRun = preserveBoundaryForNextIteration ? explicitLineBreakRun : explicitLineBreakRun + 1;
+      }
+      currentChar = 0;
+    } else {
+      currentRun = endRun;
+      currentChar = endChar;
+    }
     if (currentRun >= runs.length) {
       break;
     }
-    if (currentChar >= runText(runs[currentRun]).length) {
+    if (!isLineBreakRun(runs[currentRun]) && currentChar >= runText(runs[currentRun]).length) {
       currentRun += 1;
       currentChar = 0;
     }

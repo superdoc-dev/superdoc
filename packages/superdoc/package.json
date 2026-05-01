@@ -1,7 +1,7 @@
 {
   "name": "superdoc",
   "type": "module",
-  "version": "1.26.0",
+  "version": "1.29.1",
   "license": "AGPL-3.0",
   "repository": {
     "type": "git",
@@ -47,6 +47,16 @@
       "source": "./src/headless-toolbar.js",
       "import": "./dist/headless-toolbar.es.js"
     },
+    "./ui": {
+      "types": "./dist/superdoc/src/ui.d.ts",
+      "source": "./src/ui.js",
+      "import": "./dist/ui.es.js"
+    },
+    "./ui/react": {
+      "types": "./dist/superdoc/src/ui-react.d.ts",
+      "source": "./src/ui-react.js",
+      "import": "./dist/ui-react.es.js"
+    },
     "./headless-toolbar/react": {
       "types": "./dist/superdoc/src/headless-toolbar-react.d.ts",
       "source": "./src/headless-toolbar-react.js",
@@ -68,6 +78,12 @@
       "headless-toolbar": [
         "./dist/superdoc/src/headless-toolbar.d.ts"
       ],
+      "ui": [
+        "./dist/superdoc/src/ui.d.ts"
+      ],
+      "ui/react": [
+        "./dist/superdoc/src/ui-react.d.ts"
+      ],
       "headless-toolbar/react": [
         "./dist/superdoc/src/headless-toolbar-react.d.ts"
       ],
@@ -82,20 +98,25 @@
       ]
     }
   },
-  "main": "./dist/superdoc.umd.js",
+  "main": "./dist/superdoc.cjs",
   "module": "./dist/superdoc.es.js",
+  "unpkg": "./dist/superdoc.min.js",
+  "jsdelivr": "./dist/superdoc.min.js",
   "scripts": {
     "dev": "concurrently -k -n VITE,WORD -c cyan,magenta \"vite\" \"node ../../devtools/word-benchmark-sidecar/server.js --stay-alive-on-reuse\"",
     "dev:collab": "concurrently -k -n VITE,COLLAB,WORD -c cyan,green,magenta \"vite\" \"pnpm run collab-server\" \"node ../../devtools/word-benchmark-sidecar/server.js --stay-alive-on-reuse\"",
     "collab-server": "pnpm --filter @superdoc-dev/superdoc-yjs-collaboration build && tsx src/dev/collab-server.ts",
     "word-benchmark-sidecar": "node ../../devtools/word-benchmark-sidecar/server.js",
-    "build": "vite build && pnpm run build:umd",
+    "build": "vite build && pnpm run build:cdn",
     "build:dev": "SUPERDOC_SKIP_DTS=1 vite build",
-    "postbuild": "node ./scripts/ensure-types.cjs && node ./scripts/audit-bundle.cjs",
+    "postbuild": "node ./scripts/ensure-types.cjs && node ./scripts/audit-bundle.cjs && node ./scripts/audit-declarations.cjs",
+    "audit:declarations": "node ./scripts/audit-declarations.cjs",
+    "audit:declarations:informational": "node ./scripts/audit-declarations.cjs --informational",
+    "check:jsdoc": "node ./scripts/check-jsdoc.cjs",
     "build:es": "vite build && pnpm run postbuild",
     "watch:es": "vite build --watch",
-    "build:umd": "vite build --config vite.config.umd.js",
-    "watch:umd": "vite build --watch --config vite.config.umd.js",
+    "build:cdn": "vite build --config vite.config.cdn.js",
+    "watch:cdn": "vite build --watch --config vite.config.cdn.js",
     "clean": "rm -rf dist",
     "pack:local": "pnpm run pack",
     "pack": "pnpm run build:es && pnpm pack && mv $(ls superdoc-*.tgz) ./superdoc.tgz",

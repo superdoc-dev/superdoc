@@ -20,6 +20,7 @@ import { useToolbarItem } from '@components/toolbar/use-toolbar-item';
 import { calculateResolvedParagraphProperties } from '@extensions/paragraph/resolvedPropertiesCache.js';
 import { parseSizeUnit } from '@core/utilities';
 import { findElementBySelector, getParagraphFontFamilyFromProperties } from './helpers/general.js';
+import { markerTextToBulletStyle } from '@helpers/list-numbering-helpers.js';
 
 /**
  * @typedef {function(CommandItem): void} CommandCallback
@@ -387,6 +388,16 @@ export class SuperToolbar extends EventEmitter {
   }
 
   /**
+   * Get the width used for responsive toolbar decisions.
+   * @returns {number} Available width in pixels
+   */
+  getAvailableWidth() {
+    const documentWidth = document.documentElement.clientWidth; // take into account the scrollbar
+    const containerWidth = this.toolbarContainer?.offsetWidth ?? 0;
+    return this.config.responsiveToContainer ? containerWidth : documentWidth;
+  }
+
+  /**
    * Create toolbar items based on configuration
    * @private
    * @param {SuperToolbar} options.superToolbar - The toolbar instance
@@ -397,9 +408,7 @@ export class SuperToolbar extends EventEmitter {
    * @returns {void}
    */
   #makeToolbarItems({ superToolbar, icons, texts, fonts, hideButtons, isDev = false } = {}) {
-    const documentWidth = document.documentElement.clientWidth; // take into account the scrollbar
-    const containerWidth = this.toolbarContainer?.offsetWidth ?? 0;
-    const availableWidth = this.config.responsiveToContainer ? containerWidth : documentWidth;
+    const availableWidth = this.getAvailableWidth();
 
     const { defaultItems, overflowItems } = makeDefaultItems({
       superToolbar,
@@ -622,6 +631,15 @@ export class SuperToolbar extends EventEmitter {
         if (commandState?.value != null) item.activate({ styleId: commandState.value });
         else item.label.value = this.config.texts?.formatText || 'Format text';
       },
+      list: () => {
+        if (commandState?.active) {
+          item.activate();
+          item.selectedValue.value = markerTextToBulletStyle(commandState.value);
+        } else {
+          item.deactivate();
+          item.selectedValue.value = null;
+        }
+      },
       default: () => {
         if (commandState?.active) item.activate();
         else item.deactivate();
@@ -767,9 +785,10 @@ export class SuperToolbar extends EventEmitter {
       return;
     }
 
-    // If the editor wasn't focused and this is a mark toggle, queue it and keep the button active
-    // until the next selection update (after the user clicks into the editor).
-    if (!wasFocused && isMarkToggle) {
+    // Queue unfocused mark toggles only for body editors.
+    // Header/footer mark toggles execute immediately to avoid waiting for
+    // selectionUpdate and requiring an extra selection change.
+    if (!wasFocused && isMarkToggle && !this.activeEditor?.options?.isHeaderOrFooter) {
       this.pendingMarkCommands.push({ command, argument, item });
       const labelAttr = item?.labelAttr?.value;
       if (labelAttr && argument) {
@@ -976,7 +995,8 @@ export class SuperToolbar extends EventEmitter {
 
   /**
    * Cleans up resources when the toolbar is destroyed.
-   * Clears any pending timeouts to prevent callbacks firing after unmount.
+   * Clears any pending timeouts and unmounts the Vue app so the Toolbar
+   * component's onBeforeUnmount hook runs and removes its window listeners.
    * @returns {void}
    */
   destroy() {
@@ -986,5 +1006,6 @@ export class SuperToolbar extends EventEmitter {
     }
 
     this.destroyHeadlessToolbar();
+    this.app?.unmount();
   }
 }

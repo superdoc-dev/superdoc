@@ -91,8 +91,9 @@ describe('AutoPageNumberNodeView', () => {
       resolve: vi.fn().mockReturnValue({ nodeBefore: { marks: marksBefore }, nodeAfter: { marks: marksAfter } }),
       nodeAt: vi.fn().mockReturnValue({ isText: false, attrs: { marksAsAttrs: [] } }),
     };
-    const tr = { setNodeMarkup: vi.fn() };
+    const tr = { setNodeMarkup: vi.fn(), setMeta: vi.fn() };
     tr.setNodeMarkup.mockImplementation(() => tr);
+    tr.setMeta.mockImplementation(() => tr);
 
     const dispatch = vi.fn();
     state.doc = doc;
@@ -125,6 +126,8 @@ describe('AutoPageNumberNodeView', () => {
         { type: 'underline', attrs: {} },
       ],
     });
+    expect(tr.setMeta).toHaveBeenNthCalledWith(1, 'skipTrackChanges', true);
+    expect(tr.setMeta).toHaveBeenNthCalledWith(2, 'addToHistory', false);
     expect(dispatch).toHaveBeenCalledWith(tr);
   });
 

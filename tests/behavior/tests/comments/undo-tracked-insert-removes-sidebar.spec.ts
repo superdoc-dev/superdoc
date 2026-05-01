@@ -12,9 +12,14 @@ async function historyRedo(superdoc: Pick<SuperDocFixture, 'page'>) {
   return superdoc.page.evaluate(() => (window as any).editor.doc.history.redo());
 }
 
+const trackedChangePanel = (superdoc: SuperDocFixture) => superdoc.page.locator('#comments-panel');
+
+const trackedChangePanelEntries = (superdoc: SuperDocFixture) =>
+  trackedChangePanel(superdoc).locator('.tracked-change-text');
+
 test('undo tracked insertion removes suggestion bubble and sidebar entry', async ({ superdoc }) => {
-  const sidebar = superdoc.page.locator('.superdoc__right-sidebar');
-  const sidebarTrackedChange = sidebar.locator('.tracked-change-text');
+  const commentsPanel = trackedChangePanel(superdoc);
+  const panelTrackedChange = trackedChangePanelEntries(superdoc);
 
   await superdoc.setDocumentMode('suggesting');
   await superdoc.waitForStable();
@@ -23,15 +28,15 @@ test('undo tracked insertion removes suggestion bubble and sidebar entry', async
   await superdoc.waitForStable();
 
   await expect.poll(async () => (await listTrackChanges(superdoc.page)).total).toBeGreaterThanOrEqual(1);
-  await expect(sidebar).toBeVisible();
-  await expect.poll(async () => sidebarTrackedChange.count()).toBeGreaterThan(0);
+  await expect(commentsPanel).toBeVisible();
+  await expect.poll(async () => panelTrackedChange.count()).toBeGreaterThan(0);
 
   const result = await historyUndo(superdoc);
   await superdoc.waitForStable();
 
   expect(result.noop).toBe(false);
   await expect.poll(async () => (await listTrackChanges(superdoc.page)).total).toBe(0);
-  await expect(sidebarTrackedChange).toHaveCount(0);
+  await expect(panelTrackedChange).toHaveCount(0);
   await expect(
     superdoc.page.locator('.floating-comment > .comments-dialog', {
       has: superdoc.page.locator('.tracked-change-text'),
@@ -40,8 +45,7 @@ test('undo tracked insertion removes suggestion bubble and sidebar entry', async
 });
 
 test('redo restores tracked insertion bubble and sidebar entry after undo', async ({ superdoc }) => {
-  const sidebar = superdoc.page.locator('.superdoc__right-sidebar');
-  const sidebarTrackedChange = sidebar.locator('.tracked-change-text');
+  const panelTrackedChange = trackedChangePanelEntries(superdoc);
 
   await superdoc.setDocumentMode('suggesting');
   await superdoc.waitForStable();
@@ -50,7 +54,7 @@ test('redo restores tracked insertion bubble and sidebar entry after undo', asyn
   await superdoc.waitForStable();
 
   await expect.poll(async () => (await listTrackChanges(superdoc.page)).total).toBeGreaterThanOrEqual(1);
-  await expect.poll(async () => sidebarTrackedChange.count()).toBeGreaterThan(0);
+  await expect.poll(async () => panelTrackedChange.count()).toBeGreaterThan(0);
   await expect(await activateCommentDialog(superdoc, 'Tracked insertion')).toBeVisible();
 
   const undoResult = await historyUndo(superdoc);
@@ -58,7 +62,7 @@ test('redo restores tracked insertion bubble and sidebar entry after undo', asyn
 
   expect(undoResult.noop).toBe(false);
   await expect.poll(async () => (await listTrackChanges(superdoc.page)).total).toBe(0);
-  await expect(sidebarTrackedChange).toHaveCount(0);
+  await expect(panelTrackedChange).toHaveCount(0);
   await expect(
     superdoc.page.locator('.floating-comment > .comments-dialog', {
       has: superdoc.page.locator('.tracked-change-text'),
@@ -70,13 +74,12 @@ test('redo restores tracked insertion bubble and sidebar entry after undo', asyn
 
   expect(redoResult.noop).toBe(false);
   await expect.poll(async () => (await listTrackChanges(superdoc.page)).total).toBeGreaterThanOrEqual(1);
-  await expect.poll(async () => sidebarTrackedChange.count()).toBeGreaterThan(0);
+  await expect.poll(async () => panelTrackedChange.count()).toBeGreaterThan(0);
   await expect(await activateCommentDialog(superdoc, 'Tracked insertion')).toBeVisible();
 });
 
 test('redo is a no-op when the document did not change', async ({ superdoc }) => {
-  const sidebar = superdoc.page.locator('.superdoc__right-sidebar');
-  const sidebarTrackedChange = sidebar.locator('.tracked-change-text');
+  const panelTrackedChange = trackedChangePanelEntries(superdoc);
 
   await superdoc.setDocumentMode('suggesting');
   await superdoc.waitForStable();
@@ -85,7 +88,7 @@ test('redo is a no-op when the document did not change', async ({ superdoc }) =>
   await superdoc.waitForStable();
 
   await expect.poll(async () => (await listTrackChanges(superdoc.page)).total).toBeGreaterThanOrEqual(1);
-  await expect.poll(async () => sidebarTrackedChange.count()).toBeGreaterThan(0);
+  await expect.poll(async () => panelTrackedChange.count()).toBeGreaterThan(0);
   await expect(await activateCommentDialog(superdoc, 'Tracked insertion')).toBeVisible();
 
   const textBeforeRedo = await getDocumentText(superdoc.page);
@@ -95,6 +98,6 @@ test('redo is a no-op when the document did not change', async ({ superdoc }) =>
   expect(result.noop).toBe(true);
   await expect(await activateCommentDialog(superdoc, 'Tracked insertion')).toBeVisible();
   await expect.poll(async () => (await listTrackChanges(superdoc.page)).total).toBeGreaterThanOrEqual(1);
-  await expect.poll(async () => sidebarTrackedChange.count()).toBeGreaterThan(0);
+  await expect.poll(async () => panelTrackedChange.count()).toBeGreaterThan(0);
   expect(await getDocumentText(superdoc.page)).toBe(textBeforeRedo);
 });

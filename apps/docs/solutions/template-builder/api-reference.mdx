@@ -178,6 +178,10 @@ interface FieldDefinition {
   id: string;                      // Unique identifier
   label: string;                   // Display name
   defaultValue?: string;           // Default value for new instances
+  presetContent?: {
+    html?: string;                 // Block preset as HTML
+    json?: unknown;                // Block preset as ProseMirror JSON
+  };
   metadata?: Record<string, any>;  // Custom metadata stored in the SDT tag
   mode?: "inline" | "block";       // Insertion mode (default: "inline")
   group?: string;                  // Group ID for linked fields
@@ -185,6 +189,8 @@ interface FieldDefinition {
   lockMode?: LockMode;             // Lock mode for this field (overrides defaultLockMode)
 }
 ```
+
+`presetContent` is applied only for `mode: "block"` fields. Inline fields ignore it.
 
 ### TemplateField
 

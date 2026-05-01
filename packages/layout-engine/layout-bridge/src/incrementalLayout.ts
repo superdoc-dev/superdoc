@@ -9,7 +9,7 @@ import type {
   SectionBreakBlock,
   NormalizedColumnLayout,
 } from '@superdoc/contracts';
-import { cloneColumnLayout, normalizeColumnLayout } from '@superdoc/contracts';
+import { cloneColumnLayout, normalizeColumnLayout, rescaleColumnWidths } from '@superdoc/contracts';
 import {
   layoutDocument,
   layoutHeaderFooter,
@@ -19,11 +19,17 @@ import {
   resolvePageNumberTokens,
   type NumberingContext,
   SEMANTIC_PAGE_HEIGHT_PX,
+  SINGLE_COLUMN_DEFAULT,
+  resolveTableFrame,
 } from '@superdoc/layout-engine';
 import { remeasureParagraph } from './remeasure';
 import { computeDirtyRegions } from './diff';
 import { MeasureCache } from './cache';
 import { layoutHeaderFooterWithCache, HeaderFooterLayoutCache, type HeaderFooterBatch } from './layoutHeaderFooter';
+import {
+  buildSectionAwareHeaderFooterLayoutKey,
+  buildSectionAwareHeaderFooterMeasurementGroups,
+} from './sectionAwareHeaderFooter';
 import { FeatureFlags } from './featureFlags';
 import { PageTokenLogger, HeaderFooterCacheLogger, globalMetrics } from './instrumentation';
 import { HeaderFooterCacheState, invalidateHeaderFooterCache } from './cacheInvalidation';
@@ -183,7 +189,7 @@ const resolvePageColumns = (layout: Layout, options: LayoutOptions, blocks?: Flo
     );
     const contentWidth = pageSize.w - (marginLeft + marginRight);
     const sectionIndex = page.sectionIndex ?? 0;
-    const columnsConfig = sectionColumns.get(sectionIndex) ?? options.columns ?? { count: 1, gap: 0 };
+    const columnsConfig = sectionColumns.get(sectionIndex) ?? options.columns ?? SINGLE_COLUMN_DEFAULT;
     const normalized = normalizeColumnsForFootnotes(columnsConfig, contentWidth);
     result.set(pageIndex, { ...normalized, left: marginLeft, contentWidth });
   }
@@ -223,7 +229,9 @@ const assignFootnotesToColumns = (
 
     if (columns && columns.count > 1 && page) {
       const fragment = findFragmentForPos(page, ref.pos);
-      if (fragment && typeof fragment.x === 'number') {
+      if (fragment?.kind === 'table' && typeof fragment.columnIndex === 'number') {
+        columnIndex = Math.max(0, Math.min(columns.count - 1, fragment.columnIndex));
+      } else if (fragment && typeof fragment.x === 'number') {
         const widths = Array.isArray(columns.widths) && columns.widths.length > 0 ? columns.widths : undefined;
         if (widths) {
           let cursorX = columns.left;
@@ -885,10 +893,83 @@ export async function incrementalLayout(
    * Values are the actual content heights in pixels.
    */
   let headerContentHeightsByRId: Map<string, number> | undefined;
+  let headerContentHeightsBySectionRef: Map<string, number> | undefined;
 
   // Check if we have headers via either headerBlocks (by variant) or headerBlocksByRId (by relationship ID)
   const hasHeaderBlocks = headerFooter?.headerBlocks && Object.keys(headerFooter.headerBlocks).length > 0;
   const hasHeaderBlocksByRId = headerFooter?.headerBlocksByRId && headerFooter.headerBlocksByRId.size > 0;
+  const sectionMetadata = options.sectionMetadata ?? [];
+
+  const measureHeightsByReference = async (
+    kind: 'header' | 'footer',
+    blocksByRId: Map<string, FlowBlock[]> | undefined,
+    constraints: HeaderFooterConstraints,
+    measureFn: HeaderFooterMeasureFn,
+  ): Promise<{
+    heightsByRId?: Map<string, number>;
+    heightsBySectionRef?: Map<string, number>;
+  }> => {
+    if (!blocksByRId || blocksByRId.size === 0) {
+      return {};
+    }
+
+    const heightsByRId = new Map<string, number>();
+    const heightsBySectionRef = new Map<string, number>();
+    const sectionAwareGroups = buildSectionAwareHeaderFooterMeasurementGroups(
+      kind,
+      blocksByRId,
+      sectionMetadata,
+      constraints,
+    );
+
+    if (sectionAwareGroups.length > 0) {
+      for (const group of sectionAwareGroups) {
+        const blocks = blocksByRId.get(group.rId);
+        if (!blocks || blocks.length === 0) continue;
+
+        const measureConstraints = {
+          maxWidth: group.sectionConstraints.width,
+          maxHeight: group.sectionConstraints.height,
+        };
+        const measures = await Promise.all(blocks.map((block) => measureFn(block, measureConstraints)));
+        const layout = layoutHeaderFooter(blocks, measures, group.sectionConstraints, kind);
+        if (!(layout.height > 0)) continue;
+
+        const nextHeight = Math.max(0, layout.height);
+        const currentHeight = heightsByRId.get(group.rId) ?? 0;
+        if (nextHeight > currentHeight) {
+          heightsByRId.set(group.rId, nextHeight);
+        }
+
+        for (const sectionIndex of group.sectionIndices) {
+          heightsBySectionRef.set(buildSectionAwareHeaderFooterLayoutKey(group.rId, sectionIndex), nextHeight);
+        }
+      }
+
+      return {
+        heightsByRId: heightsByRId.size > 0 ? heightsByRId : undefined,
+        heightsBySectionRef: heightsBySectionRef.size > 0 ? heightsBySectionRef : undefined,
+      };
+    }
+
+    for (const [rId, blocks] of blocksByRId) {
+      if (!blocks || blocks.length === 0) continue;
+
+      const measureConstraints = {
+        maxWidth: constraints.width,
+        maxHeight: constraints.height,
+      };
+      const measures = await Promise.all(blocks.map((block) => measureFn(block, measureConstraints)));
+      const layout = layoutHeaderFooter(blocks, measures, constraints, kind);
+      if (layout.height > 0) {
+        heightsByRId.set(rId, layout.height);
+      }
+    }
+
+    return {
+      heightsByRId: heightsByRId.size > 0 ? heightsByRId : undefined,
+    };
+  };
 
   if (headerFooter?.constraints && (hasHeaderBlocks || hasHeaderBlocksByRId)) {
     const hfPreStart = performance.now();
@@ -952,22 +1033,14 @@ export async function incrementalLayout(
     // Also extract heights from headerBlocksByRId (for multi-section documents)
     // Store each rId's height separately for per-page margin calculation
     if (hasHeaderBlocksByRId && headerFooter.headerBlocksByRId) {
-      headerContentHeightsByRId = new Map<string, number>();
-      for (const [rId, blocks] of headerFooter.headerBlocksByRId) {
-        if (!blocks || blocks.length === 0) continue;
-        // Measure blocks to get height
-        const measureConstraints = {
-          maxWidth: headerFooter.constraints.width,
-          maxHeight: headerFooter.constraints.height,
-        };
-        const measures = await Promise.all(blocks.map((block) => measureFn(block, measureConstraints)));
-        // Layout to get actual height — pass full constraints for page-relative normalization
-        const layout = layoutHeaderFooter(blocks, measures, headerFooter.constraints, 'header');
-        if (layout.height > 0) {
-          // Store height by rId for per-page margin calculation
-          headerContentHeightsByRId.set(rId, layout.height);
-        }
-      }
+      const measuredHeights = await measureHeightsByReference(
+        'header',
+        headerFooter.headerBlocksByRId,
+        headerFooter.constraints,
+        measureFn,
+      );
+      headerContentHeightsByRId = measuredHeights.heightsByRId;
+      headerContentHeightsBySectionRef = measuredHeights.heightsBySectionRef;
     }
 
     const hfPreEnd = performance.now();
@@ -992,6 +1065,7 @@ export async function incrementalLayout(
    * Values are the actual content heights in pixels.
    */
   let footerContentHeightsByRId: Map<string, number> | undefined;
+  let footerContentHeightsBySectionRef: Map<string, number> | undefined;
 
   // Check if we have footers via either footerBlocks (by variant) or footerBlocksByRId (by relationship ID)
   const hasFooterBlocks = headerFooter?.footerBlocks && Object.keys(headerFooter.footerBlocks).length > 0;
@@ -1063,22 +1137,14 @@ export async function incrementalLayout(
       // Also extract heights from footerBlocksByRId (for multi-section documents)
       // Store each rId's height separately for per-page margin calculation
       if (hasFooterBlocksByRId && headerFooter.footerBlocksByRId) {
-        footerContentHeightsByRId = new Map<string, number>();
-        for (const [rId, blocks] of headerFooter.footerBlocksByRId) {
-          if (!blocks || blocks.length === 0) continue;
-          // Measure blocks to get height
-          const measureConstraints = {
-            maxWidth: headerFooter.constraints.width,
-            maxHeight: headerFooter.constraints.height,
-          };
-          const measures = await Promise.all(blocks.map((block) => measureFn(block, measureConstraints)));
-          // Layout to get actual height — pass full constraints for page-relative normalization
-          const layout = layoutHeaderFooter(blocks, measures, headerFooter.constraints, 'footer');
-          if (layout.height > 0) {
-            // Store height by rId for per-page margin calculation
-            footerContentHeightsByRId.set(rId, layout.height);
-          }
-        }
+        const measuredHeights = await measureHeightsByReference(
+          'footer',
+          headerFooter.footerBlocksByRId,
+          headerFooter.constraints,
+          measureFn,
+        );
+        footerContentHeightsByRId = measuredHeights.heightsByRId;
+        footerContentHeightsBySectionRef = measuredHeights.heightsBySectionRef;
       }
     } catch (error) {
       console.error('[Layout] Footer pre-layout failed:', error);
@@ -1094,7 +1160,9 @@ export async function incrementalLayout(
     ...options,
     headerContentHeights, // Pass header heights to prevent overlap (per-variant)
     footerContentHeights, // Pass footer heights to prevent overlap (per-variant)
+    headerContentHeightsBySectionRef, // Pass header heights by rId+section for exact page-specific margin calculation
     headerContentHeightsByRId, // Pass header heights by rId for per-page margin calculation
+    footerContentHeightsBySectionRef, // Pass footer heights by rId+section for exact page-specific margin calculation
     footerContentHeightsByRId, // Pass footer heights by rId for per-page margin calculation
     remeasureParagraph: (block: FlowBlock, maxWidth: number, firstLineIndent?: number) =>
       remeasureParagraph(block as ParagraphBlock, maxWidth, firstLineIndent),
@@ -1178,7 +1246,9 @@ export async function incrementalLayout(
         ...options,
         headerContentHeights, // Pass header heights to prevent overlap (per-variant)
         footerContentHeights, // Pass footer heights to prevent overlap (per-variant)
+        headerContentHeightsBySectionRef, // Pass header heights by rId+section for exact page-specific margin calculation
         headerContentHeightsByRId, // Pass header heights by rId for per-page margin calculation
+        footerContentHeightsBySectionRef, // Pass footer heights by rId+section for exact page-specific margin calculation
         footerContentHeightsByRId, // Pass footer heights by rId for per-page margin calculation
         remeasureParagraph: (block: FlowBlock, maxWidth: number, firstLineIndent?: number) =>
           remeasureParagraph(block as ParagraphBlock, maxWidth, firstLineIndent),
@@ -1328,6 +1398,34 @@ export async function incrementalLayout(
           const columns = pageColumns.get(pageIndex);
           const columnCount = Math.max(1, Math.floor(columns?.count ?? 1));
 
+          // SD-1680: cap placement to the footnote demand on this page (capped by maxReserve).
+          // Demand = sum of measured heights of all footnote refs anchored here, plus the
+          // separator/padding/gap overhead they would incur when stacked. Capping placement
+          // at `min(demand, maxReserve)` (rather than `baseReserve`) decouples the plan's
+          // placement from the body's prior-pass reserve: the plan reports how much band
+          // the footnotes actually need, the body grows its reserve to match on the next
+          // pass, and placement never exceeds maxReserve so footnotes cannot render past
+          // the page's bottom margin.
+          let demand = 0;
+          for (let columnIndex = 0; columnIndex < columnCount; columnIndex += 1) {
+            const ids = idsByColumn.get(pageIndex)?.get(columnIndex) ?? [];
+            let columnDemand = 0;
+            ids.forEach((id, idx) => {
+              const ranges = rangesByFootnoteId.get(id) ?? [];
+              let rangesHeight = 0;
+              ranges.forEach((range) => {
+                const spacingAfter = 'spacingAfter' in range ? (range.spacingAfter ?? 0) : 0;
+                rangesHeight += range.height + spacingAfter;
+              });
+              columnDemand += rangesHeight + (idx > 0 ? safeGap : 0);
+            });
+            if (columnDemand > 0) {
+              columnDemand += safeSeparatorSpacingBefore + safeDividerHeight + safeTopPadding;
+            }
+            if (columnDemand > demand) demand = columnDemand;
+          }
+          const placementCeiling = demand > 0 ? Math.min(Math.ceil(demand), maxReserve) : maxReserve;
+
           const pendingForPage = new Map<number, Array<{ id: string; ranges: FootnoteRange[] }>>();
           pendingByColumn.forEach((entries, columnIndex) => {
             const targetIndex = columnIndex < columnCount ? columnIndex : Math.max(0, columnCount - 1);
@@ -1365,7 +1463,7 @@ export async function incrementalLayout(
                 : 0;
               const overhead = isFirstSlice ? separatorBefore + separatorHeight + safeTopPadding : 0;
               const gapBefore = !isFirstSlice ? safeGap : 0;
-              const availableHeight = Math.max(0, maxReserve - usedHeight - overhead - gapBefore);
+              const availableHeight = Math.max(0, placementCeiling - usedHeight - overhead - gapBefore);
               const { slice, remainingRanges } = fitFootnoteContent(
                 id,
                 ranges,
@@ -1374,7 +1472,7 @@ export async function incrementalLayout(
                 columnIndex,
                 isContinuation,
                 measuresById,
-                isFirstSlice && maxReserve > 0,
+                isFirstSlice && placementCeiling > 0,
               );
 
               if (slice.ranges.length === 0) {
@@ -1503,7 +1601,7 @@ export async function incrementalLayout(
           );
           const pageContentWidth = pageSize.w - (marginLeft + marginRight);
           const fallbackColumns = normalizeColumnsForFootnotes(
-            options.columns ?? { count: 1, gap: 0 },
+            options.columns ?? SINGLE_COLUMN_DEFAULT,
             pageContentWidth,
           );
           const columns = pageColumns.get(pageIndex) ?? {
@@ -1633,46 +1731,27 @@ export async function incrementalLayout(
                   const block = blockById.get(range.blockId);
                   if (!measure || measure.kind !== 'table') return;
                   if (!block || block.kind !== 'table') return;
-                  const tableWidthRaw = Math.max(0, measure.totalWidth ?? 0);
-                  let tableWidth = Math.min(contentWidth, tableWidthRaw);
-                  let tableX = columnX;
-                  const justification =
-                    typeof block.attrs?.justification === 'string' ? block.attrs.justification : undefined;
-                  if (justification === 'center') {
-                    tableX = columnX + Math.max(0, (contentWidth - tableWidth) / 2);
-                  } else if (justification === 'right' || justification === 'end') {
-                    tableX = columnX + Math.max(0, contentWidth - tableWidth);
-                  } else {
-                    const indentValue = (block.attrs?.tableIndent as { width?: unknown } | undefined)?.width;
-                    const indent = typeof indentValue === 'number' && Number.isFinite(indentValue) ? indentValue : 0;
-                    tableX += indent;
-                    tableWidth = Math.max(0, tableWidth - indent);
-                  }
-                  // Rescale column widths when table was clamped to section width.
-                  // This happens in mixed-orientation docs where measurement uses the
-                  // widest section but rendering is per-section (SD-1859).
-                  let fragmentColumnWidths: number[] | undefined;
-                  if (
-                    tableWidthRaw > tableWidth &&
-                    measure.columnWidths &&
-                    measure.columnWidths.length > 0 &&
-                    tableWidthRaw > 0
-                  ) {
-                    const scale = tableWidth / tableWidthRaw;
-                    fragmentColumnWidths = measure.columnWidths.map((w: number) => Math.max(1, Math.round(w * scale)));
-                    const scaledSum = fragmentColumnWidths.reduce((a: number, b: number) => a + b, 0);
-                    const target = Math.round(tableWidth);
-                    if (scaledSum !== target && fragmentColumnWidths.length > 0) {
-                      fragmentColumnWidths[fragmentColumnWidths.length - 1] = Math.max(
-                        1,
-                        fragmentColumnWidths[fragmentColumnWidths.length - 1] + (target - scaledSum),
-                      );
-                    }
-                  }
+                  const tableWidthRaw = Math.max(0, measure.totalWidth ?? contentWidth);
+                  const { x: tableX, width: tableWidth } = resolveTableFrame(
+                    columnX,
+                    contentWidth,
+                    tableWidthRaw,
+                    block.attrs,
+                  );
+                  // Rescale column widths only when the resolved fragment width is narrower
+                  // than the measured table width. Today that primarily happens for
+                  // percentage-width tables rendered in a narrower section (SD-1859),
+                  // while non-percent wide tables keep their measured overflow width.
+                  const fragmentColumnWidths = rescaleColumnWidths(
+                    measure.columnWidths,
+                    measure.totalWidth,
+                    tableWidth,
+                  );
 
                   page.fragments.push({
                     kind: 'table',
                     blockId: range.blockId,
+                    columnIndex,
                     fromRow: 0,
                     toRow: block.rows.length,
                     x: tableX,
@@ -1742,6 +1821,10 @@ export async function incrementalLayout(
           footnoteReservedByPageIndex,
           headerContentHeights,
           footerContentHeights,
+          headerContentHeightsBySectionRef,
+          headerContentHeightsByRId,
+          footerContentHeightsBySectionRef,
+          footerContentHeightsByRId,
           remeasureParagraph: (block: FlowBlock, maxWidth: number, firstLineIndent?: number) =>
             remeasureParagraph(block as ParagraphBlock, maxWidth, firstLineIndent),
         });
@@ -1756,7 +1839,7 @@ export async function incrementalLayout(
       // so each page gets the correct reserve (avoids "too much" on one page and "not enough" on another).
       if (reserves.some((h) => h > 0)) {
         let reservesStabilized = false;
-        const seenReserveKeys = new Set<string>([reserves.join(',')]);
+        const seenReserveVectors: number[][] = [reserves.slice()];
         for (let pass = 0; pass < MAX_FOOTNOTE_LAYOUT_PASSES; pass += 1) {
           layout = relayout(reserves);
           ({ columns: pageColumns, idsByColumn } = resolveFootnoteAssignments(layout));
@@ -1772,13 +1855,14 @@ export async function incrementalLayout(
             reservesStabilized = true;
             break;
           }
-          // Detect oscillation: if we've produced a reserve vector we already tried,
-          // the loop will never converge. Break early to avoid wasted relayout passes.
-          const nextKey = nextReserves.join(',');
-          if (seenReserveKeys.has(nextKey)) {
-            break;
-          }
-          seenReserveKeys.add(nextKey);
+          // Reserves are oscillating. Break out; the post-reserve grow loop
+          // below (which is monotonic and has its own cycle detector) will
+          // bump any under-reserved pages to the current plan's demand.
+          // Merging history here would carry over large demands from early
+          // passes that the current layout no longer anchors, leading to
+          // wasted reserved space on pages that never get any footnote.
+          if (seenReserveVectors.some((v) => v.join(',') === nextReserves.join(','))) break;
+          seenReserveVectors.push(nextReserves.slice());
           // Only update reserves when we will do another layout pass; otherwise layout
           // would be built with the previous reserves while reserves would be nextReserves,
           // and the plan/injection phase could place footnotes in the wrong band.
@@ -1803,15 +1887,17 @@ export async function incrementalLayout(
           reserves,
           finalPageColumns,
         );
-        const finalReserves = finalPlan.reserves;
         let reservesAppliedToLayout = reserves;
-        const reservesDiffer =
-          finalReserves.length !== reserves.length ||
-          finalReserves.some((h, i) => (reserves[i] ?? 0) !== h) ||
-          reserves.some((h, i) => (finalReserves[i] ?? 0) !== h);
-        if (reservesDiffer) {
-          layout = relayout(finalReserves);
-          reservesAppliedToLayout = finalReserves;
+
+        const vectorsEqual = (a: number[], b: number[]): boolean => {
+          for (let i = 0; i < Math.max(a.length, b.length); i += 1) {
+            if ((a[i] ?? 0) !== (b[i] ?? 0)) return false;
+          }
+          return true;
+        };
+        const applyReserves = async (target: number[]) => {
+          layout = relayout(target);
+          reservesAppliedToLayout = target;
           ({ columns: finalPageColumns, idsByColumn: finalIdsByColumn } = resolveFootnoteAssignments(layout));
           ({ blocks: finalBlocks, measuresById: finalMeasuresById } = await measureFootnoteBlocks(
             collectFootnoteIdsByColumn(finalIdsByColumn),
@@ -1823,7 +1909,93 @@ export async function incrementalLayout(
             reservesAppliedToLayout,
             finalPageColumns,
           );
+        };
+        // Grow-only convergence: ensures every page reserves at least as much
+        // as its plan demands, so footnotes never render past the page bottom.
+        // Monotonic (reserves only increase) and safe under oscillation. Needs
+        // several passes for growth on one page to propagate to the pages it
+        // spills into. If a target cycles back to one we've tried, we merge
+        // element-wise with the last applied target to force progress.
+        const growReserves = async (maxPasses: number): Promise<boolean> => {
+          const seen: number[][] = [reservesAppliedToLayout.slice()];
+          for (let pass = 0; pass < maxPasses; pass += 1) {
+            const target = reservesAppliedToLayout.slice();
+            const plan = finalPlan.reserves;
+            let grew = false;
+            for (let i = 0; i < Math.max(target.length, plan.length); i += 1) {
+              if ((plan[i] ?? 0) > (target[i] ?? 0)) {
+                target[i] = plan[i];
+                grew = true;
+              }
+            }
+            if (!grew) return true;
+            let next = target;
+            if (seen.some((prev) => vectorsEqual(prev, target))) {
+              const last = seen[seen.length - 1];
+              next = target.map((v, i) => Math.max(v, last[i] ?? 0));
+              if (vectorsEqual(next, reservesAppliedToLayout)) return true;
+            }
+            await applyReserves(next);
+            seen.push(next);
+          }
+          return false;
+        };
+
+        // Fast path for well-converged docs: if every page's current reserve
+        // already satisfies the plan and no page is carrying dead reserve,
+        // skip both the initial grow and the tighten loop entirely. Avoids
+        // up to ~20 unnecessary relayouts on documents without oscillation.
+        const TIGHTEN_SLACK_PX = 8;
+        const needsWork = (() => {
+          const plan = finalPlan.reserves;
+          const applied = reservesAppliedToLayout;
+          const len = Math.max(plan.length, applied.length);
+          for (let i = 0; i < len; i += 1) {
+            const a = applied[i] ?? 0;
+            const p = plan[i] ?? 0;
+            if (p > a) return true; // under-reserved — grow must bump
+            if (a >= TIGHTEN_SLACK_PX && p === 0) return true; // dead reserve — tighten can reclaim
+          }
+          return false;
+        })();
+
+        if (needsWork) {
+          const GROW_MAX_PASSES = 10;
+          if (!(await growReserves(GROW_MAX_PASSES))) {
+            console.warn(
+              '[incrementalLayout] Footnote post-reserve loop did not converge; some pages may have footnotes overflowing the reserved band.',
+            );
+          }
+
+          // Opportunistic tighten: the grow loop is monotonic, so pages whose
+          // plan no longer asks for a reserve (footnote content shifted to
+          // later pages during an earlier pass) still carry their old reserve.
+          // Zero those pages' reserves and regrow any that gain footnote
+          // content after the body reflows. Revert if regrow can't stabilize
+          // safely or would add pages. Iterate a few times — each tighten
+          // + regrow can expose a fresh set of "reserved but plan==0" pages
+          // after the body reflows.
+          const MAX_TIGHTEN_ITERATIONS = 8;
+          for (let iteration = 0; iteration < MAX_TIGHTEN_ITERATIONS; iteration += 1) {
+            const pagesToTighten: number[] = [];
+            for (let i = 0; i < reservesAppliedToLayout.length; i += 1) {
+              const applied = reservesAppliedToLayout[i] ?? 0;
+              const planned = finalPlan.reserves[i] ?? 0;
+              if (applied >= TIGHTEN_SLACK_PX && planned === 0) pagesToTighten.push(i);
+            }
+            if (pagesToTighten.length === 0) break;
+            const safeApplied = reservesAppliedToLayout.slice();
+            const safePageCount = layout.pages.length;
+            const tightened = reservesAppliedToLayout.slice();
+            for (const i of pagesToTighten) tightened[i] = 0;
+            await applyReserves(tightened);
+            if (!(await growReserves(GROW_MAX_PASSES)) || layout.pages.length > safePageCount) {
+              await applyReserves(safeApplied);
+              break;
+            }
+          }
         }
+
         const blockById = new Map<string, FlowBlock>();
         finalBlocks.forEach((block) => {
           blockById.set(block.id, block);

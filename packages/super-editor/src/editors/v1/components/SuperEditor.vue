@@ -59,6 +59,13 @@ const activeEditor = computed(() => {
   return editor.value;
 });
 
+const contextMenuEditor = computed(() => {
+  if (editor.value instanceof PresentationEditor) {
+    return editor.value;
+  }
+  return activeEditor.value;
+});
+
 const contextMenuDisabled = computed(() => {
   const active = activeEditor.value;
   return active?.options ? Boolean(active.options.disableContextMenu) : Boolean(props.options.disableContextMenu);
@@ -1298,8 +1305,8 @@ onBeforeUnmount(() => {
       <div ref="editorElem" class="editor-element super-editor__element" role="presentation"></div>
       <!-- Single ContextMenu component, no Teleport needed -->
       <ContextMenu
-        v-if="!contextMenuDisabled && editorReady && activeEditor"
-        :editor="activeEditor"
+        v-if="!contextMenuDisabled && editorReady && contextMenuEditor"
+        :editor="contextMenuEditor"
         :popoverControls="popoverControls"
         :openPopover="openPopover"
         :closePopover="closePopover"

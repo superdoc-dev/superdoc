@@ -23,7 +23,9 @@ const {
   mockMeasureBlock,
   mockEditorConverterStore,
   mockCreateHeaderFooterEditor,
+  mockCreateStoryEditor,
   createdSectionEditors,
+  createdStoryEditors,
   mockOnHeaderFooterDataUpdate,
   mockUpdateYdocDocxData,
   mockEditorOverlayManager,
@@ -89,18 +91,24 @@ const {
       once: emitter.once,
       emit: emitter.emit,
       destroy: vi.fn(),
+      getJSON: vi.fn(() => ({ type: 'doc', content: [{ type: 'paragraph' }] })),
+      getUpdatedJson: vi.fn(() => ({ type: 'doc', content: [{ type: 'paragraph' }] })),
       setEditable: vi.fn(),
+      setDocumentMode: vi.fn(),
       setOptions: vi.fn(),
       commands: {
         setTextSelection: vi.fn(),
+        setCursorById: vi.fn(() => true),
       },
       state: {
         doc: {
           content: {
             size: 10,
           },
+          textBetween: vi.fn(() => 'Lazy note session'),
         },
       },
+      options: {},
       view: {
         dom: document.createElement('div'),
         focus: vi.fn(),
@@ -111,6 +119,7 @@ const {
   };
 
   const editors: Array<{ editor: ReturnType<typeof createSectionEditor> }> = [];
+  const storyEditors: Array<{ editor: ReturnType<typeof createSectionEditor> }> = [];
   const mockFlowBlockCacheInstances: Array<{
     clear: ReturnType<typeof vi.fn>;
     setHasExternalChanges: ReturnType<typeof vi.fn>;
@@ -150,7 +159,14 @@ const {
       editors.push({ editor });
       return editor;
     }),
+    mockCreateStoryEditor: vi.fn((parentEditor?: EditorInstance) => {
+      const editor = createSectionEditor();
+      editor.options = { ...editor.options, parentEditor };
+      storyEditors.push({ editor });
+      return editor;
+    }),
     createdSectionEditors: editors,
+    createdStoryEditors: storyEditors,
     mockOnHeaderFooterDataUpdate: vi.fn(),
     mockUpdateYdocDocxData: vi.fn(() => Promise.resolve()),
     mockEditorOverlayManager: vi.fn().mockImplementation(() => ({
@@ -171,6 +187,11 @@ const {
     MockFlowBlockCache,
   };
 });
+
+const bookmarkResolverMocks = vi.hoisted(() => ({
+  findAllBookmarksInDocument: vi.fn(() => []),
+  resolveBookmarkTarget: vi.fn(),
+}));
 
 // Mock PositionHitResolver
 vi.mock('../input/PositionHitResolver.js', () => ({
@@ -317,12 +338,26 @@ vi.mock('@superdoc/measuring-dom', () => ({
 
 vi.mock('@superdoc/layout-resolved', () => ({
   resolveLayout: mockResolveLayout,
+  resolveHeaderFooterLayout: vi.fn(() => ({ height: 0, pages: [] })),
 }));
 
 vi.mock('@extensions/pagination/pagination-helpers.js', () => ({
   createHeaderFooterEditor: mockCreateHeaderFooterEditor,
   onHeaderFooterDataUpdate: mockOnHeaderFooterDataUpdate,
 }));
+
+vi.mock('../../story-editor-factory.js', () => ({
+  createStoryEditor: mockCreateStoryEditor,
+}));
+
+vi.mock('../../../document-api-adapters/helpers/bookmark-resolver.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../document-api-adapters/helpers/bookmark-resolver.js')>();
+  return {
+    ...actual,
+    findAllBookmarksInDocument: bookmarkResolverMocks.findAllBookmarksInDocument,
+    resolveBookmarkTarget: bookmarkResolverMocks.resolveBookmarkTarget,
+  };
+});
 
 vi.mock('../../header-footer/EditorOverlayManager', () => ({
   EditorOverlayManager: mockEditorOverlayManager,
@@ -350,7 +385,11 @@ describe('PresentationEditor', () => {
     };
     mockEditorConverterStore.mediaFiles = {};
     createdSectionEditors.length = 0;
+    createdStoryEditors.length = 0;
     mockFlowBlockCacheInstances.length = 0;
+    bookmarkResolverMocks.findAllBookmarksInDocument.mockReset();
+    bookmarkResolverMocks.findAllBookmarksInDocument.mockImplementation(() => []);
+    bookmarkResolverMocks.resolveBookmarkTarget.mockReset();
 
     // Reset static instances
     (PresentationEditor as typeof PresentationEditor & { instances: Map<string, unknown> }).instances = new Map();
@@ -363,6 +402,37 @@ describe('PresentationEditor', () => {
     if (container.parentNode) {
       document.body.removeChild(container);
     }
+  });
+
+  describe('unified history defaults', () => {
+    it('enables the coordinator by default', async () => {
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'unified-history-default-doc',
+        content: { type: 'doc', content: [{ type: 'paragraph' }] },
+        mode: 'docx',
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(editor.historyCoordinator).not.toBeNull();
+    });
+
+    it('allows callers to disable the coordinator explicitly', async () => {
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'unified-history-disabled-doc',
+        content: { type: 'doc', content: [{ type: 'paragraph' }] },
+        mode: 'docx',
+        experimental: {
+          unifiedHistory: false,
+        },
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(editor.historyCoordinator).toBeNull();
+    });
   });
 
   describe('scrollToPosition', () => {
@@ -772,6 +842,64 @@ describe('PresentationEditor', () => {
     });
   });
 
+  describe('alternateHeaders threading (paginated flow)', () => {
+    it('forwards converter.pageStyles.alternateHeaders=true to incrementalLayout', async () => {
+      mockEditorConverterStore.current.pageStyles = { alternateHeaders: true };
+
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'alt-headers-true-doc',
+        mode: 'docx',
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(mockIncrementalLayout).toHaveBeenCalled();
+      const layoutOptions = mockIncrementalLayout.mock.calls[mockIncrementalLayout.mock.calls.length - 1]?.[3] as {
+        flowMode?: string;
+        alternateHeaders?: boolean;
+      };
+      expect(layoutOptions.flowMode).toBe('paginated');
+      expect(layoutOptions.alternateHeaders).toBe(true);
+    });
+
+    it('forwards alternateHeaders=false when converter.pageStyles.alternateHeaders is unset', async () => {
+      // converter has no pageStyles.alternateHeaders by default
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'alt-headers-default-doc',
+        mode: 'docx',
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      const layoutOptions = mockIncrementalLayout.mock.calls[mockIncrementalLayout.mock.calls.length - 1]?.[3] as {
+        flowMode?: string;
+        alternateHeaders?: boolean;
+      };
+      expect(layoutOptions.flowMode).toBe('paginated');
+      expect(layoutOptions.alternateHeaders).toBe(false);
+    });
+
+    it('coerces falsy but non-boolean pageStyles.alternateHeaders values to false', async () => {
+      // Defensive check: if a converter emits undefined/null/0/'', we still want a clean boolean
+      mockEditorConverterStore.current.pageStyles = { alternateHeaders: 0 };
+
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'alt-headers-coerce-doc',
+        mode: 'docx',
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      const layoutOptions = mockIncrementalLayout.mock.calls[mockIncrementalLayout.mock.calls.length - 1]?.[3] as {
+        alternateHeaders?: boolean;
+      };
+      expect(layoutOptions.alternateHeaders).toBe(false);
+    });
+  });
+
   describe('scrollToPage', () => {
     const buildMixedPageLayout = () => ({
       layout: {
@@ -967,6 +1095,103 @@ describe('PresentationEditor', () => {
         }
       },
     );
+
+    // SD-2495 anchor-nav fix: when the scrollable ancestor differs from the
+    // visible host (the real-world shape - the host is overflow:visible and
+    // a parent constrains height), scrollTop must land on the ancestor, not
+    // just the host. Happy-dom doesn't propagate inline overflow through
+    // getComputedStyle, so we stub it to mark a wrapper as scrollable.
+    it('writes scrollTop to both the scrollable ancestor and the visibleHost when they differ', async () => {
+      const scrollableWrapper = document.createElement('div');
+      document.body.removeChild(container);
+      scrollableWrapper.appendChild(container);
+      document.body.appendChild(scrollableWrapper);
+
+      const originalGetComputedStyle = window.getComputedStyle.bind(window);
+      const getComputedStyleSpy = vi
+        .spyOn(window, 'getComputedStyle')
+        .mockImplementation((el: Element, pseudo?: string | null) => {
+          if (el === scrollableWrapper) {
+            return { overflowY: 'auto' } as CSSStyleDeclaration;
+          }
+          return originalGetComputedStyle(el, pseudo ?? null);
+        });
+
+      mockIncrementalLayout.mockResolvedValueOnce(buildMixedPageLayout());
+
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'test-scroll-multi-target',
+        content: { type: 'doc', content: [{ type: 'paragraph' }] },
+        mode: 'docx',
+        layoutEngineOptions: {
+          virtualization: { enabled: true, gap: 10, window: 1, overscan: 0 },
+        },
+      });
+
+      await vi.waitFor(() => expect(mockIncrementalLayout).toHaveBeenCalled());
+
+      const pagesHost = container.querySelector('.presentation-editor__pages') as HTMLElement;
+      const expectedPageTop = 600 + 10 + 1200 + 10;
+
+      let wrapperScrollTop = 0;
+      let hostScrollTop = 0;
+      let mountedPageEl: HTMLElement | null = null;
+      const mountPageIfScrolled = (value: number) => {
+        if (!mountedPageEl && Math.abs(value - expectedPageTop) < 0.5) {
+          mountedPageEl = document.createElement('div');
+          mountedPageEl.setAttribute('data-page-index', '2');
+          Object.defineProperty(mountedPageEl, 'scrollIntoView', {
+            value: vi.fn(),
+            configurable: true,
+          });
+          pagesHost.appendChild(mountedPageEl);
+        }
+      };
+      Object.defineProperty(scrollableWrapper, 'scrollTop', {
+        get: () => wrapperScrollTop,
+        set: (next) => {
+          wrapperScrollTop = Number(next);
+          mountPageIfScrolled(wrapperScrollTop);
+        },
+        configurable: true,
+      });
+      Object.defineProperty(container, 'scrollTop', {
+        get: () => hostScrollTop,
+        set: (next) => {
+          hostScrollTop = Number(next);
+          mountPageIfScrolled(hostScrollTop);
+        },
+        configurable: true,
+      });
+
+      let now = 0;
+      const performanceNowSpy = vi.spyOn(performance, 'now').mockImplementation(() => now);
+      const rafSpy = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb: FrameRequestCallback) => {
+        now += 100;
+        cb(now);
+        return 1;
+      });
+
+      try {
+        const didScroll = await editor.scrollToPage(3, 'auto');
+
+        expect(didScroll).toBe(true);
+        // Both writes must land: the ancestor (real scrollable) AND the host
+        // (back-compat for layouts where the host itself is scrollable).
+        expect(wrapperScrollTop).toBe(expectedPageTop);
+        expect(hostScrollTop).toBe(expectedPageTop);
+      } finally {
+        rafSpy.mockRestore();
+        performanceNowSpy.mockRestore();
+        getComputedStyleSpy.mockRestore();
+        // Restore DOM layout so the outer afterEach can clean up normally.
+        if (scrollableWrapper.parentNode) {
+          document.body.removeChild(scrollableWrapper);
+        }
+        document.body.appendChild(container);
+      }
+    });
   });
 
   describe('setDocumentMode', () => {
@@ -2002,7 +2227,7 @@ describe('PresentationEditor', () => {
               fragments: [],
               margins: { top: 72, bottom: 72, left: 72, right: 72, header: 36, footer: 36 },
               sectionRefs: {
-                headerRefs: { default: 'rId-header-default' },
+                headerRefs: { odd: 'rId-header-default' },
                 footerRefs: { default: 'rId-footer-default' },
               },
             },
@@ -2261,7 +2486,11 @@ describe('PresentationEditor', () => {
       viewport.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, clientX: 120, clientY: 50, button: 0 }));
 
       await vi.waitFor(() => expect(createdSectionEditors.length).toBeGreaterThan(0));
-      await vi.waitFor(() => expect(editor.getActiveEditor()).toBe(createdSectionEditors.at(-1)?.editor));
+      await vi.waitFor(() =>
+        expect(
+          createdSectionEditors.some(({ editor: sectionEditor }) => sectionEditor === editor.getActiveEditor()),
+        ).toBe(true),
+      );
 
       const sourceEditor = editor.getActiveEditor();
       expect(sourceEditor).toBeDefined();
@@ -2329,7 +2558,11 @@ describe('PresentationEditor', () => {
       viewport.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, clientX: 120, clientY: 50, button: 0 }));
 
       await vi.waitFor(() => expect(createdSectionEditors.length).toBeGreaterThan(0));
-      await vi.waitFor(() => expect(editor.getActiveEditor()).toBe(createdSectionEditors.at(-1)?.editor));
+      await vi.waitFor(() =>
+        expect(
+          createdSectionEditors.some(({ editor: sectionEditor }) => sectionEditor === editor.getActiveEditor()),
+        ).toBe(true),
+      );
 
       const sourceEditor = editor.getActiveEditor();
       const transaction = { docChanged: true };
@@ -2387,7 +2620,11 @@ describe('PresentationEditor', () => {
       viewport.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, clientX: 120, clientY: 740, button: 0 }));
 
       await vi.waitFor(() => expect(createdSectionEditors.length).toBeGreaterThan(0));
-      await vi.waitFor(() => expect(editor.getActiveEditor()).toBe(createdSectionEditors.at(-1)?.editor));
+      await vi.waitFor(() =>
+        expect(
+          createdSectionEditors.some(({ editor: sectionEditor }) => sectionEditor === editor.getActiveEditor()),
+        ).toBe(true),
+      );
 
       const sourceEditor = editor.getActiveEditor();
       expect(sourceEditor).toBeDefined();
@@ -2416,64 +2653,6 @@ describe('PresentationEditor', () => {
           duration: 12,
         }),
       );
-    });
-
-    it('clears leftover footer transform when entering footer editing with non-negative minY', async () => {
-      mockIncrementalLayout.mockResolvedValueOnce(buildLayoutResult());
-
-      const editorContainer = document.createElement('div');
-      editorContainer.className = 'super-editor';
-      editorContainer.style.transform = 'translateY(24px)';
-      const editorHost = document.createElement('div');
-      editorHost.appendChild(editorContainer);
-
-      const showEditingOverlay = vi.fn(() => ({
-        success: true,
-        editorHost,
-        reason: null,
-      }));
-
-      mockEditorOverlayManager.mockImplementationOnce(() => ({
-        showEditingOverlay,
-        hideEditingOverlay: vi.fn(),
-        showSelectionOverlay: vi.fn(),
-        hideSelectionOverlay: vi.fn(),
-        setOnDimmingClick: vi.fn(),
-        getActiveEditorHost: vi.fn(() => editorHost),
-        destroy: vi.fn(),
-      }));
-
-      editor = new PresentationEditor({
-        element: container,
-        documentId: 'test-doc',
-      });
-
-      await vi.waitFor(() => expect(mockIncrementalLayout).toHaveBeenCalled());
-      await new Promise((resolve) => setTimeout(resolve, 100));
-
-      const pagesHost = container.querySelector('.presentation-editor__pages') as HTMLElement;
-      const mockPage = document.createElement('div');
-      mockPage.setAttribute('data-page-index', '0');
-      pagesHost.appendChild(mockPage);
-
-      const viewport = container.querySelector('.presentation-editor__viewport') as HTMLElement;
-      vi.spyOn(viewport, 'getBoundingClientRect').mockReturnValue({
-        left: 0,
-        top: 0,
-        width: 800,
-        height: 1000,
-        right: 800,
-        bottom: 1000,
-        x: 0,
-        y: 0,
-        toJSON: () => ({}),
-      } as DOMRect);
-
-      // Click inside the footer hitbox (y between footer margin 36 and bottom margin 72)
-      viewport.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, clientX: 120, clientY: 740, button: 0 }));
-
-      await vi.waitFor(() => expect(showEditingOverlay).toHaveBeenCalled());
-      await vi.waitFor(() => expect(editorContainer.style.transform).toBe(''));
     });
 
     it('exits header mode on Escape and announces the transition', async () => {
@@ -2545,6 +2724,626 @@ describe('PresentationEditor', () => {
       );
 
       expect(blockedSpy).toHaveBeenCalledWith(expect.objectContaining({ reason: 'missingRegion' }));
+    });
+
+    it('returns false without emitting an error when an unqualified bookmark is not found', async () => {
+      mockIncrementalLayout.mockResolvedValueOnce(buildLayoutResult());
+      const errorSpy = vi.fn();
+
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'test-doc',
+      });
+      editor.on('error', errorSpy);
+
+      await vi.waitFor(() => expect(mockIncrementalLayout).toHaveBeenCalled());
+
+      const didNavigate = await editor.navigateTo({
+        kind: 'entity',
+        entityType: 'bookmark',
+        name: 'missing-bm',
+      });
+
+      expect(didNavigate).toBe(false);
+      expect(bookmarkResolverMocks.findAllBookmarksInDocument).toHaveBeenCalled();
+      expect(bookmarkResolverMocks.resolveBookmarkTarget).not.toHaveBeenCalled();
+      expect(errorSpy).not.toHaveBeenCalled();
+    });
+
+    it('exits active header mode before navigating to a body bookmark', async () => {
+      const layoutResult = buildLayoutResult();
+      layoutResult.layout.pages[0].fragments = [
+        {
+          kind: 'para',
+          blockId: 'body-p1',
+          pmStart: 0,
+          pmEnd: 20,
+          y: 120,
+        },
+      ];
+      mockIncrementalLayout.mockResolvedValueOnce(layoutResult);
+      bookmarkResolverMocks.findAllBookmarksInDocument.mockReturnValueOnce([
+        { name: 'body-bm', bookmarkId: '7', storyKey: 'body' },
+      ]);
+      bookmarkResolverMocks.resolveBookmarkTarget.mockReturnValueOnce({
+        pos: 8,
+        name: 'body-bm',
+        bookmarkId: '7',
+        endPos: 9,
+        node: { attrs: { name: 'body-bm', id: '7' } },
+      });
+
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'test-doc',
+      });
+
+      await vi.waitFor(() => expect(mockIncrementalLayout).toHaveBeenCalled());
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      const pagesHost = container.querySelector('.presentation-editor__pages') as HTMLElement;
+      const mockPage = document.createElement('div');
+      mockPage.setAttribute('data-page-index', '0');
+      pagesHost.appendChild(mockPage);
+
+      const viewport = container.querySelector('.presentation-editor__viewport') as HTMLElement;
+      vi.spyOn(viewport, 'getBoundingClientRect').mockReturnValue({
+        left: 0,
+        top: 0,
+        width: 800,
+        height: 1000,
+        right: 800,
+        bottom: 1000,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      } as DOMRect);
+
+      viewport.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, clientX: 120, clientY: 50, button: 0 }));
+      await vi.waitFor(() => expect(createdSectionEditors.length).toBeGreaterThan(0));
+
+      const headerEditor = editor.getActiveEditor();
+      const bodyEditor = (Editor as unknown as MockedEditor).mock.results[0].value;
+      bodyEditor.commands = {
+        ...(bodyEditor.commands ?? {}),
+        setTextSelection: vi.fn(),
+      };
+      expect(headerEditor).not.toBe(bodyEditor);
+
+      const didNavigate = await editor.navigateTo({
+        kind: 'entity',
+        entityType: 'bookmark',
+        name: 'body-bm',
+      });
+
+      expect(didNavigate).toBe(true);
+      expect(editor.getActiveEditor()).toBe(bodyEditor);
+      expect(headerEditor.commands.setTextSelection).not.toHaveBeenCalledWith({ from: 8, to: 8 });
+      expect(bodyEditor.commands.setTextSelection).toHaveBeenCalledWith({ from: 8, to: 8 });
+    });
+
+    it('activates the matching header surface before navigating to a document-wide bookmark', async () => {
+      mockIncrementalLayout.mockResolvedValueOnce(buildLayoutResult());
+      bookmarkResolverMocks.findAllBookmarksInDocument.mockReturnValueOnce([
+        { name: 'hdr-bm', bookmarkId: '5', storyKey: 'hf:part:rId-header-default' },
+      ]);
+      bookmarkResolverMocks.resolveBookmarkTarget.mockReturnValueOnce({
+        pos: 7,
+        name: 'hdr-bm',
+        bookmarkId: '5',
+        endPos: 10,
+        node: { attrs: { name: 'hdr-bm', id: '5' } },
+      });
+
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'test-doc',
+      });
+
+      await vi.waitFor(() => expect(mockIncrementalLayout).toHaveBeenCalled());
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      const pagesHost = container.querySelector('.presentation-editor__pages') as HTMLElement;
+      const mockPage = document.createElement('div');
+      mockPage.setAttribute('data-page-index', '0');
+      pagesHost.appendChild(mockPage);
+
+      const viewport = container.querySelector('.presentation-editor__viewport') as HTMLElement;
+      vi.spyOn(viewport, 'getBoundingClientRect').mockReturnValue({
+        left: 0,
+        top: 0,
+        width: 800,
+        height: 1000,
+        right: 800,
+        bottom: 1000,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      } as DOMRect);
+
+      const didNavigate = await editor.navigateTo({
+        kind: 'entity',
+        entityType: 'bookmark',
+        name: 'hdr-bm',
+      });
+
+      expect(didNavigate).toBe(true);
+      await vi.waitFor(() => expect(createdSectionEditors.length).toBeGreaterThan(0));
+
+      const sessionEditor = editor.getActiveEditor();
+      expect(sessionEditor.commands.setTextSelection).toHaveBeenCalledWith({ from: 7, to: 7 });
+      expect(sessionEditor.view.focus).toHaveBeenCalled();
+    });
+
+    it('navigates successfully for an explicit headerFooterSlot bookmark target', async () => {
+      mockIncrementalLayout.mockResolvedValueOnce(buildLayoutResult());
+      bookmarkResolverMocks.resolveBookmarkTarget.mockReturnValueOnce({
+        pos: 9,
+        name: 'slot-bm',
+        bookmarkId: '6',
+        endPos: 12,
+        node: { attrs: { name: 'slot-bm', id: '6' } },
+      });
+
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'test-doc',
+      });
+
+      await vi.waitFor(() => expect(mockIncrementalLayout).toHaveBeenCalled());
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      const pagesHost = container.querySelector('.presentation-editor__pages') as HTMLElement;
+      const mockPage = document.createElement('div');
+      mockPage.setAttribute('data-page-index', '0');
+      pagesHost.appendChild(mockPage);
+
+      const viewport = container.querySelector('.presentation-editor__viewport') as HTMLElement;
+      vi.spyOn(viewport, 'getBoundingClientRect').mockReturnValue({
+        left: 0,
+        top: 0,
+        width: 800,
+        height: 1000,
+        right: 800,
+        bottom: 1000,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      } as DOMRect);
+
+      const didNavigate = await editor.navigateTo({
+        kind: 'entity',
+        entityType: 'bookmark',
+        name: 'slot-bm',
+        story: {
+          kind: 'story',
+          storyType: 'headerFooterSlot',
+          section: { kind: 'section', sectionId: 'section-0' },
+          headerFooterKind: 'header',
+          variant: 'default',
+        },
+      });
+
+      expect(didNavigate).toBe(true);
+      await vi.waitFor(() => expect(createdSectionEditors.length).toBeGreaterThan(0));
+
+      const sessionEditor = editor.getActiveEditor();
+      expect(sessionEditor.commands.setTextSelection).toHaveBeenCalledWith({ from: 9, to: 9 });
+      expect(sessionEditor.view.focus).toHaveBeenCalled();
+    });
+
+    it('normalizes odd-page default header regions for explicit headerFooterSlot bookmark targets', async () => {
+      mockIncrementalLayout.mockResolvedValueOnce({
+        layout: {
+          pageSize: { w: 612, h: 792 },
+          pages: [
+            {
+              number: 1,
+              numberText: '1',
+              size: { w: 612, h: 792 },
+              fragments: [],
+              margins: { top: 72, bottom: 72, left: 72, right: 72, header: 36, footer: 36 },
+              sectionRefs: {
+                headerRefs: { default: 'rId-header-default' },
+                footerRefs: { default: 'rId-footer-default' },
+              },
+            },
+          ],
+        },
+        measures: [],
+        headers: [
+          {
+            kind: 'header',
+            type: 'odd',
+            layout: {
+              height: 36,
+              pages: [{ number: 1, fragments: [] }],
+            },
+            blocks: [],
+            measures: [],
+          },
+        ],
+        footers: [
+          {
+            kind: 'footer',
+            type: 'default',
+            layout: {
+              height: 36,
+              pages: [{ number: 1, fragments: [] }],
+            },
+            blocks: [],
+            measures: [],
+          },
+        ],
+      });
+      bookmarkResolverMocks.resolveBookmarkTarget.mockReturnValueOnce({
+        pos: 11,
+        name: 'slot-odd-bm',
+        bookmarkId: '7',
+        endPos: 14,
+        node: { attrs: { name: 'slot-odd-bm', id: '7' } },
+      });
+
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'test-doc',
+      });
+
+      await vi.waitFor(() => expect(mockIncrementalLayout).toHaveBeenCalled());
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      const pagesHost = container.querySelector('.presentation-editor__pages') as HTMLElement;
+      const mockPage = document.createElement('div');
+      mockPage.setAttribute('data-page-index', '0');
+      pagesHost.appendChild(mockPage);
+
+      const viewport = container.querySelector('.presentation-editor__viewport') as HTMLElement;
+      vi.spyOn(viewport, 'getBoundingClientRect').mockReturnValue({
+        left: 0,
+        top: 0,
+        width: 800,
+        height: 1000,
+        right: 800,
+        bottom: 1000,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      } as DOMRect);
+
+      const didNavigate = await editor.navigateTo({
+        kind: 'entity',
+        entityType: 'bookmark',
+        name: 'slot-odd-bm',
+        story: {
+          kind: 'story',
+          storyType: 'headerFooterSlot',
+          section: { kind: 'section', sectionId: 'section-0' },
+          headerFooterKind: 'header',
+          variant: 'default',
+        },
+      });
+
+      expect(didNavigate).toBe(true);
+      await vi.waitFor(() => expect(createdSectionEditors.length).toBeGreaterThan(0));
+
+      const sessionEditor = editor.getActiveEditor();
+      expect(sessionEditor.commands.setTextSelection).toHaveBeenCalledWith({ from: 11, to: 11 });
+      expect(sessionEditor.view.focus).toHaveBeenCalled();
+    });
+  });
+
+  describe('footnote interactions', () => {
+    const prepareFootnoteEditor = async () => {
+      mockIncrementalLayout.mockResolvedValueOnce({
+        layout: {
+          pageSize: { w: 612, h: 792 },
+          pages: [
+            {
+              number: 1,
+              numberText: '1',
+              size: { w: 612, h: 792 },
+              fragments: [],
+              margins: { top: 72, bottom: 72, left: 72, right: 72, header: 36, footer: 36 },
+            },
+          ],
+        },
+        measures: [],
+      });
+
+      mockEditorConverterStore.current = {
+        ...mockEditorConverterStore.current,
+        footnotes: [
+          {
+            id: '1',
+            content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Lazy note session' }] }],
+          },
+        ],
+        convertedXml: {
+          'word/footnotes.xml': {
+            elements: [
+              {
+                name: 'w:footnotes',
+                elements: [
+                  {
+                    name: 'w:footnote',
+                    attributes: { 'w:id': '1' },
+                    elements: [{ name: 'w:p', elements: [] }],
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      };
+
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'footnote-doc',
+      });
+
+      await vi.waitFor(() => expect(mockIncrementalLayout).toHaveBeenCalled());
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      const viewport = container.querySelector('.presentation-editor__viewport') as HTMLElement;
+      vi.spyOn(viewport, 'getBoundingClientRect').mockReturnValue({
+        left: 0,
+        top: 0,
+        width: 800,
+        height: 1000,
+        right: 800,
+        bottom: 1000,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      } as DOMRect);
+
+      const footnoteFragment = document.createElement('span');
+      footnoteFragment.setAttribute('data-block-id', 'footnote-1-0');
+      viewport.appendChild(footnoteFragment);
+
+      return { viewport, footnoteFragment };
+    };
+
+    const activateFootnoteSession = async () => {
+      const { viewport, footnoteFragment } = await prepareFootnoteEditor();
+
+      expect(editor.getStorySessionManager()).not.toBeNull();
+      expect(editor.getStorySessionManager()?.getActiveSession()).toBeNull();
+
+      footnoteFragment.dispatchEvent(
+        new MouseEvent('dblclick', { bubbles: true, clientX: 120, clientY: 740, button: 0 }),
+      );
+
+      await vi.waitFor(() => expect(mockCreateStoryEditor.mock.calls.length).toBeGreaterThanOrEqual(1));
+      await vi.waitFor(() => expect(createdStoryEditors.length).toBeGreaterThanOrEqual(1));
+
+      return {
+        viewport,
+        footnoteFragment,
+        sessionEditor: createdStoryEditors.at(-1)?.editor,
+      };
+    };
+
+    const prepareEndnoteEditor = async () => {
+      mockIncrementalLayout.mockResolvedValueOnce({
+        layout: {
+          pageSize: { w: 612, h: 792 },
+          pages: [
+            {
+              number: 1,
+              numberText: '1',
+              size: { w: 612, h: 792 },
+              fragments: [],
+              margins: { top: 72, bottom: 72, left: 72, right: 72, header: 36, footer: 36 },
+            },
+          ],
+        },
+        measures: [],
+      });
+
+      mockEditorConverterStore.current = {
+        ...mockEditorConverterStore.current,
+        endnotes: [
+          {
+            id: '1',
+            content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Lazy endnote session' }] }],
+          },
+        ],
+        convertedXml: {
+          'word/endnotes.xml': {
+            elements: [
+              {
+                name: 'w:endnotes',
+                elements: [
+                  {
+                    name: 'w:endnote',
+                    attributes: { 'w:id': '1' },
+                    elements: [{ name: 'w:p', elements: [] }],
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      };
+
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'endnote-doc',
+      });
+
+      await vi.waitFor(() => expect(mockIncrementalLayout).toHaveBeenCalled());
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      const viewport = container.querySelector('.presentation-editor__viewport') as HTMLElement;
+      vi.spyOn(viewport, 'getBoundingClientRect').mockReturnValue({
+        left: 0,
+        top: 0,
+        width: 800,
+        height: 1000,
+        right: 800,
+        bottom: 1000,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      } as DOMRect);
+
+      const endnoteFragment = document.createElement('span');
+      endnoteFragment.setAttribute('data-block-id', 'endnote-1-0');
+      viewport.appendChild(endnoteFragment);
+
+      return { viewport, endnoteFragment };
+    };
+
+    it('activates a note editing session through the shared story-session manager', async () => {
+      const { sessionEditor } = await activateFootnoteSession();
+
+      expect(editor.getStorySessionManager()).not.toBeNull();
+      expect(editor.getStorySessionManager()?.getActiveSession()?.commitPolicy).toBe('onExit');
+      expect(editor.getActiveEditor()).toBe(sessionEditor);
+      expect(sessionEditor?.setDocumentMode).toHaveBeenCalledWith('editing');
+
+      editor.setDocumentMode('viewing');
+      expect(sessionEditor?.setDocumentMode).toHaveBeenLastCalledWith('viewing');
+      expect(createdSectionEditors.length).toBe(0);
+    });
+
+    it('routes tracked-change navigation to the active note session editor', async () => {
+      const { sessionEditor } = await activateFootnoteSession();
+      const setCursorById = vi.fn(() => true);
+      if (sessionEditor?.commands) {
+        sessionEditor.commands.setCursorById = setCursorById;
+      }
+
+      const didNavigate = await editor.navigateTo({
+        kind: 'entity',
+        entityType: 'trackedChange',
+        entityId: 'tc-note-1',
+        story: { kind: 'story', storyType: 'footnote', noteId: '1' },
+      });
+
+      expect(didNavigate).toBe(true);
+      expect(setCursorById).toHaveBeenCalledWith('tc-note-1', { preferredActiveThreadId: 'tc-note-1' });
+      expect(sessionEditor?.view.focus).toHaveBeenCalled();
+    });
+
+    it('falls back to rendered tracked-change stamps for inactive non-body stories', async () => {
+      const { viewport } = await prepareFootnoteEditor();
+      const page = document.createElement('div');
+      page.className = 'superdoc-page';
+      page.dataset.pageIndex = '0';
+
+      const renderedChange = document.createElement('span');
+      renderedChange.dataset.trackChangeId = 'tc-footnote-2';
+      renderedChange.dataset.storyKey = 'fn:2';
+      renderedChange.scrollIntoView = vi.fn();
+      page.appendChild(renderedChange);
+      viewport.appendChild(page);
+
+      const didNavigate = await editor.navigateTo({
+        kind: 'entity',
+        entityType: 'trackedChange',
+        entityId: 'tc-footnote-2',
+        story: { kind: 'story', storyType: 'footnote', noteId: '2' },
+      });
+
+      expect(didNavigate).toBe(true);
+      expect(renderedChange.scrollIntoView).toHaveBeenCalledWith({
+        behavior: 'auto',
+        block: 'center',
+        inline: 'nearest',
+      });
+    });
+
+    it('activates an inactive endnote story before routing tracked-change navigation', async () => {
+      const { viewport } = await prepareEndnoteEditor();
+      const page = document.createElement('div');
+      page.className = 'superdoc-page';
+      page.dataset.pageIndex = '0';
+
+      const renderedChange = document.createElement('span');
+      renderedChange.dataset.trackChangeId = 'tc-endnote-1';
+      renderedChange.dataset.storyKey = 'en:1';
+      renderedChange.scrollIntoView = vi.fn();
+      vi.spyOn(renderedChange, 'getBoundingClientRect').mockReturnValue({
+        left: 140,
+        top: 720,
+        width: 20,
+        height: 12,
+        right: 160,
+        bottom: 732,
+        x: 140,
+        y: 720,
+        toJSON: () => ({}),
+      } as DOMRect);
+      page.appendChild(renderedChange);
+      viewport.appendChild(page);
+
+      const didNavigate = await editor.navigateTo({
+        kind: 'entity',
+        entityType: 'trackedChange',
+        entityId: 'tc-endnote-1',
+        story: { kind: 'story', storyType: 'endnote', noteId: '1' },
+      });
+
+      expect(didNavigate).toBe(true);
+      await vi.waitFor(() => expect(createdStoryEditors.length).toBeGreaterThanOrEqual(2));
+
+      const sessionEditor = createdStoryEditors.at(-1)?.editor;
+      expect(sessionEditor?.commands.setCursorById).toHaveBeenCalledWith('tc-endnote-1', {
+        preferredActiveThreadId: 'tc-endnote-1',
+      });
+      expect(sessionEditor?.view.focus).toHaveBeenCalled();
+      expect(renderedChange.scrollIntoView).not.toHaveBeenCalled();
+    });
+
+    it('routes bookmark navigation to the active note session editor', async () => {
+      const { sessionEditor } = await activateFootnoteSession();
+
+      bookmarkResolverMocks.resolveBookmarkTarget.mockReturnValueOnce({
+        pos: 4,
+        name: 'bm-note-1',
+        bookmarkId: '1',
+        endPos: 8,
+        node: { attrs: { name: 'bm-note-1', id: '1' } },
+      });
+
+      const didNavigate = await editor.navigateTo({
+        kind: 'entity',
+        entityType: 'bookmark',
+        name: 'bm-note-1',
+        story: { kind: 'story', storyType: 'footnote', noteId: '1' },
+      });
+
+      expect(didNavigate).toBe(true);
+      expect(sessionEditor?.commands.setTextSelection).toHaveBeenLastCalledWith({ from: 4, to: 4 });
+      expect(sessionEditor?.view.focus).toHaveBeenCalled();
+    });
+
+    it('activates an inactive endnote story before routing bookmark navigation', async () => {
+      await prepareEndnoteEditor();
+
+      bookmarkResolverMocks.resolveBookmarkTarget.mockReturnValueOnce({
+        pos: 6,
+        name: 'bm-endnote-1',
+        bookmarkId: '2',
+        endPos: 9,
+        node: { attrs: { name: 'bm-endnote-1', id: '2' } },
+      });
+
+      const didNavigate = await editor.navigateTo({
+        kind: 'entity',
+        entityType: 'bookmark',
+        name: 'bm-endnote-1',
+        story: { kind: 'story', storyType: 'endnote', noteId: '1' },
+      });
+
+      expect(didNavigate).toBe(true);
+      await vi.waitFor(() => expect(createdStoryEditors.length).toBeGreaterThanOrEqual(1));
+
+      const sessionEditor = createdStoryEditors.at(-1)?.editor;
+      expect(sessionEditor?.commands.setTextSelection).toHaveBeenLastCalledWith({ from: 6, to: 6 });
+      expect(sessionEditor?.view.focus).toHaveBeenCalled();
     });
   });
 

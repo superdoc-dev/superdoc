@@ -359,4 +359,58 @@ describe('w:pPr translator', () => {
       expect(encodedResult).toEqual(initialParagraphProperties);
     });
   });
+
+  describe('pPrChange integration (SD-2417 regression guard)', () => {
+    it('routes w:pPrChange through the pPr encode pipeline', () => {
+      const xmlNode = {
+        name: 'w:pPr',
+        elements: [
+          { name: 'w:jc', attributes: { 'w:val': 'center' } },
+          {
+            name: 'w:pPrChange',
+            attributes: {
+              'w:id': '0',
+              'w:author': 'Regression Guard',
+              'w:date': '2026-01-01T00:00:00Z',
+            },
+            elements: [
+              {
+                name: 'w:pPr',
+                elements: [{ name: 'w:jc', attributes: { 'w:val': 'left' } }],
+              },
+            ],
+          },
+        ],
+      };
+
+      const encoded = translator.encode({ nodes: [xmlNode] });
+
+      expect(encoded.justification).toBe('center');
+      expect(encoded.change).toEqual({
+        id: '0',
+        author: 'Regression Guard',
+        date: '2026-01-01T00:00:00Z',
+        paragraphProperties: { justification: 'left' },
+      });
+    });
+
+    it('round-trips a paragraph whose pPr carries a pPrChange', () => {
+      const initialParagraphProperties = {
+        justification: 'center',
+        change: {
+          id: '0',
+          author: 'Regression Guard',
+          date: '2026-01-01T00:00:00Z',
+          paragraphProperties: { justification: 'left' },
+        },
+      };
+
+      const decoded = translator.decode({
+        node: { attrs: { paragraphProperties: initialParagraphProperties } },
+      });
+      const encoded = translator.encode({ nodes: [decoded] });
+
+      expect(encoded).toEqual(initialParagraphProperties);
+    });
+  });
 });

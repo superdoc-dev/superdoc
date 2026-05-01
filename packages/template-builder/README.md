@@ -25,7 +25,16 @@ function TemplateEditor() {
         available: [
           { id: '1324567890', label: 'Customer Name' },
           { id: '1324567891', label: 'Invoice Date' },
-          { id: '1324567892', label: 'Signature', mode: 'block', fieldType: 'signer' },
+          {
+            id: '1324567892',
+            label: 'Sample Table',
+            mode: 'block',
+            fieldType: 'signer',
+            presetContent: {
+              html: '<table style="border-collapse: collapse; width: 100%;"><tr><th style="border: 1px solid #000;">Column A</th><th style="border: 1px solid #000;">Column B</th></tr><tr><td style="border: 1px solid #000;"></td><td style="border: 1px solid #000;"></td></tr></table>',
+            },
+          },
+          { id: '1324567893', label: 'Signature', mode: 'block', fieldType: 'signer' },
         ],
       }}
       onFieldInsert={(field) => {
@@ -178,6 +187,32 @@ onFieldsChange={(fields) => {
   const signerFields = fields.filter(f => f.fieldType === 'signer');
 }}
 ```
+
+## Preset Block Content
+
+Block fields can include `presetContent` so insertion starts with a predefined structure (for example, a table or list).
+
+```jsx
+const availableFields = [
+  {
+    id: 'sample_table',
+    label: 'Sample Table',
+    mode: 'block',
+    fieldType: 'data',
+    lockMode: 'contentLocked',
+    presetContent: {
+      html: '<table style="border-collapse: collapse; width: 100%;"><tr><th style="border: 1px solid #000;">Column A</th><th style="border: 1px solid #000;">Column B</th></tr><tr><td style="border: 1px solid #000;"></td><td style="border: 1px solid #000;"></td></tr></table>',
+      // or json: { ...ProseMirror JSON... }
+    },
+  },
+];
+```
+
+Notes:
+- `presetContent` is used only for `mode: 'block'`.
+- Inline fields ignore `presetContent`.
+- Prefer `presetContent.json` when you need the most reliable preservation of structure, semantics, and editor-compatible styling.
+- With `presetContent.html`, include required attributes and inline styles explicitly so the HTML parser can map them into node attributes.
 
 ## Custom Field Creation
 

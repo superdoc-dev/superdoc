@@ -5,7 +5,12 @@ export { computeTabStops, layoutWithTabs, calculateTabWidth } from './engines/ta
 export type { TabStop };
 
 // Export table contracts
-export { OOXML_PCT_DIVISOR, type TableWidthAttr, type TableColumnSpec } from './engines/tables.js';
+export {
+  OOXML_PCT_DIVISOR,
+  resolveTableWidthAttr,
+  type TableWidthAttr,
+  type TableColumnSpec,
+} from './engines/tables.js';
 
 export { effectiveTableCellSpacing } from './table-cell-spacing.js';
 
@@ -144,6 +149,43 @@ export const CONTRACTS_VERSION = '1.0.0';
 /** Unique identifier for a block in the document. Format: `${pos}-${type}`. */
 export type BlockId = string;
 
+/**
+ * Optional DOCX source evidence carried through the render pipeline.
+ *
+ * Phase 3 keeps this deliberately optional and payload-shaped so existing
+ * layout snapshots remain valid while source-linked intelligence consumers can
+ * preserve exact DOCX/source-tree anchors where available.
+ */
+export type SourceAnchor = {
+  sourceNodeId?: string;
+  occurrenceId?: string;
+  rawFactIds?: string[];
+  schemaQNames?: Array<{
+    qName: string;
+    namespaceUri?: string;
+    prefix?: string;
+    localName?: string;
+    ownerElementQName?: string;
+  }>;
+  featureKey?: string;
+  conceptKey?: string;
+  sourceRef?: {
+    partUri: string;
+    xpathLikePath: string;
+    rawFactId?: string;
+    occurrenceId?: string;
+  };
+  anchorConfidence?: 'high' | 'medium' | 'low';
+  pmNodeId?: string;
+  pmRange?: {
+    from: number;
+    to: number;
+  };
+  flowBlockId?: string;
+  layoutFragmentId?: string;
+  paintItemId?: string;
+};
+
 /** Tab leader type for filling space before tab stops. */
 export type LeaderType = 'dot' | 'heavy' | 'hyphen' | 'middleDot' | 'underscore';
 
@@ -160,6 +202,15 @@ export type RunMark = {
 export type TrackedChangeMeta = {
   kind: TrackedChangeKind;
   id: string;
+  /**
+   * Internal story key identifying which content story owns this tracked
+   * change (`'body'`, `'hf:part:…'`, `'fn:…'`, `'en:…'`).
+   *
+   * Set by the PM adapter during conversion and stamped on the rendered DOM
+   * as `data-story-key` so downstream code can distinguish anchors across
+   * stories without re-resolving the story runtime.
+   */
+  storyKey?: string;
   author?: string;
   authorEmail?: string;
   authorImage?: string;
@@ -377,6 +428,7 @@ export type BreakRun = {
   pmStart?: number;
   pmEnd?: number;
   sdt?: SdtMetadata;
+  trackedChange?: TrackedChangeMeta;
 };
 
 /**
@@ -481,6 +533,7 @@ export type ParagraphBlock = {
   id: BlockId;
   runs: Run[];
   attrs?: ParagraphAttrs;
+  sourceAnchor?: SourceAnchor;
 };
 
 /** Border style (subset of OOXML ST_Border). */
@@ -557,6 +610,7 @@ export type TableCell = {
   rowSpan?: number;
   colSpan?: number;
   attrs?: TableCellAttrs;
+  sourceAnchor?: SourceAnchor;
 };
 
 export type TableRowProperties = {
@@ -577,6 +631,7 @@ export type TableRow = {
   id: BlockId;
   cells: TableCell[];
   attrs?: TableRowAttrs;
+  sourceAnchor?: SourceAnchor;
 };
 
 export type TableBlock = {
@@ -590,6 +645,7 @@ export type TableBlock = {
   anchor?: TableAnchor;
   /** Text wrapping for floating tables (from w:tblpPr distances). */
   wrap?: TableWrap;
+  sourceAnchor?: SourceAnchor;
 };
 
 export type BoxSpacing = {
@@ -644,6 +700,7 @@ export type ImageBlock = {
   flipV?: boolean; // Vertical flip
   /** Image hyperlink from OOXML a:hlinkClick. When set, clicking the image opens the URL. */
   hyperlink?: ImageHyperlink;
+  sourceAnchor?: SourceAnchor;
 };
 
 export type DrawingKind = 'image' | 'vectorShape' | 'shapeGroup' | 'chart';
@@ -833,6 +890,7 @@ export type DrawingBlockBase = {
   drawingContentId?: string;
   drawingContent?: DrawingContentSnapshot;
   attrs?: Record<string, unknown>;
+  sourceAnchor?: SourceAnchor;
 };
 
 /**
@@ -987,10 +1045,7 @@ export type SectionBreakBlock = {
     even?: string;
     odd?: string;
   };
-  columns?: {
-    count: number;
-    gap: number;
-    widths?: number[];
+  columns?: ColumnLayout & {
     equalWidth?: boolean;
   };
   /**
@@ -1450,12 +1505,14 @@ export type ListMarker = {
   lvlText?: string;
   customFormat?: string;
   align?: 'left' | 'center' | 'right';
+  sourceAnchor?: SourceAnchor;
 };
 
 export type ListItem = {
   id: BlockId;
   marker: ListMarker;
   paragraph: ParagraphBlock;
+  sourceAnchor?: SourceAnchor;
 };
 
 export type ListBlock = {
@@ -1463,6 +1520,7 @@ export type ListBlock = {
   id: BlockId;
   listType: 'bullet' | 'number';
   items: ListItem[];
+  sourceAnchor?: SourceAnchor;
 };
 
 export type FlowBlock =
@@ -1478,8 +1536,26 @@ export type FlowBlock =
 export type ColumnLayout = {
   count: number;
   gap: number;
+  withSeparator?: boolean;
   widths?: number[];
   equalWidth?: boolean;
+};
+
+/**
+ * A vertical region of a page that shares a single column configuration.
+ *
+ * Continuous section breaks can introduce multiple column configurations on the
+ * same page (see ECMA-376 §17.6.22 and §17.18.77). A page may therefore carry
+ * multiple regions stacked vertically. Consumers (e.g. DomPainter) use
+ * `yStart`/`yEnd` to bound any per-region overlays such as column separators.
+ */
+export type ColumnRegion = {
+  /** Inclusive top of the region, in pixels from the page top. */
+  yStart: number;
+  /** Exclusive bottom of the region, in pixels from the page top. */
+  yEnd: number;
+  /** Column configuration active within this region. */
+  columns: ColumnLayout;
 };
 
 /** A measured line within a block, output by the measurer. */
@@ -1498,6 +1574,8 @@ export type Line = {
   naturalWidth?: number;
   /** Number of spaces in the line (pre-computed for efficiency in justify calculations). */
   spaceCount?: number;
+  /** True when this line used author-defined OOXML tab stops, not synthesized default stops. */
+  hasExplicitTabStops?: boolean;
   segments?: LineSegment[];
   leaders?: LeaderDecoration[];
   bars?: BarDecoration[];
@@ -1706,6 +1784,29 @@ export type Page = {
    * Sections are 0-indexed, matching the sectionIndex in SectionMetadata.
    */
   sectionIndex?: number;
+  /**
+   * Column layout configuration for this page.
+   *
+   * Reflects the column configuration at page start. For pages with continuous
+   * section breaks that change column layout mid-page, use `columnRegions` for
+   * accurate per-region information.
+   *
+   * Used by the renderer to draw column separator lines when `withSeparator`
+   * is set to true.
+   */
+  columns?: ColumnLayout;
+  /**
+   * Vertical column regions on this page, ordered top to bottom.
+   *
+   * Populated when continuous section breaks change column layout mid-page. Each
+   * region pairs a `{yStart, yEnd}` span with the column config active inside it
+   * (see ECMA-376 §17.6.22). Renderers should prefer this field over
+   * `columns` when drawing per-region overlays (e.g. column separators).
+   *
+   * If omitted, the page has a single column region and consumers can fall back
+   * to `columns`.
+   */
+  columnRegions?: ColumnRegion[];
 };
 
 /** A paragraph fragment positioned on a page. */
@@ -1743,6 +1844,7 @@ export type ParaFragment = {
   lines?: Line[];
   pmStart?: number;
   pmEnd?: number;
+  sourceAnchor?: SourceAnchor;
 };
 
 export type TableColumnBoundary = {
@@ -1790,6 +1892,8 @@ export type PartialRowInfo = {
 export type TableFragment = {
   kind: 'table';
   blockId: BlockId;
+  /** Flow column that owns this fragment, distinct from visual x when overflow crosses margins. */
+  columnIndex?: number;
   fromRow: number;
   toRow: number;
   x: number;
@@ -1806,6 +1910,7 @@ export type TableFragment = {
   /** Per-fragment column widths, rescaled when table is clamped to section width.
    *  When set, the renderer uses these instead of measure.columnWidths. */
   columnWidths?: number[];
+  sourceAnchor?: SourceAnchor;
 };
 
 export type ImageFragment = {
@@ -1821,6 +1926,7 @@ export type ImageFragment = {
   pmStart?: number;
   pmEnd?: number;
   metadata?: ImageFragmentMetadata;
+  sourceAnchor?: SourceAnchor;
 };
 
 export type DrawingFragment = {
@@ -1839,6 +1945,7 @@ export type DrawingFragment = {
   drawingContentId?: string;
   pmStart?: number;
   pmEnd?: number;
+  sourceAnchor?: SourceAnchor;
 };
 
 export type ListItemFragment = {
@@ -1853,6 +1960,7 @@ export type ListItemFragment = {
   markerWidth: number;
   continuesFromPrev?: boolean;
   continuesOnNext?: boolean;
+  sourceAnchor?: SourceAnchor;
 };
 
 export type Fragment = ParaFragment | ImageFragment | DrawingFragment | ListItemFragment | TableFragment;
@@ -1863,6 +1971,16 @@ export type HeaderFooterPage = {
   number: number;
   fragments: Fragment[];
   numberText?: string;
+  /**
+   * Optional page-local block clones backing this page's resolved fragments.
+   * Present when header/footer tokens were laid out per page or per bucket.
+   */
+  blocks?: FlowBlock[];
+  /**
+   * Optional page-local measures aligned with `blocks`.
+   * Present when header/footer tokens were laid out per page or per bucket.
+   */
+  measures?: Measure[];
 };
 
 export type HeaderFooterLayout = {
@@ -1942,6 +2060,8 @@ export type {
   ResolvedTableItem,
   ResolvedImageItem,
   ResolvedDrawingItem,
+  ResolvedHeaderFooterPage,
+  ResolvedHeaderFooterLayout,
 } from './resolved-layout.js';
 export { isResolvedTableItem, isResolvedImageItem, isResolvedDrawingItem } from './resolved-layout.js';
 

@@ -1,10 +1,28 @@
 import { isInRegisteredSurface } from '../utils/uiSurfaceRegistry.js';
 import { CONTEXT_MENU_HANDLED_FLAG } from '../../../components/context-menu/event-flags.js';
 
+const BRIDGE_FORWARDED_FLAG = Symbol('presentation-input-bridge-forwarded');
+
+type BridgeTargetEditor = {
+  focus?: () => void;
+  state?: {
+    selection?: unknown;
+    tr?: {
+      setSelection?: (selection: unknown) => unknown;
+      setMeta?: (key: string, value: unknown) => unknown;
+    };
+  };
+  view?: {
+    dom?: HTMLElement | null;
+    dispatch?: (transaction: unknown) => void;
+  };
+};
+
 export class PresentationInputBridge {
   #windowRoot: Window;
   #layoutSurfaces: Set<EventTarget>;
   #getTargetDom: () => HTMLElement | null;
+  #getTargetEditor?: () => BridgeTargetEditor | null;
   /** Callback that returns whether the editor is in an editable mode (editing/suggesting vs viewing) */
   #isEditable: () => boolean;
   #onTargetChanged?: (target: HTMLElement | null) => void;
@@ -27,6 +45,8 @@ export class PresentationInputBridge {
    * @param onTargetChanged - Optional callback invoked when the target editor DOM element changes
    * @param options - Optional configuration including:
    *                  - useWindowFallback: Whether to attach window-level event listeners as fallback
+   *                  - getTargetEditor: Returns the active editor so focus restoration can
+   *                    use editor-aware focus logic instead of raw DOM focus
    */
   constructor(
     windowRoot: Window,
@@ -34,11 +54,15 @@ export class PresentationInputBridge {
     getTargetDom: () => HTMLElement | null,
     isEditable: () => boolean,
     onTargetChanged?: (target: HTMLElement | null) => void,
-    options?: { useWindowFallback?: boolean },
+    options?: {
+      useWindowFallback?: boolean;
+      getTargetEditor?: () => BridgeTargetEditor | null;
+    },
   ) {
     this.#windowRoot = windowRoot;
     this.#layoutSurfaces = new Set<EventTarget>([layoutSurface]);
     this.#getTargetDom = getTargetDom;
+    this.#getTargetEditor = options?.getTargetEditor;
     this.#isEditable = isEditable;
     this.#onTargetChanged = onTargetChanged;
     this.#listeners = [];
@@ -46,6 +70,15 @@ export class PresentationInputBridge {
   }
 
   bind() {
+    if (this.#useWindowFallback) {
+      this.#addListener('keydown', this.#captureStaleKeyboardEvent, this.#windowRoot, true);
+      this.#addListener('beforeinput', this.#captureStaleTextEvent, this.#windowRoot, true);
+      this.#addListener('input', this.#captureStaleTextEvent, this.#windowRoot, true);
+      this.#addListener('compositionstart', this.#captureStaleCompositionEvent, this.#windowRoot, true);
+      this.#addListener('compositionupdate', this.#captureStaleCompositionEvent, this.#windowRoot, true);
+      this.#addListener('compositionend', this.#captureStaleCompositionEvent, this.#windowRoot, true);
+    }
+
     const keyboardTargets = this.#getListenerTargets();
     keyboardTargets.forEach((target) => {
       this.#addListener('keydown', this.#forwardKeyboardEvent, target);
@@ -120,12 +153,30 @@ export class PresentationInputBridge {
   }
 
   #dispatchToTarget(originalEvent: Event, synthetic: Event) {
-    if (this.#destroyed) return;
-    const target = this.#getTargetDom();
-    this.#currentTarget = target;
+    const target = this.#resolveDispatchTarget();
     if (!target) return;
+    this.#dispatchToResolvedTarget(originalEvent, synthetic, target);
+  }
+
+  #dispatchToResolvedTarget(
+    originalEvent: Event,
+    synthetic: Event,
+    target: HTMLElement,
+    options?: { focusTarget?: boolean; suppressOriginal?: boolean; forceFocusTarget?: boolean },
+  ) {
+    if (this.#destroyed) return;
     const isConnected = (target as { isConnected?: boolean }).isConnected;
     if (isConnected === false) return;
+
+    if (options?.suppressOriginal) {
+      this.#suppressOriginalEvent(originalEvent);
+    }
+
+    if (options?.focusTarget) {
+      this.#focusTargetDom(target, { force: options?.forceFocusTarget ?? false });
+    }
+
+    this.#currentTarget = target;
     try {
       const canceled = !target.dispatchEvent(synthetic) || synthetic.defaultPrevented;
       if (canceled) {
@@ -138,6 +189,128 @@ export class PresentationInputBridge {
     }
   }
 
+  #resolveDispatchTarget(): HTMLElement | null {
+    const target = this.#getTargetDom();
+    this.#currentTarget = target;
+    if (!target) return null;
+    const isConnected = (target as { isConnected?: boolean }).isConnected;
+    if (isConnected === false) return null;
+    return target;
+  }
+
+  #focusTargetDom(target: HTMLElement, options?: { force?: boolean }) {
+    const forceFocusRestore = options?.force ?? false;
+    const doc = target.ownerDocument ?? document;
+    const selection = doc.getSelection?.() ?? null;
+    const selectionInsideTarget = !!selection?.anchorNode && target.contains(selection.anchorNode);
+    if (!forceFocusRestore && selectionInsideTarget) {
+      return;
+    }
+
+    const targetEditor = this.#getTargetEditor?.() ?? null;
+    const targetEditorDom = targetEditor?.view?.dom ?? null;
+    if (targetEditorDom === target && typeof targetEditor?.focus === 'function') {
+      targetEditor.focus();
+      this.#syncEditorSelectionToDom(targetEditor);
+      return;
+    }
+
+    const active = doc.activeElement as HTMLElement | null;
+    const activeIsTarget = active === target || (!!active && target.contains(active));
+    if (!forceFocusRestore && activeIsTarget) {
+      return;
+    }
+
+    try {
+      target.focus({ preventScroll: true });
+    } catch {
+      target.focus();
+    }
+
+    if (targetEditorDom === target) {
+      this.#syncEditorSelectionToDom(targetEditor);
+    }
+  }
+
+  /**
+   * Re-apply the active editor's current PM selection after a stale-focus handoff.
+   *
+   * When native focus is still sitting inside a stale hidden editor, browsers can
+   * transiently restore that stale DOM selection before forwarded text arrives.
+   * Re-dispatching the current selection as a non-history transaction forces the
+   * active hidden editor to write its real caret back into the DOM.
+   */
+  #syncEditorSelectionToDom(editor: BridgeTargetEditor | null | undefined) {
+    const selection = editor?.state?.selection;
+    const transaction = editor?.state?.tr;
+    const dispatch = editor?.view?.dispatch;
+    const setSelection = transaction?.setSelection;
+
+    if (!selection || !transaction || typeof setSelection !== 'function' || typeof dispatch !== 'function') {
+      return;
+    }
+
+    const selectionTransaction = setSelection.call(transaction, selection) as {
+      setMeta?: (key: string, value: unknown) => unknown;
+    };
+    selectionTransaction?.setMeta?.('addToHistory', false);
+    dispatch(selectionTransaction);
+  }
+
+  #suppressOriginalEvent(event: Event) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (typeof event.stopImmediatePropagation === 'function') {
+      event.stopImmediatePropagation();
+    }
+  }
+
+  /**
+   * Resolve a hidden editor DOM that still owns native focus even though a
+   * different editor surface is currently active.
+   *
+   * This happens when body focus survives or is restored while a footnote /
+   * header / footer session is visually active. Native input then targets the
+   * stale hidden editor directly, bypassing the visible-surface bridge unless we
+   * intercept and reroute it.
+   */
+  #resolveStaleEditorOrigin(event: Event): { activeTarget: HTMLElement; staleEditorTarget: HTMLElement } | null {
+    const activeTarget = this.#resolveDispatchTarget();
+    if (!activeTarget) {
+      return null;
+    }
+
+    if (this.#isEventOnActiveTarget(event)) {
+      return null;
+    }
+
+    if (this.#isInLayoutSurface(event)) {
+      return null;
+    }
+
+    if (isInRegisteredSurface(event)) {
+      return null;
+    }
+
+    const originNode = event.target as Node | null;
+    const originElement =
+      originNode instanceof HTMLElement
+        ? originNode
+        : originNode?.parentElement instanceof HTMLElement
+          ? originNode.parentElement
+          : null;
+    const staleEditorTarget = originElement?.closest?.('.ProseMirror[contenteditable="true"]') as HTMLElement | null;
+
+    if (!staleEditorTarget || staleEditorTarget === activeTarget) {
+      return null;
+    }
+
+    return {
+      activeTarget,
+      staleEditorTarget,
+    };
+  }
+
   /**
    * Forwards keyboard events to the hidden editor, skipping IME composition events
    * and plain character keys (which are handled by beforeinput instead).
@@ -146,6 +319,9 @@ export class PresentationInputBridge {
    * @param event - The keyboard event from the layout surface
    */
   #forwardKeyboardEvent(event: KeyboardEvent) {
+    if (this.#wasForwardedByBridge(event)) {
+      return;
+    }
     if (!this.#isEditable()) {
       return;
     }
@@ -161,6 +337,7 @@ export class PresentationInputBridge {
     if (this.#isPlainCharacterKey(event)) {
       return;
     }
+    this.#markForwardedByBridge(event);
 
     // Dispatch synchronously so browser defaults can still be prevented
     const synthetic = new KeyboardEvent(event.type, {
@@ -178,6 +355,48 @@ export class PresentationInputBridge {
     this.#dispatchToTarget(event, synthetic);
   }
 
+  #captureStaleKeyboardEvent(event: KeyboardEvent) {
+    if (!this.#isEditable()) {
+      return;
+    }
+    if (event.defaultPrevented) {
+      return;
+    }
+
+    const staleOrigin = this.#resolveStaleEditorOrigin(event);
+    if (!staleOrigin) {
+      return;
+    }
+
+    // Plain text and IME composition complete through beforeinput/input.
+    // Restore the active editor view first so the browser routes the follow-up
+    // text events into the current story surface instead of the stale body DOM.
+    // Non-text commands (Backspace, Enter, arrows, shortcuts) must also be
+    // rerouted here because there may be no beforeinput.
+    this.#focusTargetDom(staleOrigin.activeTarget);
+    if (this.#isCompositionKeyboardEvent(event) || this.#isPlainCharacterKey(event)) {
+      return;
+    }
+
+    const synthetic = new KeyboardEvent(event.type, {
+      key: event.key,
+      code: event.code,
+      location: event.location,
+      repeat: event.repeat,
+      ctrlKey: event.ctrlKey,
+      shiftKey: event.shiftKey,
+      altKey: event.altKey,
+      metaKey: event.metaKey,
+      bubbles: true,
+      cancelable: true,
+    });
+    this.#dispatchToResolvedTarget(event, synthetic, staleOrigin.activeTarget, {
+      focusTarget: true,
+      forceFocusTarget: true,
+      suppressOriginal: true,
+    });
+  }
+
   /**
    * Forwards text input events (beforeinput) to the hidden editor.
    * Uses microtask deferral for cooperative handling.
@@ -185,6 +404,9 @@ export class PresentationInputBridge {
    * @param event - The input event from the layout surface
    */
   #forwardTextEvent(event: InputEvent | TextEvent) {
+    if (this.#wasForwardedByBridge(event)) {
+      return;
+    }
     if (!this.#isEditable()) {
       return;
     }
@@ -194,6 +416,7 @@ export class PresentationInputBridge {
     if (event.defaultPrevented) {
       return;
     }
+    this.#markForwardedByBridge(event);
 
     const dispatchSyntheticEvent = () => {
       // Only re-check mutable state - surface check was already done
@@ -225,6 +448,40 @@ export class PresentationInputBridge {
     queueMicrotask(dispatchSyntheticEvent);
   }
 
+  #captureStaleTextEvent(event: InputEvent | TextEvent) {
+    if (!this.#isEditable()) {
+      return;
+    }
+    if (event.defaultPrevented) {
+      return;
+    }
+
+    const staleOrigin = this.#resolveStaleEditorOrigin(event);
+    if (!staleOrigin) {
+      return;
+    }
+
+    let synthetic: Event;
+    if (typeof InputEvent !== 'undefined') {
+      synthetic = new InputEvent(event.type, {
+        data: (event as InputEvent).data ?? (event as TextEvent).data ?? null,
+        inputType: (event as InputEvent).inputType ?? 'insertText',
+        dataTransfer: (event as InputEvent).dataTransfer ?? null,
+        isComposing: (event as InputEvent).isComposing ?? false,
+        bubbles: true,
+        cancelable: true,
+      });
+    } else {
+      synthetic = new Event(event.type, { bubbles: true, cancelable: true });
+    }
+
+    this.#dispatchToResolvedTarget(event, synthetic, staleOrigin.activeTarget, {
+      focusTarget: true,
+      forceFocusTarget: true,
+      suppressOriginal: true,
+    });
+  }
+
   /**
    * Forwards composition events (compositionstart, compositionupdate, compositionend)
    * to the hidden editor for IME input handling.
@@ -232,6 +489,9 @@ export class PresentationInputBridge {
    * @param event - The composition event from the layout surface
    */
   #forwardCompositionEvent(event: CompositionEvent) {
+    if (this.#wasForwardedByBridge(event)) {
+      return;
+    }
     if (!this.#isEditable()) {
       return;
     }
@@ -239,6 +499,33 @@ export class PresentationInputBridge {
       return;
     }
     if (event.defaultPrevented) {
+      return;
+    }
+    this.#markForwardedByBridge(event);
+
+    let synthetic: Event;
+    if (typeof CompositionEvent !== 'undefined') {
+      synthetic = new CompositionEvent(event.type, {
+        data: event.data ?? '',
+        bubbles: true,
+        cancelable: true,
+      });
+    } else {
+      synthetic = new Event(event.type, { bubbles: true, cancelable: true });
+    }
+    this.#dispatchToTarget(event, synthetic);
+  }
+
+  #captureStaleCompositionEvent(event: CompositionEvent) {
+    if (!this.#isEditable()) {
+      return;
+    }
+    if (event.defaultPrevented) {
+      return;
+    }
+
+    const staleOrigin = this.#resolveStaleEditorOrigin(event);
+    if (!staleOrigin) {
       return;
     }
 
@@ -252,7 +539,12 @@ export class PresentationInputBridge {
     } else {
       synthetic = new Event(event.type, { bubbles: true, cancelable: true });
     }
-    this.#dispatchToTarget(event, synthetic);
+
+    this.#dispatchToResolvedTarget(event, synthetic, staleOrigin.activeTarget, {
+      focusTarget: true,
+      forceFocusTarget: true,
+      suppressOriginal: true,
+    });
   }
 
   /**
@@ -272,6 +564,9 @@ export class PresentationInputBridge {
     if (handledByContextMenu) {
       return;
     }
+    if (this.#wasForwardedByBridge(event)) {
+      return;
+    }
     if (!this.#isEditable()) {
       return;
     }
@@ -281,6 +576,7 @@ export class PresentationInputBridge {
     if (event.defaultPrevented) {
       return;
     }
+    this.#markForwardedByBridge(event);
     const synthetic = new MouseEvent('contextmenu', {
       bubbles: true,
       cancelable: true,
@@ -357,6 +653,14 @@ export class PresentationInputBridge {
     }
     const origin = event.target as EventTarget | null;
     return origin ? this.#layoutSurfaces.has(origin) : false;
+  }
+
+  #wasForwardedByBridge(event: Event): boolean {
+    return Boolean((event as Event & { [BRIDGE_FORWARDED_FLAG]?: boolean })[BRIDGE_FORWARDED_FLAG]);
+  }
+
+  #markForwardedByBridge(event: Event) {
+    (event as Event & { [BRIDGE_FORWARDED_FLAG]?: boolean })[BRIDGE_FORWARDED_FLAG] = true;
   }
 
   /**

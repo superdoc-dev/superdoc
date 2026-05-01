@@ -75,6 +75,10 @@ new SuperDoc({
 
 Insert content into an existing document using editor commands.
 
+<Note>
+For new code, prefer [`editor.doc.insert`](/document-api/overview) — it accepts a positional target and returns a typed receipt. The chain command shown below stays supported for apps already wired to `activeEditor.commands.*`.
+</Note>
+
 <CodeGroup>
 ```javascript Usage
 superdoc.activeEditor.commands.insertContent(content, {

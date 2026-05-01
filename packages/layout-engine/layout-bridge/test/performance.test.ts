@@ -2,7 +2,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { resolveCanvas } from '../../measuring/dom/src/canvas-resolver.js';
 import { installNodeCanvasPolyfill } from '../../measuring/dom/src/setup.ts';
-import { runBenchmarkSuite } from '../src/benchmarks/index';
+import { runBenchmarkSuite } from './benchmarks/index';
 
 const { Canvas, usingStub } = resolveCanvas();
 

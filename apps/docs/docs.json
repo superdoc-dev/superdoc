@@ -289,7 +289,7 @@
     ]
   },
   "banner": {
-    "content": "**Bring your own editor.** Use SuperDoc as the document engine behind your own editor experience. [Read the announcement →](https://www.superdoc.dev/changelog/2026-05-01-bring-your-own-editor)",
+    "content": "**Bring your own editor UI.** Use SuperDoc as the document engine underneath. [Read the announcement →](https://www.superdoc.dev/changelog/2026-05-01-bring-your-own-editor)",
     "dismissible": true
   },
   "redirects": [

@@ -67,7 +67,10 @@ const DEFAULT_AWARENESS_PALETTE = Object.freeze([
 /** @typedef {import('./types/index.js').ExportParams} ExportParams */
 /** @typedef {import('./types/index.js').UpgradeToCollaborationOptions} UpgradeToCollaborationOptions */
 /** @typedef {import('./types/index.js').SurfaceRequest} SurfaceRequest */
-/** @typedef {import('./types/index.js').SurfaceHandle} SurfaceHandle */
+/**
+ * @template [T=unknown]
+ * @typedef {import('./types/index.js').SurfaceHandle<T>} SurfaceHandle
+ */
 /** @typedef {import('./types/index.js').NavigableAddress} NavigableAddress */
 
 /**

@@ -3,6 +3,7 @@
  * @property {string} name The user's name
  * @property {string} email The user's email
  * @property {string | null} [image] The user's photo
+ * @property {string} [color] Awareness color for collaborative cursors. Auto-assigned from the configured palette (or a default palette) when omitted, derived from a hash of the user's identity so the assignment is stable across reloads.
  */
 
 /**
@@ -536,6 +537,7 @@
  * @property {Object} [slashMenu] Deprecated. Use contextMenu instead.
  * @property {SurfacesModuleConfig} [surfaces] Surface system configuration
  * @property {TrackChangesModuleConfig} [trackChanges] Track changes module configuration
+ * @property {false | { enabled?: boolean }} [whiteboard] Whiteboard module configuration. Pass `false` to disable the module entirely; pass an object to opt in (with `enabled: true`) or to keep it registered but inert (`enabled: false`, the default when no field is set).
  */
 
 /**
@@ -628,6 +630,11 @@
  * @property {Object} [semanticOptions] Internal-only semantic mode tuning options.
  *   This shape is intentionally not a stable public API in v1.
  * @property {Object} [trackedChanges] Deprecated. Use `modules.trackChanges` instead. Optional override for paginated track-changes rendering (e.g., `{ mode: 'original' }` or `{ enabled: false }`).
+ * @property {Object} [virtualization] Page virtualization options for paginated layout. Defaults to `{ enabled: true, window: 5, overscan: 1 }` to render only the visible window of pages plus a small overscan buffer.
+ * @property {boolean} [virtualization.enabled] Whether virtualization is active (default: true)
+ * @property {number} [virtualization.window] Number of pages kept rendered around the active page (default: 5)
+ * @property {number} [virtualization.overscan] Extra pages rendered outside the active window for smoother scrolling (default: 1)
+ * @property {boolean} [showBookmarks] Whether bookmark indicators are shown in the rendered layout. Toggleable at runtime via `superdoc.setShowBookmarks()`.
  */
 
 /**
@@ -725,6 +732,9 @@
  * @property {string} [licenseKey] License key for organization identification
  * @property {SuperDocTelemetryConfig} [telemetry] Telemetry configuration
  * @property {ProofingConfig} [proofing] Proofing / spellcheck configuration
+ * @property {boolean} [useLayoutEngine] Opt-in toggle for the layout engine. Auto-disabled when web layout is requested without `layoutEngineOptions.flowMode === 'semantic'`; the loader logs a warning and falls back to the legacy ProseMirror render path in that case.
+ * @property {(payload: import('@superdoc/super-editor').FontsResolvedPayload) => void} [onFontsResolved] Callback fired after the editor reports `fonts-resolved`. The payload contains `documentFonts` and `unsupportedFonts` arrays so hosts can fall back, warn, or block printing on unsupported faces.
+ * @property {import('@hocuspocus/provider').HocuspocusProviderWebsocket} [socket] Internal: the shared websocket instance created by SuperDoc when `modules.collaboration.providerType === 'hocuspocus'`. Set automatically; do not pass from outside.
  */
 
 /**

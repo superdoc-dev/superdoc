@@ -1236,7 +1236,7 @@ export class SuperDoc extends EventEmitter {
       trackedChange: trackedChange ?? null,
     };
 
-    return isAllowed(permission, role, isInternal, context);
+    return isAllowed(permission, /** @type {string} */ (role), /** @type {boolean} */ (isInternal), context);
   }
 
   #addToolbar() {

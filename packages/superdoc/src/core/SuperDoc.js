@@ -1,7 +1,3 @@
-// @ts-check
-// @ts-check
-// @ts-check
-// @ts-check
 import '../style.css';
 
 import { EventEmitter } from 'eventemitter3';

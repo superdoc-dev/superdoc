@@ -10,8 +10,8 @@ import type { SuperDocLike } from './types.js';
  * - `BUILT_IN_COMMAND_IDS` runtime list (and its parity with the actual
  *   toolbar registry, so the static const cannot drift from the
  *   dynamic source of truth).
- * - `ui.commands.has(id)` — true for built-ins and registered customs.
- * - `ui.commands.require(id)` — throws when the id is unknown.
+ * - `ui.commands.has(id)`: true for built-ins and registered customs.
+ * - `ui.commands.require(id)`: throws when the id is unknown.
  */
 function makeSuperdocStub(): SuperDocLike {
   return {
@@ -80,6 +80,30 @@ describe('command discovery (SD-2920)', () => {
 
       reg.unregister();
       expect(ui.commands.has('company.aiRewrite')).toBe(false);
+    });
+  });
+
+  describe('reserved Proxy property names', () => {
+    it('refuses registration for ids that shadow Proxy methods', () => {
+      const ui = createSuperDocUI({ superdoc: makeSuperdocStub() });
+      teardown.push(() => ui.destroy());
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      for (const id of ['register', 'get', 'has', 'require'] as const) {
+        const result = ui.commands.register({ id, execute: () => true });
+        // Returns a no-op result so callers don't crash on
+        // `result.handle.execute(...)`.
+        expect(typeof result.handle.execute).toBe('function');
+        // The registration was refused: `has` reports false because
+        // these ids are neither built-ins nor live custom commands.
+        expect(ui.commands.has(id)).toBe(false);
+        // Index access still returns the Proxy helper, never the
+        // refused handle.
+        expect(typeof (ui.commands as unknown as Record<string, unknown>)[id]).toBe('function');
+      }
+
+      expect(warn).toHaveBeenCalled();
+      warn.mockRestore();
     });
   });
 

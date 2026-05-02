@@ -232,16 +232,19 @@ export class SuperDoc extends EventEmitter {
     onListDefinitionsChange: () => null,
     onPaginationUpdate: () => null,
     onTransaction: () => null,
-    // Tracked change bubble handlers (consumer-supplied; signature
-    // `(comment, editor) => void`) replace the default accept/reject
-    // behavior. Only fire from bubble buttons, not toolbar or context menu.
-    // Image upload handler: `async (file) => url`.
-    // All four callbacks above and the `superdocId` / `format` / `toolbar`
-    // selector / `permissionResolver` / `onFontsResolved` / `handleImageUpload`
-    // fields are intentionally NOT initialized here. The public `Config`
-    // typedef declares them optional; omitting them from the initializer
-    // keeps `superdoc.config.<field>` as `undefined` post-init when the
-    // consumer does not pass them, matching the typedef.
+    // The following optional consumer-supplied fields are intentionally
+    // NOT initialized here: `superdocId`, `format`, `toolbar` (selector),
+    // `permissionResolver`, `onFontsResolved`, `handleImageUpload`,
+    // `onTrackedChangeBubbleAccept`, `onTrackedChangeBubbleReject`.
+    // For the first six, the public `Config` typedef declares them
+    // optional; omitting them from the initializer keeps
+    // `superdoc.config.<field>` as `undefined` post-init when the consumer
+    // does not pass them, matching the typedef. The two
+    // `onTrackedChangeBubble*` callbacks are not yet on the public `Config`
+    // typedef (a typedef gap that predates this change); consumers pass
+    // them and they are read with `typeof handler === 'function'` guards.
+    // Bubble handler signature: `(comment, editor) => void`.
+    // Image upload handler signature: `async (file) => url`.
 
     // Disable context menus (slash and right-click) globally
     disableContextMenu: false,

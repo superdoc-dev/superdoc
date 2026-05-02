@@ -1,4 +1,5 @@
 export {
+  BUILT_IN_COMMAND_IDS,
   createSuperDocUI,
   shallowEqual,
   type CommandHandle,

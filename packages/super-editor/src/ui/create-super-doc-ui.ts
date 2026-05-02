@@ -1140,6 +1140,25 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
       if (prop === 'get') {
         return getDynamicHandle;
       }
+      // `has(id)` and `require(id)` (SD-2920): explicit validation
+      // helpers for config-driven toolbars and trusted dispatch sites.
+      // Both use the same registry lookup as `get(id)`; the difference
+      // is only what they return when the id is unknown.
+      if (prop === 'has') {
+        return (id: string): boolean => {
+          if (typeof id !== 'string' || id.length === 0) return false;
+          return BUILT_IN_COMMAND_ID_SET.has(id) || customCommandsRegistry.has(id);
+        };
+      }
+      if (prop === 'require') {
+        return (id: string): DynamicCommandHandle => {
+          const handle = getDynamicHandle(id);
+          if (!handle) {
+            throw new Error(`[superdoc/ui] commands.require: unknown command id "${id}".`);
+          }
+          return handle;
+        };
+      }
       // Custom-registered ids surface a typed handle from the registry.
       // Built-in ids fall through to the existing per-id cache so they
       // keep the same observe/execute shape they had before SD-2802.

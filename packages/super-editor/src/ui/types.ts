@@ -797,6 +797,26 @@ export type CommandsHandle = {
    * uniformly without branching on the id.
    */
   get(id: string): DynamicCommandHandle | undefined;
+
+  /**
+   * Returns `true` when `id` is currently registered: a built-in
+   * (member of `BUILT_IN_COMMAND_IDS`) or a custom registered via
+   * {@link CommandsHandle.register}. Returns `false` for unknown
+   * strings, including custom ids that have been unregistered.
+   *
+   * Use to validate config-driven toolbars at startup. The runtime
+   * lookup `ui.commands.get(id)` returns `undefined` for unknown ids
+   * silently; `has` makes the check explicit and short.
+   */
+  has(id: string): boolean;
+
+  /**
+   * Like {@link CommandsHandle.get} but throws when `id` is not
+   * registered. Use at trusted dispatch sites where an unknown id
+   * indicates a bug, not a user error: keyboard shortcut routers,
+   * tests, internal command pipelines.
+   */
+  require(id: string): DynamicCommandHandle;
 };
 
 /**

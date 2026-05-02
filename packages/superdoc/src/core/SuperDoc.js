@@ -123,12 +123,14 @@ export class SuperDoc extends EventEmitter {
   colors = [];
 
   /**
-   * Pinia stores and Vue runtime references. All four fields are populated
-   * by `#initVueApp`, which runs synchronously inside `#init` before any
-   * public method becomes reachable. Declared without initializers because
-   * the constructed instances are not available at field-init time;
-   * downstream code reads them post-`#init` and the runtime invariant is
-   * that they are non-null by then.
+   * Pinia stores and Vue runtime references. Populated by `#initVueApp`
+   * inside the async `#init`, which runs *after* `await #initCollaboration`,
+   * so these fields are briefly `undefined` between `new SuperDoc(config)`
+   * returning and the `ready` event firing. The non-null JSDoc here matches
+   * the existing pattern used for `users` / `version` / `whiteboard` and
+   * assumes consumers wait for `ready` before dereferencing. SD-2916 tracks
+   * the systematic soundness fix across all of these fields (declaring them
+   * `T | undefined` and casting at internal post-init access sites).
    *
    * @type {ReturnType<typeof import('../stores/superdoc-store.js').useSuperdocStore>}
    */

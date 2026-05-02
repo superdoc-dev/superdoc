@@ -66,6 +66,9 @@ catalogs:
     '@types/react-dom':
       specifier: ^19.2.3
       version: 19.2.3
+    '@types/uuid':
+      specifier: ^9.0.8
+      version: 9.0.8
     '@typescript-eslint/eslint-plugin':
       specifier: ^8.49.0
       version: 8.57.2
@@ -3113,6 +3116,9 @@ importers:
       '@superdoc/super-editor':
         specifier: workspace:*
         version: link:../super-editor
+      '@types/uuid':
+        specifier: 'catalog:'
+        version: 9.0.8
       '@vitejs/plugin-vue':
         specifier: 'catalog:'
         version: 6.0.2(rolldown-vite@7.3.1(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/node@25.6.0)(esbuild@0.27.7)(jiti@2.6.1)(less@4.4.2)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3))(vue@3.5.32(typescript@5.9.3))
@@ -10786,6 +10792,9 @@ packages:
 
   '@types/urijs@1.19.26':
     resolution: {integrity: sha512-wkXrVzX5yoqLnndOwFsieJA7oKM8cNkOKJtf/3vVGSUFkWDKZvFHpIl9Pvqb/T9UsawBBFMTTD8xu7sK5MWuvg==}
+
+  '@types/uuid@9.0.8':
+    resolution: {integrity: sha512-jg+97EGIcY9AGHJJRaaPVgetKDsrTgbRjQ5Msgjh/DQKEFl0DtyRr/VCOyD1T2R1MNeWPK/u7JoGhlDZnKBAfA==}
 
   '@types/vscode@1.110.0':
     resolution: {integrity: sha512-AGuxUEpU4F4mfuQjxPPaQVyuOMhs+VT/xRok1jiHVBubHK7lBRvCuOMZG0LKUwxncrPorJ5qq/uil3IdZBd5lA==}
@@ -32748,6 +32757,8 @@ snapshots:
   '@types/unist@3.0.3': {}
 
   '@types/urijs@1.19.26': {}
+
+  '@types/uuid@9.0.8': {}
 
   '@types/vscode@1.110.0': {}
 

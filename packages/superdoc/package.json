@@ -169,6 +169,7 @@
     "@hocuspocus/provider": "catalog:",
     "@hocuspocus/server": "catalog:",
     "@superdoc-dev/superdoc-yjs-collaboration": "workspace:*",
+    "@types/uuid": "catalog:",
     "@superdoc/common": "workspace:*",
     "@superdoc/super-editor": "workspace:*",
     "@vitejs/plugin-vue": "catalog:",

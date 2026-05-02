@@ -73,6 +73,7 @@ const DEFAULT_AWARENESS_PALETTE = Object.freeze([
  * @typedef {import('./types/index.js').SurfaceHandle<T>} SurfaceHandle
  */
 /** @typedef {import('./types/index.js').NavigableAddress} NavigableAddress */
+/** @typedef {import('@superdoc/super-editor/ui').SuperDocLike} SuperDocLike */
 
 /**
  * Config callbacks are optional on the public typedef because consumers do
@@ -99,6 +100,7 @@ function asEventListener(listener) {
  *
  * @class
  * @extends EventEmitter
+ * @implements {SuperDocLike}
  */
 export class SuperDoc extends EventEmitter {
   /** @type {Array<string>} */

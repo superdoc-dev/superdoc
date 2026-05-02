@@ -1,5 +1,5 @@
 /**
- * `SuperDocUIScope` — controller-aware lifecycle helper.
+ * `SuperDocUIScope`: controller-aware lifecycle helper.
  *
  * Without React's effect lifecycle, every consumer ends up tracking
  * subscriptions, custom-command registrations, and DOM listeners by
@@ -23,9 +23,10 @@
  *   unsubscribe immediately matches what the consumer would have done
  *   anyway with a `try { ... } finally { off(); }` pattern.
  * - `scope.on(...)` is a no-op. The listener is never installed.
- * - `scope.register(...)` throws — registering a custom command and
+ * - `scope.register(...)` throws. Registering a custom command and
  *   immediately unregistering it would still fire registry
- *   invalidation paths and warning hooks.
+ *   invalidation paths and warning hooks, so the lifecycle error is
+ *   surfaced explicitly instead of swallowed.
  * - `scope.child()` returns an already-destroyed child whose own
  *   methods follow the same rules.
  */

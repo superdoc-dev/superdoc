@@ -1,3 +1,7 @@
+// @ts-check
+// @ts-check
+// @ts-check
+// @ts-check
 import '../style.css';
 
 import { EventEmitter } from 'eventemitter3';
@@ -347,7 +351,7 @@ export class SuperDoc extends EventEmitter {
       this.config.modules.comments = {};
     }
 
-    this.config.colors = shuffleArray(this.config.colors);
+    this.config.colors = shuffleArray(/** @type {`#${string}`[]} */ (this.config.colors));
     /** @type {Map<unknown, unknown>} */
     this.userColorMap = new Map();
     this.colorIndex = 0;
@@ -470,7 +474,7 @@ export class SuperDoc extends EventEmitter {
     document.createElement = function (tagName) {
       const element = originalCreateElement.call(this, tagName);
       if (tagName.toLowerCase() === 'style') {
-        element.setAttribute('nonce', cspNonce);
+        element.setAttribute('nonce', /** @type {string} */ (cspNonce));
       }
       return element;
     };
@@ -504,7 +508,7 @@ export class SuperDoc extends EventEmitter {
         {
           id: uuidv4(),
           type: DOCX,
-          url: this.config.document,
+          url: /** @type {string} */ (this.config.document),
           name: 'document.docx',
         },
       ];
@@ -626,7 +630,7 @@ export class SuperDoc extends EventEmitter {
         ];
       }
 
-      this.#attachExternalCollaboration(externalYdoc, externalProvider);
+      this.#attachExternalCollaboration(/** @type {import('yjs').Doc} */ (externalYdoc), externalProvider);
 
       // Initialize comments sync (will be re-initialized in #initVueApp if
       // store is recreated, but the initial subscription must happen here
@@ -643,7 +647,7 @@ export class SuperDoc extends EventEmitter {
     // Start a socket for all documents and general metaMap for this SuperDoc
     if (collaborationModuleConfig.providerType === 'hocuspocus') {
       this.config.socket = new HocuspocusProviderWebsocket({
-        url: collaborationModuleConfig.url,
+        url: /** @type {string} */ (collaborationModuleConfig.url),
       });
     }
 
@@ -692,7 +696,7 @@ export class SuperDoc extends EventEmitter {
     this.provider = markRaw(provider);
 
     this.#assignUserColor();
-    this._cleanupAwareness = setupAwarenessHandler(provider, this, this.config.user);
+    this._cleanupAwareness = setupAwarenessHandler(provider, this, /** @type {User} */ (this.config.user));
 
     /** @type {InternalConfig} */ (this.config).documents.forEach((doc) => {
       doc.ydoc = ydoc;
@@ -785,7 +789,10 @@ export class SuperDoc extends EventEmitter {
       // --- Seed the room authoritatively (while editor is still local) ---
       seedEditorStateToYDoc(sourceEditor, ydoc);
       overwriteRoomComments(ydoc, this.commentsStore.commentsList);
-      overwriteRoomLockState(ydoc, { isLocked: this.isLocked, lockedBy: this.lockedBy });
+      overwriteRoomLockState(ydoc, {
+        isLocked: /** @type {boolean} */ (this.isLocked),
+        lockedBy: /** @type {User | null} */ (this.lockedBy),
+      });
 
       // --- Attach collaboration config (awareness, flags, config.documents) ---
       /** @type {InternalConfig} */ (this.config).modules.collaboration = { ydoc, provider };
@@ -1103,7 +1110,12 @@ export class SuperDoc extends EventEmitter {
     // the consumer-supplied config over it (`{ ...this.config, ...config }`),
     // so an explicit `onContentError: undefined` can still strip the
     // default. The optional chain keeps the call safe in that case.
-    this.config.onContentError?.({ error, editor, documentId: doc.id, file: doc.data });
+    this.config.onContentError?.({
+      error,
+      editor,
+      documentId: /** @type {string} */ (doc.id),
+      file: /** @type {File} */ (doc.data),
+    });
   }
 
   /**
@@ -1235,7 +1247,7 @@ export class SuperDoc extends EventEmitter {
       trackedChange: trackedChange ?? null,
     };
 
-    return isAllowed(permission, role, isInternal, context);
+    return isAllowed(permission, /** @type {string} */ (role), /** @type {boolean} */ (isInternal), context);
   }
 
   #addToolbar() {
@@ -1496,7 +1508,7 @@ export class SuperDoc extends EventEmitter {
   }
 
   #setModeSuggesting() {
-    if (!['editor', 'suggester'].includes(this.config.role)) return this.#setModeViewing();
+    if (!['editor', 'suggester'].includes(/** @type {string} */ (this.config.role))) return this.#setModeViewing();
     if (this.superdocStore.documents.length > 0) {
       const firstEditor = this.superdocStore.documents[0]?.getEditor();
       if (firstEditor) this.setActiveEditor(firstEditor);
@@ -1686,7 +1698,7 @@ export class SuperDoc extends EventEmitter {
     fieldsHighlightColor = null,
   } = {}) {
     // Get the docx files first
-    const baseFileName = exportedName ? cleanName(exportedName) : cleanName(this.config.title);
+    const baseFileName = exportedName ? cleanName(exportedName) : cleanName(/** @type {string} */ (this.config.title));
     const docxFiles = await this.exportEditorsToDOCX({ commentsType, isFinalDoc, fieldsHighlightColor });
     const blobsToZip = [...additionalFiles];
     const filenames = [...additionalFileNames];

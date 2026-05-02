@@ -2049,5 +2049,52 @@ describe('SuperDoc core', () => {
 
       expect(resolver).toHaveBeenCalledWith(expect.objectContaining({ comment, trackedChange }));
     });
+
+    it('resolves comment from commentsStore.getComment when trackedChange supplies only an id', async () => {
+      const { commentsStore } = createAppHarness();
+      const stored = { id: 'c-7', body: 'looked up' };
+      commentsStore.getComment = vi.fn(() => stored);
+
+      const resolver = vi.fn(() => true);
+      const instance = new SuperDoc({
+        selector: '#host',
+        document: 'https://example.com/doc.docx',
+        role: 'editor',
+        isInternal: true,
+        permissionResolver: resolver,
+      });
+      await flushMicrotasks();
+
+      // No `comment` passed; trackedChange only carries the id. The method
+      // must fall through to `commentsStore.getComment(commentId)`.
+      const trackedChange = { commentId: 'c-7', type: 'insert' };
+      instance.canPerformPermission({ permission: 'RESOLVE_OWN', trackedChange });
+
+      expect(commentsStore.getComment).toHaveBeenCalledWith('c-7');
+      expect(resolver).toHaveBeenCalledWith(expect.objectContaining({ comment: stored, trackedChange }));
+    });
+
+    it('unwraps a stored comment via getValues() when present', async () => {
+      const { commentsStore } = createAppHarness();
+      const unwrapped = { id: 'c-9', body: 'unwrapped' };
+      commentsStore.getComment = vi.fn(() => ({ getValues: () => unwrapped }));
+
+      const resolver = vi.fn(() => true);
+      const instance = new SuperDoc({
+        selector: '#host',
+        document: 'https://example.com/doc.docx',
+        role: 'editor',
+        isInternal: true,
+        permissionResolver: resolver,
+      });
+      await flushMicrotasks();
+
+      const trackedChange = { id: 'tc-9', type: 'delete' };
+      instance.canPerformPermission({ permission: 'RESOLVE_OWN', trackedChange });
+
+      // The store returned a wrapper with `getValues()`; the method must
+      // unwrap it before forwarding to the resolver.
+      expect(resolver).toHaveBeenCalledWith(expect.objectContaining({ comment: unwrapped }));
+    });
   });
 });

@@ -853,7 +853,6 @@ export class SuperDoc extends EventEmitter {
    * @param {import('./types/index.js').CollaborationProvider | null} provider
    */
   #setStoreDocumentCollaboration(ydoc, provider) {
-    /** @type {RuntimeDocument[] | undefined} */
     const storeDocs = this.superdocStore?.documents;
     if (!Array.isArray(storeDocs)) return;
     for (const doc of storeDocs) {
@@ -874,7 +873,6 @@ export class SuperDoc extends EventEmitter {
    * @returns {import('@superdoc/super-editor').PresentationEditor | import('@superdoc/super-editor').Editor}
    */
   #resolveUpgradeTarget() {
-    /** @type {RuntimeDocument[] | undefined} */
     const storeDocs = this.superdocStore?.documents;
     if (!storeDocs?.length) {
       throw new Error('SuperDoc: no store documents available for upgrade');

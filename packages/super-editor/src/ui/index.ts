@@ -86,6 +86,7 @@ export type {
   // Controller
   SuperDocUI,
   SuperDocUIOptions,
+  SuperDocUIScope,
   SuperDocUIState,
 
   // Selection

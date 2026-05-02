@@ -17,6 +17,7 @@ import type {
 import { shallowEqual } from './equality.js';
 import { scrollRangeIntoView } from './scroll-into-view.js';
 import { createCustomCommandsRegistry } from './custom-commands.js';
+import { createScope } from './scope.js';
 import type {
   CommandHandle,
   CommandsHandle,
@@ -35,6 +36,7 @@ import type {
   SuperDocEditorLike,
   SuperDocUI,
   SuperDocUIOptions,
+  SuperDocUIScope,
   SuperDocUIState,
   Subscribable,
   ToolbarCommandHandleState,
@@ -1658,9 +1660,39 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     },
   };
 
+  // Live scopes created via `ui.createScope()`. The controller's
+  // `destroy()` cascades into every entry before tearing down its own
+  // resources, so consumers do not need to call `scope.destroy()`
+  // themselves on shutdown — calling `ui.destroy()` is enough.
+  const liveScopes = new Set<SuperDocUIScope>();
+
+  const createScopeFn = (): SuperDocUIScope => {
+    return createScope({
+      register: customCommandsRegistry.register.bind(customCommandsRegistry),
+      trackScope: (scope) => {
+        liveScopes.add(scope);
+        return () => {
+          liveScopes.delete(scope);
+        };
+      },
+    });
+  };
+
   const destroy = () => {
     if (destroyed) return;
     destroyed = true;
+    // Cascade into scopes first. Each scope's own destroy untracks
+    // itself from `liveScopes`, so iterate a snapshot to avoid mutating
+    // the set during iteration.
+    const scopeSnapshot = [...liveScopes];
+    liveScopes.clear();
+    for (const scope of scopeSnapshot) {
+      try {
+        scope.destroy();
+      } catch (err) {
+        console.error('[superdoc/ui] scope destroy threw during ui.destroy()', err);
+      }
+    }
     stateChangeListeners.clear();
     commandHandleCache.clear();
     commandSubscribableCache.clear();
@@ -1675,5 +1707,16 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     teardown.length = 0;
   };
 
-  return { select, toolbar, commands, comments, trackChanges, selection, viewport, document, destroy };
+  return {
+    select,
+    toolbar,
+    commands,
+    comments,
+    trackChanges,
+    selection,
+    viewport,
+    document,
+    createScope: createScopeFn,
+    destroy,
+  };
 }

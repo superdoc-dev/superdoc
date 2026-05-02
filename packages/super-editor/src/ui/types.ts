@@ -259,7 +259,7 @@ export interface SelectionSlice {
    * ```ts
    * const { selectionTarget } = ui.selection.getSnapshot();
    * if (selectionTarget) {
-   *   editor.doc.insert({ target: selectionTarget, content: 'Hello' });
+   *   editor.doc.insert({ target: selectionTarget, value: 'Hello', type: 'text' });
    * }
    * ```
    *

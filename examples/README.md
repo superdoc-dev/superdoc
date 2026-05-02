@@ -29,6 +29,14 @@ Patterns for the browser editor surface.
 | [track-changes](./editor/built-in-ui/track-changes) | [docs](https://docs.superdoc.dev/editor/built-in-ui/track-changes) |
 | [toolbar](./editor/built-in-ui/toolbar) | [docs](https://docs.superdoc.dev/editor/built-in-ui/toolbar) |
 
+### Custom UI
+
+Build your own toolbar, comments sidebar, and review panel against the `superdoc/ui` controller. The polished React showcase lives at [`demos/custom-ui`](../demos/custom-ui); the matrix below is a per-framework reference.
+
+| Example | Docs |
+|---------|------|
+| [vanilla](./editor/custom-ui/vanilla) | [docs](https://docs.superdoc.dev/editor/custom-ui/overview) |
+
 ### Theming
 
 | Example | Docs |

@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SuperDoc · Custom UI · Vanilla</title>
+  </head>
+  <body>
+    <div class="app">
+      <header class="app-header">
+        <h1>Contract Review Workspace</h1>
+        <span class="subtitle">Custom UI · vanilla TypeScript</span>
+      </header>
+
+      <div class="app-body">
+        <section class="editor-area">
+          <div class="toolbar-shell">
+            <div id="toolbar" class="toolbar" role="toolbar" aria-label="Document toolbar"></div>
+          </div>
+          <div class="editor-shell">
+            <div id="editor"></div>
+          </div>
+        </section>
+
+        <aside class="sidebar">
+          <div class="sidebar-header">Activity</div>
+          <div id="composer-mount"></div>
+
+          <div class="sidebar-section-title">Comments</div>
+          <div id="comments-list" class="activity"></div>
+
+          <div class="sidebar-section-title">Tracked changes</div>
+          <div id="track-changes-list" class="activity"></div>
+        </aside>
+      </div>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

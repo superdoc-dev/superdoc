@@ -478,7 +478,10 @@ export class SuperDoc extends EventEmitter {
 
   #initDocuments() {
     const doc = this.config.document;
-    const hasDocumentConfig = !!doc && typeof doc === 'object' && Object.keys(this.config.document)?.length;
+    // Pass the narrowed `doc` to `Object.keys` so the `!!doc && typeof doc === 'object'`
+    // gate carries through; refetching `this.config.document` re-widens to
+    // `string | object | File | Blob | undefined` and trips the overload.
+    const hasDocumentConfig = !!doc && typeof doc === 'object' && Object.keys(doc)?.length;
     const hasDocumentUrl = !!doc && typeof doc === 'string' && doc.length > 0;
     const hasDocumentFile = !!doc && typeof File === 'function' && doc instanceof File;
     const hasDocumentBlob = !!doc && doc instanceof Blob && !(doc instanceof File);
@@ -850,6 +853,7 @@ export class SuperDoc extends EventEmitter {
    * @param {import('./types/index.js').CollaborationProvider | null} provider
    */
   #setStoreDocumentCollaboration(ydoc, provider) {
+    /** @type {RuntimeDocument[] | undefined} */
     const storeDocs = this.superdocStore?.documents;
     if (!Array.isArray(storeDocs)) return;
     for (const doc of storeDocs) {
@@ -870,6 +874,7 @@ export class SuperDoc extends EventEmitter {
    * @returns {import('@superdoc/super-editor').PresentationEditor | import('@superdoc/super-editor').Editor}
    */
   #resolveUpgradeTarget() {
+    /** @type {RuntimeDocument[] | undefined} */
     const storeDocs = this.superdocStore?.documents;
     if (!storeDocs?.length) {
       throw new Error('SuperDoc: no store documents available for upgrade');
@@ -1339,6 +1344,7 @@ export class SuperDoc extends EventEmitter {
    * @returns {Promise<boolean>} Whether the target was found and navigated to.
    */
   async navigateTo(target) {
+    /** @type {RuntimeDocument[] | undefined} */
     const storeDocs = this.superdocStore?.documents;
     if (!storeDocs?.length) return false;
     const presentationEditor = storeDocs[0].getPresentationEditor?.();
@@ -1364,6 +1370,7 @@ export class SuperDoc extends EventEmitter {
    * await superdoc.scrollToElement('imported-25def254');
    */
   async scrollToElement(elementId) {
+    /** @type {RuntimeDocument[] | undefined} */
     const storeDocs = this.superdocStore?.documents;
     if (!storeDocs?.length) return false;
     const presentationEditor = storeDocs[0].getPresentationEditor?.();
@@ -1551,6 +1558,7 @@ export class SuperDoc extends EventEmitter {
       });
     }
 
+    /** @type {RuntimeDocument[] | undefined} */
     const docs = this.superdocStore?.documents;
     if (Array.isArray(docs) && docs.length > 0) {
       docs.forEach((doc) => {
@@ -1804,7 +1812,7 @@ export class SuperDoc extends EventEmitter {
           this.pendingCollaborationSaves++;
           this.#log(`After increment - Doc ${index}: pending = ${this.pendingCollaborationSaves}`);
           const metaMap = doc.ydoc.getMap('meta');
-          metaMap.observe((event) => {
+          metaMap.observe((/** @type {import('yjs').YMapEvent<unknown>} */ event) => {
             if (event.changes.keys.has('immediate-save-finished')) {
               this.pendingCollaborationSaves--;
               if (this.pendingCollaborationSaves <= 0) {
@@ -1850,7 +1858,10 @@ export class SuperDoc extends EventEmitter {
     }
 
     const cfg = /** @type {InternalConfig} */ (this.config);
-    cfg.socket?.cancelWebsocketRetry();
+    // `cancelWebsocketRetry` is typed optional on `HocuspocusProviderWebsocket`
+    // but always present at runtime. Optional-chain the method too so the
+    // call is a no-op if the typedef ever drifts.
+    cfg.socket?.cancelWebsocketRetry?.();
     cfg.socket?.disconnect();
     cfg.socket?.destroy();
 

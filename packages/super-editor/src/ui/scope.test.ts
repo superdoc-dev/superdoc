@@ -209,6 +209,23 @@ describe('SuperDocUIScope', () => {
     });
   });
 
+  describe('ui.createScope() after ui.destroy()', () => {
+    it('returns an already-destroyed scope so it cannot leak', () => {
+      const ui = createSuperDocUI({ superdoc: makeSuperdocStub() });
+      ui.destroy();
+
+      const scope = ui.createScope();
+      expect(scope.destroyed).toBe(true);
+
+      // Methods follow the standard destroyed-scope contract.
+      const fn = vi.fn();
+      scope.add(fn);
+      expect(fn).toHaveBeenCalledTimes(1);
+
+      expect(() => scope.register({ id: 'company.late', execute: () => true })).toThrow(/scope has been destroyed/);
+    });
+  });
+
   describe('cascade from ui.destroy()', () => {
     it('destroys every live scope before tearing down the controller', () => {
       const ui = createSuperDocUI({ superdoc: makeSuperdocStub() });

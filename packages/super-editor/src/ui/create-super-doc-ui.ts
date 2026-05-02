@@ -1663,10 +1663,24 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
   // Live scopes created via `ui.createScope()`. The controller's
   // `destroy()` cascades into every entry before tearing down its own
   // resources, so consumers do not need to call `scope.destroy()`
-  // themselves on shutdown — calling `ui.destroy()` is enough.
+  // themselves on shutdown. Calling `ui.destroy()` is enough.
   const liveScopes = new Set<SuperDocUIScope>();
 
   const createScopeFn = (): SuperDocUIScope => {
+    if (destroyed) {
+      // Mirror the destroyed-parent behavior of `scope.child()`:
+      // return an already-destroyed scope so consumers in shutdown
+      // races do not get a live scope that the controller will never
+      // cascade-destroy. Methods on the returned scope follow the
+      // documented post-destroy contract (`add` runs synchronously,
+      // `on` is a no-op, `register` throws, `child` returns destroyed).
+      const inert = createScope({
+        register: customCommandsRegistry.register.bind(customCommandsRegistry),
+        trackScope: () => () => undefined,
+      });
+      inert.destroy();
+      return inert;
+    }
     return createScope({
       register: customCommandsRegistry.register.bind(customCommandsRegistry),
       trackScope: (scope) => {

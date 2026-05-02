@@ -145,10 +145,11 @@ export function createScope(owner: ScopeOwner): SuperDocUIScope {
   };
 
   // Register with the owner so cascade-destroy works. The untrack
-  // call goes onto the teardown stack, so `destroy()` automatically
-  // releases the parent's reference before any consumer-supplied
-  // cleanup runs (the unshift puts it at index 0, which destroys last
-  // in the reverse-order loop above).
+  // call goes onto the teardown stack at index 0, which means it runs
+  // last in the reverse-order loop in `destroy()` above. Running last
+  // matches typical cleanup ordering: consumer-supplied teardowns may
+  // still reference `scope` (e.g. through closures) while running, so
+  // we hold the owner's reference until all of those have completed.
   const untrack = owner.trackScope(scope);
   teardowns.unshift(untrack);
 

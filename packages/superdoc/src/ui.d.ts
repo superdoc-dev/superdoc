@@ -34,6 +34,7 @@ export {
   type SuperDocLike,
   type SuperDocUI,
   type SuperDocUIOptions,
+  type SuperDocUIScope,
   type SuperDocUIState,
   type TextAddress,
   type TextSegment,

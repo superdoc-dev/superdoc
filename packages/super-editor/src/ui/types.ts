@@ -490,7 +490,7 @@ export interface SuperDocUI {
  * consumers can either call `scope.destroy()` themselves on unmount /
  * HMR or rely on the cascade.
  *
- * Post-destroy semantics (idempotent — calling `destroy()` twice is
+ * Post-destroy semantics (idempotent: calling `destroy()` twice is
  * a no-op):
  * - `add(teardown)` invokes the teardown synchronously.
  * - `on(target, type, listener)` is a no-op; the listener is never
@@ -508,7 +508,7 @@ export interface SuperDocUIScope {
    * scope.add(ui.comments.subscribe(({ snapshot }) => renderList(snapshot)));
    * ```
    *
-   * Calling `add` after `destroy` invokes the teardown immediately —
+   * Calling `add` after `destroy` invokes the teardown immediately:
    * the canonical caller has already executed the side-effecting
    * subscribe call, so running the unsubscribe right away matches
    * what a `try { ... } finally { off(); }` pattern would do.

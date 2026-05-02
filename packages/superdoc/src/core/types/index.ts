@@ -1377,13 +1377,13 @@ export interface InternalConfig extends Config {
    * not part of the public Config surface.
    */
   socket?: HocuspocusProviderWebsocket;
-  /** Always populated by `#init` (default-initialized to `[]` if absent). */
+  /** Normalized to `[]` by `#init` if the consumer passes nothing or `undefined`. */
   documents: Document[];
-  /** Always populated by `#init` (default-initialized to `{}` if absent). */
+  /** Normalized to `{}` by `#init` if the consumer passes nothing or `undefined`. */
   modules: Modules;
-  /** Always populated by `#init` (DEFAULT_USER spread over consumer input). */
+  /** Spread of `DEFAULT_USER` over consumer input by `#init`; `name` always present. */
   user: User;
-  /** Always populated by `#init` (default-initialized to `{}` if absent). */
+  /** Normalized to `{}` by `#init` if the consumer passes nothing or `undefined`. */
   layoutEngineOptions: SuperDocLayoutEngineOptions;
 }
 

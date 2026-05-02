@@ -271,10 +271,14 @@ export class SuperDoc extends EventEmitter {
     }
     normalizeTrackChangesConfig(this.config);
 
-    // Default `layoutEngineOptions` to an empty object so downstream
-    // assignments (`flowMode`, `virtualization`, `trackedChanges`) don't
-    // need to null-check the parent on every access. Consumers rarely
-    // pass this; SuperDoc owns the runtime shape.
+    // Defensive defaults so the `InternalConfig` runtime invariants hold
+    // for every reachable code path. The class-field initializer seeds
+    // both `documents: []` and `layoutEngineOptions` is filled in by
+    // `normalizeTrackChangesConfig` above, but a consumer that explicitly
+    // passes `{ documents: undefined }` or omits `layoutEngineOptions`
+    // when track-changes hasn't initialized it yet would otherwise leave
+    // these undefined and break later non-null casts.
+    this.config.documents = this.config.documents || [];
     this.config.layoutEngineOptions = this.config.layoutEngineOptions || {};
 
     // Web layout behavior:

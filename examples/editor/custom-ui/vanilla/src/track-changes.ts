@@ -6,10 +6,10 @@
  * Prev / Next navigation that drive the controller's `activeId`.
  *
  * Independent of comments on purpose: the controller exposes the two
- * as separate slices so consumers decide whether to merge. Vanilla
- * demo keeps them separate to show the wiring is independent — a
- * Google-Docs-style merged Activity feed is a renderer choice, not a
- * controller capability gap.
+ * as separate slices so consumers decide whether to merge. The
+ * vanilla example keeps them separate to show the wiring is
+ * independent. A Google-Docs-style merged Activity feed is a renderer
+ * choice, not a controller capability gap.
  */
 
 import type { TrackChangeInfo, TrackChangesSlice, SuperDocUI } from 'superdoc/ui';

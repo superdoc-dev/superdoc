@@ -1,5 +1,5 @@
 /**
- * Vanilla Custom UI example — bootstrap.
+ * Vanilla Custom UI example: bootstrap.
  *
  * The whole point of this file is to show that everything `superdoc/ui/react`
  * does on top of `createSuperDocUI` is sugar. Each domain (`toolbar.ts`,
@@ -28,12 +28,12 @@ const $ = (sel: string): HTMLElement => {
 const disposer = new Disposer();
 
 // `toolbar: null` (the SuperDoc default) means the built-in toolbar is
-// not rendered — we drive everything through the controller and our
+// not rendered. We drive everything through the controller and our
 // own DOM in `toolbar.ts`. `modules.comments: false` disables the
 // built-in comments UI for the same reason. The React wrapper exposes
 // `hideToolbar` as a single boolean; in vanilla you just don't pass a
 // `toolbar` element. Logging this as a finding: the prop names diverge
-// across surfaces — `superdoc/ui/vue` (and any future framework
+// across surfaces. `superdoc/ui/vue` (and any future framework
 // adapter) should rename to a single canonical option, e.g.
 // `builtInToolbar: false`, and surface it consistently.
 const superdoc = new SuperDoc({
@@ -57,7 +57,7 @@ const superdoc = new SuperDoc({
 // this cast for every framework adapter, not just vanilla.
 const ui: SuperDocUI = createSuperDocUI({ superdoc: superdoc as unknown as Parameters<typeof createSuperDocUI>[0]['superdoc'] });
 
-// Wire each surface. Each mount* returns nothing — they push their
+// Wire each surface. Each mount* returns nothing; they push their
 // own unsubscribes onto the shared disposer so we can tear down in
 // one call. This is the lifecycle pattern hooks hide.
 mountToolbar({
@@ -89,10 +89,12 @@ mountDocumentControls({
 // Lifecycle: HMR drops the old controller's subscriptions before the
 // module re-evaluates. `beforeunload` covers the regular tab-close
 // case. `ui.destroy()` tears down the controller's own internal
-// subscriptions to the editor / SuperDoc instance.
+// subscriptions; `superdoc.destroy()` unmounts the editor itself.
+// Both are required: `ui.destroy()` does not delegate to the host.
 const teardown = () => {
   disposer.flush();
   ui.destroy();
+  superdoc.destroy();
 };
 
 window.addEventListener('beforeunload', teardown);

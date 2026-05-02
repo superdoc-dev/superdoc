@@ -1,5 +1,5 @@
 /**
- * Document-domain controls — Edit / Suggest toggle, Import (replaceFile),
+ * Document-domain controls: Edit / Suggest toggle, Import (replaceFile),
  * Export DOCX. Appended to the same toolbar element so they sit at
  * the right edge alongside the formatting controls.
  *
@@ -28,7 +28,7 @@ export function mountDocumentControls({ toolbarEl, ui, disposer }: MountOpts): v
   const trailingGroup = document.createElement('div');
   trailingGroup.className = 'toolbar-group toolbar-trailing';
 
-  // Import — round-trip companion to Export.
+  // Import: round-trip companion to Export.
   const fileInput = document.createElement('input');
   fileInput.type = 'file';
   fileInput.accept = '.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document';

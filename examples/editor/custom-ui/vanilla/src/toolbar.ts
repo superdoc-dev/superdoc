@@ -2,7 +2,7 @@
  * Custom toolbar built straight on `ui.commands.<id>`.
  *
  * Built-ins (bold, italic, underline, undo, redo, bullet-list,
- * numbered-list) bind to per-command observables — the React demo
+ * numbered-list) bind to per-command observables. The React demo
  * uses `useSuperDocCommand(id)`; here we call `.observe(...)`
  * directly. Each button only re-renders when its own command flips
  * active / disabled, matching the React per-button granularity.
@@ -109,7 +109,7 @@ function selectionGroup(ui: SuperDocUI, disposer: Disposer, onComposeComment: ()
   const group = document.createElement('div');
   group.className = 'toolbar-group';
 
-  // Comment button — disabled while there's no positional selection
+  // Comment button: disabled while there's no positional selection
   // (mirrors the React demo's CommentButton). Selection-driven enable
   // state comes from `ui.selection.subscribe` so the button keeps
   // sync across keyboard movement and clicks alike.
@@ -129,9 +129,11 @@ function selectionGroup(ui: SuperDocUI, disposer: Disposer, onComposeComment: ()
   const registration = ui.commands.register({
     id: INSERT_CLAUSE_ID,
     getState({ state }) {
-      // Disabled when there's no selection target to insert against.
-      const empty = state.selection.empty || state.selection.selectionTarget == null;
-      return { active: false, disabled: empty };
+      // `editor.doc.insert` works at a collapsed caret, so disable only
+      // when there's no addressable target at all (no editor, node
+      // selection in a non-text node, etc.). Mirrors the React demo's
+      // `InsertClauseButton` gate.
+      return { active: false, disabled: state.selection.selectionTarget == null };
     },
     async execute({ editor }) {
       if (!editor?.doc?.insert) return false;

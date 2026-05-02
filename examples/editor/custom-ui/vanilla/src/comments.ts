@@ -3,7 +3,7 @@
  *
  * Mirrors `demos/custom-ui/src/components/ActivitySidebar.tsx` but
  * without React. The render strategy is a re-render of the panel's
- * inner HTML on every snapshot change — overkill for a real product,
+ * inner HTML on every snapshot change. Overkill for a real product,
  * fine for a demo, and makes the data flow easy to follow.
  *
  * The composer is the load-bearing piece: it freezes the editor

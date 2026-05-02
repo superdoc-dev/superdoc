@@ -912,7 +912,7 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     // snapshot — the public `ToolbarSnapshotSlice` shape is the merged
     // one, not the underlying built-ins-only shape.
     getSnapshot: () => computeState().toolbar,
-    subscribe(listener) {
+    observe(listener) {
       // Drives off the same selector substrate so subscribers receive
       // the same coalesced burst pattern as ui.select consumers.
       // Equality is set to "always different" because the headless
@@ -923,11 +923,14 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
         () => false,
       ).subscribe((snapshot) => {
         try {
-          listener({ snapshot });
+          listener(snapshot);
         } catch {
           // see scheduleNotify
         }
       });
+    },
+    subscribe(listener) {
+      return toolbar.observe((snapshot) => listener({ snapshot }));
     },
     execute: ((id: PublicToolbarItemId, payload?: unknown): boolean => {
       // Routes through the centralized `dispatchCommand` so a later
@@ -1188,14 +1191,17 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
 
   const comments: CommentsHandle = {
     getSnapshot: () => computeState().comments,
-    subscribe(listener) {
+    observe(listener) {
       return select((state) => state.comments, shallowEqual).subscribe((snapshot) => {
         try {
-          listener({ snapshot });
+          listener(snapshot);
         } catch {
           // see scheduleNotify
         }
       });
+    },
+    subscribe(listener) {
+      return comments.observe((snapshot) => listener({ snapshot }));
     },
     createFromSelection({ text }) {
       const editor = resolveRoutedEditor(superdoc);
@@ -1350,14 +1356,17 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
 
   const trackChanges: TrackChangesHandle = {
     getSnapshot: () => computeState().trackChanges,
-    subscribe(listener) {
+    observe(listener) {
       return select((state) => state.trackChanges, shallowEqual).subscribe((snapshot) => {
         try {
-          listener({ snapshot });
+          listener(snapshot);
         } catch {
           // see scheduleNotify
         }
       });
+    },
+    subscribe(listener) {
+      return trackChanges.observe((snapshot) => listener({ snapshot }));
     },
     accept(changeId) {
       const api = requireDocTrackChanges();
@@ -1542,14 +1551,17 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
   // selector substrate.
   const selection: SelectionHandle = {
     getSnapshot: () => computeState().selection,
-    subscribe(listener) {
+    observe(listener) {
       return select((state) => state.selection, shallowEqual).subscribe((snapshot) => {
         try {
-          listener({ snapshot });
+          listener(snapshot);
         } catch {
           // see scheduleNotify
         }
       });
+    },
+    subscribe(listener) {
+      return selection.observe((snapshot) => listener({ snapshot }));
     },
     capture() {
       // Capture is sugar over `getSnapshot()` plus a deep clone +
@@ -1580,14 +1592,17 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
   // backwards-compat shim once consumers migrate to ui.document).
   const document: DocumentHandle = {
     getSnapshot: () => computeState().document,
-    subscribe(listener) {
+    observe(listener) {
       return select((state) => state.document, shallowEqual).subscribe((snapshot) => {
         try {
-          listener({ snapshot });
+          listener(snapshot);
         } catch {
           // see scheduleNotify
         }
       });
+    },
+    subscribe(listener) {
+      return document.observe((snapshot) => listener({ snapshot }));
     },
     setMode(mode) {
       // Routes through the host setter; ignored when the stub omits

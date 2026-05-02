@@ -565,6 +565,16 @@ export interface DocumentHandle {
    */
   subscribe(listener: (event: { snapshot: DocumentSlice }) => void): () => void;
   /**
+   * Value-shaped alias of {@link subscribe}: listener receives the
+   * snapshot directly instead of an event wrapper. Matches the
+   * per-command `observe(state => ...)` shape on
+   * {@link CommandHandle.observe}, so a single listener style works
+   * across the whole controller surface. Same emission semantics as
+   * `subscribe`: fires once synchronously, then on shallow-equality
+   * change. Returns an unsubscribe.
+   */
+  observe(listener: (snapshot: DocumentSlice) => void): () => void;
+  /**
    * Set the document mode. Routes through `superdoc.setDocumentMode`
    * which fires the existing `document-mode-change` event and updates
    * the per-editor mode. No-op when the host stub omits the setter
@@ -609,6 +619,12 @@ export interface SelectionHandle {
    * typing-only transactions). Returns an unsubscribe.
    */
   subscribe(listener: (event: { snapshot: SelectionSlice }) => void): () => void;
+  /**
+   * Value-shaped alias of {@link subscribe}: listener receives the
+   * snapshot directly. See {@link DocumentHandle.observe} for why
+   * this exists alongside `subscribe`.
+   */
+  observe(listener: (snapshot: SelectionSlice) => void): () => void;
   /**
    * Capture the current selection as a portable handle.
    *
@@ -674,6 +690,12 @@ export interface ToolbarHandle {
    * with the latest snapshot. Returns an unsubscribe.
    */
   subscribe(listener: (event: { snapshot: ToolbarSnapshotSlice }) => void): () => void;
+  /**
+   * Value-shaped alias of {@link subscribe}: listener receives the
+   * snapshot directly. See {@link DocumentHandle.observe} for why
+   * this exists alongside `subscribe`.
+   */
+  observe(listener: (snapshot: ToolbarSnapshotSlice) => void): () => void;
   /**
    * Execute a built-in toolbar command. Type-safe payload is enforced
    * via the existing `ToolbarPayloadMap`.
@@ -934,6 +956,12 @@ export interface CommentsHandle {
    */
   subscribe(listener: (event: { snapshot: CommentsSlice }) => void): () => void;
   /**
+   * Value-shaped alias of {@link subscribe}: listener receives the
+   * snapshot directly. See {@link DocumentHandle.observe} for why
+   * this exists alongside `subscribe`.
+   */
+  observe(listener: (snapshot: CommentsSlice) => void): () => void;
+  /**
    * Create a comment anchored to the current selection. Reads the
    * routed editor's `selection.current().target` and routes through
    * `editor.doc.comments.create`. Returns the operation receipt.
@@ -1001,6 +1029,12 @@ export interface TrackChangesHandle {
    * equality. Returns an unsubscribe.
    */
   subscribe(listener: (event: { snapshot: TrackChangesSlice }) => void): () => void;
+  /**
+   * Value-shaped alias of {@link subscribe}: listener receives the
+   * snapshot directly. See {@link DocumentHandle.observe} for why
+   * this exists alongside `subscribe`.
+   */
+  observe(listener: (snapshot: TrackChangesSlice) => void): () => void;
   /** Accept a single tracked change via `trackChanges.decide`. */
   accept(changeId: string): import('@superdoc/document-api').Receipt;
   /** Reject a single tracked change via `trackChanges.decide`. */

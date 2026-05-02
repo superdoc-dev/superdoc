@@ -1858,9 +1858,11 @@ export class SuperDoc extends EventEmitter {
     }
 
     const cfg = /** @type {InternalConfig} */ (this.config);
-    // `cancelWebsocketRetry` is typed optional on `HocuspocusProviderWebsocket`
-    // but always present at runtime. Optional-chain the method too so the
-    // call is a no-op if the typedef ever drifts.
+    // `cancelWebsocketRetry` is set on `HocuspocusProviderWebsocket` only
+    // while a reconnect timer is pending, and Hocuspocus clears it back to
+    // `undefined` after firing. Destroy from the "already connected, no
+    // pending retry" path lands here with the method absent, so the
+    // optional chain on the method is required to avoid a `TypeError`.
     cfg.socket?.cancelWebsocketRetry?.();
     cfg.socket?.disconnect();
     cfg.socket?.destroy();

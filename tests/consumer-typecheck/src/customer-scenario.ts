@@ -1008,6 +1008,25 @@ function testSuperDocUISubEntry() {
     return c.commentId;
   }
   void readCommentId;
+
+  // SD-2919: every domain handle exposes a value-shaped `observe(...)`
+  // alongside the existing `subscribe(({ snapshot }) => ...)`. Pin
+  // callable shape and unsubscribe identity at the consumer surface so
+  // a broken re-export through `superdoc/ui` would fail typecheck
+  // instead of silently dropping the method.
+  function exerciseObserveAliases(ui: SuperDocUI): void {
+    const offToolbar: () => void = ui.toolbar.observe((_snapshot) => {});
+    const offSelection: () => void = ui.selection.observe((_snapshot) => {});
+    const offComments: () => void = ui.comments.observe((_snapshot) => {});
+    const offTrackChanges: () => void = ui.trackChanges.observe((_snapshot) => {});
+    const offDocument: () => void = ui.document.observe((_snapshot) => {});
+    offToolbar();
+    offSelection();
+    offComments();
+    offTrackChanges();
+    offDocument();
+  }
+  void exerciseObserveAliases;
 }
 
 export {

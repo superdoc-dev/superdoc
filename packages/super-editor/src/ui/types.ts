@@ -693,7 +693,11 @@ export interface ToolbarHandle {
   /**
    * Value-shaped alias of {@link subscribe}: listener receives the
    * snapshot directly. See {@link DocumentHandle.observe} for why
-   * this exists alongside `subscribe`.
+   * this exists alongside `subscribe`. Toolbar is the one handle that
+   * does NOT dedup by shallow equality. The underlying headless
+   * controller already deduplicates internally, so the UI layer
+   * propagates every emit it produces; equality on this handle is
+   * always-different by design.
    */
   observe(listener: (snapshot: ToolbarSnapshotSlice) => void): () => void;
   /**

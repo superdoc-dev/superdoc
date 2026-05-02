@@ -67,7 +67,10 @@ const DEFAULT_AWARENESS_PALETTE = Object.freeze([
 /** @typedef {import('./types/index.js').ExportParams} ExportParams */
 /** @typedef {import('./types/index.js').UpgradeToCollaborationOptions} UpgradeToCollaborationOptions */
 /** @typedef {import('./types/index.js').SurfaceRequest} SurfaceRequest */
-/** @typedef {import('./types/index.js').SurfaceHandle} SurfaceHandle */
+/**
+ * @template [T=unknown]
+ * @typedef {import('./types/index.js').SurfaceHandle<T>} SurfaceHandle
+ */
 /** @typedef {import('./types/index.js').NavigableAddress} NavigableAddress */
 
 /**
@@ -319,11 +322,13 @@ export class SuperDoc extends EventEmitter {
     // --- One-time shell setup (survives upgrade) ---
     this.user = this.config.user;
     this.users = this.config.users || [];
+    /** @type {unknown} */
     this.socket = null;
     this.isDev = this.config.isDev || false;
 
     /** @type {Editor | null | undefined} */
     this.activeEditor = null;
+    /** @type {unknown[]} */
     this.comments = [];
 
     this.isLocked = this.config.isLocked || false;

@@ -177,14 +177,12 @@ export class SuperDoc extends EventEmitter {
 
   /** @type {Config} */
   config = {
-    superdocId: null,
     selector: '#superdoc',
     documentMode: 'editing',
     allowSelectionInViewMode: false,
     role: 'editor',
     document: {},
     documents: [],
-    format: null,
     editorExtensions: [],
 
     colors: [],
@@ -192,7 +190,6 @@ export class SuperDoc extends EventEmitter {
     users: [],
 
     modules: {}, // Optional: Modules to load. Use modules.ai.{your_key} to pass in your key
-    permissionResolver: null, // Optional: Override for permission checks
 
     // License key (resolved downstream; undefined means "not explicitly set")
     licenseKey: undefined,
@@ -206,7 +203,6 @@ export class SuperDoc extends EventEmitter {
     comments: { visible: false },
 
     // toolbar config
-    toolbar: null, // Optional DOM element to render the toolbar in
     toolbarGroups: ['left', 'center', 'right'],
     toolbarIcons: {},
     toolbarTexts: {},
@@ -236,16 +232,16 @@ export class SuperDoc extends EventEmitter {
     onListDefinitionsChange: () => null,
     onPaginationUpdate: () => null,
     onTransaction: () => null,
-    onFontsResolved: null,
-
-    // Tracked change bubble handlers - replace default accept/reject behavior
-    // Only fires from bubble buttons, not toolbar or context menu
-    // Signature: (comment, editor) => void
-    onTrackedChangeBubbleAccept: null,
-    onTrackedChangeBubbleReject: null,
-    // Image upload handler
-    // async (file) => url;
-    handleImageUpload: null,
+    // Tracked change bubble handlers (consumer-supplied; signature
+    // `(comment, editor) => void`) replace the default accept/reject
+    // behavior. Only fire from bubble buttons, not toolbar or context menu.
+    // Image upload handler: `async (file) => url`.
+    // All four callbacks above and the `superdocId` / `format` / `toolbar`
+    // selector / `permissionResolver` / `onFontsResolved` / `handleImageUpload`
+    // fields are intentionally NOT initialized here. The public `Config`
+    // typedef declares them optional; omitting them from the initializer
+    // keeps `superdoc.config.<field>` as `undefined` post-init when the
+    // consumer does not pass them, matching the typedef.
 
     // Disable context menus (slash and right-click) globally
     disableContextMenu: false,

@@ -626,7 +626,7 @@ export class SuperDoc extends EventEmitter {
         ];
       }
 
-      this.#attachExternalCollaboration(/** @type {import('yjs').Doc} */ (externalYdoc), externalProvider);
+      this.#attachExternalCollaboration(externalYdoc, externalProvider);
 
       // Initialize comments sync (will be re-initialized in #initVueApp if
       // store is recreated, but the initial subscription must happen here
@@ -692,7 +692,7 @@ export class SuperDoc extends EventEmitter {
     this.provider = markRaw(provider);
 
     this.#assignUserColor();
-    this._cleanupAwareness = setupAwarenessHandler(provider, this, /** @type {User} */ (this.config.user));
+    this._cleanupAwareness = setupAwarenessHandler(provider, this, this.config.user);
 
     /** @type {InternalConfig} */ (this.config).documents.forEach((doc) => {
       doc.ydoc = ydoc;
@@ -785,10 +785,7 @@ export class SuperDoc extends EventEmitter {
       // --- Seed the room authoritatively (while editor is still local) ---
       seedEditorStateToYDoc(sourceEditor, ydoc);
       overwriteRoomComments(ydoc, this.commentsStore.commentsList);
-      overwriteRoomLockState(ydoc, {
-        isLocked: /** @type {boolean} */ (this.isLocked),
-        lockedBy: /** @type {User | null} */ (this.lockedBy),
-      });
+      overwriteRoomLockState(ydoc, { isLocked: this.isLocked, lockedBy: this.lockedBy });
 
       // --- Attach collaboration config (awareness, flags, config.documents) ---
       /** @type {InternalConfig} */ (this.config).modules.collaboration = { ydoc, provider };
@@ -1106,12 +1103,7 @@ export class SuperDoc extends EventEmitter {
     // the consumer-supplied config over it (`{ ...this.config, ...config }`),
     // so an explicit `onContentError: undefined` can still strip the
     // default. The optional chain keeps the call safe in that case.
-    this.config.onContentError?.({
-      error,
-      editor,
-      documentId: /** @type {string} */ (doc.id),
-      file: /** @type {File} */ (doc.data),
-    });
+    this.config.onContentError?.({ error, editor, documentId: doc.id, file: doc.data });
   }
 
   /**
@@ -1243,7 +1235,7 @@ export class SuperDoc extends EventEmitter {
       trackedChange: trackedChange ?? null,
     };
 
-    return isAllowed(permission, /** @type {string} */ (role), /** @type {boolean} */ (isInternal), context);
+    return isAllowed(permission, role, isInternal, context);
   }
 
   #addToolbar() {
@@ -1504,7 +1496,7 @@ export class SuperDoc extends EventEmitter {
   }
 
   #setModeSuggesting() {
-    if (!['editor', 'suggester'].includes(/** @type {string} */ (this.config.role))) return this.#setModeViewing();
+    if (!['editor', 'suggester'].includes(this.config.role)) return this.#setModeViewing();
     if (this.superdocStore.documents.length > 0) {
       const firstEditor = this.superdocStore.documents[0]?.getEditor();
       if (firstEditor) this.setActiveEditor(firstEditor);

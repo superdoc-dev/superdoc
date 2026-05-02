@@ -76,12 +76,17 @@ const DEFAULT_AWARENESS_PALETTE = Object.freeze([
 
 /**
  * Config callbacks are optional on the public typedef because consumers do
- * not need to pass them. The default config installs no-op functions before
- * listener registration; keep the cast local so EventEmitter's runtime
- * behavior stays unchanged if that invariant is ever broken.
+ * not need to pass them. The fields wrapped by this helper (every callback
+ * registered in `#initListeners` plus the toolbar `exception` listener)
+ * default to `() => null` in the class-field initializer, so EventEmitter
+ * receives a function in normal use. This helper is a runtime identity
+ * cast: behavior is unchanged if that invariant is ever broken (e.g. a
+ * consumer explicitly passes `undefined`), and EventEmitter sees the same
+ * value it would have without the wrapper. Sites with a `null` default
+ * (`onFontsResolved`, `onTrackedChangeBubbleAccept`, `onTrackedChangeBubbleReject`)
+ * use a separate `if`-guard pattern instead of this helper.
  *
- * @template {(...args: any[]) => void} T
- * @param {T | undefined} listener
+ * @param {((...args: any[]) => void) | undefined} listener
  * @returns {(...args: any[]) => void}
  */
 function asEventListener(listener) {

@@ -13,7 +13,7 @@
  * under strict mode. If a future change re-narrows `email` to disallow
  * `null`, the `null` cases stop compiling and CI fails.
  */
-import type { User } from 'superdoc';
+import type { Config, User } from 'superdoc';
 
 // All three of string, null, undefined are valid email values.
 const userWithEmail: User = { name: 'Alice', email: 'alice@example.com' };
@@ -24,6 +24,14 @@ const userOmittingEmail: User = { name: 'Default' };
 // Optional fields stay independent of the email change.
 const userWithImage: User = { name: 'Alice', email: 'a@b.com', image: 'avatar.png' };
 const userWithImageNull: User = { name: 'Default', email: null, image: null };
+
+// `Config.user` accepts the same shape on input. `#init` normalizes a
+// partial user by spreading `DEFAULT_USER` over it, so consumers can
+// omit `email` (or `name`) without a typecheck failure.
+const cfgWithFullUser: Config['user'] = { name: 'Ada', email: 'ada@example.com' };
+const cfgWithMinimalUser: Config['user'] = { name: 'Ada' };
+const cfgWithNullEmail: Config['user'] = { name: 'Ada', email: null };
+const cfgWithEmptyUser: Config['user'] = {};
 
 // Consumers must narrow before string operations on `email`.
 function emailLength(u: User): number {
@@ -42,6 +50,10 @@ void [
   userOmittingEmail,
   userWithImage,
   userWithImageNull,
+  cfgWithFullUser,
+  cfgWithMinimalUser,
+  cfgWithNullEmail,
+  cfgWithEmptyUser,
   emailLength,
   fallback,
 ];

@@ -449,6 +449,28 @@ const scenarios = [
     files: ['src/can-perform-permission-payload.ts'],
     mustPass: true,
   },
+  // SD-2867 Kind II: `User.email` accepts both `string` and `null`. The
+  // runtime has always exposed `null` (DEFAULT_USER.email), and this
+  // fixture pins the typedef to that contract so a future PR cannot
+  // re-narrow `email` to `string` without a typecheck failure here.
+  {
+    name: 'bundler / User.email accepts string | null (SD-2867)',
+    module: 'ESNext',
+    moduleResolution: 'bundler',
+    skipLibCheck: true,
+    strict: true,
+    files: ['src/user-email-nullable.ts'],
+    mustPass: true,
+  },
+  {
+    name: 'node16 / User.email accepts string | null (SD-2867)',
+    module: 'Node16',
+    moduleResolution: 'node16',
+    skipLibCheck: true,
+    strict: true,
+    files: ['src/user-email-nullable.ts'],
+    mustPass: true,
+  },
 ];
 
 const tscPath = join(__dirname, 'node_modules', '.bin', 'tsc');

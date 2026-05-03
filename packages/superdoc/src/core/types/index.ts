@@ -47,8 +47,14 @@ export type NavigableAddress = SuperEditorNavigableAddress;
 export interface User {
   /** The user's name. */
   name: string;
-  /** The user's email. */
-  email: string;
+  /**
+   * The user's email. May be `null` when the consumer did not provide an
+   * email and SuperDoc fell back to the built-in default user; the runtime
+   * has always exposed `null` here, so the typedef accepts it explicitly
+   * rather than narrowing to `string`. Consumers must narrow before
+   * performing string operations on this field.
+   */
+  email: string | null;
   /** The user's photo. */
   image?: string | null;
   /**

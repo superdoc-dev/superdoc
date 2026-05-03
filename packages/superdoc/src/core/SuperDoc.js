@@ -186,7 +186,12 @@ export class SuperDoc extends EventEmitter {
     editorExtensions: [],
 
     colors: [],
-    user: { name: null, email: null },
+    // `user` is intentionally not initialized here. `#init` always
+    // normalizes `this.config.user` (spreading `DEFAULT_USER` over the
+    // consumer-supplied user, or using `DEFAULT_USER` outright when the
+    // consumer passes nothing). The previous `{ name: null, email: null }`
+    // placeholder was overwritten unconditionally before any consumer
+    // could observe it.
     users: [],
 
     modules: {}, // Optional: Modules to load. Use modules.ai.{your_key} to pass in your key

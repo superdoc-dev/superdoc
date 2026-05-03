@@ -471,6 +471,30 @@ const scenarios = [
     files: ['src/user-email-nullable.ts'],
     mustPass: true,
   },
+  // SD-2828: `Document.provider` and `SuperDoc.provider` are typed as
+  // `CollaborationProvider`, not `HocuspocusProvider`. The runtime stores
+  // whatever provider the consumer passed (Hocuspocus, Liveblocks-Yjs,
+  // TiptapCollab, etc.); pinning the wider contract here so a future
+  // re-narrowing to `HocuspocusProvider` would surface as a typecheck
+  // failure on the public surface.
+  {
+    name: 'bundler / provider is CollaborationProvider (SD-2828)',
+    module: 'ESNext',
+    moduleResolution: 'bundler',
+    skipLibCheck: true,
+    strict: true,
+    files: ['src/provider-collaboration-provider.ts'],
+    mustPass: true,
+  },
+  {
+    name: 'node16 / provider is CollaborationProvider (SD-2828)',
+    module: 'Node16',
+    moduleResolution: 'node16',
+    skipLibCheck: true,
+    strict: true,
+    files: ['src/provider-collaboration-provider.ts'],
+    mustPass: true,
+  },
 ];
 
 const tscPath = join(__dirname, 'node_modules', '.bin', 'tsc');

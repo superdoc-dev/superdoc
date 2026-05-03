@@ -91,8 +91,14 @@ export interface Document {
   isNewFile?: boolean;
   /** The Yjs document for collaboration. */
   ydoc?: YDoc;
-  /** The provider for collaboration. */
-  provider?: HocuspocusProvider;
+  /**
+   * The provider for collaboration. Widened from `HocuspocusProvider` to
+   * `CollaborationProvider` to match the runtime, which stores whatever
+   * provider the consumer passed via `Config.modules.collaboration.provider`
+   * (HocuspocusProvider, LiveblocksYjsProvider, TiptapCollabProvider, etc.).
+   * Consumers needing Hocuspocus-specific members must narrow before use.
+   */
+  provider?: CollaborationProvider;
 }
 
 /**

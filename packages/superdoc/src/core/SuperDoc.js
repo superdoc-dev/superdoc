@@ -129,7 +129,15 @@ export class SuperDoc extends EventEmitter {
   /** @type {import('yjs').Doc | undefined} */
   ydoc;
 
-  /** @type {import('@hocuspocus/provider').HocuspocusProvider | undefined} */
+  /**
+   * Provider for the SuperDoc-level collaboration room (separate from
+   * per-document providers). Widened to `CollaborationProvider` to match
+   * the runtime, which stores whatever provider the consumer passed via
+   * `Config.modules.collaboration.provider`. Consumers needing Hocuspocus-
+   * specific members must narrow before use.
+   *
+   * @type {import('./types/index.js').CollaborationProvider | undefined}
+   */
   provider;
 
   /** @type {Whiteboard | null} */

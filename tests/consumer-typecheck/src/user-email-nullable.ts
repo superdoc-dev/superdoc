@@ -14,6 +14,7 @@
  * `null`, the `null` cases stop compiling and CI fails.
  */
 import type { Config, User } from 'superdoc';
+import { SuperDoc } from 'superdoc';
 
 // All three of string, null, undefined are valid email values.
 const userWithEmail: User = { name: 'Alice', email: 'alice@example.com' };
@@ -32,6 +33,18 @@ const cfgWithFullUser: Config['user'] = { name: 'Ada', email: 'ada@example.com' 
 const cfgWithMinimalUser: Config['user'] = { name: 'Ada' };
 const cfgWithNullEmail: Config['user'] = { name: 'Ada', email: null };
 const cfgWithEmptyUser: Config['user'] = {};
+
+// Same contract through the `new SuperDoc(...)` constructor parameter.
+// Consumers commonly write `new SuperDoc({ selector, user: { name } })`;
+// these type-only assignments pin the constructor surface a consumer
+// would actually hit. (Type-level only, no runtime construction.)
+type SuperDocCtorArg = ConstructorParameters<typeof SuperDoc>[0];
+const ctorWithFullUser: SuperDocCtorArg = { selector: '#x', user: { name: 'Ada', email: 'ada@example.com' } };
+const ctorWithMinimalUser: SuperDocCtorArg = { selector: '#x', user: { name: 'Ada' } };
+const ctorWithNullEmail: SuperDocCtorArg = { selector: '#x', user: { name: 'Ada', email: null } };
+const ctorWithUndefinedEmail: SuperDocCtorArg = { selector: '#x', user: { name: 'Ada', email: undefined } };
+const ctorWithEmptyUser: SuperDocCtorArg = { selector: '#x', user: {} };
+const ctorWithoutUser: SuperDocCtorArg = { selector: '#x' };
 
 // Consumers must narrow before string operations on `email`.
 function emailLength(u: User): number {
@@ -54,6 +67,12 @@ void [
   cfgWithMinimalUser,
   cfgWithNullEmail,
   cfgWithEmptyUser,
+  ctorWithFullUser,
+  ctorWithMinimalUser,
+  ctorWithNullEmail,
+  ctorWithUndefinedEmail,
+  ctorWithEmptyUser,
+  ctorWithoutUser,
   emailLength,
   fallback,
 ];

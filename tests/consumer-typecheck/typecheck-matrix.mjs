@@ -4,11 +4,15 @@
  * Tests that superdoc's type declarations work across all common
  * tsconfig combinations consumers might use:
  *   - moduleResolution: bundler, node16, nodenext
- *   - skipLibCheck: true (all scenarios), false (regression check)
+ *   - skipLibCheck: true (targeted compat scenarios), false (public-surface gate)
  *   - strict: true and false
  *   - Import paths: "superdoc", "superdoc/super-editor"
  *   - Node.js headless usage (Buffer return types)
  *   - Guarded public types must not collapse to `any` (SD-2831)
+ *
+ * The optional `allowNodeModuleErrors` scenario flag remains available for
+ * documented upstream exceptions, but current public-surface scenarios should
+ * pass with `skipLibCheck: false`.
  *
  * The fixture installs superdoc from the packed tarball at
  * ../../packages/superdoc/superdoc.tgz, so the matrix tests the
@@ -300,19 +304,42 @@ const scenarios = [
     files: ['src/prosemirror-coexistence.ts'],
     mustPass: true,
   },
-  // skipLibCheck=false — informational. Existing dep noise from
-  // node_modules (~30 errors at last count) is expected here; the
-  // `allowNodeModuleErrors` flag opts this scenario into the DEPS
-  // classification rather than INFO so the failure mode stays explicit.
+  // SD-2892: full public-facing surface with skipLibCheck=false. These
+  // scenarios pack SuperDoc, install it into the consumer fixture, and compile
+  // every public consumer assertion under the resolution modes customers use.
+  // SuperDoc-owned declaration leaks surface as node_modules/superdoc errors,
+  // so these scenarios are required gates with no dependency-error allowance.
+  // If this aggregate gate fails, rerun tsc against individual fixture files
+  // to narrow the broken public entry point.
   {
-    name: 'bundler / skipLibCheck=false',
+    name: 'bundler / all public surface / skipLibCheck=false',
     module: 'ESNext',
     moduleResolution: 'bundler',
     skipLibCheck: false,
     strict: true,
-    files: ['src/imports-main.ts'],
-    mustPass: false,
-    allowNodeModuleErrors: true,
+    noPropertyAccessFromIndexSignature: true,
+    files: ['src/**/*.ts'],
+    mustPass: true,
+  },
+  {
+    name: 'node16 / all public surface / skipLibCheck=false',
+    module: 'Node16',
+    moduleResolution: 'node16',
+    skipLibCheck: false,
+    strict: true,
+    noPropertyAccessFromIndexSignature: true,
+    files: ['src/**/*.ts'],
+    mustPass: true,
+  },
+  {
+    name: 'nodenext / all public surface / skipLibCheck=false',
+    module: 'NodeNext',
+    moduleResolution: 'nodenext',
+    skipLibCheck: false,
+    strict: true,
+    noPropertyAccessFromIndexSignature: true,
+    files: ['src/**/*.ts'],
+    mustPass: true,
   },
   // SD-2842: every public type re-exported via `superdoc` must resolve
   // to a real interface, not collapse to `any` and not be missing.

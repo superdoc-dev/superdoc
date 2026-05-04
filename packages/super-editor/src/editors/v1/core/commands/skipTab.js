@@ -3,7 +3,7 @@ import { TextSelection } from 'prosemirror-state';
 /**
  * Moves the cursor across a tab node when inside a run.
  * @param {1|-1} dir Direction to move: forward (1) or backward (-1).
- * @returns {import('@core/commands/types').Command}
+ * @returns {import('./types/index.js').Command}
  */
 export function skipTab(dir) {
   return ({ state, dispatch }) => {

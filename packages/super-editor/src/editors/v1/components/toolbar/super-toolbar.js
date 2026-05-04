@@ -134,6 +134,7 @@ import { markerTextToBulletStyle } from '@helpers/list-numbering-helpers.js';
  * @typedef {Object} CommandItem
  * @property {ToolbarItem} item - The toolbar item
  * @property {*} [argument] - The argument to pass to the command
+ * @property {*} [option] - The selected nested option for option-style commands
  */
 
 /**

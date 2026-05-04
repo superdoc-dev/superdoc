@@ -71,12 +71,14 @@ export function createTestPainter(opts: { blocks?: FlowBlock[]; measures?: Measu
     };
   };
 
+  const userOnPaintSnapshot = painterOpts.onPaintSnapshot;
   const painter = createDomPainter({
     ...painterOpts,
     headerProvider: wrapProvider(headerProvider, 'header'),
     footerProvider: wrapProvider(footerProvider, 'footer'),
     onPaintSnapshot: (snapshot) => {
       lastPaintSnapshot = snapshot;
+      userOnPaintSnapshot?.(snapshot);
     },
   });
 

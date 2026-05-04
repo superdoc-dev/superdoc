@@ -105,7 +105,9 @@ function scanUndatedDeprecated(file, src) {
   lines.forEach((line, idx) => {
     if (!/@deprecated/.test(line)) return;
     const windowText = lines.slice(idx, idx + 4).join(' ');
-    if (/(replaceWith|removeIn|compat-indefinitely)/.test(windowText)) return;
+    const hasReplace = /\breplaceWith\b/.test(windowText);
+    const hasRemovalDecision = /(removeIn|compat-indefinitely)/.test(windowText);
+    if (hasReplace && hasRemovalDecision) return;
     hits.push({ file, line: idx + 1, text: line.trim().slice(0, 200) });
   });
   return hits;

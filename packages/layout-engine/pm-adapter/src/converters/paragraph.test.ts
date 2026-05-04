@@ -27,7 +27,15 @@ import type {
   NodeHandlerContext,
 } from '../types.js';
 import type { ConverterContext } from '../converter-context.js';
-import type { Run, TextRun, FlowBlock, ParagraphBlock, ImageRun, SdtMetadata } from '@superdoc/contracts';
+import type {
+  Run,
+  TextRun,
+  FlowBlock,
+  ParagraphBlock,
+  TrackedChangeMeta,
+  ImageRun,
+  SdtMetadata,
+} from '@superdoc/contracts';
 
 // Mock external dependencies
 vi.mock('./inline-converters/text-run.js', () => ({

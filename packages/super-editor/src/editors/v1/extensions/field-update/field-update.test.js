@@ -4,12 +4,16 @@
  * Tests for the FieldUpdate extension's updateFieldsInSelection command.
  *
  * Uses the numwords.docx fixture which contains NUMWORDS, NUMCHARS, and
- * NUMPAGES fields with known imported values.
+ * NUMPAGES fields with known imported values for the stat-field path. The
+ * TOC path is exercised via direct command-function invocation against a
+ * synthetic doc/editor — no docx fixture required.
  */
 
-import { afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { Schema } from 'prosemirror-model';
 import { initTestEditor, loadTestDataForEditorTests } from '@tests/helpers/helpers.js';
 import { getWordStatistics } from '../../document-api-adapters/helpers/word-statistics.js';
+import { FieldUpdate } from './field-update.js';
 
 describe('FieldUpdate extension', () => {
   let docData;
@@ -105,5 +109,137 @@ describe('FieldUpdate extension', () => {
 
     expect(numcharsField).toBeTruthy();
     expect(numcharsField.attrs.resolvedText).toBe(expectedValue);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// TOC path — invoked directly against synthetic state to avoid needing a
+// fully-imported TOC fixture.
+// ---------------------------------------------------------------------------
+
+const tocSchema = new Schema({
+  nodes: {
+    doc: { content: 'block+' },
+    paragraph: { group: 'block', content: 'inline*', toDOM: () => ['p', 0] },
+    tableOfContents: {
+      group: 'block',
+      content: 'paragraph*',
+      attrs: { sdBlockId: { default: null } },
+      toDOM: () => ['div', 0],
+    },
+    text: { group: 'inline' },
+  },
+});
+
+const buildTocDoc = (sdBlockIds) => {
+  const para = (txt) => tocSchema.nodes.paragraph.create({}, txt ? tocSchema.text(txt) : null);
+  const tocs = sdBlockIds.map((id) => tocSchema.nodes.tableOfContents.create({ sdBlockId: id }, [para('entry')]));
+  return tocSchema.nodes.doc.create({}, [para('intro'), ...tocs, para('outro')]);
+};
+
+const runUpdateFields = (overrides) => {
+  const { doc, editor } = overrides;
+  const dispatch = 'dispatch' in overrides ? overrides.dispatch : () => {};
+  // FieldUpdate is wrapped by Extension.create(); reach into config.addCommands
+  // to invoke the raw command function the same way ExtensionService does.
+  const commands = FieldUpdate.config.addCommands.call({ editor });
+  const command = commands.updateFieldsInSelection();
+  const tr = { setMeta: vi.fn() };
+  const state = { doc, selection: { from: 0, to: 0 }, schema: tocSchema, tr };
+  return { result: command({ editor, state, tr, dispatch }), tr };
+};
+
+describe('updateFieldsInSelection — TOC path', () => {
+  it('calls editor.doc.toc.update for every tableOfContents node in document order', () => {
+    const update = vi.fn(() => ({ success: true }));
+    const editor = { doc: { toc: { update } } };
+    const doc = buildTocDoc(['toc-a', 'toc-b']);
+
+    const { result } = runUpdateFields({ doc, editor });
+
+    expect(result).toBe(true);
+    expect(update).toHaveBeenCalledTimes(2);
+    expect(update.mock.calls[0][0]).toEqual({
+      target: { kind: 'block', nodeType: 'tableOfContents', nodeId: 'toc-a' },
+      mode: 'all',
+    });
+    expect(update.mock.calls[1][0]).toEqual({
+      target: { kind: 'block', nodeType: 'tableOfContents', nodeId: 'toc-b' },
+      mode: 'all',
+    });
+  });
+
+  it('sets preventDispatch on the framework tr so CommandService skips its auto-dispatch', () => {
+    const update = vi.fn(() => ({ success: true }));
+    const editor = { doc: { toc: { update } } };
+    const doc = buildTocDoc(['toc-a']);
+
+    const { tr } = runUpdateFields({ doc, editor });
+    expect(tr.setMeta).toHaveBeenCalledWith('preventDispatch', true);
+  });
+
+  it('returns true on a can()-style probe (no dispatch) when any TOC exists', () => {
+    const update = vi.fn();
+    const editor = { doc: { toc: { update } } };
+    const doc = buildTocDoc(['toc-a']);
+
+    const { result } = runUpdateFields({ doc, editor, dispatch: undefined });
+    expect(result).toBe(true);
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('skips a TOC whose sdBlockId is missing or empty', () => {
+    const update = vi.fn(() => ({ success: true }));
+    const editor = { doc: { toc: { update } } };
+    const doc = buildTocDoc([null, '', 'toc-real']);
+
+    runUpdateFields({ doc, editor });
+    expect(update).toHaveBeenCalledTimes(1);
+    expect(update.mock.calls[0][0].target.nodeId).toBe('toc-real');
+  });
+
+  it('swallows toc.update errors and continues with the remaining TOCs', () => {
+    const update = vi
+      .fn()
+      .mockImplementationOnce(() => {
+        throw new Error('boom');
+      })
+      .mockImplementationOnce(() => ({ success: true }));
+    const editor = { doc: { toc: { update } } };
+    const doc = buildTocDoc(['toc-a', 'toc-b']);
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const { result } = runUpdateFields({ doc, editor });
+    expect(result).toBe(true);
+    expect(update).toHaveBeenCalledTimes(2);
+    expect(warnSpy).toHaveBeenCalled();
+    warnSpy.mockRestore();
+  });
+
+  it('falls through to the stat-field path when the doc has no TOCs', () => {
+    const update = vi.fn();
+    const editor = { doc: { toc: { update } } };
+    const para = (txt) => tocSchema.nodes.paragraph.create({}, txt ? tocSchema.text(txt) : null);
+    const doc = tocSchema.nodes.doc.create({}, [para('hello world')]);
+
+    const { tr } = runUpdateFields({ doc, editor });
+    expect(update).not.toHaveBeenCalled();
+    expect(tr.setMeta).not.toHaveBeenCalled(); // no preventDispatch when not taking the TOC path
+  });
+});
+
+describe('FieldUpdate extension shortcuts', () => {
+  it('binds F9 to updateFieldsInSelection', () => {
+    const ed = { commands: { updateFieldsInSelection: vi.fn(() => true) } };
+    const shortcuts = FieldUpdate.config.addShortcuts.call({ editor: ed });
+    expect(typeof shortcuts.F9).toBe('function');
+    shortcuts.F9();
+    expect(ed.commands.updateFieldsInSelection).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not bind any other key alongside F9', () => {
+    const ed = { commands: { updateFieldsInSelection: vi.fn() } };
+    const shortcuts = FieldUpdate.config.addShortcuts.call({ editor: ed });
+    expect(Object.keys(shortcuts)).toEqual(['F9']);
   });
 });

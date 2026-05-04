@@ -6,14 +6,10 @@ import {
   resolveMainBodyEditor,
 } from '../../document-api-adapters/helpers/word-statistics.js';
 
-/** Field types eligible for value updates via F9. */
+/** Stat-field types refreshed by F9 when the doc has no TOCs. */
 const UPDATABLE_FIELD_TYPES = new Set(['NUMWORDS', 'NUMCHARS', 'NUMPAGES']);
 
-/**
- * Collect every `tableOfContents` node's sdBlockId, in document order.
- * @param {import('prosemirror-model').Node} doc
- * @returns {string[]}
- */
+/** Every `tableOfContents` node's sdBlockId in document order. */
 function collectTocBlockIds(doc) {
   const ids = [];
   doc.descendants((node) => {

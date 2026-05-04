@@ -41,6 +41,7 @@ import {
   collectTocSources,
   buildTocEntryParagraphs,
   type BuildTocEntryOptions,
+  type EntryTextMark,
   type EntryParagraphJson,
   type TocSource,
 } from '../helpers/toc-entry-builder.js';
@@ -282,7 +283,6 @@ type TocParagraphProps = {
 };
 type TocParagraphAttrs = { paragraphProperties?: TocParagraphProps };
 type TabStopJson = { tab?: { pos?: number; tabType?: string; leader?: string } };
-type EntryMarkJson = { type: string; attrs?: Record<string, unknown> };
 
 /** First TOC1–TOC9 paragraph in the existing TOC node, or `undefined`. */
 function findFirstTocEntryParagraph(node: ProseMirrorNode): ProseMirrorNode | undefined {
@@ -342,8 +342,8 @@ function readExistingTocTrailingParagraph(node: ProseMirrorNode): unknown | unde
  * into the rebuilt entries. Drops `link` (rebuilt from the source's bookmark)
  * and `tocPageNumber` (belongs only to the page-number run).
  */
-function readExistingTocEntryTextMarks(node: ProseMirrorNode): EntryMarkJson[] {
-  let marks: EntryMarkJson[] = [];
+function readExistingTocEntryTextMarks(node: ProseMirrorNode): EntryTextMark[] {
+  let marks: EntryTextMark[] = [];
   node.forEach((paragraph) => {
     if (marks.length > 0 || paragraph.type.name !== 'paragraph') return;
     const styleId = (paragraph.attrs as TocParagraphAttrs | undefined)?.paragraphProperties?.styleId;
@@ -355,7 +355,7 @@ function readExistingTocEntryTextMarks(node: ProseMirrorNode): EntryMarkJson[] {
       const sampled = (child.marks ?? [])
         .filter((m) => m.type.name !== 'link' && m.type.name !== 'tocPageNumber')
         .map((m) => {
-          const json: EntryMarkJson = { type: m.type.name };
+          const json: EntryTextMark = { type: m.type.name };
           if (m.attrs && Object.keys(m.attrs).length > 0) json.attrs = { ...m.attrs };
           return json;
         });

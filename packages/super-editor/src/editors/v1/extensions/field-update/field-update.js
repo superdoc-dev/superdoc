@@ -1,5 +1,6 @@
 import { Extension } from '@core/Extension.js';
 import { findFieldsInRange } from '../../document-api-adapters/helpers/field-resolver.js';
+import { findAllTocNodes } from '../../document-api-adapters/helpers/toc-resolver.js';
 import {
   getWordStatistics,
   resolveDocumentStatFieldValue,
@@ -8,18 +9,6 @@ import {
 
 /** Stat-field types refreshed by F9 when the doc has no TOCs. */
 const UPDATABLE_FIELD_TYPES = new Set(['NUMWORDS', 'NUMCHARS', 'NUMPAGES']);
-
-/** Every `tableOfContents` node's sdBlockId in document order. */
-function collectTocBlockIds(doc) {
-  const ids = [];
-  doc.descendants((node) => {
-    if (node.type.name !== 'tableOfContents') return true;
-    const sdBlockId = node.attrs?.sdBlockId;
-    if (typeof sdBlockId === 'string' && sdBlockId) ids.push(sdBlockId);
-    return false; // don't descend into TOC children
-  });
-  return ids;
-}
 
 /**
  * @module FieldUpdate
@@ -55,7 +44,9 @@ export const FieldUpdate = Extension.create({
           // would then auto-apply its captured (now-stale) `tr` to the new
           // state. Set preventDispatch so it skips that.
           if (editor?.doc?.toc?.update) {
-            const tocTargets = collectTocBlockIds(state.doc);
+            const tocTargets = findAllTocNodes(state.doc)
+              .map((toc) => toc.commandNodeId)
+              .filter((id) => typeof id === 'string' && id);
 
             if (tocTargets.length > 0) {
               if (!dispatch) return true; // can()-style probe

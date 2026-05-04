@@ -1,3 +1,5 @@
+import { findParentNodeClosestToPos } from '@core/helpers/findParentNodeClosestToPos.js';
+
 /**
  * Find the enclosing `tableOfContents` node for a document position. Used by
  * the context menu to route "Update table of contents" through
@@ -10,20 +12,13 @@
 export function findTocAncestor(doc, pos) {
   if (!doc || typeof pos !== 'number' || !Number.isFinite(pos)) return null;
   let resolved;
-
   try {
     resolved = doc.resolve(pos);
   } catch {
     return null;
   }
-
-  for (let depth = resolved.depth; depth >= 0; depth -= 1) {
-    const node = resolved.node(depth);
-    if (node?.type?.name !== 'tableOfContents') continue;
-
-    const sdBlockId = typeof node.attrs?.sdBlockId === 'string' ? node.attrs.sdBlockId : null;
-    return { node, pos: depth === 0 ? 0 : resolved.before(depth), sdBlockId };
-  }
-
-  return null;
+  const found = findParentNodeClosestToPos(resolved, (n) => n.type.name === 'tableOfContents');
+  if (!found) return null;
+  const sdBlockId = typeof found.node.attrs?.sdBlockId === 'string' ? found.node.attrs.sdBlockId : null;
+  return { node: found.node, pos: found.pos, sdBlockId };
 }

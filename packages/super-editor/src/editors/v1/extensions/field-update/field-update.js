@@ -56,8 +56,10 @@ export const FieldUpdate = Extension.create({
           // state. Set preventDispatch so it skips that.
           if (editor?.doc?.toc?.update) {
             const tocTargets = collectTocBlockIds(state.doc);
+
             if (tocTargets.length > 0) {
               if (!dispatch) return true; // can()-style probe
+
               for (const sdBlockId of tocTargets) {
                 try {
                   editor.doc.toc.update({
@@ -68,6 +70,7 @@ export const FieldUpdate = Extension.create({
                   console.warn('[FieldUpdate] toc.update failed for', sdBlockId, error);
                 }
               }
+
               outerTr?.setMeta?.('preventDispatch', true);
               return true;
             }

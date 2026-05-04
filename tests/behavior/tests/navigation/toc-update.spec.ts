@@ -18,27 +18,36 @@ const readTocTitles = async (superdoc) =>
   superdoc.page.evaluate(() => {
     const editor = (window as unknown as { editor?: { state: { doc: unknown } } }).editor;
     if (!editor?.state?.doc) return [];
+
     const titles: string[] = [];
+
     (editor.state.doc as { descendants: (cb: (n: any) => boolean | void) => void }).descendants((node) => {
       if (node?.type?.name !== 'tableOfContents') return true;
+
       node.descendants((child: any) => {
         if (child?.type?.name !== 'paragraph') return true;
         // First non-page-number text run is the entry title.
         let captured = false;
+
         child.descendants((leaf: any) => {
           if (captured) return false;
           if (!leaf.isText || !leaf.text) return true;
+
           const isPageNumber = (leaf.marks ?? []).some((m: any) => m.type?.name === 'tocPageNumber');
           if (!isPageNumber) {
             titles.push(leaf.text);
             captured = true;
           }
+
           return true;
         });
+
         return false;
       });
+
       return false;
     });
+
     return titles;
   });
 
@@ -57,18 +66,25 @@ test('@behavior SD-2664: updateFieldsInSelection (F9) rebuilds every TOC entry f
   const headingTexts = await superdoc.page.evaluate(() => {
     const editor = (window as unknown as { editor?: { state: { doc: unknown } } }).editor;
     if (!editor?.state?.doc) return [];
+
     const out: string[] = [];
+
     (editor.state.doc as { descendants: (cb: (n: any) => boolean | void) => void }).descendants((node) => {
       if (node?.type?.name === 'tableOfContents') return false; // skip TOC contents
       if (node?.type?.name !== 'paragraph') return true;
+
       const styleId = node.attrs?.paragraphProperties?.styleId;
       if (!styleId || !/^Heading[1-9]$/.test(styleId)) return true;
+
       let text = '';
+
       node.descendants((c: any) => {
         if (c.isText && c.text) text += c.text;
         return true;
       });
+
       if (text.trim()) out.push(text.trim());
+
       return true;
     });
     return out;

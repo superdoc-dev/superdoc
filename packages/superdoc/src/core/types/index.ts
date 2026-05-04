@@ -743,6 +743,56 @@ export interface ResolvedFindReplaceTexts {
 }
 
 /**
+ * A document position range, in ProseMirror coordinates.
+ *
+ * SD-2828: Surfaced on the public type contract so consumers can
+ * destructure `SearchMatch.ranges` without falling back to `any`. Mirrors
+ * the private `DocRange` typedef in the search extension; keep them in
+ * sync. Pure data, no methods.
+ */
+export interface DocRange {
+  /** Start position in the document. */
+  from: number;
+  /** End position in the document. */
+  to: number;
+}
+
+/**
+ * One match returned by `SuperDoc.search()` (and consumed by
+ * `SuperDoc.goToSearchResult()`).
+ *
+ * SD-2828: Promoted from the private search-extension typedef to a
+ * public contract so consumers get real types instead of `any` on the
+ * search return value, and so `goToSearchResult` can declare the input
+ * shape it expects rather than accepting an opaque `Object`. Match
+ * instances are produced by the runtime; consumers should treat them as
+ * read-only and pass them back unchanged.
+ */
+export interface SearchMatch {
+  /** Combined match text across all ranges. */
+  text: string;
+  /** Start position of the first range. */
+  from: number;
+  /** End position of the last range. */
+  to: number;
+  /**
+   * Stable match identifier. For single-range matches this is the
+   * position-tracker id; for multi-range (cross-paragraph) matches it is
+   * the first tracker id. Use as the dedupe / equality key when wiring a
+   * custom navigator.
+   */
+  id: string;
+  /**
+   * Document ranges for the match. Present for multi-range matches
+   * (cross-paragraph), and may also be populated for single-range
+   * matches by the search runtime; consumers should not assume length 1.
+   */
+  ranges?: DocRange[];
+  /** Position-tracker ids, one per range in `ranges`. */
+  trackerIds?: string[];
+}
+
+/**
  * Handle object injected into find/replace UIs as the `findReplace`
  * prop/context field. Provides reactive search state and all action functions.
  */

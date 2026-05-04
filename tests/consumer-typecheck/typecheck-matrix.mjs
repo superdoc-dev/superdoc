@@ -495,6 +495,31 @@ const scenarios = [
     files: ['src/provider-collaboration-provider.ts'],
     mustPass: true,
   },
+
+  // SD-2828: `SuperDoc.search()` returns `SearchMatch[] | undefined`, and
+  // `SuperDoc.goToSearchResult()` accepts `SearchMatch`. Promoting the
+  // search-match shape to the public type contract so consumers wiring
+  // a custom search UI get real types on `id`, `from`, `to`, `text`
+  // instead of `any`. Pinned here so a future change that strips or
+  // re-narrows fields would surface as a typecheck failure.
+  {
+    name: 'bundler / search returns SearchMatch[] (SD-2828)',
+    module: 'ESNext',
+    moduleResolution: 'bundler',
+    skipLibCheck: true,
+    strict: true,
+    files: ['src/search-match.ts'],
+    mustPass: true,
+  },
+  {
+    name: 'node16 / search returns SearchMatch[] (SD-2828)',
+    module: 'Node16',
+    moduleResolution: 'node16',
+    skipLibCheck: true,
+    strict: true,
+    files: ['src/search-match.ts'],
+    mustPass: true,
+  },
 ];
 
 const tscPath = join(__dirname, 'node_modules', '.bin', 'tsc');

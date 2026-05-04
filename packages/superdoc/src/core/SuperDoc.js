@@ -1585,17 +1585,27 @@ export class SuperDoc extends EventEmitter {
     }
   }
   /**
-   * Search for text or regex in the active editor
+   * Search for text or regex in the active editor.
+   *
+   * Returns `undefined` when there is no active editor; otherwise
+   * returns the array of matches the underlying search command produced
+   * (possibly empty).
+   *
    * @param {string | RegExp} text The text or regex to search for
-   * @returns {Object[]} The search results
+   * @returns {import('./types/index.js').SearchMatch[] | undefined} The search results
    */
   search(text) {
     return this.activeEditor?.commands.search(text, { searchModel: 'visible' });
   }
 
   /**
-   * Go to the next search result
-   * @param {Object} match The match object (returned as-is by `superdoc.search()`; pass it through unchanged). Stays loose here because the upstream `commands.goToSearchResult` expects a private `SearchMatch` shape that is not yet on the public surface; tightening this is a separate follow-up.
+   * Go to the next search result.
+   *
+   * Pass back a match returned by `superdoc.search()` unchanged; the
+   * runtime resolves its current document position via the embedded
+   * tracker ids.
+   *
+   * @param {import('./types/index.js').SearchMatch} match The match object returned by `superdoc.search()`.
    * @returns {void}
    */
   goToSearchResult(match) {

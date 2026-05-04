@@ -1,3 +1,4 @@
+// @ts-check
 import { v4 as uuidv4 } from 'uuid';
 import { TrackInsertMarkName, TrackDeleteMarkName } from '../constants.js';
 import { findTrackedMarkBetween } from './findTrackedMarkBetween.js';
@@ -8,7 +9,7 @@ import { findTrackedMarkBetween } from './findTrackedMarkBetween.js';
  * @param {import('prosemirror-state').Transaction} options.tr Transaction.
  * @param {number} options.from From position.
  * @param {number} options.to To position.
- * @param {object} options.user User object ({ name, email }).
+ * @param {import('../../../core/types/EditorConfig.js').User} options.user User object ({ name, email }).
  * @param {string} options.date Date.
  * @param {string} [options.id] Optional ID to use (for replace operations where insertion and deletion share the same ID).
  * @returns {import('prosemirror-model').Mark} Insertion mark.
@@ -17,13 +18,16 @@ export const markInsertion = ({ tr, from, to, user, date, id: providedId }) => {
   tr.removeMark(from, to, tr.doc.type.schema.marks[TrackDeleteMarkName]);
   tr.removeMark(from, to, tr.doc.type.schema.marks[TrackInsertMarkName]);
 
-  let trackedMark = findTrackedMarkBetween({
-    tr,
-    from,
-    to,
-    markName: TrackInsertMarkName,
-    attrs: { authorEmail: user.email || '' },
-  });
+  const trackedMark =
+    /** @type {{ from: number, to: number, mark: import('prosemirror-model').Mark } | null | undefined} */ (
+      findTrackedMarkBetween({
+        tr,
+        from,
+        to,
+        markName: TrackInsertMarkName,
+        attrs: { authorEmail: user.email || '' },
+      })
+    );
 
   let id;
   if (providedId) {

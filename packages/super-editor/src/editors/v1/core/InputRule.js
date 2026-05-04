@@ -22,10 +22,12 @@ import {
   SUPERDOC_MEDIA_MIME,
   SUPERDOC_SLICE_ATTR,
   SUPERDOC_BODY_SECT_PR_ATTR,
+  SUPERDOC_MEDIA_ATTR,
   embedSliceInHtml,
   extractSliceFromHtml,
   stripSliceFromHtml,
   extractBodySectPrFromHtml,
+  extractMediaFromHtml,
   bodySectPrShouldEmbed,
   collectReferencedImageMediaForClipboard,
   applySuperdocClipboardMedia,
@@ -35,7 +37,11 @@ import { annotateFragmentDomWithClipboardData } from './helpers/clipboardFragmen
 /** Heuristic: clipboard HTML from SuperDoc copy (slice attrs, list/section metadata). */
 export function isSuperdocOriginClipboardHtml(html) {
   if (!html || typeof html !== 'string') return false;
-  if (html.includes(SUPERDOC_SLICE_ATTR) || html.includes(SUPERDOC_BODY_SECT_PR_ATTR)) {
+  if (
+    html.includes(SUPERDOC_SLICE_ATTR) ||
+    html.includes(SUPERDOC_BODY_SECT_PR_ATTR) ||
+    html.includes(SUPERDOC_MEDIA_ATTR)
+  ) {
     return true;
   }
   if (/data-sd-sect-pr\s*=/i.test(html)) {
@@ -315,10 +321,11 @@ export const inputRulesPlugin = ({ editor, rules }) => {
         const rawHtml = clipboard.getData('text/html');
         const isSuperdocHtml = isSuperdocOriginClipboardHtml(rawHtml);
         const embeddedBodySectPr = isSuperdocHtml ? extractBodySectPrFromHtml(rawHtml) : null;
+        const embeddedMedia = isSuperdocHtml ? extractMediaFromHtml(rawHtml) : '';
 
         let superdocSliceData = clipboard.getData(SUPERDOC_SLICE_MIME) || extractSliceFromHtml(rawHtml);
         if (isSuperdocHtml || superdocSliceData) {
-          superdocSliceData = applySuperdocClipboardMedia(editor, clipboard, superdocSliceData || null);
+          superdocSliceData = applySuperdocClipboardMedia(editor, clipboard, superdocSliceData || null, embeddedMedia);
         }
         if (superdocSliceData) {
           try {
@@ -634,10 +641,8 @@ export function sanitizeHtml(html, forbiddenTags = ['meta', 'svg', 'script', 'st
 }
 
 /**
- * Reusable paste-handling utility that replicates the logic formerly held only
- * inside the `inputRulesPlugin` paste handler. This allows other components
- * (e.g. context-menu items) to invoke the same paste logic without duplicating
- * code.
+ * Handles clipboard content that was read outside the native paste event, such
+ * as the context-menu Paste action.
  *
  * @param {Object}   params
  * @param {Editor}   params.editor  The SuperEditor instance.
@@ -647,13 +652,33 @@ export function sanitizeHtml(html, forbiddenTags = ['meta', 'svg', 'script', 'st
  * @returns {Boolean}               Whether the paste was handled.
  */
 export function handleClipboardPaste({ editor, view }, html, plainText) {
+  const rawHtml = html || '';
+  const isSuperdocHtml = isSuperdocOriginClipboardHtml(rawHtml);
+  const embeddedBodySectPr = isSuperdocHtml ? extractBodySectPrFromHtml(rawHtml) : null;
+  const embeddedMedia = isSuperdocHtml ? extractMediaFromHtml(rawHtml) : '';
+  let pasteHtml = rawHtml;
+
+  let superdocSliceData = extractSliceFromHtml(rawHtml);
+  if (superdocSliceData) {
+    superdocSliceData = applySuperdocClipboardMedia(editor, null, superdocSliceData, embeddedMedia);
+    try {
+      if (handleSuperdocSlicePaste(superdocSliceData, editor, view, embeddedBodySectPr)) return true;
+    } catch (err) {
+      console.warn('Failed to paste SuperDoc slice, falling back to HTML:', err);
+    }
+  }
+
+  if (isSuperdocHtml) {
+    pasteHtml = stripSliceFromHtml(rawHtml);
+  }
+
   let source;
 
-  if (!html) {
+  if (!pasteHtml) {
     source = 'plain-text';
-  } else if (isWordHtml(html)) {
+  } else if (isWordHtml(pasteHtml)) {
     source = 'word-html';
-  } else if (isGoogleDocsHtml(html)) {
+  } else if (isGoogleDocsHtml(pasteHtml)) {
     source = 'google-docs';
   } else {
     source = 'browser-html';
@@ -667,15 +692,31 @@ export function handleClipboardPaste({ editor, view }, html, plainText) {
       return handlePlainTextUrlPaste(editor, view, plainText, detected);
     }
     case 'word-html':
-      if (editor.options.mode === 'docx' && !isSuperdocOriginClipboardHtml(html)) {
-        return handleDocxPaste(html, editor, view);
+      if (editor.options.mode === 'docx' && !isSuperdocHtml) {
+        return handleDocxPaste(pasteHtml, editor, view);
       }
-      return handleHtmlPaste(html, editor);
-    case 'google-docs':
-      return handleGoogleDocsHtml(html, editor, view);
+      {
+        const ok = handleHtmlPaste(pasteHtml, editor);
+        if (ok && embeddedBodySectPr) {
+          tryApplyEmbeddedBodySectPr(editor, view, embeddedBodySectPr);
+        }
+        return ok;
+      }
+    case 'google-docs': {
+      const ok = handleGoogleDocsHtml(pasteHtml, editor, view);
+      if (ok && embeddedBodySectPr) {
+        tryApplyEmbeddedBodySectPr(editor, view, embeddedBodySectPr);
+      }
+      return ok;
+    }
     // falls through to browser-html handling when not in DOCX mode
-    case 'browser-html':
-      return handleHtmlPaste(html, editor);
+    case 'browser-html': {
+      const ok = handleHtmlPaste(pasteHtml, editor);
+      if (ok && embeddedBodySectPr) {
+        tryApplyEmbeddedBodySectPr(editor, view, embeddedBodySectPr);
+      }
+      return ok;
+    }
   }
 
   return false;
@@ -709,7 +750,7 @@ function handleCutEvent(view, event, editor) {
     const html = unflattenListsInHtml(div.innerHTML);
     const bodySectPr = view.state.doc.attrs?.bodySectPr;
     const bodySectPrJson = bodySectPr && bodySectPrShouldEmbed(bodySectPr) ? JSON.stringify(bodySectPr) : '';
-    clipboardData.setData('text/html', embedSliceInHtml(html, sliceJson, bodySectPrJson));
+    clipboardData.setData('text/html', embedSliceInHtml(html, sliceJson, bodySectPrJson, mediaJson));
     clipboardData.setData('text/plain', fragment.textBetween(0, fragment.size, '\n\n'));
 
     event.preventDefault();

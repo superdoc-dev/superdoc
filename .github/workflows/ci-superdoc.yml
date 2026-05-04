@@ -110,6 +110,9 @@ jobs:
       - name: Validate command types
         run: node scripts/validate-command-types.mjs
 
+      - name: Check .d.ts shadows
+        run: node scripts/check-dts-shadows.mjs
+
       - name: Typecheck
         run: pnpm run type-check
 

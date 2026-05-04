@@ -42,6 +42,9 @@ pre-commit:
       glob: "packages/document-api/src/contract/**/*.ts"
       run: pnpm run generate:all && git add apps/docs/document-api/reference apps/docs/document-api/overview.mdx apps/docs/document-engine/sdks.mdx
       stage_fixed: true
+    check-dts-shadows:
+      glob: "packages/**/*.ts"
+      run: node scripts/check-dts-shadows.mjs
 
 commit-msg:
   commands:

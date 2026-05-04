@@ -534,7 +534,7 @@ export interface ListsAdapter {
 export type ListsApi = ListsAdapter;
 
 // ---------------------------------------------------------------------------
-// Execute wrappers — discovery
+// Execute wrappers: discovery
 // ---------------------------------------------------------------------------
 
 export function executeListsList(adapter: ListsAdapter, query?: ListsListQuery): ListsListResult {
@@ -590,7 +590,7 @@ export function executeListsGet(adapter: ListsAdapter, input: ListsGetInput): Li
 }
 
 // ---------------------------------------------------------------------------
-// Execute wrappers — kept operations
+// Execute wrappers: kept operations
 // ---------------------------------------------------------------------------
 
 export function executeListsInsert(
@@ -632,7 +632,7 @@ export function executeListsOutdent(
 }
 
 // ---------------------------------------------------------------------------
-// Execute wrappers — SD-1272 operations
+// Execute wrappers: SD-1272 operations
 // ---------------------------------------------------------------------------
 
 const VALID_LIST_CREATE_MODES: ReadonlySet<string> = new Set(['empty', 'fromParagraphs']);
@@ -818,7 +818,7 @@ export function executeListsConvertToText(
 }
 
 // ---------------------------------------------------------------------------
-// Execute wrappers — SD-1973 formatting operations
+// Execute wrappers: SD-1973 formatting operations
 // ---------------------------------------------------------------------------
 
 export function executeListsApplyTemplate(
@@ -988,7 +988,7 @@ export function executeListsSetType(
 }
 
 // ---------------------------------------------------------------------------
-// Execute wrappers — SD-2025 user-facing operations
+// Execute wrappers: SD-2025 user-facing operations
 // ---------------------------------------------------------------------------
 
 export function executeListsGetStyle(adapter: ListsAdapter, input: ListsGetStyleInput): ListsGetStyleResult {

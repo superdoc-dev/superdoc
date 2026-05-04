@@ -162,7 +162,7 @@ const deletableBlockNodeTypeValues = DELETABLE_BLOCK_NODE_TYPES;
 const inlineNodeTypeValues = INLINE_NODE_TYPES;
 
 // ---------------------------------------------------------------------------
-// Shared $defs — canonical schema definitions referenced via ref()
+// Shared $defs: canonical schema definitions referenced via ref()
 // ---------------------------------------------------------------------------
 
 const knownTargetKindValues = [
@@ -232,6 +232,7 @@ const SHARED_DEFS: Record<string, JsonSchema> = {
     {
       kind: { const: 'text' },
       segments: { type: 'array', items: ref('TextSegment'), minItems: 1 },
+      story: ref('StoryLocator'),
     },
     ['kind', 'segments'],
   ),
@@ -980,8 +981,6 @@ const sdNodeSelectorSchema = objectSchema(
 const sdSelectorSchema: JsonSchema = {
   oneOf: [sdTextSelectorSchema, sdNodeSelectorSchema],
 };
-
-// sdAddressSchema removed — replaced by blockNodeAddressSchema, nodeAddressSchema, textAddressSchema
 
 const sdReadOptionsSchema = objectSchema({
   includeResolved: { type: 'boolean' },
@@ -1818,7 +1817,7 @@ const tableMutationSuccessSchema: JsonSchema = objectSchema(
   ['success'],
 );
 
-/** Stricter variant for create.table — the table address is required on success. */
+/** Stricter variant for create.table: the table address is required on success. */
 const createTableSuccessSchema: JsonSchema = objectSchema(
   {
     success: { const: true },
@@ -2524,10 +2523,12 @@ function buildContentControlSchemas(): Record<ContentControlOperationId, Operati
 // ---------------------------------------------------------------------------
 
 // --- Shared patterns ---
-const refListQuerySchema = objectSchema({
+const refListQueryProperties = {
   limit: { type: 'integer', minimum: 1 },
   offset: { type: 'integer', minimum: 0 },
-});
+} satisfies Record<string, JsonSchema>;
+
+const refListQuerySchema = objectSchema(refListQueryProperties);
 
 const discoveryOutputSchema: JsonSchema = { type: 'object' };
 
@@ -2571,7 +2572,12 @@ function refConfigSchemas(): { output: JsonSchema; success: JsonSchema; failure:
 
 // --- Bookmark schemas ---
 const bookmarkAddressSchema: JsonSchema = objectSchema(
-  { kind: { const: 'entity' }, entityType: { const: 'bookmark' }, name: { type: 'string' } },
+  {
+    kind: { const: 'entity' },
+    entityType: { const: 'bookmark' },
+    name: { type: 'string' },
+    story: ref('StoryLocator'),
+  },
   ['kind', 'entityType', 'name'],
 );
 
@@ -2966,7 +2972,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
           type: 'array',
           items: objectSchema(
             {
-              nodeId: { type: 'string', description: 'Stable block ID — pass to scrollToElement() for navigation.' },
+              nodeId: { type: 'string', description: 'Stable block ID: pass to scrollToElement() for navigation.' },
               type: {
                 type: 'string',
                 description: 'Block type: paragraph, heading, listItem, image, tableOfContents.',
@@ -3036,7 +3042,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
             {
               entityId: {
                 type: 'string',
-                description: 'Comment entity ID — pass to scrollToElement() for navigation.',
+                description: 'Comment entity ID: pass to scrollToElement() for navigation.',
               },
               text: { type: 'string', description: 'Comment body text.' },
               anchoredText: { type: 'string', description: 'The document text the comment is anchored to.' },
@@ -3578,7 +3584,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     failure: paragraphMutationFailureSchemaFor('format.paragraph.clearDirection'),
   },
   'styles.apply': (() => {
-    // Derived from PROPERTY_REGISTRY — no hardcoded property lists
+    // Derived from PROPERTY_REGISTRY: no hardcoded property lists
     const runInputSchema = objectSchema(
       {
         target: objectSchema({ scope: { const: 'docDefaults' }, channel: { const: 'run' } }, ['scope', 'channel']),
@@ -3670,7 +3676,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
       text: {
         type: 'string',
         description:
-          'Paragraph text content. Each call creates ONE paragraph. For multiple items (e.g. list items), call superdoc_create separately for each item — do NOT use newlines to put multiple items in one paragraph.',
+          'Paragraph text content. Each call creates ONE paragraph. For multiple items (e.g. list items), call superdoc_create separately for each item: do NOT use newlines to put multiple items in one paragraph.',
       },
     }),
     output: createParagraphResultSchemaFor('create.paragraph'),
@@ -4025,7 +4031,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
         mode: {
           enum: ['empty', 'fromParagraphs'],
           description:
-            "Required. 'fromParagraphs' converts existing paragraphs into list items — each paragraph becomes one item, so create one paragraph per item first. 'empty' creates a new empty list at 'at'.",
+            "Required. 'fromParagraphs' converts existing paragraphs into list items: each paragraph becomes one item, so create one paragraph per item first. 'empty' creates a new empty list at 'at'.",
         },
         at: {
           ...ref('BlockAddress'),
@@ -4415,7 +4421,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     failure: listsFailureSchemaFor('lists.convertToText'),
   },
 
-  // SD-1973 — List formatting and templates
+  // SD-1973: List formatting and templates
   'lists.applyTemplate': {
     input: objectSchema(
       {
@@ -4654,7 +4660,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     failure: listsFailureSchemaFor('lists.clearLevelOverrides'),
   },
 
-  // SD-2025 — User-facing list style operations
+  // SD-2025: User-facing list style operations
   'lists.getStyle': (() => {
     const listLevelTemplateSchema = objectSchema(
       {
@@ -4974,14 +4980,14 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
         ['matchKind', 'address', 'blocks'],
       );
 
-      // query.match meta schema — effectiveResolved is required.
+      // query.match meta schema: effectiveResolved is required.
       const queryMatchMetaSchema = objectSchema({ effectiveResolved: { type: 'boolean' } }, ['effectiveResolved']);
 
       return discoveryResultSchema({ oneOf: [textMatchItemSchema, nodeMatchItemSchema] }, queryMatchMetaSchema);
     })(),
   },
   // ---------------------------------------------------------------------------
-  // Mutation step schema — discriminated union by `op`
+  // Mutation step schema: discriminated union by `op`
   // ---------------------------------------------------------------------------
 
   ...(() => {
@@ -6472,7 +6478,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
 
   // --- images ---
 
-  // Shared image location schema — discriminated union on `kind`.
+  // Shared image location schema: discriminated union on `kind`.
   // Used by create.image (at) and images.move (to).
 
   'create.image': {
@@ -7116,14 +7122,17 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
   },
 
   // =========================================================================
-  // Content Controls (SD-2070) — schemas
+  // Content Controls (SD-2070): schemas
   // =========================================================================
   ...buildContentControlSchemas(),
   // -------------------------------------------------------------------------
   // Bookmarks
   // -------------------------------------------------------------------------
   'bookmarks.list': {
-    input: refListQuerySchema,
+    input: objectSchema({
+      ...refListQueryProperties,
+      in: storyLocatorSchema,
+    }),
     output: discoveryOutputSchema,
   },
   'bookmarks.get': {
@@ -7631,7 +7640,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
  * @throws {Error} If any operation is missing a schema or an unknown operation is found.
  */
 export function buildInternalContractSchemas(): InternalContractSchemas {
-  // Cast is safe — the runtime loops below verify completeness against OPERATION_IDS.
+  // Cast is safe: the runtime loops below verify completeness against OPERATION_IDS.
   const operations = { ...operationSchemas } as unknown as Record<OperationId, OperationSchemaSet>;
 
   for (const operationId of OPERATION_IDS) {

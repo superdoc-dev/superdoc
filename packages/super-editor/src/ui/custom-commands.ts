@@ -3,6 +3,7 @@ import type {
   CustomCommandRegistrationResult,
   CustomCommandHandle,
   CustomCommandHandleState,
+  SuperDocEditorLike,
   SuperDocLike,
   SuperDocUIState,
   Subscribable,
@@ -14,6 +15,24 @@ const DEFAULT_BUILTIN_COLLISION_MESSAGE = (id: string) =>
 
 const DEFAULT_REPLACEMENT_MESSAGE = (id: string) =>
   `[superdoc/ui] ui.commands.register(): id '${id}' was already registered. Replacing prior registration.`;
+
+/**
+ * Property names the `ui.commands` Proxy intercepts before the
+ * registry lookup. A custom command registered with one of these ids
+ * would still be reachable through `ui.commands.get(id)` /
+ * `ui.commands.require(id)`, but indexing `ui.commands[id]` would
+ * return the surface helper instead of the consumer's handle. To keep
+ * the surface consistent, we refuse these ids at registration time.
+ *
+ * `override: true` does not bypass this list. Index access on a Proxy
+ * is not something registration semantics can route around; the only
+ * fix is to choose a different id (a namespaced one like
+ * `'company.has'` is the canonical workaround).
+ */
+const RESERVED_PROXY_PROPERTY_NAMES: ReadonlySet<string> = new Set(['register', 'get', 'has', 'require']);
+
+const DEFAULT_RESERVED_NAME_MESSAGE = (id: string) =>
+  `[superdoc/ui] ui.commands.register(): id '${id}' shadows a Proxy method on ui.commands and would be unreachable through index access. Use a namespaced id (e.g. 'company.${id}') instead. Registration refused.`;
 
 /**
  * Static fallback state for a custom command when:
@@ -81,6 +100,15 @@ interface CustomCommandsRegistryDeps {
   /** Host superdoc passed to custom `execute` callbacks. */
   superdoc: SuperDocLike;
   /**
+   * Resolve the routed editor at execute-time. Passed to custom
+   * `execute` callbacks alongside `superdoc` so registrations can
+   * reach `editor.doc.*` without a structural cast. Late-bound (a
+   * function, not a captured value) so the registry sees whichever
+   * story editor is active when the command runs, matching the
+   * routing the rest of `ui.*` uses.
+   */
+  getEditor(): SuperDocEditorLike | null;
+  /**
    * Re-emit the controller snapshot. Called whenever the registry
    * changes (register / unregister / invalidate) so subscribers see the
    * new custom command state. Should be microtask-coalesced.
@@ -136,7 +164,10 @@ export function createCustomCommandsRegistry(deps: CustomCommandsRegistryDeps): 
     }
   };
 
-  const buildHandle = <TPayload, TValue>(id: string): CustomCommandHandle<TPayload, TValue> => ({
+  const buildHandle = <TPayload, TValue>(
+    id: string,
+    ownEntry: InternalCustomEntry,
+  ): CustomCommandHandle<TPayload, TValue> => ({
     observe(listener) {
       let innerOff: (() => void) | null = null;
       let stopped = false;
@@ -148,7 +179,7 @@ export function createCustomCommandsRegistry(deps: CustomCommandsRegistryDeps): 
         observerDisposers.get(id)?.delete(dispose);
       };
       // Track the disposer so `unregister` / replacement can tear this
-      // observer down actively. The lazy `!entries.has(id)` short-circuit
+      // observer down actively. The lazy entry-identity short-circuit
       // below is still kept as a safety net for observers that get
       // notified between unregister and active disposal.
       let set = observerDisposers.get(id);
@@ -160,11 +191,14 @@ export function createCustomCommandsRegistry(deps: CustomCommandsRegistryDeps): 
 
       innerOff = getOrCreateSubscribable(id).subscribe((state) => {
         if (stopped) return;
-        // Safety net: the Subscribable lives on the controller's selector
-        // substrate and outlives the registration. If the command was
-        // unregistered between the schedule and this emit, stop forwarding
-        // to the listener and detach the inner subscription.
-        if (!entries.has(id)) {
+        // Identity safety net: the Subscribable lives on the
+        // controller's selector substrate and outlives the
+        // registration. If the entry this handle was built against
+        // has been removed OR replaced (custom-vs-custom register
+        // calls), stop forwarding to the listener. A consumer that
+        // captured `regA.handle` before regA was replaced by regB
+        // must NOT see B's state on A's observer.
+        if (entries.get(id) !== ownEntry) {
           dispose();
           return;
         }
@@ -186,16 +220,27 @@ export function createCustomCommandsRegistry(deps: CustomCommandsRegistryDeps): 
       return dispose;
     },
     execute: ((payload?: TPayload) => {
+      // Identity check (PR #3010 review): a captured handle from
+      // registration A must not execute registration B's handler if
+      // a later `register({ id })` replaced A with B. The internal
+      // `registry.execute(id, ...)` is identity-blind (it looks up
+      // the current entry), so the guard lives on this side. Returns
+      // `false` so the consumer sees a clean "stale handle" signal
+      // matching the no-op handle that built-in collisions return.
+      if (entries.get(id) !== ownEntry) {
+        return false;
+      }
       const result = registry.execute(id, payload);
       return result;
     }) as CustomCommandHandle<TPayload, TValue>['execute'],
   });
 
   const getHandle = <TPayload, TValue>(id: string) => {
-    if (!entries.has(id)) return undefined;
+    const entry = entries.get(id);
+    if (!entry) return undefined;
     let cached = handleCache.get(id) as CustomCommandHandle<TPayload, TValue> | undefined;
     if (cached) return cached;
-    cached = buildHandle<TPayload, TValue>(id);
+    cached = buildHandle<TPayload, TValue>(id, entry);
     handleCache.set(id, cached as CustomCommandHandle<unknown, unknown>);
     return cached;
   };
@@ -205,6 +250,24 @@ export function createCustomCommandsRegistry(deps: CustomCommandsRegistryDeps): 
       registration: CustomCommandRegistration<TPayload, TValue>,
     ): CustomCommandRegistrationResult<TPayload, TValue> {
       const { id, execute, getState, override = false } = registration;
+
+      // Reserved Proxy property names refuse unconditionally. Even
+      // `override: true` cannot route around index access on the
+      // `ui.commands` Proxy; the surface helper always wins. Returning
+      // a no-op result here keeps the call site safe (handle.execute
+      // still callable) and warns once.
+      if (RESERVED_PROXY_PROPERTY_NAMES.has(id)) {
+        console.warn(DEFAULT_RESERVED_NAME_MESSAGE(id));
+        return {
+          handle: buildNoOpHandle<TPayload, TValue>(id),
+          invalidate() {
+            // refused registration: nothing to invalidate
+          },
+          unregister() {
+            // refused registration: nothing to remove
+          },
+        };
+      }
 
       // Built-in collision: refuse without `override: true`. We return a
       // no-op registration object so the consumer's call site doesn't
@@ -336,9 +399,16 @@ export function createCustomCommandsRegistry(deps: CustomCommandsRegistryDeps): 
         // `register<TPayload>(...)` signature carries the consumer's
         // payload type to the captured handle, but the runtime registry
         // stores entries with the default `void` payload. Cast to bridge.
-        const result = (entry.execute as (args: { payload?: unknown; superdoc: SuperDocLike }) => unknown)({
+        const result = (
+          entry.execute as (args: {
+            payload?: unknown;
+            superdoc: SuperDocLike;
+            editor: SuperDocEditorLike | null;
+          }) => unknown
+        )({
           payload,
           superdoc: deps.superdoc,
+          editor: deps.getEditor(),
         });
         if (result instanceof Promise) {
           return result.then(

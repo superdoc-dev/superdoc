@@ -101,7 +101,7 @@ const STEP_DOMAIN_LABELS: Record<(typeof STEP_DOMAIN_ORDER)[number], string> = {
 };
 
 function renderStepReferenceCell(referenceOperationId?: ContractOperationSnapshot['operationId']): string {
-  if (!referenceOperationId) return '—';
+  if (!referenceOperationId) return '-';
   const operationPath = toOperationDocPath(referenceOperationId);
   return renderNoWrapLinkCode(referenceOperationId, toPublicDocHref(operationPath));
 }
@@ -209,7 +209,7 @@ function objectDiscriminatorLabel(schema: JsonSchema): string | undefined {
 
 /** Derive a human-readable type label from a JSON Schema node. */
 function schemaTypeLabel(schema: JsonSchema, $defs: Defs): string {
-  // $ref — show the def name
+  // $ref: show the def name
   const rn = refName(schema);
   if (rn) return rn;
 
@@ -221,7 +221,7 @@ function schemaTypeLabel(schema: JsonSchema, $defs: Defs): string {
     return `enum`;
   }
 
-  // allOf — flatten and derive type from merged schema
+  // allOf: flatten and derive type from merged schema
   if (Array.isArray(schema.allOf)) {
     const flat = flattenAllOf(schema, $defs);
     return schemaTypeLabel(flat, $defs);
@@ -254,7 +254,7 @@ function schemaTypeLabel(schema: JsonSchema, $defs: Defs): string {
     return 'array';
   }
 
-  // object with properties — try discriminator
+  // object with properties: try discriminator
   if (schema.type === 'object' && schema.properties) {
     const disc = objectDiscriminatorLabel(schema);
     if (disc) return `object(${disc})`;
@@ -384,7 +384,7 @@ function flattenAllOf(schema: JsonSchema, $defs: Defs): JsonSchema {
       for (const variant of variants as JsonSchema[]) {
         const { resolved: varResolved } = resolveRef(variant, $defs);
         if (varResolved.properties && typeof varResolved.properties === 'object') {
-          // Only merge the properties — requirement is optional since
+          // Only merge the properties: requirement is optional since
           // these are union alternatives, not all simultaneously required.
           Object.assign(mergedProperties, varResolved.properties);
         }
@@ -437,7 +437,7 @@ function buildFieldRows(schema: JsonSchema, $defs: Defs, prefix = '', parentRequ
 /** Build field sections, splitting top-level oneOf/anyOf schemas into explicit variants. */
 function buildFieldSections(schema: JsonSchema, $defs: Defs): FieldSection[] {
   const { resolved } = resolveRef(schema, $defs);
-  // Flatten allOf first — the merged schema may itself contain oneOf/anyOf.
+  // Flatten allOf first: the merged schema may itself contain oneOf/anyOf.
   const flat = flattenAllOf(resolved, $defs);
   const sharedProperties = (flat.properties as Record<string, JsonSchema> | undefined) ?? undefined;
   const sharedRequired = new Set<string>(Array.isArray(flat.required) ? (flat.required as string[]) : []);
@@ -628,17 +628,17 @@ function generateExample(schema: JsonSchema, $defs: Defs, fieldName?: string, de
   // const value
   if (schema.const !== undefined) return schema.const;
 
-  // enum — first value
+  // enum: first value
   if (Array.isArray(schema.enum) && schema.enum.length > 0) return schema.enum[0];
 
-  // $ref — resolve and recurse
+  // $ref: resolve and recurse
   const rn = refName(schema);
   if (rn) {
     const { resolved } = resolveRef(schema, $defs);
     return generateExample(resolved, $defs, fieldName, depth);
   }
 
-  // array — single item
+  // array: single item
   if (schema.type === 'array') {
     const items = schema.items as JsonSchema | undefined;
     if (schema.maxItems === 0) return [];
@@ -646,7 +646,7 @@ function generateExample(schema: JsonSchema, $defs: Defs, fieldName?: string, de
     return [];
   }
 
-  // object — recurse into properties
+  // object: recurse into properties
   if (schema.type === 'object' && schema.properties) {
     const properties = schema.properties as Record<string, JsonSchema>;
     const requiredSet = new Set<string>(Array.isArray(schema.required) ? (schema.required as string[]) : []);
@@ -706,7 +706,7 @@ function generateExample(schema: JsonSchema, $defs: Defs, fieldName?: string, de
     return result;
   }
 
-  // allOf — generate per-member and merge. This preserves oneOf/anyOf
+  // allOf: generate per-member and merge. This preserves oneOf/anyOf
   // variant selection (first-variant-only) instead of flattening all
   // variant properties into a single object.
   if (Array.isArray(schema.allOf)) {
@@ -721,7 +721,7 @@ function generateExample(schema: JsonSchema, $defs: Defs, fieldName?: string, de
     return merged;
   }
 
-  // oneOf / anyOf — first variant (non-object union fallback)
+  // oneOf / anyOf: first variant (non-object union fallback)
   for (const keyword of ['oneOf', 'anyOf'] as const) {
     const variants = schema[keyword];
     if (Array.isArray(variants) && variants.length > 0) {

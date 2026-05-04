@@ -44,7 +44,7 @@ export type TextInsertInput = OptionalInsertLocator & {
 /**
  * Type-safe input for markdown/html inserts with block-level positioning.
  * Accepts BlockNodeAddress targets and placement (routed through the structural insert path).
- * Standalone export — not part of the InsertInput union to avoid type narrowing issues in the runtime.
+ * Standalone export: not part of the InsertInput union to avoid type narrowing issues in the runtime.
  */
 export type RichContentInsertInput = {
   target?: SelectionTarget | BlockNodeAddress;
@@ -66,7 +66,7 @@ export type LegacyInsertInput = TextInsertInput;
  * Input payload for the `doc.insert` operation.
  *
  * Discrimination: presence of `content` (structural) vs `value` (text string).
- * These are mutually exclusive — providing both is an error.
+ * These are mutually exclusive: providing both is an error.
  */
 export type InsertInput = TextInsertInput | SDInsertInput;
 
@@ -285,7 +285,7 @@ export function executeInsert(
 ): SDMutationReceipt {
   validateInsertInput(input);
 
-  // Structural content path — returns SDMutationReceipt directly
+  // Structural content path: returns SDMutationReceipt directly
   if (isStructuralInsertInput(input)) {
     return writeAdapter.insertStructured(input, normalizeMutationOptions(options));
   }

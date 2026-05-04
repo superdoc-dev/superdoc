@@ -1,5 +1,5 @@
 /**
- * Canonical operation definitions — single source of truth for keys, metadata, and paths.
+ * Canonical operation definitions: single source of truth for keys, metadata, and paths.
  *
  * Every operation in the Document API is defined exactly once here.
  * All downstream artifacts (COMMAND_CATALOG, OPERATION_MEMBER_PATH_MAP,
@@ -8,20 +8,20 @@
  *
  * ## Adding a new operation
  *
- * 1. **Here** (`operation-definitions.ts`) — add an entry to `OPERATION_DEFINITIONS`
+ * 1. **Here** (`operation-definitions.ts`): add an entry to `OPERATION_DEFINITIONS`
  *    with `memberPath`, `description`, `expectedResult`, `metadata`, `referenceDocPath`, and `referenceGroup`.
- * 2. **`operation-registry.ts`** — add a type entry (`input`, `options`, `output`).
+ * 2. **`operation-registry.ts`**: add a type entry (`input`, `options`, `output`).
  *    The bidirectional `Assert` checks will error until this is done.
- * 3. **`invoke.ts`** (`buildDispatchTable`) — add a one-line dispatch entry calling
+ * 3. **`invoke.ts`** (`buildDispatchTable`): add a one-line dispatch entry calling
  *    the API method. `TypedDispatchTable` will error until this is done.
- * 4. **Implement** — the API method on `DocumentApi` + its adapter.
+ * 4. **Implement**: the API method on `DocumentApi` + its adapter.
  *
  * That's 4 touch points. The catalog, maps, and reference docs are derived
  * automatically. If you forget step 1 or 2, compile-time assertions fail.
  * If you forget step 3, the `TypedDispatchTable` mapped type errors.
  *
  * Import DAG: this file imports only from `metadata-types.ts` and
- * `../types/receipt.js` — no contract-internal circular deps.
+ * `../types/receipt.js`: no contract-internal circular deps.
  */
 
 import type { ReceiptFailureCode } from '../types/receipt.js';
@@ -88,7 +88,7 @@ export interface OperationDefinitionEntry {
 }
 
 // ---------------------------------------------------------------------------
-// Intent group metadata — tool-level names and descriptions
+// Intent group metadata: tool-level names and descriptions
 // ---------------------------------------------------------------------------
 
 export interface IntentGroupMeta {
@@ -148,13 +148,13 @@ export const INTENT_GROUP_META: Record<string, IntentGroupMeta> = {
     toolName: 'superdoc_edit',
     description:
       'The primary tool for inserting content into documents. ' +
-      'ALWAYS use action "insert" with type "markdown" to create headings, paragraphs, or any block content — this is faster and creates proper document structure in one call. Do NOT use superdoc_create for headings or paragraphs. ' +
+      'ALWAYS use action "insert" with type "markdown" to create headings, paragraphs, or any block content: this is faster and creates proper document structure in one call. Do NOT use superdoc_create for headings or paragraphs. ' +
       'The markdown parser creates headings from # markers (# = Heading1, ## = Heading2), bold from **text**, italic from *text*, and numbered/bullet lists. ' +
       'Position markdown inserts with "target" (a BlockNodeAddress like {kind:"block", nodeType, nodeId}) and "placement" (before, after, insideStart, insideEnd). Without a target, content appends at the end of the document. ' +
       'IMPORTANT: After a markdown insert, analyze the document context (what kind of document, how titles and body text are styled) and follow up with ONE superdoc_mutations call to format inserted blocks so they look like they belong. ' +
       'Each format.apply step accepts "inline" (fontFamily, fontSize, bold, underline, color), "alignment", and "scope" in the same step. ' +
       'Use scope: "block" so formatting covers the entire paragraph. ' +
-      'Copy the exact property values from the existing get_content blocks (fontFamily, fontSize, color, alignment, bold, underline). Do NOT invent values — use what the blocks show. ' +
+      'Copy the exact property values from the existing get_content blocks (fontFamily, fontSize, color, alignment, bold, underline). Do NOT invent values: use what the blocks show. ' +
       'Also supports replace, delete, and undo/redo. For replace and delete, pass a "ref" from superdoc_search or superdoc_get_content blocks. ' +
       'A search ref covers only the matched substring; a block ref covers the entire block text, so use block refs when rewriting or shortening whole paragraphs. ' +
       'For multi-step redlines or whole-clause rewrites, prefer superdoc_mutations with where:{by:"block", nodeType, nodeId} from superdoc_get_content action "blocks" includeText:true rather than relying on text selectors. ' +
@@ -184,7 +184,7 @@ export const INTENT_GROUP_META: Record<string, IntentGroupMeta> = {
   create: {
     toolName: 'superdoc_create',
     description:
-      'IMPORTANT: For headings and paragraphs, use superdoc_edit with type "markdown" instead — it is faster, creates proper styles, and handles positioning via target + placement. ' +
+      'IMPORTANT: For headings and paragraphs, use superdoc_edit with type "markdown" instead: it is faster, creates proper styles, and handles positioning via target + placement. ' +
       'Only use superdoc_create for tables or when markdown cannot express the content. ' +
       'Creates a single paragraph, heading, or table. Returns nodeId and ref for the created block. ' +
       'After creating, the returned ref is valid for ONE immediate superdoc_format call. For subsequent operations, re-fetch blocks with superdoc_get_content to get fresh refs (refs expire after any mutation). ' +
@@ -252,51 +252,51 @@ export const INTENT_GROUP_META: Record<string, IntentGroupMeta> = {
       'Create and modify table structure, content, and styling. Find table/row/cell nodeIds via superdoc_get_content({action:"blocks"}) or superdoc_search.\n' +
       '\n' +
       'ACTIONS:\n' +
-      '• Structure — delete, insert_row, delete_row, insert_column, delete_column, merge_cells, unmerge_cells.\n' +
-      '• Cell content — set_cell_text (text). set_cell (vAlign / wrap / fit / preferred width).\n' +
-      '• Row / column — set_row (height + rule), set_row_options (repeat-header, allow-break), set_column (widthPt).\n' +
-      '• Table styling — set_borders, set_shading, set_style_options (headerRow / bandedRows / firstColumn / lastColumn / lastRow / bandedColumns), set_layout (autofit / alignment / direction / preferredWidth), set_options (default cell margins + cell spacing).\n' +
+      '• Structure: delete, insert_row, delete_row, insert_column, delete_column, merge_cells, unmerge_cells.\n' +
+      '• Cell content: set_cell_text (text). set_cell (vAlign / wrap / fit / preferred width).\n' +
+      '• Row / column: set_row (height + rule), set_row_options (repeat-header, allow-break), set_column (widthPt).\n' +
+      '• Table styling: set_borders, set_shading, set_style_options (headerRow / bandedRows / firstColumn / lastColumn / lastRow / bandedColumns), set_layout (autofit / alignment / direction / preferredWidth), set_options (default cell margins + cell spacing).\n' +
       '\n' +
       'LOCATORS (the shapes ops accept):\n' +
       '• insert_row append shorthand: { nodeId: "<tableId>" } with no rowIndex/position appends at the end. Three other forms: target a row + position, table + rowIndex + position, or any of the above with count:N for multiple.\n' +
       '• insert_column shorthand: position:"first"|"last" with no columnIndex. Otherwise columnIndex + position:"left"|"right".\n' +
       '• merge_cells: table target + start:{rowIndex, columnIndex} + end:{rowIndex, columnIndex}.\n' +
       '• set_cell_text: table target + rowIndex + columnIndex (preferred) OR cell target.\n' +
-      '• set_cell: cell target only — does NOT accept table+rowIndex+columnIndex.\n' +
-      '• set_borders / set_shading: table OR cell target — NOT a row target.\n' +
+      '• set_cell: cell target only. Does NOT accept table+rowIndex+columnIndex.\n' +
+      '• set_borders / set_shading: table OR cell target. NOT a row target.\n' +
       '\n' +
       'COLOR FORMAT:\n' +
-      'Hex strings accept #RRGGBB, RRGGBB, #RGB, or 3-digit RGB; also "auto"; also null to clear (where supported). Stored canonically as uppercase RRGGBB. Always pass a concrete color when one is implied — never call set_borders with `auto` for a "make it look [X]" ask.\n' +
+      'Hex strings accept #RRGGBB, RRGGBB, #RGB, or 3-digit RGB; also "auto"; also null to clear (where supported). Stored canonically as uppercase RRGGBB. Always pass a concrete color when one is implied. Never call set_borders with `auto` for a "make it look [X]" ask.\n' +
       '\n' +
-      'STYLING — TWO MODES:\n' +
+      'STYLING (TWO MODES):\n' +
       '\n' +
       'A. STRUCTURAL CHANGE → re-apply the existing styling.\n' +
-      "   Triggers: insert_row / insert_column / delete_row / delete_column / merge_cells / unmerge_cells. (NOT set_cell_text or set_cell — those don't disturb borders/shading.)\n" +
+      "   Triggers: insert_row / insert_column / delete_row / delete_column / merge_cells / unmerge_cells. (NOT set_cell_text or set_cell: those don't disturb borders/shading.)\n" +
       '   Recipe: read the current borders/shading/cnf flags via superdoc_get_content({action:"blocks"}) before the change, then re-apply the SAME values after with set_borders + set_shading + set_style_options. The goal is consistency, not a redesign.\n' +
-      '   Skip on a freshly created table — a new table starts un-styled.\n' +
+      '   Skip on a freshly created table. A new table starts un-styled.\n' +
       '\n' +
       'B. STYLE-CHANGE REQUEST ("make it look [X]" / "style the whole table") → apply the FULL set with concrete colors.\n' +
-      '   Touch every axis: borders, shading, text alignment, font color/weight, cnf flags, spacing. A single set_borders call without shading and font tweaks always looks half-finished — that\'s the #1 cause of "no visual change" complaints.\n' +
+      '   Touch every axis: borders, shading, text alignment, font color/weight, cnf flags, spacing. A single set_borders call without shading and font tweaks always looks half-finished. That\'s the #1 cause of "no visual change" complaints.\n' +
       '   Color palette: discover the document\'s palette by reading superdoc_get_content({action:"blocks"}) and reusing the colors on existing tables/headings. When no palette is obvious, default to corporate blue "1F3864" or dark grey "444444" for accents and "F2F2F2" / "E7E6E6" for banding.\n' +
       '   Recipe (call ALL of these):\n' +
       '     1. set_borders applyTo:"all" with an explicit color and weight.\n' +
       '     2. set_shading on the header row cells with the accent color. Add banding on alternate body rows if appropriate.\n' +
       '     3. set_style_options { headerRow: true, bandedRows?: true } so cnf regions are recognized.\n' +
-      '     4. Cell-text alignment via superdoc_format action:"set_alignment" — center the header, left-align body, right-align numeric columns. Paragraph-level: target the paragraph inside each cell.\n' +
-      '     5. Font color + weight via superdoc_format action:"inline" — header gets a contrasting color (white on dark fill, accent on light fill) plus bold:true.\n' +
+      '     4. Cell-text alignment via superdoc_format action:"set_alignment". Center the header, left-align body, right-align numeric columns. Paragraph-level: target the paragraph inside each cell.\n' +
+      '     5. Font color + weight via superdoc_format action:"inline". Header gets a contrasting color (white on dark fill, accent on light fill) plus bold:true.\n' +
       '     6. set_options if the user asks for tighter or looser spacing.\n' +
       '   Steps 4–5 cross to superdoc_format. Use superdoc_mutations to batch many format.apply steps in one call.\n' +
       '\n' +
-      'AFTER set_cell_text — match the new cell to its siblings:\n' +
+      'AFTER set_cell_text, match the new cell to its siblings:\n' +
       'set_cell_text writes plain text with the document\'s default font/size/color and no weight. Always follow up with one superdoc_format inline call copying fontFamily/fontSize/color/bold from a sibling cell (or any non-empty body paragraph if the table is fresh and has no sibling content). If sibling cells show a bold-prefix pattern like "Label: value", replicate it on the new cell via superdoc_search + superdoc_format inline (or one superdoc_mutations batch with format.apply steps).\n' +
       '\n' +
       'LIST-TO-TABLE:\n' +
-      '(1) superdoc_create action:"table" with the desired rows/columns. (2) Populate cells with set_cell_text using rowIndex/columnIndex (one call per cell). (3) DELETE THE WHOLE LIST in one call: superdoc_list({action:"delete", target:{kind:"block", nodeType:"listItem", nodeId:"<any-item-id>"}}) — the op walks the contiguous list and removes all items.\n' +
+      '(1) superdoc_create action:"table" with the desired rows/columns. (2) Populate cells with set_cell_text using rowIndex/columnIndex (one call per cell). (3) DELETE THE WHOLE LIST in one call: superdoc_list({action:"delete", target:{kind:"block", nodeType:"listItem", nodeId:"<any-item-id>"}}). The op walks the contiguous list and removes all items.\n' +
       'Wrong paths for list deletion (all leave bullets/empty paragraphs behind): text.delete, superdoc_edit action:"delete" on text refs, lists.detach, lists.convertToText.',
     // One canonical example per non-obvious shape. Other actions follow the
     // same {action, nodeId, ...args} pattern documented in the prose above.
     inputExamples: [
-      // Append a row at the end — no rowIndex/position needed.
+      // Append a row at the end (no rowIndex/position needed).
       { action: 'insert_row', nodeId: '<tableNodeId>' },
       // Insert a column at the end (use 'first' / 'last' to skip columnIndex).
       { action: 'insert_column', nodeId: '<tableNodeId>', position: 'last' },
@@ -339,30 +339,30 @@ export const INTENT_GROUP_META: Record<string, IntentGroupMeta> = {
       'Create and manipulate bullet and numbered lists. ' +
       'Most actions require a list-item target: {kind:"block", nodeType:"listItem", nodeId:"<id>"}. ' +
       'Exceptions: "create" and "attach" operate on paragraph targets (they turn paragraphs into list items). ' +
-      'Find nodeIds via superdoc_get_content({action:"blocks"}) — pick listItem blocks for most actions, paragraph blocks for create/attach.\n' +
+      'Find nodeIds via superdoc_get_content({action:"blocks"}): pick listItem blocks for most actions, paragraph blocks for create/attach.\n' +
       '\n' +
       'CREATE & CONVERT:\n' +
-      '• "create" — make a NEW list from paragraphs. Two modes: ' +
+      '• "create": make a NEW list from paragraphs. Two modes: ' +
       'mode:"empty" with at:{kind:"block", nodeType:"paragraph", nodeId} converts a single paragraph; ' +
-      'mode:"fromParagraphs" with target:{from:{...paragraph block address}, to:{...paragraph block address}} converts a range — ALL paragraphs between from and to become items, so make sure no other content sits between them. ' +
+      'mode:"fromParagraphs" with target:{from:{...paragraph block address}, to:{...paragraph block address}} converts a range: ALL paragraphs between from and to become items, so make sure no other content sits between them. ' +
       'Pass a preset ("disc"|"circle"|"square"|"dash" for bullets; "decimal"|"decimalParenthesis"|"lowerLetter"|"upperLetter"|"lowerRoman"|"upperRoman" for ordered) or a custom style. ' +
-      'Use "create" to start a fresh list — NOT to extend an existing one (use "attach" for that).\n' +
-      '• "attach" — add paragraphs to an EXISTING list, inheriting its numbering definition. Pass target:{paragraph block address} (or {from, to} range of paragraphs) + attachTo:{kind:"block", nodeType:"listItem", nodeId:"<any item in destination list>"} + optional level:0..8. Use this to extend a list or as the second half of a merge workflow (see "join" below).\n' +
-      '• "set_type" — convert an existing list between ordered and bullet. Pass target:{listItem} + kind:"ordered" or "bullet". Adjacent compatible sequences are merged automatically to preserve continuous numbering.\n' +
-      '• "detach" — convert a list item back to a plain paragraph. Pass target:{listItem}.\n' +
+      'Use "create" to start a fresh list: NOT to extend an existing one (use "attach" for that).\n' +
+      '• "attach": add paragraphs to an EXISTING list, inheriting its numbering definition. Pass target:{paragraph block address} (or {from, to} range of paragraphs) + attachTo:{kind:"block", nodeType:"listItem", nodeId:"<any item in destination list>"} + optional level:0..8. Use this to extend a list or as the second half of a merge workflow (see "join" below).\n' +
+      '• "set_type": convert an existing list between ordered and bullet. Pass target:{listItem} + kind:"ordered" or "bullet". Adjacent compatible sequences are merged automatically to preserve continuous numbering.\n' +
+      '• "detach": convert a list item back to a plain paragraph. Pass target:{listItem}.\n' +
       '\n' +
       'ITEMS & NESTING:\n' +
-      '• "insert" — add a new list item adjacent to an existing item in the same list. Pass target:{listItem} + position:"before"|"after" + optional text. Use this (NOT superdoc_create) to add items to an existing list.\n' +
-      '• "indent" / "outdent" — bump the target item\'s nesting level by one (0-8 range). Pass target:{listItem}.\n' +
-      '• "set_level" — jump the target item to an explicit level. Pass target:{listItem} + level:0..8.\n' +
+      '• "insert": add a new list item adjacent to an existing item in the same list. Pass target:{listItem} + position:"before"|"after" + optional text. Use this (NOT superdoc_create) to add items to an existing list.\n' +
+      '• "indent" / "outdent": bump the target item\'s nesting level by one (0-8 range). Pass target:{listItem}.\n' +
+      '• "set_level": jump the target item to an explicit level. Pass target:{listItem} + level:0..8.\n' +
       '\n' +
       'NUMBERING (ordered lists):\n' +
-      '• "set_value" — restart numbering at the target. Pass target:{listItem} + value:<number> (e.g. value:1 to start over) or value:null to clear a previous override. Mid-sequence targets are atomically split off into their own sequence.\n' +
-      '• "continue_previous" — make the target\'s sequence continue numbering from the nearest compatible previous sequence (same abstract definition). Pass target:{listItem of the sequence you want to renumber}. Fails with NO_COMPATIBLE_PREVIOUS or INCOMPATIBLE_DEFINITIONS if no matching prior sequence exists.\n' +
+      '• "set_value": restart numbering at the target. Pass target:{listItem} + value:<number> (e.g. value:1 to start over) or value:null to clear a previous override. Mid-sequence targets are atomically split off into their own sequence.\n' +
+      '• "continue_previous": make the target\'s sequence continue numbering from the nearest compatible previous sequence (same abstract definition). Pass target:{listItem of the sequence you want to renumber}. Fails with NO_COMPATIBLE_PREVIOUS or INCOMPATIBLE_DEFINITIONS if no matching prior sequence exists.\n' +
       '\n' +
       'SEQUENCE SHAPE (merge / split):\n' +
-      '• "merge" — merge the target\'s sequence with an adjacent one into one continuous list. Pass target:{listItem} + direction:"withPrevious" or "withNext". Absorbed items adopt the absorbing sequence\'s numbering definition, and empty paragraphs between the two sequences are removed so numbering flows continuously.\n' +
-      '• "split" — split the target\'s sequence at the target item into two independent lists. The target and everything after become a new sequence that restarts numbering at 1. Pass target:{listItem}; add restartNumbering:false to keep the count continuing instead of restarting.',
+      '• "merge": merge the target\'s sequence with an adjacent one into one continuous list. Pass target:{listItem} + direction:"withPrevious" or "withNext". Absorbed items adopt the absorbing sequence\'s numbering definition, and empty paragraphs between the two sequences are removed so numbering flows continuously.\n' +
+      '• "split": split the target\'s sequence at the target item into two independent lists. The target and everything after become a new sequence that restarts numbering at 1. Pass target:{listItem}; add restartNumbering:false to keep the count continuing instead of restarting.',
     inputExamples: [
       {
         action: 'create',
@@ -711,7 +711,7 @@ export const OPERATION_DEFINITIONS = {
   find: {
     memberPath: 'find',
     description:
-      'Search the document for text or node matches using SDM/1 selectors. Returns discovery-grade results — for mutation targeting, use query.match instead.',
+      'Search the document for text or node matches using SDM/1 selectors. Returns discovery-grade results: for mutation targeting, use query.match instead.',
     expectedResult:
       'Returns an SDFindResult envelope ({ total, limit, offset, items }). Each item is an SDNodeResult ({ node, address }).',
     requiresDocumentContext: true,
@@ -813,7 +813,7 @@ export const OPERATION_DEFINITIONS = {
   extract: {
     memberPath: 'extract',
     description:
-      'Extract all document content with stable IDs for RAG pipelines. Returns blocks with full text, comments, and tracked changes — each with an ID compatible with scrollToElement().',
+      'Extract all document content with stable IDs for RAG pipelines. Returns blocks with full text, comments, and tracked changes: each with an ID compatible with scrollToElement().',
     expectedResult:
       'Returns an ExtractResult with blocks (nodeId, type, text, headingLevel), comments (entityId, text, anchoredText, blockId, status, author), tracked changes (entityId, type, excerpt, author, date), and revision.',
     requiresDocumentContext: true,
@@ -1778,7 +1778,7 @@ export const OPERATION_DEFINITIONS = {
   'lists.create': {
     memberPath: 'lists.create',
     description:
-      'Create a new list from one or more paragraphs. Supports optional preset or style for new sequences. When sequence.mode is "continuePrevious", preset and style are not allowed — the new items inherit formatting from the previous sequence.',
+      'Create a new list from one or more paragraphs. Supports optional preset or style for new sequences. When sequence.mode is "continuePrevious", preset and style are not allowed: the new items inherit formatting from the previous sequence.',
     expectedResult: 'Returns a ListsCreateResult with the new listId and the first item address.',
     requiresDocumentContext: true,
     metadata: mutationOperation({
@@ -1933,7 +1933,7 @@ export const OPERATION_DEFINITIONS = {
   'lists.merge': {
     memberPath: 'lists.merge',
     description:
-      'Compound: merge two adjacent list sequences into one. Reassigns numId on the absorbed sequence (no strict abstractNumId check — absorbed items adopt the absorbing definition) and deletes empty paragraphs between the two sequences. Use this instead of lists.join for the user-facing "merge these lists" intent.',
+      'Compound: merge two adjacent list sequences into one. Reassigns numId on the absorbed sequence (no strict abstractNumId check: absorbed items adopt the absorbing definition) and deletes empty paragraphs between the two sequences. Use this instead of lists.join for the user-facing "merge these lists" intent.',
     expectedResult: 'Returns a ListsMergeResult with the merged listId, absorbedCount, and removedEmptyBlocks count.',
     requiresDocumentContext: true,
     metadata: mutationOperation({
@@ -2061,7 +2061,7 @@ export const OPERATION_DEFINITIONS = {
     referenceGroup: 'lists',
   },
 
-  // SD-1973 — List formatting and templates
+  // SD-1973: List formatting and templates
   'lists.applyTemplate': {
     memberPath: 'lists.applyTemplate',
     description:
@@ -2255,7 +2255,7 @@ export const OPERATION_DEFINITIONS = {
     referenceGroup: 'lists',
   },
 
-  // SD-2025 — User-facing list style operations
+  // SD-2025: User-facing list style operations
   'lists.getStyle': {
     memberPath: 'lists.getStyle',
     description:
@@ -2305,7 +2305,7 @@ export const OPERATION_DEFINITIONS = {
   'lists.setLevelNumberStyle': {
     memberPath: 'lists.setLevelNumberStyle',
     description:
-      'Set the numbering style (e.g. decimal, lowerLetter, upperRoman) for a specific list level. Rejects "bullet" — use setLevelBullet instead. Sequence-local: clones shared definitions.',
+      'Set the numbering style (e.g. decimal, lowerLetter, upperRoman) for a specific list level. Rejects "bullet": use setLevelBullet instead. Sequence-local: clones shared definitions.',
     expectedResult: 'Returns a ListsMutateItemResult receipt; reports NO_OP if the value already matches.',
     requiresDocumentContext: true,
     metadata: mutationOperation({
@@ -2353,7 +2353,7 @@ export const OPERATION_DEFINITIONS = {
   'lists.setLevelLayout': {
     memberPath: 'lists.setLevelLayout',
     description:
-      'Set the layout properties (alignment, indentation, trailing character, tab stop) for a specific list level. Accepts partial updates — omitted fields are left unchanged. Sequence-local: clones shared definitions.',
+      'Set the layout properties (alignment, indentation, trailing character, tab stop) for a specific list level. Accepts partial updates: omitted fields are left unchanged. Sequence-local: clones shared definitions.',
     expectedResult: 'Returns a ListsMutateItemResult receipt; reports NO_OP if all values already match.',
     requiresDocumentContext: true,
     metadata: mutationOperation({
@@ -2751,7 +2751,7 @@ export const OPERATION_DEFINITIONS = {
   'tables.insertRow': {
     memberPath: 'tables.insertRow',
     description:
-      'Insert a new row into the target table. The new row is cloned from an adjacent row, so it inherits the existing cell shading, borders, alignment, and padding — no follow-up styling call is needed unless the new row should look different from the rest of the table.',
+      'Insert a new row into the target table. The new row is cloned from an adjacent row, so it inherits the existing cell shading, borders, alignment, and padding. No follow-up styling call is needed unless the new row should look different from the rest of the table.',
     expectedResult: 'Returns a TableMutationResult receipt confirming a row was inserted.',
     requiresDocumentContext: true,
     metadata: mutationOperation({
@@ -2840,7 +2840,7 @@ export const OPERATION_DEFINITIONS = {
   'tables.insertColumn': {
     memberPath: 'tables.insertColumn',
     description:
-      'Insert a new column into the target table. The new column is cloned from an adjacent column, so it inherits the existing cell shading, borders, alignment, and width — no follow-up styling call is needed unless the new column should look different from the rest of the table.',
+      'Insert a new column into the target table. The new column is cloned from an adjacent column, so it inherits the existing cell shading, borders, alignment, and width. No follow-up styling call is needed unless the new column should look different from the rest of the table.',
     expectedResult: 'Returns a TableMutationResult receipt confirming a column was inserted.',
     requiresDocumentContext: true,
     metadata: mutationOperation({
@@ -2992,7 +2992,7 @@ export const OPERATION_DEFINITIONS = {
     memberPath: 'tables.setCellProperties',
     description:
       'Set non-text properties on a single table cell: vertical alignment, text wrapping, fit-text, or preferred width. ' +
-      'Requires a cell-level target — a tableCell block address (kind, nodeType, nodeId). Does NOT accept a table target with rowIndex/columnIndex. ' +
+      'Requires a cell-level target (a tableCell block address with kind, nodeType, nodeId). Does NOT accept a table target with rowIndex/columnIndex. ' +
       'To set the text content of a cell, use action "set_cell_text" instead.',
     expectedResult: 'Returns a TableMutationResult receipt; reports NO_OP if cell properties already match.',
     requiresDocumentContext: true,
@@ -3012,9 +3012,9 @@ export const OPERATION_DEFINITIONS = {
     memberPath: 'tables.setCellText',
     description:
       'Replace the text content of a single table cell with plain text (one paragraph). ' +
-      'Accepts either a direct cell locator — a tableCell block address (kind, nodeType, nodeId) — OR a table target with rowIndex + columnIndex. ' +
+      'Accepts either a direct cell locator (a tableCell block address with kind, nodeType, nodeId) OR a table target with rowIndex + columnIndex. ' +
       'Cell properties (vertical alignment, shading, borders, colspan/rowspan) are preserved. ' +
-      'Use this for filling cells with values, replacing cell text, or populating empty tables — much simpler than walking paragraphs and runs through superdoc_edit.',
+      'Use this for filling cells with values, replacing cell text, or populating empty tables. Much simpler than walking paragraphs and runs through superdoc_edit.',
     expectedResult:
       'Returns a TableMutationResult receipt; reports NO_OP if the cell already contains exactly this text.',
     requiresDocumentContext: true,
@@ -3264,7 +3264,7 @@ export const OPERATION_DEFINITIONS = {
       'Toggle conditional-format flags (header row, banded rows/columns, first/last column, last row) on a table. ' +
       'Pass `styleOptions` with the flags you want to set or clear (omitted flags stay unchanged). ' +
       'For "format the first row as a header" use `styleOptions: { headerRow: true }`. ' +
-      'Optional `styleId` applies a named table style — leave it unset unless you have a styleId from `superdoc_get_content` (no need to invent one).',
+      'Optional `styleId` applies a named table style. Leave it unset unless you have a styleId from `superdoc_get_content` (no need to invent one).',
     expectedResult:
       'Returns a TableMutationResult receipt; reports NO_OP if the style and all provided options already match.',
     requiresDocumentContext: true,
@@ -3319,7 +3319,7 @@ export const OPERATION_DEFINITIONS = {
     memberPath: 'tables.applyPreset',
     description:
       'Apply a named visual preset to a table. Presets: "grid" (1pt black borders all around), "minimal" (no outer borders, hairline grey row separators + thicker bottom), "striped" (banded rows on, 0.5pt grey borders), "accent" (filled header row + thick accent top/bottom; defaults to dark blue, override with `accentColor`). ' +
-      'Composes set_borders + set_style_options + header-row shading in one call. Available via the document API and `superdoc_mutations` (intentionally NOT exposed as a top-level action on `superdoc_table` — agents should compose explicit set_borders / set_shading / set_style_options calls so they always pick concrete colors that match the document context).',
+      'Composes set_borders + set_style_options + header-row shading in one call. Available via the document API and `superdoc_mutations` (intentionally NOT exposed as a top-level action on `superdoc_table`. Agents should compose explicit set_borders / set_shading / set_style_options calls so they always pick concrete colors that match the document context).',
     expectedResult: 'Returns a TableMutationResult receipt.',
     requiresDocumentContext: true,
     metadata: mutationOperation({

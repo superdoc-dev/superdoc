@@ -333,9 +333,14 @@ vi.mock('prosemirror-model', async (importOriginal) => {
 const refResolverMocks = vi.hoisted(() => ({
   // Bookmark
   findAllBookmarks: vi.fn(() => []),
+  findAllBookmarkMarkersInDocument: vi.fn(() => []),
+  findAllBookmarksInDocument: vi.fn(() => []),
   resolveBookmarkTarget: vi.fn(),
   extractBookmarkInfo: vi.fn(),
   buildBookmarkDiscoveryItem: vi.fn(),
+  buildBookmarkAddress: vi.fn((name: string, story?: unknown) =>
+    story ? { kind: 'entity', entityType: 'bookmark', name, story } : { kind: 'entity', entityType: 'bookmark', name },
+  ),
   // Link
   findAllLinks: vi.fn(() => []),
   resolveLinkTarget: vi.fn(),
@@ -397,9 +402,12 @@ const refResolverMocks = vi.hoisted(() => ({
 
 vi.mock('../helpers/bookmark-resolver.js', () => ({
   findAllBookmarks: refResolverMocks.findAllBookmarks,
+  findAllBookmarkMarkersInDocument: refResolverMocks.findAllBookmarkMarkersInDocument,
+  findAllBookmarksInDocument: refResolverMocks.findAllBookmarksInDocument,
   resolveBookmarkTarget: refResolverMocks.resolveBookmarkTarget,
   extractBookmarkInfo: refResolverMocks.extractBookmarkInfo,
   buildBookmarkDiscoveryItem: refResolverMocks.buildBookmarkDiscoveryItem,
+  buildBookmarkAddress: refResolverMocks.buildBookmarkAddress,
 }));
 
 vi.mock('../helpers/footnote-resolver.js', () => ({
@@ -3068,6 +3076,10 @@ function mockResolvedNode(pos: number, nodeId: string, typeName: string, attrs: 
   };
 }
 
+function seedConformanceBookmark(name = 'bm1'): void {
+  refResolverMocks.findAllBookmarksInDocument.mockReturnValue([{ name, bookmarkId: name, storyKey: 'body' }]);
+}
+
 /** Spies on executeDomainCommand to return an applied receipt, then calls `fn`, then restores. */
 function withAppliedReceipt<T>(fn: () => T): T {
   const spy = vi.spyOn(planWrappers, 'executeDomainCommand').mockReturnValue(REF_APPLIED_RECEIPT as any);
@@ -3114,6 +3126,7 @@ const refNamespaceMutationVectors: Partial<Record<OperationId, MutationVector>> 
         { changeMode: 'tracked' },
       ),
     applyCase: () => {
+      seedConformanceBookmark('bm1');
       refResolverMocks.resolveBookmarkTarget.mockReturnValueOnce(
         mockResolvedNode(1, 'bm1', 'bookmarkStart', { name: 'bm1' }),
       );
@@ -3134,6 +3147,7 @@ const refNamespaceMutationVectors: Partial<Record<OperationId, MutationVector>> 
         { changeMode: 'tracked' },
       ),
     applyCase: () => {
+      seedConformanceBookmark('bm1');
       refResolverMocks.resolveBookmarkTarget.mockReturnValueOnce(
         mockResolvedNode(1, 'bm1', 'bookmarkStart', { name: 'bm1' }),
       );
@@ -10684,6 +10698,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
     }
   },
   'bookmarks.rename': () => {
+    seedConformanceBookmark('bm1');
     refResolverMocks.resolveBookmarkTarget.mockReturnValueOnce(
       mockResolvedNode(1, 'bm1', 'bookmarkStart', { name: 'bm1' }),
     );
@@ -10694,6 +10709,7 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
     );
   },
   'bookmarks.remove': () => {
+    seedConformanceBookmark('bm1');
     refResolverMocks.resolveBookmarkTarget.mockReturnValueOnce(
       mockResolvedNode(1, 'bm1', 'bookmarkStart', { name: 'bm1' }),
     );
@@ -11180,6 +11196,11 @@ const resetMocks = () => {
   }
   // Restore list-returning defaults
   refResolverMocks.findAllBookmarks.mockImplementation(() => []);
+  refResolverMocks.findAllBookmarkMarkersInDocument.mockImplementation(() => []);
+  refResolverMocks.findAllBookmarksInDocument.mockImplementation(() => []);
+  refResolverMocks.buildBookmarkAddress.mockImplementation((name: string, story?: unknown) =>
+    story ? { kind: 'entity', entityType: 'bookmark', name, story } : { kind: 'entity', entityType: 'bookmark', name },
+  );
   refResolverMocks.findAllLinks.mockImplementation(() => []);
   refResolverMocks.findAllFootnotes.mockImplementation(() => []);
   refResolverMocks.findAllCrossRefs.mockImplementation(() => []);

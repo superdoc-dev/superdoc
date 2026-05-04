@@ -582,6 +582,50 @@ describe('comments plugin commands', () => {
     ]);
   });
 
+  it('resolves a multi-paragraph comment to one OOXML range pair', () => {
+    const schema = createCommentSchema();
+    const mark = schema.marks[CommentMarkName].create({ commentId: 'comment-1', internal: true });
+    const doc = schema.nodes.doc.create(null, [
+      schema.nodes.paragraph.create(null, schema.text('First paragraph', [mark])),
+      schema.nodes.paragraph.create(null, schema.text('Second paragraph', [mark])),
+    ]);
+    const state = EditorState.create({ schema, doc });
+    const tr = state.tr;
+    const dispatch = vi.fn();
+
+    const result = CommentHelpers.resolveCommentById({
+      commentId: 'comment-1',
+      state,
+      tr,
+      dispatch,
+    });
+
+    expect(result).toBe(true);
+    expect(dispatch).toHaveBeenCalledWith(tr);
+
+    const applied = state.apply(tr);
+    const remainingMarkIds = [];
+    const commentNodes = [];
+
+    applied.doc.descendants((node, pos) => {
+      node.marks.forEach((nodeMark) => {
+        if (nodeMark.type === schema.marks[CommentMarkName]) {
+          remainingMarkIds.push(nodeMark.attrs.commentId);
+        }
+      });
+      if (node.type.name === 'commentRangeStart' || node.type.name === 'commentRangeEnd') {
+        commentNodes.push({ type: node.type.name, id: node.attrs['w:id'], pos });
+      }
+    });
+
+    expect(remainingMarkIds).toEqual([]);
+    expect(commentNodes).toEqual([
+      { type: 'commentRangeStart', id: 'comment-1', pos: expect.any(Number) },
+      { type: 'commentRangeEnd', id: 'comment-1', pos: expect.any(Number) },
+    ]);
+    expect(commentNodes[0].pos).toBeLessThan(commentNodes[1].pos);
+  });
+
   it('reopens a resolved comment by removing range nodes and restoring the mark', () => {
     const { commands, state, schema } = setup();
 

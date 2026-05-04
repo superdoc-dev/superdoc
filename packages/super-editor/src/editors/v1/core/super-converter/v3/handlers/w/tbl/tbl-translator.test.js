@@ -215,6 +215,33 @@ describe('w:tbl translator', () => {
       expect(result.attrs.grid).toEqual([{ col: 2880 }, { col: 2880 }]);
     });
 
+    it('keeps promoted attrs aligned with tableProperties for imported fixed-layout dxa widths', () => {
+      const fixedWidthTable = {
+        name: 'w:tbl',
+        elements: [
+          {
+            name: 'w:tblPr',
+            elements: [
+              { name: 'w:tblLayout', attributes: { 'w:type': 'fixed' } },
+              { name: 'w:tblW', attributes: { 'w:w': '1440', 'w:type': 'dxa' } },
+            ],
+          },
+          {
+            name: 'w:tblGrid',
+            elements: [{ name: 'w:gridCol', attributes: { 'w:w': '1440' } }],
+          },
+        ],
+      };
+
+      const result = translator.encode({ nodes: [fixedWidthTable], docx: {} }, {});
+
+      expect(result.attrs.tableProperties.tableLayout).toBe('fixed');
+      expect(result.attrs.tableLayout).toBe('fixed');
+      expect(result.attrs.tableProperties.tableWidth).toEqual({ type: 'dxa', value: 1440 });
+      expect(result.attrs.tableWidth).toEqual({ width: 72, type: 'dxa' });
+      expect(result.attrs.grid).toEqual([{ col: 1440 }]);
+    });
+
     it('converts auto table width to 100% when no usable grid exists', () => {
       const autoWidthTable = {
         name: 'w:tbl',
@@ -231,6 +258,86 @@ describe('w:tbl translator', () => {
 
       // No usable grid → table defaults to 100% width (fill page)
       expect(result.attrs.tableWidth).toEqual({ value: 5000, type: 'pct' });
+    });
+
+    it('derives fallback logical columns from raw row skips when tblGrid is missing', () => {
+      const skippedColumnsTable = {
+        name: 'w:tbl',
+        elements: [
+          {
+            name: 'w:tr',
+            elements: [
+              {
+                name: 'w:trPr',
+                elements: [
+                  { name: 'w:gridBefore', attributes: { 'w:val': '1' } },
+                  { name: 'w:gridAfter', attributes: { 'w:val': '2' } },
+                ],
+              },
+              { name: 'w:tc', elements: [] },
+            ],
+          },
+        ],
+      };
+
+      const result = translator.encode({ nodes: [skippedColumnsTable], docx: {} }, {});
+
+      expect(result.attrs.grid).toHaveLength(4);
+      expect(trTranslator.encode).toHaveBeenCalledWith(
+        expect.objectContaining({
+          extraParams: expect.objectContaining({
+            totalColumns: 4,
+            columnWidths: expect.arrayContaining([
+              expect.any(Number),
+              expect.any(Number),
+              expect.any(Number),
+              expect.any(Number),
+            ]),
+          }),
+        }),
+      );
+    });
+
+    it('seeds fallback skipped-column widths from wBefore and wAfter when tblGrid is missing', () => {
+      const skippedWidthTable = {
+        name: 'w:tbl',
+        elements: [
+          {
+            name: 'w:tblPr',
+            elements: [{ name: 'w:tblW', attributes: { 'w:w': '4800', 'w:type': 'dxa' } }],
+          },
+          {
+            name: 'w:tr',
+            elements: [
+              {
+                name: 'w:trPr',
+                elements: [
+                  { name: 'w:gridBefore', attributes: { 'w:val': '1' } },
+                  { name: 'w:gridAfter', attributes: { 'w:val': '2' } },
+                  { name: 'w:wBefore', attributes: { 'w:w': '1440', 'w:type': 'dxa' } },
+                  { name: 'w:wAfter', attributes: { 'w:w': '2880', 'w:type': 'dxa' } },
+                ],
+              },
+              { name: 'w:tc', elements: [] },
+            ],
+          },
+        ],
+      };
+
+      const result = translator.encode({ nodes: [skippedWidthTable], docx: {} }, {});
+
+      expect(result.attrs.grid).toHaveLength(4);
+      expect(result.attrs.grid[0]).toEqual({ col: 1440 });
+      expect(result.attrs.grid[2]).toEqual({ col: 1440 });
+      expect(result.attrs.grid[3]).toEqual({ col: 1440 });
+      expect(trTranslator.encode).toHaveBeenCalledWith(
+        expect.objectContaining({
+          extraParams: expect.objectContaining({
+            columnWidths: expect.arrayContaining([72, 72, 72]),
+            totalColumns: 4,
+          }),
+        }),
+      );
     });
   });
 
@@ -315,6 +422,61 @@ describe('w:tbl translator', () => {
       expect(tblGrid.elements.length).toBe(2);
       expect(tblGrid.elements[0].attributes['w:w']).toBe('3000');
       expect(tblGrid.elements[1].attributes['w:w']).toBe('4000');
+    });
+
+    it('does not emit w:tblLayout when only top-level tableLayout is present', () => {
+      const mockNode = {
+        type: 'table',
+        attrs: {
+          tableLayout: 'fixed',
+          grid: [{ col: '2000' }],
+        },
+        content: [],
+      };
+
+      const result = translator.decode({ node: mockNode });
+      const tblPr = result.elements.find((el) => el.name === 'w:tblPr');
+
+      expect(tblPr).toBeUndefined();
+    });
+
+    it('emits w:tblLayout when tableProperties.tableLayout is present', () => {
+      const mockNode = {
+        type: 'table',
+        attrs: {
+          tableProperties: { tableLayout: 'fixed' },
+          grid: [{ col: '2000' }],
+        },
+        content: [],
+      };
+
+      const result = translator.decode({ node: mockNode });
+      const tblPr = result.elements.find((el) => el.name === 'w:tblPr');
+
+      expect(tblPr).toBeDefined();
+      expect(tblPr.elements).toEqual([
+        expect.objectContaining({ name: 'w:tblLayout', attributes: { 'w:type': 'fixed' } }),
+      ]);
+    });
+
+    it('emits w:tblLayout for width-authored table attrs that carry both promoted and nested fixed layout', () => {
+      const mockNode = {
+        type: 'table',
+        attrs: {
+          tableLayout: 'fixed',
+          tableProperties: { tableLayout: 'fixed' },
+          grid: [{ col: '2400' }, { col: '3600' }],
+        },
+        content: [],
+      };
+
+      const result = translator.decode({ node: mockNode });
+      const tblPr = result.elements.find((el) => el.name === 'w:tblPr');
+
+      expect(tblPr).toBeDefined();
+      expect(tblPr.elements).toEqual([
+        expect.objectContaining({ name: 'w:tblLayout', attributes: { 'w:type': 'fixed' } }),
+      ]);
     });
 
     describe('_preProcessVerticalMergeCells', () => {

@@ -9,7 +9,7 @@ import { isRecord, isTextAddress, isTextTarget, assertNoUnknownFields } from '..
  *
  * `target` accepts either a single-block {@link TextAddress} or a multi-
  * segment {@link TextTarget}. A multi-segment target anchors the comment
- * across contiguous blocks — use it directly from `editor.doc.selection.current().target`
+ * across contiguous blocks: use it directly from `editor.doc.selection.current().target`
  * without picking a single segment.
  */
 export interface AddCommentInput {
@@ -78,7 +78,7 @@ export interface GetCommentInput {
 // ---------------------------------------------------------------------------
 
 /**
- * Input for `comments.create` — creates a new comment thread or a reply.
+ * Input for `comments.create`: creates a new comment thread or a reply.
  *
  * When `parentCommentId` is provided, creates a reply on an existing thread.
  * Otherwise, creates a new root comment anchored to the given text range.
@@ -94,12 +94,12 @@ export interface CommentsCreateInput {
    * directly for selections that may span multiple blocks.
    */
   target?: TextAddress | TextTarget;
-  /** Parent comment ID — when provided, creates a reply instead of a root comment. */
+  /** Parent comment ID: when provided, creates a reply instead of a root comment. */
   parentCommentId?: string;
 }
 
 /**
- * Input for `comments.patch` — field-level patch on an existing comment.
+ * Input for `comments.patch`: field-level patch on an existing comment.
  *
  * Exactly one mutation field (`text`, `target`, `status`, `isInternal`)
  * must be provided per call. Providing zero or multiple fields throws
@@ -114,7 +114,7 @@ export interface CommentsPatchInput {
   target?: TextAddress;
   /**
    * Lifecycle transition. `'resolved'` routes to resolve, `'active'`
-   * routes to reopen — symmetric inverse that removes the resolve
+   * routes to reopen: symmetric inverse that removes the resolve
    * anchors and restores the live comment mark.
    */
   status?: 'resolved' | 'active';
@@ -123,7 +123,7 @@ export interface CommentsPatchInput {
 }
 
 /**
- * Input for `comments.delete` — removes a comment by ID.
+ * Input for `comments.delete`: removes a comment by ID.
  */
 export interface CommentsDeleteInput {
   /** The ID of the comment to delete. */
@@ -206,7 +206,7 @@ function validateCreateCommentInput(input: unknown): asserts input is CommentsCr
     });
   }
 
-  // Replies only need parentCommentId + text — skip target validation
+  // Replies only need parentCommentId + text: skip target validation
   if (isReply) {
     if (typeof parentCommentId !== 'string' || parentCommentId.length === 0) {
       throw new DocumentApiValidationError('INVALID_INPUT', 'parentCommentId must be a non-empty string.', {
@@ -315,12 +315,12 @@ function validatePatchCommentInput(input: unknown): asserts input is CommentsPat
 }
 
 // ---------------------------------------------------------------------------
-// Execute wrappers — canonical interception point for input normalization
+// Execute wrappers: canonical interception point for input normalization
 // and validation. These route to the fine-grained adapter methods.
 // ---------------------------------------------------------------------------
 
 /**
- * Execute `comments.create` — routes to `adapter.add` or `adapter.reply`
+ * Execute `comments.create`: routes to `adapter.add` or `adapter.reply`
  * depending on whether `parentCommentId` is provided.
  *
  * Accepts {@link RevisionGuardOptions} instead of `MutationOptions` because
@@ -342,7 +342,7 @@ export function executeCommentsCreate(
 }
 
 /**
- * Execute `comments.patch` — routes to exactly one adapter method based on
+ * Execute `comments.patch`: routes to exactly one adapter method based on
  * the single mutation field provided. Validation enforces one-field-per-call.
  *
  * Accepts {@link RevisionGuardOptions} instead of `MutationOptions` because
@@ -372,7 +372,7 @@ export function executeCommentsPatch(
     return adapter.setInternal({ commentId: input.commentId, isInternal: input.isInternal }, options);
   }
 
-  // Unreachable after validation — throw if we somehow get here.
+  // Unreachable after validation: throw if we somehow get here.
   throw new DocumentApiValidationError(
     'INTERNAL_ERROR',
     'comments.patch: no mutation field matched after validation. This is a bug.',
@@ -392,7 +392,7 @@ function validateCommentIdInput(input: unknown, operationName: string): asserts 
 }
 
 /**
- * Execute `comments.delete` — routes to `adapter.remove`.
+ * Execute `comments.delete`: routes to `adapter.remove`.
  */
 export function executeCommentsDelete(
   adapter: CommentsAdapter,

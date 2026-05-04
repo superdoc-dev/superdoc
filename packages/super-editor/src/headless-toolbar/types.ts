@@ -11,45 +11,59 @@ import type { DocumentApi } from '@superdoc/document-api';
  */
 export type HeadlessToolbarSurface = 'body' | 'header' | 'footer' | 'note' | 'endnote';
 
-export type PublicToolbarItemId =
-  | 'bold'
-  | 'italic'
-  | 'underline'
-  | 'strikethrough'
-  | 'font-size'
-  | 'font-family'
-  | 'text-color'
-  | 'highlight-color'
-  | 'link'
-  | 'text-align'
-  | 'line-height'
-  | 'linked-style'
-  | 'bullet-list'
-  | 'numbered-list'
-  | 'indent-increase'
-  | 'indent-decrease'
-  | 'undo'
-  | 'redo'
-  | 'ruler'
-  | 'zoom'
-  | 'document-mode'
-  | 'clear-formatting'
-  | 'copy-format'
-  | 'track-changes-accept-selection'
-  | 'track-changes-reject-selection'
-  | 'image'
-  | 'table-insert'
-  | 'table-add-row-before'
-  | 'table-add-row-after'
-  | 'table-delete-row'
-  | 'table-add-column-before'
-  | 'table-add-column-after'
-  | 'table-delete-column'
-  | 'table-delete'
-  | 'table-merge-cells'
-  | 'table-split-cell'
-  | 'table-remove-borders'
-  | 'table-fix';
+/**
+ * Runtime list of every built-in toolbar command id, single source of
+ * truth for both the public {@link PublicToolbarItemId} union and any
+ * consumer-side validation. Exported so config-driven toolbars can
+ * verify their id arrays against the canonical set without invoking
+ * the controller.
+ *
+ * Order is the historical declaration order; consumers that depend on
+ * iteration order (e.g. building a toolbar that mirrors the union)
+ * should not assume it is stable across versions.
+ */
+export const BUILT_IN_COMMAND_IDS = [
+  'bold',
+  'italic',
+  'underline',
+  'strikethrough',
+  'font-size',
+  'font-family',
+  'text-color',
+  'highlight-color',
+  'link',
+  'text-align',
+  'line-height',
+  'linked-style',
+  'bullet-list',
+  'numbered-list',
+  'indent-increase',
+  'indent-decrease',
+  'undo',
+  'redo',
+  'ruler',
+  'zoom',
+  'document-mode',
+  'clear-formatting',
+  'copy-format',
+  'track-changes-accept-selection',
+  'track-changes-reject-selection',
+  'image',
+  'table-insert',
+  'table-add-row-before',
+  'table-add-row-after',
+  'table-delete-row',
+  'table-add-column-before',
+  'table-add-column-after',
+  'table-delete-column',
+  'table-delete',
+  'table-merge-cells',
+  'table-split-cell',
+  'table-remove-borders',
+  'table-fix',
+] as const satisfies readonly string[];
+
+export type PublicToolbarItemId = (typeof BUILT_IN_COMMAND_IDS)[number];
 
 /**
  * Maps each command ID to its execute() payload type.

@@ -1397,7 +1397,7 @@ export type {
   CommentsDeleteInput,
   CommentsAdapter,
   GetCommentInput,
-  // Legacy input types — exported for internal adapter use, not part of the contract.
+  // Legacy input types: exported for internal adapter use, not part of the contract.
   AddCommentInput,
   EditCommentInput,
   ReplyToCommentInput,
@@ -1684,7 +1684,7 @@ export interface DocumentApi {
    */
   selection: SelectionApi;
   /**
-   * Mutation plan engine — preview and apply atomic mutation plans.
+   * Mutation plan engine: preview and apply atomic mutation plans.
    */
   mutations: MutationsApi;
   /**
@@ -1693,7 +1693,7 @@ export interface DocumentApi {
   diff: DiffApi;
   /**
    * History operations (undo/redo) scoped to the active editor instance.
-   * Session-scoped — reflects the runtime undo/redo stack, not persistent state.
+   * Session-scoped: reflects the runtime undo/redo stack, not persistent state.
    */
   history: HistoryApi;
   /**
@@ -1801,7 +1801,7 @@ export interface DocumentApiAdapters {
  * ```
  */
 /**
- * Validates and normalizes query.match input — accepts canonical QueryMatchInput
+ * Validates and normalizes query.match input: accepts canonical QueryMatchInput
  * or a flat TextSelector/NodeSelector shorthand.
  */
 function executeQueryMatch(
@@ -1897,7 +1897,7 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
   const rawCapFn = () => executeCapabilities(adapters.capabilities);
   const capFn = (): DocumentApiCapabilities => {
     const caps = rawCapFn();
-    // Gate operations on adapter presence — mark unavailable when namespace adapter is missing.
+    // Gate operations on adapter presence: mark unavailable when namespace adapter is missing.
     for (const ns of ADAPTER_GATED_PREFIXES) {
       if (adapters[ns]) continue;
       const prefix = `${ns}.`;

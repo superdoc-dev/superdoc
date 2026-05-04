@@ -1,7 +1,7 @@
 /**
  * Barrel re-export for styles/ submodules.
  *
- * Public surface only — internal validation/schema helpers are not exposed.
+ * Public surface only: internal validation/schema helpers are not exposed.
  */
 
 // Registry: types, constants, and property definitions

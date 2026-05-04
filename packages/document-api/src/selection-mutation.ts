@@ -1,5 +1,5 @@
 /**
- * Selection-based mutation adapter — the single execution interface for
+ * Selection-based mutation adapter: the single execution interface for
  * `delete`, `replace` (text path), `insert` (target/ref path), and `format.apply` in the new
  * SelectionTarget / ref model.
  *

@@ -17,20 +17,26 @@ import type {
 import { shallowEqual } from './equality.js';
 import { scrollRangeIntoView } from './scroll-into-view.js';
 import { createCustomCommandsRegistry } from './custom-commands.js';
+import { createScope } from './scope.js';
 import type {
   CommandHandle,
   CommandsHandle,
   CommentsHandle,
+  DocumentExportInput,
+  DocumentHandle,
+  DocumentSlice,
+  DynamicCommandHandle,
   EqualityFn,
-  ReviewHandle,
-  ReviewItem,
-  ReviewSlice,
+  TrackChangesHandle,
+  TrackChangesItem,
+  TrackChangesSlice,
   SelectionHandle,
   SelectionSlice,
   SelectorFn,
   SuperDocEditorLike,
   SuperDocUI,
   SuperDocUIOptions,
+  SuperDocUIScope,
   SuperDocUIState,
   Subscribable,
   ToolbarCommandHandleState,
@@ -75,7 +81,7 @@ const EDITOR_EVENTS = [
  * invalidates tracked changes (including remote / collaborator-driven
  * mutations). Without it, the cache only refreshes when the
  * controller's own action methods call `refreshAndNotify`, leaving
- * `ui.review` subscribers stale after normal editing.
+ * `ui.trackChanges` subscribers stale after normal editing.
  */
 const LIST_REFRESH_EVENTS = ['commentsUpdate', 'commentsLoaded', 'tracked-changes-changed'] as const;
 
@@ -105,6 +111,22 @@ const FALLBACK_COMMAND_STATE: ToolbarCommandHandleState<PublicToolbarItemId> = {
 };
 
 /**
+ * Default state emitted from a {@link DynamicCommandHandle} when the
+ * command has no entry in `state.toolbar.commands` yet (e.g. the
+ * snapshot has not populated, or the command was unregistered between
+ * subscribe and the first emit). Carries `source: 'built-in'` because
+ * the dynamic handle for a built-in id reaches this branch only for
+ * built-ins. Customs never produce `undefined` here (the registry's
+ * computeStates always returns a state for every entry).
+ */
+const FALLBACK_DYNAMIC_STATE: UIToolbarCommandState = {
+  active: false,
+  disabled: true,
+  value: undefined,
+  source: 'built-in',
+};
+
+/**
  * Full set of registered toolbar command ids, used to seed the
  * internal `createHeadlessToolbar` call. Without this the controller
  * defaults to `commands = []`, leaving `snapshot.commands` empty and
@@ -126,6 +148,53 @@ const ALL_TOOLBAR_COMMAND_IDS: PublicToolbarItemId[] = Object.keys(createToolbar
  * `ui.comments.subscribe` even when nothing in the slice changed.
  */
 const EMPTY_ACTIVE_IDS: readonly string[] = Object.freeze<string[]>([]);
+
+/**
+ * Recursive structural clone for `ui.selection.capture()` (SD-2821).
+ * The captured handle is consumer-facing; it must not share array
+ * or object references with the controller's memoized selection
+ * slice. Without this, a `captured.target.segments[0].range.start =
+ * 99` from consumer code would corrupt the shared snapshot every
+ * other subscriber sees. JSON-clone is sufficient because the
+ * selection slice is plain data (strings, numbers, booleans, null,
+ * arrays, plain objects) with no functions, Dates, Maps, or cycles.
+ */
+function deepClone<T>(value: T): T {
+  if (value === null || typeof value !== 'object') return value;
+  if (Array.isArray(value)) {
+    return value.map((item) => deepClone(item)) as unknown as T;
+  }
+  const out: Record<string, unknown> = {};
+  for (const key of Object.keys(value as object)) {
+    out[key] = deepClone((value as Record<string, unknown>)[key]);
+  }
+  return out as T;
+}
+
+/**
+ * Recursive `Object.freeze` for `ui.selection.capture()` (SD-2821).
+ * `Object.freeze({ ...slice })` only freezes the top level; nested
+ * arrays / objects (target, target.segments, activeMarks) stay
+ * mutable. Walking the structure here makes
+ * `captured.activeMarks.push(...)` and
+ * `captured.target.segments[0].range.start = 99` throw in strict
+ * mode, matching the public API's "captured handle is opaque"
+ * promise. Cycle-safe: we check `Object.isFrozen(value)` before
+ * recursing so already-frozen sentinels (e.g.
+ * {@link EMPTY_ACTIVE_IDS}) don't loop back through this helper.
+ */
+function deepFreeze<T>(value: T): T {
+  if (value === null || typeof value !== 'object') return value;
+  if (Object.isFrozen(value)) return value;
+  if (Array.isArray(value)) {
+    for (const item of value) deepFreeze(item);
+  } else {
+    for (const key of Object.keys(value as object)) {
+      deepFreeze((value as Record<string, unknown>)[key]);
+    }
+  }
+  return Object.freeze(value);
+}
 
 /**
  * Resolve the **routed** editor — the body, header, footer, or note
@@ -179,6 +248,48 @@ function resolvePresentationEditor(superdoc: SuperDocUIOptions['superdoc']): {
   } catch {
     return null;
   }
+}
+
+/**
+ * Lift a {@link import('@superdoc/document-api').TextTarget} into the
+ * {@link import('@superdoc/document-api').SelectionTarget} shape that
+ * point/range Document API operations (`editor.doc.insert`,
+ * `editor.doc.text.replace`, etc.) accept directly.
+ *
+ * - `null` in → `null` out (no selection means no insert anchor).
+ * - Single-segment selection: start/end share `blockId`.
+ * - Multi-segment selection: first segment supplies the start point,
+ *   last segment the end point. Inner segments are dropped — they're
+ *   reachable from the {start,end} pair via the same block traversal
+ *   the doc-api adapter already does internally.
+ * - `story` is preserved on every level (root, start, end). When the
+ *   selection lives in a non-body story (header/footer/footnote/
+ *   endnote) the doc-api routes mutations from the target's `story`
+ *   field; dropping it here would silently route inserts into the
+ *   body and either fail to resolve the block or edit the wrong
+ *   story.
+ *
+ * The helper sits next to the controller so consumers don't have to
+ * reach into a private adapter to convert. Doc-api ops will eventually
+ * accept TextTarget directly (separate ticket); until then,
+ * `selectionSlice.selectionTarget` is the consumer-facing shortcut.
+ */
+function textTargetToSelectionTarget(
+  textTarget: import('@superdoc/document-api').TextTarget | null,
+): import('@superdoc/document-api').SelectionTarget | null {
+  if (!textTarget) return null;
+  const segments = textTarget.segments;
+  if (!segments || segments.length === 0) return null;
+  const first = segments[0]!;
+  const last = segments[segments.length - 1]!;
+  const story = (textTarget as { story?: import('@superdoc/document-api').SelectionTarget['story'] }).story;
+  const start: import('@superdoc/document-api').SelectionPoint = story
+    ? { kind: 'text', blockId: first.blockId, offset: first.range.start, story }
+    : { kind: 'text', blockId: first.blockId, offset: first.range.start };
+  const end: import('@superdoc/document-api').SelectionPoint = story
+    ? { kind: 'text', blockId: last.blockId, offset: last.range.end, story }
+    : { kind: 'text', blockId: last.blockId, offset: last.range.end };
+  return story ? { kind: 'selection', start, end, story } : { kind: 'selection', start, end };
 }
 
 export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
@@ -279,7 +390,7 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
   // commentsUpdate / trackedChangesUpdate (track-changes events ride
   // commentsUpdate today; the controller normalizes that for callers).
   // `in: 'all'` is requested so non-body stories (header, footer,
-  // footnote, endnote) are included in the merged review feed.
+  // footnote, endnote) are included in the tracked-changes feed.
   const EMPTY_TRACK_CHANGES_LIST: TrackChangesListResult = {
     evaluatedRevision: '',
     total: 0,
@@ -306,34 +417,34 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
   refreshTrackChangesListCache();
 
   /**
-   * Internal `activeReviewId`. Mirrors selection-driven activity when
-   * the user moves the cursor to a different review item, and is
-   * updated by explicit `ui.review.next/previous/scrollTo` calls.
-   * Tracked separately from `lastSelectionDrivenId` so explicit
-   * navigation away from a still-selected item isn't immediately
+   * Internal `activeTrackChangeId`. Mirrors selection-driven activity
+   * when the user moves the cursor onto a tracked change, and is
+   * updated by explicit `ui.trackChanges.next/previous/scrollTo`
+   * calls. Tracked separately from `lastSelectionDrivenId` so explicit
+   * navigation away from a still-selected change isn't immediately
    * overwritten by the next computeState() call.
    */
-  let activeReviewId: string | null = null;
+  let activeTrackChangeId: string | null = null;
   /**
-   * The selection-driven id observed during the last `computeState`.
-   * Only when this changes between calls does the controller mirror
-   * it onto `activeReviewId`; otherwise the user's `next() /
-   * previous() / scrollTo()` choice persists across recomputes.
+   * The selection-driven change id observed during the last
+   * `computeState`. Only when this changes between calls does the
+   * controller mirror it onto `activeTrackChangeId`; otherwise the
+   * user's `next() / previous() / scrollTo()` choice persists across
+   * recomputes.
    */
   let lastSelectionDrivenId: string | null = null;
 
   /**
-   * Memoized review slice. The merged-feed array is rebuilt only when
-   * one of its inputs changes — comments items reference, tracked-
-   * changes items reference, or `activeReviewId`. Without this,
-   * shallowEqual on `state.review` would mismatch every keystroke
-   * because we'd allocate a fresh items array per computeState.
+   * Memoized track-changes slice. The items array is rebuilt only when
+   * `trackChangesListCache.items` reference changes or
+   * `activeTrackChangeId` changes. Without this, shallowEqual on
+   * `state.trackChanges` would mismatch every keystroke because we'd
+   * allocate a fresh items array per computeState.
    */
-  let reviewMemo: {
-    commentsRef: CommentsListResult['items'] | null;
+  let trackChangesMemo: {
     changesRef: TrackChangesListResult['items'] | null;
     activeId: string | null;
-    slice: ReviewSlice;
+    slice: TrackChangesSlice;
   } | null = null;
 
   /**
@@ -348,6 +459,23 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
   let selectionMemo: { key: string; slice: SelectionSlice } | null = null;
 
   /**
+   * Memoized document slice. Object identity stable while `ready`
+   * and `mode` are unchanged so `shallowEqual` on `state.document`
+   * short-circuits subscribers (typing-only transactions don't move
+   * either field, but they do trigger computeState rebuilds).
+   */
+  let documentMemo: { slice: DocumentSlice } | null = null;
+
+  /**
+   * Internal dirty flag. Flipped to `true` by any editor transaction
+   * with `tr.docChanged`; cleared by a successful `ui.document.export`
+   * or by `ui.document.replaceFile`. Selection-only transactions don't
+   * touch it. Tracked separately from `documentMemo` so a flag flip
+   * busts the memo without re-allocating on every typing-only event.
+   */
+  let dirty = false;
+
+  /**
    * Stable string key over a SelectionInfo for slice memoization. Two
    * infos producing the same key represent the same observable
    * selection state, so the slice can be reused.
@@ -360,13 +488,40 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     activeChangeIds: string[],
     quotedText: string,
   ): string => {
+    // Story is folded into the key so a header→body cursor change (or
+    // any cross-story navigation) busts the memo and re-derives
+    // `selectionTarget`. Without this, two selections at the same
+    // block/offset in different stories would reuse the prior slice
+    // and misroute downstream insert/replace operations.
+    //
+    // The serialized fields match the real `StoryLocator` discriminated
+    // union (storyType + per-variant id), NOT a generic `{ type, id }`
+    // shape. Using the wrong field names silently collapses every
+    // story to the empty key, defeating the memo bust. Aligned to the
+    // doc-api `StoryLocator` shape: `body` carries no extra id;
+    // `headerFooterSlot` discriminates by section + kind + variant;
+    // `headerFooterPart` by `refId`; `footnote` / `endnote` by `noteId`.
+    const story = target ? (target as unknown as { story?: Record<string, unknown> }).story : undefined;
+    let storyKey = '';
+    if (story) {
+      const storyType = typeof story.storyType === 'string' ? story.storyType : '';
+      // Capture every discriminating field across the StoryLocator
+      // union; absent fields serialize as empty so two stories that
+      // differ on any one field produce different keys.
+      const refId = typeof story.refId === 'string' ? story.refId : '';
+      const noteId = typeof story.noteId === 'string' ? story.noteId : '';
+      const section = story.section && typeof story.section === 'object' ? JSON.stringify(story.section) : '';
+      const headerFooterKind = typeof story.headerFooterKind === 'string' ? story.headerFooterKind : '';
+      const variant = typeof story.variant === 'string' ? story.variant : '';
+      storyKey = `s=${storyType}:r=${refId}:n=${noteId}:hf=${headerFooterKind}:v=${variant}:sec=${section}`;
+    }
     const targetKey = target
       ? target.segments.map((s) => `${s.blockId}:${s.range.start}-${s.range.end}`).join('|')
       : 'null';
     const marks = [...activeMarks].sort().join(',');
     const comments = [...activeCommentIds].sort().join(',');
     const changes = [...activeChangeIds].sort().join(',');
-    return `${empty ? '1' : '0'}:${targetKey}:m=${marks}:c=${comments}:tc=${changes}:t=${quotedText}`;
+    return `${empty ? '1' : '0'}:${storyKey}:${targetKey}:m=${marks}:c=${comments}:tc=${changes}:t=${quotedText}`;
   };
 
   const computeState = (): SuperDocUIState => {
@@ -388,64 +543,49 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     const activeIds = (selectionInfo?.activeCommentIds ?? EMPTY_ACTIVE_IDS) as string[];
     const activeChangeIdsFromSelection = (selectionInfo?.activeChangeIds ?? EMPTY_ACTIVE_IDS) as string[];
 
-    // Reconcile activeReviewId. Mirror selection only when the
-    // *selection-driven* id has changed since the last computeState —
-    // otherwise an explicit next/previous/scrollTo is preserved across
-    // subsequent recomputes (the cursor hasn't moved). Sync logic:
-    //   - selection moved to a non-null entity id → mirror it
-    //   - selection moved to no entity (caret elsewhere) → keep
-    //     activeReviewId so navigation persists, but clear it if the
-    //     underlying item dropped out of the feed
-    const selectionDrivenActiveId = activeIds[0] ?? activeChangeIdsFromSelection[0] ?? null;
+    // Reconcile activeTrackChangeId. Mirror the selection-driven
+    // tracked-change id only when it has changed since the last
+    // computeState. Otherwise an explicit next/previous/scrollTo is
+    // preserved across subsequent recomputes (the cursor hasn't moved).
+    // Sync logic:
+    //   - selection moved onto a tracked change → mirror it
+    //   - selection moved off any tracked change → keep
+    //     activeTrackChangeId so navigation persists, but clear it if
+    //     the underlying change dropped out of the list
+    const selectionDrivenActiveId = activeChangeIdsFromSelection[0] ?? null;
     const selectionMoved = selectionDrivenActiveId !== lastSelectionDrivenId;
     lastSelectionDrivenId = selectionDrivenActiveId;
     if (selectionMoved && selectionDrivenActiveId) {
-      activeReviewId = selectionDrivenActiveId;
+      activeTrackChangeId = selectionDrivenActiveId;
     }
 
-    // Build (or reuse) the merged review feed. Memo invalidates only
-    // when source caches or activeReviewId change, so unrelated
+    // Build (or reuse) the track-changes slice. Memo invalidates only
+    // when the source cache or activeTrackChangeId change, so unrelated
     // transactions / selection events don't allocate a fresh items
-    // array and re-fire ui.review subscribers.
-    let reviewSlice: ReviewSlice;
+    // array and re-fire ui.trackChanges subscribers.
+    let trackChangesSlice: TrackChangesSlice;
     if (
-      reviewMemo &&
-      reviewMemo.commentsRef === commentsListCache.items &&
-      reviewMemo.changesRef === trackChangesListCache.items &&
-      reviewMemo.activeId === activeReviewId
+      trackChangesMemo &&
+      trackChangesMemo.changesRef === trackChangesListCache.items &&
+      trackChangesMemo.activeId === activeTrackChangeId
     ) {
-      reviewSlice = reviewMemo.slice;
+      trackChangesSlice = trackChangesMemo.slice;
     } else {
-      const items: ReviewItem[] = [];
-      let order = 0;
-      for (const comment of commentsListCache.items) {
-        // `comments.list()` returns `DiscoveryItem<CommentDomain>` whose
-        // canonical identifier lives on `id` (set from the underlying
-        // commentId by the adapter). The legacy `commentId` field is
-        // only on `CommentInfo` / `comments.get()` — not on this
-        // discovery shape. Reading it would emit `undefined` and break
-        // active-id matching + next/previous/scrollTo.
-        items.push({ kind: 'comment', id: comment.id, documentOrder: order++, comment });
-      }
-      for (const change of trackChangesListCache.items) {
-        items.push({ kind: 'change', id: change.id, documentOrder: order++, change });
-      }
-      let openCount = trackChangesListCache.total;
-      for (const c of commentsListCache.items) {
-        if (c.status !== 'resolved') openCount += 1;
-      }
+      const items: TrackChangesItem[] = trackChangesListCache.items.map((change) => ({
+        id: change.id,
+        change,
+      }));
       // If the previously active id dropped out of the feed (e.g. an
-      // accept/delete/reject), reset to null. Compute *after* items is
-      // built so the final slice matches the eventual activeReviewId.
-      if (activeReviewId && !items.some((item) => item.id === activeReviewId)) {
-        activeReviewId = null;
+      // accept/reject), reset to null. Compute *after* items is built
+      // so the final slice matches the eventual activeTrackChangeId.
+      if (activeTrackChangeId && !items.some((item) => item.id === activeTrackChangeId)) {
+        activeTrackChangeId = null;
       }
-      reviewSlice = { items, openCount, activeId: activeReviewId };
-      reviewMemo = {
-        commentsRef: commentsListCache.items,
+      trackChangesSlice = { items, total: items.length, activeId: activeTrackChangeId };
+      trackChangesMemo = {
         changesRef: trackChangesListCache.items,
-        activeId: activeReviewId,
-        slice: reviewSlice,
+        activeId: activeTrackChangeId,
+        slice: trackChangesSlice,
       };
     }
 
@@ -455,11 +595,11 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     // inside the resolver) keeps the slice identity stable and lets
     // `shallowEqual` short-circuit `ui.select(s => s.selection)`
     // subscribers.
-    const selectionTarget = (selectionInfo?.target ?? null) as import('@superdoc/document-api').TextTarget | null;
+    const selectionTextTarget = (selectionInfo?.target ?? null) as import('@superdoc/document-api').TextTarget | null;
     const selectionActiveMarks = (selectionInfo?.activeMarks ?? EMPTY_ACTIVE_IDS) as string[];
     const selectionKey = buildSelectionKey(
       empty,
-      selectionTarget,
+      selectionTextTarget,
       selectionActiveMarks,
       activeIds,
       activeChangeIdsFromSelection,
@@ -471,7 +611,11 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     } else {
       selectionSlice = {
         empty,
-        target: selectionTarget,
+        target: selectionTextTarget,
+        // Derived from `target`. Allocated only on memo miss so a
+        // typing-only transaction (which leaves the selection
+        // unchanged) doesn't churn the SelectionTarget identity.
+        selectionTarget: textTargetToSelectionTarget(selectionTextTarget),
         activeMarks: selectionActiveMarks,
         activeCommentIds: activeIds,
         activeChangeIds: activeChangeIdsFromSelection,
@@ -500,9 +644,26 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
       }
     }
 
+    // Memoize the document slice. Reference stays stable while
+    // (ready, mode) are unchanged so `shallowEqual` on `state.document`
+    // short-circuits ui.document.subscribe per transaction.
+    let documentSlice: DocumentSlice;
+    if (
+      documentMemo &&
+      documentMemo.slice.ready === ready &&
+      documentMemo.slice.mode === documentMode &&
+      documentMemo.slice.dirty === dirty
+    ) {
+      documentSlice = documentMemo.slice;
+    } else {
+      documentSlice = { ready, mode: documentMode, dirty };
+      documentMemo = { slice: documentSlice };
+    }
+
     const partial: SuperDocUIState = {
       ready,
       documentMode,
+      document: documentSlice,
       selection: selectionSlice,
       toolbar: { context: toolbarSnapshot.context, commands: builtInCommands } as ToolbarSnapshotSlice,
       comments: {
@@ -518,7 +679,7 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
         // `ui.comments.subscribe` listener on the editing hot path.
         activeIds: selectionSlice.activeCommentIds,
       },
-      review: reviewSlice,
+      trackChanges: trackChangesSlice,
     };
 
     const customCommandStates = customCommandsRegistry.computeStates(partial);
@@ -558,12 +719,34 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     scheduleNotify();
   };
 
+  /**
+   * Mutates `dirty` to `true` when a transaction actually changed the
+   * document. Read `payload.transaction.docChanged` so selection-only
+   * transactions (cursor moves, range adjustments) don't flip the flag.
+   * `scheduleNotify()` runs separately via the EDITOR_EVENTS wiring so
+   * we don't double-notify here.
+   */
+  const onTransaction = (payload: unknown) => {
+    if (dirty) return;
+    const tr = (payload as { transaction?: { docChanged?: unknown } } | undefined)?.transaction;
+    if (tr && tr.docChanged === true) {
+      dirty = true;
+    }
+  };
+
   const attachEditorListeners = () => {
     const next = resolveRoutedEditor(superdoc);
     if (next === currentEditor) return;
     currentEditorTeardown?.();
     currentEditorTeardown = null;
     currentEditor = next;
+    // NOTE: don't reset `dirty` here. `attachEditorListeners` also
+    // runs on routed-surface swaps (body ↔ header / footer / footnote
+    // via `activeSurfaceChange`), and clearing the flag there would
+    // hide unsaved body edits whenever the user clicked into a
+    // different surface. The flag is reset only by:
+    //   - `editorCreate` (new document mounted by the host), or
+    //   - `ui.document.replaceFile()` (explicit consumer action).
     if (!next || typeof next.on !== 'function' || typeof next.off !== 'function') return;
 
     EDITOR_EVENTS.forEach((name) => {
@@ -576,9 +759,14 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     LIST_REFRESH_EVENTS.forEach((name) => {
       next.on?.(name, refreshAndNotify);
     });
+    // Dirty-flag listener. Runs alongside the scheduleNotify wiring on
+    // 'transaction' (kept separate so `dirty` reads the transaction
+    // payload before the snapshot is recomputed).
+    next.on?.('transaction', onTransaction);
     currentEditorTeardown = () => {
       EDITOR_EVENTS.forEach((name) => next.off?.(name, scheduleNotify));
       LIST_REFRESH_EVENTS.forEach((name) => next.off?.(name, refreshAndNotify));
+      next.off?.('transaction', onTransaction);
     };
     // The set of source events changed and the routed editor swapped
     // — refresh the comments cache for the new editor and recompute
@@ -616,6 +804,19 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     };
   };
 
+  // Dedicated dirty reset on document mount. `editorCreate` fires when
+  // the host creates a fresh editor — initial mount, or after
+  // `replaceFile` rebuilds the model — so the new document opens
+  // clean. Kept as a separate handler (rather than folded into
+  // attachEditorListeners) because that helper also runs on surface
+  // swaps within the same document, which must NOT clear dirty.
+  const resetDirtyOnNewDocument = () => {
+    if (dirty) {
+      dirty = false;
+      scheduleNotify();
+    }
+  };
+
   attachPresentationListeners();
   attachEditorListeners();
   if (typeof superdoc.on === 'function') {
@@ -623,11 +824,13 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     // surface. Re-attach both layers so the controller follows.
     superdoc.on?.('editorCreate', attachPresentationListeners);
     superdoc.on?.('editorCreate', attachEditorListeners);
+    superdoc.on?.('editorCreate', resetDirtyOnNewDocument);
   }
   teardown.push(() => {
     if (typeof superdoc.off === 'function') {
       superdoc.off?.('editorCreate', attachPresentationListeners);
       superdoc.off?.('editorCreate', attachEditorListeners);
+      superdoc.off?.('editorCreate', resetDirtyOnNewDocument);
     }
     currentPresentationTeardown?.();
     currentPresentationTeardown = null;
@@ -711,7 +914,7 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     // snapshot — the public `ToolbarSnapshotSlice` shape is the merged
     // one, not the underlying built-ins-only shape.
     getSnapshot: () => computeState().toolbar,
-    subscribe(listener) {
+    observe(listener) {
       // Drives off the same selector substrate so subscribers receive
       // the same coalesced burst pattern as ui.select consumers.
       // Equality is set to "always different" because the headless
@@ -722,17 +925,28 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
         () => false,
       ).subscribe((snapshot) => {
         try {
-          listener({ snapshot });
+          listener(snapshot);
         } catch {
           // see scheduleNotify
         }
       });
     },
+    subscribe(listener) {
+      return toolbar.observe((snapshot) => listener({ snapshot }));
+    },
     execute: ((id: PublicToolbarItemId, payload?: unknown): boolean => {
-      // The controller's execute signature is conditionally typed
-      // (variadic per-id payload); cast here keeps the consumer-facing
-      // type strict while delegating at runtime.
-      return (toolbarController.execute as (id: PublicToolbarItemId, payload?: unknown) => boolean)(id, payload);
+      // Routes through the centralized `dispatchCommand` so a later
+      // `register({ id, override: true })` is honored from this
+      // surface too. Returns `boolean` for the public type even
+      // though the underlying dispatcher may return `Promise<boolean>`
+      // for an async custom override; the existing `ToolbarHandle.execute`
+      // signature is sync-typed, so an async override called via this
+      // path resolves silently. Consumers that need the resolution
+      // should use `ui.commands.get(id)?.execute()` (typed as
+      // `boolean | Promise<boolean>`) or capture the registration
+      // result from `ui.commands.register(...)`.
+      const result = dispatchCommand(id, payload);
+      return result instanceof Promise ? true : result;
     }) as ToolbarHandle['execute'],
   };
 
@@ -774,7 +988,11 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
         });
       },
       execute: ((payload?: unknown): boolean => {
-        return (toolbarController.execute as (id: PublicToolbarItemId, payload?: unknown) => boolean)(id, payload);
+        // Same dispatch path as `ui.toolbar.execute(id)` and
+        // `ui.commands.get(id)?.execute()`. See `dispatchCommand`
+        // for the override-routing rationale.
+        const result = dispatchCommand(id, payload);
+        return result instanceof Promise ? true : result;
       }) as CommandHandle<PublicToolbarItemId>['execute'],
     };
   };
@@ -785,6 +1003,10 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
   // built-ins. Built-in collisions are refused without `override: true`.
   const customCommandsRegistry = createCustomCommandsRegistry({
     superdoc,
+    // Late-bound so `execute` sees whichever story editor is active at
+    // the time the command runs (matches the routing every other
+    // `ui.*` mutation uses).
+    getEditor: () => resolveRoutedEditor(superdoc),
     isBuiltIn: (id) => BUILT_IN_COMMAND_ID_SET.has(id),
     scheduleNotify,
     buildSubscribable: (id) => select((state) => state.toolbar.commands?.[id], shallowEqual),
@@ -792,6 +1014,117 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
   teardown.push(() => {
     customCommandsRegistry.destroy();
   });
+
+  /**
+   * Single dispatch path for every `execute`-shaped surface on the
+   * controller (`ui.toolbar.execute(id)`, `ui.commands.bold.execute()`,
+   * `ui.commands.get(id)?.execute()`). All three re-resolve through the
+   * custom-commands registry FIRST so a `register({ override: true })`
+   * call routes dispatch through the override regardless of which
+   * surface the consumer happens to call. Without this single path,
+   * `state.toolbar.commands.bold` shows `source: 'custom'` while a
+   * click via `ui.commands.bold.execute()` runs the built-in,
+   * producing a state/action mismatch the consumer can't see.
+   *
+   * Resolved at call time, not at handle-construction time, so a
+   * cached handle (React `useMemo` deps, etc.) survives a later
+   * register/unregister cycle without the consumer needing to re-fetch.
+   */
+  const dispatchCommand = (id: string, payload?: unknown): boolean | Promise<boolean> => {
+    if (customCommandsRegistry.has(id)) {
+      return customCommandsRegistry.execute(id, payload);
+    }
+    return (toolbarController.execute as (id: PublicToolbarItemId, payload?: unknown) => boolean)(
+      id as PublicToolbarItemId,
+      payload,
+    );
+  };
+
+  // Per-id cache for the type-erased dynamic handles returned by
+  // `ui.commands.get(id)`. Cached so handle identity is stable across
+  // repeated lookups for the same id (consumers can put the result in
+  // a React `useMemo` dep and not re-create observers per render).
+  // Caches lazily: entries are created on first `get(id)` call.
+  const dynamicHandleCache = new Map<string, DynamicCommandHandle>();
+
+  /**
+   * Build a {@link DynamicCommandHandle} for a built-in id. Reuses the
+   * per-command Subscribable so dynamic and per-id observers share the
+   * same selector subscription against `state.toolbar.commands?.[id]`.
+   * The emitted slice already carries `source: 'built-in'` after the
+   * computeState merge, so no remapping is needed beyond the fallback.
+   */
+  const buildBuiltInDynamicHandle = (id: PublicToolbarItemId): DynamicCommandHandle => {
+    return {
+      observe(listener) {
+        return getCommandSubscribable(id).subscribe((cmdState) => {
+          // The subscribable's selector returns a value cast to
+          // `ToolbarCommandHandleState<Id>` (no `source` field), but the
+          // runtime slice is the merged `UIToolbarCommandState` with the
+          // discriminator already populated by computeState. Cast back
+          // to the public dynamic shape rather than re-allocating a fresh
+          // object per emit.
+          const next = (cmdState ?? FALLBACK_DYNAMIC_STATE) as UIToolbarCommandState;
+          try {
+            listener(next);
+          } catch {
+            // see scheduleNotify
+          }
+        });
+      },
+      execute(payload?: unknown): boolean | Promise<boolean> {
+        // Same dispatch path as `ui.toolbar.execute(id)` and
+        // `ui.commands.bold.execute()`. See `dispatchCommand` for
+        // the override-routing rationale; this handle exposes the
+        // full `boolean | Promise<boolean>` return type so consumers
+        // can `await` an async custom override.
+        return dispatchCommand(id, payload);
+      },
+    };
+  };
+
+  /**
+   * Bridge a {@link CustomCommandHandle} from the custom-commands
+   * registry into the unified {@link DynamicCommandHandle} shape.
+   * Custom handles already emit `CustomCommandHandleState` (which
+   * carries `source: 'custom'`) and `execute` already accepts an
+   * unknown payload, so the wrapper is mostly identity. It exists to
+   * satisfy the public type and to keep `dynamicHandleCache` stable.
+   */
+  const buildCustomDynamicHandle = (id: string): DynamicCommandHandle | undefined => {
+    const customHandle = customCommandsRegistry.getHandle(id);
+    if (!customHandle) return undefined;
+    return {
+      observe(listener) {
+        return customHandle.observe(listener);
+      },
+      execute(payload?: unknown) {
+        return (customHandle.execute as (payload?: unknown) => boolean | Promise<boolean>)(payload);
+      },
+    };
+  };
+
+  const getDynamicHandle = (id: string): DynamicCommandHandle | undefined => {
+    if (typeof id !== 'string' || id.length === 0) return undefined;
+    // Custom takes priority: `register({ id, override: true })` lets a
+    // custom command shadow a built-in id, and the dynamic-lookup
+    // result must follow that shadowing so consumers iterating over
+    // mixed id arrays get the override semantics they configured.
+    if (customCommandsRegistry.has(id)) {
+      // Don't memoize the wrapper: a later `unregister()` followed by a
+      // fresh `register()` for the same id swaps the underlying handle,
+      // and a stale wrapper would observe / execute against the prior
+      // registration. Building on demand is cheap (two closures) and
+      // keeps semantics aligned with the Proxy `get` path.
+      return buildCustomDynamicHandle(id);
+    }
+    if (!BUILT_IN_COMMAND_ID_SET.has(id)) return undefined;
+    let cached = dynamicHandleCache.get(id);
+    if (cached) return cached;
+    cached = buildBuiltInDynamicHandle(id as PublicToolbarItemId);
+    dynamicHandleCache.set(id, cached);
+    return cached;
+  };
 
   const commands = new Proxy({} as CommandsHandle, {
     get(_, prop) {
@@ -801,6 +1134,32 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
       // per-id handle cache below.
       if (prop === 'register') {
         return customCommandsRegistry.register.bind(customCommandsRegistry);
+      }
+      // `get(id)` is the typed dynamic-lookup escape hatch (see
+      // `DynamicCommandHandle`). Returns undefined for unregistered ids
+      // instead of producing a fallback handle that emits forever
+      // disabled state, which is what the bare proxy lookup does today.
+      if (prop === 'get') {
+        return getDynamicHandle;
+      }
+      // `has(id)` and `require(id)` (SD-2920): explicit validation
+      // helpers for config-driven toolbars and trusted dispatch sites.
+      // Both use the same registry lookup as `get(id)`; the difference
+      // is only what they return when the id is unknown.
+      if (prop === 'has') {
+        return (id: string): boolean => {
+          if (typeof id !== 'string' || id.length === 0) return false;
+          return BUILT_IN_COMMAND_ID_SET.has(id) || customCommandsRegistry.has(id);
+        };
+      }
+      if (prop === 'require') {
+        return (id: string): DynamicCommandHandle => {
+          const handle = getDynamicHandle(id);
+          if (!handle) {
+            throw new Error(`[superdoc/ui] commands.require: unknown command id "${id}".`);
+          }
+          return handle;
+        };
       }
       // Custom-registered ids surface a typed handle from the registry.
       // Built-in ids fall through to the existing per-id cache so they
@@ -853,14 +1212,17 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
 
   const comments: CommentsHandle = {
     getSnapshot: () => computeState().comments,
-    subscribe(listener) {
+    observe(listener) {
       return select((state) => state.comments, shallowEqual).subscribe((snapshot) => {
         try {
-          listener({ snapshot });
+          listener(snapshot);
         } catch {
           // see scheduleNotify
         }
       });
+    },
+    subscribe(listener) {
+      return comments.observe((snapshot) => listener({ snapshot }));
     },
     createFromSelection({ text }) {
       const editor = resolveRoutedEditor(superdoc);
@@ -880,6 +1242,40 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
       // it here means the next snapshot subscribers see is the
       // post-mutation state, regardless of which event the wrapper
       // happens to fire.
+      refreshAndNotify();
+      return receipt;
+    },
+    createFromCapture(capture, { text }) {
+      const target = capture?.target ?? null;
+      if (!target) {
+        return {
+          success: false,
+          failure: { code: 'NO_OP', message: 'ui.comments.createFromCapture: capture has no addressable target.' },
+        };
+      }
+      const api = requireDocComments();
+      const receipt = (api.create as (input: unknown, options?: unknown) => Receipt).call(api, { target, text });
+      refreshAndNotify();
+      return receipt;
+    },
+    reply(parentCommentId, { text }) {
+      // Reply uses the same `create` operation as a top-level comment;
+      // discrimination is `parentCommentId` set vs absent. Replies
+      // inherit the parent's anchor, so callers don't pass a target —
+      // the doc-api adapter resolves the parent's positional address
+      // and stamps it on the new comment.
+      const trimmed = typeof text === 'string' ? text.trim() : '';
+      if (!trimmed) {
+        return {
+          success: false,
+          failure: { code: 'NO_OP', message: 'ui.comments.reply: text is empty.' },
+        };
+      }
+      const api = requireDocComments();
+      const receipt = (api.create as (input: unknown, options?: unknown) => Receipt).call(api, {
+        parentCommentId,
+        text,
+      });
       refreshAndNotify();
       return receipt;
     },
@@ -927,7 +1323,7 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     },
   };
 
-  // ---- ui.review ----------------------------------------------------------
+  // ---- ui.trackChanges ----------------------------------------------------
   //
   // Same architectural rules as `ui.comments`: every mutation routes
   // through the Document API (`editor.doc.trackChanges.decide`); next
@@ -945,21 +1341,14 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     const editor = resolveHostEditor(superdoc);
     const api = editor?.doc?.trackChanges;
     if (!api?.decide) {
-      throw new Error('ui.review: no active editor / trackChanges API. Open a document first.');
+      throw new Error('ui.trackChanges: no active editor / trackChanges API. Open a document first.');
     }
     return api;
   };
 
-  /** Determine the entity kind for a given id from the current feed. */
-  const entityKindForId = (id: string): 'comment' | 'change' | null => {
-    const feed = computeState().review.items;
-    const item = feed.find((i) => i.id === id);
-    return item?.kind ?? null;
-  };
-
   /**
    * Build the `target` payload for `trackChanges.decide` for a single
-   * change id. Looks up the change in the cached feed; when its
+   * change id. Looks up the change in the cached list; when its
    * `address.story` is non-body (header / footer / footnote /
    * endnote), include the story so the doc-API adapter can route
    * the decision to the right story instead of defaulting to body and
@@ -974,32 +1363,31 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
   };
 
   /**
-   * Look up a review item's `address.story` so navigation /
+   * Look up a tracked change's `address.story` so navigation /
    * scrollTo can carry it into the EntityAddress target. Without this,
    * `presentation.navigateTo({ entityId: 'tc-header-x' })` defaults
    * to body and either fails with target-not-found or anchors to a
-   * same-id body change. Returns `undefined` for body-anchored items
-   * so the EntityAddress stays minimal.
+   * same-id body change. Returns `undefined` for body-anchored
+   * changes so the EntityAddress stays minimal.
    */
-  const lookupItemStory = (id: string): unknown | undefined => {
+  const lookupChangeStory = (id: string): unknown | undefined => {
     const change = trackChangesListCache.items.find((c) => c.id === id);
-    if (change) {
-      return (change as unknown as { address?: { story?: unknown } }).address?.story;
-    }
-    const comment = commentsListCache.items.find((c) => c.id === id);
-    return (comment as unknown as { address?: { story?: unknown } } | undefined)?.address?.story;
+    return (change as unknown as { address?: { story?: unknown } } | undefined)?.address?.story;
   };
 
-  const review: ReviewHandle = {
-    getSnapshot: () => computeState().review,
-    subscribe(listener) {
-      return select((state) => state.review, shallowEqual).subscribe((snapshot) => {
+  const trackChanges: TrackChangesHandle = {
+    getSnapshot: () => computeState().trackChanges,
+    observe(listener) {
+      return select((state) => state.trackChanges, shallowEqual).subscribe((snapshot) => {
         try {
-          listener({ snapshot });
+          listener(snapshot);
         } catch {
           // see scheduleNotify
         }
       });
+    },
+    subscribe(listener) {
+      return trackChanges.observe((snapshot) => listener({ snapshot }));
     },
     accept(changeId) {
       const api = requireDocTrackChanges();
@@ -1038,43 +1426,33 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
       return receipt;
     },
     next() {
-      const items = computeState().review.items;
+      const items = computeState().trackChanges.items;
       if (items.length === 0) return null;
-      const current = activeReviewId ? items.findIndex((i) => i.id === activeReviewId) : -1;
+      const current = activeTrackChangeId ? items.findIndex((i) => i.id === activeTrackChangeId) : -1;
       // Wrap-around: after last → first; null active → first.
       const nextIndex = current < 0 || current >= items.length - 1 ? 0 : current + 1;
-      activeReviewId = items[nextIndex]!.id;
+      activeTrackChangeId = items[nextIndex]!.id;
       scheduleNotify();
-      return activeReviewId;
+      return activeTrackChangeId;
     },
     previous() {
-      const items = computeState().review.items;
+      const items = computeState().trackChanges.items;
       if (items.length === 0) return null;
-      const current = activeReviewId ? items.findIndex((i) => i.id === activeReviewId) : -1;
+      const current = activeTrackChangeId ? items.findIndex((i) => i.id === activeTrackChangeId) : -1;
       // Wrap-around: before first → last; null active → last.
       const prevIndex = current <= 0 ? items.length - 1 : current - 1;
-      activeReviewId = items[prevIndex]!.id;
+      activeTrackChangeId = items[prevIndex]!.id;
       scheduleNotify();
-      return activeReviewId;
+      return activeTrackChangeId;
     },
     async scrollTo(id) {
-      const kind = entityKindForId(id);
-      activeReviewId = id;
+      activeTrackChangeId = id;
       scheduleNotify();
-      // `EntityAddress` is a discriminated union: `CommentAddress`
-      // doesn't carry a `story` field, only `TrackedChangeAddress`
-      // does. Branch on `kind` so the constructed target matches the
-      // right union member exactly.
-      let target: import('@superdoc/document-api').EntityAddress;
-      if (kind === 'change') {
-        const story = lookupItemStory(id) as import('@superdoc/document-api').TrackedChangeAddress['story'];
-        target =
-          story != null
-            ? { kind: 'entity', entityType: 'trackedChange', entityId: id, story }
-            : { kind: 'entity', entityType: 'trackedChange', entityId: id };
-      } else {
-        target = { kind: 'entity', entityType: 'comment', entityId: id };
-      }
+      const story = lookupChangeStory(id) as import('@superdoc/document-api').TrackedChangeAddress['story'];
+      const target: import('@superdoc/document-api').EntityAddress =
+        story != null
+          ? { kind: 'entity', entityType: 'trackedChange', entityId: id, story }
+          : { kind: 'entity', entityType: 'trackedChange', entityId: id };
       return runScrollIntoView({
         target,
         block: 'center',
@@ -1185,7 +1563,7 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
 
   // ---- ui.selection ------------------------------------------------------
   //
-  // Same shape as `ui.comments` / `ui.review` / `ui.toolbar`:
+  // Same shape as `ui.comments` / `ui.trackChanges` / `ui.toolbar`:
   // synchronous `getSnapshot()` + memoized `subscribe()`. Sugar over
   // `ui.select((s) => s.selection, shallowEqual)` so consumers writing
   // floating bubble menus / format toolbars / mention popovers /
@@ -1194,23 +1572,179 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
   // selector substrate.
   const selection: SelectionHandle = {
     getSnapshot: () => computeState().selection,
-    subscribe(listener) {
+    observe(listener) {
       return select((state) => state.selection, shallowEqual).subscribe((snapshot) => {
         try {
-          listener({ snapshot });
+          listener(snapshot);
         } catch {
           // see scheduleNotify
         }
       });
     },
+    subscribe(listener) {
+      return selection.observe((snapshot) => listener({ snapshot }));
+    },
+    capture() {
+      // Capture is sugar over `getSnapshot()` plus a deep clone +
+      // deep freeze: the memoized selection slice carries the
+      // portable address shapes consumers need (target,
+      // selectionTarget, activeMarks, etc.), and shares them with
+      // every other live subscriber. A shallow freeze on the
+      // top-level snapshot would still let
+      // `captured.target.segments[0].range.start = 99` or
+      // `captured.activeMarks.push(...)` corrupt the shared slice
+      // and feed bad targets into later `editor.doc.*` calls. Clone
+      // first so the freeze applies to the consumer's copy alone,
+      // not the controller's memo, then freeze recursively.
+      const slice = computeState().selection;
+      if (!slice.target && !slice.selectionTarget) return null;
+      return deepFreeze(deepClone(slice));
+    },
+  };
+
+  // ---- ui.document -------------------------------------------------------
+  //
+  // Session-level surface (Export DOCX, document-mode toggle, ready
+  // state). Sugar over `state.document` plus passthroughs to the host
+  // SuperDoc instance's setDocumentMode / export. Lifts the operations
+  // that previously forced consumers to wire a separate "host" hook
+  // through their React context (the SuperDocHost interface that
+  // SD-2813's React provider exposes today; that becomes a thin
+  // backwards-compat shim once consumers migrate to ui.document).
+  const document: DocumentHandle = {
+    getSnapshot: () => computeState().document,
+    observe(listener) {
+      return select((state) => state.document, shallowEqual).subscribe((snapshot) => {
+        try {
+          listener(snapshot);
+        } catch {
+          // see scheduleNotify
+        }
+      });
+    },
+    subscribe(listener) {
+      return document.observe((snapshot) => listener({ snapshot }));
+    },
+    setMode(mode) {
+      // Routes through the host setter; ignored when the stub omits
+      // it (test stubs / SSR). The host emits 'document-mode-change'
+      // which is already in SUPERDOC_EVENTS, so the next snapshot
+      // reflects the new mode without explicit notify here.
+      const setter = superdoc.setDocumentMode;
+      if (typeof setter !== 'function') return;
+      try {
+        setter.call(superdoc, mode);
+      } catch (err) {
+        console.error('[superdoc/ui] ui.document.setMode failed:', err);
+      }
+    },
+    async export(options?: DocumentExportInput): Promise<unknown> {
+      const exportFn = superdoc.export;
+      if (typeof exportFn !== 'function') {
+        // Surface a clear error rather than a silent no-op: a
+        // consumer that wired up an Export button has every right
+        // to know the host doesn't implement export. Same posture
+        // as the requireDocComments helper used by ui.comments.
+        throw new Error('ui.document.export: host SuperDoc instance does not implement export().');
+      }
+      // Successful export = persisted snapshot, clear dirty. A reject
+      // leaves dirty alone so the consumer can retry. Notify after the
+      // flip so subscribers see `dirty: false` synchronously.
+      const result = await exportFn.call(superdoc, options);
+      if (dirty) {
+        dirty = false;
+        scheduleNotify();
+      }
+      return result;
+    },
+    async replaceFile(file: File): Promise<void> {
+      const editor = superdoc.activeEditor;
+      const replace = editor?.replaceFile;
+      if (typeof replace !== 'function') {
+        throw new Error('ui.document.replaceFile: host has no active editor with replaceFile().');
+      }
+      await replace.call(editor, file);
+      // Replacing the file rebuilds the document model from scratch —
+      // selection, scroll, and dirty all reset. The editor swap flips
+      // `dirty` via attachEditorListeners; clear here defensively in
+      // case the swap doesn't fire (same-instance reuse).
+      if (dirty) {
+        dirty = false;
+        scheduleNotify();
+      }
+      // SD-2839 workaround: when `modules.comments: false`,
+      // `Editor.#initComments()` short-circuits and never re-emits
+      // `commentsLoaded` after `replaceFile`. The controller normally
+      // refreshes its `ui.comments` cache on that event. Re-emit it
+      // here so consumers don't have to. Once SD-2839 lands and the
+      // engine fires the event regardless of the UI flag, this becomes
+      // a harmless duplicate emit (the controller dedupes via
+      // shallow equality on the next snapshot).
+      const emit = editor.emit;
+      if (typeof emit === 'function') {
+        try {
+          emit.call(editor, 'commentsLoaded', {
+            editor,
+            comments: editor.converter?.comments ?? [],
+          });
+        } catch (err) {
+          console.error('[superdoc/ui] ui.document.replaceFile commentsLoaded re-emit failed:', err);
+        }
+      }
+    },
+  };
+
+  // Live scopes created via `ui.createScope()`. The controller's
+  // `destroy()` cascades into every entry before tearing down its own
+  // resources, so consumers do not need to call `scope.destroy()`
+  // themselves on shutdown. Calling `ui.destroy()` is enough.
+  const liveScopes = new Set<SuperDocUIScope>();
+
+  const createScopeFn = (): SuperDocUIScope => {
+    if (destroyed) {
+      // Mirror the destroyed-parent behavior of `scope.child()`:
+      // return an already-destroyed scope so consumers in shutdown
+      // races do not get a live scope that the controller will never
+      // cascade-destroy. Methods on the returned scope follow the
+      // documented post-destroy contract (`add` runs synchronously,
+      // `on` is a no-op, `register` throws, `child` returns destroyed).
+      const inert = createScope({
+        register: customCommandsRegistry.register.bind(customCommandsRegistry),
+        trackScope: () => () => undefined,
+      });
+      inert.destroy();
+      return inert;
+    }
+    return createScope({
+      register: customCommandsRegistry.register.bind(customCommandsRegistry),
+      trackScope: (scope) => {
+        liveScopes.add(scope);
+        return () => {
+          liveScopes.delete(scope);
+        };
+      },
+    });
   };
 
   const destroy = () => {
     if (destroyed) return;
     destroyed = true;
+    // Cascade into scopes first. Each scope's own destroy untracks
+    // itself from `liveScopes`, so iterate a snapshot to avoid mutating
+    // the set during iteration.
+    const scopeSnapshot = [...liveScopes];
+    liveScopes.clear();
+    for (const scope of scopeSnapshot) {
+      try {
+        scope.destroy();
+      } catch (err) {
+        console.error('[superdoc/ui] scope destroy threw during ui.destroy()', err);
+      }
+    }
     stateChangeListeners.clear();
     commandHandleCache.clear();
     commandSubscribableCache.clear();
+    dynamicHandleCache.clear();
     teardown.forEach((fn) => {
       try {
         fn();
@@ -1221,5 +1755,16 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     teardown.length = 0;
   };
 
-  return { select, toolbar, commands, comments, review, selection, viewport, destroy };
+  return {
+    select,
+    toolbar,
+    commands,
+    comments,
+    trackChanges,
+    selection,
+    viewport,
+    document,
+    createScope: createScopeFn,
+    destroy,
+  };
 }

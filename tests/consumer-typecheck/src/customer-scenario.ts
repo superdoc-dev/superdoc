@@ -320,8 +320,11 @@ function testPresentationEditorCommands(pe: PresentationEditor) {
   // Track changes
   pe.commands.enableTrackChanges();
   pe.commands.disableTrackChanges();
-  pe.commands.acceptTrackedChange();
-  pe.commands.rejectTrackedChange();
+  // Selection-based variants need no arguments. The `acceptTrackedChange`
+  // and `rejectTrackedChange` commands take an explicit TrackedChangeOptions
+  // payload; consumer code typically reaches for the selection variants here.
+  pe.commands.acceptTrackedChangeBySelection();
+  pe.commands.rejectTrackedChangeOnSelection();
 }
 
 // ============================================
@@ -439,6 +442,7 @@ function testPresentationEditorMethods(pe: PresentationEditor) {
   pe.scrollToElement('paraId-ABC123');
   pe.navigateTo({ kind: 'block', nodeId: 'paraId-ABC123' });
   pe.navigateTo({ kind: 'block', nodeId: 'paraId-ABC123', nodeType: 'paragraph' });
+  pe.navigateTo({ kind: 'entity', entityType: 'bookmark', name: 'bookmark-1' });
   pe.navigateTo({ kind: 'entity', entityType: 'comment', entityId: 'comment-1' });
   pe.navigateTo({ kind: 'entity', entityType: 'trackedChange', entityId: 'tc-1' });
 
@@ -848,14 +852,21 @@ function testVueComponents() {
  * monorepo and a broken re-export could ship undetected.
  */
 import {
+  BUILT_IN_COMMAND_IDS,
   createSuperDocUI,
   shallowEqual,
+  type CommentAddress as UICommentAddress,
+  type CommentInfo as UICommentInfo,
   type CommentsHandle,
+  type CommentsListQuery as UICommentsListQuery,
+  type CommentsListResult as UICommentsListResult,
   type CommentsSlice,
+  type EntityAddress as UIEntityAddress,
   type EqualityFn,
-  type ReviewHandle,
-  type ReviewItem,
-  type ReviewSlice,
+  type Receipt as UIReceipt,
+  type ScrollIntoViewInput as UIScrollIntoViewInput,
+  type ScrollIntoViewOutput as UIScrollIntoViewOutput,
+  type SelectionInfo as UISelectionInfo,
   type SelectionSlice,
   type SelectorFn,
   type Subscribable,
@@ -864,6 +875,13 @@ import {
   type SuperDocUI,
   type SuperDocUIOptions,
   type SuperDocUIState,
+  type TextTarget as UITextTarget,
+  type TrackChangeInfo as UITrackChangeInfo,
+  type TrackChangesHandle,
+  type TrackChangesItem,
+  type TrackChangesListResult as UITrackChangesListResult,
+  type TrackChangesSlice,
+  type TrackedChangeAddress as UITrackedChangeAddress,
   type ViewportGetRectInput,
   type ViewportHandle,
   type ViewportRect,
@@ -882,15 +900,15 @@ function testSuperDocUISubEntry() {
     toolbar: SuperDocUI['toolbar'];
     commands: SuperDocUI['commands'];
     comments: CommentsHandle;
-    review: ReviewHandle;
+    trackChanges: TrackChangesHandle;
     viewport: ViewportHandle;
     state: SuperDocUIState;
   };
   type AssertSlices = {
     selection: SelectionSlice;
     comments: CommentsSlice;
-    review: ReviewSlice;
-    reviewItem: ReviewItem;
+    trackChanges: TrackChangesSlice;
+    trackChangesItem: TrackChangesItem;
   };
   type AssertViewportShapes = {
     input: ViewportGetRectInput;
@@ -914,6 +932,103 @@ function testSuperDocUISubEntry() {
   void (null as never as AssertViewportShapes);
   void (null as never as AssertSubstrate);
   void (null as never as AssertHostShapes);
+
+  // SD-2815: document-side shapes the controller surfaces resolve
+  // through `superdoc/ui` directly, so consumers don't have to dip
+  // into `@superdoc/document-api`. The aliases above (`UICommentInfo`
+  // etc.) collide with the same types imported earlier from
+  // `superdoc`; importing both here proves the re-export does not
+  // shadow or diverge from the canonical doc-api shapes.
+  type AssertDocReExports = {
+    commentItem: UICommentInfo;
+    commentsList: UICommentsListResult;
+    commentsQuery: UICommentsListQuery;
+    trackChangeItem: UITrackChangeInfo;
+    trackChangesList: UITrackChangesListResult;
+    receipt: UIReceipt;
+    scrollInput: UIScrollIntoViewInput;
+    scrollOutput: UIScrollIntoViewOutput;
+    selectionInfo: UISelectionInfo;
+    textTarget: UITextTarget;
+    entityAddress: UIEntityAddress;
+    commentAddress: UICommentAddress;
+    trackedChangeAddress: UITrackedChangeAddress;
+  };
+  void (null as never as AssertDocReExports);
+
+  // The doc-api types reached through `superdoc/ui` should be
+  // assignable to (and from) the same types reached through the root
+  // `superdoc` import. Aliasing avoids name collisions while letting
+  // the typechecker confirm structural equivalence.
+  type AssertDocReExportParity = {
+    textTargetSame: UITextTarget extends TextTarget ? true : false;
+    textTargetSameInverse: TextTarget extends UITextTarget ? true : false;
+    selectionInfoSame: UISelectionInfo extends SelectionInfo ? true : false;
+    scrollInputSame: UIScrollIntoViewInput extends ScrollIntoViewInput ? true : false;
+    entityAddressSame: UIEntityAddress extends EntityAddress ? true : false;
+  };
+  void (null as never as AssertDocReExportParity);
+
+  // SD-2815 guard: prove the doc-api types reached through `superdoc/ui`
+  // are NOT `any` shims (the post-build script that previously stamped
+  // every `@superdoc/document-api` reference as `any` in
+  // `_internal-shims.d.ts` would otherwise compile this file silently
+  // even though every property access succeeds against `any`).
+  //
+  // `any extends 'literal' ? ... : ...` distributes to `boolean`, so
+  // the conditional below is `true` only when the type is real. If the
+  // doc-api dist regresses to ambient-`any`, `IsNotAny<UICommentInfo>`
+  // collapses to `boolean` and the `extends true` check fails.
+  type IsAny<T> = 0 extends 1 & T ? true : false;
+  type IsNotAny<T> = IsAny<T> extends true ? false : true;
+  type AssertDocReExportsHaveRealShape = {
+    commentInfoIsReal: IsNotAny<UICommentInfo> extends true ? true : false;
+    receiptIsReal: IsNotAny<UIReceipt> extends true ? true : false;
+    selectionInfoIsReal: IsNotAny<UISelectionInfo> extends true ? true : false;
+    textTargetIsReal: IsNotAny<UITextTarget> extends true ? true : false;
+    scrollInputIsReal: IsNotAny<UIScrollIntoViewInput> extends true ? true : false;
+    trackChangeInfoIsReal: IsNotAny<UITrackChangeInfo> extends true ? true : false;
+  };
+  // Force `true` literally on every field. Anything else (including
+  // `boolean` from a distributed `IsAny<any>`) breaks the assignment.
+  const docApiTypesAreReal: AssertDocReExportsHaveRealShape = {
+    commentInfoIsReal: true,
+    receiptIsReal: true,
+    selectionInfoIsReal: true,
+    textTargetIsReal: true,
+    scrollInputIsReal: true,
+    trackChangeInfoIsReal: true,
+  };
+  void docApiTypesAreReal;
+
+  // Belt-and-suspenders: read a known field on `UICommentInfo` so a
+  // future test reader sees a concrete usage. If `UICommentInfo` is
+  // `any`, this still compiles (any accepts everything), but the
+  // `IsNotAny` check above would already have failed.
+  function readCommentId(c: UICommentInfo): string {
+    return c.commentId;
+  }
+  void readCommentId;
+
+  // SD-2920: command discovery helpers exposed at the consumer surface.
+  // BUILT_IN_COMMAND_IDS is a runtime-readable list; has() / require()
+  // give configurable toolbars and trusted dispatch sites a typed way
+  // to validate id strings without indexing the proxy.
+  function exerciseCommandDiscovery(ui: SuperDocUI): void {
+    const ids: readonly string[] = BUILT_IN_COMMAND_IDS;
+    void ids;
+
+    const present: boolean = ui.commands.has('bold');
+    const missing: boolean = ui.commands.has('blod');
+    void present;
+    void missing;
+
+    const handle = ui.commands.require('bold');
+    handle.observe((_state) => {});
+    const result: boolean | Promise<boolean> = handle.execute();
+    void result;
+  }
+  void exerciseCommandDiscovery;
 }
 
 export {

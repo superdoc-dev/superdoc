@@ -1,14 +1,14 @@
 ---
 title: tables.applyPreset
 sidebarTitle: tables.applyPreset
-description: "Apply a named visual preset to a table. Presets: \"grid\" (1pt black borders all around), \"minimal\" (no outer borders, hairline grey row separators + thicker bottom), \"striped\" (banded rows on, 0.5pt grey borders), \"accent\" (filled header row + thick accent top/bottom; defaults to dark blue, override with `accentColor`). Composes set_borders + set_style_options + header-row shading in one call. Available via the document API and `superdoc_mutations` (intentionally NOT exposed as a top-level action on `superdoc_table` — agents should compose explicit set_borders / set_shading / set_style_options calls so they always pick concrete colors that match the document context)."
+description: "Apply a named visual preset to a table. Presets: \"grid\" (1pt black borders all around), \"minimal\" (no outer borders, hairline grey row separators + thicker bottom), \"striped\" (banded rows on, 0.5pt grey borders), \"accent\" (filled header row + thick accent top/bottom; defaults to dark blue, override with `accentColor`). Composes set_borders + set_style_options + header-row shading in one call. Available via the document API and `superdoc_mutations` (intentionally NOT exposed as a top-level action on `superdoc_table`. Agents should compose explicit set_borders / set_shading / set_style_options calls so they always pick concrete colors that match the document context)."
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
 
 ## Summary
 
-Apply a named visual preset to a table. Presets: "grid" (1pt black borders all around), "minimal" (no outer borders, hairline grey row separators + thicker bottom), "striped" (banded rows on, 0.5pt grey borders), "accent" (filled header row + thick accent top/bottom; defaults to dark blue, override with `accentColor`). Composes set_borders + set_style_options + header-row shading in one call. Available via the document API and `superdoc_mutations` (intentionally NOT exposed as a top-level action on `superdoc_table` — agents should compose explicit set_borders / set_shading / set_style_options calls so they always pick concrete colors that match the document context).
+Apply a named visual preset to a table. Presets: "grid" (1pt black borders all around), "minimal" (no outer borders, hairline grey row separators + thicker bottom), "striped" (banded rows on, 0.5pt grey borders), "accent" (filled header row + thick accent top/bottom; defaults to dark blue, override with `accentColor`). Composes set_borders + set_style_options + header-row shading in one call. Available via the document API and `superdoc_mutations` (intentionally NOT exposed as a top-level action on `superdoc_table`. Agents should compose explicit set_borders / set_shading / set_style_options calls so they always pick concrete colors that match the document context).
 
 - Operation ID: `tables.applyPreset`
 - API member path: `editor.doc.tables.applyPreset(...)`

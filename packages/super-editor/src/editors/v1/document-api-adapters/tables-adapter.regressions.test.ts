@@ -6,10 +6,13 @@ import {
   tablesClearBorderAdapter,
   tablesClearShadingAdapter,
   tablesDeleteCellAdapter,
+  tablesDeleteColumnAdapter,
   tablesDistributeColumnsAdapter,
   tablesInsertColumnAdapter,
   tablesInsertCellAdapter,
   tablesSetBorderAdapter,
+  tablesSetColumnWidthAdapter,
+  tablesSetCellPropertiesAdapter,
   tablesSetShadingAdapter,
   tablesSplitCellAdapter,
   tablesSplitAdapter,
@@ -570,7 +573,106 @@ describe('tables-adapter regressions', () => {
     expect(getTableGridUpdateAttrs(tr)).toMatchObject({
       userEdited: true,
       grid: [{ col: 2250 }, { col: 2250 }],
+      tableLayout: 'fixed',
+      tableProperties: {
+        tableLayout: 'fixed',
+      },
     });
+  });
+
+  it('marks column width authoring as fixed layout even when no grid is present', () => {
+    const editor = makeTableEditor();
+    const tr = editor.state.tr as unknown as { setNodeMarkup: ReturnType<typeof vi.fn> };
+    const tableNode = editor.state.doc.nodeAt(0) as ProseMirrorNode;
+    (tableNode.attrs as Record<string, unknown>).grid = undefined;
+    (tableNode.attrs as Record<string, unknown>).tableProperties = { tableLayout: 'autofit' };
+
+    const result = tablesSetColumnWidthAdapter(editor, {
+      nodeId: 'table-1',
+      columnIndex: 0,
+      widthPt: 144,
+    });
+
+    expect(result.success).toBe(true);
+    const tableUpdate = tr.setNodeMarkup.mock.calls.find((call) => call[0] === 0)?.[2] as Record<string, unknown>;
+    expect(tableUpdate.tableLayout).toBe('fixed');
+    expect(tableUpdate.tableProperties).toMatchObject({ tableLayout: 'fixed' });
+  });
+
+  it('replaces stale tableWidth metadata when setting a column width', () => {
+    const editor = makeTableEditor();
+    const tr = editor.state.tr as unknown as { setNodeMarkup: ReturnType<typeof vi.fn> };
+    const tableNode = editor.state.doc.nodeAt(0) as ProseMirrorNode;
+    (tableNode.attrs as Record<string, unknown>).tableProperties = {
+      tableLayout: 'autofit',
+      tableWidth: { value: 7200, type: 'dxa' },
+    };
+    (tableNode.attrs as Record<string, unknown>).tableWidth = { width: 480, type: 'dxa' };
+
+    const result = tablesSetColumnWidthAdapter(editor, {
+      nodeId: 'table-1',
+      columnIndex: 0,
+      widthPt: 144,
+    });
+
+    expect(result.success).toBe(true);
+    const tableUpdate = tr.setNodeMarkup.mock.calls.find((call) => call[0] === 0)?.[2] as Record<string, unknown>;
+    expect(tableUpdate.tableProperties).toMatchObject({
+      tableLayout: 'fixed',
+      tableWidth: { value: 5880, type: 'dxa' },
+    });
+    expect(tableUpdate.tableWidth).toEqual({ width: 392, type: 'dxa' });
+  });
+
+  it('syncs first-row tcW when setting a column width', () => {
+    const editor = makeTableEditor();
+    const tr = editor.state.tr as unknown as { setNodeMarkup: ReturnType<typeof vi.fn> };
+    const tableNode = editor.state.doc.nodeAt(0) as ProseMirrorNode;
+    const firstRow = tableNode.child(0) as ProseMirrorNode;
+    const firstCell = firstRow.child(0) as ProseMirrorNode;
+    (firstCell.attrs as Record<string, unknown>).tableCellProperties = {
+      cellWidth: { value: 7200, type: 'dxa' },
+    };
+
+    const result = tablesSetColumnWidthAdapter(editor, {
+      nodeId: 'table-1',
+      columnIndex: 0,
+      widthPt: 144,
+    });
+
+    expect(result.success).toBe(true);
+    const firstCellUpdate = tr.setNodeMarkup.mock.calls.find((call) => call[0] === 2)?.[2] as Record<string, unknown>;
+    expect(firstCellUpdate.colwidth).toEqual([192]);
+    expect(firstCellUpdate.tableCellProperties).toMatchObject({
+      cellWidth: { value: 2880, type: 'dxa' },
+    });
+  });
+
+  it('preserves visible tableCellSpacing when setting a column width', () => {
+    const editor = makeTableEditor();
+    const tr = editor.state.tr as unknown as { setNodeMarkup: ReturnType<typeof vi.fn> };
+    const tableNode = editor.state.doc.nodeAt(0) as ProseMirrorNode;
+    (tableNode.attrs as Record<string, unknown>).tableProperties = {
+      tableLayout: 'autofit',
+      tableCellSpacing: { value: 30, type: 'dxa' },
+    };
+    (tableNode.attrs as Record<string, unknown>).tableCellSpacing = { value: 2, type: 'dxa' };
+    (tableNode.attrs as Record<string, unknown>).borderCollapse = 'separate';
+
+    const result = tablesSetColumnWidthAdapter(editor, {
+      nodeId: 'table-1',
+      columnIndex: 0,
+      widthPt: 144,
+    });
+
+    expect(result.success).toBe(true);
+    const tableUpdate = tr.setNodeMarkup.mock.calls.find((call) => call[0] === 0)?.[2] as Record<string, unknown>;
+    expect(tableUpdate.tableProperties).toMatchObject({
+      tableLayout: 'fixed',
+      tableCellSpacing: { value: 30, type: 'dxa' },
+    });
+    expect(tableUpdate.tableCellSpacing).toEqual({ value: 2, type: 'dxa' });
+    expect(tableUpdate.borderCollapse).toBe('separate');
   });
 
   it('updates object-shaped grid colWidths when distributing columns', () => {
@@ -594,6 +696,38 @@ describe('tables-adapter regressions', () => {
         source: 'ooxml',
         colWidths: [{ col: 2250 }, { col: 2250 }],
       },
+    });
+  });
+
+  it('syncs first-row tcW when distributing column widths', () => {
+    const editor = makeTableEditor();
+    const tr = editor.state.tr as unknown as { setNodeMarkup: ReturnType<typeof vi.fn> };
+    const tableNode = editor.state.doc.nodeAt(0) as ProseMirrorNode;
+    const firstRow = tableNode.child(0) as ProseMirrorNode;
+    const firstCell = firstRow.child(0) as ProseMirrorNode;
+    const secondCell = firstRow.child(1) as ProseMirrorNode;
+    (firstCell.attrs as Record<string, unknown>).tableCellProperties = {
+      cellWidth: { value: 7200, type: 'dxa' },
+    };
+    (secondCell.attrs as Record<string, unknown>).tableCellProperties = {
+      cellWidth: { value: 3600, type: 'dxa' },
+    };
+
+    const result = tablesDistributeColumnsAdapter(editor, {
+      nodeId: 'table-1',
+      columnRange: { start: 0, end: 1 },
+    });
+
+    expect(result.success).toBe(true);
+    const firstCellUpdate = tr.setNodeMarkup.mock.calls.find((call) => call[0] === 2)?.[2] as Record<string, unknown>;
+    const secondCellUpdate = tr.setNodeMarkup.mock.calls.find((call) => call[0] === 11)?.[2] as Record<string, unknown>;
+    expect(firstCellUpdate.colwidth).toEqual([150]);
+    expect(firstCellUpdate.tableCellProperties).toMatchObject({
+      cellWidth: { value: 2250, type: 'dxa' },
+    });
+    expect(secondCellUpdate.colwidth).toEqual([150]);
+    expect(secondCellUpdate.tableCellProperties).toMatchObject({
+      cellWidth: { value: 2250, type: 'dxa' },
     });
   });
 
@@ -634,6 +768,77 @@ describe('tables-adapter regressions', () => {
       userEdited: true,
       grid: [{ col: 1200 }, { col: 3000 }, { col: 3000 }],
     });
+  });
+
+  it('keeps structural split operations from forcing fixed layout', () => {
+    const editor = makeTableEditor();
+    const tr = editor.state.tr as unknown as { setNodeMarkup: ReturnType<typeof vi.fn> };
+    const tableNode = editor.state.doc.nodeAt(0) as ProseMirrorNode;
+    (tableNode.attrs as Record<string, unknown>).tableProperties = { tableLayout: 'autofit' };
+    (tableNode.attrs as Record<string, unknown>).tableLayout = 'autofit';
+
+    const result = tablesSplitCellAdapter(editor, {
+      nodeId: 'cell-1',
+      rows: 2,
+      columns: 2,
+    });
+
+    expect(result.success).toBe(true);
+    const tableUpdate = getTableGridUpdateAttrs(tr);
+    expect(tableUpdate?.tableLayout).toBe('autofit');
+    expect((tableUpdate?.tableProperties as Record<string, unknown>)?.tableLayout).toBe('autofit');
+  });
+
+  it('keeps structural insert/delete column operations from forcing fixed layout', () => {
+    const editor = makeTableEditor();
+    const tableNode = editor.state.doc.nodeAt(0) as ProseMirrorNode;
+    (tableNode.attrs as Record<string, unknown>).tableProperties = { tableLayout: 'autofit' };
+    (tableNode.attrs as Record<string, unknown>).tableLayout = 'autofit';
+
+    const insertResult = tablesInsertColumnAdapter(editor, {
+      nodeId: 'table-1',
+      columnIndex: 0,
+      position: 'right',
+    });
+    expect(insertResult.success).toBe(true);
+
+    const insertTr = editor.state.tr as unknown as { setNodeMarkup: ReturnType<typeof vi.fn> };
+    const insertUpdate = insertTr.setNodeMarkup.mock.calls.find((call) => call[0] === 0)?.[2] as
+      | Record<string, unknown>
+      | undefined;
+    expect(insertUpdate?.tableLayout).toBe('autofit');
+    expect((insertUpdate?.tableProperties as Record<string, unknown>)?.tableLayout).toBe('autofit');
+
+    insertTr.setNodeMarkup.mockClear();
+
+    const deleteResult = tablesDeleteColumnAdapter(editor, {
+      nodeId: 'table-1',
+      columnIndex: 0,
+    });
+    expect(deleteResult.success).toBe(true);
+
+    const deleteUpdate = insertTr.setNodeMarkup.mock.calls.find((call) => call[0] === 0)?.[2] as
+      | Record<string, unknown>
+      | undefined;
+    expect(deleteUpdate?.tableLayout).toBe('autofit');
+    expect((deleteUpdate?.tableProperties as Record<string, unknown>)?.tableLayout).toBe('autofit');
+  });
+
+  it('marks preferred cell width authoring as fixed layout on the owning table', () => {
+    const editor = makeTableEditor();
+    const tr = editor.state.tr as unknown as { setNodeMarkup: ReturnType<typeof vi.fn> };
+    const tableNode = editor.state.doc.nodeAt(0) as ProseMirrorNode;
+    (tableNode.attrs as Record<string, unknown>).tableProperties = { tableLayout: 'autofit' };
+
+    const result = tablesSetCellPropertiesAdapter(editor, {
+      nodeId: 'cell-1',
+      preferredWidthPt: 72,
+    });
+
+    expect(result.success).toBe(true);
+    const tableUpdate = tr.setNodeMarkup.mock.calls.find((call) => call[0] === 0)?.[2] as Record<string, unknown>;
+    expect(tableUpdate.tableLayout).toBe('fixed');
+    expect(tableUpdate.tableProperties).toMatchObject({ tableLayout: 'fixed' });
   });
 
   it('does not copy header-only null borders when split inserts a body row from a header source row', () => {

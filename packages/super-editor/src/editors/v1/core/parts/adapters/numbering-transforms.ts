@@ -30,7 +30,22 @@ interface GenerateOptions {
   text?: string | null;
   fmt?: string | null;
   markerFontFamily?: string | null;
+  bulletStyle?: 'disc' | 'circle' | 'square' | null;
+  /**
+   * Level (`w:ilvl`) at which to apply `bulletStyle`. Defaults to 0 (top-level).
+   * Used when the user changes the bullet style for a nested list item — the
+   * override needs to land on the paragraph's actual level, otherwise the
+   * paragraph keeps showing whatever marker the base template assigned to that
+   * level.
+   */
+  bulletStyleLevel?: number | null;
 }
+
+const BULLET_STYLE_CHARS: Record<string, string> = {
+  disc: '•',
+  circle: '◦',
+  square: '▪',
+};
 
 interface GenerateResult {
   numId: number;
@@ -63,6 +78,37 @@ function buildNumDef(numId: number, abstractId: number): any {
   };
 }
 
+/**
+ * Generate an 8-hex-digit identifier suitable for `w:nsid` / `w:tmpl`.
+ *
+ * Word uses `w:nsid` as the logical identity of an abstract numbering definition.
+ * Two abstracts with the same `w:nsid` are treated as the same list, so any new
+ * abstract we synthesize at runtime must carry a fresh value — otherwise styles
+ * applied to a second list collapse onto the first when the doc is opened in Word.
+ */
+function generateAbstractIdentityHex(): string {
+  let hex = '';
+  for (let i = 0; i < 8; i += 1) {
+    hex += Math.floor(Math.random() * 16).toString(16);
+  }
+  return hex.toUpperCase();
+}
+
+/**
+ * Replace the `w:nsid` and `w:tmpl` values inside a cloned abstract with fresh
+ * hex identifiers so the new abstract has its own logical identity.
+ */
+function refreshAbstractIdentity(abstractDef: any): void {
+  if (!abstractDef?.elements?.length) return;
+  for (const el of abstractDef.elements) {
+    if (el?.name === 'w:nsid' && el.attributes) {
+      el.attributes['w:val'] = generateAbstractIdentityHex();
+    } else if (el?.name === 'w:tmpl' && el.attributes) {
+      el.attributes['w:val'] = generateAbstractIdentityHex();
+    }
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Pure transforms
 // ---------------------------------------------------------------------------
@@ -72,7 +118,7 @@ function buildNumDef(numId: number, abstractId: number): any {
  */
 export function generateNewListDefinition(numbering: NumberingModel, options: GenerateOptions): GenerateResult {
   let { listType } = options;
-  const { numId, level, start, text, fmt, markerFontFamily } = options;
+  const { numId, level, start, text, fmt, markerFontFamily, bulletStyle, bulletStyleLevel } = options;
   if (typeof listType !== 'string') listType = (listType as any).name;
 
   const definition = listType === 'orderedList' ? baseOrderedListDef : baseBulletList;
@@ -85,6 +131,39 @@ export function generateNewListDefinition(numbering: NumberingModel, options: Ge
       attributes: { ...definition.attributes, 'w:abstractNumId': String(newAbstractId) },
     }),
   );
+  // The base templates carry fixed `w:nsid` / `w:tmpl` values. Word treats those
+  // as the logical identity of an abstract — two abstracts sharing an `nsid` are
+  // collapsed when the document is opened. Freshen them per clone so each new
+  // list has its own identity (e.g. style swaps on later list items remain
+  // visually distinct in Word).
+  refreshAbstractIdentity(newAbstractDef);
+
+  // Override the bullet style for the new list if a bullet style is provided.
+  // The override lands at `bulletStyleLevel` (default level 0). Targeting a
+  // specific level keeps nested-item style swaps coherent with the paragraph's
+  // existing nesting depth.
+  const shouldOverrideBulletStyle = bulletStyle && listType !== 'orderedList';
+  if (shouldOverrideBulletStyle) {
+    const char = BULLET_STYLE_CHARS[bulletStyle];
+    const targetLevel = String(
+      Math.max(0, Number.isFinite(bulletStyleLevel as number) ? (bulletStyleLevel as number) : 0),
+    );
+
+    if (char) {
+      const lvl = newAbstractDef.elements.find(
+        (el: any) => el.name === 'w:lvl' && el.attributes['w:ilvl'] === targetLevel,
+      );
+
+      if (lvl) {
+        const lvlText = lvl.elements.find((el: any) => el.name === 'w:lvlText');
+        if (lvlText) lvlText.attributes['w:val'] = char;
+
+        // Remove any inherited font so the Unicode char renders in the document's default font
+        const rPr = lvl.elements.find((el: any) => el.name === 'w:rPr');
+        if (rPr) rPr.elements = rPr.elements.filter((el: any) => el.name !== 'w:rFonts');
+      }
+    }
+  }
 
   if (level != null && start != null && text != null && fmt != null) {
     if (numbering.definitions[numId]) {
@@ -158,10 +237,14 @@ export function changeNumIdSameAbstract(
   }
 
   const newAbstractId = getNextId(numbering.abstracts);
-  const newAbstractDef = {
-    ...abstract,
-    attributes: { ...(abstract.attributes || {}), 'w:abstractNumId': String(newAbstractId) },
-  };
+  const newAbstractDef = JSON.parse(
+    JSON.stringify({
+      ...abstract,
+      attributes: { ...(abstract.attributes || {}), 'w:abstractNumId': String(newAbstractId) },
+    }),
+  );
+  // See `generateNewListDefinition` — duplicate `w:nsid` collapses lists in Word.
+  refreshAbstractIdentity(newAbstractDef);
   numbering.abstracts[newAbstractId] = newAbstractDef;
 
   const newNumDef = buildNumDef(newId, newAbstractId);

@@ -137,7 +137,7 @@ export interface ListItemDomain {
 export type ListsListResult = DiscoveryOutput<ListItemDomain>;
 
 // ---------------------------------------------------------------------------
-// Input types — kept operations
+// Input types: kept operations
 // ---------------------------------------------------------------------------
 
 export interface ListInsertInput {
@@ -151,14 +151,14 @@ export interface ListTargetInput {
 }
 
 // ---------------------------------------------------------------------------
-// Input types — new SD-1272 operations
+// Input types: new SD-1272 operations
 // ---------------------------------------------------------------------------
 
 /**
  * Create a new list from existing paragraphs.
  *
  * When `sequence.mode` is `'continuePrevious'`, `preset` and `style` are
- * not allowed — the new items inherit formatting from the previous sequence.
+ * not allowed: the new items inherit formatting from the previous sequence.
  */
 export type ListsCreateInput =
   | {
@@ -305,10 +305,10 @@ export interface ListTemplate {
 // SD-2025 user-facing style aliases and new types
 // ---------------------------------------------------------------------------
 
-/** Reusable list style object — alias of ListTemplate for user-facing naming. */
+/** Reusable list style object: alias of ListTemplate for user-facing naming. */
 export type ListStyle = ListTemplate;
 
-/** Reusable level style — alias of ListLevelTemplate for user-facing naming. */
+/** Reusable level style: alias of ListLevelTemplate for user-facing naming. */
 export type ListLevelStyle = ListLevelTemplate;
 
 /**
@@ -329,7 +329,7 @@ export interface ListLevelLayout {
 }
 
 // ---------------------------------------------------------------------------
-// Input types — SD-1973 formatting operations
+// Input types: SD-1973 formatting operations
 // ---------------------------------------------------------------------------
 
 export interface ListsApplyTemplateInput {
@@ -410,7 +410,7 @@ export interface ListsClearLevelOverridesInput {
 }
 
 // ---------------------------------------------------------------------------
-// Input types — SD-2025 user-facing operations
+// Input types: SD-2025 user-facing operations
 // ---------------------------------------------------------------------------
 
 export interface ListsGetStyleInput {
@@ -454,7 +454,7 @@ export interface ListsSetLevelLayoutInput {
 }
 
 // ---------------------------------------------------------------------------
-// Result types — SD-2025
+// Result types: SD-2025
 // ---------------------------------------------------------------------------
 
 export interface ListsGetStyleSuccessResult {
@@ -465,7 +465,7 @@ export interface ListsGetStyleSuccessResult {
 export type ListsGetStyleResult = ListsGetStyleSuccessResult | ListsFailureResult;
 
 // ---------------------------------------------------------------------------
-// Result types — SD-1973
+// Result types: SD-1973
 // ---------------------------------------------------------------------------
 
 export interface ListsCaptureTemplateSuccessResult {

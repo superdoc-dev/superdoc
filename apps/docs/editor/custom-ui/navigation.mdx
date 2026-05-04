@@ -1,0 +1,67 @@
+---
+title: Stable navigation after edits
+sidebarTitle: Stable navigation
+description: "Navigate to document elements reliably: during edits and across sessions."
+---
+
+SuperDoc has two navigation approaches depending on your use case:
+
+| Approach | Use case | Stability |
+|----------|----------|-----------|
+| `scrollToElement(id)` | Navigate to any element by its ID | Cross-session (for DOCX-imported content) |
+| `PositionTracker` | Track nodes that move during edits | Within a single session |
+
+## Navigate by element ID
+
+`scrollToElement` takes any element ID: paragraph, comment, or tracked change: and scrolls to it. Use `doc.extract()` to get all IDs at once, or `query.match` for targeted lookups.
+
+```javascript
+// Extract all content with stable IDs
+const { blocks, comments } = editor.doc.extract();
+
+// Navigate to any block
+await superdoc.scrollToElement(blocks[0].nodeId);
+
+// Navigate to a comment
+await superdoc.scrollToElement(comments[0].entityId);
+```
+
+This is the approach to use for:
+- **RAG citations**: store `nodeId` alongside embeddings, navigate on click
+- **Cross-references**: link to specific paragraphs from external UI
+- **Search results**: scroll to the matching paragraph
+- **Cross-session addressing**: IDs from DOCX-imported content survive reloads
+
+For the full extraction pattern, see [content extraction for RAG](/document-api/common-workflows#content-extraction-for-rag). For the cross-session pattern, see [cross-session block addressing](/document-api/common-workflows#cross-session-block-addressing).
+
+## Track nodes during edits
+
+When users edit a document, stored positions can drift. Use `PositionTracker` so navigation targets stay stable within the current session.
+
+### Hyperlinks example
+
+```javascript
+// 1) Find hyperlink nodes
+const found = editor.doc.find({
+  select: { type: 'node', nodeType: 'hyperlink', kind: 'inline' },
+});
+
+// 2) Track each found node
+const links = found.items.map((item) => ({
+  item,
+  trackerId: editor.positionTracker.trackNode(item),
+}));
+
+// 3) Navigate later (for example, from a sidebar click)
+function goToLink(link) {
+  if (!link?.trackerId) return;
+  editor.positionTracker.goToTracked(link.trackerId);
+}
+```
+
+## Best practices
+
+- Use `scrollToElement` when you have an element ID from `doc.extract()` or the Document API.
+- Use `PositionTracker` when you need to follow nodes that move during edits.
+- For cross-session use, store `nodeId` values (not `sdBlockId`: those regenerate on each open).
+- Handle missing targets gracefully: both APIs return `false` if the element no longer exists.

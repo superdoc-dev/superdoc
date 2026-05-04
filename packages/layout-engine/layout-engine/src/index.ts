@@ -638,10 +638,6 @@ const hasOnlySectionBreakBlocks = (blocks: readonly FlowBlock[]): boolean => {
   return blocks.length > 0 && blocks.every((block) => block.kind === 'sectionBreak');
 };
 
-// List constants sourced from shared/common
-
-// Context types moved to modular layouters
-
 const layoutDebugEnabled =
   typeof process !== 'undefined' && typeof process.env !== 'undefined' && Boolean(process.env.SD_DEBUG_LAYOUT);
 
@@ -3088,7 +3084,7 @@ export { resolvePageNumberTokens } from './resolvePageTokens.js';
 export type { NumberingContext, ResolvePageTokensResult } from './resolvePageTokens.js';
 
 // Table utilities consumed by layout-bridge and cross-package sync tests
-export { getCellLines, getEmbeddedRowLines } from './layout-table.js';
+export { getCellLines, getEmbeddedRowLines, resolveTableFrame, resolveRenderedTableWidth } from './layout-table.js';
 export { describeCellRenderBlocks, computeCellSliceContentHeight } from './table-cell-slice.js';
 
 export { SINGLE_COLUMN_DEFAULT } from './section-breaks.js';

@@ -308,6 +308,8 @@ export function resolveLayout(input: ResolveLayoutInput): ResolvedLayout {
   const pages: ResolvedPage[] = layout.pages.map((page, pageIndex) => ({
     id: `page-${pageIndex}`,
     index: pageIndex,
+    columns: page.columns,
+    columnRegions: page.columnRegions,
     number: page.number,
     width: page.size?.w ?? layout.pageSize.w,
     height: page.size?.h ?? layout.pageSize.h,

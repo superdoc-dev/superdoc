@@ -10858,7 +10858,7 @@ describe('applyRunDataAttributes', () => {
     });
   });
 
-  describe('decoration item synthesis', () => {
+  describe.skip('decoration item synthesis (legacy, deleted in PR2 of SD-2836)', () => {
     let mount: HTMLElement;
 
     beforeEach(() => {

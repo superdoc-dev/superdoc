@@ -1,4 +1,6 @@
 import type {
+  ColumnLayout,
+  ColumnRegion,
   DrawingBlock,
   FlowMode,
   Fragment,
@@ -66,6 +68,10 @@ export type ResolvedPage = {
   };
   /** Page orientation. */
   orientation?: 'portrait' | 'landscape';
+  /** Column layout configuration for this page (reflects page-start config). */
+  columns?: ColumnLayout;
+  /** Vertical column regions when continuous section breaks change column layout mid-page. */
+  columnRegions?: ColumnRegion[];
 };
 
 /** Union of all resolved paint item kinds. */

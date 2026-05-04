@@ -235,9 +235,10 @@ function buildLegacyPaintInput(
   let resolvedLayout: ResolvedLayout;
   if (legacyState.resolvedLayout) {
     resolvedLayout = legacyState.resolvedLayout;
-  } else if (legacyState.blocks.length === 0 && legacyState.measures.length === 0) {
-    resolvedLayout = createEmptyResolvedLayout(flowMode, pageGap);
   } else {
+    // resolveLayout handles empty blocks/measures gracefully and preserves
+    // page-level metadata (size, margins, columns/columnRegions, etc.) needed
+    // by the painter even when no body content has been provided yet.
     resolvedLayout = resolveLayout({
       layout,
       flowMode: flowMode ?? 'paginated',

@@ -16,6 +16,7 @@ import type {
 } from '@superdoc/document-api';
 import { shallowEqual } from './equality.js';
 import { scrollRangeIntoView } from './scroll-into-view.js';
+import { getSelectionAnchorRect, getSelectionRects } from './selection-rects.js';
 import { createCustomCommandsRegistry } from './custom-commands.js';
 import { createScope } from './scope.js';
 import type {
@@ -1599,6 +1600,23 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
       const slice = computeState().selection;
       if (!slice.target && !slice.selectionTarget) return null;
       return deepFreeze(deepClone(slice));
+    },
+    // Painted-selection rects route through the host editor.
+    // PresentationEditor lives at the host, and the live-selection rect
+    // the painter knows about reflects the routed editor's PM selection
+    // already, so calling against the host returns the right answer for
+    // body / header / footer / note alike.
+    getRects(capture) {
+      const editor = resolveHostEditor(superdoc);
+      return getSelectionRects(editor as unknown as Parameters<typeof getSelectionRects>[0], capture);
+    },
+    getAnchorRect(options, capture) {
+      const editor = resolveHostEditor(superdoc);
+      return getSelectionAnchorRect(
+        editor as unknown as Parameters<typeof getSelectionAnchorRect>[0],
+        options,
+        capture,
+      );
     },
   };
 

@@ -207,8 +207,10 @@ function rewriteDocApiPaths(fileContent, filePath) {
 // paths the consumer can resolve.
 const RELOCATION_RULES = [
   { pkg: '@superdoc/contracts',     distEntry: 'layout-engine/contracts/src/index.d.ts' },
+  { pkg: '@superdoc/dom-contract',  distEntry: 'layout-engine/dom-contract/src/index.d.ts' },
   { pkg: '@superdoc/layout-bridge', distEntry: 'layout-engine/layout-bridge/src/index.d.ts' },
   { pkg: '@superdoc/painter-dom',   distEntry: 'layout-engine/painters/dom/src/index.d.ts' },
+  { pkg: '@superdoc/pm-adapter',    distEntry: 'layout-engine/pm-adapter/src/index.d.ts' },
 ];
 
 function makeRelocationRewriter({ pkg, distEntry }) {

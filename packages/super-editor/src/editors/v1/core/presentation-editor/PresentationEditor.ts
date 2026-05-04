@@ -101,7 +101,8 @@ import { resolveStoryRuntime } from '../../document-api-adapters/story-runtime/r
 import { BODY_STORY_KEY, buildStoryKey, parseStoryKey } from '../../document-api-adapters/story-runtime/story-key.js';
 import { createStoryEditor } from '../story-editor-factory.js';
 import { buildEndnoteBlocks } from './layout/EndnotesBuilder.js';
-import { toFlowBlocks, ConverterContext, FlowBlockCache } from '@superdoc/pm-adapter';
+import { toFlowBlocks, FlowBlockCache } from '@superdoc/pm-adapter';
+import type { ConverterContext } from '@superdoc/pm-adapter/converter-context.js';
 import { readSettingsRoot, readDefaultTableStyle } from '../../document-api-adapters/document-settings.js';
 import {
   incrementalLayout,

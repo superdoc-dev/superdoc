@@ -130,8 +130,11 @@ export default defineConfig(({ mode, command }) => {
         // rewrite step in ensure-types can redirect bare specifiers to
         // local relative paths. Same pattern as @superdoc/document-api.
         '../layout-engine/contracts/src/**/*',
+        '../layout-engine/dom-contract/src/**/*',
         '../layout-engine/layout-bridge/src/**/*',
         '../layout-engine/painters/dom/src/**/*',
+        '../layout-engine/pm-adapter/src/converter-context.ts',
+        '../layout-engine/pm-adapter/src/sections/types.ts',
       ],
       outDir: 'dist',
       // vite-plugin-dts still gathers diagnostics for this mixed JS/Vue source

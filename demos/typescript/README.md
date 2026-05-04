@@ -1,5 +1,5 @@
 # Moved to Getting Started
 
-The CDN starter moved to [`examples/getting-started/cdn`](../../examples/getting-started/cdn).
+The TypeScript starter is now covered by [`examples/getting-started/react`](../../examples/getting-started/react).
 
 This folder is kept as a compatibility shim for existing GitHub links. New starter projects should use the examples path.

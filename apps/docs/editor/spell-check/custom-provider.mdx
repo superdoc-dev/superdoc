@@ -1,13 +1,14 @@
 ---
 title: Custom spell-check provider
 sidebarTitle: Custom provider
-keywords: "custom spell-check provider, custom proofing provider, spellcheck api, proofing provider, spelling api"
+keywords: 'custom spell-check provider, custom proofing provider, spellcheck api, proofing provider, spelling api'
 ---
 
 A spell-check provider receives text segments and returns spelling issues. SuperDoc owns the editor UI and document-range mapping.
 
 <Note>
-The TypeScript types use `Proofing*` names because the provider contract is broader than spelling. The current UI renders `kind: 'spelling'` only.
+  The TypeScript types use `Proofing*` names because the provider contract is broader than spelling. The current UI
+  renders `kind: 'spelling'` only.
 </Note>
 
 ## Provider shape
@@ -85,7 +86,8 @@ Optional fields:
 - `providerMeta`
 
 <Note>
-Only `kind: 'spelling'` is rendered in the v1 UI. Providers can return grammar or style issues too, but they are not displayed yet.
+  Only `kind: 'spelling'` is rendered in the v1 UI. Providers can return grammar or style issues too, but they are not
+  displayed yet.
 </Note>
 
 ## Example: call your own API
@@ -136,7 +138,9 @@ const provider = {
 - Batch segments when your backend supports it
 
 <Note>
-`Ignore` is a SuperDoc-side suppression in v1, not a provider dictionary mutation. If you want ignored words to persist across reloads, store your own list and pass it back through `proofing.ignoredWords` the next time you create the editor.
+  `Ignore` is a SuperDoc-side suppression in v1, not a provider dictionary mutation. If you want ignored words to
+  persist across reloads, store your own list and pass it back through `proofing.ignoredWords` the next time you create
+  the editor.
 </Note>
 
 ## Troubleshooting
@@ -153,5 +157,5 @@ If spelling underlines do not appear:
 
 If you want a concrete starting point, see the repo examples:
 
-- [Typo.js example](https://github.com/superdoc-dev/superdoc/tree/main/examples/editor/proofing/typo-js) - Minimal local spell-check provider
-- [LanguageTool self-hosted example](https://github.com/superdoc-dev/superdoc/tree/main/examples/editor/proofing/language-tool-self-hosted) - Minimal self-hosted HTTP provider
+- [Typo.js example](https://github.com/superdoc-dev/superdoc/tree/main/examples/editor/spell-check/typo-js) - Minimal local spell-check provider
+- [LanguageTool self-hosted example](https://github.com/superdoc-dev/superdoc/tree/main/examples/editor/spell-check/language-tool-self-hosted) - Minimal self-hosted HTTP provider

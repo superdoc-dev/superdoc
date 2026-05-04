@@ -1,7 +1,5 @@
-# SuperDoc: Creating a Custom Node
+# Moved to Advanced Examples
 
-An example of creating a custom node to use with SuperDoc.
+The custom node demo moved to [`examples/advanced/extensions/custom-node`](../../examples/advanced/extensions/custom-node).
 
-[We create a custom node here](https://github.com/superdoc-dev/superdoc/blob/main/demos/custom-node/src/custom-node.js) — note the custom command `insertCustomNode`, which can be called from `editor.commands.insertCustomNode`.
-
-[Then we pass it into the editor via the `editorExtensions` key](https://github.com/superdoc-dev/superdoc/blob/main/demos/custom-node/src/App.vue)
+This is a low-level extension-authoring pattern, so it now lives with the advanced examples instead of the composed demo gallery.

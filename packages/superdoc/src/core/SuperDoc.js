@@ -1743,7 +1743,7 @@ export class SuperDoc extends EventEmitter {
 
   /**
    * Export editors to DOCX format.
-   * @param {{ commentsType?: string, isFinalDoc?: boolean, fieldsHighlightColor?: string }} [options]
+   * @param {{ commentsType?: string, isFinalDoc?: boolean, fieldsHighlightColor?: string | null }} [options]
    * @returns {Promise<Array<Blob>>}
    */
   async exportEditorsToDOCX({ commentsType, isFinalDoc, fieldsHighlightColor } = {}) {

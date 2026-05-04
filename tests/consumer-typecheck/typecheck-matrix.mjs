@@ -520,6 +520,32 @@ const scenarios = [
     files: ['src/search-match.ts'],
     mustPass: true,
   },
+
+  // SD-2828: `ExportParams.fieldsHighlightColor` accepts `string | null
+  // | undefined`. The runtime defaults the field to `null` when omitted
+  // and forwards that `null` straight through to `Editor.exportDocx`
+  // (which already types it as `string | null`). The previous public
+  // typedef narrowed to `string`, so consumers passing the
+  // runtime-equivalent `null` failed strict-mode typechecks. Pinned
+  // here so a future re-narrowing surfaces as a typecheck failure.
+  {
+    name: 'bundler / fieldsHighlightColor accepts null (SD-2828)',
+    module: 'ESNext',
+    moduleResolution: 'bundler',
+    skipLibCheck: true,
+    strict: true,
+    files: ['src/export-params-fields-highlight.ts'],
+    mustPass: true,
+  },
+  {
+    name: 'node16 / fieldsHighlightColor accepts null (SD-2828)',
+    module: 'Node16',
+    moduleResolution: 'node16',
+    skipLibCheck: true,
+    strict: true,
+    files: ['src/export-params-fields-highlight.ts'],
+    mustPass: true,
+  },
 ];
 
 const tscPath = join(__dirname, 'node_modules', '.bin', 'tsc');

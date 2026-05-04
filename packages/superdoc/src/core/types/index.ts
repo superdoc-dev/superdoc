@@ -1160,8 +1160,14 @@ export interface ExportParams {
   isFinalDoc?: boolean;
   /** Auto-download or return blob. */
   triggerDownload?: boolean;
-  /** Color for field highlights. */
-  fieldsHighlightColor?: string;
+  /**
+   * Color for field highlights. The runtime defaults to `null` when no
+   * value is supplied (and forwards `null` through to the underlying
+   * editor export, which accepts `string | null`); the typedef accepts
+   * `null` explicitly so consumers can pass an explicit "no highlight"
+   * value without a typecheck failure.
+   */
+  fieldsHighlightColor?: string | null;
 }
 
 /** Surface where the edit originated. */

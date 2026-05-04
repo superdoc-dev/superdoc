@@ -230,21 +230,21 @@ export const toggleList =
     if (!dispatch) return true;
 
     if (mode === 'create') {
-      // If we're swapping the bullet style on an already-nested item, mint the
+      // If we're swapping the bullet/ordered style on an already-nested item, mint the
       // new list with the override applied at that paragraph's existing level —
       // otherwise the override only lands on level 0 and the nested paragraph
       // ends up rendering whatever marker the base template assigned to its
       // level. We pick the level from the first list paragraph in the
       // selection so style swaps stay coherent with the existing nesting.
-      let bulletStyleLevel = 0;
-      if (bulletStyle) {
+      let styleOverrideLevel = 0;
+      if (bulletStyle || orderedStyle) {
         const firstExistingListPara = paragraphsInSelection.find(
           ({ node }) => getResolvedParagraphProperties(node)?.numberingProperties?.ilvl != null,
         );
         const existingIlvl = firstExistingListPara
           ? getResolvedParagraphProperties(firstExistingListPara.node)?.numberingProperties?.ilvl
           : null;
-        if (existingIlvl != null) bulletStyleLevel = existingIlvl;
+        if (existingIlvl != null) styleOverrideLevel = existingIlvl;
       }
 
       const numId = ListHelpers.getNewListId(editor);
@@ -253,8 +253,9 @@ export const toggleList =
         listType,
         editor,
         bulletStyle,
-        bulletStyleLevel,
+        bulletStyleLevel: styleOverrideLevel,
         orderedStyle,
+        orderedStyleLevel: styleOverrideLevel,
       });
       sharedNumberingProperties = {
         numId: Number(numId),

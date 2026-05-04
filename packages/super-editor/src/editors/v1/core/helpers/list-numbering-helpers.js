@@ -75,6 +75,7 @@ export function numberingInfoToOrderedStyle(numFmt, markerText) {
  * @param {'disc'|'circle'|'square'|null} [param0.bulletStyle]
  * @param {number} [param0.bulletStyleLevel]
  * @param {import('../../extensions/types/paragraph-commands.js').OrderedListStyle|null} [param0.orderedStyle]
+ * @param {number} [param0.orderedStyleLevel]
  * @param {import('../Editor').Editor} param0.editor
  * @returns {Object} The new abstract and num definitions.
  */
@@ -90,6 +91,7 @@ export const generateNewListDefinition = ({
   bulletStyle,
   bulletStyleLevel,
   orderedStyle,
+  orderedStyleLevel,
 }) => {
   /** @type {{ abstractDef: any, numDef: any }} */
   let resultDefs;
@@ -106,6 +108,7 @@ export const generateNewListDefinition = ({
       bulletStyle,
       bulletStyleLevel,
       orderedStyle,
+      orderedStyleLevel,
     });
     resultDefs = { abstractDef: result.abstractDef, numDef: result.numDef };
   });

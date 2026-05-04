@@ -118,6 +118,44 @@ describe('generateNewListDefinition - ordered style override', () => {
     expect(findChild(lvl0, 'w:lvlText').attributes['w:val']).toBe('•');
   });
 
+  it('applies orderedStyle to a sublevel (ilvl=1 → "%2.") when orderedStyleLevel is set', () => {
+    // Regression: when the user picks a list style with a non-empty selection on a
+    // nested item, `toggleList` falls through to mode='create' and mints a new abstract
+    // via this path. The override needs to land on the paragraph's actual level so the
+    // marker actually changes — without this the new abstract only mutates level 0 and
+    // the nested item keeps rendering the template's default sublevel marker.
+    const numbering = freshModel();
+    const result = generateNewListDefinition(numbering, {
+      numId: 1,
+      listType: 'orderedList',
+      orderedStyle: 'upper-roman',
+      orderedStyleLevel: 1,
+    });
+
+    const lvl0 = findLvl0(result.abstractDef);
+    // Level 0 is left at the template's default ("decimal" / "%1.")
+    expect(findChild(lvl0, 'w:numFmt').attributes['w:val']).toBe('decimal');
+    expect(findChild(lvl0, 'w:lvlText').attributes['w:val']).toBe('%1.');
+
+    const lvl1 = result.abstractDef.elements.find((el: any) => el.name === 'w:lvl' && el.attributes['w:ilvl'] === '1');
+    expect(findChild(lvl1, 'w:numFmt').attributes['w:val']).toBe('upperRoman');
+    expect(findChild(lvl1, 'w:lvlText').attributes['w:val']).toBe('%2.');
+  });
+
+  it('preserves the suffix character at sublevels (ilvl=2 → "%3)")', () => {
+    const numbering = freshModel();
+    const result = generateNewListDefinition(numbering, {
+      numId: 1,
+      listType: 'orderedList',
+      orderedStyle: 'lower-alpha-paren',
+      orderedStyleLevel: 2,
+    });
+
+    const lvl2 = result.abstractDef.elements.find((el: any) => el.name === 'w:lvl' && el.attributes['w:ilvl'] === '2');
+    expect(findChild(lvl2, 'w:numFmt').attributes['w:val']).toBe('lowerLetter');
+    expect(findChild(lvl2, 'w:lvlText').attributes['w:val']).toBe('%3)');
+  });
+
   it('does NOT touch the abstract when orderedStyle is unknown', () => {
     const numbering = freshModel();
     const result = generateNewListDefinition(numbering, {

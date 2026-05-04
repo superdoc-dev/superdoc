@@ -214,6 +214,7 @@ describe('toggleList', () => {
       editor,
       bulletStyle: undefined,
       bulletStyleLevel: 0,
+      orderedStyleLevel: 0,
     });
     const expectedNumbering = { numId: 42, ilvl: 0 };
     for (const [index, { node, pos }] of paragraphs.entries()) {
@@ -247,6 +248,7 @@ describe('toggleList', () => {
       editor,
       bulletStyle: undefined,
       bulletStyleLevel: 0,
+      orderedStyleLevel: 0,
     });
     expect(dispatch).toHaveBeenCalledWith(tr);
   });
@@ -404,6 +406,7 @@ describe('toggleList', () => {
           bulletStyle,
           bulletStyleLevel: 0,
           orderedStyle: undefined,
+          orderedStyleLevel: 0,
         });
       },
     );
@@ -433,6 +436,7 @@ describe('toggleList', () => {
         bulletStyle: null,
         bulletStyleLevel: 0,
         orderedStyle,
+        orderedStyleLevel: 0,
       });
     });
 

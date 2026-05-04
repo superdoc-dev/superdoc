@@ -39,6 +39,13 @@ interface GenerateOptions {
    */
   bulletStyleLevel?: number | null;
   orderedStyle?: OrderedListStyle | null;
+  /**
+   * Level (`w:ilvl`) at which to apply `orderedStyle`. Defaults to 0 (top-level).
+   * Used when the user changes the ordered style for a nested list item — the
+   * override needs to land on the paragraph's actual level, and the lvlText
+   * counter index (`%N`) needs to match that level.
+   */
+  orderedStyleLevel?: number | null;
 }
 
 const BULLET_STYLE_CHARS: Record<string, string> = {
@@ -129,7 +136,18 @@ function refreshAbstractIdentity(abstractDef: any): void {
  */
 export function generateNewListDefinition(numbering: NumberingModel, options: GenerateOptions): GenerateResult {
   let { listType } = options;
-  const { numId, level, start, text, fmt, markerFontFamily, bulletStyle, bulletStyleLevel, orderedStyle } = options;
+  const {
+    numId,
+    level,
+    start,
+    text,
+    fmt,
+    markerFontFamily,
+    bulletStyle,
+    bulletStyleLevel,
+    orderedStyle,
+    orderedStyleLevel,
+  } = options;
   if (typeof listType !== 'string') listType = (listType as any).name;
 
   const definition = listType === 'orderedList' ? baseOrderedListDef : baseBulletList;
@@ -176,20 +194,32 @@ export function generateNewListDefinition(numbering: NumberingModel, options: Ge
     }
   }
 
-  // Override the ordered list style for the new list if an ordered style is provided
+  // Override the ordered list style for the new list if an ordered style is provided.
+  // The override lands at `orderedStyleLevel` (default level 0). Targeting a specific
+  // level keeps nested-item style swaps coherent with the paragraph's existing nesting
+  // depth — without this, applying e.g. upper-roman to a level-1 item would only modify
+  // level 0 of the new abstract and the rendered marker would not change.
   const shouldOverrideOrderedStyle = orderedStyle && listType === 'orderedList';
   if (shouldOverrideOrderedStyle) {
     const styleConfig = ORDERED_LIST_STYLES[orderedStyle];
 
     if (styleConfig) {
-      const lvl0 = newAbstractDef.elements.find((el: any) => el.name === 'w:lvl' && el.attributes['w:ilvl'] === '0');
+      const targetLevel = Math.max(0, Number.isFinite(orderedStyleLevel as number) ? (orderedStyleLevel as number) : 0);
+      const targetLevelStr = String(targetLevel);
+      const lvl = newAbstractDef.elements.find(
+        (el: any) => el.name === 'w:lvl' && el.attributes['w:ilvl'] === targetLevelStr,
+      );
 
-      if (lvl0) {
-        const numFmt = lvl0.elements.find((el: any) => el.name === 'w:numFmt');
+      if (lvl) {
+        const numFmt = lvl.elements.find((el: any) => el.name === 'w:numFmt');
         if (numFmt) numFmt.attributes['w:val'] = styleConfig.fmt;
 
-        const lvlText = lvl0.elements.find((el: any) => el.name === 'w:lvlText');
-        if (lvlText) lvlText.attributes['w:val'] = styleConfig.text;
+        const lvlText = lvl.elements.find((el: any) => el.name === 'w:lvlText');
+        if (lvlText) {
+          // OOXML `%N` references counter level N-1, so at ilvl=N the lvlText needs `%(N+1)`.
+          // Preserve the style's suffix (e.g. ".", ")") so paren styles stay paren.
+          lvlText.attributes['w:val'] = `%${targetLevel + 1}${styleConfig.text.replace(/^%\d+/, '')}`;
+        }
       }
     }
   }

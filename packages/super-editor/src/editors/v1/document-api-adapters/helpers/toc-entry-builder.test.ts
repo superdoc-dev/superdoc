@@ -19,35 +19,47 @@ function makeConfig(display: TocSwitchConfig['display'] = {}): TocSwitchConfig {
   };
 }
 
+type TextLike = { type?: string; text?: string; marks?: Array<{ type: string; attrs?: Record<string, unknown> }> };
+
+/** Pull the title text node out of a run wrapper. */
+function titleTextOf(paragraphs: ReturnType<typeof buildTocEntryParagraphs>): TextLike {
+  const titleRun = paragraphs[0]!.content[0] as { content?: TextLike[] };
+  return titleRun.content?.[0] ?? {};
+}
+
+/** Find the page-number text node (carries the tocPageNumber mark) inside any run. */
+function pageNumberTextOf(paragraphs: ReturnType<typeof buildTocEntryParagraphs>): TextLike {
+  const runs = paragraphs[0]!.content as Array<{ content?: TextLike[] }>;
+  for (const run of runs) {
+    const child = run.content?.find((c) => Array.isArray(c.marks) && c.marks.some((m) => m.type === 'tocPageNumber'));
+    if (child) return child;
+  }
+  return {};
+}
+
 describe('buildTocEntryParagraphs', () => {
   describe('hyperlink anchors', () => {
     it('uses a _Toc bookmark name as the hyperlink anchor, not the raw sdBlockId', () => {
       const paragraphs = buildTocEntryParagraphs([BASE_SOURCE], makeConfig({ hyperlinks: true }));
-      const textNode = paragraphs[0]!.content[0] as { marks?: Array<{ type: string; attrs: Record<string, unknown> }> };
+      const textNode = titleTextOf(paragraphs);
       const linkMark = textNode.marks?.find((m) => m.type === 'link');
 
       expect(linkMark).toBeDefined();
-      expect(linkMark!.attrs.anchor).toMatch(/^_Toc[a-zA-Z0-9_]+$/);
-      expect(linkMark!.attrs.anchor).toBe(generateTocBookmarkName(BASE_SOURCE.sdBlockId));
-      expect(linkMark!.attrs.anchor).not.toBe(BASE_SOURCE.sdBlockId);
+      expect(linkMark!.attrs!.anchor).toMatch(/^_Toc[a-zA-Z0-9_]+$/);
+      expect(linkMark!.attrs!.anchor).toBe(generateTocBookmarkName(BASE_SOURCE.sdBlockId));
+      expect(linkMark!.attrs!.anchor).not.toBe(BASE_SOURCE.sdBlockId);
     });
 
     it('produces the same anchor for the same sdBlockId across calls', () => {
       const first = buildTocEntryParagraphs([BASE_SOURCE], makeConfig({ hyperlinks: true }));
       const second = buildTocEntryParagraphs([BASE_SOURCE], makeConfig({ hyperlinks: true }));
-
-      const getAnchor = (paragraphs: typeof first) => {
-        const node = paragraphs[0]!.content[0] as { marks?: Array<{ attrs: Record<string, unknown> }> };
-        return node.marks?.[0]?.attrs.anchor;
-      };
-
+      const getAnchor = (paragraphs: typeof first) => titleTextOf(paragraphs).marks?.[0]?.attrs?.anchor;
       expect(getAnchor(first)).toBe(getAnchor(second));
     });
 
     it('does not add link mark when hyperlinks display option is false', () => {
       const paragraphs = buildTocEntryParagraphs([BASE_SOURCE], makeConfig({ hyperlinks: false }));
-      const textNode = paragraphs[0]!.content[0] as { marks?: unknown[] };
-      expect(textNode.marks).toBeUndefined();
+      expect(titleTextOf(paragraphs).marks).toBeUndefined();
     });
   });
 
@@ -106,25 +118,49 @@ describe('buildTocEntryParagraphs', () => {
     });
   });
 
+  describe('entry text marks (SD-2664)', () => {
+    it('prepends preserved marks and stacks the link mark on top', () => {
+      const entryTextMarks = [
+        { type: 'textStyle', attrs: { fontFamily: 'Aptos', fontSize: '12pt' } },
+        { type: 'bold' },
+      ];
+      const paragraphs = buildTocEntryParagraphs([BASE_SOURCE], makeConfig({ hyperlinks: true }), { entryTextMarks });
+      const text = titleTextOf(paragraphs);
+      expect(text.marks!.map((m) => m.type)).toEqual(['textStyle', 'bold', 'link']);
+      expect(text.marks![0].attrs).toEqual({ fontFamily: 'Aptos', fontSize: '12pt' });
+    });
+
+    it('drops any incoming link mark; the builder rebuilds it from the source bookmark', () => {
+      const entryTextMarks = [
+        { type: 'textStyle', attrs: { fontFamily: 'Aptos' } },
+        { type: 'link', attrs: { anchor: 'old-stale-anchor' } },
+      ];
+      const paragraphs = buildTocEntryParagraphs([BASE_SOURCE], makeConfig({ hyperlinks: true }), { entryTextMarks });
+      const linkMark = titleTextOf(paragraphs).marks?.find((m) => m.type === 'link');
+      expect(linkMark?.attrs?.anchor).toBe(generateTocBookmarkName(BASE_SOURCE.sdBlockId));
+      expect(linkMark?.attrs?.anchor).not.toBe('old-stale-anchor');
+    });
+
+    it('wraps each text run in a `run` node so wrapTextInRunsPlugin does not clobber marks', () => {
+      const paragraphs = buildTocEntryParagraphs([BASE_SOURCE], makeConfig({ hyperlinks: true }));
+      const runs = paragraphs[0]!.content as Array<{ type: string }>;
+      // Title run + tab run + page-number run = 3 runs (no \p, no omit).
+      expect(runs.length).toBe(3);
+      runs.forEach((r) => expect(r.type).toBe('run'));
+    });
+  });
+
   describe('page numbers (SD-2664)', () => {
     it('substitutes page numbers from options.pageMap when present', () => {
       const pageMap = new Map<string, number>([['h-1', 7]]);
       const paragraphs = buildTocEntryParagraphs([BASE_SOURCE], makeConfig({ hyperlinks: true }), { pageMap });
-      const pageNode = paragraphs[0]!.content.find(
-        (n: Record<string, unknown>) =>
-          Array.isArray(n.marks) && n.marks?.some((m) => (m as { type: string }).type === 'tocPageNumber'),
-      ) as { text: string };
-      expect(pageNode.text).toBe('7');
+      expect(pageNumberTextOf(paragraphs).text).toBe('7');
     });
 
     it('falls back to "0" placeholder when the source is not in the page map', () => {
       const pageMap = new Map<string, number>(); // empty
       const paragraphs = buildTocEntryParagraphs([BASE_SOURCE], makeConfig({ hyperlinks: true }), { pageMap });
-      const pageNode = paragraphs[0]!.content.find(
-        (n: Record<string, unknown>) =>
-          Array.isArray(n.marks) && n.marks?.some((m) => (m as { type: string }).type === 'tocPageNumber'),
-      ) as { text: string };
-      expect(pageNode.text).toBe('0');
+      expect(pageNumberTextOf(paragraphs).text).toBe('0');
     });
   });
 });

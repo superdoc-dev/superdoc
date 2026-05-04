@@ -107,10 +107,17 @@ export function deriveIncludePageNumbers(
 
 /**
  * Derives the `tabLeader` value from the raw \p separator string.
- * Returns undefined if the separator doesn't match a known leader pattern.
+ *
+ * - `undefined` → caller did not pass a separator (no \p switch). Returns
+ *   `undefined` so consumers fall back to Word's default (dots) instead of
+ *   treating "no \p" as an explicit opt-out.
+ * - `''` → \p was present but empty. Returns `'none'` (explicit opt-out).
+ * - non-empty string → mapped via SEPARATOR_TO_TAB_LEADER, or `undefined`
+ *   when the separator is not a known leader character.
  */
 function deriveTabLeader(separator: string | undefined): TocDisplayConfig['tabLeader'] | undefined {
-  if (!separator) return 'none';
+  if (separator === undefined) return undefined;
+  if (separator === '') return 'none';
   const leader = SEPARATOR_TO_TAB_LEADER[separator];
   return leader as TocDisplayConfig['tabLeader'] | undefined;
 }

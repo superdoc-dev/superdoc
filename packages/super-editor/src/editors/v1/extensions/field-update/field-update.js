@@ -5,7 +5,6 @@ import {
   resolveDocumentStatFieldValue,
   resolveMainBodyEditor,
 } from '../../document-api-adapters/helpers/word-statistics.js';
-import { findTocAncestor } from '../table-of-contents/find-toc-ancestor.js';
 
 /** Field types eligible for value updates via F9. */
 const UPDATABLE_FIELD_TYPES = new Set(['NUMWORDS', 'NUMCHARS', 'NUMPAGES']);
@@ -21,12 +20,16 @@ export const FieldUpdate = Extension.create({
   addCommands() {
     return {
       /**
-       * Update all field values intersecting the current selection.
+       * Refresh document fields. Two phases run in order:
        *
-       * Mirrors Word's F9 semantics:
-       * - Collapsed selection: updates the single field at the cursor
-       * - Range selection: updates all fields intersecting the range
-       * - Select-all then F9: updates every field in the document
+       * 1. Every `tableOfContents` node in the document is rebuilt via
+       *    `editor.doc.toc.update({ mode: 'all' })`. The wrapper handles
+       *    materialization, page-map resolution, leader/style preservation,
+       *    and bookmark sync.
+       * 2. Updatable stat fields (NUMWORDS, NUMCHARS, NUMPAGES) intersecting
+       *    the current selection are refreshed in-place.
+       *
+       * Bound to F9. Returns `true` if any TOC or stat field changed.
        *
        * @category Command
        * @returns {Function} ProseMirror command function
@@ -38,33 +41,65 @@ export const FieldUpdate = Extension.create({
         ({ editor, state, dispatch }) => {
           const { from, to } = state.selection;
 
-          // F9 inside a TOC rebuilds the TOC via the document-api wrapper.
-          // The wrapper handles content materialization, NO_OP detection, and
-          // bookmark sync. Mode 'all' is used because it does not depend on a
-          // completed layout cycle (mode 'pageNumbers' can fail with
-          // CAPABILITY_UNAVAILABLE in headless contexts).
-          const toc = findTocAncestor(state.doc, from);
-          if (toc?.sdBlockId && editor?.documentApi?.toc?.update) {
-            if (!dispatch) return true;
-            try {
-              const target = { kind: 'block', nodeType: 'tableOfContents', nodeId: toc.sdBlockId };
-              editor.documentApi.toc.update({ target, mode: 'all' });
-            } catch (error) {
-              console.warn('[FieldUpdate] toc.update failed:', error);
-              return false;
+          // F9 first refreshes every TOC in the document via the document-api.
+          // We dispatch through `editor.doc.toc.update` so each rebuild flows
+          // through the standard wrapper (page-map resolution, leader/style
+          // preservation, bookmark sync). NO_OP results are ignored.
+          let tocUpdated = false;
+          if (editor?.doc?.toc?.update) {
+            if (!dispatch) {
+              // can()-style probe: report yes if any TOC exists.
+              let hasToc = false;
+              state.doc.descendants((node) => {
+                if (hasToc) return false;
+                if (node.type.name === 'tableOfContents') {
+                  hasToc = true;
+                  return false;
+                }
+                return true;
+              });
+              if (hasToc) return true;
+            } else {
+              const tocTargets = [];
+              state.doc.descendants((node) => {
+                if (node.type.name === 'tableOfContents') {
+                  const sdBlockId = node.attrs?.sdBlockId;
+                  if (typeof sdBlockId === 'string' && sdBlockId) {
+                    tocTargets.push(sdBlockId);
+                  }
+                  return false; // don't descend into TOC children
+                }
+                return true;
+              });
+
+              for (const sdBlockId of tocTargets) {
+                try {
+                  const result = editor.doc.toc.update({
+                    target: { kind: 'block', nodeType: 'tableOfContents', nodeId: sdBlockId },
+                    mode: 'all',
+                  });
+                  if (result?.success) tocUpdated = true;
+                } catch (error) {
+                  console.warn('[FieldUpdate] toc.update failed for', sdBlockId, error);
+                }
+              }
             }
-            return true;
           }
 
-          const fields = findFieldsInRange(state.doc, from, to);
+          // After TOC updates the doc snapshot may have shifted positions, so
+          // re-read state from the editor only in that case. When nothing was
+          // updated above, use the original `state` snapshot to keep the
+          // pre-existing stat-field path byte-for-byte equivalent.
+          const currentState = tocUpdated ? (editor?.state ?? state) : state;
+          const fields = findFieldsInRange(currentState.doc, from, to);
 
           const updatable = fields.filter((f) => UPDATABLE_FIELD_TYPES.has(f.fieldType));
-          if (updatable.length === 0) return false;
+          if (updatable.length === 0) return tocUpdated;
 
           const mainEditor = resolveMainBodyEditor(editor);
           const stats = getWordStatistics(mainEditor);
 
-          const tr = state.tr;
+          const tr = currentState.tr;
           let changed = false;
 
           // Process in reverse position order so earlier positions stay valid
@@ -82,7 +117,7 @@ export const FieldUpdate = Extension.create({
               // total-page-number stores its display value as a text child,
               // not just an attr. Replace the entire node so both the text
               // content and resolvedText stay in sync.
-              const textChild = freshValue ? state.schema.text(freshValue) : null;
+              const textChild = freshValue ? currentState.schema.text(freshValue) : null;
               const newNode = node.type.create({ ...node.attrs, resolvedText: freshValue }, textChild);
               tr.replaceWith(field.pos, field.pos + node.nodeSize, newNode);
               changed = true;
@@ -98,7 +133,7 @@ export const FieldUpdate = Extension.create({
             }
           }
 
-          if (!changed) return false;
+          if (!changed) return tocUpdated;
           if (dispatch) dispatch(tr);
           return true;
         },

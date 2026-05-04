@@ -3,7 +3,7 @@
  *
  * Used by the context menu and the F9 shortcut to detect when the cursor /
  * right-click landed inside a TOC, so we can route the action through
- * `editor.documentApi.toc.update`.
+ * `editor.doc.toc.update`.
  *
  * @param {import('prosemirror-model').Node} doc - The PM document.
  * @param {number} pos - A document position.

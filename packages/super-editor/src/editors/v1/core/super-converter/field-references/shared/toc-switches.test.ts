@@ -59,8 +59,9 @@ describe('parseTocInstruction', () => {
   it('handles empty instruction', () => {
     const config = parseTocInstruction('TOC');
     expect(config.source).toEqual({});
-    // Convenience projections are derived even for bare TOC instructions
-    expect(config.display).toEqual({ includePageNumbers: true, tabLeader: 'none' });
+    // No \p in the instruction means "use Word's default tab leader" (dots),
+    // not an explicit opt-out, so tabLeader should be undefined here.
+    expect(config.display).toEqual({ includePageNumbers: true });
     expect(config.preserved).toEqual({});
   });
 });

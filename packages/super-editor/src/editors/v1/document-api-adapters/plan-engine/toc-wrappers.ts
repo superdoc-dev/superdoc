@@ -262,6 +262,8 @@ interface MaterializeTocOptions {
   pageMap?: Map<string, number>;
   /** Right-tab stop position (twips) sampled from the existing TOC. */
   tabPos?: number;
+  /** Run-formatting marks sampled from the existing TOC entry text. */
+  entryTextMarks?: Array<{ type: string; attrs?: Record<string, unknown> }>;
 }
 
 function materializeTocContent(
@@ -296,6 +298,52 @@ function readExistingTocTabPos(node: ProseMirrorNode): number | undefined {
   return typeof pos === 'number' ? pos : undefined;
 }
 
+/** Recognises TOC entry paragraph styles (TOC1, TOC2, … TOC9). */
+const TOC_ENTRY_STYLE_RE = /^TOC[1-9]$/;
+
+/**
+ * Sample run-formatting marks (font, size, bold, italic, textStyle…) from the
+ * first non-empty text run inside an actual TOC **entry** paragraph.
+ *
+ * The TOC node can include sibling paragraphs that are not entries — most
+ * commonly the `TOCHeading` paragraph that renders the "Table of Contents"
+ * label — and those carry different run formatting. Sampling from them would
+ * propagate the wrong font/size onto every rebuilt entry. We only consider
+ * paragraphs whose styleId matches `TOC1`–`TOC9`.
+ *
+ * Excludes `link` (rebuilt from the source's bookmark) and `tocPageNumber`
+ * (belongs to the page-number run only).
+ *
+ * Returns `[]` when no entry-shaped paragraph with text is found, so the
+ * builder falls back to schema defaults.
+ */
+function readExistingTocEntryTextMarks(
+  node: ProseMirrorNode,
+): Array<{ type: string; attrs?: Record<string, unknown> }> {
+  let marks: Array<{ type: string; attrs?: Record<string, unknown> }> = [];
+  node.forEach((paragraph) => {
+    if (marks.length > 0) return;
+    if (paragraph.type.name !== 'paragraph') return;
+    const styleId = (paragraph.attrs as { paragraphProperties?: { styleId?: string } } | undefined)?.paragraphProperties
+      ?.styleId;
+    if (!styleId || !TOC_ENTRY_STYLE_RE.test(styleId)) return;
+    paragraph.descendants((child) => {
+      if (marks.length > 0) return false;
+      if (!child.isText || !child.text) return true;
+      const sampled = (child.marks ?? [])
+        .filter((m) => m.type.name !== 'link' && m.type.name !== 'tocPageNumber')
+        .map((m) => {
+          const json: { type: string; attrs?: Record<string, unknown> } = { type: m.type.name };
+          if (m.attrs && Object.keys(m.attrs).length > 0) json.attrs = { ...m.attrs };
+          return json;
+        });
+      if (sampled.length > 0) marks = sampled;
+      return false;
+    });
+  });
+  return marks;
+}
+
 // ---------------------------------------------------------------------------
 // toc.configure
 // ---------------------------------------------------------------------------
@@ -325,6 +373,11 @@ export function tocConfigureWrapper(
     editor.state.doc,
     withRightAlign(patched, effectiveRightAlign),
     editor,
+    {
+      pageMap: getPageMap(editor) ?? undefined,
+      tabPos: readExistingTocTabPos(resolved.node),
+      entryTextMarks: readExistingTocEntryTextMarks(resolved.node),
+    },
   );
 
   if (areTocConfigsEqual(currentConfig, patched) && !rightAlignChanged) {
@@ -413,6 +466,7 @@ function tocUpdateAll(editor: Editor, input: TocUpdateInput, options?: MutationO
   const { content, sources } = materializeTocContent(editor.state.doc, withRightAlign(config, rightAlign), editor, {
     pageMap: getPageMap(editor) ?? undefined,
     tabPos: readExistingTocTabPos(resolved.node),
+    entryTextMarks: readExistingTocEntryTextMarks(resolved.node),
   });
 
   // NO_OP detection: compare new content against existing before executing.

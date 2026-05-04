@@ -348,7 +348,7 @@ export function getItems(context, customItems = [], includeDefaultItems = true) 
             if (!tocId) return;
             const target = { kind: 'block', nodeType: 'tableOfContents', nodeId: tocId };
             try {
-              editor.documentApi?.toc?.update?.({ target, mode: 'all' });
+              editor.doc?.toc?.update?.({ target, mode: 'all' });
             } catch (error) {
               console.warn('[ContextMenu] toc.update failed:', error);
             }

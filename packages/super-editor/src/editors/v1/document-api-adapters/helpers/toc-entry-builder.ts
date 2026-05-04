@@ -186,11 +186,23 @@ export interface EntryParagraphJson {
  * without a follow-up `mode: 'pageNumbers'` pass and without losing layout
  * particulars from the existing TOC.
  */
+/** Mark JSON shape carried over from the existing TOC entry's text run. */
+export interface EntryTextMark {
+  type: string;
+  attrs?: Record<string, unknown>;
+}
+
 export interface BuildTocEntryOptions {
   /** sdBlockId → page number map from PresentationEditor's last layout cycle. */
   pageMap?: Map<string, number>;
   /** Right-tab stop position (twips) to mirror the existing TOC's spacing. */
   tabPos?: number;
+  /**
+   * Marks (font, size, textStyle, bold/italic, etc.) sampled from the existing
+   * TOC entry's text run so a rebuild keeps the same visual styling. The link
+   * mark is excluded — the builder rebuilds it from the source's bookmark name.
+   */
+  entryTextMarks?: EntryTextMark[];
 }
 
 export function buildTocEntryParagraphs(
@@ -218,28 +230,33 @@ function buildEntryParagraph(
   options: BuildTocEntryOptions = {},
 ): EntryParagraphJson {
   const { display } = config;
-  const content: Array<Record<string, unknown>> = [];
 
-  // Entry text — optionally wrapped in hyperlink mark
-  const textNode: Record<string, unknown> = {
-    type: 'text',
-    text: source.text || ' ',
-  };
-
+  // Entry text — preserves run formatting (font, size, bold, italic, textStyle…)
+  // sampled from the existing TOC. Link mark is rebuilt from the source's
+  // bookmark name and stacked on top of the preserved marks.
+  //
+  // We wrap the text in a `run` node because `wrapTextInRunsPlugin` would
+  // otherwise wrap the bare paragraph-child text on appendTransaction and, for
+  // the first child of a paragraph, *merge paragraph-style marks via addToSet*
+  // — which clobbers our sampled `textStyle` (TNR/Hyperlink) with the TOC1
+  // paragraph style's `textStyle` (Aptos). Pre-wrapping in a run keeps the
+  // marks we constructed.
+  const preservedMarks = (options.entryTextMarks ?? []).filter((mark) => mark?.type && mark.type !== 'link');
+  const titleMarks: EntryTextMark[] = [...preservedMarks];
   if (display.hyperlinks) {
-    textNode.marks = [
-      {
-        type: 'link',
-        attrs: {
-          anchor: generateTocBookmarkName(source.sdBlockId),
-          rId: null,
-          history: true,
-        },
+    titleMarks.push({
+      type: 'link',
+      attrs: {
+        anchor: generateTocBookmarkName(source.sdBlockId),
+        rId: null,
+        history: true,
       },
-    ];
+    });
   }
+  const titleText: Record<string, unknown> = { type: 'text', text: source.text || ' ' };
+  if (titleMarks.length > 0) titleText.marks = titleMarks;
 
-  content.push(textNode);
+  const content: Array<Record<string, unknown>> = [{ type: 'run', content: [titleText] }];
 
   // Determine whether to omit page number for this entry
   const omitRange = display.omitPageNumberLevels;
@@ -248,12 +265,13 @@ function buildEntryParagraph(
   const omitPageNumber = levelOmitted || entryOmitted;
 
   if (!omitPageNumber) {
-    // Separator between entry text and page number (\p switch overrides default tab)
+    const separatorRunChildren: Array<Record<string, unknown>> = [];
     if (display.separator) {
-      content.push({ type: 'text', text: display.separator });
+      separatorRunChildren.push({ type: 'text', text: display.separator });
     } else {
-      content.push({ type: 'tab' });
+      separatorRunChildren.push({ type: 'tab' });
     }
+    content.push({ type: 'run', content: separatorRunChildren });
 
     // Page number — resolved from the page map when available so a single
     // mode 'all' rebuild produces final numbers; falls back to '0' placeholder
@@ -261,9 +279,14 @@ function buildEntryParagraph(
     // headings whose synthetic id has not been seen by a layout cycle).
     const resolvedPage = options.pageMap?.get(source.sdBlockId);
     content.push({
-      type: 'text',
-      text: resolvedPage != null ? String(resolvedPage) : '0',
-      marks: [{ type: 'tocPageNumber' }],
+      type: 'run',
+      content: [
+        {
+          type: 'text',
+          text: resolvedPage != null ? String(resolvedPage) : '0',
+          marks: [{ type: 'tocPageNumber' }],
+        },
+      ],
     });
   }
 

@@ -111,6 +111,10 @@ export type ResolvedFragmentItem = {
   zIndex?: number;
   /** Source fragment kind — used by the painter for wrapper style decisions. */
   fragmentKind: Fragment['kind'];
+  /** Source fragment back-pointer. Lets the painter iterate resolved items
+   *  and pass the underlying fragment to render helpers without indexing
+   *  back into the legacy `page.fragments` array. */
+  fragment: Fragment;
   /** Block ID. Written to data-block-id. */
   blockId: string;
   /**
@@ -257,6 +261,8 @@ export type ResolvedTableItem = {
    * promote this to a permanent API surface.
    */
   fragmentIndex: number;
+  /** Source TableFragment back-pointer (see ResolvedFragmentItem.fragment). */
+  fragment: Fragment;
   /** ProseMirror start position for click-to-position mapping. */
   pmStart?: number;
   /** ProseMirror end position for click-to-position mapping. */
@@ -318,6 +324,8 @@ export type ResolvedImageItem = {
    * promote this to a permanent API surface.
    */
   fragmentIndex: number;
+  /** Source ImageFragment back-pointer (see ResolvedFragmentItem.fragment). */
+  fragment: Fragment;
   /** ProseMirror start position for click-to-position mapping. */
   pmStart?: number;
   /** ProseMirror end position for click-to-position mapping. */
@@ -371,6 +379,8 @@ export type ResolvedDrawingItem = {
    * promote this to a permanent API surface.
    */
   fragmentIndex: number;
+  /** Source DrawingFragment back-pointer (see ResolvedFragmentItem.fragment). */
+  fragment: Fragment;
   /** ProseMirror start position for click-to-position mapping. */
   pmStart?: number;
   /** ProseMirror end position for click-to-position mapping. */

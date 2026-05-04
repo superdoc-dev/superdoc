@@ -19,6 +19,7 @@
 export { createSuperDocUI } from './create-super-doc-ui.js';
 export { shallowEqual } from './equality.js';
 export { BUILT_IN_COMMAND_IDS } from '../headless-toolbar/types.js';
+export type { PublicToolbarItemId } from '../headless-toolbar/types.js';
 
 // Re-export the document-side shapes the controller surfaces so
 // consumers can type their components without reaching into the

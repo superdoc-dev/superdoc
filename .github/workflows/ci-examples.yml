@@ -211,6 +211,14 @@ jobs:
             ~/.cache/ms-playwright
           key: examples-workspace-${{ github.sha }}
 
+      # The vanilla custom-ui examples have a `predev` hook that
+      # runs `pnpm --filter superdoc build`, and the playwright
+      # config falls back to `pnpm --dir <example> run dev` when an
+      # example has no local node_modules (the pnpm-hoisted layout).
+      # Both require pnpm on PATH; the cache restore alone does not
+      # provide it.
+      - uses: pnpm/action-setup@v4
+
       - name: Run smoke test
         working-directory: examples/__tests__
         run: EXAMPLE=editor/custom-ui/${{ matrix.surface }}/${{ matrix.framework }} npx playwright test

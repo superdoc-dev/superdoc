@@ -1,5 +1,5 @@
 /**
- * Types for the `query.match` operation — deterministic matching with
+ * Types for the `query.match` operation: deterministic matching with
  * strict cardinality semantics for mutation targeting and agent planning.
  *
  * Canonical hierarchy: match → blocks → runs.
@@ -43,7 +43,7 @@ export interface HighlightRange {
 // Match styles (D1, D15)
 // ---------------------------------------------------------------------------
 
-/** Direct toggle states — what the run explicitly declares at run level. */
+/** Direct toggle states: what the run explicitly declares at run level. */
 export interface MatchDirectStyles {
   bold: InlineToggleDirective;
   italic: InlineToggleDirective;
@@ -51,7 +51,7 @@ export interface MatchDirectStyles {
   strike: InlineToggleDirective;
 }
 
-/** Effective visual states — what the user sees after style cascade resolution. */
+/** Effective visual states: what the user sees after style cascade resolution. */
 export interface MatchEffectiveStyles {
   bold: boolean;
   italic: boolean;
@@ -86,7 +86,7 @@ export interface MatchStyle {
 /**
  * A contiguous span of text within a block sharing identical mark-signature.
  *
- * Invariant (D4 — run-tiling): within a block, runs exactly tile the block's
+ * Invariant (D4: run-tiling): within a block, runs exactly tile the block's
  * matched range with no gaps and no overlaps.
  */
 export interface MatchRun {
@@ -95,7 +95,7 @@ export interface MatchRun {
   /** The text content of this run. */
   text: string;
   /**
-   * OOXML character style definition ID (`w:rStyle` `w:val`) — the key into
+   * OOXML character style definition ID (`w:rStyle` `w:val`): the key into
    * `styles.xml`. Omitted when no character style is applied (D10a).
    */
   styleId?: string;
@@ -142,7 +142,7 @@ export interface MatchBlock {
 }
 
 // ---------------------------------------------------------------------------
-// Match domain types — discovery-standardized (C1)
+// Match domain types: discovery-standardized (C1)
 // ---------------------------------------------------------------------------
 
 /**
@@ -152,7 +152,7 @@ export interface MatchBlock {
  * `blocks` is a non-empty tuple: a text match always covers at least one block.
  */
 export interface TextMatchDomain {
-  /** Discriminator — always `'text'` for text-selector matches. */
+  /** Discriminator: always `'text'` for text-selector matches. */
   matchKind: 'text';
   /** Address of the containing block in document order (D14). Text matches always yield the block. */
   address: BlockNodeAddress;
@@ -179,7 +179,7 @@ export interface TextMatchDomain {
  * V3 ref (anchor offsets are position-dependent).
  */
 export interface NodeMatchDomain {
-  /** Discriminator — always `'node'` for node-selector matches. */
+  /** Discriminator: always `'node'` for node-selector matches. */
   matchKind: 'node';
   /** Address of the first matched block in document order (D14). */
   address: NodeAddress;
@@ -204,11 +204,11 @@ export type NodeMatchItem = DiscoveryItem<NodeMatchDomain>;
 // ---------------------------------------------------------------------------
 
 /**
- * Metadata for `query.match` — always present on the output envelope.
+ * Metadata for `query.match`: always present on the output envelope.
  *
- * - `effectiveResolved: true` — converter context was available; `styles.effective`
+ * - `effectiveResolved: true`: converter context was available; `styles.effective`
  *   on every run reflects full cascade resolution.
- * - `effectiveResolved: false` — converter context was unavailable (headless/non-DOCX);
+ * - `effectiveResolved: false`: converter context was unavailable (headless/non-DOCX);
  *   `styles.effective` is derived from `direct` only.
  */
 export interface QueryMatchMeta {

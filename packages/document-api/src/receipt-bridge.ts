@@ -88,7 +88,7 @@ export interface StructuralReceiptParams {
  * Builds an SDMutationReceipt for structural (block-level) mutations.
  *
  * Unlike {@link textReceiptToSDReceipt} which converts from the internal
- * text pipeline, this constructs a receipt directly — preserving the
+ * text pipeline, this constructs a receipt directly: preserving the
  * original `BlockNodeAddress` target instead of normalizing it to a
  * synthetic `TextAddress`.
  */

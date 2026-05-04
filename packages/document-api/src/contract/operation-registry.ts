@@ -793,7 +793,7 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
     options: MutationOptions;
     output: SectionMutationResult;
   };
-  // Returns DocumentMutationResult (not SectionMutationResult) — document-level setting, not per-section.
+  // Returns DocumentMutationResult (not SectionMutationResult): document-level setting, not per-section.
   'sections.setOddEvenHeadersFooters': {
     input: SectionsSetOddEvenHeadersFootersInput;
     options: MutationOptions;

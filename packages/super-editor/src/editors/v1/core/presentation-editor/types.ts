@@ -224,7 +224,6 @@ export type PresentationEditorOptions = ConstructorParameters<typeof Editor>[0] 
      * active-surface undo routing.
      *
      * @default true
-     * @see plans/unified-history.md
      */
     unifiedHistory?: boolean;
   };

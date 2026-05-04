@@ -17,6 +17,7 @@ import type {
 import { shallowEqual } from './equality.js';
 import { scrollRangeIntoView } from './scroll-into-view.js';
 import { createCustomCommandsRegistry } from './custom-commands.js';
+import { createScope } from './scope.js';
 import type {
   CommandHandle,
   CommandsHandle,
@@ -35,6 +36,7 @@ import type {
   SuperDocEditorLike,
   SuperDocUI,
   SuperDocUIOptions,
+  SuperDocUIScope,
   SuperDocUIState,
   Subscribable,
   ToolbarCommandHandleState,
@@ -912,7 +914,7 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     // snapshot — the public `ToolbarSnapshotSlice` shape is the merged
     // one, not the underlying built-ins-only shape.
     getSnapshot: () => computeState().toolbar,
-    subscribe(listener) {
+    observe(listener) {
       // Drives off the same selector substrate so subscribers receive
       // the same coalesced burst pattern as ui.select consumers.
       // Equality is set to "always different" because the headless
@@ -923,11 +925,14 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
         () => false,
       ).subscribe((snapshot) => {
         try {
-          listener({ snapshot });
+          listener(snapshot);
         } catch {
           // see scheduleNotify
         }
       });
+    },
+    subscribe(listener) {
+      return toolbar.observe((snapshot) => listener({ snapshot }));
     },
     execute: ((id: PublicToolbarItemId, payload?: unknown): boolean => {
       // Routes through the centralized `dispatchCommand` so a later
@@ -1137,6 +1142,25 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
       if (prop === 'get') {
         return getDynamicHandle;
       }
+      // `has(id)` and `require(id)` (SD-2920): explicit validation
+      // helpers for config-driven toolbars and trusted dispatch sites.
+      // Both use the same registry lookup as `get(id)`; the difference
+      // is only what they return when the id is unknown.
+      if (prop === 'has') {
+        return (id: string): boolean => {
+          if (typeof id !== 'string' || id.length === 0) return false;
+          return BUILT_IN_COMMAND_ID_SET.has(id) || customCommandsRegistry.has(id);
+        };
+      }
+      if (prop === 'require') {
+        return (id: string): DynamicCommandHandle => {
+          const handle = getDynamicHandle(id);
+          if (!handle) {
+            throw new Error(`[superdoc/ui] commands.require: unknown command id "${id}".`);
+          }
+          return handle;
+        };
+      }
       // Custom-registered ids surface a typed handle from the registry.
       // Built-in ids fall through to the existing per-id cache so they
       // keep the same observe/execute shape they had before SD-2802.
@@ -1188,14 +1212,17 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
 
   const comments: CommentsHandle = {
     getSnapshot: () => computeState().comments,
-    subscribe(listener) {
+    observe(listener) {
       return select((state) => state.comments, shallowEqual).subscribe((snapshot) => {
         try {
-          listener({ snapshot });
+          listener(snapshot);
         } catch {
           // see scheduleNotify
         }
       });
+    },
+    subscribe(listener) {
+      return comments.observe((snapshot) => listener({ snapshot }));
     },
     createFromSelection({ text }) {
       const editor = resolveRoutedEditor(superdoc);
@@ -1350,14 +1377,17 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
 
   const trackChanges: TrackChangesHandle = {
     getSnapshot: () => computeState().trackChanges,
-    subscribe(listener) {
+    observe(listener) {
       return select((state) => state.trackChanges, shallowEqual).subscribe((snapshot) => {
         try {
-          listener({ snapshot });
+          listener(snapshot);
         } catch {
           // see scheduleNotify
         }
       });
+    },
+    subscribe(listener) {
+      return trackChanges.observe((snapshot) => listener({ snapshot }));
     },
     accept(changeId) {
       const api = requireDocTrackChanges();
@@ -1542,14 +1572,17 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
   // selector substrate.
   const selection: SelectionHandle = {
     getSnapshot: () => computeState().selection,
-    subscribe(listener) {
+    observe(listener) {
       return select((state) => state.selection, shallowEqual).subscribe((snapshot) => {
         try {
-          listener({ snapshot });
+          listener(snapshot);
         } catch {
           // see scheduleNotify
         }
       });
+    },
+    subscribe(listener) {
+      return selection.observe((snapshot) => listener({ snapshot }));
     },
     capture() {
       // Capture is sugar over `getSnapshot()` plus a deep clone +
@@ -1580,14 +1613,17 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
   // backwards-compat shim once consumers migrate to ui.document).
   const document: DocumentHandle = {
     getSnapshot: () => computeState().document,
-    subscribe(listener) {
+    observe(listener) {
       return select((state) => state.document, shallowEqual).subscribe((snapshot) => {
         try {
-          listener({ snapshot });
+          listener(snapshot);
         } catch {
           // see scheduleNotify
         }
       });
+    },
+    subscribe(listener) {
+      return document.observe((snapshot) => listener({ snapshot }));
     },
     setMode(mode) {
       // Routes through the host setter; ignored when the stub omits
@@ -1658,9 +1694,53 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     },
   };
 
+  // Live scopes created via `ui.createScope()`. The controller's
+  // `destroy()` cascades into every entry before tearing down its own
+  // resources, so consumers do not need to call `scope.destroy()`
+  // themselves on shutdown. Calling `ui.destroy()` is enough.
+  const liveScopes = new Set<SuperDocUIScope>();
+
+  const createScopeFn = (): SuperDocUIScope => {
+    if (destroyed) {
+      // Mirror the destroyed-parent behavior of `scope.child()`:
+      // return an already-destroyed scope so consumers in shutdown
+      // races do not get a live scope that the controller will never
+      // cascade-destroy. Methods on the returned scope follow the
+      // documented post-destroy contract (`add` runs synchronously,
+      // `on` is a no-op, `register` throws, `child` returns destroyed).
+      const inert = createScope({
+        register: customCommandsRegistry.register.bind(customCommandsRegistry),
+        trackScope: () => () => undefined,
+      });
+      inert.destroy();
+      return inert;
+    }
+    return createScope({
+      register: customCommandsRegistry.register.bind(customCommandsRegistry),
+      trackScope: (scope) => {
+        liveScopes.add(scope);
+        return () => {
+          liveScopes.delete(scope);
+        };
+      },
+    });
+  };
+
   const destroy = () => {
     if (destroyed) return;
     destroyed = true;
+    // Cascade into scopes first. Each scope's own destroy untracks
+    // itself from `liveScopes`, so iterate a snapshot to avoid mutating
+    // the set during iteration.
+    const scopeSnapshot = [...liveScopes];
+    liveScopes.clear();
+    for (const scope of scopeSnapshot) {
+      try {
+        scope.destroy();
+      } catch (err) {
+        console.error('[superdoc/ui] scope destroy threw during ui.destroy()', err);
+      }
+    }
     stateChangeListeners.clear();
     commandHandleCache.clear();
     commandSubscribableCache.clear();
@@ -1675,5 +1755,16 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     teardown.length = 0;
   };
 
-  return { select, toolbar, commands, comments, trackChanges, selection, viewport, document, destroy };
+  return {
+    select,
+    toolbar,
+    commands,
+    comments,
+    trackChanges,
+    selection,
+    viewport,
+    document,
+    createScope: createScopeFn,
+    destroy,
+  };
 }

@@ -30,6 +30,7 @@ Returns a BookmarkInfo object with the bookmark's name, range, and optional tabl
 | `target.entityType` | `"bookmark"` | yes | Constant: `"bookmark"` |
 | `target.kind` | `"entity"` | yes | Constant: `"entity"` |
 | `target.name` | string | yes |  |
+| `target.story` | StoryLocator | no | StoryLocator |
 
 ### Example request
 
@@ -38,7 +39,11 @@ Returns a BookmarkInfo object with the bookmark's name, range, and optional tabl
   "target": {
     "entityType": "bookmark",
     "kind": "entity",
-    "name": "example"
+    "name": "example",
+    "story": {
+      "kind": "story",
+      "storyType": "body"
+    }
   }
 }
 ```
@@ -80,6 +85,9 @@ _No fields._
         },
         "name": {
           "type": "string"
+        },
+        "story": {
+          "$ref": "#/$defs/StoryLocator"
         }
       },
       "required": [

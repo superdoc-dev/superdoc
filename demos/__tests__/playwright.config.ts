@@ -16,7 +16,7 @@ const portMap: Record<string, number> = {
   cdn: 8080,
   'grading-papers': 3000,
   'nextjs-ssr': 3000,
-  'bring-your-own-ui': 5189,
+  'custom-ui': 5189,
 };
 const port = portMap[demo] ?? 5173;
 

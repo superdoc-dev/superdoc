@@ -17,6 +17,24 @@ const DEFAULT_REPLACEMENT_MESSAGE = (id: string) =>
   `[superdoc/ui] ui.commands.register(): id '${id}' was already registered. Replacing prior registration.`;
 
 /**
+ * Property names the `ui.commands` Proxy intercepts before the
+ * registry lookup. A custom command registered with one of these ids
+ * would still be reachable through `ui.commands.get(id)` /
+ * `ui.commands.require(id)`, but indexing `ui.commands[id]` would
+ * return the surface helper instead of the consumer's handle. To keep
+ * the surface consistent, we refuse these ids at registration time.
+ *
+ * `override: true` does not bypass this list. Index access on a Proxy
+ * is not something registration semantics can route around; the only
+ * fix is to choose a different id (a namespaced one like
+ * `'company.has'` is the canonical workaround).
+ */
+const RESERVED_PROXY_PROPERTY_NAMES: ReadonlySet<string> = new Set(['register', 'get', 'has', 'require']);
+
+const DEFAULT_RESERVED_NAME_MESSAGE = (id: string) =>
+  `[superdoc/ui] ui.commands.register(): id '${id}' shadows a Proxy method on ui.commands and would be unreachable through index access. Use a namespaced id (e.g. 'company.${id}') instead. Registration refused.`;
+
+/**
  * Static fallback state for a custom command when:
  *  - the registration omits `getState`
  *  - `getState` returns `undefined` / `void`
@@ -232,6 +250,24 @@ export function createCustomCommandsRegistry(deps: CustomCommandsRegistryDeps): 
       registration: CustomCommandRegistration<TPayload, TValue>,
     ): CustomCommandRegistrationResult<TPayload, TValue> {
       const { id, execute, getState, override = false } = registration;
+
+      // Reserved Proxy property names refuse unconditionally. Even
+      // `override: true` cannot route around index access on the
+      // `ui.commands` Proxy; the surface helper always wins. Returning
+      // a no-op result here keeps the call site safe (handle.execute
+      // still callable) and warns once.
+      if (RESERVED_PROXY_PROPERTY_NAMES.has(id)) {
+        console.warn(DEFAULT_RESERVED_NAME_MESSAGE(id));
+        return {
+          handle: buildNoOpHandle<TPayload, TValue>(id),
+          invalidate() {
+            // refused registration: nothing to invalidate
+          },
+          unregister() {
+            // refused registration: nothing to remove
+          },
+        };
+      }
 
       // Built-in collision: refuse without `override: true`. We return a
       // no-op registration object so the consumer's call site doesn't

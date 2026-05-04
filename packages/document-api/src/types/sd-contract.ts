@@ -1,5 +1,5 @@
 /**
- * SDM/1 contract types — mutation receipts, error model, and diagnostics.
+ * SDM/1 contract types: mutation receipts, error model, and diagnostics.
  */
 
 import type { BlockNodeAddress } from './base.js';
@@ -43,8 +43,8 @@ export interface SDError {
 /**
  * Discriminated target in a mutation resolution.
  *
- * - `TextAddress` (`kind: 'text'`) — text-level insert/replace with block-relative offsets.
- * - `BlockNodeAddress` (`kind: 'block'`) — structural insert/replace targeting a whole block.
+ * - `TextAddress` (`kind: 'text'`): text-level insert/replace with block-relative offsets.
+ * - `BlockNodeAddress` (`kind: 'block'`): structural insert/replace targeting a whole block.
  */
 export type MutationResolutionTarget = TextAddress | BlockNodeAddress;
 

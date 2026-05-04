@@ -3,7 +3,7 @@ import { TextSelection } from 'prosemirror-state';
 /**
  * Removes a paragraph that only contains an empty run when backspacing inside it.
  * Prevents deleting the only paragraph in the document.
- * @returns {import('@core/commands/types').Command}
+ * @returns {import('./types/index.js').Command}
  */
 export const backspaceEmptyRunParagraph =
   () =>

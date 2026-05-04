@@ -279,3 +279,7 @@ Preset theme overrides are defined in `packages/superdoc/src/assets/styles/helpe
 - Expose UI component-specific variables as `--sd-ui-{component}-*` so consumers can customize via CSS.
 
 **When writing copy or content:** see `brand.md` for the full brand identity — strategy, voice, and visual guidelines. Product name is always **SuperDoc** (capital S, capital D).
+
+## Comments
+
+Follow `comment-policy.md`. Short version: write comments only when they encode information the code cannot express (invariants, business rules, non-local coupling, refactor-sensitive rationale). Don't paraphrase the next line. Use `AIDEV-NOTE:` anchors for rules that must survive future agent edits. Treat stale comments as bugs.

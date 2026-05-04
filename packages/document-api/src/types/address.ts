@@ -21,7 +21,7 @@ export type TextAddress = {
  * A single anchored text segment within one block.
  *
  * Unlike {@link TextAddress} (used for mutation inputs), TextSegment is a
- * lightweight component of a {@link TextTarget} — it carries no `kind`
+ * lightweight component of a {@link TextTarget}: it carries no `kind`
  * discriminant because the parent TextTarget already provides it.
  */
 export type TextSegment = {
@@ -56,8 +56,8 @@ export type TextTarget = {
  * Block node types valid as `nodeEdge` selection anchors.
  *
  * Excludes:
- * - `tableRow`, `tableCell` — row/column semantics out of scope
- * - `listItem` — derived from paragraph attrs, no distinct PM wrapper node
+ * - `tableRow`, `tableCell`: row/column semantics out of scope
+ * - `listItem`: derived from paragraph attrs, no distinct PM wrapper node
  */
 export type SelectionEdgeNodeType = Exclude<BlockNodeType, 'tableRow' | 'tableCell' | 'listItem'>;
 
@@ -95,7 +95,7 @@ export type SelectionPoint =
   | { kind: 'nodeEdge'; node: SelectionEdgeNodeAddress; edge: 'before' | 'after' };
 
 /**
- * A contiguous document selection — the canonical public target for the core
+ * A contiguous document selection: the canonical public target for the core
  * selection-mutation family (`delete`, `replace`, `format.apply`, `mutations.apply`).
  *
  * Other range-targeted APIs (comments, hyperlinks) continue to use `TextAddress`.

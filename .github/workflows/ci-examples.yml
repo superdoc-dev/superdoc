@@ -104,7 +104,7 @@ jobs:
           key: examples-workspace-${{ github.sha }}
 
       - name: Create .env for cloud providers
-        working-directory: examples/collaboration/${{ matrix.example }}
+        working-directory: examples/editor/collaboration/providers/${{ matrix.example }}
         run: |
           if [ "${{ matrix.example }}" = "liveblocks" ]; then
             echo "VITE_LIVEBLOCKS_PUBLIC_KEY=${{ secrets.VITE_LIVEBLOCKS_PUBLIC_KEY }}" > .env
@@ -112,15 +112,15 @@ jobs:
 
       - name: Run smoke test
         working-directory: examples/__tests__
-        run: EXAMPLE=collaboration/${{ matrix.example }} npx playwright test
+        run: EXAMPLE=editor/collaboration/providers/${{ matrix.example }} npx playwright test
 
-  features:
+  built-in-ui:
     needs: build
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        example: [track-changes, ai-redlining, comments, custom-toolbar]
+        example: [track-changes, comments, toolbar]
     steps:
       - name: Restore workspace
         uses: actions/cache/restore@v4
@@ -132,7 +132,27 @@ jobs:
 
       - name: Run smoke test
         working-directory: examples/__tests__
-        run: EXAMPLE=features/${{ matrix.example }} npx playwright test
+        run: EXAMPLE=editor/built-in-ui/${{ matrix.example }} npx playwright test
+
+  ai:
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        example: [redlining]
+    steps:
+      - name: Restore workspace
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            .
+            ~/.cache/ms-playwright
+          key: examples-workspace-${{ github.sha }}
+
+      - name: Run smoke test
+        working-directory: examples/__tests__
+        run: EXAMPLE=ai/${{ matrix.example }} npx playwright test
 
   advanced-headless-toolbar:
     needs: build
@@ -173,7 +193,7 @@ jobs:
   validate:
     name: CI Examples / validate
     if: always()
-    needs: [getting-started, collaboration, features, advanced-headless-toolbar, headless]
+    needs: [getting-started, collaboration, built-in-ui, ai, advanced-headless-toolbar, headless]
     runs-on: ubuntu-latest
     steps:
       - name: Check results

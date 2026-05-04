@@ -1,306 +1,82 @@
 ---
-title: Import/Export
+title: Import and export
 sidebarTitle: Import/Export
 keywords: "import, export, docx export, html import, markdown import, document formats"
 ---
 
-SuperDoc is a Word editor that accepts multiple content formats as input. All content is normalized into Word's document model internally.
+SuperDoc treats DOCX as the real document, not an export target. Load a Word file, edit it in the browser, and export a Word file again. Tracked changes, comments, and complex tables all stay intact. HTML and Markdown are useful for AI-generated content; DOCX is the full-fidelity path.
 
-## Supported formats
+For the full reference, see [Editor > SuperDoc > Import/Export](/editor/superdoc/import-export).
 
-| Format | Import | Export | Round-Trip | Use Case |
-|---|---|---|---|---|
-| **DOCX** | Full | Full | Perfect | Word documents |
-| **JSON** | Full | Full | Perfect | Programmatic control |
-| **HTML** | Structure only | Structure only | Visual only | Web content, AI output |
-| **Markdown** | CommonMark | CommonMark | Visual only | Documentation, AI output |
-| **Text** | Plain text | Plain text | Perfect | Simple content |
+## Loading a document
 
-<Note>
-HTML and Markdown imports preserve structure (headings, lists, links, tables) but strip CSS styles.
-</Note>
-
-## Importing content
-
-### At initialization
-
-Pass content when creating the SuperDoc instance.
+Pass anything that looks like a document to the `document` option:
 
 ```javascript
-// DOCX file — full fidelity
 new SuperDoc({
   selector: '#editor',
-  document: docxFile  // File, Blob, URL string, or config object
-});
-
-// HTML content — requires a base DOCX for styles
-new SuperDoc({
-  selector: '#editor',
-  document: blankDocx,
-  html: '<h1>Title</h1><p>Content</p>'
-});
-
-// Markdown content
-new SuperDoc({
-  selector: '#editor',
-  document: blankDocx,
-  markdown: '# Title\n\nContent with **formatting**'
-});
-
-// JSON (ProseMirror schema)
-new SuperDoc({
-  selector: '#editor',
-  document: blankDocx,
-  jsonOverride: documentSchema
+  document: docxFile, // File, Blob, URL string, or config object
 });
 ```
 
-<ParamField path="document" type="string | File | Blob | Object">
-  The document to load. Strings are treated as URLs. Files and Blobs are used directly.
-</ParamField>
+For HTML, Markdown, or JSON content, pair the alternate input with a base DOCX (used for styles):
 
-<ParamField path="html" type="string">
-  HTML content to initialize the editor with. Requires a `document` for styles.
-</ParamField>
-
-<ParamField path="markdown" type="string">
-  Markdown content to initialize the editor with. Requires a `document` for styles.
-</ParamField>
-
-<ParamField path="jsonOverride" type="Object">
-  ProseMirror JSON to override the document content with.
-</ParamField>
-
-### After initialization
-
-Insert content into an existing document using editor commands.
-
-<Note>
-For new code, prefer [`editor.doc.insert`](/document-api/overview) — it accepts a positional target and returns a typed receipt. The chain command shown below stays supported for apps already wired to `activeEditor.commands.*`.
-</Note>
-
-<CodeGroup>
-```javascript Usage
-superdoc.activeEditor.commands.insertContent(content, {
-  contentType: 'html'  // 'html' | 'markdown' | 'text' | 'schema'
-});
-```
-
-```javascript Full Example
-import { SuperDoc } from 'superdoc';
-import 'superdoc/style.css';
-
-const superdoc = new SuperDoc({
+```javascript
+new SuperDoc({
   selector: '#editor',
-  document: yourFile,
-  onReady: (superdoc) => {
-    superdoc.activeEditor.commands.insertContent(content, {
-      contentType: 'html'  // 'html' | 'markdown' | 'text' | 'schema'
-    });
-  },
+  document: blankDocx,
+  html: '<h1>Title</h1><p>Content</p>',
+  // markdown: '# Title\n\nContent'
+  // jsonOverride: documentSchema
 });
 ```
-</CodeGroup>
 
-<ParamField path="value" type="string | Object" required>
-  The content to insert. String for `html`, `markdown`, and `text`. ProseMirror JSON object for `schema`.
-</ParamField>
+## Exporting
 
-<ParamField path="options.contentType" type="string">
-  Content type: `'html'`, `'markdown'`, `'text'`, or `'schema'`
-</ParamField>
+Default `superdoc.export()` triggers a browser download. To upload to your backend instead, ask for the raw `Blob`:
 
-## Exporting content
-
-### DOCX export
-
-<Note>
-  `superdoc.export()` **triggers a browser download by default**. If you need the raw `Blob` (e.g. to upload to a server), pass `triggerDownload: false` — otherwise you'll get a duplicate download.
-</Note>
-
-<CodeGroup>
-```javascript Usage
-// Download as .docx file
+```javascript
+// Download
 await superdoc.export();
 
-// Get blob without triggering download
+// Upload: get the Blob, send it yourself
 const blob = await superdoc.export({ triggerDownload: false });
-
-// Export without comments
-await superdoc.export({ commentsType: 'clean' });
-
-// Export as final document (applies tracked changes)
-await superdoc.export({ isFinalDoc: true });
-
-// Custom filename
-await superdoc.export({ exportedName: 'Final Contract' });
+await fetch('/api/save', { method: 'POST', body: blob });
 ```
 
-```javascript Full Example
-import { SuperDoc } from 'superdoc';
-import 'superdoc/style.css';
+For HTML, JSON, or Markdown output, read directly from the active editor:
 
-const superdoc = new SuperDoc({
-  selector: '#editor',
-  document: yourFile,
-  onReady: async (superdoc) => {
-    // Download as .docx file
-    await superdoc.export();
-
-    // Get blob without triggering download
-    const blob = await superdoc.export({ triggerDownload: false });
-
-    // Export without comments
-    await superdoc.export({ commentsType: 'clean' });
-
-    // Export as final document (applies tracked changes)
-    await superdoc.export({ isFinalDoc: true });
-
-    // Custom filename
-    await superdoc.export({ exportedName: 'Final Contract' });
-  },
-});
-```
-</CodeGroup>
-
-<ParamField path="exportType" type="string[]" default="['docx']">
-  Formats to export
-</ParamField>
-
-<ParamField path="commentsType" type="string" default="'external'">
-  `'external'` to include comments, `'clean'` to remove all comments
-</ParamField>
-
-<ParamField path="exportedName" type="string">
-  Custom filename without extension
-</ParamField>
-
-<ParamField path="triggerDownload" type="boolean" default="true">
-  Whether to automatically trigger a file download. Set to `false` to get a `Blob` back instead.
-</ParamField>
-
-<ParamField path="isFinalDoc" type="boolean" default="false">
-  Export as final version (applies tracked change mode)
-</ParamField>
-
-<ParamField path="fieldsHighlightColor" type="string">
-  Color for field highlights in the exported document
-</ParamField>
-
-<ParamField path="additionalFiles" type="Blob[]" default="[]">
-  Additional files to bundle. When multiple files are exported, they are zipped together.
-</ParamField>
-
-<ParamField path="additionalFileNames" type="string[]" default="[]">
-  Filenames for additional files
-</ParamField>
-
-### HTML export
-
-<CodeGroup>
-```javascript Usage
-// Returns array of HTML strings (one per document)
-const htmlArray = superdoc.getHTML();
-
-// From the active editor (single string)
+```javascript
 const html = superdoc.activeEditor.getHTML();
-```
-
-```javascript Full Example
-import { SuperDoc } from 'superdoc';
-import 'superdoc/style.css';
-
-const superdoc = new SuperDoc({
-  selector: '#editor',
-  document: yourFile,
-  onReady: (superdoc) => {
-    // Returns array of HTML strings (one per document)
-    const htmlArray = superdoc.getHTML();
-
-    // From the active editor (single string)
-    const html = superdoc.activeEditor.getHTML();
-  },
-});
-```
-</CodeGroup>
-
-<Note>
-HTML export is structure-only. Custom CSS styling and Word-specific formatting are not included.
-</Note>
-
-### JSON export
-
-<CodeGroup>
-```javascript Usage
-// From the active editor
 const json = superdoc.activeEditor.getJSON();
-```
-
-```javascript Full Example
-import { SuperDoc } from 'superdoc';
-import 'superdoc/style.css';
-
-const superdoc = new SuperDoc({
-  selector: '#editor',
-  document: yourFile,
-  onReady: (superdoc) => {
-    const json = superdoc.activeEditor.getJSON();
-  },
-});
-```
-</CodeGroup>
-
-JSON export preserves the full document structure and can be re-imported with `jsonOverride`.
-
-### Markdown export
-
-<CodeGroup>
-```javascript Usage
-// From the active editor
 const markdown = await superdoc.activeEditor.getMarkdown();
 ```
 
-```javascript Full Example
-import { SuperDoc } from 'superdoc';
-import 'superdoc/style.css';
+## Format tradeoffs
 
-const superdoc = new SuperDoc({
-  selector: '#editor',
-  document: yourFile,
-  onReady: async (superdoc) => {
-    const markdown = await superdoc.activeEditor.getMarkdown();
-  },
-});
-```
-</CodeGroup>
-
-## HTML element mapping
-
-| HTML Element | Imported As | Notes |
+| Format | Round-trip fidelity | Use it for |
 |---|---|---|
-| `<h1>` to `<h6>` | Word heading styles | Requires styles in the base document |
-| `<p>`, `<div>` | Normal paragraph | |
-| `<strong>`, `<b>` | Bold | |
-| `<em>`, `<i>` | Italic | |
-| `<a href="...">` | Hyperlink | |
-| `<ul>`, `<ol>` | Word lists | Nesting supported |
-| `<table>` | Word table | Structure only |
-| `<img src="...">` | Image | URL preserved |
-| `<blockquote>` | Quote style | If style exists in document |
-| `style="text-align: ..."` | Alignment | Inline alignment is preserved |
+| **DOCX** | Full | Real Word documents: open in Word with nothing lost |
+| **JSON** | Full | Programmatic control, AI/agent input/output |
+| **HTML** | Structure only (no CSS) | Web content, AI-generated HTML |
+| **Markdown** | Structure only | Documentation, simple AI input |
 
-CSS classes, IDs, colors, fonts, margins, and other styling are stripped on import.
+DOCX preserves tracked changes, comments, complex tables, and section breaks. HTML and Markdown are structure-first: they don't preserve Word-specific formatting.
 
-## Markdown element mapping
+## What should I store in my backend?
 
-**Supported:**
-- Headings (`#` through `######`)
-- Bold/italic (`**bold**`, `*italic*`)
-- Ordered and unordered lists
-- Links `[text](url)`
-- Images `![alt](url)`
-- Code blocks
-- Blockquotes `>`
+Store the **DOCX blob** if you want full fidelity (recommended). Store JSON if you want programmatic search/diff and don't need round-tripping with Word users. Don't store HTML or Markdown unless you accept losing fidelity.
 
-**Not supported:**
-- Tables, footnotes, task lists, custom syntax extensions
+## Common pitfalls
+
+- **Duplicate downloads.** `superdoc.export()` triggers a browser download by default. If you want to upload to a backend, pass `{ triggerDownload: false }`: otherwise you get the file twice.
+- **HTML import without a base DOCX.** The `html` and `markdown` options need a `document` (a base `.docx`) for styles. Without one, headings and lists fall back to defaults.
+- **HTML round-trips lose styling.** Importing HTML, exporting DOCX, and then importing the resulting HTML back will not produce the original Word styling. For round-tripping, use DOCX or JSON.
+
+## Where to next
+
+- [Editor > SuperDoc > Import/Export](/editor/superdoc/import-export): full API reference (every option, every export flag)
+- [Editor > SuperDoc > Configuration](/editor/superdoc/configuration): `document`, `html`, `markdown`, `jsonOverride` config
+- [Editor > SuperDoc > Methods](/editor/superdoc/methods): `superdoc.export()`, `getHTML()`, `getJSON()`, `getMarkdown()`
+- [Document Engine](/document-engine/overview): server-side import/export via SDKs and CLI
+- [Editor > Collaboration > Storage](/editor/collaboration/storage): persistence patterns for collaborative docs

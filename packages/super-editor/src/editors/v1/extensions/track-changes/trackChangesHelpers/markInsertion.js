@@ -4,13 +4,14 @@ import { findTrackedMarkBetween } from './findTrackedMarkBetween.js';
 
 /**
  * Mark insertion.
- * @param {Transaction} options.tr Transaction.
+ * @param {object} options Mark insertion options.
+ * @param {import('prosemirror-state').Transaction} options.tr Transaction.
  * @param {number} options.from From position.
  * @param {number} options.to To position.
  * @param {object} options.user User object ({ name, email }).
  * @param {string} options.date Date.
- * @param {string} options.id Optional ID to use (for replace operations where insertion and deletion share the same ID).
- * @returns {Mark} Insertion mark.
+ * @param {string} [options.id] Optional ID to use (for replace operations where insertion and deletion share the same ID).
+ * @returns {import('prosemirror-model').Mark} Insertion mark.
  */
 export const markInsertion = ({ tr, from, to, user, date, id: providedId }) => {
   tr.removeMark(from, to, tr.doc.type.schema.marks[TrackDeleteMarkName]);

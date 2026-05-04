@@ -176,32 +176,202 @@ test('stable orchestrator prunes before snapshot and reports would-release previ
   );
 });
 
-test('stable orchestrator releases superdoc, cli, then sdk in order', async () => {
+test('stable tooling bundle releases CLI, SDK, then MCP in order', async () => {
   const content = await readRepoFile('scripts/release-local-stable.mjs');
-  assertOrder(content, "name: 'superdoc'", "name: 'cli'", 'scripts/release-local-stable.mjs (superdoc before cli)');
   assertOrder(content, "name: 'cli'", "name: 'sdk'", 'scripts/release-local-stable.mjs (cli before sdk)');
+  assertOrder(content, "name: 'sdk'", "name: 'mcp'", 'scripts/release-local-stable.mjs (sdk before mcp)');
+  assert.equal(
+    content.includes("name: 'superdoc'"),
+    false,
+    'scripts/release-local-stable.mjs: superdoc has its own per-package stable workflow, not this bundle',
+  );
+  assert.equal(
+    content.includes("name: 'esign'") || content.includes("name: 'react'") || content.includes("name: 'template-builder'") || content.includes("name: 'vscode-ext'"),
+    false,
+    'scripts/release-local-stable.mjs: only CLI/SDK/MCP belong in the tooling bundle',
+  );
 });
 
-test('stable workflow isolates skip-ci writebacks from the shared stable queue', async () => {
-  const content = await readRepoFile('.github/workflows/release-stable.yml');
-  assert.equal(
-    content.includes('    paths:'),
-    false,
-    '.github/workflows/release-stable.yml: stable releases must run on every push, not a filtered path subset',
+test('stable tooling bundle emits SDK release coordinates so Python publish does not depend on HEAD', async () => {
+  const content = await readRepoFile('scripts/release-local-stable.mjs');
+  assert.ok(
+    content.includes("setStepOutput('sdk_release_present'"),
+    'scripts/release-local-stable.mjs: must emit sdk_release_present after the bundle runs',
   );
   assert.ok(
-    content.includes("contains(github.event.head_commit.message, '[skip ci]')"),
+    content.includes('recordSdkReleaseOutputs'),
+    'scripts/release-local-stable.mjs: must record SDK release outputs from the SDK result, not from HEAD',
+  );
+
+  const workflow = await readRepoFile('.github/workflows/release-stable.yml');
+  assert.equal(
+    workflow.includes("git tag --points-at HEAD --list 'sdk-v*'"),
+    false,
+    '.github/workflows/release-stable.yml: must not detect SDK at HEAD - MCP commits land on top after the bundle runs',
+  );
+  assert.ok(
+    workflow.includes("steps.stable_release.outputs.sdk_release_present == 'true'"),
+    '.github/workflows/release-stable.yml: Python publish must gate on the orchestrator output, not a HEAD lookup',
+  );
+});
+
+test('stable release workflows serialize on the shared release-stable concurrency group', async () => {
+  // All stable release workflows must share `release-stable` so
+  // @semantic-release/git pushes to `stable` queue instead of racing on
+  // `git push origin stable`. Per-workflow groups parallelize and leave
+  // npm/PyPI tarballs published with no corresponding tag/commit pushed.
+  const stableWorkflows = [
+    '.github/workflows/release-stable.yml',
+    '.github/workflows/release-superdoc.yml',
+    '.github/workflows/release-react.yml',
+    '.github/workflows/release-esign.yml',
+    '.github/workflows/release-template-builder.yml',
+    '.github/workflows/release-vscode-ext.yml',
+  ];
+
+  for (const file of stableWorkflows) {
+    const content = await readRepoFile(file);
+    assert.ok(
+      content.includes("'release-stable'"),
+      `${file}: stable runs must use the shared 'release-stable' concurrency group`,
+    );
+  }
+
+  const bundle = await readRepoFile('.github/workflows/release-stable.yml');
+  assert.equal(
+    bundle.includes('    paths:'),
+    false,
+    '.github/workflows/release-stable.yml: tooling bundle must run on every stable push, not a filtered path subset',
+  );
+  assert.ok(
+    bundle.includes("contains(github.event.head_commit.message, '[skip ci]')"),
     '.github/workflows/release-stable.yml: concurrency must detect [skip ci] writeback pushes',
   );
   assert.ok(
-    content.includes("format('release-stable-skip-{0}', github.run_id)"),
-    '.github/workflows/release-stable.yml: skip-ci writebacks must use a separate concurrency group',
+    bundle.includes('id-token: write'),
+    '.github/workflows/release-stable.yml: must request id-token: write so SDK PyPI OIDC publish works',
   );
   assert.ok(
-    content.includes(
+    bundle.includes(
       "if: github.event_name == 'workflow_dispatch' || !contains(github.event.head_commit.message, '[skip ci]')",
     ),
     '.github/workflows/release-stable.yml: skip-ci writeback runs must still no-op when they start',
+  );
+
+  const perPackageStableWorkflows = [
+    '.github/workflows/release-superdoc.yml',
+    '.github/workflows/release-react.yml',
+    '.github/workflows/release-esign.yml',
+    '.github/workflows/release-template-builder.yml',
+    '.github/workflows/release-vscode-ext.yml',
+  ];
+  for (const file of perPackageStableWorkflows) {
+    const content = await readRepoFile(file);
+    assert.ok(
+      /branches:\s*\n\s*-\s*main\s*\n\s*-\s*stable/.test(content),
+      `${file}: must trigger on push to both main and stable`,
+    );
+  }
+});
+
+test('MCP releaserc builds the package before publish so the tarball ships dist/', async () => {
+  const content = await readRepoFile('apps/mcp/.releaserc.cjs');
+  assert.ok(
+    content.includes("prepareCmd: 'pnpm run build'"),
+    'apps/mcp/.releaserc.cjs: must build apps/mcp/dist before publish - the root pnpm run build does not produce it',
+  );
+});
+
+test('stable recovery filters prerelease tags so *-next.* never resumes as @latest', async () => {
+  const content = await readRepoFile('scripts/release-local-stable.mjs');
+  assert.ok(
+    content.includes('listStableMergedTags') && content.includes("isPrereleaseTag"),
+    'scripts/release-local-stable.mjs: must expose a stable-only tag filter that excludes -next.* prereleases',
+  );
+  assert.ok(
+    content.includes("expectedBranch === 'stable'") && content.includes('listStableMergedTags(pkg.tagPattern, branchRef)'),
+    'scripts/release-local-stable.mjs: stable recovery must consult the prerelease-filtered list',
+  );
+});
+
+test('release-state probes wrap fetch in bounded retry to absorb transient blips', async () => {
+  const content = await readRepoFile('scripts/release-local-stable.mjs');
+  assert.ok(
+    content.includes('async function fetchWithRetry'),
+    'scripts/release-local-stable.mjs: must define a fetchWithRetry helper',
+  );
+  // Only the helper itself should call bare `fetch(...)`; everywhere else must
+  // route through fetchWithRetry. Allow exactly one bare-fetch occurrence (the
+  // implementation inside fetchWithRetry).
+  const bareFetchCount = (content.match(/[^.\w]fetch\(/g) ?? []).length;
+  assert.equal(
+    bareFetchCount,
+    1,
+    `scripts/release-local-stable.mjs: every release-state fetch must go through fetchWithRetry; found ${bareFetchCount} bare fetch(...) calls (expected 1, the one inside fetchWithRetry itself)`,
+  );
+  assert.ok(
+    /fetchWithRetry\(\s*`https:\/\/api\.github\.com/.test(content),
+    'scripts/release-local-stable.mjs: GitHub release probes must retry',
+  );
+  assert.ok(
+    /fetchWithRetry\(\s*`https:\/\/pypi\.org\/pypi/.test(content),
+    'scripts/release-local-stable.mjs: PyPI release probes must retry',
+  );
+});
+
+test('docs promotion is keyed to SuperDoc only', async () => {
+  const promoteWorkflow = await readRepoFile('.github/workflows/promote-stable-docs.yml');
+  assert.ok(
+    promoteWorkflow.includes('workflow_run:'),
+    '.github/workflows/promote-stable-docs.yml: must trigger on workflow_run completion',
+  );
+  assert.ok(
+    /workflows:\s*\n\s*-\s*"📦 Release superdoc"/.test(promoteWorkflow),
+    '.github/workflows/promote-stable-docs.yml: must trigger only on the SuperDoc release workflow',
+  );
+  assert.equal(
+    /Release CLI|Release SDK|Release MCP|Release react|Release esign|Release template-builder|Release vscode-ext/.test(promoteWorkflow),
+    false,
+    '.github/workflows/promote-stable-docs.yml: docs-stable tracks SuperDoc only, not other packages',
+  );
+  assert.ok(
+    promoteWorkflow.includes("github.event.workflow_run.conclusion == 'success'"),
+    '.github/workflows/promote-stable-docs.yml: must only promote on successful SuperDoc runs',
+  );
+  assert.ok(
+    promoteWorkflow.includes("github.event.workflow_run.head_branch == 'stable'"),
+    '.github/workflows/promote-stable-docs.yml: must scope promotion to stable',
+  );
+  assert.ok(
+    promoteWorkflow.includes("git tag --merged origin/stable --list 'v[0-9]*'") &&
+      promoteWorkflow.includes('git tag --merged "${HEAD_SHA}" --list'),
+    '.github/workflows/promote-stable-docs.yml: must detect a real SuperDoc release (not a no-op) before pushing docs-stable',
+  );
+  assert.ok(
+    promoteWorkflow.includes('refs/heads/docs-stable'),
+    '.github/workflows/promote-stable-docs.yml: must push to docs-stable',
+  );
+});
+
+test('docs promotion supports manual workflow_dispatch with optional sha input', async () => {
+  const promoteWorkflow = await readRepoFile('.github/workflows/promote-stable-docs.yml');
+  assert.ok(
+    promoteWorkflow.includes('workflow_dispatch:'),
+    '.github/workflows/promote-stable-docs.yml: must expose workflow_dispatch for manual promotion',
+  );
+  assert.ok(
+    /sha:\s*\n\s*description:/.test(promoteWorkflow),
+    '.github/workflows/promote-stable-docs.yml: must accept an optional sha input',
+  );
+  assert.ok(
+    promoteWorkflow.includes("github.event_name == 'workflow_dispatch'"),
+    '.github/workflows/promote-stable-docs.yml: job must allow workflow_dispatch in addition to workflow_run',
+  );
+  // Manual path must NOT depend on the auto-path detect step output, otherwise
+  // a manual run would skip the push (detect only runs on workflow_run).
+  assert.ok(
+    /Push docs-stable \(manual\)[\s\S]*if:\s*github\.event_name == 'workflow_dispatch'/.test(promoteWorkflow),
+    '.github/workflows/promote-stable-docs.yml: manual push step must gate on workflow_dispatch only, not on detect.outputs',
   );
 });
 
@@ -260,12 +430,16 @@ test('stable orchestrator recovers incomplete merged tags and defers stale check
     'scripts/release-local-stable.mjs: SDK recovery must expose snapshot Python artifacts for workflow publishing',
   );
   assert.ok(
-    content.includes('npm-publish-package.cjs'),
-    'scripts/release-local-stable.mjs: reruns must have a generic npm resume path',
-  );
-  assert.ok(
     content.includes('sdk-release-publish.mjs'),
     'scripts/release-local-stable.mjs: SDK reruns must resume npm publish explicitly',
+  );
+  assert.ok(
+    content.includes("case 'mcp'") && content.includes('apps/mcp'),
+    'scripts/release-local-stable.mjs: MCP reruns must have an explicit resume path',
+  );
+  assert.ok(
+    content.includes("case 'cli'") && content.includes('apps/cli/scripts/publish.js'),
+    'scripts/release-local-stable.mjs: CLI reruns must resume via its dedicated publish script',
   );
   assert.ok(
     content.includes(": 'deferred'"),
@@ -292,37 +466,6 @@ test('stable dry runs skip incomplete-release recovery side effects', async () =
     '  if (!isDryRun) {',
     '      recoveredRelease = await maybeRecoverIncompleteRelease(pkg, branchRef);',
     'scripts/release-local-stable.mjs',
-  );
-});
-
-test('stable workflow publishes recovered SDK Python snapshots before any head-tag SDK publish', async () => {
-  const content = await readRepoFile('.github/workflows/release-stable.yml');
-  assertOrder(
-    content,
-    '- name: Publish recovered SDK companion Python packages to PyPI',
-    '- name: Build and verify Python SDK',
-    '.github/workflows/release-stable.yml',
-  );
-  assert.ok(
-    content.includes('id: stable_release'),
-    '.github/workflows/release-stable.yml: stable orchestrator step must expose recovery outputs',
-  );
-  assert.ok(
-    content.includes("if: steps.stable_release.outputs.sdk_python_snapshot_companion_dir != ''"),
-    '.github/workflows/release-stable.yml: recovered SDK snapshot companion wheels must publish even when the sdk tag is not at HEAD',
-  );
-  assert.ok(
-    content.includes("if: steps.stable_release.outputs.sdk_python_snapshot_main_dir != ''"),
-    '.github/workflows/release-stable.yml: recovered SDK snapshot root wheel must publish even when the sdk tag is not at HEAD',
-  );
-  assert.ok(
-    content.includes("if: steps.sdk_release.outputs.release_present == 'true'"),
-    '.github/workflows/release-stable.yml: SDK Python publish must still key off the sdk tag at HEAD',
-  );
-  assert.equal(
-    content.includes('Resume Node SDK publish for existing release tag'),
-    false,
-    '.github/workflows/release-stable.yml: SDK npm resume now belongs to the stable orchestrator',
   );
 });
 

@@ -4,11 +4,15 @@
  * Tests that superdoc's type declarations work across all common
  * tsconfig combinations consumers might use:
  *   - moduleResolution: bundler, node16, nodenext
- *   - skipLibCheck: true (all scenarios), false (regression check)
+ *   - skipLibCheck: true (targeted compat scenarios), false (public-surface gate)
  *   - strict: true and false
  *   - Import paths: "superdoc", "superdoc/super-editor"
  *   - Node.js headless usage (Buffer return types)
  *   - Guarded public types must not collapse to `any` (SD-2831)
+ *
+ * The optional `allowNodeModuleErrors` scenario flag remains available for
+ * documented upstream exceptions, but current public-surface scenarios should
+ * pass with `skipLibCheck: false`.
  *
  * The fixture installs superdoc from the packed tarball at
  * ../../packages/superdoc/superdoc.tgz, so the matrix tests the
@@ -300,19 +304,42 @@ const scenarios = [
     files: ['src/prosemirror-coexistence.ts'],
     mustPass: true,
   },
-  // skipLibCheck=false — informational. Existing dep noise from
-  // node_modules (~30 errors at last count) is expected here; the
-  // `allowNodeModuleErrors` flag opts this scenario into the DEPS
-  // classification rather than INFO so the failure mode stays explicit.
+  // SD-2892: full public-facing surface with skipLibCheck=false. These
+  // scenarios pack SuperDoc, install it into the consumer fixture, and compile
+  // every public consumer assertion under the resolution modes customers use.
+  // SuperDoc-owned declaration leaks surface as node_modules/superdoc errors,
+  // so these scenarios are required gates with no dependency-error allowance.
+  // If this aggregate gate fails, rerun tsc against individual fixture files
+  // to narrow the broken public entry point.
   {
-    name: 'bundler / skipLibCheck=false',
+    name: 'bundler / all public surface / skipLibCheck=false',
     module: 'ESNext',
     moduleResolution: 'bundler',
     skipLibCheck: false,
     strict: true,
-    files: ['src/imports-main.ts'],
-    mustPass: false,
-    allowNodeModuleErrors: true,
+    noPropertyAccessFromIndexSignature: true,
+    files: ['src/**/*.ts'],
+    mustPass: true,
+  },
+  {
+    name: 'node16 / all public surface / skipLibCheck=false',
+    module: 'Node16',
+    moduleResolution: 'node16',
+    skipLibCheck: false,
+    strict: true,
+    noPropertyAccessFromIndexSignature: true,
+    files: ['src/**/*.ts'],
+    mustPass: true,
+  },
+  {
+    name: 'nodenext / all public surface / skipLibCheck=false',
+    module: 'NodeNext',
+    moduleResolution: 'nodenext',
+    skipLibCheck: false,
+    strict: true,
+    noPropertyAccessFromIndexSignature: true,
+    files: ['src/**/*.ts'],
+    mustPass: true,
   },
   // SD-2842: every public type re-exported via `superdoc` must resolve
   // to a real interface, not collapse to `any` and not be missing.
@@ -375,6 +402,175 @@ const scenarios = [
     strict: true,
     noPropertyAccessFromIndexSignature: true,
     files: ['src/customer-scenario.ts'],
+    mustPass: true,
+  },
+  // SD-2869 review found the JSDoc → TS conversion silently narrowed
+  // `Modules.comments`, `Modules.toolbar`, etc. into closed object literals,
+  // rejecting pass-through fields the runtime forwards via `...moduleConfig`
+  // spread. This fixture pins a realistic Config with the documented fields
+  // plus the runtime-supported extras (useInternalExternalComments,
+  // toolbar.pagination, awareness state.user, etc.) so future regressions of
+  // the same shape fail CI before reaching customers.
+  {
+    name: 'bundler / modules config pass-through (SD-2869)',
+    module: 'ESNext',
+    moduleResolution: 'bundler',
+    skipLibCheck: true,
+    strict: true,
+    files: ['src/modules-config-passthrough.ts'],
+    mustPass: true,
+  },
+  {
+    name: 'node16 / modules config pass-through (SD-2869)',
+    module: 'Node16',
+    moduleResolution: 'node16',
+    skipLibCheck: true,
+    strict: true,
+    files: ['src/modules-config-passthrough.ts'],
+    mustPass: true,
+  },
+  // SD-2886: internal-only fields on Config / SuperDocLayoutEngineOptions
+  // must not appear on the published surface. They are hidden via
+  // `Omit<...>` re-exports in `packages/superdoc/src/index.js`. The fixture
+  // relies on `@ts-expect-error` markers that stop erroring (TS2578) if a
+  // future change leaks an internal field back onto the public surface.
+  {
+    name: 'bundler / internal fields stripped (SD-2886)',
+    module: 'ESNext',
+    moduleResolution: 'bundler',
+    skipLibCheck: true,
+    strict: true,
+    files: ['src/internal-fields-stripped.ts'],
+    mustPass: true,
+  },
+  {
+    name: 'node16 / internal fields stripped (SD-2886)',
+    module: 'Node16',
+    moduleResolution: 'node16',
+    skipLibCheck: true,
+    strict: true,
+    files: ['src/internal-fields-stripped.ts'],
+    mustPass: true,
+  },
+  // SD-2867 phase B: SuperDoc.canPerformPermission forwards `comment` and
+  // `trackedChange` to isAllowed() unchanged, so the public contract must
+  // accept the wide payloads the editor's permission helper produces
+  // (tracked-change `type`, `attrs`, `from`, `to`, `segments`, etc.). The
+  // fixture pins this so a future PR cannot re-narrow the typedef into a
+  // closed shape that rejects valid runtime payloads.
+  {
+    name: 'bundler / canPerformPermission wide payloads (SD-2867)',
+    module: 'ESNext',
+    moduleResolution: 'bundler',
+    skipLibCheck: true,
+    strict: true,
+    files: ['src/can-perform-permission-payload.ts'],
+    mustPass: true,
+  },
+  {
+    name: 'node16 / canPerformPermission wide payloads (SD-2867)',
+    module: 'Node16',
+    moduleResolution: 'node16',
+    skipLibCheck: true,
+    strict: true,
+    files: ['src/can-perform-permission-payload.ts'],
+    mustPass: true,
+  },
+  // SD-2867 Kind II: `User.email` accepts both `string` and `null`. The
+  // runtime has always exposed `null` (DEFAULT_USER.email), and this
+  // fixture pins the typedef to that contract so a future PR cannot
+  // re-narrow `email` to `string` without a typecheck failure here.
+  {
+    name: 'bundler / User.email accepts string | null (SD-2867)',
+    module: 'ESNext',
+    moduleResolution: 'bundler',
+    skipLibCheck: true,
+    strict: true,
+    files: ['src/user-email-nullable.ts'],
+    mustPass: true,
+  },
+  {
+    name: 'node16 / User.email accepts string | null (SD-2867)',
+    module: 'Node16',
+    moduleResolution: 'node16',
+    skipLibCheck: true,
+    strict: true,
+    files: ['src/user-email-nullable.ts'],
+    mustPass: true,
+  },
+  // SD-2828: `Document.provider` and `SuperDoc.provider` are typed as
+  // `CollaborationProvider`, not `HocuspocusProvider`. The runtime stores
+  // whatever provider the consumer passed (Hocuspocus, Liveblocks-Yjs,
+  // TiptapCollab, etc.); pinning the wider contract here so a future
+  // re-narrowing to `HocuspocusProvider` would surface as a typecheck
+  // failure on the public surface.
+  {
+    name: 'bundler / provider is CollaborationProvider (SD-2828)',
+    module: 'ESNext',
+    moduleResolution: 'bundler',
+    skipLibCheck: true,
+    strict: true,
+    files: ['src/provider-collaboration-provider.ts'],
+    mustPass: true,
+  },
+  {
+    name: 'node16 / provider is CollaborationProvider (SD-2828)',
+    module: 'Node16',
+    moduleResolution: 'node16',
+    skipLibCheck: true,
+    strict: true,
+    files: ['src/provider-collaboration-provider.ts'],
+    mustPass: true,
+  },
+
+  // SD-2828: `SuperDoc.search()` returns `SearchMatch[] | undefined`, and
+  // `SuperDoc.goToSearchResult()` accepts `SearchMatch`. Promoting the
+  // search-match shape to the public type contract so consumers wiring
+  // a custom search UI get real types on `id`, `from`, `to`, `text`
+  // instead of `any`. Pinned here so a future change that strips or
+  // re-narrows fields would surface as a typecheck failure.
+  {
+    name: 'bundler / search returns SearchMatch[] (SD-2828)',
+    module: 'ESNext',
+    moduleResolution: 'bundler',
+    skipLibCheck: true,
+    strict: true,
+    files: ['src/search-match.ts'],
+    mustPass: true,
+  },
+  {
+    name: 'node16 / search returns SearchMatch[] (SD-2828)',
+    module: 'Node16',
+    moduleResolution: 'node16',
+    skipLibCheck: true,
+    strict: true,
+    files: ['src/search-match.ts'],
+    mustPass: true,
+  },
+
+  // SD-2828: `ExportParams.fieldsHighlightColor` accepts `string | null
+  // | undefined`. The runtime defaults the field to `null` when omitted
+  // and forwards that `null` straight through to `Editor.exportDocx`
+  // (which already types it as `string | null`). The previous public
+  // typedef narrowed to `string`, so consumers passing the
+  // runtime-equivalent `null` failed strict-mode typechecks. Pinned
+  // here so a future re-narrowing surfaces as a typecheck failure.
+  {
+    name: 'bundler / fieldsHighlightColor accepts null (SD-2828)',
+    module: 'ESNext',
+    moduleResolution: 'bundler',
+    skipLibCheck: true,
+    strict: true,
+    files: ['src/export-params-fields-highlight.ts'],
+    mustPass: true,
+  },
+  {
+    name: 'node16 / fieldsHighlightColor accepts null (SD-2828)',
+    module: 'Node16',
+    moduleResolution: 'node16',
+    skipLibCheck: true,
+    strict: true,
+    files: ['src/export-params-fields-highlight.ts'],
     mustPass: true,
   },
 ];

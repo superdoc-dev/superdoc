@@ -41,7 +41,7 @@ This enables:
 - Document structure (headings, lists, tables) remains intact
 - Ideal for mobile devices and responsive web applications
 
-<Note>If you also need layout-engine-powered features such as proofing in web layout, set `layoutEngineOptions.flowMode: 'semantic'`.</Note>
+<Note>If you also need layout-engine-powered features such as spell check in web layout, set `layoutEngineOptions.flowMode: 'semantic'`.</Note>
 
 ## Keyboard navigation
 
@@ -135,10 +135,8 @@ Tables and lists use standard HTML elements that are accessible by default:
 ## Testing your implementation
 
 ```javascript
-// Check if high contrast is enabled
-if (superdoc.isHighContrastMode) {
-  console.log('High contrast active');
-}
+// Toggle high contrast mode
+superdoc.setHighContrastMode(true);
 
 // Ensure toolbar is keyboard accessible
 document.querySelector('.super-toolbar').setAttribute('tabindex', '0');

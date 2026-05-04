@@ -85,7 +85,7 @@ export type TextMutationResolution = {
   requestedTarget?: TextAddress;
   /**
    * Effective target used by the adapter after canonical resolution.
-   * For cross-block selections this reflects the first block only —
+   * For cross-block selections this reflects the first block only -
    * use {@link selectionTarget} for the full resolved range.
    */
   target: TextAddress;

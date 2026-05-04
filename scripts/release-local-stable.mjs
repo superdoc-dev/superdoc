@@ -1,15 +1,23 @@
 #!/usr/bin/env node
 
 /**
- * Combined stable orchestrator for auto-released stable packages.
+ * Stable tooling bundle: CLI -> SDK -> MCP, in order.
  *
- * Order matters:
- * - Release core/wrappers first so dependent packages see the final stable head.
- * - Release CLI before SDK because the SDK publish pipeline packages CLI artifacts.
- * - Release SDK last so stable CI can detect an sdk-v* tag at HEAD and resume
- *   the Python publish step if needed.
+ * Used both in CI (release-stable.yml) and locally (`pnpm release:local`).
+ * Releasing these three together solves three GitHub Actions semantics
+ * problems that per-workflow chains hit: shared concurrency cancellation,
+ * `id-token: write` permission propagation for PyPI OIDC, and double-fire
+ * from overlapping path filters. One workflow, one queue slot, one
+ * permission context.
  *
- * Manual-only stable packages (currently create + mcp) stay outside this flow.
+ * Order rationale:
+ * - CLI ships native binaries used by SDK.
+ * - SDK packages those CLI binaries into Node + Python distributions.
+ * - MCP imports SDK + engine code and ships against pinned SDK versions.
+ *
+ * superdoc, react, esign, template-builder, and vscode-ext release
+ * independently via their own per-package stable workflows. SuperDoc
+ * promotion of docs-stable is keyed to the SuperDoc workflow specifically.
  *
  * Usage:
  *   pnpm run release:local [-- --dry-run]
@@ -138,8 +146,22 @@ function listMergedTags(pattern, ref = 'HEAD') {
     : [];
 }
 
+function isPrereleaseTag(tag) {
+  return tag.includes('-next.');
+}
+
+// On stable, prerelease tags (`*-next.*`) created on main are still reachable
+// through merge commits but must NEVER be treated as "the latest stable
+// release" during recovery. Filter them out at every callsite that consumes
+// a stable tag list.
+function listStableMergedTags(pattern, ref = 'HEAD') {
+  return listMergedTags(pattern, ref).filter((tag) => !isPrereleaseTag(tag));
+}
+
 function getPreviousMergedReleaseTag(pattern, currentTag, ref = 'HEAD') {
-  const tags = listMergedTags(pattern, ref);
+  const tags = isPrereleaseTag(currentTag)
+    ? listMergedTags(pattern, ref)
+    : listStableMergedTags(pattern, ref);
   const currentIndex = tags.indexOf(currentTag);
   return currentIndex === -1 ? '' : (tags[currentIndex + 1] ?? '');
 }
@@ -225,9 +247,11 @@ function isVsCodeExtensionVersionPublished(extensionId, version, workspaceRoot =
 }
 
 async function isPyPiVersionPublished(packageName, version) {
-  const response = await fetch(`https://pypi.org/pypi/${encodeURIComponent(packageName)}/${encodeURIComponent(version)}/json`, {
-    headers: { Accept: 'application/json' },
-  });
+  const response = await fetchWithRetry(
+    `https://pypi.org/pypi/${encodeURIComponent(packageName)}/${encodeURIComponent(version)}/json`,
+    { headers: { Accept: 'application/json' } },
+    { label: `PyPI ${packageName}@${version}` },
+  );
 
   if (response.status === 404) {
     return false;
@@ -273,19 +297,46 @@ function hasGitHubReleaseContext() {
   return Boolean(process.env.GITHUB_TOKEN) && Boolean(getOriginRepository());
 }
 
+// Wraps fetch with bounded retry on transient network errors. The original
+// stable bundle failure that drove this refactor was a one-off `fetch failed`
+// against api.github.com during a release-state probe; without retry that
+// blip cancelled the entire release.
+async function fetchWithRetry(url, init, { attempts = 3, label = url } = {}) {
+  let lastError;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      return await fetch(url, init);
+    } catch (error) {
+      lastError = error;
+      const cause = error && error.cause ? ` (cause: ${error.cause.code || error.cause.message || error.cause})` : '';
+      if (attempt === attempts) {
+        throw new Error(`fetch ${label} failed after ${attempts} attempts: ${error.message}${cause}`);
+      }
+      const backoffMs = 500 * 2 ** (attempt - 1);
+      console.warn(`fetch ${label} attempt ${attempt}/${attempts} failed: ${error.message}${cause} - retrying in ${backoffMs}ms`);
+      await new Promise((resolve) => setTimeout(resolve, backoffMs));
+    }
+  }
+  throw lastError;
+}
+
 async function githubJsonRequest(pathname, options = {}) {
   const { method = 'GET', body, allow404 = false } = options;
-  const response = await fetch(`https://api.github.com${pathname}`, {
-    method,
-    headers: {
-      Accept: 'application/vnd.github+json',
-      Authorization: `Bearer ${process.env.GITHUB_TOKEN}`,
-      'Content-Type': 'application/json',
-      'User-Agent': 'superdoc-release-stable',
-      'X-GitHub-Api-Version': GITHUB_API_VERSION,
+  const response = await fetchWithRetry(
+    `https://api.github.com${pathname}`,
+    {
+      method,
+      headers: {
+        Accept: 'application/vnd.github+json',
+        Authorization: `Bearer ${process.env.GITHUB_TOKEN}`,
+        'Content-Type': 'application/json',
+        'User-Agent': 'superdoc-release-stable',
+        'X-GitHub-Api-Version': GITHUB_API_VERSION,
+      },
+      body: body ? JSON.stringify(body) : undefined,
     },
-    body: body ? JSON.stringify(body) : undefined,
-  });
+    { label: `GitHub ${method} ${pathname}` },
+  );
 
   if (allow404 && response.status === 404) {
     return null;
@@ -305,17 +356,21 @@ async function githubJsonRequest(pathname, options = {}) {
 
 async function githubBinaryRequest(url, options = {}) {
   const { method = 'POST', body, headers = {} } = options;
-  const response = await fetch(url, {
-    method,
-    headers: {
-      Accept: 'application/vnd.github+json',
-      Authorization: `Bearer ${process.env.GITHUB_TOKEN}`,
-      'User-Agent': 'superdoc-release-stable',
-      'X-GitHub-Api-Version': GITHUB_API_VERSION,
-      ...headers,
+  const response = await fetchWithRetry(
+    url,
+    {
+      method,
+      headers: {
+        Accept: 'application/vnd.github+json',
+        Authorization: `Bearer ${process.env.GITHUB_TOKEN}`,
+        'User-Agent': 'superdoc-release-stable',
+        'X-GitHub-Api-Version': GITHUB_API_VERSION,
+        ...headers,
+      },
+      body,
     },
-    body,
-  });
+    { label: `GitHub upload ${method}` },
+  );
 
   if (!response.ok) {
     const details = await response.text();
@@ -493,6 +548,25 @@ function recordSdkPythonSnapshot(snapshot) {
   setStepOutput('sdk_python_snapshot_main_dir', snapshot.mainDir);
 }
 
+// Bundle order is CLI -> SDK -> MCP. After MCP releases, HEAD points at MCP's
+// version commit, so `git tag --points-at HEAD --list 'sdk-v*'` returns
+// nothing. Emit SDK release coordinates directly so the Python publish step
+// has stable inputs that don't depend on HEAD.
+function recordSdkReleaseOutputs(sdkResult) {
+  if (!sdkResult || !sdkResult.newTags || sdkResult.newTags.length === 0) {
+    return;
+  }
+
+  const tag = sdkResult.newTags[0];
+  const version = tag.startsWith('sdk-v') ? tag.slice('sdk-v'.length) : tag;
+  const distTag = version.includes('-next.') ? 'next' : 'latest';
+
+  setStepOutput('sdk_release_present', 'true');
+  setStepOutput('sdk_release_tag', tag);
+  setStepOutput('sdk_release_version', version);
+  setStepOutput('sdk_release_dist_tag', distTag);
+}
+
 async function inspectPackageReleaseState(pkg, { tag, version, workspaceRoot = REPO_ROOT }) {
   let publishComplete = true;
   if (pkg.vsCodeExtensionId) {
@@ -547,37 +621,6 @@ function resumePackagePublish(pkg, distTag, options = {}) {
   const { workspaceRoot = REPO_ROOT, skipBuild = workspaceRoot === REPO_ROOT } = options;
 
   switch (pkg.name) {
-    case 'superdoc': {
-      const args = [join(workspaceRoot, 'scripts/publish-superdoc.cjs'), '--dist-tag', distTag];
-      if (skipBuild) {
-        args.push('--skip-build');
-      }
-      runInWorkspace(workspaceRoot, 'node', args);
-      break;
-    }
-    case 'esign':
-    case 'react':
-    case 'template-builder':
-      runInWorkspace(workspaceRoot, 'node', [
-        join(workspaceRoot, 'scripts/npm-publish-package.cjs'),
-        '--package-dir',
-        pkg.packageCwd,
-        '--tag',
-        distTag,
-      ]);
-      break;
-    case 'vscode-ext':
-      // The vscode-ext webview imports `superdoc`, which resolves to
-      // packages/superdoc/dist/. The main release flow builds that via the
-      // root `Build packages` step, but recovery snapshots only run
-      // `pnpm install` and never build the workspace. Build it here so
-      // `vsce package` can bundle the webview.
-      if (!skipBuild) {
-        runInWorkspace(workspaceRoot, 'pnpm', ['run', 'build']);
-      }
-      runInWorkspace(workspaceRoot, 'pnpm', ['--prefix', join(workspaceRoot, 'apps/vscode-ext'), 'run', 'package']);
-      runInWorkspace(workspaceRoot, 'pnpm', ['--prefix', join(workspaceRoot, 'apps/vscode-ext'), 'run', 'publish:vsce']);
-      break;
     case 'cli':
       runInWorkspace(workspaceRoot, 'pnpm', ['--prefix', join(workspaceRoot, 'apps/cli'), 'run', 'build:prepublish']);
       runInWorkspace(workspaceRoot, 'node', [join(workspaceRoot, 'apps/cli/scripts/publish.js'), '--tag', distTag]);
@@ -590,6 +633,29 @@ function resumePackagePublish(pkg, distTag, options = {}) {
         '--npm-only',
       ]);
       break;
+    case 'mcp': {
+      // MCP recovery snapshots only run `pnpm install`, so MCP's build output
+      // isn't on disk. Rebuild before publishing so the `dist/` tarball
+      // declared in apps/mcp/package.json files actually ships.
+      if (!skipBuild) {
+        runInWorkspace(workspaceRoot, 'pnpm', ['run', 'generate:all']);
+        runInWorkspace(workspaceRoot, 'pnpm', ['run', 'build:superdoc']);
+        runInWorkspace(workspaceRoot, 'pnpm', ['--prefix', join(workspaceRoot, 'packages/sdk/langs/node'), 'run', 'build']);
+      }
+      const mcpRoot = join(workspaceRoot, 'apps/mcp');
+      runInWorkspace(mcpRoot, 'pnpm', ['run', 'build']);
+      // `pnpm publish` does not honor `--prefix` (passes through to npm and
+      // errors with EUSAGE); it must run with cwd at the package root.
+      runInWorkspace(mcpRoot, 'pnpm', [
+        'publish',
+        '--no-git-checks',
+        '--access',
+        'public',
+        '--tag',
+        distTag,
+      ]);
+      break;
+    }
     default:
       throw new Error(`No resume command configured for ${pkg.name}`);
   }
@@ -654,7 +720,13 @@ async function recoverPackageRelease(pkg, { tag, version, distTag, branchRef, in
 }
 
 async function maybeRecoverIncompleteRelease(pkg, branchRef) {
-  const latestTag = listMergedTags(pkg.tagPattern, branchRef)[0];
+  // Stable recovery must skip `*-next.*` tags - those are prereleases cut on
+  // main that flow into stable through merge commits but never represent a
+  // pending stable publish. Picking one would resume against a npm @next
+  // package as if it were @latest, polluting the stable channel.
+  const latestTag = expectedBranch === 'stable'
+    ? listStableMergedTags(pkg.tagPattern, branchRef)[0]
+    : listMergedTags(pkg.tagPattern, branchRef)[0];
   if (!latestTag) {
     return null;
   }
@@ -704,7 +776,10 @@ for (const arg of process.argv.slice(2)) {
 setStepOutput('sdk_python_snapshot_tag', '');
 setStepOutput('sdk_python_snapshot_companion_dir', '');
 setStepOutput('sdk_python_snapshot_main_dir', '');
-setStepOutput('promote_sha', '');
+setStepOutput('sdk_release_present', 'false');
+setStepOutput('sdk_release_tag', '');
+setStepOutput('sdk_release_version', '');
+setStepOutput('sdk_release_dist_tag', '');
 
 // ---------------------------------------------------------------------------
 // Branch guard
@@ -724,42 +799,11 @@ const branchRef = `origin/${expectedBranch}`;
 // Release pipeline
 // ---------------------------------------------------------------------------
 
+// Stable bundle: CLI -> SDK -> MCP. These three share artifacts (SDK packages
+// CLI native binaries; MCP imports SDK + engine code), so they must release
+// together in this order. superdoc, react, esign, template-builder, and
+// vscode-ext release independently via their own per-package stable workflows.
 const packages = [
-  {
-    name: 'superdoc',
-    packageCwd: 'packages/superdoc',
-    tagPrefix: 'v',
-    tagPattern: 'v[0-9]*',
-    npmPackages: ['superdoc', '@harbour-enterprises/superdoc'],
-  },
-  {
-    name: 'esign',
-    packageCwd: 'packages/esign',
-    tagPrefix: 'esign-v',
-    tagPattern: 'esign-v*',
-    npmPackages: ['@superdoc-dev/esign'],
-  },
-  {
-    name: 'react',
-    packageCwd: 'packages/react',
-    tagPrefix: 'react-v',
-    tagPattern: 'react-v*',
-    npmPackages: ['@superdoc-dev/react'],
-  },
-  {
-    name: 'template-builder',
-    packageCwd: 'packages/template-builder',
-    tagPrefix: 'template-builder-v',
-    tagPattern: 'template-builder-v*',
-    npmPackages: ['@superdoc-dev/template-builder'],
-  },
-  {
-    name: 'vscode-ext',
-    packageCwd: 'apps/vscode-ext',
-    tagPrefix: 'vscode-v',
-    tagPattern: 'vscode-v*',
-    vsCodeExtensionId: 'superdoc-dev.superdoc-vscode-ext',
-  },
   {
     name: 'cli',
     packageCwd: 'apps/cli',
@@ -774,6 +818,13 @@ const packages = [
     tagPattern: 'sdk-v*',
     npmPackages: SDK_NODE_NPM_PACKAGES,
     pythonPackages: SDK_PYTHON_PACKAGES,
+  },
+  {
+    name: 'mcp',
+    packageCwd: 'apps/mcp',
+    tagPrefix: 'mcp-v',
+    tagPattern: 'mcp-v*',
+    npmPackages: ['@superdoc-dev/mcp'],
   },
 ];
 
@@ -910,6 +961,8 @@ for (let index = 0; index < packages.length; index += 1) {
 // Summary
 // ---------------------------------------------------------------------------
 
+recordSdkReleaseOutputs(results.get('sdk'));
+
 console.log('\n--- Release Summary ---');
 for (const [name, { status, newTags }] of results) {
   const tagInfo = newTags.length > 0 ? `  [${newTags.join(', ')}]` : '';
@@ -930,13 +983,6 @@ if (hasFailed) {
 
 if (deferredReason && !hasFailed) {
   console.log('\nCurrent run stopped before publishing from a stale checkout. The next queued stable run should continue from the latest branch head.');
-}
-
-// Emit the SHA the docs-stable promotion step should publish. Stays empty when
-// the run failed or was deferred, so production docs never advance past a
-// commit whose packages are not actually published.
-if (!hasFailed && !deferredReason) {
-  setStepOutput('promote_sha', getCurrentHead());
 }
 
 // Remind operator about @semantic-release/git behavior on stable

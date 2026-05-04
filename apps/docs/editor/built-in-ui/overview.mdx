@@ -1,0 +1,59 @@
+---
+title: Built-in UI
+sidebarTitle: Overview
+keywords: "superdoc built-in ui, modules, editor modules, document features, plugin system"
+---
+
+SuperDoc ships ready-made UI for the toolbar, comments panel, tracked-change review, and a few other surfaces. Configure it through the `modules` option: enable only what you need, swap any piece for your own component when you want to.
+
+For new React apps that want full control over the UI, [Custom UI](/editor/custom-ui/overview) is the recommended path. Built-in UI stays supported for apps that prefer SuperDoc's components as-is.
+
+```javascript
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: 'contract.docx',
+  modules: {
+    toolbar: { selector: '#toolbar' },
+    comments: { allowResolve: true },
+    collaboration: { ydoc, provider },
+    contextMenu: { includeDefaultItems: true },
+    links: { popoverResolver: (ctx) => ({ type: 'default' }) }
+  }
+});
+```
+
+## Available built-in UI
+
+<CardGroup cols={2}>
+  <Card title="Comments" icon="message-square" href="/editor/built-in-ui/comments">
+    Threaded discussions and annotations
+  </Card>
+  <Card title="Track Changes" icon="git-compare" href="/editor/built-in-ui/track-changes">
+    Word-style revision tracking with accept/reject
+  </Card>
+  <Card title="Toolbar" icon="palette" href="/editor/built-in-ui/toolbar">
+    Customizable formatting controls
+  </Card>
+  <Card title="Links" icon="link" href="/editor/built-in-ui/links">
+    Customize the link click popover or bring your own UI
+  </Card>
+  <Card title="Context Menu" icon="menu" href="/editor/built-in-ui/context-menu">
+    Right-click actions and custom commands
+  </Card>
+</CardGroup>
+
+Each surface is configured via `modules.<name>` in the [SuperDoc configuration](/editor/superdoc/configuration). See individual pages for all available options.
+
+## Related
+
+<CardGroup cols={3}>
+  <Card title="Custom UI" icon="layout-dashboard" href="/editor/custom-ui/overview">
+    Build your own toolbar, comments sidebar, and review panel with typed React hooks
+  </Card>
+  <Card title="Collaboration" icon="users" href="/editor/collaboration/overview">
+    Real-time multi-user editing with Yjs (separate top-level section)
+  </Card>
+  <Card title="Spell check" icon="check-check" href="/editor/spell-check/overview">
+    Provider-based spell check on the layout-engine editor surface
+  </Card>
+</CardGroup>

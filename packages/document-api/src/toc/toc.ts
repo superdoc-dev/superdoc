@@ -109,7 +109,7 @@ function validateTocInput(input: unknown, operationName: string): asserts input 
 }
 
 // ---------------------------------------------------------------------------
-// Execute wrappers — TOC lifecycle
+// Execute wrappers: TOC lifecycle
 // ---------------------------------------------------------------------------
 
 export function executeTocList(adapter: TocAdapter, query?: TocListQuery): TocListResult {
@@ -162,7 +162,7 @@ export function executeTocRemove(
 }
 
 // ---------------------------------------------------------------------------
-// Execute wrappers — TC entry operations
+// Execute wrappers: TC entry operations
 // ---------------------------------------------------------------------------
 
 export function executeTocMarkEntry(

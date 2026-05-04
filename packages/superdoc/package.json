@@ -1,7 +1,7 @@
 {
   "name": "superdoc",
   "type": "module",
-  "version": "1.29.1",
+  "version": "1.31.0",
   "license": "AGPL-3.0",
   "repository": {
     "type": "git",
@@ -124,6 +124,8 @@
     "test": "vitest"
   },
   "dependencies": {
+    "@types/mdast": "catalog:",
+    "@types/ws": "catalog:",
     "buffer-crc32": "catalog:",
     "eventemitter3": "catalog:",
     "jsdom": "catalog:",
@@ -131,7 +133,7 @@
     "pinia": "catalog:",
     "rollup-plugin-copy": "catalog:",
     "uuid": "catalog:",
-    "vue": "catalog:",
+    "vue": "^3.5.0",
     "y-websocket": "catalog:"
   },
   "peerDependencies": {
@@ -169,6 +171,7 @@
     "@hocuspocus/provider": "catalog:",
     "@hocuspocus/server": "catalog:",
     "@superdoc-dev/superdoc-yjs-collaboration": "workspace:*",
+    "@types/uuid": "catalog:",
     "@superdoc/common": "workspace:*",
     "@superdoc/super-editor": "workspace:*",
     "@vitejs/plugin-vue": "catalog:",

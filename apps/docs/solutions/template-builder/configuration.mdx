@@ -21,7 +21,7 @@ Control which document is loaded and how users interact with it:
 **Editing mode** - Users can edit document content and insert fields.
 **Viewing mode** - Read-only document display, fields can still be inserted.
 
-Changing `mode` at runtime switches between editing and viewing without recreating the editor — no scroll jump or content flash:
+Changing `mode` at runtime switches between editing and viewing without recreating the editor: no scroll jump or content flash:
 
 ```tsx
 <SuperDocTemplateBuilder
@@ -92,10 +92,10 @@ Color-code fields in the document and sidebar with `fieldColors`:
 />
 ```
 
-Each color controls the field's border and label in the document. The sidebar badges match automatically. Custom field types beyond `owner` and `signer` work the same way — just add them to `fieldColors`.
+Each color controls the field's border and label in the document. The sidebar badges match automatically. Custom field types beyond `owner` and `signer` work the same way: just add them to `fieldColors`.
 
 <Tip>
-  You can also import `@superdoc-dev/template-builder/field-types.css` directly and use CSS variables instead. The `fieldColors` prop is the recommended approach — no extra imports needed.
+  You can also import `@superdoc-dev/template-builder/field-types.css` directly and use CSS variables instead. The `fieldColors` prop is the recommended approach: no extra imports needed.
 </Tip>
 
 The `fieldType` value flows through all callbacks (`onFieldInsert`, `onFieldsChange`, `onExport`, etc.) and is stored in the SDT tag metadata.
@@ -173,7 +173,7 @@ Make fields read-only so end users can't edit their content:
 
 Per-field `lockMode` overrides `defaultLockMode`. The default field creation form includes a "Locked" checkbox that sets `contentLocked`.
 
-Template authors can always delete and manage fields regardless of lock mode — locking only affects end users interacting with the document. For advanced use cases, see [lock modes](/extensions/structured-content#lock-modes).
+Template authors can always delete and manage fields regardless of lock mode: locking only affects end users interacting with the document. For advanced use cases, see [lock modes](/extensions/structured-content#lock-modes).
 
 ### Linked fields
 
@@ -306,13 +306,13 @@ function CustomFieldList({ fields, onSelect, onDelete, selectedFieldId }) {
 Control the document editing toolbar:
 
 ```tsx
-// Boolean — render default toolbar container
+// Boolean: render default toolbar container
 <SuperDocTemplateBuilder toolbar={true} />
 
-// String — mount into an existing element
+// String: mount into an existing element
 <SuperDocTemplateBuilder toolbar="#my-toolbar" />
 
-// Object — full control
+// Object: full control
 <SuperDocTemplateBuilder
   toolbar={{
     selector: "#my-toolbar",

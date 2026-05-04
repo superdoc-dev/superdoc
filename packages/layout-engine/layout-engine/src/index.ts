@@ -638,10 +638,6 @@ const hasOnlySectionBreakBlocks = (blocks: readonly FlowBlock[]): boolean => {
   return blocks.length > 0 && blocks.every((block) => block.kind === 'sectionBreak');
 };
 
-// List constants sourced from shared/common
-
-// Context types moved to modular layouters
-
 const layoutDebugEnabled =
   typeof process !== 'undefined' && typeof process.env !== 'undefined' && Boolean(process.env.SD_DEBUG_LAYOUT);
 

@@ -73,7 +73,7 @@ export interface TocSwitchConfig {
   preserved: TocPreservedSwitches;
 }
 
-/** Patch for toc.configure — only configurable fields, all optional. */
+/** Patch for toc.configure: only configurable fields, all optional. */
 export type TocConfigurePatch = TocSourceConfig & TocDisplayConfig;
 
 // ---------------------------------------------------------------------------
@@ -194,7 +194,7 @@ export interface TocEntryAddress {
   nodeId: string;
 }
 
-/** Insertion target for toc.markEntry — anchored to a paragraph. */
+/** Insertion target for toc.markEntry: anchored to a paragraph. */
 export interface TocEntryInsertionTarget {
   kind: 'inline-insert';
   /** Insert TC field adjacent to a block-addressed paragraph. */
@@ -213,13 +213,13 @@ export interface TocEntryInsertionTarget {
 
 export interface TocMarkEntryInput {
   target: TocEntryInsertionTarget;
-  /** Entry text — required (v1: explicit text only). */
+  /** Entry text: required (v1: explicit text only). */
   text: string;
   /** TC \l switch level. Default: 1. */
   level?: number;
   /** TC \f switch table identifier. */
   tableIdentifier?: string;
-  /** TC \n switch — omit page number for this entry. Default: false. */
+  /** TC \n switch: omit page number for this entry. Default: false. */
   omitPageNumber?: boolean;
 }
 

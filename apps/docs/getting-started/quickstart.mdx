@@ -3,267 +3,147 @@ title: Quick start
 keywords: "superdoc quickstart, docx editor tutorial, word editor setup, javascript docx quick start, mcp docx, ai agent docx, llm document editing, superdoc init"
 ---
 
-## Pick your surface
+By the end of this page you'll have a working DOCX editor in your app: load a Word file, edit it, export it back as `.docx`.
 
-```mermaid actions={false}
-flowchart TD
-    Start{What are you building?}
-    Agent[AI agent or LLM tool<br/>that edits DOCX]
-    Server[Server / script<br/>editing DOCX]
-    Editor[Embedded DOCX editor<br/>in a web app]
-    UI{Custom UI<br/>or built-in?}
+<Info>
+**Using an AI coding agent?** Run `npx @superdoc-dev/create` in your project. It writes an AGENTS.md with SuperDoc-specific instructions and MCP setup. Then see [Use SuperDoc with AI](/getting-started/ai) for the full path picker.
+</Info>
 
-    Start -->|AI agents| Agent
-    Start -->|Backend code| Server
-    Start -->|Browser editor| Editor
-    Editor --> UI
-    UI -->|Built-in is fine| BuiltIn[SuperDoc + Modules]
-    UI -->|My own React UI| BYO[SuperDoc + Bring Your Own UI]
-
-    Agent --> AgentTools["MCP server<br/>or @superdoc-dev/sdk"]
-    Server --> SDK["@superdoc-dev/sdk<br/>or @superdoc-dev/cli"]
-```
-
-Each branch below maps to a specific section.
-
-## Using an AI coding agent?
-
-Run this first. It generates an AGENTS.md that teaches your agent how to use SuperDoc.
-
-```bash
-npx @superdoc-dev/create
-```
-
-Then set up the MCP server so your agent can edit DOCX files directly:
+## 1. Install
 
 <Tabs>
-  <Tab title="Claude Code">
+  <Tab title="npm">
     ```bash
-    claude mcp add superdoc -- npx @superdoc-dev/mcp
+    npm install superdoc
     ```
   </Tab>
-  <Tab title="Cursor">
-    Add to `~/.cursor/mcp.json`:
-
-    ```json
-    {
-      "mcpServers": {
-        "superdoc": {
-          "command": "npx",
-          "args": ["@superdoc-dev/mcp"]
-        }
-      }
-    }
+  <Tab title="React">
+    ```bash
+    npm install @superdoc-dev/react
     ```
   </Tab>
-  <Tab title="Windsurf">
-    Add to `~/.codeium/windsurf/mcp_config.json`:
+  <Tab title="CDN">
+    ```html
+    <link href="https://cdn.jsdelivr.net/npm/superdoc/dist/style.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/superdoc/dist/superdoc.min.js"></script>
+    ```
+    `SuperDoc` becomes a global: use `new SuperDoc({...})` directly.
+  </Tab>
+</Tabs>
 
-    ```json
-    {
-      "mcpServers": {
-        "superdoc": {
-          "command": "npx",
-          "args": ["@superdoc-dev/mcp"]
-        }
-      }
+## 2. Render the editor
+
+<Tabs>
+  <Tab title="JavaScript">
+    ```html
+    <div id="editor" style="height: 100vh"></div>
+
+    <script type="module">
+      import { SuperDoc } from 'superdoc';
+      import 'superdoc/style.css';
+
+      const superdoc = new SuperDoc({
+        selector: '#editor',
+      });
+    </script>
+    ```
+  </Tab>
+  <Tab title="React">
+    ```jsx
+    import { SuperDocEditor } from '@superdoc-dev/react';
+    import '@superdoc-dev/react/style.css';
+
+    export default function App() {
+      return <SuperDocEditor />;
     }
     ```
   </Tab>
 </Tabs>
 
-Done. Ask your agent to open a `.docx` file and make an edit.
+That's a blank editor. Give it a document.
 
-[MCP setup guide →](/document-engine/ai-agents/mcp-server) · [LLM tools →](/document-engine/ai-agents/llm-tools)
+## 3. Load a document
 
----
-
-## Edit DOCX from backend code
+Pass a URL, a `File` from an input, or a `Blob` from your API to `document`.
 
 <Tabs>
-  <Tab title="Node.js">
-    ```bash
-    npm install @superdoc-dev/sdk
-    ```
-
-    ```typescript
-    import { SuperDocClient } from '@superdoc-dev/sdk';
-
-    const client = new SuperDocClient({ defaultChangeMode: 'tracked' });
-    const doc = await client.open({ doc: './contract.docx' });
-
-    // query, edit, format, comment, track changes...
-
-    await doc.save();
-    await doc.close();
+  <Tab title="URL">
+    ```javascript
+    new SuperDoc({
+      selector: '#editor',
+      document: '/files/contract.docx',
+    });
     ```
   </Tab>
-  <Tab title="Python">
-    ```bash
-    pip install superdoc-sdk
-    ```
-
-    ```python
-    from superdoc import SuperDocClient
-
-    client = SuperDocClient(default_change_mode="tracked")
-    doc = client.open({"doc": "./contract.docx"})
-
-    # query, edit, format, comment, track changes...
-
-    doc.save()
-    doc.close()
+  <Tab title="File input">
+    ```javascript
+    document.getElementById('file-input').addEventListener('change', (e) => {
+      new SuperDoc({
+        selector: '#editor',
+        document: e.target.files[0],
+      });
+    });
     ```
   </Tab>
-  <Tab title="CLI">
-    ```bash
-    npm install -g @superdoc-dev/cli
-    ```
+  <Tab title="Fetch">
+    ```javascript
+    const response = await fetch('/api/documents/123');
+    const blob = await response.blob();
 
-    ```bash
-    superdoc open contract.docx
-    superdoc find --type text --pattern "ACME Corp"
-    superdoc replace --target-json '...' --text "NewCo Inc." --change-mode tracked
-    superdoc save && superdoc close
+    new SuperDoc({
+      selector: '#editor',
+      document: new File([blob], 'document.docx'),
+    });
     ```
   </Tab>
 </Tabs>
 
-[SDK docs →](/document-engine/sdks) · [CLI docs →](/document-engine/cli)
+Tracked changes, tables, images, headers/footers: all working.
 
----
+## 4. Export it
 
-## Embed a DOCX editor
+Default `superdoc.export()` triggers a browser download. To upload to your backend instead, ask for the raw `Blob`:
 
-<Steps>
-  <Step title="Install">
-    <Tabs>
-      <Tab title="npm">
-        ```bash
-        npm install superdoc
-        ```
-      </Tab>
-      <Tab title="CDN">
-        ```html
-        <link href="https://cdn.jsdelivr.net/npm/superdoc/dist/style.css" rel="stylesheet">
-        <script src="https://cdn.jsdelivr.net/npm/superdoc/dist/superdoc.min.js"></script>
-        ```
-        `SuperDoc` becomes a global — use `new SuperDoc({...})` directly.
-      </Tab>
-    </Tabs>
-  </Step>
+<Tabs>
+  <Tab title="Download">
+    ```javascript
+    await superdoc.export();
+    ```
+  </Tab>
+  <Tab title="Upload to backend">
+    ```javascript
+    const blob = await superdoc.export({ triggerDownload: false });
+    await fetch('/api/save', { method: 'POST', body: blob });
+    ```
+  </Tab>
+</Tabs>
 
-  <Step title="Mount the editor">
-    <Tabs>
-      <Tab title="npm">
-        ```html
-        <div id="editor" style="height: 100vh"></div>
+For HTML, JSON, or Markdown output, see [Import and export](/getting-started/import-export).
 
-        <script type="module">
-          import { SuperDoc } from 'superdoc';
-          import 'superdoc/style.css';
+## What are you building?
 
-          const superdoc = new SuperDoc({
-            selector: '#editor',
-          });
-        </script>
-        ```
-      </Tab>
-      <Tab title="CDN">
-        ```html
-        <div id="editor" style="height: 100vh"></div>
-
-        <script>
-          const superdoc = new SuperDoc({
-            selector: '#editor',
-          });
-        </script>
-        ```
-      </Tab>
-    </Tabs>
-    That's a blank editor. Now give it a file.
-  </Step>
-
-  <Step title="Load a document">
-    Pass a URL, a `File` from an input, or a `Blob` from your API.
-
-    <Tabs>
-      <Tab title="URL">
-        ```javascript
-        new SuperDoc({
-          selector: '#editor',
-          document: '/files/contract.docx',
-        });
-        ```
-      </Tab>
-      <Tab title="File input">
-        ```html
-        <input type="file" accept=".docx" id="file-input" />
-        <div id="editor" style="height: 100vh"></div>
-
-        <script type="module">
-          import { SuperDoc } from 'superdoc';
-          import 'superdoc/style.css';
-
-          document.getElementById('file-input').addEventListener('change', (e) => {
-            new SuperDoc({
-              selector: '#editor',
-              document: e.target.files[0],
-            });
-          });
-        </script>
-        ```
-      </Tab>
-      <Tab title="Fetch">
-        ```javascript
-        const response = await fetch('/api/documents/123');
-        const blob = await response.blob();
-
-        new SuperDoc({
-          selector: '#editor',
-          document: new File([blob], 'document.docx'),
-        });
-        ```
-      </Tab>
-    </Tabs>
-  </Step>
-</Steps>
-
-Tracked changes, tables, images, headers/footers — all working.
-
-### Using React?
-
-```jsx
-import { SuperDocEditor } from '@superdoc-dev/react';
-import '@superdoc-dev/react/style.css';
-
-function App() {
-  return <SuperDocEditor document={file} />;
-}
-```
-
-Install with `npm install @superdoc-dev/react`. [Full React guide →](/getting-started/frameworks/react)
-
-Want a custom toolbar, comments sidebar, or review panel instead of the built-in UI? See [Bring Your Own UI](/bring-your-own-ui/overview).
-
----
+| You want to... | Start here |
+|---|---|
+| Embed Word editing in a web app | This page (already done) |
+| Build a custom toolbar/sidebar | [Custom UI](/editor/custom-ui/overview) |
+| Use SuperDoc's built-in toolbar/comments | [Built-in UI](/editor/built-in-ui/overview) |
+| Edit DOCX from backend code | [Document Engine SDK](/document-engine/sdks) or [CLI](/document-engine/cli) |
+| Let Claude/Cursor edit DOCX files | [AI > MCP](/ai/mcp/overview) |
+| Add real-time collaborative editing | [Collaboration](/editor/collaboration/overview) |
 
 ## What's next
 
 <CardGroup cols={2}>
-  <Card title="Document Engine" icon="screwdriver-wrench" href="/document-engine/overview">
-    Architecture and how to choose a surface
+  <Card title="Custom UI" icon="layout-dashboard" href="/editor/custom-ui/overview">
+    Build your own React toolbar, comments sidebar, and review panel
   </Card>
-  <Card title="Bring Your Own UI" icon="layout-dashboard" href="/bring-your-own-ui/overview">
-    Custom React toolbar, comments, review panel
-  </Card>
-  <Card title="LLM tools" icon="sparkles" href="/document-engine/ai-agents/llm-tools">
-    Build custom AI agents with the SDK
+  <Card title="Document Engine" icon="wrench" href="/document-engine/overview">
+    Programmatic DOCX editing from Node, Python, CLI, or AI agents
   </Card>
   <Card title="Framework guides" icon="code" href="/getting-started/frameworks/react">
-    React, Vue, Angular, Vanilla JS
+    React, Vue, Nuxt, Angular, Laravel, Vanilla JS
   </Card>
-  <Card title="Examples" icon="arrow-up-right-from-square" href="https://github.com/superdoc-dev/superdoc/tree/main/examples">
+  <Card title="Examples" icon="external-link" href="https://github.com/superdoc-dev/superdoc/tree/main/examples">
     Working demos on GitHub
   </Card>
 </CardGroup>

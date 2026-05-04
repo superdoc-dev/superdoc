@@ -10,4 +10,4 @@
  *
  * Source: `packages/super-editor/src/ui/`
  */
-export { createSuperDocUI, shallowEqual } from '@superdoc/super-editor/ui';
+export { BUILT_IN_COMMAND_IDS, createSuperDocUI, shallowEqual } from '@superdoc/super-editor/ui';

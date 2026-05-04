@@ -99,29 +99,26 @@ export function handleDocumentPartObjectNode(node: PMNode, context: NodeHandlerC
         // Word stores the TOC field codes on the child node, not the wrapper SDT - prefer
         // the child's instruction so per-TOC options aren't lost (mirrors the recursion
         // inside processTocChildren in toc.ts).
-        const childTocInstruction = getNodeInstruction(child) ?? tocInstruction;
-        processTocChildren(
-          child.content,
-          {
-            docPartGallery: docPartGallery ?? '',
-            docPartObjectId,
-            tocInstruction: childTocInstruction,
-            sdtMetadata: docPartSdtMetadata,
-          },
-          {
-            nextBlockId,
-            positions,
-            bookmarks,
-            hyperlinkConfig,
-            enableComments,
-            trackedChangesConfig,
-            themeColors,
-            converters,
-            converterContext,
-            sectionState,
-          },
-          { blocks, recordBlockKind },
-        );
+        const metadata = {
+          docPartGallery: docPartGallery ?? '',
+          docPartObjectId,
+          tocInstruction: getNodeInstruction(child) ?? tocInstruction,
+          sdtMetadata: docPartSdtMetadata,
+        };
+        const tocContext = {
+          nextBlockId,
+          positions,
+          bookmarks,
+          hyperlinkConfig,
+          enableComments,
+          trackedChangesConfig,
+          themeColors,
+          converters,
+          converterContext,
+          sectionState,
+        };
+        const output = { blocks, recordBlockKind };
+        processTocChildren(child.content, metadata, tocContext, output);
       }
     }
   }

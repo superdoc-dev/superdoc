@@ -880,6 +880,49 @@ describe('SuperDoc core', () => {
     expect(instance.listenerCount('ready')).toBe(0);
   });
 
+  it('destroy() does not throw when providers omit optional disconnect/destroy methods', async () => {
+    createAppHarness();
+
+    // SD-2828: `CollaborationProvider` has optional `disconnect` and `destroy`.
+    // Liveblocks-style adapters legally satisfy the type with just on/off, so
+    // cleanup must guard the method, not just the provider.
+    const minimalSuperdocProvider = { on: vi.fn(), off: vi.fn() };
+    const minimalDocProvider = { on: vi.fn(), off: vi.fn() };
+
+    initSuperdocYdocMock.mockImplementationOnce(() => ({
+      ydoc: { destroy: vi.fn() },
+      provider: minimalSuperdocProvider,
+    }));
+    makeDocumentsCollaborativeMock.mockImplementationOnce((superdoc) =>
+      superdoc.config.documents.map((doc, index) => {
+        Object.assign(doc, {
+          id: doc.id || `doc-${index}`,
+          provider: minimalDocProvider,
+          ydoc: { destroyed: false, destroy: vi.fn() },
+          socket: superdoc.config.socket,
+        });
+        return doc;
+      }),
+    );
+
+    const instance = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: {
+        comments: {},
+        toolbar: {},
+        collaboration: { providerType: 'hocuspocus', url: 'wss://example.com' },
+      },
+      colors: ['red'],
+      user: { name: 'Jane', email: 'jane@example.com' },
+      onException: vi.fn(),
+    });
+    await flushMicrotasks();
+
+    expect(() => instance.destroy()).not.toThrow();
+  });
+
   it('mounts Vue on a wrapper element inside the user container', async () => {
     const { app } = createAppHarness();
     const instance = new SuperDoc({

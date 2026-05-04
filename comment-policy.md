@@ -41,6 +41,68 @@ Strong for non-local rules:
 // processor_rules. Do not return raw window constants for gift-card orders.
 ```
 
+## Loaded terms
+
+Some words decay faster than others because they imply precision the code
+does not enforce. When you reach for one of these, anchor it.
+
+### `legacy-public`
+
+A user-facing API kept available for backward compatibility. The code path
+is current; only the *name* is historical.
+
+Required annotation: replacement and earliest version it can be removed.
+
+```ts
+// AIDEV-NOTE: legacy-public — `oldName` kept for v1.x consumers.
+// Replaced by `newName`. Earliest removal: v2.0.
+```
+
+### `compat-fallback`
+
+A code path used today as the fallback when a newer system has gaps.
+**Not** deprecated; the fallback is load-bearing.
+
+Required annotation: what triggers the fallback, and what newer path
+replaces it once gaps close.
+
+```ts
+// AIDEV-NOTE: compat-fallback — used when ResolvedLayout.content is absent.
+// Retire once pm-adapter populates content for every fragment.
+```
+
+### `removed-dead`
+
+Code or a symbol that no longer exists in the repo. Should not appear in
+comments at all — describe the change in the PR or git history. A comment
+naming a removed symbol as "context" is itself a candidate for removal.
+
+### `deprecated`
+
+Actively scheduled for removal.
+
+Required annotation: `replaceWith` *and* either `removeIn` or
+`compat-indefinitely` (with reason).
+
+```ts
+/** @deprecated replaceWith=`viewOptions.layout: 'web'` removeIn=v2.0 */
+```
+
+A bare `@deprecated` is treated as incomplete: either annotate or delete.
+
+### `temporary`
+
+A short-lived workaround.
+
+Required annotation: condition for removal *and* an issue id.
+
+```ts
+// AIDEV-NOTE: temporary — disable until SD-1234 lands the new path.
+```
+
+A `temporary` comment without an issue id is treated as permanent, which is
+almost never what was intended.
+
 ## Treat stale comments as bugs
 
 A stale or misleading comment wastes the exact place where a useful invariant
@@ -57,5 +119,7 @@ to violate it, surface the conflict instead of silently choosing one side.
 Use comments sparingly, but preserve and add them when they encode invariants
 the code does not structurally enforce. Prefer specific `AIDEV-NOTE:` anchors
 for business, security, compliance, and non-local rules. Do not add comments
-that paraphrase code. Treat stale comments as bugs.
+that paraphrase code. When reaching for loaded terms like `legacy`,
+`deprecated`, or `temporary`, follow the taxonomy in `comment-policy.md`.
+Treat stale comments as bugs.
 ```

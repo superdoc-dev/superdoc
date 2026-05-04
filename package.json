@@ -88,7 +88,8 @@
     "sdk:sync-version": "node packages/sdk/scripts/sync-sdk-version.mjs",
     "sdk:release": "node packages/sdk/scripts/sdk-release.mjs",
     "sdk:release:dry": "node packages/sdk/scripts/sdk-release.mjs --dry-run",
-    "layout:export-one": "bun tests/layout/export-single-layout-snapshot.mjs"
+    "layout:export-one": "bun tests/layout/export-single-layout-snapshot.mjs",
+    "layout:screenshot-one": "pnpm --filter @superdoc-testing/visual run screenshot-one"
   },
   "devDependencies": {
     "@clack/prompts": "^1.0.1",

@@ -1636,8 +1636,13 @@ export class DomPainter {
   }
 
   public paint(input: DomPainterInput, mount: HTMLElement, mapping?: PositionMapping): void {
+    const resolvedLayout = input.resolvedLayout;
+    this.resolvedLayout = resolvedLayout;
+    // Local Layout-shaped binding kept until the four legacy-Layout methods
+    // (beginPaintSnapshot, fullRender, patchLayout, renderHorizontal,
+    // renderBookMode, renderVirtualized) migrate to ResolvedLayout in the
+    // following commit. After that, this binding goes away entirely.
     const layout = input.sourceLayout;
-    this.resolvedLayout = input.resolvedLayout;
     this.changedBlocks.clear();
 
     if (!(mount instanceof HTMLElement)) {
@@ -1683,11 +1688,11 @@ export class DomPainter {
     }
     this.layoutVersion += 1;
 
-    this.layoutEpoch = this.resolvedLayout?.layoutEpoch ?? layout.layoutEpoch ?? 0;
+    this.layoutEpoch = resolvedLayout.layoutEpoch ?? 0;
     this.mount = mount;
     this.beginPaintSnapshot(layout);
 
-    this.totalPages = layout.pages.length;
+    this.totalPages = resolvedLayout.pages.length;
     if (this.isSemanticFlow) {
       // Semantic mode always renders as a single continuous surface.
       applyStyles(mount, containerStyles);
@@ -1698,7 +1703,7 @@ export class DomPainter {
       } else {
         this.patchLayout(layout);
       }
-      this.setMountedPageIndices(this.createAllPageIndices(layout.pages.length));
+      this.setMountedPageIndices(this.createAllPageIndices(resolvedLayout.pages.length));
       this.currentLayout = layout;
       this.changedBlocks.clear();
       this.currentMapping = null;
@@ -1713,7 +1718,7 @@ export class DomPainter {
       mount.style.gap = `${this.pageGap}px`;
       this.renderHorizontal(layout, mount);
       this.finalizePaintSnapshotFromBuilder(mount);
-      this.setMountedPageIndices(this.createAllPageIndices(layout.pages.length));
+      this.setMountedPageIndices(this.createAllPageIndices(resolvedLayout.pages.length));
       this.currentLayout = layout;
       this.pageStates = [];
       this.changedBlocks.clear();
@@ -1724,7 +1729,7 @@ export class DomPainter {
       applyStyles(mount, containerStyles);
       this.renderBookMode(layout, mount);
       this.finalizePaintSnapshotFromBuilder(mount);
-      this.setMountedPageIndices(this.createAllPageIndices(layout.pages.length));
+      this.setMountedPageIndices(this.createAllPageIndices(resolvedLayout.pages.length));
       this.currentLayout = layout;
       this.pageStates = [];
       this.changedBlocks.clear();
@@ -1752,7 +1757,7 @@ export class DomPainter {
         this.patchLayout(layout);
         useDomSnapshotFallback = true;
       }
-      this.setMountedPageIndices(this.createAllPageIndices(layout.pages.length));
+      this.setMountedPageIndices(this.createAllPageIndices(resolvedLayout.pages.length));
     }
 
     if (useDomSnapshotFallback) {

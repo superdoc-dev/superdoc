@@ -2225,8 +2225,8 @@ export class DomPainter {
     };
 
     const resolvedItems = resolvedPage?.items ?? [];
-    const sdtBoundaries = computeSdtBoundaries(page.fragments, resolvedItems, this.sdtLabelsRendered);
-    const betweenBorderFlags = computeBetweenBorderFlags(page.fragments, resolvedItems);
+    const sdtBoundaries = computeSdtBoundaries(resolvedItems, this.sdtLabelsRendered);
+    const betweenBorderFlags = computeBetweenBorderFlags(resolvedItems);
 
     resolvedItems.forEach((resolvedItem, index) => {
       if (resolvedItem.kind !== 'fragment') return;
@@ -2581,7 +2581,7 @@ export class DomPainter {
 
     // Compute between-border flags for header/footer paragraph fragments
     const decorationItems = data.items ?? [];
-    const betweenBorderFlags = computeBetweenBorderFlags(data.fragments, decorationItems);
+    const betweenBorderFlags = computeBetweenBorderFlags(decorationItems);
 
     // Separate behindDoc fragments from normal fragments.
     // Prefer explicit fragment.behindDoc when present. Keep zIndex===0 as a
@@ -2774,8 +2774,8 @@ export class DomPainter {
     const existing = new Map(state.fragments.map((frag) => [frag.key, frag]));
     const nextFragments: FragmentDomState[] = [];
     const resolvedItems = resolvedPage?.items ?? [];
-    const sdtBoundaries = computeSdtBoundaries(page.fragments, resolvedItems, this.sdtLabelsRendered);
-    const betweenBorderFlags = computeBetweenBorderFlags(page.fragments, resolvedItems);
+    const sdtBoundaries = computeSdtBoundaries(resolvedItems, this.sdtLabelsRendered);
+    const betweenBorderFlags = computeBetweenBorderFlags(resolvedItems);
 
     const contextBase: FragmentRenderContext = {
       pageNumber: page.number,
@@ -2944,8 +2944,8 @@ export class DomPainter {
     };
 
     const resolvedItems = resolvedPage?.items ?? [];
-    const sdtBoundaries = computeSdtBoundaries(page.fragments, resolvedItems, this.sdtLabelsRendered);
-    const betweenBorderFlags = computeBetweenBorderFlags(page.fragments, resolvedItems);
+    const sdtBoundaries = computeSdtBoundaries(resolvedItems, this.sdtLabelsRendered);
+    const betweenBorderFlags = computeBetweenBorderFlags(resolvedItems);
     const fragmentStates: FragmentDomState[] = resolvedItems.flatMap((resolvedItem, index) => {
       if (resolvedItem.kind !== 'fragment') return [];
       const fragment = resolvedItem.fragment;
@@ -7255,13 +7255,11 @@ export class DomPainter {
 }
 
 const computeSdtBoundaries = (
-  fragments: readonly Fragment[],
   resolvedItems: readonly ResolvedPaintItem[],
   sdtLabelsRendered: Set<string>,
 ): Map<number, SdtBoundaryOptions> => {
   const boundaries = new Map<number, SdtBoundaryOptions>();
-  const containerKeys: (string | null)[] = fragments.map((_frag, idx) => {
-    const item = resolvedItems[idx];
+  const containerKeys: (string | null)[] = resolvedItems.map((item) => {
     if (item && 'sdtContainerKey' in item) {
       const key = (item as { sdtContainerKey?: string | null }).sdtContainerKey;
       return key ?? null;
@@ -7269,38 +7267,49 @@ const computeSdtBoundaries = (
     return null;
   });
 
+  const fragmentOf = (idx: number): Fragment | null => {
+    const item = resolvedItems[idx];
+    return item && item.kind === 'fragment' ? item.fragment : null;
+  };
+
   let i = 0;
-  while (i < fragments.length) {
+  while (i < resolvedItems.length) {
     const currentKey = containerKeys[i];
-    if (!currentKey) {
+    const startFrag = fragmentOf(i);
+    if (!currentKey || !startFrag) {
       i += 1;
       continue;
     }
 
-    let groupRight = fragments[i].x + fragments[i].width;
+    let groupRight = startFrag.x + startFrag.width;
     let j = i;
 
-    while (j + 1 < fragments.length && containerKeys[j + 1] === currentKey) {
+    while (j + 1 < resolvedItems.length && containerKeys[j + 1] === currentKey) {
       j += 1;
-      const fragmentRight = fragments[j].x + fragments[j].width;
+      const nextFrag = fragmentOf(j);
+      if (!nextFrag) break;
+      const fragmentRight = nextFrag.x + nextFrag.width;
       if (fragmentRight > groupRight) {
         groupRight = fragmentRight;
       }
     }
 
     for (let k = i; k <= j; k += 1) {
-      const fragment = fragments[k];
+      const fragment = fragmentOf(k);
+      if (!fragment) continue;
       const isStart = k === i;
       const isEnd = k === j;
 
       let paddingBottomOverride: number | undefined;
       if (!isEnd) {
-        const nextFragment = fragments[k + 1];
+        const nextFragment = fragmentOf(k + 1);
         const currentHeight = (resolvedItems[k] as { height?: number } | undefined)?.height ?? 0;
         const currentBottom = fragment.y + currentHeight;
-        const gapToNext = nextFragment.y - currentBottom;
-        if (gapToNext > 0) {
-          paddingBottomOverride = gapToNext;
+        if (nextFragment) {
+          const gapToNext = nextFragment.y - currentBottom;
+          if (gapToNext > 0) {
+            paddingBottomOverride = gapToNext;
+          }
         }
       }
 

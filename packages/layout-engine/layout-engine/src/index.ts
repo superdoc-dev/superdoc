@@ -1573,6 +1573,25 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
   const blockSectionMap = new Map<string, number>();
   const sectionColumnsMap = new Map<number, ColumnLayout>();
   const sectionHasExplicitColumnBreak = new Set<number>();
+  // sectionIndex -> type of the section break that ENDS this section (per
+  // pm-adapter end-tagged semantics, ECMA-376 §17.6.17: a paragraph's sectPr
+  // describes the section ENDING at that paragraph, so SectionBreakBlock.type
+  // here is the type of the break that closes the section). Per ECMA-376
+  // §17.18.77 only `continuous` breaks trigger column balancing — `nextPage`,
+  // `evenPage`, `oddPage` do not. Tracked here so the post-layout pass can
+  // skip the wrong section types.
+  const sectionEndBreakType = new Map<number, string>();
+  // sectionIndex of the LAST section in the document. The body sectPr is
+  // always the final section break and represents the end of the document,
+  // not an actual mid-document break. Even when its type defaults to
+  // `continuous` (DEFAULT_BODY_SECTION_TYPE), there is no break AFTER the
+  // last section's content to trigger balancing. Excluding the last section
+  // matches Word: a 3-column doc with only a body sectPr (e.g.
+  // `sd-1655-col-sep-3-equal-columns`) is NOT balanced — content fills
+  // top-to-bottom by column. Without this guard the previous post-layout
+  // pass over-balanced single-section docs and split heading/body across
+  // columns when Word kept them together.
+  let lastSectionIdx: number | null = null;
   // Block IDs of empty paragraphs that exist only to carry sectPr properties.
   // These are invisible in Word's output and must contribute zero height to
   // balanced columns (ECMA-376 §17.18.77). Threading explicit metadata avoids
@@ -1612,8 +1631,12 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
       documentHasAnySectionBreak = true;
       if (typeof attrSectionIdx === 'number') {
         currentSectionIdx = attrSectionIdx;
+        lastSectionIdx = attrSectionIdx;
         if (block.columns) {
           sectionColumnsMap.set(attrSectionIdx, cloneColumnLayout(block.columns));
+        }
+        if (typeof block.type === 'string') {
+          sectionEndBreakType.set(attrSectionIdx, block.type);
         }
       }
     }
@@ -2690,6 +2713,37 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
     if (sectionCols.count <= 1) continue;
     if (sectionHasExplicitColumnBreak.has(sectionIdx)) continue;
     if (alreadyBalancedSections.has(sectionIdx)) continue;
+
+    // Gate balancing on section break type (ECMA-376 §17.18.77 / Linear SD-2452):
+    //   "Only continuous section breaks trigger balancing. Next-page breaks
+    //    should NOT balance — columns fill top-to-bottom as SuperDoc currently does."
+    //
+    // pm-adapter uses end-tagged section semantics (ECMA-376 §17.6.17): the type
+    // on `sectionBreak[i]` describes the break that ENDS section i. Two cases
+    // need to be excluded:
+    //
+    //   1. Non-`continuous` end break (nextPage / evenPage / oddPage) — Word does
+    //      NOT balance these. Documents like sd-1655-col-sep-3-equal-columns and
+    //      multi-column-sections.docx all have `nextPage` (default for paragraph
+    //      sectPr) and Word fills columns top-to-bottom. Balancing them split
+    //      headings from their bodies and pushed content into columns Word left
+    //      empty.
+    //
+    //   2. The LAST section. The body sectPr is always the final section break
+    //      and represents the document end, not a real mid-document break. Even
+    //      when its type defaults to `continuous` (DEFAULT_BODY_SECTION_TYPE in
+    //      pm-adapter), there is no break AFTER the last section's content to
+    //      trigger balancing. Excluding the last section matches Word for
+    //      single-section docs.
+    //
+    // The fallback section index (FALLBACK_SECTION_IDX = -1) bypasses both gates
+    // because it is synthesized for callers passing LayoutOptions.columns
+    // without any section metadata at all (pre-pm-adapter integrations).
+    if (sectionIdx !== FALLBACK_SECTION_IDX) {
+      const endBreakType = sectionEndBreakType.get(sectionIdx);
+      if (endBreakType !== 'continuous') continue;
+      if (lastSectionIdx !== null && sectionIdx === lastSectionIdx) continue;
+    }
 
     // Find the last page carrying any fragments from this section.
     let lastPageForSection: (typeof pages)[number] | null = null;

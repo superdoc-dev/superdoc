@@ -62,11 +62,13 @@ import {
   adjustAvailableWidthForTextIndent,
   calculateJustifySpacing,
   computeLinePmRange,
+  expandRunsForInlineNewlines,
   getCellSpacingPx,
   normalizeColumnLayout,
   normalizeBaselineShift,
   resolveBaseFontSizeForVerticalText,
   shouldApplyJustify,
+  sliceRunsForLine,
   SPACE_CHARS,
 } from '@superdoc/contracts';
 import { toCssFontFamily } from '@superdoc/font-utils';
@@ -122,8 +124,6 @@ import {
 } from './features/paragraph-borders/index.js';
 import { applyRtlStyles, shouldUseSegmentPositioning } from './features/rtl-paragraph/index.js';
 import { convertOmmlToMathml } from './features/math/index.js';
-import { expandRunsForInlineNewlines } from '@superdoc/pm-adapter';
-import { sliceRunsForLine } from '@superdoc/layout-bridge';
 
 /**
  * Minimal type for WordParagraphLayoutOutput marker data used in rendering.

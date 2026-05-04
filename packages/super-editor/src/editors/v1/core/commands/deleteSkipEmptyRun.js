@@ -3,7 +3,7 @@ import { Selection } from 'prosemirror-state';
 /**
  * Deletes while skipping over an empty run to the right of the cursor.
  * When the cursor is at the end of a run and followed by an empty run, removes the next character beyond it.
- * @returns {import('@core/commands/types').Command}
+ * @returns {import('./types/index.js').Command}
  */
 export const deleteSkipEmptyRun =
   () =>

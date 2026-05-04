@@ -155,11 +155,27 @@ const BAD_ABSOLUTE_PATH_RE = /(['"])packages\/superdoc\/src\/([^'"]+)\1/g;
 
 // vite-plugin-dts incorrectly resolves subpath exports (e.g. @superdoc/super-editor/types)
 // by appending the subpath to the main entry: '../../super-editor/src/index.js/types'
-// Fix: rewrite index.js/<subpath> → <subpath>.js
-const BAD_SUBPATH_RE = /(['"])([^'"]*\/index\.js)(\/[^'"]+)\1/g;
+// or '../../super-editor/src/index.ts/types'
+// Fix: rewrite index.(js|ts)/<subpath> → <subpath>.js
+const BAD_SUBPATH_RE = /(['"])([^'"]*\/index\.(?:js|ts))(\/[^'"]+)\1/g;
 
 let fixedFiles = 0;
 let totalReplacements = 0;
+
+function appendJsExtensionToRelativeSpecifier(specifier, filePath) {
+  if (!specifier.startsWith('./') && !specifier.startsWith('../')) return specifier;
+  if (specifier.includes('?') || specifier.includes('#')) return specifier;
+  const targetBase = path.resolve(path.dirname(filePath), specifier);
+  if (path.posix.extname(specifier) === '.vue') {
+    // `./Foo.vue.js` is the Node16/NodeNext-friendly declaration specifier:
+    // TypeScript strips the trailing `.js` and resolves it to `Foo.vue.d.ts`.
+    return fs.existsSync(`${targetBase}.d.ts`) ? `${specifier}.js` : specifier;
+  }
+  if (path.posix.extname(specifier)) return specifier;
+  if (fs.existsSync(`${targetBase}.d.ts`)) return `${specifier}.js`;
+  if (fs.existsSync(path.join(targetBase, 'index.d.ts'))) return `${specifier}/index.js`;
+  return specifier;
+}
 
 // SD-2815: rewrite `@superdoc/document-api` bare specifiers to point
 // at the document-api dist that vite-plugin-dts now emits at
@@ -271,8 +287,8 @@ for (const filePath of dtsFiles) {
   fileContent = fileContent.replace(BAD_SUBPATH_RE, (match, quote, basePath, subpath) => {
     changed = true;
     totalReplacements++;
-    // Replace 'foo/index.js/types' with 'foo/types.js'
-    const dir = basePath.replace(/\/index\.js$/, '');
+    // Replace 'foo/index.js/types' or 'foo/index.ts/types' with 'foo/types.js'
+    const dir = basePath.replace(/\/index\.(?:js|ts)$/, '');
     return `${quote}${dir}${subpath}.js${quote}`;
   });
 
@@ -286,6 +302,21 @@ for (const filePath of dtsFiles) {
       changed = true;
       totalReplacements++;
       return `${pathWithoutExt}.js`;
+    },
+  );
+
+  // Node16/NodeNext consumers run stricter ESM declaration resolution than
+  // bundler consumers. vite-plugin-dts and tsup can emit relative imports like
+  // `export * from './foo'` and Vue SFC imports like `./Foo.vue`; rewrite those
+  // to `.js` specifiers that TypeScript maps back to the sibling `.d.ts` file.
+  fileContent = fileContent.replace(
+    /(?<=from\s+['"]|import\(['"])(\.{1,2}\/[^'"]+)(?=['"])/g,
+    (specifier) => {
+      const rewritten = appendJsExtensionToRelativeSpecifier(specifier, filePath);
+      if (rewritten === specifier) return specifier;
+      changed = true;
+      totalReplacements++;
+      return rewritten;
     },
   );
 

@@ -124,6 +124,8 @@
     "test": "vitest"
   },
   "dependencies": {
+    "@types/mdast": "catalog:",
+    "@types/ws": "catalog:",
     "buffer-crc32": "catalog:",
     "eventemitter3": "catalog:",
     "jsdom": "catalog:",
@@ -131,7 +133,7 @@
     "pinia": "catalog:",
     "rollup-plugin-copy": "catalog:",
     "uuid": "catalog:",
-    "vue": "catalog:",
+    "vue": "^3.5.0",
     "y-websocket": "catalog:"
   },
   "peerDependencies": {

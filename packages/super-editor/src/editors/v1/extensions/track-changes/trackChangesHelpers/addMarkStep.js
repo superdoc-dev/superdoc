@@ -13,6 +13,7 @@ import { getLiveInlineMarksInRange } from './getLiveInlineMarksInRange.js';
 
 /**
  * Add mark step.
+ * @param {object} options Add mark options.
  * @param {import('prosemirror-state').EditorState} options.state Editor state.
  * @param {import('prosemirror-state').Transaction} options.tr Transaction.
  * @param {import('prosemirror-transform').AddMarkStep} options.step Step.

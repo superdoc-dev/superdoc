@@ -69,6 +69,9 @@ catalogs:
     '@types/uuid':
       specifier: ^9.0.8
       version: 9.0.8
+    '@types/ws':
+      specifier: ^8.18.1
+      version: 8.18.1
     '@typescript-eslint/eslint-plugin':
       specifier: ^8.49.0
       version: 8.57.2
@@ -3058,6 +3061,12 @@ importers:
 
   packages/superdoc:
     dependencies:
+      '@types/mdast':
+        specifier: 'catalog:'
+        version: 4.0.4
+      '@types/ws':
+        specifier: 'catalog:'
+        version: 8.18.1
       buffer-crc32:
         specifier: 'catalog:'
         version: 1.0.0

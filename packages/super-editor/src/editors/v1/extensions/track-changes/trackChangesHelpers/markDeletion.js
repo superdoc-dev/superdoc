@@ -6,7 +6,8 @@ import { findTrackedMarkBetween } from './findTrackedMarkBetween.js';
 
 /**
  * Mark deletion.
- * @param {Transaction} options.tr Transaction.
+ * @param {object} options Mark deletion options.
+ * @param {import('prosemirror-state').Transaction} options.tr Transaction.
  * @param {number} options.from From position.
  * @param {number} options.to To position.
  * @param {object} options.user User object ({ name, email }).

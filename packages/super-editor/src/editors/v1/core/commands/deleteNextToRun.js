@@ -3,7 +3,7 @@ import { Selection } from 'prosemirror-state';
 /**
  * Deletes a single character in the run immediately after the cursor.
  * Keeps the run node intact and skips empty runs.
- * @returns {import('@core/commands/types').Command}
+ * @returns {import('./types/index.js').Command}
  */
 export const deleteNextToRun =
   () =>

@@ -2,6 +2,8 @@ import { Plugin, TextSelection } from 'prosemirror-state';
 
 import { applyEditableSlotAtInlineBoundary } from '@helpers/ensure-editable-slot-inline-boundary.js';
 
+const INLINE_LEAF_TEXT = '\ufffc';
+
 /**
  * Select-all-on-click plugin for inline StructuredContent nodes.
  *
@@ -24,6 +26,7 @@ export function createStructuredContentSelectPlugin(editor) {
 
         const { state } = view;
         const { selection } = state;
+        const isEditableSlotText = (text) => text.replace(/\u200B/g, '').length === 0;
 
         const resolveBoundaryExit = ($pos) => {
           for (let depth = $pos.depth; depth > 0; depth -= 1) {
@@ -38,10 +41,18 @@ export function createStructuredContentSelectPlugin(editor) {
 
             // Empty selection: exit only at exact boundaries.
             if (selection.empty) {
+              const trailingSlice = state.doc.textBetween(selection.from, contentTo, '', INLINE_LEAF_TEXT);
+              const leadingSlice = state.doc.textBetween(contentFrom, selection.from, '', INLINE_LEAF_TEXT);
+              const onlyTrailingEditableSlots = trailingSlice.length > 0 && isEditableSlotText(trailingSlice);
+              const onlyLeadingEditableSlots = leadingSlice.length > 0 && isEditableSlotText(leadingSlice);
               // Be tolerant by 1 position to avoid requiring a second key press
               // when PM lands just inside boundary positions.
-              if (event.key === 'ArrowRight' && selection.from >= contentTo - 1) return afterPos;
-              if (event.key === 'ArrowLeft' && selection.from <= contentFrom + 1) return beforePos;
+              if (event.key === 'ArrowRight' && (selection.from >= contentTo - 1 || onlyTrailingEditableSlots)) {
+                return afterPos;
+              }
+              if (event.key === 'ArrowLeft' && (selection.from <= contentFrom + 1 || onlyLeadingEditableSlots)) {
+                return beforePos;
+              }
               return null;
             }
 

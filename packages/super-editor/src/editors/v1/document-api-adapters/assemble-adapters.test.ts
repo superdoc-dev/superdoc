@@ -99,7 +99,7 @@ describe('assembleDocumentApiAdapters', () => {
     expect(adapters).toHaveProperty('toc.update');
     expect(adapters).toHaveProperty('toc.remove');
     expect(adapters).toHaveProperty('ranges.resolve');
-    expect(adapters).toHaveProperty('ranges.scrollIntoView');
+    expect(adapters).toHaveProperty('selection.current');
   });
 
   it('returns functions for all adapter methods', () => {
@@ -130,6 +130,6 @@ describe('assembleDocumentApiAdapters', () => {
     expect(typeof adapters.toc.update).toBe('function');
     expect(typeof adapters.toc.remove).toBe('function');
     expect(typeof adapters.ranges.resolve).toBe('function');
-    expect(typeof adapters.ranges.scrollIntoView).toBe('function');
+    expect(typeof adapters.selection!.current).toBe('function');
   });
 });

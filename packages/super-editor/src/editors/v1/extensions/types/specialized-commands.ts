@@ -20,6 +20,7 @@ export type SearchCommandOptions = {
   highlight?: boolean;
   maxMatches?: number;
   caseSensitive?: boolean;
+  searchModel?: 'raw' | 'visible';
 };
 
 type DocumentSectionCreateOptions = {

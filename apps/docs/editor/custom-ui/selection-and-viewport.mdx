@@ -1,0 +1,122 @@
+---
+title: 'Selection and viewport'
+description: 'Read the selection. Capture it. Scroll an entity into view. Look up painted rects.'
+---
+
+`useSuperDocSelection()` returns the live selection slice. `ui.selection.capture()` returns a frozen snapshot you can hold across focus changes. `ui.viewport.scrollIntoView(target)` and `ui.viewport.getRect(target)` give you geometry without reaching for the DOM.
+
+## Read the selection
+
+```tsx
+import { useSuperDocSelection } from 'superdoc/ui/react';
+
+function CommentButton() {
+  const selection = useSuperDocSelection();
+  const disabled = selection.empty || !selection.target;
+
+  return <button disabled={disabled}>Comment</button>;
+}
+```
+
+The slice updates on every selection change. Components only re-render when fields they read change.
+
+| Field | Type | Meaning |
+|---|---|---|
+| `empty` | `boolean` | Cursor only, no range. |
+| `target` | `TextTarget \| null` | Pass to `editor.doc.comments.create`, `format.apply`, etc. |
+| `selectionTarget` | `SelectionTarget \| null` | Pass to `editor.doc.insert` and other point/range operations. |
+| `activeMarks` | `string[]` | Mark names at the caret or across the selection. |
+| `activeCommentIds` | `string[]` | Comment ids whose mark overlaps the selection. |
+| `activeChangeIds` | `string[]` | Tracked-change ids whose mark overlaps the selection. |
+| `quotedText` | `string` | Text content of the selection (for previews and tooltips). |
+
+## Capture for composers
+
+A composer textarea takes focus. The editor's live selection clears. Capture the selection at composer-open, hold the snapshot, and pass it back when the user submits.
+
+```tsx
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { SelectionCapture } from 'superdoc/ui';
+import { useSuperDocUI } from 'superdoc/ui/react';
+
+export function LinkComposer({ onPosted }: { onPosted(): void }) {
+  const ui = useSuperDocUI();
+  const [href, setHref] = useState('');
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  const captured: SelectionCapture | null = useMemo(
+    () => ui?.selection.capture() ?? null,
+    [ui],
+  );
+
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, []);
+
+  const apply = () => {
+    if (!ui || !captured?.target) return;
+    // Pass captured.target to the doc-api call that mutates the link.
+    onPosted();
+  };
+
+  return (
+    <div>
+      <input ref={inputRef} value={href} onChange={(e) => setHref(e.target.value)} />
+      <button onClick={apply} disabled={!captured?.target || !href}>
+        Apply
+      </button>
+    </div>
+  );
+}
+```
+
+`capture()` returns `null` when the selection has no positional target. Captures are deep-frozen at runtime, so the consumer copy can't mutate the controller's memo.
+
+## Scroll an entity into view
+
+```ts
+await ui.viewport.scrollIntoView({
+  target: { kind: 'entity', entityType: 'comment', entityId: 'c-123' },
+  block: 'center',
+  behavior: 'smooth',
+});
+```
+
+Targets:
+
+- Comment: `{ kind: 'entity', entityType: 'comment', entityId }`
+- Tracked change: `{ kind: 'entity', entityType: 'trackedChange', entityId, story?, pageIndex? }`
+- Text range: `TextAddress` or `TextTarget` (body-only today)
+
+The result is a `{ success: boolean }` receipt. Returns `false` for unknown ids or virtualized non-body stories that haven't mounted yet.
+
+## Look up rects
+
+For floating menus, link popovers, hover cards, and "comment here" hints, ask the viewport for the painted rect.
+
+```ts
+const result = ui.viewport.getRect({
+  target: { kind: 'entity', entityType: 'comment', entityId: 'c-123' },
+});
+
+if (result.success) {
+  positionCard(result.rect.left, result.rect.top);
+}
+```
+
+Rects are plain values in viewport coordinates. Multi-page or multi-line targets return `rects` carrying every painted occurrence in document order.
+
+`success: false` reasons:
+
+| `reason` | Meaning |
+|---|---|
+| `'not-ready'` | Editor or layout hasn't bootstrapped. Retry after `editorCreate`. |
+| `'invalid-target'` | Caller-shape error. The entity type isn't supported. |
+| `'unresolved'` | Stale id. The entity isn't in the model. |
+| `'not-mounted'` | Valid target but offscreen. Call `scrollIntoView` first, then retry. |
+
+## Trade-offs
+
+- The selection slice updates on every editor change. Subscribe via the typed hook, not via raw `ui.select(...)`, so the controller can dedupe by shallow equality.
+- `getRect` is synchronous and DOM-driven. Text-anchored targets are deferred until story-aware text resolution lands.
+- `scrollIntoView` honors `behavior: 'smooth'` for body content. Non-body entities (header / footer / footnote / endnote) snap to view because story activation has to mount the surface synchronously before alignment. If smooth animation across non-body entities matters, scroll the editor surface yourself first with `behavior: 'smooth'`, then call `scrollIntoView` to land the entity.

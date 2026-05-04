@@ -1102,6 +1102,19 @@ const onEditorCreate = ({ editor }) => {
   editor.on('fieldAnnotationDoubleClicked', (params) => {
     console.log('fieldAnnotationDoubleClicked', { params });
   });
+
+  // SD-2494: Pointer event observability for debugging trackpad/right-click selection issues
+  editor.on('pointerDown', (params) => {
+    console.log('pointerDown', { params });
+  });
+
+  editor.on('pointerUp', (params) => {
+    console.log('pointerUp', { params });
+  });
+
+  editor.on('rightClick', (params) => {
+    console.log('rightClick', { params });
+  });
 };
 
 watch(

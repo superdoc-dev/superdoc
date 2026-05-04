@@ -32,6 +32,10 @@ import type {
   ListsCanJoinResult,
   ListsSeparateInput,
   ListsSeparateResult,
+  ListsMergeInput,
+  ListsMergeResult,
+  ListsSplitInput,
+  ListsSplitResult,
   ListsSetLevelInput,
   ListsSetValueInput,
   ListsContinuePreviousInput,
@@ -83,6 +87,10 @@ export type {
   ListsCanJoinResult,
   ListsSeparateInput,
   ListsSeparateResult,
+  ListsMergeInput,
+  ListsMergeResult,
+  ListsSplitInput,
+  ListsSplitResult,
   ListsSetLevelInput,
   ListsSetValueInput,
   ListsContinuePreviousInput,
@@ -480,6 +488,8 @@ export interface ListsAdapter {
   join(input: ListsJoinInput, options?: MutationOptions): ListsJoinResult;
   canJoin(input: ListsCanJoinInput): ListsCanJoinResult;
   separate(input: ListsSeparateInput, options?: MutationOptions): ListsSeparateResult;
+  merge(input: ListsMergeInput, options?: MutationOptions): ListsMergeResult;
+  split(input: ListsSplitInput, options?: MutationOptions): ListsSplitResult;
   setLevel(input: ListsSetLevelInput, options?: MutationOptions): ListsMutateItemResult;
   setValue(input: ListsSetValueInput, options?: MutationOptions): ListsMutateItemResult;
   continuePrevious(input: ListsContinuePreviousInput, options?: MutationOptions): ListsMutateItemResult;
@@ -519,7 +529,7 @@ export interface ListsAdapter {
 export type ListsApi = ListsAdapter;
 
 // ---------------------------------------------------------------------------
-// Execute wrappers — discovery
+// Execute wrappers: discovery
 // ---------------------------------------------------------------------------
 
 export function executeListsList(adapter: ListsAdapter, query?: ListsListQuery): ListsListResult {
@@ -575,7 +585,7 @@ export function executeListsGet(adapter: ListsAdapter, input: ListsGetInput): Li
 }
 
 // ---------------------------------------------------------------------------
-// Execute wrappers — kept operations
+// Execute wrappers: kept operations
 // ---------------------------------------------------------------------------
 
 export function executeListsInsert(
@@ -617,7 +627,7 @@ export function executeListsOutdent(
 }
 
 // ---------------------------------------------------------------------------
-// Execute wrappers — SD-1272 operations
+// Execute wrappers: SD-1272 operations
 // ---------------------------------------------------------------------------
 
 const VALID_LIST_CREATE_MODES: ReadonlySet<string> = new Set(['empty', 'fromParagraphs']);
@@ -700,6 +710,26 @@ export function executeListsSeparate(
   return adapter.separate(input, normalizeMutationOptions(options));
 }
 
+export function executeListsMerge(
+  adapter: ListsAdapter,
+  input: ListsMergeInput,
+  options?: MutationOptions,
+): ListsMergeResult {
+  validateListItemTarget(input, 'lists.merge');
+  requireEnum(input.direction, 'direction', VALID_JOIN_DIRECTIONS, 'lists.merge');
+  return adapter.merge(input, normalizeMutationOptions(options));
+}
+
+export function executeListsSplit(
+  adapter: ListsAdapter,
+  input: ListsSplitInput,
+  options?: MutationOptions,
+): ListsSplitResult {
+  validateListItemTarget(input, 'lists.split');
+  optionalBoolean(input.restartNumbering, 'restartNumbering', 'lists.split');
+  return adapter.split(input, normalizeMutationOptions(options));
+}
+
 export function executeListsSetLevel(
   adapter: ListsAdapter,
   input: ListsSetLevelInput,
@@ -774,7 +804,7 @@ export function executeListsConvertToText(
 }
 
 // ---------------------------------------------------------------------------
-// Execute wrappers — SD-1973 formatting operations
+// Execute wrappers: SD-1973 formatting operations
 // ---------------------------------------------------------------------------
 
 export function executeListsApplyTemplate(
@@ -944,7 +974,7 @@ export function executeListsSetType(
 }
 
 // ---------------------------------------------------------------------------
-// Execute wrappers — SD-2025 user-facing operations
+// Execute wrappers: SD-2025 user-facing operations
 // ---------------------------------------------------------------------------
 
 export function executeListsGetStyle(adapter: ListsAdapter, input: ListsGetStyleInput): ListsGetStyleResult {

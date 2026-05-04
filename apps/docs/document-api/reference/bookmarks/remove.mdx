@@ -30,6 +30,7 @@ Returns a BookmarkMutationResult indicating success or a failure.
 | `target.entityType` | `"bookmark"` | yes | Constant: `"bookmark"` |
 | `target.kind` | `"entity"` | yes | Constant: `"entity"` |
 | `target.name` | string | yes |  |
+| `target.story` | StoryLocator | no | StoryLocator |
 
 ### Example request
 
@@ -38,7 +39,11 @@ Returns a BookmarkMutationResult indicating success or a failure.
   "target": {
     "entityType": "bookmark",
     "kind": "entity",
-    "name": "example"
+    "name": "example",
+    "story": {
+      "kind": "story",
+      "storyType": "body"
+    }
   }
 }
 ```
@@ -53,6 +58,7 @@ Returns a BookmarkMutationResult indicating success or a failure.
 | `bookmark.entityType` | `"bookmark"` | yes | Constant: `"bookmark"` |
 | `bookmark.kind` | `"entity"` | yes | Constant: `"entity"` |
 | `bookmark.name` | string | yes |  |
+| `bookmark.story` | StoryLocator | no | StoryLocator |
 | `success` | `true` | yes | Constant: `true` |
 
 ### Variant 2 (success=false)
@@ -72,7 +78,11 @@ Returns a BookmarkMutationResult indicating success or a failure.
   "bookmark": {
     "entityType": "bookmark",
     "kind": "entity",
-    "name": "example"
+    "name": "example",
+    "story": {
+      "kind": "story",
+      "storyType": "body"
+    }
   },
   "success": true
 }
@@ -106,6 +116,9 @@ Returns a BookmarkMutationResult indicating success or a failure.
         },
         "name": {
           "type": "string"
+        },
+        "story": {
+          "$ref": "#/$defs/StoryLocator"
         }
       },
       "required": [
@@ -142,6 +155,9 @@ Returns a BookmarkMutationResult indicating success or a failure.
             },
             "name": {
               "type": "string"
+            },
+            "story": {
+              "$ref": "#/$defs/StoryLocator"
             }
           },
           "required": [
@@ -212,6 +228,9 @@ Returns a BookmarkMutationResult indicating success or a failure.
         },
         "name": {
           "type": "string"
+        },
+        "story": {
+          "$ref": "#/$defs/StoryLocator"
         }
       },
       "required": [

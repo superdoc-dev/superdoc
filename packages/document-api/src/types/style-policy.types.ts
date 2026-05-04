@@ -10,7 +10,7 @@ import type { CorePropertyId } from '../inline-semantics/property-ids.js';
 export type NonUniformStrategy = 'error' | 'useLeadingRun' | 'majority' | 'union';
 
 /**
- * Canonical mark key set — derived from inline-semantics property IDs.
+ * Canonical mark key set: derived from inline-semantics property IDs.
  * Retained for backward compatibility; prefer {@link CORE_PROPERTY_IDS} in new code.
  */
 export const MARK_KEYS = CORE_PROPERTY_IDS;
@@ -22,7 +22,7 @@ export type MarkKey = CorePropertyId;
 export const MARK_KEY_SET: ReadonlySet<string> = CORE_PROPERTY_ID_SET;
 
 // ---------------------------------------------------------------------------
-// Inline toggle directive model — tri-state: on | off | clear
+// Inline toggle directive model: tri-state: on | off | clear
 // ---------------------------------------------------------------------------
 
 /** Canonical directive vocabulary for inline toggle properties. */
@@ -37,9 +37,9 @@ export const INLINE_DIRECTIVE_SET: ReadonlySet<string> = new Set(INLINE_DIRECTIV
 /**
  * Inline toggle directives for core-4 marks.
  *
- * - `'on'`    — write direct ON formatting.
- * - `'off'`   — write explicit run-level OFF/negation override.
- * - `'clear'` — remove direct run-level property (inherit from style cascade).
+ * - `'on'`   : write direct ON formatting.
+ * - `'off'`  : write explicit run-level OFF/negation override.
+ * - `'clear'`: remove direct run-level property (inherit from style cascade).
  */
 export interface SetMarks {
   bold?: InlineToggleDirective;

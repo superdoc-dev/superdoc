@@ -1,5 +1,5 @@
 /**
- * Step manifest types — public, engine-agnostic metadata for step ops.
+ * Step manifest types: public, engine-agnostic metadata for step ops.
  *
  * These types describe a rich manifest model for mutation step operations.
  * The current catalog used by docs and capabilities lives in

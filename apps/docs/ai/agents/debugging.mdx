@@ -1,7 +1,7 @@
 ---
 title: Debugging
 sidebarTitle: Debugging
-description: Troubleshoot LLM tool calls — logging, error shapes, and common failure modes
+description: "Troubleshoot LLM tool calls: logging, error shapes, and common failure modes"
 keywords: "llm debugging, tool call errors, superdoc tools, ai document editing, troubleshooting, document api"
 ---
 
@@ -13,8 +13,8 @@ Every LLM tool call maps to a [Document API](/document-api/overview) operation u
 
 This gives you a clear debugging strategy:
 
-1. **Test the Document API directly.** Call the underlying SDK method with the same arguments. If it works, the operation is fine — the problem is in the prompt or the tool schema.
-2. **If the API call fails,** the issue is in the operation itself — check arguments, targets, and document state.
+1. **Test the Document API directly.** Call the underlying SDK method with the same arguments. If it works, the operation is fine: the problem is in the prompt or the tool schema.
+2. **If the API call fails,** the issue is in the operation itself: check arguments, targets, and document state.
 3. **If the API call succeeds but the LLM tool call fails,** the model is calling the tool incorrectly. Fix the prompt, add examples, or check the tool schema.
 
 ```typescript
@@ -55,29 +55,29 @@ for (const toolCall of choice.message.tool_calls) {
 ```
 
 What to look for in logs:
-- **Tool name** — is the model calling the right tool?
-- **Arguments** — are required fields present? Is the `action` correct?
-- **Targets** — are handles/addresses from a recent search, or did the model guess?
-- **Result** — did the operation return data or an error?
+- **Tool name**: is the model calling the right tool?
+- **Arguments**: are required fields present? Is the `action` correct?
+- **Targets**: are handles/addresses from a recent search, or did the model guess?
+- **Result**: did the operation return data or an error?
 
 ## Error shapes
 
 `dispatchSuperDocTool` throws errors in two categories:
 
-**Validation errors** — bad arguments before the operation runs:
+**Validation errors**: bad arguments before the operation runs:
 ```json
 { "error": "Missing required parameter: action" }
 { "error": "Unknown action 'bold' for tool superdoc_format. Valid actions: inline, set_style, set_alignment, set_indentation, set_spacing" }
 { "error": "Parameter 'target' is required for action 'replace'" }
 ```
 
-**Execution errors** — the operation ran but failed:
+**Execution errors**: the operation ran but failed:
 ```json
 { "error": "Target not found: no node matches the given handle" }
 { "error": "Invalid address: block at index 42 does not exist" }
 ```
 
-Both types are returned as strings in `err.message`. Pass them back as tool results — the model usually self-corrects.
+Both types are returned as strings in `err.message`. Pass them back as tool results: the model usually self-corrects.
 
 ## Common failure modes
 
@@ -88,7 +88,7 @@ Both types are returned as strings in `err.message`. Pass them back as tool resu
 | Edits land in the wrong place | Model invented a block address | Use `superdoc_search` to get fresh handles |
 | Infinite tool call loop | Model never reaches a stopping point | Add a max iterations guard (see below) |
 | Model doesn't use tools at all | Tools not passed to the API call | Verify `chooseTools()` result is in the `tools` param |
-| "Missing required parameter" | Model forgot `action` or another field | Check the tool schema — add examples to the prompt |
+| "Missing required parameter" | Model forgot `action` or another field | Check the tool schema: add examples to the prompt |
 | Collaboration edits not appearing | SDK not in the same collab room | Verify the collaboration URL and documentId match |
 | Operation works via API but fails via tool | Model passes wrong argument types/names | Log the parsed arguments and compare to the API signature |
 
@@ -130,13 +130,13 @@ while (iterations++ < MAX_ITERATIONS) {
 }
 
 if (iterations >= MAX_ITERATIONS) {
-  console.warn('[agent] Hit max iterations — stopping');
+  console.warn('[agent] Hit max iterations: stopping');
 }
 ```
 
 ## Related
 
-- [LLM tools](/ai/agents/llm-tools) — tool catalog and SDK functions
-- [How to use](/ai/agents/integrations) — step-by-step integration guide
-- [Best practices](/ai/agents/best-practices) — prompting and workflow tips
-- [Document API](/document-api/overview) — the underlying operations that tools call
+- [LLM tools](/ai/agents/llm-tools): tool catalog and SDK functions
+- [How to use](/ai/agents/integrations): step-by-step integration guide
+- [Best practices](/ai/agents/best-practices): prompting and workflow tips
+- [Document API](/document-api/overview): the underlying operations that tools call

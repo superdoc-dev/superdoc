@@ -2,7 +2,7 @@
  * Shared types and helpers for the standardized discovery envelope.
  *
  * All discovery operations (query.match, comments.list, trackChanges.list,
- * lists.list, find) return a `DiscoveryResult<DiscoveryItem<TDomain>>` —
+ * lists.list, find) return a `DiscoveryResult<DiscoveryItem<TDomain>>` -
  * a uniform envelope with pagination, revision tracking, and mutation-ready
  * handles.
  *
@@ -31,7 +31,7 @@ export type ExtensionTargetKind = `ext:${string}`;
 export type TargetKind = KnownTargetKind | ExtensionTargetKind;
 
 // ---------------------------------------------------------------------------
-// Resolved handle — mutation-ready reference
+// Resolved handle: mutation-ready reference
 // ---------------------------------------------------------------------------
 
 export type RefStability = 'stable' | 'ephemeral';
@@ -81,7 +81,7 @@ export type DiscoveryItem<TDomain> = {
  * Provides revision tracking, total count, paginated items, and page metadata.
  * The optional `TMeta` type parameter allows operation-specific metadata
  * (e.g., `query.match` uses it for `effectiveResolved`). Defaults to `undefined`
- * for operations that don't use it — backwards compatible.
+ * for operations that don't use it: backwards compatible.
  */
 export interface DiscoveryResult<TItem, TMeta = undefined> {
   /** Document revision at which the query was evaluated. */

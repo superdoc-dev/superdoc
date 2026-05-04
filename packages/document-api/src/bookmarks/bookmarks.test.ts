@@ -20,6 +20,7 @@ function makeAdapter(): BookmarksAdapter {
 }
 
 const validTarget = { kind: 'entity', entityType: 'bookmark', name: 'bm1' };
+const validStory = { kind: 'story', storyType: 'footnote', noteId: 'fn-1' } as const;
 
 describe('bookmarks validation', () => {
   // ── Target validation ───────────────────────────────────────────────
@@ -62,6 +63,15 @@ describe('bookmarks validation', () => {
       expect(() =>
         executeBookmarksGet(adapter, {
           target: { kind: 'entity', entityType: 'bookmark', name: 123 } as any,
+        }),
+      ).toThrow(DocumentApiValidationError);
+    });
+
+    it('throws INVALID_INPUT when target.story is invalid', () => {
+      const adapter = makeAdapter();
+      expect(() =>
+        executeBookmarksGet(adapter, {
+          target: { kind: 'entity', entityType: 'bookmark', name: 'bm1', story: 'body' } as any,
         }),
       ).toThrow(DocumentApiValidationError);
     });
@@ -136,6 +146,18 @@ describe('bookmarks validation', () => {
       expect(adapter.list).toHaveBeenCalledWith(query);
     });
 
+    it('delegates to adapter.list with a valid story filter', () => {
+      const adapter = makeAdapter();
+      const query = { in: validStory };
+      executeBookmarksList(adapter, query);
+      expect(adapter.list).toHaveBeenCalledWith(query);
+    });
+
+    it('throws INVALID_INPUT when query.in is invalid', () => {
+      const adapter = makeAdapter();
+      expect(() => executeBookmarksList(adapter, { in: 'body' as any })).toThrow(DocumentApiValidationError);
+    });
+
     it('delegates to adapter.list without query', () => {
       const adapter = makeAdapter();
       executeBookmarksList(adapter);
@@ -148,6 +170,13 @@ describe('bookmarks validation', () => {
       const adapter = makeAdapter();
       const input = { target: validTarget };
       executeBookmarksGet(adapter, input as any);
+      expect(adapter.get).toHaveBeenCalledWith(input);
+    });
+
+    it('delegates to adapter.get for a story-qualified target', () => {
+      const adapter = makeAdapter();
+      const input = { target: { ...validTarget, story: validStory } };
+      executeBookmarksGet(adapter, input);
       expect(adapter.get).toHaveBeenCalledWith(input);
     });
   });

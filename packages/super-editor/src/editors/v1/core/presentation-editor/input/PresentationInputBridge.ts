@@ -3,16 +3,26 @@ import { CONTEXT_MENU_HANDLED_FLAG } from '../../../components/context-menu/even
 
 const BRIDGE_FORWARDED_FLAG = Symbol('presentation-input-bridge-forwarded');
 
+type BridgeTargetEditor = {
+  focus?: () => void;
+  state?: {
+    selection?: unknown;
+    tr?: {
+      setSelection?: (selection: unknown) => unknown;
+      setMeta?: (key: string, value: unknown) => unknown;
+    };
+  };
+  view?: {
+    dom?: HTMLElement | null;
+    dispatch?: (transaction: unknown) => void;
+  };
+};
+
 export class PresentationInputBridge {
   #windowRoot: Window;
   #layoutSurfaces: Set<EventTarget>;
   #getTargetDom: () => HTMLElement | null;
-  #getTargetEditor?: () => {
-    focus?: () => void;
-    view?: {
-      dom?: HTMLElement | null;
-    };
-  } | null;
+  #getTargetEditor?: () => BridgeTargetEditor | null;
   /** Callback that returns whether the editor is in an editable mode (editing/suggesting vs viewing) */
   #isEditable: () => boolean;
   #onTargetChanged?: (target: HTMLElement | null) => void;
@@ -46,12 +56,7 @@ export class PresentationInputBridge {
     onTargetChanged?: (target: HTMLElement | null) => void,
     options?: {
       useWindowFallback?: boolean;
-      getTargetEditor?: () => {
-        focus?: () => void;
-        view?: {
-          dom?: HTMLElement | null;
-        };
-      } | null;
+      getTargetEditor?: () => BridgeTargetEditor | null;
     },
   ) {
     this.#windowRoot = windowRoot;
@@ -157,7 +162,7 @@ export class PresentationInputBridge {
     originalEvent: Event,
     synthetic: Event,
     target: HTMLElement,
-    options?: { focusTarget?: boolean; suppressOriginal?: boolean },
+    options?: { focusTarget?: boolean; suppressOriginal?: boolean; forceFocusTarget?: boolean },
   ) {
     if (this.#destroyed) return;
     const isConnected = (target as { isConnected?: boolean }).isConnected;
@@ -168,7 +173,7 @@ export class PresentationInputBridge {
     }
 
     if (options?.focusTarget) {
-      this.#focusTargetDom(target);
+      this.#focusTargetDom(target, { force: options?.forceFocusTarget ?? false });
     }
 
     this.#currentTarget = target;
@@ -193,18 +198,26 @@ export class PresentationInputBridge {
     return target;
   }
 
-  #focusTargetDom(target: HTMLElement) {
+  #focusTargetDom(target: HTMLElement, options?: { force?: boolean }) {
+    const forceFocusRestore = options?.force ?? false;
+    const doc = target.ownerDocument ?? document;
+    const selection = doc.getSelection?.() ?? null;
+    const selectionInsideTarget = !!selection?.anchorNode && target.contains(selection.anchorNode);
+    if (!forceFocusRestore && selectionInsideTarget) {
+      return;
+    }
+
     const targetEditor = this.#getTargetEditor?.() ?? null;
     const targetEditorDom = targetEditor?.view?.dom ?? null;
     if (targetEditorDom === target && typeof targetEditor?.focus === 'function') {
       targetEditor.focus();
+      this.#syncEditorSelectionToDom(targetEditor);
       return;
     }
 
-    const doc = target.ownerDocument ?? document;
     const active = doc.activeElement as HTMLElement | null;
     const activeIsTarget = active === target || (!!active && target.contains(active));
-    if (activeIsTarget) {
+    if (!forceFocusRestore && activeIsTarget) {
       return;
     }
 
@@ -213,6 +226,35 @@ export class PresentationInputBridge {
     } catch {
       target.focus();
     }
+
+    if (targetEditorDom === target) {
+      this.#syncEditorSelectionToDom(targetEditor);
+    }
+  }
+
+  /**
+   * Re-apply the active editor's current PM selection after a stale-focus handoff.
+   *
+   * When native focus is still sitting inside a stale hidden editor, browsers can
+   * transiently restore that stale DOM selection before forwarded text arrives.
+   * Re-dispatching the current selection as a non-history transaction forces the
+   * active hidden editor to write its real caret back into the DOM.
+   */
+  #syncEditorSelectionToDom(editor: BridgeTargetEditor | null | undefined) {
+    const selection = editor?.state?.selection;
+    const transaction = editor?.state?.tr;
+    const dispatch = editor?.view?.dispatch;
+    const setSelection = transaction?.setSelection;
+
+    if (!selection || !transaction || typeof setSelection !== 'function' || typeof dispatch !== 'function') {
+      return;
+    }
+
+    const selectionTransaction = setSelection.call(transaction, selection) as {
+      setMeta?: (key: string, value: unknown) => unknown;
+    };
+    selectionTransaction?.setMeta?.('addToHistory', false);
+    dispatch(selectionTransaction);
   }
 
   #suppressOriginalEvent(event: Event) {
@@ -350,6 +392,7 @@ export class PresentationInputBridge {
     });
     this.#dispatchToResolvedTarget(event, synthetic, staleOrigin.activeTarget, {
       focusTarget: true,
+      forceFocusTarget: true,
       suppressOriginal: true,
     });
   }
@@ -434,6 +477,7 @@ export class PresentationInputBridge {
 
     this.#dispatchToResolvedTarget(event, synthetic, staleOrigin.activeTarget, {
       focusTarget: true,
+      forceFocusTarget: true,
       suppressOriginal: true,
     });
   }
@@ -498,6 +542,7 @@ export class PresentationInputBridge {
 
     this.#dispatchToResolvedTarget(event, synthetic, staleOrigin.activeTarget, {
       focusTarget: true,
+      forceFocusTarget: true,
       suppressOriginal: true,
     });
   }

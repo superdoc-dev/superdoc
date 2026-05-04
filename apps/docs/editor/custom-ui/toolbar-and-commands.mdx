@@ -1,0 +1,145 @@
+---
+title: 'Toolbar and commands'
+sidebarTitle: 'Built-in'
+description: 'Bind buttons to bold, italic, lists, undo, redo, and every other built-in command.'
+---
+
+`useSuperDocCommand(id)` subscribes one button to one command. The component re-renders when that command flips `active` or `disabled`, never on every editor change. `ui.commands.get(id)?.execute(payload?)` runs the command.
+
+## A single button
+
+```tsx
+import { useSuperDocCommand, useSuperDocUI } from 'superdoc/ui/react';
+
+export function BoldButton() {
+  const ui = useSuperDocUI();
+  const bold = useSuperDocCommand('bold');
+
+  return (
+    <button
+      className={bold.active ? 'active' : ''}
+      disabled={bold.disabled}
+      onClick={() => ui?.commands.get('bold')?.execute()}
+    >
+      B
+    </button>
+  );
+}
+```
+
+## A row of buttons
+
+Build a static config and map. Each `<ToolbarButton>` subscribes to its own command, so unrelated state changes don't re-render the row.
+
+```tsx
+import { useSuperDocCommand, useSuperDocUI } from 'superdoc/ui/react';
+
+const TEXT_BUTTONS = [
+  { id: 'bold', label: 'B', title: 'Bold (⌘B)' },
+  { id: 'italic', label: 'I', title: 'Italic (⌘I)' },
+  { id: 'underline', label: 'U', title: 'Underline (⌘U)' },
+];
+
+export function Toolbar() {
+  return (
+    <div role="toolbar">
+      {TEXT_BUTTONS.map((b) => (
+        <ToolbarButton key={b.id} id={b.id} label={b.label} title={b.title} />
+      ))}
+    </div>
+  );
+}
+
+function ToolbarButton({ id, label, title }: { id: string; label: string; title: string }) {
+  const ui = useSuperDocUI();
+  const cmd = useSuperDocCommand(id);
+
+  return (
+    <button
+      className={cmd.active ? 'active' : ''}
+      disabled={cmd.disabled}
+      title={title}
+      onClick={() => ui?.commands.get(id)?.execute()}
+    >
+      {label}
+    </button>
+  );
+}
+```
+
+## Commands with payloads
+
+Some commands take a value. Pass it to `execute()`.
+
+```tsx
+function FontSizePicker() {
+  const ui = useSuperDocUI();
+  const size = useSuperDocCommand('font-size');
+
+  return (
+    <select
+      value={typeof size.value === 'string' ? size.value : ''}
+      disabled={size.disabled}
+      onChange={(e) => ui?.commands.get('font-size')?.execute(e.target.value)}
+    >
+      <option value="12">12</option>
+      <option value="14">14</option>
+      <option value="16">16</option>
+      <option value="18">18</option>
+    </select>
+  );
+}
+```
+
+## What the hook returns
+
+| Field | Type | Meaning |
+|---|---|---|
+| `active` | `boolean` | The command is "on" for the current selection (cursor is inside bold text). |
+| `disabled` | `boolean` | The command can't run right now (no selection, wrong document mode). |
+| `value` | `unknown` | The command's current value when applicable (font name, size, color). |
+| `source` | `'built-in' \| 'custom'` | Where the command came from. |
+
+`useSuperDocCommand` returns a fallback `{ active: false, disabled: true, source: 'built-in' }` while the editor is initializing, so your buttons render disabled with no flicker.
+
+## Built-in command ids
+
+Common ids you'll wire to buttons:
+
+| Group | Ids |
+|---|---|
+| Text | `bold`, `italic`, `underline`, `strikethrough` |
+| Inline | `link`, `font-family`, `font-size`, `text-color`, `highlight-color` |
+| Layout | `text-align`, `line-height`, `indent-increase`, `indent-decrease` |
+| Lists | `bullet-list`, `numbered-list` |
+| Style | `linked-style`, `clear-formatting`, `copy-format` |
+| History | `undo`, `redo` |
+| Tracked changes | `track-changes-accept-selection`, `track-changes-reject-selection` |
+| View | `ruler`, `zoom`, `document-mode` |
+| Tables | `table-insert`, `table-add-row-before`, `table-add-row-after`, `table-delete-row`, `table-add-column-before`, `table-add-column-after`, `table-delete-column`, `table-merge-cells`, `table-split-cell`, `table-delete` |
+| Insert | `image` |
+
+`PublicToolbarItemId` in `superdoc/ui` is the source of truth. Anything you can pass to `createHeadlessToolbar({ commands })` works as a `useSuperDocCommand` id.
+
+## Aggregate snapshots
+
+Need every command in one render pass (e.g. you generate the toolbar from the active context)? Subscribe to the whole toolbar slice.
+
+```tsx
+import { useSuperDocToolbar } from 'superdoc/ui/react';
+
+function ContextualToolbar() {
+  const toolbar = useSuperDocToolbar();
+  const ids = Object.keys(toolbar.commands);
+
+  return <div>{ids.length} commands available</div>;
+}
+```
+
+Prefer `useSuperDocCommand` per button when you can. `useSuperDocToolbar` re-renders on any command change.
+
+## Trade-offs
+
+- The hook subscribes per-id. Reusing a button component with different ids is fine: the subscription resets when `id` changes.
+- Built-in command state is derived from the active editor. If your provider sits above multiple editors, the ids you pass are scoped to whichever editor reported ready last.
+- Custom commands you registered with [`ui.commands.register`](/editor/custom-ui/custom-commands) work with the same hook.

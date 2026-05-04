@@ -104,10 +104,32 @@ describe('shouldApplyJustify', () => {
     expect(shouldApplyJustify(params)).toBe(true);
   });
 
-  it('returns false when hasExplicitPositioning is true (tab stops)', () => {
+  it('returns false when legacy hasExplicitPositioning is true', () => {
     const params: ShouldApplyJustifyParams = {
       alignment: 'justify',
       hasExplicitPositioning: true,
+      isLastLineOfParagraph: false,
+      paragraphEndsWithLineBreak: false,
+    };
+    expect(shouldApplyJustify(params)).toBe(false);
+  });
+
+  it('returns true for default tab positioning when explicit tabs are absent', () => {
+    const params: ShouldApplyJustifyParams = {
+      alignment: 'justify',
+      hasExplicitPositioning: true,
+      hasExplicitTabStops: false,
+      isLastLineOfParagraph: false,
+      paragraphEndsWithLineBreak: false,
+    };
+    expect(shouldApplyJustify(params)).toBe(true);
+  });
+
+  it('returns false for author-defined tab stops', () => {
+    const params: ShouldApplyJustifyParams = {
+      alignment: 'justify',
+      hasExplicitPositioning: false,
+      hasExplicitTabStops: true,
       isLastLineOfParagraph: false,
       paragraphEndsWithLineBreak: false,
     };

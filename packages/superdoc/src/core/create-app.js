@@ -302,11 +302,23 @@ const setPiniaDevtoolsSuppressedForApp = (app, isSuppressed) => {
 };
 
 /**
+ * Result of `createSuperdocVueApp()`. Internal-only: the shape is consumed
+ * by `SuperDoc.#initVueApp` and is not part of the public surface.
+ *
+ * @typedef {Object} SuperdocVueAppRefs
+ * @property {import('vue').App} app The Vue 3 app instance
+ * @property {import('pinia').Pinia} pinia The Pinia store instance attached to `app`
+ * @property {ReturnType<typeof useSuperdocStore>} superdocStore The SuperDoc Pinia store
+ * @property {ReturnType<typeof useCommentsStore>} commentsStore The Comments Pinia store
+ * @property {ReturnType<typeof useHighContrastMode>} highContrastModeStore The high-contrast mode composable refs (`isHighContrastMode`, `setHighContrastMode`). Named `*Store` for historical reasons; this is a plain Vue composable, not a Pinia store.
+ */
+
+/**
  * Generate the superdoc vue app
  *
  * @param {Object} [options]
  * @param {boolean} [options.disablePiniaDevtools=false] Disable Pinia devtools registration for this app instance
- * @returns {Object} An object containing the vue app, the pinia reference, and the superdoc store
+ * @returns {SuperdocVueAppRefs} An object containing the vue app, the pinia reference, the superdoc/comments Pinia stores, and the high-contrast mode composable
  */
 export const createSuperdocVueApp = ({ disablePiniaDevtools = false } = {}) => {
   const app = createApp(App);

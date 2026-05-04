@@ -12,6 +12,7 @@ import type {
   ShapeGroupDrawing,
   ImageAnchor,
   CustomGeometryData,
+  SourceAnchor,
 } from '@superdoc/contracts';
 import type { PMNode, NodeHandlerContext, BlockIdGenerator, PositionMap } from '../types.js';
 import type { EffectExtent, LineEnds } from '../utilities.js';
@@ -337,6 +338,7 @@ export const buildDrawingBlock = (
   },
 ): ShapeDrawingBlock => {
   const normalizedWrap = normalizeWrap(rawAttrs.wrap);
+  const sourceAnchor = isPlainObject(rawAttrs.sourceAnchor) ? (rawAttrs.sourceAnchor as SourceAnchor) : undefined;
   const baseAnchor = normalizeAnchorData(rawAttrs.anchorData, rawAttrs, normalizedWrap?.behindDoc);
   const pos = positions.get(node);
   const attrsWithPm: Record<string, unknown> = { ...rawAttrs };
@@ -374,6 +376,7 @@ export const buildDrawingBlock = (
     textAlign: typeof rawAttrs.textAlign === 'string' ? rawAttrs.textAlign : undefined,
     textVerticalAlign: normalizeTextVerticalAlign(rawAttrs.textVerticalAlign),
     textInsets: normalizeTextInsets(rawAttrs.textInsets),
+    sourceAnchor,
     ...extraProps,
   } as ShapeDrawingBlock;
 };

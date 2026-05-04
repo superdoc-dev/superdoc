@@ -30,6 +30,17 @@ import { mutateNumbering } from '@core/parts/adapters/numbering-mutation';
 // ---------------------------------------------------------------------------
 
 /**
+ * Maps a bullet marker character (from `listRendering.markerText`) to its named bullet style.
+ * Returns null for unrecognized markers.
+ * @param {string|null|undefined} markerText
+ * @returns {'disc'|'circle'|'square'|null}
+ */
+export function markerTextToBulletStyle(markerText) {
+  const map = { '•': 'disc', '◦': 'circle', '▪': 'square' };
+  return map[markerText] ?? null;
+}
+
+/**
  * Generate a new list definition for the given list type.
  * @param {Object} param0
  * @param {number} param0.numId
@@ -39,10 +50,23 @@ import { mutateNumbering } from '@core/parts/adapters/numbering-mutation';
  * @param {string} [param0.text]
  * @param {string} [param0.fmt]
  * @param {string} [param0.markerFontFamily]
+ * @param {'disc'|'circle'|'square'} [param0.bulletStyle]
+ * @param {number} [param0.bulletStyleLevel]
  * @param {import('../Editor').Editor} param0.editor
  * @returns {Object} The new abstract and num definitions.
  */
-export const generateNewListDefinition = ({ numId, listType, level, start, text, fmt, editor, markerFontFamily }) => {
+export const generateNewListDefinition = ({
+  numId,
+  listType,
+  level,
+  start,
+  text,
+  fmt,
+  editor,
+  markerFontFamily,
+  bulletStyle,
+  bulletStyleLevel,
+}) => {
   /** @type {{ abstractDef: any, numDef: any }} */
   let resultDefs;
 
@@ -55,6 +79,8 @@ export const generateNewListDefinition = ({ numId, listType, level, start, text,
       text,
       fmt,
       markerFontFamily,
+      bulletStyle,
+      bulletStyleLevel,
     });
     resultDefs = { abstractDef: result.abstractDef, numDef: result.numDef };
   });

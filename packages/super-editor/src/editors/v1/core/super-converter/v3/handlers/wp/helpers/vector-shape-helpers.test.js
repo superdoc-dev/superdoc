@@ -6,6 +6,8 @@ import {
   extractStrokeWidth,
   extractStrokeColor,
   extractFillColor,
+  extractLineEnds,
+  extractCustomGeometry,
 } from './vector-shape-helpers.js';
 import { emuToPixels } from '@converter/helpers.js';
 
@@ -511,5 +513,201 @@ describe('extractFillColor', () => {
     };
 
     expect(extractFillColor(spPr, style)).toBe('#808080');
+  });
+});
+
+describe('namespace prefix tolerance', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    emuToPixels.mockImplementation((emu) => parseInt(emu, 10) / 12700);
+  });
+
+  // Recursively rewrite every DrawingML node prefix from `a:` to the given replacement.
+  // Mirrors the helper used in encode-image-node-helpers.test.js.
+  const renameDrawingMlPrefix = (node, prefix) => {
+    if (!node || typeof node !== 'object') return node;
+    if (typeof node.name === 'string' && node.name.startsWith('a:')) {
+      node.name = `${prefix}:${node.name.slice(2)}`;
+    }
+    if (Array.isArray(node.elements)) {
+      node.elements.forEach((child) => renameDrawingMlPrefix(child, prefix));
+    }
+    return node;
+  };
+
+  it('extractStrokeWidth resolves a:ln when re-prefixed to ns6:', () => {
+    const spPr = renameDrawingMlPrefix({ elements: [{ name: 'a:ln', attributes: { w: '25400' } }] }, 'ns6');
+
+    expect(extractStrokeWidth(spPr)).toBe(2);
+  });
+
+  it('extractStrokeColor resolves the full a:ln/a:solidFill/a:srgbClr chain when re-prefixed', () => {
+    const spPr = renameDrawingMlPrefix(
+      {
+        elements: [
+          {
+            name: 'a:ln',
+            elements: [
+              {
+                name: 'a:solidFill',
+                elements: [{ name: 'a:srgbClr', attributes: { val: 'ff0000' } }],
+              },
+            ],
+          },
+        ],
+      },
+      'ns6',
+    );
+
+    expect(extractStrokeColor(spPr, null)).toBe('#ff0000');
+  });
+
+  it('extractStrokeColor honours a:noFill when re-prefixed', () => {
+    const spPr = renameDrawingMlPrefix(
+      {
+        elements: [
+          {
+            name: 'a:ln',
+            elements: [{ name: 'a:noFill' }],
+          },
+        ],
+      },
+      'ns6',
+    );
+
+    expect(extractStrokeColor(spPr, null)).toBeNull();
+  });
+
+  it('extractFillColor resolves a:solidFill schemeClr with modifiers when re-prefixed', () => {
+    const spPr = renameDrawingMlPrefix(
+      {
+        elements: [
+          {
+            name: 'a:solidFill',
+            elements: [
+              {
+                name: 'a:schemeClr',
+                attributes: { val: 'accent6' },
+                elements: [{ name: 'a:shade', attributes: { val: '75000' } }],
+              },
+            ],
+          },
+        ],
+      },
+      'ns6',
+    );
+
+    expect(extractFillColor(spPr, null)).toBe('#548235');
+  });
+
+  it('extractLineEnds resolves a:ln/a:headEnd/a:tailEnd when re-prefixed', () => {
+    const spPr = renameDrawingMlPrefix(
+      {
+        elements: [
+          {
+            name: 'a:ln',
+            elements: [
+              { name: 'a:headEnd', attributes: { type: 'triangle', w: 'med', len: 'med' } },
+              { name: 'a:tailEnd', attributes: { type: 'arrow', w: 'lg', len: 'lg' } },
+            ],
+          },
+        ],
+      },
+      'ns6',
+    );
+
+    const result = extractLineEnds(spPr);
+    expect(result).toEqual({
+      head: { type: 'triangle', width: 'med', length: 'med' },
+      tail: { type: 'arrow', width: 'lg', length: 'lg' },
+    });
+  });
+
+  it('extractCustomGeometry resolves a:custGeom/a:pathLst/a:path tree when re-prefixed', () => {
+    const spPr = renameDrawingMlPrefix(
+      {
+        elements: [
+          {
+            name: 'a:custGeom',
+            elements: [
+              {
+                name: 'a:pathLst',
+                elements: [
+                  {
+                    name: 'a:path',
+                    attributes: { w: '100', h: '100' },
+                    elements: [
+                      {
+                        name: 'a:moveTo',
+                        elements: [{ name: 'a:pt', attributes: { x: '0', y: '0' } }],
+                      },
+                      {
+                        name: 'a:lnTo',
+                        elements: [{ name: 'a:pt', attributes: { x: '100', y: '100' } }],
+                      },
+                      { name: 'a:close' },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+      'ns6',
+    );
+
+    const result = extractCustomGeometry(spPr);
+    expect(result).not.toBeNull();
+    expect(result.paths).toHaveLength(1);
+    expect(result.paths[0]).toMatchObject({ w: 100, h: 100 });
+    expect(result.paths[0].d).toBe('M 0 0 L 100 100 Z');
+  });
+
+  it('extractFillColor extracts gradFill stops and angle when re-prefixed', () => {
+    const spPr = renameDrawingMlPrefix(
+      {
+        elements: [
+          {
+            name: 'a:gradFill',
+            elements: [
+              {
+                name: 'a:gsLst',
+                elements: [
+                  {
+                    name: 'a:gs',
+                    attributes: { pos: '0' },
+                    elements: [{ name: 'a:srgbClr', attributes: { val: 'ff0000' } }],
+                  },
+                  {
+                    name: 'a:gs',
+                    attributes: { pos: '100000' },
+                    elements: [
+                      {
+                        name: 'a:srgbClr',
+                        attributes: { val: '0000ff' },
+                        elements: [{ name: 'a:alpha', attributes: { val: '50000' } }],
+                      },
+                    ],
+                  },
+                ],
+              },
+              { name: 'a:lin', attributes: { ang: '5400000' } }, // 90deg
+            ],
+          },
+        ],
+      },
+      'ns6',
+    );
+
+    const fill = extractFillColor(spPr, null);
+    expect(fill).toMatchObject({
+      gradientType: 'linear',
+      angle: 90,
+      stops: [
+        { position: 0, color: '#ff0000', alpha: 1 },
+        { position: 1, color: '#0000ff', alpha: 0.5 },
+      ],
+    });
   });
 });

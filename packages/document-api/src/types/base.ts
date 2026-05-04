@@ -1,7 +1,7 @@
 /**
  * Base types for the Document API node model.
  *
- * This file is the foundation of the type hierarchy — leaf node-info files
+ * This file is the foundation of the type hierarchy: leaf node-info files
  * (paragraph.types.ts, inline.types.ts, etc.) import from here, and node.ts
  * assembles the full NodeInfo union from those leaves.
  *

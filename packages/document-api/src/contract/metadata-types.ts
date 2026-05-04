@@ -1,7 +1,7 @@
 /**
  * Shared leaf types for operation metadata.
  *
- * This file is the bottom of the contract import DAG — it imports only
+ * This file is the bottom of the contract import DAG: it imports only
  * from `../types/receipt.js` and has no contract-internal dependencies.
  */
 

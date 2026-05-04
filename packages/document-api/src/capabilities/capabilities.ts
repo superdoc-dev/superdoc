@@ -67,7 +67,7 @@ export interface InlinePropertyCapability {
   storage: InlinePropertyStorage;
 }
 
-/** Format capability snapshot — advertises per-property support for `format.apply`. */
+/** Format capability snapshot: advertises per-property support for `format.apply`. */
 export interface FormatCapabilities {
   /** Capability entry per canonical inline patch key. */
   supportedInlineProperties: Record<InlineRunPatchKey, InlinePropertyCapability>;

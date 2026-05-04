@@ -24,7 +24,7 @@
     "test:behavior:html": "pnpm --filter @superdoc-testing/behavior test:html",
     "type-check": "tsc -b tsconfig.references.json",
     "type-check:force": "tsc -b --force tsconfig.references.json",
-    "rebuild:types": "pnpm run --filter=@superdoc/common --filter=@superdoc/word-layout --filter=@superdoc/contracts --filter=@superdoc/dom-contract --filter=@superdoc/layout-resolved --filter=@superdoc/geometry-utils --filter=@superdoc/style-engine --filter=@superdoc/pm-adapter --filter=@superdoc/measuring-dom --filter=@superdoc/layout-engine --filter=@superdoc/painter-dom --filter=@superdoc/layout-bridge build",
+    "rebuild:types": "pnpm --workspace-concurrency=1 run --filter=@superdoc/common --filter=@superdoc/word-layout --filter=@superdoc/contracts --filter=@superdoc/dom-contract --filter=@superdoc/layout-resolved --filter=@superdoc/geometry-utils --filter=@superdoc/style-engine --filter=@superdoc/pm-adapter --filter=@superdoc/measuring-dom --filter=@superdoc/layout-engine --filter=@superdoc/layout-bridge build && pnpm --filter=@superdoc/painter-dom build",
     "validate:commands": "node scripts/validate-command-types.mjs",
     "unzip": "bash packages/super-editor/src/editors/v1/tests/helpers/unzip.sh",
     "dev": "pnpm --prefix packages/superdoc run dev",
@@ -69,6 +69,7 @@
     "corpus:update-registry": "node scripts/corpus/update-registry.mjs",
     "watch": "pnpm --prefix packages/superdoc run watch:es",
     "check:all": "pnpm run format && pnpm run lint:fix && pnpm --prefix packages/super-editor run types:build && pnpm run test",
+    "check:examples-demos": "bun scripts/validate-examples-demos.ts",
     "local:publish": "pnpm --prefix packages/superdoc version prerelease --preid=local && pnpm --prefix packages/superdoc publish --registry http://localhost:4873",
     "update-preset-geometry": "ROOT=$(pwd) && cd ../superdoc-devtools/preset-geometry && pnpm run build && cp ./dist/index.js ./dist/index.js.map ./dist/index.d.ts \"$ROOT/packages/preset-geometry/\"",
     "manual-tag": "bash scripts/manual-tag.sh",
@@ -87,12 +88,15 @@
     "sdk:sync-version": "node packages/sdk/scripts/sync-sdk-version.mjs",
     "sdk:release": "node packages/sdk/scripts/sdk-release.mjs",
     "sdk:release:dry": "node packages/sdk/scripts/sdk-release.mjs --dry-run",
-    "layout:export-one": "bun tests/layout/export-single-layout-snapshot.mjs"
+    "layout:export-one": "bun tests/layout/export-single-layout-snapshot.mjs",
+    "layout:screenshot-one": "pnpm --filter @superdoc-testing/visual run screenshot-one"
   },
   "devDependencies": {
     "@clack/prompts": "^1.0.1",
     "@commitlint/cli": "catalog:",
     "@commitlint/config-conventional": "catalog:",
+    "@emnapi/core": "^1.9.1",
+    "@emnapi/runtime": "^1.9.1",
     "@eslint/js": "catalog:",
     "@semantic-release/changelog": "catalog:",
     "@semantic-release/exec": "catalog:",

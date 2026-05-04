@@ -3004,6 +3004,61 @@ describe('paragraph converters', () => {
         expect(context.blocks).toHaveLength(1);
         expect(getMarkerText(context.blocks[0])).toBe('二.');
       });
+
+      it('updates converterContext.sectionDirection when crossing to next section', () => {
+        const trackedChanges: TrackedChangesConfig = {
+          mode: 'review',
+          enabled: true,
+        };
+        const context = createParagraphHandlerContext(trackedChanges);
+        context.converterContext.sectionDirection = 'rtl';
+        context.sectionState = {
+          ranges: [
+            {
+              sectionIndex: 0,
+              startParagraphIndex: 0,
+              endParagraphIndex: 0,
+              sectPr: null,
+              margins: null,
+              pageSize: null,
+              orientation: null,
+              columns: null,
+              type: 'nextPage',
+              titlePg: false,
+            },
+            {
+              sectionIndex: 1,
+              startParagraphIndex: 0,
+              endParagraphIndex: 1,
+              sectPr: {
+                type: 'element',
+                name: 'w:sectPr',
+                elements: [{ type: 'element', name: 'w:bidi', attributes: { 'w:val': '0' } }],
+              },
+              margins: null,
+              pageSize: null,
+              orientation: null,
+              columns: null,
+              type: 'nextPage',
+              titlePg: false,
+            },
+          ] as any,
+          currentSectionIndex: 0,
+          currentParagraphIndex: 0,
+        };
+
+        handleParagraphNode(
+          {
+            type: 'paragraph',
+            attrs: { paragraphProperties: {} },
+            content: [{ type: 'text', text: 'section switch paragraph' }],
+          } as PMNode,
+          context,
+        );
+
+        expect(context.sectionState.currentSectionIndex).toBe(1);
+        expect(context.converterContext.sectionDirection).toBe('ltr');
+      });
     });
 
     describe('Run merging', () => {

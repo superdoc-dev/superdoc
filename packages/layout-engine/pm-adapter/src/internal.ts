@@ -65,6 +65,17 @@ import type {
 const DEFAULT_FONT = 'Times New Roman';
 const DEFAULT_SIZE = 10 / 0.75; // 10pt in pixels
 
+function resolveSectionDirectionFromSectPr(sectPr: unknown): 'ltr' | 'rtl' | undefined {
+  if (!sectPr || typeof sectPr !== 'object') return undefined;
+  const elements = (sectPr as { elements?: Array<{ name?: string; attributes?: Record<string, unknown> }> }).elements;
+  if (!Array.isArray(elements)) return undefined;
+  const bidi = elements.find((element) => element?.name === 'w:bidi');
+  if (!bidi) return undefined;
+  const val = bidi.attributes?.['w:val'] ?? bidi.attributes?.val;
+  if (val === '0' || val === 0 || val === false || val === 'false' || val === 'off') return 'ltr';
+  return 'rtl';
+}
+
 /**
  * Dispatch map for node type handlers.
  * Maps node type names to their corresponding handler functions.
@@ -181,6 +192,8 @@ export function toFlowBlocks(pmDoc: PMNode | object, options?: AdapterOptions): 
 
   // Range-aware section analysis (matches toFlowBlocks semantics)
   const bodySectionProps = doc.attrs?.bodySectPr ?? doc.attrs?.sectPr;
+  converterContext.sectionDirection =
+    converterContext.sectionDirection ?? resolveSectionDirectionFromSectPr(bodySectionProps);
   const sectionRanges = options?.emitSectionBreaks ? analyzeSectionRanges(doc, bodySectionProps) : [];
   publishSectionMetadata(sectionRanges, options);
 

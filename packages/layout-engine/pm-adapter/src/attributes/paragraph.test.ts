@@ -15,6 +15,7 @@ import {
   normalizeFramePr,
   normalizeDropCap,
   computeParagraphAttrs,
+  resolveEffectiveParagraphDirection,
   computeRunAttrs,
   hasExplicitParagraphRunProperties,
 } from './paragraph.js';
@@ -273,7 +274,117 @@ describe('computeParagraphAttrs', () => {
     const { paragraphAttrs } = computeParagraphAttrs(paragraph as never);
 
     expect(paragraphAttrs.direction).toBe('rtl');
-    expect(paragraphAttrs.rtl).toBe(true);
+  });
+
+  it('uses section direction fallback when paragraph direction is not explicit', () => {
+    const paragraph: PMNode = {
+      type: { name: 'paragraph' },
+      attrs: {
+        paragraphProperties: {},
+      },
+    };
+
+    const converterContext = {
+      sectionDirection: 'rtl',
+      translatedNumbering: {},
+      translatedLinkedStyles: { docDefaults: {}, styles: {} },
+      tableInfo: null,
+    };
+
+    const { paragraphAttrs } = computeParagraphAttrs(paragraph as never, converterContext as never);
+    expect(paragraphAttrs.direction).toBe('rtl');
+  });
+});
+
+describe('resolveEffectiveParagraphDirection', () => {
+  it('prefers resolved paragraph rightToLeft over section direction', () => {
+    const paragraph: PMNode = {
+      type: { name: 'paragraph' },
+      attrs: {
+        paragraphProperties: {
+          rightToLeft: true,
+        },
+      },
+    };
+
+    const direction = resolveEffectiveParagraphDirection(paragraph as never, { rightToLeft: true } as never, 'ltr');
+    expect(direction).toBe('rtl');
+  });
+
+  it('uses section direction when paragraph direction is not explicit', () => {
+    const paragraph: PMNode = {
+      type: { name: 'paragraph' },
+      attrs: {
+        paragraphProperties: {},
+      },
+    };
+
+    const direction = resolveEffectiveParagraphDirection(paragraph as never, {} as never, 'rtl');
+    expect(direction).toBe('rtl');
+  });
+
+  it('infers rtl when all runs with explicit direction are rtl', () => {
+    const paragraph: PMNode = {
+      type: { name: 'paragraph' },
+      content: [
+        { type: 'run', attrs: { runProperties: { rightToLeft: true } }, content: [{ type: 'text', text: 'אבג' }] },
+        { type: 'run', attrs: { runProperties: { rightToLeft: true } }, content: [{ type: 'text', text: 'דהו' }] },
+      ],
+    };
+
+    const direction = resolveEffectiveParagraphDirection(paragraph as never, {} as never);
+    expect(direction).toBe('rtl');
+  });
+
+  it('infers ltr when explicit ltr runs are the majority', () => {
+    const paragraph: PMNode = {
+      type: { name: 'paragraph' },
+      content: [
+        { type: 'run', attrs: { runProperties: { rightToLeft: true } }, content: [{ type: 'text', text: 'אבג' }] },
+        { type: 'run', attrs: { runProperties: { rightToLeft: false } }, content: [{ type: 'text', text: 'abc' }] },
+        { type: 'run', attrs: { runProperties: { rightToLeft: false } }, content: [{ type: 'text', text: 'def' }] },
+      ],
+    };
+
+    const direction = resolveEffectiveParagraphDirection(paragraph as never, {} as never);
+    expect(direction).toBe('ltr');
+  });
+
+  it('infers rtl when explicit rtl runs are the majority', () => {
+    const paragraph: PMNode = {
+      type: { name: 'paragraph' },
+      content: [
+        { type: 'run', attrs: { runProperties: { rightToLeft: false } }, content: [{ type: 'text', text: 'abc' }] },
+        { type: 'run', attrs: { runProperties: { rightToLeft: true } }, content: [{ type: 'text', text: 'אבג' }] },
+        { type: 'run', attrs: { runProperties: { rightToLeft: true } }, content: [{ type: 'text', text: 'דהו' }] },
+      ],
+    };
+
+    const direction = resolveEffectiveParagraphDirection(paragraph as never, {} as never);
+    expect(direction).toBe('rtl');
+  });
+
+  it('uses first explicit run direction as tie-breaker for mixed runs', () => {
+    const paragraph: PMNode = {
+      type: { name: 'paragraph' },
+      content: [
+        { type: 'run', attrs: { runProperties: { rightToLeft: true } }, content: [{ type: 'text', text: 'אבג' }] },
+        { type: 'run', attrs: { runProperties: { rightToLeft: false } }, content: [{ type: 'text', text: 'abc' }] },
+      ],
+    };
+
+    const direction = resolveEffectiveParagraphDirection(paragraph as never, {} as never);
+    expect(direction).toBe('rtl');
+  });
+
+  it('returns undefined when no direction signal exists', () => {
+    const paragraph: PMNode = {
+      type: { name: 'paragraph' },
+      content: [{ type: 'run', attrs: { runProperties: {} }, content: [{ type: 'text', text: 'plain text' }] }],
+    };
+
+    const direction = resolveEffectiveParagraphDirection(paragraph as never, {} as never);
+    expect(direction).toBeUndefined();
   });
 });
 

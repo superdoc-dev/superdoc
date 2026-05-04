@@ -4,6 +4,7 @@ import {
   activateNote,
   expectActiveStoryTextToContain,
   getBodyStoryText,
+  moveActiveStoryCursorToEnd,
   waitForActiveStory,
 } from '../../helpers/story-surfaces.js';
 
@@ -36,9 +37,11 @@ test('double-click rendered endnote to edit it through the presentation surface'
     noteId: '1',
   });
 
-  await superdoc.page.keyboard.press('End');
+  // Stabilize caret in the active note editor before typing.
+  await moveActiveStoryCursorToEnd(superdoc.page);
   await superdoc.page.keyboard.insertText(' edited');
   await superdoc.waitForStable();
+  await expectActiveStoryTextToContain(superdoc.page, 'simple endnote edited');
   await expect(endnote).toContainText('This is a simple endnote edited');
 
   await superdoc.page.keyboard.press('Backspace');

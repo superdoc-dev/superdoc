@@ -666,6 +666,102 @@ describe('resolveLayout', () => {
     });
   });
 
+  describe('fragment back-pointer', () => {
+    it('attaches the source ParaFragment to a paragraph item', () => {
+      const paraFragment: ParaFragment = {
+        kind: 'para',
+        blockId: 'p1',
+        fromLine: 0,
+        toLine: 1,
+        x: 72,
+        y: 100,
+        width: 468,
+      };
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [{ number: 1, fragments: [paraFragment] }],
+      };
+      const blocks: FlowBlock[] = [{ kind: 'paragraph', id: 'p1', runs: [] }];
+      const measures: Measure[] = [{ kind: 'paragraph', lines: [], totalHeight: 20 }];
+      const result = resolveLayout({ layout, flowMode: 'paginated', blocks, measures });
+      const item = result.pages[0].items[0] as { fragment?: ParaFragment };
+      expect(item.fragment).toBe(paraFragment);
+    });
+
+    it('attaches the source TableFragment to a table item', () => {
+      const tableFragment: TableFragment = {
+        kind: 'table',
+        blockId: 't1',
+        fromRow: 0,
+        toRow: 1,
+        x: 0,
+        y: 0,
+        width: 400,
+        height: 100,
+      };
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [{ number: 1, fragments: [tableFragment] }],
+      };
+      const blocks: FlowBlock[] = [
+        { kind: 'table', id: 't1', rows: [{ id: 'r1', cells: [] }], attrs: { columnWidths: [400] } },
+      ];
+      const measures: Measure[] = [
+        { kind: 'table', rowHeights: [100], columnWidths: [400], cells: [], rows: [] } as unknown as Measure,
+      ];
+      const result = resolveLayout({ layout, flowMode: 'paginated', blocks, measures });
+      const item = result.pages[0].items[0] as { fragment?: TableFragment };
+      expect(item.fragment).toBe(tableFragment);
+    });
+
+    it('attaches the source ImageFragment to an image item', () => {
+      const imageFragment: ImageFragment = {
+        kind: 'image',
+        blockId: 'img1',
+        x: 0,
+        y: 0,
+        width: 200,
+        height: 150,
+        isAnchored: false,
+      };
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [{ number: 1, fragments: [imageFragment] }],
+      };
+      const blocks: FlowBlock[] = [
+        { kind: 'image', id: 'img1', attrs: { src: 'about:blank', width: 200, height: 150 } },
+      ];
+      const measures: Measure[] = [{ kind: 'image' } as unknown as Measure];
+      const result = resolveLayout({ layout, flowMode: 'paginated', blocks, measures });
+      const item = result.pages[0].items[0] as { fragment?: ImageFragment };
+      expect(item.fragment).toBe(imageFragment);
+    });
+
+    it('attaches the source DrawingFragment to a drawing item', () => {
+      const drawingFragment: DrawingFragment = {
+        kind: 'drawing',
+        blockId: 'd1',
+        x: 0,
+        y: 0,
+        width: 200,
+        height: 200,
+        isAnchored: false,
+        geometry: { width: 200, height: 200 },
+      } as DrawingFragment;
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [{ number: 1, fragments: [drawingFragment] }],
+      };
+      const blocks: FlowBlock[] = [
+        { kind: 'drawing', id: 'd1', drawingKind: 'image', shapes: [], attrs: {} } as unknown as FlowBlock,
+      ];
+      const measures: Measure[] = [{ kind: 'drawing' } as unknown as Measure];
+      const result = resolveLayout({ layout, flowMode: 'paginated', blocks, measures });
+      const item = result.pages[0].items[0] as { fragment?: DrawingFragment };
+      expect(item.fragment).toBe(drawingFragment);
+    });
+  });
+
   describe('paragraph/list-item block and measure lifting', () => {
     it('lifts block and measure from a paragraph fragment', () => {
       const paraFragment: ParaFragment = {

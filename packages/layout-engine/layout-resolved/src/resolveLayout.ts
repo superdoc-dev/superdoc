@@ -247,6 +247,7 @@ export function resolveFragmentItem(
         height: computeFragmentHeight(fragment, blockMap),
         zIndex: resolveFragmentZIndex(fragment),
         fragmentKind: fragment.kind,
+        fragment,
         blockId: fragment.blockId,
         fragmentIndex,
         content: resolveParagraphContentIfApplicable(fragment, blockMap),

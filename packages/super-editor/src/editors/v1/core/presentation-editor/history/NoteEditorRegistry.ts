@@ -14,8 +14,6 @@
  *     entries in lockstep.
  *   - Idle disposal policy lives here (a story runtime cache miss should not
  *     kill an editor the coordinator still references).
- *
- * See `plans/unified-history.md`, Phase 2.
  */
 
 import type { FootnoteStoryLocator, EndnoteStoryLocator } from '@superdoc/document-api';

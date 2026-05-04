@@ -1648,8 +1648,6 @@ export class PresentationEditor extends EventEmitter {
    * them safe to run multiple times.
    *
    * No-op when unified history is disabled.
-   *
-   * @see plans/unified-history.md § Phase 4
    */
   recordHistoryBatch(batch: BatchHistoryRecord): void {
     this.#historyCoordinator?.withHistoryBatch(batch);
@@ -5332,8 +5330,8 @@ export class PresentationEditor extends EventEmitter {
   // ===========================================================================
   // Unified History Coordinator (enabled by default; explicit false disables)
   //
-  // See plans/unified-history.md. When the kill-switch is off, these helpers are
-  // no-ops so the legacy active-editor-first routing stays intact.
+  // When the kill-switch is off, these helpers are no-ops so the legacy
+  // active-editor-first routing stays intact.
   // ===========================================================================
 
   #isUnifiedHistoryEnabled(): boolean {

@@ -42,7 +42,6 @@ const getPreviewStyle = computed(() => {
 
 <template>
   <div class="checkbox-container">
-    <!-- TODO: check when migrating CLM -->
     <div v-if="props.isEditing" class="checkbox-editing-placeholder"></div>
     <div v-else class="checkbox-preview" :style="getPreviewStyle">{{ getValue ? 'x' : '' }}</div>
   </div>

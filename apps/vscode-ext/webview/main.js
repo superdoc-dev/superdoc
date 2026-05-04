@@ -40,22 +40,18 @@ let editor = null;
 let saveTimeout = null;
 let isInitialLoad = true;
 
-// Configuration
 const AUTO_SAVE_DELAY = 1000; // milliseconds
 
-// Initialize editor with file data
 function initializeEditor(fileArrayBuffer) {
   debug('Initializing editor with file buffer');
 
   try {
-    // Convert ArrayBuffer to File object
     const file = new File([fileArrayBuffer], 'document.docx', {
       type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     });
 
     debug(`File created: ${file.name}, ${file.size} bytes`);
 
-    // Clean up previous editor instance
     if (editor) {
       debug('Destroying previous editor...');
       try {
@@ -69,14 +65,11 @@ function initializeEditor(fileArrayBuffer) {
       debug('Destroyed previous editor');
     }
 
-    // Reset state for new editor
     isInitialLoad = true;
 
-    // Check if DOM elements exist
     const superdocElement = document.getElementById('superdoc');
     const toolbarElement = document.getElementById('superdoc-toolbar');
 
-    // Clear existing content from containers
     if (superdocElement) {
       superdocElement.innerHTML = '';
     }
@@ -121,7 +114,6 @@ function initializeEditor(fileArrayBuffer) {
   }
 }
 
-// Setup editor listeners for content changes (debounced save on update)
 function setupEditorListeners() {
   if (!editor?.activeEditor) {
     debug('No editor or activeEditor available');
@@ -141,20 +133,16 @@ function setupEditorListeners() {
   debug('Editor update listener ready');
 }
 
-// Schedule auto-save with debouncing
 function scheduleAutoSave() {
-  // Clear existing timeout
   if (saveTimeout) {
     clearTimeout(saveTimeout);
   }
 
-  // Schedule new save
   saveTimeout = setTimeout(() => {
     saveDocument();
   }, AUTO_SAVE_DELAY);
 }
 
-// Save document back to VS Code
 async function saveDocument() {
   if (!editor) {
     debug('No editor available for saving');
@@ -186,7 +174,6 @@ async function saveDocument() {
   }
 }
 
-// Handle messages from VS Code
 window.addEventListener('message', async (event) => {
   const message = event.data;
   if (!message?.type) {

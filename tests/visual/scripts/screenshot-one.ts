@@ -3,7 +3,8 @@
  *
  * Boots the visual harness vite server, drives chromium directly (no test
  * runner), writes one PNG per rendered page plus a metadata.json alongside.
- * Used by the render-parity artifact bundle (SD-2900).
+ * A generic primitive for downstream evaluation tooling that compares
+ * SuperDoc page images against external references.
  */
 import { chromium } from '@playwright/test';
 import { spawn, type ChildProcess } from 'node:child_process';

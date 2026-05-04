@@ -105,8 +105,18 @@ almost never what was intended.
 
 ## Treat stale comments as bugs
 
-A stale or misleading comment wastes the exact place where a useful invariant
-could have lived. Update it or delete it during the same change.
+In agent-heavy codebases, comments and docs are part of the prompt surface.
+A stale comment is not harmless decoration. It can become an instruction
+the next agent follows. If a comment no longer reflects the code, update it
+or delete it in the same change.
+
+## Treat agent-facing docs as comments
+
+`README.md`, `AGENTS.md`, `CLAUDE.md`, architecture notes, runbooks, and
+tutorials are prompt surface too. If a code change invalidates one of these
+docs, update or delete the stale prose in the same change. A stale root
+instruction can be more dangerous than a stale inline comment because agents
+may treat it as project policy.
 
 ## When a task conflicts with a comment
 
@@ -121,5 +131,5 @@ the code does not structurally enforce. Prefer specific `AIDEV-NOTE:` anchors
 for business, security, compliance, and non-local rules. Do not add comments
 that paraphrase code. When reaching for loaded terms like `legacy`,
 `deprecated`, or `temporary`, follow the taxonomy in `comment-policy.md`.
-Treat stale comments as bugs.
+Treat stale comments and stale agent-facing docs as bugs.
 ```

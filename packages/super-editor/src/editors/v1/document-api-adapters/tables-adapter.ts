@@ -19,6 +19,7 @@ import type {
   TablesSplitInput,
   TablesConvertToTextInput,
   TablesInsertRowInput,
+  RowInsertPosition,
   TablesDeleteRowInput,
   TablesSetRowHeightInput,
   TablesSetRowOptionsInput,

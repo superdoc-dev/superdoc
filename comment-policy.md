@@ -54,7 +54,7 @@ is current; only the *name* is historical.
 Required annotation: replacement and earliest version it can be removed.
 
 ```ts
-// AIDEV-NOTE: legacy-public — `oldName` kept for v1.x consumers.
+// AIDEV-NOTE: legacy-public - `oldName` kept for v1.x consumers.
 // Replaced by `newName`. Earliest removal: v2.0.
 ```
 
@@ -67,14 +67,14 @@ Required annotation: what triggers the fallback, and what newer path
 replaces it once gaps close.
 
 ```ts
-// AIDEV-NOTE: compat-fallback — used when ResolvedLayout.content is absent.
+// AIDEV-NOTE: compat-fallback - used when ResolvedLayout.content is absent.
 // Retire once pm-adapter populates content for every fragment.
 ```
 
 ### `removed-dead`
 
 Code or a symbol that no longer exists in the repo. Should not appear in
-comments at all — describe the change in the PR or git history. A comment
+comments at all. Describe the change in the PR or git history. A comment
 naming a removed symbol as "context" is itself a candidate for removal.
 
 ### `deprecated`
@@ -97,7 +97,7 @@ A short-lived workaround.
 Required annotation: condition for removal *and* an issue id.
 
 ```ts
-// AIDEV-NOTE: temporary — disable until SD-1234 lands the new path.
+// AIDEV-NOTE: temporary - disable until SD-1234 lands the new path.
 ```
 
 A `temporary` comment without an issue id is treated as permanent, which is

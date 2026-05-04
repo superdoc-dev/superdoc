@@ -154,7 +154,7 @@ const today = new Date().toISOString().slice(0, 10);
 
 const print = (s = '') => process.stdout.write(`${s}\n`);
 
-print(`# Comment hygiene report — ${today}`);
+print(`# Comment hygiene report - ${today}`);
 print(`Tracking: SD-2922 (.d.ts shadows), SD-2923 (comment hygiene).`);
 print(`Policy: comment-policy.md`);
 print('');

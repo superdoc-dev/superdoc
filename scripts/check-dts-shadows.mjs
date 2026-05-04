@@ -27,7 +27,7 @@
 // scoped exception, not a precedent. See SD-2922 for the follow-up.
 
 import { readdirSync, statSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { join, relative, sep } from 'node:path';
 
 const ROOT = process.cwd();
 const SCAN = 'packages';
@@ -61,7 +61,9 @@ for (const file of walk(join(ROOT, SCAN))) {
   } catch {
     continue;
   }
-  const rel = relative(ROOT, file);
+  // Normalize separators so the forward-slash ALLOWLIST_PREFIXES match on Windows,
+  // where path.relative() returns backslash-separated paths.
+  const rel = relative(ROOT, file).split(sep).join('/');
   if (ALLOWLIST_PREFIXES.some((p) => rel.startsWith(p))) continue;
   violations.push(rel);
 }

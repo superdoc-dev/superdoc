@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SuperDoc Custom UI: vanilla tracked changes</title>
+  </head>
+  <body>
+    <div class="app">
+      <section class="editor-area">
+        <div id="mode-toggle" class="mode"></div>
+        <div id="editor"></div>
+      </section>
+      <aside class="sidebar">
+        <div class="sidebar-head">
+          <h2>Tracked changes</h2>
+          <div class="bulk">
+            <button id="prev" disabled>Prev</button>
+            <button id="next" disabled>Next</button>
+            <button id="reject-all" disabled>Reject all</button>
+            <button id="accept-all" class="primary" disabled>Accept all</button>
+          </div>
+        </div>
+        <ul id="changes" class="changes"></ul>
+      </aside>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

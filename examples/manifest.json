@@ -140,6 +140,16 @@
     "ci": true
   },
   {
+    "id": "editor-custom-ui-track-changes-vanilla",
+    "title": "Custom tracked-changes panel (vanilla)",
+    "category": "Editor",
+    "surface": "Custom UI",
+    "sourceRepo": "superdoc-dev/superdoc",
+    "sourcePath": "examples/editor/custom-ui/track-changes/vanilla",
+    "docs": "https://docs.superdoc.dev/editor/custom-ui/track-changes",
+    "ci": true
+  },
+  {
     "id": "editor-spell-check-typo-js",
     "title": "Spell check with Typo.js",
     "category": "Editor",

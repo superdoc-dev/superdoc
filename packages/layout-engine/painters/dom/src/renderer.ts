@@ -1462,14 +1462,6 @@ export class DomPainter {
     return this.resolvedLayout?.pages[pageIndex] ?? null;
   }
 
-  /** Returns the resolved fragment item for a given page/fragment index, or undefined. */
-  private getResolvedFragmentItem(pageIndex: number, fragmentIndex: number): ResolvedPaintItem | undefined {
-    const page = this.getResolvedPage(pageIndex);
-    if (!page) return undefined;
-    const item = page.items[fragmentIndex];
-    return item?.kind === 'fragment' ? item : undefined;
-  }
-
   /**
    * Returns the latest painter snapshot captured during the last paint cycle.
    */
@@ -2231,9 +2223,10 @@ export class DomPainter {
     const sdtBoundaries = computeSdtBoundaries(page.fragments, resolvedItems, this.sdtLabelsRendered);
     const betweenBorderFlags = computeBetweenBorderFlags(page.fragments, resolvedItems);
 
-    page.fragments.forEach((fragment, index) => {
+    resolvedItems.forEach((resolvedItem, index) => {
+      if (resolvedItem.kind !== 'fragment') return;
+      const fragment = resolvedItem.fragment;
       const sdtBoundary = sdtBoundaries.get(index);
-      const resolvedItem = this.getResolvedFragmentItem(pageIndex, index);
       el.appendChild(
         this.renderFragment(fragment, contextBase, sdtBoundary, betweenBorderFlags.get(index), resolvedItem),
       );
@@ -2787,12 +2780,13 @@ export class DomPainter {
       pageIndex,
     };
 
-    page.fragments.forEach((fragment, index) => {
+    resolvedItems.forEach((resolvedItem, index) => {
+      if (resolvedItem.kind !== 'fragment') return;
+      const fragment = resolvedItem.fragment;
       const key = fragmentKey(fragment);
       const current = existing.get(key);
       const sdtBoundary = sdtBoundaries.get(index);
       const betweenInfo = betweenBorderFlags.get(index);
-      const resolvedItem = this.getResolvedFragmentItem(pageIndex, index);
       const resolvedSig = resolvedPaintCacheSignature(resolvedItem);
 
       if (current) {
@@ -2947,9 +2941,10 @@ export class DomPainter {
     const resolvedItems = resolvedPage?.items ?? [];
     const sdtBoundaries = computeSdtBoundaries(page.fragments, resolvedItems, this.sdtLabelsRendered);
     const betweenBorderFlags = computeBetweenBorderFlags(page.fragments, resolvedItems);
-    const fragmentStates: FragmentDomState[] = page.fragments.map((fragment, index) => {
+    const fragmentStates: FragmentDomState[] = resolvedItems.flatMap((resolvedItem, index) => {
+      if (resolvedItem.kind !== 'fragment') return [];
+      const fragment = resolvedItem.fragment;
       const sdtBoundary = sdtBoundaries.get(index);
-      const resolvedItem = this.getResolvedFragmentItem(pageIndex, index);
       const fragmentEl = this.renderFragment(
         fragment,
         contextBase,
@@ -2959,13 +2954,15 @@ export class DomPainter {
       );
       el.appendChild(fragmentEl);
       const initSig = resolvedPaintCacheSignature(resolvedItem);
-      return {
-        key: fragmentKey(fragment),
-        signature: initSig,
-        fragment,
-        element: fragmentEl,
-        context: contextBase,
-      };
+      return [
+        {
+          key: fragmentKey(fragment),
+          signature: initSig,
+          fragment,
+          element: fragmentEl,
+          context: contextBase,
+        },
+      ];
     });
 
     this.renderDecorationsForPage(el, page, pageIndex, resolvedPage);

@@ -6,7 +6,7 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 const BLANK_DOCX = resolve(import.meta.dir, '../../../../shared/common/data/blank.docx');
 const SERVER_ENTRY = resolve(import.meta.dir, '../index.ts');
 
-// 3 lifecycle + 9 intent tools from the generated catalog
+// 3 lifecycle + 10 intent tools from the generated catalog
 const EXPECTED_TOOLS = [
   // Lifecycle
   'superdoc_open',
@@ -22,6 +22,7 @@ const EXPECTED_TOOLS = [
   'superdoc_track_changes',
   'superdoc_search',
   'superdoc_mutations',
+  'superdoc_table',
 ];
 
 function textContent(result: Awaited<ReturnType<Client['callTool']>>): string {

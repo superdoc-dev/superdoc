@@ -1,55 +1,44 @@
 ---
-title: tables.setShading
-sidebarTitle: tables.setShading
-description: Set the background shading color on a table or cell range.
+title: lists.delete
+sidebarTitle: lists.delete
+description: "Delete the entire list that contains the targeted list item. Removes ALL items in the same numbered sequence (the contiguous run of list items sharing the target's numbering) AND their text content from the document. Pass any single list item from the list as `target`; the op walks adjacent siblings to find the full list. Use this for \"remove the list\" / \"delete this list\" intents and for the cleanup step of a list-to-table conversion."
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
 
 ## Summary
 
-Set the background shading color on a table or cell range.
+Delete the entire list that contains the targeted list item. Removes ALL items in the same numbered sequence (the contiguous run of list items sharing the target's numbering) AND their text content from the document. Pass any single list item from the list as `target`; the op walks adjacent siblings to find the full list. Use this for "remove the list" / "delete this list" intents and for the cleanup step of a list-to-table conversion.
 
-- Operation ID: `tables.setShading`
-- API member path: `editor.doc.tables.setShading(...)`
+- Operation ID: `lists.delete`
+- API member path: `editor.doc.lists.delete(...)`
 - Mutates document: `yes`
-- Idempotency: `idempotent`
+- Idempotency: `conditional`
 - Supports tracked mode: `no`
 - Supports dry run: `yes`
 - Deterministic target resolution: `yes`
 
 ## Expected result
 
-Returns a TableMutationResult receipt; reports NO_OP if shading already matches.
+Returns a ListsDeleteResult with `deletedCount` (number of items removed). Reports failure (INVALID_TARGET) if the target is not a list item.
 
 ## Input fields
 
-### Variant 1 (target.kind="block")
-
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `color` | string \\| null | yes | One of: string, null |
-| `target` | TableOrCellAddress | yes | TableOrCellAddress |
+| `target` | ListItemAddress | yes | ListItemAddress |
 | `target.kind` | `"block"` | yes | Constant: `"block"` |
 | `target.nodeId` | string | yes |  |
-| `target.nodeType` | enum | yes | `"table"`, `"tableCell"` |
-
-### Variant 2 (required: nodeId)
-
-| Field | Type | Required | Description |
-| --- | --- | --- | --- |
-| `color` | string \\| null | yes | One of: string, null |
-| `nodeId` | string | yes |  |
+| `target.nodeType` | `"listItem"` | yes | Constant: `"listItem"` |
 
 ### Example request
 
 ```json
 {
-  "color": "example",
   "target": {
     "kind": "block",
     "nodeId": "node-def456",
-    "nodeType": "table"
+    "nodeType": "listItem"
   }
 }
 ```
@@ -60,57 +49,37 @@ Returns a TableMutationResult receipt; reports NO_OP if shading already matches.
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
+| `deletedCount` | integer | yes |  |
 | `success` | `true` | yes | Constant: `true` |
-| `table` | TableAddress | no | TableAddress |
-| `table.kind` | `"block"` | no | Constant: `"block"` |
-| `table.nodeId` | string | no |  |
-| `table.nodeType` | `"table"` | no | Constant: `"table"` |
-| `trackedChangeRefs` | EntityAddress[] | no |  |
 
 ### Variant 2 (success=false)
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `failure` | object | yes |  |
-| `failure.code` | enum | yes | `"NO_OP"`, `"INVALID_TARGET"`, `"TARGET_NOT_FOUND"`, `"CAPABILITY_UNAVAILABLE"` |
+| `failure.code` | enum | yes | `"INVALID_TARGET"` |
 | `failure.details` | any | no |  |
 | `failure.message` | string | yes |  |
 | `success` | `false` | yes | Constant: `false` |
-
-<Tip>
-When present, `result.table` is the follow-up address to reuse after this call. For non-destructive table-targeted mutations, pass `result.table.nodeId` to the next table operation instead of re-running `find()`. Destructive operations may omit `table`.
-</Tip>
 
 ### Example response
 
 ```json
 {
-  "success": true,
-  "table": {
-    "kind": "block",
-    "nodeId": "node-def456",
-    "nodeType": "table"
-  },
-  "trackedChangeRefs": [
-    {
-      "entityId": "entity-789",
-      "entityType": "comment",
-      "kind": "entity"
-    }
-  ]
+  "deletedCount": 1,
+  "success": true
 }
 ```
 
 ## Pre-apply throws
 
 - `TARGET_NOT_FOUND`
-- `INVALID_TARGET`
 - `CAPABILITY_UNAVAILABLE`
+- `INVALID_TARGET`
 
 ## Non-applied failure codes
 
 - `INVALID_TARGET`
-- `NO_OP`
 
 ## Raw schemas
 
@@ -118,39 +87,13 @@ When present, `result.table` is the follow-up address to reuse after this call. 
 ```json
 {
   "additionalProperties": false,
-  "oneOf": [
-    {
-      "required": [
-        "target"
-      ]
-    },
-    {
-      "required": [
-        "nodeId"
-      ]
-    }
-  ],
   "properties": {
-    "color": {
-      "oneOf": [
-        {
-          "pattern": "^(#?([0-9A-Fa-f]{6}|[0-9A-Fa-f]{3})|auto)$",
-          "type": "string"
-        },
-        {
-          "type": "null"
-        }
-      ]
-    },
-    "nodeId": {
-      "type": "string"
-    },
     "target": {
-      "$ref": "#/$defs/TableOrCellAddress"
+      "$ref": "#/$defs/ListItemAddress"
     }
   },
   "required": [
-    "color"
+    "target"
   ],
   "type": "object"
 }
@@ -164,21 +107,17 @@ When present, `result.table` is the follow-up address to reuse after this call. 
     {
       "additionalProperties": false,
       "properties": {
+        "deletedCount": {
+          "minimum": 0,
+          "type": "integer"
+        },
         "success": {
           "const": true
-        },
-        "table": {
-          "$ref": "#/$defs/TableAddress"
-        },
-        "trackedChangeRefs": {
-          "items": {
-            "$ref": "#/$defs/EntityAddress"
-          },
-          "type": "array"
         }
       },
       "required": [
-        "success"
+        "success",
+        "deletedCount"
       ],
       "type": "object"
     },
@@ -190,10 +129,7 @@ When present, `result.table` is the follow-up address to reuse after this call. 
           "properties": {
             "code": {
               "enum": [
-                "NO_OP",
-                "INVALID_TARGET",
-                "TARGET_NOT_FOUND",
-                "CAPABILITY_UNAVAILABLE"
+                "INVALID_TARGET"
               ]
             },
             "details": {},
@@ -227,21 +163,17 @@ When present, `result.table` is the follow-up address to reuse after this call. 
 {
   "additionalProperties": false,
   "properties": {
+    "deletedCount": {
+      "minimum": 0,
+      "type": "integer"
+    },
     "success": {
       "const": true
-    },
-    "table": {
-      "$ref": "#/$defs/TableAddress"
-    },
-    "trackedChangeRefs": {
-      "items": {
-        "$ref": "#/$defs/EntityAddress"
-      },
-      "type": "array"
     }
   },
   "required": [
-    "success"
+    "success",
+    "deletedCount"
   ],
   "type": "object"
 }
@@ -258,10 +190,7 @@ When present, `result.table` is the follow-up address to reuse after this call. 
       "properties": {
         "code": {
           "enum": [
-            "NO_OP",
-            "INVALID_TARGET",
-            "TARGET_NOT_FOUND",
-            "CAPABILITY_UNAVAILABLE"
+            "INVALID_TARGET"
           ]
         },
         "details": {},

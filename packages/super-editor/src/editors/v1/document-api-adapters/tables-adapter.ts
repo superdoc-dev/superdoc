@@ -32,6 +32,7 @@ import type {
   TablesUnmergeCellsInput,
   TablesSplitCellInput,
   TablesSetCellPropertiesInput,
+  TablesSetCellTextInput,
   TablesSortInput,
   TablesSetStyleInput,
   TablesClearStyleInput,
@@ -62,6 +63,8 @@ import type {
   TablesApplyStyleInput,
   TablesSetBordersInput,
   TablesSetTableOptionsInput,
+  TablesApplyPresetInput,
+  TablePresetName,
   TableBorderSpec,
   TableBorderState,
   TableMarginsState,
@@ -85,6 +88,7 @@ import {
   getTableColumnCount,
   toTableFailure,
 } from './helpers/table-target-resolver.js';
+import type { ResolvedCell } from './helpers/table-target-resolver.js';
 import { rejectTrackedMode, ensureTrackedCapability, requireEditorCommand } from './helpers/mutation-helpers.js';
 import { collectTrackInsertRefsInRange } from './helpers/tracked-change-refs.js';
 import { applyDirectMutationMeta, applyTrackedMutationMeta } from './helpers/transaction-meta.js';
@@ -324,6 +328,24 @@ function normalizeClonedRowInsertCellAttrs(
   return normalizedAttrs;
 }
 
+/**
+ * Clone attrs from an adjacent column's cell when inserting a new column.
+ * Preserves shading, background, vAlign, cell margins, borders, cellWidth —
+ * everything the cell carries — but resets `colspan` to 1 (the new cell is a
+ * single column) and clears the array-shaped `colwidth` (which is sized to the
+ * source's colspan and won't fit a singleton).
+ */
+function normalizeClonedColumnInsertCellAttrs(sourceAttrs: Record<string, unknown>): Record<string, unknown> {
+  const normalizedAttrs: Record<string, unknown> = {
+    ...sourceAttrs,
+    colspan: 1,
+  };
+  if (Array.isArray(normalizedAttrs.colwidth)) {
+    delete normalizedAttrs.colwidth;
+  }
+  return normalizedAttrs;
+}
+
 type ExpandMergedCellParams = {
   tr: Transaction;
   tablePos: number;
@@ -537,6 +559,115 @@ function applyTableBorderPresetToCellBorders(
   }
 }
 
+type PresetSpec = {
+  borders: TableBorderPatch;
+  styleOptions: TableStyleOptionsPatch;
+  /** Hex color (canonical RRGGBB) or `null` for none. */
+  headerRowFill: string | null;
+};
+
+const PRESET_GREY = '999999';
+const PRESET_BLACK = '000000';
+
+const STATIC_PRESETS: Record<Exclude<TablePresetName, 'accent'>, PresetSpec> = {
+  grid: {
+    borders: {
+      top: { lineStyle: 'single', lineWeightPt: 1, color: PRESET_BLACK },
+      bottom: { lineStyle: 'single', lineWeightPt: 1, color: PRESET_BLACK },
+      left: { lineStyle: 'single', lineWeightPt: 1, color: PRESET_BLACK },
+      right: { lineStyle: 'single', lineWeightPt: 1, color: PRESET_BLACK },
+      insideH: { lineStyle: 'single', lineWeightPt: 1, color: PRESET_BLACK },
+      insideV: { lineStyle: 'single', lineWeightPt: 1, color: PRESET_BLACK },
+    },
+    styleOptions: {},
+    headerRowFill: null,
+  },
+  minimal: {
+    borders: {
+      top: null,
+      left: null,
+      right: null,
+      insideV: null,
+      insideH: { lineStyle: 'single', lineWeightPt: 0.25, color: PRESET_GREY },
+      bottom: { lineStyle: 'single', lineWeightPt: 1, color: PRESET_BLACK },
+    },
+    styleOptions: {},
+    headerRowFill: null,
+  },
+  striped: {
+    borders: {
+      top: { lineStyle: 'single', lineWeightPt: 0.5, color: PRESET_GREY },
+      bottom: { lineStyle: 'single', lineWeightPt: 0.5, color: PRESET_GREY },
+      left: { lineStyle: 'single', lineWeightPt: 0.5, color: PRESET_GREY },
+      right: { lineStyle: 'single', lineWeightPt: 0.5, color: PRESET_GREY },
+      insideH: { lineStyle: 'single', lineWeightPt: 0.5, color: PRESET_GREY },
+      insideV: { lineStyle: 'single', lineWeightPt: 0.5, color: PRESET_GREY },
+    },
+    styleOptions: { bandedRows: true },
+    headerRowFill: null,
+  },
+};
+
+function buildPresetSpec(preset: TablePresetName, accentColorInput: string | undefined): PresetSpec | null {
+  if (preset === 'accent') {
+    const accentColor = normalizeColorInput(accentColorInput ?? '1F3864');
+    return {
+      borders: {
+        top: { lineStyle: 'single', lineWeightPt: 2, color: accentColor },
+        bottom: { lineStyle: 'single', lineWeightPt: 2, color: accentColor },
+        left: null,
+        right: null,
+        insideV: null,
+        insideH: { lineStyle: 'single', lineWeightPt: 0.5, color: PRESET_GREY },
+      },
+      styleOptions: { headerRow: true },
+      headerRowFill: accentColor,
+    };
+  }
+  return STATIC_PRESETS[preset] ?? null;
+}
+
+/**
+ * Apply a shading fill to cells in a table. When `cellPositions` is provided,
+ * only those cells are updated (deduped); otherwise every unique cell in the
+ * table is updated. `fill` is a normalized color (`'auto'` clears the
+ * `background` attribute).
+ */
+function applyShadingToCells(
+  tr: Transaction,
+  tableNode: import('prosemirror-model').Node,
+  tableStart: number,
+  fill: string,
+  cellPositions?: number[],
+): void {
+  const map = TableMap.get(tableNode);
+  const positions = cellPositions ?? map.map;
+  const seen = new Set<number>();
+  const mapFrom = tr.mapping.maps.length;
+
+  for (const relPos of positions) {
+    if (seen.has(relPos)) continue;
+    seen.add(relPos);
+
+    const cellNode = tableNode.nodeAt(relPos);
+    if (!cellNode) continue;
+
+    const cellAttrs = cellNode.attrs as Record<string, unknown>;
+    const cellProps = { ...((cellAttrs.tableCellProperties ?? {}) as Record<string, unknown>) };
+    cellProps.shading = { fill, val: 'clear', color: 'auto' };
+
+    const nextCellAttrs: Record<string, unknown> = {
+      ...cellAttrs,
+      tableCellProperties: cellProps,
+    };
+
+    if (fill === 'auto') delete nextCellAttrs.background;
+    else nextCellAttrs.background = { color: fill };
+
+    tr.setNodeMarkup(tr.mapping.slice(mapFrom).map(tableStart + relPos), null, nextCellAttrs);
+  }
+}
+
 /** Flattened row locator shape accepted by {@link resolveRowLocator}. */
 type RowLocatorFields = {
   target?: TableOrRowAddress;
@@ -592,13 +723,25 @@ function resolveInsertedColumnCellType(
   return refPos != null ? (tableNode.nodeAt(refPos)?.type ?? null) : null;
 }
 
-/** Inserts a column at `col` in the table (before that column index). Follows prosemirror-tables addColumn pattern. */
+/**
+ * Inserts a column at `col` in the table (before that column index). Follows
+ * prosemirror-tables addColumn pattern.
+ *
+ * New cells inherit attrs (shading, background, vAlign, cell margins, borders)
+ * from an adjacent column's cell so the inserted column visually matches the
+ * rest of the table.
+ */
 function addColumnToTable(tr: Transaction, tablePos: number, col: number): void {
   const tableNode = tr.doc.nodeAt(tablePos);
   if (!tableNode || tableNode.type.name !== 'table') return;
   const map = TableMap.get(tableNode);
   const tableStart = tablePos + 1;
   const mapStart = tr.mapping.maps.length;
+
+  // Source column for cloning: prefer the column to the left (col-1); fall
+  // back to col (which gets shifted right by the insertion) when inserting at
+  // the start of the table. -1 means "no source available" (empty table).
+  const sourceCol = col > 0 ? col - 1 : map.width > 0 ? 0 : -1;
 
   for (let row = 0; row < map.height; row++) {
     const index = row * map.width + col;
@@ -614,11 +757,28 @@ function addColumnToTable(tr: Transaction, tablePos: number, col: number): void 
       );
       row += (((cell.attrs as Record<string, unknown>).rowspan as number) || 1) - 1;
     } else {
-      // Insert a new empty cell
+      // Insert a new cell, cloning attrs from the adjacent column's cell at
+      // this row so shading / borders / vAlign / margins match the rest of
+      // the table.
       const refType = resolveInsertedColumnCellType(tableNode, map, index, col);
       if (!refType) continue;
+
+      let clonedAttrs: Record<string, unknown> | null = null;
+      if (sourceCol >= 0) {
+        const sourceIdx = row * map.width + sourceCol;
+        const sourcePos = map.map[sourceIdx];
+        if (sourcePos != null) {
+          const sourceCell = tableNode.nodeAt(sourcePos);
+          if (sourceCell) {
+            clonedAttrs = normalizeClonedColumnInsertCellAttrs(sourceCell.attrs as Record<string, unknown>);
+          }
+        }
+      }
+
       const cellPos = map.positionAt(row, col, tableNode);
-      tr.insert(tr.mapping.slice(mapStart).map(tableStart + cellPos), refType.createAndFill()!);
+      const newCell = refType.createAndFill(clonedAttrs ?? undefined);
+      if (!newCell) continue;
+      tr.insert(tr.mapping.slice(mapStart).map(tableStart + cellPos), newCell);
     }
   }
 }
@@ -1146,6 +1306,9 @@ export function tablesSetAltTextAdapter(
 
 /**
  * tables.insertRow — insert one or more rows above/below a reference row.
+ *
+ * Append-at-end shorthand: when called with a table-level target (no
+ * `rowIndex`, no `position`), inserts `count` rows after the last row.
  */
 export function tablesInsertRowAdapter(
   editor: Editor,
@@ -1157,7 +1320,20 @@ export function tablesInsertRowAdapter(
     ensureTrackedCapability(editor, { operation: 'tables.insertRow' });
   }
 
-  const resolved = resolveRowLocator(editor, input, 'tables.insertRow');
+  // Append-at-end shorthand: rewrite to "below the last row" before resolving.
+  let normalizedInput: TablesInsertRowInput = input;
+  const inputAny = input as { rowIndex?: number; position?: RowInsertPosition };
+  if (inputAny.rowIndex == null && inputAny.position == null) {
+    const tableResolved = resolveTableLocator(editor, input as TableLocator, 'tables.insertRow');
+    const lastIndex = tableResolved.candidate.node.childCount - 1;
+    normalizedInput = {
+      ...(input as TableLocator),
+      rowIndex: lastIndex,
+      position: 'below',
+    } as TablesInsertRowInput;
+  }
+
+  const resolved = resolveRowLocator(editor, normalizedInput, 'tables.insertRow');
   const { table, rowIndex } = resolved;
 
   if (options?.dryRun) {
@@ -1167,7 +1343,9 @@ export function tablesInsertRowAdapter(
   try {
     const tr = editor.state.tr;
     const tablePos = table.candidate.pos;
-    const count = input.count ?? 1;
+    const normalizedAny = normalizedInput as { count?: number; position?: RowInsertPosition };
+    const count = normalizedAny.count ?? 1;
+    const position = normalizedAny.position ?? 'below';
     const schema = editor.state.schema;
 
     for (let i = 0; i < count; i++) {
@@ -1175,8 +1353,8 @@ export function tablesInsertRowAdapter(
       const currentTableNode = tr.doc.nodeAt(tablePos);
       if (!currentTableNode || currentTableNode.type.name !== 'table') break;
 
-      const insertIdx = input.position === 'above' ? rowIndex + i : rowIndex + 1 + i;
-      const sourceIdx = input.position === 'above' ? rowIndex + i : rowIndex;
+      const insertIdx = position === 'above' ? rowIndex + i : rowIndex + 1 + i;
+      const sourceIdx = position === 'above' ? rowIndex + i : rowIndex;
 
       const didInsertRow = insertRowInTable(
         tr,
@@ -1440,7 +1618,9 @@ export function tablesSetRowOptionsAdapter(
 // ---------------------------------------------------------------------------
 
 /**
- * tables.insertColumn — insert one or more columns left/right of a reference column.
+ * tables.insertColumn — insert one or more columns left/right of a reference
+ * column. Shorthand positions `first` and `last` don't require a columnIndex
+ * (insert at column 0 or after the last column).
  */
 export function tablesInsertColumnAdapter(
   editor: Editor,
@@ -1452,7 +1632,32 @@ export function tablesInsertColumnAdapter(
     ensureTrackedCapability(editor, { operation: 'tables.insertColumn' });
   }
 
-  const resolved = resolveColumnLocator(editor, input, 'tables.insertColumn');
+  // Resolve shorthand to a concrete columnIndex + left/right before
+  // delegating to the column locator (which requires columnIndex). Two cases:
+  //  - position 'first' | 'last' (no columnIndex needed).
+  //  - position 'left' | 'right' WITHOUT a columnIndex — treat as first/last.
+  let normalizedInput: TablesInsertColumnInput = input;
+  const inputAny = input as { position?: string; columnIndex?: number };
+  const isShorthand =
+    inputAny.position === 'first' ||
+    inputAny.position === 'last' ||
+    ((inputAny.position === 'left' || inputAny.position === 'right') && inputAny.columnIndex == null);
+  if (isShorthand) {
+    const tableResolved = resolveTableLocator(editor, input as TableLocator, 'tables.insertColumn');
+    const lastColumnIndex = Math.max(0, getTableColumnCount(tableResolved.candidate.node) - 1);
+    const insertAtStart = inputAny.position === 'first' || inputAny.position === 'left';
+    normalizedInput = {
+      ...(input as TableLocator),
+      columnIndex: insertAtStart ? 0 : lastColumnIndex,
+      position: insertAtStart ? 'left' : 'right',
+    } as TablesInsertColumnInput;
+  }
+
+  const resolved = resolveColumnLocator(
+    editor,
+    normalizedInput as { target?: TableAddress; nodeId?: string; columnIndex: number },
+    'tables.insertColumn',
+  );
   const { table, columnIndex } = resolved;
 
   if (options?.dryRun) {
@@ -1462,11 +1667,13 @@ export function tablesInsertColumnAdapter(
   try {
     const tr = editor.state.tr;
     const tablePos = table.candidate.pos;
-    const count = input.count ?? 1;
+    const normalizedAny = normalizedInput as { count?: number; position?: 'left' | 'right' };
+    const count = normalizedAny.count ?? 1;
+    const position = normalizedAny.position ?? 'right';
     let updatedGrid = (table.candidate.node.attrs as Record<string, unknown>).grid;
 
     for (let c = 0; c < count; c++) {
-      const insertCol = input.position === 'left' ? columnIndex + c : columnIndex + 1 + c;
+      const insertCol = position === 'left' ? columnIndex + c : columnIndex + 1 + c;
       addColumnToTable(tr, tablePos, insertCol);
       updatedGrid = insertGridColumnWidth(updatedGrid, insertCol) ?? updatedGrid;
     }
@@ -2374,35 +2581,55 @@ function hasDefinedUnmergeCoordinates(
   return inputRecord.rowIndex != null && inputRecord.columnIndex != null;
 }
 
-function resolveUnmergeInput(editor: Editor, input: TablesUnmergeCellsInput) {
-  if (!hasDefinedUnmergeCoordinates(input)) {
-    return resolveCellLocator(editor, input, 'tables.unmergeCells');
+/**
+ * Shared dispatcher for cell-or-table-scoped inputs (cell target/nodeId, OR
+ * table target/nodeId + rowIndex + columnIndex). Used by `tables.unmergeCells`
+ * and `tables.setCellText`. Handles three ambiguous cases:
+ *   - no coordinates → must be a direct cell locator
+ *   - coordinates + table target → table-scoped (rowIndex/columnIndex pick the cell)
+ *   - coordinates + nodeId → resolve the nodeId, then dispatch by node type
+ */
+function resolveCellOrTableScopedInput(
+  editor: Editor,
+  input: { target?: unknown; nodeId?: unknown; rowIndex?: unknown; columnIndex?: unknown },
+  operationName: string,
+): ResolvedCell {
+  const hasCoords = input.rowIndex != null && input.columnIndex != null;
+  if (!hasCoords) {
+    return resolveCellLocator(editor, input as { target?: TableCellAddress; nodeId?: string }, operationName);
   }
 
-  const target = (input as { target?: unknown }).target;
+  const target = input.target;
   if (target && typeof target === 'object' && !Array.isArray(target)) {
     const blockTarget = target as { kind?: unknown; nodeType?: unknown };
     if (blockTarget.kind === 'block' && blockTarget.nodeType === 'table') {
-      return resolveTableScopedCellLocator(editor, input, 'tables.unmergeCells');
+      return resolveTableScopedCellLocator(
+        editor,
+        input as { target?: TableAddress; nodeId?: string; rowIndex: number; columnIndex: number },
+        operationName,
+      );
     }
-    return resolveCellLocator(editor, { target: target as TableCellAddress }, 'tables.unmergeCells');
+    return resolveCellLocator(editor, { target: target as TableCellAddress }, operationName);
   }
 
-  const nodeId = (input as { nodeId?: unknown }).nodeId;
+  const nodeId = input.nodeId;
   if (typeof nodeId === 'string') {
     const candidate = findBlockByNodeIdOnly(getBlockIndex(editor), nodeId);
     if (!candidate) {
-      throw new DocumentApiAdapterError('TARGET_NOT_FOUND', 'tables.unmergeCells: target was not found.', {
+      throw new DocumentApiAdapterError('TARGET_NOT_FOUND', `${operationName}: target was not found.`, {
         target: nodeId,
       });
     }
-
     return candidate.nodeType === 'table'
-      ? resolveTableScopedCellLocator(editor, input, 'tables.unmergeCells')
-      : resolveCellLocator(editor, { nodeId }, 'tables.unmergeCells');
+      ? resolveTableScopedCellLocator(
+          editor,
+          input as { target?: TableAddress; nodeId?: string; rowIndex: number; columnIndex: number },
+          operationName,
+        )
+      : resolveCellLocator(editor, { nodeId }, operationName);
   }
 
-  return resolveCellLocator(editor, {}, 'tables.unmergeCells');
+  return resolveCellLocator(editor, {}, operationName);
 }
 
 /**
@@ -2421,7 +2648,11 @@ export function tablesUnmergeCellsAdapter(
   // Preserve read→write handoff from tables.getCells(): a TableCellInfo carries
   // row/column metadata plus a cell nodeId. For nodeId-based inputs, resolve by
   // actual node type instead of assuming coordinates always mean "table-scoped".
-  const resolved = resolveUnmergeInput(editor, input);
+  const resolved = resolveCellOrTableScopedInput(
+    editor,
+    input as { target?: unknown; nodeId?: unknown; rowIndex?: unknown; columnIndex?: unknown },
+    'tables.unmergeCells',
+  );
   const { table, cellPos, cellNode, rowIndex, columnIndex } = resolved;
 
   const attrs = cellNode.attrs as Record<string, unknown>;
@@ -2678,6 +2909,70 @@ export function tablesSetCellPropertiesAdapter(
     return buildTableSuccess(resolvePostMutationTableAddress(editor, table.candidate.pos, table.address.nodeId, tr));
   } catch {
     return toTableFailure('INVALID_TARGET', 'Cell properties update could not be applied.');
+  }
+}
+
+/**
+ * tables.setCellText — replace the text content of a single cell with a single
+ * paragraph holding `text` (plain text). Cell properties (vAlign, shading,
+ * borders, colspan/rowspan) are preserved.
+ *
+ * Accepts either a direct cell locator (target/nodeId pointing at a tableCell)
+ * or a table-scoped locator (target/nodeId pointing at a table + rowIndex +
+ * columnIndex).
+ */
+export function tablesSetCellTextAdapter(
+  editor: Editor,
+  input: TablesSetCellTextInput,
+  options?: MutationOptions,
+): TableMutationResult {
+  rejectTrackedMode('tables.setCellText', options);
+
+  const resolved = resolveCellOrTableScopedInput(
+    editor,
+    input as { target?: unknown; nodeId?: unknown; rowIndex?: unknown; columnIndex?: unknown },
+    'tables.setCellText',
+  );
+  const { table, cellPos, cellNode } = resolved;
+
+  // NO_OP: cell already contains exactly this text (single paragraph, identical content).
+  const existingText = cellNode.textContent;
+  if (cellNode.childCount === 1 && cellNode.firstChild?.type.name === 'paragraph' && existingText === input.text) {
+    return toTableFailure('NO_OP', 'tables.setCellText: cell already contains this text.');
+  }
+
+  if (options?.dryRun) {
+    return buildTableSuccess(table.address);
+  }
+
+  try {
+    const tr = editor.state.tr;
+    const schema = editor.state.schema;
+
+    // Build a paragraph node holding the text. Empty string → empty paragraph.
+    const paragraphType = schema.nodes.paragraph;
+    if (!paragraphType) {
+      return toTableFailure('INVALID_TARGET', 'tables.setCellText: paragraph node type is unavailable.');
+    }
+    const paragraph =
+      input.text.length === 0
+        ? paragraphType.createAndFill()
+        : paragraphType.createAndFill(null, schema.text(input.text));
+    if (!paragraph) {
+      return toTableFailure('INVALID_TARGET', 'tables.setCellText: failed to build paragraph.');
+    }
+
+    // Replace the entire cell content (between cellPos+1 and cellPos+1+content.size).
+    const cellStart = cellPos + 1;
+    const cellEnd = cellStart + cellNode.content.size;
+    tr.replaceWith(cellStart, cellEnd, paragraph);
+
+    applyDirectMutationMeta(tr);
+    editor.dispatch(tr);
+    clearIndexCache(editor);
+    return buildTableSuccess(resolvePostMutationTableAddress(editor, table.candidate.pos, table.address.nodeId, tr));
+  } catch {
+    return toTableFailure('INVALID_TARGET', 'Cell text update could not be applied.');
   }
 }
 
@@ -3045,7 +3340,7 @@ export function tablesSetBorderAdapter(
     currentBorders[input.edge] = {
       val: input.lineStyle,
       size: Math.round(input.lineWeightPt * 8), // pt → eighths of a point (OOXML w:sz)
-      color: input.color,
+      color: normalizeColorInput(input.color),
     };
 
     currentProps.borders = currentBorders;
@@ -3192,12 +3487,20 @@ export function tablesApplyBorderPresetAdapter(
 
 /**
  * tables.setShading — set shading color on a table or cell.
+ *
+ * Passing `color: null` delegates to `tablesClearShadingAdapter` so a single
+ * action can both set and clear (mirrors the `null`-to-clear convention used
+ * by `tables.setBorders`'s edges patch).
  */
 export function tablesSetShadingAdapter(
   editor: Editor,
   input: TablesSetShadingInput,
   options?: MutationOptions,
 ): TableMutationResult {
+  if (input.color === null) {
+    return tablesClearShadingAdapter(editor, { target: input.target, nodeId: input.nodeId }, options);
+  }
+
   rejectTrackedMode('tables.setShading', options);
 
   const resolved = resolveTableOrCellTarget(editor, input, 'tables.setShading');
@@ -3210,45 +3513,20 @@ export function tablesSetShadingAdapter(
     return buildTableSuccess(resolved.address);
   }
 
+  const normalizedColor = normalizeColorInput(input.color);
+
   try {
     const tr = editor.state.tr;
     const currentAttrs = resolved.node.attrs as Record<string, unknown>;
     const propsKey = resolved.scope === 'table' ? 'tableProperties' : 'tableCellProperties';
     const currentProps = { ...((currentAttrs[propsKey] ?? {}) as Record<string, unknown>) };
 
-    currentProps.shading = { fill: input.color, val: 'clear', color: 'auto' };
+    currentProps.shading = { fill: normalizedColor, val: 'clear', color: 'auto' };
     const syncAttrs = resolved.scope === 'table' ? syncExtractedTableAttrs(currentProps) : {};
     tr.setNodeMarkup(resolved.pos, null, { ...currentAttrs, [propsKey]: currentProps, ...syncAttrs });
 
     if (resolved.scope === 'table') {
-      const tableNode = resolved.node;
-      const tableStart = resolved.pos + 1;
-      const map = TableMap.get(tableNode);
-      const seen = new Set<number>();
-      const mapFrom = tr.mapping.maps.length;
-
-      for (let i = 0; i < map.map.length; i++) {
-        const relPos = map.map[i]!;
-        if (seen.has(relPos)) continue;
-        seen.add(relPos);
-
-        const cellNode = tableNode.nodeAt(relPos);
-        if (!cellNode) continue;
-
-        const cellAttrs = cellNode.attrs as Record<string, unknown>;
-        const cellProps = { ...((cellAttrs.tableCellProperties ?? {}) as Record<string, unknown>) };
-        cellProps.shading = { fill: input.color, val: 'clear', color: 'auto' };
-
-        const nextCellAttrs: Record<string, unknown> = {
-          ...cellAttrs,
-          tableCellProperties: cellProps,
-        };
-
-        if (input.color === 'auto') delete nextCellAttrs.background;
-        else nextCellAttrs.background = { color: input.color };
-
-        tr.setNodeMarkup(tr.mapping.slice(mapFrom).map(tableStart + relPos), null, nextCellAttrs);
-      }
+      applyShadingToCells(tr, resolved.node, resolved.pos + 1, normalizedColor);
     }
 
     applyDirectMutationMeta(tr);
@@ -3566,12 +3844,29 @@ function writeTableLook(
   return result;
 }
 
+/**
+ * Normalize a user-supplied color string to canonical uppercase `RRGGBB` (or
+ * `'auto'`). Accepts `RRGGBB`, `#RRGGBB`, 3-digit shorthand `RGB` / `#RGB`,
+ * and `'auto'`. The schema regex permits these forms; reads (see
+ * `normalizeBorderSpecToApi`) emit canonical uppercase, so writes must match.
+ */
+function normalizeColorInput(color: string): string {
+  if (color === 'auto') return 'auto';
+  const stripped = color.startsWith('#') ? color.slice(1) : color;
+  // 3-digit shorthand: `abc` → `aabbcc`.
+  const expanded =
+    stripped.length === 3
+      ? stripped[0]! + stripped[0]! + stripped[1]! + stripped[1]! + stripped[2]! + stripped[2]!
+      : stripped;
+  return expanded.toUpperCase();
+}
+
 /** Convert API `TableBorderSpec` to OOXML border storage. pt → eighths-of-a-point. */
 function normalizeBorderSpecFromApi(spec: TableBorderSpec): Record<string, unknown> {
   return {
     val: spec.lineStyle,
     size: Math.round(spec.lineWeightPt * 8),
-    color: spec.color,
+    color: normalizeColorInput(spec.color),
   };
 }
 
@@ -3942,6 +4237,85 @@ export function tablesSetTableOptionsAdapter(
     return buildTableSuccess(resolvePostMutationTableAddress(editor, candidate.pos, address.nodeId, tr));
   } catch {
     return toTableFailure('INVALID_TARGET', 'Table options could not be applied.');
+  }
+}
+
+/**
+ * tables.applyPreset — apply a named visual preset (borders + shading + style
+ * options) to a table in a single transaction.
+ *
+ * Reachable through the document-api / SDK / superdoc_mutations. Intentionally
+ * NOT surfaced as a top-level action on the `superdoc_table` intent tool —
+ * presets confused the LLM (it would call apply_preset and stop, producing no
+ * visible change). The op stays available for power users and for composing
+ * via `superdoc_mutations`.
+ */
+export function tablesApplyPresetAdapter(
+  editor: Editor,
+  input: TablesApplyPresetInput,
+  options?: MutationOptions,
+): TableMutationResult {
+  rejectTrackedMode('tables.applyPreset', options);
+
+  const { candidate, address } = resolveTableLocator(editor, input, 'tables.applyPreset');
+
+  if (options?.dryRun) {
+    return buildTableSuccess(address);
+  }
+
+  const spec = buildPresetSpec(input.preset, input.accentColor);
+  if (!spec) {
+    return toTableFailure('INVALID_TARGET', `tables.applyPreset: unknown preset "${input.preset}".`);
+  }
+
+  try {
+    const tr = editor.state.tr;
+    const tableNode = candidate.node;
+    const tablePos = candidate.pos;
+    const currentAttrs = tableNode.attrs as Record<string, unknown>;
+    const currentTableProps = { ...((currentAttrs.tableProperties ?? {}) as Record<string, unknown>) };
+
+    const currentBorders = (currentTableProps.borders ?? {}) as Record<string, unknown>;
+    currentTableProps.borders = buildOoxmlBorderPatch(currentBorders, spec.borders);
+
+    if (Object.keys(spec.styleOptions).length > 0) {
+      const currentLook = (currentTableProps.tblLook ?? { ...WORD_DEFAULT_TBL_LOOK }) as Record<string, unknown>;
+      const updatedLook: Record<string, unknown> = { ...currentLook };
+      for (const [flag, value] of Object.entries(spec.styleOptions)) {
+        if (value === undefined) continue;
+        const ooxmlKey = resolveStyleOptionFlag(flag as TableStyleOptionFlag);
+        const stored = INVERTED_FLAGS.has(flag as TableStyleOptionFlag) ? !value : value;
+        updatedLook[ooxmlKey] = stored;
+      }
+      currentTableProps.tblLook = updatedLook;
+    }
+
+    tr.setNodeMarkup(tablePos, null, {
+      ...currentAttrs,
+      tableProperties: currentTableProps,
+      ...syncExtractedTableAttrs(currentTableProps),
+    });
+
+    const patchEntries = Object.entries(spec.borders) as Array<[string, TableBorderSpec | null | undefined]>;
+    for (const [edge, value] of patchEntries) {
+      if (value === undefined) continue;
+      if (!isBoundaryEdge(edge)) continue;
+      const ooxmlSpec = value === null ? { ...CLEARED_BORDER_OOXML } : normalizeBorderSpecFromApi(value);
+      applyTableEdgeToCellBorders(tr, tablePos, tableNode, edge as TableBorderEdgeForCells, ooxmlSpec);
+    }
+
+    if (spec.headerRowFill && tableNode.childCount > 0) {
+      const map = TableMap.get(tableNode);
+      const headerCellPositions = map.map.slice(0, map.width);
+      applyShadingToCells(tr, tableNode, tablePos + 1, spec.headerRowFill, headerCellPositions);
+    }
+
+    applyDirectMutationMeta(tr);
+    editor.dispatch(tr);
+    clearIndexCache(editor);
+    return buildTableSuccess(resolvePostMutationTableAddress(editor, tablePos, address.nodeId, tr));
+  } catch {
+    return toTableFailure('INVALID_TARGET', 'Table preset could not be applied.');
   }
 }
 

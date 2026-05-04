@@ -148,6 +148,8 @@ import type {
   ListsAttachInput,
   ListsDetachInput,
   ListsDetachResult,
+  ListsDeleteInput,
+  ListsDeleteResult,
   ListsJoinInput,
   ListsJoinResult,
   ListsCanJoinInput,
@@ -197,6 +199,7 @@ import {
   executeListsCreate,
   executeListsAttach,
   executeListsDetach,
+  executeListsDelete,
   executeListsJoin,
   executeListsCanJoin,
   executeListsSeparate,
@@ -273,6 +276,7 @@ import type {
   TablesUnmergeCellsInput,
   TablesSplitCellInput,
   TablesSetCellPropertiesInput,
+  TablesSetCellTextInput,
   TablesSortInput,
   TablesSetAltTextInput,
   TablesSetStyleInput,
@@ -290,6 +294,7 @@ import type {
   TablesApplyStyleInput,
   TablesSetBordersInput,
   TablesSetTableOptionsInput,
+  TablesApplyPresetInput,
   TablesGetInput,
   TablesGetOutput,
   TablesGetCellsInput,
@@ -1276,6 +1281,8 @@ export type {
   ListsCreateResult,
   ListsDetachInput,
   ListsDetachResult,
+  ListsDeleteInput,
+  ListsDeleteResult,
   ListsFailureCode,
   ListsGetInput,
   ListsInsertResult,
@@ -1437,6 +1444,7 @@ export interface TablesApi {
   unmergeCells(input: TablesUnmergeCellsInput, options?: MutationOptions): TableMutationResult;
   splitCell(input: TablesSplitCellInput, options?: MutationOptions): TableMutationResult;
   setCellProperties(input: TablesSetCellPropertiesInput, options?: MutationOptions): TableMutationResult;
+  setCellText(input: TablesSetCellTextInput, options?: MutationOptions): TableMutationResult;
   sort(input: TablesSortInput, options?: MutationOptions): TableMutationResult;
   setAltText(input: TablesSetAltTextInput, options?: MutationOptions): TableMutationResult;
   setStyle(input: TablesSetStyleInput, options?: MutationOptions): TableMutationResult;
@@ -1454,6 +1462,7 @@ export interface TablesApi {
   applyStyle(input: TablesApplyStyleInput, options?: MutationOptions): TableMutationResult;
   setBorders(input: TablesSetBordersInput, options?: MutationOptions): TableMutationResult;
   setTableOptions(input: TablesSetTableOptionsInput, options?: MutationOptions): TableMutationResult;
+  applyPreset(input: TablesApplyPresetInput, options?: MutationOptions): TableMutationResult;
   get(input: TablesGetInput): TablesGetOutput;
   getCells(input: TablesGetCellsInput): TablesGetCellsOutput;
   getProperties(input: TablesGetPropertiesInput): TablesGetPropertiesOutput;
@@ -2200,6 +2209,9 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
       detach(input: ListsDetachInput, options?: MutationOptions): ListsDetachResult {
         return executeListsDetach(adapters.lists, input, options);
       },
+      delete(input: ListsDeleteInput, options?: MutationOptions): ListsDeleteResult {
+        return executeListsDelete(adapters.lists, input, options);
+      },
       indent(input: ListTargetInput, options?: MutationOptions): ListsMutateItemResult {
         return executeListsIndent(adapters.lists, input, options);
       },
@@ -2411,7 +2423,13 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
         );
       },
       insertRow(input, options?) {
-        return executeRowLocatorOp('tables.insertRow', adapters.tables.insertRow.bind(adapters.tables), input, options);
+        return executeRowLocatorOp(
+          'tables.insertRow',
+          adapters.tables.insertRow.bind(adapters.tables),
+          input,
+          options,
+          { allowAppendShorthand: true },
+        );
       },
       deleteRow(input, options?) {
         return executeRowLocatorOp('tables.deleteRow', adapters.tables.deleteRow.bind(adapters.tables), input, options);
@@ -2516,6 +2534,14 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
         return executeTableLocatorOp(
           'tables.setCellProperties',
           adapters.tables.setCellProperties.bind(adapters.tables),
+          input,
+          options,
+        );
+      },
+      setCellText(input, options?) {
+        return executeCellOrTableScopedCellLocatorOp(
+          'tables.setCellText',
+          adapters.tables.setCellText.bind(adapters.tables),
           input,
           options,
         );
@@ -2642,6 +2668,14 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
         return executeTablesSetTableOptions(
           'tables.setTableOptions',
           adapters.tables.setTableOptions.bind(adapters.tables),
+          input,
+          options,
+        );
+      },
+      applyPreset(input, options?) {
+        return executeTableLocatorOp(
+          'tables.applyPreset',
+          adapters.tables.applyPreset.bind(adapters.tables),
           input,
           options,
         );

@@ -1,26 +1,26 @@
 ---
-title: tables.insertColumn
-sidebarTitle: tables.insertColumn
-description: Insert a new column into the target table. The new column is cloned from an adjacent column, so it inherits the existing cell shading, borders, alignment, and width — no follow-up styling call is needed unless the new column should look different from the rest of the table.
+title: tables.applyPreset
+sidebarTitle: tables.applyPreset
+description: "Apply a named visual preset to a table. Presets: \"grid\" (1pt black borders all around), \"minimal\" (no outer borders, hairline grey row separators + thicker bottom), \"striped\" (banded rows on, 0.5pt grey borders), \"accent\" (filled header row + thick accent top/bottom; defaults to dark blue, override with `accentColor`). Composes set_borders + set_style_options + header-row shading in one call. Available via the document API and `superdoc_mutations` (intentionally NOT exposed as a top-level action on `superdoc_table` — agents should compose explicit set_borders / set_shading / set_style_options calls so they always pick concrete colors that match the document context)."
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
 
 ## Summary
 
-Insert a new column into the target table. The new column is cloned from an adjacent column, so it inherits the existing cell shading, borders, alignment, and width — no follow-up styling call is needed unless the new column should look different from the rest of the table.
+Apply a named visual preset to a table. Presets: "grid" (1pt black borders all around), "minimal" (no outer borders, hairline grey row separators + thicker bottom), "striped" (banded rows on, 0.5pt grey borders), "accent" (filled header row + thick accent top/bottom; defaults to dark blue, override with `accentColor`). Composes set_borders + set_style_options + header-row shading in one call. Available via the document API and `superdoc_mutations` (intentionally NOT exposed as a top-level action on `superdoc_table` — agents should compose explicit set_borders / set_shading / set_style_options calls so they always pick concrete colors that match the document context).
 
-- Operation ID: `tables.insertColumn`
-- API member path: `editor.doc.tables.insertColumn(...)`
+- Operation ID: `tables.applyPreset`
+- API member path: `editor.doc.tables.applyPreset(...)`
 - Mutates document: `yes`
-- Idempotency: `non-idempotent`
-- Supports tracked mode: `yes`
+- Idempotency: `idempotent`
+- Supports tracked mode: `no`
 - Supports dry run: `yes`
 - Deterministic target resolution: `yes`
 
 ## Expected result
 
-Returns a TableMutationResult receipt confirming a column was inserted.
+Returns a TableMutationResult receipt.
 
 ## Input fields
 
@@ -28,9 +28,8 @@ Returns a TableMutationResult receipt confirming a column was inserted.
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `columnIndex` | integer | no |  |
-| `count` | integer | no |  |
-| `position` | enum | yes | `"left"`, `"right"`, `"first"`, `"last"` |
+| `accentColor` | string | no |  |
+| `preset` | enum | yes | `"grid"`, `"minimal"`, `"striped"`, `"accent"` |
 | `target` | TableAddress | yes | TableAddress |
 | `target.kind` | `"block"` | yes | Constant: `"block"` |
 | `target.nodeId` | string | yes |  |
@@ -40,18 +39,16 @@ Returns a TableMutationResult receipt confirming a column was inserted.
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `columnIndex` | integer | no |  |
-| `count` | integer | no |  |
+| `accentColor` | string | no |  |
 | `nodeId` | string | yes |  |
-| `position` | enum | yes | `"left"`, `"right"`, `"first"`, `"last"` |
+| `preset` | enum | yes | `"grid"`, `"minimal"`, `"striped"`, `"accent"` |
 
 ### Example request
 
 ```json
 {
-  "columnIndex": 1,
-  "count": 1,
-  "position": "left",
+  "accentColor": "example",
+  "preset": "grid",
   "target": {
     "kind": "block",
     "nodeId": "node-def456",
@@ -112,7 +109,6 @@ When present, `result.table` is the follow-up address to reuse after this call. 
 - `TARGET_NOT_FOUND`
 - `INVALID_TARGET`
 - `CAPABILITY_UNAVAILABLE`
-- `INVALID_TARGET`
 
 ## Non-applied failure codes
 
@@ -137,23 +133,19 @@ When present, `result.table` is the follow-up address to reuse after this call. 
     }
   ],
   "properties": {
-    "columnIndex": {
-      "minimum": 0,
-      "type": "integer"
-    },
-    "count": {
-      "minimum": 1,
-      "type": "integer"
+    "accentColor": {
+      "pattern": "^(#?([0-9A-Fa-f]{6}|[0-9A-Fa-f]{3})|auto)$",
+      "type": "string"
     },
     "nodeId": {
       "type": "string"
     },
-    "position": {
+    "preset": {
       "enum": [
-        "left",
-        "right",
-        "first",
-        "last"
+        "grid",
+        "minimal",
+        "striped",
+        "accent"
       ]
     },
     "target": {
@@ -161,7 +153,7 @@ When present, `result.table` is the follow-up address to reuse after this call. 
     }
   },
   "required": [
-    "position"
+    "preset"
   ],
   "type": "object"
 }

@@ -99,6 +99,7 @@ import {
   listsCreateWrapper,
   listsAttachWrapper,
   listsDetachWrapper,
+  listsDeleteWrapper,
   listsJoinWrapper,
   listsSeparateWrapper,
   listsSetLevelWrapper,
@@ -499,6 +500,110 @@ describe('lists-wrappers', () => {
       vi.mocked(resolveListItem).mockReturnValueOnce(proj);
       listsDetachWrapper(editor, { target: proj.address });
       expect(rejectTrackedMode).toHaveBeenCalledWith('lists.detach', undefined);
+    });
+  });
+
+  // =========================================================================
+  // listsDeleteWrapper — full-list deletion via getContiguousSequence
+  // =========================================================================
+
+  describe('listsDeleteWrapper', () => {
+    function makeSequenceProjection(nodeId: string, pos: number): ListItemProjection {
+      return makeProjection({
+        address: { kind: 'block', nodeType: 'listItem', nodeId },
+        candidate: {
+          nodeType: 'listItem',
+          nodeId,
+          node: { attrs: { paragraphProperties: { numberingProperties: { numId: 1, ilvl: 0 } } }, nodeSize: 5 },
+          pos,
+          end: pos + 5,
+        },
+      } as Partial<ListItemProjection>);
+    }
+
+    /** Editor mock that exposes the tr.mapping + tr.delete shape the adapter uses. */
+    function makeDeleteEditor(): { editor: Editor; deletes: Array<[number, number]> } {
+      const deletes: Array<[number, number]> = [];
+      const tr = {
+        mapping: { map: (pos: number) => pos },
+        delete: vi.fn((from: number, to: number) => {
+          deletes.push([from, to]);
+        }),
+        setNodeMarkup: vi.fn().mockReturnThis(),
+        insertText: vi.fn().mockReturnThis(),
+      };
+      const ed = {
+        state: { doc: { content: { size: 100 } }, tr },
+        view: { dispatch: vi.fn() },
+        commands: { insertListItemAt: vi.fn(() => true) },
+      } as unknown as Editor;
+      return { editor: ed, deletes };
+    }
+
+    it('deletes the full contiguous sequence even when target is mid-list', () => {
+      // 5-item list, caller targets the THIRD item (index 2). Adapter must
+      // still delete all 5 (it walks via getContiguousSequence, not from
+      // the target onwards).
+      const sequence = [
+        makeSequenceProjection('item-1', 10),
+        makeSequenceProjection('item-2', 20),
+        makeSequenceProjection('item-3', 30),
+        makeSequenceProjection('item-4', 40),
+        makeSequenceProjection('item-5', 50),
+      ];
+      const target = sequence[2]!; // mid-list
+
+      const { editor: ed, deletes } = makeDeleteEditor();
+      vi.mocked(resolveListItem).mockReturnValueOnce(target);
+      vi.mocked(getContiguousSequence).mockReturnValueOnce(sequence);
+
+      const result = listsDeleteWrapper(ed, { target: target.address });
+
+      expect(result.success).toBe(true);
+      if (result.success) expect(result.deletedCount).toBe(5);
+      // 5 deletes issued, in reverse pos order so earlier positions stay valid.
+      expect(deletes).toEqual([
+        [50, 55],
+        [40, 45],
+        [30, 35],
+        [20, 25],
+        [10, 15],
+      ]);
+    });
+
+    it('returns dryRun count without dispatching', () => {
+      const sequence = [makeSequenceProjection('item-1', 10), makeSequenceProjection('item-2', 20)];
+      const target = sequence[0]!;
+
+      const { editor: ed, deletes } = makeDeleteEditor();
+      vi.mocked(resolveListItem).mockReturnValueOnce(target);
+      vi.mocked(getContiguousSequence).mockReturnValueOnce(sequence);
+
+      const result = listsDeleteWrapper(ed, { target: target.address }, { dryRun: true });
+      expect(result.success).toBe(true);
+      if (result.success) expect(result.deletedCount).toBe(2);
+      expect(deletes.length).toBe(0);
+      expect(ed.view!.dispatch).not.toHaveBeenCalled();
+    });
+
+    it('rejects tracked mode', () => {
+      const proj = makeProjection();
+      const { editor: ed } = makeDeleteEditor();
+      vi.mocked(resolveListItem).mockReturnValueOnce(proj);
+      vi.mocked(getContiguousSequence).mockReturnValueOnce([proj]);
+      listsDeleteWrapper(ed, { target: proj.address });
+      expect(rejectTrackedMode).toHaveBeenCalledWith('lists.delete', undefined);
+    });
+
+    it('fails INVALID_TARGET when sequence resolution returns empty', () => {
+      const proj = makeProjection();
+      const { editor: ed } = makeDeleteEditor();
+      vi.mocked(resolveListItem).mockReturnValueOnce(proj);
+      vi.mocked(getContiguousSequence).mockReturnValueOnce([]);
+
+      const result = listsDeleteWrapper(ed, { target: proj.address });
+      expect(result.success).toBe(false);
+      if (!result.success) expect(result.failure.code).toBe('INVALID_TARGET');
     });
   });
 

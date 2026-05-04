@@ -88,6 +88,8 @@ export function dispatchIntentTool(
           return execute('doc.lists.attach', rest);
         case 'detach':
           return execute('doc.lists.detach', rest);
+        case 'delete':
+          return execute('doc.lists.delete', rest);
         case 'indent':
           return execute('doc.lists.indent', rest);
         case 'outdent':
@@ -147,6 +149,47 @@ export function dispatchIntentTool(
           return execute('doc.mutations.apply', rest);
         default:
           throw new Error(`Unknown action for superdoc_mutations: ${action}`);
+      }
+    }
+    case 'superdoc_table': {
+      const { action, ...rest } = args;
+      switch (action) {
+        case 'delete':
+          return execute('doc.tables.delete', rest);
+        case 'set_layout':
+          return execute('doc.tables.setLayout', rest);
+        case 'insert_row':
+          return execute('doc.tables.insertRow', rest);
+        case 'delete_row':
+          return execute('doc.tables.deleteRow', rest);
+        case 'set_row':
+          return execute('doc.tables.setRowHeight', rest);
+        case 'set_row_options':
+          return execute('doc.tables.setRowOptions', rest);
+        case 'insert_column':
+          return execute('doc.tables.insertColumn', rest);
+        case 'delete_column':
+          return execute('doc.tables.deleteColumn', rest);
+        case 'set_column':
+          return execute('doc.tables.setColumnWidth', rest);
+        case 'merge_cells':
+          return execute('doc.tables.mergeCells', rest);
+        case 'unmerge_cells':
+          return execute('doc.tables.unmergeCells', rest);
+        case 'set_cell':
+          return execute('doc.tables.setCellProperties', rest);
+        case 'set_cell_text':
+          return execute('doc.tables.setCellText', rest);
+        case 'set_shading':
+          return execute('doc.tables.setShading', rest);
+        case 'set_style_options':
+          return execute('doc.tables.applyStyle', rest);
+        case 'set_borders':
+          return execute('doc.tables.setBorders', rest);
+        case 'set_options':
+          return execute('doc.tables.setTableOptions', rest);
+        default:
+          throw new Error(`Unknown action for superdoc_table: ${action}`);
       }
     }
     default:

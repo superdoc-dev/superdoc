@@ -3,6 +3,7 @@ import { CONTRACT_VERSION, JSON_SCHEMA_DIALECT, OPERATION_IDS, type OperationId 
 import { NODE_TYPES, BLOCK_NODE_TYPES, DELETABLE_BLOCK_NODE_TYPES, INLINE_NODE_TYPES } from '../types/base.js';
 import { SELECTION_EDGE_NODE_TYPES } from '../types/address.js';
 import { INLINE_PROPERTY_REGISTRY, buildInlineRunPatchSchema } from '../format/inline-run-patch.js';
+import { TABLE_COLOR_PATTERN_SOURCE } from '../tables/color-formats.js';
 import { INLINE_DIRECTIVES } from '../types/style-policy.types.js';
 import {
   PARAGRAPH_ALIGNMENTS,
@@ -1633,7 +1634,10 @@ const capabilitiesOutputSchema = objectSchema(
 );
 
 const strictEmptyObjectSchema = objectSchema({});
-const tableBorderColorPattern = '^([0-9A-Fa-f]{6}|auto)$';
+// Single source of truth at ../tables/color-formats. Aliased locally so the
+// rest of the schemas file reads naturally; the runtime validator imports
+// the same constant — pattern can never drift.
+const tableBorderColorPattern = TABLE_COLOR_PATTERN_SOURCE;
 
 const tableBorderSpecSchema = objectSchema(
   {
@@ -4159,6 +4163,28 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     success: objectSchema({ success: { const: true }, paragraph: ref('ParagraphAddress') }, ['success', 'paragraph']),
     failure: listsFailureSchemaFor('lists.detach'),
   },
+  'lists.delete': {
+    input: objectSchema(
+      {
+        target: listItemAddressSchema,
+      },
+      ['target'],
+    ),
+    output: {
+      oneOf: [
+        objectSchema({ success: { const: true }, deletedCount: { type: 'integer', minimum: 0 } }, [
+          'success',
+          'deletedCount',
+        ]),
+        listsFailureSchemaFor('lists.delete'),
+      ],
+    },
+    success: objectSchema({ success: { const: true }, deletedCount: { type: 'integer', minimum: 0 } }, [
+      'success',
+      'deletedCount',
+    ]),
+    failure: listsFailureSchemaFor('lists.delete'),
+  },
   'lists.indent': {
     input: objectSchema(
       {
@@ -5467,13 +5493,51 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
 
   // --- tables: row structure ---
   'tables.insertRow': {
-    input: rowOperationInputSchema(
-      {
-        position: { enum: ['above', 'below'] },
-        count: { type: 'integer', minimum: 1 },
-      },
-      ['position'],
-    ),
+    input: {
+      // 1–3: scoped variants (table or row target with explicit position).
+      // 4: table-level target only (no rowIndex/position) — appends at end.
+      oneOf: [
+        objectSchema(
+          {
+            target: tableRowAddressSchema,
+            position: { enum: ['above', 'below'] },
+            count: { type: 'integer', minimum: 1 },
+          },
+          ['target', 'position'],
+        ),
+        objectSchema(
+          {
+            target: tableAddressSchema,
+            rowIndex: { type: 'integer', minimum: 0 },
+            position: { enum: ['above', 'below'] },
+            count: { type: 'integer', minimum: 1 },
+          },
+          ['target', 'rowIndex', 'position'],
+        ),
+        objectSchema(
+          {
+            nodeId: { type: 'string' },
+            rowIndex: { type: 'integer', minimum: 0 },
+            position: { enum: ['above', 'below'] },
+            count: { type: 'integer', minimum: 1 },
+          },
+          ['nodeId', 'rowIndex', 'position'],
+        ),
+        // Append-at-end shorthand: table-level target with no rowIndex/position.
+        {
+          ...objectSchema(
+            {
+              target: tableAddressSchema,
+              nodeId: { type: 'string' },
+              count: { type: 'integer', minimum: 1 },
+            },
+            [],
+          ),
+          oneOf: [{ required: ['target'] }, { required: ['nodeId'] }],
+          not: { anyOf: [{ required: ['rowIndex'] }, { required: ['position'] }] },
+        },
+      ],
+    },
     output: tableMutationResultSchema,
     success: tableMutationSuccessSchema,
     failure: tableMutationFailureSchema,
@@ -5515,15 +5579,19 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
   // --- tables: column structure ---
   'tables.insertColumn': {
     input: {
+      // `position` is always required; `columnIndex` is optional.
+      // - `first` / `last`: shorthand, columnIndex ignored.
+      // - `left` / `right` with columnIndex: insert relative to that column.
+      // - `left` / `right` WITHOUT columnIndex: behaves like `first` / `last`.
       ...objectSchema(
         {
           target: tableAddressSchema,
           nodeId: { type: 'string' },
           columnIndex: { type: 'integer', minimum: 0 },
-          position: { enum: ['left', 'right'] },
+          position: { enum: ['left', 'right', 'first', 'last'] },
           count: { type: 'integer', minimum: 1 },
         },
-        ['columnIndex', 'position'],
+        ['position'],
       ),
       oneOf: [{ required: ['target'] }, { required: ['nodeId'] }],
     },
@@ -5659,6 +5727,49 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     success: tableMutationSuccessSchema,
     failure: tableMutationFailureSchema,
   },
+  'tables.setCellText': {
+    input: {
+      // Direct cell locator OR table-scoped (target/nodeId + rowIndex + columnIndex).
+      // `text` is always required.
+      oneOf: [
+        objectSchema(
+          {
+            target: tableCellAddressSchema,
+            text: { type: 'string' },
+          },
+          ['target', 'text'],
+        ),
+        objectSchema(
+          {
+            nodeId: { type: 'string' },
+            text: { type: 'string' },
+          },
+          ['nodeId', 'text'],
+        ),
+        objectSchema(
+          {
+            target: tableAddressSchema,
+            rowIndex: { type: 'integer', minimum: 0 },
+            columnIndex: { type: 'integer', minimum: 0 },
+            text: { type: 'string' },
+          },
+          ['target', 'rowIndex', 'columnIndex', 'text'],
+        ),
+        objectSchema(
+          {
+            nodeId: { type: 'string' },
+            rowIndex: { type: 'integer', minimum: 0 },
+            columnIndex: { type: 'integer', minimum: 0 },
+            text: { type: 'string' },
+          },
+          ['nodeId', 'rowIndex', 'columnIndex', 'text'],
+        ),
+      ],
+    },
+    output: tableMutationResultSchema,
+    success: tableMutationSuccessSchema,
+    failure: tableMutationFailureSchema,
+  },
 
   // --- tables: data + accessibility ---
   'tables.sort': {
@@ -5752,7 +5863,7 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
           edge: { enum: ['top', 'bottom', 'left', 'right', 'insideH', 'insideV', 'diagonalDown', 'diagonalUp'] },
           lineStyle: { type: 'string' },
           lineWeightPt: { type: 'number', exclusiveMinimum: 0 },
-          color: { type: 'string', pattern: '^([0-9A-Fa-f]{6}|auto)$' },
+          color: { type: 'string', pattern: tableBorderColorPattern },
         },
         ['edge', 'lineStyle', 'lineWeightPt', 'color'],
       ),
@@ -5800,7 +5911,9 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
         {
           target: tableOrCellAddressSchema,
           nodeId: { type: 'string' },
-          color: { type: 'string', pattern: '^([0-9A-Fa-f]{6}|auto)$' },
+          color: {
+            oneOf: [{ type: 'string', pattern: tableBorderColorPattern }, { type: 'null' }],
+          },
         },
         ['color'],
       ),
@@ -5960,6 +6073,23 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
         ),
         cellSpacingPt: { oneOf: [{ type: 'number', minimum: 0 }, { type: 'null' }] },
       }),
+      oneOf: [{ required: ['target'] }, { required: ['nodeId'] }],
+    },
+    output: tableMutationResultSchema,
+    success: tableMutationSuccessSchema,
+    failure: tableMutationFailureSchema,
+  },
+  'tables.applyPreset': {
+    input: {
+      ...objectSchema(
+        {
+          target: tableAddressSchema,
+          nodeId: { type: 'string' },
+          preset: { enum: ['grid', 'minimal', 'striped', 'accent'] },
+          accentColor: { type: 'string', pattern: tableBorderColorPattern },
+        },
+        ['preset'],
+      ),
       oneOf: [{ required: ['target'] }, { required: ['nodeId'] }],
     },
     output: tableMutationResultSchema,

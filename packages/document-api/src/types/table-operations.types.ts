@@ -230,7 +230,10 @@ type DirectRowTargetLocator = { target: TableRowAddress; nodeId?: never };
 
 export type TablesInsertRowInput =
   | (TableScopedRowLocator & { position: RowInsertPosition; count?: number })
-  | (DirectRowTargetLocator & { position: RowInsertPosition; count?: number });
+  | (DirectRowTargetLocator & { position: RowInsertPosition; count?: number })
+  // Table-level locator with no rowIndex/position: appends `count` rows at the
+  // end of the table (equivalent to `rowIndex: lastIndex, position: 'below'`).
+  | (TableLocator & { rowIndex?: never; position?: never; count?: number });
 
 export type TablesDeleteRowInput = DirectRowTargetLocator | TableScopedRowLocator;
 
@@ -249,12 +252,20 @@ export type TablesSetRowOptionsInput =
 // Column operations
 // ---------------------------------------------------------------------------
 
-export type ColumnInsertPosition = 'left' | 'right';
+/**
+ * Column insertion position.
+ * - `left` / `right` insert relative to `columnIndex`.
+ * - `first` / `last` are shortcuts: insert at column 0 or after the last column.
+ * - When `columnIndex` is omitted with `left` / `right`, behavior matches
+ *   `first` / `last` (LLM-friendly: "right" without a target column means
+ *   "rightmost").
+ */
+export type ColumnInsertPosition = 'left' | 'right' | 'first' | 'last';
 
-export interface TablesInsertColumnInput extends TableScopedColumnLocator {
-  position: ColumnInsertPosition;
-  count?: number;
-}
+export type TablesInsertColumnInput =
+  | (TableScopedColumnLocator & { position: 'left' | 'right'; count?: number })
+  // Shorthand: any position with table-level locator and no columnIndex.
+  | (TableLocator & { position: ColumnInsertPosition; columnIndex?: never; count?: number });
 
 export type TablesDeleteColumnInput = TableScopedColumnLocator;
 
@@ -296,6 +307,14 @@ export interface TablesSetCellPropertiesInput extends CellLocator {
   wrapText?: boolean;
   fitText?: boolean;
 }
+
+/**
+ * Replace the text content of a single cell with a single paragraph holding
+ * `text` (plain text only). Accepts either a direct cell locator or a
+ * table-scoped locator (table + rowIndex + columnIndex). Cell properties
+ * (vAlign, shading, borders, colspan/rowspan) are preserved.
+ */
+export type TablesSetCellTextInput = (CellLocator & { text: string }) | (TableScopedCellLocator & { text: string });
 
 // ---------------------------------------------------------------------------
 // Data & accessibility
@@ -486,6 +505,27 @@ export interface TablesSetTableOptionsInput extends TableLocator {
   cellSpacingPt?: number | null;
 }
 
+/**
+ * Named visual presets for tables. Each preset composes borders, shading,
+ * and conditional-format flags into a polished look.
+ *
+ * - `grid` — 0.5pt black borders all around, no shading.
+ * - `minimal` — no outer borders, hairline grey separators between rows.
+ * - `striped` — banded rows on, 0.5pt grey borders all around.
+ * - `accent` — header row filled with `accentColor` (default `1F3864`),
+ *   thick accent bottom under the header.
+ */
+export type TablePresetName = 'grid' | 'minimal' | 'striped' | 'accent';
+
+export interface TablesApplyPresetInput extends TableLocator {
+  preset: TablePresetName;
+  /**
+   * Optional accent color (hex; same format as `setShading.color`).
+   * Used by presets that need an accent (`accent`). Ignored otherwise.
+   */
+  accentColor?: string;
+}
+
 // ---------------------------------------------------------------------------
 // Styling: borders
 // ---------------------------------------------------------------------------
@@ -520,7 +560,8 @@ export interface TablesApplyBorderPresetInput extends TableLocator {
 export interface TablesSetShadingInput {
   target?: TableOrCellAddress;
   nodeId?: string;
-  color: string;
+  /** Hex color (no `#`), `'auto'`, or `null` to clear (delegates to clearShading). */
+  color: string | null;
 }
 
 export interface TablesClearShadingInput {

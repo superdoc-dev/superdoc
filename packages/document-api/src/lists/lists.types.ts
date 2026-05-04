@@ -208,6 +208,16 @@ export interface ListsDetachInput {
   target: ListItemAddress;
 }
 
+/**
+ * Delete the entire list that contains the targeted list item — removes ALL
+ * sibling list items (same numbered sequence) from the document, including
+ * their text content. The target can be ANY item in the list; the list is
+ * resolved by walking adjacent list items that share the same numbering.
+ */
+export interface ListsDeleteInput {
+  target: ListItemAddress;
+}
+
 export interface ListsJoinInput {
   target: ListItemAddress;
   direction: JoinDirection;
@@ -556,3 +566,11 @@ export type ListsMergeResult = ListsMergeSuccessResult | ListsFailureResult;
 export type ListsSplitResult = ListsSplitSuccessResult | ListsFailureResult;
 export type ListsDetachResult = ListsDetachSuccessResult | ListsFailureResult;
 export type ListsConvertToTextResult = ListsConvertToTextSuccessResult | ListsFailureResult;
+
+export interface ListsDeleteSuccessResult {
+  success: true;
+  /** Number of list items removed. */
+  deletedCount: number;
+}
+
+export type ListsDeleteResult = ListsDeleteSuccessResult | ListsFailureResult;

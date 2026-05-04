@@ -2366,7 +2366,18 @@ export class DomPainter {
       const separatorPositions = this.getColumnSeparatorPositions(columns, leftMargin, contentWidth);
       if (separatorPositions.length === 0) continue;
 
+      // Word only renders the column separator between columns that both have
+      // content. For a 2-col page where col 1 is empty (e.g. the last page of
+      // a multi-column section that fits in col 0, or a `nextPage` section
+      // where Word fills col 0 first without balancing), Word draws no line
+      // even when the section's `w:cols` declared `w:sep="1"`. Gate each
+      // separator on whether any fragment sits past it within the region.
+      const fragmentsInRegion = page.fragments.filter((f) => f.y >= yStart - 0.5 && f.y < yEnd + 0.5);
+
       for (const separatorX of separatorPositions) {
+        const hasContentPastSeparator = fragmentsInRegion.some((f) => f.x >= separatorX);
+        if (!hasContentPastSeparator) continue;
+
         const separatorEl = this.doc.createElement('div');
         separatorEl.dataset.superdocColumnSeparator = 'true';
 

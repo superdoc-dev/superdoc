@@ -2021,10 +2021,15 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
         // vertical region — there's no risk of the new 1-col region overwriting
         // prior column content, because the cursor moves to maxY below them.
         //
-        // When not balancing (e.g. single-col → multi-col, or explicit column
-        // break), fall back to the original "force a new page if currently in a
-        // column that won't exist after the change" guard so new content doesn't
-        // overwrite earlier column positions on the same page.
+        // `willBalance` is a coarse approval: balanceSectionOnPage has its own
+        // late skip conditions (unequal column widths, zero remaining height,
+        // section content too small for shouldSkipBalancing's thresholds) that
+        // can return null even when willBalance was true. The page-break
+        // fallback below must consider the actual balance outcome, not just
+        // willBalance, otherwise we leave the new region starting on the same
+        // page from a stale column index and overwriting the previous
+        // section's column content.
+        let balanceResult: { maxY: number } | null = null;
         if (willBalance) {
           // The current region starts at the last constraint boundary's Y, or at
           // the page's top margin if no mid-page region change has happened yet.
@@ -2033,7 +2038,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
           const availableHeight = activePageSize.h - activeBottomMargin - activeRegionTop;
           const contentWidth = activePageSize.w - (activeLeftMargin + activeRightMargin);
           const normalized = normalizeColumns(endingSectionColumns!, contentWidth);
-          const balanceResult = balanceSectionOnPage({
+          balanceResult = balanceSectionOnPage({
             fragments: state.page.fragments as BalancingFragment[],
             sectionIndex: endingSectionIndex!,
             sectionColumns: {
@@ -2059,10 +2064,12 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
             state.maxCursorY = balanceResult.maxY;
             alreadyBalancedSections.add(endingSectionIndex!);
           }
-        } else if (columnIndexBefore >= newColumns.count) {
-          // Non-balancing case: reducing column count without balancing means
-          // starting the new region at col 0 could overwrite earlier column
-          // content. Force a fresh page to avoid that.
+        }
+        if (balanceResult === null && columnIndexBefore >= newColumns.count) {
+          // No balancing applied (either willBalance was false, or
+          // balanceSectionOnPage skipped late). Reducing column count without
+          // balancing means starting the new region at col 0 could overwrite
+          // earlier column content. Force a fresh page to avoid that.
           state = paginator.startNewPage();
         }
 

@@ -40,6 +40,7 @@ Build your own toolbar, comments sidebar, and review panel against the `superdoc
 | Example | Docs |
 |---------|------|
 | [toolbar/vanilla](./editor/custom-ui/toolbar/vanilla) | [docs](https://docs.superdoc.dev/editor/custom-ui/overview) |
+| [comments/vanilla](./editor/custom-ui/comments/vanilla) | [docs](https://docs.superdoc.dev/editor/custom-ui/comments) |
 
 ### Theming
 

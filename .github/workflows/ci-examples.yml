@@ -200,7 +200,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        surface: [toolbar]
+        surface: [toolbar, comments]
         framework: [vanilla]
     steps:
       - name: Restore workspace

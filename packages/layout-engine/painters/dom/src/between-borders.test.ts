@@ -22,7 +22,7 @@ const betweenOff: BetweenBorderInfo = {
   suppressBottomBorder: false,
   gapBelow: 0,
 };
-import { createDomPainter } from './index.js';
+import { createTestPainter as createDomPainter } from './_test-utils.js';
 import type {
   ParagraphBorders,
   ParagraphBorder,

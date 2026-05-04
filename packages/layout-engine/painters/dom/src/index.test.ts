@@ -105,7 +105,6 @@ function createTestPainter(opts: { blocks?: FlowBlock[]; measures?: Measure[] } 
           });
       const input: DomPainterInput = {
         resolvedLayout: effectiveResolved,
-        sourceLayout: layout,
       };
       painter.paint(input, mount, mapping as any);
     },
@@ -1598,7 +1597,7 @@ describe('DomPainter', () => {
     });
 
     try {
-      const painter = createDomPainter({ blocks: [tableBlock], measures: [tableMeasure] });
+      const painter = createTestPainter({ blocks: [tableBlock], measures: [tableMeasure] });
       expect(() => painter.paint(tableLayout, mount)).not.toThrow();
 
       const placeholder = mount.querySelector('.render-error-placeholder') as HTMLElement | null;
@@ -6852,7 +6851,7 @@ describe('DomPainter', () => {
         ],
       };
 
-      const painter = createDomPainter({ blocks: [imageBlock], measures: [imageMeasure] });
+      const painter = createTestPainter({ blocks: [imageBlock], measures: [imageMeasure] });
       painter.paint(imageLayout, mount);
     };
 
@@ -8457,7 +8456,7 @@ describe('ImageFragment (block-level images)', () => {
         ...(hyperlink ? { hyperlink } : {}),
       };
       const measure: Measure = { kind: 'image', width: 100, height: 50 };
-      return createDomPainter({ blocks: [block], measures: [measure] });
+      return createTestPainter({ blocks: [block], measures: [measure] });
     };
 
     it('wraps linked image in <a class="superdoc-link"> with correct href', () => {
@@ -8508,7 +8507,7 @@ describe('ImageFragment (block-level images)', () => {
         pageSize: { w: 400, h: 300 },
         pages: [{ number: 1, fragments: [fragment] }],
       };
-      const painter = createDomPainter({ blocks: [block], measures: [measure] });
+      const painter = createTestPainter({ blocks: [block], measures: [measure] });
       painter.paint(layout, mount);
 
       const anchor = mount.querySelector('a.superdoc-link') as HTMLAnchorElement | null;
@@ -8529,7 +8528,7 @@ describe('ImageFragment (block-level images)', () => {
         pageSize: { w: 400, h: 300 },
         pages: [{ number: 1, fragments: [fragment] }],
       };
-      const painter = createDomPainter({ blocks: [block], measures: [measure] });
+      const painter = createTestPainter({ blocks: [block], measures: [measure] });
       painter.paint(layout, mount);
 
       const anchor = mount.querySelector('a.superdoc-link');
@@ -8555,7 +8554,7 @@ describe('ImageFragment (block-level images)', () => {
         pageSize: { w: 400, h: 300 },
         pages: [{ number: 1, fragments: [fragment] }],
       };
-      const painter = createDomPainter({ blocks: [block], measures: [measure] });
+      const painter = createTestPainter({ blocks: [block], measures: [measure] });
       painter.paint(layout, mount);
 
       const anchor = mount.querySelector('a.superdoc-link');
@@ -8622,7 +8621,7 @@ describe('URL sanitization security', () => {
 
 describe('normalizeAnchor XSS protection', () => {
   let mount: HTMLElement;
-  let painter: ReturnType<typeof createDomPainter>;
+  let painter: ReturnType<typeof createTestPainter>;
 
   const createFlowBlockWithLink = (link: unknown): FlowBlock => ({
     kind: 'paragraph',
@@ -8769,7 +8768,7 @@ describe('normalizeAnchor XSS protection', () => {
 
 describe('appendDocLocation XSS protection', () => {
   let mount: HTMLElement;
-  let painter: ReturnType<typeof createDomPainter>;
+  let painter: ReturnType<typeof createTestPainter>;
 
   const createFlowBlockWithLink = (link: unknown): FlowBlock => ({
     kind: 'paragraph',
@@ -8949,7 +8948,7 @@ describe('appendDocLocation XSS protection', () => {
 
 describe('appendDocLocation edge cases', () => {
   let mount: HTMLElement;
-  let painter: ReturnType<typeof createDomPainter>;
+  let painter: ReturnType<typeof createTestPainter>;
 
   const createFlowBlockWithLink = (link: unknown): FlowBlock => ({
     kind: 'paragraph',
@@ -9168,7 +9167,7 @@ describe('appendDocLocation edge cases', () => {
 
 describe('Tooltip truncation signaling', () => {
   let mount: HTMLElement;
-  let painter: ReturnType<typeof createDomPainter>;
+  let painter: ReturnType<typeof createTestPainter>;
 
   const createFlowBlockWithLink = (link: unknown): FlowBlock => ({
     kind: 'paragraph',
@@ -9918,7 +9917,7 @@ describe('Link accessibility - Tooltip aria-describedby', () => {
 
 describe('Link rendering metrics', () => {
   let mount: HTMLElement;
-  let painter: ReturnType<typeof createDomPainter>;
+  let painter: ReturnType<typeof createTestPainter>;
 
   const createFlowBlockWithLink = (link: unknown): FlowBlock => ({
     kind: 'paragraph',

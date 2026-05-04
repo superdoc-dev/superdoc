@@ -4965,7 +4965,6 @@ describe('DomPainter', () => {
         attrs: {
           alignment: 'center',
           direction: 'rtl',
-          rtl: true,
         },
       };
       const footerMeasure: Measure = {
@@ -8409,7 +8408,7 @@ describe('DomPainter', () => {
       kind: 'paragraph',
       id: 'rtl-block',
       runs: [{ text: 'مرحبا', fontFamily: 'Arial', fontSize: 16 }],
-      attrs: { direction: 'rtl' as const, rtl: true, ...attrs },
+      attrs: { direction: 'rtl' as const, ...attrs },
     });
 
     const rtlMeasure: Measure = {
@@ -8464,7 +8463,7 @@ describe('DomPainter', () => {
           { kind: 'tab', width: 40, fontFamily: 'Arial', fontSize: 16 } as any,
           { text: 'عالم', fontFamily: 'Arial', fontSize: 16 },
         ],
-        attrs: { direction: 'rtl' as const, rtl: true },
+        attrs: { direction: 'rtl' as const },
       };
 
       const tabMeasure: Measure = {

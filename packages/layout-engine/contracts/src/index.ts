@@ -1467,7 +1467,6 @@ export type ParagraphAttrs = {
   /** Marks an empty paragraph that only exists to carry section properties. */
   sectPrMarker?: boolean;
   direction?: 'ltr' | 'rtl';
-  rtl?: boolean;
   isTocEntry?: boolean;
   tocInstruction?: string;
   /** Floating alignment for positioned paragraphs (from w:framePr/@w:xAlign). */

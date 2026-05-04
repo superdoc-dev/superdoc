@@ -7565,7 +7565,7 @@ const hasListMarkerProperties = (
  * - Position markers (pmStart, pmEnd)
  * - Special tokens (page numbers, etc.)
  * - List marker properties (numId, ilvl, markerText) - for list indent changes
- * - Paragraph attributes (alignment, spacing, indent, borders, shading, direction, rtl, tabs)
+ * - Paragraph attributes (alignment, spacing, indent, borders, shading, direction, tabs)
  * - Table cell content and paragraph formatting within cells
  *
  * For table blocks, a deep hash is computed across all rows and cells, including:
@@ -7709,7 +7709,6 @@ const deriveBlockVersion = (block: FlowBlock): string => {
           attrs.shading?.fill ?? '',
           attrs.shading?.color ?? '',
           attrs.direction ?? '',
-          attrs.rtl ? '1' : '',
           attrs.tabs?.length ? JSON.stringify(attrs.tabs) : '',
         ].join(':')
       : '';
@@ -7896,7 +7895,6 @@ const deriveBlockVersion = (block: FlowBlock): string => {
               hash = hashString(hash, attrs.shading?.fill ?? '');
               hash = hashString(hash, attrs.shading?.color ?? '');
               hash = hashString(hash, attrs.direction ?? '');
-              hash = hashString(hash, attrs.rtl ? '1' : '');
               if (attrs.borders) {
                 hash = hashString(hash, hashParagraphBorders(attrs.borders));
               }
@@ -8120,28 +8118,6 @@ export const applyRunDataAttributes = (element: HTMLElement, dataAttrs?: Record<
       }
     }
   });
-};
-
-const resolveParagraphDirection = (attrs?: ParagraphAttrs): 'ltr' | 'rtl' | undefined => {
-  if (attrs?.direction) {
-    return attrs.direction;
-  }
-  if (attrs?.rtl === true) {
-    return 'rtl';
-  }
-  if (attrs?.rtl === false) {
-    return 'ltr';
-  }
-  return undefined;
-};
-
-const applyParagraphDirection = (element: HTMLElement, attrs?: ParagraphAttrs): void => {
-  const direction = resolveParagraphDirection(attrs);
-  if (!direction) {
-    return;
-  }
-  element.setAttribute('dir', direction);
-  element.style.direction = direction;
 };
 
 const applyParagraphBlockStyles = (element: HTMLElement, attrs?: ParagraphAttrs): void => {

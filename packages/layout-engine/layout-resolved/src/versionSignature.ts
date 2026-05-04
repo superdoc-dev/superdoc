@@ -292,7 +292,6 @@ export const deriveBlockVersion = (block: FlowBlock): string => {
           attrs.shading?.fill ?? '',
           attrs.shading?.color ?? '',
           attrs.direction ?? '',
-          attrs.rtl ? '1' : '',
           attrs.tabs?.length ? JSON.stringify(attrs.tabs) : '',
         ].join(':')
       : '';
@@ -437,7 +436,6 @@ export const deriveBlockVersion = (block: FlowBlock): string => {
               hash = hashString(hash, attrs.shading?.fill ?? '');
               hash = hashString(hash, attrs.shading?.color ?? '');
               hash = hashString(hash, attrs.direction ?? '');
-              hash = hashString(hash, attrs.rtl ? '1' : '');
               if (attrs.borders) {
                 hash = hashString(hash, hashParagraphBorders(attrs.borders));
               }

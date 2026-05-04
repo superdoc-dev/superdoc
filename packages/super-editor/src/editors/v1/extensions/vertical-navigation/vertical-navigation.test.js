@@ -151,6 +151,64 @@ afterEach(() => {
 });
 
 describe('VerticalNavigation', () => {
+  it('handles Home within current visual line using line pmStart', () => {
+    const { line1 } = createDomStructure();
+    line1.dataset.pmStart = '10';
+    line1.dataset.pmEnd = '20';
+    document.elementsFromPoint = vi.fn(() => [line1]);
+
+    const { plugin, view } = createEnvironment();
+    const handled = plugin.props.handleKeyDown(view, { key: 'Home', shiftKey: false });
+
+    expect(handled).toBe(true);
+    expect(view.state.selection.from).toBe(10);
+    expect(view.state.selection.to).toBe(10);
+  });
+
+  it('handles End with Shift within current visual line using line pmEnd', () => {
+    const { line1 } = createDomStructure();
+    line1.dataset.pmStart = '10';
+    line1.dataset.pmEnd = '20';
+    document.elementsFromPoint = vi.fn(() => [line1]);
+
+    const { plugin, view } = createEnvironment();
+    const handled = plugin.props.handleKeyDown(view, { key: 'End', shiftKey: true });
+
+    expect(handled).toBe(true);
+    expect(view.state.selection.from).toBe(1);
+    expect(view.state.selection.to).toBe(20);
+  });
+
+  it('maps Home to pmStart for RTL visual line', () => {
+    const { line1 } = createDomStructure();
+    line1.dataset.pmStart = '30';
+    line1.dataset.pmEnd = '40';
+    line1.setAttribute('dir', 'rtl');
+    document.elementsFromPoint = vi.fn(() => [line1]);
+
+    const { plugin, view } = createEnvironment();
+    const handled = plugin.props.handleKeyDown(view, { key: 'Home', shiftKey: false });
+
+    expect(handled).toBe(true);
+    expect(view.state.selection.from).toBe(30);
+    expect(view.state.selection.to).toBe(30);
+  });
+
+  it('maps End to pmEnd for RTL visual line', () => {
+    const { line1 } = createDomStructure();
+    line1.dataset.pmStart = '30';
+    line1.dataset.pmEnd = '40';
+    line1.setAttribute('dir', 'rtl');
+    document.elementsFromPoint = vi.fn(() => [line1]);
+
+    const { plugin, view } = createEnvironment();
+    const handled = plugin.props.handleKeyDown(view, { key: 'End', shiftKey: false });
+
+    expect(handled).toBe(true);
+    expect(view.state.selection.from).toBe(40);
+    expect(view.state.selection.to).toBe(40);
+  });
+
   it('returns false when editor is not presenting', () => {
     const { plugin, view } = createEnvironment({ presenting: false });
 

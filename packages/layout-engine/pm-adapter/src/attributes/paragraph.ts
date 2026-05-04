@@ -37,6 +37,7 @@ import {
 
 const DEFAULT_DECIMAL_SEPARATOR = '.';
 const DEFAULT_TAB_INTERVAL_TWIPS = 720; // 0.5 inch
+type ParagraphDirection = 'ltr' | 'rtl';
 
 const normalizeColor = (value?: unknown): string | undefined => {
   if (typeof value !== 'string') return undefined;
@@ -60,6 +61,43 @@ export const deepClone = <T>(obj: T): T => {
     }
   }
   return clone as T;
+};
+
+const inferDirectionFromRuns = (para: PMNode): ParagraphDirection | undefined => {
+  const content = Array.isArray(para.content) ? para.content : [];
+  let rtlRunCount = 0;
+  let ltrRunCount = 0;
+  let firstExplicitDirection: ParagraphDirection | undefined;
+
+  for (const node of content) {
+    if (node?.type !== 'run') continue;
+    const runDirection = (node.attrs?.runProperties as { rightToLeft?: unknown } | undefined)?.rightToLeft;
+    if (runDirection === true) {
+      rtlRunCount += 1;
+      if (!firstExplicitDirection) firstExplicitDirection = 'rtl';
+      continue;
+    }
+    if (runDirection === false) {
+      ltrRunCount += 1;
+      if (!firstExplicitDirection) firstExplicitDirection = 'ltr';
+    }
+  }
+
+  if (rtlRunCount === 0 && ltrRunCount === 0) return undefined;
+  if (rtlRunCount > ltrRunCount) return 'rtl';
+  if (ltrRunCount > rtlRunCount) return 'ltr';
+  return firstExplicitDirection;
+};
+
+export const resolveEffectiveParagraphDirection = (
+  para: PMNode,
+  resolvedParagraphProperties: ParagraphProperties,
+  sectionDirection?: ParagraphDirection,
+): ParagraphDirection | undefined => {
+  if (resolvedParagraphProperties.rightToLeft === true) return 'rtl';
+  if (resolvedParagraphProperties.rightToLeft === false) return 'ltr';
+  if (sectionDirection) return sectionDirection;
+  return inferDirectionFromRuns(para);
 };
 
 /**
@@ -273,7 +311,12 @@ export const computeParagraphAttrs = (
     );
   }
 
-  const isRtl = resolvedParagraphProperties.rightToLeft === true;
+  const normalizedDirection = resolveEffectiveParagraphDirection(
+    para,
+    resolvedParagraphProperties,
+    converterContext?.sectionDirection,
+  );
+  const isRtl = normalizedDirection === 'rtl';
 
   const normalizedSpacing = normalizeParagraphSpacing(
     resolvedParagraphProperties.spacing,
@@ -287,12 +330,6 @@ export const computeParagraphAttrs = (
   const paragraphDecimalSeparator = DEFAULT_DECIMAL_SEPARATOR;
   const tabIntervalTwips = DEFAULT_TAB_INTERVAL_TWIPS;
   const normalizedFramePr = normalizeFramePr(resolvedParagraphProperties.framePr);
-  const normalizedDirection =
-    resolvedParagraphProperties.rightToLeft === true
-      ? 'rtl'
-      : resolvedParagraphProperties.rightToLeft === false
-        ? 'ltr'
-        : undefined;
   const floatAlignment = normalizedFramePr?.xAlign;
   const normalizedNumberingProperties = normalizeNumberingProperties(resolvedParagraphProperties.numberingProperties);
   const dropCapDescriptor = normalizeDropCap(resolvedParagraphProperties.framePr, para, converterContext);
@@ -322,7 +359,7 @@ export const computeParagraphAttrs = (
     keepLines: resolvedParagraphProperties.keepLines,
     floatAlignment: floatAlignment,
     pageBreakBefore: resolvedParagraphProperties.pageBreakBefore,
-    ...(normalizedDirection ? { direction: normalizedDirection as 'rtl' | 'ltr', rtl: isRtl } : {}),
+    ...(normalizedDirection ? { direction: normalizedDirection } : {}),
   };
 
   if (normalizedNumberingProperties && normalizedListRendering) {

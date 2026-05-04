@@ -77,6 +77,17 @@ import {
 import { chartNodeToDrawingBlock } from './chart.js';
 import { tableNodeToBlock } from './table.js';
 
+function resolveSectionDirectionFromSectPr(sectPr: unknown): 'ltr' | 'rtl' | undefined {
+  if (!sectPr || typeof sectPr !== 'object') return undefined;
+  const elements = (sectPr as { elements?: Array<{ name?: string; attributes?: Record<string, unknown> }> }).elements;
+  if (!Array.isArray(elements)) return undefined;
+  const bidi = elements.find((element) => element?.name === 'w:bidi');
+  if (!bidi) return undefined;
+  const val = bidi.attributes?.['w:val'] ?? bidi.attributes?.val;
+  if (val === '0' || val === 0 || val === false || val === 'false' || val === 'off') return 'ltr';
+  return 'rtl';
+}
+
 function sourceAnchorFromNode(node: PMNode): SourceAnchor | undefined {
   const sourceAnchor = (node.attrs as Record<string, unknown> | undefined)?.sourceAnchor;
   return sourceAnchor && typeof sourceAnchor === 'object' && !Array.isArray(sourceAnchor)
@@ -1085,6 +1096,7 @@ export function handleParagraphNode(node: PMNode, context: NodeHandlerContext): 
       blocks.push(sectionBreak);
       recordBlockKind?.(sectionBreak.kind);
       sectionState!.currentSectionIndex++;
+      converterContext.sectionDirection = resolveSectionDirectionFromSectPr(nextSection.sectPr);
     }
   }
 

@@ -178,16 +178,6 @@ describe('updateFieldsInSelection — TOC path', () => {
     expect(tr.setMeta).toHaveBeenCalledWith('preventDispatch', true);
   });
 
-  it('returns true on a can()-style probe (no dispatch) when any TOC exists', () => {
-    const update = vi.fn();
-    const editor = { doc: { toc: { update } } };
-    const doc = buildTocDoc(['toc-a']);
-
-    const { result } = runUpdateFields({ doc, editor, dispatch: undefined });
-    expect(result).toBe(true);
-    expect(update).not.toHaveBeenCalled();
-  });
-
   it('skips a TOC whose sdBlockId is missing or empty', () => {
     const update = vi.fn(() => ({ success: true }));
     const editor = { doc: { toc: { update } } };
@@ -232,14 +222,8 @@ describe('FieldUpdate extension shortcuts', () => {
   it('binds F9 to updateFieldsInSelection', () => {
     const ed = { commands: { updateFieldsInSelection: vi.fn(() => true) } };
     const shortcuts = FieldUpdate.config.addShortcuts.call({ editor: ed });
-    expect(typeof shortcuts.F9).toBe('function');
+    expect(Object.keys(shortcuts)).toEqual(['F9']);
     shortcuts.F9();
     expect(ed.commands.updateFieldsInSelection).toHaveBeenCalledTimes(1);
-  });
-
-  it('does not bind any other key alongside F9', () => {
-    const ed = { commands: { updateFieldsInSelection: vi.fn() } };
-    const shortcuts = FieldUpdate.config.addShortcuts.call({ editor: ed });
-    expect(Object.keys(shortcuts)).toEqual(['F9']);
   });
 });

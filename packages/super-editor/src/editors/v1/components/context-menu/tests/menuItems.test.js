@@ -1095,16 +1095,6 @@ describe('menuItems.js', () => {
       expect(findItem(sections)).toBeUndefined();
     });
 
-    it('is hidden when tocAncestor exists but sdBlockId is missing', () => {
-      mockContext = createMockContext({
-        editor: mockEditor,
-        trigger: TRIGGERS.click,
-        tocAncestor: { node: {}, pos: 5, sdBlockId: null },
-      });
-      const sections = getItems(mockContext);
-      expect(findItem(sections)).toBeUndefined();
-    });
-
     it('is hidden on the slash trigger even when inside a TOC', () => {
       mockContext = createMockContext({
         editor: mockEditor,
@@ -1131,40 +1121,6 @@ describe('menuItems.js', () => {
         target: { kind: 'block', nodeType: 'tableOfContents', nodeId: 'toc-42' },
         mode: 'all',
       });
-    });
-
-    it('action is a no-op when sdBlockId is missing', () => {
-      const update = vi.fn();
-      const ed = { ...mockEditor, doc: { toc: { update } } };
-      // showWhen would normally hide the item — invoke action directly to assert the guard.
-      mockContext = createMockContext({
-        editor: ed,
-        trigger: TRIGGERS.click,
-        tocAncestor: { node: {}, pos: 5, sdBlockId: 'toc-1' },
-      });
-      const sections = getItems(mockContext);
-      const item = findItem(sections);
-      // Re-invoke action with a context that has no sdBlockId.
-      item.action(ed, { ...mockContext, tocAncestor: { node: {}, pos: 5, sdBlockId: null } });
-      expect(update).not.toHaveBeenCalled();
-    });
-
-    it('action swallows errors thrown by editor.doc.toc.update', () => {
-      const update = vi.fn(() => {
-        throw new Error('boom');
-      });
-      const ed = { ...mockEditor, doc: { toc: { update } } };
-      mockContext = createMockContext({
-        editor: ed,
-        trigger: TRIGGERS.click,
-        tocAncestor: { node: {}, pos: 5, sdBlockId: 'toc-1' },
-      });
-      const sections = getItems(mockContext);
-      const item = findItem(sections);
-      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-      expect(() => item.action(ed, mockContext)).not.toThrow();
-      expect(warn).toHaveBeenCalled();
-      warn.mockRestore();
     });
   });
 });

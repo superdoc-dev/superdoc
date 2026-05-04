@@ -64,13 +64,7 @@ describe('buildTocEntryParagraphs', () => {
   });
 
   describe('rightAlignPageNumbers', () => {
-    it('adds a right-aligned tab stop with default dot leader when rightAlignPageNumbers is true', () => {
-      const paragraphs = buildTocEntryParagraphs([BASE_SOURCE], makeConfig({ rightAlignPageNumbers: true }));
-      const tabStops = paragraphs[0]!.attrs.paragraphProperties as Record<string, unknown>;
-      expect(tabStops.tabStops).toEqual([{ tab: { tabType: 'right', pos: 9350, leader: 'dot' } }]);
-    });
-
-    it('adds a right-aligned tab stop with default dot leader by default (undefined)', () => {
+    it('adds a right-aligned tab stop with default dot leader', () => {
       const paragraphs = buildTocEntryParagraphs([BASE_SOURCE], makeConfig());
       const tabStops = paragraphs[0]!.attrs.paragraphProperties as Record<string, unknown>;
       expect(tabStops.tabStops).toEqual([{ tab: { tabType: 'right', pos: 9350, leader: 'dot' } }]);

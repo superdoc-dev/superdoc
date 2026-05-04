@@ -61,6 +61,7 @@ type CoreCommandNames =
   | 'backspaceSkipEmptyRun'
   | 'backspaceNextToRun'
   | 'backspaceAcrossRuns'
+  | 'backspaceAtomBefore'
   | 'deleteSkipEmptyRun'
   | 'deleteNextToRun'
   | 'skipTab';

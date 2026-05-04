@@ -50,6 +50,7 @@ export * from './backspaceEmptyRunParagraph.js';
 export * from './backspaceSkipEmptyRun.js';
 export * from './backspaceNextToRun.js';
 export * from './backspaceAcrossRuns.js';
+export * from './backspaceAtomBefore.js';
 export * from './deleteSkipEmptyRun.js';
 export * from './deleteNextToRun.js';
 export * from './skipTab.js';

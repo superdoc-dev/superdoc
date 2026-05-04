@@ -33,6 +33,14 @@ Patterns for the browser editor surface.
 | [track-changes](./editor/built-in-ui/track-changes) | [docs](https://docs.superdoc.dev/editor/built-in-ui/track-changes) |
 | [toolbar](./editor/built-in-ui/toolbar) | [docs](https://docs.superdoc.dev/editor/built-in-ui/toolbar) |
 
+### Custom UI
+
+Build your own toolbar, comments sidebar, and review panel against the `superdoc/ui` controller. Each example teaches one surface in the smallest amount of code.
+
+| Example | Docs |
+|---------|------|
+| [toolbar/vanilla](./editor/custom-ui/toolbar/vanilla) | [docs](https://docs.superdoc.dev/editor/custom-ui/overview) |
+
 ### Theming
 
 | Example | Docs |

@@ -194,6 +194,27 @@ jobs:
         working-directory: examples/__tests__
         run: EXAMPLE=advanced/extensions/${{ matrix.example }} npx playwright test
 
+  custom-ui:
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        surface: [toolbar]
+        framework: [vanilla]
+    steps:
+      - name: Restore workspace
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            .
+            ~/.cache/ms-playwright
+          key: examples-workspace-${{ github.sha }}
+
+      - name: Run smoke test
+        working-directory: examples/__tests__
+        run: EXAMPLE=editor/custom-ui/${{ matrix.surface }}/${{ matrix.framework }} npx playwright test
+
   headless:
     needs: build
     runs-on: ubuntu-latest
@@ -213,7 +234,7 @@ jobs:
   validate:
     name: CI Examples / validate
     if: always()
-    needs: [getting-started, collaboration, built-in-ui, ai, advanced-headless-toolbar, advanced-extensions, headless]
+    needs: [getting-started, collaboration, built-in-ui, ai, advanced-headless-toolbar, advanced-extensions, custom-ui, headless]
     runs-on: ubuntu-latest
     steps:
       - name: Check results

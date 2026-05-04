@@ -496,7 +496,7 @@ describe('DomPainter', () => {
     expect(lines[1].style.wordSpacing).toBe('');
   });
 
-  it('skips justify for lines with manual tab runs but no explicit segment positions', () => {
+  it('applies justify for manual tab runs that use default positioning', () => {
     const tabBlock: FlowBlock = {
       kind: 'paragraph',
       id: 'tab-justify-block',
@@ -521,7 +521,7 @@ describe('DomPainter', () => {
           ascent: 12,
           descent: 4,
           lineHeight: 20,
-          // No segments with x — this is the "manual tab without segments" case
+          segments: [{ runIndex: 2, fromChar: 0, toChar: 7, width: 60, x: 40 }],
         },
         {
           fromRun: 2,
@@ -562,7 +562,76 @@ describe('DomPainter', () => {
 
     const lines = Array.from(mount.querySelectorAll('.superdoc-line')) as HTMLElement[];
     expect(lines.length).toBeGreaterThanOrEqual(1);
-    // Manual tab without explicit segment positions should skip justify
+    expect(parseFloat(lines[0].style.wordSpacing)).toBeGreaterThan(0);
+  });
+
+  it('skips justify for lines that used author-defined tab stops', () => {
+    const tabBlock: FlowBlock = {
+      kind: 'paragraph',
+      id: 'explicit-tab-justify-block',
+      runs: [
+        { text: 'A', fontFamily: 'Arial', fontSize: 16 },
+        { kind: 'tab', text: '\t', width: 48 },
+        { text: 'a b c d', fontFamily: 'Arial', fontSize: 16 },
+      ],
+      attrs: { alignment: 'justify' },
+    };
+
+    const tabMeasure: Measure = {
+      kind: 'paragraph',
+      lines: [
+        {
+          fromRun: 0,
+          fromChar: 0,
+          toRun: 2,
+          toChar: 7,
+          width: 60,
+          maxWidth: 100,
+          ascent: 12,
+          descent: 4,
+          lineHeight: 20,
+          hasExplicitTabStops: true,
+          segments: [{ runIndex: 2, fromChar: 0, toChar: 7, width: 60, x: 40 }],
+        },
+        {
+          fromRun: 2,
+          fromChar: 7,
+          toRun: 2,
+          toChar: 7,
+          width: 0,
+          ascent: 12,
+          descent: 4,
+          lineHeight: 20,
+        },
+      ],
+      totalHeight: 40,
+    };
+
+    const tabLayout: Layout = {
+      pageSize: { w: 200, h: 200 },
+      pages: [
+        {
+          number: 1,
+          fragments: [
+            {
+              kind: 'para',
+              blockId: 'explicit-tab-justify-block',
+              fromLine: 0,
+              toLine: 2,
+              x: 0,
+              y: 0,
+              width: 100,
+            },
+          ],
+        },
+      ],
+    };
+
+    const painter = createTestPainter({ blocks: [tabBlock], measures: [tabMeasure] });
+    painter.paint(tabLayout, mount);
+
+    const lines = Array.from(mount.querySelectorAll('.superdoc-line')) as HTMLElement[];
+    expect(lines.length).toBeGreaterThanOrEqual(1);
     expect(lines[0].style.wordSpacing).toBe('');
   });
 
@@ -2343,6 +2412,185 @@ describe('DomPainter', () => {
 
     // Verify text content (label text + run text)
     expect(wrapper.textContent).toContain('controlled text');
+  });
+
+  it('keeps inline SDT wrapper font-size in sync when run font-size changes', () => {
+    const block: FlowBlock = {
+      kind: 'paragraph',
+      id: 'inline-sdt-font-sync',
+      runs: [
+        {
+          text: 'Company Address',
+          fontFamily: 'Arial, sans-serif',
+          fontSize: 14.6667,
+          pmStart: 2044,
+          pmEnd: 2059,
+          sdt: {
+            type: 'structuredContent',
+            scope: 'inline',
+            id: '574416526',
+            tag: 'inline_text_sdt',
+            alias: 'Company Address',
+            lockMode: 'unlocked',
+          },
+        },
+      ],
+      attrs: {},
+    };
+
+    const measure: Measure = {
+      kind: 'paragraph',
+      lines: [
+        {
+          fromRun: 0,
+          fromChar: 0,
+          toRun: 0,
+          toChar: 15,
+          width: 180,
+          ascent: 12,
+          descent: 4,
+          lineHeight: 20,
+        },
+      ],
+      totalHeight: 20,
+    };
+
+    const layout: Layout = {
+      pageSize: { w: 612, h: 792 },
+      pages: [
+        {
+          number: 1,
+          fragments: [
+            {
+              kind: 'para',
+              blockId: 'inline-sdt-font-sync',
+              fromLine: 0,
+              toLine: 1,
+              x: 30,
+              y: 40,
+              width: 552,
+              pmStart: 2044,
+              pmEnd: 2059,
+            },
+          ],
+        },
+      ],
+    };
+
+    const painter = createTestPainter({ blocks: [block], measures: [measure] });
+    painter.paint(layout, mount);
+
+    const getInlineSdtWrapper = () =>
+      mount.querySelector('.superdoc-structured-content-inline[data-sdt-id="574416526"]') as HTMLElement | null;
+
+    const wrapperBefore = getInlineSdtWrapper();
+    expect(wrapperBefore).toBeTruthy();
+    expect(wrapperBefore?.style.fontSize).toBe('14.6667px');
+
+    const updatedBlock: FlowBlock = {
+      ...block,
+      runs: [
+        {
+          ...block.runs[0],
+          fontSize: 10,
+        },
+      ],
+    };
+
+    painter.setData([updatedBlock], [measure]);
+    painter.paint(layout, mount);
+
+    const wrapperAfter = getInlineSdtWrapper();
+    expect(wrapperAfter).toBeTruthy();
+    expect(wrapperAfter?.style.fontSize).toBe('10px');
+  });
+
+  it('uses first run font-size for inline SDT wrapper when a field has mixed run sizes', () => {
+    const mixedSizeBlock: FlowBlock = {
+      kind: 'paragraph',
+      id: 'inline-sdt-mixed-font-size',
+      runs: [
+        {
+          text: 'Big',
+          fontFamily: 'Arial, sans-serif',
+          fontSize: 36,
+          pmStart: 100,
+          pmEnd: 103,
+          sdt: {
+            type: 'structuredContent',
+            scope: 'inline',
+            id: 'mixed-size-sdt',
+            tag: 'inline_text_sdt',
+            alias: 'Mixed Size Field',
+            lockMode: 'unlocked',
+          },
+        },
+        {
+          text: ' small',
+          fontFamily: 'Arial, sans-serif',
+          fontSize: 10,
+          pmStart: 103,
+          pmEnd: 109,
+          sdt: {
+            type: 'structuredContent',
+            scope: 'inline',
+            id: 'mixed-size-sdt',
+            tag: 'inline_text_sdt',
+            alias: 'Mixed Size Field',
+            lockMode: 'unlocked',
+          },
+        },
+      ],
+      attrs: {},
+    };
+
+    const mixedSizeMeasure: Measure = {
+      kind: 'paragraph',
+      lines: [
+        {
+          fromRun: 0,
+          fromChar: 0,
+          toRun: 1,
+          toChar: 6,
+          width: 180,
+          ascent: 12,
+          descent: 4,
+          lineHeight: 20,
+        },
+      ],
+      totalHeight: 20,
+    };
+
+    const mixedSizeLayout: Layout = {
+      pageSize: { w: 612, h: 792 },
+      pages: [
+        {
+          number: 1,
+          fragments: [
+            {
+              kind: 'para',
+              blockId: 'inline-sdt-mixed-font-size',
+              fromLine: 0,
+              toLine: 1,
+              x: 30,
+              y: 40,
+              width: 552,
+              pmStart: 100,
+              pmEnd: 109,
+            },
+          ],
+        },
+      ],
+    };
+
+    const painter = createTestPainter({ blocks: [mixedSizeBlock], measures: [mixedSizeMeasure] });
+    painter.paint(mixedSizeLayout, mount);
+
+    const wrapper = mount.querySelector(
+      '.superdoc-structured-content-inline[data-sdt-id="mixed-size-sdt"]',
+    ) as HTMLElement | null;
+    expect(wrapper).toBeTruthy();
+    expect(wrapper?.style.fontSize).toBe('36px');
   });
 
   it('positions word-layout markers relative to the text start', () => {
@@ -4636,9 +4884,70 @@ describe('DomPainter', () => {
       expect(footerFragmentEl).toBeTruthy();
       // Footer container is at effectiveOffset (400px)
       expect(footerEl.style.top).toBe(`${footerOffset}px`);
-      // Fragment uses band-local Y + container offset from band origin
-      // The exact top depends on getDecorationAnchorPageOriginY, but the
-      // key invariant is that the absolute page position is correct.
+      // Fragment uses band-local Y + container offset from band origin.
+      // With footer distance provided, anchors convert back to absolute page-space
+      // using the physical footer reference point (pageHeight - footerDistance).
+      const renderedPageTop = parseFloat(footerEl.style.top || '0') + parseFloat(footerFragmentEl.style.top || '0');
+      expect(renderedPageTop).toBe((layout.pageSize?.h ?? 0) - 20 + footerFragment.y);
+    });
+
+    it('falls back to bottom margin origin when footer distance is missing', () => {
+      const footerImageBlock: FlowBlock = {
+        kind: 'image',
+        id: 'footer-page-relative-img-missing',
+        src: 'data:image/png;base64,xxx',
+        anchor: {
+          isAnchored: true,
+          hRelativeFrom: 'page',
+          vRelativeFrom: 'page',
+        },
+      };
+      const footerImageMeasure: Measure = {
+        kind: 'image',
+        width: 20,
+        height: 20,
+      };
+      const footerOffset = 400;
+      const footerFragment: Fragment = {
+        kind: 'image',
+        blockId: footerImageBlock.id,
+        x: 0,
+        y: 25,
+        width: 20,
+        height: 20,
+        isAnchored: true,
+      };
+
+      const painter = createTestPainter({
+        blocks: [block, footerImageBlock],
+        measures: [measure, footerImageMeasure],
+        footerProvider: () => ({
+          fragments: [footerFragment],
+          height: 80,
+          offset: footerOffset,
+        }),
+      });
+
+      painter.paint(
+        {
+          ...layout,
+          pages: [
+            {
+              ...layout.pages[0],
+              number: 1,
+              margins: { left: 0, right: 0, bottom: 100 },
+            },
+          ],
+        },
+        mount,
+      );
+
+      const footerEl = mount.querySelector('.superdoc-page-footer') as HTMLElement;
+      const footerFragmentEl = footerEl.querySelector(
+        '[data-block-id="footer-page-relative-img-missing"]',
+      ) as HTMLElement;
+
+      expect(footerFragmentEl).toBeTruthy();
       const renderedPageTop = parseFloat(footerEl.style.top || '0') + parseFloat(footerFragmentEl.style.top || '0');
       expect(renderedPageTop).toBe(footerOffset + footerFragment.y);
     });

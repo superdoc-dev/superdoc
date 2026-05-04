@@ -82,6 +82,7 @@ export function layoutImageBlock({
     pmStart: pmRange.pmStart,
     pmEnd: pmRange.pmEnd,
     metadata,
+    sourceAnchor: block.sourceAnchor,
   };
 
   state.page.fragments.push(fragment);

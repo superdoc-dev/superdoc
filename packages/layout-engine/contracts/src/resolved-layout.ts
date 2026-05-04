@@ -12,6 +12,7 @@ import type {
   ParagraphBorders,
   ParagraphMeasure,
   SectionVerticalAlign,
+  SourceAnchor,
   TableBlock,
   TableMeasure,
 } from './index.js';
@@ -88,8 +89,9 @@ export type ResolvedGroupItem = {
 
 /**
  * A resolved fragment wrapper item.
- * Carries positioning and metadata needed to create the fragment's DOM wrapper,
- * while inner content rendering is delegated to legacy fragment renderers via fragmentIndex.
+ * Carries positioning and metadata needed to create the fragment's DOM wrapper.
+ * Inner content rendering is delegated to the Fragment-based render path via
+ * fragmentIndex; see the compat-fallback note on that field.
  */
 export type ResolvedFragmentItem = {
   kind: 'fragment';
@@ -109,9 +111,16 @@ export type ResolvedFragmentItem = {
   zIndex?: number;
   /** Source fragment kind — used by the painter for wrapper style decisions. */
   fragmentKind: Fragment['kind'];
-  /** Block ID — written to data-block-id and used for legacy content lookup. */
+  /** Block ID. Written to data-block-id. */
   blockId: string;
-  /** Index within page.fragments — bridge to legacy content rendering. */
+  /**
+   * Index back into page.fragments.
+   *
+   * AIDEV-NOTE: compat-fallback. The painter currently reads inner content from
+   * Fragment via this index because ResolvedFragmentItem does not carry full
+   * content yet. Becomes unused once paint items are self-describing; do not
+   * promote this to a permanent API surface.
+   */
   fragmentIndex: number;
   /** ProseMirror start position for click-to-position mapping. */
   pmStart?: number;
@@ -131,12 +140,18 @@ export type ResolvedFragmentItem = {
   paragraphBorderHash?: string;
   /** Pre-extracted paragraph borders for between-border rendering. */
   paragraphBorders?: ParagraphBorders;
-  /** Pre-computed change-detection signature (blockVersion + fragment-specific data). */
+  /** Pre-computed visual/layout signature (blockVersion + fragment-specific data). */
   version?: string;
+  /** Pre-computed source/evidence metadata signature. Does not imply visual/layout geometry changed. */
+  evidenceVersion?: string;
+  /** Combined paint reuse signature. DomPainter uses this to refresh source-linked DOM metadata. */
+  paintCacheVersion?: string;
   /** Pre-extracted block for paragraph (ParagraphBlock) or list-item (ListBlock) fragments. */
   block?: ParagraphBlock | ListBlock;
   /** Pre-extracted measure for paragraph (ParagraphMeasure) or list-item (ListMeasure) fragments. */
   measure?: ParagraphMeasure | ListMeasure;
+  /** Optional DOCX source evidence preserved for intelligence adapters and paint snapshots. */
+  sourceAnchor?: SourceAnchor;
 };
 
 /** Resolved paragraph content for non-table paragraph/list-item fragments. */
@@ -233,7 +248,14 @@ export type ResolvedTableItem = {
   zIndex?: number;
   /** Block ID — written to data-block-id. */
   blockId: string;
-  /** Index within page.fragments — bridge to legacy rendering. */
+  /**
+   * Index back into page.fragments.
+   *
+   * AIDEV-NOTE: compat-fallback. The painter currently reads inner content from
+   * Fragment via this index because ResolvedFragmentItem does not carry full
+   * content yet. Becomes unused once paint items are self-describing; do not
+   * promote this to a permanent API surface.
+   */
   fragmentIndex: number;
   /** ProseMirror start position for click-to-position mapping. */
   pmStart?: number;
@@ -253,8 +275,14 @@ export type ResolvedTableItem = {
   effectiveColumnWidths: number[];
   /** Pre-computed SDT container key for boundary grouping (`structuredContent:<id>` or `documentSection:<id>`). */
   sdtContainerKey?: string | null;
-  /** Pre-computed change-detection signature (blockVersion + fragment-specific data). */
+  /** Pre-computed visual/layout signature (blockVersion + fragment-specific data). */
   version?: string;
+  /** Pre-computed source/evidence metadata signature. Does not imply visual/layout geometry changed. */
+  evidenceVersion?: string;
+  /** Combined paint reuse signature. DomPainter uses this to refresh source-linked DOM metadata. */
+  paintCacheVersion?: string;
+  /** Optional DOCX source evidence preserved for intelligence adapters and paint snapshots. */
+  sourceAnchor?: SourceAnchor;
 };
 
 /**
@@ -281,7 +309,14 @@ export type ResolvedImageItem = {
   zIndex?: number;
   /** Block ID — written to data-block-id. */
   blockId: string;
-  /** Index within page.fragments — bridge to legacy rendering. */
+  /**
+   * Index back into page.fragments.
+   *
+   * AIDEV-NOTE: compat-fallback. The painter currently reads inner content from
+   * Fragment via this index because ResolvedFragmentItem does not carry full
+   * content yet. Becomes unused once paint items are self-describing; do not
+   * promote this to a permanent API surface.
+   */
   fragmentIndex: number;
   /** ProseMirror start position for click-to-position mapping. */
   pmStart?: number;
@@ -293,8 +328,14 @@ export type ResolvedImageItem = {
   metadata?: ImageFragmentMetadata;
   /** Pre-computed SDT container key for boundary grouping (typically null for images). */
   sdtContainerKey?: string | null;
-  /** Pre-computed change-detection signature (blockVersion + fragment-specific data). */
+  /** Pre-computed visual/layout signature (blockVersion + fragment-specific data). */
   version?: string;
+  /** Pre-computed source/evidence metadata signature. Does not imply visual/layout geometry changed. */
+  evidenceVersion?: string;
+  /** Combined paint reuse signature. DomPainter uses this to refresh source-linked DOM metadata. */
+  paintCacheVersion?: string;
+  /** Optional DOCX source evidence preserved for intelligence adapters and paint snapshots. */
+  sourceAnchor?: SourceAnchor;
 };
 
 /**
@@ -321,7 +362,14 @@ export type ResolvedDrawingItem = {
   zIndex?: number;
   /** Block ID — written to data-block-id. */
   blockId: string;
-  /** Index within page.fragments — bridge to legacy rendering. */
+  /**
+   * Index back into page.fragments.
+   *
+   * AIDEV-NOTE: compat-fallback. The painter currently reads inner content from
+   * Fragment via this index because ResolvedFragmentItem does not carry full
+   * content yet. Becomes unused once paint items are self-describing; do not
+   * promote this to a permanent API surface.
+   */
   fragmentIndex: number;
   /** ProseMirror start position for click-to-position mapping. */
   pmStart?: number;
@@ -331,8 +379,14 @@ export type ResolvedDrawingItem = {
   block: DrawingBlock;
   /** Pre-computed SDT container key for boundary grouping (typically null for drawings). */
   sdtContainerKey?: string | null;
-  /** Pre-computed change-detection signature (blockVersion + fragment-specific data). */
+  /** Pre-computed visual/layout signature (blockVersion + fragment-specific data). */
   version?: string;
+  /** Pre-computed source/evidence metadata signature. Does not imply visual/layout geometry changed. */
+  evidenceVersion?: string;
+  /** Combined paint reuse signature. DomPainter uses this to refresh source-linked DOM metadata. */
+  paintCacheVersion?: string;
+  /** Optional DOCX source evidence preserved for intelligence adapters and paint snapshots. */
+  sourceAnchor?: SourceAnchor;
 };
 
 /** Type guard: checks whether a resolved paint item is a ResolvedTableItem. */
@@ -393,4 +447,6 @@ export type ResolvedListMarkerItem = {
     color?: string;
     letterSpacing?: number;
   };
+  /** Optional DOCX source evidence for list-marker observations. */
+  sourceAnchor?: SourceAnchor;
 };

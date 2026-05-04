@@ -46,7 +46,7 @@ export interface Query {
   offset?: number;
   /**
    * Cardinality requirement for the result set.
-   * Used for future enforcement — currently passed through without behavioral change.
+   * Used for future enforcement: currently passed through without behavioral change.
    */
   require?: 'any' | 'first' | 'exactlyOne' | 'all';
   /**

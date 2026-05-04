@@ -233,6 +233,54 @@
       value: file://../shared/checks.cjs:instinctList
       metric: tool_instinct
 
+# --- List tasks: compound ops (merge / split / restart) ---
+#
+# These tests probe the model's ACTION-selection within superdoc_list in a
+# single turn. Task prompts include a concrete listItem nodeId so the model
+# can skip the read and go straight to the mutation — otherwise in single-turn
+# with tool_choice: required, the model correctly reads first and never emits
+# the mutation. Multi-step workflows (e.g. sub-point = insert then indent) are
+# deferred to Level 2 execution evals.
+
+- description: 'Merge two adjacent lists (instinct)'
+  metadata: { category: instinct, group: 2 }
+  vars:
+    task: 'The document has two adjacent numbered lists. Given that the first item of the second list has nodeId "A1B2C3D4", call the tool that merges its sequence into the previous list so the two become one continuous numbered list.'
+    expectedListAction: merge
+  assert:
+    - type: javascript
+      value: file://../shared/checks.cjs:instinctList
+      metric: tool_instinct
+    - type: javascript
+      value: file://../shared/checks.cjs:usesListAction
+      metric: argument_accuracy
+
+- description: 'Split a list at a specific item (instinct)'
+  metadata: { category: instinct, group: 2 }
+  vars:
+    task: 'Given a numbered list, split it at the item with nodeId "E5F6G7H8" so that item and everything after it become a new separate list whose numbering restarts at 1.'
+    expectedListAction: split
+  assert:
+    - type: javascript
+      value: file://../shared/checks.cjs:instinctList
+      metric: tool_instinct
+    - type: javascript
+      value: file://../shared/checks.cjs:usesListAction
+      metric: argument_accuracy
+
+- description: 'Restart list numbering at a specific item (instinct)'
+  metadata: { category: instinct, group: 2 }
+  vars:
+    task: 'The ordered list currently runs 1, 2, 3, 4, 5 continuously. Make item with nodeId "I9J0K1L2" restart at 1 — set its explicit numbering value to 1 so subsequent items become 2, 3, etc.'
+    expectedListAction: set_value
+  assert:
+    - type: javascript
+      value: file://../shared/checks.cjs:instinctList
+      metric: tool_instinct
+    - type: javascript
+      value: file://../shared/checks.cjs:usesListAction
+      metric: argument_accuracy
+
 # --- Tracked changes tasks ---
 
 - description: 'Tracked change edit (instinct)'

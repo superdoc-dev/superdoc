@@ -2173,18 +2173,6 @@ describe('createDocumentApi', () => {
         expect(e.code).toBe('SELECTION_ADAPTER_UNAVAILABLE');
       }
     });
-
-    it('throws SELECTION_ADAPTER_UNAVAILABLE when selection.onChange is called without a selection adapter', () => {
-      const api = makeApiWithoutSelection();
-      try {
-        api.selection.onChange(() => {});
-        expect.fail('expected SELECTION_ADAPTER_UNAVAILABLE to be thrown');
-      } catch (err: unknown) {
-        const e = err as { name: string; code: string };
-        expect(e.name).toBe('DocumentApiValidationError');
-        expect(e.code).toBe('SELECTION_ADAPTER_UNAVAILABLE');
-      }
-    });
   });
 
   describe('comments.patch target validation', () => {

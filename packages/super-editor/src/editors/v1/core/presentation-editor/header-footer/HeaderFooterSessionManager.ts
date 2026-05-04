@@ -59,10 +59,8 @@ import { selectionToRects } from '@superdoc/layout-bridge';
 import { deduplicateOverlappingRects } from '../../../dom-observer/DomSelectionGeometry.js';
 import { resolveSectionProjections } from '../../../document-api-adapters/helpers/sections-resolver.js';
 import { computeCaretLayoutRectGeometry as computeCaretLayoutRectGeometryFromHelper } from '../selection/CaretGeometry.js';
-import {
-  ensureExplicitHeaderFooterSlot,
-  normalizeVariant,
-} from '../../../document-api-adapters/helpers/header-footer-slot-materialization.js';
+import { ensureExplicitHeaderFooterSlot } from '../../../document-api-adapters/helpers/header-footer-slot-materialization.js';
+import { normalizeVariant } from './header-footer-variant.js';
 
 // =============================================================================
 // Types
@@ -2350,7 +2348,11 @@ export class HeaderFooterSessionManager {
           const prevSectionIds = multiSectionId.sectionHeaderIds.get(sectionIndex - 1);
           sectionRId = prevSectionIds?.[headerFooterType as keyof typeof prevSectionIds] ?? undefined;
         }
-        if (!sectionRId && headerFooterType !== 'default') {
+        const shouldUseDefaultHeaderRef =
+          headerFooterType !== 'default' &&
+          page.sectionRefs.headerRefs?.default &&
+          (!multiSectionId?.alternateHeaders || headerFooterType === 'odd');
+        if (!sectionRId && shouldUseDefaultHeaderRef) {
           sectionRId = page.sectionRefs.headerRefs?.default;
         }
       } else if (page?.sectionRefs && kind === 'footer') {
@@ -2359,7 +2361,11 @@ export class HeaderFooterSessionManager {
           const prevSectionIds = multiSectionId.sectionFooterIds.get(sectionIndex - 1);
           sectionRId = prevSectionIds?.[headerFooterType as keyof typeof prevSectionIds] ?? undefined;
         }
-        if (!sectionRId && headerFooterType !== 'default') {
+        const shouldUseDefaultFooterRef =
+          headerFooterType !== 'default' &&
+          page.sectionRefs.footerRefs?.default &&
+          (!multiSectionId?.alternateHeaders || headerFooterType === 'odd');
+        if (!sectionRId && shouldUseDefaultFooterRef) {
           sectionRId = page.sectionRefs.footerRefs?.default;
         }
       }

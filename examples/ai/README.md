@@ -2,7 +2,7 @@
 
 Give LLMs structured access to document operations. Each example connects SuperDoc's Document Engine to a cloud AI platform or agent framework — open a doc, let the model review and edit it with tools, save the result.
 
-**Docs:** [Integrations](https://docs.superdoc.dev/document-engine/ai-agents/integrations) · [LLM Tools](https://docs.superdoc.dev/document-engine/ai-agents/llm-tools)
+**Docs:** [Integrations](https://docs.superdoc.dev/ai/agents/integrations) · [LLM Tools](https://docs.superdoc.dev/ai/agents/llm-tools)
 
 ## Cloud platforms
 
@@ -11,6 +11,14 @@ You write the agentic loop and control the conversation directly.
 | Platform | Node.js | Python | Auth |
 |----------|---------|--------|------|
 | [AWS Bedrock](./bedrock) | `index.ts` | `index.py` | AWS credentials (`aws configure`) |
+
+## Streaming
+
+Stream LLM text into a live SuperDoc editor through the Document API.
+
+| Example | What it shows |
+|---------|---------------|
+| [streaming](./streaming) | Token-by-token generation into an in-browser SuperDoc via `editor.doc.insert()`, with a small Node proxy that keeps the OpenAI key server-side |
 
 ## Run
 

@@ -19,6 +19,7 @@ export type RegionConstraints = {
     top?: number;
     bottom?: number;
     header?: number;
+    footer?: number;
   };
 };
 
@@ -49,7 +50,12 @@ function computePhysicalAnchorY(block: ImageBlock | DrawingBlock, fragmentHeight
  * footer-local y=0. This is the top of the bottom margin area.
  */
 function computeFooterBandOrigin(constraints: RegionConstraints): number {
-  return (constraints.pageHeight ?? 0) - (constraints.margins?.bottom ?? 0);
+  const pageHeight = constraints.pageHeight ?? 0;
+  const footerDistance = constraints.margins?.footer;
+  if (typeof footerDistance === 'number' && Number.isFinite(footerDistance)) {
+    return Math.max(0, pageHeight - Math.max(0, footerDistance));
+  }
+  return Math.max(0, pageHeight - (constraints.margins?.bottom ?? 0));
 }
 
 function isAnchoredFragment(fragment: Fragment): boolean {

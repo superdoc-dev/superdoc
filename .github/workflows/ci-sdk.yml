@@ -13,7 +13,6 @@ on:
       - 'scripts/generate-all.mjs'
       - 'package.json'
       - '.github/workflows/ci-sdk.yml'
-  merge_group:
   workflow_dispatch:
 
 concurrency:

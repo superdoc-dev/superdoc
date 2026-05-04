@@ -262,7 +262,7 @@ When forwarding this payload to `POST /v1/sign`, only the following `signer` fie
 | `ip`        | no       | IPv4 address of the signer. Included in the audit trail certificate.        |
 | `userAgent` | no       | Browser user agent string. Included in the audit trail certificate.         |
 
-No other properties are accepted on `signer` — the request is rejected with a validation error if extra keys are sent. For application-specific context (tenantId, contractId, etc.), pass a top-level `metadata` object instead.
+No other properties are accepted on `signer`: the request is rejected with a validation error if extra keys are sent. For application-specific context (tenantId, contractId, etc.), pass a top-level `metadata` object instead.
 
 <Warning>
   Do **not** trust `ip` or `userAgent` values from the browser-submitted payload. Derive them server-side from the incoming request (e.g. `req.ip`, `req.headers['user-agent']`) before forwarding to `/v1/sign`, so the audit trail certificate reflects what your server actually observed.

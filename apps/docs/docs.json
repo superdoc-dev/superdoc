@@ -37,7 +37,7 @@
       {
         "title": "Ask on Discord",
         "description": "Join our support channel",
-        "icon": "discord",
+        "icon": "/public/icons/discord.svg",
         "href": "https://discord.com/channels/1299087524056010902/1299436491839246409"
       }
     ]
@@ -70,36 +70,95 @@
             ]
           },
           {
-            "group": "Core",
+            "group": "Editor",
             "pages": [
               {
                 "group": "SuperDoc",
                 "pages": [
-                  "core/superdoc/overview",
-                  "core/superdoc/configuration",
-                  "core/superdoc/methods",
-                  "core/superdoc/surfaces",
-                  "core/superdoc/events"
-                ]
-              },
-              {
-                "group": "SuperEditor",
-                "pages": [
-                  "core/supereditor/overview",
-                  "core/supereditor/configuration",
-                  "core/supereditor/methods",
-                  "core/supereditor/events"
+                  "editor/superdoc/overview",
+                  "editor/superdoc/configuration",
+                  "editor/superdoc/import-export",
+                  "editor/superdoc/methods",
+                  "editor/superdoc/surfaces",
+                  "editor/superdoc/events"
                 ]
               },
               {
                 "group": "React",
-                "pages": ["core/react/overview", "core/react/configuration", "core/react/methods", "core/react/types"]
+                "pages": [
+                  "editor/react/overview",
+                  "editor/react/configuration",
+                  "editor/react/methods",
+                  "editor/react/types"
+                ]
+              },
+              {
+                "group": "Custom UI",
+                "tag": "NEW",
+                "pages": [
+                  "editor/custom-ui/overview",
+                  "editor/custom-ui/react-setup",
+                  {
+                    "group": "Toolbar and commands",
+                    "pages": ["editor/custom-ui/toolbar-and-commands", "editor/custom-ui/custom-commands"]
+                  },
+                  "editor/custom-ui/comments",
+                  "editor/custom-ui/track-changes",
+                  "editor/custom-ui/selection-and-viewport",
+                  "editor/custom-ui/navigation",
+                  "editor/custom-ui/document-control",
+                  "editor/custom-ui/api-reference"
+                ]
+              },
+              {
+                "group": "Built-in UI",
+                "pages": [
+                  "editor/built-in-ui/overview",
+                  "editor/built-in-ui/comments",
+                  "editor/built-in-ui/track-changes",
+                  "editor/built-in-ui/toolbar",
+                  "editor/built-in-ui/links",
+                  "editor/built-in-ui/context-menu"
+                ]
+              },
+              {
+                "group": "Collaboration",
+                "pages": [
+                  "editor/collaboration/overview",
+                  "editor/collaboration/quickstart",
+                  "editor/collaboration/upgrade-to-collaboration",
+                  "editor/collaboration/configuration",
+                  "editor/collaboration/storage",
+                  {
+                    "group": "Guides",
+                    "pages": [
+                      "guides/collaboration/liveblocks",
+                      "guides/collaboration/superdoc-yjs",
+                      "guides/collaboration/hocuspocus"
+                    ]
+                  }
+                ]
+              },
+              {
+                "group": "Spell check",
+                "pages": ["editor/spell-check/overview", "editor/spell-check/custom-provider"]
+              },
+              {
+                "group": "Theming",
+                "pages": [
+                  "editor/theming/overview",
+                  "editor/theming/custom-themes",
+                  "editor/theming/css-variable-migration"
+                ]
+              },
+              {
+                "group": "PDF",
+                "pages": ["editor/pdf", "editor/pdf/whiteboard"]
               }
             ]
           },
           {
             "group": "Document Engine",
-            "tag": "NEW",
             "pages": [
               "document-engine/overview",
               {
@@ -108,14 +167,13 @@
                   "document-api/overview",
                   "document-api/reference/index",
                   "document-api/common-workflows",
-                  "document-api/available-operations"
+                  "document-api/available-operations",
+                  "document-api/migration"
                 ]
               },
-              {
-                "group": "SDKs",
-                "pages": ["document-engine/sdks", "document-engine/sdk-diffing"]
-              },
-              "document-engine/cli"
+              "document-engine/sdks",
+              "document-engine/cli",
+              "document-engine/diffing"
             ]
           },
           {
@@ -138,37 +196,6 @@
                 ]
               },
               "ai/agents/skills"
-            ]
-          },
-          {
-            "group": "Modules",
-            "pages": [
-              "modules/overview",
-              {
-                "group": "Collaboration",
-                "pages": [
-                  "modules/collaboration/overview",
-                  "modules/collaboration/quickstart",
-                  "modules/collaboration/upgrade-to-collaboration",
-                  "modules/collaboration/configuration"
-                ]
-              },
-              "modules/comments",
-              "modules/track-changes",
-              {
-                "group": "Toolbar",
-                "tag": "NEW",
-                "pages": [
-                  "modules/toolbar/overview",
-                  "modules/toolbar/built-in",
-                  "modules/toolbar/headless",
-                  "modules/toolbar/examples"
-                ]
-              },
-              "modules/links",
-              "modules/context-menu",
-              "modules/pdf",
-              "modules/whiteboard"
             ]
           },
           {
@@ -197,42 +224,16 @@
             ]
           },
           {
-            "group": "Guides",
-            "pages": [
-              "guides/general/storage",
-              "guides/general/stable-navigation",
-              "guides/general/custom-themes",
-              {
-                "group": "Proofing",
-                "pages": ["guides/general/proofing", "guides/general/custom-proofing-provider"]
-              },
-              {
-                "group": "Collaboration",
-                "pages": [
-                  "guides/collaboration/liveblocks",
-                  "guides/collaboration/superdoc-yjs",
-                  "guides/collaboration/hocuspocus"
-                ]
-              },
-              {
-                "group": "Migration",
-                "pages": [
-                  "guides/migration/document-api",
-                  "guides/migration/prosemirror",
-                  "guides/migration/breaking-changes-v1",
-                  "guides/migration/typescript-migration",
-                  "guides/migration/css-variables"
-                ]
-              }
-            ]
-          },
-          {
             "group": "Resources",
             "pages": [
               "guides/general/accessibility",
               "resources/telemetry",
               "guides/general/security",
-              "resources/license"
+              "resources/license",
+              {
+                "group": "Upgrade guides",
+                "pages": ["guides/migration/breaking-changes-v1", "guides/migration/prosemirror"]
+              }
             ]
           }
         ]
@@ -280,25 +281,188 @@
         "href": "https://github.com/superdoc-dev/superdoc"
       },
       {
-        "type": "button",
+        "type": "discord",
         "href": "https://discord.com/invite/b9UuaZRyaB",
-        "label": "Discord",
-        "icon": "discord"
+        "label": "Discord"
       }
     ]
   },
   "banner": {
-    "content": "**Introducing Document Engine** — edit DOCX files from code, CLI, SDKs, or AI agents. [Read the announcement →](https://www.superdoc.dev/changelog/2026-03-22-document-engine)",
+    "content": "**Bring your own editor UI.** Use SuperDoc as the document engine underneath. [Read the announcement →](https://www.superdoc.dev/changelog/2026-05-01-bring-your-own-editor)",
     "dismissible": true
   },
   "redirects": [
     {
-      "source": "/modules/toolbar",
-      "destination": "/modules/toolbar/overview"
+      "source": "/editor/proofing/overview",
+      "destination": "/editor/spell-check/overview"
     },
     {
-      "source": "/getting-started/ai",
-      "destination": "/ai/overview"
+      "source": "/editor/proofing/custom-provider",
+      "destination": "/editor/spell-check/custom-provider"
+    },
+    {
+      "source": "/editor/proofing/:path*",
+      "destination": "/editor/spell-check/:path*"
+    },
+    {
+      "source": "/document-engine/sdk-diffing",
+      "destination": "/document-engine/diffing"
+    },
+    {
+      "source": "/guides/general/storage",
+      "destination": "/editor/collaboration/storage"
+    },
+    {
+      "source": "/guides/general/stable-navigation",
+      "destination": "/editor/custom-ui/navigation"
+    },
+    {
+      "source": "/guides/general/custom-themes",
+      "destination": "/editor/theming/custom-themes"
+    },
+    {
+      "source": "/guides/general/proofing",
+      "destination": "/editor/spell-check/overview"
+    },
+    {
+      "source": "/guides/general/custom-proofing-provider",
+      "destination": "/editor/spell-check/custom-provider"
+    },
+    {
+      "source": "/guides/migration/document-api",
+      "destination": "/document-api/migration"
+    },
+    {
+      "source": "/guides/migration/css-variables",
+      "destination": "/editor/theming/css-variable-migration"
+    },
+    {
+      "source": "/bring-your-own-ui/:path*",
+      "destination": "/editor/custom-ui/:path*"
+    },
+    {
+      "source": "/build-your-own-ui/:path*",
+      "destination": "/editor/custom-ui/:path*"
+    },
+    {
+      "source": "/custom-ui/:path*",
+      "destination": "/editor/custom-ui/:path*"
+    },
+    {
+      "source": "/modules/collaboration/backend",
+      "destination": "/editor/collaboration/configuration"
+    },
+    {
+      "source": "/modules/collaboration/client",
+      "destination": "/editor/collaboration/configuration"
+    },
+    {
+      "source": "/modules/collaboration/cloud/liveblocks",
+      "destination": "/guides/collaboration/liveblocks"
+    },
+    {
+      "source": "/modules/collaboration/self-hosted/superdoc-yjs",
+      "destination": "/guides/collaboration/superdoc-yjs"
+    },
+    {
+      "source": "/modules/collaboration/self-hosted/hocuspocus",
+      "destination": "/guides/collaboration/hocuspocus"
+    },
+    {
+      "source": "/modules/collaboration/self-hosted/overview",
+      "destination": "/guides/collaboration/self-hosted-overview"
+    },
+    {
+      "source": "/modules/collaboration",
+      "destination": "/editor/collaboration/overview"
+    },
+    {
+      "source": "/modules/collaboration/:path*",
+      "destination": "/editor/collaboration/:path*"
+    },
+    {
+      "source": "/modules/toolbar/headless",
+      "destination": "/advanced/headless-toolbar"
+    },
+    {
+      "source": "/modules/toolbar/examples",
+      "destination": "/advanced/headless-toolbar-examples"
+    },
+    {
+      "source": "/modules/toolbar",
+      "destination": "/editor/built-in-ui/toolbar"
+    },
+    {
+      "source": "/modules/toolbar/built-in",
+      "destination": "/editor/built-in-ui/toolbar"
+    },
+    {
+      "source": "/modules/toolbar/overview",
+      "destination": "/editor/built-in-ui/toolbar"
+    },
+    {
+      "source": "/editor/built-in-ui/toolbar/built-in",
+      "destination": "/editor/built-in-ui/toolbar"
+    },
+    {
+      "source": "/editor/built-in-ui/toolbar/overview",
+      "destination": "/editor/built-in-ui/toolbar"
+    },
+    {
+      "source": "/modules/pdf",
+      "destination": "/editor/pdf"
+    },
+    {
+      "source": "/modules/whiteboard",
+      "destination": "/editor/pdf/whiteboard"
+    },
+    {
+      "source": "/editor/built-in-ui/pdf",
+      "destination": "/editor/pdf"
+    },
+    {
+      "source": "/editor/built-in-ui/whiteboard",
+      "destination": "/editor/pdf/whiteboard"
+    },
+    {
+      "source": "/modules",
+      "destination": "/editor/built-in-ui/overview"
+    },
+    {
+      "source": "/modules/:path*",
+      "destination": "/editor/built-in-ui/:path*"
+    },
+    {
+      "source": "/core/superdoc/properties",
+      "destination": "/editor/superdoc/methods#properties"
+    },
+    {
+      "source": "/core/superdoc/types",
+      "destination": "/editor/superdoc/methods#typescript-types"
+    },
+    {
+      "source": "/core/superdoc/:path*",
+      "destination": "/editor/superdoc/:path*"
+    },
+    {
+      "source": "/core/react/:path*",
+      "destination": "/editor/react/:path*"
+    },
+    {
+      "source": "/core/supereditor/hooks",
+      "destination": "/advanced/supereditor/events"
+    },
+    {
+      "source": "/core/supereditor",
+      "destination": "/advanced/supereditor/overview"
+    },
+    {
+      "source": "/core/supereditor/:path*",
+      "destination": "/advanced/supereditor/:path*"
+    },
+    {
+      "source": "/extensions/creating-extensions",
+      "destination": "/advanced/custom-extensions"
     },
     {
       "source": "/getting-started/ai-agents",
@@ -345,18 +509,6 @@
       "destination": "/ai/agents/skills"
     },
     {
-      "source": "/core/superdoc/properties",
-      "destination": "/core/superdoc/methods#properties"
-    },
-    {
-      "source": "/core/superdoc/types",
-      "destination": "/core/superdoc/methods#typescript-types"
-    },
-    {
-      "source": "/core/supereditor/hooks",
-      "destination": "/core/supereditor/events"
-    },
-    {
       "source": "/guide/quick-start",
       "destination": "/getting-started/quickstart"
     },
@@ -366,27 +518,27 @@
     },
     {
       "source": "/guide/modes-roles",
-      "destination": "/core/superdoc/configuration#setting-priority"
+      "destination": "/editor/superdoc/configuration#setting-priority"
     },
     {
       "source": "/guide/components",
-      "destination": "/core/superdoc/overview"
+      "destination": "/editor/superdoc/overview"
     },
     {
       "source": "/guide/field-annotation",
-      "destination": "/core/extensions/field-annotation"
+      "destination": "/extensions/field-annotation"
     },
     {
       "source": "/guide/modules",
-      "destination": "/modules/overview"
+      "destination": "/editor/built-in-ui/overview"
     },
     {
       "source": "/guide/integration",
-      "destination": "/getting-started/installation"
+      "destination": "/getting-started/quickstart"
     },
     {
       "source": "/guide/collaboration",
-      "destination": "/modules/collaboration"
+      "destination": "/editor/collaboration/overview"
     },
     {
       "source": "/guide/accessibility",
@@ -402,7 +554,7 @@
     },
     {
       "source": "/resources/storage",
-      "destination": "/guides/general/storage"
+      "destination": "/editor/collaboration/storage"
     },
     {
       "source": "/resources/migration",
@@ -410,7 +562,7 @@
     },
     {
       "source": "/resources/guides",
-      "destination": "/guides/general"
+      "destination": "/getting-started/introduction"
     },
     {
       "source": "/guide/resources#migrate-from-prosemirror",
@@ -418,39 +570,15 @@
     },
     {
       "source": "/guide/advanced",
-      "destination": "/core/supereditor/overview"
+      "destination": "/advanced/supereditor/overview"
     },
     {
       "source": "/getting-started/ai-ready",
-      "destination": "/getting-started/ai-agents"
+      "destination": "/ai/agents/llm-tools"
     },
     {
       "source": "/api-reference/documents/sign",
-      "destination": "/api-reference/signature/sign"
-    },
-    {
-      "source": "/modules/collaboration/backend",
-      "destination": "/modules/collaboration/configuration"
-    },
-    {
-      "source": "/modules/collaboration/client",
-      "destination": "/modules/collaboration/configuration"
-    },
-    {
-      "source": "/modules/collaboration/cloud/liveblocks",
-      "destination": "/guides/collaboration/liveblocks"
-    },
-    {
-      "source": "/modules/collaboration/self-hosted/superdoc-yjs",
-      "destination": "/guides/collaboration/superdoc-yjs"
-    },
-    {
-      "source": "/modules/collaboration/self-hosted/hocuspocus",
-      "destination": "/guides/collaboration/hocuspocus"
-    },
-    {
-      "source": "/modules/collaboration/self-hosted/overview",
-      "destination": "/guides/collaboration/self-hosted-overview"
+      "destination": "/solutions/esign/api-reference"
     },
     {
       "source": "/extensions/slash-menu",
@@ -458,7 +586,7 @@
     },
     {
       "source": "/extensions/track-changes",
-      "destination": "/modules/track-changes"
+      "destination": "/editor/built-in-ui/track-changes"
     },
     {
       "source": "/guides/breaking-changes-v1",

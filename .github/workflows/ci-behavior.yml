@@ -14,14 +14,58 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  detect:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      behavior: ${{ steps.set.outputs.behavior }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
+        id: filter
+        if: github.event_name == 'pull_request'
+        with:
+          filters: |
+            behavior:
+              - 'packages/super-editor/**'
+              - 'packages/superdoc/**'
+              - 'packages/layout-engine/**'
+              - 'packages/word-layout/**'
+              - 'packages/preset-geometry/**'
+              - 'packages/document-api/**'
+              - 'shared/**'
+              - 'tests/behavior/**'
+              - 'pnpm-lock.yaml'
+              - 'package.json'
+              - 'pnpm-workspace.yaml'
+              - '.nvmrc'
+              - 'tsconfig.base.json'
+              - 'tsconfig.references.json'
+              - 'vite.sourceResolve.ts'
+              - '.github/workflows/ci-behavior.yml'
+
+      - id: set
+        run: |
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            echo "behavior=${{ steps.filter.outputs.behavior }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "behavior=true" >> "$GITHUB_OUTPUT"
+          fi
+
   test:
+    needs: detect
+    if: needs.detect.outputs.behavior == 'true'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        # PRs run chromium only for fast feedback. merge_group and workflow_dispatch
-        # run the full 3-browser matrix before anything lands on main.
-        browser: ${{ fromJSON(github.event_name == 'pull_request' && '["chromium"]' || '["chromium", "firefox", "webkit"]') }}
+        # PRs without behavior-relevant changes are skipped entirely by the
+        # detect gate above. When the suite does run, exercise all 3 browsers
+        # so cross-browser regressions are caught at PR time.
+        browser: [chromium, firefox, webkit]
         shard: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@v6
@@ -68,12 +112,20 @@ jobs:
   validate:
     name: Behavior Tests / validate
     if: always()
-    needs: [test]
+    needs: [detect, test]
     runs-on: ubuntu-latest
     steps:
       - name: Check results
         run: |
-          if [[ "${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped') }}" == "true" ]]; then
-            echo "One or more required jobs did not succeed."
+          if [[ "${{ needs.detect.result }}" != "success" ]]; then
+            echo "Detect job did not succeed (result: ${{ needs.detect.result }})."
+            exit 1
+          fi
+          if [[ "${{ needs.detect.outputs.behavior }}" != "true" ]]; then
+            echo "Behavior tests skipped: no relevant paths changed."
+            exit 0
+          fi
+          if [[ "${{ needs.test.result }}" != "success" ]]; then
+            echo "Behavior tests were required but did not succeed (result: ${{ needs.test.result }})."
             exit 1
           fi

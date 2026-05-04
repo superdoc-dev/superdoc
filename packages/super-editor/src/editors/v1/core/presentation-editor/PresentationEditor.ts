@@ -47,6 +47,11 @@ import { createLayoutMetrics as createLayoutMetricsFromHelper } from './layout/P
 import { buildFootnotesInput, type NoteRenderOverride } from './layout/FootnotesBuilder.js';
 import { safeCleanup } from './utils/SafeCleanup.js';
 import { createHiddenHost } from './dom/HiddenHost.js';
+import {
+  elementsToRangeRects,
+  findRenderedCommentElements,
+  findRenderedTrackedChangeElementsStrict,
+} from './dom/EntityRectFinder.js';
 import { RemoteCursorManager, type RenderDependencies } from './remote-cursors/RemoteCursorManager.js';
 import { EditorInputManager } from './pointer-events/EditorInputManager.js';
 import { SelectionSyncCoordinator } from './selection/SelectionSyncCoordinator.js';
@@ -241,14 +246,20 @@ import type {
   DocumentApi,
   NavigableAddress,
   BlockNavigationAddress,
+  BookmarkAddress,
   StoryLocator,
 } from '@superdoc/document-api';
 import { isStoryLocator } from '@superdoc/document-api';
 import { getBlockIndex } from '../../document-api-adapters/helpers/index-cache.js';
 import { findBlockByNodeIdOnly, findBlockById } from '../../document-api-adapters/helpers/node-address-resolver.js';
+import {
+  findAllBookmarksInDocument,
+  resolveBookmarkTarget,
+} from '../../document-api-adapters/helpers/bookmark-resolver.js';
 import { resolveTrackedChange } from '../../document-api-adapters/helpers/tracked-change-resolver.js';
 import { makeTrackedChangeAnchorKey } from '../../document-api-adapters/helpers/tracked-change-runtime-ref.js';
 import { getTrackedChangeIndex } from '../../document-api-adapters/tracked-changes/tracked-change-index.js';
+import { normalizeVariant } from './header-footer/header-footer-variant.js';
 import type { SelectionHandle } from '../selection-state.js';
 
 const DOCUMENT_RELS_PART_ID = 'word/_rels/document.xml.rels';
@@ -1637,8 +1648,6 @@ export class PresentationEditor extends EventEmitter {
    * them safe to run multiple times.
    *
    * No-op when unified history is disabled.
-   *
-   * @see plans/unified-history.md § Phase 4
    */
   recordHistoryBatch(batch: BatchHistoryRecord): void {
     this.#historyCoordinator?.withHistoryBatch(batch);
@@ -2118,6 +2127,56 @@ export class PresentationEditor extends EventEmitter {
       bounds,
       pageIndex: rects[0]?.pageIndex ?? 0,
     };
+  }
+
+  /**
+   * Viewport-coords rect lookup for an entity (comment / tracked
+   * change) painted in the editor surface. Drives the
+   * `superdoc/ui` `ui.viewport.getRect` substrate so consumers can
+   * pin sticky cards / floating toolbars next to inline highlights
+   * without reaching into DOM, PM positions, or painter selectors.
+   *
+   * Returns plain value rects (not live `DOMRect`) in viewport
+   * coordinates. An empty array means the entity isn't currently
+   * painted — virtualized page, story not active, or id not present
+   * in the document. Callers can choose to scroll first then retry,
+   * or render the card detached.
+   *
+   * @param target - The entity to locate. `entityType` is one of
+   *                 `'comment'` or `'trackedChange'`. `story` is
+   *                 optional; when provided, results are filtered to
+   *                 that story so an id that exists in body and a
+   *                 footer doesn't return rects from both.
+   */
+  getEntityRects(target: { entityType?: unknown; entityId?: unknown; story?: unknown }): RangeRect[] {
+    if (!target || typeof target !== 'object') return [];
+    const entityType = target.entityType;
+    const entityId = target.entityId;
+    if (typeof entityType !== 'string' || typeof entityId !== 'string' || entityId.length === 0) {
+      return [];
+    }
+    const host = this.#visibleHost;
+    if (!host) return [];
+    const storyKey = resolveStoryKeyFromAddress(target.story);
+    let elements: HTMLElement[];
+    if (entityType === 'trackedChange') {
+      // Use a strict story filter for the viewport read path. The
+      // navigation helper `#findRenderedTrackedChangeElements` falls
+      // back to all same-id matches when no exact story match wins a
+      // heuristic — that's correct for "scroll to this change", but
+      // wrong here: a sticky card asked to anchor a header/footer
+      // change must not silently anchor to a body copy of the same
+      // id. Empty result when the requested story has no painted copy
+      // is the correct signal — the UI controller maps it to
+      // `not-mounted` so the consumer can pre-mount via
+      // `viewport.scrollIntoView` and retry.
+      elements = findRenderedTrackedChangeElementsStrict(host, entityId, escapeAttrValue, storyKey);
+    } else if (entityType === 'comment') {
+      elements = findRenderedCommentElements(host, entityId, storyKey);
+    } else {
+      return [];
+    }
+    return elementsToRangeRects(elements);
   }
 
   #getThreadSelectionBounds(
@@ -5271,8 +5330,8 @@ export class PresentationEditor extends EventEmitter {
   // ===========================================================================
   // Unified History Coordinator (enabled by default; explicit false disables)
   //
-  // See plans/unified-history.md. When the kill-switch is off, these helpers are
-  // no-ops so the legacy active-editor-first routing stays intact.
+  // When the kill-switch is off, these helpers are no-ops so the legacy
+  // active-editor-first routing stays intact.
   // ===========================================================================
 
   #isUnifiedHistoryEnabled(): boolean {
@@ -7253,6 +7312,10 @@ export class PresentationEditor extends EventEmitter {
         top: marginTop,
         bottom: marginBottom,
         header: headerMargin,
+        // Only set footer when the source defines w:footer. Defaulting to 0 here
+        // would defeat the bottom-margin fallback in computeFooterBandOrigin
+        // (typeof 0 === 'number' passes the check, returning pageHeight - 0).
+        ...(margins.footer != null ? { footer: footerMargin } : {}),
       },
       overflowBaseHeight,
     };
@@ -8053,26 +8116,37 @@ export class PresentationEditor extends EventEmitter {
   /**
    * Navigate to a typed document element address.
    *
-   * @param target - Typed address: block (nodeId), comment (entityId), or tracked change (entityId).
+   * @param target - Typed address: block, bookmark, comment, or tracked change.
+   * @param options - Scroll options forwarded to the underlying scroll path.
+   *   `behavior` defaults to `'auto'` so existing internal callers keep their
+   *   instant-scroll behavior; the `superdoc/ui` viewport surface opts into
+   *   `'smooth'` at its own boundary. `block` defaults to `'center'`.
    * @returns Promise resolving to true if navigation succeeded.
    */
-  async navigateTo(target: NavigableAddress): Promise<boolean> {
+  async navigateTo(
+    target: NavigableAddress,
+    options: { behavior?: ScrollBehavior; block?: 'start' | 'center' | 'end' | 'nearest' } = {},
+  ): Promise<boolean> {
     if (!target) return false;
 
     try {
       if (target.kind === 'block') {
-        return await this.#navigateToBlock(target);
+        return await this.#navigateToBlock(target, options);
       }
 
       if (target.kind === 'entity') {
+        if (target.entityType === 'bookmark') {
+          return await this.#navigateToBookmark(target);
+        }
         if (target.entityType === 'comment') {
-          return await this.#navigateToComment(target.entityId);
+          return await this.#navigateToComment(target.entityId, options);
         }
         if (target.entityType === 'trackedChange') {
           return await this.#navigateToTrackedChange(
             target.entityId,
             resolveStoryKeyFromAddress(target.story),
             target.pageIndex,
+            options,
           );
         }
       }
@@ -8085,7 +8159,10 @@ export class PresentationEditor extends EventEmitter {
     }
   }
 
-  async #navigateToBlock(target: BlockNavigationAddress): Promise<boolean> {
+  async #navigateToBlock(
+    target: BlockNavigationAddress,
+    options: { behavior?: ScrollBehavior; block?: 'start' | 'center' | 'end' | 'nearest' } = {},
+  ): Promise<boolean> {
     const editor = this.#editor;
     if (!editor) return false;
 
@@ -8103,7 +8180,7 @@ export class PresentationEditor extends EventEmitter {
     }
 
     if (!candidate) return false;
-    return this.#scrollToBlockCandidate(editor, candidate);
+    return this.#scrollToBlockCandidate(editor, candidate, options);
   }
 
   /**
@@ -8115,7 +8192,11 @@ export class PresentationEditor extends EventEmitter {
    * generate layout fragments. We walk the block's children to find the
    * first inline node with text content (typically a `run` node).
    */
-  async #scrollToBlockCandidate(editor: Editor, candidate: { pos: number }): Promise<boolean> {
+  async #scrollToBlockCandidate(
+    editor: Editor,
+    candidate: { pos: number },
+    options: { behavior?: ScrollBehavior; block?: 'start' | 'center' | 'end' | 'nearest' } = {},
+  ): Promise<boolean> {
     const blockNode = editor.state.doc.nodeAt(candidate.pos);
     let contentPos = candidate.pos + 1;
     if (blockNode) {
@@ -8128,8 +8209,8 @@ export class PresentationEditor extends EventEmitter {
     }
 
     const scrolled = await this.scrollToPositionAsync(contentPos, {
-      behavior: 'auto',
-      block: 'center',
+      behavior: options.behavior ?? 'auto',
+      block: options.block ?? 'center',
     });
     if (!scrolled) return false;
 
@@ -8138,7 +8219,10 @@ export class PresentationEditor extends EventEmitter {
     return true;
   }
 
-  async #navigateToComment(entityId: string): Promise<boolean> {
+  async #navigateToComment(
+    entityId: string,
+    options: { behavior?: ScrollBehavior; block?: 'start' | 'center' | 'end' | 'nearest' } = {},
+  ): Promise<boolean> {
     const editor = this.#editor;
     if (!editor) return false;
 
@@ -8151,13 +8235,55 @@ export class PresentationEditor extends EventEmitter {
 
     // Scroll the viewport — setCursorById places the cursor but doesn't
     // scroll in presentation mode where DomPainter renders the output.
-    await this.scrollToPositionAsync(editor.state.selection.from, { behavior: 'auto', block: 'center' });
+    await this.scrollToPositionAsync(editor.state.selection.from, {
+      behavior: options.behavior ?? 'auto',
+      block: options.block ?? 'center',
+    });
     return true;
   }
 
-  async #navigateToTrackedChange(entityId: string, storyKey?: string, preferredPageIndex?: number): Promise<boolean> {
+  async #navigateToBookmark(target: BookmarkAddress): Promise<boolean> {
     const editor = this.#editor;
     if (!editor) return false;
+
+    let storyKey = resolveStoryKeyFromAddress(target.story);
+
+    if (!storyKey) {
+      const entry = findAllBookmarksInDocument(editor).find((bookmark) => bookmark.name === target.name);
+      if (!entry) {
+        return false;
+      }
+      storyKey = entry.storyKey;
+    }
+
+    if (!storyKey || storyKey === BODY_STORY_KEY) {
+      this.exitActiveStorySurface();
+      return await this.goToAnchor(target.name);
+    }
+
+    if (this.#navigateToActiveStoryBookmark(target.name, storyKey)) {
+      return true;
+    }
+
+    const activatedStoryKey = await this.#activateBookmarkStorySurface(storyKey);
+    if (activatedStoryKey) {
+      return this.#navigateToActiveStoryBookmark(target.name, activatedStoryKey);
+    }
+
+    return false;
+  }
+
+  async #navigateToTrackedChange(
+    entityId: string,
+    storyKey?: string,
+    preferredPageIndex?: number,
+    options: { behavior?: ScrollBehavior; block?: 'start' | 'center' | 'end' | 'nearest' } = {},
+  ): Promise<boolean> {
+    const editor = this.#editor;
+    if (!editor) return false;
+
+    const behavior = options.behavior ?? 'auto';
+    const block = options.block ?? 'center';
 
     if (storyKey && storyKey !== BODY_STORY_KEY) {
       if (this.#navigateToActiveStoryTrackedChange(entityId, storyKey)) {
@@ -8170,35 +8296,35 @@ export class PresentationEditor extends EventEmitter {
         }
       }
 
-      return this.#scrollToRenderedTrackedChange(entityId, storyKey, preferredPageIndex);
+      return this.#scrollToRenderedTrackedChange(entityId, storyKey, preferredPageIndex, { behavior, block });
     }
 
     const setCursorById = editor.commands?.setCursorById;
 
     // Try direct cursor placement, then scroll to the new selection.
     if (typeof setCursorById === 'function' && setCursorById(entityId, { preferredActiveThreadId: entityId })) {
-      await this.scrollToPositionAsync(editor.state.selection.from, { behavior: 'auto', block: 'center' });
+      await this.scrollToPositionAsync(editor.state.selection.from, { behavior, block });
       return true;
     }
 
     // Fall back to resolving the tracked change position and scrolling.
     const resolved = resolveTrackedChange(editor, entityId);
     if (!resolved) {
-      return this.#scrollToRenderedTrackedChange(entityId, undefined, preferredPageIndex);
+      return this.#scrollToRenderedTrackedChange(entityId, undefined, preferredPageIndex, { behavior, block });
     }
 
     // Try with the raw ID (tracked changes may use a different internal ID).
     if (typeof setCursorById === 'function' && resolved.rawId !== entityId) {
       if (setCursorById(resolved.rawId, { preferredActiveThreadId: resolved.rawId })) {
-        await this.scrollToPositionAsync(editor.state.selection.from, { behavior: 'auto', block: 'center' });
+        await this.scrollToPositionAsync(editor.state.selection.from, { behavior, block });
         return true;
       }
     }
 
     // Last resort: scroll to position directly.
     const scrolled = await this.scrollToPositionAsync(resolved.from, {
-      behavior: 'auto',
-      block: 'center',
+      behavior,
+      block,
     });
     if (!scrolled) return false;
 
@@ -8287,6 +8413,209 @@ export class PresentationEditor extends EventEmitter {
     return this.#getActiveTrackedChangeStorySurface()?.storyKey === storyKey;
   }
 
+  async #activateBookmarkStorySurface(storyKey: string): Promise<string | null> {
+    let locator: StoryLocator | null = null;
+    try {
+      locator = parseStoryKey(storyKey);
+    } catch {
+      return null;
+    }
+
+    if (!locator || locator.storyType === 'body') {
+      return null;
+    }
+
+    if (locator.storyType === 'footnote' || locator.storyType === 'endnote') {
+      return this.#activateBookmarkNoteStorySurface(locator);
+    }
+
+    if (locator.storyType === 'headerFooterPart' || locator.storyType === 'headerFooterSlot') {
+      return this.#activateBookmarkHeaderFooterSurface(locator);
+    }
+
+    return null;
+  }
+
+  async #activateBookmarkNoteStorySurface(
+    locator: Extract<StoryLocator, { storyType: 'footnote' | 'endnote' }>,
+  ): Promise<string | null> {
+    const targetContext = this.#buildNoteLayoutContext({
+      storyType: locator.storyType,
+      noteId: locator.noteId,
+    });
+
+    if ((this.#headerFooterSession?.session?.mode ?? 'body') !== 'body') {
+      this.#headerFooterSession?.exitMode();
+    }
+
+    const firstPageIndex = targetContext?.firstPageIndex ?? 0;
+    const hostWidthPx = targetContext?.hostWidthPx ?? Math.max(1, this.#visibleHost?.clientWidth ?? 1);
+
+    this.#scrollPageIntoView(firstPageIndex);
+
+    const totalPageCount = this.#layoutState.layout?.pages?.length ?? 1;
+    const pageNumber = Math.max(1, firstPageIndex + 1);
+
+    this.#ensureStorySessionManager().activate(locator, {
+      commitPolicy: 'onExit',
+      preferHiddenHost: true,
+      hostWidthPx,
+      editorContext: {
+        currentPageNumber: pageNumber,
+        totalPageCount: Math.max(1, totalPageCount),
+        surfaceKind: locator.storyType === 'endnote' ? 'endnote' : 'note',
+      },
+    });
+
+    const storyKey = buildStoryKey(locator);
+    return (await this.#waitForTrackedChangeStorySurface(storyKey)) ? storyKey : null;
+  }
+
+  async #activateBookmarkHeaderFooterSurface(
+    locator: Extract<StoryLocator, { storyType: 'headerFooterPart' | 'headerFooterSlot' }>,
+  ): Promise<string | null> {
+    const region = this.#findHeaderFooterRegionForBookmarkLocator(locator);
+    const expectedRefId =
+      locator.storyType === 'headerFooterPart'
+        ? locator.refId
+        : region
+          ? this.#resolveBookmarkHeaderFooterRefId(region, locator)
+          : null;
+
+    if (!region || !expectedRefId) {
+      return null;
+    }
+
+    this.#scrollPageIntoView(region.pageIndex);
+    await this.#waitForPageMount(region.pageIndex, { timeout: PresentationEditor.ANCHOR_NAV_TIMEOUT_MS });
+
+    const activeEditor = await this.#headerFooterSession?.activateRegion(region, {
+      initialSelection: 'defer',
+    });
+    if (!activeEditor) {
+      return null;
+    }
+
+    return buildStoryKey({
+      kind: 'story',
+      storyType: 'headerFooterPart',
+      refId: expectedRefId,
+    });
+  }
+
+  #resolveBookmarkHeaderFooterRefId(
+    region: HeaderFooterRegion,
+    locator: Extract<StoryLocator, { storyType: 'headerFooterSlot' }>,
+  ): string | null {
+    if (region.headerFooterRefId) {
+      return region.headerFooterRefId;
+    }
+
+    const page = this.#layoutState.layout?.pages?.[region.pageIndex];
+    if (!page) {
+      return null;
+    }
+
+    const refCollection =
+      locator.headerFooterKind === 'header' ? page.sectionRefs?.headerRefs : page.sectionRefs?.footerRefs;
+    if (!refCollection) {
+      return null;
+    }
+
+    const normalizedRegionVariant = region.sectionType ? normalizeVariant(region.sectionType) : null;
+    const candidates = [region.sectionType, normalizedRegionVariant, locator.variant].filter(
+      (variant): variant is string => typeof variant === 'string' && variant.length > 0,
+    );
+
+    for (const variant of candidates) {
+      const refId = refCollection[variant as keyof typeof refCollection];
+      if (typeof refId === 'string' && refId.length > 0) {
+        return refId;
+      }
+    }
+
+    return null;
+  }
+
+  #findHeaderFooterRegionForBookmarkLocator(
+    locator: Extract<StoryLocator, { storyType: 'headerFooterPart' | 'headerFooterSlot' }>,
+  ): HeaderFooterRegion | null {
+    const manager = this.#headerFooterSession;
+    if (!manager) {
+      return null;
+    }
+
+    const searchRegions =
+      locator.storyType === 'headerFooterSlot'
+        ? locator.headerFooterKind === 'header'
+          ? manager.headerRegions
+          : manager.footerRegions
+        : new Map([...manager.headerRegions.entries(), ...manager.footerRegions.entries()]);
+
+    for (const region of searchRegions.values()) {
+      if (locator.storyType === 'headerFooterPart') {
+        if (region.headerFooterRefId === locator.refId) {
+          return region;
+        }
+        continue;
+      }
+
+      if (region.sectionId !== locator.section.sectionId) {
+        continue;
+      }
+
+      if (region.sectionType && normalizeVariant(region.sectionType) !== locator.variant) {
+        continue;
+      }
+
+      return region;
+    }
+
+    if (locator.storyType === 'headerFooterPart') {
+      const layout = this.#layoutState.layout;
+      if (!layout) {
+        return null;
+      }
+
+      for (let pageIndex = 0; pageIndex < layout.pages.length; pageIndex += 1) {
+        const page = layout.pages[pageIndex];
+        const headerRefs = Object.values(page.sectionRefs?.headerRefs ?? {});
+        if (headerRefs.includes(locator.refId)) {
+          return manager.getRegionForPage('header', pageIndex) ?? manager.findRegionForPage('header', pageIndex);
+        }
+
+        const footerRefs = Object.values(page.sectionRefs?.footerRefs ?? {});
+        if (footerRefs.includes(locator.refId)) {
+          return manager.getRegionForPage('footer', pageIndex) ?? manager.findRegionForPage('footer', pageIndex);
+        }
+      }
+    }
+
+    return null;
+  }
+
+  #navigateToActiveStoryBookmark(name: string, storyKey: string): boolean {
+    const activeSurface = this.#getActiveTrackedChangeStorySurface();
+    if (!activeSurface || activeSurface.storyKey !== storyKey) {
+      return false;
+    }
+
+    let resolved;
+    try {
+      resolved = resolveBookmarkTarget(activeSurface.editor.state.doc, {
+        kind: 'entity',
+        entityType: 'bookmark',
+        name,
+      });
+    } catch {
+      return false;
+    }
+
+    activeSurface.editor.commands?.setTextSelection?.({ from: resolved.pos, to: resolved.pos });
+    this.#focusAndRevealActiveStorySelection(activeSurface.editor);
+    return true;
+  }
+
   #navigateToActiveStoryTrackedChange(entityId: string, storyKey: string): boolean {
     const activeSurface = this.#getActiveTrackedChangeStorySurface();
     if (!activeSurface || activeSurface.storyKey !== storyKey) {
@@ -8349,6 +8678,7 @@ export class PresentationEditor extends EventEmitter {
     entityId: string,
     storyKey?: string,
     preferredPageIndex?: number,
+    options: { behavior?: ScrollBehavior; block?: 'start' | 'center' | 'end' | 'nearest' } = {},
   ): Promise<boolean> {
     const candidate = this.#findRenderedTrackedChangeElement(entityId, storyKey, preferredPageIndex);
     if (!candidate) {
@@ -8356,7 +8686,11 @@ export class PresentationEditor extends EventEmitter {
     }
 
     try {
-      candidate.scrollIntoView({ behavior: 'auto', block: 'center', inline: 'nearest' });
+      candidate.scrollIntoView({
+        behavior: options.behavior ?? 'auto',
+        block: options.block ?? 'center',
+        inline: 'nearest',
+      });
       return true;
     } catch {
       return false;
@@ -8398,6 +8732,17 @@ export class PresentationEditor extends EventEmitter {
         blocks: this.#layoutState.blocks,
         measures: this.#layoutState.measures,
         bookmarks: this.#layoutState.bookmarks,
+        resolveAnchorPosition: (name) => {
+          try {
+            return resolveBookmarkTarget(this.#editor.state.doc, {
+              kind: 'entity',
+              entityType: 'bookmark',
+              name,
+            }).pos;
+          } catch {
+            return null;
+          }
+        },
         pageGeometryHelper: this.#pageGeometryHelper ?? undefined,
         painterHost: this.#painterHost,
         scrollContainer: this.#scrollContainer ?? this.#visibleHost,

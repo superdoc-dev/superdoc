@@ -12,6 +12,7 @@ vi.mock('@helpers/list-numbering-helpers.js', () => ({
     generateNewListDefinition: vi.fn(),
     getListDefinitionDetails: vi.fn(() => null),
   },
+  markerTextToBulletStyle: vi.fn((m) => ({ '•': 'disc', '◦': 'circle', '▪': 'square' })[m] ?? null),
 }));
 
 vi.mock('@extensions/paragraph/resolvedPropertiesCache.js', () => ({
@@ -181,6 +182,8 @@ describe('toggleList', () => {
       numId: 42,
       listType: 'orderedList',
       editor,
+      bulletStyle: undefined,
+      bulletStyleLevel: 0,
     });
     const expectedNumbering = { numId: 42, ilvl: 0 };
     for (const [index, { node, pos }] of paragraphs.entries()) {
@@ -212,6 +215,8 @@ describe('toggleList', () => {
       numId: 99,
       listType: 'orderedList',
       editor,
+      bulletStyle: undefined,
+      bulletStyleLevel: 0,
     });
     expect(dispatch).toHaveBeenCalledWith(tr);
   });
@@ -341,5 +346,106 @@ describe('toggleList', () => {
     expect(result).toBe(true);
     expect(updateNumberingProperties).not.toHaveBeenCalled();
     expect(ListHelpers.generateNewListDefinition).not.toHaveBeenCalled();
+  });
+
+  describe('with bulletStyle argument', () => {
+    it('forwards bulletStyle into generateNewListDefinition on the create path', () => {
+      ListHelpers.getNewListId.mockReturnValue('5');
+      const paragraphs = [createParagraph({ paragraphProperties: {} }, 1)];
+      const state = createState(paragraphs);
+      const handler = toggleList('bulletList', 'square');
+
+      const result = handler({ editor, state, tr, dispatch });
+
+      expect(result).toBe(true);
+      expect(ListHelpers.generateNewListDefinition).toHaveBeenCalledWith({
+        numId: 5,
+        listType: 'bulletList',
+        editor,
+        bulletStyle: 'square',
+        bulletStyleLevel: 0,
+      });
+    });
+
+    it('removes the list when paragraph already matches the requested bulletStyle', () => {
+      ListHelpers.getListDefinitionDetails.mockReturnValue({ listNumberingType: 'bullet' });
+      const paragraphs = [
+        createParagraph(
+          {
+            paragraphProperties: { numberingProperties: { numId: 5, ilvl: 0 } },
+            listRendering: { numberingType: 'bullet', markerText: '◦' },
+          },
+          1,
+        ),
+      ];
+      const state = createState(paragraphs);
+      const handler = toggleList('bulletList', 'circle');
+
+      const result = handler({ editor, state, tr, dispatch });
+
+      expect(result).toBe(true);
+      // Marker matches requested style → removal path, no new definition.
+      expect(updateNumberingProperties).toHaveBeenCalledWith(null, paragraphs[0].node, paragraphs[0].pos, editor, tr);
+      expect(ListHelpers.generateNewListDefinition).not.toHaveBeenCalled();
+    });
+
+    it('takes the create path with a fresh numId when swapping to a different bulletStyle', () => {
+      ListHelpers.getListDefinitionDetails.mockReturnValue({ listNumberingType: 'bullet' });
+      ListHelpers.getNewListId.mockReturnValue('99');
+      const paragraphs = [
+        createParagraph(
+          {
+            paragraphProperties: { numberingProperties: { numId: 5, ilvl: 0 } },
+            listRendering: { numberingType: 'bullet', markerText: '•' },
+          },
+          1,
+        ),
+      ];
+      const state = createState(paragraphs);
+      const handler = toggleList('bulletList', 'square');
+
+      const result = handler({ editor, state, tr, dispatch });
+
+      expect(result).toBe(true);
+      // Existing disc marker doesn't match 'square' → predicate fails → create path mints new numId.
+      expect(ListHelpers.getNewListId).toHaveBeenCalledWith(editor);
+      expect(ListHelpers.generateNewListDefinition).toHaveBeenCalledWith({
+        numId: 99,
+        listType: 'bulletList',
+        editor,
+        bulletStyle: 'square',
+        bulletStyleLevel: 0,
+      });
+      // Paragraph migrates to the new numId.
+      expect(updateNumberingProperties).toHaveBeenCalledWith(
+        { numId: 99, ilvl: 0 },
+        paragraphs[0].node,
+        paragraphs[0].pos,
+        editor,
+        tr,
+      );
+    });
+
+    it('falls back to type-only matching when no bulletStyle is requested', () => {
+      ListHelpers.getListDefinitionDetails.mockReturnValue({ listNumberingType: 'bullet' });
+      const paragraphs = [
+        createParagraph(
+          {
+            paragraphProperties: { numberingProperties: { numId: 5, ilvl: 0 } },
+            listRendering: { numberingType: 'bullet', markerText: '▪' },
+          },
+          1,
+        ),
+      ];
+      const state = createState(paragraphs);
+      // No style argument: any bullet marker should be treated as "already a bullet list".
+      const handler = toggleList('bulletList');
+
+      const result = handler({ editor, state, tr, dispatch });
+
+      expect(result).toBe(true);
+      expect(updateNumberingProperties).toHaveBeenCalledWith(null, paragraphs[0].node, paragraphs[0].pos, editor, tr);
+      expect(ListHelpers.generateNewListDefinition).not.toHaveBeenCalled();
+    });
   });
 });

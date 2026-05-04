@@ -122,12 +122,11 @@ import type {
   SelectionApi,
   SelectionInfo,
   SelectionCurrentInput,
-  SelectionChangeListener,
   TextTarget,
   TextAddress,
   TextSegment,
 
-  // Ranges — scrollIntoView
+  // Viewport scroll (now exposed via ui.viewport.scrollIntoView)
   ScrollIntoViewInput,
   ScrollIntoViewOutput,
   EntityAddress,
@@ -321,8 +320,11 @@ function testPresentationEditorCommands(pe: PresentationEditor) {
   // Track changes
   pe.commands.enableTrackChanges();
   pe.commands.disableTrackChanges();
-  pe.commands.acceptTrackedChange();
-  pe.commands.rejectTrackedChange();
+  // Selection-based variants need no arguments. The `acceptTrackedChange`
+  // and `rejectTrackedChange` commands take an explicit TrackedChangeOptions
+  // payload; consumer code typically reaches for the selection variants here.
+  pe.commands.acceptTrackedChangeBySelection();
+  pe.commands.rejectTrackedChangeOnSelection();
 }
 
 // ============================================
@@ -440,6 +442,7 @@ function testPresentationEditorMethods(pe: PresentationEditor) {
   pe.scrollToElement('paraId-ABC123');
   pe.navigateTo({ kind: 'block', nodeId: 'paraId-ABC123' });
   pe.navigateTo({ kind: 'block', nodeId: 'paraId-ABC123', nodeType: 'paragraph' });
+  pe.navigateTo({ kind: 'entity', entityType: 'bookmark', name: 'bookmark-1' });
   pe.navigateTo({ kind: 'entity', entityType: 'comment', entityId: 'comment-1' });
   pe.navigateTo({ kind: 'entity', entityType: 'trackedChange', entityId: 'tc-1' });
 
@@ -481,23 +484,21 @@ function testSelectionAPI(pe: PresentationEditor) {
 }
 
 // ============================================
-// SECTION 8c: Document API — ranges.scrollIntoView
+// SECTION 8c: Viewport scroll — `ui.viewport.scrollIntoView`
 // ============================================
 
 /**
- * Smoke test for `editor.doc.ranges.scrollIntoView`. Consumers need to
- * construct all three target shapes (TextAddress, TextTarget, EntityAddress)
- * and await the returned Promise. The function is type-checked only —
- * it is not called at runtime.
+ * Type-only smoke test for `ui.viewport.scrollIntoView`. Consumers
+ * construct `ScrollIntoViewInput` (TextAddress, TextTarget, or
+ * EntityAddress) and pass it to the viewport handle, which returns
+ * `Promise<ScrollIntoViewOutput>`.
  */
-async function testRangesScrollIntoView(editor: Editor) {
-  const api = (editor as any).doc.ranges as {
-    scrollIntoView(input: ScrollIntoViewInput): Promise<ScrollIntoViewOutput>;
-  };
-
+async function testViewportScrollIntoView(viewport: {
+  scrollIntoView(input: ScrollIntoViewInput): Promise<ScrollIntoViewOutput>;
+}) {
   // TextAddress — single-block target.
   const textAddress: TextAddress = { kind: 'text', blockId: 'p1', range: { start: 0, end: 10 } };
-  const resTextAddr: ScrollIntoViewOutput = await api.scrollIntoView({ target: textAddress });
+  const resTextAddr: ScrollIntoViewOutput = await viewport.scrollIntoView({ target: textAddress });
   const successA: boolean = resTextAddr.success;
   void successA;
 
@@ -507,7 +508,7 @@ async function testRangesScrollIntoView(editor: Editor) {
     kind: 'text',
     segments: [seg, { blockId: 'p2', range: { start: 0, end: 3 } }],
   };
-  const resTextTarget: ScrollIntoViewOutput = await api.scrollIntoView({
+  const resTextTarget: ScrollIntoViewOutput = await viewport.scrollIntoView({
     target: textTarget,
     block: 'start',
     behavior: 'auto',
@@ -521,8 +522,8 @@ async function testRangesScrollIntoView(editor: Editor) {
     entityType: 'trackedChange',
     entityId: 'tc_1',
   };
-  await api.scrollIntoView({ target: commentAddr, behavior: 'smooth' });
-  await api.scrollIntoView({ target: trackedAddr, block: 'center' });
+  await viewport.scrollIntoView({ target: commentAddr, behavior: 'smooth' });
+  await viewport.scrollIntoView({ target: trackedAddr, block: 'center' });
 
   // Construct a full input object and pass it through — verifies the
   // combined type compiles for consumers who build inputs programmatically.
@@ -531,7 +532,7 @@ async function testRangesScrollIntoView(editor: Editor) {
     block: 'nearest',
     behavior: 'auto',
   };
-  await api.scrollIntoView(fullInput);
+  await viewport.scrollIntoView(fullInput);
 }
 
 // ============================================
@@ -593,19 +594,10 @@ function testDocSelectionPrimitives(editor: Editor) {
   void ta;
   void tt;
 
-  // Subscription: onChange returns an unsubscribe. Listener receives
-  // a SelectionInfo. The parameter is annotated explicitly because
-  // document-api types are surfaced via ambient `any` shims in the
-  // published package (workspace-package privacy), so type inference
-  // through SelectionChangeListener collapses to implicit any.
-  const listener: SelectionChangeListener = (next: SelectionInfo) => {
-    const nextTarget: TextTarget | null = next.target;
-    void nextTarget;
-  };
-  const unsubscribe: () => void = api.onChange(listener);
-  unsubscribe();
-
-  // The exported SelectionCurrentInput type is the argument shape.
+  // The Document API contract is request/response: `current()` is
+  // the read primitive. For change subscriptions, use the
+  // `superdoc/ui` selector substrate
+  // (`createSuperDocUI({ superdoc }).select(s => s.selection, ...)`).
   const input: SelectionCurrentInput = { includeText: true };
   api.current(input);
 }
@@ -846,6 +838,199 @@ function testVueComponents() {
   const slashMenu = SlashMenu;
 }
 
+// ============================================
+// SECTION 18: superdoc/ui sub-entry — `createSuperDocUI({ superdoc })`
+// ============================================
+
+/**
+ * Type-level smoke test for the published `superdoc/ui` sub-entry.
+ *
+ * Mirrors the `superdoc/headless-toolbar` shim pattern: this module
+ * is a thin re-export of the browser-only UI controller from
+ * `@superdoc/super-editor`. Without a consumer-perspective import,
+ * the published sub-entry would only be type-checked from inside the
+ * monorepo and a broken re-export could ship undetected.
+ */
+import {
+  BUILT_IN_COMMAND_IDS,
+  createSuperDocUI,
+  shallowEqual,
+  type CommentAddress as UICommentAddress,
+  type CommentInfo as UICommentInfo,
+  type CommentsHandle,
+  type CommentsListQuery as UICommentsListQuery,
+  type CommentsListResult as UICommentsListResult,
+  type CommentsSlice,
+  type EntityAddress as UIEntityAddress,
+  type EqualityFn,
+  type Receipt as UIReceipt,
+  type ScrollIntoViewInput as UIScrollIntoViewInput,
+  type ScrollIntoViewOutput as UIScrollIntoViewOutput,
+  type SelectionInfo as UISelectionInfo,
+  type SelectionSlice,
+  type SelectorFn,
+  type Subscribable,
+  type SuperDocEditorLike,
+  type SuperDocLike,
+  type SuperDocUI,
+  type SuperDocUIOptions,
+  type SuperDocUIState,
+  type TextTarget as UITextTarget,
+  type TrackChangeInfo as UITrackChangeInfo,
+  type TrackChangesHandle,
+  type TrackChangesItem,
+  type TrackChangesListResult as UITrackChangesListResult,
+  type TrackChangesSlice,
+  type TrackedChangeAddress as UITrackedChangeAddress,
+  type ViewportGetRectInput,
+  type ViewportHandle,
+  type ViewportRect,
+  type ViewportRectResult,
+} from 'superdoc/ui';
+
+function testSuperDocUISubEntry() {
+  // Runtime exports compile and have callable shapes.
+  const factory: (options: SuperDocUIOptions) => SuperDocUI = createSuperDocUI;
+  const eq: EqualityFn<unknown> = shallowEqual;
+  void factory;
+  void eq;
+
+  // Public handle / slice types resolve through the sub-entry.
+  type AssertHandles = {
+    toolbar: SuperDocUI['toolbar'];
+    commands: SuperDocUI['commands'];
+    comments: CommentsHandle;
+    trackChanges: TrackChangesHandle;
+    viewport: ViewportHandle;
+    state: SuperDocUIState;
+  };
+  type AssertSlices = {
+    selection: SelectionSlice;
+    comments: CommentsSlice;
+    trackChanges: TrackChangesSlice;
+    trackChangesItem: TrackChangesItem;
+  };
+  type AssertViewportShapes = {
+    input: ViewportGetRectInput;
+    rect: ViewportRect;
+    result: ViewportRectResult;
+  };
+  type AssertSubstrate = {
+    selector: SelectorFn<SuperDocUIState, SelectionSlice>;
+    sub: Subscribable<SelectionSlice>;
+  };
+  type AssertHostShapes = {
+    superdoc: SuperDocLike;
+    editor: SuperDocEditorLike;
+  };
+
+  // `void` the type aliases so the file stays a smoke test, not a
+  // sample. Touching each at value level via `null as never` keeps
+  // the typechecker honest without runtime work.
+  void (null as never as AssertHandles);
+  void (null as never as AssertSlices);
+  void (null as never as AssertViewportShapes);
+  void (null as never as AssertSubstrate);
+  void (null as never as AssertHostShapes);
+
+  // SD-2815: document-side shapes the controller surfaces resolve
+  // through `superdoc/ui` directly, so consumers don't have to dip
+  // into `@superdoc/document-api`. The aliases above (`UICommentInfo`
+  // etc.) collide with the same types imported earlier from
+  // `superdoc`; importing both here proves the re-export does not
+  // shadow or diverge from the canonical doc-api shapes.
+  type AssertDocReExports = {
+    commentItem: UICommentInfo;
+    commentsList: UICommentsListResult;
+    commentsQuery: UICommentsListQuery;
+    trackChangeItem: UITrackChangeInfo;
+    trackChangesList: UITrackChangesListResult;
+    receipt: UIReceipt;
+    scrollInput: UIScrollIntoViewInput;
+    scrollOutput: UIScrollIntoViewOutput;
+    selectionInfo: UISelectionInfo;
+    textTarget: UITextTarget;
+    entityAddress: UIEntityAddress;
+    commentAddress: UICommentAddress;
+    trackedChangeAddress: UITrackedChangeAddress;
+  };
+  void (null as never as AssertDocReExports);
+
+  // The doc-api types reached through `superdoc/ui` should be
+  // assignable to (and from) the same types reached through the root
+  // `superdoc` import. Aliasing avoids name collisions while letting
+  // the typechecker confirm structural equivalence.
+  type AssertDocReExportParity = {
+    textTargetSame: UITextTarget extends TextTarget ? true : false;
+    textTargetSameInverse: TextTarget extends UITextTarget ? true : false;
+    selectionInfoSame: UISelectionInfo extends SelectionInfo ? true : false;
+    scrollInputSame: UIScrollIntoViewInput extends ScrollIntoViewInput ? true : false;
+    entityAddressSame: UIEntityAddress extends EntityAddress ? true : false;
+  };
+  void (null as never as AssertDocReExportParity);
+
+  // SD-2815 guard: prove the doc-api types reached through `superdoc/ui`
+  // are NOT `any` shims (the post-build script that previously stamped
+  // every `@superdoc/document-api` reference as `any` in
+  // `_internal-shims.d.ts` would otherwise compile this file silently
+  // even though every property access succeeds against `any`).
+  //
+  // `any extends 'literal' ? ... : ...` distributes to `boolean`, so
+  // the conditional below is `true` only when the type is real. If the
+  // doc-api dist regresses to ambient-`any`, `IsNotAny<UICommentInfo>`
+  // collapses to `boolean` and the `extends true` check fails.
+  type IsAny<T> = 0 extends 1 & T ? true : false;
+  type IsNotAny<T> = IsAny<T> extends true ? false : true;
+  type AssertDocReExportsHaveRealShape = {
+    commentInfoIsReal: IsNotAny<UICommentInfo> extends true ? true : false;
+    receiptIsReal: IsNotAny<UIReceipt> extends true ? true : false;
+    selectionInfoIsReal: IsNotAny<UISelectionInfo> extends true ? true : false;
+    textTargetIsReal: IsNotAny<UITextTarget> extends true ? true : false;
+    scrollInputIsReal: IsNotAny<UIScrollIntoViewInput> extends true ? true : false;
+    trackChangeInfoIsReal: IsNotAny<UITrackChangeInfo> extends true ? true : false;
+  };
+  // Force `true` literally on every field. Anything else (including
+  // `boolean` from a distributed `IsAny<any>`) breaks the assignment.
+  const docApiTypesAreReal: AssertDocReExportsHaveRealShape = {
+    commentInfoIsReal: true,
+    receiptIsReal: true,
+    selectionInfoIsReal: true,
+    textTargetIsReal: true,
+    scrollInputIsReal: true,
+    trackChangeInfoIsReal: true,
+  };
+  void docApiTypesAreReal;
+
+  // Belt-and-suspenders: read a known field on `UICommentInfo` so a
+  // future test reader sees a concrete usage. If `UICommentInfo` is
+  // `any`, this still compiles (any accepts everything), but the
+  // `IsNotAny` check above would already have failed.
+  function readCommentId(c: UICommentInfo): string {
+    return c.commentId;
+  }
+  void readCommentId;
+
+  // SD-2920: command discovery helpers exposed at the consumer surface.
+  // BUILT_IN_COMMAND_IDS is a runtime-readable list; has() / require()
+  // give configurable toolbars and trusted dispatch sites a typed way
+  // to validate id strings without indexing the proxy.
+  function exerciseCommandDiscovery(ui: SuperDocUI): void {
+    const ids: readonly string[] = BUILT_IN_COMMAND_IDS;
+    void ids;
+
+    const present: boolean = ui.commands.has('bold');
+    const missing: boolean = ui.commands.has('blod');
+    void present;
+    void missing;
+
+    const handle = ui.commands.require('bold');
+    handle.observe((_state) => {});
+    const result: boolean | Promise<boolean> = handle.execute();
+    void result;
+  }
+  void exerciseCommandDiscovery;
+}
+
 export {
   testTypeShapes,
   testEditorOptions,
@@ -856,6 +1041,7 @@ export {
   testReplaceFile,
   testPresentationEditorMethods,
   testSelectionAPI,
+  testViewportScrollIntoView,
   testEditorEvents,
   testPresentationEditorEvents,
   testToolbar,
@@ -871,4 +1057,5 @@ export {
   testAdditionalFunctions,
   testAdditionalClasses,
   testVueComponents,
+  testSuperDocUISubEntry,
 };

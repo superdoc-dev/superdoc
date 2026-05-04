@@ -1,7 +1,7 @@
 /**
  * Story locator types for addressing content within different document stories.
  *
- * A "story" is a distinct content flow within a document — the body, a header,
+ * A "story" is a distinct content flow within a document: the body, a header,
  * a footer, a footnote, or an endnote. Every address and query can optionally
  * target a specific story; when omitted, the body story is assumed (backward
  * compatible).
@@ -36,7 +36,7 @@ export type StoryHeaderFooterResolution = (typeof STORY_HEADER_FOOTER_RESOLUTION
 export type StoryHeaderFooterOnWrite = (typeof STORY_HEADER_FOOTER_ON_WRITE_VALUES)[number];
 
 // ---------------------------------------------------------------------------
-// StoryLocator — discriminated union
+// StoryLocator: discriminated union
 // ---------------------------------------------------------------------------
 
 /** The main document body. */
@@ -48,7 +48,7 @@ export interface BodyStoryLocator {
 /**
  * A header/footer slot identified by section, kind, and variant.
  *
- * This is the high-level "logical" locator — it represents a slot that may
+ * This is the high-level "logical" locator: it represents a slot that may
  * resolve to an explicit part in the targeted section or inherit from an
  * earlier section.
  *
@@ -56,9 +56,9 @@ export interface BodyStoryLocator {
  *   (following inheritance) or only matches an explicit local reference.
  *   Defaults to `'effective'` when omitted.
  * - `onWrite` controls mutation behavior when the slot is inherited:
- *   - `'materializeIfInherited'` — creates a local copy before editing (default).
- *   - `'editResolvedPart'` — edits the inherited part in place.
- *   - `'error'` — fails if the slot is not explicitly defined in this section.
+ *   - `'materializeIfInherited'`: creates a local copy before editing (default).
+ *   - `'editResolvedPart'`: edits the inherited part in place.
+ *   - `'error'`: fails if the slot is not explicitly defined in this section.
  */
 export interface HeaderFooterSlotStoryLocator {
   kind: 'story';
@@ -75,7 +75,7 @@ export interface HeaderFooterSlotStoryLocator {
 /**
  * A header/footer part identified by its relationship ID.
  *
- * This is the low-level "physical" locator — it points directly at a specific
+ * This is the low-level "physical" locator: it points directly at a specific
  * header or footer XML part, bypassing section-level resolution.
  */
 export interface HeaderFooterPartStoryLocator {
@@ -115,7 +115,7 @@ export type StoryLocator =
 // ---------------------------------------------------------------------------
 
 /**
- * Type guard — returns `true` if `value` is a valid {@link StoryLocator}.
+ * Type guard: returns `true` if `value` is a valid {@link StoryLocator}.
  *
  * Checks the full discriminated-union shape so malformed partial locators do
  * not leak through validation and fail later with raw property-access errors.
@@ -148,7 +148,7 @@ export function isStoryLocator(value: unknown): value is StoryLocator {
 }
 
 /**
- * Type guard — returns `true` if `locator` targets the document body.
+ * Type guard: returns `true` if `locator` targets the document body.
  */
 export function isBodyStory(locator: StoryLocator): locator is BodyStoryLocator {
   return locator.storyType === 'body';
@@ -180,7 +180,7 @@ export function getStoryHeaderFooterOnWrite(
  * Converts a {@link StoryLocator} to a canonical string key.
  *
  * The key is deterministic and suitable for use as a map key or cache key.
- * Round-tripping is NOT guaranteed — this is a one-way serialization.
+ * Round-tripping is NOT guaranteed: this is a one-way serialization.
  *
  * Examples:
  * - `{ kind: 'story', storyType: 'body' }` → `'story:body'`

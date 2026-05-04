@@ -10,8 +10,6 @@
  * Each `withHistoryBatch()` call pushes one batch record here. The batch's
  * `undo` / `redo` callbacks are what the coordinator actually runs when it
  * reaches this adapter during replay — there is no underlying editor step.
- *
- * See `plans/unified-history.md`, Phase 4.
  */
 
 import type { HistorySnapshotAdapter, ParticipantHistorySnapshot } from './types.js';

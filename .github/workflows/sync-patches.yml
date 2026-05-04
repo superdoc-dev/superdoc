@@ -93,6 +93,13 @@ jobs:
 
             # Check if all conflicts are resolved
             if [ -z "$(git diff --name-only --diff-filter=U)" ]; then
+              # If every conflict was auto-resolved to main's version, the index
+              # may now be clean (nothing to sync). Same guard as the no-conflict path.
+              if git diff --cached --quiet; then
+                echo "No changes to sync - auto-resolution kept main's version for everything."
+                exit 0
+              fi
+
               git commit -m "chore: merge stable into main (release conflicts auto-resolved)"
               git push origin "$SYNC_BRANCH"
 

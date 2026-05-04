@@ -271,6 +271,17 @@ export async function resolveComment(page: Page, input: { commentId: string }): 
   );
 }
 
+/**
+ * Reopen a previously-resolved comment via the public Document API.
+ * Routes through `comments.patch({ status: 'active' })` (SD-2789).
+ */
+export async function reopenComment(page: Page, input: { commentId: string }): Promise<void> {
+  await page.evaluate(
+    (payload) => (window as any).editor.doc.comments.patch({ commentId: payload.commentId, status: 'active' }),
+    input,
+  );
+}
+
 export async function listComments(
   page: Page,
   query: { includeResolved?: boolean } = { includeResolved: true },

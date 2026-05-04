@@ -1,5 +1,5 @@
 /**
- * Full NodeInfo union — assembled from leaf node-info files.
+ * Full NodeInfo union: assembled from leaf node-info files.
  * Base types (NodeKind, NodeType, BaseNodeInfo, addresses) live in base.ts.
  */
 

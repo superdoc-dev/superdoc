@@ -11,7 +11,7 @@ import type { DocumentApi } from '../index.js';
 import { INLINE_PROPERTY_REGISTRY } from '../format/inline-run-patch.js';
 
 // ---------------------------------------------------------------------------
-// TypedDispatchTable — compile-time contract between registry and dispatch
+// TypedDispatchTable: compile-time contract between registry and dispatch
 // ---------------------------------------------------------------------------
 
 type TypedDispatchHandler<K extends OperationId> = OperationRegistry[K]['options'] extends never
@@ -49,7 +49,7 @@ function buildFormatInlineAliasDispatch(api: DocumentApi): Pick<TypedDispatchTab
  * Builds a dispatch table that maps every OperationId to the corresponding
  * direct method call on the given DocumentApi instance.
  *
- * Each entry delegates to the direct method — no parallel execution path.
+ * Each entry delegates to the direct method: no parallel execution path.
  * The return type is {@link TypedDispatchTable}, which validates at compile
  * time that each handler conforms to the {@link OperationRegistry} contract.
  */
@@ -129,6 +129,8 @@ export function buildDispatchTable(api: DocumentApi): TypedDispatchTable {
     'lists.join': (input, options) => api.lists.join(input, options),
     'lists.canJoin': (input) => api.lists.canJoin(input),
     'lists.separate': (input, options) => api.lists.separate(input, options),
+    'lists.merge': (input, options) => api.lists.merge(input, options),
+    'lists.split': (input, options) => api.lists.split(input, options),
     'lists.setLevel': (input, options) => api.lists.setLevel(input, options),
     'lists.setValue': (input, options) => api.lists.setValue(input, options),
     'lists.continuePrevious': (input, options) => api.lists.continuePrevious(input, options),

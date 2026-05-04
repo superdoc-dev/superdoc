@@ -6,6 +6,61 @@ const path = require('node:path');
 // Verify that vite-plugin-dts generated the expected type entry points.
 // Path aliases are resolved by vite-plugin-dts via tsconfig.json paths.
 const distRoot = path.resolve(__dirname, '..', 'dist');
+const repoRoot = path.resolve(__dirname, '..', '..', '..');
+
+// SD-2842: vite-plugin-dts skips hand-written `.d.ts` files in its include
+// glob (it only emits declarations from `.ts`/`.js`). When a file like
+// `core-command-map.d.ts` is referenced via a relative import from another
+// emitted `.d.ts`, the consumer hits an unresolved-module error. Copy
+// every hand-written `.d.ts` from the source trees we publish into the
+// matching dist location so those imports resolve.
+// Hand-written `.d.ts` files we know are internal-only and must NOT ship
+// in `superdoc`'s published dist. The copy step is opt-in via filename
+// blocklist (rather than e.g. a per-file directive) so future hand-written
+// declarations land in dist by default and the cost of skipping one is one
+// line here. Each entry should have a comment explaining why.
+const HANDWRITTEN_DTS_BLOCKLIST = new Set([
+  // Ambient module declarations for internal `@superdoc/super-editor/converter/internal/...`
+  // subpaths. Nothing in `superdoc`'s shipped surface actually imports those subpaths,
+  // so the declarations would only leak the bare specifiers into published d.ts.
+  // Keep the file in source for super-editor's own typecheck; just don't ship it. (SD-2859)
+  'converter-internal.d.ts',
+]);
+
+function copyHandwrittenDtsFiles(srcDir, destDir) {
+  let copied = 0;
+  function walk(currentSrc, currentDest) {
+    if (!fs.existsSync(currentSrc)) return;
+    for (const entry of fs.readdirSync(currentSrc, { withFileTypes: true })) {
+      if (entry.name === 'node_modules' || entry.name === '__tests__' || entry.name === 'tests') continue;
+      const srcPath = path.join(currentSrc, entry.name);
+      const destPath = path.join(currentDest, entry.name);
+      if (entry.isDirectory()) {
+        walk(srcPath, destPath);
+        continue;
+      }
+      if (!entry.name.endsWith('.d.ts')) continue;
+      // Skip blocklisted files (see HANDWRITTEN_DTS_BLOCKLIST above).
+      if (HANDWRITTEN_DTS_BLOCKLIST.has(entry.name)) continue;
+      // Skip if the dist already has this file (vite-plugin-dts may have
+      // generated its own version from a co-located .ts file)
+      if (fs.existsSync(destPath)) continue;
+      fs.mkdirSync(path.dirname(destPath), { recursive: true });
+      fs.copyFileSync(srcPath, destPath);
+      copied++;
+    }
+  }
+  walk(srcDir, destDir);
+  return copied;
+}
+
+const handwrittenCopiedSuperEditor = copyHandwrittenDtsFiles(
+  path.join(repoRoot, 'packages/super-editor/src'),
+  path.join(distRoot, 'super-editor/src'),
+);
+if (handwrittenCopiedSuperEditor > 0) {
+  console.log(`[ensure-types] ✓ Copied ${handwrittenCopiedSuperEditor} hand-written .d.ts files from super-editor/src`);
+}
 
 const requiredEntryPoints = [
   'superdoc/src/index.d.ts',
@@ -32,7 +87,12 @@ if (!hasSuperDocExport) {
 }
 
 // Fix workspace package imports that aren't resolvable by consumers.
-// @superdoc/common is a private workspace package — inline its types.
+// @superdoc/common is a private workspace package — inline its types in
+// the main entry. Other reachable d.ts files that import from
+// @superdoc/common fall through to the ambient shim block below; those
+// imports surface internal types (Comment, CommentContent, CommentJSON)
+// that are not on the public surface, so collapsing them to `any` via
+// the shim is correct.
 const hadWorkspaceImport = content.includes('@superdoc/common');
 if (hadWorkspaceImport) {
   // Replace the @superdoc/common import with inline declarations
@@ -95,16 +155,110 @@ const BAD_ABSOLUTE_PATH_RE = /(['"])packages\/superdoc\/src\/([^'"]+)\1/g;
 
 // vite-plugin-dts incorrectly resolves subpath exports (e.g. @superdoc/super-editor/types)
 // by appending the subpath to the main entry: '../../super-editor/src/index.js/types'
-// Fix: rewrite index.js/<subpath> → <subpath>.js
-const BAD_SUBPATH_RE = /(['"])([^'"]*\/index\.js)(\/[^'"]+)\1/g;
+// or '../../super-editor/src/index.ts/types'
+// Fix: rewrite index.(js|ts)/<subpath> → <subpath>.js
+const BAD_SUBPATH_RE = /(['"])([^'"]*\/index\.(?:js|ts))(\/[^'"]+)\1/g;
 
 let fixedFiles = 0;
 let totalReplacements = 0;
+
+function appendJsExtensionToRelativeSpecifier(specifier, filePath) {
+  if (!specifier.startsWith('./') && !specifier.startsWith('../')) return specifier;
+  if (specifier.includes('?') || specifier.includes('#')) return specifier;
+  const targetBase = path.resolve(path.dirname(filePath), specifier);
+  if (path.posix.extname(specifier) === '.vue') {
+    // `./Foo.vue.js` is the Node16/NodeNext-friendly declaration specifier:
+    // TypeScript strips the trailing `.js` and resolves it to `Foo.vue.d.ts`.
+    return fs.existsSync(`${targetBase}.d.ts`) ? `${specifier}.js` : specifier;
+  }
+  if (path.posix.extname(specifier)) return specifier;
+  if (fs.existsSync(`${targetBase}.d.ts`)) return `${specifier}.js`;
+  if (fs.existsSync(path.join(targetBase, 'index.d.ts'))) return `${specifier}/index.js`;
+  return specifier;
+}
+
+// SD-2815: rewrite `@superdoc/document-api` bare specifiers to point
+// at the document-api dist that vite-plugin-dts now emits at
+// `dist/document-api/`. Without this, packed consumers see the bare
+// specifier in the .d.ts files, fail to resolve it, and fall through
+// to the `_internal-shims.d.ts` `any` shim that is generated below.
+// The doc-api types re-exported via `superdoc/ui` would then be
+// useless (every value assignable, no checking), defeating the public
+// re-export surface added in SD-2815.
+const DOC_API_PATH_RE = /(['"])@superdoc\/document-api(\/[^'"]+)?\1/g;
+function rewriteDocApiPaths(fileContent, filePath) {
+  return fileContent.replace(DOC_API_PATH_RE, (_match, quote, subpath = '') => {
+    const target = path.join(distRoot, 'document-api/src/index.d.ts');
+    let rel = path.relative(path.dirname(filePath), target).split(path.sep).join('/');
+    if (!rel.startsWith('.')) rel = './' + rel;
+    // Drop the trailing `.d.ts` so the import path follows the
+    // module-resolution convention used everywhere else in the dist
+    // (`...index.js` form, which TS resolves to `index.d.ts`).
+    rel = rel.replace(/\.d\.ts$/, '.js');
+    if (subpath) rel = rel.replace(/\/index\.js$/, subpath);
+    return `${quote}${rel}${quote}`;
+  });
+}
+
+// SD-2842: relocate workspace packages whose types appear on the
+// public surface. Same idea as the document-api rewrite above: emit
+// their declarations into superdoc's dist (via vite-plugin-dts include)
+// and redirect bare specifiers in emitted .d.ts files to relative
+// paths the consumer can resolve.
+const RELOCATION_RULES = [
+  { pkg: '@superdoc/contracts',     distEntry: 'layout-engine/contracts/src/index.d.ts' },
+  { pkg: '@superdoc/layout-bridge', distEntry: 'layout-engine/layout-bridge/src/index.d.ts' },
+  { pkg: '@superdoc/painter-dom',   distEntry: 'layout-engine/painters/dom/src/index.d.ts' },
+];
+
+function makeRelocationRewriter({ pkg, distEntry }) {
+  // Match the package name with optional subpath, e.g. `@superdoc/contracts` or
+  // `@superdoc/contracts/engines/tabs.js`. Anchored to either side of the
+  // package segment so `@superdoc/contracts-something` is not matched.
+  const escaped = pkg.replace(/\//g, '\\/');
+  const re = new RegExp(`(['"])${escaped}(\\/[^'"]+)?\\1`, 'g');
+  return (fileContent, filePath) => {
+    return fileContent.replace(re, (_match, quote, subpath = '') => {
+      const target = path.join(distRoot, distEntry);
+      let rel = path.relative(path.dirname(filePath), target).split(path.sep).join('/');
+      if (!rel.startsWith('.')) rel = './' + rel;
+      rel = rel.replace(/\.d\.ts$/, '.js');
+      if (subpath) rel = rel.replace(/\/index\.js$/, subpath);
+      return `${quote}${rel}${quote}`;
+    });
+  };
+}
+
+const RELOCATION_REWRITERS = RELOCATION_RULES.map((rule) => ({
+  pkg: rule.pkg,
+  rewrite: makeRelocationRewriter(rule),
+}));
 
 const dtsFiles = findDtsFiles(distRoot);
 for (const filePath of dtsFiles) {
   let fileContent = fs.readFileSync(filePath, 'utf8');
   let changed = false;
+
+  // Rewrite @superdoc/document-api → relative path to dist/document-api.
+  // Run BEFORE the pnpm path rewrite so imports surface as bare paths
+  // pointing at the dist tree, not at node_modules.
+  const beforeDocApi = fileContent;
+  fileContent = rewriteDocApiPaths(fileContent, filePath);
+  if (fileContent !== beforeDocApi) {
+    changed = true;
+    totalReplacements++;
+  }
+
+  // SD-2842: apply each relocation rewriter in turn. Each one redirects
+  // its own private-package specifier to a relative path in the local dist.
+  for (const { rewrite } of RELOCATION_REWRITERS) {
+    const before = fileContent;
+    fileContent = rewrite(fileContent, filePath);
+    if (fileContent !== before) {
+      changed = true;
+      totalReplacements++;
+    }
+  }
 
   // Fix pnpm node_modules paths → bare specifiers
   fileContent = fileContent.replace(PNPM_PATH_RE, (match, quote, _fullPath, packageName) => {
@@ -133,8 +287,8 @@ for (const filePath of dtsFiles) {
   fileContent = fileContent.replace(BAD_SUBPATH_RE, (match, quote, basePath, subpath) => {
     changed = true;
     totalReplacements++;
-    // Replace 'foo/index.js/types' with 'foo/types.js'
-    const dir = basePath.replace(/\/index\.js$/, '');
+    // Replace 'foo/index.js/types' or 'foo/index.ts/types' with 'foo/types.js'
+    const dir = basePath.replace(/\/index\.(?:js|ts)$/, '');
     return `${quote}${dir}${subpath}.js${quote}`;
   });
 
@@ -148,6 +302,21 @@ for (const filePath of dtsFiles) {
       changed = true;
       totalReplacements++;
       return `${pathWithoutExt}.js`;
+    },
+  );
+
+  // Node16/NodeNext consumers run stricter ESM declaration resolution than
+  // bundler consumers. vite-plugin-dts and tsup can emit relative imports like
+  // `export * from './foo'` and Vue SFC imports like `./Foo.vue`; rewrite those
+  // to `.js` specifiers that TypeScript maps back to the sibling `.d.ts` file.
+  fileContent = fileContent.replace(
+    /(?<=from\s+['"]|import\(['"])(\.{1,2}\/[^'"]+)(?=['"])/g,
+    (specifier) => {
+      const rewritten = appendJsExtensionToRelativeSpecifier(specifier, filePath);
+      if (rewritten === specifier) return specifier;
+      changed = true;
+      totalReplacements++;
+      return rewritten;
     },
   );
 
@@ -207,7 +376,7 @@ for (const filePath of dtsFiles) {
     const mod = m[2];
 
     // Skip relative imports and already-handled packages
-    if (mod.startsWith('.') || mod.startsWith('@superdoc/common') || mod.startsWith('@superdoc/super-editor')) continue;
+    if (mod.startsWith('.') || mod.startsWith('@superdoc/super-editor') || mod.startsWith('@superdoc/document-api') || RELOCATION_RULES.some((r) => mod === r.pkg || mod.startsWith(r.pkg + '/'))) continue;
 
     if (mod.startsWith('@superdoc/')) {
       if (!workspaceImports.has(mod)) workspaceImports.set(mod, new Set());
@@ -220,7 +389,7 @@ for (const filePath of dtsFiles) {
   const dynamicImports = fileContent.matchAll(/import\(['"]([^'"]+)['"]\)\.(\w+)/g);
   for (const m of dynamicImports) {
     const mod = m[1];
-    if (mod.startsWith('.') || mod.startsWith('@superdoc/common') || mod.startsWith('@superdoc/super-editor')) continue;
+    if (mod.startsWith('.') || mod.startsWith('@superdoc/super-editor') || mod.startsWith('@superdoc/document-api') || RELOCATION_RULES.some((r) => mod === r.pkg || mod.startsWith(r.pkg + '/'))) continue;
 
     if (mod.startsWith('@superdoc/')) {
       if (!workspaceImports.has(mod)) workspaceImports.set(mod, new Set());
@@ -232,10 +401,15 @@ for (const filePath of dtsFiles) {
   const bareRefs = fileContent.matchAll(/['"](@superdoc\/[^'"]+)['"]/g);
   for (const m of bareRefs) {
     const mod = m[1];
-    // Skip @superdoc/super-editor (consumer-facing, not internal)
-    // Skip @superdoc/common root module (inlined separately), but allow subpath
-    // imports like @superdoc/common/components/BasicUpload.vue to be shimmed
-    if (mod === '@superdoc/common' || mod.startsWith('@superdoc/super-editor')) continue;
+    // Skip @superdoc/super-editor (consumer-facing, not internal). All
+    // other @superdoc/* references (including @superdoc/common root and
+    // its subpaths) fall through to shim generation. The strip-and-inline
+    // step above handles `superdoc/src/index.d.ts`'s @superdoc/common
+    // import explicitly; other files importing from @superdoc/common
+    // resolve through the shim and collapse internal-only types
+    // (Comment, CommentContent, CommentJSON) to `any`. None of those
+    // appear on superdoc's public surface, so the collapse is safe.
+    if (mod.startsWith('@superdoc/super-editor') || mod.startsWith('@superdoc/document-api') || RELOCATION_RULES.some((r) => mod === r.pkg || mod.startsWith(r.pkg + '/'))) continue;
     if (!workspaceImports.has(mod)) workspaceImports.set(mod, new Set());
   }
 }
@@ -273,8 +447,20 @@ if (workspaceImports.size > 0) {
   for (const [mod, names] of [...workspaceImports.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
     wsCount++;
     const sortedNames = [...names].sort();
-    const exportLines = sortedNames
-      .map(n => `  export type ${n} = any;`);
+    const exportLines = [];
+    for (const n of sortedNames) {
+      // `default` is a reserved word and cannot appear in `export type
+      // default = any;`. When a file imports the default export of a
+      // private module (e.g. `import { default as Foo } from '@superdoc/common/components/Foo.vue'`),
+      // the named-imports collector picks up `default` as a name; emit
+      // a proper `export default` declaration instead.
+      if (n === 'default') {
+        exportLines.push('  const _default: any;');
+        exportLines.push('  export default _default;');
+      } else {
+        exportLines.push(`  export type ${n} = any;`);
+      }
+    }
     if (exportLines.length > 0) {
       shimLines.push(`declare module '${mod}' {\n${exportLines.join('\n')}\n}`);
     } else {
@@ -298,4 +484,20 @@ for (const entry of requiredEntryPoints) {
 }
 
 console.log(`[ensure-types] ✓ Generated ambient shims for ${wsCount} workspace modules`);
+
+// SD-2842 regression net: assert that no relocated package leaked back
+// into the shim file. If one shows up, a future change broke the
+// rewrite or include for that package and customers would see `any`
+// for those types again.
+const shimContent = fs.readFileSync(shimPath, 'utf8');
+const SHIM_FORBIDDEN = ['@superdoc/document-api', ...RELOCATION_RULES.map((r) => r.pkg)];
+for (const pkg of SHIM_FORBIDDEN) {
+  const re = new RegExp(`declare module '${pkg.replace(/\//g, '\\/')}(\\/[^']+)?'`);
+  if (re.test(shimContent)) {
+    console.error(`[ensure-types] ✗ ${pkg} appears in _internal-shims.d.ts. Its types should resolve via the relocation rewrite, not via an ambient any shim. Investigate the include glob, the rewrite rule, and the shim-skip predicate for this package.`);
+    process.exit(1);
+  }
+}
+console.log(`[ensure-types] ✓ Verified ${SHIM_FORBIDDEN.length} relocated packages do not appear in shim file`);
+
 console.log('[ensure-types] ✓ Verified type entry points');

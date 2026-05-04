@@ -50,10 +50,12 @@ import { CommentsPluginKey } from '@extensions/comment/comments-plugin.js';
 
 const MULTI_CLICK_TIME_THRESHOLD_MS = 400;
 const MULTI_CLICK_DISTANCE_THRESHOLD_PX = 5;
+const DRAG_SELECTION_DISTANCE_THRESHOLD_PX = 5;
 const AUTO_SCROLL_EDGE_PX = 32;
 const AUTO_SCROLL_MAX_SPEED_PX = 24;
 /** Tolerance for detecting scrollability to handle sub-pixel rounding in browsers */
 const SCROLL_DETECTION_TOLERANCE_PX = 1;
+const DEFAULT_PAGE_MARGIN_PX = 72;
 const COMMENT_HIGHLIGHT_SELECTOR = '.superdoc-comment-highlight';
 const TRACK_CHANGE_SELECTOR = '[data-track-change-id]';
 const PM_TRACK_CHANGE_SELECTOR = '.track-insert[data-id], .track-delete[data-id], .track-format[data-id]';
@@ -125,6 +127,40 @@ function isSameRenderedNoteTarget(
   return left.storyType === right.storyType && left.noteId === right.noteId;
 }
 
+function isOutsidePageBodyContent(layout: Layout, x: number, pageIndex?: number, pageLocalY?: number): boolean {
+  if (!Number.isFinite(x) || !Number.isFinite(pageIndex) || !Number.isFinite(pageLocalY)) {
+    return false;
+  }
+
+  const page = layout.pages[pageIndex];
+  if (!page) {
+    return false;
+  }
+
+  const pageWidth = page.size?.w ?? layout.pageSize.w;
+  const pageHeight = page.size?.h ?? layout.pageSize.h;
+  if (!Number.isFinite(pageWidth) || pageWidth <= 0 || !Number.isFinite(pageHeight) || pageHeight <= 0) {
+    return false;
+  }
+
+  const margins = page.margins ?? null;
+  const marginLeft = Number.isFinite(margins?.left) ? (margins!.left as number) : DEFAULT_PAGE_MARGIN_PX;
+  const marginRight = Number.isFinite(margins?.right) ? (margins!.right as number) : DEFAULT_PAGE_MARGIN_PX;
+  const marginTop = Number.isFinite(margins?.top) ? (margins!.top as number) : DEFAULT_PAGE_MARGIN_PX;
+  const marginBottom = Number.isFinite(margins?.bottom) ? (margins!.bottom as number) : DEFAULT_PAGE_MARGIN_PX;
+
+  const bodyLeft = Math.max(0, marginLeft);
+  const bodyRight = Math.min(pageWidth, pageWidth - Math.max(0, marginRight));
+  const bodyTop = Math.max(0, marginTop);
+  const bodyBottom = Math.min(pageHeight, pageHeight - Math.max(0, marginBottom));
+
+  if (bodyLeft >= bodyRight || bodyTop >= bodyBottom) {
+    return false;
+  }
+
+  return x < bodyLeft || x > bodyRight || pageLocalY < bodyTop || pageLocalY > bodyBottom;
+}
+
 function getCommentHighlightThreadIds(target: EventTarget | null): string[] {
   if (!(target instanceof Element)) {
     return [];
@@ -149,7 +185,7 @@ function isDirectSingleCommentHighlightHit(target: EventTarget | null): boolean 
 
 function isDirectTrackedChangeHit(target: EventTarget | null): boolean {
   if (!(target instanceof Element)) return false;
-  return target.closest(TRACK_CHANGE_SELECTOR) != null;
+  return target.closest(`${TRACK_CHANGE_SELECTOR}, ${PM_TRACK_CHANGE_SELECTOR}`) != null;
 }
 
 function resolveTrackChangeThreadId(target: EventTarget | null): string | null {
@@ -535,6 +571,8 @@ export class EditorInputManager {
   #dragLastPointer: SelectionDebugHudState['lastPointer'] = null;
   #dragLastRawHit: PositionHit | null = null;
   #dragUsedPageNotMountedFallback = false;
+  #dragStartClient: { clientX: number; clientY: number } | null = null;
+  #dragThresholdExceeded = false;
   #autoScrollActive = false;
   #autoScrollTimer: { id: number; kind: 'raf' | 'timeout' } | null = null;
   #autoScrollVelocity: { x: number; y: number } = { x: 0, y: 0 };
@@ -811,8 +849,26 @@ export class EditorInputManager {
     this.#dragLastPointer = null;
     this.#dragLastRawHit = null;
     this.#dragUsedPageNotMountedFallback = false;
+    this.#dragStartClient = null;
+    this.#dragThresholdExceeded = false;
     this.#lastPointerClient = null;
     this.#stopAutoScroll();
+  }
+
+  #hasExceededDragSelectionThreshold(clientX: number, clientY: number): boolean {
+    if (this.#dragThresholdExceeded) return true;
+    if (!this.#dragStartClient) return true;
+
+    const deltaX = clientX - this.#dragStartClient.clientX;
+    const deltaY = clientY - this.#dragStartClient.clientY;
+    const thresholdSquared = DRAG_SELECTION_DISTANCE_THRESHOLD_PX * DRAG_SELECTION_DISTANCE_THRESHOLD_PX;
+
+    if (deltaX * deltaX + deltaY * deltaY < thresholdSquared) {
+      return false;
+    }
+
+    this.#dragThresholdExceeded = true;
+    return true;
   }
 
   #clearCellAnchor(): void {
@@ -1424,6 +1480,15 @@ export class EditorInputManager {
       }
     }
 
+    if (
+      !useActiveSurfaceHitTest &&
+      isOutsidePageBodyContent(layoutState.layout, x, normalizedPoint.pageIndex, normalizedPoint.pageLocalY)
+    ) {
+      event.preventDefault();
+      this.#focusEditor();
+      return;
+    }
+
     const { rawHit, hit } = this.#resolveSelectionPointerHit({
       layoutState,
       normalized: { x, y },
@@ -1481,17 +1546,19 @@ export class EditorInputManager {
       }
     }
 
-    // Handle click outside text content
+    // Handle click outside text content — keep cursor and scroll position unchanged.
     if (!rawHit) {
-      this.#focusEditorAtFirstPosition();
+      this.#focusEditor();
       return;
     }
 
     // Guard against stale note hits after a session switch or partial rerender.
+    // Compare both storyType and noteId so a footnote-N session does not
+    // mistake a hit on endnote-N as the same target.
     if (
       isNoteEditing &&
       activeNoteTarget &&
-      parseRenderedNoteTarget(rawHit.blockId)?.noteId !== activeNoteTarget.noteId
+      !isSameRenderedNoteTarget(parseRenderedNoteTarget(rawHit.blockId), activeNoteTarget)
     ) {
       this.#callbacks.exitActiveStorySession?.();
       this.#focusEditor();
@@ -1574,6 +1641,8 @@ export class EditorInputManager {
     this.#dragLastPointer = { clientX: event.clientX, clientY: event.clientY, x, y };
     this.#dragLastRawHit = hit;
     this.#dragUsedPageNotMountedFallback = false;
+    this.#dragStartClient = { clientX: event.clientX, clientY: event.clientY };
+    this.#dragThresholdExceeded = false;
     this.#lastPointerClient = { clientX: event.clientX, clientY: event.clientY };
 
     this.#isDragging = true;
@@ -1666,6 +1735,10 @@ export class EditorInputManager {
 
     // Handle drag selection
     if (this.#isDragging && this.#dragAnchor !== null && event.buttons & 1) {
+      if (!this.#hasExceededDragSelectionThreshold(event.clientX, event.clientY)) {
+        return;
+      }
+
       this.#lastPointerClient = { clientX: event.clientX, clientY: event.clientY };
       this.#handleDragSelectionAt(event.clientX, event.clientY);
       this.#updateAutoScrollFromPointer(event.clientX, event.clientY);
@@ -1739,6 +1812,8 @@ export class EditorInputManager {
       this.#dragLastPointer = null;
       this.#dragLastRawHit = null;
       this.#dragUsedPageNotMountedFallback = false;
+      this.#dragStartClient = null;
+      this.#dragThresholdExceeded = false;
       this.#lastPointerClient = null;
       return;
     }
@@ -1963,17 +2038,21 @@ export class EditorInputManager {
   #findStructuredContentBlockAtPos(doc: ProseMirrorNode, pos: number): StructuredContentSelection | null {
     if (!Number.isFinite(pos)) return null;
 
-    const $pos = doc.resolve(pos);
-    for (let depth = $pos.depth; depth > 0; depth--) {
-      const node = $pos.node(depth);
-      if (node.type?.name === 'structuredContentBlock') {
-        return {
-          node,
-          pos: $pos.before(depth),
-          start: $pos.start(depth),
-          end: $pos.end(depth),
-        };
+    try {
+      const $pos = doc.resolve(pos);
+      for (let depth = $pos.depth; depth > 0; depth--) {
+        const node = $pos.node(depth);
+        if (node.type?.name === 'structuredContentBlock') {
+          return {
+            node,
+            pos: $pos.before(depth),
+            start: $pos.start(depth),
+            end: $pos.end(depth),
+          };
+        }
       }
+    } catch {
+      return null;
     }
 
     return null;
@@ -2028,17 +2107,21 @@ export class EditorInputManager {
   #findStructuredContentInlineAtPos(doc: ProseMirrorNode, pos: number): StructuredContentSelection | null {
     if (!Number.isFinite(pos)) return null;
 
-    const $pos = doc.resolve(pos);
-    for (let depth = $pos.depth; depth > 0; depth--) {
-      const node = $pos.node(depth);
-      if (node.type?.name === 'structuredContent') {
-        return {
-          node,
-          pos: $pos.before(depth),
-          start: $pos.start(depth),
-          end: $pos.end(depth),
-        };
+    try {
+      const $pos = doc.resolve(pos);
+      for (let depth = $pos.depth; depth > 0; depth--) {
+        const node = $pos.node(depth);
+        if (node.type?.name === 'structuredContent') {
+          return {
+            node,
+            pos: $pos.before(depth),
+            start: $pos.start(depth),
+            end: $pos.end(depth),
+          };
+        }
       }
+    } catch {
+      return null;
     }
 
     return null;
@@ -2630,6 +2713,8 @@ export class EditorInputManager {
     this.#dragLastPointer = null;
     this.#dragLastRawHit = null;
     this.#dragUsedPageNotMountedFallback = false;
+    this.#dragStartClient = null;
+    this.#dragThresholdExceeded = false;
     this.#lastPointerClient = null;
     this.#stopAutoScroll();
   }

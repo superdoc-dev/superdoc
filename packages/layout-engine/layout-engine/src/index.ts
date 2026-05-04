@@ -2710,35 +2710,43 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
     if (sectionHasExplicitColumnBreak.has(sectionIdx)) continue;
     if (alreadyBalancedSections.has(sectionIdx)) continue;
 
-    // Gate balancing on section break type (ECMA-376 §17.18.77 / Linear SD-2452):
-    //   "Only continuous section breaks trigger balancing. Next-page breaks
-    //    should NOT balance — columns fill top-to-bottom as SuperDoc currently does."
+    // Gate balancing on section-end break type AND whether the section spans
+    // multiple pages (ECMA-376 §17.18.77 / Linear SD-2452, refined against
+    // empirical Word behavior):
+    //
+    //   - Continuous mid-document break ending the section → balance (Word).
+    //   - Non-`continuous` break (nextPage / evenPage / oddPage) → don't balance.
+    //   - Body sectPr (last section, defaults to `continuous` per pm-adapter
+    //     DEFAULT_BODY_SECTION_TYPE): balance ONLY if the section spans multiple
+    //     pages. Word balances the last page of multi-page multi-column body
+    //     sections (e.g. two_column_two_page-arial 2 page 17 splits 3+2) but
+    //     does NOT balance single-page sections (e.g. sd-1655 fills col 1 then
+    //     col 2 without redistributing).
     //
     // pm-adapter uses end-tagged section semantics (ECMA-376 §17.6.17): the type
-    // on `sectionBreak[i]` describes the break that ENDS section i. Two cases
-    // need to be excluded:
+    // on `sectionBreak[i]` describes the break that ENDS section i. The body
+    // sectPr is the final section break and gets the default `continuous` type,
+    // so we can't distinguish explicit vs default `continuous` from the type
+    // alone — the multi-page check supplies the missing signal for the last
+    // section. Earlier sections rely on the type being non-default if it's
+    // `continuous` (because paragraph sectPr defaults to `nextPage`).
     //
-    //   1. Non-`continuous` end break (nextPage / evenPage / oddPage) — Word does
-    //      NOT balance these. Documents like sd-1655-col-sep-3-equal-columns and
-    //      multi-column-sections.docx all have `nextPage` (default for paragraph
-    //      sectPr) and Word fills columns top-to-bottom. Balancing them split
-    //      headings from their bodies and pushed content into columns Word left
-    //      empty.
-    //
-    //   2. The LAST section. The body sectPr is always the final section break
-    //      and represents the document end, not a real mid-document break. Even
-    //      when its type defaults to `continuous` (DEFAULT_BODY_SECTION_TYPE in
-    //      pm-adapter), there is no break AFTER the last section's content to
-    //      trigger balancing. Excluding the last section matches Word for
-    //      single-section docs.
-    //
-    // The fallback section index (FALLBACK_SECTION_IDX = -1) bypasses both gates
-    // because it is synthesized for callers passing LayoutOptions.columns
-    // without any section metadata at all (pre-pm-adapter integrations).
+    // FALLBACK_SECTION_IDX (-1) bypasses both gates because the synthesized
+    // fallback fires only when no pm-adapter section metadata exists at all.
     if (sectionIdx !== FALLBACK_SECTION_IDX) {
       const endBreakType = sectionEndBreakType.get(sectionIdx);
       if (endBreakType !== 'continuous') continue;
-      if (lastSectionIdx !== null && sectionIdx === lastSectionIdx) continue;
+
+      if (lastSectionIdx !== null && sectionIdx === lastSectionIdx) {
+        let sectionPagesCount = 0;
+        for (const p of pages) {
+          if (p.fragments.some((f) => blockSectionMap.get(f.blockId) === sectionIdx)) {
+            sectionPagesCount += 1;
+            if (sectionPagesCount > 1) break;
+          }
+        }
+        if (sectionPagesCount <= 1) continue;
+      }
     }
 
     // Find the last page carrying any fragments from this section.

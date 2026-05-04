@@ -20,6 +20,7 @@ export type TableStyleParagraphProps = {
 };
 
 export type ConverterContext = {
+  sectionDirection?: 'ltr' | 'rtl';
   docx?: Record<string, unknown>;
   translatedNumbering: NumberingProperties;
   translatedLinkedStyles: StylesDocumentProperties;

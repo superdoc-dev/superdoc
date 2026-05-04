@@ -126,9 +126,6 @@ export const isRtlBlock = (block: FlowBlock): boolean => {
   if (typeof directionAttr === 'string' && directionAttr.toLowerCase() === 'rtl') {
     return true;
   }
-  if (typeof attrs.rtl === 'boolean') {
-    return attrs.rtl;
-  }
   return false;
 };
 

@@ -3189,7 +3189,6 @@ describe('toFlowBlocks', () => {
       const paragraph = blocks[0];
       expect(paragraph.kind).toBe('paragraph');
       expect(paragraph.attrs?.direction).toBe('rtl');
-      expect(paragraph.attrs?.rtl).toBe(true);
       expect(paragraph.attrs?.indent?.left).toBe(24);
       expect(paragraph.attrs?.indent?.right).toBe(12);
     });
@@ -3216,7 +3215,62 @@ describe('toFlowBlocks', () => {
       const paragraph = blocks[0];
       expect(paragraph.kind).toBe('paragraph');
       expect(paragraph.attrs?.direction).toBe('ltr');
-      expect(paragraph.attrs?.rtl).toBe(false);
+    });
+
+    it('inherits paragraph direction from body sectPr w:bidi when paragraph direction is missing', () => {
+      const pmDoc = {
+        type: 'doc',
+        attrs: {
+          bodySectPr: {
+            type: 'element',
+            name: 'w:sectPr',
+            elements: [{ type: 'element', name: 'w:bidi', attributes: {} }],
+          },
+        },
+        content: [
+          {
+            type: 'paragraph',
+            attrs: {
+              paragraphProperties: {},
+            },
+            content: [{ type: 'text', text: 'Section inherited RTL' }],
+          },
+        ],
+      };
+
+      const { blocks } = toFlowBlocks(pmDoc);
+      expect(blocks).toHaveLength(1);
+      const paragraph = blocks[0];
+      expect(paragraph.kind).toBe('paragraph');
+      expect(paragraph.attrs?.direction).toBe('rtl');
+    });
+
+    it('does not inherit RTL direction when body sectPr w:bidi is explicitly false', () => {
+      const pmDoc = {
+        type: 'doc',
+        attrs: {
+          bodySectPr: {
+            type: 'element',
+            name: 'w:sectPr',
+            elements: [{ type: 'element', name: 'w:bidi', attributes: { 'w:val': '0' } }],
+          },
+        },
+        content: [
+          {
+            type: 'paragraph',
+            attrs: {
+              paragraphProperties: {},
+            },
+            content: [{ type: 'text', text: 'Section inherited LTR' }],
+          },
+        ],
+      };
+
+      const { blocks } = toFlowBlocks(pmDoc);
+      expect(blocks).toHaveLength(1);
+      const paragraph = blocks[0];
+      expect(paragraph.kind).toBe('paragraph');
+      expect(paragraph.attrs?.direction).toBe('ltr');
     });
 
     it('handles multiple page breaks', () => {
@@ -4562,7 +4616,6 @@ describe('toFlowBlocks', () => {
 
       expect(blocks).toHaveLength(1);
       expect(blocks[0].attrs?.direction).toBe('rtl');
-      expect(blocks[0].attrs?.rtl).toBe(true);
       expect(blocks[0].attrs?.alignment).toBeUndefined();
     });
 
@@ -4592,7 +4645,6 @@ describe('toFlowBlocks', () => {
 
       expect(blocks).toHaveLength(1);
       expect(blocks[0].attrs?.direction).toBe('rtl');
-      expect(blocks[0].attrs?.rtl).toBe(true);
       expect(blocks[0].attrs).toMatchObject({
         alignment: 'center',
       });
@@ -4625,7 +4677,6 @@ describe('toFlowBlocks', () => {
 
       expect(blocks).toHaveLength(1);
       expect(blocks[0].attrs?.direction).toBe('rtl');
-      expect(blocks[0].attrs?.rtl).toBe(true);
       expect(blocks[0].attrs).toMatchObject({
         alignment: 'left',
       });

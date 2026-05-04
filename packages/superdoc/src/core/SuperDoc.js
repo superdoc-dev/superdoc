@@ -1880,12 +1880,12 @@ export class SuperDoc extends EventEmitter {
     cfg.socket?.destroy();
 
     this.ydoc?.destroy();
-    this.provider?.disconnect();
-    this.provider?.destroy();
+    this.provider?.disconnect?.();
+    this.provider?.destroy?.();
 
     cfg.documents.forEach((doc) => {
-      doc.provider?.disconnect();
-      doc.provider?.destroy();
+      doc.provider?.disconnect?.();
+      doc.provider?.destroy?.();
       doc.ydoc?.destroy();
     });
   }

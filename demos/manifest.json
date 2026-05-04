@@ -7,7 +7,7 @@
     "sourceRepo": "superdoc-dev/superdoc",
     "sourcePath": "demos/custom-ui",
     "docs": "https://docs.superdoc.dev/editor/custom-ui/overview",
-    "thumbnail": "demos/custom-ui/demo-thumbnail.png",
+    "thumbnail": null,
     "liveUrl": null,
     "homepage": true,
     "stackblitz": true

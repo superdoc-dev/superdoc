@@ -162,3 +162,79 @@ test.describe('Backspace after a noBreakHyphen atom (SD-2746)', () => {
     expect(await collectFirstParagraphChildTypes(superdoc)).toEqual(['run', 'run']);
   });
 });
+
+/**
+ * Symmetric coverage for forward Delete. The atom-wrapper run shape gives three
+ * "before the atom" caret positions; only the innermost (caret inside the
+ * wrapper run, with the atom as nodeAfter) is broken in the default chain
+ * because every command after `deleteSkipEmptyRun` bails on a non-run atom.
+ * The other two positions already work via `deleteNextToRun` — covered here
+ * to lock in the existing behavior.
+ */
+test.describe('Delete before a noBreakHyphen atom (SD-2746)', () => {
+  test('caret inside the atom-run, immediately before the atom', async ({ superdoc }) => {
+    await setupDocWithAtom(superdoc);
+    expect(await countAtoms(superdoc)).toBe(1);
+
+    const atomPos = await findAtomPos(superdoc);
+    const caret = atomPos; // inside atom's wrapper run, before atom (parentOffset = 0)
+    await superdoc.setTextSelection(caret, caret);
+    await superdoc.waitForStable();
+
+    const ctx = await describeCaret(superdoc, caret);
+    expect(ctx.parent).toBe('run');
+    expect(ctx.nodeAfter).toBe('noBreakHyphen');
+
+    await superdoc.press('Delete');
+    await superdoc.waitForStable();
+
+    // Without the deleteAtomAfter command, none of the chain commands fire
+    // here and the doc is unchanged. With the fix, the atom and its wrapper
+    // run are removed as one unit (matching the Backspace case-1 behavior).
+    expect(await countAtoms(superdoc)).toBe(0);
+    expect(await collectText(superdoc)).toBe('abcdef');
+    expect(await collectFirstParagraphChildTypes(superdoc)).toEqual(['run', 'run']);
+  });
+
+  test('caret at paragraph level immediately before the atom-run', async ({ superdoc }) => {
+    await setupDocWithAtom(superdoc);
+    expect(await countAtoms(superdoc)).toBe(1);
+
+    const atomPos = await findAtomPos(superdoc);
+    const caret = atomPos - 1; // paragraph-level boundary; nodeAfter = atom-wrapper run
+    await superdoc.setTextSelection(caret, caret);
+    await superdoc.waitForStable();
+
+    const ctx = await describeCaret(superdoc, caret);
+    expect(ctx.parent).toBe('paragraph');
+    expect(ctx.nodeAfter).toBe('run');
+
+    await superdoc.press('Delete');
+    await superdoc.waitForStable();
+
+    expect(await countAtoms(superdoc)).toBe(0);
+    expect(await collectText(superdoc)).toBe('abcdef');
+    expect(await collectFirstParagraphChildTypes(superdoc)).toEqual(['run', 'run']);
+  });
+
+  test('caret at end of the previous run (atom-wrapper is the next paragraph-level sibling)', async ({ superdoc }) => {
+    await setupDocWithAtom(superdoc);
+    expect(await countAtoms(superdoc)).toBe(1);
+
+    const atomPos = await findAtomPos(superdoc);
+    const caret = atomPos - 2; // inside previous run, parentOffset === content size
+    await superdoc.setTextSelection(caret, caret);
+    await superdoc.waitForStable();
+
+    const ctx = await describeCaret(superdoc, caret);
+    expect(ctx.parent).toBe('run');
+    expect(ctx.nodeAfter).toBeNull();
+
+    await superdoc.press('Delete');
+    await superdoc.waitForStable();
+
+    expect(await countAtoms(superdoc)).toBe(0);
+    expect(await collectText(superdoc)).toBe('abcdef');
+    expect(await collectFirstParagraphChildTypes(superdoc)).toEqual(['run', 'run']);
+  });
+});

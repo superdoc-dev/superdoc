@@ -53,6 +53,7 @@ export * from './backspaceAcrossRuns.js';
 export * from './backspaceAtomBefore.js';
 export * from './deleteSkipEmptyRun.js';
 export * from './deleteNextToRun.js';
+export * from './deleteAtomAfter.js';
 export * from './skipTab.js';
 
 // Tables

@@ -318,7 +318,15 @@ describe('extraction', () => {
       expect(result).toBeNull();
     });
 
-    it('should default type to "nextPage" when sectPr exists but w:type is missing', () => {
+    it('returns type: undefined and typeIsExplicit: false when w:type is missing', () => {
+      // extractSectionData no longer assumes a section-type default — that
+      // belongs to the caller (paragraph sectPr defaults to nextPage,
+      // body sectPr defaults to continuous). Returning the absence as
+      // `type: undefined` plus `typeIsExplicit: false` lets the caller
+      // apply the correct default while still distinguishing "OOXML omitted
+      // w:type" from "OOXML wrote w:type=continuous". The distinction is
+      // load-bearing for column-balancing: Word balances explicit-continuous
+      // body sectPrs even single-page (sd-1480) but not defaulted ones (sd-1655).
       const para: PMNode = {
         type: 'paragraph',
         attrs: {
@@ -340,7 +348,8 @@ describe('extraction', () => {
       const result = extractSectionData(para);
 
       expect(result).not.toBeNull();
-      expect(result?.type).toBe('nextPage');
+      expect(result?.type).toBeUndefined();
+      expect(result?.typeIsExplicit).toBe(false);
       expect(result?.vAlign).toBe('bottom');
     });
   });

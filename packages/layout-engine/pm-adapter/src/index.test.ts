@@ -2175,8 +2175,15 @@ describe('toFlowBlocks', () => {
       const { blocks } = toFlowBlocks(pmDoc, { emitSectionBreaks: true });
       const sectionBreaks = blocks.filter((b: FlowBlock) => b.kind === 'sectionBreak' && !b.attrs?.isFirstSection);
 
+      // The retained break here is the FINAL section's, derived from the
+      // body sectPr produced by `createTestBodySectPr` (no `<w:type>`). That
+      // section defaults to `continuous` per DEFAULT_BODY_SECTION_TYPE — Word's
+      // body-sectPr default. The earlier expectation of `'nextPage'` matched a
+      // bug where extractSectionType applied a paragraph-style default to body
+      // sectPrs.
       expect(sectionBreaks).toHaveLength(1);
-      expect(sectionBreaks[0].type).toBe('nextPage');
+      expect(sectionBreaks[0].type).toBe('continuous');
+      expect(sectionBreaks[0].attrs?.typeIsExplicit).toBe(false);
     });
 
     it('emits section breaks even when w:type element is missing (defaults to nextPage)', () => {
@@ -2220,9 +2227,14 @@ describe('toFlowBlocks', () => {
       const { blocks } = toFlowBlocks(pmDoc, { emitSectionBreaks: true });
       const sectionBreaks = blocks.filter((b: FlowBlock) => b.kind === 'sectionBreak' && !b.attrs?.isFirstSection);
 
+      // Two retained breaks:
+      //   1. The middle section's, ending at the explicit `nextPage` paragraph.
+      //   2. The final section's, derived from the body sectPr (no <w:type>),
+      //      defaulting to `continuous` per OOXML body-sectPr semantics.
       expect(sectionBreaks).toHaveLength(2);
       expect(sectionBreaks[0].type).toBe('nextPage');
-      expect(sectionBreaks[1].type).toBe('nextPage');
+      expect(sectionBreaks[1].type).toBe('continuous');
+      expect(sectionBreaks[1].attrs?.typeIsExplicit).toBe(false);
     });
 
     it('keeps final paragraph section break even without type when no body sectPr', () => {

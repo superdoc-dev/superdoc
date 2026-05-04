@@ -79,15 +79,21 @@ function extractNormalizedMargins(attrs: Record<string, unknown>): {
 
 /**
  * Extract section type from <w:type> element.
- * Defaults to 'nextPage' per OOXML spec when absent.
+ * Returns the explicit value when present, or `null` when absent so callers
+ * can distinguish "OOXML omitted w:type" from "OOXML wrote nextPage". This
+ * matters for column balancing: Word balances a section ending in an
+ * explicit `w:type="continuous"` body sectPr but does NOT balance one that
+ * merely defaulted to continuous (per ECMA-376 §17.18.77 and observed
+ * behavior on `sd-1655-col-sep-3-equal-columns` vs `sd-1480-two-col-tab-positions`).
  */
-function extractSectionType(elements: SectionElement[]): SectionType {
+function extractSectionType(elements: SectionElement[]): SectionType | null {
   const typeEl = elements.find((el) => el?.name === 'w:type');
-  const val = typeEl?.attributes?.['w:val'];
+  if (!typeEl) return null;
+  const val = typeEl.attributes?.['w:val'];
   if (val === 'continuous' || val === 'nextPage' || val === 'evenPage' || val === 'oddPage') {
     return val;
   }
-  return 'nextPage';
+  return null;
 }
 
 /**
@@ -316,6 +322,8 @@ export function extractSectionData(para: PMNode): {
   bottomPx?: number;
   leftPx?: number;
   type?: SectionType;
+  /** True iff `<w:type>` was present in the source XML (vs. type defaulted by the caller). */
+  typeIsExplicit?: boolean;
   pageSizePx?: { w: number; h: number };
   orientation?: Orientation;
   columnsPx?: ColumnLayout;
@@ -348,8 +356,10 @@ export function extractSectionData(para: PMNode): {
     return headerPx == null && footerPx == null ? null : { headerPx, footerPx };
   }
 
-  // Extract all section properties. Type always has a value (defaults to 'nextPage')
-  const type = extractSectionType(sectPrElements);
+  // Extract all section properties. type is null when <w:type> is omitted.
+  const explicitType = extractSectionType(sectPrElements);
+  const type = explicitType ?? undefined;
+  const typeIsExplicit = explicitType !== null;
   const { pageSizePx, orientation } = extractPageSizeAndOrientation(sectPrElements);
   const titlePg = sectPrElements.some((el) => el?.name === 'w:titlePg');
   const fallbackMargins = extractFallbackMargins(sectPrElements, headerPx, footerPx);
@@ -362,7 +372,10 @@ export function extractSectionData(para: PMNode): {
   const columnsPx = extractColumns(sectPrElements);
   const vAlign = extractVerticalAlign(sectPrElements);
 
-  // When sectPrElements exist, always return data (even if minimal) since type defaults to 'nextPage'
+  // When sectPrElements exist, always return data (even if minimal). The
+  // caller applies the appropriate default for `type` (paragraph default =
+  // nextPage, body default = continuous) and sees `typeIsExplicit` for the
+  // distinction.
   return {
     headerPx,
     footerPx,
@@ -371,6 +384,7 @@ export function extractSectionData(para: PMNode): {
     bottomPx,
     leftPx,
     type,
+    typeIsExplicit,
     pageSizePx,
     orientation,
     columnsPx,

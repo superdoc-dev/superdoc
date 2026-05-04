@@ -130,6 +130,13 @@ export function createSectionBreakBlock(
     attrs: {
       source: 'sectPr',
       sectionIndex: section.sectionIndex,
+      // Surface whether `<w:type>` was explicit in the source XML. The
+      // layout-engine's column-balance gate uses this to distinguish a
+      // body sectPr that defaulted to `continuous` (Word does not balance,
+      // e.g. sd-1655-col-sep-3-equal-columns) from one with
+      // `<w:type w:val="continuous"/>` written out (Word balances, e.g.
+      // sd-1480-two-col-tab-positions, even when the section is single-page).
+      typeIsExplicit: section.typeIsExplicit,
       ...extraAttrs,
     },
     ...(section.pageSize && { pageSize: section.pageSize }),

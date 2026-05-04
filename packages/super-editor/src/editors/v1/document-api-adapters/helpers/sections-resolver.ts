@@ -178,6 +178,7 @@ function createSyntheticRange(bodySectPr: XmlElement | null, paragraphCount: num
     orientation: null,
     columns: null,
     type: SectionType.CONTINUOUS,
+    typeIsExplicit: false,
     titlePg: false,
     headerRefs: undefined,
     footerRefs: undefined,

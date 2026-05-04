@@ -1577,6 +1577,12 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
   // `evenPage`, `oddPage` do not. Tracked here so the post-layout pass can
   // skip the wrong section types.
   const sectionEndBreakType = new Map<number, string>();
+  // sectionIndex -> whether `<w:type>` was EXPLICIT in the source sectPr.
+  // Body sectPrs default to `continuous` when w:type is omitted; Word does
+  // NOT balance those single-page docs (sd-1655). Body sectPrs with explicit
+  // `<w:type w:val="continuous"/>` DO balance (sd-1480), even single-page.
+  // The flag carries the distinction across pm-adapter -> layout-engine.
+  const sectionTypeIsExplicit = new Map<number, boolean>();
   // sectionIndex of the LAST section in the document. The body sectPr is
   // always the final section break and represents the end of the document,
   // not an actual mid-document break. Even when its type defaults to
@@ -1621,7 +1627,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
     if (measure) {
       balancingMeasureMap.set(block.id, measure as MeasureData);
     }
-    const blockWithAttrs = block as { attrs?: { sectionIndex?: number } };
+    const blockWithAttrs = block as { attrs?: { sectionIndex?: number; typeIsExplicit?: boolean } };
     const attrSectionIdx = blockWithAttrs.attrs?.sectionIndex;
     if (block.kind === 'sectionBreak') {
       documentHasAnySectionBreak = true;
@@ -1633,6 +1639,9 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
         }
         if (typeof block.type === 'string') {
           sectionEndBreakType.set(attrSectionIdx, block.type);
+        }
+        if (typeof blockWithAttrs.attrs?.typeIsExplicit === 'boolean') {
+          sectionTypeIsExplicit.set(attrSectionIdx, blockWithAttrs.attrs.typeIsExplicit);
         }
       }
     }
@@ -2717,43 +2726,70 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
     if (sectionHasExplicitColumnBreak.has(sectionIdx)) continue;
     if (alreadyBalancedSections.has(sectionIdx)) continue;
 
-    // Gate balancing on section-end break type AND whether the section spans
-    // multiple pages (ECMA-376 §17.18.77 / Linear SD-2452, refined against
-    // empirical Word behavior):
+    // Gate balancing on the break-type signals around the section
+    // (ECMA-376 §17.18.77 / Linear SD-2452, refined against empirical Word
+    // behavior). Three balance-allowed scenarios + one skip-the-last-section
+    // safeguard:
     //
-    //   - Continuous mid-document break ending the section → balance (Word).
-    //   - Non-`continuous` break (nextPage / evenPage / oddPage) → don't balance.
-    //   - Body sectPr (last section, defaults to `continuous` per pm-adapter
-    //     DEFAULT_BODY_SECTION_TYPE): balance ONLY if the section spans multiple
-    //     pages. Word balances the last page of multi-page multi-column body
-    //     sections (e.g. two_column_two_page-arial 2 page 17 splits 3+2) but
-    //     does NOT balance single-page sections (e.g. sd-1655 fills col 1 then
-    //     col 2 without redistributing).
+    //   1. The section's own end-break is `continuous` AND it is NOT the last
+    //      section. This is the spec-canonical case — a mid-document
+    //      continuous break balances the preceding section. Covers
+    //      spec-test-1..5, sd-2326, all `pagination/two_column_two_page-arial`
+    //      page 17 scenarios.
     //
-    // pm-adapter uses end-tagged section semantics (ECMA-376 §17.6.17): the type
-    // on `sectionBreak[i]` describes the break that ENDS section i. The body
-    // sectPr is the final section break and gets the default `continuous` type,
-    // so we can't distinguish explicit vs default `continuous` from the type
-    // alone — the multi-page check supplies the missing signal for the last
-    // section. Earlier sections rely on the type being non-default if it's
-    // `continuous` (because paragraph sectPr defaults to `nextPage`).
+    //   2. The doc contains at least one EXPLICIT `<w:type w:val="continuous"/>`
+    //      somewhere. Word treats an explicit continuous break (typically the
+    //      body sectPr) as a doc-wide signal to balance every multi-column
+    //      section, even ones whose own break is `nextPage`. Covers
+    //      sd-1480-two-col-tab-positions: section 0 ends with default
+    //      `nextPage` but the body sectPr has explicit `continuous`, and Word
+    //      balances 6 entries 3+3.
     //
-    // FALLBACK_SECTION_IDX (-1) bypasses both gates because the synthesized
+    //   3. The section spans multiple pages. Word balances the last page of a
+    //      multi-page multi-column body section regardless of break-type
+    //      explicitness. Covers `two_column_two_page-arial 2` page 17 (17
+    //      pages, body default continuous, balanced 3+2 on the final page).
+    //
+    // The skip-the-last-section safeguard handles `sd-1655-col-sep-3-equal-columns`:
+    //   single section, body sectPr without `<w:type>`, single page,
+    //   3-column → Word fills column-by-column without balancing. None of
+    //   the three allowed scenarios fire here, so the skip path runs.
+    //
+    // FALLBACK_SECTION_IDX (-1) bypasses all of this — the synthesized
     // fallback fires only when no pm-adapter section metadata exists at all.
     if (sectionIdx !== FALLBACK_SECTION_IDX) {
       const endBreakType = sectionEndBreakType.get(sectionIdx);
-      if (endBreakType !== 'continuous') continue;
+      const isLast = lastSectionIdx !== null && sectionIdx === lastSectionIdx;
+      const isExplicitContinuous = endBreakType === 'continuous' && sectionTypeIsExplicit.get(sectionIdx) === true;
+      // Scan all sections once for a doc-wide explicit continuous break.
+      let docHasExplicitContinuous = false;
+      for (const [idx, explicit] of sectionTypeIsExplicit) {
+        if (explicit && sectionEndBreakType.get(idx) === 'continuous') {
+          docHasExplicitContinuous = true;
+          break;
+        }
+      }
 
-      if (lastSectionIdx !== null && sectionIdx === lastSectionIdx) {
+      const allowedByMidDocContinuous = endBreakType === 'continuous' && !isLast;
+      const allowedByDocWideExplicit = docHasExplicitContinuous;
+      let allowedByMultiPage = false;
+      if (!allowedByMidDocContinuous && !allowedByDocWideExplicit) {
         let sectionPagesCount = 0;
         for (const p of pages) {
           if (p.fragments.some((f) => blockSectionMap.get(f.blockId) === sectionIdx)) {
             sectionPagesCount += 1;
-            if (sectionPagesCount > 1) break;
+            if (sectionPagesCount > 1) {
+              allowedByMultiPage = true;
+              break;
+            }
           }
         }
-        if (sectionPagesCount <= 1) continue;
       }
+
+      if (!allowedByMidDocContinuous && !allowedByDocWideExplicit && !allowedByMultiPage) continue;
+      // Suppress the `void` lint warning while keeping the variable available
+      // for future refinements that want a "section-own-explicit" gate.
+      void isExplicitContinuous;
     }
 
     // Find the last page carrying any fragments from this section.

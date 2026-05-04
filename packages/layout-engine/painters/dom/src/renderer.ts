@@ -291,13 +291,13 @@ export type PageDecorationPayload = {
  *
  * @param {number} pageNumber - The page number (1-indexed)
  * @param {PageMargins} [pageMargins] - Page margin configuration
- * @param {Page} [page] - Full page object from the layout
+ * @param {ResolvedPage} [page] - Resolved page from the layout
  * @returns {PageDecorationPayload | null} Decoration payload containing fragments and layout info, or null if no decoration
  */
 export type PageDecorationProvider = (
   pageNumber: number,
   pageMargins?: PageMargins,
-  page?: Page,
+  page?: ResolvedPage,
 ) => PageDecorationPayload | null;
 
 /**
@@ -1291,7 +1291,7 @@ export class DomPainter {
   private mount: HTMLElement | null = null;
   private doc: Document | null = null;
   private pageStates: PageDomState[] = [];
-  private currentLayout: Layout | null = null;
+  private currentLayout: ResolvedLayout | null = null;
   private changedBlocks = new Set<string>();
   private readonly layoutMode: LayoutMode;
   private readonly isSemanticFlow: boolean;
@@ -1492,7 +1492,7 @@ export class DomPainter {
     this.onPaintSnapshotCallback?.(snapshot);
   }
 
-  private beginPaintSnapshot(layout: Layout): void {
+  private beginPaintSnapshot(layout: ResolvedLayout): void {
     this.paintSnapshotBuilder = {
       formatVersion: 1,
       lineCount: 0,
@@ -1638,11 +1638,6 @@ export class DomPainter {
   public paint(input: DomPainterInput, mount: HTMLElement, mapping?: PositionMapping): void {
     const resolvedLayout = input.resolvedLayout;
     this.resolvedLayout = resolvedLayout;
-    // Local Layout-shaped binding kept until the four legacy-Layout methods
-    // (beginPaintSnapshot, fullRender, patchLayout, renderHorizontal,
-    // renderBookMode, renderVirtualized) migrate to ResolvedLayout in the
-    // following commit. After that, this binding goes away entirely.
-    const layout = input.sourceLayout;
     this.changedBlocks.clear();
 
     if (!(mount instanceof HTMLElement)) {
@@ -1690,7 +1685,7 @@ export class DomPainter {
 
     this.layoutEpoch = resolvedLayout.layoutEpoch ?? 0;
     this.mount = mount;
-    this.beginPaintSnapshot(layout);
+    this.beginPaintSnapshot(resolvedLayout);
 
     this.totalPages = resolvedLayout.pages.length;
     if (this.isSemanticFlow) {
@@ -1699,12 +1694,12 @@ export class DomPainter {
       mount.style.gap = '0px';
       mount.style.alignItems = 'stretch';
       if (!this.currentLayout || this.pageStates.length === 0) {
-        this.fullRender(layout);
+        this.fullRender(resolvedLayout);
       } else {
-        this.patchLayout(layout);
+        this.patchLayout(resolvedLayout);
       }
       this.setMountedPageIndices(this.createAllPageIndices(resolvedLayout.pages.length));
-      this.currentLayout = layout;
+      this.currentLayout = resolvedLayout;
       this.changedBlocks.clear();
       this.currentMapping = null;
       return;
@@ -1716,10 +1711,10 @@ export class DomPainter {
       applyStyles(mount, containerStylesHorizontal);
       // Use configured page gap for horizontal rendering
       mount.style.gap = `${this.pageGap}px`;
-      this.renderHorizontal(layout, mount);
+      this.renderHorizontal(resolvedLayout, mount);
       this.finalizePaintSnapshotFromBuilder(mount);
       this.setMountedPageIndices(this.createAllPageIndices(resolvedLayout.pages.length));
-      this.currentLayout = layout;
+      this.currentLayout = resolvedLayout;
       this.pageStates = [];
       this.changedBlocks.clear();
       this.currentMapping = null;
@@ -1727,10 +1722,10 @@ export class DomPainter {
     }
     if (mode === 'book') {
       applyStyles(mount, containerStyles);
-      this.renderBookMode(layout, mount);
+      this.renderBookMode(resolvedLayout, mount);
       this.finalizePaintSnapshotFromBuilder(mount);
       this.setMountedPageIndices(this.createAllPageIndices(resolvedLayout.pages.length));
-      this.currentLayout = layout;
+      this.currentLayout = resolvedLayout;
       this.pageStates = [];
       this.changedBlocks.clear();
       this.currentMapping = null;
@@ -1743,18 +1738,18 @@ export class DomPainter {
     if (this.virtualEnabled) {
       // Keep container gap at 0 so spacer elements don't introduce extra offsets.
       mount.style.gap = '0px';
-      this.renderVirtualized(layout, mount);
+      this.renderVirtualized(resolvedLayout, mount);
       useDomSnapshotFallback = true;
-      this.currentLayout = layout;
+      this.currentLayout = resolvedLayout;
       this.changedBlocks.clear();
       this.currentMapping = null;
     } else {
       // Use configured page gap for normal vertical rendering
       mount.style.gap = `${this.pageGap}px`;
       if (!this.currentLayout || this.pageStates.length === 0) {
-        this.fullRender(layout);
+        this.fullRender(resolvedLayout);
       } else {
-        this.patchLayout(layout);
+        this.patchLayout(resolvedLayout);
         useDomSnapshotFallback = true;
       }
       this.setMountedPageIndices(this.createAllPageIndices(resolvedLayout.pages.length));
@@ -1767,7 +1762,7 @@ export class DomPainter {
       this.finalizePaintSnapshotFromBuilder(mount);
     }
 
-    this.currentLayout = layout;
+    this.currentLayout = resolvedLayout;
     this.changedBlocks.clear();
     this.currentMapping = null;
   }
@@ -1775,7 +1770,7 @@ export class DomPainter {
   // ----------------
   // Virtualized path
   // ----------------
-  private renderVirtualized(layout: Layout, mount: HTMLElement): void {
+  private renderVirtualized(layout: ResolvedLayout, mount: HTMLElement): void {
     if (!this.doc) return;
     // Always keep the latest layout reference for handlers
     this.currentLayout = layout;
@@ -1884,10 +1879,7 @@ export class DomPainter {
     if (!this.currentLayout) return;
     const N = this.currentLayout.pages.length;
     if (N !== this.virtualHeights.length) {
-      this.virtualHeights = this.currentLayout.pages.map((p, i) => {
-        const resolved = this.getResolvedPage(i);
-        return resolved?.height ?? p.size?.h ?? this.currentLayout!.pageSize.h;
-      });
+      this.virtualHeights = this.currentLayout.pages.map((p) => p.height);
     }
     // Build offsets where offsets[i] = sum_{k < i} (height[k] + gap).
     // Use virtualGap to match CSS gap on virtualPagesEl.
@@ -2046,8 +2038,7 @@ export class DomPainter {
     // Insert or patch needed pages
     for (const i of mounted) {
       const page = layout.pages[i];
-      const resolved = this.getResolvedPage(i);
-      const pageSize = resolved ? { w: resolved.width, h: resolved.height } : (page.size ?? layout.pageSize);
+      const pageSize = { w: page.width, h: page.height };
       const existing = this.pageIndexToState.get(i);
       if (!existing) {
         const newState = this.createPageState(page, pageSize, i);
@@ -2144,28 +2135,23 @@ export class DomPainter {
     this.virtualGapSpacers = [];
   }
 
-  private renderHorizontal(layout: Layout, mount: HTMLElement): void {
+  private renderHorizontal(layout: ResolvedLayout, mount: HTMLElement): void {
     if (!this.doc) return;
     mount.innerHTML = '';
     layout.pages.forEach((page, pageIndex) => {
-      const resolved = this.getResolvedPage(pageIndex);
-      const pageSize = resolved ? { w: resolved.width, h: resolved.height } : (page.size ?? layout.pageSize);
-      const pageEl = this.renderPage(pageSize.w, pageSize.h, page, pageIndex);
+      const pageEl = this.renderPage(page.width, page.height, page, pageIndex);
       mount.appendChild(pageEl);
     });
   }
 
-  private renderBookMode(layout: Layout, mount: HTMLElement): void {
+  private renderBookMode(layout: ResolvedLayout, mount: HTMLElement): void {
     if (!this.doc) return;
     mount.innerHTML = '';
     const pages = layout.pages;
     if (pages.length === 0) return;
 
-    const firstResolved = this.getResolvedPage(0);
-    const firstPageSize = firstResolved
-      ? { w: firstResolved.width, h: firstResolved.height }
-      : (pages[0].size ?? layout.pageSize);
-    const firstPageEl = this.renderPage(firstPageSize.w, firstPageSize.h, pages[0], 0);
+    const firstPage = pages[0];
+    const firstPageEl = this.renderPage(firstPage.width, firstPage.height, firstPage, 0);
     mount.appendChild(firstPageEl);
 
     for (let i = 1; i < pages.length; i += 2) {
@@ -2174,20 +2160,12 @@ export class DomPainter {
       applyStyles(spreadEl, spreadStyles);
 
       const leftPage = pages[i];
-      const leftResolved = this.getResolvedPage(i);
-      const leftPageSize = leftResolved
-        ? { w: leftResolved.width, h: leftResolved.height }
-        : (leftPage.size ?? layout.pageSize);
-      const leftPageEl = this.renderPage(leftPageSize.w, leftPageSize.h, leftPage, i);
+      const leftPageEl = this.renderPage(leftPage.width, leftPage.height, leftPage, i);
       spreadEl.appendChild(leftPageEl);
 
       if (i + 1 < pages.length) {
         const rightPage = pages[i + 1];
-        const rightResolved = this.getResolvedPage(i + 1);
-        const rightPageSize = rightResolved
-          ? { w: rightResolved.width, h: rightResolved.height }
-          : (rightPage.size ?? layout.pageSize);
-        const rightPageEl = this.renderPage(rightPageSize.w, rightPageSize.h, rightPage, i + 1);
+        const rightPageEl = this.renderPage(rightPage.width, rightPage.height, rightPage, i + 1);
         spreadEl.appendChild(rightPageEl);
       }
 
@@ -2195,11 +2173,10 @@ export class DomPainter {
     }
   }
 
-  private renderPage(width: number, height: number, page: Page, pageIndex: number): HTMLElement {
+  private renderPage(width: number, height: number, page: ResolvedPage, pageIndex: number): HTMLElement {
     if (!this.doc) {
       throw new Error('DomPainter: document is not available');
     }
-    const resolvedPage = this.getResolvedPage(pageIndex);
     const el = this.doc.createElement('div');
     el.classList.add(CLASS_NAMES.page);
     applyStyles(el, pageStyles(width, height, this.getEffectivePageStyles()));
@@ -2210,7 +2187,7 @@ export class DomPainter {
 
     // Render per-page ruler if enabled (suppressed in semantic flow mode)
     if (!this.isSemanticFlow && this.options.ruler?.enabled) {
-      const rulerEl = this.renderPageRuler(width, page, resolvedPage);
+      const rulerEl = this.renderPageRuler(width, page);
       if (rulerEl) {
         el.appendChild(rulerEl);
       }
@@ -2220,11 +2197,11 @@ export class DomPainter {
       pageNumber: page.number,
       totalPages: this.totalPages,
       section: 'body',
-      pageNumberText: resolvedPage?.numberText ?? page.numberText,
+      pageNumberText: page.numberText,
       pageIndex,
     };
 
-    const resolvedItems = resolvedPage?.items ?? [];
+    const resolvedItems = page.items;
     const sdtBoundaries = computeSdtBoundaries(resolvedItems, this.sdtLabelsRendered);
     const betweenBorderFlags = computeBetweenBorderFlags(resolvedItems);
 
@@ -2236,8 +2213,8 @@ export class DomPainter {
         this.renderFragment(fragment, contextBase, sdtBoundary, betweenBorderFlags.get(index), resolvedItem),
       );
     });
-    this.renderDecorationsForPage(el, page, pageIndex, resolvedPage);
-    this.renderColumnSeparators(el, page, width, height, resolvedPage);
+    this.renderDecorationsForPage(el, page, pageIndex);
+    this.renderColumnSeparators(el, page, width, height);
     return el;
   }
 
@@ -2259,13 +2236,13 @@ export class DomPainter {
    * - Uses DEFAULT_PAGE_HEIGHT_PX (1056px = 11 inches) if page.size.h is not available
    * - Defaults margins to 0 if not explicitly provided
    */
-  private renderPageRuler(pageWidthPx: number, page: Page, resolvedPage?: ResolvedPage | null): HTMLElement | null {
+  private renderPageRuler(pageWidthPx: number, page: ResolvedPage): HTMLElement | null {
     if (!this.doc) {
       console.warn('[renderPageRuler] Cannot render ruler: document is not available.');
       return null;
     }
 
-    const margins = resolvedPage?.margins ?? page.margins;
+    const margins = page.margins;
     if (!margins) {
       console.warn(`[renderPageRuler] Cannot render ruler for page ${page.number}: margins not available.`);
       return null;
@@ -2277,7 +2254,7 @@ export class DomPainter {
     try {
       const rulerDefinition = generateRulerDefinitionFromPx({
         pageWidthPx,
-        pageHeightPx: page.size?.h ?? DEFAULT_PAGE_HEIGHT_PX,
+        pageHeightPx: page.height ?? DEFAULT_PAGE_HEIGHT_PX,
         leftMarginPx: leftMargin,
         rightMarginPx: rightMargin,
       });
@@ -2318,17 +2295,11 @@ export class DomPainter {
     }
   }
 
-  private renderColumnSeparators(
-    pageEl: HTMLElement,
-    page: Page,
-    pageWidth: number,
-    pageHeight: number,
-    resolvedPage?: ResolvedPage | null,
-  ): void {
+  private renderColumnSeparators(pageEl: HTMLElement, page: ResolvedPage, pageWidth: number, pageHeight: number): void {
     if (!this.doc) return;
     pageEl.querySelectorAll('[data-superdoc-column-separator="true"]').forEach((separator) => separator.remove());
 
-    const pageMargins = resolvedPage?.margins ?? page.margins;
+    const pageMargins = page.margins;
     if (!pageMargins) return;
 
     const leftMargin = pageMargins.left ?? 0;
@@ -2424,15 +2395,10 @@ export class DomPainter {
 
     return separatorPositions;
   }
-  private renderDecorationsForPage(
-    pageEl: HTMLElement,
-    page: Page,
-    pageIndex: number,
-    resolvedPage?: ResolvedPage | null,
-  ): void {
+  private renderDecorationsForPage(pageEl: HTMLElement, page: ResolvedPage, pageIndex: number): void {
     if (this.isSemanticFlow) return;
-    this.renderDecorationSection(pageEl, page, pageIndex, 'header', resolvedPage);
-    this.renderDecorationSection(pageEl, page, pageIndex, 'footer', resolvedPage);
+    this.renderDecorationSection(pageEl, page, pageIndex, 'header');
+    this.renderDecorationSection(pageEl, page, pageIndex, 'footer');
   }
 
   /**
@@ -2463,21 +2429,17 @@ export class DomPainter {
    */
   private getDecorationAnchorPageOriginY(
     pageEl: HTMLElement,
-    page: Page,
+    page: ResolvedPage,
     kind: 'header' | 'footer',
     effectiveOffset: number,
-    resolvedPage?: ResolvedPage | null,
   ): number {
     if (kind === 'header') {
       return effectiveOffset;
     }
 
-    const pageMargins = resolvedPage?.margins ?? page.margins;
+    const pageMargins = page.margins;
     const styledPageHeight = Number.parseFloat(pageEl.style.height || '');
-    const pageHeight =
-      page.size?.h ??
-      this.currentLayout?.pageSize?.h ??
-      (Number.isFinite(styledPageHeight) ? styledPageHeight : pageEl.clientHeight);
+    const pageHeight = page.height ?? (Number.isFinite(styledPageHeight) ? styledPageHeight : pageEl.clientHeight);
 
     const footerDistance = pageMargins?.footer;
     if (typeof footerDistance === 'number' && Number.isFinite(footerDistance)) {
@@ -2489,7 +2451,7 @@ export class DomPainter {
       return effectiveOffset;
     }
 
-    const footnoteReserve = resolvedPage?.footnoteReserved ?? page.footnoteReserved ?? 0;
+    const footnoteReserve = page.footnoteReserved ?? 0;
     const adjustedBottomMargin = Math.max(0, bottomMargin - footnoteReserve);
 
     return Math.max(0, pageHeight - adjustedBottomMargin);
@@ -2497,16 +2459,14 @@ export class DomPainter {
 
   private renderDecorationSection(
     pageEl: HTMLElement,
-    page: Page,
+    page: ResolvedPage,
     pageIndex: number,
     kind: 'header' | 'footer',
-    resolvedPage?: ResolvedPage | null,
   ): void {
     if (!this.doc) return;
     const provider = kind === 'header' ? this.headerProvider : this.footerProvider;
     const className = kind === 'header' ? CLASS_NAMES.pageHeader : CLASS_NAMES.pageFooter;
     const existing = pageEl.querySelector(`.${className}`);
-    // Provider still receives legacy page — its signature is not changed in this PR
     const data = provider ? provider(page.number, page.margins, page) : null;
 
     if (!data || data.fragments.length === 0) {
@@ -2519,7 +2479,7 @@ export class DomPainter {
     container.innerHTML = '';
     const baseOffset = data.offset ?? (kind === 'footer' ? pageEl.clientHeight - data.height : 0);
     const marginLeft = data.marginLeft ?? 0;
-    const pageMargins = resolvedPage?.margins ?? page.margins;
+    const pageMargins = page.margins;
     const marginRight = pageMargins?.right ?? 0;
 
     // For footers, if content is taller than reserved space, expand container upward
@@ -2560,7 +2520,7 @@ export class DomPainter {
     // Header page-relative anchors use raw inner-layout Y and are handled with
     // the simpler effectiveOffset subtraction (unchanged from the baseline).
     const footerAnchorPageOriginY =
-      kind === 'footer' ? this.getDecorationAnchorPageOriginY(pageEl, page, kind, effectiveOffset, resolvedPage) : 0;
+      kind === 'footer' ? this.getDecorationAnchorPageOriginY(pageEl, page, kind, effectiveOffset) : 0;
     const footerAnchorContainerOffsetY = kind === 'footer' ? footerAnchorPageOriginY - effectiveOffset : 0;
 
     // For footers, calculate offset to push content to bottom of container
@@ -2586,7 +2546,7 @@ export class DomPainter {
       pageNumber: page.number,
       totalPages: this.totalPages,
       section: kind,
-      pageNumberText: resolvedPage?.numberText ?? page.numberText,
+      pageNumberText: page.numberText,
       pageIndex,
     };
 
@@ -2727,14 +2687,13 @@ export class DomPainter {
     this.mountedPageIndices = [];
   }
 
-  private fullRender(layout: Layout): void {
+  private fullRender(layout: ResolvedLayout): void {
     if (!this.mount || !this.doc) return;
     this.mount.innerHTML = '';
     this.pageStates = [];
 
     layout.pages.forEach((page, pageIndex) => {
-      const resolved = this.getResolvedPage(pageIndex);
-      const pageSize = resolved ? { w: resolved.width, h: resolved.height } : (page.size ?? layout.pageSize);
+      const pageSize = { w: page.width, h: page.height };
       const pageState = this.createPageState(page, pageSize, pageIndex);
       pageState.element.dataset.pageNumber = String(page.number);
       pageState.element.dataset.pageIndex = String(pageIndex);
@@ -2743,14 +2702,13 @@ export class DomPainter {
     });
   }
 
-  private patchLayout(layout: Layout): void {
+  private patchLayout(layout: ResolvedLayout): void {
     if (!this.mount || !this.doc) return;
 
     const nextStates: PageDomState[] = [];
 
     layout.pages.forEach((page, index) => {
-      const resolved = this.getResolvedPage(index);
-      const pageSize = resolved ? { w: resolved.width, h: resolved.height } : (page.size ?? layout.pageSize);
+      const pageSize = { w: page.width, h: page.height };
       const prevState = this.pageStates[index];
       if (!prevState) {
         const newState = this.createPageState(page, pageSize, index);
@@ -2773,8 +2731,12 @@ export class DomPainter {
     this.pageStates = nextStates;
   }
 
-  private patchPage(state: PageDomState, page: Page, pageSize: { w: number; h: number }, pageIndex: number): void {
-    const resolvedPage = this.getResolvedPage(pageIndex);
+  private patchPage(
+    state: PageDomState,
+    page: ResolvedPage,
+    pageSize: { w: number; h: number },
+    pageIndex: number,
+  ): void {
     const pageEl = state.element;
     applyStyles(pageEl, pageStyles(pageSize.w, pageSize.h, this.getEffectivePageStyles()));
     this.applySemanticPageOverrides(pageEl);
@@ -2784,7 +2746,7 @@ export class DomPainter {
 
     const existing = new Map(state.fragments.map((frag) => [frag.key, frag]));
     const nextFragments: FragmentDomState[] = [];
-    const resolvedItems = resolvedPage?.items ?? [];
+    const resolvedItems = page.items;
     const sdtBoundaries = computeSdtBoundaries(resolvedItems, this.sdtLabelsRendered);
     const betweenBorderFlags = computeBetweenBorderFlags(resolvedItems);
 
@@ -2792,7 +2754,7 @@ export class DomPainter {
       pageNumber: page.number,
       totalPages: this.totalPages,
       section: 'body',
-      pageNumberText: resolvedPage?.numberText ?? page.numberText,
+      pageNumberText: page.numberText,
       pageIndex,
     };
 
@@ -2874,8 +2836,8 @@ export class DomPainter {
     });
 
     state.fragments = nextFragments;
-    this.renderDecorationsForPage(pageEl, page, pageIndex, resolvedPage);
-    this.renderColumnSeparators(pageEl, page, pageSize.w, pageSize.h, resolvedPage);
+    this.renderDecorationsForPage(pageEl, page, pageIndex);
+    this.renderColumnSeparators(pageEl, page, pageSize.w, pageSize.h);
   }
 
   /**
@@ -2935,11 +2897,10 @@ export class DomPainter {
     }
   }
 
-  private createPageState(page: Page, pageSize: { w: number; h: number }, pageIndex: number): PageDomState {
+  private createPageState(page: ResolvedPage, pageSize: { w: number; h: number }, pageIndex: number): PageDomState {
     if (!this.doc) {
       throw new Error('DomPainter.createPageState requires a document');
     }
-    const resolvedPage = this.getResolvedPage(pageIndex);
     const el = this.doc.createElement('div');
     el.classList.add(CLASS_NAMES.page);
     applyStyles(el, pageStyles(pageSize.w, pageSize.h, this.getEffectivePageStyles()));
@@ -2950,11 +2911,11 @@ export class DomPainter {
       pageNumber: page.number,
       totalPages: this.totalPages,
       section: 'body',
-      pageNumberText: resolvedPage?.numberText ?? page.numberText,
+      pageNumberText: page.numberText,
       pageIndex,
     };
 
-    const resolvedItems = resolvedPage?.items ?? [];
+    const resolvedItems = page.items;
     const sdtBoundaries = computeSdtBoundaries(resolvedItems, this.sdtLabelsRendered);
     const betweenBorderFlags = computeBetweenBorderFlags(resolvedItems);
     const fragmentStates: FragmentDomState[] = resolvedItems.flatMap((resolvedItem, index) => {
@@ -2981,8 +2942,8 @@ export class DomPainter {
       ];
     });
 
-    this.renderDecorationsForPage(el, page, pageIndex, resolvedPage);
-    this.renderColumnSeparators(el, page, pageSize.w, pageSize.h, resolvedPage);
+    this.renderDecorationsForPage(el, page, pageIndex);
+    this.renderColumnSeparators(el, page, pageSize.w, pageSize.h);
     return { element: el, fragments: fragmentStates };
   }
 

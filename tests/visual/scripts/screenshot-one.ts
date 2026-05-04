@@ -143,6 +143,18 @@ async function assertSuperDocBuilt(): Promise<void> {
   }
 }
 
+async function clearStalePageImages(outputDir: string): Promise<void> {
+  // Reusing an output directory across runs would otherwise leave page-NNN.png
+  // files from a longer prior run, which downstream consumers would mistake
+  // for current output. metadata.json is overwritten unconditionally below.
+  const entries = await fs.readdir(outputDir).catch(() => [] as string[]);
+  await Promise.all(
+    entries
+      .filter((name) => /^page-\d{3,}\.png$/.test(name))
+      .map((name) => fs.unlink(path.join(outputDir, name)).catch(() => undefined)),
+  );
+}
+
 async function sha256OfFile(filePath: string): Promise<string> {
   const hash = createHash('sha256');
   await new Promise<void>((resolve, reject) => {
@@ -212,6 +224,7 @@ async function main(): Promise<void> {
   await assertDocxInput(inputPath);
   await assertSuperDocBuilt();
   await fs.mkdir(outputDir, { recursive: true });
+  await clearStalePageImages(outputDir);
 
   const docxSha256 = await sha256OfFile(inputPath);
 
@@ -274,17 +287,29 @@ async function main(): Promise<void> {
       );
     }
 
+    // AIDEV-NOTE: a partial capture corrupts the artifact bundle silently
+    // for downstream consumers (a visual judge would compare missing pages
+    // as drift). Throw on any scroll/screenshot failure rather than break,
+    // so the caller sees a non-zero exit instead of a "successful" run with
+    // fewer images than pages.
     let captured = 0;
     for (let i = 0; i < pageCount; i += 1) {
       const pageEl = pages.nth(i);
       try {
         await pageEl.scrollIntoViewIfNeeded({ timeout: 5_000 });
-      } catch {
-        break;
+      } catch (cause) {
+        throw new Error(
+          `Failed to scroll page ${i + 1}/${pageCount} into view; partial capture aborted (${captured}/${pageCount} pages written).`,
+          { cause: cause instanceof Error ? cause : undefined },
+        );
       }
       const fileName = `page-${String(i + 1).padStart(3, '0')}.png`;
       await pageEl.screenshot({ path: path.join(outputDir, fileName), timeout: 15_000 });
       captured += 1;
+    }
+
+    if (captured !== pageCount) {
+      throw new Error(`Captured ${captured} of ${pageCount} pages; partial capture aborted.`);
     }
 
     const viewport = page.viewportSize() ?? { width: 1600, height: 1200 };
@@ -297,7 +322,6 @@ async function main(): Promise<void> {
       docxSha256,
       pipeline: args.pipeline,
       pageCount: captured,
-      pageCountReported: pageCount,
       viewport: { width: viewport.width, height: viewport.height },
     };
 

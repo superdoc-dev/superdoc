@@ -2654,9 +2654,6 @@ importers:
       '@superdoc/font-utils':
         specifier: workspace:*
         version: link:../../../../shared/font-utils
-      '@superdoc/layout-resolved':
-        specifier: workspace:*
-        version: link:../../layout-resolved
       '@superdoc/preset-geometry':
         specifier: workspace:*
         version: link:../../../preset-geometry
@@ -2667,6 +2664,9 @@ importers:
       '@superdoc/layout-engine':
         specifier: workspace:*
         version: link:../../layout-engine
+      '@superdoc/layout-resolved':
+        specifier: workspace:*
+        version: link:../../layout-resolved
       vitest:
         specifier: 'catalog:'
         version: 3.2.4(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/debug@4.1.13)(@types/node@25.6.0)(esbuild@0.27.7)(happy-dom@20.4.0)(jiti@2.6.1)(jsdom@27.3.0(canvas@3.2.3))(less@4.4.2)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)

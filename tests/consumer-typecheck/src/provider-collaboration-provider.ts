@@ -4,7 +4,7 @@
  *
  * The runtime stores whatever provider the consumer passed via
  * `Config.modules.collaboration.provider`. Consumers may pass any
- * Yjs-compatible provider — Hocuspocus, LiveblocksYjsProvider,
+ * Yjs-compatible provider: Hocuspocus, LiveblocksYjsProvider,
  * TiptapCollabProvider, or a hand-rolled adapter that conforms to the
  * `CollaborationProvider` shape. The previous typedef narrowed both
  * fields to `HocuspocusProvider`, which lied about the runtime for any
@@ -19,24 +19,30 @@ import type { CollaborationProvider, Config, SuperDoc } from 'superdoc';
 
 declare const sd: SuperDoc;
 
-// `SuperDoc.provider` is `CollaborationProvider | undefined`. A consumer
-// using a non-Hocuspocus provider can read it directly without `as`.
-const sdProvider: CollaborationProvider | undefined = sd.provider;
+// Strict type-equality assertion. A narrower type (e.g. `HocuspocusProvider`)
+// would still be assignable to `CollaborationProvider | undefined`, so a
+// plain assignment here would silently pass under a re-narrowing
+// regression. The `Equal` trick fails the test if the field's exact type
+// drifts in either direction.
+type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
+type AssertEqual<A, B> = Equal<A, B> extends true ? true : never;
+
+// `SuperDoc.provider` must be exactly `CollaborationProvider | undefined`.
+const _sdProviderTypeIsExact: AssertEqual<typeof sd.provider, CollaborationProvider | undefined> = true;
 
 // `Config['documents']` carries the per-document `Document` shape.
 type DocumentEntry = NonNullable<Config['documents']>[number];
 
-// `Document.provider` is `CollaborationProvider | undefined`. Same shape
-// as the SuperDoc-level field; consumers reading `doc.provider` see
-// the same widened type.
+// `Document.provider` must be exactly `CollaborationProvider | undefined`.
 declare const docEntry: DocumentEntry;
-const docProvider: CollaborationProvider | undefined = docEntry.provider;
+const _docProviderTypeIsExact: AssertEqual<typeof docEntry.provider, CollaborationProvider | undefined> = true;
 
-// Construct a minimal `CollaborationProvider`-shaped object — the public
-// interface only requires the Yjs-shaped `on` / `off` methods. Consumers
-// of non-Hocuspocus providers (Liveblocks, Tiptap, custom) must be able
-// to assign such a value and have it satisfy the `Document.provider`
-// shape.
+// Construct a `CollaborationProvider`-shaped object with the Yjs-style
+// `on` / `off` methods consumers typically supply. Every field on the
+// public `CollaborationProvider` interface is optional, so even an empty
+// `{}` would satisfy the type; including `on`/`off` here mirrors what
+// real non-Hocuspocus providers (Liveblocks, Tiptap, custom adapters)
+// expose and what the runtime calls into.
 const minimalProvider: CollaborationProvider = {
   on: () => {},
   off: () => {},
@@ -48,4 +54,4 @@ const docWithMinimalProvider: DocumentEntry = {
 };
 
 // Reference all bindings so `tsc --noEmit` doesn't strip them.
-void [sdProvider, docProvider, minimalProvider, docWithMinimalProvider];
+void [_sdProviderTypeIsExact, _docProviderTypeIsExact, minimalProvider, docWithMinimalProvider];

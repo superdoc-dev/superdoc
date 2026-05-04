@@ -812,7 +812,6 @@ test.describe('suggesting mode routing', () => {
       });
 
     await expectCaretAtClickBoundary(superdoc.page, footnote, 'fX0ootnote', 6);
-
     await superdoc.page.keyboard.insertText('Z');
     await superdoc.waitForStable(300);
 

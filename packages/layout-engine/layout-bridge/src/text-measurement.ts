@@ -19,6 +19,14 @@ let measurementCanvas: HTMLCanvasElement | null = null;
 let measurementCtx: CanvasRenderingContext2D | null = null;
 
 const TAB_CHAR_LENGTH = 1;
+const FOOTNOTE_MARKER_DATA_ATTR = 'data-sd-footnote-number';
+
+const getRunDataAttrs = (run: Run | undefined): Record<string, string> | undefined => {
+  if (!run || !('dataAttrs' in run)) {
+    return undefined;
+  }
+  return run.dataAttrs;
+};
 
 const getRunCharacterLength = (run: Run | undefined): number => {
   if (!run) return 0;
@@ -33,6 +41,10 @@ const getRunCharacterLength = (run: Run | undefined): number => {
     return 0;
   }
   return run.text?.length ?? 0;
+};
+
+const isVisualOnlyRun = (run: Run | undefined): boolean => {
+  return getRunDataAttrs(run)?.[FOOTNOTE_MARKER_DATA_ATTR] === 'true';
 };
 
 /**
@@ -54,22 +66,6 @@ const isWordChar = (char: string): boolean => {
   if (!char) return false;
   const code = char.charCodeAt(0);
   return (code >= 48 && code <= 57) || (code >= 65 && code <= 90) || (code >= 97 && code <= 122) || char === "'";
-};
-
-const lineContainsManualTabWithoutSegments = (block: FlowBlock, line: Line): boolean => {
-  if (block.kind !== 'paragraph') return false;
-  if (line.segments?.some((seg) => seg.x !== undefined)) {
-    return false;
-  }
-  const fromRun = line.fromRun ?? 0;
-  const toRun = line.toRun ?? fromRun;
-  for (let runIndex = fromRun; runIndex <= toRun; runIndex += 1) {
-    const run = block.runs[runIndex];
-    if (run && isTabRun(run)) {
-      return true;
-    }
-  }
-  return false;
 };
 
 const capitalizeText = (text: string): string => {
@@ -139,6 +135,16 @@ type JustifyAdjustment = {
   totalSpaces: number;
 };
 
+type GetJustifyAdjustmentParams = {
+  block: FlowBlock;
+  line: Line;
+  availableWidthOverride?: number;
+  alignmentOverride?: string;
+  isLastLineOfParagraph?: boolean;
+  paragraphEndsWithLineBreak?: boolean;
+  skipJustifyOverride?: boolean;
+};
+
 /**
  * Counts the number of space characters in a text string.
  *
@@ -184,45 +190,46 @@ const countSpaces = (text: string): number => {
  * - Non-justify alignment: Returns zero adjustment
  * - Last line of paragraph: Returns zero adjustment (unless paragraph ends with soft break)
  * - No spaces: Returns zero adjustment (prevents division by zero)
- * - Lines with explicit segment positioning: Returns zero adjustment
+ * - Lines with author-defined tab stops: Returns zero adjustment
  * - Compressed lines: Returns negative adjustment (naturalWidth used for slack calculation)
  * - Empty runs array: Returns zero adjustment
  *
- * @param block - The paragraph block containing the line
- * @param line - The line to compute justify adjustment for
- * @param availableWidthOverride - The available width for content (fragment width minus paragraph indents).
+ * @param params - Named parameters for justify adjustment.
+ * @param params.block - The paragraph block containing the line
+ * @param params.line - The line to compute justify adjustment for
+ * @param params.availableWidthOverride - The available width for content (fragment width minus paragraph indents).
  *   Must match what the painter uses to ensure consistent justify spacing. If not provided,
  *   falls back to line.maxWidth or line.width.
- * @param alignmentOverride - Optional alignment override (defaults to block.attrs.alignment)
- * @param isLastLineOfParagraph - Whether this is the last line of the paragraph.
+ * @param params.alignmentOverride - Optional alignment override (defaults to block.attrs.alignment)
+ * @param params.isLastLineOfParagraph - Whether this is the last line of the paragraph.
  *   If not provided, auto-derived from block/line: `line.toRun >= block.runs.length - 1`.
  *   Auto-derivation ensures measurement matches rendering. Returns false for empty runs arrays.
- * @param paragraphEndsWithLineBreak - Whether the paragraph ends with a soft break (Shift+Enter).
+ * @param params.paragraphEndsWithLineBreak - Whether the paragraph ends with a soft break (Shift+Enter).
  *   If not provided, auto-derived: `lastRun?.kind === 'lineBreak'`.
  *   Auto-derivation ensures measurement matches rendering. Returns false for empty runs arrays.
- * @param skipJustifyOverride - Explicit override to skip justify
+ * @param params.skipJustifyOverride - Explicit override to skip justify
  * @returns Object containing extraPerSpace (pixels to add after each space) and totalSpaces
  *
  * @example
  * ```typescript
  * // Line with 200px width in 250px available space, 5 spaces
- * const adj = getJustifyAdjustment(block, line, 250, undefined, false, false);
+ * const adj = getJustifyAdjustment({ block, line, availableWidthOverride: 250, isLastLineOfParagraph: false });
  * // Returns: { extraPerSpace: 10, totalSpaces: 5 }  (50px slack / 5 spaces)
  *
  * // Last line of paragraph (no soft break)
- * const adj = getJustifyAdjustment(block, line, 250, undefined, true, false);
+ * const adj = getJustifyAdjustment({ block, line, availableWidthOverride: 250, isLastLineOfParagraph: true });
  * // Returns: { extraPerSpace: 0, totalSpaces: 5 }  (last line not justified)
  * ```
  */
-const getJustifyAdjustment = (
-  block: FlowBlock,
-  line: Line,
-  availableWidthOverride?: number,
-  alignmentOverride?: string,
-  isLastLineOfParagraph?: boolean,
-  paragraphEndsWithLineBreak?: boolean,
-  skipJustifyOverride?: boolean,
-): JustifyAdjustment => {
+const getJustifyAdjustment = ({
+  block,
+  line,
+  availableWidthOverride,
+  alignmentOverride,
+  isLastLineOfParagraph,
+  paragraphEndsWithLineBreak,
+  skipJustifyOverride,
+}: GetJustifyAdjustmentParams): JustifyAdjustment => {
   if (block.kind !== 'paragraph') {
     return { extraPerSpace: 0, totalSpaces: 0 };
   }
@@ -233,7 +240,6 @@ const getJustifyAdjustment = (
   }
 
   const alignment = alignmentOverride ?? block.attrs?.alignment;
-  const hasExplicitPositioning = line.segments?.some((seg) => seg.x !== undefined) ?? false;
 
   // Derive last-line info from block/line when not explicitly provided.
   // This ensures measurement matches rendering even when callers don't pass these flags.
@@ -245,7 +251,8 @@ const getJustifyAdjustment = (
   // Determine if justify should be applied using shared logic
   const shouldJustify = shouldApplyJustify({
     alignment,
-    hasExplicitPositioning,
+    hasExplicitPositioning: line.segments?.some((seg) => seg.x !== undefined) ?? false,
+    hasExplicitTabStops: line.hasExplicitTabStops === true,
     isLastLineOfParagraph: isLastLineOfParagraph ?? derivedIsLastLine,
     paragraphEndsWithLineBreak: paragraphEndsWithLineBreak ?? derivedEndsWithLineBreak,
     skipJustifyOverride,
@@ -423,17 +430,13 @@ export function measureCharacterX(
     line.maxWidth ??
     // Fallback: if no maxWidth, approximate available width as line width (no slack)
     line.width;
-  const manualTabWithoutSegments = lineContainsManualTabWithoutSegments(block, line);
   // Pass availableWidth to justify calculation to match painter's word-spacing
-  const justify = getJustifyAdjustment(
+  const justify = getJustifyAdjustment({
     block,
     line,
-    availableWidth,
+    availableWidthOverride: availableWidth,
     alignmentOverride,
-    undefined,
-    undefined,
-    manualTabWithoutSegments,
-  );
+  });
   const alignment = alignmentOverride ?? (block.kind === 'paragraph' ? block.attrs?.alignment : undefined);
   // For justify alignment, the line is stretched to fill available width (slack distributed across spaces)
   // For center/right alignment, the line keeps its natural width and is positioned within the available space
@@ -703,20 +706,11 @@ export function charOffsetToPm(block: FlowBlock, line: Line, charOffset: number,
   let cursor = 0;
   let lastPm = fallbackPmStart;
 
-  for (const run of runs) {
-    const isTab = isTabRun(run);
-    const text =
-      'src' in run ||
-      run.kind === 'lineBreak' ||
-      run.kind === 'break' ||
-      run.kind === 'fieldAnnotation' ||
-      run.kind === 'math'
-        ? ''
-        : (run.text ?? '');
-    const runLength = isTab ? TAB_CHAR_LENGTH : text.length;
-
-    const runPmStart = typeof run.pmStart === 'number' ? run.pmStart : null;
-    const runPmEnd = typeof run.pmEnd === 'number' ? run.pmEnd : runPmStart != null ? runPmStart + runLength : null;
+  for (let runIndex = 0; runIndex < runs.length; runIndex += 1) {
+    const run = runs[runIndex];
+    const runLength = getRunCharacterLength(run);
+    const runPmStart = resolveRunPmStart(run, runLength);
+    const runPmEnd = resolveRunPmEnd(run, runLength, runPmStart);
 
     if (runPmStart != null) {
       lastPm = runPmStart;
@@ -724,7 +718,15 @@ export function charOffsetToPm(block: FlowBlock, line: Line, charOffset: number,
 
     if (safeCharOffset <= cursor + runLength) {
       const offsetInRun = Math.max(0, safeCharOffset - cursor);
-      return runPmStart != null ? runPmStart + Math.min(offsetInRun, runLength) : fallbackPmStart + safeCharOffset;
+      if (runPmStart != null) {
+        return runPmStart + Math.min(offsetInRun, runLength);
+      }
+
+      if (isVisualOnlyRun(run)) {
+        return resolveVisualOnlyRunBoundary(runs, runIndex, offsetInRun, runLength, lastPm);
+      }
+
+      return fallbackPmStart + safeCharOffset;
     }
 
     if (runPmEnd != null) {
@@ -736,6 +738,72 @@ export function charOffsetToPm(block: FlowBlock, line: Line, charOffset: number,
 
   return lastPm;
 }
+
+const resolveRunPmStart = (run: Run | undefined, runLength: number): number | null => {
+  if (!run) {
+    return null;
+  }
+
+  if (typeof run.pmStart === 'number') {
+    return run.pmStart;
+  }
+
+  if (typeof run.pmEnd === 'number') {
+    return run.pmEnd - runLength;
+  }
+
+  return null;
+};
+
+const resolveRunPmEnd = (run: Run | undefined, runLength: number, runPmStart: number | null): number | null => {
+  if (!run) {
+    return null;
+  }
+
+  if (typeof run.pmEnd === 'number') {
+    return run.pmEnd;
+  }
+
+  if (runPmStart != null) {
+    return runPmStart + runLength;
+  }
+
+  return null;
+};
+
+const findNextPmBoundary = (runs: readonly Run[], startIndex: number, fallbackPm: number): number => {
+  for (let runIndex = startIndex; runIndex < runs.length; runIndex += 1) {
+    const run = runs[runIndex];
+    const runLength = getRunCharacterLength(run);
+    const nextPmStart = resolveRunPmStart(run, runLength);
+    if (nextPmStart != null) {
+      return nextPmStart;
+    }
+
+    const nextPmEnd = resolveRunPmEnd(run, runLength, nextPmStart);
+    if (nextPmEnd != null) {
+      return nextPmEnd;
+    }
+  }
+
+  return fallbackPm;
+};
+
+const resolveVisualOnlyRunBoundary = (
+  runs: readonly Run[],
+  runIndex: number,
+  offsetInRun: number,
+  runLength: number,
+  previousPmBoundary: number,
+): number => {
+  const nextPmBoundary = findNextPmBoundary(runs, runIndex + 1, previousPmBoundary);
+  if (runLength <= 0 || previousPmBoundary === nextPmBoundary) {
+    return previousPmBoundary;
+  }
+
+  const midpoint = runLength / 2;
+  return offsetInRun < midpoint ? previousPmBoundary : nextPmBoundary;
+};
 
 /**
  * Find the character offset and PM position at a given X coordinate within a line.
@@ -764,16 +832,12 @@ export function findCharacterAtX(
     // Fallback: approximate with line width when no maxWidth is present
     line.width;
   // Pass availableWidth to justify calculation to match painter's word-spacing
-  const manualTabWithoutSegments = lineContainsManualTabWithoutSegments(block, line);
-  const justify = getJustifyAdjustment(
+  const justify = getJustifyAdjustment({
     block,
     line,
-    availableWidth,
+    availableWidthOverride: availableWidth,
     alignmentOverride,
-    undefined,
-    undefined,
-    manualTabWithoutSegments,
-  );
+  });
   const alignment = alignmentOverride ?? (block.kind === 'paragraph' ? block.attrs?.alignment : undefined);
   // For justify alignment, the line is stretched to fill available width (slack distributed across spaces)
   // For center/right alignment, the line keeps its natural width and is positioned within the available space

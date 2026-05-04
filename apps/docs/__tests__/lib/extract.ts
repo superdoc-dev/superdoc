@@ -20,8 +20,6 @@ const SKIP_FILE_PATTERNS = [
   /document-api\//,
   /solutions\/esign\//,
   /solutions\/template-builder\//,
-  /ai\/ai-actions\//,
-  /ai\/ai-builder\//,
   /getting-started\/frameworks\//,
   /snippets\//,
 ];
@@ -34,7 +32,6 @@ const SKIP_IMPORTS = [
   'hocuspocus',
   'fastify',
   'express',
-  '@superdoc-dev/ai',
   '@superdoc-dev/esign',
   '@superdoc-dev/template-builder',
   '@superdoc-dev/superdoc-yjs-collaboration',

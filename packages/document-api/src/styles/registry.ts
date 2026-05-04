@@ -1,7 +1,7 @@
 /**
  * Single source of truth for `styles.apply` property definitions.
  *
- * This module is the leaf of the styles/ dependency graph — it imports nothing
+ * This module is the leaf of the styles/ dependency graph: it imports nothing
  * from validation.ts, schema.ts, or apply.ts. All other styles modules import
  * from here.
  */
@@ -239,7 +239,7 @@ const TAB_STOP_SCHEMA: ValueSchema = {
 };
 
 // ---------------------------------------------------------------------------
-// Property Registry — single source of truth for styles.apply properties
+// Property Registry: single source of truth for styles.apply properties
 // ---------------------------------------------------------------------------
 
 export const PROPERTY_REGISTRY: PropertyDefinition[] = [
@@ -392,7 +392,7 @@ export function getPropertyDefinition(key: string, channel: StylesChannel): Prop
 }
 
 // ---------------------------------------------------------------------------
-// Excluded Keys — intentionally disallowed in Word docDefaults
+// Excluded Keys: intentionally disallowed in Word docDefaults
 // ---------------------------------------------------------------------------
 
 export const EXCLUDED_KEYS: Record<StylesChannel, Map<string, string>> = {

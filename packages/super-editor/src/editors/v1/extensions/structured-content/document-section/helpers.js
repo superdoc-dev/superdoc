@@ -1,6 +1,11 @@
 import { DOMSerializer } from 'prosemirror-model';
 
 /**
+ * @typedef {import('../../../core/Editor.js').Editor} Editor
+ * @typedef {import('prosemirror-model').Node} ProseMirrorNode
+ */
+
+/**
  * Get all sections in the editor document.
  * This function traverses the document and collects all nodes of the specified section type.
  * @param {Editor} editor - The editor instance to search within.
@@ -51,7 +56,7 @@ export const exportSectionsToHTML = (editor) => {
 
 /**
  * Get HTML representation of a ProseMirror node.
- * @param {Node} node - The ProseMirror node to convert.
+ * @param {ProseMirrorNode} node - The ProseMirror node to convert.
  * @param {Editor} editor - The editor instance used for serialization.
  * @returns {String} The HTML representation of the node's content.
  */

@@ -26,6 +26,7 @@ Returns a BookmarksListResult containing discovered bookmarks with address and d
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
+| `in` | StoryLocator | no | StoryLocator |
 | `limit` | integer | no |  |
 | `offset` | integer | no |  |
 
@@ -64,6 +65,9 @@ _No fields._
 {
   "additionalProperties": false,
   "properties": {
+    "in": {
+      "$ref": "#/$defs/StoryLocator"
+    },
     "limit": {
       "minimum": 1,
       "type": "integer"

@@ -125,8 +125,13 @@ export interface User {
   /** The user's name */
   name?: string;
 
-  /** The user's email */
-  email?: string;
+  /**
+   * The user's email. Optional, and may be `null` when SuperDoc fell back
+   * to the built-in default user without an email; the runtime has always
+   * exposed `null` here, so the typedef accepts it explicitly. Consumers
+   * must narrow before performing string operations on this field.
+   */
+  email?: string | null;
 
   /** The user's photo URL */
   image?: string | null;
@@ -563,6 +568,15 @@ export interface EditorOptions {
 
   /** Host-provided permission hook */
   permissionResolver?: ((params: PermissionParams) => boolean | undefined) | null;
+
+  /** Called on pointer down events (local only, not broadcast via collaboration) */
+  onPointerDown?: (params: { editor: Editor; event: PointerEvent }) => void;
+
+  /** Called on pointer up events (local only, not broadcast via collaboration) */
+  onPointerUp?: (params: { editor: Editor; event: PointerEvent }) => void;
+
+  /** Called on right-click (local only, not broadcast via collaboration) */
+  onRightClick?: (params: { editor: Editor; event: PointerEvent }) => void;
 
   /**
    * Custom resolver for the link click popover.

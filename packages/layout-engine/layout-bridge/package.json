@@ -26,10 +26,10 @@
     "@superdoc/dom-contract": "workspace:*",
     "@superdoc/layout-engine": "workspace:*",
     "@superdoc/measuring-dom": "workspace:*",
-    "@superdoc/painter-dom": "workspace:*",
     "@superdoc/word-layout": "workspace:*"
   },
   "devDependencies": {
+    "@superdoc/painter-dom": "workspace:*",
     "@superdoc/pm-adapter": "workspace:*",
     "@types/node": "catalog:",
     "tsup": "catalog:",

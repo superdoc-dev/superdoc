@@ -238,6 +238,25 @@ describe('text measurement utility', () => {
     expect(secondTab.pmPosition).toBeLessThanOrEqual(3);
   });
 
+  it('maps clicks through leading visual-only marker runs to editable PM positions', () => {
+    const block = createBlock([
+      { text: '1', fontFamily: 'Arial', fontSize: 16, dataAttrs: { 'data-sd-footnote-number': 'true' } } as Run,
+      { text: 'Hello', fontFamily: 'Arial', fontSize: 16, pmStart: 0, pmEnd: 5 },
+    ]);
+    const line = baseLine({
+      fromRun: 0,
+      toRun: 1,
+      toChar: 6,
+      width: 6 * CHAR_WIDTH,
+    });
+
+    const markerHit = findCharacterAtX(block, line, CHAR_WIDTH / 2, 0);
+    expect(markerHit.pmPosition).toBe(0);
+
+    const textHit = findCharacterAtX(block, line, CHAR_WIDTH * 3.5, 0);
+    expect(textHit.pmPosition).toBe(3);
+  });
+
   describe('charOffsetToPm edge cases', () => {
     it('clamps character offset beyond line bounds to end position', () => {
       const block = createBlock([{ text: 'Hello', fontFamily: 'Arial', fontSize: 16, pmStart: 0, pmEnd: 5 }]);
@@ -379,6 +398,22 @@ describe('text measurement utility', () => {
 
       const result = charOffsetToPm(block, line, 0, 5);
       expect(result).toBe(5);
+    });
+
+    it('does not advance PM positions through visual-only marker runs', () => {
+      const block = createBlock([
+        { text: '1', fontFamily: 'Arial', fontSize: 16, dataAttrs: { 'data-sd-footnote-number': 'true' } } as Run,
+        { text: 'Hello', fontFamily: 'Arial', fontSize: 16, pmStart: 0, pmEnd: 5 },
+      ]);
+      const line = baseLine({
+        fromRun: 0,
+        toRun: 1,
+        toChar: 6,
+      });
+
+      expect(charOffsetToPm(block, line, 0, 0)).toBe(0);
+      expect(charOffsetToPm(block, line, 1, 0)).toBe(0);
+      expect(charOffsetToPm(block, line, 3, 0)).toBe(2);
     });
   });
 
@@ -590,13 +625,14 @@ describe('text measurement utility', () => {
       expect(xWithSlack).toBeGreaterThan(xWithNaturalWidth);
     });
 
-    it('skips justify spacing for manual tabs without explicit segments', () => {
+    it('applies justify spacing for manual default tabs without explicit segments', () => {
       const trailingText = 'Item body';
       const tabWidth = 48;
       const block = createBlock([
         { text: '1 ', fontFamily: 'Arial', fontSize: 16 },
         { kind: 'tab', text: '\t', width: tabWidth },
         { text: trailingText, fontFamily: 'Arial', fontSize: 16 },
+        { text: ' next line', fontFamily: 'Arial', fontSize: 16 },
       ]);
       (block as any).attrs = { alignment: 'justify' };
       const line = baseLine({
@@ -607,13 +643,10 @@ describe('text measurement utility', () => {
         maxWidth: 300,
       });
 
-      const targetCharOffset = 7;
+      const targetCharOffset = 10;
       const baseX = measureCharacterX(block, line, targetCharOffset, line.width);
       const wideX = measureCharacterX(block, line, targetCharOffset, 300);
-      expect(wideX).toBe(baseX);
-
-      const hitResult = findCharacterAtX(block, line, baseX, 0, 300);
-      expect(hitResult.charOffset).toBe(targetCharOffset);
+      expect(wideX).toBeGreaterThan(baseX);
     });
 
     it('still applies justify to lines without any tab runs', () => {

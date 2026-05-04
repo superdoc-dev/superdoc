@@ -62,6 +62,34 @@ function assertType(value: unknown, expectedType: string, context: string): void
   }
 }
 
+it('exports bookmark-capable navigation address types from the public barrel', () => {
+  const story: import('./index.js').StoryLocator = { kind: 'story', storyType: 'body' };
+  const bookmark: import('./index.js').BookmarkAddress = {
+    kind: 'entity',
+    entityType: 'bookmark',
+    name: 'bookmark-1',
+    story,
+  };
+  const block: import('./index.js').BlockNavigationAddress = {
+    kind: 'block',
+    nodeId: 'node-1',
+  };
+  const comment: import('./index.js').CommentAddress = {
+    kind: 'entity',
+    entityType: 'comment',
+    entityId: 'comment-1',
+  };
+  const tracked: import('./index.js').TrackedChangeAddress = {
+    kind: 'entity',
+    entityType: 'trackedChange',
+    entityId: 'change-1',
+    story,
+  };
+
+  const targets: import('./index.js').NavigableAddress[] = [bookmark, block, comment, tracked];
+  expect(targets).toHaveLength(4);
+});
+
 // ============================================
 // INTERFACE SHAPE DEFINITIONS (from index.d.ts)
 // ============================================

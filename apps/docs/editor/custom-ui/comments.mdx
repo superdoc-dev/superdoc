@@ -1,0 +1,193 @@
+---
+title: 'Comments'
+description: 'Build your own comments sidebar. Capture selections, post comments and replies, resolve and reopen.'
+---
+
+`useSuperDocComments()` gives you the live comments feed. `ui.selection.capture()` freezes the selection so a composer textarea can take focus without losing the anchor. `ui.comments.createFromCapture(capture, { text })` posts the comment.
+
+## A minimal comments list
+
+```tsx
+import { useSuperDocComments, useSuperDocUI } from 'superdoc/ui/react';
+
+export function CommentsList() {
+  const { items } = useSuperDocComments();
+  const ui = useSuperDocUI();
+
+  return (
+    <div>
+      {items.map((c) => (
+        <article key={c.id}>
+          <header>
+            <strong>{c.creatorName ?? 'Unknown'}</strong>
+          </header>
+          <p>{c.text}</p>
+          <button onClick={() => ui?.comments.resolve(c.id)}>Resolve</button>
+        </article>
+      ))}
+    </div>
+  );
+}
+```
+
+`items` is the array sourced from `editor.doc.comments.list()`. Each item is a `DiscoveryItem<CommentDomain>` with `id`, `text`, `creatorName`, `creatorEmail`, `createdTime`, `parentCommentId`, `status`, `target`, `anchoredText`.
+
+## Disable the built-in comments UI
+
+When you're rendering your own panel, turn off SuperDoc's so the two don't overlap.
+
+```tsx
+<SuperDocEditor
+  document="/contract.docx"
+  modules={{ comments: false }}
+  hideToolbar
+  contained
+  onReady={({ superdoc }) => setSuperDoc(superdoc)}
+/>
+```
+
+Imported comments still flow through the engine on export and import. The flag turns off the rendered UI, not the data.
+
+## Add a comment from a selection
+
+Two paths. Pick based on whether your composer takes focus from the editor.
+
+### When the user clicks "Comment" with the selection still active
+
+```tsx
+import { useSuperDocSelection, useSuperDocUI } from 'superdoc/ui/react';
+
+function AddCommentButton() {
+  const ui = useSuperDocUI();
+  const selection = useSuperDocSelection();
+
+  return (
+    <button
+      disabled={selection.empty || !selection.target}
+      onClick={() => ui?.comments.createFromSelection({ text: 'Looks good' })}
+    >
+      Comment
+    </button>
+  );
+}
+```
+
+`createFromSelection` reads the live editor selection. If your button doesn't steal focus, the selection is still there when the click handler runs.
+
+### When you open a composer with a textarea
+
+A textarea takes focus. The editor selection clears. By the time the user presses "Post", the live selection is gone. Capture it first.
+
+```tsx
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { SelectionCapture } from 'superdoc/ui';
+import { useSuperDocUI } from 'superdoc/ui/react';
+
+export function CommentComposer({ onPosted }: { onPosted(): void }) {
+  const ui = useSuperDocUI();
+  const [text, setText] = useState('');
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  // Freeze the selection at mount. Holds across focus changes.
+  const captured: SelectionCapture | null = useMemo(
+    () => ui?.selection.capture() ?? null,
+    [ui],
+  );
+
+  useEffect(() => {
+    textareaRef.current?.focus();
+  }, []);
+
+  const post = () => {
+    if (!ui || !captured) return;
+    const receipt = ui.comments.createFromCapture(captured, { text: text.trim() });
+    if (receipt.success) onPosted();
+  };
+
+  return (
+    <div>
+      {captured?.quotedText ? <blockquote>{captured.quotedText}</blockquote> : null}
+      <textarea
+        ref={textareaRef}
+        rows={3}
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        placeholder="Write a comment..."
+      />
+      <button onClick={post} disabled={!captured || !text.trim()}>
+        Comment
+      </button>
+    </div>
+  );
+}
+```
+
+`captured.target` is the same shape `editor.doc.comments.create({ target })` accepts. `quotedText` gives you the anchored text for previewing in the composer.
+
+## Resolve and reopen
+
+```tsx
+ui.comments.resolve(commentId);
+ui.comments.reopen(commentId);
+ui.comments.delete(commentId);
+```
+
+All three return a Document API receipt. The next snapshot from `useSuperDocComments()` reflects the change.
+
+## Scroll to a comment
+
+```tsx
+ui.comments.scrollTo(commentId);
+```
+
+Scrolls the editor viewport to the comment's anchor. Body-scoped today: the comment-address contract carries no `story` field, so a comment anchored in a header, footer, or note doesn't navigate through this call. For now, scroll those manually via `ui.viewport.scrollIntoView({ target: ... })` once you've resolved the right address yourself.
+
+## Threads and replies
+
+Comments form threads via `parentCommentId`. Each item from `useSuperDocComments()` carries one if it's a reply; group your sidebar by `parentCommentId` to render thread roots with their replies stacked underneath.
+
+```tsx
+const { items } = useSuperDocComments();
+const roots = items.filter((c) => !c.parentCommentId);
+const repliesByParent = items.reduce((map, c) => {
+  if (c.parentCommentId) {
+    const list = map.get(c.parentCommentId) ?? [];
+    list.push(c);
+    map.set(c.parentCommentId, list);
+  }
+  return map;
+}, new Map<string, typeof items>());
+```
+
+To post a reply, call `ui.comments.reply(parentCommentId, { text })`. The reply inherits the parent's anchor, so you don't pass a target. Empty or whitespace-only text returns a `NO_OP` receipt instead of hitting the API.
+
+```tsx
+import { useSuperDocUI } from 'superdoc/ui/react';
+
+function ReplyComposer({ parent }: { parent: { id: string } }) {
+  const ui = useSuperDocUI();
+  const [text, setText] = useState('');
+
+  const post = () => {
+    if (!ui || !text.trim()) return;
+    const receipt = ui.comments.reply(parent.id, { text: text.trim() });
+    if (receipt.success) setText('');
+  };
+
+  return (
+    <>
+      <textarea value={text} onChange={(e) => setText(e.target.value)} />
+      <button onClick={post} disabled={!ui || !text.trim()}>Reply</button>
+    </>
+  );
+}
+```
+
+The next snapshot from `useSuperDocComments()` includes the reply, threaded under the parent via `parentCommentId`. The reference demo's `ActivitySidebar` ships this pattern with focus management and Ctrl/Cmd+Enter to post.
+
+## Trade-offs
+
+- `useSuperDocComments` returns a memoized snapshot. Re-renders happen only when items, total, or activeIds change.
+- `createFromSelection` returns `{ success: false, failure: { code: 'NO_OP' } }` when there's no selection target. Guard with `selection.empty` or `selection.target == null`.
+- `createFromCapture` stays valid as long as the captured snapshot's blocks still exist. If the user deleted the anchored text between capture and post, the post fails with `INVALID_TARGET`.
+- Multi-paragraph anchors export as one `commentRangeStart` / `commentRangeEnd` pair per comment id, conformant with ECMA-376 §17.13.4.

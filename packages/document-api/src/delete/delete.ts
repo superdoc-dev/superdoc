@@ -1,5 +1,5 @@
 /**
- * Delete operation — removes content at a contiguous document selection.
+ * Delete operation: removes content at a contiguous document selection.
  *
  * Accepts either an explicit `SelectionTarget` or a mutation-ready `ref`
  * string from discovery APIs (`query.match`, `find`).

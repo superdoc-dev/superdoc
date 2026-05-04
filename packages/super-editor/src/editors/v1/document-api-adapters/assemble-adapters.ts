@@ -64,6 +64,8 @@ import {
   listsJoinWrapper,
   listsCanJoinWrapper,
   listsSeparateWrapper,
+  listsMergeWrapper,
+  listsSplitWrapper,
   listsSetLevelWrapper,
   listsSetValueWrapper,
   listsContinuePreviousWrapper,
@@ -97,6 +99,7 @@ import { executePlan } from './plan-engine/executor.js';
 import { previewPlan } from './plan-engine/preview.js';
 import { queryMatchAdapter } from './plan-engine/query-match-adapter.js';
 import { resolveRange } from './helpers/range-resolver.js';
+import { resolveCurrentSelectionInfo } from './helpers/selection-info-resolver.js';
 import { initRevision, trackRevisions } from './plan-engine/revision-tracker.js';
 import { initStoryRevisionStore } from './story-runtime/story-revision-store.js';
 import { registerBuiltInExecutors } from './plan-engine/register-executors.js';
@@ -462,6 +465,8 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
       join: (input, options) => listsJoinWrapper(editor, input, options),
       canJoin: (input) => listsCanJoinWrapper(editor, input),
       separate: (input, options) => listsSeparateWrapper(editor, input, options),
+      merge: (input, options) => listsMergeWrapper(editor, input, options),
+      split: (input, options) => listsSplitWrapper(editor, input, options),
       setLevel: (input, options) => listsSetLevelWrapper(editor, input, options),
       setValue: (input, options) => listsSetValueWrapper(editor, input, options),
       continuePrevious: (input, options) => listsContinuePreviousWrapper(editor, input, options),
@@ -717,6 +722,9 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
     },
     ranges: {
       resolve: (input) => resolveRange(editor, input),
+    },
+    selection: {
+      current: (input) => resolveCurrentSelectionInfo(editor, input),
     },
     query: {
       match: (input) => queryMatchAdapter(editor, input),

@@ -30,7 +30,7 @@ export function validateStoryConsistency(
   if (withinStory !== undefined) {
     throw new DocumentApiValidationError(
       'INVALID_INPUT',
-      'within must not carry a story field — it scopes within the already-resolved story.',
+      'within must not carry a story field: it scopes within the already-resolved story.',
       { field: 'within.story' },
     );
   }

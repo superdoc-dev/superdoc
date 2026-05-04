@@ -1,62 +1,97 @@
-# SuperDoc Examples
+# SuperDoc examples
 
-Minimal, self-contained examples showing how to use SuperDoc.
+Minimal, copy-pasteable examples organized to mirror the [docs](https://docs.superdoc.dev): Editor, Document Engine, AI.
 
-## Getting Started
+## Getting started
+
+Framework starters. Pick one, run `pnpm install && pnpm dev`.
 
 | Example | Description |
 |---------|-------------|
 | [react](./getting-started/react) | React + TypeScript with Vite |
 | [vue](./getting-started/vue) | Vue 3 + TypeScript with Vite |
 | [vanilla](./getting-started/vanilla) | Plain JavaScript with Vite |
-| [cdn](./getting-started/cdn) | Zero build tools — just an HTML file |
+| [cdn](./getting-started/cdn) | Zero build tools, just an HTML file |
+| [angular](./getting-started/angular) | Angular setup |
+| [nextjs](./getting-started/nextjs) | Next.js (SSR-safe) |
+| [nuxt](./getting-started/nuxt) | Nuxt setup |
+| [laravel](./getting-started/laravel) | Laravel + Inertia |
 
-## Features
+## Editor
 
-| Example | Description | Docs |
-|---------|-------------|------|
-| [track-changes](./features/track-changes) | Accept/reject workflow with suggesting mode | [Track Changes](https://docs.superdoc.dev/extensions/track-changes) |
-| [ai-redlining](./features/ai-redlining) | LLM-powered document review with tracked changes | [AI Agents](https://docs.superdoc.dev/getting-started/ai-agents) |
-| [comments](./features/comments) | Threaded comments with resolve workflow and event log | [Comments](https://docs.superdoc.dev/modules/comments) |
-| [custom-toolbar](./features/custom-toolbar) | Custom button groups, excluded items, and custom buttons | [Toolbar](https://docs.superdoc.dev/modules/toolbar) |
-| [collaboration](./collaboration) | Real-time editing with various Yjs providers | [Guides](https://docs.superdoc.dev/guides) |
-| [headless](./headless) | Server-side AI redlining with Node.js | [AI Agents](https://docs.superdoc.dev/getting-started/ai-agents) |
+Patterns for the browser editor surface.
 
-## AI Integrations
+### Built-in UI
 
-Connect SuperDoc's Document Engine to cloud AI platforms and agent frameworks.
+| Example | Docs |
+|---------|------|
+| [comments](./editor/built-in-ui/comments) | [docs](https://docs.superdoc.dev/editor/built-in-ui/comments) |
+| [track-changes](./editor/built-in-ui/track-changes) | [docs](https://docs.superdoc.dev/editor/built-in-ui/track-changes) |
+| [toolbar](./editor/built-in-ui/toolbar) | [docs](https://docs.superdoc.dev/editor/built-in-ui/toolbar) |
 
-### Cloud Platforms
+### Theming
 
-| Integration | Description | Docs |
-|-------------|-------------|------|
-| [AWS Bedrock](./ai/bedrock) | Bedrock Converse API with tool use | [Integrations](https://docs.superdoc.dev/document-engine/ai-agents/integrations) |
-| [Google Vertex AI](./ai/vertex) | Gemini with function calling | [Integrations](https://docs.superdoc.dev/document-engine/ai-agents/integrations) |
+| Example | Docs |
+|---------|------|
+| [theming](./editor/theming) | [docs](https://docs.superdoc.dev/editor/theming/overview) |
 
-### Agent Frameworks
+### Spell check
 
-| Integration | Description | Docs |
-|-------------|-------------|------|
-| [Vercel AI SDK](./ai/vercel-ai) | Any model via the Vercel AI SDK | [Integrations](https://docs.superdoc.dev/document-engine/ai-agents/integrations) |
-| [LangChain](./ai/langchain) | LangGraph ReAct agent | [Integrations](https://docs.superdoc.dev/document-engine/ai-agents/integrations) |
+| Example | Docs |
+|---------|------|
+| [proofing](./editor/proofing) | [docs](https://docs.superdoc.dev/editor/spell-check/overview) |
 
-### Demos
+### Collaboration
 
-| Example | Description | Docs |
-|---------|-------------|------|
-| [Contract Review](./ai/contract-review) | Full demo: agentic + headless contract review | [AI Agents](https://docs.superdoc.dev/getting-started/ai-agents) |
+Realtime providers and backend setups for Yjs-based collaboration.
+
+| Example | Description |
+|---------|-------------|
+| [providers/superdoc-yjs](./editor/collaboration/providers/superdoc-yjs) | Self-hosted Yjs server (recommended) |
+| [providers/hocuspocus](./editor/collaboration/providers/hocuspocus) | Hocuspocus provider setup |
+| [providers/liveblocks](./editor/collaboration/providers/liveblocks) | Liveblocks managed service |
+| [backends/node-sdk](./editor/collaboration/backends/node-sdk) | Server-side document operations alongside the realtime layer |
+| [backends/fastapi](./editor/collaboration/backends/fastapi) | Python FastAPI backend |
+
+## Document Engine
+
+Programmatic editing without a visible editor.
+
+| Example | Docs |
+|---------|------|
+| [diffing](./document-engine/diffing) | [docs](https://docs.superdoc.dev/document-engine/diffing) |
+
+## AI
+
+Document editing through models and agents.
+
+| Example | Description |
+|---------|-------------|
+| [bedrock](./ai/bedrock) | AWS Bedrock Converse API with tool use |
+| [streaming](./ai/streaming) | Stream model output into a visible editor |
+| [redlining](./ai/redlining) | LLM-driven tracked-change review |
+| [collaborative-agent](./ai/collaborative-agent) | AI agent operating on a collaborative doc |
+
+## Advanced
+
+Edge cases and infrastructure-level patterns. Most consumers won't need these.
+
+| Example | Notes |
+|---------|-------|
+| [grading-papers-comments-annotations](./advanced/grading-papers-comments-annotations) | Full-stack annotation use case |
+| [headless-toolbar](./advanced/headless-toolbar) | Framework-agnostic toolbar substrate |
 
 ## Running an example
 
 ```bash
-cd <example>
-npm install
-npm run dev
+cd <path-to-example>
+pnpm install
+pnpm dev
 ```
 
-For the CDN example, just open `index.html` or run `npx serve .`.
+For the CDN example, open `index.html` directly or run `npx serve .`.
 
 ## Documentation
 
-- [Getting Started](https://docs.superdoc.dev/getting-started/installation)
-- [Configuration](https://docs.superdoc.dev/core/superdoc/configuration)
+- [Quickstart](https://docs.superdoc.dev/getting-started/quickstart)
+- [Configuration](https://docs.superdoc.dev/editor/superdoc/configuration)

@@ -4,7 +4,7 @@
  * Handles conversion of ProseMirror image nodes to ImageBlocks
  */
 
-import type { ImageBlock, BoxSpacing, ImageAnchor } from '@superdoc/contracts';
+import type { ImageBlock, BoxSpacing, ImageAnchor, SourceAnchor } from '@superdoc/contracts';
 import type { PMNode, BlockIdGenerator, PositionMap, NodeHandlerContext, TrackedChangesConfig } from '../types.js';
 import { collectTrackedChangeFromMarks } from '../marks/index.js';
 import { shouldHideTrackedNode, annotateBlockWithTrackedChange } from '../tracked-changes.js';
@@ -33,6 +33,11 @@ const V_ALIGN_VALUES = new Set(['top', 'center', 'bottom']);
 
 const isPlainObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const sourceAnchorFromAttrs = (attrs: Record<string, unknown>): SourceAnchor | undefined => {
+  const sourceAnchor = attrs.sourceAnchor;
+  return isPlainObject(sourceAnchor) ? (sourceAnchor as SourceAnchor) : undefined;
+};
 
 const isAllowedObjectFit = (value?: string): value is 'contain' | 'cover' | 'fill' | 'scale-down' => {
   return value === 'contain' || value === 'cover' || value === 'fill' || value === 'scale-down';
@@ -321,6 +326,7 @@ export function imageNodeToBlock(
     ...(flipH !== undefined && { flipH }),
     ...(flipV !== undefined && { flipV }),
     ...(hyperlink ? { hyperlink } : {}),
+    sourceAnchor: sourceAnchorFromAttrs(attrs),
   };
 }
 

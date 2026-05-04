@@ -214,6 +214,39 @@ describe('EditorInputManager - Drag Auto Scroll', () => {
     expect(mockEditor.view.dispatch).toHaveBeenCalled();
   });
 
+  it('does not extend selection when pointer movement stays below the drag threshold', () => {
+    startDrag(10, 10);
+    mockEditor.view.dispatch.mockClear();
+    (mockCallbacks.scheduleSelectionUpdate as ReturnType<typeof vi.fn>).mockClear();
+
+    moveDrag(13, 13);
+
+    expect(mockEditor.view.dispatch).not.toHaveBeenCalled();
+    expect(mockCallbacks.scheduleSelectionUpdate).not.toHaveBeenCalled();
+  });
+
+  it('extends selection once Euclidean pointer movement reaches the drag threshold', () => {
+    startDrag(10, 10);
+    mockEditor.view.dispatch.mockClear();
+    (mockCallbacks.scheduleSelectionUpdate as ReturnType<typeof vi.fn>).mockClear();
+
+    moveDrag(13, 14);
+
+    expect(mockEditor.view.dispatch).toHaveBeenCalledTimes(1);
+    expect(mockCallbacks.scheduleSelectionUpdate).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not start edge auto-scroll while pointer movement stays below the drag threshold', () => {
+    startDrag(10, 94);
+    mockEditor.view.dispatch.mockClear();
+
+    moveDrag(10, 96);
+
+    expect(rafCallback).toBeNull();
+    expect(scrollContainer.scrollTop).toBe(0);
+    expect(mockEditor.view.dispatch).not.toHaveBeenCalled();
+  });
+
   it('stops auto-scroll when pointer moves away from edge zone', () => {
     startDrag(10, 10);
     moveDrag(10, 95);

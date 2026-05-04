@@ -211,9 +211,11 @@ export async function runOpen(tokens: string[], context: CommandContext): Promis
 
         await writeContextMetadata(paths, metadata);
 
-        // Only update the project-global active-session pointer in oneshot (CLI) mode.
-        // Host mode must never write this file — it causes cross-document contamination
-        // when multiple SDK clients share the same project root.
+        // AIDEV-NOTE: the project-global active-session pointer may
+        // only be written in oneshot (CLI) mode. Host mode must never
+        // touch this file: multiple SDK clients can share one project
+        // root, and a write here cross-contaminates their sessions.
+        // Mirror the same guard in close.ts when changing this rule.
         if (context.executionMode !== 'host') {
           await setActiveSessionId(metadata.contextId);
         }

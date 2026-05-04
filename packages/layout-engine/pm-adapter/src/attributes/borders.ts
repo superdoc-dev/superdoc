@@ -17,11 +17,15 @@ import type {
 } from '@superdoc/contracts';
 import type { OoxmlBorder } from '../types.js';
 import { normalizeColor, pickNumber, isFiniteNumber, normalizeCellPaddingTopBottom } from '../utilities.js';
-import { PX_PER_PT } from '../constants.js';
+import { eighthPointsToPixels } from '@superdoc/super-editor/converter/internal/helpers.js';
 
-const EIGHTHS_PER_POINT = 8;
 const MIN_BORDER_SIZE_PX = 0.5; // Minimum visible border
 const MAX_BORDER_SIZE_PX = 100; // Reasonable maximum
+
+type BorderConversionUnit = 'px' | 'eighthPoints';
+type BorderConversionOptions = {
+  unit?: BorderConversionUnit;
+};
 
 /**
  * Convert an OOXML border size (stored in eighths of a point) to pixels.
@@ -32,15 +36,16 @@ const MAX_BORDER_SIZE_PX = 100; // Reasonable maximum
  *
  * Clamps results to reasonable bounds to prevent edge cases.
  */
-const borderSizeToPx = (size?: number): number | undefined => {
-  if (!isFiniteNumber(size)) return undefined;
-  if (size <= 0) return 0;
+export const borderSizeToPx = (size?: number): number | undefined => eighthPointsToPixels(size, { clamp: true });
 
-  const points = size / EIGHTHS_PER_POINT;
-  const pixelValue = points * PX_PER_PT;
+const clampPixelBorderWidth = (width: number): number =>
+  Math.min(MAX_BORDER_SIZE_PX, Math.max(MIN_BORDER_SIZE_PX, width));
 
-  // Clamp to reasonable bounds
-  return Math.min(MAX_BORDER_SIZE_PX, Math.max(MIN_BORDER_SIZE_PX, pixelValue));
+const resolveBorderWidth = (size: number, unit: BorderConversionUnit): number | undefined => {
+  if (unit === 'eighthPoints') {
+    return borderSizeToPx(size);
+  }
+  return clampPixelBorderWidth(size);
 };
 
 /**
@@ -57,17 +62,21 @@ const normalizeColorWithDefault = (color?: string): string => {
 /**
  * Converts an OOXML border specification to layout engine BorderSpec format.
  *
- * Border sizes are assumed to be in eighths of a point (OOXML standard) if >= 8,
- * otherwise treated as already-converted pixel values. Nil/none borders return
- * a special BorderSpec with style 'none' and width 0.
+ * Border sizes emitted by the DOCX translator are already expressed in pixels,
+ * so the pm-adapter simply clamps them to a safe range instead of converting
+ * from eighths-of-a-point. Nil/none borders return a special BorderSpec with
+ * style 'none' and width 0.
  *
  * @param ooxmlBorder - Raw OOXML border object with optional val, size, and color properties
+ * @param options - Optional conversion options
+ * @param options.unit - Unit of `size`. Defaults to `'px'` (clamps to a safe range).
+ *   Use `'eighthPoints'` when callers haven't pre-converted from OOXML's ST_EighthPointMeasure.
  * @returns BorderSpec with style, width (in pixels), and color, or undefined if invalid
  *
  * @example
  * ```typescript
- * convertBorderSpec({ val: 'single', size: 16, color: 'FF0000' });
- * // { style: 'single', width: 2.67, color: '#FF0000' }
+ * convertBorderSpec({ val: 'single', size: 4, color: 'FF0000' });
+ * // { style: 'single', width: 4, color: '#FF0000' }
  *
  * convertBorderSpec({ val: 'nil' });
  * // { style: 'none', width: 0 }
@@ -76,7 +85,7 @@ const normalizeColorWithDefault = (color?: string): string => {
  * // undefined
  * ```
  */
-export function convertBorderSpec(ooxmlBorder: unknown): BorderSpec | undefined {
+export function convertBorderSpec(ooxmlBorder: unknown, options?: BorderConversionOptions): BorderSpec | undefined {
   if (!ooxmlBorder || typeof ooxmlBorder !== 'object' || ooxmlBorder === null) {
     return undefined;
   }
@@ -101,11 +110,17 @@ export function convertBorderSpec(ooxmlBorder: unknown): BorderSpec | undefined 
     return { style: 'none' as BorderStyle, width: 0 };
   }
 
-  const width = borderSizeToPx(sizeNumber);
-  if (width == null) return undefined;
+  if (!isFiniteNumber(sizeNumber)) return undefined;
+  const numericSize = sizeNumber as number;
+  if (numericSize <= 0) {
+    return { style: 'none' as BorderStyle, width: 0 };
+  }
 
   // Ensure color has # prefix
   const normalizedColor = normalizeColorWithDefault(colorString);
+  const unit: BorderConversionUnit = options?.unit ?? 'px';
+  const width = resolveBorderWidth(numericSize, unit);
+  if (width == null) return undefined;
 
   return {
     style: (val as BorderStyle) || 'single',
@@ -121,18 +136,24 @@ export function convertBorderSpec(ooxmlBorder: unknown): BorderSpec | undefined 
  * a `none` flag for nil/none borders instead of returning a style enum.
  *
  * @param ooxmlBorder - Raw OOXML border object with optional val, size, and color properties
+ * @param options - Optional conversion options
+ * @param options.unit - Unit of `size`. Defaults to `'px'` (clamps to a safe range).
+ *   Use `'eighthPoints'` when callers haven't pre-converted from OOXML's ST_EighthPointMeasure.
  * @returns TableBorderValue with style, width, and color, or { none: true } for nil borders, or undefined if invalid
  *
  * @example
  * ```typescript
- * convertTableBorderValue({ val: 'single', size: 16, color: 'FF0000' });
- * // { style: 'single', width: 2.67, color: '#FF0000' }
+ * convertTableBorderValue({ val: 'single', size: 4, color: 'FF0000' });
+ * // { style: 'single', width: 4, color: '#FF0000' }
  *
  * convertTableBorderValue({ val: 'nil' });
  * // { none: true }
  * ```
  */
-export function convertTableBorderValue(ooxmlBorder: unknown): TableBorderValue | undefined {
+export function convertTableBorderValue(
+  ooxmlBorder: unknown,
+  options?: BorderConversionOptions,
+): TableBorderValue | undefined {
   if (!ooxmlBorder || typeof ooxmlBorder !== 'object') return undefined;
 
   const border = ooxmlBorder as OoxmlBorder;
@@ -145,10 +166,14 @@ export function convertTableBorderValue(ooxmlBorder: unknown): TableBorderValue 
     return { none: true };
   }
 
-  const width = borderSizeToPx(size);
-  if (width == null) return undefined;
+  if (!isFiniteNumber(size)) return undefined;
+  const numericSize = size as number;
+  if (numericSize <= 0) return { none: true };
 
   const normalizedColor = normalizeColorWithDefault(color);
+  const unit: BorderConversionUnit = options?.unit ?? 'px';
+  const width = resolveBorderWidth(numericSize, unit);
+  if (width == null) return undefined;
 
   return {
     style: (val as BorderStyle) || 'single',
@@ -202,9 +227,15 @@ function isTableBorderValue(value: unknown): value is TableBorderValue {
  * - A raw OOXML-like border object where each side may contain { size, val, ... }
  *
  * @param bordersInput - Record of border definitions for sides (top, left, right, etc.)
+ * @param options - Optional conversion options forwarded to convertTableBorderValue
+ * @param options.unit - Unit of border `size`. Defaults to `'px'`.
+ *   Use `'eighthPoints'` when sides carry raw OOXML ST_EighthPointMeasure values.
  * @returns TableBorders | undefined
  */
-export function extractTableBorders(bordersInput: Record<string, unknown> | undefined): TableBorders | undefined {
+export function extractTableBorders(
+  bordersInput: Record<string, unknown> | undefined,
+  options?: BorderConversionOptions,
+): TableBorders | undefined {
   if (!bordersInput || typeof bordersInput !== 'object') {
     return undefined;
   }
@@ -221,7 +252,7 @@ export function extractTableBorders(bordersInput: Record<string, unknown> | unde
       borders[side] = raw;
     } else {
       // Convert from OOXML
-      const converted = convertTableBorderValue(raw);
+      const converted = convertTableBorderValue(raw, options);
       if (converted !== undefined) {
         borders[side] = converted;
       }
@@ -240,6 +271,9 @@ export function extractTableBorders(bordersInput: Record<string, unknown> | unde
  * @param cellAttrs - ProseMirror table cell node attributes object
  * @returns CellBorders object with BorderSpec for each side (top, right, bottom, left), or undefined if no borders
  *
+ * Sizes on `cellAttrs.borders` are expected to be already in pixels - the DOCX
+ * translator converts from eighth-points before pm-adapter sees them.
+ *
  * @example
  * ```typescript
  * extractCellBorders({
@@ -248,7 +282,7 @@ export function extractTableBorders(bordersInput: Record<string, unknown> | unde
  *     bottom: { val: 'double', size: 16 }
  *   }
  * });
- * // { top: { style: 'single', width: 1.33, ... }, bottom: { style: 'double', width: 2.67, ... } }
+ * // { top: { style: 'single', width: 8, color: '#000000' }, bottom: { style: 'double', width: 16, color: '#000000' } }
  * ```
  */
 export function extractCellBorders(cellAttrs: Record<string, unknown>): CellBorders | undefined {

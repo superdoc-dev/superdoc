@@ -24,6 +24,10 @@
 
 const BLOCK_SEPARATOR = '\n';
 const ATOM_PLACEHOLDER = '\ufffc';
+const DELETION_BARRIER = '\u0000';
+const DEFAULT_SEARCH_MODEL = 'raw';
+
+const hasTrackDeleteMark = (node) => node?.marks?.some((mark) => mark?.type?.name === 'trackDelete') ?? false;
 
 /**
  * SearchIndex provides a lazily-built, cached index for searching across
@@ -48,6 +52,9 @@ export class SearchIndex {
   /** @type {import('prosemirror-model').Node | null} */
   doc = null;
 
+  /** @type {'raw'|'visible'} */
+  searchModel = DEFAULT_SEARCH_MODEL;
+
   /**
    * Build the search index from a ProseMirror document.
    * Uses doc.textBetween for the flattened string and walks
@@ -55,22 +62,95 @@ export class SearchIndex {
    *
    * @param {import('prosemirror-model').Node} doc - The ProseMirror document
    */
-  build(doc) {
-    // Get the flattened text using ProseMirror's optimized textBetween
-    this.text = doc.textBetween(0, doc.content.size, BLOCK_SEPARATOR, ATOM_PLACEHOLDER);
+  build(doc, options = {}) {
+    const searchModel = options?.searchModel === 'visible' ? 'visible' : DEFAULT_SEARCH_MODEL;
+
+    if (searchModel === 'visible') {
+      this.#buildVisible(doc);
+    } else {
+      // Get the flattened text using ProseMirror's optimized textBetween
+      this.text = doc.textBetween(0, doc.content.size, BLOCK_SEPARATOR, ATOM_PLACEHOLDER);
+    }
+
     this.segments = [];
     this.docSize = doc.content.size;
     this.doc = doc;
+    this.searchModel = searchModel;
 
     // Walk the document to build the segment map
     // Note: doc node's content starts at position 0 (doc has no opening tag)
     let offset = 0;
-    this.#walkNodeContent(doc, 0, offset, (segment) => {
-      this.segments.push(segment);
-      offset = segment.offsetEnd;
-    });
+    const visibleContext = searchModel === 'visible' ? { deletionBarrierActive: false } : null;
+    this.#walkNodeContent(
+      doc,
+      0,
+      offset,
+      (segment) => {
+        this.segments.push(segment);
+        offset = segment.offsetEnd;
+      },
+      searchModel,
+      visibleContext,
+    );
 
     this.valid = true;
+  }
+
+  /**
+   * Build flattened text for the `visible` model, where tracked deletions
+   * are removed from searchable text and replaced with a non-searchable
+   * barrier to prevent false collapsed matches.
+   *
+   * @param {import('prosemirror-model').Node} doc
+   */
+  #buildVisible(doc) {
+    const parts = [];
+    let emittedDeletionBarrier = false;
+
+    const appendDeletionBarrier = () => {
+      if (emittedDeletionBarrier) return;
+      parts.push(DELETION_BARRIER);
+      emittedDeletionBarrier = true;
+    };
+
+    const walkNodeContent = (node) => {
+      let isFirstChild = true;
+      node.forEach((child) => {
+        if (child.isBlock && !isFirstChild) {
+          parts.push(BLOCK_SEPARATOR);
+          emittedDeletionBarrier = false;
+        }
+        walkNode(child);
+        isFirstChild = false;
+      });
+    };
+
+    const walkNode = (node) => {
+      if (node.isText) {
+        const text = node.text || '';
+        if (!text.length) return;
+
+        if (hasTrackDeleteMark(node)) {
+          appendDeletionBarrier();
+          return;
+        }
+
+        parts.push(text);
+        emittedDeletionBarrier = false;
+        return;
+      }
+
+      if (node.isLeaf) {
+        parts.push(ATOM_PLACEHOLDER);
+        emittedDeletionBarrier = false;
+        return;
+      }
+
+      walkNodeContent(node);
+    };
+
+    walkNodeContent(doc);
+    this.text = parts.join('');
   }
 
   /**
@@ -84,7 +164,7 @@ export class SearchIndex {
    * @param {(segment: Segment) => void} addSegment - Callback to add a segment
    * @returns {number} The new offset after processing this node's content
    */
-  #walkNodeContent(node, contentStart, offset, addSegment) {
+  #walkNodeContent(node, contentStart, offset, addSegment, searchModel = DEFAULT_SEARCH_MODEL, context = null) {
     let currentOffset = offset;
     let isFirstChild = true;
 
@@ -101,9 +181,12 @@ export class SearchIndex {
           kind: 'blockSep',
         });
         currentOffset += 1;
+        if (context && searchModel === 'visible') {
+          context.deletionBarrierActive = false;
+        }
       }
 
-      currentOffset = this.#walkNode(child, childDocPos, currentOffset, addSegment);
+      currentOffset = this.#walkNode(child, childDocPos, currentOffset, addSegment, searchModel, context);
       isFirstChild = false;
     });
 
@@ -119,11 +202,31 @@ export class SearchIndex {
    * @param {(segment: Segment) => void} addSegment - Callback to add a segment
    * @returns {number} The new offset after processing this node
    */
-  #walkNode(node, docPos, offset, addSegment) {
+  #walkNode(node, docPos, offset, addSegment, searchModel = DEFAULT_SEARCH_MODEL, context = null) {
     if (node.isText) {
+      if (searchModel === 'visible' && hasTrackDeleteMark(node)) {
+        if (context?.deletionBarrierActive) {
+          return offset;
+        }
+        addSegment({
+          offsetStart: offset,
+          offsetEnd: offset + 1,
+          docFrom: docPos,
+          docTo: docPos,
+          kind: 'atom',
+        });
+        if (context) {
+          context.deletionBarrierActive = true;
+        }
+        return offset + 1;
+      }
+
       // Text node: add a text segment
       const text = node.text || '';
       if (text.length > 0) {
+        if (context && searchModel === 'visible') {
+          context.deletionBarrierActive = false;
+        }
         addSegment({
           offsetStart: offset,
           offsetEnd: offset + text.length,
@@ -137,6 +240,9 @@ export class SearchIndex {
     }
 
     if (node.isLeaf) {
+      if (context && searchModel === 'visible') {
+        context.deletionBarrierActive = false;
+      }
       // Leaf node (atom): check if it's a hard_break or other atom
       if (node.type.name === 'hard_break') {
         addSegment({
@@ -161,7 +267,7 @@ export class SearchIndex {
 
     // For non-leaf nodes, recurse into content
     // Content starts at docPos + 1 (after opening tag)
-    return this.#walkNodeContent(node, docPos + 1, offset, addSegment);
+    return this.#walkNodeContent(node, docPos + 1, offset, addSegment, searchModel, context);
   }
 
   /**
@@ -177,8 +283,9 @@ export class SearchIndex {
    * @param {import('prosemirror-model').Node} doc - The document to check against
    * @returns {boolean} True if index is stale and needs rebuilding
    */
-  isStale(doc) {
-    return !this.valid || this.doc !== doc;
+  isStale(doc, options = {}) {
+    const searchModel = options?.searchModel === 'visible' ? 'visible' : DEFAULT_SEARCH_MODEL;
+    return !this.valid || this.doc !== doc || this.searchModel !== searchModel;
   }
 
   /**
@@ -187,9 +294,9 @@ export class SearchIndex {
    *
    * @param {import('prosemirror-model').Node} doc - The document
    */
-  ensureValid(doc) {
-    if (this.isStale(doc)) {
-      this.build(doc);
+  ensureValid(doc, options = {}) {
+    if (this.isStale(doc, options)) {
+      this.build(doc, options);
     }
   }
 

@@ -53,7 +53,7 @@ export interface IndexEntryData {
 }
 
 // ---------------------------------------------------------------------------
-// Input types — INDEX lifecycle
+// Input types: INDEX lifecycle
 // ---------------------------------------------------------------------------
 
 export interface IndexListInput {
@@ -84,7 +84,7 @@ export interface IndexRemoveInput {
 }
 
 // ---------------------------------------------------------------------------
-// Input types — XE entries
+// Input types: XE entries
 // ---------------------------------------------------------------------------
 
 export interface IndexEntryListInput {
@@ -112,7 +112,7 @@ export interface IndexEntryRemoveInput {
 }
 
 // ---------------------------------------------------------------------------
-// Info / Domain — INDEX
+// Info / Domain: INDEX
 // ---------------------------------------------------------------------------
 
 export interface IndexInfo {
@@ -130,7 +130,7 @@ export interface IndexDomain {
 }
 
 // ---------------------------------------------------------------------------
-// Info / Domain — XE entries (Amendment 9: includes all expanded fields)
+// Info / Domain: XE entries (Amendment 9: includes all expanded fields)
 // ---------------------------------------------------------------------------
 
 export interface IndexEntryInfo {

@@ -1,5 +1,6 @@
 import type { Position } from '../types/base.js';
 import type { TextTarget } from '../types/address.js';
+import type { StoryLocator } from '../types/story.types.js';
 import type { AdapterMutationFailure } from '../types/adapter-result.js';
 import type { DiscoveryOutput } from '../types/discovery.js';
 
@@ -11,6 +12,18 @@ export interface BookmarkAddress {
   kind: 'entity';
   entityType: 'bookmark';
   name: string;
+  /**
+   * Story containing this bookmark. Omit for body (backward compatible).
+   *
+   * When omitted, bookmark operations resolve by `name` across the whole
+   * document. If multiple stories contain the same bookmark name, omitted-story
+   * lookup resolves to the first match returned by the implementation's
+   * document-wide bookmark scan; callers must not rely on a specific cross-story
+   * ordering rule. Prefer the `address` returned by bookmark read operations
+   * (`bookmarks.list`, `bookmarks.get`) because those responses populate
+   * `story` for non-body bookmarks.
+   */
+  story?: StoryLocator;
 }
 
 // ---------------------------------------------------------------------------
@@ -20,6 +33,8 @@ export interface BookmarkAddress {
 export interface BookmarkListInput {
   limit?: number;
   offset?: number;
+  /** Restrict listing to a specific story. Omit to search document-wide. */
+  in?: StoryLocator;
 }
 
 export interface BookmarkGetInput {

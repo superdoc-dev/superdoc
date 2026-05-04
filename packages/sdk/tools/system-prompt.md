@@ -164,6 +164,94 @@ Use preset "disc" for bullets, "decimal" for numbered. WARNING: the range conver
 
 3. To change a bullet list to numbered: `superdoc_list({action: "set_type", target: {kind: "block", nodeType: "listItem", nodeId: "<anyItemId>"}, kind: "ordered"})`
 
+### Add items to an existing list
+
+To add a new item adjacent to an existing list item, use `superdoc_list({action: "insert"})`, NOT `superdoc_create({action: "paragraph"})` — the latter creates a standalone paragraph that is not part of the list:
+
+```
+superdoc_get_content({action: "blocks"})  // find the listItem nodeId you want to insert next to
+superdoc_list({action: "insert", target: {kind: "block", nodeType: "listItem", nodeId: "<itemId>"}, position: "after", text: "New item text"})
+```
+
+**Level inheritance.** The new item inherits the target's nesting level. Insert after a level-0 item → new item is level 0. Insert after a level-2 item → new item is level 2. To change the level, chain `indent` / `outdent` / `set_level` on the nodeId returned in the insert response.
+
+**Use the nodeId from the response directly.** `superdoc_list({action: "insert"})` returns `{item: {nodeId: "<id>"}}` — that id is ready for subsequent `indent`, `outdent`, `set_level`, or text edits. You do NOT need to re-fetch blocks between the insert and the follow-up operation.
+
+### Add a sub-point under an existing item
+
+Insert a peer, then indent it one level:
+
+```
+// 1. Insert a peer item after the parent — new item is at the parent's level
+const resp = superdoc_list({action: "insert", target: {kind: "block", nodeType: "listItem", nodeId: "<parentItemId>"}, position: "after", text: "Sub-point"})
+
+// 2. Indent using the nodeId from resp.item.nodeId
+superdoc_list({action: "indent", target: {kind: "block", nodeType: "listItem", nodeId: "<resp.item.nodeId>"}})
+```
+
+### Build a nested list with mixed levels
+
+`lists.create` produces a flat list. Add nesting by chaining `insert` + `indent` / `set_level`, using the nodeId returned by each insert to target the next step:
+
+```
+// Starting point: a list item at level 0 ("Parent" with nodeId <parent>)
+
+// Sibling at level 0
+const r1 = superdoc_list({action: "insert", target: {kind: "block", nodeType: "listItem", nodeId: "<parent>"}, position: "after", text: "Sibling"})
+
+// Child at level 1 (insert after r1, then indent)
+const r2 = superdoc_list({action: "insert", target: {kind: "block", nodeType: "listItem", nodeId: "<r1.item.nodeId>"}, position: "after", text: "Child"})
+superdoc_list({action: "indent", target: {kind: "block", nodeType: "listItem", nodeId: "<r2.item.nodeId>"}})
+
+// Grandchild at level 3 (insert after r2, then jump to level 3 directly)
+const r3 = superdoc_list({action: "insert", target: {kind: "block", nodeType: "listItem", nodeId: "<r2.item.nodeId>"}, position: "after", text: "Deep"})
+superdoc_list({action: "set_level", target: {kind: "block", nodeType: "listItem", nodeId: "<r3.item.nodeId>"}, level: 3})
+```
+
+`indent` bumps the level by one (bounded 0–8). `set_level` jumps directly to any level 0–8. Markers update automatically based on the list's definition for each level (e.g. `1.` / `a.` / `i.` for an ordered list).
+
+### Merge two adjacent lists into one
+
+Use `merge` — it handles the common case where two ordered or bulleted lists sit next to each other and should become one continuous list. Absorbed items adopt the absorbing sequence's definition, and any empty paragraphs between the two lists are removed so numbering flows continuously.
+
+```
+superdoc_get_content({action: "blocks"})  // find a listItem in either sequence
+// To merge with the previous sequence:
+superdoc_list({action: "merge", target: {kind: "block", nodeType: "listItem", nodeId: "<itemId>"}, direction: "withPrevious"})
+// Or with the next sequence:
+superdoc_list({action: "merge", target: {kind: "block", nodeType: "listItem", nodeId: "<itemId>"}, direction: "withNext"})
+```
+
+### Split a list into two
+
+Use `split` to break one list into two independent lists at a specific item. The target and everything after become a new sequence that restarts numbering at 1:
+
+```
+superdoc_list({action: "split", target: {kind: "block", nodeType: "listItem", nodeId: "<itemId>"}})
+```
+
+Pass `restartNumbering: false` if you want the new half to keep counting from where the original left off.
+
+### Restart numbering at a specific item
+
+For ordered lists. To make item N restart from a chosen number (commonly 1):
+
+```
+superdoc_list({action: "set_value", target: {kind: "block", nodeType: "listItem", nodeId: "<itemId>"}, value: 1})
+```
+
+Pass `value: null` to clear a previously-set restart override and let the item resume natural numbering.
+
+### Continue numbering across a break
+
+For ordered lists. When two sibling sequences should be numbered as one (e.g. numbering jumps back to 1 and you want it to continue from where the previous list left off), target the FIRST item of the second sequence:
+
+```
+superdoc_list({action: "continue_previous", target: {kind: "block", nodeType: "listItem", nodeId: "<firstItemOfSecondList>"}})
+```
+
+Fails with `NO_COMPATIBLE_PREVIOUS` or `INCOMPATIBLE_DEFINITIONS` if no prior sequence shares the same abstract definition. In that case, use `merge` instead — it handles mismatched definitions, removes empty gap paragraphs, and produces one continuous list.
+
 ### Insert content into a document (new or existing)
 
 Markdown insert creates block structure but uses default formatting. You MUST follow up with formatting so inserted content looks like it belongs in the document.

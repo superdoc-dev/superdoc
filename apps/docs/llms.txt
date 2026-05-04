@@ -2,14 +2,14 @@
 
 > The document engine for the modern web.
 
-SuperDoc renders, edits, and automates .docx files — in the browser, headless on the server, or through stateless APIs. Built on OOXML directly. No conversion layer. Import a document, edit it, export it. Nothing lost.
+SuperDoc renders, edits, and automates .docx files: in the browser, headless on the server, or through stateless APIs. Built on OOXML directly. No conversion layer. Import a document, edit it, export it. Nothing lost.
 
 ## What it does
 
-- Reads and writes OOXML natively — documents stay real .docx files at every step
+- Reads and writes OOXML natively: documents stay real .docx files at every step
 - 180+ MCP tools covering reading, editing, formatting, comments, tracked changes, and more
 - Tracked changes and comments as first-class operations
-- Math equations render natively as MathML — no external library needed
+- Math equations render natively as MathML: no external library needed
 - Same document model across browser editor, headless Node, and APIs
 - Stateless API for convert, annotate, sign, and verify
 - Real-time collaboration with Yjs CRDT
@@ -34,6 +34,7 @@ npm install @superdoc-dev/sdk
 - MCP server: https://docs.superdoc.dev/document-engine/ai-agents/mcp-server
 - Document API: https://docs.superdoc.dev/document-api/overview
 - Available operations: https://docs.superdoc.dev/document-api/available-operations
+- Custom UI (custom React UI): https://docs.superdoc.dev/editor/custom-ui/overview
 - API reference (backend): https://docs.superdoc.dev/api-reference/introduction
 - SDK docs: https://docs.superdoc.dev/document-engine/sdks
 - CLI: https://docs.superdoc.dev/document-engine/cli
@@ -42,14 +43,20 @@ npm install @superdoc-dev/sdk
 - Examples: https://github.com/superdoc-dev/superdoc/tree/main/examples
 - Full context: https://docs.superdoc.dev/llms-full.txt
 
+## Layer model (use the right surface)
+
+- **Document API** (`editor.doc.*`): request/response document operations: comments, tracked changes, formatting, insert/replace. Same shape on server, client, and AI agents. Use for any document mutation.
+- **`superdoc/ui` and `superdoc/ui/react`**: typed browser controller for custom toolbar, comments sidebar, review panel, selection, viewport, document controls. **Use for custom React UI**: not `superdoc.activeEditor.commands.*`.
+- **Built-in modules** (`modules/*`): SuperDoc renders the UI. Use when the built-in look is fine.
+
 ## Packages
 
-- superdoc — main library (browser editor)
-- @superdoc-dev/react — React wrapper
-- @superdoc-dev/sdk — Node.js SDK for programmatic access
-- @superdoc-dev/cli — command-line interface
-- @superdoc-dev/mcp — MCP server for AI coding agents
-- superdoc-sdk (PyPI) — Python SDK
+- superdoc: main library (browser editor)
+- @superdoc-dev/react: React wrapper
+- @superdoc-dev/sdk: Node.js SDK for programmatic access
+- @superdoc-dev/cli: command-line interface
+- @superdoc-dev/mcp: MCP server for AI coding agents
+- superdoc-sdk (PyPI): Python SDK
 
 ## License
 

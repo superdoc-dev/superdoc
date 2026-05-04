@@ -1,0 +1,109 @@
+---
+title: 'React setup'
+description: 'Provider, onReady, hooks. The scaffolding every page in this section builds on.'
+---
+
+The provider holds one controller per editor mount. Components read it through `useSuperDocUI()` and the per-domain hooks. Drop your toolbar, sidebar, and review components anywhere inside the provider.
+
+## Install
+
+```bash
+pnpm add superdoc @superdoc-dev/react
+```
+
+## Wire the provider
+
+Wrap your app in `<SuperDocUIProvider>`. Mount `<SuperDocEditor>` somewhere inside. Hand the SuperDoc instance to the provider on `onReady`.
+
+```tsx
+import { SuperDocEditor } from '@superdoc-dev/react';
+import '@superdoc-dev/react/style.css';
+import { SuperDocUIProvider, useSetSuperDoc } from 'superdoc/ui/react';
+
+import { Toolbar } from './Toolbar';
+import { ActivitySidebar } from './ActivitySidebar';
+
+export function App() {
+  return (
+    <SuperDocUIProvider>
+      <Toolbar />
+      <EditorMount />
+      <ActivitySidebar />
+    </SuperDocUIProvider>
+  );
+}
+
+function EditorMount() {
+  const setSuperDoc = useSetSuperDoc();
+
+  return (
+    <SuperDocEditor
+      document="/contract.docx"
+      hideToolbar
+      contained
+      onReady={({ superdoc }) => setSuperDoc(superdoc)}
+    />
+  );
+}
+```
+
+`hideToolbar` and `contained` keep `<SuperDocEditor>` from rendering its built-in toolbar or claiming the page. Your components own the layout.
+
+## Read state from a hook
+
+Hooks return live state. The component re-renders only when the slice it subscribed to changes.
+
+```tsx
+import { useSuperDocCommand, useSuperDocUI } from 'superdoc/ui/react';
+
+export function BoldButton() {
+  const ui = useSuperDocUI();
+  const bold = useSuperDocCommand('bold');
+
+  return (
+    <button
+      className={bold.active ? 'active' : ''}
+      disabled={bold.disabled}
+      onClick={() => ui?.commands.get('bold')?.execute()}
+    >
+      B
+    </button>
+  );
+}
+```
+
+## What's available
+
+| Hook | Returns | Use it for |
+|---|---|---|
+| `useSuperDocUI()` | The controller, or `null` until ready | Calling `ui.commands.get(id)?.execute()` and other actions |
+| `useSuperDocCommand(id)` | `{ active, disabled, value, source }` | Binding one toolbar button to one command |
+| `useSuperDocComments()` | The live comments feed | Building a comments sidebar |
+| `useSuperDocTrackChanges()` | The live tracked-changes feed | Building a track-changes review panel |
+| `useSuperDocSelection()` | The current selection slice | Enabling/disabling buttons, building bubble menus |
+| `useSuperDocDocument()` | `{ ready, mode }` | Mode toggles, "ready" guards |
+| `useSuperDocSlice(picker, initial)` | Any slice from `ui.select(...)` | Custom subscriptions the typed hooks don't cover |
+| `useSuperDocHost()` | The host SuperDoc instance | Operations the controller doesn't bridge yet |
+| `useSetSuperDoc()` | The setter the editor mount calls in `onReady` | Only the editor mount component |
+
+## What the provider does
+
+`createSuperDocUI({ superdoc })` runs once when the editor reports ready. It tears down on unmount. You don't manage the lifecycle.
+
+<Tip>
+Components that render before the editor is ready see `useSuperDocUI()` return `null`. Guard with `if (!ui) return null;` or render a pending state.
+</Tip>
+
+## Common pitfalls
+
+<AccordionGroup>
+  <Accordion title="Built-in UI overlapping with yours">
+    Set `modules: { comments: false }` on `<SuperDocEditor>` to disable SuperDoc's built-in comment bubble. Same pattern for `modules: { trackChanges: { ... } }` if you want the engine without rendering. The Document API and exports keep working either way.
+  </Accordion>
+  <Accordion title="Ready vs not-ready states">
+    `useSuperDocUI()` returns `null` between mount and `onReady`. Hooks downstream (`useSuperDocCommand`, `useSuperDocComments`, etc.) return their fallback states during that window. Your buttons render disabled, your sidebar shows empty. No flicker, no errors.
+  </Accordion>
+  <Accordion title="Multiple editors">
+    One `<SuperDocUIProvider>` holds one controller. If you render two editors on a page, give each its own provider.
+  </Accordion>
+</AccordionGroup>

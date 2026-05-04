@@ -1,0 +1,28 @@
+name: Check .d.ts shadows
+
+# Always-run gate for the rule documented in scripts/check-dts-shadows.mjs:
+# no sibling .ts + .d.ts files under packages/. Lives in its own workflow
+# so it runs on every PR regardless of which packages changed - the wider
+# CI's path filter does not cover all of packages/, and this rule must.
+
+on:
+  pull_request:
+  merge_group:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Check .d.ts shadows
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+
+      - name: Run check
+        run: node scripts/check-dts-shadows.mjs

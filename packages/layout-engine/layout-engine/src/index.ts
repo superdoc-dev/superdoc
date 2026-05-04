@@ -1573,6 +1573,25 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
   const blockSectionMap = new Map<string, number>();
   const sectionColumnsMap = new Map<number, ColumnLayout>();
   const sectionHasExplicitColumnBreak = new Set<number>();
+  // Block IDs of empty paragraphs that exist only to carry sectPr properties.
+  // These are invisible in Word's output and must contribute zero height to
+  // balanced columns (ECMA-376 §17.18.77). Threading explicit metadata avoids
+  // the older `line.width === 0` heuristic, which incorrectly collapsed normal
+  // blank paragraphs and caused overlap on the next paragraph.
+  const sectPrMarkerBlockIds = new Set<string>();
+  // True if any block in the document is a column break. Used as a guard for
+  // the document-wide balancing fallback (Nick comment 2): when callers use
+  // LayoutOptions.columns without section metadata, we still want Word's
+  // balanced-final-page behavior unless the author placed an explicit column
+  // break, in which case we preserve their intent.
+  let documentHasExplicitColumnBreak = false;
+  // True if any block in the document is a sectionBreak. The document-wide
+  // fallback only fires when there are NO sectionBreak blocks — otherwise the
+  // section-scoped path is the source of truth (even if pm-adapter or a
+  // synthetic caller didn't stamp `attrs.sectionIndex`, treating it as a
+  // single fallback section would clobber regions that the mid-page handler
+  // already balanced).
+  let documentHasAnySectionBreak = false;
   // Tracks sections already balanced mid-page — the post-layout pass skips these
   // to avoid double-balancing, which would overlap fragments at the same x/y.
   const alreadyBalancedSections = new Set<number>();
@@ -1589,17 +1608,33 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
     }
     const blockWithAttrs = block as { attrs?: { sectionIndex?: number } };
     const attrSectionIdx = blockWithAttrs.attrs?.sectionIndex;
-    if (block.kind === 'sectionBreak' && typeof attrSectionIdx === 'number') {
-      currentSectionIdx = attrSectionIdx;
-      if (block.columns) {
-        sectionColumnsMap.set(attrSectionIdx, cloneColumnLayout(block.columns));
+    if (block.kind === 'sectionBreak') {
+      documentHasAnySectionBreak = true;
+      if (typeof attrSectionIdx === 'number') {
+        currentSectionIdx = attrSectionIdx;
+        if (block.columns) {
+          sectionColumnsMap.set(attrSectionIdx, cloneColumnLayout(block.columns));
+        }
       }
     }
     if (currentSectionIdx !== null) {
       blockSectionMap.set(block.id, currentSectionIdx);
       if (block.kind === 'columnBreak') {
         sectionHasExplicitColumnBreak.add(currentSectionIdx);
+        documentHasExplicitColumnBreak = true;
       }
+    } else if (block.kind === 'columnBreak') {
+      documentHasExplicitColumnBreak = true;
+    }
+    // Block paragraphs that exist only to carry sectPr metadata (pm-adapter
+    // sets this attr on otherwise-empty section-property paragraphs). These
+    // are invisible in Word's renderer and must not contribute height when
+    // balancing columns.
+    if (
+      block.kind === 'paragraph' &&
+      (blockWithAttrs as { attrs?: { sectPrMarker?: boolean } }).attrs?.sectPrMarker === true
+    ) {
+      sectPrMarkerBlockIds.add(block.id);
     }
   });
 
@@ -1996,6 +2031,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
             columnWidth: normalized.width,
             availableHeight,
             measureMap: balancingMeasureMap,
+            sectPrMarkerBlockIds,
           });
           if (balanceResult) {
             // Collapse both cursors to the balanced section bottom so the new
@@ -2630,7 +2666,26 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
   // Mid-page continuous breaks are handled in the layout loop itself (see the
   // forceMidPageRegion branch above). This post-layout pass handles sections that
   // end at a page boundary or at document end.
-  const contentWidth = pageSize.w - (activeLeftMargin + activeRightMargin);
+  //
+  // Document-wide fallback: when callers pass `LayoutOptions.columns` directly
+  // without sectionBreak metadata, pm-adapter never stamps sectionIndex on any
+  // block and `sectionColumnsMap` stays empty. Synthesize a single virtual
+  // section that spans the whole document so multi-column callers still get
+  // their final page balanced (preserves the pre-SD-2452 behavior). Skip when
+  // the document carries an explicit column break — author intent wins.
+  const FALLBACK_SECTION_IDX = -1;
+  if (
+    sectionColumnsMap.size === 0 &&
+    !documentHasAnySectionBreak &&
+    activeColumns.count > 1 &&
+    !documentHasExplicitColumnBreak
+  ) {
+    sectionColumnsMap.set(FALLBACK_SECTION_IDX, cloneColumnLayout(activeColumns));
+    for (const block of blocks) {
+      blockSectionMap.set(block.id, FALLBACK_SECTION_IDX);
+    }
+  }
+
   for (const [sectionIdx, sectionCols] of sectionColumnsMap) {
     if (sectionCols.count <= 1) continue;
     if (sectionHasExplicitColumnBreak.has(sectionIdx)) continue;
@@ -2645,8 +2700,22 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
     }
     if (!lastPageForSection) continue;
 
-    const normalized = normalizeColumns(sectionCols, contentWidth);
-    const availableHeight = pageSize.h - activeBottomMargin - activeTopMargin;
+    // Section-local page geometry. Each page snapshots its own margins and size
+    // at startNewPage time (paginator.ts), so different sections with different
+    // page setups (margins, paper size, orientation) carry their own values on
+    // their pages. Earlier code derived the content box from the FINAL active*
+    // state, which silently rewrote earlier sections' fragments using the last
+    // section's content width and left margin. Use the target page's metrics.
+    const sectionPageSize = lastPageForSection.size ?? pageSize;
+    const sectionPageMargins = lastPageForSection.margins;
+    const sectionLeftMargin = sectionPageMargins?.left ?? activeLeftMargin;
+    const sectionRightMargin = sectionPageMargins?.right ?? activeRightMargin;
+    const sectionTopMarginPx = sectionPageMargins?.top ?? activeTopMargin;
+    const sectionBottomMargin = sectionPageMargins?.bottom ?? activeBottomMargin;
+    const sectionContentWidth = sectionPageSize.w - (sectionLeftMargin + sectionRightMargin);
+    const sectionAvailableHeight = sectionPageSize.h - sectionBottomMargin - sectionTopMarginPx;
+
+    const normalized = normalizeColumns(sectionCols, sectionContentWidth);
 
     balanceSectionOnPage({
       fragments: lastPageForSection.fragments as BalancingFragment[],
@@ -2660,11 +2729,12 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
       },
       sectionHasExplicitColumnBreak: false, // already filtered above
       blockSectionMap,
-      margins: { left: activeLeftMargin },
-      topMargin: activeTopMargin,
+      margins: { left: sectionLeftMargin },
+      topMargin: sectionTopMarginPx,
       columnWidth: normalized.width,
-      availableHeight,
+      availableHeight: sectionAvailableHeight,
       measureMap: balancingMeasureMap,
+      sectPrMarkerBlockIds,
     });
   }
 

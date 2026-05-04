@@ -517,8 +517,10 @@ export interface MeasureData {
   kind: string;
   /** Line measurements for paragraph content */
   lines?: Array<{ lineHeight: number }>;
-  /** Total height for non-paragraph content */
+  /** Total height for non-paragraph content (image, drawing) */
   height?: number;
+  /** Total height for table content (TableMeasure stores this rather than `height`). */
+  totalHeight?: number;
 }
 
 /**
@@ -559,14 +561,27 @@ function getFragmentHeight(fragment: BalancingFragment, measureMap: Map<string, 
     return sum;
   }
 
-  // For non-paragraph content, use explicit height or measure height
+  // For non-paragraph content, prefer the layout-engine-assigned fragment.height,
+  // then fall back to the measure's height field. TableMeasure stores totalHeight
+  // (not `height`), so consult that as the final fallback for table fragments —
+  // otherwise a fragment with height=0 (e.g. a layout that allocated zero height
+  // for a header-less table) silently disappears from balancing math and the
+  // balancer over-packs other blocks into column 0.
   if (fragment.kind === 'image' || fragment.kind === 'drawing' || fragment.kind === 'table') {
-    if (typeof fragment.height === 'number') {
+    if (typeof fragment.height === 'number' && fragment.height > 0) {
       return fragment.height;
     }
     const measure = measureMap.get(fragment.blockId);
-    if (measure && typeof measure.height === 'number') {
-      return measure.height;
+    if (measure) {
+      if (typeof measure.height === 'number' && measure.height > 0) {
+        return measure.height;
+      }
+      if (fragment.kind === 'table' && typeof measure.totalHeight === 'number') {
+        return measure.totalHeight;
+      }
+    }
+    if (typeof fragment.height === 'number') {
+      return fragment.height;
     }
   }
 
@@ -576,42 +591,26 @@ function getFragmentHeight(fragment: BalancingFragment, measureMap: Map<string, 
 /**
  * Return the fragment height that the column balancer should use.
  *
- * This differs from `getFragmentHeight` for one case: an empty sectPr-marker
+ * Differs from `getFragmentHeight` for one case: an empty sectPr-marker
  * paragraph. In OOXML a paragraph that exists solely to carry `<w:sectPr>`
- * has no text content — all measured lines have `width === 0`. Word does
- * NOT render an empty line for such markers, so they take no vertical space
- * in the balanced layout. Treating them as balance-neutral prevents them
- * from pushing their column's cursor down and unbalancing the section's
- * final page against Word's output (ECMA-376 §17.18.77).
+ * is invisible to Word's renderer, so it must take no vertical space in the
+ * balanced layout (ECMA-376 §17.18.77). The pm-adapter stamps these
+ * paragraphs with `attrs.sectPrMarker === true` (paragraph.ts), and the
+ * caller threads the resulting block-id set through here.
  *
- * For every other paragraph, image, drawing, or table this delegates to
- * the standard `getFragmentHeight` so existing behavior is preserved.
+ * Earlier versions of this function tried to detect markers from line
+ * geometry (`line.width === 0`), but a regular blank paragraph also
+ * measures with width 0 and DOES occupy line height — collapsing those to
+ * 0 caused the next paragraph to overlap the blank line. The metadata-based
+ * gate is the only safe signal.
  */
-function getBalancingHeight(fragment: BalancingFragment, measureMap: Map<string, MeasureData>): number {
-  if (fragment.kind === 'para') {
-    const measure = measureMap.get(fragment.blockId) as
-      | (MeasureData & { lines?: Array<{ lineHeight: number; width?: number }> })
-      | undefined;
-    if (measure?.kind === 'paragraph' && Array.isArray(measure.lines) && measure.lines.length > 0) {
-      const fromLine = fragment.fromLine ?? 0;
-      const toLine = fragment.toLine ?? measure.lines.length;
-      // A sectPr-marker paragraph is empty: every measured line has an
-      // EXPLICIT width of 0 (measuring-dom sets width per line). Treat
-      // undefined width as "has content" so synthetic test fixtures and any
-      // other callers that don't set line.width keep their existing height.
-      let allEmpty = true;
-      let sawAnyLine = false;
-      for (let i = fromLine; i < toLine; i++) {
-        const line = measure.lines[i];
-        if (!line) continue;
-        sawAnyLine = true;
-        if (line.width !== 0) {
-          allEmpty = false;
-          break;
-        }
-      }
-      if (sawAnyLine && allEmpty) return 0;
-    }
+function getBalancingHeight(
+  fragment: BalancingFragment,
+  measureMap: Map<string, MeasureData>,
+  sectPrMarkerBlockIds?: Set<string>,
+): number {
+  if (fragment.kind === 'para' && sectPrMarkerBlockIds && sectPrMarkerBlockIds.has(fragment.blockId)) {
+    return 0;
   }
   return getFragmentHeight(fragment, measureMap);
 }
@@ -792,6 +791,12 @@ export interface BalanceSectionOnPageArgs {
   availableHeight: number;
   /** Measurement data for fragments (built from measures array). */
   measureMap: Map<string, MeasureData>;
+  /**
+   * Block IDs of paragraphs that exist only to carry `<w:sectPr>` properties.
+   * These contribute zero height to balanced columns — see `getBalancingHeight`.
+   * Optional; when omitted no fragment is treated as a marker.
+   */
+  sectPrMarkerBlockIds?: Set<string>;
 }
 
 /**
@@ -857,6 +862,7 @@ export function balanceSectionOnPage(args: BalanceSectionOnPageArgs): { maxY: nu
     fragments,
     columnCount,
     measureMap: args.measureMap,
+    sectPrMarkerBlockIds: args.sectPrMarkerBlockIds,
   });
 
   // Order fragments in document order: by current column (x → left-to-right),
@@ -878,7 +884,7 @@ export function balanceSectionOnPage(args: BalanceSectionOnPageArgs): { maxY: nu
   // blank line for such markers.
   const contentBlocks: BalancingBlock[] = ordered.map((f, i) => ({
     blockId: `${f.blockId}#${i}`,
-    measuredHeight: getBalancingHeight(f, args.measureMap),
+    measuredHeight: getBalancingHeight(f, args.measureMap, args.sectPrMarkerBlockIds),
     canBreak: false,
     keepWithNext: false,
     keepTogether: true,
@@ -932,16 +938,19 @@ interface TableMeasureLike {
 }
 
 /**
- * Row-boundary record used by the renderer to draw horizontal dividers.
- * Mirrors the subset of `TableFragmentMetadata['rowBoundaries']` that the
- * split helper needs to read and regenerate.
+ * Row-boundary record matching the contract `TableRowBoundary` shape.
+ *
+ * The DOM renderer serializes these into the compact `{i,y,h,min,r}` keys
+ * for `data-table-boundaries`; storing them in the contract shape here
+ * keeps the layout-engine/contract boundary intact and prevents `undefined`
+ * row-boundary values from reaching the renderer when a table is split.
  */
 interface RowBoundaryLike {
-  i: number;
+  index: number;
   y: number;
-  h: number;
-  min: number;
-  r: number;
+  height: number;
+  minHeight: number;
+  resizable: boolean;
 }
 
 /**
@@ -981,8 +990,9 @@ function splitDominantTableAtRowBoundary(args: {
   fragments: BalancingFragment[];
   columnCount: number;
   measureMap: Map<string, MeasureData>;
+  sectPrMarkerBlockIds?: Set<string>;
 }): void {
-  const { sectionFragments, fragments, columnCount, measureMap } = args;
+  const { sectionFragments, fragments, columnCount, measureMap, sectPrMarkerBlockIds } = args;
   if (columnCount <= 1) return;
 
   const tables = sectionFragments.filter((f) => f.kind === 'table');
@@ -1003,11 +1013,14 @@ function splitDominantTableAtRowBoundary(args: {
   const measure = measureMap.get(table.blockId) as TableMeasureLike | undefined;
   if (!measure || measure.kind !== 'table' || !Array.isArray(measure.rows)) return;
 
-  const totalSectionHeight = sectionFragments.reduce((sum, f) => sum + getBalancingHeight(f, measureMap), 0);
+  const totalSectionHeight = sectionFragments.reduce(
+    (sum, f) => sum + getBalancingHeight(f, measureMap, sectPrMarkerBlockIds),
+    0,
+  );
   if (totalSectionHeight <= 0) return;
   const target = totalSectionHeight / columnCount;
 
-  const tableHeight = getBalancingHeight(table, measureMap);
+  const tableHeight = getBalancingHeight(table, measureMap, sectPrMarkerBlockIds);
   // Small-epsilon guard: if the table alone fits within the target, the
   // atomic balancer already produces a correct assignment — splitting would
   // only introduce visual churn.
@@ -1038,12 +1051,17 @@ function splitDominantTableAtRowBoundary(args: {
   // Regenerate rowBoundaries so the renderer draws horizontal dividers at the
   // right y-offsets inside each half. rowBoundaries are 0-origin within the
   // fragment; we walk the measure's rows for each half and accumulate.
+  // Use the contract `TableRowBoundary` shape ({index, y, height, minHeight,
+  // resizable}). The DOM renderer compresses these into {i,y,h,min,r} for the
+  // serialized data-table-boundaries attribute; emitting the compact shape
+  // here would produce undefined values after the renderer's projection and
+  // break interactive row resize handles for split fragments.
   const makeRowBoundaries = (rows: Array<{ height: number }>, startIndex: number): RowBoundaryLike[] => {
     const out: RowBoundaryLike[] = [];
     let y = 0.5;
     for (let i = 0; i < rows.length; i++) {
       const h = rows[i].height ?? 0;
-      out.push({ i: startIndex + i, y, h, min: h, r: 1 });
+      out.push({ index: startIndex + i, y, height: h, minHeight: h, resizable: true });
       y += h;
     }
     return out;

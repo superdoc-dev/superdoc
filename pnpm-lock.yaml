@@ -2651,15 +2651,9 @@ importers:
       '@superdoc/font-utils':
         specifier: workspace:*
         version: link:../../../../shared/font-utils
-      '@superdoc/layout-bridge':
-        specifier: workspace:*
-        version: link:../../layout-bridge
       '@superdoc/layout-resolved':
         specifier: workspace:*
         version: link:../../layout-resolved
-      '@superdoc/pm-adapter':
-        specifier: workspace:*
-        version: link:../../pm-adapter
       '@superdoc/preset-geometry':
         specifier: workspace:*
         version: link:../../../preset-geometry

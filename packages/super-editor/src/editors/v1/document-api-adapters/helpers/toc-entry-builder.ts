@@ -66,46 +66,35 @@ export function collectTocSources(doc: ProseMirrorNode, config: TocSwitchConfig)
       const attrs = node.attrs as Record<string, unknown> | undefined;
       const paragraphProps = attrs?.paragraphProperties as Record<string, unknown> | undefined;
       const styleId = paragraphProps?.styleId as string | undefined;
-      // Pasted/new paragraphs intentionally have null paraId/sdBlockId (see
-      // InputRule.js SUPERDOC_SLICE_PASTE_IDENTITY_RESETS) to avoid public-id
-      // duplicates. Synthesize a deterministic position-based id so they still
-      // appear in the rebuilt TOC and round-trip via OOXML bookmarks.
+      // Pasted/new paragraphs intentionally lose paraId/sdBlockId (see
+      // InputRule.js SUPERDOC_SLICE_PASTE_IDENTITY_RESETS). Synthesize a
+      // position-based id so they still appear in the rebuilt TOC.
       const sdBlockId =
         ((attrs?.sdBlockId ?? attrs?.paraId) as string | undefined) ?? buildFallbackBlockNodeId('paragraph', pos);
-
-      // Update paragraph context for TC field collection
       currentParagraphSdBlockId = sdBlockId;
-
       if (!sdBlockId) return true;
 
       const text = flattenText(node);
-      // Word's TOC field skips paragraphs that are styled as headings but
-      // contain no visible text (page-break-only spacers, empty stubs).
-      // Including them produces ghost entries that look like a regression.
-      const hasVisibleText = text.trim().length > 0;
+      // Word's TOC skips heading-styled paragraphs with no visible text
+      // (page-break spacers, empty stubs).
+      if (text.trim().length === 0) return true;
 
-      // Check heading by style (\o switch)
+      // \o switch — heading-style level
       if (outlineLevels) {
         const headingLevel = getHeadingLevel(styleId);
-        if (
-          headingLevel != null &&
-          headingLevel >= outlineLevels.from &&
-          headingLevel <= outlineLevels.to &&
-          hasVisibleText
-        ) {
+        if (headingLevel != null && headingLevel >= outlineLevels.from && headingLevel <= outlineLevels.to) {
           sources.push({ text, level: headingLevel, sdBlockId, kind: 'heading' });
-          // Continue descending to find TC fields within this paragraph
-          return true;
+          return true; // descend so TC fields inside this paragraph are still collected
         }
       }
 
-      // Check applied outline level (\u switch)
+      // \u switch — applied paragraph outline level
       if (useApplied) {
         const effectiveLevels = outlineLevels ?? { from: 1, to: 9 };
         const rawOutlineLevel = paragraphProps?.outlineLevel as number | undefined;
         if (rawOutlineLevel != null) {
           const tocLevel = rawOutlineLevel + 1;
-          if (tocLevel >= effectiveLevels.from && tocLevel <= effectiveLevels.to && hasVisibleText) {
+          if (tocLevel >= effectiveLevels.from && tocLevel <= effectiveLevels.to) {
             sources.push({ text, level: tocLevel, sdBlockId, kind: 'appliedOutline' });
             return true;
           }
@@ -171,40 +160,38 @@ export interface EntryParagraphJson {
   content: Array<Record<string, unknown>>;
 }
 
-/**
- * Builds ProseMirror-compatible paragraph JSON nodes for TOC entries.
- *
- * Each entry gets:
- * - Paragraph style: TOC{level}
- * - tocSourceId paragraph attribute (source heading/TC field's sdBlockId)
- * - Link mark with anchor pointing to a `_Toc`-prefixed bookmark name (when \h is set)
- * - Page number placeholder "0" with tocPageNumber mark
- * - Separator: custom (\p switch) or default tab
- */
-/**
- * Optional context that lets the entry builder produce final-looking output
- * without a follow-up `mode: 'pageNumbers'` pass and without losing layout
- * particulars from the existing TOC.
- */
-/** Mark JSON shape carried over from the existing TOC entry's text run. */
+/** A mark in JSON form, as carried on the rebuilt TOC entry's text runs. */
 export interface EntryTextMark {
   type: string;
   attrs?: Record<string, unknown>;
 }
 
+/**
+ * Optional context that lets the entry builder produce final-looking output
+ * (resolved page numbers, preserved tab spacing, sampled font/size marks)
+ * without a follow-up `mode: 'pageNumbers'` pass.
+ */
 export interface BuildTocEntryOptions {
   /** sdBlockId → page number map from PresentationEditor's last layout cycle. */
   pageMap?: Map<string, number>;
   /** Right-tab stop position (twips) to mirror the existing TOC's spacing. */
   tabPos?: number;
-  /**
-   * Marks (font, size, textStyle, bold/italic, etc.) sampled from the existing
-   * TOC entry's text run so a rebuild keeps the same visual styling. The link
-   * mark is excluded — the builder rebuilds it from the source's bookmark name.
-   */
+  /** Marks sampled from the existing TOC entry text. `link` is filtered out and rebuilt. */
   entryTextMarks?: EntryTextMark[];
+  /**
+   * Paragraph-level `<w:rPr>` overrides sampled from the existing entry. Word
+   * stamps these on TOC entries (e.g. `bold: false`, `italic: false`) to
+   * disable the TOC1 paragraph style's `<w:b/><w:i/>`. Preserving them keeps
+   * the rebuilt entries visually identical to the imported ones.
+   */
+  paragraphRunProperties?: Record<string, unknown>;
 }
 
+/**
+ * Build TOC entry paragraphs. Each paragraph carries `pStyle="TOC{level}"`,
+ * a `tocSourceId` attr pointing back to the source heading, and three runs:
+ * the (linked) entry title, the tab/separator, and the page number.
+ */
 export function buildTocEntryParagraphs(
   sources: TocSource[],
   config: TocSwitchConfig,
@@ -224,6 +211,11 @@ const TAB_LEADER_MAP: Record<string, string> = {
   middleDot: 'middleDot',
 };
 
+/** Wrap inline children in a `run` node — the schema unit that `wrapTextInRunsPlugin` skips. */
+function asRun(children: Array<Record<string, unknown>>): Record<string, unknown> {
+  return { type: 'run', content: children };
+}
+
 function buildEntryParagraph(
   source: TocSource,
   config: TocSwitchConfig,
@@ -231,75 +223,59 @@ function buildEntryParagraph(
 ): EntryParagraphJson {
   const { display } = config;
 
-  // Entry text — preserves run formatting (font, size, bold, italic, textStyle…)
-  // sampled from the existing TOC. Link mark is rebuilt from the source's
-  // bookmark name and stacked on top of the preserved marks.
-  //
-  // We wrap the text in a `run` node because `wrapTextInRunsPlugin` would
-  // otherwise wrap the bare paragraph-child text on appendTransaction and, for
-  // the first child of a paragraph, *merge paragraph-style marks via addToSet*
-  // — which clobbers our sampled `textStyle` (TNR/Hyperlink) with the TOC1
-  // paragraph style's `textStyle` (Aptos). Pre-wrapping in a run keeps the
-  // marks we constructed.
-  const preservedMarks = (options.entryTextMarks ?? []).filter((mark) => mark?.type && mark.type !== 'link');
-  const titleMarks: EntryTextMark[] = [...preservedMarks];
+  // Title text. Marks are stacked: sampled (font/size/textStyle/bold/italic)
+  // first, link last. Wrapped in a `run` so `wrapTextInRunsPlugin` does not
+  // re-wrap and merge the TOC1 paragraph style's run properties via addToSet,
+  // which would clobber the sampled `textStyle` mark.
+  const titleMarks: EntryTextMark[] = (options.entryTextMarks ?? []).filter(
+    (mark) => mark?.type && mark.type !== 'link',
+  );
   if (display.hyperlinks) {
     titleMarks.push({
       type: 'link',
-      attrs: {
-        anchor: generateTocBookmarkName(source.sdBlockId),
-        rId: null,
-        history: true,
-      },
+      attrs: { anchor: generateTocBookmarkName(source.sdBlockId), rId: null, history: true },
     });
   }
   const titleText: Record<string, unknown> = { type: 'text', text: source.text || ' ' };
   if (titleMarks.length > 0) titleText.marks = titleMarks;
 
-  const content: Array<Record<string, unknown>> = [{ type: 'run', content: [titleText] }];
+  const content: Array<Record<string, unknown>> = [asRun([titleText])];
 
-  // Determine whether to omit page number for this entry
+  // Determine whether to omit page number for this entry.
   const omitRange = display.omitPageNumberLevels;
-  const levelOmitted = omitRange && source.level >= omitRange.from && source.level <= omitRange.to;
-  const entryOmitted = source.omitPageNumber;
-  const omitPageNumber = levelOmitted || entryOmitted;
+  const omitPageNumber = Boolean(
+    (omitRange && source.level >= omitRange.from && source.level <= omitRange.to) || source.omitPageNumber,
+  );
 
   if (!omitPageNumber) {
-    const separatorRunChildren: Array<Record<string, unknown>> = [];
-    if (display.separator) {
-      separatorRunChildren.push({ type: 'text', text: display.separator });
-    } else {
-      separatorRunChildren.push({ type: 'tab' });
-    }
-    content.push({ type: 'run', content: separatorRunChildren });
+    // Separator: custom \p text or default tab.
+    content.push(asRun([display.separator ? { type: 'text', text: display.separator } : { type: 'tab' }]));
 
-    // Page number — resolved from the page map when available so a single
-    // mode 'all' rebuild produces final numbers; falls back to '0' placeholder
-    // when the source paragraph is not yet in the page map (freshly pasted
-    // headings whose synthetic id has not been seen by a layout cycle).
+    // Page number — resolved from the page map when available; '0' placeholder
+    // otherwise (e.g. freshly-pasted heading whose synthetic id hasn't been
+    // seen by a layout cycle yet).
     const resolvedPage = options.pageMap?.get(source.sdBlockId);
-    content.push({
-      type: 'run',
-      content: [
+    content.push(
+      asRun([
         {
           type: 'text',
           text: resolvedPage != null ? String(resolvedPage) : '0',
           marks: [{ type: 'tocPageNumber' }],
         },
-      ],
-    });
+      ]),
+    );
   }
 
-  // Build paragraph properties — add right-aligned tab stop when enabled
-  const paragraphProperties: Record<string, unknown> = {
-    styleId: `TOC${source.level}`,
-  };
+  const paragraphProperties: Record<string, unknown> = { styleId: `TOC${source.level}` };
+  if (options.paragraphRunProperties && Object.keys(options.paragraphRunProperties).length > 0) {
+    paragraphProperties.runProperties = { ...options.paragraphRunProperties };
+  }
 
   const rightAlign = display.rightAlignPageNumbers !== false; // default true
   if (rightAlign && !omitPageNumber) {
     // Word's default TOC tab leader is dots. The \p switch is only emitted
-    // when a non-default separator is used, so an absent tabLeader means the
-    // user expects dots, not "no leader". Honor an explicit 'none' to opt out.
+    // for a non-default separator, so an absent `tabLeader` means "use the
+    // default", not "no leader". `'none'` is the explicit opt-out.
     const leader =
       display.tabLeader === 'none' ? undefined : (display.tabLeader && TAB_LEADER_MAP[display.tabLeader]) || 'dot';
     const pos = options.tabPos ?? DEFAULT_RIGHT_TAB_POS;

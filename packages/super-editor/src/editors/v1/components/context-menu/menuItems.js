@@ -344,18 +344,18 @@ export function getItems(context, customItems = [], includeDefaultItems = true) 
           icon: ICONS.updateTableOfContents,
           isDefault: true,
           action: (editor, context) => {
-            const tocId = context.tocAncestor?.sdBlockId;
-            if (!tocId) return;
-            const target = { kind: 'block', nodeType: 'tableOfContents', nodeId: tocId };
+            const sdBlockId = context.tocAncestor?.sdBlockId;
+            if (!sdBlockId) return;
             try {
-              editor.doc?.toc?.update?.({ target, mode: 'all' });
+              editor.doc?.toc?.update?.({
+                target: { kind: 'block', nodeType: 'tableOfContents', nodeId: sdBlockId },
+                mode: 'all',
+              });
             } catch (error) {
               console.warn('[ContextMenu] toc.update failed:', error);
             }
           },
-          showWhen: (context) => {
-            return context.trigger === TRIGGERS.click && !!context.tocAncestor?.sdBlockId;
-          },
+          showWhen: (context) => context.trigger === TRIGGERS.click && !!context.tocAncestor?.sdBlockId,
         },
       ],
     },

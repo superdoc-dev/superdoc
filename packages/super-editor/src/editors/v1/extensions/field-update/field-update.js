@@ -10,6 +10,22 @@ import {
 const UPDATABLE_FIELD_TYPES = new Set(['NUMWORDS', 'NUMCHARS', 'NUMPAGES']);
 
 /**
+ * Collect every `tableOfContents` node's sdBlockId, in document order.
+ * @param {import('prosemirror-model').Node} doc
+ * @returns {string[]}
+ */
+function collectTocBlockIds(doc) {
+  const ids = [];
+  doc.descendants((node) => {
+    if (node.type.name !== 'tableOfContents') return true;
+    const sdBlockId = node.attrs?.sdBlockId;
+    if (typeof sdBlockId === 'string' && sdBlockId) ids.push(sdBlockId);
+    return false; // don't descend into TOC children
+  });
+  return ids;
+}
+
+/**
  * @module FieldUpdate
  * @sidebarTitle Field Update
  * @shortcut F9 | updateFieldsInSelection | Update fields in selection
@@ -20,16 +36,14 @@ export const FieldUpdate = Extension.create({
   addCommands() {
     return {
       /**
-       * Refresh document fields. Two phases run in order:
+       * Refresh document fields.
        *
-       * 1. Every `tableOfContents` node in the document is rebuilt via
-       *    `editor.doc.toc.update({ mode: 'all' })`. The wrapper handles
-       *    materialization, page-map resolution, leader/style preservation,
-       *    and bookmark sync.
-       * 2. Updatable stat fields (NUMWORDS, NUMCHARS, NUMPAGES) intersecting
-       *    the current selection are refreshed in-place.
+       * - When the doc contains any TOCs, rebuilds **all** of them via
+       *   `editor.doc.toc.update({ mode: 'all' })` and stops.
+       * - Otherwise, refreshes stat fields (NUMWORDS, NUMCHARS, NUMPAGES) that
+       *   intersect the current selection.
        *
-       * Bound to F9. Returns `true` if any TOC or stat field changed.
+       * Bound to F9. Returns `true` if anything was updated.
        *
        * @category Command
        * @returns {Function} ProseMirror command function
@@ -38,68 +52,39 @@ export const FieldUpdate = Extension.create({
        */
       updateFieldsInSelection:
         () =>
-        ({ editor, state, dispatch }) => {
+        ({ editor, state, tr: outerTr, dispatch }) => {
           const { from, to } = state.selection;
 
-          // F9 first refreshes every TOC in the document via the document-api.
-          // We dispatch through `editor.doc.toc.update` so each rebuild flows
-          // through the standard wrapper (page-map resolution, leader/style
-          // preservation, bookmark sync). NO_OP results are ignored.
-          let tocUpdated = false;
+          // toc.update dispatches its own transaction per TOC; CommandService
+          // would then auto-apply its captured (now-stale) `tr` to the new
+          // state. Set preventDispatch so it skips that.
           if (editor?.doc?.toc?.update) {
-            if (!dispatch) {
-              // can()-style probe: report yes if any TOC exists.
-              let hasToc = false;
-              state.doc.descendants((node) => {
-                if (hasToc) return false;
-                if (node.type.name === 'tableOfContents') {
-                  hasToc = true;
-                  return false;
-                }
-                return true;
-              });
-              if (hasToc) return true;
-            } else {
-              const tocTargets = [];
-              state.doc.descendants((node) => {
-                if (node.type.name === 'tableOfContents') {
-                  const sdBlockId = node.attrs?.sdBlockId;
-                  if (typeof sdBlockId === 'string' && sdBlockId) {
-                    tocTargets.push(sdBlockId);
-                  }
-                  return false; // don't descend into TOC children
-                }
-                return true;
-              });
-
+            const tocTargets = collectTocBlockIds(state.doc);
+            if (tocTargets.length > 0) {
+              if (!dispatch) return true; // can()-style probe
               for (const sdBlockId of tocTargets) {
                 try {
-                  const result = editor.doc.toc.update({
+                  editor.doc.toc.update({
                     target: { kind: 'block', nodeType: 'tableOfContents', nodeId: sdBlockId },
                     mode: 'all',
                   });
-                  if (result?.success) tocUpdated = true;
                 } catch (error) {
                   console.warn('[FieldUpdate] toc.update failed for', sdBlockId, error);
                 }
               }
+              outerTr?.setMeta?.('preventDispatch', true);
+              return true;
             }
           }
 
-          // After TOC updates the doc snapshot may have shifted positions, so
-          // re-read state from the editor only in that case. When nothing was
-          // updated above, use the original `state` snapshot to keep the
-          // pre-existing stat-field path byte-for-byte equivalent.
-          const currentState = tocUpdated ? (editor?.state ?? state) : state;
-          const fields = findFieldsInRange(currentState.doc, from, to);
-
+          const fields = findFieldsInRange(state.doc, from, to);
           const updatable = fields.filter((f) => UPDATABLE_FIELD_TYPES.has(f.fieldType));
-          if (updatable.length === 0) return tocUpdated;
+          if (updatable.length === 0) return false;
 
           const mainEditor = resolveMainBodyEditor(editor);
           const stats = getWordStatistics(mainEditor);
 
-          const tr = currentState.tr;
+          const tr = state.tr;
           let changed = false;
 
           // Process in reverse position order so earlier positions stay valid
@@ -117,7 +102,7 @@ export const FieldUpdate = Extension.create({
               // total-page-number stores its display value as a text child,
               // not just an attr. Replace the entire node so both the text
               // content and resolvedText stay in sync.
-              const textChild = freshValue ? currentState.schema.text(freshValue) : null;
+              const textChild = freshValue ? state.schema.text(freshValue) : null;
               const newNode = node.type.create({ ...node.attrs, resolvedText: freshValue }, textChild);
               tr.replaceWith(field.pos, field.pos + node.nodeSize, newNode);
               changed = true;
@@ -133,7 +118,7 @@ export const FieldUpdate = Extension.create({
             }
           }
 
-          if (!changed) return tocUpdated;
+          if (!changed) return false;
           if (dispatch) dispatch(tr);
           return true;
         },

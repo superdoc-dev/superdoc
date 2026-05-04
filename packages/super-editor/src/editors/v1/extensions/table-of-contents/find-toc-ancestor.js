@@ -1,15 +1,11 @@
 /**
- * Find the enclosing `tableOfContents` node for a given document position.
- *
- * Used by the context menu and the F9 shortcut to detect when the cursor /
- * right-click landed inside a TOC, so we can route the action through
+ * Find the enclosing `tableOfContents` node for a document position. Used by
+ * the context menu to route "Update table of contents" through
  * `editor.doc.toc.update`.
  *
- * @param {import('prosemirror-model').Node} doc - The PM document.
- * @param {number} pos - A document position.
+ * @param {import('prosemirror-model').Node} doc
+ * @param {number} pos
  * @returns {{ node: import('prosemirror-model').Node, pos: number, sdBlockId: string | null } | null}
- *   The TOC node, its document position, and its `sdBlockId` (when available),
- *   or `null` when `pos` is not inside a TOC.
  */
 export function findTocAncestor(doc, pos) {
   if (!doc || typeof pos !== 'number' || !Number.isFinite(pos)) return null;
@@ -19,14 +15,11 @@ export function findTocAncestor(doc, pos) {
   } catch {
     return null;
   }
-
   for (let depth = resolved.depth; depth >= 0; depth -= 1) {
     const node = resolved.node(depth);
-    if (node?.type?.name === 'tableOfContents') {
-      const sdBlockId = typeof node.attrs?.sdBlockId === 'string' ? node.attrs.sdBlockId : null;
-      const nodePos = depth === 0 ? 0 : resolved.before(depth);
-      return { node, pos: nodePos, sdBlockId };
-    }
+    if (node?.type?.name !== 'tableOfContents') continue;
+    const sdBlockId = typeof node.attrs?.sdBlockId === 'string' ? node.attrs.sdBlockId : null;
+    return { node, pos: depth === 0 ? 0 : resolved.before(depth), sdBlockId };
   }
   return null;
 }

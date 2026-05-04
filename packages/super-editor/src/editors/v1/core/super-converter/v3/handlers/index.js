@@ -150,6 +150,7 @@ import { translator as w_sz_translator } from './w/sz/sz-translator.js';
 import { translator as w_szCs_translator } from './w/szcs/szcs-translator.js';
 import { translator as w_t_translator } from './w/t/t-translator.js';
 import { translator as w_tab_translator } from './w/tab/tab-translator.js';
+import { translator as w_noBreakHyphen_translator } from './w/noBreakHyphen/no-break-hyphen-translator.js';
 import { translator as w_tabs_translator } from './w/tabs/tabs-translator.js';
 import { translator as w_tbl_translator } from './w/tbl/tbl-translator.js';
 import { translator as w_tblBorders_translator } from './w/tblBorders/tblBorders-translator.js';
@@ -358,6 +359,7 @@ const translatorList = Array.from(
     w_szCs_translator,
     w_t_translator,
     w_tab_translator,
+    w_noBreakHyphen_translator,
     w_tabs_translator,
     w_tbl_translator,
     w_tblBorders_translator,

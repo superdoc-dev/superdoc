@@ -12,7 +12,7 @@ import { findTrackedMarkBetween } from './findTrackedMarkBetween.js';
  * @param {number} options.to To position.
  * @param {object} options.user User object ({ name, email }).
  * @param {string} options.date Date.
- * @param {string} options.id Optional ID to use (for replace operations where insertion and deletion share the same ID).
+ * @param {string} [options.id] Optional ID to use (for replace operations where insertion and deletion share the same ID).
  * @returns {Object} Deletion map and deletionMark
  */
 export const markDeletion = ({ tr, from, to, user, date, id: providedId }) => {

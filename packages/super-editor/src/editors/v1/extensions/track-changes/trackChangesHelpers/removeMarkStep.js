@@ -7,6 +7,7 @@ import { getLiveInlineMarksInRange } from './getLiveInlineMarksInRange.js';
 
 /**
  * Remove mark step.
+ * @param {object} options Remove mark options.
  * @param {import('prosemirror-state').EditorState} options.state Editor state.
  * @param {import('prosemirror-transform').RemoveMarkStep} options.step Step.
  * @param {import('prosemirror-state').Transaction} options.newTr New transaction.

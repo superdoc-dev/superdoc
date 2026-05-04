@@ -26,6 +26,10 @@ function isSpecialEntry(entry: NoteEntryLike): boolean {
   return SPECIAL_NOTE_TYPES.has(entry.type ?? '');
 }
 
+function normalizeNoteId(entry: NoteEntryLike): string {
+  return String(entry.id ?? '');
+}
+
 /**
  * Find a note entry by ID with regular-note priority.
  *
@@ -51,4 +55,34 @@ export function findNoteEntryById<T extends NoteEntryLike>(
   }
 
   return fallback;
+}
+
+/**
+ * Enumerate one effective note entry per note ID with regular-note priority.
+ *
+ * Preserves first-seen order by note ID while ensuring that when both a
+ * special entry and a regular note share the same numeric ID, the regular note
+ * is the effective entry for that ID.
+ */
+export function enumerateEffectiveNoteEntries<T extends NoteEntryLike>(entries: T[] | undefined | null): T[] {
+  if (!Array.isArray(entries)) return [];
+
+  const orderedIds: string[] = [];
+  const effectiveById = new Map<string, T>();
+
+  for (const entry of entries) {
+    const noteId = normalizeNoteId(entry);
+    if (!effectiveById.has(noteId)) {
+      orderedIds.push(noteId);
+      effectiveById.set(noteId, entry);
+      continue;
+    }
+
+    const current = effectiveById.get(noteId)!;
+    if (isSpecialEntry(current) && !isSpecialEntry(entry)) {
+      effectiveById.set(noteId, entry);
+    }
+  }
+
+  return orderedIds.map((noteId) => effectiveById.get(noteId)!);
 }

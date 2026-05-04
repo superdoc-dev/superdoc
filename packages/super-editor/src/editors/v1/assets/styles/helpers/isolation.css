@@ -5,8 +5,8 @@
  */
 .sd-editor-scoped,
 .sd-editor-scoped :where(*:not(svg):not(svg *):not(.annotation):not([data-drag-handle])),
-.sd-editor-scoped :where(*:not(svg):not(svg *)::before),
-.sd-editor-scoped :where(*:not(svg):not(svg *)::after) {
+.sd-editor-scoped :where(*:not(svg):not(svg *))::before,
+.sd-editor-scoped :where(*:not(svg):not(svg *))::after {
   all: revert;
   box-sizing: border-box;
 }

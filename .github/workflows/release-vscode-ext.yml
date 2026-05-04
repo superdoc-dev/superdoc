@@ -1,11 +1,11 @@
-# Auto-releases on push to main (@next).
-# Stable releases are orchestrated centrally by release-stable.yml.
+# Auto-releases on push to main (@next) and stable (@latest).
 name: 📦 Release vscode-ext
 
 on:
   push:
     branches:
       - main
+      - stable
     paths:
       - 'apps/vscode-ext/**'
       - 'packages/superdoc/**'
@@ -23,6 +23,9 @@ permissions:
   packages: write
 
 concurrency:
+  # Stable releases share the `release-stable` group so @semantic-release/git
+  # pushes to `stable` serialize across workflows; per-workflow groups would
+  # let releases race on `git push origin stable`.
   group: ${{ github.ref_name == 'stable' && 'release-stable' || format('{0}-{1}', github.workflow, github.ref) }}
   cancel-in-progress: ${{ github.ref_name != 'stable' }}
 

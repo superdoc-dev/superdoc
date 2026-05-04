@@ -125,8 +125,13 @@ export interface User {
   /** The user's name */
   name?: string;
 
-  /** The user's email */
-  email?: string;
+  /**
+   * The user's email. Optional, and may be `null` when SuperDoc fell back
+   * to the built-in default user without an email; the runtime has always
+   * exposed `null` here, so the typedef accepts it explicitly. Consumers
+   * must narrow before performing string operations on this field.
+   */
+  email?: string | null;
 
   /** The user's photo URL */
   image?: string | null;

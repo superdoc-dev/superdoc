@@ -1,7 +1,7 @@
 import type { TextTarget } from '../types/address.js';
 
 /**
- * Input for `selection.current` — reads the editor's current selection.
+ * Input for `selection.current`: reads the editor's current selection.
  *
  * Purely a read operation; does not modify the document. `selection.current`
  * always reflects the live editor selection in whichever story currently
@@ -34,7 +34,7 @@ export interface SelectionInfo {
    * is not in text (empty document, node selection, no focus, etc.).
    *
    * `TextTarget.segments` may contain multiple entries when the selection
-   * spans multiple blocks. Pass the whole target to `comments.create` —
+   * spans multiple blocks. Pass the whole target to `comments.create` -
    * it resolves multi-segment targets to a single PM range spanning the
    * full selection.
    */
@@ -44,7 +44,7 @@ export interface SelectionInfo {
    * ProseMirror mark type names (e.g. `'bold'`, `'italic'`, `'link'`).
    * Use these to drive toolbar active-state rendering.
    *
-   * `activeMarks` uses **intersection** semantics — a name is present
+   * `activeMarks` uses **intersection** semantics: a name is present
    * only when every character in the selection carries that mark. This
    * matches Word/Google Docs toolbar behavior.
    */

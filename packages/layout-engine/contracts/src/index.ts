@@ -1574,6 +1574,8 @@ export type Line = {
   naturalWidth?: number;
   /** Number of spaces in the line (pre-computed for efficiency in justify calculations). */
   spaceCount?: number;
+  /** True when this line used author-defined OOXML tab stops, not synthesized default stops. */
+  hasExplicitTabStops?: boolean;
   segments?: LineSegment[];
   leaders?: LeaderDecoration[];
   bars?: BarDecoration[];

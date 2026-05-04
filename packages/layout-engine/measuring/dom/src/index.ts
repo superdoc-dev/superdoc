@@ -232,6 +232,7 @@ type TabStopPx = {
   pos: number; // px
   val: TabStop['val'];
   leader?: TabStop['leader'];
+  source?: TabStop['source'];
 };
 
 // Unused type - may be needed for future decimal tab implementation
@@ -1090,6 +1091,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
     /** Tallest inline image on this line (pixels) */
     maxImageHeight?: number;
     maxWidth: number;
+    hasExplicitTabStops?: boolean;
     segments: Line['segments'];
     leaders?: Line['leaders'];
     /** Count of breakable spaces already included on this line (for justify-aware fitting) */
@@ -1542,6 +1544,9 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
       const clampedTarget = Math.min(target, maxAbsWidth);
       const tabAdvance = Math.max(0, clampedTarget - absCurrentX);
       currentLine.width = roundValue(currentLine.width + tabAdvance);
+      if (stop?.source === 'explicit') {
+        currentLine.hasExplicitTabStops = true;
+      }
       // Persist measured tab width on the TabRun for downstream consumers/tests
       (run as TabRun & { width?: number }).width = tabAdvance;
 
@@ -2543,6 +2548,9 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
         const clampedTarget = Math.min(target, maxAbsWidth);
         const tabAdvance = Math.max(0, clampedTarget - absCurrentX);
         currentLine.width = roundValue(currentLine.width + tabAdvance);
+        if (stop?.source === 'explicit') {
+          currentLine.hasExplicitTabStops = true;
+        }
 
         currentLine.maxFontInfo = updateMaxFontInfo(currentLine.maxFontSize, currentLine.maxFontInfo, run);
         currentLine.maxFontSize = Math.max(currentLine.maxFontSize, lineHeightFontSize(run));
@@ -3526,6 +3534,7 @@ const buildTabStopsPx = (indent?: ParagraphIndent, tabs?: TabStop[], tabInterval
     pos: twipsToPx(stop.pos),
     val: stop.val,
     leader: stop.leader,
+    source: stop.source,
   }));
 };
 

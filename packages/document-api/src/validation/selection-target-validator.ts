@@ -1,7 +1,7 @@
 /**
  * Validation for SelectionTarget and its constituent types.
  *
- * These are shape-level guards — they check structural correctness,
+ * These are shape-level guards: they check structural correctness,
  * not semantic validity (e.g., whether a blockId exists in the document).
  */
 

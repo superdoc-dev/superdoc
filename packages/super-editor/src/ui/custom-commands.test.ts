@@ -105,7 +105,35 @@ describe('ui.commands.register', () => {
     expect(execute).toHaveBeenCalledWith({
       payload: { prompt: 'fix tone' },
       superdoc,
+      editor: superdoc.activeEditor,
     });
+
+    ui.destroy();
+  });
+
+  it('execute receives the routed editor late-bound (story swap between register and execute)', () => {
+    const { superdoc, editor } = makeStubs();
+    const ui = createSuperDocUI({ superdoc });
+
+    const execute = vi.fn(() => true);
+    const reg = ui.commands.register({ id: 'company.aiRewrite', execute });
+
+    // Plant a child story editor that PresentationEditor would route
+    // to (header focus, footer focus, etc). The custom-command runtime
+    // re-resolves on each execute, so the edit-time editor must be the
+    // routed one — not whichever was active at register-time.
+    const childEditor = { tag: 'header-editor' };
+    (
+      editor as unknown as {
+        presentationEditor?: { getActiveEditor?: () => unknown };
+      }
+    ).presentationEditor = { getActiveEditor: () => childEditor };
+
+    reg.handle.execute();
+
+    expect(execute).toHaveBeenCalledTimes(1);
+    const args = execute.mock.calls[0]?.[0] as { editor: unknown };
+    expect(args.editor).toBe(childEditor);
 
     ui.destroy();
   });
@@ -645,6 +673,7 @@ describe('ui.commands.get', () => {
     expect(execute).toHaveBeenCalledWith({
       payload: { prompt: 'fix tone' },
       superdoc,
+      editor: superdoc.activeEditor,
     });
 
     ui.destroy();

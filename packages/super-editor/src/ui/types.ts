@@ -3,7 +3,7 @@
  *
  * The controller exposes a single observation pipeline (the **selector
  * substrate** at `ui.select(...)`) that the domain namespaces
- * (`ui.toolbar`, `ui.commands`, `ui.comments`, `ui.review`,
+ * (`ui.toolbar`, `ui.commands`, `ui.comments`, `ui.trackChanges`,
  * `ui.viewport`, `ui.selection`) are implemented on top of. Consumers
  * building their own UI typically reach for the domain handles
  * (`ui.comments.subscribe(...)`, `ui.commands.bold.observe(...)`)
@@ -64,6 +64,21 @@ export interface SuperDocLike {
 export interface SuperDocEditorLike {
   on?(event: string, handler: (...args: unknown[]) => void): unknown;
   off?(event: string, handler: (...args: unknown[]) => void): unknown;
+  emit?(event: string, payload: unknown): void;
+  /**
+   * Replace the current document file. Consumed by `ui.document.replaceFile`
+   * to give consumers a typed import path without reaching into the host
+   * instance. Optional in the structural typing so SSR / non-browser
+   * stubs stay valid.
+   */
+  replaceFile?(file: File): Promise<unknown>;
+  /**
+   * Converter handle. The controller reads `converter.comments` after
+   * a `replaceFile` to manually re-emit `commentsLoaded` while
+   * SD-2839 is open (Editor short-circuits the event when
+   * `modules.comments: false`).
+   */
+  converter?: { comments?: unknown[] };
   doc?: {
     selection?: {
       current?(input?: { includeText?: boolean }): {
@@ -91,12 +106,24 @@ export interface SuperDocEditorLike {
     };
     /**
      * Tracked-changes member on the Document API. Used by
-     * `ui.review.*` for accept/reject and the merged feed.
+     * `ui.trackChanges.*` for accept/reject and the live feed.
      */
     trackChanges?: {
       list?(query?: unknown): unknown;
       decide?(input: unknown, options?: unknown): unknown;
     };
+    /**
+     * Insert content at a positional target. Surfaces the typed
+     * doc-API signature so custom commands can call
+     * `editor.doc.insert(...)` without a structural cast. The control
+     * surface needs `editor.doc.insert` for the Custom UI custom-command
+     * pattern (Insert clause, AI-generated text); other doc-API
+     * mutation methods stay loose unless a similar use case lands.
+     */
+    insert?(
+      input: import('@superdoc/document-api').InsertInput,
+      options?: unknown,
+    ): import('@superdoc/document-api').SDMutationReceipt;
   };
   /**
    * PresentationEditor handle. Browser-only. The controller calls
@@ -125,7 +152,7 @@ export interface SuperDocEditorLike {
  * Read individual fields via {@link SuperDocUI.select} or pull whole
  * slices through the domain handles (`ui.selection.subscribe`,
  * `ui.comments.subscribe`, etc.). Each slice is memoized so a typing
- * only transaction (which leaves selection / comments / review
+ * only transaction (which leaves selection / comments / track-changes
  * unchanged) does not re-fire downstream subscribers.
  *
  * Implementation note: the selector substrate recomputes the full
@@ -165,12 +192,11 @@ export interface SuperDocUIState {
    */
   comments: CommentsSlice;
   /**
-   * Review slice — merged comments + tracked-changes feed for the
-   * Word / Google Docs review sidebar pattern. Cached at controller
-   * level alongside the comments slice; refreshes on the same events
-   * plus tracked-change events.
+   * Tracked-changes slice. Items + activeId for the tracked-changes
+   * sidebar pattern. Cached at controller level alongside the comments
+   * slice; refreshes on tracked-change events.
    */
-  review: ReviewSlice;
+  trackChanges: TrackChangesSlice;
 }
 
 /**
@@ -233,7 +259,7 @@ export interface SelectionSlice {
    * ```ts
    * const { selectionTarget } = ui.selection.getSnapshot();
    * if (selectionTarget) {
-   *   editor.doc.insert({ target: selectionTarget, content: 'Hello' });
+   *   editor.doc.insert({ target: selectionTarget, value: 'Hello', type: 'text' });
    * }
    * ```
    *
@@ -250,7 +276,7 @@ export interface SelectionSlice {
    * root, so non-body selections route correctly. Today the selection
    * resolver does NOT yet stamp `target.story` for non-body surfaces
    * (header / footer / footnote / endnote); a doc-api follow-up
-   * tracks this. Until it lands, consumers building BYO UI on top of
+   * tracks this. Until it lands, consumers building Custom UI on top of
    * non-body content should detect the routed surface themselves and
    * stamp the right `StoryLocator` before passing the target into a
    * doc-api operation.
@@ -276,8 +302,8 @@ export interface SelectionSlice {
   /**
    * Tracked-change ids whose mark (`trackInsert` / `trackDelete` /
    * `trackFormat`) overlaps the selection. Union semantics. Mirrors
-   * `state.review.activeId` (which picks the first id) for consumers
-   * that want the full set.
+   * `state.trackChanges.activeId` (which picks the first id) for
+   * consumers that want the full set.
    */
   activeChangeIds: string[];
   /**
@@ -311,54 +337,36 @@ export interface CommentsSlice {
 }
 
 /**
- * One item in the merged review feed (comments + tracked changes).
+ * One tracked-change item exposed on `state.trackChanges.items`.
  *
- * Discriminated by `kind`. `documentOrder` is a dense rank within the
- * snapshot — comparing two items' `documentOrder` tells you which
- * appears first; consuming UIs don't need to recompute it.
+ * Mirrors `editor.doc.trackChanges.list()` output (one entry per
+ * change). UIs that want a merged comments-and-changes sidebar
+ * compose their own feed from `ui.comments.items` and
+ * `ui.trackChanges.items`.
  */
-export type ReviewItem =
-  | {
-      kind: 'comment';
-      id: string;
-      documentOrder: number;
-      comment: import('@superdoc/document-api').CommentsListResult['items'][number];
-    }
-  | {
-      kind: 'change';
-      id: string;
-      documentOrder: number;
-      change: import('@superdoc/document-api').TrackChangesListResult['items'][number];
-    };
+export interface TrackChangesItem {
+  /** Tracked-change id. */
+  id: string;
+  /** Full change record from `editor.doc.trackChanges.list()`. */
+  change: import('@superdoc/document-api').TrackChangesListResult['items'][number];
+}
 
 /**
- * Snapshot of the merged review feed exposed on `state.review`.
+ * Snapshot of the tracked-changes feed exposed on `state.trackChanges`.
  *
- * Document-order ranking note (per SD-2791 ticket): both
- * `editor.doc.trackChanges.list()` and tracked-change groupings are
- * already returned in PM-position order, but cross-list interleaving
- * between comments and tracked changes is *not* fully resolved
- * because public `TrackChangeInfo` lacks a positional `target` today
- * (separate ticket). The initial implementation interleaves comments
- * (in their `comments.list()` order) ahead of tracked changes (in
- * their `list()` order); migration-guide consumers get a stable
- * iteration order and dense `documentOrder` ranks for next/previous
- * navigation. When `TrackChangeInfo.target` lands, the merge sort
- * gets refined transparently.
+ * `editor.doc.trackChanges.list()` returns items in PM-position order;
+ * `items` mirrors that order so next/previous navigation tracks the
+ * document.
  */
-export interface ReviewSlice {
-  /** Merged feed, sorted by `documentOrder`. */
-  items: ReviewItem[];
+export interface TrackChangesSlice {
+  /** Tracked changes in document order. */
+  items: TrackChangesItem[];
+  /** Convenience count of `items.length`. */
+  total: number;
   /**
-   * Number of unresolved review items (open comments + every tracked
-   * change). Drives sidebar-header counts.
-   */
-  openCount: number;
-  /**
-   * The currently active item id — driven by selection
-   * (`activeCommentIds[0] ?? activeChangeIds[0]`) plus
-   * `ui.review.next/previous/scrollTo` calls. `null` when nothing is
-   * focused.
+   * The currently active change id. Driven by selection
+   * (`activeChangeIds[0]`) plus `ui.trackChanges.next/previous/
+   * scrollTo` calls. `null` when nothing is focused.
    */
   activeId: string | null;
 }
@@ -408,11 +416,13 @@ export interface SuperDocUI {
   comments: CommentsHandle;
 
   /**
-   * Review domain — merged comments + tracked-changes feed for
-   * Word/Google-Docs review sidebars. Same shape as `comments` but
-   * with accept/reject/next/previous semantics.
+   * Tracked-changes domain. Accept/reject and navigation over the
+   * tracked-change list. Mirrors `editor.doc.trackChanges` for verbs;
+   * `next/previous/scrollTo` are UI-only navigation helpers. UIs that
+   * want a merged comments-and-changes sidebar compose
+   * `ui.comments.items` and `ui.trackChanges.items` themselves.
    */
-  review: ReviewHandle;
+  trackChanges: TrackChangesHandle;
 
   /**
    * Selection domain — single subscription + read surface for
@@ -441,23 +451,119 @@ export interface SuperDocUI {
 
   /**
    * Document domain. Session-level operations a custom toolbar
-   * needs (Export DOCX, document-mode toggle, ready state). Sugar
-   * over `state.document` plus passthroughs to the host SuperDoc
-   * instance's `setDocumentMode` / `export`. Lifts the operations
-   * that previously forced consumers to wire a separate "host" hook
-   * through their React context just so a toolbar button could call
-   * `superdoc.export(...)`. Dirty / unsaved-changes is intentionally
-   * not on this slice today: SuperDoc has no host-side dirty primitive,
-   * and adding one is a separate ticket.
+   * needs (Export DOCX, document-mode toggle, ready state, unsaved-
+   * changes indicator). Sugar over `state.document` plus passthroughs
+   * to the host SuperDoc instance's `setDocumentMode` / `export` /
+   * `replaceFile`. Lifts the operations that previously forced
+   * consumers to wire a separate "host" hook through their React
+   * context just so a toolbar button could call `superdoc.export(...)`.
+   * The slice's `dirty` flag is transaction-driven and cleared on a
+   * successful `export` or `replaceFile`; see {@link DocumentSlice}.
    */
   document: DocumentHandle;
 
   /**
+   * Create a {@link SuperDocUIScope} for collecting subscriptions,
+   * custom-command registrations, and DOM listeners under one
+   * lifecycle. Calling `ui.destroy()` cascades into every live scope
+   * before tearing down the controller's own resources, so a typical
+   * non-React consumer needs only `scope.destroy()` (or just
+   * `ui.destroy()`) to clean up.
+   */
+  createScope(): SuperDocUIScope;
+
+  /**
    * Tear down all internal subscriptions to the editor / SuperDoc
-   * instance / presentation editor. After destroy, no listeners will
+   * instance / presentation editor, plus every scope created via
+   * {@link SuperDocUI.createScope}. After destroy, no listeners will
    * fire and `select(...)` should not be called.
    */
   destroy(): void;
+}
+
+/**
+ * Lifecycle helper returned by {@link SuperDocUI.createScope}.
+ *
+ * Collects subscription unsubscribes, custom-command registrations,
+ * and DOM event listeners under a single tear-down call. Calling
+ * `ui.destroy()` automatically destroys every live scope first, so
+ * consumers can either call `scope.destroy()` themselves on unmount /
+ * HMR or rely on the cascade.
+ *
+ * Post-destroy semantics (idempotent: calling `destroy()` twice is
+ * a no-op):
+ * - `add(teardown)` invokes the teardown synchronously.
+ * - `on(target, type, listener)` is a no-op; the listener is never
+ *   installed.
+ * - `register(registration)` throws.
+ * - `child()` returns an already-destroyed scope.
+ */
+export interface SuperDocUIScope {
+  /**
+   * Add a teardown function. Typically the unsubscribe returned by a
+   * domain handle's `subscribe()` / `observe()` call:
+   *
+   * ```ts
+   * scope.add(ui.commands.bold.observe((state) => render(state)));
+   * scope.add(ui.comments.subscribe(({ snapshot }) => renderList(snapshot)));
+   * ```
+   *
+   * Calling `add` after `destroy` invokes the teardown immediately:
+   * the canonical caller has already executed the side-effecting
+   * subscribe call, so running the unsubscribe right away matches
+   * what a `try { ... } finally { off(); }` pattern would do.
+   */
+  add(teardown: () => void): void;
+
+  /**
+   * Register a custom toolbar command. Returns the full
+   * {@link CustomCommandRegistrationResult} so consumers retain access
+   * to `handle.observe(...)` and `invalidate()`. The scope retains
+   * the `unregister()` callback and runs it when the scope is
+   * destroyed; consumers may still call `result.unregister()`
+   * manually before that, which is idempotent on the registry side.
+   *
+   * Throws when called on a destroyed scope. A register-then-unregister
+   * cycle would still fire the registry's invalidation paths and any
+   * collision-warning hooks, so we surface the lifecycle error
+   * explicitly instead of swallowing it.
+   */
+  register<TPayload = void, TValue = unknown>(
+    registration: CustomCommandRegistration<TPayload, TValue>,
+  ): CustomCommandRegistrationResult<TPayload, TValue>;
+
+  /**
+   * Add a DOM event listener. Calls `target.addEventListener(type,
+   * listener, options)` and queues a `removeEventListener` with the
+   * same arguments for scope teardown. No-op when called on a
+   * destroyed scope.
+   */
+  on(
+    target: EventTarget,
+    type: string,
+    listener: EventListenerOrEventListenerObject,
+    options?: AddEventListenerOptions | boolean,
+  ): void;
+
+  /**
+   * Create a child scope. Destroying the parent destroys every child
+   * first; child scopes share the controller's command registry so
+   * `child.register(...)` registers against the same surface as
+   * `ui.commands.register(...)`. Returns an already-destroyed scope
+   * when called on a destroyed parent.
+   */
+  child(): SuperDocUIScope;
+
+  /**
+   * Tear down every collected teardown and child scope. Idempotent.
+   * Errors thrown by individual teardowns are caught and logged to
+   * `console.error`; one failure does not prevent the rest from
+   * running.
+   */
+  destroy(): void;
+
+  /** True after {@link destroy} has been called. */
+  readonly destroyed: boolean;
 }
 
 /**
@@ -474,6 +580,22 @@ export interface DocumentSlice {
   ready: boolean;
   /** Mirror of `superdoc.config.documentMode`. */
   mode: 'editing' | 'suggesting' | 'viewing' | null;
+  /**
+   * True when the document has unsaved changes. Flips to `true` on any
+   * editor transaction that mutates the document (`tr.docChanged`).
+   * Selection-only transactions (cursor moves, range adjustments) do
+   * not flip the flag.
+   *
+   * Cleared back to `false` when:
+   * - `ui.document.export(...)` resolves successfully, or
+   * - `ui.document.replaceFile(...)` swaps the document.
+   *
+   * Undo-to-clean is not tracked: hitting undo until the document
+   * matches its on-open state still reads as dirty. Apps that need
+   * the Word/GDocs-style "no unsaved changes" semantics should layer
+   * their own edit-count diff on top.
+   */
+  dirty: boolean;
 }
 
 /**
@@ -539,6 +661,16 @@ export interface DocumentHandle {
    */
   subscribe(listener: (event: { snapshot: DocumentSlice }) => void): () => void;
   /**
+   * Value-shaped alias of {@link subscribe}: listener receives the
+   * snapshot directly instead of an event wrapper. Matches the
+   * per-command `observe(state => ...)` shape on
+   * {@link CommandHandle.observe}, so a single listener style works
+   * across the whole controller surface. Same emission semantics as
+   * `subscribe`: fires once synchronously, then on shallow-equality
+   * change. Returns an unsubscribe.
+   */
+  observe(listener: (snapshot: DocumentSlice) => void): () => void;
+  /**
    * Set the document mode. Routes through `superdoc.setDocumentMode`
    * which fires the existing `document-mode-change` event and updates
    * the per-editor mode. No-op when the host stub omits the setter
@@ -555,11 +687,21 @@ export interface DocumentHandle {
    * try/catch and surface the error inline.
    */
   export(options?: DocumentExportInput): Promise<unknown>;
+  /**
+   * Replace the current document file. Routes through
+   * `superdoc.activeEditor.replaceFile(file)` and re-emits
+   * `commentsLoaded` once the swap completes so consumers running
+   * `modules.comments: false` (SD-2839) still see imported comments
+   * refresh in `ui.comments`. Resolves when the swap and the
+   * post-swap event have both fired. Rejects if the host has no
+   * active editor or the engine swap throws.
+   */
+  replaceFile(file: File): Promise<void>;
 }
 
 /**
  * Selection domain handle exposed on `ui.selection`. Same shape as
- * `CommentsHandle` / `ReviewHandle`: snapshot + subscription. Mirrors
+ * `CommentsHandle` / `TrackChangesHandle`: snapshot + subscription. Mirrors
  * the full `SelectionInfo` projection through the memoized
  * `state.selection` slice.
  */
@@ -573,6 +715,12 @@ export interface SelectionHandle {
    * typing-only transactions). Returns an unsubscribe.
    */
   subscribe(listener: (event: { snapshot: SelectionSlice }) => void): () => void;
+  /**
+   * Value-shaped alias of {@link subscribe}: listener receives the
+   * snapshot directly. See {@link DocumentHandle.observe} for why
+   * this exists alongside `subscribe`.
+   */
+  observe(listener: (snapshot: SelectionSlice) => void): () => void;
   /**
    * Capture the current selection as a portable handle.
    *
@@ -606,32 +754,23 @@ export interface SelectionHandle {
 /**
  * Frozen snapshot returned by {@link SelectionHandle.capture}.
  *
- * Same shape as {@link SelectionSlice} but `DeepReadonly` so the
- * type signal matches the runtime deep-freeze: assigning into
- * `captured.target.segments[0].range.start` or
- * `captured.activeMarks[0]` is a TypeScript error AND a runtime
- * throw in strict mode. Declared as its own named type so
- * consumers can name the captured value in their component state
- * (`useState<SelectionCapture | null>(null)`) and so the planned
- * `restore(capture)` follow-up has a stable input type.
- */
-export type SelectionCapture = DeepReadonly<SelectionSlice>;
-
-/**
- * Recursively mark every property and array element as `readonly`.
- * Mirrors the runtime `Object.freeze` walk performed by
- * `ui.selection.capture()` so the static type matches reality.
+ * Same shape as {@link SelectionSlice}; declared as its own type
+ * so consumers can name the captured value in their component
+ * state (`useState<SelectionCapture | null>(null)`) and so the
+ * planned `restore(capture)` follow-up has a stable input type.
  *
- * Kept module-local: this is an implementation detail of the
- * captured selection contract, not a generic helper consumers
- * should reach for.
+ * The runtime value is recursively `Object.freeze`d, so assigning
+ * into `captured.target.segments[0].range.start` or
+ * `captured.activeMarks[0]` throws in strict mode. We do NOT
+ * encode that as a `readonly` type because the canonical use case
+ * is passing `captured.target` straight to `editor.doc.*`
+ * operations whose parameters are typed as mutable shapes (the
+ * doc-api doesn't mutate them, but its types don't say `readonly`).
+ * Adding `readonly` here would force a cast at every doc-api
+ * boundary; the runtime guard plus this JSDoc carry the "do not
+ * mutate" contract instead.
  */
-type DeepReadonly<T> =
-  T extends ReadonlyArray<infer U>
-    ? ReadonlyArray<DeepReadonly<U>>
-    : T extends object
-      ? { readonly [K in keyof T]: DeepReadonly<T[K]> }
-      : T;
+export type SelectionCapture = SelectionSlice;
 
 /**
  * Aggregate toolbar handle exposed on `ui.toolbar`. Compatible with
@@ -647,6 +786,12 @@ export interface ToolbarHandle {
    * with the latest snapshot. Returns an unsubscribe.
    */
   subscribe(listener: (event: { snapshot: ToolbarSnapshotSlice }) => void): () => void;
+  /**
+   * Value-shaped alias of {@link subscribe}: listener receives the
+   * snapshot directly. See {@link DocumentHandle.observe} for why
+   * this exists alongside `subscribe`.
+   */
+  observe(listener: (snapshot: ToolbarSnapshotSlice) => void): () => void;
   /**
    * Execute a built-in toolbar command. Type-safe payload is enforced
    * via the existing `ToolbarPayloadMap`.
@@ -748,6 +893,26 @@ export type CommandsHandle = {
    * uniformly without branching on the id.
    */
   get(id: string): DynamicCommandHandle | undefined;
+
+  /**
+   * Returns `true` when `id` is currently registered: a built-in
+   * (member of `BUILT_IN_COMMAND_IDS`) or a custom registered via
+   * {@link CommandsHandle.register}. Returns `false` for unknown
+   * strings, including custom ids that have been unregistered.
+   *
+   * Use to validate config-driven toolbars at startup. The runtime
+   * lookup `ui.commands.get(id)` returns `undefined` for unknown ids
+   * silently; `has` makes the check explicit and short.
+   */
+  has(id: string): boolean;
+
+  /**
+   * Like {@link CommandsHandle.get} but throws when `id` is not
+   * registered. Use at trusted dispatch sites where an unknown id
+   * indicates a bug, not a user error: keyboard shortcut routers,
+   * tests, internal command pipelines.
+   */
+  require(id: string): DynamicCommandHandle;
 };
 
 /**
@@ -815,12 +980,23 @@ export type CustomCommandRegistration<TPayload = void, TValue = unknown> = {
    */
   id: string;
   /**
-   * Execute the command. Receives `payload` (typed per registration)
-   * and the host `superdoc` instance. Return value is normalized to
-   * `boolean` for the synchronous result; async commands return a
-   * Promise that the runtime awaits internally.
+   * Execute the command. Receives:
+   *
+   * - `payload` (typed per registration),
+   * - the host `superdoc` instance, and
+   * - the routed `editor` — the same editor `ui.commands.*` mutations
+   *   target. Use `editor.doc.*` for direct Document API access without
+   *   reaching `superdoc.activeEditor`. `editor` is `null` before the
+   *   editor has reported ready, so guard early.
+   *
+   * Return value is normalized to `boolean` for the synchronous result;
+   * async commands return a Promise the runtime awaits internally.
    */
-  execute: (args: { payload?: TPayload; superdoc: SuperDocLike }) => boolean | void | Promise<boolean | void>;
+  execute: (args: {
+    payload?: TPayload;
+    superdoc: SuperDocLike;
+    editor: SuperDocEditorLike | null;
+  }) => boolean | void | Promise<boolean | void>;
   /**
    * Optional state deriver. Runs on every snapshot rebuild. If omitted,
    * the command's state stays static at `{ active: false, disabled: false, value: undefined }`.
@@ -896,11 +1072,44 @@ export interface CommentsHandle {
    */
   subscribe(listener: (event: { snapshot: CommentsSlice }) => void): () => void;
   /**
+   * Value-shaped alias of {@link subscribe}: listener receives the
+   * snapshot directly. See {@link DocumentHandle.observe} for why
+   * this exists alongside `subscribe`.
+   */
+  observe(listener: (snapshot: CommentsSlice) => void): () => void;
+  /**
    * Create a comment anchored to the current selection. Reads the
    * routed editor's `selection.current().target` and routes through
    * `editor.doc.comments.create`. Returns the operation receipt.
    */
   createFromSelection(input: { text: string }): import('@superdoc/document-api').Receipt;
+  /**
+   * Create a comment anchored to a captured selection snapshot.
+   * Use when the live selection is gone by the time the user submits
+   * (the canonical case: a composer textarea takes focus, the editor
+   * loses its visible selection, and `createFromSelection` would see
+   * a null target). Capture the selection at composer-open via
+   * `ui.selection.capture()`, hold it across the user's typing, then
+   * pass it here. Routes through `editor.doc.comments.create` with
+   * the captured `target`. Returns a `NO_OP` receipt when the capture
+   * lacks a positional target.
+   */
+  createFromCapture(capture: SelectionCapture, input: { text: string }): import('@superdoc/document-api').Receipt;
+  /**
+   * Post a reply to an existing thread. Routes through
+   * `editor.doc.comments.create({ parentCommentId, text })`; the
+   * reply inherits the parent's anchor, so callers don't pass a
+   * target. The next `useSuperDocComments()` snapshot includes the
+   * reply with `parentCommentId` set, which sidebars can group under
+   * the thread root.
+   *
+   * Returns a `NO_OP` receipt when `text` is empty or whitespace-only,
+   * matching the doc-api's text-required contract for top-level
+   * comments. Returns a failure receipt when the parent id has been
+   * deleted between the time the user opened the reply composer and
+   * pressed Send.
+   */
+  reply(parentCommentId: string, input: { text: string }): import('@superdoc/document-api').Receipt;
   /** Resolve a comment via `editor.doc.comments.patch`. */
   resolve(commentId: string): import('@superdoc/document-api').Receipt;
   /**
@@ -921,21 +1130,27 @@ export interface CommentsHandle {
 }
 
 /**
- * Review domain handle exposed on `ui.review`. Same architectural
- * posture as `CommentsHandle`: every mutation routes through
- * `editor.doc.trackChanges.*` (the Document API contract); next /
- * previous / scrollTo are UI-only navigation helpers.
+ * Tracked-changes domain handle exposed on `ui.trackChanges`. Same
+ * architectural posture as `CommentsHandle`: every mutation routes
+ * through `editor.doc.trackChanges.*` (the Document API contract);
+ * `next` / `previous` / `scrollTo` are UI-only navigation helpers.
  */
-export interface ReviewHandle {
-  /** Snapshot the merged review feed synchronously. */
-  getSnapshot(): ReviewSlice;
+export interface TrackChangesHandle {
+  /** Snapshot the tracked-changes feed synchronously. */
+  getSnapshot(): TrackChangesSlice;
   /**
-   * Subscribe to review-snapshot changes (items, openCount, activeId).
-   * Listener fires once synchronously with the current snapshot, then
-   * again whenever the slice changes by shallow equality. Returns an
-   * unsubscribe.
+   * Subscribe to track-changes snapshot updates (items, total,
+   * activeId). Listener fires once synchronously with the current
+   * snapshot, then again whenever the slice changes by shallow
+   * equality. Returns an unsubscribe.
    */
-  subscribe(listener: (event: { snapshot: ReviewSlice }) => void): () => void;
+  subscribe(listener: (event: { snapshot: TrackChangesSlice }) => void): () => void;
+  /**
+   * Value-shaped alias of {@link subscribe}: listener receives the
+   * snapshot directly. See {@link DocumentHandle.observe} for why
+   * this exists alongside `subscribe`.
+   */
+  observe(listener: (snapshot: TrackChangesSlice) => void): () => void;
   /** Accept a single tracked change via `trackChanges.decide`. */
   accept(changeId: string): import('@superdoc/document-api').Receipt;
   /** Reject a single tracked change via `trackChanges.decide`. */
@@ -945,20 +1160,20 @@ export interface ReviewHandle {
   /** Reject every tracked change via `trackChanges.decide({ scope: 'all' })`. */
   rejectAll(): import('@superdoc/document-api').Receipt;
   /**
-   * Move `activeId` to the next item in the merged feed (document
-   * order). Wraps to the first item past the last. Returns the new
-   * active id, or `null` if the feed is empty.
+   * Move `activeId` to the next tracked change in document order.
+   * Wraps to the first item past the last. Returns the new active
+   * id, or `null` when there are no changes.
    */
   next(): string | null;
   /**
-   * Move `activeId` to the previous item in the merged feed. Wraps
-   * to the last item past the first. Returns the new active id, or
-   * `null` if the feed is empty.
+   * Move `activeId` to the previous tracked change in document order.
+   * Wraps to the last item past the first. Returns the new active id,
+   * or `null` when there are no changes.
    */
   previous(): string | null;
   /**
-   * Scroll the viewport to the given item (comment or tracked
-   * change) and set it as `activeId`. Routes through
+   * Scroll the viewport to the given tracked change and set it as
+   * `activeId`. Routes through
    * `ui.viewport.scrollIntoView({ target: EntityAddress })`.
    */
   scrollTo(id: string): Promise<import('@superdoc/document-api').ScrollIntoViewOutput>;

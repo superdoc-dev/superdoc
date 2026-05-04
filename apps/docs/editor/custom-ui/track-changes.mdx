@@ -1,0 +1,121 @@
+---
+title: 'Custom track changes UI'
+sidebarTitle: 'Track changes'
+description: 'Build your own track-changes review panel. Accept, reject, navigate next and previous.'
+---
+
+`useSuperDocTrackChanges()` exposes the live tracked-change list in document order. Accept, reject, accept-all, reject-all, scroll-to, and next / previous navigation route through `editor.doc.trackChanges.*` underneath.
+
+## A live list of changes
+
+```tsx
+import { useSuperDocTrackChanges, useSuperDocUI } from 'superdoc/ui/react';
+
+export function ReviewPanel() {
+  const { items, total } = useSuperDocTrackChanges();
+  const ui = useSuperDocUI();
+
+  return (
+    <aside>
+      <h2>Track changes · {total}</h2>
+      {items.map((item) => (
+        <ChangeRow
+          key={item.id}
+          change={item.change}
+          onAccept={() => ui?.trackChanges.accept(item.id)}
+          onReject={() => ui?.trackChanges.reject(item.id)}
+        />
+      ))}
+    </aside>
+  );
+}
+```
+
+`items` mirrors `editor.doc.trackChanges.list()`. Each item carries `id` plus the full `change` record (type, author, excerpt, address).
+
+## Accept and reject
+
+```tsx
+ui.trackChanges.accept(changeId);
+ui.trackChanges.reject(changeId);
+ui.trackChanges.acceptAll();
+ui.trackChanges.rejectAll();
+```
+
+All four return Document API receipts. After a single decision, the change leaves the live list (it's been applied or discarded). To render an audit trail, snapshot the change before deciding:
+
+```tsx
+const decideChange = (id: string, decision: 'accepted' | 'rejected') => {
+  const item = trackChanges.items.find((it) => it.id === id);
+  const snapshot = item?.change ?? null;
+
+  if (decision === 'accepted') ui.trackChanges.accept(id);
+  else ui.trackChanges.reject(id);
+
+  if (snapshot) {
+    setDecided((prev) => [...prev, { id, decision, snapshot }]);
+  }
+};
+```
+
+## Navigate
+
+```tsx
+const nextId = ui.trackChanges.next();
+const prevId = ui.trackChanges.previous();
+ui.trackChanges.scrollTo(changeId);
+```
+
+`next` and `previous` walk the list in document order. They wrap. `scrollTo` scrolls the editor viewport to the change's anchor and sets it as the active id.
+
+## Independent vs paired replacements
+
+A typed-over selection in Suggest mode produces an insertion AND a deletion. Default `'paired'` mode collapses them into one tracked-change entity (accept once, both apply). Independent mode gives each half its own id.
+
+```tsx
+<SuperDocEditor
+  document="/contract.docx"
+  modules={{ trackChanges: { replacements: 'independent' } }}
+  hideToolbar
+  contained
+  onReady={({ superdoc }) => setSuperDoc(superdoc)}
+/>
+```
+
+Pick what your review UI wants to render. One row per replacement (paired) or two rows for the deletion + insertion (independent).
+
+## Highlight the active card
+
+The selection slice exposes `activeChangeIds`. Use it to highlight the card matching the cursor.
+
+```tsx
+import { useSuperDocTrackChanges, useSuperDocSelection } from 'superdoc/ui/react';
+
+function ActiveAwareList() {
+  const { items } = useSuperDocTrackChanges();
+  const selection = useSuperDocSelection();
+  const activeId = selection.activeChangeIds[0] ?? null;
+
+  return items.map((item) => (
+    <div key={item.id} className={item.id === activeId ? 'active' : ''}>
+      {/* row */}
+    </div>
+  ));
+}
+```
+
+## What the snapshot looks like
+
+| Field | Type | Meaning |
+|---|---|---|
+| `items` | `TrackChangesItem[]` | Tracked changes in document order. |
+| `total` | `number` | Convenience count of `items.length`. |
+| `activeId` | `string \| null` | Active change driven by selection or by `next / previous / scrollTo`. |
+
+`TrackChangesItem` is `{ id, change }`. The `change` shape mirrors `editor.doc.trackChanges.list()`: `type`, `author`, `authorEmail`, `excerpt`, `address`, etc.
+
+## Trade-offs
+
+- `acceptAll` and `rejectAll` apply across every story. To scope to body only, call `accept` / `reject` per id.
+- Tracked changes in headers, footers, and footnotes route correctly through `scrollTo`. Non-body entities snap to view (story activation mounts the surface synchronously before alignment); body entities scroll smoothly.
+- The merged Activity feed pattern is consumer-owned. The controller stays minimal so apps that only render tracked changes don't pay for comment merging, and apps that want an Activity panel decide their own ordering rules.

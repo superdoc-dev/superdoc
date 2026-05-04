@@ -1621,6 +1621,38 @@ describe('measureBlock', () => {
       }
     });
 
+    it('uses the hanging-indent body text start as the first default tab target', async () => {
+      const block: FlowBlock = {
+        kind: 'paragraph',
+        id: 'manual-numbering-hanging-tab',
+        runs: [
+          { text: '1.', fontFamily: 'Arial', fontSize: 16 },
+          { kind: 'tab', text: '\t', tabIndex: 0, pmStart: 2, pmEnd: 3 },
+          { text: 'The quick brown fox', fontFamily: 'Arial', fontSize: 16 },
+        ],
+        attrs: {
+          indent: { left: 100, hanging: 60 },
+          alignment: 'justify',
+        },
+      };
+
+      const measure = expectParagraphMeasure(await measureBlock(block, 500));
+      expect(measure.lines).toHaveLength(1);
+
+      const firstLine = measure.lines[0];
+      const textSegment = firstLine.segments?.find((segment) => segment.runIndex === 2);
+      expect(firstLine.hasExplicitTabStops).toBeUndefined();
+      expect(textSegment?.x).toBeDefined();
+      // First line starts at left - hanging (40px), so a segment x of 60px
+      // lands the post-tab text exactly at the body indent (100px).
+      expect(Math.round((textSegment?.x ?? 0) + 40)).toBe(100);
+      expect(block.runs[1].kind).toBe('tab');
+      if (block.runs[1].kind === 'tab') {
+        expect(block.runs[1].width).toBeGreaterThan(0);
+        expect(block.runs[1].width).toBeLessThan(60);
+      }
+    });
+
     it('aligns trailing tabs to explicit right stops with dot leaders (TOC regression)', async () => {
       const rightStopTwips = 10593;
       const rightStopPx = rightStopTwips * (96 / 1440); // ~706px
@@ -1643,6 +1675,7 @@ describe('measureBlock', () => {
       const measure = expectParagraphMeasure(await measureBlock(block, 800));
       expect(measure.lines).toHaveLength(1);
       const line = measure.lines[0];
+      expect(line.hasExplicitTabStops).toBe(true);
       expect(line.leaders).toBeDefined();
       expect(line.leaders?.[0]?.style).toBe('dot');
       // Leader must end right before the page number — within ~20px of the right stop

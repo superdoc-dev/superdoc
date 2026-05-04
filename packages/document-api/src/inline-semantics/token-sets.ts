@@ -1,5 +1,5 @@
 /**
- * OOXML token acceptance sets — strict, case-sensitive, per-property.
+ * OOXML token acceptance sets: strict, case-sensitive, per-property.
  *
  * These are the exhaustive sets of accepted values for inline property tokens.
  * Any value not in these sets is an invalid token and must produce a structured
@@ -12,7 +12,7 @@
 
 /**
  * Accepted `w:val` values for ST_OnOff properties (case-sensitive, per OOXML spec).
- * Absent `w:val` (bare element like `<w:b/>`) normalizes to ON — handled by parsers, not here.
+ * Absent `w:val` (bare element like `<w:b/>`) normalizes to ON: handled by parsers, not here.
  */
 export const ST_ON_OFF_VALUES = ['true', 'false', '1', '0', 'on', 'off'] as const;
 export type StOnOffValue = (typeof ST_ON_OFF_VALUES)[number];

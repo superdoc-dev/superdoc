@@ -442,6 +442,7 @@ function testPresentationEditorMethods(pe: PresentationEditor) {
   pe.scrollToElement('paraId-ABC123');
   pe.navigateTo({ kind: 'block', nodeId: 'paraId-ABC123' });
   pe.navigateTo({ kind: 'block', nodeId: 'paraId-ABC123', nodeType: 'paragraph' });
+  pe.navigateTo({ kind: 'entity', entityType: 'bookmark', name: 'bookmark-1' });
   pe.navigateTo({ kind: 'entity', entityType: 'comment', entityId: 'comment-1' });
   pe.navigateTo({ kind: 'entity', entityType: 'trackedChange', entityId: 'tc-1' });
 
@@ -851,6 +852,7 @@ function testVueComponents() {
  * monorepo and a broken re-export could ship undetected.
  */
 import {
+  BUILT_IN_COMMAND_IDS,
   createSuperDocUI,
   shallowEqual,
   type CommentAddress as UICommentAddress,
@@ -862,9 +864,6 @@ import {
   type EntityAddress as UIEntityAddress,
   type EqualityFn,
   type Receipt as UIReceipt,
-  type ReviewHandle,
-  type ReviewItem,
-  type ReviewSlice,
   type ScrollIntoViewInput as UIScrollIntoViewInput,
   type ScrollIntoViewOutput as UIScrollIntoViewOutput,
   type SelectionInfo as UISelectionInfo,
@@ -878,7 +877,10 @@ import {
   type SuperDocUIState,
   type TextTarget as UITextTarget,
   type TrackChangeInfo as UITrackChangeInfo,
+  type TrackChangesHandle,
+  type TrackChangesItem,
   type TrackChangesListResult as UITrackChangesListResult,
+  type TrackChangesSlice,
   type TrackedChangeAddress as UITrackedChangeAddress,
   type ViewportGetRectInput,
   type ViewportHandle,
@@ -898,15 +900,15 @@ function testSuperDocUISubEntry() {
     toolbar: SuperDocUI['toolbar'];
     commands: SuperDocUI['commands'];
     comments: CommentsHandle;
-    review: ReviewHandle;
+    trackChanges: TrackChangesHandle;
     viewport: ViewportHandle;
     state: SuperDocUIState;
   };
   type AssertSlices = {
     selection: SelectionSlice;
     comments: CommentsSlice;
-    review: ReviewSlice;
-    reviewItem: ReviewItem;
+    trackChanges: TrackChangesSlice;
+    trackChangesItem: TrackChangesItem;
   };
   type AssertViewportShapes = {
     input: ViewportGetRectInput;
@@ -1007,6 +1009,26 @@ function testSuperDocUISubEntry() {
     return c.commentId;
   }
   void readCommentId;
+
+  // SD-2920: command discovery helpers exposed at the consumer surface.
+  // BUILT_IN_COMMAND_IDS is a runtime-readable list; has() / require()
+  // give configurable toolbars and trusted dispatch sites a typed way
+  // to validate id strings without indexing the proxy.
+  function exerciseCommandDiscovery(ui: SuperDocUI): void {
+    const ids: readonly string[] = BUILT_IN_COMMAND_IDS;
+    void ids;
+
+    const present: boolean = ui.commands.has('bold');
+    const missing: boolean = ui.commands.has('blod');
+    void present;
+    void missing;
+
+    const handle = ui.commands.require('bold');
+    handle.observe((_state) => {});
+    const result: boolean | Promise<boolean> = handle.execute();
+    void result;
+  }
+  void exerciseCommandDiscovery;
 }
 
 export {

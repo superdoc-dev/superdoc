@@ -1,5 +1,5 @@
 /**
- * Format operations — inline style application on contiguous document selections.
+ * Format operations: inline style application on contiguous document selections.
  *
  * All format operations now accept `SelectionTarget` or `ref` instead of `TextAddress`.
  * They route through the `SelectionMutationAdapter` (backed by the plan engine).
@@ -35,7 +35,7 @@ export type FormatUnderlineInput = FormatInlineAliasInput<'underline'>;
 export type FormatStrikethroughInput = FormatInlineAliasInput<'strike'>;
 
 /**
- * Keys where `value` may be omitted — booleans (defaults to `true`) and
+ * Keys where `value` may be omitted: booleans (defaults to `true`) and
  * `underline` (defaults to `true` for simple on/off).
  */
 type ImplicitTrueKey =
@@ -57,7 +57,7 @@ export type FormatInlineAliasInput<K extends InlineRunPatchKey> = K extends Impl
 /**
  * Input payload for `format.apply`.
  *
- * Accepts either `target` (SelectionTarget) or `ref` (string) — exactly one required.
+ * Accepts either `target` (SelectionTarget) or `ref` (string): exactly one required.
  */
 export type StyleApplyInput = TargetLocator & {
   target?: SelectionTarget;
@@ -128,7 +128,7 @@ function validateTargetLocator(input: Record<string, unknown>, operation: string
 }
 
 // ---------------------------------------------------------------------------
-// format.apply — validation and execution
+// format.apply: validation and execution
 // ---------------------------------------------------------------------------
 
 const STYLE_APPLY_INPUT_ALLOWED_KEYS = new Set(['target', 'ref', 'inline', 'in']);
@@ -166,7 +166,7 @@ export function executeStyleApply(
 }
 
 // ---------------------------------------------------------------------------
-// format.<inlineKey> aliases — normalize to format.apply payloads
+// format.<inlineKey> aliases: normalize to format.apply payloads
 // ---------------------------------------------------------------------------
 
 const INLINE_ALIAS_INPUT_ALLOWED_KEYS = new Set(['target', 'ref', 'value', 'in']);

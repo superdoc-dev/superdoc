@@ -1,12 +1,12 @@
 /**
- * SDM/1 canonical node model — content nodes and inline nodes.
+ * SDM/1 canonical node model: content nodes and inline nodes.
  *
  * Every structural node follows the discriminated union pattern:
  *   { kind: '<nodeKind>'; <nodeKind>: { ...payload } }
  *
  * This file defines all concrete node interfaces and the two primary unions:
- *   SDContentNode — block-level document body nodes
- *   SDInlineNode  — inline nodes within paragraph-like containers
+ *   SDContentNode: block-level document body nodes
+ *   SDInlineNode : inline nodes within paragraph-like containers
  */
 
 import type {
@@ -53,7 +53,7 @@ export interface SDParagraphLikeBase extends SDNodeBase {
 }
 
 // ---------------------------------------------------------------------------
-// Content nodes — block-level
+// Content nodes: block-level
 // ---------------------------------------------------------------------------
 
 export interface SDParagraph extends SDParagraphLikeBase {

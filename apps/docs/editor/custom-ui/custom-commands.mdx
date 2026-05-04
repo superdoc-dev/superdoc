@@ -1,0 +1,183 @@
+---
+title: 'Custom commands'
+sidebarTitle: 'Custom'
+description: 'Register your own commands by id. Drive AI actions, clause inserts, and business logic alongside built-ins.'
+---
+
+`ui.commands.register({ id, execute, getState })` puts your command on the same surface as built-ins. Bind to it with `useSuperDocCommand(id)` exactly like a bold button. Override built-ins when you need to. Recompute state when something outside the editor changes.
+
+## Register a command
+
+```tsx
+import { useEffect } from 'react';
+import { useSuperDocUI } from 'superdoc/ui/react';
+
+export function RegisterClauseCommand() {
+  const ui = useSuperDocUI();
+
+  useEffect(() => {
+    if (!ui) return;
+
+    const reg = ui.commands.register({
+      id: 'company.insertClause',
+      execute: ({ payload, superdoc }) => {
+        // Run any logic. Return a boolean for the toolbar.
+        console.log('inserting clause', payload);
+        return true;
+      },
+      getState: ({ state }) => ({
+        disabled: state.selection.empty,
+      }),
+    });
+
+    return () => reg.unregister();
+  }, [ui]);
+
+  return null;
+}
+```
+
+The returned registration cleans itself up on `unregister()`. Always tear down in the effect's cleanup so unmounting the component removes the command.
+
+## Bind a button to it
+
+Same hook as built-ins.
+
+```tsx
+function InsertClauseButton() {
+  const ui = useSuperDocUI();
+  const cmd = useSuperDocCommand('company.insertClause');
+
+  return (
+    <button
+      disabled={cmd.disabled}
+      onClick={() => ui?.commands.get('company.insertClause')?.execute({ clauseId: 'nda' })}
+    >
+      Insert NDA
+    </button>
+  );
+}
+```
+
+## Naming
+
+Use a namespace to avoid colliding with future built-ins. `company.insertClause`, `acme.aiRewrite`, `support.translate`. Bare names like `'rewrite'` will warn if SuperDoc later adds a built-in with the same id.
+
+## getState
+
+`getState` runs on every snapshot rebuild. Keep it cheap. The argument is the full controller state, so you can read `state.selection`, `state.documentMode`, `state.comments` without subscribing yourself.
+
+```ts
+getState: ({ state }) => ({
+  active: state.selection.activeMarks.includes('aiHighlight'),
+  disabled: state.selection.empty || state.documentMode === 'viewing',
+  value: state.selection.quotedText,
+})
+```
+
+`getState` is sync. Async work belongs in `execute`. If app state outside the editor changes (auth flip, quota tick), call `reg.invalidate()` to re-run `getState`.
+
+```ts
+const reg = ui.commands.register({ ... });
+
+function onPermissionsChange() {
+  reg.invalidate();
+}
+```
+
+## execute
+
+`execute` receives `{ payload, superdoc }`. The cleanest custom commands are additive: they call your services, open your modals, fire telemetry, and don't mutate the document. The runtime cares about the return value (`boolean` or `Promise<boolean>`); the engine doesn't see the work.
+
+```ts
+ui.commands.register<{ clauseId: string }>({
+  id: 'company.openClauseLibrary',
+  execute: ({ payload }) => {
+    if (!payload) return false;
+    openClauseModal(payload.clauseId);
+    return true;
+  },
+});
+```
+
+Async work is fine. The runtime awaits internally.
+
+```ts
+execute: async ({ payload }) => {
+  const result = await postReviewRequest(payload);
+  return result.ok;
+}
+```
+
+### Mutating the document from a custom command
+
+Custom commands that need to insert, replace, or format content reach the Document API through the host instance today. Use the public `ui.selection` slice for positional shapes; pull `superdoc.activeEditor` for the doc-API call. The reference demo's `InsertClauseButton` shows the full pattern.
+
+```ts
+ui.commands.register<{ clauseId: string }>({
+  id: 'company.insertClause',
+  getState: ({ state }) => ({
+    disabled: !state.ready || state.selection.target === null,
+  }),
+  execute: ({ payload, editor }) => {
+    if (!payload || !editor) return false;
+    const clause = clauseLibrary.find((c) => c.id === payload.clauseId);
+    if (!clause) return false;
+
+    const selectionTarget = ui.selection.getSnapshot().selectionTarget;
+    if (!selectionTarget) return false;
+
+    const receipt = editor.doc?.insert?.({
+      value: clause.body,
+      type: 'text',
+      target: selectionTarget,
+    });
+    return receipt?.success === true;
+  },
+});
+```
+
+Two things make the snippet safe to copy:
+
+- The positional target comes from `ui.selection.getSnapshot().selectionTarget` (a public `SelectionTarget` shape that `editor.doc.insert` accepts). Don't pass `selection.current().target`. That's a `TextTarget`, the wrong shape for `insert`.
+- `editor` is typed and resolved late-bound by the controller. It tracks header / footer / footnote focus the same way every other `ui.*` mutation does, so a custom command run from a header-focused composer hits the right story.
+
+The reference demo's `InsertClauseButton` ships this exact pattern.
+
+## Override a built-in
+
+Pass `override: true` to deliberately replace a built-in. Without it, registrations colliding with a built-in id are refused with a console warning.
+
+<Warning>
+  Override fully replaces the built-in's `execute`. There is no "call original" delegation today: if you override `'bold'`, the only thing that happens when a user clicks the Bold button is whatever your `execute` does. Add behavior; don't trust the original to still run.
+</Warning>
+
+Two ways to reach the same toolbar effect:
+
+```ts
+// Pattern A: register a sibling, dispatch both. Built-in stays untouched.
+ui.commands.register({
+  id: 'company.boldTelemetry',
+  execute: () => {
+    track('bold-pressed');
+    return true;
+  },
+});
+
+// In your Bold button handler:
+ui.commands.get('company.boldTelemetry')?.execute();
+ui.commands.get('bold')?.execute();
+```
+
+Pattern A is the right choice for almost every case. Once you override, every surface routes through your handler: `useSuperDocCommand('bold')`, `ui.commands.get('bold')?.execute()`, `ui.toolbar.execute('bold')`.
+
+<Warning>
+**Replacing a built-in entirely is an advanced escape hatch.** The Document API is the recommended way to mutate the document; if your override needs to actually toggle a mark, you have to reach into the underlying engine's chain commands, which aren't part of the public typed surface. Use this only when you genuinely need to gate the built-in (audit, RBAC, "ask before formatting") and you understand that the built-in's behavior is now your responsibility to maintain. Most teams should pick Pattern A.
+</Warning>
+
+## Trade-offs
+
+- `getState` runs on every snapshot rebuild. Keep it pure and fast.
+- `execute` errors are caught and logged; they don't crash the toolbar.
+- `unregister()` is idempotent. Calling twice is safe.
+- The lifecycle is component-scoped. Hold the registration for as long as the command should be available.

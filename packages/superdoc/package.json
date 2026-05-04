@@ -1,7 +1,7 @@
 {
   "name": "superdoc",
   "type": "module",
-  "version": "1.29.1",
+  "version": "1.31.0",
   "license": "AGPL-3.0",
   "repository": {
     "type": "git",
@@ -109,7 +109,10 @@
     "word-benchmark-sidecar": "node ../../devtools/word-benchmark-sidecar/server.js",
     "build": "vite build && pnpm run build:cdn",
     "build:dev": "SUPERDOC_SKIP_DTS=1 vite build",
-    "postbuild": "node ./scripts/ensure-types.cjs && node ./scripts/audit-bundle.cjs",
+    "postbuild": "node ./scripts/ensure-types.cjs && node ./scripts/audit-bundle.cjs && node ./scripts/audit-declarations.cjs",
+    "audit:declarations": "node ./scripts/audit-declarations.cjs",
+    "audit:declarations:informational": "node ./scripts/audit-declarations.cjs --informational",
+    "check:jsdoc": "node ./scripts/check-jsdoc.cjs",
     "build:es": "vite build && pnpm run postbuild",
     "watch:es": "vite build --watch",
     "build:cdn": "vite build --config vite.config.cdn.js",
@@ -121,6 +124,8 @@
     "test": "vitest"
   },
   "dependencies": {
+    "@types/mdast": "catalog:",
+    "@types/ws": "catalog:",
     "buffer-crc32": "catalog:",
     "eventemitter3": "catalog:",
     "jsdom": "catalog:",
@@ -128,7 +133,7 @@
     "pinia": "catalog:",
     "rollup-plugin-copy": "catalog:",
     "uuid": "catalog:",
-    "vue": "catalog:",
+    "vue": "^3.5.0",
     "y-websocket": "catalog:"
   },
   "peerDependencies": {
@@ -166,6 +171,7 @@
     "@hocuspocus/provider": "catalog:",
     "@hocuspocus/server": "catalog:",
     "@superdoc-dev/superdoc-yjs-collaboration": "workspace:*",
+    "@types/uuid": "catalog:",
     "@superdoc/common": "workspace:*",
     "@superdoc/super-editor": "workspace:*",
     "@vitejs/plugin-vue": "catalog:",

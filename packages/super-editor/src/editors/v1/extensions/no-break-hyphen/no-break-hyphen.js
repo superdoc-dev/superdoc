@@ -23,6 +23,12 @@ export const NoBreakHyphenNode = Node.create({
   selectable: false,
   atom: true,
 
+  // Tell PM the visible text representation of this leaf so flattening APIs —
+  // search, get-text, diff, accessibility readers — see U+2011 instead of a
+  // placeholder. Read by PM's built-in `Node.textBetween` and by SuperDoc's
+  // `textBetweenWithTabs`.
+  leafText: () => NON_BREAKING_HYPHEN,
+
   addOptions() {
     return {
       htmlAttributes: {

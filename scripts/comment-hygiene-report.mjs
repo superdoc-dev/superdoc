@@ -10,6 +10,14 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, relative, extname } from 'node:path';
 
+// AIDEV-NOTE: Required for the "always exits 0" contract. Without this,
+// `node scripts/comment-hygiene-report.mjs | head` triggers EPIPE on
+// stdout, which Node turns into a non-zero exit and a stack trace.
+process.stdout.on('error', (err) => {
+  if (err.code === 'EPIPE') process.exit(0);
+  throw err;
+});
+
 const ROOT = process.cwd();
 const SCAN_ROOTS = ['packages', 'shared'];
 const SKIP_DIR_NAMES = new Set([

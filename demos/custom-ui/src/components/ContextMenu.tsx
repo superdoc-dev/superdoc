@@ -27,7 +27,14 @@ interface OpenState {
  *     consumer-side CSS class.
  *
  * Built-in editor context menu is suppressed via `disableContextMenu`
- * on `<SuperDocEditor>`, so this is the only menu the user sees.
+ * on `<SuperDocEditor>`. When `getContextMenuItems(context)` returns
+ * any items, this is the menu the user sees and we `preventDefault`
+ * the native one. When it returns empty (no contribution matches the
+ * click target), the handler returns without preventing the default,
+ * so the browser's native menu falls through. SD-2944 unblocks that
+ * fall-through; before it landed, the editor's selection extension
+ * suppressed the native menu unconditionally and right-click on
+ * unmatched plain text would be dead.
  */
 export function ContextMenu() {
   const ui = useSuperDocUI();
@@ -36,10 +43,13 @@ export function ContextMenu() {
   useEffect(() => {
     if (!ui) return;
     const onContextMenu = (event: MouseEvent) => {
-      // Scope to the painted host. Entity hits alone aren't a scope
-      // signal: `entityAt` returns `[]` outside the editor AND inside
-      // plain text, and a custom toolbar / sidebar inside the host
-      // wrapper would otherwise trigger this menu.
+      // Scope to the painted host before reading `contextAt`. The
+      // bundle's emptiness alone isn't a scope signal: an empty
+      // bundle can mean "outside the editor" OR "inside plain text
+      // with no selection and no entities". Without the host check,
+      // a right-click on the consumer's own toolbar or sidebar
+      // (which sit outside the painted host) would still open this
+      // menu.
       const host = ui.viewport.getHost();
       const target = event.target;
       if (!host || !(target instanceof Node) || !host.contains(target)) {

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSuperDocTrackChanges, useSuperDocUI } from 'superdoc/ui/react';
 
 export interface DecidedChange {
@@ -71,5 +71,10 @@ export function useDecidedChanges(): DecidedChangesState {
     });
   }, [trackChanges.items]);
 
-  return { decidedChanges, decideChange };
+  // Memoize the wrapper so consumers passing the result into an
+  // effect (e.g. `ContextMenuRegistrations` whose deps include the
+  // returned object) don't re-fire on every parent render. Without
+  // this, a fresh object literal each call would unregister and
+  // re-register every contributed command on every track-change tick.
+  return useMemo(() => ({ decidedChanges, decideChange }), [decidedChanges, decideChange]);
 }

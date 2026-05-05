@@ -110,6 +110,16 @@
     "ci": true
   },
   {
+    "id": "editor-custom-ui-selection-capture",
+    "title": "Custom UI: selection capture",
+    "category": "Editor",
+    "surface": "Custom UI",
+    "sourceRepo": "superdoc-dev/superdoc",
+    "sourcePath": "examples/editor/custom-ui/selection-capture",
+    "docs": "https://docs.superdoc.dev/editor/custom-ui/selection-and-viewport",
+    "ci": true
+  },
+  {
     "id": "editor-theming",
     "title": "Theming",
     "category": "Editor",

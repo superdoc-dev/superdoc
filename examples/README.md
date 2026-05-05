@@ -33,6 +33,12 @@ Patterns for the browser editor surface.
 | [track-changes](./editor/built-in-ui/track-changes) | [docs](https://docs.superdoc.dev/editor/built-in-ui/track-changes) |
 | [toolbar](./editor/built-in-ui/toolbar) | [docs](https://docs.superdoc.dev/editor/built-in-ui/toolbar) |
 
+### Custom UI
+
+| Example | Docs |
+|---------|------|
+| [selection-capture](./editor/custom-ui/selection-capture) | [docs](https://docs.superdoc.dev/editor/custom-ui/selection-and-viewport) |
+
 ### Theming
 
 | Example | Docs |

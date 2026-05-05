@@ -134,6 +134,34 @@ jobs:
         working-directory: examples/__tests__
         run: EXAMPLE=editor/built-in-ui/${{ matrix.example }} npx playwright test
 
+  custom-ui:
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        example: [selection-capture]
+    steps:
+      - name: Restore workspace
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            .
+            ~/.cache/ms-playwright
+          key: examples-workspace-${{ github.sha }}
+
+      - uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Run smoke test
+        working-directory: examples/__tests__
+        run: EXAMPLE=editor/custom-ui/${{ matrix.example }} npx playwright test
+
   ai:
     needs: build
     runs-on: ubuntu-latest
@@ -213,7 +241,7 @@ jobs:
   validate:
     name: CI Examples / validate
     if: always()
-    needs: [getting-started, collaboration, built-in-ui, ai, advanced-headless-toolbar, advanced-extensions, headless]
+    needs: [getting-started, collaboration, built-in-ui, custom-ui, ai, advanced-headless-toolbar, advanced-extensions, headless]
     runs-on: ubuntu-latest
     steps:
       - name: Check results

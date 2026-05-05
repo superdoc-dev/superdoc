@@ -93,12 +93,7 @@ const SHARED_COMMON_DTS_TARGETS = typeSurface.sharedCommonDtsTargets;
   console.log(`[ensure-types] ✓ Emitted ${SHARED_COMMON_DTS_TARGETS.length} shared/common declarations`);
 }
 
-const requiredEntryPoints = [
-  'superdoc/src/index.d.ts',
-  'superdoc/src/super-editor.d.ts',
-  'super-editor/src/index.d.ts',
-  'super-editor/src/types.d.ts',
-];
+const requiredEntryPoints = typeSurface.requiredEntryPoints;
 
 for (const entry of requiredEntryPoints) {
   const fullPath = path.join(distRoot, entry);

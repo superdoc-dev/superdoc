@@ -2994,7 +2994,7 @@ export class PresentationEditor extends EventEmitter {
 
     this.#domIndexObserverManager?.pause();
     try {
-      this.#painterAdapter.paint({ resolvedLayout, sourceLayout: layout }, this.#painterHost);
+      this.#painterAdapter.paint({ resolvedLayout }, this.#painterHost);
       this.#refreshEditorDomAugmentations();
     } finally {
       this.#domIndexObserverManager?.resume();

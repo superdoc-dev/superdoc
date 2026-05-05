@@ -789,14 +789,64 @@ const applyTabLayoutToLines = (
   const alignmentTabStopsPx = tabStops
     .map((stop, index) => ({ stop, index }))
     .filter(({ stop }) => stop.val === 'end' || stop.val === 'center' || stop.val === 'decimal');
+
+  // Per-line-segment tab counts. Segments are delimited by explicit <w:br/> because
+  // pPr/tabs apply per line, not per paragraph. sd-1480: "Page\t2<br/>Page\t5\t"
+  // must bind the meaningful tab on each segment to the alignment stop, ignoring
+  // trailing-empty <w:tab/> artifacts.
+  const tabSegmentInfo = new Map<number, { localOrdinal: number; segmentTotal: number }>();
+  {
+    let segmentStart = 0;
+    const closeSegment = (segmentEnd: number) => {
+      const tabsInSegment: number[] = [];
+      for (let i = segmentStart; i < segmentEnd; i++) {
+        if (runs[i].kind === 'tab') tabsInSegment.push(i);
+      }
+      let trailingCutoff = segmentEnd;
+      for (let i = segmentEnd - 1; i >= segmentStart; i--) {
+        const r = runs[i];
+        if (r.kind === 'tab') {
+          trailingCutoff = i;
+          continue;
+        }
+        break;
+      }
+      const effective = tabsInSegment.filter((idx) => idx < trailingCutoff);
+      const total = effective.length;
+      effective.forEach((idx, ord) => {
+        tabSegmentInfo.set(idx, { localOrdinal: ord, segmentTotal: total });
+      });
+      for (const idx of tabsInSegment) {
+        if (idx >= trailingCutoff) tabSegmentInfo.set(idx, { localOrdinal: -1, segmentTotal: 0 });
+      }
+    };
+    for (let i = 0; i < runs.length; i++) {
+      const r = runs[i];
+      if (r.kind === 'lineBreak' || (r.kind === 'break' && (r as { breakType?: string }).breakType === 'line')) {
+        closeSegment(i);
+        segmentStart = i + 1;
+      }
+    }
+    closeSegment(runs.length);
+  }
+
   // Word-compat heuristic (not ECMA-376 17.3.3.32): the last N tab characters in a
-  // paragraph bind to the last N explicit end/center/decimal stops. Needed for TOC
+  // line bind to the last N explicit end/center/decimal stops. Needed for TOC
   // entries where a right-aligned dot-leader stop coexists with default grid stops.
   // Mirrored in measuring/dom/src/index.ts.
-  const getAlignmentStopForOrdinal = (ordinal: number): { stop: TabStopPx; index: number } | null => {
+  const getAlignmentStopForOrdinal = (ordinal: number, runIdx?: number): { stop: TabStopPx; index: number } | null => {
     if (alignmentTabStopsPx.length === 0 || totalTabRuns === 0 || !Number.isFinite(ordinal)) return null;
-    if (ordinal < 0 || ordinal >= totalTabRuns) return null;
-    const remainingTabs = totalTabRuns - ordinal - 1;
+    let scopeOrdinal = ordinal;
+    let scopeTotal = totalTabRuns;
+    if (runIdx !== undefined) {
+      const info = tabSegmentInfo.get(runIdx);
+      if (info) {
+        scopeOrdinal = info.localOrdinal;
+        scopeTotal = info.segmentTotal;
+      }
+    }
+    if (scopeOrdinal < 0 || scopeOrdinal >= scopeTotal) return null;
+    const remainingTabs = scopeTotal - scopeOrdinal - 1;
     const targetIndex = alignmentTabStopsPx.length - 1 - remainingTabs;
     if (targetIndex < 0 || targetIndex >= alignmentTabStopsPx.length) return null;
     return alignmentTabStopsPx[targetIndex];
@@ -828,13 +878,21 @@ const applyTabLayoutToLines = (
     /**
      * Processes a tab character, calculating position and handling alignment.
      */
-    const applyTab = (startRunIndex: number, startChar: number, run?: Run, tabOrdinal?: number): void => {
+    const applyTab = (
+      startRunIndex: number,
+      startChar: number,
+      run?: Run,
+      tabOrdinal?: number,
+      tabRunIdx?: number,
+    ): void => {
       const originX = cursorX;
       const absCurrentX = cursorX + effectiveIndent;
       let stop: TabStopPx | undefined;
       let target: number;
       const forcedAlignment =
-        typeof tabOrdinal === 'number' && Number.isFinite(tabOrdinal) ? getAlignmentStopForOrdinal(tabOrdinal) : null;
+        typeof tabOrdinal === 'number' && Number.isFinite(tabOrdinal)
+          ? getAlignmentStopForOrdinal(tabOrdinal, tabRunIdx)
+          : null;
       if (forcedAlignment && forcedAlignment.stop.pos > absCurrentX + TAB_EPSILON) {
         stop = forcedAlignment.stop;
         target = forcedAlignment.stop.pos;
@@ -901,7 +959,7 @@ const applyTabLayoutToLines = (
       if (run.kind === 'tab') {
         const tabRun = run as TabRun;
         const ordinal = consumeTabOrdinal(tabRun.tabIndex);
-        applyTab(runIndex + 1, 0, run, ordinal);
+        applyTab(runIndex + 1, 0, run, ordinal, runIndex);
         continue;
       }
 

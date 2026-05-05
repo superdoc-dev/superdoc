@@ -1375,17 +1375,71 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
     }
   };
 
+  // Per-line-segment tab counts. The heuristic below binds the last N tabs of a
+  // segment to the last N alignment stops; segments are delimited by explicit
+  // <w:br/> runs because pPr/tabs apply per line, not per paragraph.
+  // sd-1480-two-col-tab-positions: a single paragraph "Page\t2<br/>Page\t5\t"
+  // must emit a leader on BOTH lines (per-segment scope) and ignore the trailing
+  // empty <w:tab/> on line 2 so the meaningful tab binds to the alignment stop.
+  const tabSegmentInfo = new Map<number, { localOrdinal: number; segmentTotal: number }>();
+  {
+    let segmentStart = 0;
+    const closeSegment = (segmentEnd: number) => {
+      const tabsInSegment: number[] = [];
+      for (let i = segmentStart; i < segmentEnd; i++) {
+        if (isTabRun(runsToProcess[i])) tabsInSegment.push(i);
+      }
+      // Strip trailing tabs that have no content after them — these are authoring
+      // artifacts (Word emits them sometimes) and should fall through to greedy
+      // tab-stop matching, not consume an alignment stop slot.
+      let trailingCutoff = segmentEnd;
+      for (let i = segmentEnd - 1; i >= segmentStart; i--) {
+        const r = runsToProcess[i];
+        if (isTabRun(r)) {
+          trailingCutoff = i;
+          continue;
+        }
+        break;
+      }
+      const effective = tabsInSegment.filter((idx) => idx < trailingCutoff);
+      const total = effective.length;
+      effective.forEach((idx, ord) => {
+        tabSegmentInfo.set(idx, { localOrdinal: ord, segmentTotal: total });
+      });
+      for (const idx of tabsInSegment) {
+        if (idx >= trailingCutoff) tabSegmentInfo.set(idx, { localOrdinal: -1, segmentTotal: 0 });
+      }
+    };
+    for (let i = 0; i < runsToProcess.length; i++) {
+      const r = runsToProcess[i];
+      if (isLineBreakRun(r) || (r.kind === 'break' && (r as { breakType?: string }).breakType === 'line')) {
+        closeSegment(i);
+        segmentStart = i + 1;
+      }
+    }
+    closeSegment(runsToProcess.length);
+  }
+
   // Word-compat heuristic (not ECMA-376 17.3.3.32): the last N tab characters in a
-  // paragraph bind to the last N explicit end/center/decimal stops. Needed for TOC
+  // line bind to the last N explicit end/center/decimal stops. Needed for TOC
   // entries where a right-aligned dot-leader stop coexists with default grid stops —
   // strict greedy next-stop resolution would land the trailing tab on a default stop
   // instead of the leader stop. Mirrored in layout-bridge/src/remeasure.ts.
-  const getAlignmentStopForOrdinal = (ordinal: number): { stop: TabStopPx; index: number } | null => {
+  const getAlignmentStopForOrdinal = (ordinal: number, runIdx?: number): { stop: TabStopPx; index: number } | null => {
     if (alignmentTabStopsPx.length === 0 || totalTabRuns === 0 || !Number.isFinite(ordinal)) {
       return null;
     }
-    if (ordinal < 0 || ordinal >= totalTabRuns) return null;
-    const remainingTabs = totalTabRuns - ordinal - 1;
+    let scopeOrdinal = ordinal;
+    let scopeTotal = totalTabRuns;
+    if (runIdx !== undefined) {
+      const info = tabSegmentInfo.get(runIdx);
+      if (info) {
+        scopeOrdinal = info.localOrdinal;
+        scopeTotal = info.segmentTotal;
+      }
+    }
+    if (scopeOrdinal < 0 || scopeOrdinal >= scopeTotal) return null;
+    const remainingTabs = scopeTotal - scopeOrdinal - 1;
     const targetIndex = alignmentTabStopsPx.length - 1 - remainingTabs;
     if (targetIndex < 0 || targetIndex >= alignmentTabStopsPx.length) return null;
     return alignmentTabStopsPx[targetIndex];
@@ -1529,7 +1583,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
       // inputs (explicit + synthetic TabRuns) don't produce out-of-order ordinals.
       // Mirrors consumeTabOrdinal() in layout-bridge/src/remeasure.ts.
       sequentialTabIndex = Math.max(sequentialTabIndex, resolvedTabIndex + 1);
-      const forcedAlignment = getAlignmentStopForOrdinal(resolvedTabIndex);
+      const forcedAlignment = getAlignmentStopForOrdinal(resolvedTabIndex, runIndex);
       if (forcedAlignment && forcedAlignment.stop.pos > absCurrentX + TAB_EPSILON) {
         stop = forcedAlignment.stop;
         target = forcedAlignment.stop.pos;

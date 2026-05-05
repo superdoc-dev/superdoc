@@ -120,6 +120,16 @@
     "ci": true
   },
   {
+    "id": "editor-custom-ui-configurable-toolbar",
+    "title": "Custom UI: configurable toolbar",
+    "category": "Editor",
+    "surface": "Custom UI",
+    "sourceRepo": "superdoc-dev/superdoc",
+    "sourcePath": "examples/editor/custom-ui/configurable-toolbar",
+    "docs": "https://docs.superdoc.dev/editor/custom-ui/toolbar-and-commands",
+    "ci": true
+  },
+  {
     "id": "editor-theming",
     "title": "Theming",
     "category": "Editor",

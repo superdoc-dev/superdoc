@@ -59,6 +59,8 @@ function InsertClauseButton() {
 }
 ```
 
+See the [configurable toolbar example](https://github.com/superdoc-dev/superdoc/tree/main/examples/editor/custom-ui/configurable-toolbar) for a runnable vanilla version that registers an `example.insertClause` command alongside the built-in bold / italic / underline buttons.
+
 ## Naming
 
 Use a namespace to avoid colliding with future built-ins. `company.insertClause`, `acme.aiRewrite`, `support.translate`. Bare names like `'rewrite'` will warn if SuperDoc later adds a built-in with the same id.

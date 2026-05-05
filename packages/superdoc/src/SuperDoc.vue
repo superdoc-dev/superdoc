@@ -1222,12 +1222,6 @@ onMounted(() => {
   document.addEventListener('keydown', handleDocumentShortcut, true);
 });
 
-/**
- * Handle Cmd+F / Ctrl+F to open find/replace instead of browser find.
- * Use a document-level capture listener because the dev shell and
- * presentation-mode bridge do not always leave keyboard focus on a node
- * that bubbles through the .superdoc root.
- */
 function isFindShortcutEvent(e) {
   return (e.metaKey || e.ctrlKey) && !e.altKey && e.key?.toLowerCase?.() === 'f';
 }
@@ -1274,6 +1268,11 @@ function handleFormattingMarksShortcut(e) {
   proxy.$superdoc.toggleFormattingMarks?.();
 }
 
+/**
+ * Handle document-level shortcuts before browser or shell handlers.
+ * Use a capture listener because the dev shell and presentation-mode bridge
+ * do not always leave keyboard focus on a node that bubbles through the root.
+ */
 function handleDocumentShortcut(e) {
   handleFindShortcut(e);
   if (e.defaultPrevented) return;

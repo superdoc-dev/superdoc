@@ -12,7 +12,7 @@ describe('DomPainter formatting marks', () => {
     document.body.appendChild(container);
   });
 
-  function createParagraphBlock(text: string): FlowBlock {
+  function createParagraphBlock(text: string, attrs: FlowBlock['attrs'] = {}): FlowBlock {
     return {
       kind: 'paragraph',
       id: 'paragraph-1',
@@ -25,7 +25,7 @@ describe('DomPainter formatting marks', () => {
           pmEnd: text.length,
         },
       ],
-      attrs: {},
+      attrs,
     };
   }
 
@@ -95,6 +95,33 @@ describe('DomPainter formatting marks', () => {
     expect(paragraphMark?.textContent).toBe('¶');
     expect(paragraphMark?.style.left).toBe('72px');
     expect(document.head.textContent).toContain('--sd-formatting-paragraph-mark-gap');
+  });
+
+  it('positions paragraph marks after inline-flow paragraph indents', () => {
+    const text = 'Indented text';
+    const block = createParagraphBlock(text, {
+      indent: {
+        left: 36,
+        firstLine: 12,
+      },
+    });
+    const measure = createParagraphMeasure(text, 96);
+    const layout = createParagraphLayout();
+
+    const painter = createDomPainter({
+      blocks: [block],
+      measures: [measure],
+      showFormattingMarks: true,
+    });
+
+    painter.paint(layout, container);
+
+    const line = container.querySelector<HTMLElement>('.superdoc-line');
+    expect(line?.style.paddingLeft).toBe('36px');
+    expect(line?.style.textIndent).toBe('12px');
+
+    const paragraphMark = container.querySelector<HTMLElement>('.superdoc-formatting-paragraph-mark');
+    expect(paragraphMark?.style.left).toBe('144px');
   });
 
   it('does not add formatting mark DOM when disabled', () => {

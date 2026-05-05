@@ -6425,7 +6425,33 @@ export class DomPainter {
       spaceCount,
       shouldJustify: justifyShouldApply,
     });
-    let paragraphMarkLeftOffsetPx = 0;
+    const resolveLineIndentOffset = (): number => {
+      if (indentOffsetOverride != null) {
+        return indentOffsetOverride;
+      }
+
+      const paraIndent = (block.attrs as ParagraphAttrs | undefined)?.indent;
+      const indentLeft = paraIndent?.left ?? 0;
+      const firstLine = paraIndent?.firstLine ?? 0;
+      const hanging = paraIndent?.hanging ?? 0;
+      const isFirstLineOfPara = lineIndex === 0 || lineIndex === undefined;
+      const firstLineOffsetForCumX = isFirstLineOfPara ? firstLine - hanging : 0;
+      const wordLayoutValue = (block.attrs as ParagraphAttrs | undefined)?.wordLayout;
+      const wordLayout = isMinimalWordLayout(wordLayoutValue) ? wordLayoutValue : undefined;
+      const isListParagraph = Boolean(wordLayout?.marker);
+      const fallbackListTextStartPx =
+        typeof wordLayout?.marker?.textStartX === 'number' && Number.isFinite(wordLayout.marker.textStartX)
+          ? wordLayout.marker.textStartX
+          : typeof wordLayout?.textStartPx === 'number' && Number.isFinite(wordLayout.textStartPx)
+            ? wordLayout.textStartPx
+            : undefined;
+      const listIndentOffset = isFirstLineOfPara
+        ? (resolvedListTextStartPx ?? fallbackListTextStartPx ?? indentLeft)
+        : indentLeft;
+
+      return isListParagraph ? listIndentOffset : indentLeft + firstLineOffsetForCumX;
+    };
+    const paragraphMarkLeftOffsetPx = resolveLineIndentOffset();
 
     if (spacingPerSpace !== 0) {
       // Each rendered line is its own block; relying on text-align-last is brittle, so we use word-spacing.
@@ -6440,33 +6466,7 @@ export class DomPainter {
       //
       // The segment x positions from layout are relative to the content area (left margin = 0).
       // We need to add the paragraph indent to ALL positions (both explicit and calculated).
-      let indentOffset: number;
-      if (indentOffsetOverride != null) {
-        // Resolved path: indentOffset was pre-computed by the resolver.
-        indentOffset = indentOffsetOverride;
-      } else {
-        // Legacy path: derive from block attrs.
-        const paraIndent = (block.attrs as ParagraphAttrs | undefined)?.indent;
-        const indentLeft = paraIndent?.left ?? 0;
-        const firstLine = paraIndent?.firstLine ?? 0;
-        const hanging = paraIndent?.hanging ?? 0;
-        const isFirstLineOfPara = lineIndex === 0 || lineIndex === undefined;
-        const firstLineOffsetForCumX = isFirstLineOfPara ? firstLine - hanging : 0;
-        const wordLayoutValue = (block.attrs as ParagraphAttrs | undefined)?.wordLayout;
-        const wordLayout = isMinimalWordLayout(wordLayoutValue) ? wordLayoutValue : undefined;
-        const isListParagraph = Boolean(wordLayout?.marker);
-        const fallbackListTextStartPx =
-          typeof wordLayout?.marker?.textStartX === 'number' && Number.isFinite(wordLayout.marker.textStartX)
-            ? wordLayout.marker.textStartX
-            : typeof wordLayout?.textStartPx === 'number' && Number.isFinite(wordLayout.textStartPx)
-              ? wordLayout.textStartPx
-              : undefined;
-        const listIndentOffset = isFirstLineOfPara
-          ? (resolvedListTextStartPx ?? fallbackListTextStartPx ?? indentLeft)
-          : indentLeft;
-        indentOffset = isListParagraph ? listIndentOffset : indentLeft + firstLineOffsetForCumX;
-      }
-      paragraphMarkLeftOffsetPx = indentOffset;
+      const indentOffset = paragraphMarkLeftOffsetPx;
       let cumulativeX = 0; // Start at 0, we'll add indentOffset when positioning
 
       const segments = line.segments!;

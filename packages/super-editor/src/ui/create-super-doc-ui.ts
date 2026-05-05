@@ -17,6 +17,7 @@ import type {
 import { collectEntityHitsFromChain } from './entity-at.js';
 import { shallowEqual } from './equality.js';
 import { resolvePositionAt } from './position-at.js';
+import { buildViewportContext } from './viewport-context.js';
 import { shortcutFromEvent } from './keyboard-shortcuts.js';
 import { scrollRangeIntoView } from './scroll-into-view.js';
 import { getSelectionAnchorRect, getSelectionRects } from './selection-rects.js';
@@ -49,6 +50,8 @@ import type {
   ToolbarHandle,
   ToolbarSnapshotSlice,
   UIToolbarCommandState,
+  ViewportContext,
+  ViewportContextAtInput,
   ViewportEntityAtInput,
   ViewportEntityHit,
   ViewportGetRectInput,
@@ -1295,9 +1298,24 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
       // contributed items here. Computed against the current snapshot
       // (so `selection` matches what observers just saw) and the
       // caller-supplied entities from `ui.viewport.entityAt`.
+      //
+      // SD-2945: input can also be the full {@link ViewportContext}
+      // bundle from `ui.viewport.contextAt({ x, y })`. Detected by the
+      // presence of `point`. The legacy `{ entities }` shape doesn't
+      // carry one. When a bundle is passed, predicates receive the
+      // full shape (point / position / insideSelection) and each
+      // returned item gets an `invoke()` closure that fires execute
+      // with `context` bound.
       if (prop === 'getContextMenuItems') {
-        return (input?: { entities?: ViewportEntityHit[] }): ContextMenuItem[] => {
-          return customCommandsRegistry.getContextMenuItems(computeState(), input?.entities ?? []);
+        return (input?: { entities?: ViewportEntityHit[] } | ViewportContext): ContextMenuItem[] => {
+          const isBundle = !!input && typeof (input as ViewportContext).point === 'object';
+          if (isBundle) {
+            return customCommandsRegistry.getContextMenuItems(computeState(), input as ViewportContext);
+          }
+          return customCommandsRegistry.getContextMenuItems(
+            computeState(),
+            (input as { entities?: ViewportEntityHit[] } | undefined)?.entities ?? [],
+          );
         };
       }
       // Custom-registered ids surface a typed handle from the registry.
@@ -1743,6 +1761,26 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
         input.x,
         input.y,
       );
+    },
+
+    contextAt(input: ViewportContextAtInput): ViewportContext {
+      // Coerce non-numeric coords to 0 so the bundle is still
+      // well-formed (entities = [], position = null,
+      // insideSelection = false). Consumers can ignore `point` /
+      // `position` themselves; returning a partial bundle would
+      // force every consumer to null-check.
+      const x = typeof input?.x === 'number' ? input.x : 0;
+      const y = typeof input?.y === 'number' ? input.y : 0;
+      const hostEditor = resolveHostEditor(superdoc);
+      const routedEditor = resolveRoutedEditor(superdoc);
+      const entities = viewport.entityAt({ x, y });
+      const position = viewport.positionAt({ x, y });
+      const selectionSlice = computeState().selection;
+      const selectionRects = getSelectionRects(
+        hostEditor as unknown as Parameters<typeof getSelectionRects>[0],
+        routedEditor as unknown as Parameters<typeof getSelectionRects>[1],
+      );
+      return buildViewportContext({ x, y, entities, position, selection: selectionSlice, selectionRects });
     },
   };
 

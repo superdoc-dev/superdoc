@@ -520,3 +520,38 @@ describe('ui.viewport.positionAt - resolution', () => {
     ui.destroy();
   });
 });
+
+// SD-2945: `ui.viewport.contextAt({ x, y })` is the bundle right-click
+// menus pass to `getContextMenuItems`. Verifies it composes the
+// existing primitives (entityAt / positionAt / selection slice / rect
+// hit-test) and always returns a well-formed shape, even when the
+// editor surfaces nothing under the click.
+describe('ui.viewport.contextAt - bundle composition', () => {
+  it('echoes the click point and surfaces empty primitives when nothing is under the click', () => {
+    const { superdoc } = makeStubs();
+    const ui = createSuperDocUI({ superdoc });
+
+    const ctx = ui.viewport.contextAt({ x: 100, y: 200 });
+    expect(ctx.point).toEqual({ x: 100, y: 200 });
+    expect(ctx.entities).toEqual([]);
+    expect(ctx.position).toBeNull();
+    expect(ctx.insideSelection).toBe(false);
+    expect(ctx.selection).toBeDefined();
+    expect(ctx.selection.empty).toBe(true);
+
+    ui.destroy();
+  });
+
+  it('coerces non-numeric input to a well-formed default bundle', () => {
+    const { superdoc } = makeStubs();
+    const ui = createSuperDocUI({ superdoc });
+
+    const ctx = ui.viewport.contextAt({} as never);
+    expect(ctx.point).toEqual({ x: 0, y: 0 });
+    expect(ctx.entities).toEqual([]);
+    expect(ctx.position).toBeNull();
+    expect(ctx.insideSelection).toBe(false);
+
+    ui.destroy();
+  });
+});

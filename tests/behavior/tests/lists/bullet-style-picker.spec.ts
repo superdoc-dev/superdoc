@@ -4,7 +4,7 @@ import { LIST_MARKER_SELECTOR, getParagraphNumberingByText } from '../../helpers
 test.use({ config: { toolbar: 'full' } });
 
 const BULLET_DROPDOWN_CARET = '[aria-label="Bullet list"] .dropdown-caret';
-const STYLE_OPTION = (label: string) => `.bullet-style-buttons [aria-label="${label}"]`;
+const STYLE_OPTION = (label: string) => `.style-buttons-list [aria-label="${label}"]`;
 
 const STYLE_LABEL = {
   disc: 'Opaque circle',
@@ -15,7 +15,7 @@ const STYLE_LABEL = {
 async function openBulletDropdown(superdoc: SuperDocFixture) {
   await superdoc.page.locator(BULLET_DROPDOWN_CARET).click();
   await superdoc.waitForStable();
-  await expect(superdoc.page.locator('.bullet-style-buttons')).toBeVisible();
+  await expect(superdoc.page.locator('.style-buttons-list')).toBeVisible();
 }
 
 async function pickStyle(superdoc: SuperDocFixture, style: keyof typeof STYLE_LABEL) {

@@ -23,7 +23,7 @@ Open http://localhost:5189.
 - Insert a custom clause registered with `ui.commands.register` — the button works, and so does its keyboard shortcut `Mod-Shift-C` (declared on the registration, not wired in a separate keydown listener).
 - Switch between Edit and Suggest. In Suggest, every edit lands as a tracked change.
 - Select text and watch the floating bubble menu appear next to the selection (anchored via `ui.selection.getAnchorRect()`, not `window.getSelection()`).
-- Right-click on a tracked change, comment, or anywhere in the document to see the custom context menu. Items appear via `register({ contextMenu: { when } })` and the click context (entities, position, selection, whether the click landed inside the painted selection) comes from `ui.viewport.contextAt({ x, y })` in one call.
+- Right-click on a tracked change, comment, inside a selection, or on plain text. The custom context menu adapts to the click target (Accept / Reject / Resolve / Copy / Comment / Insert clause here). Items appear via `register({ contextMenu: { when } })` and the click context (entities, position, selection, insideSelection) comes from `ui.viewport.contextAt({ x, y })` in one call.
 - Add a comment. The composer captures the selection on open, posts on submit, and `restore`s the visible range on close so the user keeps their place.
 - Accept or reject tracked changes. Decided ones move to a Resolved section.
 - Export the doc, edit it in Word, click Import, watch the activity feed update.
@@ -80,9 +80,13 @@ The demo follows a strict separation between the three editor UI surfaces. Each 
 | --- | --- | --- |
 | **Toolbar** | The **document** | Mode toggle, Export, Import, Insert clause, Undo / Redo, review nav. Persistent controls that don't depend on a selection or a click target. |
 | **Floating bubble menu** | The **selection** | Bold, Italic, Link, Copy, Comment on selection. Format-on-selection actions where the user's eyes stay on the work. |
-| **Right-click context menu** | The **clicked target** | Accept / Reject (on tracked change), Resolve (on comment), Copy / Comment on selection (only when the click is *inside* the selection rect). |
+| **Right-click context menu** | The **clicked target** | Accept / Reject (on tracked change), Resolve (on comment), Copy / Comment on selection (only when the click is *inside* the selection rect), Insert clause here (when the click lands on plain caret-only text). |
 
-`ui.viewport.contextAt({ x, y })` returns one bundle with the click point, the entities under it, the resolved caret position, the live selection, and `insideSelection` (whether the click landed in the painted selection rects). Each predicate filters on the same shape its handler receives, so "Copy" / "Comment on selection" gate themselves on `insideSelection === true` and a stale selection elsewhere on the page can't leak into a right-click somewhere else.
+`ui.viewport.contextAt({ x, y })` returns one bundle with the click point, the entities under it, the resolved caret position, the live selection, and `insideSelection` (whether the click landed in the painted selection rects). Each predicate filters on the same shape its handler receives, so "Copy" / "Comment on selection" gate themselves on `insideSelection === true` and "Insert clause here" gates on `position !== null && insideSelection !== true`. A stale selection elsewhere on the page can't leak into a right-click somewhere else.
+
+The `Insert clause here` handler reads `context.position.target` (a collapsed `SelectionTarget` at the click point) and passes it straight to `editor.doc.insert`. That's the canonical SD-2945 demonstration: the same predicate the menu was filtered with becomes the target the action acts on. Without the bundle, the registration would have to insert against the user's prior selection somewhere else in the doc, making the label a lie.
+
+Right-click on plain text where no item matches (e.g. inside a footnote with no clause-insert in scope) falls through to the browser's native menu. SD-2944 wired `disableContextMenu: true` to actually let the native menu through; the demo deliberately doesn't `preventDefault` when `getContextMenuItems(context)` returns nothing, so the user gets Copy / Paste / Inspect from the browser instead of a dead right-click.
 
 ## The custom-UI recipe (after SD-2936)
 

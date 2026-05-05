@@ -128,12 +128,43 @@ export function ContextMenuRegistrations({ decided, onComposeComment }: Props) {
       },
     });
 
+    // Point-anchored insert. The canonical SD-2945 demonstration: the
+    // handler reads `context.position.target` (a collapsed
+    // SelectionTarget at the click point, story-aware via SD-2954) and
+    // inserts directly at the click. Without the bundle, this would
+    // fire `editor.doc.insert` against `state.selection.selectionTarget`
+    // and silently land at the user's prior selection somewhere else
+    // in the doc, making the menu label a lie.
+    //
+    // Gated on `position !== null && !insideSelection` so it only
+    // shows when the click landed on plain text outside any
+    // selection. Inside the selection we already offer "Comment on
+    // selection" / "Copy"; on an entity we offer Accept/Reject/Resolve.
+    const SAMPLE_CLAUSE =
+      'Each party agrees to maintain the confidentiality of all information disclosed by the other party in connection with this agreement.';
+    const insertHere = ui.commands.register({
+      id: 'demo.insertClauseHere',
+      execute: ({ context, editor }) => {
+        const target = context?.position?.target;
+        if (!target || !editor?.doc?.insert) return false;
+        const receipt = editor.doc.insert({ value: SAMPLE_CLAUSE, type: 'text', target });
+        return receipt?.success === true;
+      },
+      contextMenu: {
+        label: 'Insert clause here',
+        group: 'review',
+        order: 10,
+        when: ({ position, insideSelection }) => position !== null && insideSelection !== true,
+      },
+    });
+
     return () => {
       accept.unregister();
       reject.unregister();
       resolve.unregister();
       copy.unregister();
       comment.unregister();
+      insertHere.unregister();
     };
   }, [ui, onComposeComment, decided]);
 

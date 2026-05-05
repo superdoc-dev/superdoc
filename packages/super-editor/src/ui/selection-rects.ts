@@ -21,45 +21,33 @@ interface RawRangeRect {
   height: number;
 }
 
-// Captures whose target lives in a non-body story (header, footer,
-// footnote, endnote) need a story-aware rect resolver on
-// `PresentationEditor` that doesn't yet exist publicly. The live path
-// works for non-body selections because `presentationEditor
-// .getSelectionRects()` calls `getActiveEditor()` internally and
-// dispatches to the right surface; the captured path can't, because by
-// the time the consumer is asking for rects, focus has often moved away
-// (composer textarea, sidebar, modal) and the active surface is back on
-// body. Until a follow-up surfaces a `getRangeRectsForStory(from, to,
-// story)` primitive, captures referencing non-body stories return [].
-// Same posture as `scroll-into-view`'s text-anchored path.
-function captureIsBodyOnly(capture: SelectionCapture): boolean {
-  const story = (capture.target as { story?: unknown } | null)?.story;
-  if (story === undefined || story === null) return true;
-  if (typeof story === 'string') return story === 'body';
-  if (typeof story === 'object') {
-    const kind = (story as { kind?: unknown }).kind;
-    return kind === undefined || kind === 'body';
-  }
-  return true;
-}
-
 /**
  * Resolve the painted rects of the current selection, or of a captured
  * one when `capture` is provided. Empty array when the editor has no
  * presentation layer (SSR / non-paginated mounts), no current selection,
  * or a stale capture whose target no longer resolves.
  *
- * Captures referencing non-body stories return [] — the underlying
- * story-aware rect resolver is a follow-up (body-only matches the same
- * posture as `scroll-into-view`'s text-anchored path).
+ * Two editors are accepted because the capture path needs both:
+ * - `hostEditor` owns the presentation layer (`getRangeRects`).
+ * - `routedEditor` owns the PM document that captured block ids belong
+ *   to. For body-only captures these are the same instance; for
+ *   captures taken while editing a header / footer / footnote /
+ *   endnote, the routed editor is the story editor.
+ *
+ * The live path uses only `hostEditor.presentationEditor.getSelectionRects()`,
+ * which routes through its internal `getActiveEditor()` and works on
+ * every surface.
  */
-export function getSelectionRects(editor: Editor | null, capture?: SelectionCapture | null): ViewportRect[] {
-  const presentation = editor?.presentationEditor;
+export function getSelectionRects(
+  hostEditor: Editor | null,
+  routedEditor: Editor | null,
+  capture?: SelectionCapture | null,
+): ViewportRect[] {
+  const presentation = hostEditor?.presentationEditor;
   if (!presentation) return [];
 
   if (capture) {
-    if (!captureIsBodyOnly(capture)) return [];
-    return getCapturedSelectionRects(editor!, capture);
+    return getCapturedSelectionRects(hostEditor!, routedEditor ?? hostEditor!, capture);
   }
 
   if (typeof presentation.getSelectionRects !== 'function') return [];
@@ -76,11 +64,12 @@ export function getSelectionRects(editor: Editor | null, capture?: SelectionCapt
  * `null` when the selection produces no painted rects.
  */
 export function getSelectionAnchorRect(
-  editor: Editor | null,
+  hostEditor: Editor | null,
+  routedEditor: Editor | null,
   options?: SelectionAnchorRectOptions,
   capture?: SelectionCapture | null,
 ): ViewportRect | null {
-  const rects = getSelectionRects(editor, capture);
+  const rects = getSelectionRects(hostEditor, routedEditor, capture);
   if (rects.length === 0) return null;
 
   const placement = options?.placement ?? 'start';
@@ -89,8 +78,12 @@ export function getSelectionAnchorRect(
   return rects[0]!;
 }
 
-function getCapturedSelectionRects(editor: Editor, capture: SelectionCapture): ViewportRect[] {
-  const presentation = editor.presentationEditor;
+function getCapturedSelectionRects(
+  hostEditor: Editor,
+  routedEditor: Editor,
+  capture: SelectionCapture,
+): ViewportRect[] {
+  const presentation = hostEditor.presentationEditor;
   if (!presentation || typeof presentation.getRangeRects !== 'function') return [];
 
   const segments = capture.target?.segments;
@@ -102,15 +95,22 @@ function getCapturedSelectionRects(editor: Editor, capture: SelectionCapture): V
   const first = segments[0]!;
   const last = segments[segments.length - 1]!;
 
+  // Resolve block ids against the routed editor so captures taken in
+  // header / footer / footnote / endnote stories still resolve while
+  // the user remains in that story (the routed editor is the one whose
+  // PM document those block ids belong to). When focus has moved
+  // elsewhere by call time, the routed editor falls back to the body,
+  // and a non-body capture's block ids won't resolve there — the
+  // function returns [] gracefully.
   let fromResolved: { from: number; to: number } | null = null;
   let toResolved: { from: number; to: number } | null = null;
   try {
-    fromResolved = resolveTextTarget(editor, {
+    fromResolved = resolveTextTarget(routedEditor, {
       kind: 'text',
       blockId: first.blockId,
       range: first.range,
     });
-    toResolved = resolveTextTarget(editor, {
+    toResolved = resolveTextTarget(routedEditor, {
       kind: 'text',
       blockId: last.blockId,
       range: last.range,

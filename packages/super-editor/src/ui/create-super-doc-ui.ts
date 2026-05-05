@@ -1601,19 +1601,37 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
       if (!slice.target && !slice.selectionTarget) return null;
       return deepFreeze(deepClone(slice));
     },
-    // Painted-selection rects route through the host editor.
-    // PresentationEditor lives at the host, and the live-selection rect
-    // the painter knows about reflects the routed editor's PM selection
-    // already, so calling against the host returns the right answer for
-    // body / header / footer / note alike.
+    // Painted-selection rects need both editors:
+    //
+    // - The host editor owns the presentation layer (the rect engine
+    //   lives there). The live path also flows through it because
+    //   `presentationEditor.getSelectionRects()` calls `getActiveEditor()`
+    //   internally and dispatches to the routed surface.
+    // - The routed editor owns the PM document that captured block ids
+    //   belong to. For body captures the two editors are the same; for
+    //   captures taken while editing a header / footer / footnote /
+    //   endnote, the routed editor is the story editor and the host
+    //   editor's PM doc would silently fail to resolve those ids.
+    //
+    // When focus has moved to a sidebar / composer by call time, the
+    // routed editor falls back to the body, and a non-body capture's
+    // block ids won't resolve there. The helper returns [] gracefully
+    // in that case (rather than wrong rects from another surface).
     getRects(capture) {
-      const editor = resolveHostEditor(superdoc);
-      return getSelectionRects(editor as unknown as Parameters<typeof getSelectionRects>[0], capture);
+      const hostEditor = resolveHostEditor(superdoc);
+      const routedEditor = resolveRoutedEditor(superdoc);
+      return getSelectionRects(
+        hostEditor as unknown as Parameters<typeof getSelectionRects>[0],
+        routedEditor as unknown as Parameters<typeof getSelectionRects>[1],
+        capture,
+      );
     },
     getAnchorRect(options, capture) {
-      const editor = resolveHostEditor(superdoc);
+      const hostEditor = resolveHostEditor(superdoc);
+      const routedEditor = resolveRoutedEditor(superdoc);
       return getSelectionAnchorRect(
-        editor as unknown as Parameters<typeof getSelectionAnchorRect>[0],
+        hostEditor as unknown as Parameters<typeof getSelectionAnchorRect>[0],
+        routedEditor as unknown as Parameters<typeof getSelectionAnchorRect>[1],
         options,
         capture,
       );

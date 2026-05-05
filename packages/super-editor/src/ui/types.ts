@@ -799,14 +799,15 @@ export interface SelectionHandle {
    * footer, footnote, endnote — because `PresentationEditor` routes
    * selection-rect lookups through its currently active editor.
    *
-   * The captured path is body-only today: captures whose target lives
-   * in a non-body story return `[]`. Story-aware rect resolution for
-   * captures requires a `getRangeRectsForStory(from, to, story)`
-   * primitive on PresentationEditor that doesn't yet exist; until that
-   * lands, consumers building floating UI on header / footer / note
-   * surfaces should query rects from the live selection (no capture)
-   * before focus moves elsewhere. Same posture as
-   * `ui.viewport.scrollIntoView` for text-anchored targets.
+   * The captured path resolves block ids against the currently routed
+   * editor, so captures taken in a non-body story still produce the
+   * right rects while the user remains in that story (the common case
+   * for a bubble menu or composer that opens a sidebar). When focus
+   * has moved to a different story (or the body) by call time, the
+   * captured block ids no longer resolve and the call returns `[]`
+   * rather than rects from the wrong surface — fully cross-surface
+   * captured rects need a story-keyed lookup that doesn't yet exist
+   * publicly on `PresentationEditor`.
    */
   getRects(capture?: SelectionCapture | null): ViewportRect[];
   /**

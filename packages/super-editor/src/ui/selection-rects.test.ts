@@ -200,30 +200,6 @@ describe('ui.selection.getRects — captured selection', () => {
     expect(ui.selection.getRects(fakeCapture)).toEqual([]);
   });
 
-  it('returns [] for a capture whose target lives in a non-body story (body-only limitation)', () => {
-    const { superdoc, mocks } = makeStubs({
-      rangeRects: [{ pageIndex: 0, left: 10, top: 10, right: 50, bottom: 30, width: 40, height: 20 }],
-    });
-    const ui = createSuperDocUI({ superdoc });
-
-    const headerCapture = Object.freeze({
-      empty: false,
-      target: {
-        kind: 'text',
-        story: 'header',
-        segments: [{ blockId: 'b1', range: { start: 0, end: 4 } }],
-      },
-      selectionTarget: null,
-      activeMarks: [],
-      activeCommentIds: [],
-      activeChangeIds: [],
-      quotedText: 'test',
-    }) as never;
-
-    expect(ui.selection.getRects(headerCapture)).toEqual([]);
-    expect(mocks.getRangeRects).not.toHaveBeenCalled();
-  });
-
   it('returns [] when getRangeRects is missing on the presentation stub', () => {
     const { superdoc, editor } = makeStubs();
     (editor as { presentationEditor: unknown }).presentationEditor = {

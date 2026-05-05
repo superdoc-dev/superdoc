@@ -1727,6 +1727,95 @@ describe('resolveLayout', () => {
       expect(content.lines[0].isListFirstLine).toBe(true);
     });
 
+    it('preserves increasing first-line marker anchor for nested RTL list levels', () => {
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [
+          {
+            number: 1,
+            fragments: [
+              {
+                kind: 'para',
+                blockId: 'rtl-l0',
+                fromLine: 0,
+                toLine: 1,
+                x: 72,
+                y: 100,
+                width: 468,
+                markerWidth: 36,
+                markerTextWidth: 10,
+              },
+              {
+                kind: 'para',
+                blockId: 'rtl-l1',
+                fromLine: 0,
+                toLine: 1,
+                x: 72,
+                y: 130,
+                width: 468,
+                markerWidth: 36,
+                markerTextWidth: 10,
+              },
+              {
+                kind: 'para',
+                blockId: 'rtl-l2',
+                fromLine: 0,
+                toLine: 1,
+                x: 72,
+                y: 160,
+                width: 468,
+                markerWidth: 36,
+                markerTextWidth: 10,
+              },
+            ],
+          },
+        ],
+      };
+
+      const makeRtlBlock = (id: string, right: number, markerText: string): FlowBlock => ({
+        kind: 'paragraph',
+        id,
+        runs: [{ kind: 'text', text: 'RTL list item' }],
+        attrs: {
+          direction: 'rtl',
+          indent: { right, hanging: -24 },
+          wordLayout: {
+            marker: {
+              markerText,
+              justification: 'right',
+              suffix: 'tab',
+              run: { fontFamily: 'Arial', fontSize: 12 },
+            },
+          },
+        },
+      });
+
+      const blocks: FlowBlock[] = [
+        makeRtlBlock('rtl-l0', 24, '1.'),
+        makeRtlBlock('rtl-l1', 48, 'a.'),
+        makeRtlBlock('rtl-l2', 72, 'i.'),
+      ];
+      const measures: Measure[] = [
+        { kind: 'paragraph', lines: [makeLine()], totalHeight: 20 },
+        { kind: 'paragraph', lines: [makeLine()], totalHeight: 20 },
+        { kind: 'paragraph', lines: [makeLine()], totalHeight: 20 },
+      ];
+
+      const result = resolveLayout({ layout, flowMode: 'paginated', blocks, measures });
+      const pageItems = result.pages[0].items as any[];
+
+      const m0 = pageItems[0].content.marker;
+      const m1 = pageItems[1].content.marker;
+      const m2 = pageItems[2].content.marker;
+
+      expect(m0.firstLinePaddingLeftPx).toBeLessThan(m1.firstLinePaddingLeftPx);
+      expect(m1.firstLinePaddingLeftPx).toBeLessThan(m2.firstLinePaddingLeftPx);
+      expect(m1.firstLinePaddingLeftPx - m0.firstLinePaddingLeftPx).toBe(24);
+      expect(m2.firstLinePaddingLeftPx - m1.firstLinePaddingLeftPx).toBe(24);
+      expect(m0.markerStartPx).toBeLessThan(m1.markerStartPx);
+      expect(m1.markerStartPx).toBeLessThan(m2.markerStartPx);
+    });
+
     it('omits marker on continuation fragment', () => {
       const layout: Layout = {
         pageSize: { w: 612, h: 792 },

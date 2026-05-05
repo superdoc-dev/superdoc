@@ -1,6 +1,10 @@
 {
   "name": "@superdoc-dev/sdk-linux-arm64",
+<<<<<<< HEAD
   "version": "1.8.1",
+=======
+  "version": "1.8.0",
+>>>>>>> origin/main
   "os": [
     "linux"
   ],

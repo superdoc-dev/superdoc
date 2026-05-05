@@ -24,7 +24,7 @@
     "test:behavior:html": "pnpm --filter @superdoc-testing/behavior test:html",
     "type-check": "tsc -b tsconfig.references.json",
     "type-check:force": "tsc -b --force tsconfig.references.json",
-    "rebuild:types": "pnpm run --filter=@superdoc/common --filter=@superdoc/word-layout --filter=@superdoc/contracts --filter=@superdoc/dom-contract --filter=@superdoc/layout-resolved --filter=@superdoc/geometry-utils --filter=@superdoc/style-engine --filter=@superdoc/pm-adapter --filter=@superdoc/measuring-dom --filter=@superdoc/layout-engine --filter=@superdoc/layout-bridge --filter=@superdoc/painter-dom build",
+    "rebuild:types": "pnpm --workspace-concurrency=1 run --filter=@superdoc/common --filter=@superdoc/word-layout --filter=@superdoc/contracts --filter=@superdoc/dom-contract --filter=@superdoc/layout-resolved --filter=@superdoc/geometry-utils --filter=@superdoc/style-engine --filter=@superdoc/pm-adapter --filter=@superdoc/measuring-dom --filter=@superdoc/layout-engine --filter=@superdoc/layout-bridge build && pnpm --filter=@superdoc/painter-dom build",
     "validate:commands": "node scripts/validate-command-types.mjs",
     "unzip": "bash packages/super-editor/src/editors/v1/tests/helpers/unzip.sh",
     "dev": "pnpm --prefix packages/superdoc run dev",
@@ -88,7 +88,8 @@
     "sdk:sync-version": "node packages/sdk/scripts/sync-sdk-version.mjs",
     "sdk:release": "node packages/sdk/scripts/sdk-release.mjs",
     "sdk:release:dry": "node packages/sdk/scripts/sdk-release.mjs --dry-run",
-    "layout:export-one": "bun tests/layout/export-single-layout-snapshot.mjs"
+    "layout:export-one": "bun tests/layout/export-single-layout-snapshot.mjs",
+    "layout:screenshot-one": "pnpm --filter @superdoc-testing/visual run screenshot-one"
   },
   "devDependencies": {
     "@clack/prompts": "^1.0.1",

@@ -981,8 +981,6 @@ const sdSelectorSchema: JsonSchema = {
   oneOf: [sdTextSelectorSchema, sdNodeSelectorSchema],
 };
 
-// sdAddressSchema removed: replaced by blockNodeAddressSchema, nodeAddressSchema, textAddressSchema
-
 const sdReadOptionsSchema = objectSchema({
   includeResolved: { type: 'boolean' },
   includeProvenance: { type: 'boolean' },

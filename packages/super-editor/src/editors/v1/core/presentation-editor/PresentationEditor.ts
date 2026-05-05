@@ -101,7 +101,8 @@ import { resolveStoryRuntime } from '../../document-api-adapters/story-runtime/r
 import { BODY_STORY_KEY, buildStoryKey, parseStoryKey } from '../../document-api-adapters/story-runtime/story-key.js';
 import { createStoryEditor } from '../story-editor-factory.js';
 import { buildEndnoteBlocks } from './layout/EndnotesBuilder.js';
-import { toFlowBlocks, ConverterContext, FlowBlockCache } from '@superdoc/pm-adapter';
+import { toFlowBlocks, FlowBlockCache } from '@superdoc/pm-adapter';
+import type { ConverterContext } from '@superdoc/pm-adapter/converter-context.js';
 import { readSettingsRoot, readDefaultTableStyle } from '../../document-api-adapters/document-settings.js';
 import {
   incrementalLayout,
@@ -1648,8 +1649,6 @@ export class PresentationEditor extends EventEmitter {
    * them safe to run multiple times.
    *
    * No-op when unified history is disabled.
-   *
-   * @see plans/unified-history.md § Phase 4
    */
   recordHistoryBatch(batch: BatchHistoryRecord): void {
     this.#historyCoordinator?.withHistoryBatch(batch);
@@ -5332,8 +5331,8 @@ export class PresentationEditor extends EventEmitter {
   // ===========================================================================
   // Unified History Coordinator (enabled by default; explicit false disables)
   //
-  // See plans/unified-history.md. When the kill-switch is off, these helpers are
-  // no-ops so the legacy active-editor-first routing stays intact.
+  // When the kill-switch is off, these helpers are no-ops so the legacy
+  // active-editor-first routing stays intact.
   // ===========================================================================
 
   #isUnifiedHistoryEnabled(): boolean {

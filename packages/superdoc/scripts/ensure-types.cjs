@@ -155,11 +155,27 @@ const BAD_ABSOLUTE_PATH_RE = /(['"])packages\/superdoc\/src\/([^'"]+)\1/g;
 
 // vite-plugin-dts incorrectly resolves subpath exports (e.g. @superdoc/super-editor/types)
 // by appending the subpath to the main entry: '../../super-editor/src/index.js/types'
-// Fix: rewrite index.js/<subpath> → <subpath>.js
-const BAD_SUBPATH_RE = /(['"])([^'"]*\/index\.js)(\/[^'"]+)\1/g;
+// or '../../super-editor/src/index.ts/types'
+// Fix: rewrite index.(js|ts)/<subpath> → <subpath>.js
+const BAD_SUBPATH_RE = /(['"])([^'"]*\/index\.(?:js|ts))(\/[^'"]+)\1/g;
 
 let fixedFiles = 0;
 let totalReplacements = 0;
+
+function appendJsExtensionToRelativeSpecifier(specifier, filePath) {
+  if (!specifier.startsWith('./') && !specifier.startsWith('../')) return specifier;
+  if (specifier.includes('?') || specifier.includes('#')) return specifier;
+  const targetBase = path.resolve(path.dirname(filePath), specifier);
+  if (path.posix.extname(specifier) === '.vue') {
+    // `./Foo.vue.js` is the Node16/NodeNext-friendly declaration specifier:
+    // TypeScript strips the trailing `.js` and resolves it to `Foo.vue.d.ts`.
+    return fs.existsSync(`${targetBase}.d.ts`) ? `${specifier}.js` : specifier;
+  }
+  if (path.posix.extname(specifier)) return specifier;
+  if (fs.existsSync(`${targetBase}.d.ts`)) return `${specifier}.js`;
+  if (fs.existsSync(path.join(targetBase, 'index.d.ts'))) return `${specifier}/index.js`;
+  return specifier;
+}
 
 // SD-2815: rewrite `@superdoc/document-api` bare specifiers to point
 // at the document-api dist that vite-plugin-dts now emits at
@@ -189,10 +205,21 @@ function rewriteDocApiPaths(fileContent, filePath) {
 // their declarations into superdoc's dist (via vite-plugin-dts include)
 // and redirect bare specifiers in emitted .d.ts files to relative
 // paths the consumer can resolve.
+//
+// SD-2893 note for pm-adapter: only specific type subpaths are
+// relocated (see vite.config.js include list). A bare `@superdoc/pm-adapter`
+// specifier would rewrite to a relative path that does not exist in dist.
+// The audit gate (RELOCATED_PACKAGES in audit-declarations.cjs) rejects
+// any unrewritten bare specifier at build time, so this is a build-time
+// failure rather than a silent consumer break. If a future public type
+// genuinely needs the pm-adapter barrel, widen the vite include and the
+// shim drain in lockstep.
 const RELOCATION_RULES = [
   { pkg: '@superdoc/contracts',     distEntry: 'layout-engine/contracts/src/index.d.ts' },
+  { pkg: '@superdoc/dom-contract',  distEntry: 'layout-engine/dom-contract/src/index.d.ts' },
   { pkg: '@superdoc/layout-bridge', distEntry: 'layout-engine/layout-bridge/src/index.d.ts' },
   { pkg: '@superdoc/painter-dom',   distEntry: 'layout-engine/painters/dom/src/index.d.ts' },
+  { pkg: '@superdoc/pm-adapter',    distEntry: 'layout-engine/pm-adapter/src/index.d.ts' },
 ];
 
 function makeRelocationRewriter({ pkg, distEntry }) {
@@ -271,8 +298,8 @@ for (const filePath of dtsFiles) {
   fileContent = fileContent.replace(BAD_SUBPATH_RE, (match, quote, basePath, subpath) => {
     changed = true;
     totalReplacements++;
-    // Replace 'foo/index.js/types' with 'foo/types.js'
-    const dir = basePath.replace(/\/index\.js$/, '');
+    // Replace 'foo/index.js/types' or 'foo/index.ts/types' with 'foo/types.js'
+    const dir = basePath.replace(/\/index\.(?:js|ts)$/, '');
     return `${quote}${dir}${subpath}.js${quote}`;
   });
 
@@ -286,6 +313,21 @@ for (const filePath of dtsFiles) {
       changed = true;
       totalReplacements++;
       return `${pathWithoutExt}.js`;
+    },
+  );
+
+  // Node16/NodeNext consumers run stricter ESM declaration resolution than
+  // bundler consumers. vite-plugin-dts and tsup can emit relative imports like
+  // `export * from './foo'` and Vue SFC imports like `./Foo.vue`; rewrite those
+  // to `.js` specifiers that TypeScript maps back to the sibling `.d.ts` file.
+  fileContent = fileContent.replace(
+    /(?<=from\s+['"]|import\(['"])(\.{1,2}\/[^'"]+)(?=['"])/g,
+    (specifier) => {
+      const rewritten = appendJsExtensionToRelativeSpecifier(specifier, filePath);
+      if (rewritten === specifier) return specifier;
+      changed = true;
+      totalReplacements++;
+      return rewritten;
     },
   );
 

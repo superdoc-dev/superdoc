@@ -43,12 +43,29 @@ export type CommentAddress = SuperEditorCommentAddress;
 export type TrackedChangeAddress = SuperEditorTrackedChangeAddress;
 export type NavigableAddress = SuperEditorNavigableAddress;
 
-/** The current user of this superdoc. */
+/**
+ * The current user of this superdoc.
+ *
+ * Every field is optional on input. `SuperDoc.#init` normalizes a missing
+ * or partial `user` by spreading `DEFAULT_USER` over consumer input, so
+ * `name` and `email` always have a value at runtime even when the
+ * consumer omits them. The typedef stays open so consumers can pass
+ * `{ name: 'Ada' }` without a typecheck failure.
+ *
+ * Kept structurally compatible with the publicly re-exported
+ * `User` from `@superdoc/super-editor` (also optional name/email).
+ */
 export interface User {
   /** The user's name. */
-  name: string;
-  /** The user's email. */
-  email: string;
+  name?: string;
+  /**
+   * The user's email. May be `null` when the consumer did not provide an
+   * email and SuperDoc fell back to the built-in default user; the runtime
+   * has always exposed `null` here, so the typedef accepts it explicitly
+   * rather than narrowing to `string`. Consumers must narrow before
+   * performing string operations on this field.
+   */
+  email?: string | null;
   /** The user's photo. */
   image?: string | null;
   /**
@@ -74,8 +91,14 @@ export interface Document {
   isNewFile?: boolean;
   /** The Yjs document for collaboration. */
   ydoc?: YDoc;
-  /** The provider for collaboration. */
-  provider?: HocuspocusProvider;
+  /**
+   * The provider for collaboration. Widened from `HocuspocusProvider` to
+   * `CollaborationProvider` to match the runtime, which stores whatever
+   * provider the consumer passed via `Config.modules.collaboration.provider`
+   * (HocuspocusProvider, LiveblocksYjsProvider, TiptapCollabProvider, etc.).
+   * Consumers needing Hocuspocus-specific members must narrow before use.
+   */
+  provider?: CollaborationProvider;
 }
 
 /**
@@ -720,6 +743,56 @@ export interface ResolvedFindReplaceTexts {
 }
 
 /**
+ * A document position range, in ProseMirror coordinates.
+ *
+ * SD-2828: Surfaced on the public type contract so consumers can
+ * destructure `SearchMatch.ranges` without falling back to `any`. Mirrors
+ * the private `DocRange` typedef in the search extension; keep them in
+ * sync. Pure data, no methods.
+ */
+export interface DocRange {
+  /** Start position in the document. */
+  from: number;
+  /** End position in the document. */
+  to: number;
+}
+
+/**
+ * One match returned by `SuperDoc.search()` (and consumed by
+ * `SuperDoc.goToSearchResult()`).
+ *
+ * SD-2828: Promoted from the private search-extension typedef to a
+ * public contract so consumers get real types instead of `any` on the
+ * search return value, and so `goToSearchResult` can declare the input
+ * shape it expects rather than accepting an opaque `Object`. Match
+ * instances are produced by the runtime; consumers should treat them as
+ * read-only and pass them back unchanged.
+ */
+export interface SearchMatch {
+  /** Combined match text across all ranges. */
+  text: string;
+  /** Start position of the first range. */
+  from: number;
+  /** End position of the last range. */
+  to: number;
+  /**
+   * Stable match identifier. For single-range matches this is the
+   * position-tracker id; for multi-range (cross-paragraph) matches it is
+   * the first tracker id. Use as the dedupe / equality key when wiring a
+   * custom navigator.
+   */
+  id: string;
+  /**
+   * Document ranges for the match. Present for multi-range matches
+   * (cross-paragraph), and may also be populated for single-range
+   * matches by the search runtime; consumers should not assume length 1.
+   */
+  ranges?: DocRange[];
+  /** Position-tracker ids, one per range in `ranges`. */
+  trackerIds?: string[];
+}
+
+/**
  * Handle object injected into find/replace UIs as the `findReplace`
  * prop/context field. Provides reactive search state and all action functions.
  */
@@ -1087,8 +1160,14 @@ export interface ExportParams {
   isFinalDoc?: boolean;
   /** Auto-download or return blob. */
   triggerDownload?: boolean;
-  /** Color for field highlights. */
-  fieldsHighlightColor?: string;
+  /**
+   * Color for field highlights. The runtime defaults to `null` when no
+   * value is supplied (and forwards `null` through to the underlying
+   * editor export, which accepts `string | null`); the typedef accepts
+   * `null` explicitly so consumers can pass an explicit "no highlight"
+   * value without a typecheck failure.
+   */
+  fieldsHighlightColor?: string | null;
 }
 
 /** Surface where the edit originated. */
@@ -1356,11 +1435,16 @@ export interface Config {
 }
 
 /**
- * Internal augmentation of `Config` for runtime-only fields that must not
- * appear on the published consumer surface. The `Config` interface above is
- * the public contract; this type adds the fields SuperDoc sets/reads
- * internally so the implementation can be type-checked without leaking the
- * fields into customer IDE autocomplete.
+ * Internal augmentation of `Config` for runtime-only fields and tightened
+ * invariants that must not appear on the published consumer surface. The
+ * `Config` interface above is the public contract; this type adds the
+ * fields SuperDoc sets/reads internally so the implementation can be
+ * type-checked without leaking the fields into customer IDE autocomplete.
+ *
+ * The four overrides below mark fields that `Config` exposes as optional
+ * but `SuperDoc.#init` always normalizes to a populated shape. Internal
+ * call sites cast `this.config` to this type so they can access these
+ * invariants without per-site null guards.
  *
  * Use this from internal SuperDoc.js callsites that need the augmented shape
  * (e.g. `/** @type {InternalConfig} *\/ (this.config).socket = ...`).
@@ -1372,6 +1456,14 @@ export interface InternalConfig extends Config {
    * not part of the public Config surface.
    */
   socket?: HocuspocusProviderWebsocket;
+  /** Normalized to `[]` by `#init` if the consumer passes nothing or `undefined`. */
+  documents: Document[];
+  /** Normalized to `{}` by `#init` if the consumer passes nothing or `undefined`. */
+  modules: Modules;
+  /** Spread of `DEFAULT_USER` over consumer input by `#init`; `name` always present. */
+  user: User;
+  /** Normalized to `{}` by `#init` if the consumer passes nothing or `undefined`. */
+  layoutEngineOptions: SuperDocLayoutEngineOptions;
 }
 
 /**

@@ -42,6 +42,7 @@ import type {
   ContextMenuSection,
   CoreCommandMap,
   DirectSurfaceRequest,
+  DocRange,
   DocumentApi,
   DocumentMode,
   DocumentProtectionState,
@@ -137,6 +138,7 @@ import type {
   Schema,
   ScrollIntoViewInput,
   ScrollIntoViewOutput,
+  SearchMatch,
   SectionMetadata,
   SelectionApi,
   SelectionCommandContext,
@@ -207,6 +209,7 @@ const _real_ContextMenuItem: AssertNotAny<ContextMenuItem> = true;
 const _real_ContextMenuSection: AssertNotAny<ContextMenuSection> = true;
 const _real_CoreCommandMap: AssertNotAny<CoreCommandMap> = true;
 const _real_DirectSurfaceRequest: AssertNotAny<DirectSurfaceRequest> = true;
+const _real_DocRange: AssertNotAny<DocRange> = true;
 const _real_DocumentApi: AssertNotAny<DocumentApi> = true;
 const _real_DocumentMode: AssertNotAny<DocumentMode> = true;
 const _real_DocumentProtectionState: AssertNotAny<DocumentProtectionState> = true;
@@ -302,6 +305,7 @@ const _real_SaveOptions: AssertNotAny<SaveOptions> = true;
 const _real_Schema: AssertNotAny<Schema> = true;
 const _real_ScrollIntoViewInput: AssertNotAny<ScrollIntoViewInput> = true;
 const _real_ScrollIntoViewOutput: AssertNotAny<ScrollIntoViewOutput> = true;
+const _real_SearchMatch: AssertNotAny<SearchMatch> = true;
 const _real_SectionMetadata: AssertNotAny<SectionMetadata> = true;
 const _real_SelectionApi: AssertNotAny<SelectionApi> = true;
 const _real_SelectionCommandContext: AssertNotAny<SelectionCommandContext> = true;

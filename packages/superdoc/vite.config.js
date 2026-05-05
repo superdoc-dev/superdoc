@@ -130,8 +130,15 @@ export default defineConfig(({ mode, command }) => {
         // rewrite step in ensure-types can redirect bare specifiers to
         // local relative paths. Same pattern as @superdoc/document-api.
         '../layout-engine/contracts/src/**/*',
+        '../layout-engine/dom-contract/src/**/*',
         '../layout-engine/layout-bridge/src/**/*',
         '../layout-engine/painters/dom/src/**/*',
+        // SD-2893: pm-adapter is included file-by-file (not via `src/**/*`)
+        // because the full barrel pulls in @superdoc/style-engine and other
+        // internal packages that would re-expand the shim list. Only the
+        // type subpaths reachable from the public surface are relocated.
+        '../layout-engine/pm-adapter/src/converter-context.ts',
+        '../layout-engine/pm-adapter/src/sections/types.ts',
       ],
       outDir: 'dist',
       // vite-plugin-dts still gathers diagnostics for this mixed JS/Vue source

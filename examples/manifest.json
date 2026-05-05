@@ -1,0 +1,307 @@
+[
+  {
+    "id": "getting-started-react",
+    "title": "React starter",
+    "category": "Getting Started",
+    "surface": "Frameworks",
+    "sourceRepo": "superdoc-dev/superdoc",
+    "sourcePath": "examples/getting-started/react",
+    "docs": "https://docs.superdoc.dev/getting-started/frameworks/react",
+    "ci": true
+  },
+  {
+    "id": "getting-started-vue",
+    "title": "Vue starter",
+    "category": "Getting Started",
+    "surface": "Frameworks",
+    "sourceRepo": "superdoc-dev/superdoc",
+    "sourcePath": "examples/getting-started/vue",
+    "docs": "https://docs.superdoc.dev/getting-started/frameworks/vue",
+    "ci": true
+  },
+  {
+    "id": "getting-started-vanilla",
+    "title": "Vanilla JavaScript starter",
+    "category": "Getting Started",
+    "surface": "Frameworks",
+    "sourceRepo": "superdoc-dev/superdoc",
+    "sourcePath": "examples/getting-started/vanilla",
+    "docs": "https://docs.superdoc.dev/getting-started/frameworks/vanilla-js",
+    "ci": true
+  },
+  {
+    "id": "getting-started-cdn",
+    "title": "CDN starter",
+    "category": "Getting Started",
+    "surface": "Frameworks",
+    "sourceRepo": "superdoc-dev/superdoc",
+    "sourcePath": "examples/getting-started/cdn",
+    "docs": "https://docs.superdoc.dev/getting-started/quickstart",
+    "ci": true
+  },
+  {
+    "id": "getting-started-angular",
+    "title": "Angular starter",
+    "category": "Getting Started",
+    "surface": "Frameworks",
+    "sourceRepo": "superdoc-dev/superdoc",
+    "sourcePath": "examples/getting-started/angular",
+    "docs": "https://docs.superdoc.dev/getting-started/frameworks/angular",
+    "ci": true
+  },
+  {
+    "id": "getting-started-nextjs",
+    "title": "Next.js starter",
+    "category": "Getting Started",
+    "surface": "Frameworks",
+    "sourceRepo": "superdoc-dev/superdoc",
+    "sourcePath": "examples/getting-started/nextjs",
+    "docs": "https://docs.superdoc.dev/getting-started/frameworks/nextjs",
+    "ci": false
+  },
+  {
+    "id": "getting-started-nuxt",
+    "title": "Nuxt starter",
+    "category": "Getting Started",
+    "surface": "Frameworks",
+    "sourceRepo": "superdoc-dev/superdoc",
+    "sourcePath": "examples/getting-started/nuxt",
+    "docs": "https://docs.superdoc.dev/getting-started/frameworks/nuxt",
+    "ci": true
+  },
+  {
+    "id": "getting-started-laravel",
+    "title": "Laravel starter",
+    "category": "Getting Started",
+    "surface": "Frameworks",
+    "sourceRepo": "superdoc-dev/superdoc",
+    "sourcePath": "examples/getting-started/laravel",
+    "docs": "https://docs.superdoc.dev/getting-started/frameworks/laravel",
+    "ci": true
+  },
+  {
+    "id": "editor-built-in-comments",
+    "title": "Built-in comments",
+    "category": "Editor",
+    "surface": "Built-in UI",
+    "sourceRepo": "superdoc-dev/superdoc",
+    "sourcePath": "examples/editor/built-in-ui/comments",
+    "docs": "https://docs.superdoc.dev/editor/built-in-ui/comments",
+    "ci": true
+  },
+  {
+    "id": "editor-built-in-track-changes",
+    "title": "Built-in track changes",
+    "category": "Editor",
+    "surface": "Built-in UI",
+    "sourceRepo": "superdoc-dev/superdoc",
+    "sourcePath": "examples/editor/built-in-ui/track-changes",
+    "docs": "https://docs.superdoc.dev/editor/built-in-ui/track-changes",
+    "ci": true
+  },
+  {
+    "id": "editor-built-in-toolbar",
+    "title": "Built-in toolbar",
+    "category": "Editor",
+    "surface": "Built-in UI",
+    "sourceRepo": "superdoc-dev/superdoc",
+    "sourcePath": "examples/editor/built-in-ui/toolbar",
+    "docs": "https://docs.superdoc.dev/editor/built-in-ui/toolbar",
+    "ci": true
+  },
+  {
+    "id": "editor-theming",
+    "title": "Theming",
+    "category": "Editor",
+    "surface": "Theming",
+    "sourceRepo": "superdoc-dev/superdoc",
+    "sourcePath": "examples/editor/theming",
+    "docs": "https://docs.superdoc.dev/editor/theming/overview",
+    "ci": false
+  },
+  {
+    "id": "editor-spell-check-typo-js",
+    "title": "Spell check with Typo.js",
+    "category": "Editor",
+    "surface": "Spell check",
+    "sourceRepo": "superdoc-dev/superdoc",
+    "sourcePath": "examples/editor/spell-check/typo-js",
+    "docs": "https://docs.superdoc.dev/editor/spell-check/overview",
+    "ci": false
+  },
+  {
+    "id": "editor-spell-check-languagetool",
+    "title": "Spell check with LanguageTool",
+    "category": "Editor",
+    "surface": "Spell check",
+    "sourceRepo": "superdoc-dev/superdoc",
+    "sourcePath": "examples/editor/spell-check/language-tool-self-hosted",
+    "docs": "https://docs.superdoc.dev/editor/spell-check/custom-provider",
+    "ci": false
+  },
+  {
+    "id": "shim-editor-proofing",
+    "title": "Proofing examples shim",
+    "category": "Editor",
+    "surface": "Spell check",
+    "sourceRepo": "superdoc-dev/superdoc",
+    "sourcePath": "examples/editor/proofing",
+    "docs": "https://docs.superdoc.dev/editor/spell-check/overview",
+    "ci": false,
+    "status": "shim",
+    "redirectTo": "examples/editor/spell-check"
+  },
+  {
+    "id": "editor-collaboration-superdoc-yjs",
+    "title": "SuperDoc Yjs collaboration",
+    "category": "Editor",
+    "surface": "Collaboration",
+    "sourceRepo": "superdoc-dev/superdoc",
+    "sourcePath": "examples/editor/collaboration/providers/superdoc-yjs",
+    "docs": "https://docs.superdoc.dev/guides/collaboration/superdoc-yjs",
+    "ci": true
+  },
+  {
+    "id": "editor-collaboration-hocuspocus",
+    "title": "Hocuspocus collaboration",
+    "category": "Editor",
+    "surface": "Collaboration",
+    "sourceRepo": "superdoc-dev/superdoc",
+    "sourcePath": "examples/editor/collaboration/providers/hocuspocus",
+    "docs": "https://docs.superdoc.dev/guides/collaboration/hocuspocus",
+    "ci": true
+  },
+  {
+    "id": "editor-collaboration-liveblocks",
+    "title": "Liveblocks collaboration",
+    "category": "Editor",
+    "surface": "Collaboration",
+    "sourceRepo": "superdoc-dev/superdoc",
+    "sourcePath": "examples/editor/collaboration/providers/liveblocks",
+    "docs": "https://docs.superdoc.dev/guides/collaboration/liveblocks",
+    "ci": true
+  },
+  {
+    "id": "editor-collaboration-node-sdk-backend",
+    "title": "Node SDK collaboration backend",
+    "category": "Editor",
+    "surface": "Collaboration",
+    "sourceRepo": "superdoc-dev/superdoc",
+    "sourcePath": "examples/editor/collaboration/backends/node-sdk",
+    "docs": "https://docs.superdoc.dev/editor/collaboration/storage",
+    "ci": false
+  },
+  {
+    "id": "editor-collaboration-fastapi-backend",
+    "title": "FastAPI collaboration backend",
+    "category": "Editor",
+    "surface": "Collaboration",
+    "sourceRepo": "superdoc-dev/superdoc",
+    "sourcePath": "examples/editor/collaboration/backends/fastapi",
+    "docs": "https://docs.superdoc.dev/editor/collaboration/storage",
+    "ci": false
+  },
+  {
+    "id": "document-engine-diffing",
+    "title": "Diffing",
+    "category": "Document Engine",
+    "surface": "Diffing",
+    "sourceRepo": "superdoc-dev/superdoc",
+    "sourcePath": "examples/document-engine/diffing",
+    "docs": "https://docs.superdoc.dev/document-engine/diffing",
+    "ci": false
+  },
+  {
+    "id": "ai-bedrock",
+    "title": "AWS Bedrock",
+    "category": "AI",
+    "surface": "Agents",
+    "sourceRepo": "superdoc-dev/superdoc",
+    "sourcePath": "examples/ai/bedrock",
+    "docs": "https://docs.superdoc.dev/ai/agents/integrations",
+    "ci": false
+  },
+  {
+    "id": "ai-streaming",
+    "title": "Streaming into an editor",
+    "category": "AI",
+    "surface": "Agents",
+    "sourceRepo": "superdoc-dev/superdoc",
+    "sourcePath": "examples/ai/streaming",
+    "docs": "https://docs.superdoc.dev/ai/agents/integrations",
+    "ci": false
+  },
+  {
+    "id": "ai-redlining",
+    "title": "AI redlining",
+    "category": "AI",
+    "surface": "Agents",
+    "sourceRepo": "superdoc-dev/superdoc",
+    "sourcePath": "examples/ai/redlining",
+    "docs": "https://docs.superdoc.dev/ai/overview",
+    "ci": true
+  },
+  {
+    "id": "ai-headless-redlining",
+    "title": "Headless AI redlining",
+    "category": "AI",
+    "surface": "Headless",
+    "sourceRepo": "superdoc-dev/superdoc",
+    "sourcePath": "examples/headless/ai-redlining",
+    "docs": "https://docs.superdoc.dev/getting-started/ai",
+    "ci": true,
+    "review": "Consolidate with examples/ai/redlining after choosing the browser vs server path."
+  },
+  {
+    "id": "ai-collaborative-agent",
+    "title": "Collaborative AI agent",
+    "category": "AI",
+    "surface": "Agents",
+    "sourceRepo": "superdoc-dev/superdoc",
+    "sourcePath": "examples/ai/collaborative-agent",
+    "docs": "https://docs.superdoc.dev/ai/agents/integrations",
+    "ci": false,
+    "review": "May move to demos because it is a full app workflow."
+  },
+  {
+    "id": "advanced-headless-toolbar",
+    "title": "Headless Toolbar",
+    "category": "Advanced",
+    "surface": "Headless Toolbar",
+    "sourceRepo": "superdoc-dev/superdoc",
+    "sourcePath": "examples/advanced/headless-toolbar",
+    "docs": "https://docs.superdoc.dev/advanced/headless-toolbar",
+    "ci": true
+  },
+  {
+    "id": "advanced-extension-custom-mark",
+    "title": "Custom mark",
+    "category": "Advanced",
+    "surface": "Extensions",
+    "sourceRepo": "superdoc-dev/superdoc",
+    "sourcePath": "examples/advanced/extensions/custom-mark",
+    "docs": "https://docs.superdoc.dev/advanced/custom-extensions",
+    "ci": true
+  },
+  {
+    "id": "advanced-extension-custom-node",
+    "title": "Custom node",
+    "category": "Advanced",
+    "surface": "Extensions",
+    "sourceRepo": "superdoc-dev/superdoc",
+    "sourcePath": "examples/advanced/extensions/custom-node",
+    "docs": "https://docs.superdoc.dev/advanced/custom-extensions",
+    "ci": true
+  },
+  {
+    "id": "advanced-grading-papers-comments-annotations",
+    "title": "Grading papers with comments and annotations",
+    "category": "Advanced",
+    "surface": "Review workflows",
+    "sourceRepo": "superdoc-dev/superdoc",
+    "sourcePath": "examples/advanced/grading-papers-comments-annotations",
+    "docs": null,
+    "ci": false,
+    "review": "May move to demos because it is a full app workflow."
+  }
+]

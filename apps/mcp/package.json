@@ -1,6 +1,10 @@
 {
   "name": "@superdoc-dev/mcp",
+<<<<<<< HEAD
   "version": "0.3.1",
+=======
+  "version": "0.3.0",
+>>>>>>> origin/main
   "type": "module",
   "engines": {
     "node": ">=20"

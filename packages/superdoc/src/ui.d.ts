@@ -1,4 +1,5 @@
 export {
+  BUILT_IN_COMMAND_IDS,
   createSuperDocUI,
   shallowEqual,
   type CommandHandle,
@@ -34,6 +35,7 @@ export {
   type SuperDocLike,
   type SuperDocUI,
   type SuperDocUIOptions,
+  type SuperDocUIScope,
   type SuperDocUIState,
   type TextAddress,
   type TextSegment,

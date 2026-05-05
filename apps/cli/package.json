@@ -1,6 +1,10 @@
 {
   "name": "@superdoc-dev/cli",
+<<<<<<< HEAD
   "version": "0.8.1",
+=======
+  "version": "0.8.0",
+>>>>>>> origin/main
   "type": "module",
   "bin": {
     "superdoc": "./dist/index.js"

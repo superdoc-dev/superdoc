@@ -212,6 +212,8 @@ import { getSchemaIntrospection } from './helpers/schema-introspection.js';
  * @typedef {import('./core/types/index.js').PasswordPromptRenderContext} PasswordPromptRenderContext
  * @typedef {import('./core/types/index.js').PasswordPromptResolution} PasswordPromptResolution
  * @typedef {import('./core/types/index.js').PasswordPromptConfig} PasswordPromptConfig
+ * @typedef {import('./core/types/index.js').DocRange} DocRange
+ * @typedef {import('./core/types/index.js').SearchMatch} SearchMatch
  * @typedef {import('./core/types/index.js').ResolvedFindReplaceTexts} ResolvedFindReplaceTexts
  * @typedef {import('./core/types/index.js').FindReplaceHandle} FindReplaceHandle
  * @typedef {import('./core/types/index.js').FindReplaceContext} FindReplaceContext

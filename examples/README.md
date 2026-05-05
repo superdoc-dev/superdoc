@@ -2,6 +2,10 @@
 
 Minimal, copy-pasteable examples organized to mirror the [docs](https://docs.superdoc.dev): Editor, Document Engine, AI.
 
+Examples teach one concept in the smallest useful amount of code. If you want a composed app or product workflow, see [`demos/`](../demos/) instead.
+
+The machine-readable index lives in [`manifest.json`](./manifest.json).
+
 ## Getting started
 
 Framework starters. Pick one, run `pnpm install && pnpm dev`.
@@ -39,7 +43,7 @@ Patterns for the browser editor surface.
 
 | Example | Docs |
 |---------|------|
-| [proofing](./editor/proofing) | [docs](https://docs.superdoc.dev/editor/spell-check/overview) |
+| [spell-check](./editor/spell-check) | [docs](https://docs.superdoc.dev/editor/spell-check/overview) |
 
 ### Collaboration
 
@@ -70,6 +74,7 @@ Document editing through models and agents.
 | [bedrock](./ai/bedrock) | AWS Bedrock Converse API with tool use |
 | [streaming](./ai/streaming) | Stream model output into a visible editor |
 | [redlining](./ai/redlining) | LLM-driven tracked-change review |
+| [headless/ai-redlining](./headless/ai-redlining) | Server-side AI redlining runner |
 | [collaborative-agent](./ai/collaborative-agent) | AI agent operating on a collaborative doc |
 
 ## Advanced
@@ -79,6 +84,8 @@ Edge cases and infrastructure-level patterns. Most consumers won't need these.
 | Example | Notes |
 |---------|-------|
 | [grading-papers-comments-annotations](./advanced/grading-papers-comments-annotations) | Full-stack annotation use case |
+| [extensions/custom-mark](./advanced/extensions/custom-mark) | Custom mark authoring |
+| [extensions/custom-node](./advanced/extensions/custom-node) | Custom node authoring |
 | [headless-toolbar](./advanced/headless-toolbar) | Framework-agnostic toolbar substrate |
 
 ## Running an example

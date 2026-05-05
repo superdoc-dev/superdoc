@@ -1,21 +1,5 @@
-# Spell Check / Proofing
+# Moved to Spell Check
 
-Both examples use SuperDoc's built-in proofing platform with different spell-check providers. Each is intentionally minimal and optimized for clarity over production hardening.
-They install the published `superdoc@next` package rather than a local workspace build.
+The proofing examples moved to [`examples/editor/spell-check`](../spell-check).
 
-| | Typo.js | LanguageTool |
-|---|---|---|
-| Provider | [typo-js](https://github.com/cfinke/Typo.js) | [LanguageTool](https://languagetool.org/) |
-| Deployment | Browser-only | Self-hosted (Docker) |
-| Offline | Yes | No |
-| Grammar capable | No | Yes (filtered to spelling in this example) |
-| Best for | Privacy, offline, demos | Production, multi-language |
-
-## Examples
-
-- **[typo-js/](./typo-js/)** — Local, browser-only spell check. No backend required.
-- **[language-tool-self-hosted/](./language-tool-self-hosted/)** — Self-hosted HTTP spell check via LanguageTool.
-
-## Third-Party Notices
-
-See [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md) for licensing details on bundled third-party software.
+The public API still uses the `proofing` configuration key because the provider contract can grow beyond spelling. The examples use the customer-facing Spell check name because the current UI renders spelling issues.

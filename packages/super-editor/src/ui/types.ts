@@ -129,12 +129,38 @@ export interface SuperDocEditorLike {
    * PresentationEditor handle. Browser-only. The controller calls
    * `presentationEditor.getEntityRects(target)` from `ui.viewport.getRect`
    * to look up the painted-DOM rectangles for an entity (comment or
-   * tracked change) without leaking DOM elements through the public
-   * `ui.viewport` surface. Optional in the structural typing to keep
+   * tracked change), and `presentationEditor.getSelectionRects()` /
+   * `getRangeRects(from, to)` from `ui.selection.getRects` /
+   * `ui.selection.getAnchorRect` to anchor floating UI to the painted
+   * selection without consumers reaching for `window.getSelection()`
+   * (which reads from the offscreen ProseMirror DOM and returns the
+   * wrong coordinates). Optional in the structural typing to keep
    * SSR / non-browser stubs valid.
    */
   presentationEditor?: {
     getEntityRects?(target: { entityType?: unknown; entityId?: unknown; story?: unknown }): Array<{
+      pageIndex: number;
+      left: number;
+      right: number;
+      top: number;
+      bottom: number;
+      width: number;
+      height: number;
+    }>;
+    getSelectionRects?(relativeTo?: HTMLElement): Array<{
+      pageIndex: number;
+      left: number;
+      right: number;
+      top: number;
+      bottom: number;
+      width: number;
+      height: number;
+    }>;
+    getRangeRects?(
+      from: number,
+      to: number,
+      relativeTo?: HTMLElement,
+    ): Array<{
       pageIndex: number;
       left: number;
       right: number;
@@ -259,7 +285,7 @@ export interface SelectionSlice {
    * ```ts
    * const { selectionTarget } = ui.selection.getSnapshot();
    * if (selectionTarget) {
-   *   editor.doc.insert({ target: selectionTarget, content: 'Hello' });
+   *   editor.doc.insert({ target: selectionTarget, value: 'Hello', type: 'text' });
    * }
    * ```
    *
@@ -463,11 +489,107 @@ export interface SuperDocUI {
   document: DocumentHandle;
 
   /**
+   * Create a {@link SuperDocUIScope} for collecting subscriptions,
+   * custom-command registrations, and DOM listeners under one
+   * lifecycle. Calling `ui.destroy()` cascades into every live scope
+   * before tearing down the controller's own resources, so a typical
+   * non-React consumer needs only `scope.destroy()` (or just
+   * `ui.destroy()`) to clean up.
+   */
+  createScope(): SuperDocUIScope;
+
+  /**
    * Tear down all internal subscriptions to the editor / SuperDoc
-   * instance / presentation editor. After destroy, no listeners will
+   * instance / presentation editor, plus every scope created via
+   * {@link SuperDocUI.createScope}. After destroy, no listeners will
    * fire and `select(...)` should not be called.
    */
   destroy(): void;
+}
+
+/**
+ * Lifecycle helper returned by {@link SuperDocUI.createScope}.
+ *
+ * Collects subscription unsubscribes, custom-command registrations,
+ * and DOM event listeners under a single tear-down call. Calling
+ * `ui.destroy()` automatically destroys every live scope first, so
+ * consumers can either call `scope.destroy()` themselves on unmount /
+ * HMR or rely on the cascade.
+ *
+ * Post-destroy semantics (idempotent: calling `destroy()` twice is
+ * a no-op):
+ * - `add(teardown)` invokes the teardown synchronously.
+ * - `on(target, type, listener)` is a no-op; the listener is never
+ *   installed.
+ * - `register(registration)` throws.
+ * - `child()` returns an already-destroyed scope.
+ */
+export interface SuperDocUIScope {
+  /**
+   * Add a teardown function. Typically the unsubscribe returned by a
+   * domain handle's `subscribe()` / `observe()` call:
+   *
+   * ```ts
+   * scope.add(ui.commands.bold.observe((state) => render(state)));
+   * scope.add(ui.comments.subscribe(({ snapshot }) => renderList(snapshot)));
+   * ```
+   *
+   * Calling `add` after `destroy` invokes the teardown immediately:
+   * the canonical caller has already executed the side-effecting
+   * subscribe call, so running the unsubscribe right away matches
+   * what a `try { ... } finally { off(); }` pattern would do.
+   */
+  add(teardown: () => void): void;
+
+  /**
+   * Register a custom toolbar command. Returns the full
+   * {@link CustomCommandRegistrationResult} so consumers retain access
+   * to `handle.observe(...)` and `invalidate()`. The scope retains
+   * the `unregister()` callback and runs it when the scope is
+   * destroyed; consumers may still call `result.unregister()`
+   * manually before that, which is idempotent on the registry side.
+   *
+   * Throws when called on a destroyed scope. A register-then-unregister
+   * cycle would still fire the registry's invalidation paths and any
+   * collision-warning hooks, so we surface the lifecycle error
+   * explicitly instead of swallowing it.
+   */
+  register<TPayload = void, TValue = unknown>(
+    registration: CustomCommandRegistration<TPayload, TValue>,
+  ): CustomCommandRegistrationResult<TPayload, TValue>;
+
+  /**
+   * Add a DOM event listener. Calls `target.addEventListener(type,
+   * listener, options)` and queues a `removeEventListener` with the
+   * same arguments for scope teardown. No-op when called on a
+   * destroyed scope.
+   */
+  on(
+    target: EventTarget,
+    type: string,
+    listener: EventListenerOrEventListenerObject,
+    options?: AddEventListenerOptions | boolean,
+  ): void;
+
+  /**
+   * Create a child scope. Destroying the parent destroys every child
+   * first; child scopes share the controller's command registry so
+   * `child.register(...)` registers against the same surface as
+   * `ui.commands.register(...)`. Returns an already-destroyed scope
+   * when called on a destroyed parent.
+   */
+  child(): SuperDocUIScope;
+
+  /**
+   * Tear down every collected teardown and child scope. Idempotent.
+   * Errors thrown by individual teardowns are caught and logged to
+   * `console.error`; one failure does not prevent the rest from
+   * running.
+   */
+  destroy(): void;
+
+  /** True after {@link destroy} has been called. */
+  readonly destroyed: boolean;
 }
 
 /**
@@ -565,6 +687,16 @@ export interface DocumentHandle {
    */
   subscribe(listener: (event: { snapshot: DocumentSlice }) => void): () => void;
   /**
+   * Value-shaped alias of {@link subscribe}: listener receives the
+   * snapshot directly instead of an event wrapper. Matches the
+   * per-command `observe(state => ...)` shape on
+   * {@link CommandHandle.observe}, so a single listener style works
+   * across the whole controller surface. Same emission semantics as
+   * `subscribe`: fires once synchronously, then on shallow-equality
+   * change. Returns an unsubscribe.
+   */
+  observe(listener: (snapshot: DocumentSlice) => void): () => void;
+  /**
    * Set the document mode. Routes through `superdoc.setDocumentMode`
    * which fires the existing `document-mode-change` event and updates
    * the per-editor mode. No-op when the host stub omits the setter
@@ -610,6 +742,12 @@ export interface SelectionHandle {
    */
   subscribe(listener: (event: { snapshot: SelectionSlice }) => void): () => void;
   /**
+   * Value-shaped alias of {@link subscribe}: listener receives the
+   * snapshot directly. See {@link DocumentHandle.observe} for why
+   * this exists alongside `subscribe`.
+   */
+  observe(listener: (snapshot: SelectionSlice) => void): () => void;
+  /**
    * Capture the current selection as a portable handle.
    *
    * The pattern: a sidebar composer or floating menu opens, takes
@@ -637,6 +775,65 @@ export interface SelectionHandle {
    * doc-api primitive does.
    */
   capture(): SelectionCapture | null;
+  /**
+   * Look up the painted rectangles of the current selection (or a
+   * captured one) in viewport coordinates.
+   *
+   * SuperDoc renders the visible page through the layout engine, not
+   * the hidden ProseMirror DOM. `window.getSelection().getRangeAt(0)
+   * .getBoundingClientRect()` reads from the offscreen PM and returns
+   * coordinates that don't match what the user sees — every consumer
+   * who reaches for it ships a broken bubble menu. This method asks
+   * the painter directly so the rects align with what's painted.
+   *
+   * Multi-line selections produce one rect per painted line in
+   * document order. Empty selections, no-editor state, or captures
+   * whose target no longer resolves return `[]`.
+   *
+   * Pass a `SelectionCapture` (from {@link capture}) to query rects
+   * for a frozen selection — useful when a composer has stolen focus
+   * and the editor's live selection is gone but you still want to
+   * position UI relative to where the user originally selected.
+   *
+   * The live path (no capture) handles all surfaces — body, header,
+   * footer, footnote, endnote — because `PresentationEditor` routes
+   * selection-rect lookups through its currently active editor.
+   *
+   * The captured path resolves block ids against the currently routed
+   * editor, so captures taken in a non-body story still produce the
+   * right rects while the user remains in that story (the common case
+   * for a bubble menu or composer that opens a sidebar). When focus
+   * has moved to a different story (or the body) by call time, the
+   * captured block ids no longer resolve and the call returns `[]`
+   * rather than rects from the wrong surface — fully cross-surface
+   * captured rects need a story-keyed lookup that doesn't yet exist
+   * publicly on `PresentationEditor`.
+   */
+  getRects(capture?: SelectionCapture | null): ViewportRect[];
+  /**
+   * Single anchor rect for floating UI (bubble menu, link popover,
+   * mention list). Sugar over {@link getRects}: returns the first
+   * line rect when `placement` is `'start'` (default), the last when
+   * `'end'`, or the union bounding box across all line rects when
+   * `'union'`. Returns `null` when there are no rects.
+   */
+  getAnchorRect(options?: SelectionAnchorRectOptions, capture?: SelectionCapture | null): ViewportRect | null;
+}
+
+/**
+ * Options for {@link SelectionHandle.getAnchorRect}.
+ */
+export interface SelectionAnchorRectOptions {
+  /**
+   * Which line of a multi-line selection to anchor to.
+   *
+   * - `'start'` (default): top-most line. Matches Word / Google Docs
+   *    bubble menu placement.
+   * - `'end'`: bottom-most line. Useful when the popover lives below.
+   * - `'union'`: bounding rect across every line. Useful for selection
+   *    overlays / shaded backgrounds.
+   */
+  placement?: 'start' | 'end' | 'union';
 }
 
 /**
@@ -674,6 +871,12 @@ export interface ToolbarHandle {
    * with the latest snapshot. Returns an unsubscribe.
    */
   subscribe(listener: (event: { snapshot: ToolbarSnapshotSlice }) => void): () => void;
+  /**
+   * Value-shaped alias of {@link subscribe}: listener receives the
+   * snapshot directly. See {@link DocumentHandle.observe} for why
+   * this exists alongside `subscribe`.
+   */
+  observe(listener: (snapshot: ToolbarSnapshotSlice) => void): () => void;
   /**
    * Execute a built-in toolbar command. Type-safe payload is enforced
    * via the existing `ToolbarPayloadMap`.
@@ -775,6 +978,26 @@ export type CommandsHandle = {
    * uniformly without branching on the id.
    */
   get(id: string): DynamicCommandHandle | undefined;
+
+  /**
+   * Returns `true` when `id` is currently registered: a built-in
+   * (member of `BUILT_IN_COMMAND_IDS`) or a custom registered via
+   * {@link CommandsHandle.register}. Returns `false` for unknown
+   * strings, including custom ids that have been unregistered.
+   *
+   * Use to validate config-driven toolbars at startup. The runtime
+   * lookup `ui.commands.get(id)` returns `undefined` for unknown ids
+   * silently; `has` makes the check explicit and short.
+   */
+  has(id: string): boolean;
+
+  /**
+   * Like {@link CommandsHandle.get} but throws when `id` is not
+   * registered. Use at trusted dispatch sites where an unknown id
+   * indicates a bug, not a user error: keyboard shortcut routers,
+   * tests, internal command pipelines.
+   */
+  require(id: string): DynamicCommandHandle;
 };
 
 /**
@@ -934,6 +1157,12 @@ export interface CommentsHandle {
    */
   subscribe(listener: (event: { snapshot: CommentsSlice }) => void): () => void;
   /**
+   * Value-shaped alias of {@link subscribe}: listener receives the
+   * snapshot directly. See {@link DocumentHandle.observe} for why
+   * this exists alongside `subscribe`.
+   */
+  observe(listener: (snapshot: CommentsSlice) => void): () => void;
+  /**
    * Create a comment anchored to the current selection. Reads the
    * routed editor's `selection.current().target` and routes through
    * `editor.doc.comments.create`. Returns the operation receipt.
@@ -1001,6 +1230,12 @@ export interface TrackChangesHandle {
    * equality. Returns an unsubscribe.
    */
   subscribe(listener: (event: { snapshot: TrackChangesSlice }) => void): () => void;
+  /**
+   * Value-shaped alias of {@link subscribe}: listener receives the
+   * snapshot directly. See {@link DocumentHandle.observe} for why
+   * this exists alongside `subscribe`.
+   */
+  observe(listener: (snapshot: TrackChangesSlice) => void): () => void;
   /** Accept a single tracked change via `trackChanges.decide`. */
   accept(changeId: string): import('@superdoc/document-api').Receipt;
   /** Reject a single tracked change via `trackChanges.decide`. */

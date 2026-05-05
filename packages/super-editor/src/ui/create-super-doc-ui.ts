@@ -1572,10 +1572,13 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     // surfaces a typed `EntityHit[]` consumers can switch on.
     entityAt(input: ViewportEntityAtInput): ViewportEntityHit[] {
       if (!input || typeof input.x !== 'number' || typeof input.y !== 'number') return [];
-      // `document.elementFromPoint` is the only entry point. Guard
-      // SSR / non-browser stubs explicitly so the call doesn't throw
-      // in test environments without a global `document`.
-      if (typeof document === 'undefined' || typeof document.elementFromPoint !== 'function') {
+      // The DOM `document` is reached through `globalThis.document`
+      // because the local `document: DocumentHandle` declared below
+      // would otherwise shadow it for type-checking. Guard SSR /
+      // non-browser stubs explicitly so the call doesn't throw in
+      // test environments without a global `document`.
+      const dom = (globalThis as { document?: Document }).document;
+      if (!dom || typeof dom.elementFromPoint !== 'function') {
         return [];
       }
       // Scope the lookup to this controller's editor: a page mounting
@@ -1585,7 +1588,7 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
       const editor = resolveHostEditor(superdoc);
       const host = editor?.presentationEditor?.visibleHost;
       if (!host) return [];
-      const startEl = document.elementFromPoint(input.x, input.y);
+      const startEl = dom.elementFromPoint(input.x, input.y);
       if (!startEl || !host.contains(startEl)) return [];
       return collectEntityHitsFromChain(startEl);
     },

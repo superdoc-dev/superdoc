@@ -65,6 +65,42 @@ const ORDERED_LIST_STYLES: Record<string, { fmt: string; text: string }> = {
   'lower-alpha-paren': { fmt: 'lowerLetter', text: '%1)' },
 };
 
+/**
+ * Default `w:lvlJc` per ordered numFmt, matching Word's own multilevel-list
+ * defaults (sampled from a real-world numbering.xml):
+ *   decimal / *Letter → left  — single-character or narrow markers stay flush left
+ *   *Roman           → right — markers grow with count ("I." → "VIII."), so right-
+ *                              justification keeps content aligned at one X.
+ */
+const DEFAULT_LVL_JC_BY_FMT: Record<string, 'left' | 'right'> = {
+  decimal: 'left',
+  upperRoman: 'right',
+  lowerRoman: 'right',
+  upperLetter: 'left',
+  lowerLetter: 'left',
+};
+
+/**
+ * Default `w:ind w:hanging` per ordered numFmt, paired with the lvlJc above.
+ * Word ships left-justified levels with a wider hanging (so the marker fits
+ * inside it without overflow) and right-justified levels with a narrower one
+ * (because the marker right-anchors at indent.left and extends leftward
+ * regardless of the hanging value). Sourced from the same reference doc.
+ *
+ * Values are in twips. Refreshing this together with `lvlJc` is essential —
+ * leaving e.g. `hanging=180` (the right-just default) on a level we just
+ * switched to a left-just numFmt causes content drift, because narrow markers
+ * land within the hanging zone but wider ones overflow it (sending the
+ * overflow path's per-marker fallback into action).
+ */
+const DEFAULT_HANGING_BY_FMT: Record<string, number> = {
+  decimal: 360,
+  upperRoman: 180,
+  lowerRoman: 180,
+  upperLetter: 360,
+  lowerLetter: 360,
+};
+
 interface GenerateResult {
   numId: number;
   abstractId: number;
@@ -221,16 +257,35 @@ export function generateNewListDefinition(numbering: NumberingModel, options: Ge
           lvlText.attributes['w:val'] = `%${targetLevel + 1}${styleConfig.text.replace(/^%\d+/, '')}`;
         }
 
-        // Default ordered list markers to right-justification so siblings
-        // with varying widths (e.g. "I." vs "III.", "1." vs "10.") share a
-        // single content-start X. The base ordered template ships with
-        // lvlJc="left", which would otherwise leave wider markers pushing
-        // their own line right.
-        const lvlJc = lvl.elements.find((el: any) => el.name === 'w:lvlJc');
-        if (lvlJc) {
-          lvlJc.attributes['w:val'] = 'right';
-        } else {
-          lvl.elements.push({ type: 'element', name: 'w:lvlJc', attributes: { 'w:val': 'right' } });
+        // Refresh lvlJc + hanging in lockstep with the new numFmt (Word's
+        // multilevel defaults: decimal/letter → left/360, roman → right/180).
+        // Setting only one of them leaves a level that can drift (e.g. left-
+        // just numFmt with hanging=180 overflows for wider markers).
+        const defaultLvlJc = DEFAULT_LVL_JC_BY_FMT[styleConfig.fmt];
+        if (defaultLvlJc) {
+          const lvlJc = lvl.elements.find((el: any) => el.name === 'w:lvlJc');
+          if (lvlJc) {
+            lvlJc.attributes['w:val'] = defaultLvlJc;
+          } else {
+            lvl.elements.push({ type: 'element', name: 'w:lvlJc', attributes: { 'w:val': defaultLvlJc } });
+          }
+        }
+
+        const defaultHanging = DEFAULT_HANGING_BY_FMT[styleConfig.fmt];
+        if (defaultHanging != null) {
+          let pPr = lvl.elements.find((el: any) => el.name === 'w:pPr');
+          if (!pPr) {
+            pPr = { type: 'element', name: 'w:pPr', elements: [] };
+            lvl.elements.push(pPr);
+          }
+          if (!pPr.elements) pPr.elements = [];
+          let ind = pPr.elements.find((el: any) => el.name === 'w:ind');
+          if (!ind) {
+            ind = { type: 'element', name: 'w:ind', attributes: { 'w:hanging': String(defaultHanging) } };
+            pPr.elements.push(ind);
+          } else {
+            ind.attributes = { ...(ind.attributes || {}), 'w:hanging': String(defaultHanging) };
+          }
         }
       }
     }
@@ -524,14 +579,15 @@ export function setLvlStyleOnAbstract(
   let numFmtValue: string | null = null;
   let lvlTextValue: string | null = null;
   let lvlJcValue: string | null = null;
+  let hangingValue: number | null = null;
 
   if (options.bulletStyle) {
     const char = BULLET_STYLE_CHARS[options.bulletStyle];
     if (!char) return false;
     numFmtValue = 'bullet';
     lvlTextValue = char;
-    // Bullet markers are single-character; the source's lvlJc carries no
-    // meaningful drift. Leave it untouched to avoid clobbering imported docs.
+    // Bullet markers are single-character; the source's lvlJc/hanging carry
+    // no meaningful drift. Leave them untouched to avoid clobbering imports.
   } else if (options.orderedStyle) {
     const config = ORDERED_LIST_STYLES[options.orderedStyle];
     if (!config) return false;
@@ -539,21 +595,42 @@ export function setLvlStyleOnAbstract(
     // need `%(N+1)`. Preserve the style's suffix (e.g. ".", ")") so paren styles stay paren.
     numFmtValue = config.fmt;
     lvlTextValue = `%${ilvl + 1}${config.text.replace(/^%\d+/, '')}`;
-    // Default ordered styles to right-justified markers: when widths vary
-    // across siblings (e.g. "I." vs "III." in a roman list, or "1." vs
-    // "10." in a long decimal list), right-justification keeps content
-    // aligned at one X. The source's lvlJc was tied to the previous numFmt
-    // (which may have been single-width like a bullet) and would otherwise
-    // cause drift on the new style.
-    lvlJcValue = 'right';
+    // Match Word's per-numFmt defaults (decimal/letter → left, roman → right).
+    // The source's lvlJc was tied to the PREVIOUS numFmt and is often wrong
+    // for the new one. Refresh hanging in lockstep — leaving e.g. hanging=180
+    // (the right-just default) on a level switched to a left-just numFmt
+    // means narrow markers fit but wider ones overflow → drift.
+    lvlJcValue = DEFAULT_LVL_JC_BY_FMT[config.fmt] ?? null;
+    hangingValue = DEFAULT_HANGING_BY_FMT[config.fmt] ?? null;
   } else {
     return false;
   }
+
+  // Refresh `w:ind w:hanging` on the level's pPr without touching `w:left`
+  // (that's the user's chosen indentation, not part of the marker geometry).
+  const setHangingOnLevel = (hanging: number): boolean => {
+    let pPr = lvlEl.elements.find((el: any) => el.name === 'w:pPr');
+    if (!pPr) {
+      pPr = { type: 'element', name: 'w:pPr', elements: [] };
+      lvlEl.elements.push(pPr);
+    }
+    if (!pPr.elements) pPr.elements = [];
+    let ind = pPr.elements.find((el: any) => el.name === 'w:ind');
+    if (!ind) {
+      ind = { type: 'element', name: 'w:ind', attributes: { 'w:hanging': String(hanging) } };
+      pPr.elements.push(ind);
+      return true;
+    }
+    if (ind.attributes?.['w:hanging'] === String(hanging)) return false;
+    ind.attributes = { ...(ind.attributes || {}), 'w:hanging': String(hanging) };
+    return true;
+  };
 
   let changed = false;
   if (setOrAddChild('w:numFmt', numFmtValue)) changed = true;
   if (setOrAddChild('w:lvlText', lvlTextValue)) changed = true;
   if (lvlJcValue != null && setOrAddChild('w:lvlJc', lvlJcValue)) changed = true;
+  if (hangingValue != null && setHangingOnLevel(hangingValue)) changed = true;
   if (stripMarkerFont()) changed = true;
   return changed;
 }

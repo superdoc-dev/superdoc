@@ -10,6 +10,7 @@ import { resolveParagraphProperties, encodeCSSFromPPr } from '@converter/styles.
 import { twipsToPixels } from '@converter/helpers.js';
 import { calculateTabStyle } from '../tab/helpers/tabDecorations.js';
 import { isList } from '@core/commands/list-helpers';
+import { resolveParagraphProperties as resolveParagraphPropertiesFromStyleEngine } from '@superdoc/style-engine/ooxml';
 
 vi.mock('@core/Attribute.js', () => ({
   Attribute: {
@@ -39,6 +40,10 @@ vi.mock('@core/commands/list-helpers', () => ({
 
 vi.mock('@helpers/index.js', () => ({
   findParentNodeClosestToPos: vi.fn().mockReturnValue(null),
+}));
+
+vi.mock('@superdoc/style-engine/ooxml', () => ({
+  resolveParagraphProperties: vi.fn((_params, inlineProps) => inlineProps || {}),
 }));
 
 const createEditor = () => {
@@ -415,6 +420,66 @@ describe('ParagraphNodeView', () => {
 
     const ltrNode = createNode({ attrs: { paragraphProperties: {}, listRendering: {} } });
     nodeView.update(ltrNode, []);
+
+    expect(nodeView.dom.getAttribute('dir')).toBeNull();
+  });
+
+  it('sets dir="rtl" for Pattern 1 paragraphs with run-level RTL only', () => {
+    isList.mockReturnValue(false);
+    resolveParagraphProperties.mockReturnValue({});
+
+    const makeRun = (rtl) => ({
+      type: { name: 'run' },
+      attrs: { runProperties: { rtl } },
+    });
+    const runs = [makeRun(true), makeRun(true)];
+    const fragment = { childCount: runs.length, child: (i) => runs[i] };
+
+    const { nodeView } = mountNodeView({
+      attrs: {
+        paragraphProperties: {},
+        listRendering: {},
+      },
+      content: fragment,
+    });
+
+    expect(nodeView.dom.getAttribute('dir')).toBe('rtl');
+  });
+
+  it('sets dir="rtl" when resolved paragraph properties inherit rightToLeft from styles/docDefaults', () => {
+    isList.mockReturnValue(false);
+    resolveParagraphPropertiesFromStyleEngine.mockReturnValue({
+      rightToLeft: true,
+      styleId: 'Normal',
+    });
+
+    const { nodeView } = mountNodeView({
+      attrs: {
+        paragraphProperties: {
+          styleId: 'Normal',
+        },
+        listRendering: {},
+      },
+    });
+
+    expect(nodeView.dom.getAttribute('dir')).toBe('rtl');
+  });
+
+  it('does not force dir when inherited resolved properties are explicit ltr', () => {
+    isList.mockReturnValue(false);
+    resolveParagraphPropertiesFromStyleEngine.mockReturnValue({
+      rightToLeft: false,
+      styleId: 'Normal',
+    });
+
+    const { nodeView } = mountNodeView({
+      attrs: {
+        paragraphProperties: {
+          styleId: 'Normal',
+        },
+        listRendering: {},
+      },
+    });
 
     expect(nodeView.dom.getAttribute('dir')).toBeNull();
   });

@@ -494,6 +494,44 @@ function inlinePageFieldSingleRunFooterXml(): string {
 `;
 }
 
+function rtlPattern1HeaderXml(): string {
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:hdr xmlns:w="${NS_W}" xmlns:r="${NS_R}">
+  <w:p>
+    <w:pPr>
+      <w:pStyle w:val="Header"/>
+      <w:jc w:val="center"/>
+    </w:pPr>
+    <w:r>
+      <w:rPr><w:rtl/></w:rPr>
+      <w:t>כותרת</w:t>
+    </w:r>
+    <w:r>
+      <w:rPr><w:rtl/></w:rPr>
+      <w:t xml:space="preserve"> עליונה</w:t>
+    </w:r>
+  </w:p>
+</w:hdr>
+`;
+}
+
+function rtlPattern1FooterXml(): string {
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:ftr xmlns:w="${NS_W}" xmlns:r="${NS_R}">
+  <w:p>
+    <w:pPr>
+      <w:pStyle w:val="Footer"/>
+      <w:jc w:val="center"/>
+    </w:pPr>
+    <w:r>
+      <w:rPr><w:rtl/></w:rPr>
+      <w:t>שלוםאבג</w:t>
+    </w:r>
+  </w:p>
+</w:ftr>
+`;
+}
+
 function trackedFootnotesXml(): string {
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:footnotes xmlns:w="${NS_W}" xmlns:r="${NS_R}">
@@ -633,6 +671,14 @@ export const STORY_ONLY_TRACKED_CHANGES_DOC_PATH = ensureGeneratedFixture(
     'word/footer2.xml': trackedFooterXml(),
     'word/footnotes.xml': trackedFootnotesXml(),
     'word/endnotes.xml': trackedEndnotesXml(),
+  },
+);
+export const RTL_PATTERN1_HEADER_FOOTER_DOC_PATH = ensureGeneratedFixture(
+  'rtl-pattern1-header-footer.docx',
+  'h_f-normal.docx',
+  {
+    'word/header2.xml': rtlPattern1HeaderXml(),
+    'word/footer2.xml': rtlPattern1FooterXml(),
   },
 );
 

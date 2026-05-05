@@ -3084,7 +3084,10 @@ export class PresentationEditor extends EventEmitter {
         x: localX,
         y: localY,
       };
-      const hit = clickToPositionGeometry(context.layout, context.blocks, context.measures, headerPoint) ?? null;
+      const geometryHit =
+        clickToPositionGeometry(context.layout, context.blocks, context.measures, headerPoint) ?? null;
+      const domHit = this.#resolveHeaderFooterDomHit(context, clientX, clientY);
+      const hit = domHit ?? geometryHit;
       if (!hit) {
         return null;
       }
@@ -7834,6 +7837,76 @@ export class PresentationEditor extends EventEmitter {
       column: 0,
       lineIndex: -1,
     };
+  }
+
+  #resolveHeaderFooterDomHit(context: HeaderFooterLayoutContext, clientX: number, clientY: number): PositionHit | null {
+    const layout = this.#layoutState.layout;
+    if (!layout) return null;
+
+    const blockIds = new Set(
+      context.blocks.map((block) => block.id).filter((id): id is string => typeof id === 'string' && id.length > 0),
+    );
+    if (blockIds.size === 0) return null;
+
+    const doc = this.#viewportHost.ownerDocument ?? document;
+    const elementsFromPoint = typeof doc.elementsFromPoint === 'function' ? doc.elementsFromPoint.bind(doc) : null;
+
+    const tryResolve = (element: Element | null, enforceKnownBlockIds = true): PositionHit | null => {
+      const fragmentElement = element instanceof HTMLElement ? element.closest<HTMLElement>('[data-block-id]') : null;
+      const blockId = fragmentElement?.getAttribute('data-block-id') ?? '';
+      if (!fragmentElement) return null;
+      if (enforceKnownBlockIds && !blockIds.has(blockId)) return null;
+
+      const pos = resolvePositionWithinFragmentDomFromDom(fragmentElement, clientX, clientY);
+      if (pos == null) return null;
+
+      return {
+        pos,
+        layoutEpoch: readLayoutEpochFromDomFromDom(fragmentElement, clientX, clientY) ?? layout.layoutEpoch ?? 0,
+        blockId,
+        pageIndex: this.#resolveRenderedPageIndexForElement(fragmentElement),
+        column: 0,
+        lineIndex: -1,
+      };
+    };
+
+    if (elementsFromPoint) {
+      for (const element of elementsFromPoint(clientX, clientY)) {
+        const hit = tryResolve(element, true);
+        if (hit) return hit;
+      }
+
+      // Fallback: when rendered block IDs differ from context block IDs (e.g. split/derived
+      // header/footer fragments), still resolve from the visible fragment under pointer.
+      // Scope to the header/footer surface to avoid matching body fragments at the same
+      // viewport coordinates (header/footer has pointer-events: none, so elementsFromPoint
+      // may return body elements that sit visually behind the header/footer area).
+      for (const element of elementsFromPoint(clientX, clientY)) {
+        if (!element.closest('.superdoc-page-header, .superdoc-page-footer')) continue;
+        const hit = tryResolve(element, false);
+        if (hit) return hit;
+      }
+    }
+
+    // Header/footer surfaces are rendered with pointer-events: none on the container
+    // in presentation mode. In that case elementsFromPoint may miss the intended
+    // fragment chain, so fallback to a geometric fragment pick by bounding box.
+    const surfaceSelector = context.region.kind === 'footer' ? '.superdoc-page-footer' : '.superdoc-page-header';
+    const pageElement = getPageElementByIndex(this.#viewportHost, context.region.pageIndex);
+    const surface = pageElement?.querySelector(surfaceSelector) ?? null;
+    if (surface instanceof HTMLElement) {
+      const fragments = Array.from(surface.querySelectorAll<HTMLElement>('.superdoc-fragment'));
+      for (const fragment of fragments) {
+        const rect = fragment.getBoundingClientRect();
+        if (clientX < rect.left || clientX > rect.right || clientY < rect.top || clientY > rect.bottom) {
+          continue;
+        }
+        const hit = tryResolve(fragment, false);
+        if (hit) return hit;
+      }
+    }
+
+    return null;
   }
 
   #createCollapsedSelectionNearInlineContent(doc: ProseMirrorNode, pos: number): Selection {

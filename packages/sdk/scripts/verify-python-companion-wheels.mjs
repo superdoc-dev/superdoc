@@ -31,6 +31,22 @@ async function listWheelEntries(wheelPath) {
   return JSON.parse(stdout);
 }
 
+async function getWheelEntryMode(wheelPath, entryName) {
+  // Zip files store Unix permissions in the high 16 bits of external_attr.
+  // external_attr >> 16 gives the Unix mode (e.g., 0o755 = 493 decimal).
+  const python = [
+    'import sys, zipfile',
+    'z = zipfile.ZipFile(sys.argv[1])',
+    'info = z.getinfo(sys.argv[2])',
+    'print(info.external_attr >> 16)',
+  ].join('; ');
+  const { stdout } = await execFileAsync('python3', ['-c', python, wheelPath, entryName], {
+    cwd: REPO_ROOT,
+    env: process.env,
+  });
+  return parseInt(stdout.trim(), 10);
+}
+
 async function readWheelMetadata(wheelPath) {
   const python = [
     'import sys, zipfile',
@@ -200,6 +216,16 @@ async function verifySingleCompanion(wheelPath, target, errors) {
   }
   if (binEntries.length !== 1) {
     errors.push(`${target.id}: expected exactly 1 binary in bin/, found ${binEntries.length}: ${binEntries.join(', ')}`);
+  }
+
+  // Verify binary has execute permissions (Unix mode & 0o111 != 0)
+  // Skip for Windows — executability is determined by .exe extension, not file mode.
+  if (!target.id.startsWith('windows-') && binEntries.includes(expectedBinary)) {
+    const mode = await getWheelEntryMode(wheelPath, expectedBinary);
+    const hasExecuteBit = (mode & 0o111) !== 0;
+    if (!hasExecuteBit) {
+      errors.push(`${target.id}: binary missing execute permissions (mode=${mode.toString(8)})`);
+    }
   }
 
   console.log(`  ${target.id} OK: ${path.basename(wheelPath)} (${(wheelStat.size / 1e6).toFixed(1)} MB)`);

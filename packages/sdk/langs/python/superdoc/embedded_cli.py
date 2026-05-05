@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 import platform
 from importlib import resources
 from pathlib import Path
@@ -78,6 +77,11 @@ def _resolve_from_vendor_fallback(target: str) -> Optional[str]:
 
 
 def resolve_embedded_cli_path() -> str:
+    """Resolve the path to the embedded CLI binary for the current platform.
+
+    The binary is made executable at build time via each companion package's
+    setup.py build_py hook, so no runtime chmod is needed.
+    """
     target = _resolve_target()
     if target is None:
         raise SuperDocError(
@@ -101,13 +105,5 @@ def resolve_embedded_cli_path() -> str:
             code='CLI_BINARY_MISSING',
             details={'target': target},
         )
-
-    # Ensure binary is executable on unix
-    if os.name != 'nt':
-        try:
-            mode = os.stat(path).st_mode
-            os.chmod(path, mode | 0o111)
-        except Exception:
-            pass
 
     return path

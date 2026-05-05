@@ -3019,9 +3019,9 @@ export class DomPainter {
       const content = resolvedItem?.content;
 
       // Prefer resolved item metadata over legacy fragment reads
-      const paraContinuesFromPrev = resolvedItem?.continuesFromPrev ?? fragment.continuesFromPrev;
-      const paraContinuesOnNext = resolvedItem?.continuesOnNext ?? fragment.continuesOnNext;
-      const paraMarkerWidth = resolvedItem?.markerWidth ?? fragment.markerWidth;
+      const paraContinuesFromPrev = resolvedItem?.continuesFromPrev;
+      const paraContinuesOnNext = resolvedItem?.continuesOnNext;
+      const paraMarkerWidth = resolvedItem?.markerWidth;
 
       const fragmentEl = this.doc.createElement('div');
       fragmentEl.classList.add(CLASS_NAMES.fragment);
@@ -3181,10 +3181,7 @@ export class DomPainter {
               const markerEl = this.doc!.createElement('span');
               markerEl.classList.add('superdoc-paragraph-marker');
               markerEl.textContent = resolvedMarker.text;
-              applySourceAnchorDataset(
-                markerEl,
-                resolvedMarker.sourceAnchor ?? resolvedItem?.sourceAnchor ?? fragment.sourceAnchor,
-              );
+              applySourceAnchorDataset(markerEl, resolvedMarker.sourceAnchor ?? resolvedItem?.sourceAnchor);
               markerEl.style.pointerEvents = 'none';
 
               markerContainer.style.position = 'relative';
@@ -3232,7 +3229,7 @@ export class DomPainter {
           this.capturePaintSnapshotLine(lineEl, context, {
             inTableFragment: false,
             inTableParagraph: false,
-            sourceAnchor: resolvedItem?.sourceAnchor ?? fragment.sourceAnchor,
+            sourceAnchor: resolvedItem?.sourceAnchor,
           });
           fragmentEl.appendChild(lineEl);
         });
@@ -3399,10 +3396,7 @@ export class DomPainter {
               const markerEl = this.doc!.createElement('span');
               markerEl.classList.add('superdoc-paragraph-marker');
               markerEl.textContent = marker.markerText ?? '';
-              applySourceAnchorDataset(
-                markerEl,
-                block.sourceAnchor ?? resolvedItem?.sourceAnchor ?? fragment.sourceAnchor,
-              );
+              applySourceAnchorDataset(markerEl, block.sourceAnchor ?? resolvedItem?.sourceAnchor);
               markerEl.style.pointerEvents = 'none';
 
               const markerJustification = marker.justification ?? 'left';
@@ -3451,7 +3445,7 @@ export class DomPainter {
           this.capturePaintSnapshotLine(lineEl, context, {
             inTableFragment: false,
             inTableParagraph: false,
-            sourceAnchor: resolvedItem?.sourceAnchor ?? fragment.sourceAnchor,
+            sourceAnchor: resolvedItem?.sourceAnchor,
           });
           fragmentEl.appendChild(lineEl);
         });
@@ -3577,9 +3571,10 @@ export class DomPainter {
       }
 
       // Prefer resolved item metadata over legacy fragment reads
-      const listContinuesFromPrev = resolvedItem?.continuesFromPrev ?? fragment.continuesFromPrev;
-      const listContinuesOnNext = resolvedItem?.continuesOnNext ?? fragment.continuesOnNext;
-      const listMarkerWidth = resolvedItem?.markerWidth ?? fragment.markerWidth;
+      const listContinuesFromPrev = resolvedItem?.continuesFromPrev;
+      const listContinuesOnNext = resolvedItem?.continuesOnNext;
+      // Default to 0 (no marker gutter) when absent — used directly in Math.max below.
+      const listMarkerWidth = resolvedItem?.markerWidth ?? 0;
 
       const fragmentEl = this.doc.createElement('div');
       fragmentEl.classList.add(CLASS_NAMES.fragment, `${CLASS_NAMES.fragment}-list-item`);
@@ -3616,10 +3611,7 @@ export class DomPainter {
 
       const markerEl = this.doc.createElement('span');
       markerEl.classList.add('superdoc-list-marker');
-      applySourceAnchorDataset(
-        markerEl,
-        item.marker.sourceAnchor ?? item.sourceAnchor ?? resolvedItem?.sourceAnchor ?? fragment.sourceAnchor,
-      );
+      applySourceAnchorDataset(markerEl, item.marker.sourceAnchor ?? item.sourceAnchor ?? resolvedItem?.sourceAnchor);
 
       // Track B: Use marker styling from wordLayout if available
       const wordLayout: MinimalWordLayout | undefined = item.paragraph.attrs?.wordLayout as
@@ -3700,7 +3692,7 @@ export class DomPainter {
         this.capturePaintSnapshotLine(lineEl, context, {
           inTableFragment: false,
           inTableParagraph: false,
-          sourceAnchor: resolvedItem?.sourceAnchor ?? fragment.sourceAnchor,
+          sourceAnchor: resolvedItem?.sourceAnchor,
         });
         contentEl.appendChild(lineEl);
       });
@@ -3748,17 +3740,17 @@ export class DomPainter {
       }
 
       // Add PM position markers for transaction targeting
-      const imgPmStart = resolvedItem?.pmStart ?? fragment.pmStart;
+      const imgPmStart = resolvedItem?.pmStart;
       if (imgPmStart != null) {
         fragmentEl.dataset.pmStart = String(imgPmStart);
       }
-      const imgPmEnd = resolvedItem?.pmEnd ?? fragment.pmEnd;
+      const imgPmEnd = resolvedItem?.pmEnd;
       if (imgPmEnd != null) {
         fragmentEl.dataset.pmEnd = String(imgPmEnd);
       }
 
       // Add metadata for interactive image resizing (skip watermarks - they should not be interactive)
-      const imgMetadata = resolvedItem?.metadata ?? fragment.metadata;
+      const imgMetadata = resolvedItem?.metadata;
       if (imgMetadata && !block.attrs?.vmlWatermark) {
         fragmentEl.setAttribute('data-image-metadata', JSON.stringify(imgMetadata));
       }
@@ -6949,7 +6941,7 @@ export class DomPainter {
       return '';
     }
 
-    const zIndex = resolvedZIndex ?? fragment.zIndex;
+    const zIndex = resolvedZIndex;
     return zIndex != null ? String(zIndex) : '';
   }
 
@@ -6968,7 +6960,7 @@ export class DomPainter {
     el.style.width = `${item.width}px`;
     el.dataset.blockId = item.blockId;
     el.dataset.layoutEpoch = String(this.layoutEpoch);
-    applySourceAnchorDataset(el, item.sourceAnchor ?? fragment.sourceAnchor);
+    applySourceAnchorDataset(el, item.sourceAnchor);
     this.applyFragmentWrapperZIndex(el, fragment, item.zIndex);
 
     if (item.fragmentKind === 'image' || item.fragmentKind === 'drawing' || item.fragmentKind === 'table') {
@@ -6992,7 +6984,9 @@ export class DomPainter {
     section?: 'body' | 'header' | 'footer',
   ): void {
     this.applyResolvedFragmentFrame(el, item, fragment, section);
-    const mw = item.markerWidth ?? fragment.markerWidth;
+    // Default to 0 (no marker gutter expansion) when markerWidth is absent — the resolve
+    // stage populates this for list items that have a measured marker (SD-2957).
+    const mw = item.markerWidth ?? 0;
     el.style.left = `${item.x - mw}px`;
     el.style.width = `${item.width + mw}px`;
   }

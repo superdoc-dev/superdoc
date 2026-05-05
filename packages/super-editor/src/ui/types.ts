@@ -1369,4 +1369,48 @@ export interface ViewportHandle {
   scrollIntoView(
     input: import('@superdoc/document-api').ScrollIntoViewInput,
   ): Promise<import('@superdoc/document-api').ScrollIntoViewOutput>;
+  /**
+   * Look up entities painted under a viewport coordinate. Used by
+   * right-click menus and hover tooltips to ask "what's at this point?"
+   * without consumers reading `data-track-change-id` /
+   * `data-comment-ids` off the painted DOM themselves — the
+   * data-attribute layout is an implementation detail of the painter
+   * that consumers shouldn't depend on.
+   *
+   * Returns an ordered array of {@link ViewportEntityHit}, innermost
+   * first. A point can sit inside several entities at once (a tracked
+   * change inside a comment highlight, for example) — every match is
+   * surfaced, not just the topmost. Empty array when the point isn't
+   * over any painted entity, when called outside a browser, or when no
+   * editor is mounted.
+   *
+   * Today the supported entity types are `comment` and `trackedChange`.
+   * `link`, `image`, and `tableCell` are reserved for follow-ups —
+   * adding them is purely additive (new union members), so callers can
+   * `switch` on `hit.type` and the default branch remains forward
+   * compatible.
+   */
+  entityAt(input: ViewportEntityAtInput): ViewportEntityHit[];
 }
+
+/**
+ * Input shape for {@link ViewportHandle.entityAt}. Coordinates are
+ * viewport-relative (the same space `MouseEvent.clientX` /
+ * `clientY` produce, and the same space {@link ViewportRect} reports
+ * back), so a `contextmenu` handler can pass `event.clientX` /
+ * `event.clientY` directly.
+ */
+export interface ViewportEntityAtInput {
+  x: number;
+  y: number;
+}
+
+/**
+ * One hit returned by {@link ViewportHandle.entityAt}.
+ *
+ * The union is intentionally narrow today (`comment` /
+ * `trackedChange`); other entity types land via additive union
+ * members so a `switch` on `hit.type` with a default branch stays
+ * forward compatible.
+ */
+export type ViewportEntityHit = { type: 'comment'; id: string } | { type: 'trackedChange'; id: string };

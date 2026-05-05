@@ -310,3 +310,15 @@ describe('ui.viewport.scrollIntoView', () => {
     ui.destroy();
   });
 });
+
+describe('ui.viewport.entityAt — input validation', () => {
+  it('returns [] for invalid input (missing or non-numeric coordinates)', () => {
+    const { superdoc } = makeStubs();
+    const ui = createSuperDocUI({ superdoc });
+
+    expect(ui.viewport.entityAt({} as never)).toEqual([]);
+    expect(ui.viewport.entityAt({ x: 'a', y: 0 } as never)).toEqual([]);
+
+    ui.destroy();
+  });
+});

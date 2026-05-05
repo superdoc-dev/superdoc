@@ -14,6 +14,7 @@ import type {
   ScrollIntoViewOutput,
   TrackChangesListResult,
 } from '@superdoc/document-api';
+import { collectEntityHitsFromChain } from './entity-at.js';
 import { shallowEqual } from './equality.js';
 import { scrollRangeIntoView } from './scroll-into-view.js';
 import { getSelectionAnchorRect, getSelectionRects } from './selection-rects.js';
@@ -44,6 +45,8 @@ import type {
   ToolbarHandle,
   ToolbarSnapshotSlice,
   UIToolbarCommandState,
+  ViewportEntityAtInput,
+  ViewportEntityHit,
   ViewportGetRectInput,
   ViewportHandle,
   ViewportRect,
@@ -1559,6 +1562,24 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
 
     async scrollIntoView(input: ScrollIntoViewInput): Promise<ScrollIntoViewOutput> {
       return runScrollIntoView(input);
+    },
+
+    // The painter stamps `data-track-change-id` and `data-comment-ids`
+    // on each painted run; reading them back is what consumers were
+    // doing imperatively from `event.target.closest(...)` in
+    // contextmenu handlers. Centralizing the lookup here keeps the
+    // attribute names an implementation detail of the painter and
+    // surfaces a typed `EntityHit[]` consumers can switch on.
+    entityAt(input: ViewportEntityAtInput): ViewportEntityHit[] {
+      if (!input || typeof input.x !== 'number' || typeof input.y !== 'number') return [];
+      // `document.elementFromPoint` is the only entry point — guard
+      // SSR / non-browser stubs explicitly so the call doesn't throw
+      // in test environments without a global `document`.
+      if (typeof document === 'undefined' || typeof document.elementFromPoint !== 'function') {
+        return [];
+      }
+      const startEl = document.elementFromPoint(input.x, input.y);
+      return collectEntityHitsFromChain(startEl);
     },
   };
 

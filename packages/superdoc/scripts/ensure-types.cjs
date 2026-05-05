@@ -123,13 +123,15 @@ if (!hasSuperDocExport) {
   process.exit(1);
 }
 
-// Fix workspace package imports that aren't resolvable by consumers.
-// @superdoc/common is a private workspace package — inline its types in
-// the main entry. Other reachable d.ts files that import from
-// @superdoc/common fall through to the ambient shim block below; those
-// imports surface internal types (Comment, CommentContent, CommentJSON)
-// that are not on the public surface, so collapsing them to `any` via
-// the shim is correct.
+// @superdoc/common is a private workspace package, so consumers can't
+// resolve a bare `from '@superdoc/common'` import. The main entry
+// (superdoc/src/index.d.ts) imports runtime values from it — DOCX/PDF/
+// HTML constants, getFileObject, compareVersions, BlankDOCX (the last
+// from a Vite `?url` import that vite-plugin-dts can't type). Strip
+// that import statement and inline ambient declarations for those
+// values. Type-only imports of @superdoc/common from other dist files
+// are handled separately by the RELOCATION_RULES rewriter below, which
+// maps bare @superdoc/common to dist/shared/common/comments-types.d.ts.
 const hadWorkspaceImport = content.includes('@superdoc/common');
 if (hadWorkspaceImport) {
   // Replace the @superdoc/common import with inline declarations

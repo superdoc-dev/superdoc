@@ -124,6 +124,8 @@ export function CommentComposer({ onPosted }: { onPosted(): void }) {
 
 `captured.target` is the same shape `editor.doc.comments.create({ target })` accepts. `quotedText` gives you the anchored text for previewing in the composer.
 
+See the [selection capture example](https://github.com/superdoc-dev/superdoc/tree/main/examples/editor/custom-ui/selection-capture) for a runnable vanilla version: open a composer, move focus to a textarea, and post against the original selection.
+
 ## Resolve and reopen
 
 ```tsx

@@ -10,7 +10,7 @@
  */
 
 import type { Node as ProseMirrorNode } from 'prosemirror-model';
-import type { SelectionPoint, SelectionTarget } from '@superdoc/document-api';
+import type { SelectionPoint, SelectionTarget, StoryLocator } from '@superdoc/document-api';
 import type { Editor } from '../editors/v1/core/Editor.js';
 import { pmPositionToTextOffset } from '../editors/v1/document-api-adapters/helpers/text-offset-resolver.js';
 import type { ViewportPositionHit } from './types.js';
@@ -19,6 +19,7 @@ interface HostEditor {
   presentationEditor?: {
     posAtCoords?(coords: { clientX: number; clientY: number }): { pos: number; inside: number } | null;
     visibleHost?: HTMLElement;
+    getActiveStoryLocator?(): StoryLocator | null;
   } | null;
 }
 
@@ -66,9 +67,29 @@ export function resolvePositionAt(
   if (!block) return null;
 
   const offset = pmPositionToTextOffset(block.node, block.pos, result.pos);
-  const point: SelectionPoint = { kind: 'text', blockId: block.blockId, offset };
-  const target: SelectionTarget = { kind: 'selection', start: point, end: point };
+  // When the routed editor is a story (header/footer/note), the blockId
+  // resolves against the story's PM doc. Without `story`, downstream
+  // doc-api ops (`insert`, `replace`, etc.) default to body and fail to
+  // locate the block. Mirrors the locator the host editor would use when
+  // routing operations to the active story.
+  const story = readActiveStoryLocator(hostEditor);
+  const point: SelectionPoint = story
+    ? { kind: 'text', blockId: block.blockId, offset, story }
+    : { kind: 'text', blockId: block.blockId, offset };
+  const target: SelectionTarget = story
+    ? { kind: 'selection', start: point, end: point, story }
+    : { kind: 'selection', start: point, end: point };
   return { point, target };
+}
+
+function readActiveStoryLocator(hostEditor: Editor & HostEditor): StoryLocator | null {
+  const presentation = hostEditor.presentationEditor;
+  if (!presentation || typeof presentation.getActiveStoryLocator !== 'function') return null;
+  try {
+    return presentation.getActiveStoryLocator() ?? null;
+  } catch {
+    return null;
+  }
 }
 
 interface BlockMatch {
@@ -100,6 +121,11 @@ function findContainingTextBlock(doc: ProseMirrorNode | undefined, pmPos: number
 }
 
 function readBlockId(node: ProseMirrorNode): string | null {
-  const id = (node.attrs as { id?: unknown })?.id;
+  // Match the canonical fallback used by `selection-info-resolver.ts`:
+  // paragraphs (the most common textblock) only set `sdBlockId`; reading
+  // `attrs.id` alone returns null for every paragraph and silently
+  // bricks `positionAt` for the bulk of click targets.
+  const attrs = (node.attrs ?? {}) as Record<string, unknown>;
+  const id = attrs.sdBlockId ?? attrs.id ?? attrs.blockId;
   return typeof id === 'string' && id.length > 0 ? id : null;
 }

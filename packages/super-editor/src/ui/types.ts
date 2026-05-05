@@ -183,6 +183,15 @@ export interface SuperDocEditorLike {
      * caret position in the editor's PM document.
      */
     posAtCoords?(coords: { clientX: number; clientY: number }): { pos: number; inside: number } | null;
+    /**
+     * The story locator for the routed editor when the user is
+     * inside a header/footer/footnote/endnote, or `null` when the body
+     * editor is active. `ui.viewport.positionAt` threads this onto the
+     * returned `SelectionPoint` / `SelectionTarget` so consumers passing
+     * the target to `editor.doc.insert` / `replace` route to the right
+     * story instead of falling back to body.
+     */
+    getActiveStoryLocator?(): import('@superdoc/document-api').StoryLocator | null;
   } | null;
 }
 

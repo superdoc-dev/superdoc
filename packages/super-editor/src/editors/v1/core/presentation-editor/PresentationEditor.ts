@@ -1364,6 +1364,27 @@ export class PresentationEditor extends EventEmitter {
   }
 
   /**
+   * The {@link StoryLocator} for the currently routed editor, or `null`
+   * when the body editor is active. Notes (footnote/endnote) flow
+   * through the generic story-session manager; headers/footers flow
+   * through the legacy header-footer session. Both are unified here so
+   * external surfaces (selection / positionAt) can thread the locator
+   * onto a {@link SelectionTarget} without reaching into private state.
+   */
+  getActiveStoryLocator(): StoryLocator | null {
+    const storySession = this.#storySessionManager?.getActiveSession();
+    if (storySession) return storySession.locator;
+
+    const session = this.#headerFooterSession?.session;
+    if (!session || session.mode === 'body' || !session.headerFooterRefId) return null;
+    return {
+      kind: 'story',
+      storyType: 'headerFooterPart',
+      refId: session.headerFooterRefId,
+    };
+  }
+
+  /**
    * Exit any active non-body editing surface and restore the body editor.
    *
    * This gives tests and editor-integrated helpers a single public entry point

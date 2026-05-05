@@ -150,18 +150,6 @@
     "ci": false
   },
   {
-    "id": "shim-editor-proofing",
-    "title": "Proofing examples shim",
-    "category": "Editor",
-    "surface": "Spell check",
-    "sourceRepo": "superdoc-dev/superdoc",
-    "sourcePath": "examples/editor/proofing",
-    "docs": "https://docs.superdoc.dev/editor/spell-check/overview",
-    "ci": false,
-    "status": "shim",
-    "redirectTo": "examples/editor/spell-check"
-  },
-  {
     "id": "editor-collaboration-superdoc-yjs",
     "title": "SuperDoc Yjs collaboration",
     "category": "Editor",
@@ -252,26 +240,14 @@
     "ci": true
   },
   {
-    "id": "ai-headless-redlining",
-    "title": "Headless AI redlining",
-    "category": "AI",
-    "surface": "Headless",
+    "id": "document-engine-ai-redlining",
+    "title": "AI redlining (server-side)",
+    "category": "Document Engine",
+    "surface": "AI",
     "sourceRepo": "superdoc-dev/superdoc",
-    "sourcePath": "examples/headless/ai-redlining",
+    "sourcePath": "examples/document-engine/ai-redlining",
     "docs": "https://docs.superdoc.dev/getting-started/ai",
-    "ci": true,
-    "review": "Consolidate with examples/ai/redlining after choosing the browser vs server path."
-  },
-  {
-    "id": "ai-collaborative-agent",
-    "title": "Collaborative AI agent",
-    "category": "AI",
-    "surface": "Agents",
-    "sourceRepo": "superdoc-dev/superdoc",
-    "sourcePath": "examples/ai/collaborative-agent",
-    "docs": "https://docs.superdoc.dev/ai/agents/integrations",
-    "ci": false,
-    "review": "May move to demos because it is a full app workflow."
+    "ci": true
   },
   {
     "id": "advanced-headless-toolbar",
@@ -302,16 +278,5 @@
     "sourcePath": "examples/advanced/extensions/custom-node",
     "docs": "https://docs.superdoc.dev/advanced/custom-extensions",
     "ci": true
-  },
-  {
-    "id": "advanced-grading-papers-comments-annotations",
-    "title": "Grading papers with comments and annotations",
-    "category": "Advanced",
-    "surface": "Review workflows",
-    "sourceRepo": "superdoc-dev/superdoc",
-    "sourcePath": "examples/advanced/grading-papers-comments-annotations",
-    "docs": null,
-    "ci": false,
-    "review": "May move to demos because it is a full app workflow."
   }
 ]

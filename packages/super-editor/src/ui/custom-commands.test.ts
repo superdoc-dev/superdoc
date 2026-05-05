@@ -949,3 +949,348 @@ describe('ui.commands.get', () => {
     ui.destroy();
   });
 });
+
+describe('ui.commands.getContextMenuItems', () => {
+  it('returns [] when no registered command carries a contextMenu field', () => {
+    const { superdoc } = makeStubs();
+    const ui = createSuperDocUI({ superdoc });
+
+    ui.commands.register({ id: 'company.plain', execute: () => true });
+
+    expect(ui.commands.getContextMenuItems()).toEqual([]);
+
+    ui.destroy();
+  });
+
+  it('surfaces contributions, filling defaults for group / order', () => {
+    const { superdoc } = makeStubs();
+    const ui = createSuperDocUI({ superdoc });
+
+    ui.commands.register({
+      id: 'company.acceptChange',
+      execute: () => true,
+      contextMenu: { label: 'Accept suggestion' },
+    });
+
+    expect(ui.commands.getContextMenuItems()).toEqual([
+      { id: 'company.acceptChange', label: 'Accept suggestion', group: 'custom', order: 0 },
+    ]);
+
+    ui.destroy();
+  });
+
+  it('filters items by the when predicate using caller-supplied entities + current selection', () => {
+    const { superdoc } = makeStubs();
+    const ui = createSuperDocUI({ superdoc });
+
+    const whenSpy = vi.fn(({ entities }) => entities.some((e) => e.type === 'trackedChange'));
+    ui.commands.register({
+      id: 'company.acceptChange',
+      execute: () => true,
+      contextMenu: { label: 'Accept suggestion', group: 'review', when: whenSpy },
+    });
+
+    expect(ui.commands.getContextMenuItems({ entities: [{ type: 'comment', id: 'c1' }] })).toEqual([]);
+    expect(ui.commands.getContextMenuItems({ entities: [{ type: 'trackedChange', id: 'tc1' }] })).toHaveLength(1);
+
+    expect(whenSpy).toHaveBeenCalledTimes(2);
+    expect(whenSpy.mock.calls[0]![0].selection).toBeDefined();
+
+    ui.destroy();
+  });
+
+  it('sorts by built-in group order, then order, then registration sequence', () => {
+    const { superdoc } = makeStubs();
+    const ui = createSuperDocUI({ superdoc });
+
+    // Built-in group order: format(0), clipboard(1), review(2), comment(3), link(4)
+    ui.commands.register({
+      id: 'a.review-2',
+      execute: () => true,
+      contextMenu: { label: 'Review B', group: 'review', order: 20 },
+    });
+    ui.commands.register({
+      id: 'b.format-1',
+      execute: () => true,
+      contextMenu: { label: 'Format A', group: 'format', order: 0 },
+    });
+    ui.commands.register({
+      id: 'c.review-1',
+      execute: () => true,
+      contextMenu: { label: 'Review A', group: 'review', order: 10 },
+    });
+    ui.commands.register({
+      id: 'd.review-tie-second',
+      execute: () => true,
+      contextMenu: { label: 'Review C', group: 'review', order: 10 },
+    });
+    ui.commands.register({
+      id: 'e.custom',
+      execute: () => true,
+      contextMenu: { label: 'Z', group: 'company.workflow', order: 0 },
+    });
+
+    expect(ui.commands.getContextMenuItems().map((i) => i.id)).toEqual([
+      'b.format-1',
+      'c.review-1',
+      'd.review-tie-second',
+      'a.review-2',
+      'e.custom',
+    ]);
+
+    ui.destroy();
+  });
+
+  it('plain custom commands (no contextMenu) do not anchor a custom group rank', () => {
+    const { superdoc } = makeStubs();
+    const ui = createSuperDocUI({ superdoc });
+
+    // Register a plain command first (seq 0) — it has no contextMenu
+    // and must not claim the 'custom' fallback group's rank anchor.
+    ui.commands.register({ id: 'a.plain', execute: () => true });
+    // Register a workflow contribution (seq 1).
+    ui.commands.register({
+      id: 'b.workflow',
+      execute: () => true,
+      contextMenu: { label: 'Workflow A', group: 'company.workflow' },
+    });
+    // Register a 'custom' fallback group contribution (seq 2).
+    ui.commands.register({
+      id: 'c.custom',
+      execute: () => true,
+      contextMenu: { label: 'Default A' },
+    });
+
+    // 'company.workflow' (seq 1) must rank before 'custom' (seq 2).
+    // If the plain seq=0 command anchored 'custom', the order would
+    // flip.
+    expect(ui.commands.getContextMenuItems().map((i) => i.id)).toEqual(['b.workflow', 'c.custom']);
+
+    ui.destroy();
+  });
+
+  it('preserves a group rank anchor when one contributor is replaced and another remains', () => {
+    const { superdoc } = makeStubs();
+    const ui = createSuperDocUI({ superdoc });
+
+    // Group 'workflow' opens with two contributors at seq 0 and seq 1.
+    ui.commands.register({
+      id: 'wf.first',
+      execute: () => true,
+      contextMenu: { label: 'WF 1', group: 'company.workflow', order: 0 },
+    });
+    ui.commands.register({
+      id: 'wf.second',
+      execute: () => true,
+      contextMenu: { label: 'WF 2', group: 'company.workflow', order: 1 },
+    });
+    // A second custom group registers at seq 2.
+    ui.commands.register({
+      id: 'rev.first',
+      execute: () => true,
+      contextMenu: { label: 'Rev 1', group: 'company.review-extras', order: 0 },
+    });
+
+    // Now replace `wf.first` — the new seq becomes 3, but `wf.second`
+    // still carries the original seq 1, so the workflow group's
+    // anchor must stay at 1 and render before 'review-extras' (seq 2).
+    ui.commands.register({
+      id: 'wf.first',
+      execute: () => true,
+      contextMenu: { label: 'WF 1 (replaced)', group: 'company.workflow', order: 0 },
+    });
+
+    expect(ui.commands.getContextMenuItems().map((i) => i.id)).toEqual(['wf.first', 'wf.second', 'rev.first']);
+
+    ui.destroy();
+  });
+
+  it('hides items whose when predicate throws and logs the error once per distinct message', () => {
+    const { superdoc } = makeStubs();
+    const ui = createSuperDocUI({ superdoc });
+
+    ui.commands.register({
+      id: 'company.flaky',
+      execute: () => true,
+      contextMenu: {
+        label: 'Flaky',
+        when: () => {
+          throw new Error('boom');
+        },
+      },
+    });
+
+    expect(ui.commands.getContextMenuItems()).toEqual([]);
+    expect(ui.commands.getContextMenuItems()).toEqual([]);
+    expect(errorSpy).toHaveBeenCalledTimes(1);
+
+    ui.destroy();
+  });
+
+  it("refuses 'getContextMenuItems' as a custom command id (Proxy collision)", () => {
+    const { superdoc } = makeStubs();
+    const ui = createSuperDocUI({ superdoc });
+
+    const reg = ui.commands.register({
+      id: 'getContextMenuItems',
+      execute: () => true,
+      contextMenu: { label: 'Should not register' },
+    });
+
+    expect(warnSpy).toHaveBeenCalled();
+    // Refused registrations get a no-op handle, so the contribution
+    // never enters the registry.
+    expect(ui.commands.getContextMenuItems()).toEqual([]);
+    reg.unregister();
+
+    ui.destroy();
+  });
+});
+
+describe('ui.commands.register — shortcut field', () => {
+  function makeStubsWithHost() {
+    const stubs = makeStubs();
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    // Preserve any existing presentationEditor surface the toolbar
+    // resolver expects (`getActiveEditor`) and add the `visibleHost`
+    // that the keydown listener scopes to.
+    const existing =
+      (stubs.editor as unknown as { presentationEditor?: Record<string, unknown> }).presentationEditor ?? {};
+    (stubs.editor as unknown as { presentationEditor: Record<string, unknown> }).presentationEditor = {
+      getActiveEditor: () => stubs.editor,
+      ...existing,
+      visibleHost: host,
+    };
+    return { ...stubs, host };
+  }
+
+  function fireKey(target: Node, init: Partial<KeyboardEventInit> & { key: string }) {
+    const ev = new KeyboardEvent('keydown', { ...init, bubbles: true, cancelable: true });
+    target.dispatchEvent(ev);
+    return ev;
+  }
+
+  it('dispatches the registered command when the matching combo fires inside the host', () => {
+    const { superdoc, host } = makeStubsWithHost();
+    const ui = createSuperDocUI({ superdoc });
+
+    const execute = vi.fn(() => true);
+    ui.commands.register({ id: 'company.insertClause', execute, shortcut: 'Mod-Shift-C' });
+
+    fireKey(host, { key: 'c', ctrlKey: true, shiftKey: true });
+
+    expect(execute).toHaveBeenCalledTimes(1);
+    host.remove();
+    ui.destroy();
+  });
+
+  it("dispatches when focus is in the routed editor's hidden PM DOM (the normal editing path)", () => {
+    const { superdoc, editor, host } = makeStubsWithHost();
+    // Mount the hidden ProseMirror DOM directly under document.body
+    // (mirroring how PresentationEditor appends the hidden host outside
+    // the visible host) so a click-into-document keypress lands here.
+    const pmDom = document.createElement('div');
+    document.body.appendChild(pmDom);
+    (editor as unknown as { view: { dom: HTMLElement } }).view = { dom: pmDom };
+    const ui = createSuperDocUI({ superdoc });
+
+    const execute = vi.fn(() => true);
+    ui.commands.register({ id: 'company.action', execute, shortcut: 'Mod-K' });
+
+    fireKey(pmDom, { key: 'k', ctrlKey: true });
+
+    expect(execute).toHaveBeenCalledTimes(1);
+    pmDom.remove();
+    host.remove();
+    ui.destroy();
+  });
+
+  it('does not dispatch when focus is outside the painted host', () => {
+    const { superdoc, host } = makeStubsWithHost();
+    const ui = createSuperDocUI({ superdoc });
+
+    const execute = vi.fn(() => true);
+    ui.commands.register({ id: 'company.insertClause', execute, shortcut: 'Mod-Shift-C' });
+
+    const outside = document.createElement('input');
+    document.body.appendChild(outside);
+    fireKey(outside, { key: 'c', ctrlKey: true, shiftKey: true });
+
+    expect(execute).not.toHaveBeenCalled();
+    outside.remove();
+    host.remove();
+    ui.destroy();
+  });
+
+  it('warns and replaces when two registrations claim the same shortcut', () => {
+    const { superdoc, host } = makeStubsWithHost();
+    const ui = createSuperDocUI({ superdoc });
+
+    const firstExecute = vi.fn(() => true);
+    const secondExecute = vi.fn(() => true);
+    ui.commands.register({ id: 'company.first', execute: firstExecute, shortcut: 'Mod-K' });
+    ui.commands.register({ id: 'company.second', execute: secondExecute, shortcut: 'Mod-K' });
+
+    expect(warnSpy).toHaveBeenCalled();
+
+    fireKey(host, { key: 'k', ctrlKey: true });
+    expect(firstExecute).not.toHaveBeenCalled();
+    expect(secondExecute).toHaveBeenCalledTimes(1);
+
+    host.remove();
+    ui.destroy();
+  });
+
+  it('drops the shortcut on unregister so later keypresses are no-ops', () => {
+    const { superdoc, host } = makeStubsWithHost();
+    const ui = createSuperDocUI({ superdoc });
+
+    const execute = vi.fn(() => true);
+    const reg = ui.commands.register({ id: 'company.toggle', execute, shortcut: 'Mod-J' });
+
+    fireKey(host, { key: 'j', ctrlKey: true });
+    expect(execute).toHaveBeenCalledTimes(1);
+
+    reg.unregister();
+    fireKey(host, { key: 'j', ctrlKey: true });
+    expect(execute).toHaveBeenCalledTimes(1);
+
+    host.remove();
+    ui.destroy();
+  });
+
+  it('accepts a string[] for multiple shortcuts on the same command', () => {
+    const { superdoc, host } = makeStubsWithHost();
+    const ui = createSuperDocUI({ superdoc });
+
+    const execute = vi.fn(() => true);
+    ui.commands.register({
+      id: 'company.action',
+      execute,
+      shortcut: ['Mod-1', 'Mod-Shift-1'],
+    });
+
+    fireKey(host, { key: '1', ctrlKey: true });
+    fireKey(host, { key: '1', ctrlKey: true, shiftKey: true });
+
+    expect(execute).toHaveBeenCalledTimes(2);
+    host.remove();
+    ui.destroy();
+  });
+
+  it('warns on a malformed shortcut and ignores it', () => {
+    const { superdoc, host } = makeStubsWithHost();
+    const ui = createSuperDocUI({ superdoc });
+
+    const execute = vi.fn(() => true);
+    ui.commands.register({ id: 'company.bad', execute, shortcut: 'Mod-Shift' });
+
+    expect(warnSpy).toHaveBeenCalled();
+    fireKey(host, { key: 'Shift', ctrlKey: true });
+    expect(execute).not.toHaveBeenCalled();
+
+    host.remove();
+    ui.destroy();
+  });
+});

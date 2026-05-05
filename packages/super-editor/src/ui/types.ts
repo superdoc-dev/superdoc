@@ -169,6 +169,14 @@ export interface SuperDocEditorLike {
       width: number;
       height: number;
     }>;
+    /**
+     * Painted-DOM host element. `ui.viewport.entityAt` reads it to
+     * confirm the hit returned by `document.elementFromPoint` lives
+     * inside this controller's editor — without that scope check, a
+     * page mounting two SuperDoc instances would return entity ids
+     * from the wrong instance.
+     */
+    visibleHost?: HTMLElement;
   } | null;
 }
 
@@ -767,12 +775,8 @@ export interface SelectionHandle {
    * The returned handle is a frozen value object, safe to store
    * on a React ref or in component state across renders.
    *
-   * Visual restore (re-focus the editor and highlight the captured
-   * range when the composer closes) is intentionally NOT on this
-   * surface today: the public Document API has no `selection.set`
-   * primitive yet, and `editor.doc.*` is the contract this
-   * controller routes through. A `restore()` method lands once the
-   * doc-api primitive does.
+   * Pair with {@link restore} to put the visible selection back when
+   * the composer closes.
    */
   capture(): SelectionCapture | null;
   /**
@@ -818,7 +822,52 @@ export interface SelectionHandle {
    * `'union'`. Returns `null` when there are no rects.
    */
   getAnchorRect(options?: SelectionAnchorRectOptions, capture?: SelectionCapture | null): ViewportRect | null;
+  /**
+   * Inverse of {@link capture}. Set the editor's visible selection to
+   * the range a capture froze. Closes the round-trip a sidebar
+   * composer needs: capture on open, post on submit, restore on close
+   * so the user sees the editor with the same range highlighted.
+   *
+   * Returns a result object rather than `void` because captures go
+   * stale: an edit between capture-time and call-time can move or
+   * delete the captured block, the editor can switch into viewing
+   * mode, or the captured target may have been a non-text selection
+   * with no addressable range. The `reason` discriminator lets
+   * consumers distinguish "the editor hasn't mounted yet" from "the
+   * doc has changed under us" without inspecting state separately.
+   *
+   * Side effect: a successful restore also moves browser focus into
+   * the editor's painted host (via the underlying `setTextSelection`
+   * command). That is the right behavior for the canonical composer
+   * flow — the user submits and expects to keep typing — but it does
+   * mean callers triggering `restore` from contexts where focus
+   * shouldn't move (e.g. a "preview" toggle that should leave focus
+   * on a sidebar control) need to gate the call themselves.
+   *
+   * Cross-surface limitation: a capture taken in a header / footer /
+   * footnote / endnote restores correctly while the user remains in
+   * that story (the routed editor still owns the captured block ids).
+   * Once focus has moved to the body, the routed editor falls back
+   * and the captured non-body block ids no longer resolve there;
+   * `restore` returns `{ success: false, reason: 'stale' }` rather
+   * than placing the selection on the wrong surface. Same posture as
+   * {@link getRects}.
+   */
+  restore(capture: SelectionCapture): SelectionRestoreResult;
 }
+
+/**
+ * Result of {@link SelectionHandle.restore}.
+ *
+ * `'not-ready'` — no editor mounted (SSR, post-destroy).
+ * `'read-only'` — editor is in viewing mode; selection mutation refused.
+ * `'missing-target'` — capture had no addressable text target.
+ * `'stale'` — captured block ids don't resolve in the current document
+ * (the doc was edited or swapped between capture and restore).
+ */
+export type SelectionRestoreResult =
+  | { success: true }
+  | { success: false; reason: 'not-ready' | 'read-only' | 'missing-target' | 'stale' };
 
 /**
  * Options for {@link SelectionHandle.getAnchorRect}.
@@ -841,8 +890,8 @@ export interface SelectionAnchorRectOptions {
  *
  * Same shape as {@link SelectionSlice}; declared as its own type
  * so consumers can name the captured value in their component
- * state (`useState<SelectionCapture | null>(null)`) and so the
- * planned `restore(capture)` follow-up has a stable input type.
+ * state (`useState<SelectionCapture | null>(null)`) and so
+ * {@link SelectionHandle.restore} has a stable input type.
  *
  * The runtime value is recursively `Object.freeze`d, so assigning
  * into `captured.target.segments[0].range.start` or
@@ -998,6 +1047,37 @@ export type CommandsHandle = {
    * tests, internal command pipelines.
    */
   require(id: string): DynamicCommandHandle;
+
+  /**
+   * Collect the right-click context-menu items contributed by custom
+   * commands, filtered by their `when` predicate and sorted by
+   * `(group, order, registration time)`. Returns `[]` when no
+   * registered command carries a `contextMenu` field or none survives
+   * the predicate.
+   *
+   * The consumer renders the menu themselves. The typical flow:
+   *
+   * ```ts
+   * scope.on(editorHost, 'contextmenu', (event) => {
+   *   event.preventDefault();
+   *   const entities = ui.viewport.entityAt({ x: event.clientX, y: event.clientY });
+   *   const items = ui.commands.getContextMenuItems({ entities });
+   *   renderMenu(items, event.clientX, event.clientY);
+   * });
+   * ```
+   *
+   * `entities` defaults to `[]` so menus that aren't point-anchored
+   * (keyboard shortcut, app-bar trigger) still resolve a useful
+   * subset. The current selection slice is read from controller state
+   * automatically.
+   *
+   * Built-in items are NOT in this list: SuperDoc's built-in
+   * context-menu extension still owns Bold / Italic / Copy / Paste
+   * when enabled. This surface exists for apps that disable that
+   * extension (`disableContextMenu: true`) and roll their own menu —
+   * built-in entries belong to the consumer's renderer at that point.
+   */
+  getContextMenuItems(input?: { entities?: ViewportEntityHit[] }): ContextMenuItem[];
 };
 
 /**
@@ -1104,7 +1184,104 @@ export type CustomCommandRegistration<TPayload = void, TValue = unknown> = {
    * a console warning.
    */
   override?: boolean;
+  /**
+   * Optional contribution to the right-click context menu. When set,
+   * the command shows up in {@link CommandsHandle.getContextMenuItems}
+   * results (filtered by `when`) so a custom context-menu UI can
+   * render and dispatch it. Consumers using SuperDoc's built-in
+   * context-menu extension keep using that — this surface is for
+   * apps that turn the built-in off (`disableContextMenu`) and roll
+   * their own menu without losing the contribution model.
+   */
+  contextMenu?: ContextMenuContribution;
+  /**
+   * Optional keyboard shortcut(s) bound to this command. Follows the
+   * ProseMirror / Tiptap convention: `'Mod-K'`, `'Mod-Shift-C'`,
+   * `'Alt-Enter'`. `Mod` is the platform-correct meta key (Cmd on
+   * macOS, Ctrl elsewhere). Pass an array for multiple bindings on
+   * the same command.
+   *
+   * The controller installs a single keydown listener on the editor
+   * host; matched shortcuts dispatch through the same path
+   * `ui.commands.get(id).execute()` uses, so the consumer never has
+   * to wire keyboard plumbing by hand. Shortcuts only fire while
+   * focus is inside the editor, so a Cmd-B in a sidebar input does
+   * not trigger Bold on the document.
+   *
+   * Custom-vs-custom collisions: when two registrations claim the
+   * same shortcut, the later one wins and the controller logs a
+   * warning. Built-in editor keymaps (Bold's Cmd-B, etc.) are owned
+   * by the editor's own keymap plugin and are not in scope for
+   * collision detection — registering `'Mod-B'` will fire alongside
+   * Bold, not in place of it.
+   */
+  shortcut?: string | string[];
 };
+
+/**
+ * Right-click context-menu contribution attached to a custom command.
+ *
+ * The consumer renders the menu themselves; SuperDoc just collects the
+ * items, applies `when`, and sorts. Click handling stays on the
+ * consumer's side and dispatches via `ui.commands.get(id).execute()`.
+ */
+export interface ContextMenuContribution {
+  /** Display label for the item. */
+  label: string;
+  /**
+   * Logical group for sorting. Lets a contribution slot next to
+   * related built-ins. Custom group names are accepted; unknown groups
+   * are placed after the built-in groups in registration order. Built-in
+   * group ids: `'format'`, `'clipboard'`, `'review'`, `'comment'`,
+   * `'link'`.
+   */
+  group?: string;
+  /**
+   * Sort order within the group. Lower runs earlier. Defaults to `0`;
+   * ties are broken by registration order so the rendered menu is
+   * stable across snapshots.
+   */
+  order?: number;
+  /**
+   * Predicate scoping the item to specific contexts (the click landed
+   * on a tracked change, the selection is non-empty, etc.). Receives
+   * the entities under the click coordinate (call
+   * {@link ViewportHandle.entityAt} to populate them) and the current
+   * selection slice. Omitted predicate means "always applicable".
+   *
+   * Errors thrown from `when` are caught and the item is hidden for
+   * that query — same posture as `getState` on a custom command.
+   */
+  when?: (input: ContextMenuWhenInput) => boolean;
+}
+
+/** Input passed to {@link ContextMenuContribution.when}. */
+export interface ContextMenuWhenInput {
+  /**
+   * Entities under the right-click point, from
+   * {@link ViewportHandle.entityAt}. Empty array when the consumer
+   * didn't pass entities (e.g. the menu opens from a keyboard shortcut
+   * rather than a click) or when the point is over no painted entity.
+   */
+  entities: ViewportEntityHit[];
+  /** Current selection slice. Mirrors `state.selection`. */
+  selection: SelectionSlice;
+}
+
+/**
+ * One item returned by {@link CommandsHandle.getContextMenuItems}.
+ *
+ * The `id` matches a registered custom command; consumers dispatch on
+ * click via `ui.commands.get(item.id).execute()`. `group` and `order`
+ * are surfaced (rather than collapsed) so the consumer's renderer can
+ * insert separators between groups.
+ */
+export interface ContextMenuItem {
+  id: string;
+  label: string;
+  group: string;
+  order: number;
+}
 
 /** Return value from {@link CommandsHandle.register}. */
 export type CustomCommandRegistrationResult<TPayload, TValue> = {
@@ -1369,4 +1546,54 @@ export interface ViewportHandle {
   scrollIntoView(
     input: import('@superdoc/document-api').ScrollIntoViewInput,
   ): Promise<import('@superdoc/document-api').ScrollIntoViewOutput>;
+  /**
+   * Look up entities painted under a viewport coordinate. Used by
+   * right-click menus and hover tooltips to ask "what's at this point?"
+   * without consumers reading `data-track-change-id` /
+   * `data-comment-ids` off the painted DOM themselves; the
+   * data-attribute layout is an implementation detail of the painter
+   * that consumers shouldn't depend on.
+   *
+   * Returns an ordered array of {@link ViewportEntityHit}, innermost
+   * first. A point can sit inside several entities at once (a tracked
+   * change inside a comment highlight, for example); every match is
+   * surfaced, not just the topmost. Empty array when the point isn't
+   * over any painted entity, when called outside a browser, or when no
+   * editor is mounted.
+   *
+   * Scoped to the controller's own editor: hits are only returned when
+   * the point lands inside this editor's painted host. A page mounting
+   * two SuperDoc instances therefore can't have one controller return
+   * ids from the other's DOM, and post-destroy calls return `[]`
+   * rather than stale ids from cached painted nodes.
+   *
+   * Today the supported entity types are `comment` and `trackedChange`.
+   * `link`, `image`, and `tableCell` are reserved for follow-ups;
+   * adding them is purely additive (new union members), so callers can
+   * `switch` on `hit.type` and the default branch remains forward
+   * compatible.
+   */
+  entityAt(input: ViewportEntityAtInput): ViewportEntityHit[];
 }
+
+/**
+ * Input shape for {@link ViewportHandle.entityAt}. Coordinates are
+ * viewport-relative (the same space `MouseEvent.clientX` /
+ * `clientY` produce, and the same space {@link ViewportRect} reports
+ * back), so a `contextmenu` handler can pass `event.clientX` /
+ * `event.clientY` directly.
+ */
+export interface ViewportEntityAtInput {
+  x: number;
+  y: number;
+}
+
+/**
+ * One hit returned by {@link ViewportHandle.entityAt}.
+ *
+ * The union is intentionally narrow today (`comment` /
+ * `trackedChange`); other entity types land via additive union
+ * members so a `switch` on `hit.type` with a default branch stays
+ * forward compatible.
+ */
+export type ViewportEntityHit = { type: 'comment'; id: string } | { type: 'trackedChange'; id: string };

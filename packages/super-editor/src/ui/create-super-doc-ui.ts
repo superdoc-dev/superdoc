@@ -14,15 +14,19 @@ import type {
   ScrollIntoViewOutput,
   TrackChangesListResult,
 } from '@superdoc/document-api';
+import { collectEntityHitsFromChain } from './entity-at.js';
 import { shallowEqual } from './equality.js';
+import { shortcutFromEvent } from './keyboard-shortcuts.js';
 import { scrollRangeIntoView } from './scroll-into-view.js';
 import { getSelectionAnchorRect, getSelectionRects } from './selection-rects.js';
+import { restoreSelection } from './selection-restore.js';
 import { createCustomCommandsRegistry } from './custom-commands.js';
 import { createScope } from './scope.js';
 import type {
   CommandHandle,
   CommandsHandle,
   CommentsHandle,
+  ContextMenuItem,
   DocumentExportInput,
   DocumentHandle,
   DocumentSlice,
@@ -44,6 +48,8 @@ import type {
   ToolbarHandle,
   ToolbarSnapshotSlice,
   UIToolbarCommandState,
+  ViewportEntityAtInput,
+  ViewportEntityHit,
   ViewportGetRectInput,
   ViewportHandle,
   ViewportRect,
@@ -1016,6 +1022,60 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     customCommandsRegistry.destroy();
   });
 
+  // Keyboard shortcut dispatch for custom commands registered with a
+  // `shortcut` field. Two important shapes:
+  //
+  // - Bubble phase. ProseMirror's keymap plugin is bubble-phase too
+  //   and `eventBelongsToView` bails on `event.defaultPrevented`. A
+  //   capture-phase listener that calls preventDefault would silently
+  //   suppress every built-in editor keymap (Bold, Enter, Backspace),
+  //   contradicting the documented "fires alongside built-ins"
+  //   contract. Running at bubble lets the editor's own keymap
+  //   process the event first; we dispatch the custom command after.
+  //
+  // - Scope expanded to the editor's hidden ProseMirror DOM in
+  //   addition to the painted host. Once the user clicks the document,
+  //   native focus moves to the hidden contenteditable that PM owns,
+  //   which lives outside `visibleHost`. Filtering only on
+  //   `host.contains(target)` would drop every keystroke from the
+  //   normal editing path.
+  if (typeof globalThis !== 'undefined' && (globalThis as { document?: Document }).document) {
+    const dom = (globalThis as { document: Document }).document;
+    const onKeyDown = (event: Event) => {
+      const ke = event as KeyboardEvent;
+      // Re-resolve every event because the editor mount can happen
+      // after `createSuperDocUI` runs; caching a missing host at
+      // construction time would never recover.
+      const editor = resolveRoutedEditor(superdoc) as
+        | (SuperDocEditorLike & {
+            view?: { dom?: HTMLElement };
+            presentationEditor?: { visibleHost?: HTMLElement };
+          })
+        | null;
+      if (!editor) return;
+      const target = ke.target as Node | null;
+      if (!target) return;
+      const inHost = editor.presentationEditor?.visibleHost?.contains(target) === true;
+      const inPmDom = editor.view?.dom?.contains(target) === true;
+      if (!inHost && !inPmDom) return;
+      const combo = shortcutFromEvent(ke);
+      if (!combo) return;
+      const id = customCommandsRegistry.resolveShortcut(combo);
+      if (!id) return;
+      // Dispatch through the same path `ui.commands.get(id).execute()`
+      // uses. preventDefault runs AFTER dispatch so PM's keymap (which
+      // already ran in this bubble pass) isn't suppressed by an
+      // earlier defaultPrevented check; the call still blocks browser
+      // defaults that haven't run yet (the URL-bar shortcut, etc.).
+      customCommandsRegistry.execute(id);
+      ke.preventDefault();
+    };
+    dom.addEventListener('keydown', onKeyDown);
+    teardown.push(() => {
+      dom.removeEventListener('keydown', onKeyDown);
+    });
+  }
+
   /**
    * Single dispatch path for every `execute`-shaped surface on the
    * controller (`ui.toolbar.execute(id)`, `ui.commands.bold.execute()`,
@@ -1160,6 +1220,15 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
             throw new Error(`[superdoc/ui] commands.require: unknown command id "${id}".`);
           }
           return handle;
+        };
+      }
+      // Custom-UI consumers building their own context menu pull
+      // contributed items here. Computed against the current snapshot
+      // (so `selection` matches what observers just saw) and the
+      // caller-supplied entities from `ui.viewport.entityAt`.
+      if (prop === 'getContextMenuItems') {
+        return (input?: { entities?: ViewportEntityHit[] }): ContextMenuItem[] => {
+          return customCommandsRegistry.getContextMenuItems(computeState(), input?.entities ?? []);
         };
       }
       // Custom-registered ids surface a typed handle from the registry.
@@ -1560,6 +1629,35 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     async scrollIntoView(input: ScrollIntoViewInput): Promise<ScrollIntoViewOutput> {
       return runScrollIntoView(input);
     },
+
+    // The painter stamps `data-track-change-id` and `data-comment-ids`
+    // on each painted run; reading them back is what consumers were
+    // doing imperatively from `event.target.closest(...)` in
+    // contextmenu handlers. Centralizing the lookup here keeps the
+    // attribute names an implementation detail of the painter and
+    // surfaces a typed `EntityHit[]` consumers can switch on.
+    entityAt(input: ViewportEntityAtInput): ViewportEntityHit[] {
+      if (!input || typeof input.x !== 'number' || typeof input.y !== 'number') return [];
+      // The DOM `document` is reached through `globalThis.document`
+      // because the local `document: DocumentHandle` declared below
+      // would otherwise shadow it for type-checking. Guard SSR /
+      // non-browser stubs explicitly so the call doesn't throw in
+      // test environments without a global `document`.
+      const dom = (globalThis as { document?: Document }).document;
+      if (!dom || typeof dom.elementFromPoint !== 'function') {
+        return [];
+      }
+      // Scope the lookup to this controller's editor: a page mounting
+      // two SuperDoc instances would otherwise have one's entityAt
+      // return ids from the other's painted DOM. A null host (no
+      // editor mounted, post-destroy, SSR test stub) returns [].
+      const editor = resolveHostEditor(superdoc);
+      const host = editor?.presentationEditor?.visibleHost;
+      if (!host) return [];
+      const startEl = dom.elementFromPoint(input.x, input.y);
+      if (!startEl || !host.contains(startEl)) return [];
+      return collectEntityHitsFromChain(startEl);
+    },
   };
 
   // ---- ui.selection ------------------------------------------------------
@@ -1635,6 +1733,16 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
         options,
         capture,
       );
+    },
+    restore(capture) {
+      // Routed editor: same rationale as `getRects(capture)` — block
+      // ids in a non-body capture only resolve in their own story
+      // editor's PM doc. When focus has moved to the body by call
+      // time, the routed editor is body and resolution returns
+      // `'stale'` rather than placing the selection on the wrong
+      // surface.
+      const editor = resolveRoutedEditor(superdoc);
+      return restoreSelection(editor as unknown as Parameters<typeof restoreSelection>[0], capture);
     },
   };
 

@@ -310,3 +310,55 @@ describe('ui.viewport.scrollIntoView', () => {
     ui.destroy();
   });
 });
+
+describe('ui.viewport.entityAt — host scoping', () => {
+  it('returns [] for invalid input (missing or non-numeric coordinates)', () => {
+    const { superdoc } = makeStubs();
+    const ui = createSuperDocUI({ superdoc });
+
+    expect(ui.viewport.entityAt({} as never)).toEqual([]);
+    expect(ui.viewport.entityAt({ x: 'a', y: 0 } as never)).toEqual([]);
+
+    ui.destroy();
+  });
+
+  it('returns [] when no editor is mounted (no presentationEditor.visibleHost)', () => {
+    const { superdoc } = makeStubs();
+    // Stub editor has no `visibleHost` on its presentationEditor —
+    // simulating SSR / non-paginated mounts and post-destroy state.
+    const ui = createSuperDocUI({ superdoc });
+
+    expect(ui.viewport.entityAt({ x: 10, y: 10 })).toEqual([]);
+
+    ui.destroy();
+  });
+
+  it('returns [] when the hit element is outside the controller`s painted host', () => {
+    const { superdoc } = makeStubs();
+    // Mount a fake host on the stub presentation editor and put the
+    // "hit" element OUTSIDE that host — the equivalent of a second
+    // SuperDoc instance painting the cursor target.
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    (
+      superdoc.activeEditor as unknown as { presentationEditor: { visibleHost: HTMLElement } }
+    ).presentationEditor.visibleHost = host;
+
+    const outside = document.createElement('span');
+    outside.dataset.commentIds = 'c-foreign';
+    document.body.appendChild(outside);
+
+    const docAny = document as unknown as { elementFromPoint?: (x: number, y: number) => Element | null };
+    const original = docAny.elementFromPoint;
+    docAny.elementFromPoint = () => outside;
+
+    const ui = createSuperDocUI({ superdoc });
+    expect(ui.viewport.entityAt({ x: 0, y: 0 })).toEqual([]);
+
+    if (original) docAny.elementFromPoint = original;
+    else delete docAny.elementFromPoint;
+    outside.remove();
+    host.remove();
+    ui.destroy();
+  });
+});

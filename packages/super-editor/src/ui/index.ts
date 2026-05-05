@@ -95,11 +95,15 @@ export type {
   SelectionAnchorRectOptions,
   SelectionCapture,
   SelectionHandle,
+  SelectionRestoreResult,
   SelectionSlice,
 
   // Toolbar + commands
   CommandHandle,
   CommandsHandle,
+  ContextMenuContribution,
+  ContextMenuItem,
+  ContextMenuWhenInput,
   CustomCommandHandle,
   CustomCommandHandleState,
   CustomCommandRegistration,
@@ -120,6 +124,8 @@ export type {
   TrackChangesSlice,
 
   // Viewport
+  ViewportEntityAtInput,
+  ViewportEntityHit,
   ViewportGetRectInput,
   ViewportHandle,
   ViewportRect,

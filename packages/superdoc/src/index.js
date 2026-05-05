@@ -28,7 +28,6 @@ import {
   // Vue components
   SuperEditor,
   SuperInput,
-  BasicUpload,
   Toolbar,
   AIWriter,
   ContextMenu,
@@ -289,7 +288,6 @@ export {
   // Vue components
   SuperEditor,
   SuperInput,
-  BasicUpload,
   Toolbar,
   AIWriter,
   ContextMenu,

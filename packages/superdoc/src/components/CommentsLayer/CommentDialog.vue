@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref, getCurrentInstance, onMounted, nextTick, watch } from 'vue';
+import { computed, ref, reactive, getCurrentInstance, onMounted, nextTick, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useCommentsStore } from '@superdoc/stores/comments-store';
 import { useSuperdocStore } from '@superdoc/stores/superdoc-store';
@@ -384,10 +384,36 @@ const checkOverflow = () => {
 watch(parentBodyRef, () => {
   nextTick(checkOverflow);
 });
+
+// Track truncation state and overflow for each reply separately.
+const replyExpanded = reactive({});
+const replyOverflowing = reactive({});
+const replyBodyRefs = reactive({});
+
+const setReplyBodyRef = (commentId) => (el) => {
+  if (el) {
+    replyBodyRefs[commentId] = el;
+    nextTick(() => checkReplyOverflow(commentId));
+  } else {
+    delete replyBodyRefs[commentId];
+  }
+};
+const checkReplyOverflow = (commentId) => {
+  if (replyExpanded[commentId]) return;
+  const el = replyBodyRefs[commentId];
+  replyOverflowing[commentId] = el ? el.scrollHeight > el.clientHeight + 1 : false;
+};
+const toggleReplyTruncation = (commentId) => {
+  replyExpanded[commentId] = !replyExpanded[commentId];
+  nextTick(() => emit('resize'));
+};
+
 // Reset truncation, thread collapse, and reply state when card becomes inactive
 watch(isDialogActive, (active) => {
   if (!active) {
     textExpanded.value = false;
+    Object.keys(replyExpanded).forEach((k) => delete replyExpanded[k]);
+    Object.keys(replyOverflowing).forEach((k) => delete replyOverflowing[k]);
     threadExpanded.value = false;
     isReplying.value = false;
     nextTick(() => emit('resize'));
@@ -885,8 +911,8 @@ watch(editingCommentId, (commentId) => {
         <div class="card-section comment-body" v-if="comment.trackedChange">
           <div
             class="tracked-change"
-            :class="{ 'is-truncated': shouldTruncate && index === 0 }"
-            :ref="index === 0 ? (el) => (parentBodyRef = el) : undefined"
+            :class="{ 'is-truncated': index === 0 ? shouldTruncate : !replyExpanded[comment.commentId] }"
+            :ref="index === 0 ? (el) => (parentBodyRef = el) : setReplyBodyRef(comment.commentId)"
           >
             <div v-if="comment.trackedChangeDisplayType === 'hyperlinkAdded'">
               <span class="change-type">Added hyperlink </span>
@@ -916,16 +942,24 @@ watch(editingCommentId, (commentId) => {
             </div>
           </div>
           <div
-            v-if="shouldTruncate && isTextOverflowing && index === 0"
+            v-if="
+              index === 0
+                ? shouldTruncate && isTextOverflowing
+                : !replyExpanded[comment.commentId] && replyOverflowing[comment.commentId]
+            "
             class="show-more-toggle"
-            @click.stop.prevent="toggleTruncation"
+            @click.stop.prevent="index === 0 ? toggleTruncation() : toggleReplyTruncation(comment.commentId)"
           >
             Show more
           </div>
           <div
-            v-if="textExpanded && isTextOverflowing && index === 0"
+            v-if="
+              index === 0
+                ? textExpanded && isTextOverflowing
+                : replyExpanded[comment.commentId] && replyOverflowing[comment.commentId]
+            "
             class="show-more-toggle"
-            @click.stop.prevent="toggleTruncation"
+            @click.stop.prevent="index === 0 ? toggleTruncation() : toggleReplyTruncation(comment.commentId)"
           >
             Show less
           </div>
@@ -936,8 +970,8 @@ watch(editingCommentId, (commentId) => {
           <div
             v-if="!isDebugging && !isEditingThisComment(comment)"
             class="comment"
-            :class="{ 'is-truncated': shouldTruncate && index === 0 }"
-            :ref="index === 0 ? (el) => (parentBodyRef = el) : undefined"
+            :class="{ 'is-truncated': index === 0 ? shouldTruncate : !replyExpanded[comment.commentId] }"
+            :ref="index === 0 ? (el) => (parentBodyRef = el) : setReplyBodyRef(comment.commentId)"
             v-html="comment.commentText"
           ></div>
           <div v-else-if="isDebugging && !isEditingThisComment(comment)" class="comment">
@@ -968,16 +1002,26 @@ watch(editingCommentId, (commentId) => {
             </div>
           </div>
           <div
-            v-if="shouldTruncate && isTextOverflowing && index === 0 && !isEditingThisComment(comment)"
+            v-if="
+              (index === 0
+                ? shouldTruncate && isTextOverflowing
+                : !replyExpanded[comment.commentId] && replyOverflowing[comment.commentId]) &&
+              !isEditingThisComment(comment)
+            "
             class="show-more-toggle"
-            @click.stop.prevent="toggleTruncation"
+            @click.stop.prevent="index === 0 ? toggleTruncation() : toggleReplyTruncation(comment.commentId)"
           >
             Show more
           </div>
           <div
-            v-if="textExpanded && isTextOverflowing && index === 0 && !isEditingThisComment(comment)"
+            v-if="
+              (index === 0
+                ? textExpanded && isTextOverflowing
+                : replyExpanded[comment.commentId] && replyOverflowing[comment.commentId]) &&
+              !isEditingThisComment(comment)
+            "
             class="show-more-toggle"
-            @click.stop.prevent="toggleTruncation"
+            @click.stop.prevent="index === 0 ? toggleTruncation() : toggleReplyTruncation(comment.commentId)"
           >
             Show less
           </div>
@@ -1304,3 +1348,4 @@ watch(editingCommentId, (commentId) => {
   display: inline-block;
 }
 </style>
+

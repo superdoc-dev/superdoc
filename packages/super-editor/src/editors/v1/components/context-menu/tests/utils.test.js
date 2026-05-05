@@ -752,10 +752,8 @@ describe('utils.js', () => {
   });
 
   // SD-2875: spelling suggestions vanished from the right-click menu in 1.29
-  // because <ContextMenu> was rebound from the inner Editor (which carries
-  // _presentationEditor) to the PresentationEditor wrapper (which does not).
-  // resolveProofingContext must locate the proofing manager from any of the
-  // three handles the menu can be wired to.
+  // because <ContextMenu> moved from the inner Editor to the PresentationEditor
+  // wrapper, which doesn't carry _presentationEditor.
   describe('resolveProofingContext (SD-2875 regression)', () => {
     const buildIssue = () => ({
       pmFrom: 10,

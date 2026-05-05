@@ -4,7 +4,7 @@ sidebarTitle: 'Context menu'
 description: 'Suppress the built-in menu, render your own with the controller bundle, dispatch with the click target bound to your handler.'
 ---
 
-`ui.viewport.contextAt({ x, y })` returns one bundle with the entities under the click, the resolved caret position, the live selection, and `insideSelection` (whether the click landed inside the painted selection rects). Pass that bundle to `ui.commands.getContextMenuItems(context)`, render the result, and let `item.invoke()` fire the registered `execute({ context })` with the same bundle bound. The handler acts on the click target without your menu component threading payloads.
+`ui.viewport.contextAt({ x, y })` returns one bundle: entities under the click, resolved caret position, live selection, and `insideSelection`. Pass it to `ui.commands.getContextMenuItems(context)` to get items, then call `item.invoke()` to fire `execute({ context })` with the same bundle bound. Your menu stops threading payloads. Your registrations stop redoing the work the predicate already did.
 
 ## Quick start
 
@@ -143,7 +143,7 @@ execute: ({ payload, superdoc, editor, context }) => {
 }
 ```
 
-`context` is `undefined` when the command is dispatched directly (`commands.get(id).execute(payload)` or `commands.execute(id)`). Handlers that only depend on `payload` keep working unchanged.
+`context` is `undefined` when the command is dispatched directly (`ui.commands.get(id)?.execute(payload)`, `ui.commands.require(id).execute(...)`, or `ui.toolbar.execute(id, payload)` for built-ins). Handlers that only depend on `payload` keep working unchanged.
 
 ## Falling through to the native menu
 

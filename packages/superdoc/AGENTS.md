@@ -193,7 +193,7 @@ Docs: https://docs.superdoc.dev/document-engine/overview
 | Import DOCX | Pass URL, File, or Blob to `document` option |
 | Export DOCX | `const blob = await superdoc.export({ isFinalDoc: true })` |
 | Track changes | Set `documentMode: 'suggesting'` or use SDK with `defaultChangeMode: 'tracked'` |
-| Add comments (programmatic) | Use Document API: `editor.doc.comments.create({ target, content: 'text' })` |
+| Add comments (programmatic) | Use Document API: `editor.doc.comments.create({ target, text: 'comment body' })` |
 | Find and replace | Use Document API: `editor.doc.query.match(...)` then `editor.doc.replace(...)` |
 | Format text (programmatic) | Use Document API: `editor.doc.format.bold(...)`, `.italic(...)`, etc. |
 | Real-time collab | Configure `modules.collaboration` with a Yjs provider |
@@ -232,7 +232,7 @@ superdoc.on('editorCreate', ({ editor }) => {
   editor.doc.replace({ target: result.items[0].target, text: 'Globex' });
 
   // Add a comment
-  editor.doc.comments.create({ target: result.items[0].target, content: 'Updated name' });
+  editor.doc.comments.create({ target: result.items[0].target, text: 'Updated name' });
 });
 ```
 

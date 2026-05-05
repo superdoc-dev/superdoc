@@ -172,7 +172,7 @@ ui.commands.register<{ clauseId?: string }>({
 });
 ```
 
-Format follows ProseMirror keymap syntax: `Mod` (Ctrl on Windows / Linux, Cmd on macOS), `Shift`, `Alt`, `Ctrl`, then a key (`A`–`Z`, `0`–`9`, `Enter`, `Space`, etc.). Examples: `'Mod-K'`, `'Mod-Shift-C'`, `'Alt-Enter'`.
+Format follows ProseMirror keymap syntax: `Mod` (Ctrl on Windows / Linux, Cmd on macOS), `Shift`, `Alt`, `Ctrl`, then a key (`A` through `Z`, `0` through `9`, `Enter`, `Space`, etc.). Examples: `'Mod-K'`, `'Mod-Shift-C'`, `'Alt-Enter'`.
 
 The keyboard path doesn't consult `getState`. If your toolbar button is disabled, the shortcut still fires unless you mirror the gate inside `execute`:
 

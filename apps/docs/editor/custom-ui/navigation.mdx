@@ -8,17 +8,16 @@ The controller exposes navigation helpers for the everyday cases (scroll a comme
 
 ## Comments and tracked changes
 
-Use `ui.comments.scrollTo(id)` and `ui.trackChanges.scrollTo(id)` to land on a specific entity. `ui.trackChanges.next()` and `ui.trackChanges.previous()` step through review.
+`ui.comments.scrollTo(id)` and `ui.trackChanges.scrollTo(id)` land on a specific entity. `ui.trackChanges.next()` and `previous()` advance `activeId` and return the new id, but they don't move the viewport on their own. Pair them with `scrollTo` to navigate.
 
 ```ts
 ui.comments.scrollTo('c-123');
 
-ui.trackChanges.next();        // active selection moves to the next change
-ui.trackChanges.previous();
-ui.trackChanges.scrollTo('tc-7');
+const nextId = ui.trackChanges.next();
+if (nextId) ui.trackChanges.scrollTo(nextId);
 ```
 
-`scrollTo` activates the right surface (body / header / footer / note) before alignment, so a non-body entity scrolls into view even when the user is currently editing the body.
+`ui.trackChanges.scrollTo` is story-aware: a tracked change in a header, footer, or footnote activates the right surface before alignment. `ui.comments.scrollTo` is body-scoped today; non-body comment scroll lands in a follow-up.
 
 ## Generic viewport scroll
 

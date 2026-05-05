@@ -23,6 +23,7 @@ import { pickNumber, twipsToPx, isFiniteNumber, ptToPx } from '../utilities.js';
 import { normalizeAlignment, normalizeParagraphSpacing } from './spacing-indent.js';
 import { normalizeOoxmlTabs } from './tabs.js';
 import { normalizeParagraphBorders, normalizeParagraphShading } from './borders.js';
+import { mirrorIndentForRtl } from './bidi.js';
 import type { ConverterContext } from '../converter-context.js';
 
 import {
@@ -122,6 +123,29 @@ const normalizeIndentTwipsToPx = (indent?: ParagraphIndent | null): ParagraphInd
   if (firstLine != null) result.firstLine = twipsToPx(firstLine);
   if (hanging != null) result.hanging = twipsToPx(hanging);
   return Object.keys(result).length > 0 ? result : undefined;
+};
+
+const resolveLogicalIndentToPhysical = (
+  indent: ParagraphIndent | undefined,
+  _direction: ParagraphDirection | undefined,
+): ParagraphIndent | undefined => {
+  if (!indent) return undefined;
+
+  const resolved: ParagraphIndent = { ...indent };
+  const source = indent as ParagraphIndent & { start?: unknown; end?: unknown };
+
+  if (source.start != null) {
+    resolved.left = source.start as number;
+  }
+
+  if (source.end != null) {
+    resolved.right = source.end as number;
+  }
+
+  delete (resolved as ParagraphIndent & { start?: unknown }).start;
+  delete (resolved as ParagraphIndent & { end?: unknown }).end;
+
+  return resolved;
 };
 
 export const normalizeFramePr = (value: ParagraphFrameProperties | undefined): ParagraphFrame | undefined => {
@@ -322,7 +346,13 @@ export const computeParagraphAttrs = (
     resolvedParagraphProperties.spacing,
     Boolean(resolvedParagraphProperties.numberingProperties),
   );
-  const normalizedIndent = normalizeIndentTwipsToPx(resolvedParagraphProperties.indent as ParagraphIndent);
+  const indentWithPhysicalSides = resolveLogicalIndentToPhysical(
+    resolvedParagraphProperties.indent as ParagraphIndent,
+    normalizedDirection,
+  );
+  const normalizedIndentBase = normalizeIndentTwipsToPx(indentWithPhysicalSides);
+  const normalizedIndent =
+    isRtl && normalizedIndentBase ? mirrorIndentForRtl(normalizedIndentBase) : normalizedIndentBase;
   const normalizedTabStops = normalizeOoxmlTabs(resolvedParagraphProperties.tabStops);
   const normalizedAlignment = normalizeAlignment(resolvedParagraphProperties.justification, isRtl);
   const normalizedBorders = normalizeParagraphBorders(resolvedParagraphProperties.borders);

@@ -3189,8 +3189,8 @@ describe('toFlowBlocks', () => {
       const paragraph = blocks[0];
       expect(paragraph.kind).toBe('paragraph');
       expect(paragraph.attrs?.direction).toBe('rtl');
-      expect(paragraph.attrs?.indent?.left).toBe(24);
-      expect(paragraph.attrs?.indent?.right).toBe(12);
+      expect(paragraph.attrs?.indent?.left).toBe(12);
+      expect(paragraph.attrs?.indent?.right).toBe(24);
     });
 
     it('does not mark paragraphs as RTL when w:bidi is explicitly false', () => {

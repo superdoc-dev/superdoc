@@ -162,6 +162,10 @@ const BAD_SUBPATH_RE = /(['"])([^'"]*\/index\.(?:js|ts))(\/[^'"]+)\1/g;
 let fixedFiles = 0;
 let totalReplacements = 0;
 
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 function appendJsExtensionToRelativeSpecifier(specifier, filePath) {
   if (!specifier.startsWith('./') && !specifier.startsWith('../')) return specifier;
   if (specifier.includes('?') || specifier.includes('#')) return specifier;
@@ -207,34 +211,62 @@ function rewriteDocApiPaths(fileContent, filePath) {
 // paths the consumer can resolve.
 //
 // SD-2893 note for pm-adapter: only specific type subpaths are
-// relocated (see vite.config.js include list). A bare `@superdoc/pm-adapter`
-// specifier would rewrite to a relative path that does not exist in dist.
-// The audit gate (RELOCATED_PACKAGES in audit-declarations.cjs) rejects
-// any unrewritten bare specifier at build time, so this is a build-time
-// failure rather than a silent consumer break. If a future public type
-// genuinely needs the pm-adapter barrel, widen the vite include and the
-// shim drain in lockstep.
+// relocated (see vite.config.js include list). Do not add a broad
+// `@superdoc/pm-adapter` rule unless the barrel declaration is also
+// emitted; otherwise a bare specifier would rewrite to a missing
+// relative path and evade the audit gate.
 const RELOCATION_RULES = [
-  { pkg: '@superdoc/contracts',     distEntry: 'layout-engine/contracts/src/index.d.ts' },
-  { pkg: '@superdoc/dom-contract',  distEntry: 'layout-engine/dom-contract/src/index.d.ts' },
-  { pkg: '@superdoc/layout-bridge', distEntry: 'layout-engine/layout-bridge/src/index.d.ts' },
-  { pkg: '@superdoc/painter-dom',   distEntry: 'layout-engine/painters/dom/src/index.d.ts' },
-  { pkg: '@superdoc/pm-adapter',    distEntry: 'layout-engine/pm-adapter/src/index.d.ts' },
+  { pkg: '@superdoc/contracts',     distEntry: 'layout-engine/contracts/src/index.d.ts', matchSubpaths: true },
+  { pkg: '@superdoc/dom-contract',  distEntry: 'layout-engine/dom-contract/src/index.d.ts', matchSubpaths: true },
+  { pkg: '@superdoc/layout-bridge', distEntry: 'layout-engine/layout-bridge/src/index.d.ts', matchSubpaths: true },
+  { pkg: '@superdoc/painter-dom',   distEntry: 'layout-engine/painters/dom/src/index.d.ts', matchSubpaths: true },
+  {
+    pkg: '@superdoc/pm-adapter/converter-context.js',
+    distEntry: 'layout-engine/pm-adapter/src/converter-context.d.ts',
+    matchSubpaths: false,
+  },
+  {
+    pkg: '@superdoc/pm-adapter/sections/types.js',
+    distEntry: 'layout-engine/pm-adapter/src/sections/types.d.ts',
+    matchSubpaths: false,
+  },
 ];
 
-function makeRelocationRewriter({ pkg, distEntry }) {
+// Guard packages that must never fall back to `_internal-shims.d.ts`.
+// `@superdoc/pm-adapter` is guarded as a root package even though only
+// two exact subpaths are relocated today; a future bare-barrel leak should
+// fail the build rather than ship as `any`.
+const RELOCATION_GUARD_PACKAGES = [
+  '@superdoc/document-api',
+  '@superdoc/contracts',
+  '@superdoc/dom-contract',
+  '@superdoc/layout-bridge',
+  '@superdoc/painter-dom',
+  '@superdoc/pm-adapter',
+];
+
+function isRelocatedSpecifier(mod) {
+  return RELOCATION_RULES.some((rule) =>
+    rule.matchSubpaths
+      ? mod === rule.pkg || mod.startsWith(rule.pkg + '/')
+      : mod === rule.pkg,
+  );
+}
+
+function makeRelocationRewriter({ pkg, distEntry, matchSubpaths }) {
   // Match the package name with optional subpath, e.g. `@superdoc/contracts` or
   // `@superdoc/contracts/engines/tabs.js`. Anchored to either side of the
   // package segment so `@superdoc/contracts-something` is not matched.
-  const escaped = pkg.replace(/\//g, '\\/');
-  const re = new RegExp(`(['"])${escaped}(\\/[^'"]+)?\\1`, 'g');
+  const escaped = escapeRegExp(pkg);
+  const subpathPattern = matchSubpaths ? `(\\/[^'"]+)?` : '';
+  const re = new RegExp(`(['"])${escaped}${subpathPattern}\\1`, 'g');
   return (fileContent, filePath) => {
     return fileContent.replace(re, (_match, quote, subpath = '') => {
       const target = path.join(distRoot, distEntry);
       let rel = path.relative(path.dirname(filePath), target).split(path.sep).join('/');
       if (!rel.startsWith('.')) rel = './' + rel;
       rel = rel.replace(/\.d\.ts$/, '.js');
-      if (subpath) rel = rel.replace(/\/index\.js$/, subpath);
+      if (matchSubpaths && subpath) rel = rel.replace(/\/index\.js$/, subpath);
       return `${quote}${rel}${quote}`;
     });
   };
@@ -244,6 +276,20 @@ const RELOCATION_REWRITERS = RELOCATION_RULES.map((rule) => ({
   pkg: rule.pkg,
   rewrite: makeRelocationRewriter(rule),
 }));
+
+const UNSHIMMED_PRIVATE_SPECIFIERS = new Set([
+  '@superdoc/pm-adapter',
+]);
+
+function shouldSkipWorkspaceShim(mod) {
+  return (
+    mod.startsWith('.') ||
+    mod.startsWith('@superdoc/super-editor') ||
+    mod.startsWith('@superdoc/document-api') ||
+    isRelocatedSpecifier(mod) ||
+    UNSHIMMED_PRIVATE_SPECIFIERS.has(mod)
+  );
+}
 
 const dtsFiles = findDtsFiles(distRoot);
 for (const filePath of dtsFiles) {
@@ -387,7 +433,7 @@ for (const filePath of dtsFiles) {
     const mod = m[2];
 
     // Skip relative imports and already-handled packages
-    if (mod.startsWith('.') || mod.startsWith('@superdoc/super-editor') || mod.startsWith('@superdoc/document-api') || RELOCATION_RULES.some((r) => mod === r.pkg || mod.startsWith(r.pkg + '/'))) continue;
+    if (shouldSkipWorkspaceShim(mod)) continue;
 
     if (mod.startsWith('@superdoc/')) {
       if (!workspaceImports.has(mod)) workspaceImports.set(mod, new Set());
@@ -400,7 +446,7 @@ for (const filePath of dtsFiles) {
   const dynamicImports = fileContent.matchAll(/import\(['"]([^'"]+)['"]\)\.(\w+)/g);
   for (const m of dynamicImports) {
     const mod = m[1];
-    if (mod.startsWith('.') || mod.startsWith('@superdoc/super-editor') || mod.startsWith('@superdoc/document-api') || RELOCATION_RULES.some((r) => mod === r.pkg || mod.startsWith(r.pkg + '/'))) continue;
+    if (shouldSkipWorkspaceShim(mod)) continue;
 
     if (mod.startsWith('@superdoc/')) {
       if (!workspaceImports.has(mod)) workspaceImports.set(mod, new Set());
@@ -420,7 +466,7 @@ for (const filePath of dtsFiles) {
     // resolve through the shim and collapse internal-only types
     // (Comment, CommentContent, CommentJSON) to `any`. None of those
     // appear on superdoc's public surface, so the collapse is safe.
-    if (mod.startsWith('@superdoc/super-editor') || mod.startsWith('@superdoc/document-api') || RELOCATION_RULES.some((r) => mod === r.pkg || mod.startsWith(r.pkg + '/'))) continue;
+    if (shouldSkipWorkspaceShim(mod)) continue;
     if (!workspaceImports.has(mod)) workspaceImports.set(mod, new Set());
   }
 }
@@ -501,11 +547,11 @@ console.log(`[ensure-types] ✓ Generated ambient shims for ${wsCount} workspace
 // rewrite or include for that package and customers would see `any`
 // for those types again.
 const shimContent = fs.readFileSync(shimPath, 'utf8');
-const SHIM_FORBIDDEN = ['@superdoc/document-api', ...RELOCATION_RULES.map((r) => r.pkg)];
+const SHIM_FORBIDDEN = RELOCATION_GUARD_PACKAGES;
 for (const pkg of SHIM_FORBIDDEN) {
-  const re = new RegExp(`declare module '${pkg.replace(/\//g, '\\/')}(\\/[^']+)?'`);
+  const re = new RegExp(`declare module '${escapeRegExp(pkg)}(\\/[^']+)?'`);
   if (re.test(shimContent)) {
-    console.error(`[ensure-types] ✗ ${pkg} appears in _internal-shims.d.ts. Its types should resolve via the relocation rewrite, not via an ambient any shim. Investigate the include glob, the rewrite rule, and the shim-skip predicate for this package.`);
+    console.error(`[ensure-types] ✗ ${pkg} appears in _internal-shims.d.ts. Its types should resolve via a relocation rewrite or fail the audit as an unrelocated leak, not via an ambient any shim. Investigate the include glob, the rewrite rule, and the shim-skip predicate for this package.`);
     process.exit(1);
   }
 }

@@ -58,11 +58,12 @@ if (!fs.existsSync(distRoot)) {
   process.exit(1);
 }
 
-// Packages whose types have been relocated into `superdoc`'s published
-// declaration tree. They must NEVER appear as a `declare module` block in
+// Packages whose public type dependencies are relocated into `superdoc`'s
+// published declaration tree or explicitly guarded from falling back to an
+// ambient shim. They must NEVER appear as a `declare module` block in
 // `_internal-shims.d.ts` — if they do, their types collapse to `any` for
-// consumers and we have a regression. Mirror of SD-2842's `RELOCATION_RULES`
-// in `ensure-types.cjs`; keep the two lists in sync.
+// consumers and we have a regression. Mirror of SD-2842's
+// `RELOCATION_GUARD_PACKAGES` in `ensure-types.cjs`; keep the two lists in sync.
 const RELOCATED_PACKAGES = [
   '@superdoc/document-api',
   '@superdoc/contracts',

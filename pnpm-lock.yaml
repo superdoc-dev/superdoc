@@ -2572,6 +2572,9 @@ importers:
         specifier: workspace:*
         version: link:../../word-layout
     devDependencies:
+      '@superdoc/layout-resolved':
+        specifier: workspace:*
+        version: link:../layout-resolved
       '@superdoc/painter-dom':
         specifier: workspace:*
         version: link:../painters/dom
@@ -2701,6 +2704,9 @@ importers:
       '@superdoc/layout-engine':
         specifier: workspace:*
         version: link:../layout-engine
+      '@superdoc/layout-resolved':
+        specifier: workspace:*
+        version: link:../layout-resolved
       '@superdoc/painter-dom':
         specifier: workspace:*
         version: link:../painters/dom

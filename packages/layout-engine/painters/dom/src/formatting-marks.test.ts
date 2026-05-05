@@ -95,6 +95,9 @@ describe('DomPainter formatting marks', () => {
     expect(paragraphMark?.textContent).toBe('¶');
     expect(paragraphMark?.style.left).toBe('72px');
     expect(document.head.textContent).toContain('--sd-formatting-paragraph-mark-gap');
+    expect(document.head.textContent).toContain(
+      '[dir="rtl"] .superdoc-formatting-paragraph-mark {\n  transform: translateX(calc(-100% - var(--sd-formatting-paragraph-mark-gap, 0.2em)))',
+    );
   });
 
   it('positions paragraph marks after inline-flow paragraph indents', () => {

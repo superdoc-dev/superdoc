@@ -375,6 +375,10 @@ const FORMATTING_MARKS_STYLES = `
   display: inline;
 }
 
+.superdoc-layout.superdoc-show-formatting-marks [dir="rtl"] .superdoc-formatting-paragraph-mark {
+  transform: translateX(calc(-100% - var(--sd-formatting-paragraph-mark-gap, 0.2em)));
+}
+
 @media print {
   .superdoc-layout.superdoc-show-formatting-marks .superdoc-tab::after,
   .superdoc-layout.superdoc-show-formatting-marks .superdoc-formatting-space-mark::after,

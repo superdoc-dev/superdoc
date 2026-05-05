@@ -84,13 +84,31 @@ export function createTestPainter(opts: { blocks?: FlowBlock[]; measures?: Measu
 
   return {
     paint(layout: Layout, mount: HTMLElement, mapping?: unknown) {
+      // Auto-synthesize minimal blocks/measures for any layout fragment whose
+      // blockId isn't covered by currentBlocks. Tests that only care about
+      // wrapper-level rendering (column separators, page chrome) can skip the
+      // boilerplate of building matching blocks for every fragment they place.
+      const knownIds = new Set(currentBlocks.map((b) => b.id));
+      const syntheticBlocks: FlowBlock[] = [];
+      const syntheticMeasures: Measure[] = [];
+      for (const page of layout.pages) {
+        for (const fragment of page.fragments ?? []) {
+          if (fragment.kind !== 'para' || knownIds.has(fragment.blockId)) continue;
+          syntheticBlocks.push({ kind: 'paragraph', id: fragment.blockId, runs: [] });
+          syntheticMeasures.push({ kind: 'paragraph', lines: [], totalHeight: 0 });
+          knownIds.add(fragment.blockId);
+        }
+      }
+      const effectiveBlocks = syntheticBlocks.length ? [...currentBlocks, ...syntheticBlocks] : currentBlocks;
+      const effectiveMeasures = syntheticMeasures.length ? [...currentMeasures, ...syntheticMeasures] : currentMeasures;
+
       const effectiveResolved = resolvedLayoutOverridden
         ? currentResolved
         : resolveLayout({
             layout,
             flowMode: opts.flowMode ?? 'paginated',
-            blocks: currentBlocks,
-            measures: currentMeasures,
+            blocks: effectiveBlocks,
+            measures: effectiveMeasures,
           });
       const input: DomPainterInput = {
         resolvedLayout: effectiveResolved,

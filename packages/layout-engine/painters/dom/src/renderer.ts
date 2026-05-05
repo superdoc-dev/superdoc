@@ -2320,7 +2320,7 @@ export class DomPainter {
       // where Word fills col 0 first without balancing), Word draws no line
       // even when the section's `w:cols` declared `w:sep="1"`. Gate each
       // separator on whether any fragment sits past it within the region.
-      const fragmentsInRegion = page.fragments.filter((f) => f.y >= yStart - 0.5 && f.y < yEnd + 0.5);
+      const fragmentsInRegion = page.items.filter((item) => item.y >= yStart - 0.5 && item.y < yEnd + 0.5);
 
       for (const separatorX of separatorPositions) {
         const hasContentPastSeparator = fragmentsInRegion.some((f) => f.x >= separatorX);

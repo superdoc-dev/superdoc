@@ -7,6 +7,7 @@
  */
 
 import type { Editor } from '../editors/v1/core/Editor.js';
+import { DocumentApiAdapterError } from '../editors/v1/document-api-adapters/errors.js';
 import { resolveTextTarget } from '../editors/v1/document-api-adapters/helpers/adapter-utils.js';
 import type { SelectionCapture, SelectionAnchorRectOptions, ViewportRect } from './types.js';
 
@@ -20,17 +21,44 @@ interface RawRangeRect {
   height: number;
 }
 
+// Captures whose target lives in a non-body story (header, footer,
+// footnote, endnote) need a story-aware rect resolver on
+// `PresentationEditor` that doesn't yet exist publicly. The live path
+// works for non-body selections because `presentationEditor
+// .getSelectionRects()` calls `getActiveEditor()` internally and
+// dispatches to the right surface; the captured path can't, because by
+// the time the consumer is asking for rects, focus has often moved away
+// (composer textarea, sidebar, modal) and the active surface is back on
+// body. Until a follow-up surfaces a `getRangeRectsForStory(from, to,
+// story)` primitive, captures referencing non-body stories return [].
+// Same posture as `scroll-into-view`'s text-anchored path.
+function captureIsBodyOnly(capture: SelectionCapture): boolean {
+  const story = (capture.target as { story?: unknown } | null)?.story;
+  if (story === undefined || story === null) return true;
+  if (typeof story === 'string') return story === 'body';
+  if (typeof story === 'object') {
+    const kind = (story as { kind?: unknown }).kind;
+    return kind === undefined || kind === 'body';
+  }
+  return true;
+}
+
 /**
  * Resolve the painted rects of the current selection, or of a captured
  * one when `capture` is provided. Empty array when the editor has no
  * presentation layer (SSR / non-paginated mounts), no current selection,
  * or a stale capture whose target no longer resolves.
+ *
+ * Captures referencing non-body stories return [] — the underlying
+ * story-aware rect resolver is a follow-up (body-only matches the same
+ * posture as `scroll-into-view`'s text-anchored path).
  */
 export function getSelectionRects(editor: Editor | null, capture?: SelectionCapture | null): ViewportRect[] {
   const presentation = editor?.presentationEditor;
   if (!presentation) return [];
 
   if (capture) {
+    if (!captureIsBodyOnly(capture)) return [];
     return getCapturedSelectionRects(editor!, capture);
   }
 
@@ -68,11 +96,9 @@ function getCapturedSelectionRects(editor: Editor, capture: SelectionCapture): V
   const segments = capture.target?.segments;
   if (!segments || segments.length === 0) return [];
 
-  // Multi-segment selections span multiple blocks but produce a single
-  // continuous PM range — `from` is the first segment's start, `to` is
-  // the last segment's end. Resolving each end independently keeps the
-  // logic simple and matches how the doc-api represents the selection
-  // internally.
+  // Multi-segment captures collapse to one PM range bounded by the
+  // first segment's start and the last segment's end — matching how
+  // the doc-api represents a selection in the unified PM document.
   const first = segments[0]!;
   const last = segments[segments.length - 1]!;
 
@@ -89,7 +115,14 @@ function getCapturedSelectionRects(editor: Editor, capture: SelectionCapture): V
       blockId: last.blockId,
       range: last.range,
     });
-  } catch {
+  } catch (err) {
+    // resolveTextTarget re-throws AMBIGUOUS_TARGET so callers can log
+    // the precise diagnostic. Surface it to the console rather than
+    // swallowing silently — bare `return []` would hide a real document
+    // problem (two blocks sharing an id) behind "no rects".
+    if (err instanceof DocumentApiAdapterError) {
+      console.warn(`[superdoc/ui] ui.selection.getRects: ${err.code}: ${err.message}`);
+    }
     return [];
   }
   if (!fromResolved || !toResolved) return [];

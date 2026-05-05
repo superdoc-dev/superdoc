@@ -794,6 +794,19 @@ export interface SelectionHandle {
    * for a frozen selection — useful when a composer has stolen focus
    * and the editor's live selection is gone but you still want to
    * position UI relative to where the user originally selected.
+   *
+   * The live path (no capture) handles all surfaces — body, header,
+   * footer, footnote, endnote — because `PresentationEditor` routes
+   * selection-rect lookups through its currently active editor.
+   *
+   * The captured path is body-only today: captures whose target lives
+   * in a non-body story return `[]`. Story-aware rect resolution for
+   * captures requires a `getRangeRectsForStory(from, to, story)`
+   * primitive on PresentationEditor that doesn't yet exist; until that
+   * lands, consumers building floating UI on header / footer / note
+   * surfaces should query rects from the live selection (no capture)
+   * before focus moves elsewhere. Same posture as
+   * `ui.viewport.scrollIntoView` for text-anchored targets.
    */
   getRects(capture?: SelectionCapture | null): ViewportRect[];
   /**

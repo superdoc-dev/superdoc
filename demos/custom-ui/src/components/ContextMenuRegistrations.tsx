@@ -128,11 +128,10 @@ export function ContextMenuRegistrations({ decided, onComposeComment }: Props) {
       },
     });
 
-    // Point-anchored insert. The canonical SD-2945 demonstration: the
-    // handler reads `context.position.target` (a collapsed
-    // SelectionTarget at the click point, story-aware via SD-2954) and
-    // inserts directly at the click. Without the bundle, this would
-    // fire `editor.doc.insert` against `state.selection.selectionTarget`
+    // Point-anchored insert. Reads `context.position.target` (a
+    // collapsed SelectionTarget at the click point) and inserts
+    // directly at the click. Without the bundle, this would fire
+    // `editor.doc.insert` against `state.selection.selectionTarget`
     // and silently land at the user's prior selection somewhere else
     // in the doc, making the menu label a lie.
     //

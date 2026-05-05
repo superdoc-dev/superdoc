@@ -45,9 +45,8 @@ function AppInner() {
   const closeComposer = useCallback(() => setComposeOpen(false), []);
 
   return (
-    <>
-      <div className="app">
-        <header className="app-header">
+    <div className="app">
+      <header className="app-header">
           <h1>Contract Review Workspace</h1>
           <span className="subtitle">Memorandum · review pending</span>
         </header>
@@ -76,7 +75,6 @@ function AppInner() {
             </div>
           </aside>
         </div>
-      </div>
-    </>
+    </div>
   );
 }

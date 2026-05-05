@@ -46,7 +46,7 @@ const STATIC_DISABLED: CustomCommandHandleState<unknown> = {
  * Demonstrates `ui.commands.register({...})` — the surface SuperDoc
  * exposes for consumer-defined toolbar buttons. The component:
  *
- *   1. Registers `'company.insertClause'` on mount and unregisters
+ *   1. Registers `'demo.insertClause'` on mount and unregisters
  *      on unmount, so the command's lifetime matches the component's.
  *      A real consumer app usually holds the registration for the
  *      session, but the pattern is the same.
@@ -65,7 +65,7 @@ const STATIC_DISABLED: CustomCommandHandleState<unknown> = {
  * Capturing the registration return value (`reg.handle`) is the
  * typed path: it carries the consumer's `TPayload` / `TValue`
  * generics. Dynamic-lookup callers should use
- * `ui.commands.get('company.insertClause')` (returns
+ * `ui.commands.get('demo.insertClause')` (returns
  * `DynamicCommandHandle | undefined`); the older bracket-index path
  * still works at runtime but loses the per-command typing.
  */
@@ -82,7 +82,7 @@ export function InsertClauseButton() {
     if (!ui) return;
 
     const reg = ui.commands.register<InsertClausePayload>({
-      id: 'company.insertClause',
+      id: 'demo.insertClause',
       // Mod-Shift-C dispatches `execute` with no payload, which the
       // body below treats as "open the picker" rather than performing
       // an insert. (A consumer with a single-clause flow would skip

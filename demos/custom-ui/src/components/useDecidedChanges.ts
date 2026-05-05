@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSuperDocTrackChanges, useSuperDocUI } from 'superdoc/ui/react';
 
 export interface DecidedChange {
@@ -31,12 +31,21 @@ export function useDecidedChanges(): DecidedChangesState {
   const trackChanges = useSuperDocTrackChanges();
   const [decidedChanges, setDecidedChanges] = useState<Map<string, DecidedChange>>(() => new Map());
 
+  // Ref-mirror the live items so `decideChange` can read them without
+  // listing them in its `useCallback` deps. Without this, the callback
+  // identity changes on every track-change tick, the wrapper object
+  // below breaks reference, and any consumer that lists the wrapper in
+  // an effect's deps re-runs that effect (and registers/unregisters
+  // any contributed commands) on every doc edit.
+  const itemsRef = useRef(trackChanges.items);
+  itemsRef.current = trackChanges.items;
+
   const decideChange = useCallback(
     (id: string, decision: 'accepted' | 'rejected') => {
       if (!ui) return;
-      // Capture a snapshot from the live feed BEFORE we mutate, since
+      // Snapshot from the live feed BEFORE we mutate, since
       // accept/reject removes the tracked-change row entirely.
-      const liveItem = trackChanges.items.find((it) => it.id === id);
+      const liveItem = itemsRef.current.find((it) => it.id === id);
       const change = (liveItem?.change ?? null) as DecidedChange['snapshot'] | null;
       if (decision === 'accepted') ui.trackChanges.accept(id);
       else ui.trackChanges.reject(id);
@@ -48,7 +57,7 @@ export function useDecidedChanges(): DecidedChangesState {
         });
       }
     },
-    [ui, trackChanges.items],
+    [ui],
   );
 
   // Reconcile against the live feed: when a previously-decided id
@@ -73,8 +82,9 @@ export function useDecidedChanges(): DecidedChangesState {
 
   // Memoize the wrapper so consumers passing the result into an
   // effect (e.g. `ContextMenuRegistrations` whose deps include the
-  // returned object) don't re-fire on every parent render. Without
-  // this, a fresh object literal each call would unregister and
-  // re-register every contributed command on every track-change tick.
+  // returned object) only see a fresh reference when the underlying
+  // state actually changes, not on every parent render. Combined with
+  // the items-ref above, the wrapper now changes only when
+  // `decidedChanges` does.
   return useMemo(() => ({ decidedChanges, decideChange }), [decidedChanges, decideChange]);
 }

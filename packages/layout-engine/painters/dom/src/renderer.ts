@@ -6862,28 +6862,29 @@ export class DomPainter {
       if (section === 'body' || section === undefined) {
         assertFragmentPmPositions(fragment, 'paragraph fragment');
       }
-      // Narrow to ResolvedFragmentItem to access para-specific resolved fields
+      // Narrow to ResolvedFragmentItem to access para-specific resolved fields.
+      // resolveLayout copies pmStart/pmEnd/continuesFromPrev/continuesOnNext from the
+      // source paragraph onto the resolved item when present, so reading off the
+      // back-pointer would be redundant (SD-2957).
       const resolvedFrag = resolvedItem as ResolvedFragmentItem | undefined;
-      const pmStart = resolvedFrag?.pmStart ?? (fragment as ParaFragment).pmStart;
+      const pmStart = resolvedFrag?.pmStart;
       if (pmStart != null) {
         el.dataset.pmStart = String(pmStart);
       } else {
         delete el.dataset.pmStart;
       }
-      const pmEnd = resolvedFrag?.pmEnd ?? (fragment as ParaFragment).pmEnd;
+      const pmEnd = resolvedFrag?.pmEnd;
       if (pmEnd != null) {
         el.dataset.pmEnd = String(pmEnd);
       } else {
         delete el.dataset.pmEnd;
       }
-      const continuesFromPrev = resolvedFrag?.continuesFromPrev ?? (fragment as ParaFragment).continuesFromPrev;
-      if (continuesFromPrev) {
+      if (resolvedFrag?.continuesFromPrev) {
         el.dataset.continuesFromPrev = 'true';
       } else {
         delete el.dataset.continuesFromPrev;
       }
-      const continuesOnNext = resolvedFrag?.continuesOnNext ?? (fragment as ParaFragment).continuesOnNext;
-      if (continuesOnNext) {
+      if (resolvedFrag?.continuesOnNext) {
         el.dataset.continuesOnNext = 'true';
       } else {
         delete el.dataset.continuesOnNext;

@@ -1,5 +1,5 @@
 {
-  "name": "headless-ai-redlining",
+  "name": "document-engine-ai-redlining",
   "private": true,
   "type": "module",
   "scripts": {

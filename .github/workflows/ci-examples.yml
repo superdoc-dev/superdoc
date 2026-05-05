@@ -222,7 +222,7 @@ jobs:
         working-directory: examples/__tests__
         run: EXAMPLE=advanced/extensions/${{ matrix.example }} npx playwright test
 
-  headless:
+  document-engine:
     needs: build
     runs-on: ubuntu-latest
     steps:
@@ -234,14 +234,14 @@ jobs:
             ~/.cache/ms-playwright
           key: examples-workspace-${{ github.sha }}
 
-      - name: Run headless tests
-        working-directory: examples/headless/ai-redlining
+      - name: Run AI redlining (server-side) tests
+        working-directory: examples/document-engine/ai-redlining
         run: npx tsx src/index.test.ts
 
   validate:
     name: CI Examples / validate
     if: always()
-    needs: [getting-started, collaboration, built-in-ui, custom-ui, ai, advanced-headless-toolbar, advanced-extensions, headless]
+    needs: [getting-started, collaboration, built-in-ui, custom-ui, ai, advanced-headless-toolbar, advanced-extensions, document-engine]
     runs-on: ubuntu-latest
     steps:
       - name: Check results

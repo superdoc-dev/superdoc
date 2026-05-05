@@ -70,6 +70,7 @@ Programmatic editing without a visible editor.
 | Example | Docs |
 |---------|------|
 | [diffing](./document-engine/diffing) | [docs](https://docs.superdoc.dev/document-engine/diffing) |
+| [ai-redlining](./document-engine/ai-redlining) | [docs](https://docs.superdoc.dev/getting-started/ai) |
 
 ## AI
 
@@ -79,9 +80,7 @@ Document editing through models and agents.
 |---------|-------------|
 | [bedrock](./ai/bedrock) | AWS Bedrock Converse API with tool use |
 | [streaming](./ai/streaming) | Stream model output into a visible editor |
-| [redlining](./ai/redlining) | LLM-driven tracked-change review |
-| [headless/ai-redlining](./headless/ai-redlining) | Server-side AI redlining runner |
-| [collaborative-agent](./ai/collaborative-agent) | AI agent operating on a collaborative doc |
+| [redlining](./ai/redlining) | LLM-driven tracked-change review (browser) |
 
 ## Advanced
 
@@ -89,7 +88,6 @@ Edge cases and infrastructure-level patterns. Most consumers won't need these.
 
 | Example | Notes |
 |---------|-------|
-| [grading-papers-comments-annotations](./advanced/grading-papers-comments-annotations) | Full-stack annotation use case |
 | [extensions/custom-mark](./advanced/extensions/custom-mark) | Custom mark authoring |
 | [extensions/custom-node](./advanced/extensions/custom-node) | Custom node authoring |
 | [headless-toolbar](./advanced/headless-toolbar) | Framework-agnostic toolbar substrate |

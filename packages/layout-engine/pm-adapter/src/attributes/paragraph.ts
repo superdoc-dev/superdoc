@@ -94,10 +94,12 @@ export const resolveEffectiveParagraphDirection = (
   para: PMNode,
   resolvedParagraphProperties: ParagraphProperties,
   sectionDirection?: ParagraphDirection,
+  docDefaultsDirection?: ParagraphDirection,
 ): ParagraphDirection | undefined => {
   if (resolvedParagraphProperties.rightToLeft === true) return 'rtl';
   if (resolvedParagraphProperties.rightToLeft === false) return 'ltr';
   if (sectionDirection) return sectionDirection;
+  if (docDefaultsDirection) return docDefaultsDirection;
   return inferDirectionFromRuns(para);
 };
 
@@ -339,6 +341,11 @@ export const computeParagraphAttrs = (
     para,
     resolvedParagraphProperties,
     converterContext?.sectionDirection,
+    converterContext?.translatedLinkedStyles?.docDefaults?.paragraphProperties?.rightToLeft === true
+      ? 'rtl'
+      : converterContext?.translatedLinkedStyles?.docDefaults?.paragraphProperties?.rightToLeft === false
+        ? 'ltr'
+        : undefined,
   );
   const isRtl = normalizedDirection === 'rtl';
 

@@ -506,4 +506,17 @@ describe('w:r r-translator decode (export only inline run properties)', () => {
     expect((rPr.elements ?? []).map((e) => e.name)).toContain('w:color');
     expect((rPr.elements ?? []).map((e) => e.name)).toContain('w:b');
   });
+
+  it('preserves run-level rtl even when inline/style key filters omit it', () => {
+    const params = runWithContent({
+      runProperties: { rtl: true, color: 'FF0000' },
+      runPropertiesInlineKeys: ['color'],
+      runPropertiesStyleKeys: ['rtl'],
+      runPropertiesOverrideKeys: [],
+    });
+    const result = translator.decode(params);
+    const rPr = result?.elements?.find((el) => el?.name === 'w:rPr');
+    expect(rPr).toBeDefined();
+    expect((rPr.elements ?? []).map((e) => e.name)).toContain('w:rtl');
+  });
 });

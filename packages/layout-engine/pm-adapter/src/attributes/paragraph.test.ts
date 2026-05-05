@@ -375,6 +375,30 @@ describe('resolveEffectiveParagraphDirection', () => {
     expect(direction).toBe('rtl');
   });
 
+  it('uses docDefaults direction before run inference', () => {
+    const paragraph: PMNode = {
+      type: { name: 'paragraph' },
+      content: [
+        { type: 'run', attrs: { runProperties: { rightToLeft: true } }, content: [{ type: 'text', text: 'אבג' }] },
+      ],
+    };
+
+    const direction = resolveEffectiveParagraphDirection(paragraph as never, {} as never, undefined, 'ltr');
+    expect(direction).toBe('ltr');
+  });
+
+  it('uses docDefaults rtl before run inference', () => {
+    const paragraph: PMNode = {
+      type: { name: 'paragraph' },
+      content: [
+        { type: 'run', attrs: { runProperties: { rightToLeft: false } }, content: [{ type: 'text', text: 'abc' }] },
+      ],
+    };
+
+    const direction = resolveEffectiveParagraphDirection(paragraph as never, {} as never, undefined, 'rtl');
+    expect(direction).toBe('rtl');
+  });
+
   it('infers rtl when all runs with explicit direction are rtl', () => {
     const paragraph: PMNode = {
       type: { name: 'paragraph' },

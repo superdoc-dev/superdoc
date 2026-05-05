@@ -326,11 +326,16 @@ const decode = (params, decodedAttrs = {}) => {
   // so those documents still round-trip formatting (accepts larger document.xml vs strict allow-list only).
   const candidateKeys =
     inlineKeys != null ? [...new Set([...(inlineKeys || []), ...(overrideKeys || [])])] : Object.keys(runProperties);
+  // Preserve explicit run-level RTL on export even when allow-lists are incomplete.
+  if (runProperties?.rtl != null && !candidateKeys.includes('rtl')) {
+    candidateKeys.push('rtl');
+  }
 
   const shouldExport = (key) =>
-    key in (runProperties || {}) &&
-    (!(Array.isArray(styleKeys) && styleKeys.includes(key)) ||
-      (Array.isArray(overrideKeys) && overrideKeys.includes(key)));
+    (key === 'rtl' && runProperties?.rtl != null) ||
+    (key in (runProperties || {}) &&
+      (!(Array.isArray(styleKeys) && styleKeys.includes(key)) ||
+        (Array.isArray(overrideKeys) && overrideKeys.includes(key))));
 
   const exportKeys = candidateKeys.filter(shouldExport);
 

@@ -29,4 +29,21 @@ describe('w:rtl translator (attribute)', () => {
       expect(out).toBe(true);
     });
   });
+
+  describe('decode', () => {
+    it('creates w:rtl when rtl is true', () => {
+      const out = translator.decode({ node: { attrs: { rtl: true } } });
+      expect(out).toEqual({ attributes: {} });
+    });
+
+    it('writes w:val=0 when rtl is false', () => {
+      const out = translator.decode({ node: { attrs: { rtl: false } } });
+      expect(out).toEqual({ attributes: { 'w:val': '0' } });
+    });
+
+    it('returns undefined when rtl is missing', () => {
+      const out = translator.decode({ node: { attrs: {} } });
+      expect(out).toBeUndefined();
+    });
+  });
 });

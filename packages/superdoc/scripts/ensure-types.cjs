@@ -277,6 +277,9 @@ const RELOCATION_REWRITERS = RELOCATION_RULES.map((rule) => ({
   rewrite: makeRelocationRewriter(rule),
 }));
 
+// Any root specifier added here should also be listed in
+// RELOCATION_GUARD_PACKAGES so it cannot fall back to an ambient `any`
+// shim after we intentionally skip shim generation.
 const UNSHIMMED_PRIVATE_SPECIFIERS = new Set([
   '@superdoc/pm-adapter',
 ]);

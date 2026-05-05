@@ -30,18 +30,27 @@ export function ContextMenu() {
   useEffect(() => {
     if (!ui) return;
     const onContextMenu = (event: MouseEvent) => {
-      // `entityAt` is already scoped to the controller's painted host
-      // (PR #3139) — it returns `[]` for points outside the editor.
-      // Use that as the scope check rather than a CSS-class filter
-      // like `.editor-shell`, which fails when the painter routes the
-      // event through a hidden ProseMirror DOM that lives outside
-      // `visibleHost`.
+      // Scope the listener to the editor surface. `entityAt` alone
+      // isn't enough now that always-on contributions (Bold, Italic,
+      // Copy, Comment on selection) are wired to the selection slice
+      // rather than the click coordinate — without an explicit
+      // editor-surface check, right-clicking the sidebar with a
+      // selection in the editor would pop our menu over the sidebar.
+      // `.editor-shell` is the demo's own wrapper class. Once a
+      // public `ui.viewport.getHost()` lands, swap the closest()
+      // check for that.
+      const target = event.target;
+      if (!(target instanceof Element) || !target.closest?.('.editor-shell')) {
+        return;
+      }
       const entities = ui.viewport.entityAt({ x: event.clientX, y: event.clientY });
       const items = ui.commands.getContextMenuItems({ entities });
       if (items.length === 0) {
-        // Outside the editor or over a region with no contributed
-        // items — let the browser's native menu run rather than
-        // suppressing it silently.
+        // Inside the editor but no contributions matched. The
+        // `custom-selection` PM extension has already preventDefault
+        // -ed the original event so the browser's native menu
+        // won't show — there's nothing to render here either, so
+        // close any open menu and bail.
         setState(null);
         return;
       }

@@ -88,6 +88,15 @@ export function InsertClauseButton() {
       // an insert. (A consumer with a single-clause flow would skip
       // the menu and pass `{ clauseId: 'confidentiality' }` directly.)
       shortcut: 'Mod-Shift-C',
+      // Same command also surfaces in the right-click context menu so
+      // a user with the cursor parked in the document can reach the
+      // clause picker without aiming for the toolbar.
+      contextMenu: {
+        label: 'Insert clause…',
+        group: 'review',
+        order: 100,
+        when: ({ selection }) => selection.target !== null,
+      },
       getState: ({ state }) => ({
         active: false,
         // Disabled when there's nothing positional to anchor the

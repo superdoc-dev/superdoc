@@ -92,6 +92,32 @@ export function ContextMenuRegistrations({ decided, onComposeComment }: Props) {
     // browser's native menu is suppressed there. Without these
     // entries the menu would be empty whenever the click isn't over a
     // tracked change or comment.
+    const bold = ui.commands.register({
+      id: 'demo.bold',
+      execute: () => {
+        ui.commands.get('bold')?.execute();
+        return true;
+      },
+      contextMenu: {
+        label: 'Bold',
+        group: 'format',
+        order: 0,
+        when: ({ selection }) => !selection.empty,
+      },
+    });
+    const italic = ui.commands.register({
+      id: 'demo.italic',
+      execute: () => {
+        ui.commands.get('italic')?.execute();
+        return true;
+      },
+      contextMenu: {
+        label: 'Italic',
+        group: 'format',
+        order: 1,
+        when: ({ selection }) => !selection.empty,
+      },
+    });
     const copy = ui.commands.register({
       id: 'demo.copy',
       execute: () => {
@@ -126,6 +152,8 @@ export function ContextMenuRegistrations({ decided, onComposeComment }: Props) {
       accept.unregister();
       reject.unregister();
       resolve.unregister();
+      bold.unregister();
+      italic.unregister();
       copy.unregister();
       comment.unregister();
     };

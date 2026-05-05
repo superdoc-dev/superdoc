@@ -31,6 +31,7 @@ export {
   type SelectionHandle,
   type SelectionInfo,
   type SelectionPoint,
+  type SelectionRestoreResult,
   type SelectionSlice,
   type SelectionTarget,
   type SelectorFn,

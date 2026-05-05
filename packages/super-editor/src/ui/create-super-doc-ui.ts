@@ -18,6 +18,7 @@ import { collectEntityHitsFromChain } from './entity-at.js';
 import { shallowEqual } from './equality.js';
 import { scrollRangeIntoView } from './scroll-into-view.js';
 import { getSelectionAnchorRect, getSelectionRects } from './selection-rects.js';
+import { restoreSelection } from './selection-restore.js';
 import { createCustomCommandsRegistry } from './custom-commands.js';
 import { createScope } from './scope.js';
 import type {
@@ -1677,6 +1678,16 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
         options,
         capture,
       );
+    },
+    restore(capture) {
+      // Routed editor: same rationale as `getRects(capture)` — block
+      // ids in a non-body capture only resolve in their own story
+      // editor's PM doc. When focus has moved to the body by call
+      // time, the routed editor is body and resolution returns
+      // `'stale'` rather than placing the selection on the wrong
+      // surface.
+      const editor = resolveRoutedEditor(superdoc);
+      return restoreSelection(editor as unknown as Parameters<typeof restoreSelection>[0], capture);
     },
   };
 

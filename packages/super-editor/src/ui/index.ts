@@ -95,6 +95,7 @@ export type {
   SelectionAnchorRectOptions,
   SelectionCapture,
   SelectionHandle,
+  SelectionRestoreResult,
   SelectionSlice,
 
   // Toolbar + commands

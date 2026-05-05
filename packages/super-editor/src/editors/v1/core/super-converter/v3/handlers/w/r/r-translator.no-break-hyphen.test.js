@@ -110,7 +110,12 @@ describe('w:r translator <w:noBreakHyphen/> round-trip', () => {
     const runs = Array.isArray(decoded) ? decoded : [decoded];
 
     const allChildren = runs.flatMap((r) => (r.elements || []).filter((el) => el.name !== 'w:rPr'));
-    expect(allChildren).toEqual([{ name: 'w:noBreakHyphen' }]);
+    // Match by intent (exactly one child, named w:noBreakHyphen) instead of
+    // strict deep-equality — the encode/decode pipeline normalizes through
+    // xml-js shapes that introduce ancillary undefined fields (`attributes`,
+    // `text`, `type`) along with the required `elements: []`.
+    expect(allChildren).toHaveLength(1);
+    expect(allChildren[0]).toMatchObject({ name: 'w:noBreakHyphen' });
     // Specifically: no <w:t> emitted in lieu of the element
     expect(allChildren.some((el) => el.name === 'w:t')).toBe(false);
   });

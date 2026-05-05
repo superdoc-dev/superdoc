@@ -33,12 +33,12 @@ describe('w:noBreakHyphen translator config', () => {
       expect(res).toBeTruthy();
       expect(res.name).toBe('w:r');
       expect(Array.isArray(res.elements)).toBe(true);
-      expect(res.elements[0]).toEqual({ name: 'w:noBreakHyphen' });
+      expect(res.elements[0]).toEqual({ name: 'w:noBreakHyphen', elements: [] });
     });
 
     it('returns the bare element when extraParams.skipRun is set', () => {
       const res = config.decode({ node: { type: 'noBreakHyphen' }, extraParams: { skipRun: true } }, undefined);
-      expect(res).toEqual({ name: 'w:noBreakHyphen' });
+      expect(res).toEqual({ name: 'w:noBreakHyphen', elements: [] });
     });
 
     it('returns undefined when params.node is missing', () => {
@@ -49,7 +49,7 @@ describe('w:noBreakHyphen translator config', () => {
     it('preserves decodedAttrs as element attributes', () => {
       const decoded = { 'w:custom': 'foo' };
       const res = config.decode({ node: { type: 'noBreakHyphen' } }, decoded);
-      expect(res.elements[0]).toEqual({ name: 'w:noBreakHyphen', attributes: decoded });
+      expect(res.elements[0]).toEqual({ name: 'w:noBreakHyphen', elements: [], attributes: decoded });
     });
   });
 
@@ -64,13 +64,13 @@ describe('w:noBreakHyphen translator config', () => {
       const childNames = res.elements[0].elements.map((el) => el.name);
       expect(childNames).toContain('w:b');
       expect(childNames).toContain('w:i');
-      expect(res.elements[1]).toEqual({ name: 'w:noBreakHyphen' });
+      expect(res.elements[1]).toEqual({ name: 'w:noBreakHyphen', elements: [] });
     });
 
     it('does not add run props when node.marks is empty and no inherited rPr', () => {
       const res = config.decode({ node: { type: 'noBreakHyphen', marks: [] } }, undefined);
       expect(res.name).toBe('w:r');
-      expect(res.elements).toEqual([{ name: 'w:noBreakHyphen' }]);
+      expect(res.elements).toEqual([{ name: 'w:noBreakHyphen', elements: [] }]);
     });
 
     it('inherits run properties from extraParams.runProperties', () => {

@@ -6167,7 +6167,7 @@ export class PresentationEditor extends EventEmitter {
       // Process per-rId header/footer content and decoration providers (paginated only)
       if (!isSemanticFlow) {
         await this.#layoutPerRIdHeaderFooters(headerFooterInput, layout, sectionMetadata);
-        this.#updateDecorationProviders(layout, resolvedLayout);
+        this.#updateDecorationProviders(resolvedLayout);
       }
 
       this.#ensurePainter();
@@ -7350,8 +7350,8 @@ export class PresentationEditor extends EventEmitter {
    * Update decoration providers for header/footer.
    * Delegates to HeaderFooterSessionManager which handles provider creation.
    */
-  #updateDecorationProviders(layout: Layout, resolvedLayout: ResolvedLayout) {
-    this.#headerFooterSession?.updateDecorationProviders(layout, resolvedLayout);
+  #updateDecorationProviders(resolvedLayout: ResolvedLayout) {
+    this.#headerFooterSession?.updateDecorationProviders(resolvedLayout);
   }
 
   /**

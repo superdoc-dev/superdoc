@@ -2038,19 +2038,18 @@ export class DomPainter {
     // Insert or patch needed pages
     for (const i of mounted) {
       const page = layout.pages[i];
-      const pageSize = { w: page.width, h: page.height };
       const existing = this.pageIndexToState.get(i);
       if (!existing) {
-        const newState = this.createPageState(page, pageSize, i);
+        const newState = this.createPageState(page, i);
         newState.element.dataset.pageNumber = String(page.number);
         newState.element.dataset.pageIndex = String(i);
         // Ensure virtualization uses page margin 0
-        applyStyles(newState.element, pageStyles(pageSize.w, pageSize.h, this.getEffectivePageStyles()));
+        applyStyles(newState.element, pageStyles(page.width, page.height, this.getEffectivePageStyles()));
         this.virtualPagesEl.appendChild(newState.element);
         this.pageIndexToState.set(i, newState);
       } else {
         // Patch in place
-        this.patchPage(existing, page, pageSize, i);
+        this.patchPage(existing, page, i);
       }
     }
 
@@ -2682,8 +2681,7 @@ export class DomPainter {
     this.pageStates = [];
 
     layout.pages.forEach((page, pageIndex) => {
-      const pageSize = { w: page.width, h: page.height };
-      const pageState = this.createPageState(page, pageSize, pageIndex);
+      const pageState = this.createPageState(page, pageIndex);
       pageState.element.dataset.pageNumber = String(page.number);
       pageState.element.dataset.pageIndex = String(pageIndex);
       this.mount!.appendChild(pageState.element);
@@ -2697,17 +2695,16 @@ export class DomPainter {
     const nextStates: PageDomState[] = [];
 
     layout.pages.forEach((page, index) => {
-      const pageSize = { w: page.width, h: page.height };
       const prevState = this.pageStates[index];
       if (!prevState) {
-        const newState = this.createPageState(page, pageSize, index);
+        const newState = this.createPageState(page, index);
         newState.element.dataset.pageNumber = String(page.number);
         newState.element.dataset.pageIndex = String(index);
         this.mount!.insertBefore(newState.element, this.mount!.children[index] ?? null);
         nextStates.push(newState);
         return;
       }
-      this.patchPage(prevState, page, pageSize, index);
+      this.patchPage(prevState, page, index);
       nextStates.push(prevState);
     });
 
@@ -2720,14 +2717,9 @@ export class DomPainter {
     this.pageStates = nextStates;
   }
 
-  private patchPage(
-    state: PageDomState,
-    page: ResolvedPage,
-    pageSize: { w: number; h: number },
-    pageIndex: number,
-  ): void {
+  private patchPage(state: PageDomState, page: ResolvedPage, pageIndex: number): void {
     const pageEl = state.element;
-    applyStyles(pageEl, pageStyles(pageSize.w, pageSize.h, this.getEffectivePageStyles()));
+    applyStyles(pageEl, pageStyles(page.width, page.height, this.getEffectivePageStyles()));
     this.applySemanticPageOverrides(pageEl);
     pageEl.dataset.pageNumber = String(page.number);
     pageEl.dataset.layoutEpoch = String(this.layoutEpoch);
@@ -2826,7 +2818,7 @@ export class DomPainter {
 
     state.fragments = nextFragments;
     this.renderDecorationsForPage(pageEl, page, pageIndex);
-    this.renderColumnSeparators(pageEl, page, pageSize.w, pageSize.h);
+    this.renderColumnSeparators(pageEl, page, page.width, page.height);
   }
 
   /**
@@ -2886,13 +2878,13 @@ export class DomPainter {
     }
   }
 
-  private createPageState(page: ResolvedPage, pageSize: { w: number; h: number }, pageIndex: number): PageDomState {
+  private createPageState(page: ResolvedPage, pageIndex: number): PageDomState {
     if (!this.doc) {
       throw new Error('DomPainter.createPageState requires a document');
     }
     const el = this.doc.createElement('div');
     el.classList.add(CLASS_NAMES.page);
-    applyStyles(el, pageStyles(pageSize.w, pageSize.h, this.getEffectivePageStyles()));
+    applyStyles(el, pageStyles(page.width, page.height, this.getEffectivePageStyles()));
     this.applySemanticPageOverrides(el);
     el.dataset.layoutEpoch = String(this.layoutEpoch);
 
@@ -2932,7 +2924,7 @@ export class DomPainter {
     });
 
     this.renderDecorationsForPage(el, page, pageIndex);
-    this.renderColumnSeparators(el, page, pageSize.w, pageSize.h);
+    this.renderColumnSeparators(el, page, page.width, page.height);
     return { element: el, fragments: fragmentStates };
   }
 

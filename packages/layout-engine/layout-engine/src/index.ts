@@ -2774,11 +2774,38 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
         }
       }
 
+      // Per ECMA-376 §17.18.77, a continuous break balances the section it
+      // ENDS (i.e., the section BEFORE the break), not the section that
+      // CONTAINS or follows it. When the body sectPr itself is the explicit
+      // continuous trigger, it balances the section preceding the body, not
+      // the body section itself. Compare:
+      //
+      //   sd-1480: body sectPr explicit-continuous + 2-col, section 0 has
+      //            content. Word balances section 0 (3+3).
+      //   mixed-columns-tabs-tnr: body sectPr explicit-continuous + 2-col,
+      //            section 1 (the body) has the 2-col Test list, section 0
+      //            has 1-col descriptions. Word does NOT balance section 1
+      //            (14+5 column-flow); the body-as-trigger applies to
+      //            section 0, which is single-col and so a no-op.
+      //
+      // Excluding the body-explicit-continuous section itself from rule 2
+      // matches both: section 0 of sd-1480 still balances (it's not the
+      // body), section 1 of mixed-columns-tabs-tnr does not (it IS the
+      // body). The body section can still balance via rule 1 (impossible:
+      // last section can't satisfy "not last") or rule 3 (multi-page).
+      const bodyExplicitContinuousIdx =
+        lastSectionIdx !== null &&
+        sectionTypeIsExplicit.get(lastSectionIdx) === true &&
+        sectionEndBreakType.get(lastSectionIdx) === 'continuous'
+          ? lastSectionIdx
+          : null;
+
       const isExplicitNonContinuous =
         typeIsExplicit && (endBreakType === 'nextPage' || endBreakType === 'evenPage' || endBreakType === 'oddPage');
 
       const allowedByMidDocContinuous = endBreakType === 'continuous' && !isLast;
-      const allowedByDocWideExplicit = docHasExplicitContinuous && !isExplicitNonContinuous;
+      const allowedByDocWideExplicit =
+        docHasExplicitContinuous && !isExplicitNonContinuous && sectionIdx !== bodyExplicitContinuousIdx;
       let allowedByMultiPage = false;
       if (!allowedByMidDocContinuous && !allowedByDocWideExplicit) {
         let sectionPagesCount = 0;

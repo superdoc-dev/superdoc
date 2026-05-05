@@ -136,10 +136,19 @@ export function ContextMenuRegistrations({ decided, onComposeComment }: Props) {
     // and silently land at the user's prior selection somewhere else
     // in the doc, making the menu label a lie.
     //
-    // Gated on `position !== null && !insideSelection` so it only
-    // shows when the click landed on plain text outside any
-    // selection. Inside the selection we already offer "Comment on
-    // selection" / "Copy"; on an entity we offer Accept/Reject/Resolve.
+    // Gated on three conditions so it only shows on plain caret-only
+    // text:
+    //   - `position !== null`: a caret resolved (excludes clicks
+    //     outside the painted host).
+    //   - `insideSelection !== true`: the click isn't inside the
+    //     active selection (Copy / Comment on selection own that
+    //     case).
+    //   - `entities.length === 0`: the click isn't on a tracked
+    //     change or comment (Accept / Reject / Resolve own those).
+    //     Without this gate, right-clicking a tracked change would
+    //     surface both Accept/Reject AND "Insert clause here", and
+    //     picking the latter would insert into the entity's range
+    //     instead of acting on the entity.
     const SAMPLE_CLAUSE =
       'Each party agrees to maintain the confidentiality of all information disclosed by the other party in connection with this agreement.';
     const insertHere = ui.commands.register({
@@ -154,7 +163,8 @@ export function ContextMenuRegistrations({ decided, onComposeComment }: Props) {
         label: 'Insert clause here',
         group: 'review',
         order: 10,
-        when: ({ position, insideSelection }) => position !== null && insideSelection !== true,
+        when: ({ entities, position, insideSelection }) =>
+          entities.length === 0 && position !== null && insideSelection !== true,
       },
     });
 

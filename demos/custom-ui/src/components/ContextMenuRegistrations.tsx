@@ -85,45 +85,17 @@ export function ContextMenuRegistrations({ decided, onComposeComment }: Props) {
       },
     });
 
-    // Always-on fallback items so right-click on plain selected text
-    // produces a useful menu instead of feeling "dead". The
-    // `custom-selection` PM extension preventDefaults every right-click
-    // inside the editor (regardless of `disableContextMenu`), so the
-    // browser's native menu is suppressed there. Without these
-    // entries the menu would be empty whenever the click isn't over a
-    // tracked change or comment.
-    // Bold / Italic stay available on a collapsed selection: toggling
-    // a mark with no range applies it to the cursor's stored marks
-    // so the next typed character picks up the formatting. Same UX
-    // Word and Google Docs offer on right-click. Gate on
-    // `selection.target` so we don't surface them when the editor
-    // isn't focused at all.
-    const bold = ui.commands.register({
-      id: 'demo.bold',
-      execute: () => {
-        ui.commands.get('bold')?.execute();
-        return true;
-      },
-      contextMenu: {
-        label: 'Bold',
-        group: 'format',
-        order: 0,
-        when: ({ selection }) => selection.target !== null,
-      },
-    });
-    const italic = ui.commands.register({
-      id: 'demo.italic',
-      execute: () => {
-        ui.commands.get('italic')?.execute();
-        return true;
-      },
-      contextMenu: {
-        label: 'Italic',
-        group: 'format',
-        order: 1,
-        when: ({ selection }) => selection.target !== null,
-      },
-    });
+    // Selection-scoped items. The right-click menu only shows these
+    // when the click is INSIDE the selection rect (the consumer's
+    // ContextMenu component hit-tests via `ui.selection.getRects()`).
+    // Without that gate, a stale selection from a prior interaction
+    // would leak into a right-click somewhere else.
+    //
+    // Format items (Bold / Italic / Link) deliberately live in the
+    // floating bubble menu rather than here. The right-click target
+    // model is "the thing under the pointer," and a format toggle
+    // doesn't belong to a target — it belongs to the active
+    // selection. The bubble menu owns that.
     const copy = ui.commands.register({
       id: 'demo.copy',
       execute: () => {
@@ -148,8 +120,6 @@ export function ContextMenuRegistrations({ decided, onComposeComment }: Props) {
       contextMenu: {
         label: 'Comment on selection',
         group: 'comment',
-        // Need both a non-empty selection AND a positional target —
-        // the latter so `createFromCapture` has somewhere to anchor.
         when: ({ selection }) => !selection.empty && selection.target !== null,
       },
     });
@@ -158,8 +128,6 @@ export function ContextMenuRegistrations({ decided, onComposeComment }: Props) {
       accept.unregister();
       reject.unregister();
       resolve.unregister();
-      bold.unregister();
-      italic.unregister();
       copy.unregister();
       comment.unregister();
     };

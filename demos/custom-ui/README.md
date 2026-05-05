@@ -72,6 +72,20 @@ Sort or partition the result however the UI wants. This demo's `ActivitySidebar`
 - No backend. The clause library in `<InsertClauseButton>` is hardcoded. Real consumers fetch from their own API and call `reg.invalidate()` when permissions or availability change.
 - No AI provider. Custom commands can call any LLM from `execute`; the demo picked "Insert clause" because it's concrete and self-contained.
 
+## Three surfaces, three subjects
+
+The demo follows a strict separation between the three editor UI surfaces. Each one answers a different "what's the subject of this action?" question:
+
+| Surface | Subject | Belongs here |
+| --- | --- | --- |
+| **Toolbar** | The **document** | Mode toggle, Export, Import, Insert clause, Undo / Redo, review nav. Persistent controls that don't depend on a selection or a click target. |
+| **Floating bubble menu** | The **selection** | Bold, Italic, Link, Copy, Comment on selection. Format-on-selection actions where the user's eyes stay on the work. |
+| **Right-click context menu** | The **clicked target** | Accept / Reject (on tracked change), Resolve (on comment), Copy / Comment on selection (only when the click is *inside* the selection rect). |
+
+The right-click menu deliberately stays empty when the click lands on plain caret-only text. To honor the "click target = subject" rule for items like "Paste here" or "Insert clause at this point", the demo would need a `ui.viewport.positionAt({ x, y })` API (paired with `entityAt`) that resolves a coordinate to a `SelectionPoint`. Without it, those items would dispatch against the stale selection from before the right-click — a misleading teaching example. The API gap is filed as a SD-2936 follow-up; the demo stays honest until it lands.
+
+The `ContextMenu` component hit-tests the click against `ui.selection.getRects()` to separate "click landed inside the selection" from "click landed somewhere else with a stale selection elsewhere on the page". Without that hit-test, every right-click anywhere would surface selection-scoped items.
+
 ## The custom-UI recipe (after SD-2936)
 
 1. **Floating selection toolbar** — `ui.selection.getAnchorRect({ placement: 'start' })` returns viewport-relative coords for the painted selection. Re-position on `useSuperDocSelection()` change + `scroll`/`resize`. Don't reach for `window.getSelection()`; SuperDoc's painted DOM is separate from the offscreen ProseMirror DOM and the browser API returns the wrong rect. See `SelectionPopover.tsx`.

@@ -303,6 +303,75 @@ describe('preProcessNodesForFldChar', () => {
     ]);
   });
 
+  it('preserves a tracked-deletion-wrapped field split across paragraphs without throwing', () => {
+    const expectedNodes = [
+      {
+        name: 'w:p',
+        elements: [
+          {
+            name: 'w:del',
+            attributes: { 'w:id': '1', 'w:author': 'Repro', 'w:date': '2026-04-30T00:00:00Z' },
+            elements: [
+              { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'begin' } }] },
+              {
+                name: 'w:r',
+                elements: [
+                  {
+                    name: 'w:instrText',
+                    attributes: { 'xml:space': 'preserve' },
+                    elements: [{ type: 'text', text: ' HYPERLINK \\l "Bookmark" ' }],
+                  },
+                ],
+              },
+              { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'separate' } }] },
+              {
+                name: 'w:r',
+                elements: [
+                  {
+                    name: 'w:delText',
+                    attributes: { 'xml:space': 'preserve' },
+                    elements: [{ type: 'text', text: 'deleted link text' }],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+      {
+        name: 'w:p',
+        elements: [
+          {
+            name: 'w:del',
+            attributes: { 'w:id': '2', 'w:author': 'Repro', 'w:date': '2026-04-30T00:00:00Z' },
+            elements: [
+              { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'end' } }] },
+              {
+                name: 'w:r',
+                elements: [
+                  {
+                    name: 'w:delText',
+                    attributes: { 'xml:space': 'preserve' },
+                    elements: [{ type: 'text', text: 'deleted text after field end' }],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ];
+    const nodes = structuredClone(expectedNodes);
+
+    let result;
+    expect(() => {
+      result = preProcessNodesForFldChar(nodes, mockDocx);
+    }).not.toThrow();
+    expect(result.processedNodes).toEqual(expectedNodes);
+    expect(result.unpairedBegin).toBeNull();
+    expect(result.unpairedEnd).toBeNull();
+  });
+
   it('should handle unpaired begin', () => {
     const nodes = [
       { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'begin' } }] },

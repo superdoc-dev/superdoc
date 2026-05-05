@@ -7,10 +7,11 @@ import { carbonCopy } from '@core/utilities/carbonCopy.js';
 const SKIP_FIELD_PROCESSING_NODE_NAMES = new Set(['w:drawing', 'w:pict']);
 
 const shouldSkipFieldProcessing = (node) => SKIP_FIELD_PROCESSING_NODE_NAMES.has(node?.name);
+const isTrackChangeWrapper = (node) => node?.name === 'w:del' || node?.name === 'w:ins';
 /**
  * @typedef {object} FldCharProcessResult
  * @property {OpenXmlNode[]} processedNodes - The list of nodes after processing.
- * @property {Array<{nodes: OpenXmlNode[], fieldInfo: {instrText: string, instructionTokens?: Array<{type: string, text?: string}>}}>| null} unpairedBegin - If a field 'begin' was found without a matching 'end'. Contains the current field data.
+ * @property {Array<{nodes: OpenXmlNode[], fieldInfo: {instrText: string, instructionTokens?: Array<{type: string, text?: string}>, afterSeparate?: boolean, preserveRaw?: boolean}}>| null} unpairedBegin - If a field 'begin' was found without a matching 'end'. Contains the current field data.
  * @property {boolean | null} unpairedEnd - If a field 'end' was found without a matching 'begin'.
  */
 
@@ -48,13 +49,15 @@ export const preProcessNodesForFldChar = (nodes = [], docx) => {
       const rawCollectedNodes = rawCollectedNodesStack.pop().filter((n) => n !== null);
       const fieldRunRPr = fieldRunRPrStack.pop() ?? null;
       const currentField = currentFieldStack.pop();
-      const combinedResult = _processCombinedNodesForFldChar(
-        collectedNodes,
-        currentField.instrText.trim(),
-        docx,
-        currentField.instructionTokens,
-        fieldRunRPr,
-      );
+      const combinedResult = currentField.preserveRaw
+        ? { nodes: rawCollectedNodes, handled: false }
+        : _processCombinedNodesForFldChar(
+            collectedNodes,
+            currentField.instrText.trim(),
+            docx,
+            currentField.instructionTokens,
+            fieldRunRPr,
+          );
       const outputNodes = combinedResult.handled ? combinedResult.nodes : rawCollectedNodes;
       if (collectedNodesStack.length === 0) {
         // We have completed a top-level field, add the combined nodes to the output.
@@ -205,7 +208,11 @@ export const preProcessNodesForFldChar = (nodes = [], docx) => {
       if (childResult.unpairedBegin) {
         // A field started in the children, so this node is part of that field.
         childResult.unpairedBegin.forEach((pendingField) => {
-          currentFieldStack.push(pendingField.fieldInfo);
+          const fieldInfo = { ...pendingField.fieldInfo };
+          if (fieldInfo.preserveRaw || isTrackChangeWrapper(node)) {
+            fieldInfo.preserveRaw = true;
+          }
+          currentFieldStack.push(fieldInfo);
 
           // The current node should be added to the collected nodes
           collectedNodesStack.push([node]);
@@ -216,6 +223,12 @@ export const preProcessNodesForFldChar = (nodes = [], docx) => {
         });
       } else if (childResult.unpairedEnd) {
         // A field from this level or higher ended in the children.
+        if (collectedNodesStack.length === 0) {
+          processedNodes.push(node);
+          unpairedEnd = true;
+          return;
+        }
+
         collectedNodesStack[collectedNodesStack.length - 1].push(node);
         captureRawNodeForCurrentField(rawNode, capturedRawNodes, rawSourceToken);
         finalizeField();

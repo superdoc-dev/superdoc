@@ -73,6 +73,7 @@ const RELOCATION_GUARD_PACKAGES = [
   '@superdoc/painter-dom',
   '@superdoc/pm-adapter',
   '@superdoc/style-engine',
+  '@superdoc/common',
   '@superdoc/common/list-marker-utils',
 ];
 

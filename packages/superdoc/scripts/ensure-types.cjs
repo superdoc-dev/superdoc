@@ -66,9 +66,11 @@ if (handwrittenCopiedSuperEditor > 0) {
 // public surface. Adding shared/ to vite-plugin-dts's `include` would shift the
 // common-ancestor of all source files to the repo root and reorganise the
 // entire dist tree, so we run tsc directly for just the files we relocate.
-// Today: list-marker-utils plus its sibling layout-constants. Add new entries
-// here in lockstep with `RELOCATION_RULES` below.
-const SHARED_COMMON_DTS_TARGETS = ['list-marker-utils.ts', 'layout-constants.ts'];
+// Today: list-marker-utils plus its sibling layout-constants, and
+// comments-types (the four Comment* types referenced via bare @superdoc/common
+// imports in three internal-only dist d.ts files). Add new entries here in
+// lockstep with `RELOCATION_RULES` below.
+const SHARED_COMMON_DTS_TARGETS = ['list-marker-utils.ts', 'layout-constants.ts', 'comments-types.ts'];
 {
   const { spawnSync: _spawnSync } = require('node:child_process');
   const tscBin = path.join(repoRoot, 'node_modules', '.bin', 'tsc');
@@ -285,6 +287,20 @@ const RELOCATION_RULES = [
     distEntry: 'layout-engine/style-engine/src/ooxml/index.d.ts',
     matchSubpaths: false,
   },
+  // SD-2893: bare @superdoc/common appears in three internal-only dist d.ts
+  // files for the four Comment* types (Comment, CommentContent, CommentJSON,
+  // CommentThreadingProfile). Point the bare specifier at comments-types.d.ts
+  // (emitted via SHARED_COMMON_DTS_TARGETS) so the rewrite resolves to a real
+  // file. matchSubpaths: false because only the bare specifier is referenced;
+  // any future @superdoc/common/<other-subpath> import would not be auto-
+  // rewritten, falling through to the audit gate. The runtime-value imports
+  // from the main entry (DOCX, PDF, HTML, getFileObject, compareVersions,
+  // BlankDOCX) are still handled by the inline-replacement step above.
+  {
+    pkg: '@superdoc/common',
+    distEntry: 'shared/common/comments-types.d.ts',
+    matchSubpaths: false,
+  },
 ];
 
 // Guard packages that must never fall back to `_internal-shims.d.ts`.
@@ -300,6 +316,7 @@ const RELOCATION_GUARD_PACKAGES = [
   '@superdoc/painter-dom',
   '@superdoc/pm-adapter',
   '@superdoc/style-engine',
+  '@superdoc/common',
   '@superdoc/common/list-marker-utils',
 ];
 

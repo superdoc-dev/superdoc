@@ -79,21 +79,37 @@ function extractNormalizedMargins(attrs: Record<string, unknown>): {
 
 /**
  * Extract section type from <w:type> element.
- * Returns the explicit value when present, or `null` when absent so callers
- * can distinguish "OOXML omitted w:type" from "OOXML wrote nextPage". This
- * matters for column balancing: Word balances a section ending in an
- * explicit `w:type="continuous"` body sectPr but does NOT balance one that
- * merely defaulted to continuous (per ECMA-376 §17.18.77 and observed
- * behavior on `sd-1655-col-sep-3-equal-columns` vs `sd-1480-two-col-tab-positions`).
+ * Defaults to 'nextPage' per OOXML spec when absent. This preserves the
+ * historical body-sectPr type behavior — any change to that ripples
+ * through page-break placement, header/footer inheritance, and section
+ * flow across the entire layout pipeline. Callers that need to know
+ * whether `<w:type>` was actually present should consult
+ * `extractSectionTypeWithSource` below; the existing `type` value stays
+ * `nextPage` regardless.
  */
-function extractSectionType(elements: SectionElement[]): SectionType | null {
+function extractSectionType(elements: SectionElement[]): SectionType {
   const typeEl = elements.find((el) => el?.name === 'w:type');
-  if (!typeEl) return null;
-  const val = typeEl.attributes?.['w:val'];
+  const val = typeEl?.attributes?.['w:val'];
   if (val === 'continuous' || val === 'nextPage' || val === 'evenPage' || val === 'oddPage') {
     return val;
   }
-  return null;
+  return 'nextPage';
+}
+
+/**
+ * True iff `<w:type>` is present in the source XML.
+ *
+ * The column-balancing gate (ECMA-376 §17.18.77) needs to distinguish a
+ * body sectPr whose `<w:type>` defaulted to `nextPage` because it was
+ * omitted (sd-1655-col-sep-3-equal-columns: Word fills col-by-col, no
+ * balance) from one with explicit `<w:type w:val="continuous"/>`
+ * (sd-1480-two-col-tab-positions: Word balances 6 entries 3+3 on a
+ * single page). The type field alone can't carry this — both produce
+ * `'nextPage'` in the resolved type — so we surface it as a separate
+ * flag without touching the established type defaulting.
+ */
+function extractSectionTypeIsExplicit(elements: SectionElement[]): boolean {
+  return elements.some((el) => el?.name === 'w:type');
 }
 
 /**
@@ -356,10 +372,12 @@ export function extractSectionData(para: PMNode): {
     return headerPx == null && footerPx == null ? null : { headerPx, footerPx };
   }
 
-  // Extract all section properties. type is null when <w:type> is omitted.
-  const explicitType = extractSectionType(sectPrElements);
-  const type = explicitType ?? undefined;
-  const typeIsExplicit = explicitType !== null;
+  // Extract all section properties. type defaults to 'nextPage' per OOXML
+  // spec (and this preserves the historical pipeline behavior across page
+  // breaks, header/footer flow, etc). `typeIsExplicit` lets the
+  // column-balancing gate know whether `<w:type>` was actually written.
+  const type = extractSectionType(sectPrElements);
+  const typeIsExplicit = extractSectionTypeIsExplicit(sectPrElements);
   const { pageSizePx, orientation } = extractPageSizeAndOrientation(sectPrElements);
   const titlePg = sectPrElements.some((el) => el?.name === 'w:titlePg');
   const fallbackMargins = extractFallbackMargins(sectPrElements, headerPx, footerPx);

@@ -227,11 +227,7 @@ describe('PM → FlowBlock → Measure integration', () => {
     expect(breaks.length).toBe(4);
 
     const last = breaks[breaks.length - 1] as never;
-    // The body sectPr in this fixture has no `<w:type>`, so the final section
-    // takes pm-adapter's body default (DEFAULT_BODY_SECTION_TYPE = continuous).
-    // The earlier `nextPage` expectation matched a bug where extractSectionType
-    // applied a paragraph-style default to body sectPrs.
-    expect(last.type).toBe('continuous');
+    expect(last.type).toBe('nextPage');
     expect(last.orientation).toBe('landscape');
     expect(last.pageSize).toBeDefined();
     expect(Math.round(last.pageSize.w)).toBe(1056); // Landscape width (legal @ 96dpi)

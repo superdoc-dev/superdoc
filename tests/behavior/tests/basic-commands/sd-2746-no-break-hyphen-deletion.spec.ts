@@ -23,7 +23,13 @@ const setupDocWithAtom = async (superdoc: any) => {
   await superdoc.waitForStable();
   await superdoc.executeCommand('insertContent', { type: 'noBreakHyphen' });
   await superdoc.waitForStable();
-  await superdoc.type('def');
+  // After insertContent of an atom, PM leaves the caret inside the atom's
+  // wrapper run. WebKit's contenteditable doesn't deliver subsequent keyboard
+  // input back to PM at that position (chromium/firefox do), so `type('def')`
+  // gets silently dropped. Use insertContent here — the deletion tests below
+  // are about Backspace/Delete semantics, not the typing path, and the
+  // resulting doc structure (three runs) is identical either way.
+  await superdoc.executeCommand('insertContent', 'def');
   await superdoc.waitForStable();
 };
 

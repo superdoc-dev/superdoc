@@ -47,6 +47,17 @@ vi.mock('prosemirror-tables', () => ({
   })),
 }));
 
+import { selectedRect as selectedRectMock } from 'prosemirror-tables';
+import { undoDepth, redoDepth } from 'prosemirror-history';
+import { yUndoPluginKey } from 'y-prosemirror';
+
+import { isList } from '@core/commands/list-helpers';
+import { isCellSelection as isCellSelectionMock } from '@extensions/table/tableHelpers/isCellSelection.js';
+import {
+  collectTrackedChanges,
+  collectTrackedChangesForContext,
+} from '@extensions/track-changes/permission-helpers.js';
+
 import {
   getEditorContext,
   getPropsByItemId,
@@ -55,17 +66,8 @@ import {
   __getCellSelectionInfoForTest,
   __resolveProofingContextForTest,
 } from '../utils.js';
-import { isList } from '@core/commands/list-helpers';
 import { readFromClipboard } from '../../../core/utilities/clipboardUtils.js';
 import { selectionHasNodeOrMark } from '../../cursor-helpers.js';
-import { undoDepth, redoDepth } from 'prosemirror-history';
-import { yUndoPluginKey } from 'y-prosemirror';
-import { isCellSelection as isCellSelectionMock } from '@extensions/table/tableHelpers/isCellSelection.js';
-import { selectedRect as selectedRectMock } from 'prosemirror-tables';
-import {
-  collectTrackedChanges,
-  collectTrackedChangesForContext,
-} from '@extensions/track-changes/permission-helpers.js';
 
 // Get the mocked functions
 const mockReadFromClipboard = vi.mocked(readFromClipboard);

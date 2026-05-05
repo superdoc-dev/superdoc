@@ -55,6 +55,8 @@ export {
   type TrackChangesSlice,
   type TrackedChangeAddress,
   type UIToolbarCommandState,
+  type ViewportContext,
+  type ViewportContextAtInput,
   type ViewportEntityAtInput,
   type ViewportEntityHit,
   type ViewportGetRectInput,

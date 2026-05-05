@@ -1075,9 +1075,13 @@ export type CommandsHandle = {
    * ```ts
    * scope.on(editorHost, 'contextmenu', (event) => {
    *   event.preventDefault();
-   *   const entities = ui.viewport.entityAt({ x: event.clientX, y: event.clientY });
-   *   const items = ui.commands.getContextMenuItems({ entities });
-   *   renderMenu(items, event.clientX, event.clientY);
+   *   // SD-2945: pass the full bundle so predicates filter on the
+   *   // same shape handlers receive, and `item.invoke()` fires
+   *   // execute with context bound. The legacy `{ entities }` shape
+   *   // still works for apps that haven't migrated.
+   *   const context = ui.viewport.contextAt({ x: event.clientX, y: event.clientY });
+   *   const items = ui.commands.getContextMenuItems(context);
+   *   renderMenu(items, event.clientX, event.clientY, (item) => item.invoke?.());
    * });
    * ```
    *
@@ -1092,7 +1096,7 @@ export type CommandsHandle = {
    * extension (`disableContextMenu: true`) and roll their own menu —
    * built-in entries belong to the consumer's renderer at that point.
    */
-  getContextMenuItems(input?: { entities?: ViewportEntityHit[] }): ContextMenuItem[];
+  getContextMenuItems(input?: { entities?: ViewportEntityHit[] } | ViewportContext): ContextMenuItem[];
 };
 
 /**
@@ -1163,11 +1167,18 @@ export type CustomCommandRegistration<TPayload = void, TValue = unknown> = {
    * Execute the command. Receives:
    *
    * - `payload` (typed per registration),
-   * - the host `superdoc` instance, and
+   * - the host `superdoc` instance,
    * - the routed `editor` — the same editor `ui.commands.*` mutations
    *   target. Use `editor.doc.*` for direct Document API access without
    *   reaching `superdoc.activeEditor`. `editor` is `null` before the
-   *   editor has reported ready, so guard early.
+   *   editor has reported ready, so guard early, and
+   * - `context` (SD-2945): the {@link ViewportContext} bundle, present
+   *   only when the command was invoked via `ContextMenuItem.invoke()`
+   *   from a menu opened with `ui.viewport.contextAt(...)`. Lets
+   *   right-click handlers act on the click target ("Paste here",
+   *   "Comment here") without re-running entityAt / positionAt or
+   *   threading payloads. `undefined` for direct
+   *   `commands.execute` / `commands.get(id).execute()` calls.
    *
    * Return value is normalized to `boolean` for the synchronous result;
    * async commands return a Promise the runtime awaits internally.
@@ -1176,6 +1187,7 @@ export type CustomCommandRegistration<TPayload = void, TValue = unknown> = {
     payload?: TPayload;
     superdoc: SuperDocLike;
     editor: SuperDocEditorLike | null;
+    context?: ViewportContext;
   }) => boolean | void | Promise<boolean | void>;
   /**
    * Optional state deriver. Runs on every snapshot rebuild. If omitted,
@@ -1281,6 +1293,28 @@ export interface ContextMenuWhenInput {
   entities: ViewportEntityHit[];
   /** Current selection slice. Mirrors `state.selection`. */
   selection: SelectionSlice;
+  /**
+   * SD-2945: viewport-relative click point. Present only when the
+   * consumer called `getContextMenuItems(viewport.contextAt({ x, y }))`
+   * (or passed a {@link ViewportContext} directly). Predicates that
+   * only care about entities / selection can keep destructuring the
+   * old two fields; the new ones are additive.
+   */
+  point?: { x: number; y: number };
+  /**
+   * Resolved caret position at the click point, or `null` when the
+   * click is outside the painted host. Present only when the consumer
+   * passed a {@link ViewportContext}.
+   */
+  position?: ViewportPositionHit | null;
+  /**
+   * `true` when the click point is inside the currently painted
+   * selection rects. Lets predicates distinguish "right-clicked the
+   * selection" from "right-clicked elsewhere" without re-running
+   * geometry. Present only when the consumer passed a
+   * {@link ViewportContext}.
+   */
+  insideSelection?: boolean;
 }
 
 /**
@@ -1296,6 +1330,19 @@ export interface ContextMenuItem {
   label: string;
   group: string;
   order: number;
+  /**
+   * SD-2945: convenience invoker that fires the registered command's
+   * `execute` with the {@link ViewportContext} bundle bound. Present
+   * only when the items came from
+   * `getContextMenuItems(viewport.contextAt(...))`. The bundle is
+   * captured in the closure so the handler receives the same shape
+   * the predicate filtered on, without the consumer re-threading a
+   * payload at every dispatch site.
+   *
+   * Consumers can still call `ui.commands.get(item.id).execute()`
+   * directly when they don't need context (no behavior change).
+   */
+  invoke?(): boolean | Promise<boolean>;
 }
 
 /** Return value from {@link CommandsHandle.register}. */
@@ -1633,6 +1680,42 @@ export interface ViewportHandle {
    * about to consume them.
    */
   positionAt(input: ViewportPositionAtInput): ViewportPositionHit | null;
+
+  /**
+   * Resolve a viewport `(x, y)` coordinate to the full right-click
+   * context bundle: `entities` under the point, the resolved
+   * `position`, the live `selection`, the `point` itself, and
+   * `insideSelection` (whether the click landed inside the painted
+   * selection rects).
+   *
+   * Composes `entityAt`, `positionAt`, the `selection` slice, and an
+   * AABB hit-test against `selection.getRects()` so consumers building
+   * right-click menus don't reassemble the same shape at every site.
+   * Pass the returned bundle to `getContextMenuItems(context)` so
+   * predicates filter on the same shape handlers receive, and to
+   * `ContextMenuItem.invoke()` so `execute({ context })` can act on
+   * the click target without re-running geometry.
+   *
+   * Always returns a bundle (no `null`) so consumer code can
+   * destructure without null-checking the top-level result; the
+   * inner fields still carry the absent-case defaults each primitive
+   * defines (`entities = []`, `position = null`,
+   * `insideSelection = false`). Non-numeric coordinates coerce to
+   * `(0, 0)` rather than short-circuiting to an empty bundle, since
+   * `(0, 0)` is itself a valid viewport point and may legitimately
+   * sit inside the painted host; pass real coordinates if you want
+   * the result to reflect a specific click.
+   */
+  contextAt(input: ViewportContextAtInput): ViewportContext;
+}
+
+/**
+ * Input shape for {@link ViewportHandle.contextAt}. Same coordinate
+ * space as `MouseEvent.clientX` / `clientY`.
+ */
+export interface ViewportContextAtInput {
+  x: number;
+  y: number;
 }
 
 /**
@@ -1660,6 +1743,49 @@ export interface ViewportPositionAtInput {
 export interface ViewportPositionHit {
   point: import('@superdoc/document-api').SelectionPoint;
   target: import('@superdoc/document-api').SelectionTarget;
+}
+
+/**
+ * The "what did the user right-click on?" bundle returned by
+ * {@link ViewportHandle.contextAt}. Composes `entityAt`, `positionAt`,
+ * the live selection slice, and an AABB hit-test against the current
+ * selection rects so consumers don't reassemble the same shape at
+ * every register site.
+ *
+ * Threaded into both `ContextMenuContribution.when` (so predicates can
+ * filter on entity / position / selection containment) and the
+ * registered `execute` (via {@link ContextMenuItem.invoke}) so the
+ * handler doesn't redo work the controller already did.
+ */
+export interface ViewportContext {
+  /**
+   * The viewport-relative coordinate the consumer asked about.
+   * Echoed back so handlers that anchor floating UI to the click
+   * point don't have to remember it separately.
+   */
+  point: { x: number; y: number };
+  /**
+   * Entities under the click point, ordered innermost-first. Same
+   * shape and ordering {@link ViewportHandle.entityAt} returns
+   * directly. Empty when the click is over no painted entity.
+   */
+  entities: ViewportEntityHit[];
+  /**
+   * Resolved caret position at the click point, or `null` when the
+   * point is outside the painted host or no editor is mounted. Same
+   * shape {@link ViewportHandle.positionAt} returns.
+   */
+  position: ViewportPositionHit | null;
+  /** The live selection slice. Mirrors `state.selection`. */
+  selection: SelectionSlice;
+  /**
+   * `true` when the click point is inside any of the rects the live
+   * selection currently paints. Distinguishes "right-clicked the
+   * selection itself" (act on the selection) from "right-clicked
+   * elsewhere" (act on the click target). Always `false` for an
+   * empty / collapsed selection.
+   */
+  insideSelection: boolean;
 }
 
 /**

@@ -1,4 +1,5 @@
 import { normalizeShortcut } from './keyboard-shortcuts.js';
+import { isViewportContextBundle } from './viewport-context.js';
 import type {
   ContextMenuContribution,
   ContextMenuItem,
@@ -11,6 +12,7 @@ import type {
   SuperDocUIState,
   Subscribable,
   UIToolbarCommandState,
+  ViewportContext,
   ViewportEntityHit,
 } from './types.js';
 
@@ -129,8 +131,13 @@ export interface CustomCommandsRegistry {
    */
   getHandle<TPayload = unknown, TValue = unknown>(id: string): CustomCommandHandle<TPayload, TValue> | undefined;
 
-  /** Run `execute` for a registered id. Returns false if not registered. */
-  execute(id: string, payload?: unknown): boolean | Promise<boolean>;
+  /**
+   * Run `execute` for a registered id. Returns false if not registered.
+   * `context` (SD-2945) forwards the {@link ViewportContext} bundle when
+   * the dispatch came from a `ContextMenuItem.invoke()`; direct
+   * controller calls leave it `undefined`.
+   */
+  execute(id: string, payload?: unknown, context?: ViewportContext): boolean | Promise<boolean>;
 
   /**
    * Collect context-menu items contributed by registered customs.
@@ -138,8 +145,14 @@ export interface CustomCommandsRegistry {
    * supplied entities + the current selection slice; sorted by
    * `(group, order, registrationSeq)`. Errors from `when` are
    * caught and the item is hidden for that query.
+   *
+   * SD-2945: when `input` is the full {@link ViewportContext} bundle,
+   * predicates receive `point` / `position` / `insideSelection` and
+   * each returned item carries an `invoke()` closure that fires
+   * execute with the bundle bound. Pass an entities array for the
+   * legacy "entities only" call shape.
    */
-  getContextMenuItems(state: SuperDocUIState, entities: ViewportEntityHit[]): ContextMenuItem[];
+  getContextMenuItems(state: SuperDocUIState, input: ViewportEntityHit[] | ViewportContext): ContextMenuItem[];
 
   /**
    * Look up the custom command id (if any) bound to a normalized
@@ -498,7 +511,7 @@ export function createCustomCommandsRegistry(deps: CustomCommandsRegistryDeps): 
 
     getHandle,
 
-    execute(id, payload) {
+    execute(id, payload, context) {
       const entry = entries.get(id);
       if (!entry) return false;
       try {
@@ -506,16 +519,23 @@ export function createCustomCommandsRegistry(deps: CustomCommandsRegistryDeps): 
         // `register<TPayload>(...)` signature carries the consumer's
         // payload type to the captured handle, but the runtime registry
         // stores entries with the default `void` payload. Cast to bridge.
+        // `context` (SD-2945) is forwarded only when the dispatch came
+        // from a `ContextMenuItem.invoke()`; direct
+        // `ui.commands.execute` and `commands.get(id).execute()` calls
+        // pass it through as `undefined`, leaving the prior payload
+        // shape untouched for handlers that don't care about clicks.
         const result = (
           entry.execute as (args: {
             payload?: unknown;
             superdoc: SuperDocLike;
             editor: SuperDocEditorLike | null;
+            context?: ViewportContext;
           }) => unknown
         )({
           payload,
           superdoc: deps.superdoc,
           editor: deps.getEditor(),
+          context,
         });
         if (result instanceof Promise) {
           return result.then(
@@ -533,7 +553,19 @@ export function createCustomCommandsRegistry(deps: CustomCommandsRegistryDeps): 
       }
     },
 
-    getContextMenuItems(state, entities) {
+    // SD-2945: input is either an entities array (consumer built the
+    // menu via `viewport.entityAt(...)` only) or a full
+    // {@link ViewportContext} bundle from `viewport.contextAt(...)`.
+    // Routed through the same `isViewportContextBundle` guard the
+    // controller proxy uses so the two layers can't disagree on
+    // ambiguous inputs (e.g. `{ point: null }`, `undefined`).
+    // Bundle inputs surface `point` / `position` / `insideSelection`
+    // on the `when` predicate AND wire `invoke()` on each returned
+    // item so consumers can fire execute with context bound.
+    getContextMenuItems(state, input) {
+      const context = isViewportContextBundle(input) ? input : null;
+      const entities: ViewportEntityHit[] = context ? context.entities : Array.isArray(input) ? input : [];
+
       const items: ContextMenuItem[] = [];
       for (const entry of entries.values()) {
         const contribution = entry.contextMenu;
@@ -542,7 +574,16 @@ export function createCustomCommandsRegistry(deps: CustomCommandsRegistryDeps): 
         if (contribution.when) {
           let applies = true;
           try {
-            applies = contribution.when({ entities, selection: state.selection }) === true;
+            const whenInput = context
+              ? {
+                  entities,
+                  selection: state.selection,
+                  point: context.point,
+                  position: context.position,
+                  insideSelection: context.insideSelection,
+                }
+              : { entities, selection: state.selection };
+            applies = contribution.when(whenInput) === true;
           } catch (err) {
             // Same dedupe posture as `getState` errors: log once per
             // distinct message so a buggy `when` predicate doesn't
@@ -559,11 +600,28 @@ export function createCustomCommandsRegistry(deps: CustomCommandsRegistryDeps): 
           entry.lastContextMenuErrorMessage = null;
         }
 
+        // Identity-guarded `invoke()` mirrors the captured-handle
+        // pattern at `buildHandle.execute`: the closure refuses to
+        // dispatch when a later `register({ id })` has replaced this
+        // entry between menu open and click. Without that guard, a
+        // menu held open across a re-registration would fire the new
+        // owner's handler with the old item's label / predicate /
+        // bundle, which is exactly the stale-handle class of bug the
+        // prior pattern was added to prevent.
+        const ownEntry = entry;
+        const itemId = entry.id;
+        const invoke = context
+          ? (): boolean | Promise<boolean> => {
+              if (entries.get(itemId) !== ownEntry) return false;
+              return registry.execute(itemId, undefined, context);
+            }
+          : undefined;
         items.push({
           id: entry.id,
           label: contribution.label,
           group: contribution.group ?? DEFAULT_CONTEXT_MENU_GROUP,
           order: contribution.order ?? 0,
+          ...(invoke ? { invoke } : {}),
         });
       }
 

@@ -90,4 +90,16 @@ describe('text indent commands', () => {
     const finalNode = afterUnset.doc.firstChild;
     expect(finalNode.attrs.paragraphProperties.indent).toBeUndefined();
   });
+
+  it('increaseTextIndent caps at maximum indent (9360 points)', () => {
+    const nearMaxIndent = 9000;
+    const state = createState({ paragraphProperties: { indent: { left: nearMaxIndent } } });
+    getResolvedParagraphProperties.mockReturnValueOnce({ indent: { left: nearMaxIndent } });
+
+    const { dispatched, nextState } = runCommand(increaseTextIndent(), state);
+
+    expect(dispatched).toBe(true);
+    const updated = nextState.doc.firstChild;
+    expect(updated.attrs.paragraphProperties.indent.left).toBe(9360);
+  });
 });

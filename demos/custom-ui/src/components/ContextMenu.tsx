@@ -30,19 +30,22 @@ export function ContextMenu() {
   useEffect(() => {
     if (!ui) return;
     const onContextMenu = (event: MouseEvent) => {
-      const target = event.target;
-      if (!(target instanceof Node)) return;
-      // Only handle right-clicks inside the editor area. Anywhere
-      // else, let the browser's native menu run.
-      const editorShell = (target as Element).closest?.('.editor-shell');
-      if (!editorShell) return;
-      event.preventDefault();
+      // `entityAt` is already scoped to the controller's painted host
+      // (PR #3139) — it returns `[]` for points outside the editor.
+      // Use that as the scope check rather than a CSS-class filter
+      // like `.editor-shell`, which fails when the painter routes the
+      // event through a hidden ProseMirror DOM that lives outside
+      // `visibleHost`.
       const entities = ui.viewport.entityAt({ x: event.clientX, y: event.clientY });
       const items = ui.commands.getContextMenuItems({ entities });
       if (items.length === 0) {
+        // Outside the editor or over a region with no contributed
+        // items — let the browser's native menu run rather than
+        // suppressing it silently.
         setState(null);
         return;
       }
+      event.preventDefault();
       setState({ x: event.clientX, y: event.clientY, items, entities });
     };
     const onPointerDown = (event: PointerEvent) => {

@@ -1,29 +1,31 @@
 <script setup>
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { useHighContrastMode } from '../../composables/use-high-contrast-mode';
-import { toolbarIcons } from './toolbarIcons.js';
 
 const { isHighContrastMode } = useHighContrastMode();
 const emit = defineEmits(['select']);
 
 const props = defineProps({
+  buttons: {
+    type: Array,
+    required: true,
+  },
   selectedStyle: {
     type: String,
     default: null,
   },
+  iconSize: {
+    type: Number,
+    default: 25,
+  },
 });
 
 const buttonRefs = ref([]);
-const numberedButtons = [
-  { key: 'decimal', icon: toolbarIcons.numberedListDecimal, ariaLabel: '1. 2. 3.' },
-  { key: 'decimal-paren', icon: toolbarIcons.numberedListDecimalParen, ariaLabel: '1) 2) 3)' },
-  { key: 'upper-roman', icon: toolbarIcons.numberedListUpperRoman, ariaLabel: 'I. II. III.' },
-  { key: 'lower-roman', icon: toolbarIcons.numberedListLowerRoman, ariaLabel: 'i. ii. iii.' },
-  { key: 'upper-alpha', icon: toolbarIcons.numberedListUpperAlpha, ariaLabel: 'A. B. C.' },
-  { key: 'upper-alpha-paren', icon: toolbarIcons.numberedListUpperAlphaParen, ariaLabel: 'A) B) C)' },
-  { key: 'lower-alpha', icon: toolbarIcons.numberedListLowerAlpha, ariaLabel: 'a. b. c.' },
-  { key: 'lower-alpha-paren', icon: toolbarIcons.numberedListLowerAlphaParen, ariaLabel: 'a) b) c)' },
-];
+
+const iconStyle = computed(() => ({
+  width: `${props.iconSize}px`,
+  height: `${props.iconSize}px`,
+}));
 
 const select = (key) => {
   emit('select', key);
@@ -56,7 +58,7 @@ const handleKeyDown = (e, index) => {
       moveToNextButton(index);
       break;
     case 'Enter':
-      select(numberedButtons[index].key);
+      select(props.buttons[index].key);
       break;
     default:
       break;
@@ -73,12 +75,13 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="numbered-style-buttons" :class="{ 'high-contrast': isHighContrastMode }">
+  <div class="style-buttons-list" :class="{ 'high-contrast': isHighContrastMode }">
     <div
-      v-for="(button, index) in numberedButtons"
+      v-for="(button, index) in props.buttons"
       :key="button.key"
       class="button-icon"
       :class="{ selected: props.selectedStyle === button.key }"
+      :style="iconStyle"
       @click="select(button.key)"
       v-html="button.icon"
       role="menuitem"
@@ -90,7 +93,7 @@ onMounted(() => {
 </template>
 
 <style scoped>
-.numbered-style-buttons {
+.style-buttons-list {
   display: flex;
   justify-content: space-between;
   width: 100%;
@@ -102,8 +105,6 @@ onMounted(() => {
     padding: 5px;
     font-size: var(--sd-ui-font-size-600, 16px);
     color: var(--sd-ui-dropdown-text, #47484a);
-    width: 30px;
-    height: 30px;
     border-radius: var(--sd-ui-dropdown-option-radius, 3px);
     display: flex;
     justify-content: center;

@@ -5,8 +5,8 @@ import { normalizeFontOption } from './helpers/font-options.js';
 import { useToolbarItem } from './use-toolbar-item';
 import AIWriter from './AIWriter.vue';
 import AlignmentButtons from './AlignmentButtons.vue';
-import BulletStyleButtons from './BulletStyleButtons.vue';
-import NumberedStyleButtons from './NumberedStyleButtons.vue';
+import StyleButtonsList from './StyleButtonsList.vue';
+import { bulletStyleButtons, numberedStyleButtons } from './list-style-buttons.js';
 import DocumentMode from './DocumentMode.vue';
 import LinkedStyle from './LinkedStyle.vue';
 import LinkInput from './LinkInput.vue';
@@ -655,7 +655,9 @@ export const makeDefaultItems = ({
             const item = { ...bulletedList, command: 'toggleBulletListStyle' };
             superToolbar.emitCommand({ item, argument: style });
           };
-          return h(BulletStyleButtons, {
+          return h(StyleButtonsList, {
+            buttons: bulletStyleButtons,
+            iconSize: 25,
             selectedStyle: bulletedList.selectedValue.value,
             onSelect: handleSelect,
           });
@@ -688,7 +690,9 @@ export const makeDefaultItems = ({
             const item = { ...numberedList, command: 'toggleOrderedListStyle' };
             superToolbar.emitCommand({ item, argument: style });
           };
-          return h(NumberedStyleButtons, {
+          return h(StyleButtonsList, {
+            buttons: numberedStyleButtons,
+            iconSize: 30,
             selectedStyle: numberedList.selectedValue.value,
             onSelect: handleSelect,
           });

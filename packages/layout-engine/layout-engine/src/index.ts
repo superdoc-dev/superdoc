@@ -2803,22 +2803,34 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
       const isExplicitNonContinuous =
         typeIsExplicit && (endBreakType === 'nextPage' || endBreakType === 'evenPage' || endBreakType === 'oddPage');
 
+      // Page-count probe used by both the multi-page allow rule (3) and the
+      // mid-doc multi-page skip below. Computed once and short-circuits at >1.
+      let sectionPagesCount = 0;
+      for (const p of pages) {
+        if (p.fragments.some((f) => blockSectionMap.get(f.blockId) === sectionIdx)) {
+          sectionPagesCount += 1;
+          if (sectionPagesCount > 1) break;
+        }
+      }
+      const isMultiPage = sectionPagesCount > 1;
+
+      // Mid-doc multi-page multi-column sections: Word does NOT balance the
+      // last page. ECMA's "minimum section height" balancing makes sense for
+      // single-page sections (rebalancing visibly shrinks the section) but
+      // not for multi-page sections whose height is already pinned by the
+      // page boundary — last-page rebalancing would just reshuffle a
+      // handful of overflow fragments. Verified against:
+      //   layout/ivosass-sub p3   (section 1, mid-doc, 2-page, 4 overflow
+      //                            fragments → Word leaves them in col 0).
+      //   lists/saas_original p4  (similar — overflow content stays single).
+      // Multi-page LAST sections still balance via rule 3 below
+      // (two_column_two_page-arial 2 p17 keeps its 3+2 split).
+      if (isMultiPage && !isLast) continue;
+
       const allowedByMidDocContinuous = endBreakType === 'continuous' && !isLast;
       const allowedByDocWideExplicit =
         docHasExplicitContinuous && !isExplicitNonContinuous && sectionIdx !== bodyExplicitContinuousIdx;
-      let allowedByMultiPage = false;
-      if (!allowedByMidDocContinuous && !allowedByDocWideExplicit) {
-        let sectionPagesCount = 0;
-        for (const p of pages) {
-          if (p.fragments.some((f) => blockSectionMap.get(f.blockId) === sectionIdx)) {
-            sectionPagesCount += 1;
-            if (sectionPagesCount > 1) {
-              allowedByMultiPage = true;
-              break;
-            }
-          }
-        }
-      }
+      const allowedByMultiPage = isMultiPage;
 
       if (!allowedByMidDocContinuous && !allowedByDocWideExplicit && !allowedByMultiPage) continue;
     }

@@ -202,6 +202,13 @@ export const toggleList =
           }
         }
 
+        // The numbering model has already been mutated via mutateNumbering
+        // inside cloneListDefinitionWithLevelStyle. The setNodeMarkup steps
+        // added to `tr` above need to be dispatched too — otherwise direct
+        // command callers (e.g. `editor.commands.toggleOrderedListStyle(...)`
+        // invoked outside the toolbar wiring) would see the numbering
+        // definitions change without the paragraphs migrating to them.
+        dispatch(tr);
         return true;
       }
     }

@@ -664,6 +664,11 @@ export function cloneListDefinitionWithLevelStyle(
     ...(newAbstractDef.attributes || {}),
     'w:abstractNumId': String(newAbstractId),
   };
+  // Refresh `w:nsid` / `w:tmpl` so the cloned abstract has its own logical
+  // identity. Without this, Word treats matching `w:nsid` values as the same
+  // logical list and can collapse the restyled clone back onto the source list
+  // when the document is re-opened (i.e. style changes silently revert).
+  refreshAbstractIdentity(newAbstractDef);
   numbering.abstracts[newAbstractId] = newAbstractDef;
 
   setLvlStyleOnAbstract(numbering, newAbstractId, ilvl, options);

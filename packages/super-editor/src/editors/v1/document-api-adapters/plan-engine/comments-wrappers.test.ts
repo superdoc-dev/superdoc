@@ -30,9 +30,20 @@ vi.mock('../helpers/adapter-utils.js', async () => {
   };
 });
 
+vi.mock('../tracked-changes/enumerate-stories.js', () => ({
+  enumerateRevisionCapableStories: vi.fn(() => [{ kind: 'story', storyType: 'body' }]),
+}));
+
+vi.mock('../story-runtime/resolve-story-runtime.js', () => ({
+  resolveStoryRuntime: vi.fn(),
+}));
+
 import { listCommentAnchors } from '../helpers/comment-target-resolver.js';
 import { resolveTextTarget } from '../helpers/adapter-utils.js';
 import { executeDomainCommand } from './plan-wrappers.js';
+import { enumerateRevisionCapableStories } from '../tracked-changes/enumerate-stories.js';
+import { resolveStoryRuntime } from '../story-runtime/resolve-story-runtime.js';
+import type { StoryLocator } from '@superdoc/document-api';
 
 function makeAnchor(
   overrides: Partial<CommentAnchor> & { commentId: string; pos: number; end: number },
@@ -838,5 +849,182 @@ describe('comments-wrappers: addCommentHandler multi-segment targets', () => {
     expect(receipt.failure?.code).toBe('INVALID_TARGET');
     expect(receipt.failure?.message).toContain('atoms');
     expect(editor.commands!.addComment).not.toHaveBeenCalled();
+  });
+});
+
+describe('comments-wrappers: cross-section listing (SD-2938)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    // Earlier suites set per-test mockReturnValue on listCommentAnchors
+    // to seed anchors for "c1". clearAllMocks wipes call history but
+    // not implementations, so reset to the default empty list here.
+    vi.mocked(listCommentAnchors).mockReturnValue([]);
+    vi.mocked(enumerateRevisionCapableStories).mockReturnValue([{ kind: 'story', storyType: 'body' }]);
+  });
+
+  const headerLocator: StoryLocator = {
+    kind: 'story',
+    storyType: 'headerFooterPart',
+    refId: 'rId6',
+  };
+
+  it('returns body-only items when query.in is undefined (backward compatible)', () => {
+    const editor = makeEditor([{ commentId: 'c-body', commentText: 'body comment' }]);
+    const wrapper = createCommentsWrapper(editor);
+
+    const result = wrapper.list();
+
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0]!.id).toBe('c-body');
+    expect(result.items[0]!.address.story).toBeUndefined();
+    expect(enumerateRevisionCapableStories).not.toHaveBeenCalled();
+    expect(resolveStoryRuntime).not.toHaveBeenCalled();
+  });
+
+  it('aggregates body + header comments and stamps story on the header item when in: "all"', () => {
+    const bodyEditor = makeEditor([{ commentId: 'c-body', commentText: 'body comment', createdTime: 1 }]);
+    const headerEditor = makeEditor([{ commentId: 'c-header', commentText: 'header comment', createdTime: 2 }]);
+
+    vi.mocked(enumerateRevisionCapableStories).mockReturnValue([{ kind: 'story', storyType: 'body' }, headerLocator]);
+    vi.mocked(resolveStoryRuntime).mockReturnValue({ editor: headerEditor } as never);
+
+    const wrapper = createCommentsWrapper(bodyEditor);
+    const result = wrapper.list({ in: 'all' });
+
+    const ids = result.items.map((i) => i.id);
+    expect(ids).toEqual(['c-body', 'c-header']);
+
+    const bodyItem = result.items.find((i) => i.id === 'c-body')!;
+    const headerItem = result.items.find((i) => i.id === 'c-header')!;
+
+    expect(bodyItem.address.story).toBeUndefined();
+    expect(headerItem.address.story).toEqual(headerLocator);
+  });
+
+  it('returns only the targeted story when query.in is a non-body locator', () => {
+    const bodyEditor = makeEditor([{ commentId: 'c-body', commentText: 'body comment' }]);
+    const headerEditor = makeEditor([{ commentId: 'c-header', commentText: 'header comment' }]);
+
+    vi.mocked(resolveStoryRuntime).mockReturnValue({ editor: headerEditor } as never);
+
+    const wrapper = createCommentsWrapper(bodyEditor);
+    const result = wrapper.list({ in: headerLocator });
+
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0]!.id).toBe('c-header');
+    expect(result.items[0]!.address.story).toEqual(headerLocator);
+    expect(enumerateRevisionCapableStories).not.toHaveBeenCalled();
+  });
+
+  it('skips a non-body story when its runtime cannot be resolved', () => {
+    const bodyEditor = makeEditor([{ commentId: 'c-body', commentText: 'body comment' }]);
+
+    vi.mocked(enumerateRevisionCapableStories).mockReturnValue([{ kind: 'story', storyType: 'body' }, headerLocator]);
+    vi.mocked(resolveStoryRuntime).mockImplementation(() => {
+      throw new Error('story runtime missing');
+    });
+
+    const wrapper = createCommentsWrapper(bodyEditor);
+    const result = wrapper.list({ in: 'all' });
+
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0]!.id).toBe('c-body');
+  });
+
+  it('deduplicates if the same comment id appears in body and a non-body store', () => {
+    const bodyEditor = makeEditor([{ commentId: 'c-shared', commentText: 'body copy', createdTime: 1 }]);
+    const headerEditor = makeEditor([{ commentId: 'c-shared', commentText: 'header copy', createdTime: 2 }]);
+
+    vi.mocked(enumerateRevisionCapableStories).mockReturnValue([{ kind: 'story', storyType: 'body' }, headerLocator]);
+    vi.mocked(resolveStoryRuntime).mockReturnValue({ editor: headerEditor } as never);
+
+    const wrapper = createCommentsWrapper(bodyEditor);
+    const result = wrapper.list({ in: 'all' });
+
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0]!.id).toBe('c-shared');
+    // Body wins because body is enumerated first.
+    expect(result.items[0]!.address.story).toBeUndefined();
+  });
+
+  it('prefers the story-stamped record when body has only a definition (no anchor)', () => {
+    // OOXML imports flatten every comment definition into the body's
+    // converter.comments. For a comment anchored in the header, the
+    // body pass yields a definition-only record (no target). The
+    // header pass yields the same id with target + story. The merge
+    // must keep the header version so UI actions route by story.
+    const bodyEditor = makeEditor([{ commentId: 'c-header-only', commentText: 'lives in header' }]);
+    const headerEditor = makeEditor([{ commentId: 'c-header-only', commentText: 'lives in header' }]);
+
+    vi.mocked(listCommentAnchors).mockImplementation(((editor: unknown) => {
+      if (editor === bodyEditor) return [] as never;
+      return [makeAnchor({ commentId: 'c-header-only', pos: 0, end: 6 })] as never;
+    }) as never);
+
+    vi.mocked(enumerateRevisionCapableStories).mockReturnValue([{ kind: 'story', storyType: 'body' }, headerLocator]);
+    vi.mocked(resolveStoryRuntime).mockReturnValue({ editor: headerEditor } as never);
+
+    const wrapper = createCommentsWrapper(bodyEditor);
+    const result = wrapper.list({ in: 'all' });
+
+    expect(result.items).toHaveLength(1);
+    const item = result.items[0]!;
+    expect(item.id).toBe('c-header-only');
+    expect(item.address.story).toEqual(headerLocator);
+    expect(item.target).toBeDefined();
+    expect(item.target?.story).toEqual(headerLocator);
+  });
+
+  it('disposes a non-cacheable runtime returned during the in: all walk', () => {
+    const bodyEditor = makeEditor();
+    const headerEditor = makeEditor();
+    const dispose = vi.fn();
+
+    vi.mocked(enumerateRevisionCapableStories).mockReturnValue([{ kind: 'story', storyType: 'body' }, headerLocator]);
+    vi.mocked(resolveStoryRuntime).mockReturnValue({
+      editor: headerEditor,
+      cacheable: false,
+      dispose,
+    } as never);
+
+    const wrapper = createCommentsWrapper(bodyEditor);
+    wrapper.list({ in: 'all' });
+
+    expect(dispose).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not dispose a cacheable runtime during the in: all walk', () => {
+    const bodyEditor = makeEditor();
+    const headerEditor = makeEditor();
+    const dispose = vi.fn();
+
+    vi.mocked(enumerateRevisionCapableStories).mockReturnValue([{ kind: 'story', storyType: 'body' }, headerLocator]);
+    vi.mocked(resolveStoryRuntime).mockReturnValue({
+      editor: headerEditor,
+      cacheable: true,
+      dispose,
+    } as never);
+
+    const wrapper = createCommentsWrapper(bodyEditor);
+    wrapper.list({ in: 'all' });
+
+    expect(dispose).not.toHaveBeenCalled();
+  });
+
+  it('disposes a non-cacheable runtime returned for a single-story query', () => {
+    const bodyEditor = makeEditor();
+    const headerEditor = makeEditor();
+    const dispose = vi.fn();
+
+    vi.mocked(resolveStoryRuntime).mockReturnValue({
+      editor: headerEditor,
+      cacheable: false,
+      dispose,
+    } as never);
+
+    const wrapper = createCommentsWrapper(bodyEditor);
+    wrapper.list({ in: headerLocator });
+
+    expect(dispose).toHaveBeenCalledTimes(1);
   });
 });

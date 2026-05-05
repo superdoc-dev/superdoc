@@ -1402,7 +1402,8 @@ export type {
   GoToCommentInput,
   SetCommentActiveInput,
 } from './comments/comments.js';
-export type { CommentInfo, CommentsListQuery, CommentsListResult } from './comments/comments.types.js';
+export type { CommentInfo, CommentsListQuery, CommentsListResult, CommentsInAll } from './comments/comments.types.js';
+export { COMMENTS_IN_ALL } from './comments/comments.types.js';
 export { DocumentApiValidationError } from './errors.js';
 export { textReceiptToSDReceipt, buildStructuralReceipt } from './receipt-bridge.js';
 export type { StructuralReceiptParams } from './receipt-bridge.js';

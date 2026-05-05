@@ -1,6 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 
+vi.mock('../editors/v1/document-api-adapters/story-runtime/resolve-story-runtime.js', () => ({
+  resolveStoryRuntime: vi.fn(),
+}));
+
 import { createSuperDocUI } from './create-super-doc-ui.js';
+import { resolveStoryRuntime } from '../editors/v1/document-api-adapters/story-runtime/resolve-story-runtime.js';
+import type { StoryLocator } from '@superdoc/document-api';
 import type { SuperDocLike } from './types.js';
 
 /**
@@ -491,6 +497,319 @@ describe('ui.comments — actions route through editor.doc.*', () => {
     expect(mocks.navigateTo).toHaveBeenCalledTimes(1);
     const target = mocks.navigateTo.mock.calls[0][0] as { kind: string; entityType: string; entityId: string };
     expect(target).toEqual({ kind: 'entity', entityType: 'comment', entityId: 'c-42' });
+
+    ui.destroy();
+  });
+});
+
+describe('ui.comments cross-section routing (SD-2938)', () => {
+  const headerLocator: StoryLocator = {
+    kind: 'story',
+    storyType: 'headerFooterPart',
+    refId: 'rId6',
+  };
+
+  /**
+   * Stub builder that mirrors `makeStubs` but returns a host (body)
+   * editor and a separate header editor with its own comments
+   * adapter. The host's `comments.list({ in: 'all' })` returns both
+   * comments. The body one has no `address.story`; the header one
+   * has the locator stamped. That mirrors what the wrapper does in
+   * production.
+   */
+  function makeHostWithHeader() {
+    const headerCreate = vi.fn((_input: unknown) => ({ success: true as const }));
+    const headerPatch = vi.fn((_input: unknown) => ({ success: true as const }));
+    const headerDelete = vi.fn((_input: unknown) => ({ success: true as const }));
+
+    const bodyCreate = vi.fn((_input: unknown) => ({ success: true as const }));
+    const bodyPatch = vi.fn((_input: unknown) => ({ success: true as const }));
+    const bodyDelete = vi.fn((_input: unknown) => ({ success: true as const }));
+
+    const bodyList = vi.fn((query?: { in?: unknown }) => {
+      if (query?.in === 'all') {
+        return {
+          evaluatedRevision: 'r1',
+          total: 2,
+          items: [
+            {
+              id: 'body-1',
+              handle: { ref: 'comment:body-1', refStability: 'stable' as const, targetKind: 'comment' as const },
+              address: { kind: 'entity' as const, entityType: 'comment' as const, entityId: 'body-1' },
+              status: 'open' as const,
+            },
+            {
+              id: 'header-1',
+              handle: { ref: 'comment:header-1', refStability: 'stable' as const, targetKind: 'comment' as const },
+              address: {
+                kind: 'entity' as const,
+                entityType: 'comment' as const,
+                entityId: 'header-1',
+                story: headerLocator,
+              },
+              status: 'open' as const,
+            },
+          ],
+          page: { limit: 50, offset: 0, returned: 2 },
+        };
+      }
+      return { evaluatedRevision: 'r1', total: 0, items: [], page: { limit: 0, offset: 0, returned: 0 } };
+    });
+
+    const navigateTo = vi.fn(async (_target: unknown) => true);
+
+    const editorListeners = new Map<string, Set<(...args: unknown[]) => void>>();
+    const superdocListeners = new Map<string, Set<(...args: unknown[]) => void>>();
+
+    const headerEditor = {
+      doc: {
+        comments: { create: headerCreate, patch: headerPatch, delete: headerDelete, list: vi.fn(() => undefined) },
+      },
+    };
+
+    const hostEditor: {
+      on: ReturnType<typeof vi.fn>;
+      off: ReturnType<typeof vi.fn>;
+      doc: unknown;
+      presentationEditor: { navigateTo: typeof navigateTo; getActiveEditor: () => unknown };
+    } = {
+      on: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
+        if (!editorListeners.has(event)) editorListeners.set(event, new Set());
+        editorListeners.get(event)!.add(handler);
+      }),
+      off: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
+        editorListeners.get(event)?.delete(handler);
+      }),
+      doc: {
+        selection: {
+          current: vi.fn(() => ({ empty: true, text: '', target: null, activeCommentIds: [], activeChangeIds: [] })),
+        },
+        comments: { create: bodyCreate, patch: bodyPatch, delete: bodyDelete, list: bodyList },
+      },
+      presentationEditor: undefined as never,
+    };
+    hostEditor.presentationEditor = { navigateTo, getActiveEditor: () => hostEditor };
+
+    const superdoc: SuperDocLike & { fireEditor(event: string, ...args: unknown[]): void } = {
+      activeEditor: hostEditor as never,
+      config: { documentMode: 'editing' },
+      on: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
+        if (!superdocListeners.has(event)) superdocListeners.set(event, new Set());
+        superdocListeners.get(event)!.add(handler);
+      }),
+      off: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
+        superdocListeners.get(event)?.delete(handler);
+      }),
+      fireEditor(event, ...args) {
+        const handlers = editorListeners.get(event);
+        if (!handlers) return;
+        [...handlers].forEach((handler) => handler(...args));
+      },
+    };
+
+    const commit = vi.fn();
+    const commitEditor = vi.fn();
+    const dispose = vi.fn();
+    let runtimeCacheable = true;
+
+    vi.mocked(resolveStoryRuntime).mockImplementation(((_host: unknown, locator?: StoryLocator) => {
+      if (!locator || locator.storyType === 'body') return { editor: hostEditor };
+      return {
+        editor: headerEditor,
+        cacheable: runtimeCacheable,
+        commit,
+        commitEditor,
+        dispose,
+      };
+    }) as never);
+
+    return {
+      superdoc,
+      hostEditor,
+      headerEditor,
+      setRuntimeCacheable(value: boolean) {
+        runtimeCacheable = value;
+      },
+      mocks: {
+        bodyCreate,
+        bodyPatch,
+        bodyDelete,
+        bodyList,
+        headerCreate,
+        headerPatch,
+        headerDelete,
+        navigateTo,
+        commit,
+        commitEditor,
+        dispose,
+      },
+    };
+  }
+
+  it('snapshot includes both body and header comments via host list-all', () => {
+    const { superdoc, mocks } = makeHostWithHeader();
+    const ui = createSuperDocUI({ superdoc });
+
+    const snap = ui.comments.getSnapshot();
+    const ids = snap.items.map((i) => (i as { id: string }).id);
+    expect(ids).toEqual(['body-1', 'header-1']);
+    expect(mocks.bodyList).toHaveBeenCalledWith({ in: 'all' });
+
+    ui.destroy();
+  });
+
+  it('resolve(headerCommentId) routes through the header editor adapter', () => {
+    const { superdoc, mocks } = makeHostWithHeader();
+    const ui = createSuperDocUI({ superdoc });
+
+    const receipt = ui.comments.resolve('header-1');
+
+    expect(receipt.success).toBe(true);
+    expect(mocks.headerPatch).toHaveBeenCalledTimes(1);
+    expect(mocks.headerPatch).toHaveBeenCalledWith({ commentId: 'header-1', status: 'resolved' });
+    expect(mocks.bodyPatch).not.toHaveBeenCalled();
+
+    ui.destroy();
+  });
+
+  it('delete(headerCommentId) routes through the header editor adapter', () => {
+    const { superdoc, mocks } = makeHostWithHeader();
+    const ui = createSuperDocUI({ superdoc });
+
+    const receipt = ui.comments.delete('header-1');
+
+    expect(receipt.success).toBe(true);
+    expect(mocks.headerDelete).toHaveBeenCalledTimes(1);
+    expect(mocks.headerDelete).toHaveBeenCalledWith({ commentId: 'header-1' });
+    expect(mocks.bodyDelete).not.toHaveBeenCalled();
+
+    ui.destroy();
+  });
+
+  it('reply(headerCommentId) routes through the header editor adapter', () => {
+    const { superdoc, mocks } = makeHostWithHeader();
+    const ui = createSuperDocUI({ superdoc });
+
+    const receipt = ui.comments.reply('header-1', { text: 'thanks' });
+
+    expect(receipt.success).toBe(true);
+    expect(mocks.headerCreate).toHaveBeenCalledTimes(1);
+    expect(mocks.headerCreate).toHaveBeenCalledWith({ parentCommentId: 'header-1', text: 'thanks' });
+    expect(mocks.bodyCreate).not.toHaveBeenCalled();
+
+    ui.destroy();
+  });
+
+  it('resolve(bodyCommentId) stays on the body editor adapter', () => {
+    const { superdoc, mocks } = makeHostWithHeader();
+    const ui = createSuperDocUI({ superdoc });
+
+    ui.comments.resolve('body-1');
+
+    expect(mocks.bodyPatch).toHaveBeenCalledTimes(1);
+    expect(mocks.headerPatch).not.toHaveBeenCalled();
+
+    ui.destroy();
+  });
+
+  it('scrollTo(headerCommentId) passes a story-aware target to navigateTo', async () => {
+    const { superdoc, mocks } = makeHostWithHeader();
+    const ui = createSuperDocUI({ superdoc });
+
+    await ui.comments.scrollTo('header-1');
+
+    expect(mocks.navigateTo).toHaveBeenCalledTimes(1);
+    const target = mocks.navigateTo.mock.calls[0][0] as {
+      kind: string;
+      entityType: string;
+      entityId: string;
+      story?: StoryLocator;
+    };
+    expect(target).toEqual({ kind: 'entity', entityType: 'comment', entityId: 'header-1', story: headerLocator });
+
+    ui.destroy();
+  });
+
+  it('scrollTo(bodyCommentId) does not include story (backward compatible)', async () => {
+    const { superdoc, mocks } = makeHostWithHeader();
+    const ui = createSuperDocUI({ superdoc });
+
+    await ui.comments.scrollTo('body-1');
+
+    expect(mocks.navigateTo).toHaveBeenCalledTimes(1);
+    const target = mocks.navigateTo.mock.calls[0][0] as Record<string, unknown>;
+    expect(target).toEqual({ kind: 'entity', entityType: 'comment', entityId: 'body-1' });
+    expect(target.story).toBeUndefined();
+
+    ui.destroy();
+  });
+
+  it('resolve(headerCommentId) commits the story editor back to the host part', () => {
+    const { superdoc, mocks } = makeHostWithHeader();
+    const ui = createSuperDocUI({ superdoc });
+
+    ui.comments.resolve('header-1');
+
+    // commitEditor takes precedence over commit when present.
+    expect(mocks.commitEditor).toHaveBeenCalledTimes(1);
+    expect(mocks.commit).not.toHaveBeenCalled();
+
+    ui.destroy();
+  });
+
+  it('delete(headerCommentId) commits the story editor back to the host part', () => {
+    const { superdoc, mocks } = makeHostWithHeader();
+    const ui = createSuperDocUI({ superdoc });
+
+    ui.comments.delete('header-1');
+
+    expect(mocks.commitEditor).toHaveBeenCalledTimes(1);
+
+    ui.destroy();
+  });
+
+  it('reply(headerCommentId) commits the story editor back to the host part', () => {
+    const { superdoc, mocks } = makeHostWithHeader();
+    const ui = createSuperDocUI({ superdoc });
+
+    ui.comments.reply('header-1', { text: 'thanks' });
+
+    expect(mocks.commitEditor).toHaveBeenCalledTimes(1);
+
+    ui.destroy();
+  });
+
+  it('resolve(bodyCommentId) does not call commit (body persists directly)', () => {
+    const { superdoc, mocks } = makeHostWithHeader();
+    const ui = createSuperDocUI({ superdoc });
+
+    ui.comments.resolve('body-1');
+
+    expect(mocks.commit).not.toHaveBeenCalled();
+    expect(mocks.commitEditor).not.toHaveBeenCalled();
+
+    ui.destroy();
+  });
+
+  it('disposes a non-cacheable runtime after resolving a header comment', () => {
+    const stubs = makeHostWithHeader();
+    stubs.setRuntimeCacheable(false);
+    const ui = createSuperDocUI({ superdoc: stubs.superdoc });
+
+    ui.comments.resolve('header-1');
+
+    expect(stubs.mocks.dispose).toHaveBeenCalledTimes(1);
+
+    ui.destroy();
+  });
+
+  it('does not dispose a cacheable runtime after resolving a header comment', () => {
+    const { superdoc, mocks } = makeHostWithHeader();
+    const ui = createSuperDocUI({ superdoc });
+
+    ui.comments.resolve('header-1');
+
+    expect(mocks.dispose).not.toHaveBeenCalled();
 
     ui.destroy();
   });

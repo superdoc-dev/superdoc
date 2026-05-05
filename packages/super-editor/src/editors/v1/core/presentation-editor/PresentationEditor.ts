@@ -8140,7 +8140,7 @@ export class PresentationEditor extends EventEmitter {
           return await this.#navigateToBookmark(target);
         }
         if (target.entityType === 'comment') {
-          return await this.#navigateToComment(target.entityId, options);
+          return await this.#navigateToComment(target.entityId, resolveStoryKeyFromAddress(target.story), options);
         }
         if (target.entityType === 'trackedChange') {
           return await this.#navigateToTrackedChange(
@@ -8222,10 +8222,33 @@ export class PresentationEditor extends EventEmitter {
 
   async #navigateToComment(
     entityId: string,
+    storyKey: string | undefined,
     options: { behavior?: ScrollBehavior; block?: 'start' | 'center' | 'end' | 'nearest' } = {},
   ): Promise<boolean> {
     const editor = this.#editor;
     if (!editor) return false;
+
+    const behavior = options.behavior ?? 'auto';
+    const block = options.block ?? 'center';
+
+    // Non-body comments live in stories whose anchors aren't reachable
+    // through the body editor's `setCursorById`. Fall back to scrolling
+    // the rendered DOM element directly. `findRenderedCommentElements`
+    // is already story-aware. When the story isn't currently painted
+    // (e.g. a footnote that hasn't been expanded), the lookup returns
+    // an empty array and we surface a structured `false` rather than
+    // landing the cursor in the wrong place.
+    if (storyKey && storyKey !== BODY_STORY_KEY) {
+      const elements = findRenderedCommentElements(this.#painterHost, entityId, storyKey);
+      const candidate = elements[0];
+      if (!candidate) return false;
+      try {
+        candidate.scrollIntoView({ behavior, block, inline: 'nearest' });
+        return true;
+      } catch {
+        return false;
+      }
+    }
 
     const setCursorById = editor.commands?.setCursorById;
     if (typeof setCursorById !== 'function') return false;
@@ -8234,12 +8257,10 @@ export class PresentationEditor extends EventEmitter {
       return false;
     }
 
-    // Scroll the viewport — setCursorById places the cursor but doesn't
-    // scroll in presentation mode where DomPainter renders the output.
-    await this.scrollToPositionAsync(editor.state.selection.from, {
-      behavior: options.behavior ?? 'auto',
-      block: options.block ?? 'center',
-    });
+    // Scroll the viewport. `setCursorById` places the cursor but
+    // doesn't scroll in presentation mode where DomPainter renders
+    // the output.
+    await this.scrollToPositionAsync(editor.state.selection.from, { behavior, block });
     return true;
   }
 

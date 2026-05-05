@@ -119,13 +119,9 @@ export type EntityType = 'comment' | 'trackedChange';
 export type CommentAddress = {
   kind: 'entity';
   entityType: 'comment';
-  /**
-   * Comment navigation is currently body-scoped only.
-   *
-   * Unlike bookmark and tracked-change navigation, `navigateTo()` does not yet
-   * accept a `story` locator for comments.
-   */
   entityId: string;
+  /** Story containing this comment. Omit for body (backward compatible). */
+  story?: StoryLocator;
 };
 
 export type TrackedChangeAddress = {
@@ -169,11 +165,11 @@ export type BlockNavigationAddress = {
  * Supports navigation to:
  * - Blocks by `nodeId` in the body story
  * - Bookmarks by `name`, optionally scoped to a `story`
- * - Comments by `entityId` in the body story
+ * - Comments by `entityId`, optionally scoped to a `story`
  * - Tracked changes by `entityId`, optionally scoped to a `story`
  *
- * Story-aware navigation is currently supported for bookmarks and tracked
- * changes. Block and comment targets remain body-only until the runtime gains
- * equivalent non-body resolution paths.
+ * Story-aware navigation is supported for bookmarks, tracked changes, and
+ * comments. Block targets remain body-only until the runtime gains equivalent
+ * non-body resolution paths.
  */
 export type NavigableAddress = BlockNavigationAddress | BookmarkAddress | CommentAddress | TrackedChangeAddress;

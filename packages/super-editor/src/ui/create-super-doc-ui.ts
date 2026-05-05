@@ -12,9 +12,12 @@ import type {
   Receipt,
   ScrollIntoViewInput,
   ScrollIntoViewOutput,
+  StoryLocator,
   TrackChangesListResult,
 } from '@superdoc/document-api';
+import { COMMENTS_IN_ALL } from '@superdoc/document-api';
 import { collectEntityHitsFromChain } from './entity-at.js';
+import { resolveStoryRuntime } from '../editors/v1/document-api-adapters/story-runtime/resolve-story-runtime.js';
 import { shallowEqual } from './equality.js';
 import { scrollRangeIntoView } from './scroll-into-view.js';
 import { getSelectionAnchorRect, getSelectionRects } from './selection-rects.js';
@@ -371,14 +374,20 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
   };
   let commentsListCache: CommentsListResult = EMPTY_COMMENTS_LIST;
   const refreshCommentsListCache = () => {
-    const editor = resolveRoutedEditor(superdoc);
+    // Always go through the host editor with `in: 'all'` so the
+    // snapshot includes comments anchored in headers, footers,
+    // footnotes, and endnotes, not just whichever section currently
+    // has focus. The routed editor's snapshot would collapse to one
+    // section and drop the rest as the user moves focus, which the
+    // SD-2938 reproduction surfaced.
+    const editor = resolveHostEditor(superdoc);
     const list = editor?.doc?.comments?.list;
     if (typeof list !== 'function') {
       commentsListCache = EMPTY_COMMENTS_LIST;
       return;
     }
     try {
-      const result = list.call(editor.doc!.comments, undefined) as CommentsListResult | undefined;
+      const result = list.call(editor.doc!.comments, { in: COMMENTS_IN_ALL }) as CommentsListResult | undefined;
       commentsListCache = result ?? EMPTY_COMMENTS_LIST;
     } catch {
       // Reset to empty rather than retaining the previous editor's
@@ -1210,6 +1219,83 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
   };
 
   /**
+   * Look up a comment in the current snapshot and return its
+   * `address.story` if any. The snapshot is sourced from the host
+   * editor with `{ in: 'all' }`, so the returned locator (if
+   * non-body) is what the action needs to route by.
+   */
+  const findCommentStory = (commentId: string): StoryLocator | undefined => {
+    for (const item of commentsListCache.items) {
+      if (item.id === commentId || item.importedId === commentId) {
+        return item.address?.story;
+      }
+    }
+    return undefined;
+  };
+
+  /**
+   * Resolve the comments adapter that owns the given comment, plus a
+   * `finalize()` tail that the caller invokes after the mutation has
+   * landed. For body comments the tail is a no-op. For non-body
+   * comments the tail commits the story editor's state back to the
+   * canonical OOXML part (otherwise the mutation lives only in the
+   * temporary story editor and is undone by the next refresh) and
+   * disposes any non-cacheable runtime so headless story editors do
+   * not leak.
+   *
+   * Falls back to the routed editor's adapter when the comment isn't
+   * in the snapshot yet (e.g. a just-created reply whose refresh
+   * hasn't landed) or when the story can't be resolved.
+   */
+  const resolveCommentRoute = (
+    commentId: string,
+  ): { api: NonNullable<SuperDocEditorLike['doc']>['comments']; finalize: () => void } => {
+    const noop = () => undefined;
+    const story = findCommentStory(commentId);
+    if (!story || story.storyType === 'body') {
+      const host = resolveHostEditor(superdoc);
+      const api = host?.doc?.comments;
+      if (api) return { api, finalize: noop };
+      return { api: requireDocComments(), finalize: noop };
+    }
+    const host = resolveHostEditor(superdoc);
+    if (host) {
+      try {
+        const runtime = resolveStoryRuntime(host as never, story);
+        const api = (runtime.editor as unknown as SuperDocEditorLike)?.doc?.comments;
+        if (api) {
+          const finalize = () => {
+            try {
+              if (typeof runtime.commitEditor === 'function') {
+                runtime.commitEditor(host as never, runtime.editor);
+              } else if (typeof runtime.commit === 'function') {
+                runtime.commit(host as never);
+              }
+            } catch {
+              // Persistence failure is surfaced via the receipt the
+              // action returned; swallow here so the controller does
+              // not throw out of a UI handler.
+            }
+            if (runtime.cacheable === false && typeof runtime.dispose === 'function') {
+              try {
+                runtime.dispose();
+              } catch {
+                // best-effort
+              }
+            }
+          };
+          return { api, finalize };
+        }
+      } catch {
+        // Fall through to routed-editor adapter so the user sees a
+        // structured failure receipt rather than a thrown error when a
+        // story silently disappears between snapshot and action.
+      }
+    }
+    return { api: requireDocComments(), finalize: noop };
+  };
+
+  /**
    * Run `scrollRangeIntoView` against the host editor — the
    * presentation editor lives at the host level and its
    * `navigateTo` is story-aware (the entity target's `story` field
@@ -1286,52 +1372,57 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
           failure: { code: 'NO_OP', message: 'ui.comments.reply: text is empty.' },
         };
       }
-      const api = requireDocComments();
+      const { api, finalize } = resolveCommentRoute(parentCommentId);
       const receipt = (api.create as (input: unknown, options?: unknown) => Receipt).call(api, {
         parentCommentId,
         text,
       });
+      finalize();
       refreshAndNotify();
       return receipt;
     },
     resolve(commentId) {
-      const api = requireDocComments();
+      const { api, finalize } = resolveCommentRoute(commentId);
       const receipt = (api.patch as (input: unknown, options?: unknown) => Receipt).call(api, {
         commentId,
         status: 'resolved',
       });
+      finalize();
       refreshAndNotify();
       return receipt;
     },
     reopen(commentId) {
       // Routes through `comments.patch({ status: 'active' })`. Today
-      // doc-api validation rejects anything other than 'resolved' —
+      // doc-api validation rejects anything other than 'resolved'.
       // SD-2789 widens the union and ships the lifecycle inverse.
       // Until then this surfaces an INVALID_INPUT receipt or throws,
       // which is the correct visible behavior for a not-yet-shipped
       // operation rather than a silent no-op.
-      const api = requireDocComments();
+      const { api, finalize } = resolveCommentRoute(commentId);
       const receipt = (api.patch as (input: unknown, options?: unknown) => Receipt).call(api, {
         commentId,
         status: 'active',
       });
+      finalize();
       refreshAndNotify();
       return receipt;
     },
     delete(commentId) {
-      const api = requireDocComments();
+      const { api, finalize } = resolveCommentRoute(commentId);
       const receipt = (api.delete as (input: unknown, options?: unknown) => Receipt).call(api, { commentId });
+      finalize();
       refreshAndNotify();
       return receipt;
     },
     async scrollTo(commentId) {
-      // `CommentAddress` is body-scoped in the contract — it has no
-      // `story` field today. Story-aware comment navigation lands as
-      // a separate doc-API extension; until then, just route the id
-      // and let `presentation.navigateTo` resolve through the comment
-      // entity store.
+      // Pass `address.story` from the cached snapshot so
+      // `presentation.navigateTo` activates the right story (header,
+      // footer, footnote, endnote) before scrolling. For body
+      // comments the story is omitted, which leaves navigation
+      // body-scoped exactly like before.
+      const story = findCommentStory(commentId);
       return runScrollIntoView({
-        target: { kind: 'entity', entityType: 'comment', entityId: commentId },
+        target: { kind: 'entity', entityType: 'comment', entityId: commentId, ...(story ? { story } : {}) },
         block: 'center',
         behavior: 'smooth',
       });

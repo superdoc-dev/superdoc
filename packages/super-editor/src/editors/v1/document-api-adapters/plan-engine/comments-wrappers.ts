@@ -26,10 +26,13 @@ import type {
   RevisionGuardOptions,
   SetCommentActiveInput,
   SetCommentInternalInput,
+  StoryLocator,
   TextSegment,
   TextTarget,
 } from '@superdoc/document-api';
-import { buildResolvedHandle, buildDiscoveryItem, buildDiscoveryResult } from '@superdoc/document-api';
+import { buildResolvedHandle, buildDiscoveryItem, buildDiscoveryResult, COMMENTS_IN_ALL } from '@superdoc/document-api';
+import { resolveStoryRuntime } from '../story-runtime/resolve-story-runtime.js';
+import { enumerateRevisionCapableStories } from '../tracked-changes/enumerate-stories.js';
 import { TextSelection } from 'prosemirror-state';
 import { v4 as uuidv4 } from 'uuid';
 import { DocumentApiAdapterError } from '../errors.js';
@@ -370,7 +373,20 @@ function mergeAnchorData(
   }
 }
 
-function buildCommentInfos(editor: Editor): CommentInfo[] {
+/**
+ * Stamps `address.story` and `target.story` on each comment when a non-body
+ * locator is supplied. Body comments leave both `story` fields undefined for
+ * backward compatibility, matching the track-changes convention.
+ */
+function stampStoryLocator(infosById: Map<string, CommentInfo>, story: StoryLocator | undefined): void {
+  if (!story || story.storyType === 'body') return;
+  for (const info of infosById.values()) {
+    info.address = { ...info.address, story };
+    if (info.target) info.target = { ...info.target, story };
+  }
+}
+
+function buildCommentInfos(editor: Editor, story?: StoryLocator): CommentInfo[] {
   const store = getCommentEntityStore(editor);
   const infosById = new Map<string, CommentInfo>();
 
@@ -381,6 +397,7 @@ function buildCommentInfos(editor: Editor): CommentInfo[] {
   }
 
   mergeAnchorData(editor, infosById, listCommentAnchorsSafe(editor));
+  stampStoryLocator(infosById, story);
 
   // Inherit target + anchoredText from nearest anchored ancestor for replies.
   // Walks up the parent chain so deep threads resolve regardless of iteration order.
@@ -1022,10 +1039,136 @@ function getCommentHandler(editor: Editor, input: GetCommentInput): CommentInfo 
   return found;
 }
 
+/**
+ * Comparator that matches `buildCommentInfos`'s in-story sort: createdTime
+ * ascending, target start ascending, then commentId. Re-applied to the
+ * aggregated cross-story list so the merge order is deterministic.
+ */
+function compareCommentInfos(left: CommentInfo, right: CommentInfo): number {
+  const leftCreated = left.createdTime ?? 0;
+  const rightCreated = right.createdTime ?? 0;
+  if (leftCreated !== rightCreated) return leftCreated - rightCreated;
+
+  const leftStart = left.target?.segments[0]?.range.start ?? Number.MAX_SAFE_INTEGER;
+  const rightStart = right.target?.segments[0]?.range.start ?? Number.MAX_SAFE_INTEGER;
+  if (leftStart !== rightStart) return leftStart - rightStart;
+
+  return left.commentId.localeCompare(right.commentId);
+}
+
+/**
+ * Aggregates comments across body + every non-body story (headers, footers,
+ * footnotes, endnotes). Reuses `enumerateRevisionCapableStories` because the
+ * comment-capable story set matches the revision-capable one. Anywhere a
+ * user can type, they can comment.
+ *
+ * Each non-body editor is resolved lazily through `resolveStoryRuntime`. That
+ * helper caches per-story so repeated calls are cheap. Runtimes flagged as
+ * `cacheable: false` are headless views over a part that has no live editor;
+ * we dispose them at the end of the walk so a `{ in: 'all' }` refresh against
+ * a doc with non-mounted stories does not allocate a fresh editor on every
+ * call.
+ *
+ * The body pass observes the global `comments.xml` definition list (every
+ * comment in the doc, regardless of where its anchor lives). For comments
+ * anchored outside the body, that pass produces a definition-only record
+ * with no `target`. Later passes for the owning story produce the same id
+ * with a `target` and a `story` locator. The merge below prefers the
+ * story-stamped record so UI actions route by `address.story` instead of
+ * mistaking a header comment for a body one.
+ */
+function listCommentsAcrossStories(hostEditor: Editor): CommentInfo[] {
+  const stories = enumerateRevisionCapableStories(hostEditor);
+  const merged = new Map<string, CommentInfo>();
+  const transientRuntimes: Array<() => void> = [];
+
+  try {
+    for (const story of stories) {
+      let storyEditor: Editor | null = null;
+      if (story.storyType === 'body') {
+        storyEditor = hostEditor;
+      } else {
+        let runtime;
+        try {
+          runtime = resolveStoryRuntime(hostEditor, story);
+        } catch {
+          // Story can't be resolved (missing converter data, in-flight teardown);
+          // skip rather than fail the whole list call.
+          continue;
+        }
+        storyEditor = runtime.editor;
+        if (runtime.cacheable === false && typeof runtime.dispose === 'function') {
+          transientRuntimes.push(runtime.dispose);
+        }
+      }
+
+      const infos = buildCommentInfos(storyEditor, story);
+      for (const info of infos) {
+        const existing = merged.get(info.commentId);
+        if (!existing) {
+          merged.set(info.commentId, info);
+          continue;
+        }
+        // Prefer the entry with anchor data + story locator over a body
+        // definition-only record. Without this, headers/footers get
+        // routed as body comments after the first list({ in: 'all' }).
+        if (!existing.target && info.target) {
+          merged.set(info.commentId, info);
+        }
+      }
+    }
+  } finally {
+    for (const dispose of transientRuntimes) {
+      try {
+        dispose();
+      } catch {
+        // best-effort
+      }
+    }
+  }
+
+  return Array.from(merged.values()).sort(compareCommentInfos);
+}
+
 function listCommentsHandler(editor: Editor, query?: CommentsListQuery): CommentsListResult {
   validatePaginationInput(query?.offset, query?.limit);
 
-  const comments = buildCommentInfos(editor);
+  const scope = query?.in;
+  let comments: CommentInfo[];
+  let disposeTransient: (() => void) | undefined;
+  if (scope === COMMENTS_IN_ALL) {
+    comments = listCommentsAcrossStories(editor);
+  } else if (scope && scope.storyType !== 'body') {
+    let storyEditor: Editor;
+    try {
+      const runtime = resolveStoryRuntime(editor, scope);
+      storyEditor = runtime.editor;
+      if (runtime.cacheable === false && typeof runtime.dispose === 'function') {
+        disposeTransient = runtime.dispose;
+      }
+    } catch {
+      return buildDiscoveryResult({
+        evaluatedRevision: getRevision(editor),
+        total: 0,
+        items: [],
+        page: { limit: query?.limit ?? 0, offset: query?.offset ?? 0, returned: 0 },
+      });
+    }
+    try {
+      comments = buildCommentInfos(storyEditor, scope);
+    } finally {
+      if (disposeTransient) {
+        try {
+          disposeTransient();
+        } catch {
+          // best-effort
+        }
+      }
+    }
+  } else {
+    comments = buildCommentInfos(editor);
+  }
+
   const includeResolved = query?.includeResolved ?? true;
   const filtered = includeResolved ? comments : comments.filter((comment) => comment.status !== 'resolved');
   const evaluatedRevision = getRevision(editor);

@@ -83,11 +83,9 @@ export function InsertClauseButton() {
 
     const reg = ui.commands.register<InsertClausePayload>({
       id: 'company.insertClause',
-      // Mod-Shift-C opens the menu rather than running execute() with
-      // a payload — there's no clause id to insert until the user
-      // picks one. The shortcut is wired to dispatch the SAME `execute`
-      // body the button click does, but with a sentinel that opens
-      // the menu. (A consumer with a single-clause flow would skip
+      // Mod-Shift-C dispatches `execute` with no payload, which the
+      // body below treats as "open the picker" rather than performing
+      // an insert. (A consumer with a single-clause flow would skip
       // the menu and pass `{ clauseId: 'confidentiality' }` directly.)
       shortcut: 'Mod-Shift-C',
       getState: ({ state }) => ({
@@ -99,13 +97,23 @@ export function InsertClauseButton() {
           state.documentMode === 'viewing' ||
           state.selection.target === null,
       }),
-      execute: ({ payload, editor }) => {
-        // No payload → user pressed the shortcut. Open the menu and
-        // let them pick a clause.
+      execute: ({ payload, editor, superdoc }) => {
+        // The keyboard dispatch path doesn't consult `getState`; without
+        // this gate, Mod-Shift-C would pop the picker even when the
+        // toolbar button is grayed out (no selection target / viewing
+        // mode), letting the user choose a clause that the insert
+        // branch can't honor — silent dead-end. Mirror the disabled
+        // check from `getState` so the shortcut and the button agree.
+        const live = ui.selection.getSnapshot();
+        const documentMode = superdoc.config?.documentMode ?? null;
+        const disabled = documentMode === 'viewing' || live.target === null;
+
         if (!payload) {
+          if (disabled) return false;
           setOpen(true);
           return true;
         }
+        if (disabled) return false;
         const clause = CLAUSES.find((c) => c.id === payload.clauseId);
         if (!clause) return false;
 

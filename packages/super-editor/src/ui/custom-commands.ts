@@ -15,8 +15,8 @@ import type {
 
 /**
  * Built-in group ids in the order they render in the context menu.
- * Custom groups land after these in registration order — see
- * `compareGroups` below.
+ * Custom groups land after these, ranked by the smallest registration
+ * seq currently contributing to the group — see `groupRank` below.
  */
 const BUILTIN_CONTEXT_MENU_GROUPS = ['format', 'clipboard', 'review', 'comment', 'link'] as const;
 const BUILTIN_GROUP_ORDER: ReadonlyMap<string, number> = new Map(
@@ -508,22 +508,34 @@ export function createCustomCommandsRegistry(deps: CustomCommandsRegistryDeps): 
         });
       }
 
-      // Sort by group (built-ins first in fixed order, then unknown
-      // groups in registration order via the seq we tracked when each
-      // group's first contribution registered), then by order asc,
-      // then by registration seq asc.
+      // Rank each custom group by the smallest registration seq
+      // currently contributing to it. Two corners that drive this:
+      //
+      // - Skip entries with no `contextMenu` set. Otherwise a plain
+      //   custom command (no contribution) would default to the
+      //   `'custom'` fallback group via `?? DEFAULT_CONTEXT_MENU_GROUP`
+      //   and silently anchor that group's rank from a non-contribution.
+      // - Use the *minimum* current seq, not the first one encountered.
+      //   `entries` is a Map; replacement keeps the key at its original
+      //   insertion index but stores the new (higher) seq, so reading
+      //   the first encountered seq for a group's lone re-registered
+      //   contributor would use the new seq and reorder the group.
+      //   Min-of-current is stable: while *any* original-seq contributor
+      //   remains in the group, the group's rank stays anchored.
       const customGroupSeq = new Map<string, number>();
       for (const entry of entries.values()) {
-        const group = entry.contextMenu?.group ?? DEFAULT_CONTEXT_MENU_GROUP;
+        if (!entry.contextMenu) continue;
+        const group = entry.contextMenu.group ?? DEFAULT_CONTEXT_MENU_GROUP;
         if (BUILTIN_GROUP_ORDER.has(group)) continue;
-        if (!customGroupSeq.has(group)) customGroupSeq.set(group, entry.registrationSeq);
+        const existing = customGroupSeq.get(group);
+        if (existing === undefined || entry.registrationSeq < existing) {
+          customGroupSeq.set(group, entry.registrationSeq);
+        }
       }
 
       const groupRank = (group: string): number => {
         const builtin = BUILTIN_GROUP_ORDER.get(group);
         if (builtin !== undefined) return builtin;
-        // Custom groups land after built-ins; rank by registration
-        // order of the first contribution in that group.
         return BUILTIN_CONTEXT_MENU_GROUPS.length + (customGroupSeq.get(group) ?? 0);
       };
 

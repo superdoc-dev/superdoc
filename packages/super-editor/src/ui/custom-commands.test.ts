@@ -1041,6 +1041,70 @@ describe('ui.commands.getContextMenuItems', () => {
     ui.destroy();
   });
 
+  it('plain custom commands (no contextMenu) do not anchor a custom group rank', () => {
+    const { superdoc } = makeStubs();
+    const ui = createSuperDocUI({ superdoc });
+
+    // Register a plain command first (seq 0) — it has no contextMenu
+    // and must not claim the 'custom' fallback group's rank anchor.
+    ui.commands.register({ id: 'a.plain', execute: () => true });
+    // Register a workflow contribution (seq 1).
+    ui.commands.register({
+      id: 'b.workflow',
+      execute: () => true,
+      contextMenu: { label: 'Workflow A', group: 'company.workflow' },
+    });
+    // Register a 'custom' fallback group contribution (seq 2).
+    ui.commands.register({
+      id: 'c.custom',
+      execute: () => true,
+      contextMenu: { label: 'Default A' },
+    });
+
+    // 'company.workflow' (seq 1) must rank before 'custom' (seq 2).
+    // If the plain seq=0 command anchored 'custom', the order would
+    // flip.
+    expect(ui.commands.getContextMenuItems().map((i) => i.id)).toEqual(['b.workflow', 'c.custom']);
+
+    ui.destroy();
+  });
+
+  it('preserves a group rank anchor when one contributor is replaced and another remains', () => {
+    const { superdoc } = makeStubs();
+    const ui = createSuperDocUI({ superdoc });
+
+    // Group 'workflow' opens with two contributors at seq 0 and seq 1.
+    ui.commands.register({
+      id: 'wf.first',
+      execute: () => true,
+      contextMenu: { label: 'WF 1', group: 'company.workflow', order: 0 },
+    });
+    ui.commands.register({
+      id: 'wf.second',
+      execute: () => true,
+      contextMenu: { label: 'WF 2', group: 'company.workflow', order: 1 },
+    });
+    // A second custom group registers at seq 2.
+    ui.commands.register({
+      id: 'rev.first',
+      execute: () => true,
+      contextMenu: { label: 'Rev 1', group: 'company.review-extras', order: 0 },
+    });
+
+    // Now replace `wf.first` — the new seq becomes 3, but `wf.second`
+    // still carries the original seq 1, so the workflow group's
+    // anchor must stay at 1 and render before 'review-extras' (seq 2).
+    ui.commands.register({
+      id: 'wf.first',
+      execute: () => true,
+      contextMenu: { label: 'WF 1 (replaced)', group: 'company.workflow', order: 0 },
+    });
+
+    expect(ui.commands.getContextMenuItems().map((i) => i.id)).toEqual(['wf.first', 'wf.second', 'rev.first']);
+
+    ui.destroy();
+  });
+
   it('hides items whose when predicate throws and logs the error once per distinct message', () => {
     const { superdoc } = makeStubs();
     const ui = createSuperDocUI({ superdoc });

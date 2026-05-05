@@ -20,6 +20,14 @@ export function restoreSelection(
 ): SelectionRestoreResult {
   if (!editor) return { success: false, reason: 'not-ready' };
 
+  // Read-only mode (viewing) refuses selection mutation. Same posture
+  // as a doc-api mutation against an editor in `viewing` mode — the
+  // editor is observable but not addressable.
+  if (editor.isEditable === false) return { success: false, reason: 'read-only' };
+
+  const setTextSelection = editor.commands?.setTextSelection;
+  if (typeof setTextSelection !== 'function') return { success: false, reason: 'not-ready' };
+
   // SD-2954: when the capture carries a `story` locator, the
   // captured block ids only make sense in that story's PM doc. If
   // the user has switched surfaces between capture and restore (e.g.
@@ -28,8 +36,12 @@ export function restoreSelection(
   // we'd otherwise reach `resolveTextTarget` only to fail there with
   // a less-specific reason. Compare the captured story against the
   // currently routed story up-front so the typed `'stale'` reflects
-  // the real reason. Captures with no story keep current behavior
-  // (resolve against the routed editor, which is body in the common case).
+  // the real reason. Runs after `isEditable` and the
+  // `setTextSelection` guard so read-only / unmounted editors
+  // continue to surface their existing typed reasons regardless of
+  // whether the capture carries a story. Captures with no story keep
+  // current behavior (resolve against the routed editor, which is
+  // body in the common case).
   const capturedStory = (capture.target as { story?: StoryLocator } | null | undefined)?.story ?? null;
   if (capturedStory) {
     const activeStory = readActiveStoryLocator(options.hostEditor ?? null);
@@ -37,14 +49,6 @@ export function restoreSelection(
       return { success: false, reason: 'stale' };
     }
   }
-
-  // Read-only mode (viewing) refuses selection mutation. Same posture
-  // as a doc-api mutation against an editor in `viewing` mode — the
-  // editor is observable but not addressable.
-  if (editor.isEditable === false) return { success: false, reason: 'read-only' };
-
-  const setTextSelection = editor.commands?.setTextSelection;
-  if (typeof setTextSelection !== 'function') return { success: false, reason: 'not-ready' };
 
   const segments = capture.target?.segments;
   if (!segments || segments.length === 0) return { success: false, reason: 'missing-target' };

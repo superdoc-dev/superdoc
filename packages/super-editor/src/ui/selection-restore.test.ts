@@ -242,6 +242,20 @@ describe('ui.selection.restore', () => {
     ui.destroy();
   });
 
+  // The story-mismatch short-circuit must not pre-empt the
+  // `read-only` guard. A consumer storing a header capture and
+  // restoring against an editor that has been switched to viewing
+  // mode should still see `read-only`. Losing that typed reason
+  // would push consumers into branching on `'stale'` to detect
+  // viewing mode, which is what `read-only` exists to avoid.
+  it('returns "read-only" (not "stale") when a story capture meets a non-editable editor', () => {
+    const { superdoc } = makeStubs({ isEditable: false, activeStoryLocator: null });
+    const ui = createSuperDocUI({ superdoc });
+
+    expect(ui.selection.restore(headerCapture)).toEqual({ success: false, reason: 'read-only' });
+    ui.destroy();
+  });
+
   it('matches the captured story by value, not by object identity', () => {
     // The host emits a fresh locator object on every call to
     // `getActiveStoryLocator()`. The match must hold even though the

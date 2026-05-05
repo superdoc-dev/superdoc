@@ -284,6 +284,24 @@ function resolvePresentationEditor(superdoc: SuperDocUIOptions['superdoc']): {
  * accept TextTarget directly (separate ticket); until then,
  * `selectionSlice.selectionTarget` is the consumer-facing shortcut.
  */
+function textTargetToSelectionTarget(
+  textTarget: import('@superdoc/document-api').TextTarget | null,
+): import('@superdoc/document-api').SelectionTarget | null {
+  if (!textTarget) return null;
+  const segments = textTarget.segments;
+  if (!segments || segments.length === 0) return null;
+  const first = segments[0]!;
+  const last = segments[segments.length - 1]!;
+  const story = (textTarget as { story?: import('@superdoc/document-api').SelectionTarget['story'] }).story;
+  const start: import('@superdoc/document-api').SelectionPoint = story
+    ? { kind: 'text', blockId: first.blockId, offset: first.range.start, story }
+    : { kind: 'text', blockId: first.blockId, offset: first.range.start };
+  const end: import('@superdoc/document-api').SelectionPoint = story
+    ? { kind: 'text', blockId: last.blockId, offset: last.range.end, story }
+    : { kind: 'text', blockId: last.blockId, offset: last.range.end };
+  return story ? { kind: 'selection', start, end, story } : { kind: 'selection', start, end };
+}
+
 /**
  * Reads the currently routed story from the host's PresentationEditor.
  * Returns `null` when the body editor is active or when the host
@@ -320,24 +338,6 @@ function attachStoryToTextTarget(
   if (!textTarget || !story) return textTarget;
   if ((textTarget as { story?: unknown }).story) return textTarget;
   return { ...textTarget, story };
-}
-
-function textTargetToSelectionTarget(
-  textTarget: import('@superdoc/document-api').TextTarget | null,
-): import('@superdoc/document-api').SelectionTarget | null {
-  if (!textTarget) return null;
-  const segments = textTarget.segments;
-  if (!segments || segments.length === 0) return null;
-  const first = segments[0]!;
-  const last = segments[segments.length - 1]!;
-  const story = (textTarget as { story?: import('@superdoc/document-api').SelectionTarget['story'] }).story;
-  const start: import('@superdoc/document-api').SelectionPoint = story
-    ? { kind: 'text', blockId: first.blockId, offset: first.range.start, story }
-    : { kind: 'text', blockId: first.blockId, offset: first.range.start };
-  const end: import('@superdoc/document-api').SelectionPoint = story
-    ? { kind: 'text', blockId: last.blockId, offset: last.range.end, story }
-    : { kind: 'text', blockId: last.blockId, offset: last.range.end };
-  return story ? { kind: 'selection', start, end, story } : { kind: 'selection', start, end };
 }
 
 export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {

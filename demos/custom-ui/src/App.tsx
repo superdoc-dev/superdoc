@@ -9,6 +9,21 @@ import { ContextMenuRegistrations } from './components/ContextMenuRegistrations'
 import { useDecidedChanges } from './components/useDecidedChanges';
 
 export function App() {
+  return (
+    <SuperDocUIProvider>
+      <AppInner />
+    </SuperDocUIProvider>
+  );
+}
+
+/**
+ * Hooks that subscribe to the controller (like `useDecidedChanges`)
+ * have to live INSIDE `<SuperDocUIProvider>`, so the page-level hook
+ * work happens here rather than in `App`. Keeping `App` as a thin
+ * provider wrapper also matches what a real consumer's root usually
+ * does.
+ */
+function AppInner() {
   // The composer is sidebar-side UI but is triggered from the toolbar's
   // comment button. Lifting the open/close state to the layout root is
   // the simplest path; a real product might dispatch through a state
@@ -21,7 +36,7 @@ export function App() {
   const decided = useDecidedChanges();
 
   return (
-    <SuperDocUIProvider>
+    <>
       <div className="app">
         <header className="app-header">
           <h1>Contract Review Workspace</h1>
@@ -53,6 +68,6 @@ export function App() {
           </aside>
         </div>
       </div>
-    </SuperDocUIProvider>
+    </>
   );
 }

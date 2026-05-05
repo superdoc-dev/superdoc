@@ -59,6 +59,22 @@ export function restoreSelection(editor: Editor | null, capture: SelectionCaptur
   }
   if (!fromResolved || !toResolved) return { success: false, reason: 'stale' };
 
+  // Block id + range can both still resolve while the text inside the
+  // range has shifted — a collaborator inserts text earlier in the
+  // same paragraph, the offsets stay in-bounds, the resolved position
+  // is now over different content than the user originally selected.
+  // Compare the live text at the resolved range against the snapshot
+  // the capture froze (`quotedText` mirrors
+  // `state.doc.textBetween(from, to, ' ')` at capture time per the
+  // selection-info resolver). Skip the check when the capture was
+  // collapsed (`quotedText === ''`) — there's no range to misplace.
+  if (capture.quotedText !== '') {
+    const liveText = editor.state?.doc?.textBetween?.(fromResolved.from, toResolved.to, ' ');
+    if (typeof liveText === 'string' && liveText !== capture.quotedText) {
+      return { success: false, reason: 'stale' };
+    }
+  }
+
   const ok = setTextSelection({ from: fromResolved.from, to: toResolved.to });
   if (!ok) return { success: false, reason: 'stale' };
   return SUCCESS;

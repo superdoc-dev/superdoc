@@ -3,36 +3,41 @@ import { describe, expect, it, vi } from 'vitest';
 import { createSuperDocUI } from './create-super-doc-ui.js';
 import type { SuperDocLike } from './types.js';
 
+// Pin the resolver so tests can exercise the post-resolve code paths
+// (text-equivalence check, dispatch to setTextSelection) without
+// constructing a real PM document.
+vi.mock('../editors/v1/document-api-adapters/helpers/adapter-utils.js', () => ({
+  resolveTextTarget: (editor: unknown, target: { blockId: string }) => {
+    if ((editor as { __resolverMode?: string })?.__resolverMode === 'null') return null;
+    if (target.blockId === 'b1') return { from: 1, to: 5 };
+    return null;
+  },
+}));
+
 /**
  * Stub for `ui.selection.restore` tests. The helper accesses
  * `editor.isEditable` and `editor.commands.setTextSelection({ from, to })`
  * directly; the rest of the editor surface is unused so the stub is
  * minimal.
  */
-function makeStubs(opts: { isEditable?: boolean; resolves?: boolean } = {}) {
+function makeStubs(opts: { isEditable?: boolean; resolves?: boolean; liveText?: string } = {}) {
   const isEditable = opts.isEditable ?? true;
   const resolves = opts.resolves ?? true;
+  const liveText = opts.liveText ?? 'test';
 
   const setTextSelection = vi.fn(() => true);
-
-  // Model a doc with one matching block id so `resolveTextTarget`
-  // succeeds. Without `resolves`, a stub doc with no blocks returns
-  // null from the resolver and surfaces 'stale'.
-  const docContent = resolves
-    ? [{ type: { name: 'paragraph' }, attrs: { id: 'b1' }, content: { size: 10 }, nodeSize: 12 }]
-    : [];
 
   const editor = {
     on: vi.fn(),
     off: vi.fn(),
     isEditable,
+    // Switches the mocked `resolveTextTarget` between "succeeds" and
+    // "returns null" without rebuilding a real PM document for unit
+    // boundary testing.
+    __resolverMode: resolves ? 'ok' : 'null',
     state: {
       doc: {
-        descendants: (visitor: (node: unknown, pos: number) => boolean | void) => {
-          for (let i = 0; i < docContent.length; i += 1) visitor(docContent[i], i + 1);
-        },
-        nodeAt: () => null,
-        content: { size: 100 },
+        textBetween: () => liveText,
       },
     },
     commands: { setTextSelection },
@@ -118,6 +123,41 @@ describe('ui.selection.restore', () => {
     const ui = createSuperDocUI({ superdoc });
 
     expect(ui.selection.restore(bodyCapture)).toEqual({ success: false, reason: 'stale' });
+    ui.destroy();
+  });
+
+  it('returns { success: false, reason: "stale" } when the live text at the resolved range no longer matches the capture', () => {
+    // The block id still resolves and offsets stay in bounds, but the
+    // text at those offsets has shifted (e.g. a collaborator inserted
+    // text earlier in the same paragraph). The text-equivalence check
+    // catches this and refuses to silently report success.
+    const { superdoc } = makeStubs({ liveText: 'shifted contents at same offset' });
+    const ui = createSuperDocUI({ superdoc });
+
+    expect(ui.selection.restore(bodyCapture)).toEqual({ success: false, reason: 'stale' });
+    ui.destroy();
+  });
+
+  it('skips the text-equivalence check for collapsed captures (no range to misplace)', () => {
+    // A collapsed capture has quotedText === ''. textBetween at equal
+    // positions is also '', so the check is a trivial pass — but the
+    // stub returns 'mismatch' to prove we don't run the comparison
+    // for collapsed captures.
+    const { superdoc, mocks } = makeStubs({ liveText: 'should not be compared' });
+    const ui = createSuperDocUI({ superdoc });
+
+    const collapsed = Object.freeze({
+      empty: true,
+      target: { kind: 'text', segments: [{ blockId: 'b1', range: { start: 0, end: 0 } }] },
+      selectionTarget: null,
+      activeMarks: [],
+      activeCommentIds: [],
+      activeChangeIds: [],
+      quotedText: '',
+    }) as never;
+
+    expect(ui.selection.restore(collapsed)).toEqual({ success: true });
+    expect(mocks.setTextSelection).toHaveBeenCalledTimes(1);
     ui.destroy();
   });
 

@@ -112,9 +112,9 @@ The `superdoc` package currently exposes the following entries via `package.json
 | `./headless-toolbar` | Yes | Public subpath | `imports-headless-toolbar.ts` | Stays |
 | `./headless-toolbar/react` | Yes | Public subpath | `imports-headless-toolbar-react.ts` | Stays |
 | `./headless-toolbar/vue` | Yes | Public subpath | `imports-headless-toolbar-vue.ts` | Stays |
-| `./converter` | No (runtime-only) | Legacy public compatibility surface | n/a (no type contract) | DOCX conversion is also reachable through `Editor.open` / `Editor.loadXmlData` / `SuperConverter` exported from `superdoc`. Kept exported, not advertised, migration target is `superdoc`. |
-| `./docx-zipper` | No (runtime-only) | Legacy public compatibility surface | n/a (no type contract) | `DocxZipper` is exported from `superdoc`. Kept exported, not advertised, migration target is `superdoc`. |
-| `./file-zipper` | No (runtime-only) | Legacy public compatibility surface | n/a (no type contract) | `createZip` is exported from `superdoc`. Kept exported, not advertised, migration target is `superdoc`. |
+| `./converter` | Yes (SD-2953) | Legacy public compatibility surface | `imports-converter.ts` | DOCX conversion is also reachable through `Editor.open` / `Editor.loadXmlData` / `SuperConverter` exported from `superdoc`. Kept exported, not advertised, migration target is `superdoc`. Types added in SD-2953 to satisfy strict-mode consumers. |
+| `./docx-zipper` | Yes (SD-2953) | Legacy public compatibility surface | `imports-docx-zipper.ts` | `DocxZipper` is exported from `superdoc`. Kept exported, not advertised, migration target is `superdoc`. Types added in SD-2953. |
+| `./file-zipper` | Yes (SD-2953) | Legacy public compatibility surface | `imports-file-zipper.ts` | `createZip` is exported from `superdoc`. Kept exported, not advertised, migration target is `superdoc`. Types added in SD-2953. |
 | `./style.css` | N/A | Public asset | n/a (asset) | Stays |
 
 When a new subpath is added to `package.json` `exports`, the change must update both this inventory and the consumer matrix in the same PR. SD-2861's matrix scenarios are the gate that fails CI when a typed subpath ships without coverage.

@@ -31,9 +31,11 @@
       "require": "./dist/types.cjs"
     },
     "./converter": {
+      "types": "./dist/super-editor/src/editors/v1/core/super-converter/SuperConverter.d.ts",
       "import": "./dist/super-editor/converter.es.js"
     },
     "./docx-zipper": {
+      "types": "./dist/super-editor/src/editors/v1/core/DocxZipper.d.ts",
       "import": "./dist/super-editor/docx-zipper.es.js"
     },
     "./super-editor": {
@@ -68,6 +70,7 @@
       "import": "./dist/headless-toolbar-vue.es.js"
     },
     "./file-zipper": {
+      "types": "./dist/super-editor/src/editors/v1/core/super-converter/zipper.d.ts",
       "import": "./dist/super-editor/file-zipper.es.js"
     },
     "./style.css": "./dist/style.css"
@@ -95,6 +98,15 @@
       ],
       "types": [
         "./dist/super-editor/src/types.d.ts"
+      ],
+      "converter": [
+        "./dist/super-editor/src/editors/v1/core/super-converter/SuperConverter.d.ts"
+      ],
+      "docx-zipper": [
+        "./dist/super-editor/src/editors/v1/core/DocxZipper.d.ts"
+      ],
+      "file-zipper": [
+        "./dist/super-editor/src/editors/v1/core/super-converter/zipper.d.ts"
       ]
     }
   },
@@ -109,7 +121,7 @@
     "word-benchmark-sidecar": "node ../../devtools/word-benchmark-sidecar/server.js",
     "build": "vite build && pnpm run build:cdn",
     "build:dev": "SUPERDOC_SKIP_DTS=1 vite build",
-    "postbuild": "node ./scripts/check-tsconfig-type-surface.cjs && node ./scripts/ensure-types.cjs && node ./scripts/audit-bundle.cjs && node ./scripts/audit-declarations.cjs",
+    "postbuild": "node ./scripts/check-tsconfig-type-surface.cjs && node ./scripts/ensure-types.cjs && node ./scripts/audit-bundle.cjs && node ./scripts/audit-declarations.cjs && node ./scripts/check-export-coverage.cjs",
     "audit:declarations": "node ./scripts/audit-declarations.cjs",
     "audit:declarations:informational": "node ./scripts/audit-declarations.cjs --informational",
     "check:jsdoc": "node ./scripts/check-jsdoc.cjs",

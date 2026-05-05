@@ -416,11 +416,17 @@ function resolveProofingContext(editor, pos) {
   if (pos == null || !Number.isFinite(pos)) return null;
 
   try {
-    // Access PresentationEditor's proofing manager via the editor's back-reference
-    const pe = editor?._presentationEditor;
-    if (!pe?.proofingManager) return null;
-
-    const manager = pe.proofingManager;
+    // The context menu is wired to either the PresentationEditor wrapper
+    // (since SD-2875: 1.29+) or the inner / story Editor that carries a
+    // back-reference to it. Resolve the manager from whichever shape the
+    // caller passed — without this fallback, suggestions silently vanish
+    // when the wrapper itself is the menu's editor handle.
+    const manager =
+      editor?._presentationEditor?.proofingManager ??
+      editor?.presentationEditor?.proofingManager ??
+      editor?.proofingManager ??
+      null;
+    if (!manager) return null;
     const issue = manager.getIssueAtPosition(pos);
     if (!issue) return null;
 
@@ -443,4 +449,5 @@ export {
   getStructureFromResolvedPos as __getStructureFromResolvedPosForTest,
   isCollaborationEnabled as __isCollaborationEnabledForTest,
   getCellSelectionInfo as __getCellSelectionInfoForTest,
+  resolveProofingContext as __resolveProofingContextForTest,
 };

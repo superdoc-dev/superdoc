@@ -1564,16 +1564,26 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
       // inputs (explicit + synthetic TabRuns) don't produce out-of-order ordinals.
       // Mirrors consumeTabOrdinal() in layout-bridge/src/remeasure.ts.
       sequentialTabIndex = Math.max(sequentialTabIndex, resolvedTabIndex + 1);
-      const forcedAlignment = getAlignmentStopForOrdinal(resolvedTabIndex, runIndex);
+      // Compute greedy first so we can decide whether the SD-2447 heuristic is
+      // actually needed. The heuristic exists because when tabStops are seeded
+      // with synthetic 0.5" defaults from origin (TOC styles with only an
+      // alignment stop), greedy lands on a default before reaching the
+      // alignment stop. When the paragraph has an explicit start-aligned stop
+      // ahead of the alignment stop (e.g. TOC1 with `start@740, end@9360`),
+      // greedy already finds the correct stop and the heuristic over-fires.
+      // Only force the heuristic when greedy would land on a `source:default`
+      // stop — which is precisely the SD-2447 condition.
+      const greedy = getNextTabStopPx(absCurrentX, tabStops, tabStopCursor);
+      const greedyOnDefault = greedy.stop?.source === 'default';
+      const forcedAlignment = greedyOnDefault ? getAlignmentStopForOrdinal(resolvedTabIndex, runIndex) : null;
       if (forcedAlignment && forcedAlignment.stop.pos > absCurrentX + TAB_EPSILON) {
         stop = forcedAlignment.stop;
         target = forcedAlignment.stop.pos;
         tabStopCursor = forcedAlignment.index + 1;
       } else {
-        const nextStop = getNextTabStopPx(absCurrentX, tabStops, tabStopCursor);
-        target = nextStop.target;
-        tabStopCursor = nextStop.nextIndex;
-        stop = nextStop.stop;
+        target = greedy.target;
+        tabStopCursor = greedy.nextIndex;
+        stop = greedy.stop;
       }
       const maxAbsWidth = currentLine.maxWidth + effectiveIndent;
       const clampedTarget = Math.min(target, maxAbsWidth);

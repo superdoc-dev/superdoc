@@ -874,8 +874,13 @@ const applyTabLayoutToLines = (
       const absCurrentX = cursorX + effectiveIndent;
       let stop: TabStopPx | undefined;
       let target: number;
+      // Mirror of measuring/dom: only force the SD-2447 heuristic when greedy
+      // would land on a `source:default` stop (synthetic 0.5" grid). Explicit
+      // start stops should win greedy.
+      const greedy = getNextTabStopPx(absCurrentX, tabStops, tabStopCursor);
+      const greedyOnDefault = greedy.stop?.source === 'default';
       const forcedAlignment =
-        typeof tabOrdinal === 'number' && Number.isFinite(tabOrdinal)
+        greedyOnDefault && typeof tabOrdinal === 'number' && Number.isFinite(tabOrdinal)
           ? getAlignmentStopForOrdinal(tabOrdinal, tabRunIdx)
           : null;
       if (forcedAlignment && forcedAlignment.stop.pos > absCurrentX + TAB_EPSILON) {
@@ -883,10 +888,9 @@ const applyTabLayoutToLines = (
         target = forcedAlignment.stop.pos;
         tabStopCursor = forcedAlignment.index + 1;
       } else {
-        const next = getNextTabStopPx(absCurrentX, tabStops, tabStopCursor);
-        stop = next.stop;
-        target = next.target;
-        tabStopCursor = next.nextIndex;
+        stop = greedy.stop;
+        target = greedy.target;
+        tabStopCursor = greedy.nextIndex;
       }
       const clampedTarget = Number.isFinite(maxAbsWidth) ? Math.min(target, maxAbsWidth) : target;
       const relativeTarget = clampedTarget - effectiveIndent;

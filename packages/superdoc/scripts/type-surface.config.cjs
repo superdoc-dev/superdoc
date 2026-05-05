@@ -49,6 +49,16 @@ const requiredEntryPoints = [
   'super-editor/src/types.d.ts',
 ];
 
+/**
+ * Foundational source roots tsconfig.json must include but `relocations`
+ * does not own. These are the public-package sources themselves
+ * (`superdoc/src`, `super-editor/src`, `document-api/src`), distinct from
+ * the workspace-internal packages relocated via `relocations`. The
+ * tsconfig parity check expects exactly this base set plus the union of
+ * `relocations[*].tsconfigIncludes`.
+ */
+const baseTsconfigIncludes = ['src', '../super-editor/src', '../document-api/src'];
+
 const handwrittenDtsBlocklist = [
   // Ambient module declarations for internal `@superdoc/super-editor/converter/internal/...`
   // subpaths. Nothing in superdoc's shipped surface imports those subpaths,
@@ -216,6 +226,7 @@ const rule1Allowlist = {
 module.exports = {
   requiredEntryPoints,
   handwrittenDtsBlocklist,
+  baseTsconfigIncludes,
   relocations,
   sharedCommonDtsTargets,
   relocationGuardPackages,

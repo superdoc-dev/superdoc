@@ -20,26 +20,29 @@ interface Props {
 }
 
 /**
- * Registers the demo's context-menu contributions. A real consumer
- * keeps these registrations alive for the session; this component
- * demonstrates the `register({ contextMenu: { group, when } })`
- * surface and `when({ entities })` predicates that scope items to
- * specific click targets.
+ * Registers the demo's context-menu contributions.
+ *
+ * Each registration declares its own visibility via `when({ entities,
+ * insideSelection, ... })` and reads the click subject from
+ * `context.entities` / `context.selection` inside `execute`. Both
+ * predicate and handler see the same {@link ViewportContext} bundle
+ * the menu was opened on, so the demo doesn't thread payloads through
+ * the menu UI to keep them in sync.
  */
 export function ContextMenuRegistrations({ decided, onComposeComment }: Props) {
   const ui = useSuperDocUI();
 
   useEffect(() => {
     if (!ui) return;
-    const trackedChangeId = (entities: ViewportEntityHit[] | undefined) =>
+    const trackedChangeId = (entities: ReadonlyArray<ViewportEntityHit> | undefined) =>
       entities?.find((e) => e.type === 'trackedChange')?.id;
-    const commentId = (entities: ViewportEntityHit[] | undefined) =>
+    const commentId = (entities: ReadonlyArray<ViewportEntityHit> | undefined) =>
       entities?.find((e) => e.type === 'comment')?.id;
 
-    const accept = ui.commands.register<{ entities?: ViewportEntityHit[] }>({
+    const accept = ui.commands.register({
       id: 'demo.acceptSuggestion',
-      execute: ({ payload }) => {
-        const id = trackedChangeId(payload?.entities);
+      execute: ({ context }) => {
+        const id = trackedChangeId(context?.entities);
         if (!id) return false;
         // Route through the shared store so the Resolved audit row
         // shows up — calling `ui.trackChanges.accept(id)` directly
@@ -55,10 +58,10 @@ export function ContextMenuRegistrations({ decided, onComposeComment }: Props) {
         when: ({ entities }) => entities.some((e) => e.type === 'trackedChange'),
       },
     });
-    const reject = ui.commands.register<{ entities?: ViewportEntityHit[] }>({
+    const reject = ui.commands.register({
       id: 'demo.rejectSuggestion',
-      execute: ({ payload }) => {
-        const id = trackedChangeId(payload?.entities);
+      execute: ({ context }) => {
+        const id = trackedChangeId(context?.entities);
         if (!id) return false;
         decided.decideChange(id, 'rejected');
         return true;
@@ -70,10 +73,10 @@ export function ContextMenuRegistrations({ decided, onComposeComment }: Props) {
         when: ({ entities }) => entities.some((e) => e.type === 'trackedChange'),
       },
     });
-    const resolve = ui.commands.register<{ entities?: ViewportEntityHit[] }>({
+    const resolve = ui.commands.register({
       id: 'demo.resolveComment',
-      execute: ({ payload }) => {
-        const id = commentId(payload?.entities);
+      execute: ({ context }) => {
+        const id = commentId(context?.entities);
         if (!id) return false;
         ui.comments.resolve(id);
         return true;
@@ -85,11 +88,11 @@ export function ContextMenuRegistrations({ decided, onComposeComment }: Props) {
       },
     });
 
-    // Selection-scoped items. The right-click menu only shows these
-    // when the click is INSIDE the selection rect (the consumer's
-    // ContextMenu component hit-tests via `ui.selection.getRects()`).
-    // Without that gate, a stale selection from a prior interaction
-    // would leak into a right-click somewhere else.
+    // Selection-scoped items. The `insideSelection` predicate field
+    // gates these to clicks INSIDE the painted selection rects, so a
+    // stale selection from elsewhere in the doc doesn't leak into a
+    // right-click far away. The controller computes that flag once
+    // per menu open and hands the same value to every predicate.
     //
     // Format items (Bold / Italic / Link) deliberately live in the
     // floating bubble menu rather than here. The right-click target
@@ -98,8 +101,8 @@ export function ContextMenuRegistrations({ decided, onComposeComment }: Props) {
     // selection. The bubble menu owns that.
     const copy = ui.commands.register({
       id: 'demo.copy',
-      execute: () => {
-        const text = ui.selection.getSnapshot().quotedText;
+      execute: ({ context }) => {
+        const text = context?.selection.quotedText ?? ui.selection.getSnapshot().quotedText;
         if (text && typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
           navigator.clipboard.writeText(text).catch(() => {});
         }
@@ -108,7 +111,7 @@ export function ContextMenuRegistrations({ decided, onComposeComment }: Props) {
       contextMenu: {
         label: 'Copy',
         group: 'clipboard',
-        when: ({ selection }) => !selection.empty,
+        when: ({ selection, insideSelection }) => !selection.empty && insideSelection === true,
       },
     });
     const comment = ui.commands.register({
@@ -120,7 +123,8 @@ export function ContextMenuRegistrations({ decided, onComposeComment }: Props) {
       contextMenu: {
         label: 'Comment on selection',
         group: 'comment',
-        when: ({ selection }) => !selection.empty && selection.target !== null,
+        when: ({ selection, insideSelection }) =>
+          !selection.empty && selection.target !== null && insideSelection === true,
       },
     });
 

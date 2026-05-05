@@ -23,7 +23,7 @@ Open http://localhost:5189.
 - Insert a custom clause registered with `ui.commands.register` — the button works, and so does its keyboard shortcut `Mod-Shift-C` (declared on the registration, not wired in a separate keydown listener).
 - Switch between Edit and Suggest. In Suggest, every edit lands as a tracked change.
 - Select text and watch the floating bubble menu appear next to the selection (anchored via `ui.selection.getAnchorRect()`, not `window.getSelection()`).
-- Right-click on a tracked change or comment to see the custom context menu — items appear via `register({ contextMenu: { when } })` and the click target's entities come from `ui.viewport.entityAt({ x, y })`.
+- Right-click on a tracked change, comment, or anywhere in the document to see the custom context menu. Items appear via `register({ contextMenu: { when } })` and the click context (entities, position, selection, whether the click landed inside the painted selection) comes from `ui.viewport.contextAt({ x, y })` in one call.
 - Add a comment. The composer captures the selection on open, posts on submit, and `restore`s the visible range on close so the user keeps their place.
 - Accept or reject tracked changes. Decided ones move to a Resolved section.
 - Export the doc, edit it in Word, click Import, watch the activity feed update.
@@ -35,7 +35,7 @@ SuperDocUIProvider                one controller per app
 └── EditorMount                   <SuperDocEditor> + onReady + disableContextMenu
     ├── Toolbar                   ui.commands + setDocumentMode
     ├── SelectionPopover          ui.selection.getAnchorRect — bubble menu over the selection
-    ├── ContextMenu               ui.viewport.entityAt + ui.commands.getContextMenuItems
+    ├── ContextMenu               ui.viewport.contextAt + ui.commands.getContextMenuItems(context) + item.invoke()
     ├── ContextMenuRegistrations  ui.commands.register({ contextMenu: { when } })
     └── ActivitySidebar           ui.comments + ui.trackChanges + ui.selection
         └── CommentComposer       ui.selection.capture / restore + ui.comments.createFromCapture
@@ -82,15 +82,13 @@ The demo follows a strict separation between the three editor UI surfaces. Each 
 | **Floating bubble menu** | The **selection** | Bold, Italic, Link, Copy, Comment on selection. Format-on-selection actions where the user's eyes stay on the work. |
 | **Right-click context menu** | The **clicked target** | Accept / Reject (on tracked change), Resolve (on comment), Copy / Comment on selection (only when the click is *inside* the selection rect). |
 
-The right-click menu deliberately stays empty when the click lands on plain caret-only text. To honor the "click target = subject" rule for items like "Paste here" or "Insert clause at this point", the demo would need a `ui.viewport.positionAt({ x, y })` API (paired with `entityAt`) that resolves a coordinate to a `SelectionPoint`. Without it, those items would dispatch against the stale selection from before the right-click — a misleading teaching example. The API gap is filed as a SD-2936 follow-up; the demo stays honest until it lands.
-
-The `ContextMenu` component hit-tests the click against `ui.selection.getRects()` to separate "click landed inside the selection" from "click landed somewhere else with a stale selection elsewhere on the page". Without that hit-test, every right-click anywhere would surface selection-scoped items.
+`ui.viewport.contextAt({ x, y })` returns one bundle with the click point, the entities under it, the resolved caret position, the live selection, and `insideSelection` (whether the click landed in the painted selection rects). Each predicate filters on the same shape its handler receives, so "Copy" / "Comment on selection" gate themselves on `insideSelection === true` and a stale selection elsewhere on the page can't leak into a right-click somewhere else.
 
 ## The custom-UI recipe (after SD-2936)
 
 1. **Floating selection toolbar** — `ui.selection.getAnchorRect({ placement: 'start' })` returns viewport-relative coords for the painted selection. Re-position on `useSuperDocSelection()` change + `scroll`/`resize`. Don't reach for `window.getSelection()`; SuperDoc's painted DOM is separate from the offscreen ProseMirror DOM and the browser API returns the wrong rect. See `SelectionPopover.tsx`.
 
-2. **Right-click context menu** — set `disableContextMenu` on `<SuperDocEditor>` to suppress the built-in. On `contextmenu`, call `ui.viewport.entityAt({ x: event.clientX, y: event.clientY })` to get the entities under the cursor, then `ui.commands.getContextMenuItems({ entities })` to get items contributed via `register({ contextMenu })`. Pass `entities` as the payload when dispatching so `execute` can act on the right id. See `ContextMenu.tsx` + `ContextMenuRegistrations.tsx`.
+2. **Right-click context menu**: set `disableContextMenu` on `<SuperDocEditor>` to suppress the built-in. On `contextmenu`, call `ui.viewport.contextAt({ x: event.clientX, y: event.clientY })` to get the bundle (entities, position, selection, insideSelection), then `ui.commands.getContextMenuItems(context)` to get items contributed via `register({ contextMenu })`. Each item carries `invoke()`, which fires the registered `execute({ context })` with the bundle bound, so handlers act on the click target without the menu component threading payloads. Scope the listener with `ui.viewport.getHost()` instead of a CSS class. See `ContextMenu.tsx` + `ContextMenuRegistrations.tsx`.
 
 3. **Custom command + keyboard shortcut** — declare `shortcut: 'Mod-Shift-C'` on the registration. The controller installs a single bubble-phase keydown listener scoped to the painted host; matched shortcuts dispatch through the same path the toolbar button uses. No per-command keymap wiring. See `InsertClauseButton.tsx`.
 

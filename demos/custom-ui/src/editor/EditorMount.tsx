@@ -56,8 +56,9 @@ export function EditorMount() {
       hideToolbar
       contained
       // Suppress the editor's built-in right-click menu; the demo
-      // renders its own via `ContextMenu` (which uses
-      // `ui.viewport.entityAt` + `ui.commands.getContextMenuItems`).
+      // renders its own via `ContextMenu`, which opens against the
+      // bundle from `ui.viewport.contextAt(...)` and dispatches via
+      // `item.invoke()`.
       disableContextMenu
       style={{ height: '100%' }}
       onReady={({ superdoc }: { superdoc: unknown }) => {

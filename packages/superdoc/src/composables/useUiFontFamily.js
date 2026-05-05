@@ -21,23 +21,6 @@ export const DEFAULT_UI_FONT_FAMILY = 'Arial, Helvetica, sans-serif';
  *
  * @returns {{ uiFontFamily: import('vue').ComputedRef<string> }} An object containing:
  *   - uiFontFamily: A computed reference to the UI font-family string
- *
- * @example
- * // In a Vue component
- * import { useUiFontFamily } from '@superdoc/composables/useUiFontFamily.js';
- *
- * export default {
- *   setup() {
- *     const { uiFontFamily } = useUiFontFamily();
- *
- *     // Use in template or computed styles
- *     return { uiFontFamily };
- *   }
- * }
- *
- * @example
- * // In a template
- * <CommentsDropdown :content-style="{ fontFamily: uiFontFamily }" />
  */
 export function useUiFontFamily() {
   const instance = getCurrentInstance();

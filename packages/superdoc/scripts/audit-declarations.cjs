@@ -69,6 +69,7 @@ const RELOCATION_GUARD_PACKAGES = [
   '@superdoc/contracts',
   '@superdoc/dom-contract',
   '@superdoc/layout-bridge',
+  '@superdoc/layout-engine',
   '@superdoc/painter-dom',
   '@superdoc/pm-adapter',
 ];

@@ -219,6 +219,7 @@ const RELOCATION_RULES = [
   { pkg: '@superdoc/contracts',     distEntry: 'layout-engine/contracts/src/index.d.ts', matchSubpaths: true },
   { pkg: '@superdoc/dom-contract',  distEntry: 'layout-engine/dom-contract/src/index.d.ts', matchSubpaths: true },
   { pkg: '@superdoc/layout-bridge', distEntry: 'layout-engine/layout-bridge/src/index.d.ts', matchSubpaths: true },
+  { pkg: '@superdoc/layout-engine', distEntry: 'layout-engine/layout-engine/src/index.d.ts', matchSubpaths: true },
   { pkg: '@superdoc/painter-dom',   distEntry: 'layout-engine/painters/dom/src/index.d.ts', matchSubpaths: true },
   {
     pkg: '@superdoc/pm-adapter/converter-context.js',
@@ -241,6 +242,7 @@ const RELOCATION_GUARD_PACKAGES = [
   '@superdoc/contracts',
   '@superdoc/dom-contract',
   '@superdoc/layout-bridge',
+  '@superdoc/layout-engine',
   '@superdoc/painter-dom',
   '@superdoc/pm-adapter',
 ];

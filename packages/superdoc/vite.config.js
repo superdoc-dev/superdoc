@@ -132,6 +132,7 @@ export default defineConfig(({ mode, command }) => {
         '../layout-engine/contracts/src/**/*',
         '../layout-engine/dom-contract/src/**/*',
         '../layout-engine/layout-bridge/src/**/*',
+        '../layout-engine/layout-engine/src/**/*',
         '../layout-engine/painters/dom/src/**/*',
         // SD-2893: pm-adapter is included file-by-file (not via `src/**/*`)
         // because the full barrel pulls in @superdoc/style-engine and other

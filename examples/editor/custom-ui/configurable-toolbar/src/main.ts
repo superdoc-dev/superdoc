@@ -48,6 +48,12 @@ for (const config of BUILT_IN_BUTTONS) {
   btn.textContent = config.label;
   btn.title = config.title;
   if (config.className) btn.classList.add(config.className);
+  // Keep editor focus while the button is clicked. Without this, the
+  // mousedown moves focus to the button, the editor blurs, and the
+  // selection that fed `state.disabled` / `state.active` may collapse
+  // before the click handler runs. The built-in toolbar uses the
+  // same trick.
+  btn.addEventListener('mousedown', (event) => event.preventDefault());
   btn.addEventListener('click', () => {
     ui.commands.get(config.id)?.execute();
   });
@@ -93,6 +99,7 @@ const insertBtn = document.createElement('button');
 insertBtn.textContent = 'Insert clause';
 insertBtn.className = 'custom';
 insertBtn.title = 'Insert a fixed snippet (custom command)';
+insertBtn.addEventListener('mousedown', (event) => event.preventDefault());
 insertBtn.addEventListener('click', () => {
   ui.commands.get('example.insertClause')?.execute();
 });

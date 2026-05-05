@@ -386,11 +386,8 @@ function normalizeDecorationFragments(fragments: Fragment[], layoutMinY: number)
   return fragments.map((fragment) => ({ ...fragment, y: fragment.y + yOffset }));
 }
 
-function normalizeDecorationItems(
-  items: ResolvedPaintItem[] | undefined,
-  layoutMinY: number,
-): ResolvedPaintItem[] | undefined {
-  if (!items || layoutMinY >= 0) {
+function normalizeDecorationItems(items: ResolvedPaintItem[], layoutMinY: number): ResolvedPaintItem[] {
+  if (layoutMinY >= 0) {
     return items;
   }
 
@@ -2404,6 +2401,9 @@ export class HeaderFooterSessionManager {
               rIdResolvedLayout,
               `rId '${rIdLayoutKey}' page ${pageNumber}`,
             );
+            if (!alignedItems) {
+              return null;
+            }
             const pageHeight =
               page?.height ?? resolvedLayout.pages[0]?.height ?? layoutOptions.pageSize?.h ?? defaultPageSize.h;
             const margins = pageMargins ?? resolvedLayout.pages[0]?.margins ?? layoutOptions.margins ?? defaultMargins;
@@ -2465,6 +2465,9 @@ export class HeaderFooterSessionManager {
         resolvedVariant,
         `variant '${headerFooterType}' page ${pageNumber}`,
       );
+      if (!alignedVariantItems) {
+        return null;
+      }
 
       const pageHeight =
         page?.height ?? resolvedLayout.pages[0]?.height ?? layoutOptions.pageSize?.h ?? defaultPageSize.h;

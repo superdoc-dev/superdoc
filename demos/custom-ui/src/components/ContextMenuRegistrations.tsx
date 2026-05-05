@@ -92,6 +92,12 @@ export function ContextMenuRegistrations({ decided, onComposeComment }: Props) {
     // browser's native menu is suppressed there. Without these
     // entries the menu would be empty whenever the click isn't over a
     // tracked change or comment.
+    // Bold / Italic stay available on a collapsed selection: toggling
+    // a mark with no range applies it to the cursor's stored marks
+    // so the next typed character picks up the formatting. Same UX
+    // Word and Google Docs offer on right-click. Gate on
+    // `selection.target` so we don't surface them when the editor
+    // isn't focused at all.
     const bold = ui.commands.register({
       id: 'demo.bold',
       execute: () => {
@@ -102,7 +108,7 @@ export function ContextMenuRegistrations({ decided, onComposeComment }: Props) {
         label: 'Bold',
         group: 'format',
         order: 0,
-        when: ({ selection }) => !selection.empty,
+        when: ({ selection }) => selection.target !== null,
       },
     });
     const italic = ui.commands.register({
@@ -115,7 +121,7 @@ export function ContextMenuRegistrations({ decided, onComposeComment }: Props) {
         label: 'Italic',
         group: 'format',
         order: 1,
-        when: ({ selection }) => !selection.empty,
+        when: ({ selection }) => selection.target !== null,
       },
     });
     const copy = ui.commands.register({

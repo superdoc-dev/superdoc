@@ -57,6 +57,7 @@ import type {
   ResolvedTableItem,
   ResolvedImageItem,
   ResolvedDrawingItem,
+  ResolvedListMarkerItem,
 } from '@superdoc/contracts';
 import {
   adjustAvailableWidthForTextIndent,
@@ -3217,6 +3218,12 @@ export class DomPainter {
         const expandedRunsForBlock = expandRunsForInlineNewlines(block.runs);
 
         content.lines.forEach((resolvedLine) => {
+          const paragraphMarkLeftOffset = this.resolveResolvedListParagraphMarkOffset(
+            resolvedLine.isListFirstLine ? resolvedMarker : undefined,
+            fragment.markerTextWidth,
+            resolvedLine.indentOffset,
+          );
+
           const lineEl = this.renderLine(
             block,
             resolvedLine.line,
@@ -3227,6 +3234,7 @@ export class DomPainter {
             expandedRunsForBlock,
             resolvedLine.resolvedListTextStartPx,
             resolvedLine.indentOffset,
+            paragraphMarkLeftOffset,
           );
 
           // Apply pre-computed indent values
@@ -3295,15 +3303,17 @@ export class DomPainter {
 
               if (resolvedMarker.suffix === 'tab') {
                 const tabEl = this.doc!.createElement('span');
-                tabEl.className = 'superdoc-tab';
+                tabEl.classList.add('superdoc-tab', 'superdoc-marker-suffix-tab');
                 tabEl.innerHTML = '&nbsp;';
                 tabEl.style.display = 'inline-block';
+                tabEl.style.fontSize = `${resolvedMarker.run.fontSize}px`;
                 tabEl.style.wordSpacing = '0px';
                 tabEl.style.width = `${resolvedMarker.suffixWidthPx}px`;
                 lineEl.prepend(tabEl);
               } else if (resolvedMarker.suffix === 'space') {
                 const spaceEl = this.doc!.createElement('span');
                 spaceEl.classList.add('superdoc-marker-suffix-space');
+                spaceEl.style.fontSize = `${resolvedMarker.run.fontSize}px`;
                 spaceEl.style.wordSpacing = '0px';
                 spaceEl.textContent = '\u00A0';
                 lineEl.prepend(spaceEl);
@@ -3514,15 +3524,17 @@ export class DomPainter {
               const suffix = marker.suffix ?? 'tab';
               if (suffix === 'tab') {
                 const tabEl = this.doc!.createElement('span');
-                tabEl.className = 'superdoc-tab';
+                tabEl.classList.add('superdoc-tab', 'superdoc-marker-suffix-tab');
                 tabEl.innerHTML = '&nbsp;';
                 tabEl.style.display = 'inline-block';
+                tabEl.style.fontSize = `${marker.run.fontSize}px`;
                 tabEl.style.wordSpacing = '0px';
                 tabEl.style.width = `${listTabWidth}px`;
                 lineEl.prepend(tabEl);
               } else if (suffix === 'space') {
                 const spaceEl = this.doc!.createElement('span');
                 spaceEl.classList.add('superdoc-marker-suffix-space');
+                spaceEl.style.fontSize = `${marker.run.fontSize}px`;
                 spaceEl.style.wordSpacing = '0px';
                 spaceEl.textContent = '\u00A0';
                 lineEl.prepend(spaceEl);
@@ -5484,6 +5496,36 @@ export class DomPainter {
     lineEl.appendChild(mark);
   }
 
+  private resolveResolvedListParagraphMarkOffset(
+    marker: ResolvedListMarkerItem | undefined,
+    markerTextWidth: number | undefined,
+    fallbackOffset: number | undefined,
+  ): number | undefined {
+    if (typeof fallbackOffset === 'number' && Number.isFinite(fallbackOffset) && fallbackOffset > 0) {
+      return fallbackOffset;
+    }
+    if (!marker || marker.vanish) {
+      return fallbackOffset;
+    }
+
+    const paddingLeft = Number.isFinite(marker.firstLinePaddingLeftPx) ? marker.firstLinePaddingLeftPx : 0;
+    const suffixWidth = marker.suffix !== 'nothing' && Number.isFinite(marker.suffixWidthPx) ? marker.suffixWidthPx : 0;
+
+    if (marker.justification === 'left') {
+      const markerWidth =
+        typeof markerTextWidth === 'number' && Number.isFinite(markerTextWidth) && markerTextWidth > 0
+          ? markerTextWidth
+          : 0;
+      return paddingLeft + markerWidth + suffixWidth;
+    }
+
+    const centerPadding =
+      marker.justification === 'center' && Number.isFinite(marker.centerPaddingAdjustPx)
+        ? (marker.centerPaddingAdjustPx ?? 0)
+        : 0;
+    return paddingLeft + centerPadding + suffixWidth;
+  }
+
   private renderRun(
     run: Run,
     context: FragmentRenderContext,
@@ -6142,6 +6184,7 @@ export class DomPainter {
    * @param preExpandedRuns - Pre-computed result of expandRunsForInlineNewlines; pass when rendering multiple lines of the same paragraph to avoid recomputing per line
    * @param resolvedListTextStartPx - Optional canonical text-start override for list first lines
    * @param indentOffsetOverride - When defined, used instead of re-deriving indentOffset from block attrs in the segment positioning path
+   * @param paragraphMarkLeftOffsetOverride - Optional text-start override for positioning presentation-only paragraph marks
    * @returns The rendered line element
    */
   private renderLine(
@@ -6154,6 +6197,7 @@ export class DomPainter {
     preExpandedRuns?: Run[],
     resolvedListTextStartPx?: number,
     indentOffsetOverride?: number,
+    paragraphMarkLeftOffsetOverride?: number,
   ): HTMLElement {
     if (!this.doc) {
       throw new Error('DomPainter: document is not available');
@@ -6451,7 +6495,8 @@ export class DomPainter {
 
       return isListParagraph ? listIndentOffset : indentLeft + firstLineOffsetForCumX;
     };
-    const paragraphMarkLeftOffsetPx = resolveLineIndentOffset();
+    const paragraphMarkLeftOffsetPx =
+      paragraphMarkLeftOffsetOverride != null ? paragraphMarkLeftOffsetOverride : resolveLineIndentOffset();
 
     if (spacingPerSpace !== 0) {
       // Each rendered line is its own block; relying on text-align-last is brittle, so we use word-spacing.

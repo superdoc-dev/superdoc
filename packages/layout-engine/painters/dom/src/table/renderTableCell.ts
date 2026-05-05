@@ -394,15 +394,21 @@ function renderListMarker(params: MarkerRenderParams): void {
   const suffixType = markerLayout?.suffix ?? 'tab';
   if (suffixType === 'tab') {
     const tabEl = doc.createElement('span');
-    tabEl.className = 'superdoc-tab';
+    tabEl.classList.add('superdoc-tab', 'superdoc-marker-suffix-tab');
     tabEl.innerHTML = '&nbsp;';
     tabEl.style.display = 'inline-block';
+    if (markerLayout?.run?.fontSize != null) {
+      tabEl.style.fontSize = `${markerLayout.run.fontSize}px`;
+    }
     tabEl.style.wordSpacing = '0px';
     tabEl.style.width = `${listTabWidth}px`;
     lineEl.prepend(tabEl);
   } else if (suffixType === 'space') {
     const spaceEl = doc.createElement('span');
     spaceEl.classList.add('superdoc-marker-suffix-space');
+    if (markerLayout?.run?.fontSize != null) {
+      spaceEl.style.fontSize = `${markerLayout.run.fontSize}px`;
+    }
     spaceEl.style.wordSpacing = '0px';
     spaceEl.textContent = '\u00A0';
     lineEl.prepend(spaceEl);

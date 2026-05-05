@@ -1380,6 +1380,10 @@ describe('renderTableCell', () => {
       // Left-justified markers stay inline (position: relative on container span)
       const markerContainer = markerEl.parentElement as HTMLElement;
       expect(markerContainer.style.position).toBe('relative');
+
+      const tabEl = lineEl.querySelector('.superdoc-tab') as HTMLElement;
+      expect(tabEl.classList.contains('superdoc-marker-suffix-tab')).toBe(true);
+      expect(tabEl.style.fontSize).toBe('14px');
     });
 
     it('should render numbered list marker with correct text', () => {

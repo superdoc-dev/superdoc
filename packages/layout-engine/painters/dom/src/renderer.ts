@@ -2407,7 +2407,6 @@ export class DomPainter {
    * are measured from.
    */
   private getDecorationAnchorPageOriginY(
-    pageEl: HTMLElement,
     page: ResolvedPage,
     kind: 'header' | 'footer',
     effectiveOffset: number,
@@ -2416,9 +2415,14 @@ export class DomPainter {
       return effectiveOffset;
     }
 
+    if (!Number.isFinite(page.height) || page.height <= 0) {
+      throw new Error(
+        `DomPainter: invalid ResolvedPage.height (${page.height}) for page ${page.index}; resolve stage must produce a positive numeric height.`,
+      );
+    }
+
     const pageMargins = page.margins;
-    const styledPageHeight = Number.parseFloat(pageEl.style.height || '');
-    const pageHeight = page.height ?? (Number.isFinite(styledPageHeight) ? styledPageHeight : pageEl.clientHeight);
+    const pageHeight = page.height;
 
     const footerDistance = pageMargins?.footer;
     if (typeof footerDistance === 'number' && Number.isFinite(footerDistance)) {
@@ -2499,7 +2503,7 @@ export class DomPainter {
     // Header page-relative anchors use raw inner-layout Y and are handled with
     // the simpler effectiveOffset subtraction (unchanged from the baseline).
     const footerAnchorPageOriginY =
-      kind === 'footer' ? this.getDecorationAnchorPageOriginY(pageEl, page, kind, effectiveOffset) : 0;
+      kind === 'footer' ? this.getDecorationAnchorPageOriginY(page, kind, effectiveOffset) : 0;
     const footerAnchorContainerOffsetY = kind === 'footer' ? footerAnchorPageOriginY - effectiveOffset : 0;
 
     // For footers, calculate offset to push content to bottom of container

@@ -205,6 +205,19 @@ describe('layoutDocument', () => {
     ).toThrow(/non-positive content area/);
   });
 
+  it('clamps header-inflated margins so oversized header content does not crash body layout', () => {
+    const layout = layoutDocument([block], [makeMeasure([1])], {
+      pageSize: { w: 720, h: 540 },
+      margins: { top: 60, right: 60, bottom: 56, left: 60, header: 48, footer: 56 },
+      sectionMetadata: [{ sectionIndex: 0, headerRefs: { default: 'rId4' } }],
+      headerContentHeightsByRId: new Map([['rId4', 568]]),
+    });
+
+    expect(layout.pages).toHaveLength(1);
+    expect(layout.pages[0].margins.top).toBeCloseTo(483);
+    expect(layout.pages[0].margins.bottom).toBe(56);
+  });
+
   it('fills columns before advancing to a new page', () => {
     const options: LayoutOptions = {
       pageSize: { w: 600, h: 800 },
@@ -3948,6 +3961,47 @@ describe('layoutHeaderFooter', () => {
     expect(imgFrag).toBeDefined();
     expect(imgFragNoKind).toBeDefined();
     expect(imgFrag!.y).toBe(imgFragNoKind!.y);
+  });
+
+  it('excludes page-covering header anchors from measurement height', () => {
+    const paragraphBlock: FlowBlock = {
+      kind: 'paragraph',
+      id: 'header-anchor-paragraph',
+      runs: [{ text: 'Header', fontFamily: 'Arial', fontSize: 12, pmStart: 1, pmEnd: 7 }],
+    };
+    const imageBlock: FlowBlock = {
+      kind: 'image',
+      id: 'header-background',
+      src: 'data:image/png;base64,xxx',
+      anchor: {
+        isAnchored: true,
+        hRelativeFrom: 'page',
+        vRelativeFrom: 'paragraph',
+        offsetH: 0,
+        offsetV: 0,
+      },
+    };
+    const imageMeasure: Measure = {
+      kind: 'image',
+      width: 720,
+      height: 568,
+    };
+    const paragraphMeasure = makeMeasure([1]);
+    const layout = layoutHeaderFooter(
+      [paragraphBlock, imageBlock],
+      [paragraphMeasure, imageMeasure],
+      {
+        width: 600,
+        height: 424,
+        pageWidth: 720,
+        pageHeight: 540,
+        margins: { left: 60, right: 60, top: 60, bottom: 56, header: 48 },
+      },
+      'header',
+    );
+
+    expect(layout.height).toBe(1);
+    expect(layout.renderHeight).toBeCloseTo(568);
   });
 
   it('does not narrow footer paragraphs around page-relative anchored textboxes', () => {

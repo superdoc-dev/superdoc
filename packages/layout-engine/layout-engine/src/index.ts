@@ -829,6 +829,32 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
     return baseBottomMargin;
   };
 
+  const MIN_BODY_CONTENT_HEIGHT = 1;
+  const clampHeaderFooterInflatedMargins = (
+    topMargin: number,
+    bottomMargin: number,
+    baseTopMargin: number,
+    baseBottomMargin: number,
+    currentPageHeight: number,
+  ): { top: number; bottom: number } => {
+    const maxMarginTotal = currentPageHeight - MIN_BODY_CONTENT_HEIGHT;
+    if (topMargin + bottomMargin <= maxMarginTotal) return { top: topMargin, bottom: bottomMargin };
+
+    const baseMarginTotal = baseTopMargin + baseBottomMargin;
+    if (baseMarginTotal >= maxMarginTotal) return { top: topMargin, bottom: bottomMargin };
+
+    const topInflation = Math.max(0, topMargin - baseTopMargin);
+    const bottomInflation = Math.max(0, bottomMargin - baseBottomMargin);
+    const totalInflation = topInflation + bottomInflation;
+    if (totalInflation <= 0) return { top: topMargin, bottom: bottomMargin };
+
+    const availableInflation = maxMarginTotal - baseMarginTotal;
+    return {
+      top: baseTopMargin + availableInflation * (topInflation / totalInflation),
+      bottom: baseBottomMargin + availableInflation * (bottomInflation / totalInflation),
+    };
+  };
+
   // Calculate the maximum header/footer content heights (used for fallback and section breaks)
   // These are still needed for cases where we don't have per-page information
   const maxHeaderContentHeight = headerContentHeights
@@ -855,11 +881,16 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
   const footerDistance = margins.footer ?? margins.bottom;
   const defaultHeaderHeight = getHeaderHeightForPage('default', undefined, 0);
   const defaultFooterHeight = getFooterHeightForPage('default', undefined, 0);
-  const effectiveTopMargin = calculateEffectiveTopMargin(defaultHeaderHeight, headerDistance, margins.top);
-  const effectiveBottomMargin = calculateEffectiveBottomMargin(defaultFooterHeight, footerDistance, margins.bottom);
+  const effectiveMargins = clampHeaderFooterInflatedMargins(
+    calculateEffectiveTopMargin(defaultHeaderHeight, headerDistance, margins.top),
+    calculateEffectiveBottomMargin(defaultFooterHeight, footerDistance, margins.bottom),
+    margins.top,
+    margins.bottom,
+    pageSize.h,
+  );
 
-  let activeTopMargin = effectiveTopMargin;
-  let activeBottomMargin = effectiveBottomMargin;
+  let activeTopMargin = effectiveMargins.top;
+  let activeBottomMargin = effectiveMargins.bottom;
   let activeLeftMargin = margins.left;
   let activeRightMargin = margins.right;
   let pendingTopMargin: number | null = null;
@@ -1428,12 +1459,15 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
         // Always recalculate to ensure pages without headers reset to base margin
         // (not the inflated margin from a previous page with a header).
         // Use section base margins, not document defaults, for correct per-section behavior.
-        activeTopMargin = calculateEffectiveTopMargin(headerHeight, activeHeaderDistance, activeSectionBaseTopMargin);
-        activeBottomMargin = calculateEffectiveBottomMargin(
-          footerHeight,
-          activeFooterDistance,
+        const adjustedMargins = clampHeaderFooterInflatedMargins(
+          calculateEffectiveTopMargin(headerHeight, activeHeaderDistance, activeSectionBaseTopMargin),
+          calculateEffectiveBottomMargin(footerHeight, activeFooterDistance, activeSectionBaseBottomMargin),
+          activeSectionBaseTopMargin,
           activeSectionBaseBottomMargin,
+          activePageSize.h,
         );
+        activeTopMargin = adjustedMargins.top;
+        activeBottomMargin = adjustedMargins.bottom;
 
         layoutLog(
           `[Layout] Page ${newPageNumber}: Using variant '${variantType}' - headerHeight: ${headerHeight}, footerHeight: ${footerHeight}`,
@@ -2998,6 +3032,8 @@ function getPageRelativeMeasurementBand(
  * 3. Page-relative header/footer overlays that do not intersect the region's
  *    reserved margin band — they should still render, but must not reserve
  *    body space like true header/footer content.
+ * 4. Header/footer anchored overlays at least as tall as the measurement
+ *    canvas — these are page-covering decoration, not body-reserving content.
  */
 function shouldExcludeFromMeasurement(
   fragment: Fragment,
@@ -3039,6 +3075,11 @@ function shouldExcludeFromMeasurement(
     if (measurementBand && !rangesIntersect(fragment.y, fragmentBottom, measurementBand.start, measurementBand.end)) {
       return true;
     }
+  }
+
+  const fragmentHeight = typeof fragment.height === 'number' ? fragment.height : fragmentBottom - fragment.y;
+  if (kind && Number.isFinite(fragmentHeight) && fragmentHeight >= canvasHeight) {
+    return true;
   }
 
   return false;

@@ -17,19 +17,15 @@ import type {
   ImageFragment,
   ImageHyperlink,
   ImageRun,
-  Layout,
   Line,
   LineSegment,
   ListBlock,
   ListItemFragment,
   ListMeasure,
-  Measure,
-  Page,
   PageMargins,
   ParaFragment,
   ParagraphAttrs,
   ParagraphBlock,
-  ParagraphBorder,
   ParagraphMeasure,
   PositionedDrawingGeometry,
   Run,
@@ -242,34 +238,18 @@ export type RenderedLineInfo = {
 /**
  * Input to `DomPainter.paint()`.
  *
- * `resolvedLayout` is the canonical resolved data the painter reads from.
- * `sourceLayout` is the raw Layout retained for legacy internal access paths.
+ * The painter consumes only `resolvedLayout`. All fragment, geometry, and
+ * page-level metadata it needs is reachable from `ResolvedPaintItem.fragment`
+ * back-pointers and `ResolvedPage` fields.
  */
 export type DomPainterInput = {
   resolvedLayout: ResolvedLayout;
-  /** Raw Layout for internal fragment access. */
-  sourceLayout: Layout;
-  /**
-   * Optional bridge data used only when a decoration provider omits `items`.
-   * Body rendering reads from `resolvedLayout`; these arrays exist solely so
-   * header/footer fragments can synthesize resolved items on demand.
-   */
-  blocks?: FlowBlock[];
-  measures?: Measure[];
-  headerBlocks?: FlowBlock[];
-  headerMeasures?: Measure[];
-  footerBlocks?: FlowBlock[];
-  footerMeasures?: Measure[];
 };
 
 export type PageDecorationPayload = {
   fragments: Fragment[];
-  /**
-   * Resolved items aligned 1:1 with `fragments`. Same length, same order.
-   * When omitted, the painter treats fragments as having no resolved metadata
-   * (no paragraph borders, no SDT container keys).
-   */
-  items?: ResolvedPaintItem[];
+  /** Resolved items aligned 1:1 with `fragments`. Same length, same order. */
+  items: ResolvedPaintItem[];
   /** Minimum Y coordinate from layout; negative when content extends above y=0. */
   minY?: number;
   height: number;

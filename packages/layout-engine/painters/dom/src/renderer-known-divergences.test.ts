@@ -10,7 +10,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { createDomPainter } from './index.js';
+import { createTestPainter as createDomPainter } from './_test-utils.js';
 import type { FlowBlock, Measure, Layout, Line } from '@superdoc/contracts';
 import { normalizeLines } from './test-utils/normalize-line.js';
 

@@ -105,7 +105,6 @@ function createTestPainter(opts: { blocks?: FlowBlock[]; measures?: Measure[] } 
           });
       const input: DomPainterInput = {
         resolvedLayout: effectiveResolved,
-        sourceLayout: layout,
       };
       painter.paint(input, mount, mapping as any);
     },
@@ -1598,7 +1597,7 @@ describe('DomPainter', () => {
     });
 
     try {
-      const painter = createDomPainter({ blocks: [tableBlock], measures: [tableMeasure] });
+      const painter = createTestPainter({ blocks: [tableBlock], measures: [tableMeasure] });
       expect(() => painter.paint(tableLayout, mount)).not.toThrow();
 
       const placeholder = mount.querySelector('.render-error-placeholder') as HTMLElement | null;
@@ -6852,7 +6851,7 @@ describe('DomPainter', () => {
         ],
       };
 
-      const painter = createDomPainter({ blocks: [imageBlock], measures: [imageMeasure] });
+      const painter = createTestPainter({ blocks: [imageBlock], measures: [imageMeasure] });
       painter.paint(imageLayout, mount);
     };
 
@@ -8457,7 +8456,7 @@ describe('ImageFragment (block-level images)', () => {
         ...(hyperlink ? { hyperlink } : {}),
       };
       const measure: Measure = { kind: 'image', width: 100, height: 50 };
-      return createDomPainter({ blocks: [block], measures: [measure] });
+      return createTestPainter({ blocks: [block], measures: [measure] });
     };
 
     it('wraps linked image in <a class="superdoc-link"> with correct href', () => {
@@ -8508,7 +8507,7 @@ describe('ImageFragment (block-level images)', () => {
         pageSize: { w: 400, h: 300 },
         pages: [{ number: 1, fragments: [fragment] }],
       };
-      const painter = createDomPainter({ blocks: [block], measures: [measure] });
+      const painter = createTestPainter({ blocks: [block], measures: [measure] });
       painter.paint(layout, mount);
 
       const anchor = mount.querySelector('a.superdoc-link') as HTMLAnchorElement | null;
@@ -8529,7 +8528,7 @@ describe('ImageFragment (block-level images)', () => {
         pageSize: { w: 400, h: 300 },
         pages: [{ number: 1, fragments: [fragment] }],
       };
-      const painter = createDomPainter({ blocks: [block], measures: [measure] });
+      const painter = createTestPainter({ blocks: [block], measures: [measure] });
       painter.paint(layout, mount);
 
       const anchor = mount.querySelector('a.superdoc-link');
@@ -8555,7 +8554,7 @@ describe('ImageFragment (block-level images)', () => {
         pageSize: { w: 400, h: 300 },
         pages: [{ number: 1, fragments: [fragment] }],
       };
-      const painter = createDomPainter({ blocks: [block], measures: [measure] });
+      const painter = createTestPainter({ blocks: [block], measures: [measure] });
       painter.paint(layout, mount);
 
       const anchor = mount.querySelector('a.superdoc-link');
@@ -8622,7 +8621,7 @@ describe('URL sanitization security', () => {
 
 describe('normalizeAnchor XSS protection', () => {
   let mount: HTMLElement;
-  let painter: ReturnType<typeof createDomPainter>;
+  let painter: ReturnType<typeof createTestPainter>;
 
   const createFlowBlockWithLink = (link: unknown): FlowBlock => ({
     kind: 'paragraph',
@@ -8769,7 +8768,7 @@ describe('normalizeAnchor XSS protection', () => {
 
 describe('appendDocLocation XSS protection', () => {
   let mount: HTMLElement;
-  let painter: ReturnType<typeof createDomPainter>;
+  let painter: ReturnType<typeof createTestPainter>;
 
   const createFlowBlockWithLink = (link: unknown): FlowBlock => ({
     kind: 'paragraph',
@@ -8949,7 +8948,7 @@ describe('appendDocLocation XSS protection', () => {
 
 describe('appendDocLocation edge cases', () => {
   let mount: HTMLElement;
-  let painter: ReturnType<typeof createDomPainter>;
+  let painter: ReturnType<typeof createTestPainter>;
 
   const createFlowBlockWithLink = (link: unknown): FlowBlock => ({
     kind: 'paragraph',
@@ -9168,7 +9167,7 @@ describe('appendDocLocation edge cases', () => {
 
 describe('Tooltip truncation signaling', () => {
   let mount: HTMLElement;
-  let painter: ReturnType<typeof createDomPainter>;
+  let painter: ReturnType<typeof createTestPainter>;
 
   const createFlowBlockWithLink = (link: unknown): FlowBlock => ({
     kind: 'paragraph',
@@ -9918,7 +9917,7 @@ describe('Link accessibility - Tooltip aria-describedby', () => {
 
 describe('Link rendering metrics', () => {
   let mount: HTMLElement;
-  let painter: ReturnType<typeof createDomPainter>;
+  let painter: ReturnType<typeof createTestPainter>;
 
   const createFlowBlockWithLink = (link: unknown): FlowBlock => ({
     kind: 'paragraph',
@@ -10855,181 +10854,6 @@ describe('applyRunDataAttributes', () => {
       expect(content).toContain('Main');
       expect(content).toContain('Header');
       expect(content).toContain('Footer');
-    });
-  });
-
-  describe.skip('decoration item synthesis (legacy, deleted in PR2 of SD-2836)', () => {
-    let mount: HTMLElement;
-
-    beforeEach(() => {
-      mount = document.createElement('div');
-      document.body.appendChild(mount);
-    });
-
-    afterEach(() => {
-      document.body.removeChild(mount);
-    });
-
-    it('synthesizes missing header items from legacy setData bridge data', () => {
-      const mainBlock: FlowBlock = {
-        kind: 'paragraph',
-        id: 'main-block',
-        runs: [{ text: 'Main', fontFamily: 'Arial', fontSize: 16, pmStart: 0, pmEnd: 4 }],
-      };
-      const mainMeasure: Measure = {
-        kind: 'paragraph',
-        lines: [{ fromRun: 0, fromChar: 0, toRun: 0, toChar: 4, width: 40, ascent: 12, descent: 4, lineHeight: 20 }],
-        totalHeight: 20,
-      };
-      const headerBlock: FlowBlock = {
-        kind: 'paragraph',
-        id: 'hf-header-synth',
-        runs: [{ text: 'Synth Header', fontFamily: 'Arial', fontSize: 14, pmStart: 0, pmEnd: 12 }],
-      };
-      const headerMeasure: Measure = {
-        kind: 'paragraph',
-        lines: [{ fromRun: 0, fromChar: 0, toRun: 0, toChar: 12, width: 90, ascent: 10, descent: 3, lineHeight: 16 }],
-        totalHeight: 16,
-      };
-      const layout: Layout = {
-        pageSize: { w: 400, h: 500 },
-        pages: [{ number: 1, fragments: [] }],
-      };
-
-      const painter = createDomPainter({
-        blocks: [mainBlock],
-        measures: [mainMeasure],
-        headerProvider: () => ({
-          height: 16,
-          offset: 0,
-          fragments: [{ kind: 'para', blockId: 'hf-header-synth', fromLine: 0, toLine: 1, x: 0, y: 0, width: 120 }],
-        }),
-      });
-
-      painter.setData([mainBlock], [mainMeasure], [headerBlock], [headerMeasure]);
-      painter.paint(layout, mount);
-
-      expect(mount.querySelector('.superdoc-page-header')?.textContent).toContain('Synth Header');
-      expect(mount.querySelector('.render-error-placeholder')).toBeNull();
-    });
-
-    it('synthesizes missing footer items from direct DomPainterInput bridge data', () => {
-      const footerBlock: FlowBlock = {
-        kind: 'paragraph',
-        id: 'hf-footer-synth',
-        runs: [{ text: 'Synth Footer', fontFamily: 'Arial', fontSize: 14, pmStart: 0, pmEnd: 12 }],
-      };
-      const footerMeasure: Measure = {
-        kind: 'paragraph',
-        lines: [{ fromRun: 0, fromChar: 0, toRun: 0, toChar: 12, width: 88, ascent: 10, descent: 3, lineHeight: 16 }],
-        totalHeight: 16,
-      };
-      const layout: Layout = {
-        pageSize: { w: 400, h: 500 },
-        pages: [{ number: 1, fragments: [] }],
-      };
-
-      const painter = createDomPainter({
-        footerProvider: () => ({
-          height: 16,
-          offset: 460,
-          fragments: [{ kind: 'para', blockId: 'hf-footer-synth', fromLine: 0, toLine: 1, x: 0, y: 0, width: 120 }],
-        }),
-      });
-
-      painter.paint(
-        {
-          resolvedLayout: emptyResolved,
-          sourceLayout: layout,
-          footerBlocks: [footerBlock],
-          footerMeasures: [footerMeasure],
-        },
-        mount,
-      );
-
-      expect(mount.querySelector('.superdoc-page-footer')?.textContent).toContain('Synth Footer');
-      expect(mount.querySelector('.render-error-placeholder')).toBeNull();
-    });
-
-    it('validates optional decoration block/measure pairs on direct input', () => {
-      const painter = createDomPainter({});
-      const layout: Layout = {
-        pageSize: { w: 400, h: 500 },
-        pages: [{ number: 1, fragments: [] }],
-      };
-
-      expect(() =>
-        painter.paint(
-          {
-            resolvedLayout: emptyResolved,
-            sourceLayout: layout,
-            headerBlocks: [
-              {
-                kind: 'paragraph',
-                id: 'hf-header-invalid',
-                runs: [{ text: 'Invalid', fontFamily: 'Arial', fontSize: 12, pmStart: 0, pmEnd: 7 }],
-              },
-            ],
-          },
-          mount,
-        ),
-      ).toThrow('headerBlocks and headerMeasures must both be provided or both be omitted.');
-    });
-
-    it('validates optional decoration block/measure pairs in setData', () => {
-      const painter = createDomPainter({});
-
-      expect(() =>
-        painter.setData(
-          [
-            {
-              kind: 'paragraph',
-              id: 'body',
-              runs: [{ text: 'Body', fontFamily: 'Arial', fontSize: 12, pmStart: 0, pmEnd: 4 }],
-            },
-          ],
-          [
-            {
-              kind: 'paragraph',
-              lines: [
-                { fromRun: 0, fromChar: 0, toRun: 0, toChar: 4, width: 30, ascent: 10, descent: 3, lineHeight: 16 },
-              ],
-              totalHeight: 16,
-            },
-          ],
-          [
-            {
-              kind: 'paragraph',
-              id: 'hf-header-invalid',
-              runs: [{ text: 'Invalid', fontFamily: 'Arial', fontSize: 12, pmStart: 0, pmEnd: 7 }],
-            },
-          ],
-        ),
-      ).toThrow('headerBlocks and headerMeasures must both be provided or both be omitted.');
-    });
-
-    it('uses setResolvedLayout for legacy layout paints', () => {
-      const painter = createDomPainter({});
-      const layout: Layout = {
-        pageSize: { w: 400, h: 500 },
-        pages: [{ number: 1, fragments: [] }],
-      };
-
-      painter.setResolvedLayout(emptyResolved);
-
-      expect(() => painter.paint(layout, mount)).not.toThrow();
-      expect(mount.querySelector('.superdoc-page')).toBeTruthy();
-    });
-
-    it('creates an empty resolved layout for legacy paints without block data', () => {
-      const painter = createDomPainter({});
-      const layout: Layout = {
-        pageSize: { w: 400, h: 500 },
-        pages: [{ number: 1, fragments: [] }],
-      };
-
-      expect(() => painter.paint(layout, mount)).not.toThrow();
-      expect(mount.querySelector('.superdoc-page')).toBeTruthy();
     });
   });
 

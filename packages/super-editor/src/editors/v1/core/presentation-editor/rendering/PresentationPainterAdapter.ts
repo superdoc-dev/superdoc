@@ -73,7 +73,7 @@ export class PresentationPainterAdapter {
 
   // ── Paint orchestration ─────────────────────────────────────────────
 
-  paint(input: DomPainterInput | Layout, mount: HTMLElement, mapping?: PositionMapping): void {
+  paint(input: DomPainterInput, mount: HTMLElement, mapping?: PositionMapping): void {
     this.#painter?.paint(input, mount, mapping);
   }
 

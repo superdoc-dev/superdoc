@@ -12,25 +12,30 @@ Read-only DOM renderer for the SuperDoc layout engine.
 
 ## API (read-only)
 
+DomPainter consumes a single paint-ready input, `ResolvedLayout`, produced
+upstream by `@superdoc/layout-resolved`. It does not run layout, measurement,
+or pm-adapter logic itself.
+
 ```ts
 import { createDomPainter } from '@superdoc/painter-dom';
+import { resolveLayout } from '@superdoc/layout-resolved';
 
 const painter = createDomPainter({
-  blocks,      // FlowBlocks used to generate the layout
-  measures,    // Measures (parallel to blocks)
   layoutMode: 'vertical' | 'horizontal' | 'book',
-  pageStyles,  // optional style overrides
-  headerProvider, // optional per-page header decorations
-  footerProvider, // optional per-page footer decorations
+  pageStyles,                                                // optional style overrides
+  headerProvider,                                            // optional per-page header decorations
+  footerProvider,                                            // optional per-page footer decorations
   virtualization: { enabled: true, window: 5, overscan: 1 }, // vertical mode only
 });
 
-painter.paint(layout, mountElement); // layout comes from @superdoc/layout-engine
-painter.setData(blocks, measures);   // update data without re-instantiating
+const resolvedLayout = resolveLayout({ layout, flowMode, blocks, measures });
+painter.paint({ resolvedLayout }, mountElement);
 painter.setProviders(newHeader, newFooter); // optional helper for provider changes
 ```
 
 Notes:
-- Expects `blocks[i]` and `measures[i]` to align with the layout you pass to `paint`.
+- `paint()` takes only `{ resolvedLayout }` — no raw `Layout`, `blocks`, or `measures`.
+- Header/footer providers must return a `PageDecorationPayload` whose `items` are
+  aligned 1:1 with `fragments` (same length, same order).
 - Virtualization is opt-in and only supported in vertical mode (windowed pages with spacers).
 - Renderer is read-only: no editing/input handling is included here.

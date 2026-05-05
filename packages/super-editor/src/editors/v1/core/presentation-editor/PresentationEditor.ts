@@ -6209,7 +6209,6 @@ export class PresentationEditor extends EventEmitter {
       const painterPaintStart = perfNow();
       const paintInput: DomPainterInput = {
         resolvedLayout,
-        sourceLayout: layout,
       };
       this.#painterAdapter.paint(paintInput, this.#painterHost, mapping ?? undefined);
       const painterPaintEnd = perfNow();

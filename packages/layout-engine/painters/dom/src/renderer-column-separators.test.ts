@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { createDomPainter } from './index.js';
+import { createTestPainter as createDomPainter } from './_test-utils.js';
 import type { ColumnRegion, Fragment, Layout, Page } from '@superdoc/contracts';
 
 // These tests pin down DomPainter's column-separator rendering:

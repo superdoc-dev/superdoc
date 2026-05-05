@@ -363,6 +363,7 @@ const FORMATTING_MARKS_STYLES = `
   display: none;
   position: absolute;
   top: 0;
+  transform: translateX(var(--sd-formatting-paragraph-mark-gap, 0.2em));
   color: var(--sd-formatting-mark-color, var(--sd-ui-action, currentColor));
   pointer-events: none;
   user-select: none;

@@ -94,6 +94,7 @@ describe('DomPainter formatting marks', () => {
     const paragraphMark = container.querySelector<HTMLElement>('.superdoc-formatting-paragraph-mark');
     expect(paragraphMark?.textContent).toBe('¶');
     expect(paragraphMark?.style.left).toBe('72px');
+    expect(document.head.textContent).toContain('--sd-formatting-paragraph-mark-gap');
   });
 
   it('does not add formatting mark DOM when disabled', () => {

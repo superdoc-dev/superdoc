@@ -791,48 +791,28 @@ const applyTabLayoutToLines = (
     .filter(({ stop }) => stop.val === 'end' || stop.val === 'center' || stop.val === 'decimal');
 
   // Per-line-segment tab counts. Segments are delimited by explicit <w:br/> because
-  // pPr/tabs apply per line, not per paragraph. sd-1480: "Page\t2<br/>Page\t5\t"
-  // must bind the meaningful tab on each segment to the alignment stop, ignoring
-  // trailing-empty <w:tab/> artifacts.
+  // pPr/tabs apply per line, not per paragraph. sd-1480: "Page\t2<br/>Page\t5" must
+  // bind the trailing tab of EACH segment to the alignment stop, not just the
+  // paragraph-final tab.
   const tabSegmentInfo = new Map<number, { localOrdinal: number; segmentTotal: number }>();
   {
-    let segmentStart = 0;
-    const closeSegment = (segmentEnd: number) => {
-      const tabsInSegment: number[] = [];
-      for (let i = segmentStart; i < segmentEnd; i++) {
-        if (runs[i].kind === 'tab') tabsInSegment.push(i);
-      }
-      let trailingCutoff = segmentEnd;
-      for (let i = segmentEnd - 1; i >= segmentStart; i--) {
-        const r = runs[i];
-        if (r.kind === 'tab') {
-          trailingCutoff = i;
-          continue;
-        }
-        break;
-      }
-      let effective = tabsInSegment.filter((idx) => idx < trailingCutoff);
-      // If stripping trailing tabs would leave NO effective tabs, the segment is
-      // shaped like "Label:\t" or "\t" — the lone tab IS the meaningful one and
-      // must still bind to the alignment stop.
-      if (effective.length === 0) effective = tabsInSegment;
-      const total = effective.length;
-      effective.forEach((idx, ord) => {
-        tabSegmentInfo.set(idx, { localOrdinal: ord, segmentTotal: total });
+    let segmentTabRunIndices: number[] = [];
+    const closeSegment = () => {
+      const total = segmentTabRunIndices.length;
+      segmentTabRunIndices.forEach((runIdx, ord) => {
+        tabSegmentInfo.set(runIdx, { localOrdinal: ord, segmentTotal: total });
       });
-      const effectiveSet = new Set(effective);
-      for (const idx of tabsInSegment) {
-        if (!effectiveSet.has(idx)) tabSegmentInfo.set(idx, { localOrdinal: -1, segmentTotal: 0 });
-      }
+      segmentTabRunIndices = [];
     };
     for (let i = 0; i < runs.length; i++) {
       const r = runs[i];
       if (r.kind === 'lineBreak' || (r.kind === 'break' && (r as { breakType?: string }).breakType === 'line')) {
-        closeSegment(i);
-        segmentStart = i + 1;
+        closeSegment();
+      } else if (r.kind === 'tab') {
+        segmentTabRunIndices.push(i);
       }
     }
-    closeSegment(runs.length);
+    closeSegment();
   }
 
   // Word-compat heuristic (not ECMA-376 17.3.3.32): the last N tab characters in a

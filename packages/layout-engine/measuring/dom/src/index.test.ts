@@ -1961,66 +1961,6 @@ describe('measureBlock', () => {
       expect(line2.leaders?.[0]?.style).toBe('dot');
     });
 
-    it('ignores trailing-empty <w:tab/> when binding alignment stops (sd-1480)', async () => {
-      // The OOXML "Page\t5\t" (trailing empty tab) must still bind the meaningful
-      // first tab to the right-aligned dot-leader stop. Without trailing-empty
-      // tab handling, the heuristic would bind the trailing tab and leave "5" at
-      // a default grid stop with the leader after it.
-      const rightStopTwips = 4306;
-      const block: FlowBlock = {
-        kind: 'paragraph',
-        id: 'trailing-empty-tab',
-        runs: [
-          { text: 'Page', fontFamily: 'Arial', fontSize: 13.333 },
-          { kind: 'tab', text: '\t', tabIndex: 0, pmStart: 4, pmEnd: 5 },
-          { text: '5', fontFamily: 'Arial', fontSize: 13.333 },
-          { kind: 'tab', text: '\t', tabIndex: 1, pmStart: 6, pmEnd: 7 },
-        ],
-        attrs: {
-          tabs: [{ pos: rightStopTwips, val: 'end', leader: 'dot' }],
-        },
-      };
-
-      const measure = expectParagraphMeasure(await measureBlock(block, 800));
-      expect(measure.lines).toHaveLength(1);
-      const line = measure.lines[0];
-      expect(line.leaders, 'meaningful tab should bind to alignment stop').toBeDefined();
-      expect(line.leaders).toHaveLength(1);
-      expect(line.leaders?.[0]?.style).toBe('dot');
-      // Leader runs from after "Page" to just before "5" at the right stop.
-      const rightStopPx = rightStopTwips * (96 / 1440);
-      expect(line.leaders?.[0]?.from).toBeLessThan(40);
-      expect(line.leaders?.[0]?.to).toBeGreaterThan(rightStopPx - 20);
-    });
-
-    it('binds a lone trailing tab to the alignment stop (Label:\\t form fields)', async () => {
-      // Form-field pattern "By:\t" has a single trailing tab that IS meaningful.
-      // The trailing-empty-tab heuristic must NOT strip it, otherwise the leader
-      // truncates to a default grid stop and "By:______" loses its underscore run.
-      const rightStopTwips = 4306;
-      const block: FlowBlock = {
-        kind: 'paragraph',
-        id: 'lone-trailing-tab',
-        runs: [
-          { text: 'By:', fontFamily: 'Arial', fontSize: 13.333 },
-          { kind: 'tab', text: '\t', tabIndex: 0, pmStart: 3, pmEnd: 4 },
-        ],
-        attrs: {
-          tabs: [{ pos: rightStopTwips, val: 'end', leader: 'underscore' }],
-        },
-      };
-
-      const measure = expectParagraphMeasure(await measureBlock(block, 800));
-      expect(measure.lines).toHaveLength(1);
-      const line = measure.lines[0];
-      expect(line.leaders).toBeDefined();
-      expect(line.leaders).toHaveLength(1);
-      expect(line.leaders?.[0]?.style).toBe('underscore');
-      const rightStopPx = rightStopTwips * (96 / 1440);
-      // Leader must extend from after "By:" to the right alignment stop.
-      expect(line.leaders?.[0]?.to).toBeGreaterThan(rightStopPx - 5);
-    });
-
     it('preserves trailing spaces after tabs when line breaks', async () => {
       const block: FlowBlock = {
         kind: 'paragraph',

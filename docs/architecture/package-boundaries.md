@@ -178,11 +178,11 @@ The relocation pattern is what `superdoc` currently uses for several internal-bu
 
 **Decision.** Keep as-is. The audit gate (SD-2832) plus the type ownership rules remove the customer-visible cost of the split. Restructuring without a strong forcing function is scope creep. Revisit only if the audit gate proves expensive to maintain because of the package count.
 
-### Decision 4. Runtime-only `superdoc` subpaths are legacy public compatibility surface.
+### Decision 4. Legacy public-compatibility `superdoc` subpaths.
 
-**Context.** `./converter`, `./docx-zipper`, `./file-zipper` are exported as runtime-only entries today. The functionality they expose (DOCX conversion, zipping) is also reachable through `superdoc`'s main entry: `Editor.open`, `Editor.loadXmlData`, `SuperConverter`, `DocxZipper`, `createZip` are all exported from `superdoc`.
+**Context.** `./converter`, `./docx-zipper`, `./file-zipper` are exported subpaths whose functionality (DOCX conversion, zipping) is also reachable through `superdoc`'s main entry: `Editor.open`, `Editor.loadXmlData`, `SuperConverter`, `DocxZipper`, `createZip` are all exported from `superdoc`.
 
-**Decision.** All three subpaths are classified as **legacy public compatibility surface**. Migration target is `superdoc` itself (the symbols already exist there). We keep them exported, stop advertising them, point new use at `superdoc`, and add minimal type coverage so strict-mode TS does not break.
+**Decision.** All three subpaths are classified as **legacy public compatibility surface**. Migration target is `superdoc` itself (the symbols already exist there). We keep them exported, stop advertising them, and point new use at `superdoc`. SD-2953 added `types` fields and matrix fixtures so strict-mode consumers no longer hit TS7016; the export-coverage audit (`check-export-coverage.cjs`) now enforces that every `package.json` exports entry carries types, an asset classification, or a documented runtime-only allowlist entry.
 
 ## Deliverables
 

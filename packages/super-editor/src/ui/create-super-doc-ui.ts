@@ -1572,13 +1572,21 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     // surfaces a typed `EntityHit[]` consumers can switch on.
     entityAt(input: ViewportEntityAtInput): ViewportEntityHit[] {
       if (!input || typeof input.x !== 'number' || typeof input.y !== 'number') return [];
-      // `document.elementFromPoint` is the only entry point — guard
+      // `document.elementFromPoint` is the only entry point. Guard
       // SSR / non-browser stubs explicitly so the call doesn't throw
       // in test environments without a global `document`.
       if (typeof document === 'undefined' || typeof document.elementFromPoint !== 'function') {
         return [];
       }
+      // Scope the lookup to this controller's editor: a page mounting
+      // two SuperDoc instances would otherwise have one's entityAt
+      // return ids from the other's painted DOM. A null host (no
+      // editor mounted, post-destroy, SSR test stub) returns [].
+      const editor = resolveHostEditor(superdoc);
+      const host = editor?.presentationEditor?.visibleHost;
+      if (!host) return [];
       const startEl = document.elementFromPoint(input.x, input.y);
+      if (!startEl || !host.contains(startEl)) return [];
       return collectEntityHitsFromChain(startEl);
     },
   };

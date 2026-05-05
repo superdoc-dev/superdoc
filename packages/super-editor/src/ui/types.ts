@@ -169,6 +169,14 @@ export interface SuperDocEditorLike {
       width: number;
       height: number;
     }>;
+    /**
+     * Painted-DOM host element. `ui.viewport.entityAt` reads it to
+     * confirm the hit returned by `document.elementFromPoint` lives
+     * inside this controller's editor — without that scope check, a
+     * page mounting two SuperDoc instances would return entity ids
+     * from the wrong instance.
+     */
+    visibleHost?: HTMLElement;
   } | null;
 }
 
@@ -1373,19 +1381,25 @@ export interface ViewportHandle {
    * Look up entities painted under a viewport coordinate. Used by
    * right-click menus and hover tooltips to ask "what's at this point?"
    * without consumers reading `data-track-change-id` /
-   * `data-comment-ids` off the painted DOM themselves — the
+   * `data-comment-ids` off the painted DOM themselves; the
    * data-attribute layout is an implementation detail of the painter
    * that consumers shouldn't depend on.
    *
    * Returns an ordered array of {@link ViewportEntityHit}, innermost
    * first. A point can sit inside several entities at once (a tracked
-   * change inside a comment highlight, for example) — every match is
+   * change inside a comment highlight, for example); every match is
    * surfaced, not just the topmost. Empty array when the point isn't
    * over any painted entity, when called outside a browser, or when no
    * editor is mounted.
    *
+   * Scoped to the controller's own editor: hits are only returned when
+   * the point lands inside this editor's painted host. A page mounting
+   * two SuperDoc instances therefore can't have one controller return
+   * ids from the other's DOM, and post-destroy calls return `[]`
+   * rather than stale ids from cached painted nodes.
+   *
    * Today the supported entity types are `comment` and `trackedChange`.
-   * `link`, `image`, and `tableCell` are reserved for follow-ups —
+   * `link`, `image`, and `tableCell` are reserved for follow-ups;
    * adding them is purely additive (new union members), so callers can
    * `switch` on `hit.type` and the default branch remains forward
    * compatible.

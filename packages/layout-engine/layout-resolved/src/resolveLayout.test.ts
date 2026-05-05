@@ -66,6 +66,21 @@ describe('resolveLayout', () => {
     expect(result.pages[2].height).toBe(1600);
   });
 
+  it('forwards page-level columns and columnRegions onto ResolvedPage', () => {
+    const columns = { count: 2, gap: 24, withSeparator: true } as const;
+    const columnRegions = [
+      { yStart: 0, yEnd: 400, columns: { count: 1, gap: 0 } },
+      { yStart: 400, yEnd: 1000, columns: { count: 3, gap: 12 } },
+    ] as const;
+    const layout: Layout = {
+      pageSize: { w: 800, h: 1000 },
+      pages: [{ number: 1, fragments: [], columns, columnRegions: [...columnRegions] }],
+    };
+    const result = resolveLayout({ layout, flowMode: 'paginated', blocks: [], measures: [] });
+    expect(result.pages[0].columns).toEqual(columns);
+    expect(result.pages[0].columnRegions).toEqual(columnRegions);
+  });
+
   it('falls back to layout.pageSize when page.size is undefined', () => {
     const layout: Layout = {
       pageSize: { w: 612, h: 792 },

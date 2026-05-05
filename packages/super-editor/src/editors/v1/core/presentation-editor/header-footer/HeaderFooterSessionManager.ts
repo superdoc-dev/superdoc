@@ -19,7 +19,9 @@ import type {
   SectionMetadata,
   Fragment,
   ResolvedHeaderFooterLayout,
-  ResolvedPaintItem, ResolvedLayout, ResolvedPage 
+  ResolvedPaintItem,
+  ResolvedLayout,
+  ResolvedPage,
 } from '@superdoc/contracts';
 import type { PageDecorationProvider } from '@superdoc/painter-dom';
 import { resolveHeaderFooterLayout } from '@superdoc/layout-resolved';
@@ -2263,9 +2265,9 @@ export class HeaderFooterSessionManager {
    * Update decoration providers for header and footer.
    * Creates new providers based on layout results and sets them on this manager.
    */
-  updateDecorationProviders(layout: Layout, resolvedLayout: ResolvedLayout): void {
-    this.#headerDecorationProvider = this.createDecorationProvider('header', layout);
-    this.#footerDecorationProvider = this.createDecorationProvider('footer', layout);
+  updateDecorationProviders(resolvedLayout: ResolvedLayout): void {
+    this.#headerDecorationProvider = this.createDecorationProvider('header', resolvedLayout);
+    this.#footerDecorationProvider = this.createDecorationProvider('footer', resolvedLayout);
     this.rebuildRegions(resolvedLayout);
   }
 
@@ -2304,7 +2306,10 @@ export class HeaderFooterSessionManager {
   /**
    * Create a decoration provider for header or footer rendering.
    */
-  createDecorationProvider(kind: 'header' | 'footer', layout: Layout): PageDecorationProvider | undefined {
+  createDecorationProvider(
+    kind: 'header' | 'footer',
+    resolvedLayout: ResolvedLayout,
+  ): PageDecorationProvider | undefined {
     const results = kind === 'header' ? this.#headerLayoutResults : this.#footerLayoutResults;
     const layoutsByRId = kind === 'header' ? this.#headerLayoutsByRId : this.#footerLayoutsByRId;
     const resolvedResults = kind === 'header' ? this.#resolvedHeaderLayouts : this.#resolvedFooterLayouts;
@@ -2325,7 +2330,7 @@ export class HeaderFooterSessionManager {
 
     // Build section first page map
     const sectionFirstPageNumbers = new Map<number, number>();
-    for (const p of layout.pages) {
+    for (const p of resolvedLayout.pages) {
       const idx = p.sectionIndex ?? 0;
       if (!sectionFirstPageNumbers.has(idx)) {
         sectionFirstPageNumbers.set(idx, p.number);
@@ -2391,16 +2396,17 @@ export class HeaderFooterSessionManager {
           const slotPage = this.#findPageForNumber(rIdLayout.layout.pages, pageNumber);
           if (slotPage) {
             const fragments = slotPage.fragments ?? [];
-            const resolvedLayout = resolvedByRId.get(rIdLayoutKey);
+            const rIdResolvedLayout = resolvedByRId.get(rIdLayoutKey);
             const alignedItems = this.resolveAlignedDecorationItems(
               fragments,
               slotPage.number,
               rIdLayout,
-              resolvedLayout,
+              rIdResolvedLayout,
               `rId '${rIdLayoutKey}' page ${pageNumber}`,
             );
-            const pageHeight = page?.height ?? layout.pageSize?.h ?? layoutOptions.pageSize?.h ?? defaultPageSize.h;
-            const margins = pageMargins ?? layout.pages[0]?.margins ?? layoutOptions.margins ?? defaultMargins;
+            const pageHeight =
+              page?.height ?? resolvedLayout.pages[0]?.height ?? layoutOptions.pageSize?.h ?? defaultPageSize.h;
+            const margins = pageMargins ?? resolvedLayout.pages[0]?.margins ?? layoutOptions.margins ?? defaultMargins;
             const decorationMargins =
               kind === 'footer' ? this.#stripFootnoteReserveFromBottomMargin(margins, page ?? null) : margins;
             const box = this.#computeDecorationBox(kind, decorationMargins, pageHeight);
@@ -2460,8 +2466,9 @@ export class HeaderFooterSessionManager {
         `variant '${headerFooterType}' page ${pageNumber}`,
       );
 
-      const pageHeight = page?.height ?? layout.pageSize?.h ?? layoutOptions.pageSize?.h ?? defaultPageSize.h;
-      const margins = pageMargins ?? layout.pages[0]?.margins ?? layoutOptions.margins ?? defaultMargins;
+      const pageHeight =
+        page?.height ?? resolvedLayout.pages[0]?.height ?? layoutOptions.pageSize?.h ?? defaultPageSize.h;
+      const margins = pageMargins ?? resolvedLayout.pages[0]?.margins ?? layoutOptions.margins ?? defaultMargins;
       const decorationMargins =
         kind === 'footer' ? this.#stripFootnoteReserveFromBottomMargin(margins, page ?? null) : margins;
       const box = this.#computeDecorationBox(kind, decorationMargins, pageHeight);

@@ -284,4 +284,45 @@ describe('architecture boundaries', () => {
       }
     });
   });
+
+  describe('Guard F: painter-dom render path does not coalesce resolved fields with the legacy fragment back-pointer (SD-2957)', () => {
+    // Lines exempt because the LHS reads from a different stage entirely (e.g.
+    // ImageBlock.width is the OOXML natural width, fragment.width is the
+    // resolved layout width — semantically different fallback, not a dead
+    // resolved-stage coalescing). Add a substring here only when the LHS is
+    // demonstrably NOT a resolved-item field.
+    const ALLOWED_FRAGMENT_FALLBACKS = ['block.width ?? fragment.width', 'block.height ?? fragment.height'];
+    const FORBIDDEN_PATTERN = /\?\?\s*\(?fragment(?:\s+as\s+\w+)?\)?\.[a-zA-Z_$][\w$]*/g;
+
+    it('production source under painters/dom/src does not fall back to fragment.X after a resolved read', () => {
+      const srcDir = path.join(LAYOUT_ENGINE_ROOT, 'painters/dom/src');
+      const files = collectRuntimeSources(srcDir).filter((f) => !f.endsWith('_test-utils.ts'));
+      const violations: { file: string; line: string }[] = [];
+
+      for (const file of files) {
+        const relPath = path.relative(LAYOUT_ENGINE_ROOT, file);
+        const raw = fs.readFileSync(file, 'utf-8');
+        const processed = preprocessSource(raw);
+        const lines = processed.split('\n');
+        lines.forEach((ln, idx) => {
+          FORBIDDEN_PATTERN.lastIndex = 0;
+          if (!FORBIDDEN_PATTERN.test(ln)) return;
+          if (ALLOWED_FRAGMENT_FALLBACKS.some((allowed) => ln.includes(allowed))) return;
+          violations.push({ file: `${relPath}:${idx + 1}`, line: ln.trim() });
+        });
+      }
+
+      if (violations.length > 0) {
+        const details = violations.map((v) => `  ${v.file}\n    ${v.line}`).join('\n');
+        expect.fail(
+          `Found ${violations.length} dead 'resolvedX ?? fragment.Y' coalescing(s). The resolve stage is the\n` +
+            `unique source of truth for every field the painter reads — the producer copies fragment fields\n` +
+            `onto resolved items when present, so the fragment fallback is dead. Replace 'resolvedX ?? fragment.Y'\n` +
+            `with just 'resolvedX', or with 'resolvedX ?? <numeric default>' when the value is consumed as a\n` +
+            `number. If the LHS reads from a different stage (e.g. ImageBlock.width vs fragment.width), add the\n` +
+            `line substring to ALLOWED_FRAGMENT_FALLBACKS with a comment explaining why.\n\n${details}`,
+        );
+      }
+    });
+  });
 });

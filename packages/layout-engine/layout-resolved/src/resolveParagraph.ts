@@ -15,6 +15,7 @@ import {
   resolveListMarkerGeometry,
   resolveListTextStartPx,
   computeTabWidth,
+  resolveMarkerIndent,
   type MinimalMarker,
   type MinimalWordLayout,
 } from '@superdoc/common/list-marker-utils';
@@ -92,6 +93,12 @@ export function resolveParagraphContent(
   const paraIndent = (block.attrs as ParagraphAttrs | undefined)?.indent;
   const paraIndentLeft = paraIndent?.left ?? 0;
   const paraIndentRight = paraIndent?.right ?? 0;
+  const isRtl = (block.attrs as ParagraphAttrs | undefined)?.direction === 'rtl';
+  const {
+    anchorIndentPx: paraMarkerAnchorIndent,
+    firstLinePx: markerFirstLine,
+    hangingPx: markerHanging,
+  } = resolveMarkerIndent(paraIndent, isRtl);
   const suppressFirstLineIndent = (block.attrs as Record<string, unknown>)?.suppressFirstLineIndent === true;
   const firstLineOffset = suppressFirstLineIndent ? 0 : (paraIndent?.firstLine ?? 0) - (paraIndent?.hanging ?? 0);
 
@@ -108,9 +115,9 @@ export function resolveParagraphContent(
   const listFirstLineTextStartPx = hasMarker
     ? resolverListTextStartPx(
         wordLayout,
-        paraIndentLeft,
-        paraIndent?.hanging ?? 0,
-        paraIndent?.firstLine ?? 0,
+        paraMarkerAnchorIndent,
+        markerHanging,
+        markerFirstLine,
         fragment.markerTextWidth,
       )
     : undefined;
@@ -127,9 +134,9 @@ export function resolveParagraphContent(
   const listFirstLineMarkerGeometry = shouldUseSharedInlinePrefixGeometry
     ? resolverListMarkerGeometry(
         wordLayout,
-        paraIndentLeft,
-        paraIndent?.hanging ?? 0,
-        paraIndent?.firstLine ?? 0,
+        paraMarkerAnchorIndent,
+        markerHanging,
+        markerFirstLine,
         fragment.markerTextWidth,
       )
     : undefined;
@@ -139,7 +146,7 @@ export function resolveParagraphContent(
   let markerStartPos = 0;
   if (hasMarker) {
     const markerTextWidth = fragment.markerTextWidth!;
-    const anchorPoint = paraIndentLeft - (paraIndent?.hanging ?? 0) + (paraIndent?.firstLine ?? 0);
+    const anchorPoint = paraMarkerAnchorIndent - markerHanging + markerFirstLine;
     const markerJustification = wordLayout!.marker!.justification ?? 'left';
     let currentPos: number;
     if (markerJustification === 'left') {
@@ -161,9 +168,9 @@ export function resolveParagraphContent(
         currentPos,
         markerJustification,
         wordLayout!.tabsPx,
-        paraIndent?.hanging,
-        paraIndent?.firstLine,
-        paraIndentLeft,
+        markerHanging,
+        markerFirstLine,
+        paraMarkerAnchorIndent,
       );
     } else if (suffix === 'space') {
       listTabWidth = 4;
@@ -175,7 +182,7 @@ export function resolveParagraphContent(
   if (hasMarker) {
     const m = wordLayout!.marker!;
     const justification = (m.justification ?? 'left') as 'left' | 'right' | 'center';
-    const firstLinePaddingLeftPx = paraIndentLeft + (paraIndent?.firstLine ?? 0) - (paraIndent?.hanging ?? 0);
+    const firstLinePaddingLeftPx = paraMarkerAnchorIndent - markerHanging + markerFirstLine;
 
     let centerPaddingAdjustPx: number | undefined;
     if (justification === 'center') {

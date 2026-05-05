@@ -26,7 +26,7 @@ export { normalizeAlignment, normalizeParagraphSpacing, normalizeLineRule } from
 export { normalizeOoxmlTabs, normalizeTabVal, normalizeTabLeader } from './tabs.js';
 
 // BiDi text
-export { mirrorIndentForRtl, ensureBidiIndentPx, DEFAULT_BIDI_INDENT_PX } from './bidi.js';
+export { mirrorIndentForRtl } from './bidi.js';
 
 // Paragraph attributes
 export { computeParagraphAttrs, deepClone } from './paragraph.js';

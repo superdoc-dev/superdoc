@@ -160,6 +160,58 @@ describe('computeParagraphAttrs', () => {
     expect(paragraphAttrs.tabs?.[0]).toEqual({ val: 'start', pos: 720 });
   });
 
+  it('maps logical indent start/end to physical left/right for LTR paragraphs', () => {
+    const paragraph: PMNode = {
+      type: { name: 'paragraph' },
+      attrs: {
+        paragraphProperties: {
+          indent: { start: 720, end: 1440 },
+        },
+      },
+    };
+
+    const { paragraphAttrs } = computeParagraphAttrs(paragraph as never);
+
+    expect(paragraphAttrs.indent?.left).toBe(twipsToPx(720));
+    expect(paragraphAttrs.indent?.right).toBe(twipsToPx(1440));
+  });
+
+  it('maps logical indent start/end for RTL paragraphs and applies mirroring', () => {
+    const paragraph: PMNode = {
+      type: { name: 'paragraph' },
+      attrs: {
+        paragraphProperties: {
+          rightToLeft: true,
+          indent: { start: 720, end: 1440 },
+        },
+      },
+    };
+
+    const { paragraphAttrs } = computeParagraphAttrs(paragraph as never);
+
+    expect(paragraphAttrs.indent?.left).toBe(twipsToPx(1440));
+    expect(paragraphAttrs.indent?.right).toBe(twipsToPx(720));
+  });
+
+  it('mirrors physical indent values for RTL paragraphs', () => {
+    const paragraph: PMNode = {
+      type: { name: 'paragraph' },
+      attrs: {
+        paragraphProperties: {
+          rightToLeft: true,
+          indent: { left: 720, right: 1440, firstLine: 360, hanging: 240 },
+        },
+      },
+    };
+
+    const { paragraphAttrs } = computeParagraphAttrs(paragraph as never);
+
+    expect(paragraphAttrs.indent?.left).toBe(twipsToPx(1440));
+    expect(paragraphAttrs.indent?.right).toBe(twipsToPx(720));
+    expect(paragraphAttrs.indent?.firstLine).toBe(-twipsToPx(360));
+    expect(paragraphAttrs.indent?.hanging).toBe(-twipsToPx(240));
+  });
+
   it('exposes resolved paragraph properties when no converter context is provided', () => {
     const paragraph: PMNode = {
       type: { name: 'paragraph' },

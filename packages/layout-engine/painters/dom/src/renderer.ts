@@ -107,7 +107,10 @@ import {
 import { applyAlphaToSVG, applyGradientToSVG, validateHexColor } from './svg-utils.js';
 import { renderTableFragment as renderTableFragmentElement } from './table/renderTableFragment.js';
 import { applyImageClipPath } from './utils/image-clip-path.js';
-import { isMinimalWordLayout as isMinimalWordLayoutShared } from '@superdoc/common/list-marker-utils';
+import {
+  isMinimalWordLayout as isMinimalWordLayoutShared,
+  resolveMarkerIndent,
+} from '@superdoc/common/list-marker-utils';
 import {
   computeTabWidth,
   resolvePainterListMarkerGeometry,
@@ -3169,7 +3172,7 @@ export class DomPainter {
             fragment.markerTextWidth,
             resolvedLine.indentOffset,
           );
-
+          const isRtl = block.attrs?.direction === 'rtl';
           const lineEl = this.renderLine(
             block,
             resolvedLine.line,
@@ -3207,7 +3210,11 @@ export class DomPainter {
 
           // Render marker on list first line
           if (resolvedLine.isListFirstLine && resolvedMarker) {
-            lineEl.style.paddingLeft = `${resolvedMarker.firstLinePaddingLeftPx}px`;
+            if (isRtl) {
+              lineEl.style.paddingRight = `${resolvedMarker.firstLinePaddingLeftPx}px`;
+            } else {
+              lineEl.style.paddingLeft = `${resolvedMarker.firstLinePaddingLeftPx}px`;
+            }
 
             if (!resolvedMarker.vanish) {
               const markerContainer = this.doc!.createElement('span');
@@ -3226,12 +3233,24 @@ export class DomPainter {
               markerContainer.style.position = 'relative';
               if (resolvedMarker.justification === 'right') {
                 markerContainer.style.position = 'absolute';
-                markerContainer.style.left = `${resolvedMarker.markerStartPx}px`;
+                if (isRtl) {
+                  markerContainer.style.right = `${resolvedMarker.markerStartPx}px`;
+                } else {
+                  markerContainer.style.left = `${resolvedMarker.markerStartPx}px`;
+                }
               } else if (resolvedMarker.justification === 'center') {
                 markerContainer.style.position = 'absolute';
-                markerContainer.style.left = `${resolvedMarker.markerStartPx - (resolvedMarker.centerPaddingAdjustPx ?? 0)}px`;
-                lineEl.style.paddingLeft =
-                  parseFloat(lineEl.style.paddingLeft) + (resolvedMarker.centerPaddingAdjustPx ?? 0) + 'px';
+                if (isRtl) {
+                  markerContainer.style.right = `${resolvedMarker.markerStartPx - (resolvedMarker.centerPaddingAdjustPx ?? 0)}px`;
+                  lineEl.style.paddingRight =
+                    (
+                      parseFloat(lineEl.style.paddingRight || '0') + (resolvedMarker.centerPaddingAdjustPx ?? 0)
+                    ).toString() + 'px';
+                } else {
+                  markerContainer.style.left = `${resolvedMarker.markerStartPx - (resolvedMarker.centerPaddingAdjustPx ?? 0)}px`;
+                  lineEl.style.paddingLeft =
+                    parseFloat(lineEl.style.paddingLeft) + (resolvedMarker.centerPaddingAdjustPx ?? 0) + 'px';
+                }
               }
 
               markerEl.style.fontFamily =
@@ -3279,6 +3298,12 @@ export class DomPainter {
         const paraIndent = block.attrs?.indent;
         const paraIndentLeft = paraIndent?.left ?? 0;
         const paraIndentRight = paraIndent?.right ?? 0;
+        const isRtl = block.attrs?.direction === 'rtl';
+        const {
+          anchorIndentPx: paraMarkerAnchorIndent,
+          firstLinePx: markerFirstLine,
+          hangingPx: markerHanging,
+        } = resolveMarkerIndent(paraIndent, isRtl);
         const suppressFirstLineIndent = (block.attrs as Record<string, unknown>)?.suppressFirstLineIndent === true;
         const firstLineOffset = suppressFirstLineIndent ? 0 : (paraIndent?.firstLine ?? 0) - (paraIndent?.hanging ?? 0);
 
@@ -3290,9 +3315,9 @@ export class DomPainter {
           !paraContinuesFromPrev && paraMarkerWidth && wordLayout?.marker
             ? resolvePainterListTextStartPx({
                 wordLayout,
-                indentLeftPx: paraIndentLeft,
-                hangingIndentPx: paraIndent?.hanging ?? 0,
-                firstLineIndentPx: paraIndent?.firstLine ?? 0,
+                indentLeftPx: paraMarkerAnchorIndent,
+                hangingIndentPx: markerHanging,
+                firstLineIndentPx: markerFirstLine,
                 markerTextWidthPx: fragment.markerTextWidth,
               })
             : undefined;
@@ -3308,9 +3333,9 @@ export class DomPainter {
         const listFirstLineMarkerGeometry = shouldUseSharedInlinePrefixGeometry
           ? resolvePainterListMarkerGeometry({
               wordLayout,
-              indentLeftPx: paraIndentLeft,
-              hangingIndentPx: paraIndent?.hanging ?? 0,
-              firstLineIndentPx: paraIndent?.firstLine ?? 0,
+              indentLeftPx: paraMarkerAnchorIndent,
+              hangingIndentPx: markerHanging,
+              firstLineIndentPx: markerFirstLine,
               markerTextWidthPx: fragment.markerTextWidth,
             })
           : undefined;
@@ -3319,7 +3344,7 @@ export class DomPainter {
         let markerStartPos = 0;
         if (!paraContinuesFromPrev && paraMarkerWidth && wordLayout?.marker) {
           const markerTextWidth = fragment.markerTextWidth!;
-          const anchorPoint = paraIndentLeft - (paraIndent?.hanging ?? 0) + (paraIndent?.firstLine ?? 0);
+          const anchorPoint = paraMarkerAnchorIndent - markerHanging + markerFirstLine;
           const markerJustification = wordLayout.marker.justification ?? 'left';
           let currentPos: number;
           if (markerJustification === 'left') {
@@ -3341,9 +3366,9 @@ export class DomPainter {
               currentPos,
               markerJustification,
               wordLayout.tabsPx,
-              paraIndent?.hanging,
-              paraIndent?.firstLine,
-              paraIndentLeft,
+              markerHanging,
+              markerFirstLine,
+              paraMarkerAnchorIndent,
             );
           } else if (suffix === 'space') {
             listTabWidth = 4;
@@ -3427,7 +3452,12 @@ export class DomPainter {
             if (!marker) {
               return;
             }
-            lineEl.style.paddingLeft = `${paraIndentLeft + (paraIndent?.firstLine ?? 0) - (paraIndent?.hanging ?? 0)}px`;
+            const firstLineIndent = paraMarkerAnchorIndent - markerHanging + markerFirstLine;
+            if (isRtl) {
+              lineEl.style.paddingRight = `${firstLineIndent}px`;
+            } else {
+              lineEl.style.paddingLeft = `${firstLineIndent}px`;
+            }
 
             if (!marker.run.vanish) {
               const markerContainer = this.doc!.createElement('span');
@@ -3448,11 +3478,22 @@ export class DomPainter {
               markerContainer.style.position = 'relative';
               if (markerJustification === 'right') {
                 markerContainer.style.position = 'absolute';
-                markerContainer.style.left = `${markerStartPos}px`;
+                if (isRtl) {
+                  markerContainer.style.right = `${markerStartPos}px`;
+                } else {
+                  markerContainer.style.left = `${markerStartPos}px`;
+                }
               } else if (markerJustification === 'center') {
                 markerContainer.style.position = 'absolute';
-                markerContainer.style.left = `${markerStartPos - fragment.markerTextWidth! / 2}px`;
-                lineEl.style.paddingLeft = parseFloat(lineEl.style.paddingLeft) + fragment.markerTextWidth! / 2 + 'px';
+                if (isRtl) {
+                  markerContainer.style.right = `${markerStartPos - fragment.markerTextWidth! / 2}px`;
+                  lineEl.style.paddingRight =
+                    (parseFloat(lineEl.style.paddingRight || '0') + fragment.markerTextWidth! / 2).toString() + 'px';
+                } else {
+                  markerContainer.style.left = `${markerStartPos - fragment.markerTextWidth! / 2}px`;
+                  lineEl.style.paddingLeft =
+                    parseFloat(lineEl.style.paddingLeft) + fragment.markerTextWidth! / 2 + 'px';
+                }
               }
 
               markerEl.style.fontFamily = toCssFontFamily(marker.run.fontFamily) ?? marker.run.fontFamily;

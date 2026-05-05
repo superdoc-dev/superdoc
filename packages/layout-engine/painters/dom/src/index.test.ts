@@ -5912,6 +5912,92 @@ describe('DomPainter', () => {
       expect(markerEl.textContent).toBe('i.');
     });
 
+    it('renders RTL resolved list first-line anchor on padding-right for nested numbered levels', () => {
+      const paragraphBlock: FlowBlock = {
+        kind: 'paragraph',
+        id: 'resolved-rtl-marker',
+        runs: [{ text: 'RTL nested item', fontFamily: 'Arial', fontSize: 12, pmStart: 1, pmEnd: 16 }],
+        attrs: { direction: 'rtl' as const },
+      };
+
+      const paragraphMeasure: Measure = {
+        kind: 'paragraph',
+        lines: [createResolvedTestLine(16)],
+        totalHeight: 20,
+      };
+
+      const paragraphLayout: Layout = {
+        pageSize: { w: 400, h: 500 },
+        pages: [
+          {
+            number: 1,
+            fragments: [
+              { kind: 'para', blockId: 'resolved-rtl-marker', fromLine: 0, toLine: 1, x: 30, y: 40, width: 300 },
+            ],
+          },
+        ],
+      };
+
+      const resolvedLayout = createSinglePageResolvedLayout({
+        kind: 'fragment',
+        id: 'para:resolved-rtl-marker:0:1',
+        pageIndex: 0,
+        x: 30,
+        y: 40,
+        width: 300,
+        height: 20,
+        fragmentKind: 'para',
+        blockId: 'resolved-rtl-marker',
+        fragmentIndex: 0,
+        block: paragraphBlock as import('@superdoc/contracts').ParagraphBlock,
+        measure: paragraphMeasure as import('@superdoc/contracts').ParagraphMeasure,
+        content: {
+          lines: [
+            {
+              line: createResolvedTestLine(16),
+              lineIndex: 0,
+              availableWidth: 300,
+              skipJustify: true,
+              paddingLeftPx: 0,
+              paddingRightPx: 0,
+              textIndentPx: 0,
+              isListFirstLine: true,
+              hasExplicitSegmentPositioning: false,
+              indentOffset: 0,
+            },
+          ],
+          marker: {
+            text: 'i.',
+            justification: 'right',
+            suffix: 'tab',
+            markerStartPx: 72,
+            suffixWidthPx: 24,
+            firstLinePaddingLeftPx: 72,
+            run: {
+              fontFamily: 'Arial',
+              fontSize: 12,
+            },
+          },
+        },
+      });
+
+      const painter = createTestPainter({
+        blocks: [paragraphBlock],
+        measures: [paragraphMeasure],
+      });
+
+      painter.setResolvedLayout(resolvedLayout);
+      painter.paint(paragraphLayout, mount);
+
+      const lineEl = mount.querySelector('.superdoc-line') as HTMLElement;
+      const markerEl = mount.querySelector('.superdoc-paragraph-marker') as HTMLElement;
+
+      expect(lineEl.getAttribute('dir')).toBe('rtl');
+      expect(lineEl.style.paddingRight).toBe('72px');
+      expect(lineEl.style.paddingLeft).toBe('');
+      expect(markerEl.textContent).toBe('i.');
+    });
+
     it('renders a resolved drop cap without a legacy descriptor on the block', () => {
       const paragraphBlock: FlowBlock = {
         kind: 'paragraph',

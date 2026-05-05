@@ -144,6 +144,25 @@ export const createIndentIncreaseExecute =
     return createDirectCommandExecute('increaseTextIndent')({ context });
   };
 
+const createListToggleExecute =
+  (styleCommand: string, legacyCommand: string) =>
+  ({ context, payload }: { context: ToolbarContext | null; payload?: unknown }) => {
+    const editor = resolveStateEditor(context);
+    const commands = editor?.commands;
+    if (typeof commands?.[styleCommand] === 'function') {
+      const result = payload === undefined ? commands[styleCommand]() : commands[styleCommand](payload);
+      return Boolean(result);
+    }
+    if (typeof commands?.[legacyCommand] === 'function') {
+      return Boolean(commands[legacyCommand]());
+    }
+    return false;
+  };
+
+export const createBulletListExecute = () => createListToggleExecute('toggleBulletListStyle', 'toggleBulletList');
+
+export const createOrderedListExecute = () => createListToggleExecute('toggleOrderedListStyle', 'toggleOrderedList');
+
 export const createIndentDecreaseExecute =
   () =>
   ({ context }: { context: ToolbarContext | null; payload?: unknown }) => {

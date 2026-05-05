@@ -28,11 +28,13 @@ import {
   createUnderlineExecute,
 } from './helpers/formatting.js';
 import {
+  createBulletListExecute,
   createIndentDecreaseExecute,
   createIndentIncreaseExecute,
   createLineHeightStateDeriver,
   createLinkedStyleStateDeriver,
   createListStateDeriver,
+  createOrderedListExecute,
   createTextAlignStateDeriver,
 } from './helpers/paragraph.js';
 import { createDirectCommandExecute, createDisabledStateDeriver } from './helpers/general.js';
@@ -121,11 +123,13 @@ export const createToolbarRegistry = (): Partial<Record<PublicToolbarItemId, Bui
       id: 'bullet-list',
       directCommandName: 'toggleBulletListStyle',
       state: createListStateDeriver('bullet'),
+      execute: createBulletListExecute(),
     },
     'numbered-list': {
       id: 'numbered-list',
       directCommandName: 'toggleOrderedListStyle',
       state: createListStateDeriver('ordered'),
+      execute: createOrderedListExecute(),
     },
     'indent-increase': {
       id: 'indent-increase',

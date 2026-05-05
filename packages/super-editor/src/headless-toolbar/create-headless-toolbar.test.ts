@@ -554,15 +554,13 @@ describe('createHeadlessToolbar', () => {
     controller.destroy();
   });
 
-  // PR-2873 (SD-2527): registry rename has compatibility implications.
-  // Hosts that wrap or mock the OLD command names (toggleBulletList,
-  // toggleOrderedList) without exposing the new style-aware ones now silently
-  // fail — this test documents that contract.
-  it('returns false for bullet-list when only the old toggleBulletList exists on the host', () => {
+  // PR-2873 (SD-2527): the registry prefers the new style-aware commands
+  // but falls back to the legacy ones so hosts that only expose
+  // toggleBulletList / toggleOrderedList keep working.
+  it('falls back to toggleBulletList when toggleBulletListStyle is unavailable', () => {
     const toggleBulletList = vi.fn(() => true);
     const superdoc = createActiveEditorHost({
       commands: {
-        // legacy command only — no toggleBulletListStyle
         toggleBulletList,
       },
       state: createSelectionState({
@@ -581,13 +579,13 @@ describe('createHeadlessToolbar', () => {
       commands: ['bullet-list'],
     });
 
-    expect(controller.execute?.('bullet-list')).toBe(false);
-    expect(toggleBulletList).not.toHaveBeenCalled();
+    expect(controller.execute?.('bullet-list')).toBe(true);
+    expect(toggleBulletList).toHaveBeenCalledTimes(1);
 
     controller.destroy();
   });
 
-  it('returns false for numbered-list when only the old toggleOrderedList exists on the host', () => {
+  it('falls back to toggleOrderedList when toggleOrderedListStyle is unavailable', () => {
     const toggleOrderedList = vi.fn(() => true);
     const superdoc = createActiveEditorHost({
       commands: {
@@ -609,8 +607,8 @@ describe('createHeadlessToolbar', () => {
       commands: ['numbered-list'],
     });
 
-    expect(controller.execute?.('numbered-list')).toBe(false);
-    expect(toggleOrderedList).not.toHaveBeenCalled();
+    expect(controller.execute?.('numbered-list')).toBe(true);
+    expect(toggleOrderedList).toHaveBeenCalledTimes(1);
 
     controller.destroy();
   });

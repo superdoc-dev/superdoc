@@ -244,6 +244,21 @@ describe('InputRule helpers', () => {
     expect(editor.converter.bodySectPr).toEqual(sectPr);
   });
 
+  it('handles SuperDoc-origin HTML with no slice div (block-id only) via stripped HTML paste', () => {
+    const { editor, view } = createEditorContext(doc(p('Base')));
+    editor.converter = {};
+    const sectPr = makeMultiColumnSectPr();
+    const visibleHtml = '<p data-sd-block-id="abc-123">Block content</p>';
+    const html = embedSliceInHtml(visibleHtml, '', JSON.stringify(sectPr));
+
+    const handled = handleClipboardPaste({ editor, view }, html, 'Block content');
+
+    expect(handled).toBe(true);
+    expect(view.state.doc.textContent).toContain('Block content');
+    expect(view.state.doc.textContent).not.toMatch(/eyJ[A-Za-z0-9+/=]{20,}/);
+    expect(editor.converter.bodySectPr).toEqual(sectPr);
+  });
+
   it('falls back to browser HTML handling for Word HTML outside docx mode', () => {
     const { editor } = createEditorContext(doc(p('Base')));
     const html = '<meta name="Generator" content="Microsoft Word"><p>Content</p>';

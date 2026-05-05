@@ -187,4 +187,47 @@ describe('architecture boundaries', () => {
       expectNoViolations(findRelativeImportViolations(srcDir, /from\s+['"].*layout-engine\//));
     });
   });
+
+  describe('Guard D: painter-dom is a dumb final renderer with no upstream dependencies', () => {
+    it('painter-dom runtime src does not import @superdoc/pm-adapter', () => {
+      const srcDir = path.join(LAYOUT_ENGINE_ROOT, 'painters/dom/src');
+      expectNoViolations(findImportViolations(srcDir, '@superdoc/pm-adapter'));
+    });
+
+    it('painter-dom runtime src does not import @superdoc/layout-bridge', () => {
+      const srcDir = path.join(LAYOUT_ENGINE_ROOT, 'painters/dom/src');
+      expectNoViolations(findImportViolations(srcDir, '@superdoc/layout-bridge'));
+    });
+
+    it('painter-dom runtime src does not import @superdoc/layout-resolved (test-only utility)', () => {
+      const srcDir = path.join(LAYOUT_ENGINE_ROOT, 'painters/dom/src');
+      // _test-utils.ts is test-only and excluded from runtime collection. The
+      // architecture-boundary check passes when no runtime file imports
+      // layout-resolved.
+      const files = collectRuntimeSources(srcDir).filter((f) => !f.endsWith('_test-utils.ts'));
+      const violations: { file: string; line: string }[] = [];
+      const pattern = new RegExp(`['"]@superdoc/layout-resolved(?:[/'"]|$)`);
+      for (const file of files) {
+        const raw = fs.readFileSync(file, 'utf-8');
+        const processed = preprocessSource(raw);
+        const lines = processed.split('\n');
+        for (const ln of lines) {
+          if (pattern.test(ln)) {
+            violations.push({ file: path.relative(LAYOUT_ENGINE_ROOT, file), line: ln.trim() });
+          }
+        }
+      }
+      expectNoViolations(violations);
+    });
+
+    it('painter-dom runtime src does not import relative pm-adapter paths', () => {
+      const srcDir = path.join(LAYOUT_ENGINE_ROOT, 'painters/dom/src');
+      expectNoViolations(findRelativeImportViolations(srcDir, /from\s+['"].*pm-adapter\//));
+    });
+
+    it('painter-dom runtime src does not import relative layout-bridge paths', () => {
+      const srcDir = path.join(LAYOUT_ENGINE_ROOT, 'painters/dom/src');
+      expectNoViolations(findRelativeImportViolations(srcDir, /from\s+['"].*layout-bridge\//));
+    });
+  });
 });

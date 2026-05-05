@@ -275,6 +275,16 @@ const RELOCATION_RULES = [
     distEntry: 'shared/common/list-marker-utils.d.ts',
     matchSubpaths: false,
   },
+  // SD-2893: only the /ooxml subpath of style-engine is publicly reachable.
+  // Relocate just this subpath plus its sibling cascade.ts dependency
+  // (see vite.config.js include list). The bare @superdoc/style-engine is
+  // guarded but unrewritten; if a future bare-barrel leak appears the audit
+  // gate fails rather than producing a missing relative path.
+  {
+    pkg: '@superdoc/style-engine/ooxml',
+    distEntry: 'layout-engine/style-engine/src/ooxml/index.d.ts',
+    matchSubpaths: false,
+  },
 ];
 
 // Guard packages that must never fall back to `_internal-shims.d.ts`.
@@ -289,6 +299,7 @@ const RELOCATION_GUARD_PACKAGES = [
   '@superdoc/layout-engine',
   '@superdoc/painter-dom',
   '@superdoc/pm-adapter',
+  '@superdoc/style-engine',
   '@superdoc/common/list-marker-utils',
 ];
 
@@ -329,6 +340,7 @@ const RELOCATION_REWRITERS = RELOCATION_RULES.map((rule) => ({
 // shim after we intentionally skip shim generation.
 const UNSHIMMED_PRIVATE_SPECIFIERS = new Set([
   '@superdoc/pm-adapter',
+  '@superdoc/style-engine',
 ]);
 
 function shouldSkipWorkspaceShim(mod) {

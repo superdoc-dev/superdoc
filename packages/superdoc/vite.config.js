@@ -140,6 +140,12 @@ export default defineConfig(({ mode, command }) => {
         // type subpaths reachable from the public surface are relocated.
         '../layout-engine/pm-adapter/src/converter-context.ts',
         '../layout-engine/pm-adapter/src/sections/types.ts',
+        // SD-2893: only the /ooxml subpath of style-engine is publicly
+        // reachable today. Include the ooxml subtree plus the cascade.ts
+        // sibling it depends on. The full src/**/* glob pulls the broader
+        // project graph through contracts project references.
+        '../layout-engine/style-engine/src/ooxml/**/*',
+        '../layout-engine/style-engine/src/cascade.ts',
       ],
       outDir: 'dist',
       // vite-plugin-dts still gathers diagnostics for this mixed JS/Vue source

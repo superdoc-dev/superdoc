@@ -18,19 +18,9 @@ const repoRoot = path.resolve(__dirname, '..', '..', '..');
 // `core-command-map.d.ts` is referenced via a relative import from another
 // emitted `.d.ts`, the consumer hits an unresolved-module error. Copy
 // every hand-written `.d.ts` from the source trees we publish into the
-// matching dist location so those imports resolve.
-// Hand-written `.d.ts` files we know are internal-only and must NOT ship
-// in `superdoc`'s published dist. The copy step is opt-in via filename
-// blocklist (rather than e.g. a per-file directive) so future hand-written
-// declarations land in dist by default and the cost of skipping one is one
-// line here. Each entry should have a comment explaining why.
-const HANDWRITTEN_DTS_BLOCKLIST = new Set([
-  // Ambient module declarations for internal `@superdoc/super-editor/converter/internal/...`
-  // subpaths. Nothing in `superdoc`'s shipped surface actually imports those subpaths,
-  // so the declarations would only leak the bare specifiers into published d.ts.
-  // Keep the file in source for super-editor's own typecheck; just don't ship it. (SD-2859)
-  'converter-internal.d.ts',
-]);
+// matching dist location so those imports resolve. Source list:
+// type-surface.config.cjs `handwrittenDtsBlocklist`.
+const HANDWRITTEN_DTS_BLOCKLIST = new Set(typeSurface.handwrittenDtsBlocklist);
 
 function copyHandwrittenDtsFiles(srcDir, destDir) {
   let copied = 0;
@@ -71,11 +61,10 @@ if (handwrittenCopiedSuperEditor > 0) {
 // public surface. Adding shared/ to vite-plugin-dts's `include` would shift the
 // common-ancestor of all source files to the repo root and reorganise the
 // entire dist tree, so we run tsc directly for just the files we relocate.
-// Today: list-marker-utils plus its sibling layout-constants, and
-// comments-types (the four Comment* types referenced via bare @superdoc/common
-// imports in three internal-only dist d.ts files). Add new entries here in
-// lockstep with `RELOCATION_RULES` below.
-const SHARED_COMMON_DTS_TARGETS = ['list-marker-utils.ts', 'layout-constants.ts', 'comments-types.ts'];
+// Source list: type-surface.config.cjs `sharedCommonDtsTargets`. Each entry
+// pairs with a `relocations` rule whose distEntry points at
+// `shared/common/<filename>.d.ts`.
+const SHARED_COMMON_DTS_TARGETS = typeSurface.sharedCommonDtsTargets;
 {
   const { spawnSync: _spawnSync } = require('node:child_process');
   const tscBin = path.join(repoRoot, 'node_modules', '.bin', 'tsc');

@@ -147,18 +147,20 @@ const relocations = [
   // common/list-marker-utils and common (bare): emitted via tsc-postbuild
   // (see sharedCommonDtsTargets) because the source lives in shared/, which
   // would shift the vite-plugin-dts common-ancestor if added to vite include.
+  // Empty viteIncludes/tsconfigIncludes are deliberate: ensure-types.cjs's
+  // tsc-postbuild step handles emit; no vite/tsconfig participation needed.
   {
     pkg: '@superdoc/common/list-marker-utils',
     distEntry: 'shared/common/list-marker-utils.d.ts',
     matchSubpaths: false,
-    viteIncludes: [],
+    viteIncludes: [], // emitted via sharedCommonDtsTargets tsc-postbuild
     tsconfigIncludes: [],
   },
   {
     pkg: '@superdoc/common',
     distEntry: 'shared/common/comments-types.d.ts',
     matchSubpaths: false,
-    viteIncludes: [],
+    viteIncludes: [], // emitted via sharedCommonDtsTargets tsc-postbuild
     tsconfigIncludes: [],
   },
 ];

@@ -11,6 +11,12 @@ interface Props {
    * clicked.
    */
   decided: DecidedChangesState;
+  /**
+   * Open the comment composer with the current selection. Wired to
+   * the same App-level open/close state the toolbar's Comment button
+   * uses, so a context-menu trigger lands on the same composer.
+   */
+  onComposeComment(): void;
 }
 
 /**
@@ -20,7 +26,7 @@ interface Props {
  * surface and `when({ entities })` predicates that scope items to
  * specific click targets.
  */
-export function ContextMenuRegistrations({ decided }: Props) {
+export function ContextMenuRegistrations({ decided, onComposeComment }: Props) {
   const ui = useSuperDocUI();
 
   useEffect(() => {
@@ -79,12 +85,51 @@ export function ContextMenuRegistrations({ decided }: Props) {
       },
     });
 
+    // Always-on fallback items so right-click on plain selected text
+    // produces a useful menu instead of feeling "dead". The
+    // `custom-selection` PM extension preventDefaults every right-click
+    // inside the editor (regardless of `disableContextMenu`), so the
+    // browser's native menu is suppressed there. Without these
+    // entries the menu would be empty whenever the click isn't over a
+    // tracked change or comment.
+    const copy = ui.commands.register({
+      id: 'demo.copy',
+      execute: () => {
+        const text = ui.selection.getSnapshot().quotedText;
+        if (text && typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+          navigator.clipboard.writeText(text).catch(() => {});
+        }
+        return true;
+      },
+      contextMenu: {
+        label: 'Copy',
+        group: 'clipboard',
+        when: ({ selection }) => !selection.empty,
+      },
+    });
+    const comment = ui.commands.register({
+      id: 'demo.commentSelection',
+      execute: () => {
+        onComposeComment();
+        return true;
+      },
+      contextMenu: {
+        label: 'Comment on selection',
+        group: 'comment',
+        // Need both a non-empty selection AND a positional target —
+        // the latter so `createFromCapture` has somewhere to anchor.
+        when: ({ selection }) => !selection.empty && selection.target !== null,
+      },
+    });
+
     return () => {
       accept.unregister();
       reject.unregister();
       resolve.unregister();
+      copy.unregister();
+      comment.unregister();
     };
-  }, [ui]);
+  }, [ui, onComposeComment, decided]);
 
   return null;
 }

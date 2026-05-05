@@ -53,7 +53,7 @@ function AppInner() {
             </div>
             <SelectionPopover onComposeComment={() => setComposeOpen(true)} />
             <ContextMenu />
-            <ContextMenuRegistrations decided={decided} />
+            <ContextMenuRegistrations decided={decided} onComposeComment={() => setComposeOpen(true)} />
           </section>
 
           <aside className="sidebar">

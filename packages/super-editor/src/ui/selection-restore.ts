@@ -47,11 +47,14 @@ export function restoreSelection(editor: Editor | null, capture: SelectionCaptur
       range: last.range,
     });
   } catch {
-    // AMBIGUOUS_TARGET (two blocks sharing an id) → treat as stale
-    // for restore. The selection-rects path surfaces a console.warn;
-    // we don't here because restore is typically a one-shot composer
-    // close, not a per-frame query, so the caller gets a clean
-    // typed `'stale'` reason and decides whether to log.
+    // Ambiguous block ids (resolveTextTarget throws when two blocks
+    // share an id) collapse to 'stale'. The sibling
+    // `ui.selection.getRects(capture)` path surfaces a console.warn
+    // for the same condition because rect lookups can run on every
+    // scroll/resize and a per-frame warn would still be one-shot per
+    // capture; restore runs once on composer close, so the typed
+    // `'stale'` reason is enough — consumers branching on the result
+    // can log themselves if they care.
     return { success: false, reason: 'stale' };
   }
   if (!fromResolved || !toResolved) return { success: false, reason: 'stale' };

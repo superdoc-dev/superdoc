@@ -836,6 +836,14 @@ export interface SelectionHandle {
    * consumers distinguish "the editor hasn't mounted yet" from "the
    * doc has changed under us" without inspecting state separately.
    *
+   * Side effect: a successful restore also moves browser focus into
+   * the editor's painted host (via the underlying `setTextSelection`
+   * command). That is the right behavior for the canonical composer
+   * flow — the user submits and expects to keep typing — but it does
+   * mean callers triggering `restore` from contexts where focus
+   * shouldn't move (e.g. a "preview" toggle that should leave focus
+   * on a sidebar control) need to gate the call themselves.
+   *
    * Cross-surface limitation: a capture taken in a header / footer /
    * footnote / endnote restores correctly while the user remains in
    * that story (the routed editor still owns the captured block ids).

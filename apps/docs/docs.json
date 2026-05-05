@@ -98,6 +98,7 @@
                 "pages": [
                   "editor/custom-ui/overview",
                   "editor/custom-ui/react-setup",
+                  "editor/custom-ui/controller-setup",
                   {
                     "group": "Toolbar and commands",
                     "pages": ["editor/custom-ui/toolbar-and-commands", "editor/custom-ui/custom-commands"]

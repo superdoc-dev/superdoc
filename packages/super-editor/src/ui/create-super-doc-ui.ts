@@ -284,6 +284,44 @@ function resolvePresentationEditor(superdoc: SuperDocUIOptions['superdoc']): {
  * accept TextTarget directly (separate ticket); until then,
  * `selectionSlice.selectionTarget` is the consumer-facing shortcut.
  */
+/**
+ * Reads the currently routed story from the host's PresentationEditor.
+ * Returns `null` when the body editor is active or when the host
+ * doesn't expose the locator (older mounts, server-side stubs).
+ *
+ * The selection-info resolver runs against the routed editor and has
+ * no path back to the host, so the controller stamps the locator onto
+ * the live TextTarget at the seam where both editors are reachable.
+ * Same shape SD-2943's `ui.viewport.positionAt` uses for the same
+ * reason: without it, downstream doc-api ops fall back to body and
+ * fail to locate the block.
+ */
+function readActiveStoryLocator(
+  hostEditor: SuperDocEditorLike | null,
+): import('@superdoc/document-api').StoryLocator | null {
+  const presentation = hostEditor?.presentationEditor;
+  if (!presentation || typeof presentation.getActiveStoryLocator !== 'function') return null;
+  try {
+    return presentation.getActiveStoryLocator() ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Stamp `story` onto a live TextTarget when the routed editor is a
+ * non-body story and the resolver didn't already attach it. Idempotent
+ * when `story` is already present (resolver-attached or otherwise).
+ */
+function attachStoryToTextTarget(
+  textTarget: import('@superdoc/document-api').TextTarget | null,
+  story: import('@superdoc/document-api').StoryLocator | null,
+): import('@superdoc/document-api').TextTarget | null {
+  if (!textTarget || !story) return textTarget;
+  if ((textTarget as { story?: unknown }).story) return textTarget;
+  return { ...textTarget, story };
+}
+
 function textTargetToSelectionTarget(
   textTarget: import('@superdoc/document-api').TextTarget | null,
 ): import('@superdoc/document-api').SelectionTarget | null {
@@ -605,7 +643,20 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     // inside the resolver) keeps the slice identity stable and lets
     // `shallowEqual` short-circuit `ui.select(s => s.selection)`
     // subscribers.
-    const selectionTextTarget = (selectionInfo?.target ?? null) as import('@superdoc/document-api').TextTarget | null;
+    // SD-2954: when the routed editor is a non-body story, stamp the
+    // active story locator onto the live TextTarget. The selection
+    // resolver runs against the routed editor and has no path back to
+    // the host's PresentationEditor, so the controller seam is the
+    // only place where both are reachable. Direct
+    // `editor.doc.selection.current()` calls are unaffected by design;
+    // a deeper adapter change would be a separate ticket.
+    const hostEditor = resolveHostEditor(superdoc);
+    const routedIsStory = editor != null && hostEditor != null && editor !== hostEditor;
+    const activeStory = routedIsStory ? readActiveStoryLocator(hostEditor) : null;
+    const selectionTextTarget = attachStoryToTextTarget(
+      (selectionInfo?.target ?? null) as import('@superdoc/document-api').TextTarget | null,
+      activeStory,
+    );
     const selectionActiveMarks = (selectionInfo?.activeMarks ?? EMPTY_ACTIVE_IDS) as string[];
     const selectionKey = buildSelectionKey(
       empty,
@@ -1761,8 +1812,17 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
       // time, the routed editor is body and resolution returns
       // `'stale'` rather than placing the selection on the wrong
       // surface.
+      //
+      // Host editor (SD-2954): the restore helper reads
+      // `presentationEditor.getActiveStoryLocator()` from the host
+      // to short-circuit on cross-surface captures with a typed
+      // `'stale'`, so a capture in a header doesn't silently fall
+      // through to the body resolution.
       const editor = resolveRoutedEditor(superdoc);
-      return restoreSelection(editor as unknown as Parameters<typeof restoreSelection>[0], capture);
+      const hostEditor = resolveHostEditor(superdoc);
+      return restoreSelection(editor as unknown as Parameters<typeof restoreSelection>[0], capture, {
+        hostEditor: hostEditor as unknown as Parameters<typeof restoreSelection>[2]['hostEditor'],
+      });
     },
   };
 

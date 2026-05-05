@@ -6,14 +6,37 @@
  * needs (capture on open → restore on close).
  */
 
+import type { StoryLocator } from '@superdoc/document-api';
 import type { Editor } from '../editors/v1/core/Editor.js';
 import { resolveTextTarget } from '../editors/v1/document-api-adapters/helpers/adapter-utils.js';
-import type { SelectionCapture, SelectionRestoreResult } from './types.js';
+import type { SelectionCapture, SelectionRestoreResult, SuperDocEditorLike } from './types.js';
 
 const SUCCESS: SelectionRestoreResult = { success: true };
 
-export function restoreSelection(editor: Editor | null, capture: SelectionCapture): SelectionRestoreResult {
+export function restoreSelection(
+  editor: Editor | null,
+  capture: SelectionCapture,
+  options: { hostEditor?: SuperDocEditorLike | null } = {},
+): SelectionRestoreResult {
   if (!editor) return { success: false, reason: 'not-ready' };
+
+  // SD-2954: when the capture carries a `story` locator, the
+  // captured block ids only make sense in that story's PM doc. If
+  // the user has switched surfaces between capture and restore (e.g.
+  // capture in a header, restore after focus moved back to body),
+  // the routed editor is body, the captured ids won't resolve, and
+  // we'd otherwise reach `resolveTextTarget` only to fail there with
+  // a less-specific reason. Compare the captured story against the
+  // currently routed story up-front so the typed `'stale'` reflects
+  // the real reason. Captures with no story keep current behavior
+  // (resolve against the routed editor, which is body in the common case).
+  const capturedStory = (capture.target as { story?: StoryLocator } | null | undefined)?.story ?? null;
+  if (capturedStory) {
+    const activeStory = readActiveStoryLocator(options.hostEditor ?? null);
+    if (!storyMatches(activeStory, capturedStory)) {
+      return { success: false, reason: 'stale' };
+    }
+  }
 
   // Read-only mode (viewing) refuses selection mutation. Same posture
   // as a doc-api mutation against an editor in `viewing` mode — the
@@ -78,4 +101,37 @@ export function restoreSelection(editor: Editor | null, capture: SelectionCaptur
   const ok = setTextSelection({ from: fromResolved.from, to: toResolved.to });
   if (!ok) return { success: false, reason: 'stale' };
   return SUCCESS;
+}
+
+function readActiveStoryLocator(hostEditor: SuperDocEditorLike | null): StoryLocator | null {
+  const presentation = hostEditor?.presentationEditor;
+  if (!presentation || typeof presentation.getActiveStoryLocator !== 'function') return null;
+  try {
+    return presentation.getActiveStoryLocator() ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Compare a captured story locator against the currently routed
+ * story. Returns `true` only when both locators target the same
+ * story surface. The match is keyed on the discriminating fields of
+ * the StoryLocator union (storyType + per-variant id) so two
+ * different headers in the same document resolve as different
+ * stories. Same shape `buildSelectionKey` already uses to memoize
+ * the slice.
+ */
+function storyMatches(a: StoryLocator | null, b: StoryLocator | null): boolean {
+  if (!a || !b) return false;
+  if (a.storyType !== b.storyType) return false;
+  const ax = a as unknown as Record<string, unknown>;
+  const bx = b as unknown as Record<string, unknown>;
+  if (ax.refId !== bx.refId) return false;
+  if (ax.noteId !== bx.noteId) return false;
+  if (ax.headerFooterKind !== bx.headerFooterKind) return false;
+  if (ax.variant !== bx.variant) return false;
+  const aSection = JSON.stringify(ax.section ?? null);
+  const bSection = JSON.stringify(bx.section ?? null);
+  return aSection === bSection;
 }

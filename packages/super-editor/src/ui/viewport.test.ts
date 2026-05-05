@@ -362,3 +362,47 @@ describe('ui.viewport.entityAt — host scoping', () => {
     ui.destroy();
   });
 });
+
+describe('ui.viewport.getHost', () => {
+  it('returns the painted host element when one is mounted', () => {
+    const { superdoc } = makeStubs();
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    (
+      superdoc.activeEditor as unknown as { presentationEditor: { visibleHost: HTMLElement } }
+    ).presentationEditor.visibleHost = host;
+
+    const ui = createSuperDocUI({ superdoc });
+    expect(ui.viewport.getHost()).toBe(host);
+
+    host.remove();
+    ui.destroy();
+  });
+
+  it('returns null when no editor is mounted', () => {
+    const { superdoc } = makeStubs();
+    (superdoc.activeEditor as unknown as { presentationEditor: unknown }).presentationEditor = undefined;
+    const ui = createSuperDocUI({ superdoc });
+    expect(ui.viewport.getHost()).toBeNull();
+    ui.destroy();
+  });
+});
+
+describe('ui.viewport.positionAt — input validation', () => {
+  it('returns null for invalid input (missing or non-numeric coordinates)', () => {
+    const { superdoc } = makeStubs();
+    const ui = createSuperDocUI({ superdoc });
+
+    expect(ui.viewport.positionAt({} as never)).toBeNull();
+    expect(ui.viewport.positionAt({ x: 'a', y: 0 } as never)).toBeNull();
+
+    ui.destroy();
+  });
+
+  it('returns null when posAtCoords is missing on the presentation stub', () => {
+    const { superdoc } = makeStubs();
+    const ui = createSuperDocUI({ superdoc });
+    expect(ui.viewport.positionAt({ x: 10, y: 10 })).toBeNull();
+    ui.destroy();
+  });
+});

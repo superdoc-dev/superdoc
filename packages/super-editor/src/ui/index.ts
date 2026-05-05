@@ -128,6 +128,8 @@ export type {
   ViewportEntityHit,
   ViewportGetRectInput,
   ViewportHandle,
+  ViewportPositionAtInput,
+  ViewportPositionHit,
   ViewportRect,
   ViewportRectResult,
 

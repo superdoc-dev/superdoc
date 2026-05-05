@@ -16,6 +16,7 @@ import type {
 } from '@superdoc/document-api';
 import { collectEntityHitsFromChain } from './entity-at.js';
 import { shallowEqual } from './equality.js';
+import { resolvePositionAt } from './position-at.js';
 import { shortcutFromEvent } from './keyboard-shortcuts.js';
 import { scrollRangeIntoView } from './scroll-into-view.js';
 import { getSelectionAnchorRect, getSelectionRects } from './selection-rects.js';
@@ -51,6 +52,8 @@ import type {
   ViewportEntityAtInput,
   ViewportEntityHit,
   ViewportGetRectInput,
+  ViewportPositionAtInput,
+  ViewportPositionHit,
   ViewportHandle,
   ViewportRect,
   ViewportRectResult,
@@ -1657,6 +1660,23 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
       const startEl = dom.elementFromPoint(input.x, input.y);
       if (!startEl || !host.contains(startEl)) return [];
       return collectEntityHitsFromChain(startEl);
+    },
+
+    getHost(): HTMLElement | null {
+      const editor = resolveHostEditor(superdoc);
+      return editor?.presentationEditor?.visibleHost ?? null;
+    },
+
+    positionAt(input: ViewportPositionAtInput): ViewportPositionHit | null {
+      if (!input || typeof input.x !== 'number' || typeof input.y !== 'number') return null;
+      const hostEditor = resolveHostEditor(superdoc);
+      const routedEditor = resolveRoutedEditor(superdoc);
+      return resolvePositionAt(
+        hostEditor as unknown as Parameters<typeof resolvePositionAt>[0],
+        routedEditor as unknown as Parameters<typeof resolvePositionAt>[1],
+        input.x,
+        input.y,
+      );
     },
   };
 

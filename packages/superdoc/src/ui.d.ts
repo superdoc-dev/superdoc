@@ -59,6 +59,8 @@ export {
   type ViewportEntityHit,
   type ViewportGetRectInput,
   type ViewportHandle,
+  type ViewportPositionAtInput,
+  type ViewportPositionHit,
   type ViewportRect,
   type ViewportRectResult,
 } from '@superdoc/super-editor/ui';

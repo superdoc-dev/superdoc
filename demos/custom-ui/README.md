@@ -20,20 +20,25 @@ Open http://localhost:5189.
 ## What you can do here
 
 - Click toolbar buttons (bold, italic, lists, undo, redo) wired through `useSuperDocCommand`.
-- Insert a custom clause registered with `ui.commands.register`.
+- Insert a custom clause registered with `ui.commands.register` — the button works, and so does its keyboard shortcut `Mod-Shift-C` (declared on the registration, not wired in a separate keydown listener).
 - Switch between Edit and Suggest. In Suggest, every edit lands as a tracked change.
-- Select text and add a comment. Reply threads render under their parent.
+- Select text and watch the floating bubble menu appear next to the selection (anchored via `ui.selection.getAnchorRect()`, not `window.getSelection()`).
+- Right-click on a tracked change or comment to see the custom context menu — items appear via `register({ contextMenu: { when } })` and the click target's entities come from `ui.viewport.entityAt({ x, y })`.
+- Add a comment. The composer captures the selection on open, posts on submit, and `restore`s the visible range on close so the user keeps their place.
 - Accept or reject tracked changes. Decided ones move to a Resolved section.
 - Export the doc, edit it in Word, click Import, watch the activity feed update.
 
 ## Architecture
 
 ```
-SuperDocUIProvider          one controller per app
-└── EditorMount             <SuperDocEditor> + onReady
-    ├── Toolbar             ui.commands + setDocumentMode
-    └── ActivitySidebar     ui.comments + ui.trackChanges + ui.selection
-        └── CommentComposer ui.selection.capture()
+SuperDocUIProvider                one controller per app
+└── EditorMount                   <SuperDocEditor> + onReady + disableContextMenu
+    ├── Toolbar                   ui.commands + setDocumentMode
+    ├── SelectionPopover          ui.selection.getAnchorRect — bubble menu over the selection
+    ├── ContextMenu               ui.viewport.entityAt + ui.commands.getContextMenuItems
+    ├── ContextMenuRegistrations  ui.commands.register({ contextMenu: { when } })
+    └── ActivitySidebar           ui.comments + ui.trackChanges + ui.selection
+        └── CommentComposer       ui.selection.capture / restore + ui.comments.createFromCapture
 ```
 
 Components consume the controller via `useSuperDocUI()`. They never reach into `editor.state` or `editor.view`.
@@ -66,13 +71,22 @@ Sort or partition the result however the UI wants. This demo's `ActivitySidebar`
 - No design system. Plain React, plain CSS. Drop the same patterns into your Tailwind / shadcn / MUI / Mantine stack.
 - No backend. The clause library in `<InsertClauseButton>` is hardcoded. Real consumers fetch from their own API and call `reg.invalidate()` when permissions or availability change.
 - No AI provider. Custom commands can call any LLM from `execute`; the demo picked "Insert clause" because it's concrete and self-contained.
-- No floating bubble menu or link popover. To position one today, read the browser's selection rect from a `useSuperDocSelection()` effect: `window.getSelection()?.getRangeAt(0)?.getBoundingClientRect()`.
+
+## The custom-UI recipe (after SD-2936)
+
+1. **Floating selection toolbar** — `ui.selection.getAnchorRect({ placement: 'start' })` returns viewport-relative coords for the painted selection. Re-position on `useSuperDocSelection()` change + `scroll`/`resize`. Don't reach for `window.getSelection()`; SuperDoc's painted DOM is separate from the offscreen ProseMirror DOM and the browser API returns the wrong rect. See `SelectionPopover.tsx`.
+
+2. **Right-click context menu** — set `disableContextMenu` on `<SuperDocEditor>` to suppress the built-in. On `contextmenu`, call `ui.viewport.entityAt({ x: event.clientX, y: event.clientY })` to get the entities under the cursor, then `ui.commands.getContextMenuItems({ entities })` to get items contributed via `register({ contextMenu })`. Pass `entities` as the payload when dispatching so `execute` can act on the right id. See `ContextMenu.tsx` + `ContextMenuRegistrations.tsx`.
+
+3. **Custom command + keyboard shortcut** — declare `shortcut: 'Mod-Shift-C'` on the registration. The controller installs a single bubble-phase keydown listener scoped to the painted host; matched shortcuts dispatch through the same path the toolbar button uses. No per-command keymap wiring. See `InsertClauseButton.tsx`.
+
+4. **Composer capture + restore** — `ui.selection.capture()` on open holds the selection across focus moves. `ui.comments.createFromCapture(captured, { text })` posts the comment using the frozen target. `ui.selection.restore(captured)` puts the visible selection back so the user keeps their place. See `CommentComposer.tsx`.
 
 ## Three takeaways for your own UI
 
 1. **One provider, many components.** The toolbar, sidebar, and review panel all subscribe to the same controller via hooks. They don't pass props down a tree.
 2. **`modules: { comments: false }` and your own panel.** The demo turns off the built-in comments UI and renders its own. Imported comments still flow through export and import.
-3. **Capture, then post.** Composers freeze the selection at open and pass the snapshot at submit. The textarea taking focus doesn't lose the anchor.
+3. **Capture, then restore.** Composers freeze the selection at open, post on submit, then `restore(capture)` on close. The user sees their range come back instead of typing into a vanished selection.
 
 ## Telemetry
 

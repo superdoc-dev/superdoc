@@ -83,6 +83,13 @@ export function InsertClauseButton() {
 
     const reg = ui.commands.register<InsertClausePayload>({
       id: 'company.insertClause',
+      // Mod-Shift-C opens the menu rather than running execute() with
+      // a payload — there's no clause id to insert until the user
+      // picks one. The shortcut is wired to dispatch the SAME `execute`
+      // body the button click does, but with a sentinel that opens
+      // the menu. (A consumer with a single-clause flow would skip
+      // the menu and pass `{ clauseId: 'confidentiality' }` directly.)
+      shortcut: 'Mod-Shift-C',
       getState: ({ state }) => ({
         active: false,
         // Disabled when there's nothing positional to anchor the
@@ -93,7 +100,12 @@ export function InsertClauseButton() {
           state.selection.target === null,
       }),
       execute: ({ payload, editor }) => {
-        if (!payload) return false;
+        // No payload → user pressed the shortcut. Open the menu and
+        // let them pick a clause.
+        if (!payload) {
+          setOpen(true);
+          return true;
+        }
         const clause = CLAUSES.find((c) => c.id === payload.clauseId);
         if (!clause) return false;
 

@@ -3,6 +3,9 @@ import { SuperDocUIProvider } from 'superdoc/ui/react';
 import { EditorMount } from './editor/EditorMount';
 import { Toolbar } from './components/Toolbar';
 import { ActivitySidebar } from './components/ActivitySidebar';
+import { SelectionPopover } from './components/SelectionPopover';
+import { ContextMenu } from './components/ContextMenu';
+import { ContextMenuRegistrations } from './components/ContextMenuRegistrations';
 
 export function App() {
   // The composer is sidebar-side UI but is triggered from the toolbar's
@@ -27,6 +30,9 @@ export function App() {
             <div className="editor-shell">
               <EditorMount />
             </div>
+            <SelectionPopover onComposeComment={() => setComposeOpen(true)} />
+            <ContextMenu />
+            <ContextMenuRegistrations />
           </section>
 
           <aside className="sidebar">

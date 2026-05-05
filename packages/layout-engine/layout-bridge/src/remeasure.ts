@@ -811,13 +811,18 @@ const applyTabLayoutToLines = (
         }
         break;
       }
-      const effective = tabsInSegment.filter((idx) => idx < trailingCutoff);
+      let effective = tabsInSegment.filter((idx) => idx < trailingCutoff);
+      // If stripping trailing tabs would leave NO effective tabs, the segment is
+      // shaped like "Label:\t" or "\t" — the lone tab IS the meaningful one and
+      // must still bind to the alignment stop.
+      if (effective.length === 0) effective = tabsInSegment;
       const total = effective.length;
       effective.forEach((idx, ord) => {
         tabSegmentInfo.set(idx, { localOrdinal: ord, segmentTotal: total });
       });
+      const effectiveSet = new Set(effective);
       for (const idx of tabsInSegment) {
-        if (idx >= trailingCutoff) tabSegmentInfo.set(idx, { localOrdinal: -1, segmentTotal: 0 });
+        if (!effectiveSet.has(idx)) tabSegmentInfo.set(idx, { localOrdinal: -1, segmentTotal: 0 });
       }
     };
     for (let i = 0; i < runs.length; i++) {

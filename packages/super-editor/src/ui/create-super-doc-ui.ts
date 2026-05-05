@@ -16,6 +16,7 @@ import type {
 } from '@superdoc/document-api';
 import { collectEntityHitsFromChain } from './entity-at.js';
 import { shallowEqual } from './equality.js';
+import { shortcutFromEvent } from './keyboard-shortcuts.js';
 import { scrollRangeIntoView } from './scroll-into-view.js';
 import { getSelectionAnchorRect, getSelectionRects } from './selection-rects.js';
 import { restoreSelection } from './selection-restore.js';
@@ -1020,6 +1021,40 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
   teardown.push(() => {
     customCommandsRegistry.destroy();
   });
+
+  // Keyboard shortcut dispatch for custom commands registered with a
+  // `shortcut` field. The listener filters to events that originate
+  // inside this controller's painted host so a Cmd-B in a sidebar
+  // input doesn't trigger Bold on the document. Built-in editor
+  // keymaps are owned by the editor's own keymap plugin and are
+  // unaffected — registering 'Mod-B' fires alongside Bold, not
+  // instead of it.
+  if (typeof globalThis !== 'undefined' && (globalThis as { document?: Document }).document) {
+    const dom = (globalThis as { document: Document }).document;
+    const onKeyDown = (event: Event) => {
+      const ke = event as KeyboardEvent;
+      // Resolve the host every event because the editor mount can
+      // happen after `createSuperDocUI` runs; caching a missing host
+      // at construction time would never recover.
+      const host = resolveHostEditor(superdoc)?.presentationEditor?.visibleHost;
+      if (!host) return;
+      const target = ke.target as Node | null;
+      if (!target || !host.contains(target)) return;
+      const combo = shortcutFromEvent(ke);
+      if (!combo) return;
+      const id = customCommandsRegistry.resolveShortcut(combo);
+      if (!id) return;
+      // Match found: prevent the browser default (form submit, page
+      // shortcut, etc.) and dispatch through the same path
+      // `ui.commands.get(id).execute()` uses.
+      ke.preventDefault();
+      customCommandsRegistry.execute(id);
+    };
+    dom.addEventListener('keydown', onKeyDown, true);
+    teardown.push(() => {
+      dom.removeEventListener('keydown', onKeyDown, true);
+    });
+  }
 
   /**
    * Single dispatch path for every `execute`-shaped surface on the

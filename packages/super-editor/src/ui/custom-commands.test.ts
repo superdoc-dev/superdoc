@@ -1146,3 +1146,130 @@ describe('ui.commands.getContextMenuItems', () => {
     ui.destroy();
   });
 });
+
+describe('ui.commands.register — shortcut field', () => {
+  function makeStubsWithHost() {
+    const stubs = makeStubs();
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    // Preserve any existing presentationEditor surface the toolbar
+    // resolver expects (`getActiveEditor`) and add the `visibleHost`
+    // that the keydown listener scopes to.
+    const existing =
+      (stubs.editor as unknown as { presentationEditor?: Record<string, unknown> }).presentationEditor ?? {};
+    (stubs.editor as unknown as { presentationEditor: Record<string, unknown> }).presentationEditor = {
+      getActiveEditor: () => stubs.editor,
+      ...existing,
+      visibleHost: host,
+    };
+    return { ...stubs, host };
+  }
+
+  function fireKey(target: Node, init: Partial<KeyboardEventInit> & { key: string }) {
+    const ev = new KeyboardEvent('keydown', { ...init, bubbles: true, cancelable: true });
+    target.dispatchEvent(ev);
+    return ev;
+  }
+
+  it('dispatches the registered command when the matching combo fires inside the host', () => {
+    const { superdoc, host } = makeStubsWithHost();
+    const ui = createSuperDocUI({ superdoc });
+
+    const execute = vi.fn(() => true);
+    ui.commands.register({ id: 'company.insertClause', execute, shortcut: 'Mod-Shift-C' });
+
+    fireKey(host, { key: 'c', ctrlKey: true, shiftKey: true });
+
+    expect(execute).toHaveBeenCalledTimes(1);
+    host.remove();
+    ui.destroy();
+  });
+
+  it('does not dispatch when focus is outside the painted host', () => {
+    const { superdoc, host } = makeStubsWithHost();
+    const ui = createSuperDocUI({ superdoc });
+
+    const execute = vi.fn(() => true);
+    ui.commands.register({ id: 'company.insertClause', execute, shortcut: 'Mod-Shift-C' });
+
+    const outside = document.createElement('input');
+    document.body.appendChild(outside);
+    fireKey(outside, { key: 'c', ctrlKey: true, shiftKey: true });
+
+    expect(execute).not.toHaveBeenCalled();
+    outside.remove();
+    host.remove();
+    ui.destroy();
+  });
+
+  it('warns and replaces when two registrations claim the same shortcut', () => {
+    const { superdoc, host } = makeStubsWithHost();
+    const ui = createSuperDocUI({ superdoc });
+
+    const firstExecute = vi.fn(() => true);
+    const secondExecute = vi.fn(() => true);
+    ui.commands.register({ id: 'company.first', execute: firstExecute, shortcut: 'Mod-K' });
+    ui.commands.register({ id: 'company.second', execute: secondExecute, shortcut: 'Mod-K' });
+
+    expect(warnSpy).toHaveBeenCalled();
+
+    fireKey(host, { key: 'k', ctrlKey: true });
+    expect(firstExecute).not.toHaveBeenCalled();
+    expect(secondExecute).toHaveBeenCalledTimes(1);
+
+    host.remove();
+    ui.destroy();
+  });
+
+  it('drops the shortcut on unregister so later keypresses are no-ops', () => {
+    const { superdoc, host } = makeStubsWithHost();
+    const ui = createSuperDocUI({ superdoc });
+
+    const execute = vi.fn(() => true);
+    const reg = ui.commands.register({ id: 'company.toggle', execute, shortcut: 'Mod-J' });
+
+    fireKey(host, { key: 'j', ctrlKey: true });
+    expect(execute).toHaveBeenCalledTimes(1);
+
+    reg.unregister();
+    fireKey(host, { key: 'j', ctrlKey: true });
+    expect(execute).toHaveBeenCalledTimes(1);
+
+    host.remove();
+    ui.destroy();
+  });
+
+  it('accepts a string[] for multiple shortcuts on the same command', () => {
+    const { superdoc, host } = makeStubsWithHost();
+    const ui = createSuperDocUI({ superdoc });
+
+    const execute = vi.fn(() => true);
+    ui.commands.register({
+      id: 'company.action',
+      execute,
+      shortcut: ['Mod-1', 'Mod-Shift-1'],
+    });
+
+    fireKey(host, { key: '1', ctrlKey: true });
+    fireKey(host, { key: '1', ctrlKey: true, shiftKey: true });
+
+    expect(execute).toHaveBeenCalledTimes(2);
+    host.remove();
+    ui.destroy();
+  });
+
+  it('warns on a malformed shortcut and ignores it', () => {
+    const { superdoc, host } = makeStubsWithHost();
+    const ui = createSuperDocUI({ superdoc });
+
+    const execute = vi.fn(() => true);
+    ui.commands.register({ id: 'company.bad', execute, shortcut: 'Mod-Shift' });
+
+    expect(warnSpy).toHaveBeenCalled();
+    fireKey(host, { key: 'Shift', ctrlKey: true });
+    expect(execute).not.toHaveBeenCalled();
+
+    host.remove();
+    ui.destroy();
+  });
+});

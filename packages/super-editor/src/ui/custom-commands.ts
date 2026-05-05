@@ -1,3 +1,4 @@
+import { normalizeShortcut } from './keyboard-shortcuts.js';
 import type {
   ContextMenuContribution,
   ContextMenuItem,
@@ -12,6 +13,12 @@ import type {
   UIToolbarCommandState,
   ViewportEntityHit,
 } from './types.js';
+
+const DEFAULT_SHORTCUT_COLLISION_MESSAGE = (shortcut: string, oldId: string, newId: string) =>
+  `[superdoc/ui] ui.commands.register(): shortcut '${shortcut}' was already bound to '${oldId}'. Replacing with '${newId}'.`;
+
+const DEFAULT_INVALID_SHORTCUT_MESSAGE = (id: string, raw: string) =>
+  `[superdoc/ui] ui.commands.register(): id '${id}' carries an invalid shortcut '${raw}' — ignored. Use a string like 'Mod-Shift-K'.`;
 
 /**
  * Built-in group ids in the order they render in the context menu.
@@ -71,6 +78,12 @@ interface InternalCustomEntry {
   execute: CustomCommandRegistration['execute'];
   getState: CustomCommandRegistration['getState'];
   override: boolean;
+  /**
+   * Normalized shortcut strings claimed by this registration.
+   * Tracked so unregister/replacement can drop them from the
+   * shortcut → id index in one pass.
+   */
+  shortcuts: string[];
   contextMenu: ContextMenuContribution | null;
   /**
    * Monotonic counter at registration time; ties in `(group, order)`
@@ -128,6 +141,14 @@ export interface CustomCommandsRegistry {
    */
   getContextMenuItems(state: SuperDocUIState, entities: ViewportEntityHit[]): ContextMenuItem[];
 
+  /**
+   * Look up the custom command id (if any) bound to a normalized
+   * shortcut string. Used by the controller's keydown listener to
+   * dispatch matched shortcuts. Returns `undefined` when nothing is
+   * registered for that combo.
+   */
+  resolveShortcut(shortcut: string): string | undefined;
+
   /** Drop every registration and tear down per-command Subscribables. */
   destroy(): void;
 }
@@ -179,6 +200,37 @@ export function createCustomCommandsRegistry(deps: CustomCommandsRegistryDeps): 
   // are broken by registration time. Stable across snapshots, doesn't
   // reuse values when entries are unregistered + re-registered.
   let nextRegistrationSeq = 0;
+  // Normalized shortcut string → command id. Replacement / unregister
+  // mutate this through `releaseShortcuts` / `claimShortcuts` so a
+  // stale registration's shortcuts can never dispatch into a removed
+  // entry.
+  const shortcutIndex = new Map<string, string>();
+
+  const releaseShortcuts = (entry: InternalCustomEntry) => {
+    for (const sc of entry.shortcuts) {
+      if (shortcutIndex.get(sc) === entry.id) shortcutIndex.delete(sc);
+    }
+  };
+
+  const claimShortcuts = (id: string, raw: string | string[] | undefined): string[] => {
+    if (raw === undefined) return [];
+    const list = Array.isArray(raw) ? raw : [raw];
+    const claimed: string[] = [];
+    for (const item of list) {
+      const normalized = normalizeShortcut(item);
+      if (!normalized) {
+        console.warn(DEFAULT_INVALID_SHORTCUT_MESSAGE(id, item));
+        continue;
+      }
+      const prior = shortcutIndex.get(normalized);
+      if (prior && prior !== id) {
+        console.warn(DEFAULT_SHORTCUT_COLLISION_MESSAGE(normalized, prior, id));
+      }
+      shortcutIndex.set(normalized, id);
+      claimed.push(normalized);
+    }
+    return claimed;
+  };
   // Active observer disposers per command id. Lets `unregister` (and
   // replacement) actively tear down inner subscriptions instead of
   // waiting for the observer wrapper's lazy `!entries.has(id)` check
@@ -335,9 +387,14 @@ export function createCustomCommandsRegistry(deps: CustomCommandsRegistryDeps): 
       // Existing observers attached to the prior registration must be
       // told their command is gone before we install the new one — the
       // observer's `entries.has(id)` short-circuit will then detach.
-      if (entries.has(id)) {
+      const priorEntry = entries.get(id);
+      if (priorEntry) {
         console.warn(DEFAULT_REPLACEMENT_MESSAGE(id));
         disposeAllObservers(id);
+        // Drop the prior registration's shortcuts before claiming the
+        // new ones so a re-registration that drops a binding doesn't
+        // leave a stale shortcut → id mapping.
+        releaseShortcuts(priorEntry);
       }
 
       // Capture the entry by reference so this registration's
@@ -351,6 +408,7 @@ export function createCustomCommandsRegistry(deps: CustomCommandsRegistryDeps): 
         execute: execute as InternalCustomEntry['execute'],
         getState: getState as InternalCustomEntry['getState'],
         override,
+        shortcuts: claimShortcuts(id, registration.shortcut),
         contextMenu: registration.contextMenu ?? null,
         registrationSeq: nextRegistrationSeq++,
         lastErrorMessage: null,
@@ -387,6 +445,7 @@ export function createCustomCommandsRegistry(deps: CustomCommandsRegistryDeps): 
           entries.delete(id);
           handleCache.delete(id);
           subscribableCache.delete(id);
+          releaseShortcuts(ownEntry);
           // Actively detach every active observer for this id so they
           // stop holding the inner Subscribable. The observer wrapper's
           // lazy `!entries.has(id)` check would otherwise leave the
@@ -552,6 +611,10 @@ export function createCustomCommandsRegistry(deps: CustomCommandsRegistryDeps): 
       return items;
     },
 
+    resolveShortcut(shortcut) {
+      return shortcutIndex.get(shortcut);
+    },
+
     destroy() {
       // Dispose every active observer before clearing maps so the
       // inner Subscribables release their selector subscriptions; just
@@ -561,6 +624,7 @@ export function createCustomCommandsRegistry(deps: CustomCommandsRegistryDeps): 
       entries.clear();
       handleCache.clear();
       subscribableCache.clear();
+      shortcutIndex.clear();
     },
   };
 

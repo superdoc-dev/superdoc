@@ -1194,6 +1194,28 @@ export type CustomCommandRegistration<TPayload = void, TValue = unknown> = {
    * their own menu without losing the contribution model.
    */
   contextMenu?: ContextMenuContribution;
+  /**
+   * Optional keyboard shortcut(s) bound to this command. Follows the
+   * ProseMirror / Tiptap convention: `'Mod-K'`, `'Mod-Shift-C'`,
+   * `'Alt-Enter'`. `Mod` is the platform-correct meta key (Cmd on
+   * macOS, Ctrl elsewhere). Pass an array for multiple bindings on
+   * the same command.
+   *
+   * The controller installs a single keydown listener on the editor
+   * host; matched shortcuts dispatch through the same path
+   * `ui.commands.get(id).execute()` uses, so the consumer never has
+   * to wire keyboard plumbing by hand. Shortcuts only fire while
+   * focus is inside the editor, so a Cmd-B in a sidebar input does
+   * not trigger Bold on the document.
+   *
+   * Custom-vs-custom collisions: when two registrations claim the
+   * same shortcut, the later one wins and the controller logs a
+   * warning. Built-in editor keymaps (Bold's Cmd-B, etc.) are owned
+   * by the editor's own keymap plugin and are not in scope for
+   * collision detection — registering `'Mod-B'` will fire alongside
+   * Bold, not in place of it.
+   */
+  shortcut?: string | string[];
 };
 
 /**

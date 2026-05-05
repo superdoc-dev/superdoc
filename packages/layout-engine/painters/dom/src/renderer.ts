@@ -6485,8 +6485,9 @@ export class DomPainter {
             const runSegments = segmentsByRun.get(runIndex);
             const baseSegX = runSegments && runSegments[0]?.x !== undefined ? runSegments[0].x : cumulativeX;
             const segX = baseSegX + indentOffset;
-            const segWidth =
-              (runSegments && runSegments[0]?.width !== undefined ? runSegments[0].width : elem.offsetWidth) ?? 0;
+            // LineSegment.width is required by contract; producer (measuring-dom) always emits it.
+            // No paint-time DOM measurement (SD-2957).
+            const segWidth = runSegments?.[0]?.width ?? 0;
             elem.style.position = 'absolute';
             elem.style.left = `${segX}px`;
             appendToLineGeo(elem, baseRun, segX, segWidth);
@@ -6589,20 +6590,11 @@ export class DomPainter {
             elem.style.left = `${xPos}px`;
             appendToLineGeo(elem, segmentRun, xPos, segment.width ?? 0);
 
-            // Update cumulative X for next segment by measuring this element's width
-            // This applies to ALL segments (both with and without explicit X)
+            // Advance cumulative X by the resolved segment width. LineSegment.width is the
+            // sole source of truth — the painter does not measure inline elements (SD-2957).
             // Use baseX (without indent) to keep cumulativeX relative to content area,
             // matching how segment.x values are calculated in layout.
-            let width = segment.width ?? 0;
-            if (width <= 0 && this.doc) {
-              const measureEl = elem.cloneNode(true) as HTMLElement;
-              measureEl.style.position = 'absolute';
-              measureEl.style.visibility = 'hidden';
-              measureEl.style.left = '-9999px';
-              this.doc.body.appendChild(measureEl);
-              width = measureEl.offsetWidth;
-              this.doc.body.removeChild(measureEl);
-            }
+            const width = segment.width ?? 0;
             cumulativeX = baseX + width;
             // Update SDT wrapper width if actual measured width differs from initial estimate
             if (geoSdtWrapper) {

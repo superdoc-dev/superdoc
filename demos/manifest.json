@@ -387,5 +387,18 @@
     "stackblitz": false,
     "status": "shim",
     "redirectTo": "examples/advanced/extensions/custom-node"
+  },
+  {
+    "id": "collaborative-agent",
+    "title": "Collaborative AI agent",
+    "description": "Real-time collaborative DOCX editing with an AI agent. Y.js sync between a React client and a server-side OpenAI tool loop.",
+    "category": "AI",
+    "sourceRepo": "superdoc-dev/superdoc",
+    "sourcePath": "demos/collaborative-agent",
+    "docs": "https://docs.superdoc.dev/ai/agents/integrations",
+    "thumbnail": null,
+    "liveUrl": null,
+    "homepage": false,
+    "stackblitz": false
   }
 ]

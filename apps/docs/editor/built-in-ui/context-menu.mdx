@@ -1,15 +1,19 @@
 ---
-title: Context Menu
+title: Context menu
 keywords: "context menu, right-click menu, custom commands"
 ---
 
-A contextual command menu triggered by right-clicking. Shows relevant actions based on cursor position and document state.
+The built-in right-click menu. Shows relevant actions based on cursor position and document state. Configure it via `modules.contextMenu`, or disable it and render your own.
+
+<Note>
+Building a fully custom right-click menu? See [Custom right-click menu](/editor/custom-ui/context-menu) for the controller-driven flow: `ui.viewport.contextAt({ x, y })` returns one bundle, registrations contribute items via `register({ contextMenu: { when } })`, and `item.invoke()` dispatches with the bundle bound. The page below covers the built-in module only.
+</Note>
 
 ## Quick start
 
-The context menu is **enabled by default**. Right-click anywhere in the document to open it.
+The built-in menu is **enabled by default**. Right-click anywhere in the document to open it.
 
-To disable it:
+To turn off the built-in menu, set `disableContextMenu: true`. This switches off SuperDoc's own menu and lets the browser's native right-click menu (Copy / Paste / Inspect) appear, or lets your own custom `contextmenu` listener take over:
 
 ```javascript
 new SuperDoc({
@@ -34,7 +38,7 @@ new SuperDoc({
 ```
 
 <ParamField path="disableContextMenu" type="boolean" default="false">
-  Top-level option to disable the context menu entirely
+  Top-level option that disables the built-in menu and lets the browser's native right-click menu (or your own custom `contextmenu` listener) appear instead. Pair with the [custom right-click menu](/editor/custom-ui/context-menu) flow when you're rendering your own.
 </ParamField>
 
 <ParamField path="modules.contextMenu.includeDefaultItems" type="boolean" default="true">

@@ -20,26 +20,69 @@ function canonicalKey(key: string): string {
 }
 
 /**
+ * Modifier names accepted in a shortcut string. Anything else in a
+ * non-key position rejects the registration — silently dropping
+ * unknown tokens would cause `'Cmd-K'` (Cmd is not a recognized
+ * alias here) to bind to bare `K`, which would fire on every K
+ * keypress during normal typing.
+ */
+const MOD_ALIASES = new Set(['Mod', 'Meta', 'Cmd', 'Command']);
+const ALT_ALIASES = new Set(['Alt', 'Option']);
+const CTRL_ALIASES = new Set(['Control', 'Ctrl']);
+const SHIFT_ALIASES = new Set(['Shift']);
+
+/**
  * Normalize a shortcut string to canonical form. Returns `null` for
- * malformed inputs (empty, missing key, only modifiers).
+ * malformed inputs (empty, missing key, only modifiers, unknown
+ * modifier names).
  */
 export function normalizeShortcut(input: string): string | null {
   if (typeof input !== 'string' || input.length === 0) return null;
   const parts = input.split('-').filter((p) => p.length > 0);
   if (parts.length === 0) return null;
   const key = parts[parts.length - 1]!;
-  const mods = new Set(parts.slice(0, -1));
+  const modParts = parts.slice(0, -1);
   // Reject if the "key" is itself a modifier (e.g. someone wrote
   // "Mod-Shift" — there's no actual key to match).
-  if (mods.has(key) || key === 'Mod' || key === 'Alt' || key === 'Shift' || key === 'Control' || key === 'Meta') {
-    return null;
+  const allMods = new Set([...MOD_ALIASES, ...ALT_ALIASES, ...CTRL_ALIASES, ...SHIFT_ALIASES]);
+  if (allMods.has(key)) return null;
+
+  let hasMod = false;
+  let hasAlt = false;
+  let hasShift = false;
+  for (const part of modParts) {
+    if (MOD_ALIASES.has(part) || CTRL_ALIASES.has(part)) hasMod = true;
+    else if (ALT_ALIASES.has(part)) hasAlt = true;
+    else if (SHIFT_ALIASES.has(part)) hasShift = true;
+    // Unknown token (typo like 'Cmdd' or lowercase 'mod') — refuse
+    // rather than silently drop it. Returning the bare key would
+    // bind the command to plain typing.
+    else return null;
   }
+
   const out: string[] = [];
-  if (mods.has('Mod') || mods.has('Meta') || mods.has('Control') || mods.has('Ctrl')) out.push('Mod');
-  if (mods.has('Alt') || mods.has('Option')) out.push('Alt');
-  if (mods.has('Shift')) out.push('Shift');
+  if (hasMod) out.push('Mod');
+  if (hasAlt) out.push('Alt');
+  if (hasShift) out.push('Shift');
   out.push(canonicalKey(key));
   return out.join('-');
+}
+
+/**
+ * Derive the unshifted base of a printable key from `event.code`.
+ * Browsers report the *shifted* character in `event.key` for
+ * printable keys (`Shift-1` on US layouts produces `!`, `Shift-/`
+ * produces `?`), but consumers register `'Mod-Shift-1'` not
+ * `'Mod-Shift-!'`. `event.code` carries the layout-stable digit /
+ * letter id (`Digit1`, `KeyA`), so we use it when shift is held to
+ * keep registrations and runtime lookups aligned. Letters are the
+ * easy case — `event.key` already returns the base letter regardless
+ * of shift.
+ */
+function unshiftedPrintableFromCode(code: string | undefined): string | null {
+  if (!code) return null;
+  if (code.startsWith('Digit') && code.length === 6) return code.slice(5);
+  return null;
 }
 
 /**
@@ -50,8 +93,19 @@ export function normalizeShortcut(input: string): string | null {
  * itself a modifier (the user is still composing the chord).
  */
 export function shortcutFromEvent(event: KeyboardEvent): string | null {
-  const key = event.key;
-  if (!key || key === 'Control' || key === 'Meta' || key === 'Alt' || key === 'Shift') return null;
+  const rawKey = event.key;
+  if (!rawKey || rawKey === 'Control' || rawKey === 'Meta' || rawKey === 'Alt' || rawKey === 'Shift') {
+    return null;
+  }
+  // Shifted digits — fall back to the layout-stable code so
+  // 'Mod-Shift-1' matches the actual keypress that produces '!' on
+  // US keyboards (and the equivalent shifted glyph on other layouts).
+  let key = rawKey;
+  if (event.shiftKey && rawKey.length === 1) {
+    const unshifted = unshiftedPrintableFromCode(event.code);
+    if (unshifted) key = unshifted;
+  }
+
   const out: string[] = [];
   if (event.metaKey || event.ctrlKey) out.push('Mod');
   if (event.altKey) out.push('Alt');

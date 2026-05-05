@@ -1023,36 +1023,56 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
   });
 
   // Keyboard shortcut dispatch for custom commands registered with a
-  // `shortcut` field. The listener filters to events that originate
-  // inside this controller's painted host so a Cmd-B in a sidebar
-  // input doesn't trigger Bold on the document. Built-in editor
-  // keymaps are owned by the editor's own keymap plugin and are
-  // unaffected — registering 'Mod-B' fires alongside Bold, not
-  // instead of it.
+  // `shortcut` field. Two important shapes:
+  //
+  // - Bubble phase. ProseMirror's keymap plugin is bubble-phase too
+  //   and `eventBelongsToView` bails on `event.defaultPrevented`. A
+  //   capture-phase listener that calls preventDefault would silently
+  //   suppress every built-in editor keymap (Bold, Enter, Backspace),
+  //   contradicting the documented "fires alongside built-ins"
+  //   contract. Running at bubble lets the editor's own keymap
+  //   process the event first; we dispatch the custom command after.
+  //
+  // - Scope expanded to the editor's hidden ProseMirror DOM in
+  //   addition to the painted host. Once the user clicks the document,
+  //   native focus moves to the hidden contenteditable that PM owns,
+  //   which lives outside `visibleHost`. Filtering only on
+  //   `host.contains(target)` would drop every keystroke from the
+  //   normal editing path.
   if (typeof globalThis !== 'undefined' && (globalThis as { document?: Document }).document) {
     const dom = (globalThis as { document: Document }).document;
     const onKeyDown = (event: Event) => {
       const ke = event as KeyboardEvent;
-      // Resolve the host every event because the editor mount can
-      // happen after `createSuperDocUI` runs; caching a missing host
-      // at construction time would never recover.
-      const host = resolveHostEditor(superdoc)?.presentationEditor?.visibleHost;
-      if (!host) return;
+      // Re-resolve every event because the editor mount can happen
+      // after `createSuperDocUI` runs; caching a missing host at
+      // construction time would never recover.
+      const editor = resolveRoutedEditor(superdoc) as
+        | (SuperDocEditorLike & {
+            view?: { dom?: HTMLElement };
+            presentationEditor?: { visibleHost?: HTMLElement };
+          })
+        | null;
+      if (!editor) return;
       const target = ke.target as Node | null;
-      if (!target || !host.contains(target)) return;
+      if (!target) return;
+      const inHost = editor.presentationEditor?.visibleHost?.contains(target) === true;
+      const inPmDom = editor.view?.dom?.contains(target) === true;
+      if (!inHost && !inPmDom) return;
       const combo = shortcutFromEvent(ke);
       if (!combo) return;
       const id = customCommandsRegistry.resolveShortcut(combo);
       if (!id) return;
-      // Match found: prevent the browser default (form submit, page
-      // shortcut, etc.) and dispatch through the same path
-      // `ui.commands.get(id).execute()` uses.
-      ke.preventDefault();
+      // Dispatch through the same path `ui.commands.get(id).execute()`
+      // uses. preventDefault runs AFTER dispatch so PM's keymap (which
+      // already ran in this bubble pass) isn't suppressed by an
+      // earlier defaultPrevented check; the call still blocks browser
+      // defaults that haven't run yet (the URL-bar shortcut, etc.).
       customCommandsRegistry.execute(id);
+      ke.preventDefault();
     };
-    dom.addEventListener('keydown', onKeyDown, true);
+    dom.addEventListener('keydown', onKeyDown);
     teardown.push(() => {
-      dom.removeEventListener('keydown', onKeyDown, true);
+      dom.removeEventListener('keydown', onKeyDown);
     });
   }
 

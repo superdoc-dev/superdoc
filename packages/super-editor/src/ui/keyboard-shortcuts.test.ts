@@ -27,6 +27,20 @@ describe('normalizeShortcut', () => {
     expect(normalizeShortcut('Mod-Shift')).toBeNull();
     expect(normalizeShortcut('Shift')).toBeNull();
   });
+
+  it('rejects unknown modifier tokens rather than silently dropping them', () => {
+    // `Cmd` would silently drop and bind to bare `K` if not rejected,
+    // firing on every K keypress during normal typing.
+    expect(normalizeShortcut('Cmdd-K')).toBeNull();
+    // Lowercase modifier names are typos, not aliases — refuse them.
+    expect(normalizeShortcut('mod-k')).toBeNull();
+    expect(normalizeShortcut('shift-k')).toBeNull();
+  });
+
+  it('accepts Cmd / Command as aliases for Mod', () => {
+    expect(normalizeShortcut('Cmd-K')).toBe('Mod-K');
+    expect(normalizeShortcut('Command-K')).toBe('Mod-K');
+  });
 });
 
 describe('shortcutFromEvent', () => {
@@ -55,5 +69,13 @@ describe('shortcutFromEvent', () => {
     const combo = shortcutFromEvent(event({ key: 'k', ctrlKey: true, shiftKey: true }));
     expect(combo).not.toBeNull();
     expect(normalizeShortcut(combo!)).toBe(combo);
+  });
+
+  it('uses event.code to recover the unshifted base for shifted digits (US: Shift-1 → "!")', () => {
+    // The browser fires `key='!'` for Shift-1 on US layouts. Without
+    // `event.code` fallback the lookup would build 'Mod-Shift-!' and
+    // miss any `'Mod-Shift-1'` registration.
+    const combo = shortcutFromEvent(event({ key: '!', code: 'Digit1', ctrlKey: true, shiftKey: true }));
+    expect(combo).toBe('Mod-Shift-1');
   });
 });

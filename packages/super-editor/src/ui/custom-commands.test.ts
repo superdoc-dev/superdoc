@@ -1185,6 +1185,27 @@ describe('ui.commands.register — shortcut field', () => {
     ui.destroy();
   });
 
+  it("dispatches when focus is in the routed editor's hidden PM DOM (the normal editing path)", () => {
+    const { superdoc, editor, host } = makeStubsWithHost();
+    // Mount the hidden ProseMirror DOM directly under document.body
+    // (mirroring how PresentationEditor appends the hidden host outside
+    // the visible host) so a click-into-document keypress lands here.
+    const pmDom = document.createElement('div');
+    document.body.appendChild(pmDom);
+    (editor as unknown as { view: { dom: HTMLElement } }).view = { dom: pmDom };
+    const ui = createSuperDocUI({ superdoc });
+
+    const execute = vi.fn(() => true);
+    ui.commands.register({ id: 'company.action', execute, shortcut: 'Mod-K' });
+
+    fireKey(pmDom, { key: 'k', ctrlKey: true });
+
+    expect(execute).toHaveBeenCalledTimes(1);
+    pmDom.remove();
+    host.remove();
+    ui.destroy();
+  });
+
   it('does not dispatch when focus is outside the painted host', () => {
     const { superdoc, host } = makeStubsWithHost();
     const ui = createSuperDocUI({ superdoc });

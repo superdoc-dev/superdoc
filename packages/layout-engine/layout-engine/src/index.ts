@@ -2765,34 +2765,26 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
       const typeIsExplicit = sectionTypeIsExplicit.get(sectionIdx) === true;
       const isLast = lastSectionIdx !== null && sectionIdx === lastSectionIdx;
 
-      // Scan all sections once for a doc-wide explicit continuous break.
-      let docHasExplicitContinuous = false;
-      for (const [idx, explicit] of sectionTypeIsExplicit) {
-        if (explicit && sectionEndBreakType.get(idx) === 'continuous') {
-          docHasExplicitContinuous = true;
-          break;
-        }
-      }
-
       // Per ECMA-376 §17.18.77, a continuous break balances the section it
-      // ENDS (i.e., the section BEFORE the break), not the section that
-      // CONTAINS or follows it. When the body sectPr itself is the explicit
-      // continuous trigger, it balances the section preceding the body, not
-      // the body section itself. Compare:
+      // ENDS — i.e., the section BEFORE the break, not the section that
+      // contains or follows it. When the body sectPr authors an explicit
+      // continuous break, the affected section is the one IMMEDIATELY
+      // preceding the body. Compare:
       //
-      //   sd-1480: body sectPr explicit-continuous + 2-col, section 0 has
-      //            content. Word balances section 0 (3+3).
-      //   mixed-columns-tabs-tnr: body sectPr explicit-continuous + 2-col,
-      //            section 1 (the body) has the 2-col Test list, section 0
-      //            has 1-col descriptions. Word does NOT balance section 1
-      //            (14+5 column-flow); the body-as-trigger applies to
-      //            section 0, which is single-col and so a no-op.
+      //   sd-1480: 2 sections; body (section 1) is explicit-continuous,
+      //            section 0 has the 2-col content. Word balances section 0
+      //            (3+3) — exactly bodyExplicitContinuousIdx - 1.
+      //   mixed-columns-tabs-tnr: body explicit-continuous, body has the
+      //            2-col Test list, section 0 is 1-col descriptions. Word
+      //            does NOT balance section 1 (14+5 column-flow); the
+      //            body-as-trigger applies to section 0 (single-col, no-op).
       //
-      // Excluding the body-explicit-continuous section itself from rule 2
-      // matches both: section 0 of sd-1480 still balances (it's not the
-      // body), section 1 of mixed-columns-tabs-tnr does not (it IS the
-      // body). The body section can still balance via rule 1 (impossible:
-      // last section can't satisfy "not last") or rule 3 (multi-page).
+      // Earlier this rule used a doc-wide `docHasExplicitContinuous` flag,
+      // which over-fired for any multi-col section in the document whenever
+      // some other section was explicit-continuous — including a single-page
+      // body section with omitted `<w:type>` that should match sd-1655's
+      // skip rule. Tying it to bodyExplicitContinuousIdx − 1 (the section
+      // the break actually ends) restores ECMA-correct scope.
       const bodyExplicitContinuousIdx =
         lastSectionIdx !== null &&
         sectionTypeIsExplicit.get(lastSectionIdx) === true &&
@@ -2828,11 +2820,13 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
       if (isMultiPage && !isLast) continue;
 
       const allowedByMidDocContinuous = endBreakType === 'continuous' && !isLast;
-      const allowedByDocWideExplicit =
-        docHasExplicitContinuous && !isExplicitNonContinuous && sectionIdx !== bodyExplicitContinuousIdx;
+      // Body-explicit-continuous balances the section IT ENDS, which is the
+      // section immediately preceding the body. No doc-wide flag.
+      const allowedByBodyExplicitContinuous =
+        bodyExplicitContinuousIdx !== null && sectionIdx === bodyExplicitContinuousIdx - 1 && !isExplicitNonContinuous;
       const allowedByMultiPage = isMultiPage;
 
-      if (!allowedByMidDocContinuous && !allowedByDocWideExplicit && !allowedByMultiPage) continue;
+      if (!allowedByMidDocContinuous && !allowedByBodyExplicitContinuous && !allowedByMultiPage) continue;
     }
 
     // Find the last page carrying any fragments from this section.

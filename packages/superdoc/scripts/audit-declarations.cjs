@@ -72,6 +72,7 @@ const RELOCATION_GUARD_PACKAGES = [
   '@superdoc/layout-engine',
   '@superdoc/painter-dom',
   '@superdoc/pm-adapter',
+  '@superdoc/common/list-marker-utils',
 ];
 
 // Specifiers that may appear as bare imports in published d.ts files even

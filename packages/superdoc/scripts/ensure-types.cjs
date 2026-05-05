@@ -62,6 +62,41 @@ if (handwrittenCopiedSuperEditor > 0) {
   console.log(`[ensure-types] ✓ Copied ${handwrittenCopiedSuperEditor} hand-written .d.ts files from super-editor/src`);
 }
 
+// SD-2893: emit declarations for the shared/common subpaths reachable from the
+// public surface. Adding shared/ to vite-plugin-dts's `include` would shift the
+// common-ancestor of all source files to the repo root and reorganise the
+// entire dist tree, so we run tsc directly for just the files we relocate.
+// Today: list-marker-utils plus its sibling layout-constants. Add new entries
+// here in lockstep with `RELOCATION_RULES` below.
+const SHARED_COMMON_DTS_TARGETS = ['list-marker-utils.ts', 'layout-constants.ts'];
+{
+  const { spawnSync: _spawnSync } = require('node:child_process');
+  const tscBin = path.join(repoRoot, 'node_modules', '.bin', 'tsc');
+  const sharedCommonDistDir = path.join(distRoot, 'shared/common');
+  fs.mkdirSync(sharedCommonDistDir, { recursive: true });
+  const sources = SHARED_COMMON_DTS_TARGETS.map((f) => path.join(repoRoot, 'shared/common', f));
+  const tscResult = _spawnSync(
+    tscBin,
+    [
+      '--declaration',
+      '--emitDeclarationOnly',
+      '--skipLibCheck',
+      '--target', 'ES2022',
+      '--module', 'ESNext',
+      '--moduleResolution', 'bundler',
+      '--outDir', sharedCommonDistDir,
+      '--rootDir', path.join(repoRoot, 'shared/common'),
+      ...sources,
+    ],
+    { stdio: 'inherit' },
+  );
+  if (tscResult.status !== 0) {
+    console.error('[ensure-types] tsc failed emitting shared/common declarations');
+    process.exit(1);
+  }
+  console.log(`[ensure-types] ✓ Emitted ${SHARED_COMMON_DTS_TARGETS.length} shared/common declarations`);
+}
+
 const requiredEntryPoints = [
   'superdoc/src/index.d.ts',
   'superdoc/src/super-editor.d.ts',
@@ -231,6 +266,15 @@ const RELOCATION_RULES = [
     distEntry: 'layout-engine/pm-adapter/src/sections/types.d.ts',
     matchSubpaths: false,
   },
+  // SD-2893: list-marker-utils is the only @superdoc/common subpath publicly
+  // reachable today (via painter-dom). Relocate just this file so the bare
+  // @superdoc/common shim does not capture it; the parent @superdoc/common
+  // package and other subpaths stay shimmed until separately drained.
+  {
+    pkg: '@superdoc/common/list-marker-utils',
+    distEntry: 'shared/common/list-marker-utils.d.ts',
+    matchSubpaths: false,
+  },
 ];
 
 // Guard packages that must never fall back to `_internal-shims.d.ts`.
@@ -245,6 +289,7 @@ const RELOCATION_GUARD_PACKAGES = [
   '@superdoc/layout-engine',
   '@superdoc/painter-dom',
   '@superdoc/pm-adapter',
+  '@superdoc/common/list-marker-utils',
 ];
 
 function isRelocatedSpecifier(mod) {

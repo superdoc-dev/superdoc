@@ -16,6 +16,7 @@ import type {
 } from '@superdoc/document-api';
 import { collectEntityHitsFromChain } from './entity-at.js';
 import { shallowEqual } from './equality.js';
+import { resolvePositionAt } from './position-at.js';
 import { shortcutFromEvent } from './keyboard-shortcuts.js';
 import { scrollRangeIntoView } from './scroll-into-view.js';
 import { getSelectionAnchorRect, getSelectionRects } from './selection-rects.js';
@@ -51,6 +52,8 @@ import type {
   ViewportEntityAtInput,
   ViewportEntityHit,
   ViewportGetRectInput,
+  ViewportPositionAtInput,
+  ViewportPositionHit,
   ViewportHandle,
   ViewportRect,
   ViewportRectResult,
@@ -297,6 +300,59 @@ function textTargetToSelectionTarget(
     ? { kind: 'text', blockId: last.blockId, offset: last.range.end, story }
     : { kind: 'text', blockId: last.blockId, offset: last.range.end };
   return story ? { kind: 'selection', start, end, story } : { kind: 'selection', start, end };
+}
+
+/**
+ * Reads the currently routed story from the host's PresentationEditor.
+ * Returns `null` when the body editor is active or when no presentation
+ * layer is reachable (older mounts, server-side stubs).
+ *
+ * Routes through `resolveToolbarSources` so all three documented
+ * presentation-resolution paths surface the locator: the direct
+ * `activeEditor.presentationEditor` field, the legacy
+ * `activeEditor._presentationEditor` field, and the
+ * `superdocStore.documents[].getPresentationEditor()` lookup that
+ * non-Vue mounts rely on. Reading `hostEditor.presentationEditor`
+ * directly would silently miss the latter two and the new selection
+ * slice would stay body-scoped on those setups.
+ *
+ * The selection-info resolver runs against the routed editor and has
+ * no path back to the host, so the controller stamps the locator onto
+ * the live TextTarget at the seam where both editors are reachable.
+ * Same shape SD-2943's `ui.viewport.positionAt` uses for the same
+ * reason: without it, downstream doc-api ops fall back to body and
+ * fail to locate the block.
+ */
+function readActiveStoryLocator(
+  superdoc: SuperDocUIOptions['superdoc'],
+): import('@superdoc/document-api').StoryLocator | null {
+  let presentation: { getActiveStoryLocator?: () => unknown } | null = null;
+  try {
+    const sources = resolveToolbarSources(superdoc as never);
+    presentation = (sources.presentationEditor as never) ?? null;
+  } catch {
+    return null;
+  }
+  if (!presentation || typeof presentation.getActiveStoryLocator !== 'function') return null;
+  try {
+    return (presentation.getActiveStoryLocator() ?? null) as import('@superdoc/document-api').StoryLocator | null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Stamp `story` onto a live TextTarget when the routed editor is a
+ * non-body story and the resolver didn't already attach it. Idempotent
+ * when `story` is already present (resolver-attached or otherwise).
+ */
+function attachStoryToTextTarget(
+  textTarget: import('@superdoc/document-api').TextTarget | null,
+  story: import('@superdoc/document-api').StoryLocator | null,
+): import('@superdoc/document-api').TextTarget | null {
+  if (!textTarget || !story) return textTarget;
+  if ((textTarget as { story?: unknown }).story) return textTarget;
+  return { ...textTarget, story };
 }
 
 export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
@@ -602,7 +658,20 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     // inside the resolver) keeps the slice identity stable and lets
     // `shallowEqual` short-circuit `ui.select(s => s.selection)`
     // subscribers.
-    const selectionTextTarget = (selectionInfo?.target ?? null) as import('@superdoc/document-api').TextTarget | null;
+    // SD-2954: when the routed editor is a non-body story, stamp the
+    // active story locator onto the live TextTarget. The selection
+    // resolver runs against the routed editor and has no path back to
+    // the host's PresentationEditor, so the controller seam is the
+    // only place where both are reachable. Direct
+    // `editor.doc.selection.current()` calls are unaffected by design;
+    // a deeper adapter change would be a separate ticket.
+    const hostEditor = resolveHostEditor(superdoc);
+    const routedIsStory = editor != null && hostEditor != null && editor !== hostEditor;
+    const activeStory = routedIsStory ? readActiveStoryLocator(superdoc) : null;
+    const selectionTextTarget = attachStoryToTextTarget(
+      (selectionInfo?.target ?? null) as import('@superdoc/document-api').TextTarget | null,
+      activeStory,
+    );
     const selectionActiveMarks = (selectionInfo?.activeMarks ?? EMPTY_ACTIVE_IDS) as string[];
     const selectionKey = buildSelectionKey(
       empty,
@@ -1658,6 +1727,23 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
       if (!startEl || !host.contains(startEl)) return [];
       return collectEntityHitsFromChain(startEl);
     },
+
+    getHost(): HTMLElement | null {
+      const editor = resolveHostEditor(superdoc);
+      return editor?.presentationEditor?.visibleHost ?? null;
+    },
+
+    positionAt(input: ViewportPositionAtInput): ViewportPositionHit | null {
+      if (!input || typeof input.x !== 'number' || typeof input.y !== 'number') return null;
+      const hostEditor = resolveHostEditor(superdoc);
+      const routedEditor = resolveRoutedEditor(superdoc);
+      return resolvePositionAt(
+        hostEditor as unknown as Parameters<typeof resolvePositionAt>[0],
+        routedEditor as unknown as Parameters<typeof resolvePositionAt>[1],
+        input.x,
+        input.y,
+      );
+    },
   };
 
   // ---- ui.selection ------------------------------------------------------
@@ -1741,8 +1827,18 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
       // time, the routed editor is body and resolution returns
       // `'stale'` rather than placing the selection on the wrong
       // surface.
+      //
+      // Story locator (SD-2954): pre-resolved here so the helper
+      // doesn't have to repeat the presentation-editor lookup.
+      // `readActiveStoryLocator` routes through `resolveToolbarSources`
+      // and covers the direct, legacy `_presentationEditor`, and
+      // `superdocStore.documents[].getPresentationEditor()` paths
+      // uniformly.
       const editor = resolveRoutedEditor(superdoc);
-      return restoreSelection(editor as unknown as Parameters<typeof restoreSelection>[0], capture);
+      const activeStory = readActiveStoryLocator(superdoc);
+      return restoreSelection(editor as unknown as Parameters<typeof restoreSelection>[0], capture, {
+        activeStory,
+      });
     },
   };
 

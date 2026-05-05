@@ -29,6 +29,7 @@ export function resolveImageItem(
     zIndex: fragment.isAnchored ? fragment.zIndex : undefined,
     blockId: fragment.blockId,
     fragmentIndex,
+    fragment,
     block,
     sourceAnchor: fragment.sourceAnchor ?? block.sourceAnchor,
   };

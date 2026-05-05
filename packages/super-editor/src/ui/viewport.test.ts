@@ -362,3 +362,161 @@ describe('ui.viewport.entityAt — host scoping', () => {
     ui.destroy();
   });
 });
+
+describe('ui.viewport.getHost', () => {
+  it('returns the painted host element when one is mounted', () => {
+    const { superdoc } = makeStubs();
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    (
+      superdoc.activeEditor as unknown as { presentationEditor: { visibleHost: HTMLElement } }
+    ).presentationEditor.visibleHost = host;
+
+    const ui = createSuperDocUI({ superdoc });
+    expect(ui.viewport.getHost()).toBe(host);
+
+    host.remove();
+    ui.destroy();
+  });
+
+  it('returns null when no editor is mounted', () => {
+    const { superdoc } = makeStubs();
+    (superdoc.activeEditor as unknown as { presentationEditor: unknown }).presentationEditor = undefined;
+    const ui = createSuperDocUI({ superdoc });
+    expect(ui.viewport.getHost()).toBeNull();
+    ui.destroy();
+  });
+});
+
+describe('ui.viewport.positionAt — input validation', () => {
+  it('returns null for invalid input (missing or non-numeric coordinates)', () => {
+    const { superdoc } = makeStubs();
+    const ui = createSuperDocUI({ superdoc });
+
+    expect(ui.viewport.positionAt({} as never)).toBeNull();
+    expect(ui.viewport.positionAt({ x: 'a', y: 0 } as never)).toBeNull();
+
+    ui.destroy();
+  });
+
+  it('returns null when posAtCoords is missing on the presentation stub', () => {
+    const { superdoc } = makeStubs();
+    const ui = createSuperDocUI({ superdoc });
+    expect(ui.viewport.positionAt({ x: 10, y: 10 })).toBeNull();
+    ui.destroy();
+  });
+});
+
+describe('ui.viewport.positionAt - resolution', () => {
+  // Minimal PM-shaped textblock: a single paragraph carrying its block
+  // id under `sdBlockId` (the canonical attr the importer assigns to
+  // paragraphs). `id` and `blockId` are intentionally absent so the
+  // test catches a regression of the `attrs.id`-only readBlockId.
+  function makeDocWithParagraphAtSdBlockId(blockId: string, content: string) {
+    const text = { isText: true, isTextblock: false, text: content, nodeSize: content.length, attrs: {} };
+    const paragraph = {
+      isText: false,
+      isTextblock: true,
+      nodeSize: content.length + 2, // open + content + close
+      attrs: { sdBlockId: blockId },
+      content,
+    };
+    const doc = {
+      descendants(callback: (node: unknown, pos: number) => boolean | void) {
+        // Walk: paragraph at pos=0, then its text child (skipped because
+        // !isTextblock returns true to descend, but we don't model the
+        // text child since findContainingTextBlock matches the textblock
+        // itself).
+        callback(paragraph, 0);
+      },
+    };
+    return { doc, paragraph, text };
+  }
+
+  function buildEditorStub(
+    doc: unknown,
+    posAtCoordsResult: { pos: number; inside: number } | null,
+    extras: { storyLocator?: unknown; visibleHost?: HTMLElement } = {},
+  ) {
+    const editor: {
+      on: ReturnType<typeof vi.fn>;
+      off: ReturnType<typeof vi.fn>;
+      state: { doc: unknown };
+      doc: unknown;
+      presentationEditor: {
+        getActiveEditor: () => unknown;
+        posAtCoords: (coords: { clientX: number; clientY: number }) => { pos: number; inside: number } | null;
+        visibleHost?: HTMLElement;
+        getActiveStoryLocator?: () => unknown;
+      };
+    } = {
+      on: vi.fn(),
+      off: vi.fn(),
+      state: { doc },
+      doc: {
+        selection: { current: vi.fn(() => ({ empty: true })) },
+        comments: {
+          list: vi.fn(() => ({
+            evaluatedRevision: 'r1',
+            total: 0,
+            items: [],
+            page: { limit: 0, offset: 0, returned: 0 },
+          })),
+        },
+        trackChanges: {
+          list: vi.fn(() => ({
+            evaluatedRevision: 'r1',
+            total: 0,
+            items: [],
+            page: { limit: 0, offset: 0, returned: 0 },
+          })),
+        },
+      },
+      presentationEditor: {
+        getActiveEditor: () => editor,
+        posAtCoords: vi.fn(() => posAtCoordsResult),
+        visibleHost: extras.visibleHost,
+        getActiveStoryLocator: extras.storyLocator !== undefined ? vi.fn(() => extras.storyLocator) : undefined,
+      },
+    };
+    return editor;
+  }
+
+  it('resolves a paragraph whose block id is stored on `sdBlockId` (not `id`)', () => {
+    const { doc } = makeDocWithParagraphAtSdBlockId('p-42', 'hello');
+    const editor = buildEditorStub(doc, { pos: 3, inside: 0 }); // pos inside paragraph
+    const superdoc: SuperDocLike = {
+      activeEditor: editor as never,
+      config: { documentMode: 'editing' },
+    };
+    const ui = createSuperDocUI({ superdoc });
+
+    const hit = ui.viewport.positionAt({ x: 10, y: 10 });
+    expect(hit).not.toBeNull();
+    expect(hit?.point.kind).toBe('text');
+    expect((hit?.point as { blockId: string }).blockId).toBe('p-42');
+    expect(hit?.target.kind).toBe('selection');
+    expect((hit?.target.start as { blockId: string }).blockId).toBe('p-42');
+
+    ui.destroy();
+  });
+
+  it('threads the active story locator onto the returned point and target', () => {
+    const { doc } = makeDocWithParagraphAtSdBlockId('hf-block-1', 'header');
+    const storyLocator = { kind: 'story', storyType: 'headerFooterPart', refId: 'rId7' } as const;
+    const editor = buildEditorStub(doc, { pos: 4, inside: 0 }, { storyLocator });
+    const superdoc: SuperDocLike = {
+      activeEditor: editor as never,
+      config: { documentMode: 'editing' },
+    };
+    const ui = createSuperDocUI({ superdoc });
+
+    const hit = ui.viewport.positionAt({ x: 10, y: 10 });
+    expect(hit).not.toBeNull();
+    expect(hit?.point).toMatchObject({ blockId: 'hf-block-1', story: storyLocator });
+    expect(hit?.target).toMatchObject({ story: storyLocator });
+    expect((hit?.target.start as { story?: unknown }).story).toEqual(storyLocator);
+
+    ui.destroy();
+  });
+});

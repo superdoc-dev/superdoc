@@ -131,6 +131,7 @@ import type {
   Layout,
   Measure,
   Page,
+  ResolvedLayout,
   SectionMetadata,
   TrackedChangesMode,
   Fragment,
@@ -1362,6 +1363,27 @@ export class PresentationEditor extends EventEmitter {
    */
   getStorySessionManager(): StoryPresentationSessionManager | null {
     return this.#storySessionManager;
+  }
+
+  /**
+   * The {@link StoryLocator} for the currently routed editor, or `null`
+   * when the body editor is active. Notes (footnote/endnote) flow
+   * through the generic story-session manager; headers/footers flow
+   * through the legacy header-footer session. Both are unified here so
+   * external surfaces (selection / positionAt) can thread the locator
+   * onto a {@link SelectionTarget} without reaching into private state.
+   */
+  getActiveStoryLocator(): StoryLocator | null {
+    const storySession = this.#storySessionManager?.getActiveSession();
+    if (storySession) return storySession.locator;
+
+    const session = this.#headerFooterSession?.session;
+    if (!session || session.mode === 'body' || !session.headerFooterRefId) return null;
+    return {
+      kind: 'story',
+      storyType: 'headerFooterPart',
+      refId: session.headerFooterRefId,
+    };
   }
 
   /**
@@ -6216,7 +6238,7 @@ export class PresentationEditor extends EventEmitter {
       // Process per-rId header/footer content and decoration providers (paginated only)
       if (!isSemanticFlow) {
         await this.#layoutPerRIdHeaderFooters(headerFooterInput, layout, sectionMetadata);
-        this.#updateDecorationProviders(layout);
+        this.#updateDecorationProviders(resolvedLayout);
       }
 
       this.#ensurePainter();
@@ -6236,7 +6258,6 @@ export class PresentationEditor extends EventEmitter {
       const painterPaintStart = perfNow();
       const paintInput: DomPainterInput = {
         resolvedLayout,
-        sourceLayout: layout,
       };
       this.#painterAdapter.paint(paintInput, this.#painterHost, mapping ?? undefined);
       const painterPaintEnd = perfNow();
@@ -7400,8 +7421,8 @@ export class PresentationEditor extends EventEmitter {
    * Update decoration providers for header/footer.
    * Delegates to HeaderFooterSessionManager which handles provider creation.
    */
-  #updateDecorationProviders(layout: Layout) {
-    this.#headerFooterSession?.updateDecorationProviders(layout);
+  #updateDecorationProviders(resolvedLayout: ResolvedLayout) {
+    this.#headerFooterSession?.updateDecorationProviders(resolvedLayout);
   }
 
   /**

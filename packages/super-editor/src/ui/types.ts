@@ -177,6 +177,21 @@ export interface SuperDocEditorLike {
      * from the wrong instance.
      */
     visibleHost?: HTMLElement;
+    /**
+     * Coordinate-to-position helper. Consumed by
+     * `ui.viewport.positionAt` to resolve a viewport `(x, y)` to a
+     * caret position in the editor's PM document.
+     */
+    posAtCoords?(coords: { clientX: number; clientY: number }): { pos: number; inside: number } | null;
+    /**
+     * The story locator for the routed editor when the user is
+     * inside a header/footer/footnote/endnote, or `null` when the body
+     * editor is active. `ui.viewport.positionAt` threads this onto the
+     * returned `SelectionPoint` / `SelectionTarget` so consumers passing
+     * the target to `editor.doc.insert` / `replace` route to the right
+     * story instead of falling back to body.
+     */
+    getActiveStoryLocator?(): import('@superdoc/document-api').StoryLocator | null;
   } | null;
 }
 
@@ -1574,6 +1589,77 @@ export interface ViewportHandle {
    * compatible.
    */
   entityAt(input: ViewportEntityAtInput): ViewportEntityHit[];
+  /**
+   * The painted-DOM host element for this controller's editor, or
+   * `null` when no editor is mounted (SSR, post-destroy, before
+   * `onReady` fires).
+   *
+   * Custom UI consumers reach for the host element to scope their
+   * own DOM listeners — `contextmenu`, hover tooltips, drag-and-drop
+   * — to events that originate inside the editor. Without this,
+   * consumers either listen on `document` and filter by a CSS class
+   * they control (fragile, breaks when the wrapper class is renamed)
+   * or pass the editor's container down through their own component
+   * tree (verbose).
+   *
+   * The returned element is the host SuperDoc paints into. The
+   * editor's hidden ProseMirror DOM is appended elsewhere and is not
+   * inside this host — events whose target is in the hidden PM DOM
+   * (most keyboard events after focus moves into the editor) won't
+   * pass `host.contains(target)` checks. For coordinate-based hit
+   * tests use {@link entityAt} or {@link positionAt} instead, both of
+   * which scope correctly across painted-DOM and hidden-DOM events.
+   */
+  getHost(): HTMLElement | null;
+  /**
+   * Resolve a viewport coordinate to a position in the editor's
+   * document, or `null` when the point is outside the painted host or
+   * no editor is mounted.
+   *
+   * The natural pair to {@link entityAt}: while `entityAt` answers
+   * "what entity is under this point?", `positionAt` answers "what
+   * caret position is under this point?". Right-click menus offering
+   * "Paste here", "Insert clause at this point", or "Add comment at
+   * this point" need this to dispatch their action against the click
+   * coordinate rather than the user's previous selection somewhere
+   * else in the document.
+   *
+   * Returns a {@link ViewportPositionHit} with both the resolved
+   * `point` (a `SelectionPoint` consumers can pass straight to
+   * `editor.doc.insert({ target })` and similar APIs) and the
+   * `target` (a `SelectionTarget` for selection-shaped operations).
+   * The two shapes are derived from the same underlying position,
+   * just packaged differently to match the doc-api method that's
+   * about to consume them.
+   */
+  positionAt(input: ViewportPositionAtInput): ViewportPositionHit | null;
+}
+
+/**
+ * Input shape for {@link ViewportHandle.positionAt}. Same coordinate
+ * space as `MouseEvent.clientX` / `clientY` and {@link ViewportRect}.
+ */
+export interface ViewportPositionAtInput {
+  x: number;
+  y: number;
+}
+
+/**
+ * Resolved caret position returned by {@link ViewportHandle.positionAt}.
+ *
+ * `point` is the {@link import('@superdoc/document-api').SelectionPoint}
+ * shape used by point-anchored doc-api operations (`editor.doc.insert(
+ * { target: { kind: 'selection', start: point, end: point } })` for a
+ * collapsed insert at the click site).
+ *
+ * `target` is the equivalent {@link import('@superdoc/document-api').SelectionTarget}
+ * — a collapsed selection at the click point — for operations that
+ * accept a target shape directly. Same underlying position, two
+ * packagings; consumers pick the shape their downstream call needs.
+ */
+export interface ViewportPositionHit {
+  point: import('@superdoc/document-api').SelectionPoint;
+  target: import('@superdoc/document-api').SelectionTarget;
 }
 
 /**

@@ -15,13 +15,9 @@ import { processTocChildren } from './toc.js';
  * Processes TOC children for Table of Contents galleries.
  * For other gallery types (page numbers, etc.), processes child paragraphs normally.
  *
- * If a preceding paragraph carried a `w:sectPr` whose next section starts at
- * this SDT, emit the pending section break BEFORE processing children so the
- * SDT's paragraphs render on the new page (see SD-2557). `findParagraphsWithSectPr`
- * doesn't recurse into `documentPartObject`, so its child paragraphs don't bump
- * `currentParagraphIndex` — and without this call, the deferred break would only
- * fire on the next body paragraph AFTER the SDT, leaving e.g. a TOC on the
- * prior page with the cover content.
+ * If a section transition occurs inside this SDT, child paragraph processing
+ * emits the pending break before the paragraph that starts the next section and
+ * advances `currentParagraphIndex` in step with `findParagraphsWithSectPr`.
  *
  * @param node - Document part object node to process
  * @param context - Shared handler context

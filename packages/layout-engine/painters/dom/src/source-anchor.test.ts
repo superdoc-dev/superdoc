@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createDomPainter } from './index.js';
+import { createTestPainter as createDomPainter } from './_test-utils.js';
 import type { FlowBlock, Layout, Measure, SourceAnchor } from '@superdoc/contracts';
 import type { PaintSnapshot } from './renderer.js';
 

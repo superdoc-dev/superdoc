@@ -552,6 +552,173 @@ describe('createSuperDocUI', () => {
     });
   });
 
+  // SD-2954: when the live selection resolver returns a TextTarget
+  // without `story` (the resolver runs against the routed editor and
+  // has no path back to the host's PresentationEditor), the
+  // controller stamps the active story locator at the seam where
+  // both editors are reachable. Without this stamping the live
+  // selection slice carries body-scoped targets even when the user
+  // is editing a header, and downstream doc-api ops route to body
+  // and silently fail to find the block.
+  it('state.selection.target gets the active story locator stamped when the resolver omits it', async () => {
+    const headerStory = { kind: 'story', storyType: 'headerFooterPart', refId: 'rId7' };
+
+    const headerEditor = {
+      on: vi.fn(),
+      off: vi.fn(),
+      state: { selection: { empty: false } },
+      isEditable: true,
+      doc: {
+        selection: {
+          current: vi.fn(() => ({
+            empty: false,
+            text: 'header text',
+            // Resolver returns no story field. Controller must stamp it.
+            target: { kind: 'text', segments: [{ blockId: 'h1', range: { start: 0, end: 4 } }] },
+            activeMarks: [],
+            activeCommentIds: [],
+            activeChangeIds: [],
+          })),
+        },
+      },
+    };
+
+    const presentationEditor: Record<string, unknown> = {
+      on: vi.fn(),
+      off: vi.fn(),
+      isEditable: true,
+      state: { selection: { empty: false } },
+      // Body editor is the host; routed editor is the header.
+      getActiveEditor: vi.fn(() => headerEditor),
+      getActiveStoryLocator: vi.fn(() => headerStory),
+      commands: {},
+    };
+
+    const bodyEditor = {
+      on: vi.fn(),
+      off: vi.fn(),
+      state: { selection: { empty: true } },
+      isEditable: true,
+      doc: {
+        selection: {
+          current: vi.fn(() => ({
+            empty: true,
+            target: null,
+            activeMarks: [],
+            activeCommentIds: [],
+            activeChangeIds: [],
+          })),
+        },
+      },
+    };
+    (bodyEditor as unknown as { _presentationEditor: unknown })._presentationEditor = presentationEditor;
+    (bodyEditor as unknown as { presentationEditor: unknown }).presentationEditor = presentationEditor;
+
+    const superdoc = {
+      activeEditor: bodyEditor as never,
+      config: { documentMode: 'editing' as const },
+      on: vi.fn(),
+      off: vi.fn(),
+    };
+
+    const ui = createSuperDocUI({ superdoc });
+    teardown.push(() => ui.destroy());
+
+    const slice = ui.select((state) => state.selection).get();
+    expect(slice.target).toEqual({
+      kind: 'text',
+      segments: [{ blockId: 'h1', range: { start: 0, end: 4 } }],
+      story: headerStory,
+    });
+    expect(slice.selectionTarget).toEqual({
+      kind: 'selection',
+      start: { kind: 'text', blockId: 'h1', offset: 0, story: headerStory },
+      end: { kind: 'text', blockId: 'h1', offset: 4, story: headerStory },
+      story: headerStory,
+    });
+  });
+
+  // SD-2954 regression: `resolveToolbarSources` resolves the
+  // PresentationEditor through three documented paths, the direct
+  // `activeEditor.presentationEditor` field, the legacy
+  // `activeEditor._presentationEditor` field, and the
+  // `superdocStore.documents[].getPresentationEditor()` lookup.
+  // `readActiveStoryLocator` reads the locator through the same
+  // pipeline so all three paths surface the active story. Reading
+  // `activeEditor.presentationEditor` directly would silently miss
+  // the latter two and the new selection slice would stay
+  // body-scoped on those mounts.
+  it('state.selection.target picks up the active story via the legacy _presentationEditor field', () => {
+    const headerStory = { kind: 'story', storyType: 'headerFooterPart', refId: 'rId-legacy' };
+
+    const headerEditor = {
+      on: vi.fn(),
+      off: vi.fn(),
+      state: { selection: { empty: false } },
+      isEditable: true,
+      doc: {
+        selection: {
+          current: vi.fn(() => ({
+            empty: false,
+            text: 'header text',
+            target: { kind: 'text', segments: [{ blockId: 'h1', range: { start: 0, end: 4 } }] },
+            activeMarks: [],
+            activeCommentIds: [],
+            activeChangeIds: [],
+          })),
+        },
+      },
+    };
+
+    const presentationEditor: Record<string, unknown> = {
+      on: vi.fn(),
+      off: vi.fn(),
+      isEditable: true,
+      state: { selection: { empty: false } },
+      getActiveEditor: vi.fn(() => headerEditor),
+      getActiveStoryLocator: vi.fn(() => headerStory),
+      commands: {},
+    };
+
+    // Mount only via the legacy `_presentationEditor` field. The new
+    // selection state must still pick up the active story.
+    const bodyEditor = {
+      on: vi.fn(),
+      off: vi.fn(),
+      state: { selection: { empty: true } },
+      isEditable: true,
+      doc: {
+        selection: {
+          current: vi.fn(() => ({
+            empty: true,
+            target: null,
+            activeMarks: [],
+            activeCommentIds: [],
+            activeChangeIds: [],
+          })),
+        },
+      },
+    };
+    (bodyEditor as unknown as { _presentationEditor: unknown })._presentationEditor = presentationEditor;
+
+    const superdoc = {
+      activeEditor: bodyEditor as never,
+      config: { documentMode: 'editing' as const },
+      on: vi.fn(),
+      off: vi.fn(),
+    };
+
+    const ui = createSuperDocUI({ superdoc });
+    teardown.push(() => ui.destroy());
+
+    const slice = ui.select((state) => state.selection).get();
+    expect(slice.target).toEqual({
+      kind: 'text',
+      segments: [{ blockId: 'h1', range: { start: 0, end: 4 } }],
+      story: headerStory,
+    });
+  });
+
   it('state.selection.selectionTarget is null when target is null', () => {
     const superdoc = makeSuperdocStub();
     (superdoc.activeEditor as { doc: { selection: { current: unknown } } }).doc.selection.current = vi.fn(() => ({

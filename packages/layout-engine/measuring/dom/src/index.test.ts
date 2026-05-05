@@ -1924,6 +1924,43 @@ describe('measureBlock', () => {
       expect(leader.to).toBeCloseTo(300 - pageNumWidth, 0);
     });
 
+    it('emits leaders on both lines when a paragraph contains a <w:br/> between tab groups (sd-1480)', async () => {
+      // Repro for sd-1480-two-col-tab-positions: a single paragraph with right-aligned
+      // dot-leader tab stop and a soft line break. The tabs/pPr applies per line, so
+      // BOTH lines must emit a dot leader.
+      const rightStopTwips = 4306;
+      const block: FlowBlock = {
+        kind: 'paragraph',
+        id: 'multiline-leader',
+        runs: [
+          { text: 'Page', fontFamily: 'Arial', fontSize: 13.333 },
+          { kind: 'tab', text: '\t', tabIndex: 0, pmStart: 4, pmEnd: 5 },
+          { text: '2', fontFamily: 'Arial', fontSize: 13.333 },
+          { kind: 'lineBreak' },
+          { text: 'Page', fontFamily: 'Arial', fontSize: 13.333 },
+          { kind: 'tab', text: '\t', tabIndex: 1, pmStart: 11, pmEnd: 12 },
+          { text: '5', fontFamily: 'Arial', fontSize: 13.333 },
+        ],
+        attrs: {
+          tabs: [{ pos: rightStopTwips, val: 'end', leader: 'dot' }],
+        },
+      };
+
+      const measure = expectParagraphMeasure(await measureBlock(block, 800));
+      expect(measure.lines.length).toBeGreaterThanOrEqual(2);
+
+      const line1 = measure.lines[0];
+      const line2 = measure.lines[1];
+
+      expect(line1.leaders, 'line 1 should have a dot leader').toBeDefined();
+      expect(line1.leaders).toHaveLength(1);
+      expect(line1.leaders?.[0]?.style).toBe('dot');
+
+      expect(line2.leaders, 'line 2 should have a dot leader').toBeDefined();
+      expect(line2.leaders).toHaveLength(1);
+      expect(line2.leaders?.[0]?.style).toBe('dot');
+    });
+
     it('preserves trailing spaces after tabs when line breaks', async () => {
       const block: FlowBlock = {
         kind: 'paragraph',

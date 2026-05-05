@@ -9,14 +9,14 @@
 import type { StoryLocator } from '@superdoc/document-api';
 import type { Editor } from '../editors/v1/core/Editor.js';
 import { resolveTextTarget } from '../editors/v1/document-api-adapters/helpers/adapter-utils.js';
-import type { SelectionCapture, SelectionRestoreResult, SuperDocEditorLike } from './types.js';
+import type { SelectionCapture, SelectionRestoreResult } from './types.js';
 
 const SUCCESS: SelectionRestoreResult = { success: true };
 
 export function restoreSelection(
   editor: Editor | null,
   capture: SelectionCapture,
-  options: { hostEditor?: SuperDocEditorLike | null } = {},
+  options: { activeStory?: StoryLocator | null } = {},
 ): SelectionRestoreResult {
   if (!editor) return { success: false, reason: 'not-ready' };
 
@@ -44,8 +44,7 @@ export function restoreSelection(
   // body in the common case).
   const capturedStory = (capture.target as { story?: StoryLocator } | null | undefined)?.story ?? null;
   if (capturedStory) {
-    const activeStory = readActiveStoryLocator(options.hostEditor ?? null);
-    if (!storyMatches(activeStory, capturedStory)) {
+    if (!storyMatches(options.activeStory ?? null, capturedStory)) {
       return { success: false, reason: 'stale' };
     }
   }
@@ -105,16 +104,6 @@ export function restoreSelection(
   const ok = setTextSelection({ from: fromResolved.from, to: toResolved.to });
   if (!ok) return { success: false, reason: 'stale' };
   return SUCCESS;
-}
-
-function readActiveStoryLocator(hostEditor: SuperDocEditorLike | null): StoryLocator | null {
-  const presentation = hostEditor?.presentationEditor;
-  if (!presentation || typeof presentation.getActiveStoryLocator !== 'function') return null;
-  try {
-    return presentation.getActiveStoryLocator() ?? null;
-  } catch {
-    return null;
-  }
 }
 
 /**

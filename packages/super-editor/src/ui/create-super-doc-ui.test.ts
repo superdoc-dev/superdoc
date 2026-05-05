@@ -638,6 +638,87 @@ describe('createSuperDocUI', () => {
     });
   });
 
+  // SD-2954 regression: `resolveToolbarSources` resolves the
+  // PresentationEditor through three documented paths, the direct
+  // `activeEditor.presentationEditor` field, the legacy
+  // `activeEditor._presentationEditor` field, and the
+  // `superdocStore.documents[].getPresentationEditor()` lookup.
+  // `readActiveStoryLocator` reads the locator through the same
+  // pipeline so all three paths surface the active story. Reading
+  // `activeEditor.presentationEditor` directly would silently miss
+  // the latter two and the new selection slice would stay
+  // body-scoped on those mounts.
+  it('state.selection.target picks up the active story via the legacy _presentationEditor field', () => {
+    const headerStory = { kind: 'story', storyType: 'headerFooterPart', refId: 'rId-legacy' };
+
+    const headerEditor = {
+      on: vi.fn(),
+      off: vi.fn(),
+      state: { selection: { empty: false } },
+      isEditable: true,
+      doc: {
+        selection: {
+          current: vi.fn(() => ({
+            empty: false,
+            text: 'header text',
+            target: { kind: 'text', segments: [{ blockId: 'h1', range: { start: 0, end: 4 } }] },
+            activeMarks: [],
+            activeCommentIds: [],
+            activeChangeIds: [],
+          })),
+        },
+      },
+    };
+
+    const presentationEditor: Record<string, unknown> = {
+      on: vi.fn(),
+      off: vi.fn(),
+      isEditable: true,
+      state: { selection: { empty: false } },
+      getActiveEditor: vi.fn(() => headerEditor),
+      getActiveStoryLocator: vi.fn(() => headerStory),
+      commands: {},
+    };
+
+    // Mount only via the legacy `_presentationEditor` field. The new
+    // selection state must still pick up the active story.
+    const bodyEditor = {
+      on: vi.fn(),
+      off: vi.fn(),
+      state: { selection: { empty: true } },
+      isEditable: true,
+      doc: {
+        selection: {
+          current: vi.fn(() => ({
+            empty: true,
+            target: null,
+            activeMarks: [],
+            activeCommentIds: [],
+            activeChangeIds: [],
+          })),
+        },
+      },
+    };
+    (bodyEditor as unknown as { _presentationEditor: unknown })._presentationEditor = presentationEditor;
+
+    const superdoc = {
+      activeEditor: bodyEditor as never,
+      config: { documentMode: 'editing' as const },
+      on: vi.fn(),
+      off: vi.fn(),
+    };
+
+    const ui = createSuperDocUI({ superdoc });
+    teardown.push(() => ui.destroy());
+
+    const slice = ui.select((state) => state.selection).get();
+    expect(slice.target).toEqual({
+      kind: 'text',
+      segments: [{ blockId: 'h1', range: { start: 0, end: 4 } }],
+      story: headerStory,
+    });
+  });
+
   it('state.selection.selectionTarget is null when target is null', () => {
     const superdoc = makeSuperdocStub();
     (superdoc.activeEditor as { doc: { selection: { current: unknown } } }).doc.selection.current = vi.fn(() => ({

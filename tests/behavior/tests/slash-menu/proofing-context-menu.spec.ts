@@ -198,10 +198,9 @@ test('right-click on a correctly spelled word does NOT add proofing items (SD-28
   // up but has no issue at any position.
   await configureStubProvider(superdoc, 'teh', ['the']);
 
-  // Give the provider a moment to run; we deliberately do NOT wait for
-  // an issue because none should be produced. A short stable settle is
-  // enough since the debounce is 50ms.
-  await page.waitForTimeout(150);
+  // Wait until the stub has actually run, otherwise this test can pass
+  // because the check never fired rather than because nothing matched.
+  await page.waitForFunction(() => (window.__sd2875Calls ?? 0) > 0, null, { timeout: 5_000 });
   await superdoc.waitForStable();
 
   const helloPos = await superdoc.findTextPos('Hello');

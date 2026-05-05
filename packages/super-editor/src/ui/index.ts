@@ -100,6 +100,9 @@ export type {
   // Toolbar + commands
   CommandHandle,
   CommandsHandle,
+  ContextMenuContribution,
+  ContextMenuItem,
+  ContextMenuWhenInput,
   CustomCommandHandle,
   CustomCommandHandleState,
   CustomCommandRegistration,

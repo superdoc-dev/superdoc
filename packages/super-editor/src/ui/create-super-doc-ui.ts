@@ -24,6 +24,7 @@ import type {
   CommandHandle,
   CommandsHandle,
   CommentsHandle,
+  ContextMenuItem,
   DocumentExportInput,
   DocumentHandle,
   DocumentSlice,
@@ -1163,6 +1164,15 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
             throw new Error(`[superdoc/ui] commands.require: unknown command id "${id}".`);
           }
           return handle;
+        };
+      }
+      // Custom-UI consumers building their own context menu pull
+      // contributed items here. Computed against the current snapshot
+      // (so `selection` matches what observers just saw) and the
+      // caller-supplied entities from `ui.viewport.entityAt`.
+      if (prop === 'getContextMenuItems') {
+        return (input?: { entities?: ViewportEntityHit[] }): ContextMenuItem[] => {
+          return customCommandsRegistry.getContextMenuItems(computeState(), input?.entities ?? []);
         };
       }
       // Custom-registered ids surface a typed handle from the registry.

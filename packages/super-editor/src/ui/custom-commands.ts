@@ -1,4 +1,6 @@
 import type {
+  ContextMenuContribution,
+  ContextMenuItem,
   CustomCommandRegistration,
   CustomCommandRegistrationResult,
   CustomCommandHandle,
@@ -8,7 +10,19 @@ import type {
   SuperDocUIState,
   Subscribable,
   UIToolbarCommandState,
+  ViewportEntityHit,
 } from './types.js';
+
+/**
+ * Built-in group ids in the order they render in the context menu.
+ * Custom groups land after these in registration order — see
+ * `compareGroups` below.
+ */
+const BUILTIN_CONTEXT_MENU_GROUPS = ['format', 'clipboard', 'review', 'comment', 'link'] as const;
+const BUILTIN_GROUP_ORDER: ReadonlyMap<string, number> = new Map(
+  BUILTIN_CONTEXT_MENU_GROUPS.map((g, i) => [g, i] as const),
+);
+const DEFAULT_CONTEXT_MENU_GROUP = 'custom';
 
 const DEFAULT_BUILTIN_COLLISION_MESSAGE = (id: string) =>
   `[superdoc/ui] ui.commands.register(): id '${id}' collides with a built-in command. Pass { override: true } to replace deliberately. Registration refused.`;
@@ -29,7 +43,13 @@ const DEFAULT_REPLACEMENT_MESSAGE = (id: string) =>
  * fix is to choose a different id (a namespaced one like
  * `'company.has'` is the canonical workaround).
  */
-const RESERVED_PROXY_PROPERTY_NAMES: ReadonlySet<string> = new Set(['register', 'get', 'has', 'require']);
+const RESERVED_PROXY_PROPERTY_NAMES: ReadonlySet<string> = new Set([
+  'register',
+  'get',
+  'has',
+  'require',
+  'getContextMenuItems',
+]);
 
 const DEFAULT_RESERVED_NAME_MESSAGE = (id: string) =>
   `[superdoc/ui] ui.commands.register(): id '${id}' shadows a Proxy method on ui.commands and would be unreachable through index access. Use a namespaced id (e.g. 'company.${id}') instead. Registration refused.`;
@@ -51,12 +71,24 @@ interface InternalCustomEntry {
   execute: CustomCommandRegistration['execute'];
   getState: CustomCommandRegistration['getState'];
   override: boolean;
+  contextMenu: ContextMenuContribution | null;
+  /**
+   * Monotonic counter at registration time; ties in `(group, order)`
+   * are broken by this so the rendered menu is stable across
+   * snapshots and across re-registrations of unrelated commands.
+   */
+  registrationSeq: number;
   /**
    * Most recent error message thrown from `getState`. Used to dedupe
    * `console.error` calls so a buggy `getState` doesn't flood the console
    * once per snapshot rebuild.
    */
   lastErrorMessage: string | null;
+  /**
+   * Most recent error message thrown from `contextMenu.when`. Same
+   * dedupe posture as `lastErrorMessage`.
+   */
+  lastContextMenuErrorMessage: string | null;
 }
 
 export interface CustomCommandsRegistry {
@@ -86,6 +118,15 @@ export interface CustomCommandsRegistry {
 
   /** Run `execute` for a registered id. Returns false if not registered. */
   execute(id: string, payload?: unknown): boolean | Promise<boolean>;
+
+  /**
+   * Collect context-menu items contributed by registered customs.
+   * Filtered by each contribution's `when` predicate against the
+   * supplied entities + the current selection slice; sorted by
+   * `(group, order, registrationSeq)`. Errors from `when` are
+   * caught and the item is hidden for that query.
+   */
+  getContextMenuItems(state: SuperDocUIState, entities: ViewportEntityHit[]): ContextMenuItem[];
 
   /** Drop every registration and tear down per-command Subscribables. */
   destroy(): void;
@@ -134,6 +175,10 @@ export function createCustomCommandsRegistry(deps: CustomCommandsRegistryDeps): 
   const entries = new Map<string, InternalCustomEntry>();
   const handleCache = new Map<string, CustomCommandHandle<unknown, unknown>>();
   const subscribableCache = new Map<string, Subscribable<UIToolbarCommandState | undefined>>();
+  // Monotonic counter so `(group, order)` ties in context-menu sort
+  // are broken by registration time. Stable across snapshots, doesn't
+  // reuse values when entries are unregistered + re-registered.
+  let nextRegistrationSeq = 0;
   // Active observer disposers per command id. Lets `unregister` (and
   // replacement) actively tear down inner subscriptions instead of
   // waiting for the observer wrapper's lazy `!entries.has(id)` check
@@ -306,7 +351,10 @@ export function createCustomCommandsRegistry(deps: CustomCommandsRegistryDeps): 
         execute: execute as InternalCustomEntry['execute'],
         getState: getState as InternalCustomEntry['getState'],
         override,
+        contextMenu: registration.contextMenu ?? null,
+        registrationSeq: nextRegistrationSeq++,
         lastErrorMessage: null,
+        lastContextMenuErrorMessage: null,
       };
       entries.set(id, ownEntry);
 
@@ -424,6 +472,72 @@ export function createCustomCommandsRegistry(deps: CustomCommandsRegistryDeps): 
         console.error(`[superdoc/ui] custom command '${id}' execute threw:`, err);
         return false;
       }
+    },
+
+    getContextMenuItems(state, entities) {
+      const items: ContextMenuItem[] = [];
+      for (const entry of entries.values()) {
+        const contribution = entry.contextMenu;
+        if (!contribution) continue;
+
+        if (contribution.when) {
+          let applies = true;
+          try {
+            applies = contribution.when({ entities, selection: state.selection }) === true;
+          } catch (err) {
+            // Same dedupe posture as `getState` errors: log once per
+            // distinct message so a buggy `when` predicate doesn't
+            // flood the console on every right-click.
+            const message = err instanceof Error ? err.message : String(err);
+            if (entry.lastContextMenuErrorMessage !== message) {
+              entry.lastContextMenuErrorMessage = message;
+              console.error(`[superdoc/ui] custom command '${entry.id}' contextMenu.when threw:`, err);
+            }
+            applies = false;
+          }
+          if (!applies) continue;
+        } else {
+          entry.lastContextMenuErrorMessage = null;
+        }
+
+        items.push({
+          id: entry.id,
+          label: contribution.label,
+          group: contribution.group ?? DEFAULT_CONTEXT_MENU_GROUP,
+          order: contribution.order ?? 0,
+        });
+      }
+
+      // Sort by group (built-ins first in fixed order, then unknown
+      // groups in registration order via the seq we tracked when each
+      // group's first contribution registered), then by order asc,
+      // then by registration seq asc.
+      const customGroupSeq = new Map<string, number>();
+      for (const entry of entries.values()) {
+        const group = entry.contextMenu?.group ?? DEFAULT_CONTEXT_MENU_GROUP;
+        if (BUILTIN_GROUP_ORDER.has(group)) continue;
+        if (!customGroupSeq.has(group)) customGroupSeq.set(group, entry.registrationSeq);
+      }
+
+      const groupRank = (group: string): number => {
+        const builtin = BUILTIN_GROUP_ORDER.get(group);
+        if (builtin !== undefined) return builtin;
+        // Custom groups land after built-ins; rank by registration
+        // order of the first contribution in that group.
+        return BUILTIN_CONTEXT_MENU_GROUPS.length + (customGroupSeq.get(group) ?? 0);
+      };
+
+      const seqById = new Map<string, number>();
+      for (const entry of entries.values()) seqById.set(entry.id, entry.registrationSeq);
+
+      items.sort((a, b) => {
+        const ga = groupRank(a.group);
+        const gb = groupRank(b.group);
+        if (ga !== gb) return ga - gb;
+        if (a.order !== b.order) return a.order - b.order;
+        return (seqById.get(a.id) ?? 0) - (seqById.get(b.id) ?? 0);
+      });
+      return items;
     },
 
     destroy() {

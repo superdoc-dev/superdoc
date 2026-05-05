@@ -1006,6 +1006,37 @@ export type CommandsHandle = {
    * tests, internal command pipelines.
    */
   require(id: string): DynamicCommandHandle;
+
+  /**
+   * Collect the right-click context-menu items contributed by custom
+   * commands, filtered by their `when` predicate and sorted by
+   * `(group, order, registration time)`. Returns `[]` when no
+   * registered command carries a `contextMenu` field or none survives
+   * the predicate.
+   *
+   * The consumer renders the menu themselves. The typical flow:
+   *
+   * ```ts
+   * scope.on(editorHost, 'contextmenu', (event) => {
+   *   event.preventDefault();
+   *   const entities = ui.viewport.entityAt({ x: event.clientX, y: event.clientY });
+   *   const items = ui.commands.getContextMenuItems({ entities });
+   *   renderMenu(items, event.clientX, event.clientY);
+   * });
+   * ```
+   *
+   * `entities` defaults to `[]` so menus that aren't point-anchored
+   * (keyboard shortcut, app-bar trigger) still resolve a useful
+   * subset. The current selection slice is read from controller state
+   * automatically.
+   *
+   * Built-in items are NOT in this list: SuperDoc's built-in
+   * context-menu extension still owns Bold / Italic / Copy / Paste
+   * when enabled. This surface exists for apps that disable that
+   * extension (`disableContextMenu: true`) and roll their own menu —
+   * built-in entries belong to the consumer's renderer at that point.
+   */
+  getContextMenuItems(input?: { entities?: ViewportEntityHit[] }): ContextMenuItem[];
 };
 
 /**
@@ -1112,7 +1143,82 @@ export type CustomCommandRegistration<TPayload = void, TValue = unknown> = {
    * a console warning.
    */
   override?: boolean;
+  /**
+   * Optional contribution to the right-click context menu. When set,
+   * the command shows up in {@link CommandsHandle.getContextMenuItems}
+   * results (filtered by `when`) so a custom context-menu UI can
+   * render and dispatch it. Consumers using SuperDoc's built-in
+   * context-menu extension keep using that — this surface is for
+   * apps that turn the built-in off (`disableContextMenu`) and roll
+   * their own menu without losing the contribution model.
+   */
+  contextMenu?: ContextMenuContribution;
 };
+
+/**
+ * Right-click context-menu contribution attached to a custom command.
+ *
+ * The consumer renders the menu themselves; SuperDoc just collects the
+ * items, applies `when`, and sorts. Click handling stays on the
+ * consumer's side and dispatches via `ui.commands.get(id).execute()`.
+ */
+export interface ContextMenuContribution {
+  /** Display label for the item. */
+  label: string;
+  /**
+   * Logical group for sorting. Lets a contribution slot next to
+   * related built-ins. Custom group names are accepted; unknown groups
+   * are placed after the built-in groups in registration order. Built-in
+   * group ids: `'format'`, `'clipboard'`, `'review'`, `'comment'`,
+   * `'link'`.
+   */
+  group?: string;
+  /**
+   * Sort order within the group. Lower runs earlier. Defaults to `0`;
+   * ties are broken by registration order so the rendered menu is
+   * stable across snapshots.
+   */
+  order?: number;
+  /**
+   * Predicate scoping the item to specific contexts (the click landed
+   * on a tracked change, the selection is non-empty, etc.). Receives
+   * the entities under the click coordinate (call
+   * {@link ViewportHandle.entityAt} to populate them) and the current
+   * selection slice. Omitted predicate means "always applicable".
+   *
+   * Errors thrown from `when` are caught and the item is hidden for
+   * that query — same posture as `getState` on a custom command.
+   */
+  when?: (input: ContextMenuWhenInput) => boolean;
+}
+
+/** Input passed to {@link ContextMenuContribution.when}. */
+export interface ContextMenuWhenInput {
+  /**
+   * Entities under the right-click point, from
+   * {@link ViewportHandle.entityAt}. Empty array when the consumer
+   * didn't pass entities (e.g. the menu opens from a keyboard shortcut
+   * rather than a click) or when the point is over no painted entity.
+   */
+  entities: ViewportEntityHit[];
+  /** Current selection slice. Mirrors `state.selection`. */
+  selection: SelectionSlice;
+}
+
+/**
+ * One item returned by {@link CommandsHandle.getContextMenuItems}.
+ *
+ * The `id` matches a registered custom command; consumers dispatch on
+ * click via `ui.commands.get(item.id).execute()`. `group` and `order`
+ * are surfaced (rather than collapsed) so the consumer's renderer can
+ * insert separators between groups.
+ */
+export interface ContextMenuItem {
+  id: string;
+  label: string;
+  group: string;
+  order: number;
+}
 
 /** Return value from {@link CommandsHandle.register}. */
 export type CustomCommandRegistrationResult<TPayload, TValue> = {

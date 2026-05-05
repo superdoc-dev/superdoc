@@ -2,6 +2,7 @@ import { getResolvedParagraphProperties } from '@extensions/paragraph/resolvedPr
 import { ptToTwips } from '@converter/helpers';
 
 const defaultIncrementPoints = 36;
+const maxIndentPoints = 9360; // 6.5 inches
 
 /**
  * Increase text indentation
@@ -62,6 +63,10 @@ function calculateNewIndentation(node, delta) {
     left = increment;
   } else {
     left += increment;
+  }
+
+  if (left > maxIndentPoints) {
+    left = maxIndentPoints;
   }
 
   if (left <= 0) {

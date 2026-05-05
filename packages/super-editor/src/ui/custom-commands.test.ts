@@ -1289,6 +1289,76 @@ describe('ui.commands.getContextMenuItems - ViewportContext bundle', () => {
 
     ui.destroy();
   });
+
+  // A menu held open across a re-registration must not dispatch the
+  // replacement's handler. The captured-handle pattern at
+  // `buildHandle.execute` already guards `commands.get(id).execute()`
+  // against this; `invoke()` follows the same identity check so a
+  // stale menu item cleanly returns false instead of firing the new
+  // owner's handler with the old item's label/predicate.
+  it('invoke() returns false (no dispatch) when the entry was replaced after the menu opened', () => {
+    const { superdoc } = makeStubs();
+    const ui = createSuperDocUI({ superdoc });
+    const oldExecute = vi.fn(() => true);
+    const newExecute = vi.fn(() => true);
+
+    ui.commands.register({
+      id: 'replaceable',
+      execute: oldExecute,
+      contextMenu: { label: 'Old' },
+    });
+
+    const items = ui.commands.getContextMenuItems(makeBundle());
+    expect(items).toHaveLength(1);
+    expect(typeof items[0]!.invoke).toBe('function');
+
+    // Replace the registration after the menu items are captured.
+    ui.commands.register({
+      id: 'replaceable',
+      execute: newExecute,
+      contextMenu: { label: 'New' },
+      override: true,
+    });
+
+    const result = items[0]!.invoke!();
+    expect(result).toBe(false);
+    expect(oldExecute).not.toHaveBeenCalled();
+    expect(newExecute).not.toHaveBeenCalled();
+
+    ui.destroy();
+  });
+
+  // Bundle vs legacy-shape detection must reject inputs whose `point`
+  // is null or non-numeric. A consumer hand-building
+  // `{ entities, point: null }` should keep the legacy path; without
+  // this guard `typeof null === 'object'` would route them to the
+  // bundle branch and the registry would read `position` /
+  // `insideSelection` as undefined.
+  it('routes inputs with `point: null` through the legacy entities path, not the bundle path', () => {
+    const { superdoc } = makeStubs();
+    const ui = createSuperDocUI({ superdoc });
+    const whenSpy = vi.fn(() => true);
+
+    ui.commands.register({
+      id: 'test.partial.input',
+      execute: () => true,
+      contextMenu: { label: 'Partial', when: whenSpy },
+    });
+
+    ui.commands.getContextMenuItems({
+      entities: [{ type: 'comment', id: 'c1' }],
+      point: null,
+    } as never);
+
+    expect(whenSpy).toHaveBeenCalledTimes(1);
+    const arg = whenSpy.mock.calls[0]![0] as Record<string, unknown>;
+    expect(arg.entities).toEqual([{ type: 'comment', id: 'c1' }]);
+    // Legacy shape: bundle-only fields stay absent.
+    expect(arg.point).toBeUndefined();
+    expect(arg.insideSelection).toBeUndefined();
+
+    ui.destroy();
+  });
 });
 
 describe('ui.commands.register — shortcut field', () => {

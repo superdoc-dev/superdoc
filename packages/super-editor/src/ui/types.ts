@@ -1696,9 +1696,15 @@ export interface ViewportHandle {
    * `ContextMenuItem.invoke()` so `execute({ context })` can act on
    * the click target without re-running geometry.
    *
-   * Always returns a bundle (no `null`). Every field has a
-   * deterministic default for the "outside the host" case so consumer
-   * code can destructure without null checks.
+   * Always returns a bundle (no `null`) so consumer code can
+   * destructure without null-checking the top-level result; the
+   * inner fields still carry the absent-case defaults each primitive
+   * defines (`entities = []`, `position = null`,
+   * `insideSelection = false`). Non-numeric coordinates coerce to
+   * `(0, 0)` rather than short-circuiting to an empty bundle, since
+   * `(0, 0)` is itself a valid viewport point and may legitimately
+   * sit inside the painted host; pass real coordinates if you want
+   * the result to reflect a specific click.
    */
   contextAt(input: ViewportContextAtInput): ViewportContext;
 }

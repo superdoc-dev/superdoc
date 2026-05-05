@@ -52,3 +52,22 @@ export function buildViewportContext(args: {
     insideSelection: pointInsideRects(args.x, args.y, args.selectionRects),
   };
 }
+
+/**
+ * Type guard for the bundle vs the legacy `{ entities }` call shape
+ * accepted by `ui.commands.getContextMenuItems(input)`.
+ *
+ * Requires `point` to be a non-null object with numeric `x` / `y`.
+ * `typeof null === 'object'` is the easy trap here, plus a hand-built
+ * `{ entities, point: null }` should keep the legacy path so the
+ * registry doesn't read `entities` from a partial bundle whose other
+ * fields are `undefined`. Both call layers (controller proxy and
+ * registry) route through this guard so they cannot disagree.
+ */
+export function isViewportContextBundle(input: unknown): input is ViewportContext {
+  if (input == null || typeof input !== 'object') return false;
+  const candidate = input as { point?: unknown };
+  if (candidate.point == null || typeof candidate.point !== 'object') return false;
+  const p = candidate.point as { x?: unknown; y?: unknown };
+  return typeof p.x === 'number' && typeof p.y === 'number';
+}

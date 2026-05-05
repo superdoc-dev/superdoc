@@ -1,4 +1,5 @@
 import { normalizeShortcut } from './keyboard-shortcuts.js';
+import { isViewportContextBundle } from './viewport-context.js';
 import type {
   ContextMenuContribution,
   ContextMenuItem,
@@ -552,16 +553,18 @@ export function createCustomCommandsRegistry(deps: CustomCommandsRegistryDeps): 
       }
     },
 
-    // SD-2945: input is either the legacy `entities` array (consumer
-    // built the menu via `viewport.entityAt(...)` only) or the full
+    // SD-2945: input is either an entities array (consumer built the
+    // menu via `viewport.entityAt(...)` only) or a full
     // {@link ViewportContext} bundle from `viewport.contextAt(...)`.
+    // Routed through the same `isViewportContextBundle` guard the
+    // controller proxy uses so the two layers can't disagree on
+    // ambiguous inputs (e.g. `{ point: null }`, `undefined`).
     // Bundle inputs surface `point` / `position` / `insideSelection`
     // on the `when` predicate AND wire `invoke()` on each returned
     // item so consumers can fire execute with context bound.
     getContextMenuItems(state, input) {
-      const isBundle = !Array.isArray(input);
-      const entities: ViewportEntityHit[] = isBundle ? (input as ViewportContext).entities : (input ?? []);
-      const context: ViewportContext | null = isBundle ? (input as ViewportContext) : null;
+      const context = isViewportContextBundle(input) ? input : null;
+      const entities: ViewportEntityHit[] = context ? context.entities : Array.isArray(input) ? input : [];
 
       const items: ContextMenuItem[] = [];
       for (const entry of entries.values()) {
@@ -597,15 +600,22 @@ export function createCustomCommandsRegistry(deps: CustomCommandsRegistryDeps): 
           entry.lastContextMenuErrorMessage = null;
         }
 
-        // SD-2945: when called with a {@link ViewportContext} bundle,
-        // attach an `invoke()` closure that fires `execute` with
-        // `context` bound. Captures the captured `id` and the bundle
-        // by reference; consumers that mutate the bundle after
-        // calling `getContextMenuItems` would change what the
-        // closure sees, but the bundle is shaped as immutable data
-        // for this use case (contextAt builds it fresh per call).
+        // Identity-guarded `invoke()` mirrors the captured-handle
+        // pattern at `buildHandle.execute`: the closure refuses to
+        // dispatch when a later `register({ id })` has replaced this
+        // entry between menu open and click. Without that guard, a
+        // menu held open across a re-registration would fire the new
+        // owner's handler with the old item's label / predicate /
+        // bundle, which is exactly the stale-handle class of bug the
+        // prior pattern was added to prevent.
+        const ownEntry = entry;
         const itemId = entry.id;
-        const invoke = context ? () => registry.execute(itemId, undefined, context) : undefined;
+        const invoke = context
+          ? (): boolean | Promise<boolean> => {
+              if (entries.get(itemId) !== ownEntry) return false;
+              return registry.execute(itemId, undefined, context);
+            }
+          : undefined;
         items.push({
           id: entry.id,
           label: contribution.label,

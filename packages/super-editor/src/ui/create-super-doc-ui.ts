@@ -17,7 +17,7 @@ import type {
 import { collectEntityHitsFromChain } from './entity-at.js';
 import { shallowEqual } from './equality.js';
 import { resolvePositionAt } from './position-at.js';
-import { buildViewportContext } from './viewport-context.js';
+import { buildViewportContext, isViewportContextBundle } from './viewport-context.js';
 import { shortcutFromEvent } from './keyboard-shortcuts.js';
 import { scrollRangeIntoView } from './scroll-into-view.js';
 import { getSelectionAnchorRect, getSelectionRects } from './selection-rects.js';
@@ -1300,17 +1300,16 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
       // caller-supplied entities from `ui.viewport.entityAt`.
       //
       // SD-2945: input can also be the full {@link ViewportContext}
-      // bundle from `ui.viewport.contextAt({ x, y })`. Detected by the
-      // presence of `point`. The legacy `{ entities }` shape doesn't
-      // carry one. When a bundle is passed, predicates receive the
-      // full shape (point / position / insideSelection) and each
-      // returned item gets an `invoke()` closure that fires execute
-      // with `context` bound.
+      // bundle from `ui.viewport.contextAt({ x, y })`. Detected by a
+      // valid `point: { x, y }` field. `typeof null === 'object'`, so
+      // we explicitly require `point` to be a non-null object before
+      // routing to the bundle path; otherwise a hand-built input like
+      // `{ entities, point: null }` would be misclassified and the
+      // bundle's other fields would arrive as undefined.
       if (prop === 'getContextMenuItems') {
         return (input?: { entities?: ViewportEntityHit[] } | ViewportContext): ContextMenuItem[] => {
-          const isBundle = !!input && typeof (input as ViewportContext).point === 'object';
-          if (isBundle) {
-            return customCommandsRegistry.getContextMenuItems(computeState(), input as ViewportContext);
+          if (isViewportContextBundle(input)) {
+            return customCommandsRegistry.getContextMenuItems(computeState(), input);
           }
           return customCommandsRegistry.getContextMenuItems(
             computeState(),

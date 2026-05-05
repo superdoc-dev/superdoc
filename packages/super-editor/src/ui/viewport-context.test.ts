@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildViewportContext, pointInsideRects } from './viewport-context.js';
+import { buildViewportContext, isViewportContextBundle, pointInsideRects } from './viewport-context.js';
 import type { SelectionSlice, ViewportRect } from './types.js';
 
 const rect = (top: number, left: number, width: number, height: number, pageIndex = 0): ViewportRect => ({
@@ -99,5 +99,32 @@ describe('buildViewportContext', () => {
       selectionRects: [rect(40, 40, 100, 20)],
     });
     expect(ctx.insideSelection).toBe(false);
+  });
+});
+
+describe('isViewportContextBundle', () => {
+  it('returns true only for objects whose `point` is `{ x: number, y: number }`', () => {
+    expect(isViewportContextBundle({ point: { x: 0, y: 0 }, entities: [] })).toBe(true);
+    expect(isViewportContextBundle({ point: { x: 100, y: 200 }, entities: [], position: null })).toBe(true);
+  });
+
+  it('rejects null / undefined', () => {
+    expect(isViewportContextBundle(null)).toBe(false);
+    expect(isViewportContextBundle(undefined)).toBe(false);
+  });
+
+  it('rejects the legacy `{ entities }` call shape', () => {
+    expect(isViewportContextBundle({ entities: [] })).toBe(false);
+    expect(isViewportContextBundle({})).toBe(false);
+  });
+
+  it('rejects an object whose `point` is null (avoids the `typeof null === "object"` trap)', () => {
+    expect(isViewportContextBundle({ entities: [], point: null })).toBe(false);
+  });
+
+  it('rejects partially-built bundles missing numeric x / y', () => {
+    expect(isViewportContextBundle({ point: {}, entities: [] })).toBe(false);
+    expect(isViewportContextBundle({ point: { x: 'a', y: 0 }, entities: [] })).toBe(false);
+    expect(isViewportContextBundle({ point: { x: 0 }, entities: [] })).toBe(false);
   });
 });

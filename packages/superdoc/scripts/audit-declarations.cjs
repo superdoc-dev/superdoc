@@ -36,6 +36,11 @@
 const fs = require('node:fs');
 const path = require('node:path');
 
+// SD-2864: canonical taxonomy for the published type surface. The lists
+// below previously duplicated data from ensure-types.cjs; both now derive
+// from the same config so the two scripts cannot drift.
+const typeSurface = require('./type-surface.config.cjs');
+
 const distRoot = path.resolve(__dirname, '..', 'dist');
 
 // SD-2859: strict is the default. The audit fails the build on any
@@ -52,35 +57,17 @@ if (!fs.existsSync(distRoot)) {
   process.exit(1);
 }
 
-// Packages whose public type dependencies are relocated into `superdoc`'s
-// published declaration tree or explicitly guarded from falling back to an
-// ambient shim. They must NEVER appear as a `declare module` block in
-// `_internal-shims.d.ts` — if they do, their types collapse to `any` for
-// consumers and we have a regression. Mirror of SD-2842's
-// `RELOCATION_GUARD_PACKAGES` in `ensure-types.cjs`; keep the two lists in sync.
-const RELOCATION_GUARD_PACKAGES = [
-  '@superdoc/document-api',
-  '@superdoc/contracts',
-  '@superdoc/dom-contract',
-  '@superdoc/layout-bridge',
-  '@superdoc/layout-engine',
-  '@superdoc/painter-dom',
-  '@superdoc/pm-adapter',
-  '@superdoc/style-engine',
-  '@superdoc/common',
-  '@superdoc/common/list-marker-utils',
-];
+// Packages that must NEVER appear as a `declare module` block in
+// `_internal-shims.d.ts`. After SD-2942 the file is no longer emitted, so
+// this list is a defense against stale tarballs and future re-introduction.
+// Source: type-surface.config.cjs `relocationGuardPackages`.
+const RELOCATION_GUARD_PACKAGES = typeSurface.relocationGuardPackages;
 
 // Specifiers that may appear as bare imports in published d.ts files even
 // though they are private workspace packages. Each entry has a documented
-// reason; anything outside this allowlist (and outside the shim file) is a
-// real leak per Rule 1.
-const RULE1_ALLOWLIST = {
-  // Legacy public surface per the RFC. Resolves through `superdoc`'s
-  // published dist tree at runtime via the existing rewrite/include rules.
-  // Deep subpaths beyond the curated public surface are NOT allowlisted.
-  '@superdoc/super-editor': 'legacy public surface (RFC Decision 1)',
-};
+// reason; anything outside this allowlist is a real leak per Rule 1.
+// Source: type-surface.config.cjs `rule1Allowlist`.
+const RULE1_ALLOWLIST = typeSurface.rule1Allowlist;
 
 function isRule1Allowed(specifier, shimmedSet) {
   if (RULE1_ALLOWLIST[specifier]) return true;

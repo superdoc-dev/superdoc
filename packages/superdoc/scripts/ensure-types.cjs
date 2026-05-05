@@ -3,6 +3,11 @@
 const fs = require('node:fs');
 const path = require('node:path');
 
+// SD-2864: canonical taxonomy for the published type surface. Mirrors
+// vite.config.js, tsconfig.json, and audit-declarations.cjs from a single
+// data file so contributors only edit one place to add a new relocation.
+const typeSurface = require('./type-surface.config.cjs');
+
 // Verify that vite-plugin-dts generated the expected type entry points.
 // Path aliases are resolved by vite-plugin-dts via tsconfig.json paths.
 const distRoot = path.resolve(__dirname, '..', 'dist');
@@ -243,84 +248,20 @@ function rewriteDocApiPaths(fileContent, filePath) {
   });
 }
 
-// SD-2842: relocate workspace packages whose types appear on the
-// public surface. Same idea as the document-api rewrite above: emit
-// their declarations into superdoc's dist (via vite-plugin-dts include)
-// and redirect bare specifiers in emitted .d.ts files to relative
-// paths the consumer can resolve.
-//
-// SD-2893 note for pm-adapter: only specific type subpaths are
-// relocated (see vite.config.js include list). Do not add a broad
-// `@superdoc/pm-adapter` rule unless the barrel declaration is also
-// emitted; otherwise a bare specifier would rewrite to a missing
-// relative path and evade the audit gate.
-const RELOCATION_RULES = [
-  { pkg: '@superdoc/contracts',     distEntry: 'layout-engine/contracts/src/index.d.ts', matchSubpaths: true },
-  { pkg: '@superdoc/dom-contract',  distEntry: 'layout-engine/dom-contract/src/index.d.ts', matchSubpaths: true },
-  { pkg: '@superdoc/layout-bridge', distEntry: 'layout-engine/layout-bridge/src/index.d.ts', matchSubpaths: true },
-  { pkg: '@superdoc/layout-engine', distEntry: 'layout-engine/layout-engine/src/index.d.ts', matchSubpaths: true },
-  { pkg: '@superdoc/painter-dom',   distEntry: 'layout-engine/painters/dom/src/index.d.ts', matchSubpaths: true },
-  {
-    pkg: '@superdoc/pm-adapter/converter-context.js',
-    distEntry: 'layout-engine/pm-adapter/src/converter-context.d.ts',
-    matchSubpaths: false,
-  },
-  {
-    pkg: '@superdoc/pm-adapter/sections/types.js',
-    distEntry: 'layout-engine/pm-adapter/src/sections/types.d.ts',
-    matchSubpaths: false,
-  },
-  // SD-2893: list-marker-utils is the only @superdoc/common subpath publicly
-  // reachable today (via painter-dom). Relocate just this file so the bare
-  // @superdoc/common shim does not capture it; the parent @superdoc/common
-  // package and other subpaths stay shimmed until separately drained.
-  {
-    pkg: '@superdoc/common/list-marker-utils',
-    distEntry: 'shared/common/list-marker-utils.d.ts',
-    matchSubpaths: false,
-  },
-  // SD-2893: only the /ooxml subpath of style-engine is publicly reachable.
-  // Relocate just this subpath plus its sibling cascade.ts dependency
-  // (see vite.config.js include list). The bare @superdoc/style-engine is
-  // guarded but unrewritten; if a future bare-barrel leak appears the audit
-  // gate fails rather than producing a missing relative path.
-  {
-    pkg: '@superdoc/style-engine/ooxml',
-    distEntry: 'layout-engine/style-engine/src/ooxml/index.d.ts',
-    matchSubpaths: false,
-  },
-  // SD-2893: bare @superdoc/common appears in three internal-only dist d.ts
-  // files for the four Comment* types (Comment, CommentContent, CommentJSON,
-  // CommentThreadingProfile). Point the bare specifier at comments-types.d.ts
-  // (emitted via SHARED_COMMON_DTS_TARGETS) so the rewrite resolves to a real
-  // file. matchSubpaths: false because only the bare specifier is referenced;
-  // any future @superdoc/common/<other-subpath> import would not be auto-
-  // rewritten, falling through to the audit gate. The runtime-value imports
-  // from the main entry (DOCX, PDF, HTML, getFileObject, compareVersions,
-  // BlankDOCX) are still handled by the inline-replacement step above.
-  {
-    pkg: '@superdoc/common',
-    distEntry: 'shared/common/comments-types.d.ts',
-    matchSubpaths: false,
-  },
-];
+// SD-2842 / SD-2864: relocate workspace packages whose types appear on the
+// public surface. Each rule redirects bare/subpath specifiers in emitted
+// .d.ts files to a relative path inside dist. The canonical list lives in
+// type-surface.config.cjs; this script picks the fields it needs.
+const RELOCATION_RULES = typeSurface.relocations.map(({ pkg, distEntry, matchSubpaths }) => ({
+  pkg,
+  distEntry,
+  matchSubpaths,
+}));
 
-// Guard packages that must never fall back to `_internal-shims.d.ts`.
-// `@superdoc/pm-adapter` is guarded as a root package even though only
-// two exact subpaths are relocated today; a future bare-barrel leak should
-// fail the build rather than ship as `any`.
-const RELOCATION_GUARD_PACKAGES = [
-  '@superdoc/document-api',
-  '@superdoc/contracts',
-  '@superdoc/dom-contract',
-  '@superdoc/layout-bridge',
-  '@superdoc/layout-engine',
-  '@superdoc/painter-dom',
-  '@superdoc/pm-adapter',
-  '@superdoc/style-engine',
-  '@superdoc/common',
-  '@superdoc/common/list-marker-utils',
-];
+// Guard packages that must never appear as a `declare module` block in
+// `_internal-shims.d.ts`. SD-2942 removed the shim emit; this list is
+// kept as defense against stale tarballs and future re-introduction.
+const RELOCATION_GUARD_PACKAGES = typeSurface.relocationGuardPackages;
 
 function isRelocatedSpecifier(mod) {
   return RELOCATION_RULES.some((rule) =>
@@ -356,11 +297,9 @@ const RELOCATION_REWRITERS = RELOCATION_RULES.map((rule) => ({
 
 // Any root specifier added here should also be listed in
 // RELOCATION_GUARD_PACKAGES so it cannot fall back to an ambient `any`
-// shim after we intentionally skip shim generation.
-const UNSHIMMED_PRIVATE_SPECIFIERS = new Set([
-  '@superdoc/pm-adapter',
-  '@superdoc/style-engine',
-]);
+// shim after we intentionally skip shim generation. List source:
+// type-surface.config.cjs (`unshimmedPrivateSpecifiers`).
+const UNSHIMMED_PRIVATE_SPECIFIERS = new Set(typeSurface.unshimmedPrivateSpecifiers);
 
 function shouldSkipWorkspaceShim(mod) {
   return (

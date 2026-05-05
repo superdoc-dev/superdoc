@@ -930,6 +930,19 @@ export const makeDefaultItems = ({
     },
   });
 
+  const formattingMarks = useToolbarItem({
+    type: 'button',
+    name: 'formattingMarks',
+    command: 'toggleFormattingMarks',
+    allowWithoutEditor: true,
+    icon: toolbarIcons.formattingMarks,
+    active: false,
+    tooltip: toolbarTexts.formattingMarks,
+    attributes: {
+      ariaLabel: 'Formatting marks',
+    },
+  });
+
   const selectedLinkedStyle = ref(null);
   const linkedStyles = useToolbarItem({
     type: 'dropdown',
@@ -1027,7 +1040,7 @@ export const makeDefaultItems = ({
   const stickyItemsWidth = 120;
   const toolbarPadding = 32;
 
-  const itemsToHideXL = ['linkedStyles', 'clearFormatting', 'copyFormat', 'ruler'];
+  const itemsToHideXL = ['linkedStyles', 'clearFormatting', 'copyFormat', 'ruler', 'formattingMarks'];
   const itemsToHideSM = ['zoom', 'fontFamily', 'fontSize', 'redo'];
   const shouldUseLgCompactStyles = availableWidth <= RESPONSIVE_BREAKPOINTS.lg;
 
@@ -1078,6 +1091,7 @@ export const makeDefaultItems = ({
     linkedStyles,
     separator,
     ruler,
+    formattingMarks,
     copyFormat,
     clearFormatting,
     aiButton,
@@ -1099,7 +1113,7 @@ export const makeDefaultItems = ({
     const getLinkedStylesIndex = toolbarItems.findIndex((item) => item.name.value === 'linkedStyles');
     toolbarItems.splice(getLinkedStylesIndex - 1, 2);
 
-    const filterItems = ['ruler', 'zoom', 'undo', 'redo'];
+    const filterItems = ['ruler', 'formattingMarks', 'zoom', 'undo', 'redo'];
     toolbarItems = toolbarItems.filter((item) => !filterItems.includes(item.name.value));
   }
 

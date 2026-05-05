@@ -120,6 +120,8 @@ export type DomPainterOptions = {
   ruler?: RulerOptions;
   /** Called with the paint snapshot after each paint cycle completes. */
   onPaintSnapshot?: (snapshot: PaintSnapshot) => void;
+  /** Render nonprinting formatting marks such as spaces, tabs, and paragraph marks. */
+  showFormattingMarks?: boolean;
 };
 
 type LegacyDomPainterState = {
@@ -162,6 +164,7 @@ export type DomPainterHandle = {
   onScroll(): void;
   setZoom(zoom: number): void;
   setScrollContainer(el: HTMLElement | null): void;
+  setShowFormattingMarks(showFormattingMarks: boolean): void;
 };
 
 function assertRequiredBlockMeasurePair(label: string, blocks: FlowBlock[], measures: Measure[]): void {
@@ -331,6 +334,7 @@ export const createDomPainter = (options: DomPainterOptions): DomPainterHandle =
     virtualization: options.virtualization,
     ruler: options.ruler,
     onPaintSnapshot: options.onPaintSnapshot,
+    showFormattingMarks: options.showFormattingMarks,
   });
 
   return {
@@ -379,6 +383,9 @@ export const createDomPainter = (options: DomPainterOptions): DomPainterHandle =
     },
     setScrollContainer(el: HTMLElement | null) {
       painter.setScrollContainer(el);
+    },
+    setShowFormattingMarks(showFormattingMarks: boolean) {
+      painter.setShowFormattingMarks(showFormattingMarks);
     },
   };
 };

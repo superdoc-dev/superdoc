@@ -691,6 +691,9 @@ export class SuperToolbar extends EventEmitter {
 
     if (!this.activeEditor || currentMode === 'viewing') {
       this.#deactivateAll();
+      this.toolbarItems.forEach((item) => {
+        if (item.allowWithoutEditor?.value) this.#applyHeadlessState(item);
+      });
       return;
     }
 

@@ -42,6 +42,7 @@ export const BUILT_IN_COMMAND_IDS = [
   'undo',
   'redo',
   'ruler',
+  'formatting-marks',
   'zoom',
   'document-mode',
   'clear-formatting',
@@ -89,6 +90,7 @@ export type ToolbarPayloadMap = {
   undo: never;
   redo: never;
   ruler: never;
+  'formatting-marks': never;
   zoom: number;
   'document-mode': 'editing' | 'suggesting' | 'viewing';
   'clear-formatting': never;
@@ -134,6 +136,7 @@ export type ToolbarValueMap = {
   undo: undefined;
   redo: undefined;
   ruler: undefined;
+  'formatting-marks': undefined;
   zoom: number;
   'document-mode': string;
   'clear-formatting': undefined;
@@ -234,6 +237,12 @@ export type ToolbarExecuteFn = (id: PublicToolbarItemId, payload?: unknown) => b
 
 export type HeadlessToolbarSuperdocHost = {
   activeEditor?: Editor | null;
+  config?: {
+    layoutEngineOptions?: {
+      showFormattingMarks?: boolean;
+    };
+  };
+  toggleFormattingMarks?: () => void;
   on?: (event: string, listener: (...args: any[]) => void) => void;
   off?: (event: string, listener: (...args: any[]) => void) => void;
   superdocStore?: {

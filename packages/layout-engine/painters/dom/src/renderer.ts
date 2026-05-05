@@ -92,6 +92,7 @@ import {
   containerStyles,
   containerStylesHorizontal,
   ensureFieldAnnotationStyles,
+  ensureFormattingMarksStyles,
   ensureImageSelectionStyles,
   ensureLinkStyles,
   ensureMathMencloseStyles,
@@ -332,6 +333,8 @@ type PainterOptions = {
   ruler?: RulerOptions;
   /** Called with the paint snapshot after each paint cycle completes. */
   onPaintSnapshot?: (snapshot: PaintSnapshot) => void;
+  /** Render nonprinting formatting marks such as spaces, tabs, and paragraph marks. */
+  showFormattingMarks?: boolean;
 };
 
 type FragmentDomState = {
@@ -1357,6 +1360,7 @@ export class DomPainter {
   private mountedPageIndices: number[] = [];
   /** Resolved layout for the next-gen paint pipeline. */
   private resolvedLayout: ResolvedLayout | null = null;
+  private showFormattingMarks = false;
 
   constructor(options: PainterOptions = {}) {
     this.options = options;
@@ -1364,6 +1368,7 @@ export class DomPainter {
     this.isSemanticFlow = (options.flowMode ?? 'paginated') === 'semantic';
     this.headerProvider = options.headerProvider;
     this.footerProvider = options.footerProvider;
+    this.showFormattingMarks = options.showFormattingMarks === true;
 
     // Initialize page gap (defaults: 24px vertical, 20px horizontal)
     const defaultGap = this.layoutMode === 'horizontal' ? 20 : 24;
@@ -1393,9 +1398,34 @@ export class DomPainter {
     this.onPaintSnapshotCallback = options.onPaintSnapshot ?? null;
   }
 
+  public setShowFormattingMarks(showFormattingMarks: boolean): void {
+    const next = showFormattingMarks === true;
+    if (this.showFormattingMarks === next) return;
+    this.showFormattingMarks = next;
+    this.applyFormattingMarksClass();
+    this.invalidateRenderedContent();
+  }
+
   public setProviders(header?: PageDecorationProvider, footer?: PageDecorationProvider): void {
     this.headerProvider = header;
     this.footerProvider = footer;
+  }
+
+  private applyFormattingMarksClass(mount: HTMLElement | null = this.mount): void {
+    mount?.classList.toggle('superdoc-show-formatting-marks', this.showFormattingMarks);
+  }
+
+  private invalidateRenderedContent(): void {
+    this.pageStates = [];
+    this.currentLayout = null;
+    this.pageIndexToState.clear();
+    this.virtualMountedKey = '';
+    this.clearGapSpacers();
+    this.topSpacerEl = null;
+    this.bottomSpacerEl = null;
+    this.virtualPagesEl = null;
+    this.processedLayoutVersion = -1;
+    this.layoutVersion += 1;
   }
 
   /**
@@ -1677,6 +1707,7 @@ export class DomPainter {
     ensurePrintStyles(doc);
     ensureLinkStyles(doc);
     ensureTrackChangeStyles(doc);
+    ensureFormattingMarksStyles(doc);
     ensureFieldAnnotationStyles(doc);
     ensureSdtContainerStyles(doc);
     ensureImageSelectionStyles(doc);
@@ -1685,9 +1716,11 @@ export class DomPainter {
       ensureRulerStyles(doc);
     }
     mount.classList.add(CLASS_NAMES.container);
+    this.applyFormattingMarksClass(mount);
 
     if (this.mount && this.mount !== mount) {
       this.resetState();
+      this.applyFormattingMarksClass(mount);
     }
     this.layoutVersion += 1;
 
@@ -5380,6 +5413,77 @@ export class DomPainter {
     return wrapper;
   }
 
+  private setTextContentWithFormattingSpaceMarks(element: HTMLElement, text: string): void {
+    if (!this.showFormattingMarks || !text.includes(' ') || !this.doc) {
+      element.textContent = text;
+      return;
+    }
+
+    element.textContent = '';
+    let chunkStart = 0;
+    for (let index = 0; index < text.length; index += 1) {
+      if (text[index] !== ' ') continue;
+
+      if (index > chunkStart) {
+        element.appendChild(this.doc.createTextNode(text.slice(chunkStart, index)));
+      }
+
+      const space = this.doc.createElement('span');
+      space.classList.add('superdoc-formatting-space-mark');
+      space.textContent = ' ';
+      element.appendChild(space);
+      chunkStart = index + 1;
+    }
+
+    if (chunkStart < text.length) {
+      element.appendChild(this.doc.createTextNode(text.slice(chunkStart)));
+    }
+  }
+
+  private findLastTextRun(runs: Run[]): TextRun | null {
+    for (let index = runs.length - 1; index >= 0; index -= 1) {
+      const run = runs[index];
+      if (run && (run.kind === 'text' || run.kind === undefined) && 'text' in run) {
+        return run as TextRun;
+      }
+    }
+    return null;
+  }
+
+  private appendFormattingParagraphMark(lineEl: HTMLElement, line: Line, runs: Run[], leftOffsetPx: number): void {
+    if (!this.showFormattingMarks || !this.doc) return;
+    if (runs.length > 0 && line.toRun < runs.length - 1) return;
+
+    const mark = this.doc.createElement('span');
+    mark.classList.add('superdoc-formatting-paragraph-mark');
+    mark.setAttribute('aria-hidden', 'true');
+    mark.textContent = '¶';
+
+    const run = this.findLastTextRun(runs);
+    if (run) {
+      if (run.fontFamily) {
+        mark.style.fontFamily = toCssFontFamily(run.fontFamily) ?? run.fontFamily;
+      }
+      if (typeof run.fontSize === 'number') {
+        mark.style.fontSize = `${run.fontSize}px`;
+      }
+      if (run.bold) {
+        mark.style.fontWeight = 'bold';
+      }
+      if (run.italic) {
+        mark.style.fontStyle = 'italic';
+      }
+      if (run.letterSpacing != null) {
+        mark.style.letterSpacing = `${run.letterSpacing}px`;
+      }
+    }
+    mark.style.lineHeight = `${line.lineHeight}px`;
+
+    const lineWidth = line.naturalWidth ?? line.width ?? 0;
+    mark.style.left = `${Math.max(0, leftOffsetPx + lineWidth)}px`;
+    lineEl.appendChild(mark);
+  }
+
   private renderRun(
     run: Run,
     context: FragmentRenderContext,
@@ -5421,7 +5525,7 @@ export class DomPainter {
     const isActiveLink = !!(linkData && !linkData.blocked && linkData.href);
     const elem = isActiveLink ? this.doc.createElement('a') : this.doc.createElement('span');
     const text = resolveRunText(run, context);
-    elem.textContent = text;
+    this.setTextContentWithFormattingSpaceMarks(elem, text);
 
     if (linkData?.dataset) {
       applyLinkDataset(elem, linkData.dataset);
@@ -6321,6 +6425,7 @@ export class DomPainter {
       spaceCount,
       shouldJustify: justifyShouldApply,
     });
+    let paragraphMarkLeftOffsetPx = 0;
 
     if (spacingPerSpace !== 0) {
       // Each rendered line is its own block; relying on text-align-last is brittle, so we use word-spacing.
@@ -6361,6 +6466,7 @@ export class DomPainter {
           : indentLeft;
         indentOffset = isListParagraph ? listIndentOffset : indentLeft + firstLineOffsetForCumX;
       }
+      paragraphMarkLeftOffsetPx = indentOffset;
       let cumulativeX = 0; // Start at 0, we'll add indentOffset when positioning
 
       const segments = line.segments!;
@@ -6755,6 +6861,8 @@ export class DomPainter {
       // Close any remaining wrapper at end of line
       closeCurrentWrapper();
     }
+
+    this.appendFormattingParagraphMark(el, line, expandedBlock.runs, paragraphMarkLeftOffsetPx);
 
     // Post-process: Apply tooltip accessibility for any links with pending tooltips
     // This must happen after elements are in the DOM so aria-describedby can reference siblings

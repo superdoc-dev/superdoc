@@ -150,6 +150,7 @@ const {
       getMountedPageIndices: vi.fn(() => []),
       onScroll: vi.fn(),
       setScrollContainer: vi.fn(),
+      setShowFormattingMarks: vi.fn(),
       setProviders: vi.fn(),
     })),
     mockMeasureBlock: vi.fn(() => ({ width: 100, height: 100 })),

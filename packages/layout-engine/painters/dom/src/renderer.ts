@@ -255,7 +255,8 @@ export type PageDecorationPayload = {
   height: number;
   /** Optional measured content height to aid bottom alignment in footers. */
   contentHeight?: number;
-  offset?: number;
+  /** Decoration band origin in page-local Y. Producer is the sole source of truth (SD-2957). */
+  offset: number;
   marginLeft?: number;
   // Optional explicit content width (px) for the decoration container
   contentWidth?: number;
@@ -2460,7 +2461,7 @@ export class DomPainter {
     const container = (existing as HTMLElement) ?? this.doc.createElement('div');
     container.className = className;
     container.innerHTML = '';
-    const baseOffset = data.offset ?? (kind === 'footer' ? pageEl.clientHeight - data.height : 0);
+    const baseOffset = data.offset;
     const marginLeft = data.marginLeft ?? 0;
     const pageMargins = page.margins;
     const marginRight = pageMargins?.right ?? 0;

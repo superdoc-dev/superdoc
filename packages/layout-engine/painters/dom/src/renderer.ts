@@ -5462,15 +5462,30 @@ export class DomPainter {
     return null;
   }
 
-  private appendFormattingParagraphMark(lineEl: HTMLElement, line: Line, runs: Run[], leftOffsetPx: number): void {
+  private appendFormattingParagraphMark(
+    lineEl: HTMLElement,
+    line: Line,
+    runs: Run[],
+    leftOffsetPx: number,
+    availableWidth: number,
+    hasExplicitPositioning: boolean,
+  ): void {
     if (!this.showFormattingMarks || !this.doc) return;
-    const lastTextRun = this.findLastTextRun(runs);
-    if (lastTextRun) {
-      if (line.toRun < lastTextRun.index) return;
-      if (line.toRun === lastTextRun.index && line.toChar < lastTextRun.run.text.length) return;
-    } else if (runs.length > 0 && line.toRun < runs.length - 1) {
-      return;
+    const lastRun = runs.length > 0 ? runs[runs.length - 1] : null;
+    if (lastRun) {
+      const lastRunIndex = runs.length - 1;
+      if (line.toRun < lastRunIndex) return;
+      if (
+        line.toRun === lastRunIndex &&
+        (lastRun.kind === 'text' || lastRun.kind === undefined) &&
+        'text' in lastRun &&
+        line.toChar < lastRun.text.length
+      ) {
+        return;
+      }
     }
+
+    const lastTextRun = this.findLastTextRun(runs);
 
     const mark = this.doc.createElement('span');
     mark.classList.add('superdoc-formatting-paragraph-mark');
@@ -5498,7 +5513,17 @@ export class DomPainter {
     mark.style.lineHeight = `${line.lineHeight}px`;
 
     const lineWidth = line.naturalWidth ?? line.width ?? 0;
-    mark.style.left = `${Math.max(0, leftOffsetPx + lineWidth)}px`;
+    const alignmentSlack = Math.max(0, availableWidth - lineWidth);
+    const textAlign = lineEl.style.textAlign;
+    const alignmentOffset =
+      !hasExplicitPositioning && textAlign === 'center'
+        ? alignmentSlack / 2
+        : !hasExplicitPositioning && textAlign === 'right'
+          ? alignmentSlack
+          : 0;
+    const isRtl = lineEl.dir === 'rtl' || lineEl.style.direction === 'rtl';
+    const visualTextEndOffset = isRtl ? alignmentOffset : alignmentOffset + lineWidth;
+    mark.style.left = `${Math.max(0, leftOffsetPx + visualTextEndOffset)}px`;
     lineEl.appendChild(mark);
   }
 
@@ -6501,8 +6526,9 @@ export class DomPainter {
 
       return isListParagraph ? listIndentOffset : indentLeft + firstLineOffsetForCumX;
     };
-    const paragraphMarkLeftOffsetPx =
+    const lineTextStartOffsetPx =
       paragraphMarkLeftOffsetOverride != null ? paragraphMarkLeftOffsetOverride : resolveLineIndentOffset();
+    const paragraphMarkLeftOffsetPx = lineTextStartOffsetPx;
 
     if (spacingPerSpace !== 0) {
       // Each rendered line is its own block; relying on text-align-last is brittle, so we use word-spacing.
@@ -6517,7 +6543,9 @@ export class DomPainter {
       //
       // The segment x positions from layout are relative to the content area (left margin = 0).
       // We need to add the paragraph indent to ALL positions (both explicit and calculated).
-      const indentOffset = paragraphMarkLeftOffsetPx;
+      // Segment x positions and paragraph marks both need the visual text start,
+      // including list marker/suffix space when the resolved layout provides it.
+      const indentOffset = lineTextStartOffsetPx;
       let cumulativeX = 0; // Start at 0, we'll add indentOffset when positioning
 
       const segments = line.segments!;
@@ -6913,7 +6941,14 @@ export class DomPainter {
       closeCurrentWrapper();
     }
 
-    this.appendFormattingParagraphMark(el, line, expandedBlock.runs, paragraphMarkLeftOffsetPx);
+    this.appendFormattingParagraphMark(
+      el,
+      line,
+      expandedBlock.runs,
+      paragraphMarkLeftOffsetPx,
+      availableWidth,
+      hasExplicitPositioning ?? false,
+    );
 
     // Post-process: Apply tooltip accessibility for any links with pending tooltips
     // This must happen after elements are in the DOM so aria-describedby can reference siblings

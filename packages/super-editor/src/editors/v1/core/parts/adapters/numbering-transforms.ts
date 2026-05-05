@@ -220,6 +220,18 @@ export function generateNewListDefinition(numbering: NumberingModel, options: Ge
           // Preserve the style's suffix (e.g. ".", ")") so paren styles stay paren.
           lvlText.attributes['w:val'] = `%${targetLevel + 1}${styleConfig.text.replace(/^%\d+/, '')}`;
         }
+
+        // Default ordered list markers to right-justification so siblings
+        // with varying widths (e.g. "I." vs "III.", "1." vs "10.") share a
+        // single content-start X. The base ordered template ships with
+        // lvlJc="left", which would otherwise leave wider markers pushing
+        // their own line right.
+        const lvlJc = lvl.elements.find((el: any) => el.name === 'w:lvlJc');
+        if (lvlJc) {
+          lvlJc.attributes['w:val'] = 'right';
+        } else {
+          lvl.elements.push({ type: 'element', name: 'w:lvlJc', attributes: { 'w:val': 'right' } });
+        }
       }
     }
   }
@@ -511,12 +523,15 @@ export function setLvlStyleOnAbstract(
 
   let numFmtValue: string | null = null;
   let lvlTextValue: string | null = null;
+  let lvlJcValue: string | null = null;
 
   if (options.bulletStyle) {
     const char = BULLET_STYLE_CHARS[options.bulletStyle];
     if (!char) return false;
     numFmtValue = 'bullet';
     lvlTextValue = char;
+    // Bullet markers are single-character; the source's lvlJc carries no
+    // meaningful drift. Leave it untouched to avoid clobbering imported docs.
   } else if (options.orderedStyle) {
     const config = ORDERED_LIST_STYLES[options.orderedStyle];
     if (!config) return false;
@@ -524,6 +539,13 @@ export function setLvlStyleOnAbstract(
     // need `%(N+1)`. Preserve the style's suffix (e.g. ".", ")") so paren styles stay paren.
     numFmtValue = config.fmt;
     lvlTextValue = `%${ilvl + 1}${config.text.replace(/^%\d+/, '')}`;
+    // Default ordered styles to right-justified markers: when widths vary
+    // across siblings (e.g. "I." vs "III." in a roman list, or "1." vs
+    // "10." in a long decimal list), right-justification keeps content
+    // aligned at one X. The source's lvlJc was tied to the previous numFmt
+    // (which may have been single-width like a bullet) and would otherwise
+    // cause drift on the new style.
+    lvlJcValue = 'right';
   } else {
     return false;
   }
@@ -531,6 +553,7 @@ export function setLvlStyleOnAbstract(
   let changed = false;
   if (setOrAddChild('w:numFmt', numFmtValue)) changed = true;
   if (setOrAddChild('w:lvlText', lvlTextValue)) changed = true;
+  if (lvlJcValue != null && setOrAddChild('w:lvlJc', lvlJcValue)) changed = true;
   if (stripMarkerFont()) changed = true;
   return changed;
 }

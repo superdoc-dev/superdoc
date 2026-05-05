@@ -1,6 +1,17 @@
 import { useEffect } from 'react';
 import type { ViewportEntityHit } from 'superdoc/ui';
 import { useSuperDocUI } from 'superdoc/ui/react';
+import type { DecidedChangesState } from './useDecidedChanges';
+
+interface Props {
+  /**
+   * Shared accept/reject dispatcher. The Activity sidebar uses the
+   * same store; routing context-menu decisions through it keeps the
+   * Resolved audit row in sync regardless of which surface the user
+   * clicked.
+   */
+  decided: DecidedChangesState;
+}
 
 /**
  * Registers the demo's context-menu contributions. A real consumer
@@ -9,7 +20,7 @@ import { useSuperDocUI } from 'superdoc/ui/react';
  * surface and `when({ entities })` predicates that scope items to
  * specific click targets.
  */
-export function ContextMenuRegistrations() {
+export function ContextMenuRegistrations({ decided }: Props) {
   const ui = useSuperDocUI();
 
   useEffect(() => {
@@ -24,7 +35,11 @@ export function ContextMenuRegistrations() {
       execute: ({ payload }) => {
         const id = trackedChangeId(payload?.entities);
         if (!id) return false;
-        ui.trackChanges.accept(id);
+        // Route through the shared store so the Resolved audit row
+        // shows up — calling `ui.trackChanges.accept(id)` directly
+        // would skip the snapshot pass that the sidebar's Resolved
+        // section reads from.
+        decided.decideChange(id, 'accepted');
         return true;
       },
       contextMenu: {
@@ -39,7 +54,7 @@ export function ContextMenuRegistrations() {
       execute: ({ payload }) => {
         const id = trackedChangeId(payload?.entities);
         if (!id) return false;
-        ui.trackChanges.reject(id);
+        decided.decideChange(id, 'rejected');
         return true;
       },
       contextMenu: {

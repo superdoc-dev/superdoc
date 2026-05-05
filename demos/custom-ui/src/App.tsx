@@ -6,6 +6,7 @@ import { ActivitySidebar } from './components/ActivitySidebar';
 import { SelectionPopover } from './components/SelectionPopover';
 import { ContextMenu } from './components/ContextMenu';
 import { ContextMenuRegistrations } from './components/ContextMenuRegistrations';
+import { useDecidedChanges } from './components/useDecidedChanges';
 
 export function App() {
   // The composer is sidebar-side UI but is triggered from the toolbar's
@@ -13,6 +14,11 @@ export function App() {
   // the simplest path; a real product might dispatch through a state
   // store, but the example keeps the wiring obvious.
   const [composeOpen, setComposeOpen] = useState(false);
+  // Shared decided-changes store. Both ActivitySidebar (per-card
+  // accept/reject buttons) and the right-click context menu route
+  // through `decided.decideChange` so the Resolved audit row shows
+  // up regardless of which surface fired the decision.
+  const decided = useDecidedChanges();
 
   return (
     <SuperDocUIProvider>
@@ -32,7 +38,7 @@ export function App() {
             </div>
             <SelectionPopover onComposeComment={() => setComposeOpen(true)} />
             <ContextMenu />
-            <ContextMenuRegistrations />
+            <ContextMenuRegistrations decided={decided} />
           </section>
 
           <aside className="sidebar">
@@ -41,6 +47,7 @@ export function App() {
               <ActivitySidebar
                 composeOpen={composeOpen}
                 onCloseComposer={() => setComposeOpen(false)}
+                decided={decided}
               />
             </div>
           </aside>

@@ -3,7 +3,7 @@
 # ─── Config ───────────────────────────────────────────────────────────────────
 
 PNPM := pnpm
-ROOT := $(shell cd ../../.. && pwd)
+ROOT := $(shell cd ../.. && pwd)
 SDK_SRC := $(ROOT)/packages/sdk/langs/node
 CLI_SRC := $(ROOT)/apps/cli
 CLI_ARTIFACT = $(CLI_SRC)/artifacts/$(CLI_TARGET)/$(CLI_BINARY)

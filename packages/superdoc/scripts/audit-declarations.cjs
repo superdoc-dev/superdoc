@@ -5,33 +5,27 @@
  * and reports:
  *
  *  Rule 1 (FAIL in strict mode): private workspace specifier in an emitted
- *    declaration that is NOT covered by `_internal-shims.d.ts` and NOT a
- *    legacy public surface. The shim file is the registry of "known
- *    unresolved" private modules whose types the RFC tolerates collapsing
- *    to `any`; legacy public surfaces (currently `@superdoc/super-editor`)
- *    resolve through the published dist tree. Anything outside that
- *    allowlist is a leak the RFC forbids: a consumer's strict-mode build
- *    fails to resolve the import.
+ *    declaration that is NOT in `RULE1_ALLOWLIST` (legacy public surfaces,
+ *    currently only `@superdoc/super-editor`). After SD-2942 there is no
+ *    `_internal-shims.d.ts` fallback, so any unrelocated `@superdoc/*`
+ *    specifier on the public surface fails the build instead of riding
+ *    through silently as `any`. If the file is present (a stale dist from
+ *    before SD-2942), its `declare module` entries still suppress Rule 1
+ *    for backward compatibility.
  *
  *  Rule 2 (FAIL in strict mode): package-manager-internal paths.
  *    `node_modules/.pnpm/...` paths leak the local install layout into a
  *    declaration that consumers cannot resolve.
  *
  *  Rule 3 (FAIL in strict mode): a relocated package reappears in
- *    `_internal-shims.d.ts`. The RFC's relocation pattern (SD-2842) routes
- *    Document API, contracts, layout-bridge, and painter-dom types through
- *    `superdoc`'s own dist tree; if any of those packages collapse back into
- *    an `any` shim, customers see the regression. This rule overlaps with
- *    the build-time check in `ensure-types.cjs`; keeping both lets the audit
- *    run as a standalone gate against any tarball, not just during a fresh
- *    build.
+ *    `_internal-shims.d.ts`. With SD-2942 the file is no longer emitted
+ *    by the build, so this rule is a no-op in steady state — kept as a
+ *    defense if a future change re-introduces the file or runs against
+ *    a stale tarball.
  *
- *  Informational: the set of modules still declared in `_internal-shims.d.ts`.
- *    The shim file may legitimately exist for legacy or internal-only
- *    declarations; the RFC's audit-gate rule is "no public type may resolve
- *    through it", not "the file must not exist". This list is reported so
- *    drift is visible and the surface can be tightened over time, but its
- *    contents do not fail the audit.
+ *  Informational: the set of modules still declared in `_internal-shims.d.ts`
+ *    when the file exists. After SD-2942 the file is not emitted, so this
+ *    section is normally absent.
  *
  * Default mode is strict: findings exit non-zero so a regression cannot
  * ship silently. Pass `--informational` (or set

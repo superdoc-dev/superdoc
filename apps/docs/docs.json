@@ -98,15 +98,14 @@
                 "pages": [
                   "editor/custom-ui/overview",
                   "editor/custom-ui/react-setup",
-                  {
-                    "group": "Toolbar and commands",
-                    "pages": ["editor/custom-ui/toolbar-and-commands", "editor/custom-ui/custom-commands"]
-                  },
+                  "editor/custom-ui/controller-setup",
+                  "editor/custom-ui/toolbar-and-commands",
+                  "editor/custom-ui/custom-commands",
                   "editor/custom-ui/comments",
-                  "editor/custom-ui/track-changes",
                   "editor/custom-ui/selection-and-viewport",
-                  "editor/custom-ui/navigation",
+                  "editor/custom-ui/track-changes",
                   "editor/custom-ui/document-control",
+                  "editor/custom-ui/navigation",
                   "editor/custom-ui/api-reference"
                 ]
               },

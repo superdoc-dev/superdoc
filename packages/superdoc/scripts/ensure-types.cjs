@@ -205,10 +205,21 @@ function rewriteDocApiPaths(fileContent, filePath) {
 // their declarations into superdoc's dist (via vite-plugin-dts include)
 // and redirect bare specifiers in emitted .d.ts files to relative
 // paths the consumer can resolve.
+//
+// SD-2893 note for pm-adapter: only specific type subpaths are
+// relocated (see vite.config.js include list). A bare `@superdoc/pm-adapter`
+// specifier would rewrite to a relative path that does not exist in dist.
+// The audit gate (RELOCATED_PACKAGES in audit-declarations.cjs) rejects
+// any unrewritten bare specifier at build time, so this is a build-time
+// failure rather than a silent consumer break. If a future public type
+// genuinely needs the pm-adapter barrel, widen the vite include and the
+// shim drain in lockstep.
 const RELOCATION_RULES = [
   { pkg: '@superdoc/contracts',     distEntry: 'layout-engine/contracts/src/index.d.ts' },
+  { pkg: '@superdoc/dom-contract',  distEntry: 'layout-engine/dom-contract/src/index.d.ts' },
   { pkg: '@superdoc/layout-bridge', distEntry: 'layout-engine/layout-bridge/src/index.d.ts' },
   { pkg: '@superdoc/painter-dom',   distEntry: 'layout-engine/painters/dom/src/index.d.ts' },
+  { pkg: '@superdoc/pm-adapter',    distEntry: 'layout-engine/pm-adapter/src/index.d.ts' },
 ];
 
 function makeRelocationRewriter({ pkg, distEntry }) {

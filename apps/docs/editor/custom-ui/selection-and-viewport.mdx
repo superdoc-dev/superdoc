@@ -72,6 +72,8 @@ export function LinkComposer({ onPosted }: { onPosted(): void }) {
 
 `capture()` returns `null` when the selection has no positional target. Captures are deep-frozen at runtime, so the consumer copy can't mutate the controller's memo.
 
+See the [selection capture example](https://github.com/superdoc-dev/superdoc/tree/main/examples/editor/custom-ui/selection-capture) for a runnable vanilla version showing why a captured selection survives composer focus changes.
+
 ## Scroll an entity into view
 
 ```ts

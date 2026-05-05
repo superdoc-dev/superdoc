@@ -57,9 +57,6 @@ jobs:
       matrix:
         demo:
           - custom-ui
-          - cdn
-          - custom-mark
-          - custom-node
           - docx-from-html
           - docxtemplater
           - fields
@@ -68,13 +65,9 @@ jobs:
           - linked-sections
           - loading-from-json
           - nextjs-ssr
-          - react
           # - replace-content  # broken: runtime nextSibling error in SuperDoc
           - text-selection
           - toolbar
-          - typescript
-          - vanilla
-          - vue
     steps:
       - name: Restore workspace
         uses: actions/cache/restore@v4

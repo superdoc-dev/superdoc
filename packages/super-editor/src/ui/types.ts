@@ -129,12 +129,38 @@ export interface SuperDocEditorLike {
    * PresentationEditor handle. Browser-only. The controller calls
    * `presentationEditor.getEntityRects(target)` from `ui.viewport.getRect`
    * to look up the painted-DOM rectangles for an entity (comment or
-   * tracked change) without leaking DOM elements through the public
-   * `ui.viewport` surface. Optional in the structural typing to keep
+   * tracked change), and `presentationEditor.getSelectionRects()` /
+   * `getRangeRects(from, to)` from `ui.selection.getRects` /
+   * `ui.selection.getAnchorRect` to anchor floating UI to the painted
+   * selection without consumers reaching for `window.getSelection()`
+   * (which reads from the offscreen ProseMirror DOM and returns the
+   * wrong coordinates). Optional in the structural typing to keep
    * SSR / non-browser stubs valid.
    */
   presentationEditor?: {
     getEntityRects?(target: { entityType?: unknown; entityId?: unknown; story?: unknown }): Array<{
+      pageIndex: number;
+      left: number;
+      right: number;
+      top: number;
+      bottom: number;
+      width: number;
+      height: number;
+    }>;
+    getSelectionRects?(relativeTo?: HTMLElement): Array<{
+      pageIndex: number;
+      left: number;
+      right: number;
+      top: number;
+      bottom: number;
+      width: number;
+      height: number;
+    }>;
+    getRangeRects?(
+      from: number,
+      to: number,
+      relativeTo?: HTMLElement,
+    ): Array<{
       pageIndex: number;
       left: number;
       right: number;
@@ -749,6 +775,65 @@ export interface SelectionHandle {
    * doc-api primitive does.
    */
   capture(): SelectionCapture | null;
+  /**
+   * Look up the painted rectangles of the current selection (or a
+   * captured one) in viewport coordinates.
+   *
+   * SuperDoc renders the visible page through the layout engine, not
+   * the hidden ProseMirror DOM. `window.getSelection().getRangeAt(0)
+   * .getBoundingClientRect()` reads from the offscreen PM and returns
+   * coordinates that don't match what the user sees — every consumer
+   * who reaches for it ships a broken bubble menu. This method asks
+   * the painter directly so the rects align with what's painted.
+   *
+   * Multi-line selections produce one rect per painted line in
+   * document order. Empty selections, no-editor state, or captures
+   * whose target no longer resolves return `[]`.
+   *
+   * Pass a `SelectionCapture` (from {@link capture}) to query rects
+   * for a frozen selection — useful when a composer has stolen focus
+   * and the editor's live selection is gone but you still want to
+   * position UI relative to where the user originally selected.
+   *
+   * The live path (no capture) handles all surfaces — body, header,
+   * footer, footnote, endnote — because `PresentationEditor` routes
+   * selection-rect lookups through its currently active editor.
+   *
+   * The captured path resolves block ids against the currently routed
+   * editor, so captures taken in a non-body story still produce the
+   * right rects while the user remains in that story (the common case
+   * for a bubble menu or composer that opens a sidebar). When focus
+   * has moved to a different story (or the body) by call time, the
+   * captured block ids no longer resolve and the call returns `[]`
+   * rather than rects from the wrong surface — fully cross-surface
+   * captured rects need a story-keyed lookup that doesn't yet exist
+   * publicly on `PresentationEditor`.
+   */
+  getRects(capture?: SelectionCapture | null): ViewportRect[];
+  /**
+   * Single anchor rect for floating UI (bubble menu, link popover,
+   * mention list). Sugar over {@link getRects}: returns the first
+   * line rect when `placement` is `'start'` (default), the last when
+   * `'end'`, or the union bounding box across all line rects when
+   * `'union'`. Returns `null` when there are no rects.
+   */
+  getAnchorRect(options?: SelectionAnchorRectOptions, capture?: SelectionCapture | null): ViewportRect | null;
+}
+
+/**
+ * Options for {@link SelectionHandle.getAnchorRect}.
+ */
+export interface SelectionAnchorRectOptions {
+  /**
+   * Which line of a multi-line selection to anchor to.
+   *
+   * - `'start'` (default): top-most line. Matches Word / Google Docs
+   *    bubble menu placement.
+   * - `'end'`: bottom-most line. Useful when the popover lives below.
+   * - `'union'`: bounding rect across every line. Useful for selection
+   *    overlays / shaded backgrounds.
+   */
+  placement?: 'start' | 'end' | 'union';
 }
 
 /**

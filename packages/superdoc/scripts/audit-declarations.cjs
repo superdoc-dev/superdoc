@@ -66,8 +66,10 @@ if (!fs.existsSync(distRoot)) {
 const RELOCATED_PACKAGES = [
   '@superdoc/document-api',
   '@superdoc/contracts',
+  '@superdoc/dom-contract',
   '@superdoc/layout-bridge',
   '@superdoc/painter-dom',
+  '@superdoc/pm-adapter',
 ];
 
 // Specifiers that may appear as bare imports in published d.ts files even

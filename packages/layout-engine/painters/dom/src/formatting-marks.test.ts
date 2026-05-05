@@ -124,6 +124,55 @@ describe('DomPainter formatting marks', () => {
     expect(paragraphMark?.style.left).toBe('144px');
   });
 
+  it('renders paragraph marks only on the final visual line of wrapped paragraphs', () => {
+    const text = 'Wrapped paragraph text';
+    const block = createParagraphBlock(text);
+    const measure: Measure = {
+      kind: 'paragraph',
+      lines: [
+        {
+          fromRun: 0,
+          fromChar: 0,
+          toRun: 0,
+          toChar: 8,
+          width: 64,
+          ascent: 12,
+          descent: 4,
+          lineHeight: 20,
+        },
+        {
+          fromRun: 0,
+          fromChar: 8,
+          toRun: 0,
+          toChar: text.length,
+          width: 112,
+          ascent: 12,
+          descent: 4,
+          lineHeight: 20,
+        },
+      ],
+      totalHeight: 40,
+    };
+    const layout = createParagraphLayout();
+    layout.pages[0].fragments[0].toLine = 2;
+
+    const painter = createDomPainter({
+      blocks: [block],
+      measures: [measure],
+      showFormattingMarks: true,
+    });
+
+    painter.paint(layout, container);
+
+    const lines = container.querySelectorAll<HTMLElement>('.superdoc-line');
+    expect(lines[0].querySelector('.superdoc-formatting-paragraph-mark')).toBeNull();
+
+    const paragraphMark = lines[1].querySelector<HTMLElement>('.superdoc-formatting-paragraph-mark');
+    expect(container.querySelectorAll('.superdoc-formatting-paragraph-mark')).toHaveLength(1);
+    expect(paragraphMark?.textContent).toBe('¶');
+    expect(paragraphMark?.style.left).toBe('112px');
+  });
+
   it('does not add formatting mark DOM when disabled', () => {
     const text = 'A B';
     const block = createParagraphBlock(text);

@@ -525,6 +525,14 @@ const applyInlineStyles = (el: HTMLElement, styles: Partial<CSSStyleDeclaration>
   });
 };
 
+const convertParagraphMarkToCellMark = (lineEl: HTMLElement): void => {
+  const mark = lineEl.querySelector<HTMLElement>('.superdoc-formatting-paragraph-mark');
+  if (!mark) return;
+
+  mark.classList.add('superdoc-formatting-cell-mark');
+  mark.textContent = '¤';
+};
+
 /**
  * Parameters for rendering a nested table inside a table cell.
  *
@@ -1304,6 +1312,7 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
         const paragraphMeasure = blockMeasure as ParagraphMeasure;
         const lines = paragraphMeasure.lines;
         const blockLineCount = lines?.length || 0;
+        const isLastBlockInCell = i === Math.min(blockMeasures.length, cellBlocks.length) - 1;
 
         /**
          * Extract Word layout information from paragraph attributes.
@@ -1417,6 +1426,9 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
             isLastLine,
             lineIdx === 0 && localStartLine === 0 ? listFirstLineTextStartPx : undefined,
           );
+          if (isLastBlockInCell && isLastLine) {
+            convertParagraphMarkToCellMark(lineEl);
+          }
           lineEl.style.paddingLeft = '';
           lineEl.style.paddingRight = '';
           lineEl.style.textIndent = '';

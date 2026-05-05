@@ -5452,11 +5452,11 @@ export class DomPainter {
     }
   }
 
-  private findLastTextRun(runs: Run[]): TextRun | null {
+  private findLastTextRun(runs: Run[]): { run: TextRun; index: number } | null {
     for (let index = runs.length - 1; index >= 0; index -= 1) {
       const run = runs[index];
       if (run && (run.kind === 'text' || run.kind === undefined) && 'text' in run) {
-        return run as TextRun;
+        return { run: run as TextRun, index };
       }
     }
     return null;
@@ -5464,14 +5464,20 @@ export class DomPainter {
 
   private appendFormattingParagraphMark(lineEl: HTMLElement, line: Line, runs: Run[], leftOffsetPx: number): void {
     if (!this.showFormattingMarks || !this.doc) return;
-    if (runs.length > 0 && line.toRun < runs.length - 1) return;
+    const lastTextRun = this.findLastTextRun(runs);
+    if (lastTextRun) {
+      if (line.toRun < lastTextRun.index) return;
+      if (line.toRun === lastTextRun.index && line.toChar < lastTextRun.run.text.length) return;
+    } else if (runs.length > 0 && line.toRun < runs.length - 1) {
+      return;
+    }
 
     const mark = this.doc.createElement('span');
     mark.classList.add('superdoc-formatting-paragraph-mark');
     mark.setAttribute('aria-hidden', 'true');
     mark.textContent = '¶';
 
-    const run = this.findLastTextRun(runs);
+    const run = lastTextRun?.run;
     if (run) {
       if (run.fontFamily) {
         mark.style.fontFamily = toCssFontFamily(run.fontFamily) ?? run.fontFamily;

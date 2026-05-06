@@ -41,6 +41,11 @@ export const deleteAtomAfter =
     // Case 1 only: caret is inside the atom's wrapper run, immediately
     // before the atom, and the atom is that run's only child. Remove the
     // whole wrapper as a single unit so we don't leak an empty run.
+    // Note: `childCount !== 1` is defensive — `calculateInlineRunPropertiesPlugin`
+    // segments runs by inline properties on every change, so a run holding
+    // text+atom+text is always split back into three single-content runs
+    // before this command runs. The guard documents the invariant; it isn't
+    // reachable through normal editing.
     const parent = $pos.parent;
     if (parent.type.name !== 'run' || parent.content.childCount !== 1) return false;
 

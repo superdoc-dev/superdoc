@@ -3032,8 +3032,12 @@ function getPageRelativeMeasurementBand(
  * 3. Page-relative header/footer overlays that do not intersect the region's
  *    reserved margin band — they should still render, but must not reserve
  *    body space like true header/footer content.
- * 4. Header/footer anchored overlays at least as tall as the measurement
- *    canvas — these are page-covering decoration, not body-reserving content.
+ * 4. Header/footer anchored overlays with wrap=None that cover the full
+ *    measurement canvas — `wrap=None` is OOXML's "absolute overlay, no flow
+ *    exclusion zone", so by definition such fragments must not reserve body
+ *    space. Combined with full-canvas bounds this catches page-covering
+ *    background shapes regardless of vRelativeFrom/hRelativeFrom (which the
+ *    authoring tool is free to set to column/paragraph for cover pages).
  */
 function shouldExcludeFromMeasurement(
   fragment: Fragment,
@@ -3077,8 +3081,21 @@ function shouldExcludeFromMeasurement(
     }
   }
 
+  // Only treat anchored content as a non-measurement overlay when it is
+  // unambiguously a page-covering decoration: wrap=None (no exclusion zone,
+  // so by definition the shape never reserves body space) AND fragment size
+  // covers the measurement canvas in both dimensions. Real anchored
+  // header/footer content uses wrap modes that affect flow (Square / Tight /
+  // TopAndBottom / Through), so it continues to reserve space.
   const fragmentHeight = typeof fragment.height === 'number' ? fragment.height : fragmentBottom - fragment.y;
-  if (kind && Number.isFinite(fragmentHeight) && fragmentHeight >= canvasHeight) {
+  const fragmentWidth = typeof fragment.width === 'number' ? fragment.width : 0;
+  const heightCoversCanvas = Number.isFinite(fragmentHeight) && fragmentHeight >= canvasHeight;
+  const widthCoversCanvas =
+    Number.isFinite(constraints.width) && constraints.width > 0 && fragmentWidth >= constraints.width;
+  const wrapType = anchoredBlock.wrap?.type;
+  const isOverlayWrap = wrapType === 'None';
+
+  if (kind && heightCoversCanvas && widthCoversCanvas && isOverlayWrap) {
     return true;
   }
 

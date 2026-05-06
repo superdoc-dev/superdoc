@@ -6765,13 +6765,13 @@ export class DomPainter {
 
             elem.style.position = 'absolute';
             elem.style.left = `${xPos}px`;
-            appendToLineGeo(elem, segmentRun, xPos, segment.width ?? 0);
+            appendToLineGeo(elem, segmentRun, xPos, segment.width);
 
             // Advance cumulative X by the resolved segment width. LineSegment.width is the
             // sole source of truth — the painter does not measure inline elements (SD-2957).
             // Use baseX (without indent) to keep cumulativeX relative to content area,
             // matching how segment.x values are calculated in layout.
-            const width = segment.width ?? 0;
+            const width = segment.width;
             cumulativeX = baseX + width;
             // Update SDT wrapper width if actual measured width differs from initial estimate
             if (geoSdtWrapper) {

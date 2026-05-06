@@ -227,7 +227,7 @@ export const preProcessNodesForFldChar = (nodes = [], docx) => {
         // A field from this level or higher ended in the children.
         const shouldPreserveRaw = childResult.unpairedEndPreserveRaw || isTrackChangeWrapper(node);
         if (collectedNodesStack.length === 0) {
-          processedNodes.push(node);
+          processedNodes.push(rawNode);
           unpairedEnd = true;
           if (shouldPreserveRaw) unpairedEndPreserveRaw = true;
           return;

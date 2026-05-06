@@ -418,6 +418,38 @@ describe('preProcessNodesForFldChar', () => {
     expect(docx['word/_rels/document.xml.rels'].elements[0].elements).toEqual([]);
   });
 
+  it('preserves raw child nodes when an unpaired end bubbles through a non-collecting wrapper', () => {
+    const expectedNodes = [
+      { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'begin' } }] },
+      {
+        name: 'w:r',
+        elements: [{ name: 'w:instrText', elements: [{ type: 'text', text: 'CUSTOMFIELD foo' }] }],
+      },
+      { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'separate' } }] },
+      { name: 'w:r', elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'value' }] }] },
+      {
+        name: 'w:p',
+        elements: [
+          {
+            name: 'w:sdt',
+            elements: [
+              {
+                name: 'w:sdtContent',
+                elements: [{ name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'end' } }] }],
+              },
+            ],
+          },
+        ],
+      },
+    ];
+    const nodes = structuredClone(expectedNodes);
+    const { processedNodes, unpairedBegin, unpairedEnd } = preProcessNodesForFldChar(nodes, mockDocx);
+
+    expect(processedNodes).toEqual(expectedNodes);
+    expect(unpairedBegin).toBeNull();
+    expect(unpairedEnd).toBeNull();
+  });
+
   it('should handle unpaired begin', () => {
     const nodes = [
       { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'begin' } }] },

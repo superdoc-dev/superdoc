@@ -51,16 +51,17 @@ export const preProcessNodesForFldChar = (nodes = [], docx) => {
       const rawCollectedNodes = rawCollectedNodesStack.pop().filter((n) => n !== null);
       const fieldRunRPr = fieldRunRPrStack.pop() ?? null;
       const currentField = currentFieldStack.pop();
-      const combinedResult = currentField.preserveRaw
-        ? { nodes: rawCollectedNodes, handled: false }
-        : _processCombinedNodesForFldChar(
-            collectedNodes,
-            currentField.instrText.trim(),
-            docx,
-            currentField.instructionTokens,
-            fieldRunRPr,
-          );
-      const outputNodes = combinedResult.handled ? combinedResult.nodes : rawCollectedNodes;
+      let outputNodes = rawCollectedNodes;
+      if (!currentField.preserveRaw) {
+        const combinedResult = _processCombinedNodesForFldChar(
+          collectedNodes,
+          currentField.instrText.trim(),
+          docx,
+          currentField.instructionTokens,
+          fieldRunRPr,
+        );
+        outputNodes = combinedResult.handled ? combinedResult.nodes : rawCollectedNodes;
+      }
       if (collectedNodesStack.length === 0) {
         // We have completed a top-level field, add the combined nodes to the output.
         processedNodes.push(...outputNodes);

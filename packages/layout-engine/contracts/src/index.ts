@@ -1587,6 +1587,8 @@ export type LineSegment = {
   toChar: number;
   width: number;
   x?: number;
+  /** End x for an immediately preceding tab when it differs from this segment's paint x. */
+  precedingTabEndX?: number;
 };
 
 export type LeaderDecoration = {

@@ -3355,7 +3355,7 @@ export class DomPainter {
           // Adjust availableWidth for first-line text indent (hanging indent).
           const isFirstLine = index === 0 && !paraContinuesFromPrev;
           const isListFirstLine = Boolean(hasListFirstLineMarker && fragment.markerTextWidth);
-          if (isFirstLine && !isListFirstLine && !hasExplicitSegmentPositioning) {
+          if (isFirstLine && !isListFirstLine && line.hasExplicitTabStops !== true) {
             availableWidthOverride = adjustAvailableWidthForTextIndent(
               availableWidthOverride,
               firstLineOffset,
@@ -6238,6 +6238,8 @@ export class DomPainter {
 
     // Check if any segments have explicit X positioning (from tab stops)
     const hasExplicitPositioning = line.segments?.some((seg) => seg.x !== undefined);
+    const explicitPositionedSegmentCount = line.segments?.filter((seg) => seg.x !== undefined).length ?? 0;
+    const hasMultipleExplicitPositionedSegments = explicitPositionedSegmentCount > 1;
     const availableWidth = availableWidthOverride ?? line.maxWidth ?? line.width;
 
     const justifyShouldApply = shouldApplyJustify({
@@ -6247,7 +6249,7 @@ export class DomPainter {
       // Caller already folds last-line + trailing lineBreak behavior into skipJustify.
       isLastLineOfParagraph: false,
       paragraphEndsWithLineBreak: false,
-      skipJustifyOverride: skipJustify,
+      skipJustifyOverride: skipJustify || hasMultipleExplicitPositionedSegments,
     });
 
     const countSpaces = (text: string): number => {
@@ -6473,10 +6475,8 @@ export class DomPainter {
       });
 
       /**
-       * Finds the X position where the immediate next segment starts after a given run index.
-       * Only returns the X if the very next run has a segment with explicit positioning.
-       * This handles tab-aligned text where right/center alignment causes the text to start
-       * before the tab stop target.
+       * Finds the immediate next segment carrying tab geometry after a given run index.
+       * This handles tab-aligned text and compensated tab paint geometry.
        *
        * WHY ONLY THE IMMEDIATE NEXT RUN:
        * When rendering a tab, we need to know where the content IMMEDIATELY after this tab begins
@@ -6492,17 +6492,20 @@ export class DomPainter {
        * - TAB2 will independently check "MoreContent" when it's rendered
        *
        * @param fromRunIndex - The run index to search after
-       * @returns The X position of the immediate next segment, or undefined if not found or not immediate
+       * @returns The immediate next tab-positioned segment, or undefined if not found or not immediate
        */
-      const findImmediateNextSegmentX = (fromRunIndex: number): number | undefined => {
+      const findImmediateNextSegment = (fromRunIndex: number): LineSegment | undefined => {
         // Only check the immediate next run - don't skip over other tabs
         const nextRunIdx = fromRunIndex + 1;
         if (nextRunIdx <= line.toRun) {
           const nextSegments = segmentsByRun.get(nextRunIdx);
           if (nextSegments && nextSegments.length > 0) {
             const firstSegment = nextSegments[0];
-            // Return the segment's explicit X if it has one (from tab alignment)
-            return firstSegment.x;
+            // Return only the first segment; later segments in the same run are
+            // not immediately adjacent to this tab.
+            return firstSegment.x !== undefined || firstSegment.precedingTabEndX !== undefined
+              ? firstSegment
+              : undefined;
           }
         }
         return undefined;
@@ -6565,13 +6568,15 @@ export class DomPainter {
 
         if (baseRun.kind === 'tab') {
           // Find where the immediate next content begins (if it's right after this tab)
-          const immediateNextX = findImmediateNextSegmentX(runIndex);
+          const immediateNextSegment = findImmediateNextSegment(runIndex);
           const tabStartX = cumulativeX;
 
           // The tab should span from where previous content ended to where next content begins.
-          // If the immediate next segment has an explicit X (from tab alignment), use that.
-          // Otherwise, use the tab's measured width to calculate the end position.
-          const tabEndX = immediateNextX !== undefined ? immediateNextX : tabStartX + (baseRun.width ?? 0);
+          // If layout supplied a tab-end boundary for the next segment, prefer it.
+          // Otherwise, use the next segment's explicit X (from tab alignment) or the
+          // tab's measured width.
+          const measuredTabEndX = tabStartX + (baseRun.width ?? 0);
+          const tabEndX = immediateNextSegment?.precedingTabEndX ?? immediateNextSegment?.x ?? measuredTabEndX;
           const actualTabWidth = tabEndX - tabStartX;
 
           const tabEl = this.doc!.createElement('span');
@@ -6742,10 +6747,12 @@ export class DomPainter {
             // Use baseX (without indent) to keep cumulativeX relative to content area,
             // matching how segment.x values are calculated in layout.
             const width = segment.width;
-            cumulativeX = baseX + width;
+            const justifyExtraWidth = spacingPerSpace !== 0 ? spacingPerSpace * countSpaces(segmentText) : 0;
+            const visualWidth = width + justifyExtraWidth;
+            cumulativeX = baseX + visualWidth;
             // Update SDT wrapper width if actual measured width differs from initial estimate
             if (geoSdtWrapper) {
-              geoSdtMaxRight = Math.max(geoSdtMaxRight, xPos + width);
+              geoSdtMaxRight = Math.max(geoSdtMaxRight, xPos + visualWidth);
             }
           }
         });

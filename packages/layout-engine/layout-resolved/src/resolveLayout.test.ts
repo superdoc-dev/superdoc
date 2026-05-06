@@ -1965,6 +1965,58 @@ describe('resolveLayout', () => {
       expect(content.lines[0].availableWidth).toBe(468);
     });
 
+    it('adjusts first-line hanging availableWidth for default-tab segment positioning', () => {
+      const layout: Layout = {
+        pageSize: { w: 816, h: 1056 },
+        pages: [
+          {
+            number: 1,
+            fragments: [{ kind: 'para', blockId: 'p1', fromLine: 0, toLine: 2, x: 96, y: 100, width: 624 }],
+          },
+        ],
+      };
+      const blocks: FlowBlock[] = [
+        {
+          kind: 'paragraph',
+          id: 'p1',
+          runs: [
+            { kind: 'text', text: 'WHEREAS:' },
+            { kind: 'tab', text: '\t' },
+            { kind: 'text', text: "The Board of Directors of the Corporation has reviewed the Corporation's " },
+          ],
+          attrs: { alignment: 'justify', indent: { left: 144, hanging: 144 } },
+        },
+      ];
+      const measures: Measure[] = [
+        {
+          kind: 'paragraph',
+          lines: [
+            makeLine({
+              fromRun: 0,
+              fromChar: 0,
+              toRun: 2,
+              toChar: 73,
+              width: 620.96875,
+              maxWidth: 624,
+              segments: [
+                { runIndex: 0, fromChar: 0, toChar: 8, width: 81.7734375 },
+                { runIndex: 2, fromChar: 0, toChar: 73, width: 476.96875, x: 144 },
+              ],
+            }),
+            makeLine({ fromRun: 2, fromChar: 73, toRun: 2, toChar: 80, width: 60, maxWidth: 480 }),
+          ],
+          totalHeight: 40,
+        },
+      ];
+
+      const result = resolveLayout({ layout, flowMode: 'paginated', blocks, measures });
+      const content = (result.pages[0].items[0] as any).content;
+      expect(content.lines[0].textIndentPx).toBe(0);
+      expect(content.lines[0].hasExplicitSegmentPositioning).toBe(true);
+      expect(content.lines[0].availableWidth).toBe(624);
+      expect(content.lines[1].availableWidth).toBe(480);
+    });
+
     it('does not adjust availableWidth for list paragraphs with hanging indent', () => {
       const layout: Layout = {
         pageSize: { w: 612, h: 792 },

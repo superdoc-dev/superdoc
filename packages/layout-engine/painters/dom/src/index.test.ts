@@ -564,6 +564,245 @@ describe('DomPainter', () => {
     expect(parseFloat(lines[0].style.wordSpacing)).toBeGreaterThan(0);
   });
 
+  it('uses first-line hanging width when justifying default-tab positioned segments', () => {
+    const tabBlock: FlowBlock = {
+      kind: 'paragraph',
+      id: 'hanging-default-tab-justify-block',
+      runs: [
+        { text: 'WHEREAS:', fontFamily: 'Times New Roman', fontSize: 16 },
+        { kind: 'tab', text: '\t', width: 62.2265625 },
+        {
+          text: "The Board of Directors of the Corporation has reviewed the Corporation's ",
+          fontFamily: 'Times New Roman',
+          fontSize: 16,
+        },
+        { text: 'next line', fontFamily: 'Times New Roman', fontSize: 16 },
+      ],
+      attrs: {
+        alignment: 'justify',
+        indent: { left: 144, hanging: 144 },
+      },
+    };
+
+    const tabMeasure: Measure = {
+      kind: 'paragraph',
+      lines: [
+        {
+          fromRun: 0,
+          fromChar: 0,
+          toRun: 2,
+          toChar: 73,
+          width: 620.96875,
+          maxWidth: 624,
+          ascent: 12,
+          descent: 4,
+          lineHeight: 20,
+          spaceCount: 10,
+          segments: [
+            { runIndex: 0, fromChar: 0, toChar: 8, width: 81.7734375 },
+            { runIndex: 2, fromChar: 0, toChar: 73, width: 476.96875, x: 144 },
+          ],
+        },
+        {
+          fromRun: 3,
+          fromChar: 0,
+          toRun: 3,
+          toChar: 9,
+          width: 60,
+          maxWidth: 480,
+          ascent: 12,
+          descent: 4,
+          lineHeight: 20,
+        },
+      ],
+      totalHeight: 40,
+    };
+
+    const tabLayout: Layout = {
+      pageSize: { w: 816, h: 1056 },
+      pages: [
+        {
+          number: 1,
+          fragments: [
+            {
+              kind: 'para',
+              blockId: 'hanging-default-tab-justify-block',
+              fromLine: 0,
+              toLine: 2,
+              x: 96,
+              y: 96,
+              width: 624,
+            },
+          ],
+        },
+      ],
+    };
+
+    const painter = createTestPainter({ blocks: [tabBlock], measures: [tabMeasure] });
+    painter.paint(tabLayout, mount);
+
+    const lines = Array.from(mount.querySelectorAll('.superdoc-line')) as HTMLElement[];
+    expect(lines).toHaveLength(2);
+    expect(parseFloat(lines[0].style.wordSpacing)).toBeCloseTo(0.303125, 5);
+  });
+
+  it('advances flow-positioned tab segments by accumulated justify spacing', () => {
+    const tabBlock: FlowBlock = {
+      kind: 'paragraph',
+      id: 'justify-tab-flow-segments',
+      runs: [
+        { text: '10.1', fontFamily: 'Calibri', fontSize: 13.333, bold: true },
+        { text: '.', fontFamily: 'Calibri', fontSize: 13.333 },
+        { kind: 'tab', text: '\t', width: 7 },
+        { text: 'Any and all', fontFamily: 'Calibri', fontSize: 13.333 },
+        { text: ' intellectual property', fontFamily: 'Calibri', fontSize: 13.333 },
+        { text: 'last line', fontFamily: 'Calibri', fontSize: 13.333 },
+      ],
+      attrs: { alignment: 'justify' },
+    };
+
+    const tabMeasure: Measure = {
+      kind: 'paragraph',
+      lines: [
+        {
+          fromRun: 0,
+          fromChar: 0,
+          toRun: 4,
+          toChar: 22,
+          width: 100,
+          maxWidth: 120,
+          ascent: 12,
+          descent: 4,
+          lineHeight: 20,
+          spaceCount: 4,
+          segments: [
+            { runIndex: 0, fromChar: 0, toChar: 4, width: 25 },
+            { runIndex: 1, fromChar: 0, toChar: 1, width: 4 },
+            { runIndex: 3, fromChar: 0, toChar: 11, width: 60, x: 37 },
+            { runIndex: 4, fromChar: 0, toChar: 22, width: 40 },
+          ],
+        },
+        {
+          fromRun: 5,
+          fromChar: 0,
+          toRun: 5,
+          toChar: 9,
+          width: 40,
+          maxWidth: 120,
+          ascent: 12,
+          descent: 4,
+          lineHeight: 20,
+        },
+      ],
+      totalHeight: 40,
+    };
+
+    const tabLayout: Layout = {
+      pageSize: { w: 200, h: 200 },
+      pages: [
+        {
+          number: 1,
+          fragments: [
+            {
+              kind: 'para',
+              blockId: 'justify-tab-flow-segments',
+              fromLine: 0,
+              toLine: 2,
+              x: 0,
+              y: 0,
+              width: 120,
+            },
+          ],
+        },
+      ],
+    };
+
+    const painter = createTestPainter({ blocks: [tabBlock], measures: [tabMeasure] });
+    painter.paint(tabLayout, mount);
+
+    const lines = Array.from(mount.querySelectorAll('.superdoc-line')) as HTMLElement[];
+    expect(lines[0].style.wordSpacing).toBe('5px');
+
+    const continuation = Array.from(lines[0].querySelectorAll('span')).find((span) =>
+      span.textContent?.includes('intellectual property'),
+    ) as HTMLElement;
+    expect(continuation.style.left).toBe('107px');
+  });
+
+  it('does not justify lines with multiple explicit tab columns', () => {
+    const tabBlock: FlowBlock = {
+      kind: 'paragraph',
+      id: 'multi-column-tab-justify-block',
+      runs: [
+        { text: 'Each Accident', fontFamily: 'Times New Roman', fontSize: 16 },
+        { kind: 'tab', text: '\t', width: 120 },
+        { text: '$1,000,000', fontFamily: 'Times New Roman', fontSize: 16 },
+        { text: 'last line', fontFamily: 'Times New Roman', fontSize: 16 },
+      ],
+      attrs: { alignment: 'justify' },
+    };
+
+    const tabMeasure: Measure = {
+      kind: 'paragraph',
+      lines: [
+        {
+          fromRun: 0,
+          fromChar: 0,
+          toRun: 2,
+          toChar: 10,
+          width: 160,
+          maxWidth: 300,
+          ascent: 12,
+          descent: 4,
+          lineHeight: 20,
+          spaceCount: 1,
+          segments: [
+            { runIndex: 0, fromChar: 0, toChar: 13, width: 94, x: 0 },
+            { runIndex: 2, fromChar: 0, toChar: 10, width: 72, x: 192 },
+          ],
+        },
+        {
+          fromRun: 3,
+          fromChar: 0,
+          toRun: 3,
+          toChar: 9,
+          width: 40,
+          maxWidth: 300,
+          ascent: 12,
+          descent: 4,
+          lineHeight: 20,
+        },
+      ],
+      totalHeight: 40,
+    };
+
+    const tabLayout: Layout = {
+      pageSize: { w: 400, h: 200 },
+      pages: [
+        {
+          number: 1,
+          fragments: [
+            {
+              kind: 'para',
+              blockId: 'multi-column-tab-justify-block',
+              fromLine: 0,
+              toLine: 2,
+              x: 0,
+              y: 0,
+              width: 300,
+            },
+          ],
+        },
+      ],
+    };
+
+    const painter = createTestPainter({ blocks: [tabBlock], measures: [tabMeasure] });
+    painter.paint(tabLayout, mount);
+
+    const lines = Array.from(mount.querySelectorAll('.superdoc-line')) as HTMLElement[];
+    expect(lines[0].style.wordSpacing).toBe('');
+  });
+
   it('skips justify for lines that used author-defined tab stops', () => {
     const tabBlock: FlowBlock = {
       kind: 'paragraph',

@@ -132,6 +132,18 @@ jobs:
           cd tests/consumer-typecheck
           node typecheck-matrix.mjs
 
+      - name: Deep public-type audit
+        # Recursive walk of every type reachable from superdoc's public
+        # exports in the installed tarball. Catches member-level / param
+        # / return `any` that the matrix and check-public-types miss.
+        # Reuses the fixture installed by the matrix step above; runs
+        # without --pack to avoid a second pack-and-install cycle.
+        # See tests/consumer-typecheck/deep-type-audit.README.md for
+        # the gate's behavior and how to update the allowlist.
+        run: |
+          cd tests/consumer-typecheck
+          node deep-type-audit.mjs
+
   unit-tests:
     needs: build
     runs-on: ubuntu-latest

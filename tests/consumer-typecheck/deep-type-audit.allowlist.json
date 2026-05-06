@@ -1,0 +1,2936 @@
+{
+  "version": 1,
+  "generatedAt": "2026-05-06T20:40:22.427Z",
+  "entries": [
+    {
+      "key": "export|node_modules/superdoc/dist/super-editor/src/editors/v1/index.d.ts|AnnotatorHelpers|AnnotatorHelpers",
+      "kind": "export",
+      "symbolPath": "AnnotatorHelpers",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/index.d.ts",
+      "line": 66,
+      "snippet": "AnnotatorHelpers",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "export|node_modules/superdoc/dist/super-editor/src/editors/v1/index.d.ts|TrackChangesBasePluginKey|TrackChangesBasePluginKey",
+      "kind": "export",
+      "symbolPath": "TrackChangesBasePluginKey",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/index.d.ts",
+      "line": 66,
+      "snippet": "TrackChangesBasePluginKey",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "export|node_modules/superdoc/dist/superdoc/src/index.d.ts|AnnotatorHelpers|AnnotatorHelpers",
+      "kind": "export",
+      "symbolPath": "AnnotatorHelpers",
+      "file": "node_modules/superdoc/dist/superdoc/src/index.d.ts",
+      "line": 170,
+      "snippet": "AnnotatorHelpers",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "export|node_modules/superdoc/dist/superdoc/src/index.d.ts|TrackChangesBasePluginKey|TrackChangesBasePluginKey",
+      "kind": "export",
+      "symbolPath": "TrackChangesBasePluginKey",
+      "file": "node_modules/superdoc/dist/superdoc/src/index.d.ts",
+      "line": 170,
+      "snippet": "TrackChangesBasePluginKey",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/super-editor/src/editors/v1/core/helpers/getActiveFormatting.d.ts|getActiveFormatting(editor)|editor: any",
+      "kind": "param",
+      "symbolPath": "getActiveFormatting(editor)",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/helpers/getActiveFormatting.d.ts",
+      "line": 1,
+      "snippet": "editor: any",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/super-editor/src/editors/v1/core/super-converter/zipper.d.ts|createZip(blobs)|blobs: any",
+      "kind": "param",
+      "symbolPath": "createZip(blobs)",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/super-converter/zipper.d.ts",
+      "line": 7,
+      "snippet": "blobs: any",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/super-editor/src/editors/v1/core/super-converter/zipper.d.ts|createZip(fileNames)|fileNames: any",
+      "kind": "param",
+      "symbolPath": "createZip(fileNames)",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/super-converter/zipper.d.ts",
+      "line": 7,
+      "snippet": "fileNames: any",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/super-editor/src/editors/v1/core/types/EditorConfig.d.ts|SuperDoc.provider.off(event)|event: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.provider.off(event)",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/types/EditorConfig.d.ts",
+      "line": 205,
+      "snippet": "event: any",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/super-editor/src/editors/v1/core/types/EditorConfig.d.ts|SuperDoc.provider.on(event)|event: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.provider.on(event)",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/types/EditorConfig.d.ts",
+      "line": 204,
+      "snippet": "event: any",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/comment/comments-plugin.d.ts|createOrUpdateTrackedChangeComment(options)|options: any",
+      "kind": "param",
+      "symbolPath": "createOrUpdateTrackedChangeComment(options)",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/comment/comments-plugin.d.ts",
+      "line": 3,
+      "snippet": "options: any",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/field-annotation/fieldAnnotationHelpers/findFieldAnnotations.d.ts|fieldAnnotationHelpers.findFieldAnnotations(predicate)|predicate: any",
+      "kind": "param",
+      "symbolPath": "fieldAnnotationHelpers.findFieldAnnotations(predicate)",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/field-annotation/fieldAnnotationHelpers/findFieldAnnotations.d.ts",
+      "line": 1,
+      "snippet": "predicate: any",
+      "owner": "tier-3-helpers",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/field-annotation/fieldAnnotationHelpers/findFieldAnnotations.d.ts|fieldAnnotationHelpers.findFieldAnnotations(state)|state: any",
+      "kind": "param",
+      "symbolPath": "fieldAnnotationHelpers.findFieldAnnotations(state)",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/field-annotation/fieldAnnotationHelpers/findFieldAnnotations.d.ts",
+      "line": 1,
+      "snippet": "state: any",
+      "owner": "tier-3-helpers",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/field-annotation/fieldAnnotationHelpers/findFieldAnnotationsBetween.d.ts|fieldAnnotationHelpers.findFieldAnnotationsBetween(doc)|doc: any",
+      "kind": "param",
+      "symbolPath": "fieldAnnotationHelpers.findFieldAnnotationsBetween(doc)",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/field-annotation/fieldAnnotationHelpers/findFieldAnnotationsBetween.d.ts",
+      "line": 8,
+      "snippet": "doc: any",
+      "owner": "tier-3-helpers",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/field-annotation/fieldAnnotationHelpers/findFieldAnnotationsBetween.d.ts|fieldAnnotationHelpers.findFieldAnnotationsBetween(from)|from: any",
+      "kind": "param",
+      "symbolPath": "fieldAnnotationHelpers.findFieldAnnotationsBetween(from)",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/field-annotation/fieldAnnotationHelpers/findFieldAnnotationsBetween.d.ts",
+      "line": 8,
+      "snippet": "from: any",
+      "owner": "tier-3-helpers",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/field-annotation/fieldAnnotationHelpers/findFieldAnnotationsBetween.d.ts|fieldAnnotationHelpers.findFieldAnnotationsBetween(to)|to: any",
+      "kind": "param",
+      "symbolPath": "fieldAnnotationHelpers.findFieldAnnotationsBetween(to)",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/field-annotation/fieldAnnotationHelpers/findFieldAnnotationsBetween.d.ts",
+      "line": 8,
+      "snippet": "to: any",
+      "owner": "tier-3-helpers",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/field-annotation/fieldAnnotationHelpers/findFieldAnnotationsByFieldId.d.ts|fieldAnnotationHelpers.findFieldAnnotationsByFieldId(fieldIdOrArray)|fieldIdOrArray: any",
+      "kind": "param",
+      "symbolPath": "fieldAnnotationHelpers.findFieldAnnotationsByFieldId(fieldIdOrArray)",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/field-annotation/fieldAnnotationHelpers/findFieldAnnotationsByFieldId.d.ts",
+      "line": 7,
+      "snippet": "fieldIdOrArray: any",
+      "owner": "tier-3-helpers",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/field-annotation/fieldAnnotationHelpers/findFieldAnnotationsByFieldId.d.ts|fieldAnnotationHelpers.findFieldAnnotationsByFieldId(state)|state: any",
+      "kind": "param",
+      "symbolPath": "fieldAnnotationHelpers.findFieldAnnotationsByFieldId(state)",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/field-annotation/fieldAnnotationHelpers/findFieldAnnotationsByFieldId.d.ts",
+      "line": 7,
+      "snippet": "state: any",
+      "owner": "tier-3-helpers",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/field-annotation/fieldAnnotationHelpers/findFirstFieldAnnotationByFieldId.d.ts|fieldAnnotationHelpers.findFirstFieldAnnotationByFieldId(fieldId)|fieldId: any",
+      "kind": "param",
+      "symbolPath": "fieldAnnotationHelpers.findFirstFieldAnnotationByFieldId(fieldId)",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/field-annotation/fieldAnnotationHelpers/findFirstFieldAnnotationByFieldId.d.ts",
+      "line": 7,
+      "snippet": "fieldId: any",
+      "owner": "tier-3-helpers",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/field-annotation/fieldAnnotationHelpers/findFirstFieldAnnotationByFieldId.d.ts|fieldAnnotationHelpers.findFirstFieldAnnotationByFieldId(state)|state: any",
+      "kind": "param",
+      "symbolPath": "fieldAnnotationHelpers.findFirstFieldAnnotationByFieldId(state)",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/field-annotation/fieldAnnotationHelpers/findFirstFieldAnnotationByFieldId.d.ts",
+      "line": 7,
+      "snippet": "state: any",
+      "owner": "tier-3-helpers",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/field-annotation/fieldAnnotationHelpers/findHeaderFooterAnnotationsByFieldId.d.ts|fieldAnnotationHelpers.findHeaderFooterAnnotationsByFieldId(activeSectionEditor)|activeSectionEditor: any",
+      "kind": "param",
+      "symbolPath": "fieldAnnotationHelpers.findHeaderFooterAnnotationsByFieldId(activeSectionEditor)",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/field-annotation/fieldAnnotationHelpers/findHeaderFooterAnnotationsByFieldId.d.ts",
+      "line": 7,
+      "snippet": "activeSectionEditor: any",
+      "owner": "tier-3-helpers",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/field-annotation/fieldAnnotationHelpers/findHeaderFooterAnnotationsByFieldId.d.ts|fieldAnnotationHelpers.findHeaderFooterAnnotationsByFieldId(editor)|editor: any",
+      "kind": "param",
+      "symbolPath": "fieldAnnotationHelpers.findHeaderFooterAnnotationsByFieldId(editor)",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/field-annotation/fieldAnnotationHelpers/findHeaderFooterAnnotationsByFieldId.d.ts",
+      "line": 7,
+      "snippet": "editor: any",
+      "owner": "tier-3-helpers",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/field-annotation/fieldAnnotationHelpers/findHeaderFooterAnnotationsByFieldId.d.ts|fieldAnnotationHelpers.findHeaderFooterAnnotationsByFieldId(fieldIdOrArray)|fieldIdOrArray: any",
+      "kind": "param",
+      "symbolPath": "fieldAnnotationHelpers.findHeaderFooterAnnotationsByFieldId(fieldIdOrArray)",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/field-annotation/fieldAnnotationHelpers/findHeaderFooterAnnotationsByFieldId.d.ts",
+      "line": 7,
+      "snippet": "fieldIdOrArray: any",
+      "owner": "tier-3-helpers",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/field-annotation/fieldAnnotationHelpers/findRemovedFieldAnnotations.d.ts|fieldAnnotationHelpers.findRemovedFieldAnnotations(tr)|tr: any",
+      "kind": "param",
+      "symbolPath": "fieldAnnotationHelpers.findRemovedFieldAnnotations(tr)",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/field-annotation/fieldAnnotationHelpers/findRemovedFieldAnnotations.d.ts",
+      "line": 1,
+      "snippet": "tr: any",
+      "owner": "tier-3-helpers",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/field-annotation/fieldAnnotationHelpers/getAllFieldAnnotations.d.ts|fieldAnnotationHelpers.getAllFieldAnnotations(state)|state: any",
+      "kind": "param",
+      "symbolPath": "fieldAnnotationHelpers.getAllFieldAnnotations(state)",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/field-annotation/fieldAnnotationHelpers/getAllFieldAnnotations.d.ts",
+      "line": 6,
+      "snippet": "state: any",
+      "owner": "tier-3-helpers",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/field-annotation/fieldAnnotationHelpers/getAllFieldAnnotationsWithRect.d.ts|fieldAnnotationHelpers.getAllFieldAnnotationsWithRect(state)|state: any",
+      "kind": "param",
+      "symbolPath": "fieldAnnotationHelpers.getAllFieldAnnotationsWithRect(state)",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/field-annotation/fieldAnnotationHelpers/getAllFieldAnnotationsWithRect.d.ts",
+      "line": 7,
+      "snippet": "state: any",
+      "owner": "tier-3-helpers",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/field-annotation/fieldAnnotationHelpers/getAllFieldAnnotationsWithRect.d.ts|fieldAnnotationHelpers.getAllFieldAnnotationsWithRect(view)|view: any",
+      "kind": "param",
+      "symbolPath": "fieldAnnotationHelpers.getAllFieldAnnotationsWithRect(view)",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/field-annotation/fieldAnnotationHelpers/getAllFieldAnnotationsWithRect.d.ts",
+      "line": 7,
+      "snippet": "view: any",
+      "owner": "tier-3-helpers",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/field-annotation/fieldAnnotationHelpers/getHeaderFooterAnnotations.d.ts|fieldAnnotationHelpers.getHeaderFooterAnnotations(editor)|editor: any",
+      "kind": "param",
+      "symbolPath": "fieldAnnotationHelpers.getHeaderFooterAnnotations(editor)",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/field-annotation/fieldAnnotationHelpers/getHeaderFooterAnnotations.d.ts",
+      "line": 1,
+      "snippet": "editor: any",
+      "owner": "tier-3-helpers",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/field-annotation/fieldAnnotationHelpers/trackFieldAnnotationsDeletion.d.ts|fieldAnnotationHelpers.trackFieldAnnotationsDeletion(editor)|editor: any",
+      "kind": "param",
+      "symbolPath": "fieldAnnotationHelpers.trackFieldAnnotationsDeletion(editor)",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/field-annotation/fieldAnnotationHelpers/trackFieldAnnotationsDeletion.d.ts",
+      "line": 1,
+      "snippet": "editor: any",
+      "owner": "tier-3-helpers",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/field-annotation/fieldAnnotationHelpers/trackFieldAnnotationsDeletion.d.ts|fieldAnnotationHelpers.trackFieldAnnotationsDeletion(tr)|tr: any",
+      "kind": "param",
+      "symbolPath": "fieldAnnotationHelpers.trackFieldAnnotationsDeletion(tr)",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/field-annotation/fieldAnnotationHelpers/trackFieldAnnotationsDeletion.d.ts",
+      "line": 1,
+      "snippet": "tr: any",
+      "owner": "tier-3-helpers",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/track-changes/trackChangesHelpers/documentHelpers.d.ts|trackChangesHelpers.documentHelpers.findChildren(descend)|descend: any",
+      "kind": "param",
+      "symbolPath": "trackChangesHelpers.documentHelpers.findChildren(descend)",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/track-changes/trackChangesHelpers/documentHelpers.d.ts",
+      "line": 7,
+      "snippet": "descend: any",
+      "owner": "tier-3-helpers",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/track-changes/trackChangesHelpers/documentHelpers.d.ts|trackChangesHelpers.documentHelpers.findChildren(node)|node: any",
+      "kind": "param",
+      "symbolPath": "trackChangesHelpers.documentHelpers.findChildren(node)",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/track-changes/trackChangesHelpers/documentHelpers.d.ts",
+      "line": 7,
+      "snippet": "node: any",
+      "owner": "tier-3-helpers",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/track-changes/trackChangesHelpers/documentHelpers.d.ts|trackChangesHelpers.documentHelpers.findChildren(predicate)|predicate: any",
+      "kind": "param",
+      "symbolPath": "trackChangesHelpers.documentHelpers.findChildren(predicate)",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/track-changes/trackChangesHelpers/documentHelpers.d.ts",
+      "line": 7,
+      "snippet": "predicate: any",
+      "owner": "tier-3-helpers",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/track-changes/trackChangesHelpers/documentHelpers.d.ts|trackChangesHelpers.documentHelpers.findInlineNodes(descend)|descend: any",
+      "kind": "param",
+      "symbolPath": "trackChangesHelpers.documentHelpers.findInlineNodes(descend)",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/track-changes/trackChangesHelpers/documentHelpers.d.ts",
+      "line": 8,
+      "snippet": "descend: any",
+      "owner": "tier-3-helpers",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/track-changes/trackChangesHelpers/documentHelpers.d.ts|trackChangesHelpers.documentHelpers.findInlineNodes(node)|node: any",
+      "kind": "param",
+      "symbolPath": "trackChangesHelpers.documentHelpers.findInlineNodes(node)",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/track-changes/trackChangesHelpers/documentHelpers.d.ts",
+      "line": 8,
+      "snippet": "node: any",
+      "owner": "tier-3-helpers",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/track-changes/trackChangesHelpers/documentHelpers.d.ts|trackChangesHelpers.documentHelpers.findMarkPosition(doc)|doc: any",
+      "kind": "param",
+      "symbolPath": "trackChangesHelpers.documentHelpers.findMarkPosition(doc)",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/track-changes/trackChangesHelpers/documentHelpers.d.ts",
+      "line": 1,
+      "snippet": "doc: any",
+      "owner": "tier-3-helpers",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/track-changes/trackChangesHelpers/documentHelpers.d.ts|trackChangesHelpers.documentHelpers.findMarkPosition(markName)|markName: any",
+      "kind": "param",
+      "symbolPath": "trackChangesHelpers.documentHelpers.findMarkPosition(markName)",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/track-changes/trackChangesHelpers/documentHelpers.d.ts",
+      "line": 1,
+      "snippet": "markName: any",
+      "owner": "tier-3-helpers",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/track-changes/trackChangesHelpers/documentHelpers.d.ts|trackChangesHelpers.documentHelpers.findMarkPosition(pos)|pos: any",
+      "kind": "param",
+      "symbolPath": "trackChangesHelpers.documentHelpers.findMarkPosition(pos)",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/track-changes/trackChangesHelpers/documentHelpers.d.ts",
+      "line": 1,
+      "snippet": "pos: any",
+      "owner": "tier-3-helpers",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/track-changes/trackChangesHelpers/documentHelpers.d.ts|trackChangesHelpers.documentHelpers.flatten(node)|node: any",
+      "kind": "param",
+      "symbolPath": "trackChangesHelpers.documentHelpers.flatten(node)",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/track-changes/trackChangesHelpers/documentHelpers.d.ts",
+      "line": 6,
+      "snippet": "node: any",
+      "owner": "tier-3-helpers",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/track-changes/trackChangesHelpers/markSnapshotHelpers.d.ts|trackChangesHelpers.getTypeName(markLike)|markLike: any",
+      "kind": "param",
+      "symbolPath": "trackChangesHelpers.getTypeName(markLike)",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/track-changes/trackChangesHelpers/markSnapshotHelpers.d.ts",
+      "line": 1,
+      "snippet": "markLike: any",
+      "owner": "tier-3-helpers",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/track-changes/trackChangesHelpers/markSnapshotHelpers.d.ts|trackChangesHelpers.hasMatchingMark(marks)|marks: any",
+      "kind": "param",
+      "symbolPath": "trackChangesHelpers.hasMatchingMark(marks)",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/track-changes/trackChangesHelpers/markSnapshotHelpers.d.ts",
+      "line": 5,
+      "snippet": "marks: any",
+      "owner": "tier-3-helpers",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/track-changes/trackChangesHelpers/markSnapshotHelpers.d.ts|trackChangesHelpers.hasMatchingMark(stepMark)|stepMark: any",
+      "kind": "param",
+      "symbolPath": "trackChangesHelpers.hasMatchingMark(stepMark)",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/track-changes/trackChangesHelpers/markSnapshotHelpers.d.ts",
+      "line": 5,
+      "snippet": "stepMark: any",
+      "owner": "tier-3-helpers",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/track-changes/trackChangesHelpers/markSnapshotHelpers.d.ts|trackChangesHelpers.isTrackFormatNoOp(after)|after: any",
+      "kind": "param",
+      "symbolPath": "trackChangesHelpers.isTrackFormatNoOp(after)",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/track-changes/trackChangesHelpers/markSnapshotHelpers.d.ts",
+      "line": 2,
+      "snippet": "after: any",
+      "owner": "tier-3-helpers",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/track-changes/trackChangesHelpers/markSnapshotHelpers.d.ts|trackChangesHelpers.isTrackFormatNoOp(before)|before: any",
+      "kind": "param",
+      "symbolPath": "trackChangesHelpers.isTrackFormatNoOp(before)",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/track-changes/trackChangesHelpers/markSnapshotHelpers.d.ts",
+      "line": 2,
+      "snippet": "before: any",
+      "owner": "tier-3-helpers",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/track-changes/trackChangesHelpers/markSnapshotHelpers.d.ts|trackChangesHelpers.markSnapshotMatchesStepMark(snapshot)|snapshot: any",
+      "kind": "param",
+      "symbolPath": "trackChangesHelpers.markSnapshotMatchesStepMark(snapshot)",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/track-changes/trackChangesHelpers/markSnapshotHelpers.d.ts",
+      "line": 4,
+      "snippet": "snapshot: any",
+      "owner": "tier-3-helpers",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/track-changes/trackChangesHelpers/markSnapshotHelpers.d.ts|trackChangesHelpers.markSnapshotMatchesStepMark(stepMark)|stepMark: any",
+      "kind": "param",
+      "symbolPath": "trackChangesHelpers.markSnapshotMatchesStepMark(stepMark)",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/track-changes/trackChangesHelpers/markSnapshotHelpers.d.ts",
+      "line": 4,
+      "snippet": "stepMark: any",
+      "owner": "tier-3-helpers",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/track-changes/trackChangesHelpers/markSnapshotHelpers.d.ts|trackChangesHelpers.upsertMarkSnapshotByType(incoming)|incoming: any",
+      "kind": "param",
+      "symbolPath": "trackChangesHelpers.upsertMarkSnapshotByType(incoming)",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/track-changes/trackChangesHelpers/markSnapshotHelpers.d.ts",
+      "line": 6,
+      "snippet": "incoming: any",
+      "owner": "tier-3-helpers",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/track-changes/trackChangesHelpers/markSnapshotHelpers.d.ts|trackChangesHelpers.upsertMarkSnapshotByType(snapshots)|snapshots: any",
+      "kind": "param",
+      "symbolPath": "trackChangesHelpers.upsertMarkSnapshotByType(snapshots)",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/track-changes/trackChangesHelpers/markSnapshotHelpers.d.ts",
+      "line": 6,
+      "snippet": "snapshots: any",
+      "owner": "tier-3-helpers",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/composables/use-high-contrast-mode.d.ts|SuperDoc.highContrastModeStore.setHighContrastMode(value)|value: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.highContrastModeStore.setHighContrastMode(value)",
+      "file": "node_modules/superdoc/dist/superdoc/src/composables/use-high-contrast-mode.d.ts",
+      "line": 3,
+      "snippet": "value: any",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts|SuperDoc.commentsStore<1><0>.belongsToDocument(activeDocumentId)|activeDocumentId: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.commentsStore<1><0>.belongsToDocument(activeDocumentId)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts",
+      "line": 86,
+      "snippet": "activeDocumentId: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts|SuperDoc.commentsStore<1><0>.belongsToDocument(comment)|comment: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.commentsStore<1><0>.belongsToDocument(comment)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts",
+      "line": 86,
+      "snippet": "comment: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts|SuperDoc.commentsStore<1><0>.cancelComment(superdoc)|superdoc: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.commentsStore<1><0>.cancelComment(superdoc)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts",
+      "line": 105,
+      "snippet": "superdoc: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts|SuperDoc.commentsStore<1><0>.getCommentAliasIds(commentOrId)|commentOrId: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.commentsStore<1><0>.getCommentAliasIds(commentOrId)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts",
+      "line": 67,
+      "snippet": "commentOrId: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts|SuperDoc.commentsStore<1><0>.getCommentDocumentId(comment)|comment: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.commentsStore<1><0>.getCommentDocumentId(comment)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts",
+      "line": 85,
+      "snippet": "comment: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts|SuperDoc.commentsStore<1><0>.getCommentLocation(parent)|parent: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.commentsStore<1><0>.getCommentLocation(parent)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts",
+      "line": 91,
+      "snippet": "parent: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts|SuperDoc.commentsStore<1><0>.getCommentLocation(selection)|selection: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.commentsStore<1><0>.getCommentLocation(selection)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts",
+      "line": 91,
+      "snippet": "selection: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts|SuperDoc.commentsStore<1><0>.handleEditorLocationsUpdate(allCommentPositions)|allCommentPositions: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.commentsStore<1><0>.handleEditorLocationsUpdate(allCommentPositions)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts",
+      "line": 116,
+      "snippet": "allCommentPositions: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts|SuperDoc.commentsStore<1><0>.hasOverlapId(id)|id: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.commentsStore<1><0>.hasOverlapId(id)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts",
+      "line": 95,
+      "snippet": "id: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts|SuperDoc.commentsStore<1><0>.removePendingComment(superdoc)|superdoc: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.commentsStore<1><0>.removePendingComment(superdoc)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts",
+      "line": 110,
+      "snippet": "superdoc: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts|SuperDoc.commentsStore<1><0>.resolveCommentPositionEntry(commentOrId)|commentOrId: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.commentsStore<1><0>.resolveCommentPositionEntry(commentOrId)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts",
+      "line": 81,
+      "snippet": "commentOrId: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts|SuperDoc.commentsStore<1><0>.resolveCommentPositionEntry(preferredId)|preferredId: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.commentsStore<1><0>.resolveCommentPositionEntry(preferredId)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts",
+      "line": 81,
+      "snippet": "preferredId: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts|SuperDoc.commentsStore<1><0>.showAddComment(superdoc)|superdoc: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.commentsStore<1><0>.showAddComment(superdoc)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts",
+      "line": 101,
+      "snippet": "superdoc: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts|SuperDoc.commentsStore<2><0>.belongsToDocument(activeDocumentId)|activeDocumentId: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.commentsStore<2><0>.belongsToDocument(activeDocumentId)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts",
+      "line": 221,
+      "snippet": "activeDocumentId: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts|SuperDoc.commentsStore<2><0>.belongsToDocument(comment)|comment: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.commentsStore<2><0>.belongsToDocument(comment)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts",
+      "line": 221,
+      "snippet": "comment: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts|SuperDoc.commentsStore<2><0>.cancelComment(superdoc)|superdoc: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.commentsStore<2><0>.cancelComment(superdoc)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts",
+      "line": 240,
+      "snippet": "superdoc: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts|SuperDoc.commentsStore<2><0>.getCommentAliasIds(commentOrId)|commentOrId: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.commentsStore<2><0>.getCommentAliasIds(commentOrId)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts",
+      "line": 202,
+      "snippet": "commentOrId: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts|SuperDoc.commentsStore<2><0>.getCommentDocumentId(comment)|comment: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.commentsStore<2><0>.getCommentDocumentId(comment)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts",
+      "line": 220,
+      "snippet": "comment: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts|SuperDoc.commentsStore<2><0>.getCommentLocation(parent)|parent: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.commentsStore<2><0>.getCommentLocation(parent)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts",
+      "line": 226,
+      "snippet": "parent: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts|SuperDoc.commentsStore<2><0>.getCommentLocation(selection)|selection: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.commentsStore<2><0>.getCommentLocation(selection)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts",
+      "line": 226,
+      "snippet": "selection: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts|SuperDoc.commentsStore<2><0>.handleEditorLocationsUpdate(allCommentPositions)|allCommentPositions: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.commentsStore<2><0>.handleEditorLocationsUpdate(allCommentPositions)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts",
+      "line": 251,
+      "snippet": "allCommentPositions: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts|SuperDoc.commentsStore<2><0>.hasOverlapId(id)|id: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.commentsStore<2><0>.hasOverlapId(id)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts",
+      "line": 230,
+      "snippet": "id: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts|SuperDoc.commentsStore<2><0>.removePendingComment(superdoc)|superdoc: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.commentsStore<2><0>.removePendingComment(superdoc)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts",
+      "line": 245,
+      "snippet": "superdoc: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts|SuperDoc.commentsStore<2><0>.resolveCommentPositionEntry(commentOrId)|commentOrId: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.commentsStore<2><0>.resolveCommentPositionEntry(commentOrId)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts",
+      "line": 216,
+      "snippet": "commentOrId: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts|SuperDoc.commentsStore<2><0>.resolveCommentPositionEntry(preferredId)|preferredId: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.commentsStore<2><0>.resolveCommentPositionEntry(preferredId)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts",
+      "line": 216,
+      "snippet": "preferredId: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts|SuperDoc.commentsStore<2><0>.showAddComment(superdoc)|superdoc: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.commentsStore<2><0>.showAddComment(superdoc)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts",
+      "line": 236,
+      "snippet": "superdoc: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts|SuperDoc.commentsStore<3><0>.belongsToDocument(activeDocumentId)|activeDocumentId: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.commentsStore<3><0>.belongsToDocument(activeDocumentId)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts",
+      "line": 356,
+      "snippet": "activeDocumentId: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts|SuperDoc.commentsStore<3><0>.belongsToDocument(comment)|comment: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.commentsStore<3><0>.belongsToDocument(comment)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts",
+      "line": 356,
+      "snippet": "comment: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts|SuperDoc.commentsStore<3><0>.cancelComment(superdoc)|superdoc: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.commentsStore<3><0>.cancelComment(superdoc)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts",
+      "line": 375,
+      "snippet": "superdoc: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts|SuperDoc.commentsStore<3><0>.getCommentAliasIds(commentOrId)|commentOrId: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.commentsStore<3><0>.getCommentAliasIds(commentOrId)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts",
+      "line": 337,
+      "snippet": "commentOrId: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts|SuperDoc.commentsStore<3><0>.getCommentDocumentId(comment)|comment: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.commentsStore<3><0>.getCommentDocumentId(comment)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts",
+      "line": 355,
+      "snippet": "comment: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts|SuperDoc.commentsStore<3><0>.getCommentLocation(parent)|parent: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.commentsStore<3><0>.getCommentLocation(parent)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts",
+      "line": 361,
+      "snippet": "parent: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts|SuperDoc.commentsStore<3><0>.getCommentLocation(selection)|selection: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.commentsStore<3><0>.getCommentLocation(selection)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts",
+      "line": 361,
+      "snippet": "selection: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts|SuperDoc.commentsStore<3><0>.handleEditorLocationsUpdate(allCommentPositions)|allCommentPositions: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.commentsStore<3><0>.handleEditorLocationsUpdate(allCommentPositions)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts",
+      "line": 386,
+      "snippet": "allCommentPositions: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts|SuperDoc.commentsStore<3><0>.hasOverlapId(id)|id: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.commentsStore<3><0>.hasOverlapId(id)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts",
+      "line": 365,
+      "snippet": "id: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts|SuperDoc.commentsStore<3><0>.removePendingComment(superdoc)|superdoc: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.commentsStore<3><0>.removePendingComment(superdoc)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts",
+      "line": 380,
+      "snippet": "superdoc: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts|SuperDoc.commentsStore<3><0>.resolveCommentPositionEntry(commentOrId)|commentOrId: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.commentsStore<3><0>.resolveCommentPositionEntry(commentOrId)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts",
+      "line": 351,
+      "snippet": "commentOrId: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts|SuperDoc.commentsStore<3><0>.resolveCommentPositionEntry(preferredId)|preferredId: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.commentsStore<3><0>.resolveCommentPositionEntry(preferredId)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts",
+      "line": 351,
+      "snippet": "preferredId: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts|SuperDoc.commentsStore<3><0>.showAddComment(superdoc)|superdoc: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.commentsStore<3><0>.showAddComment(superdoc)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts",
+      "line": 371,
+      "snippet": "superdoc: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts|SuperDoc.superdocStore<1><0>.commentsStore<3>.belongsToDocument(activeDocumentId)|activeDocumentId: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.superdocStore<1><0>.commentsStore<3>.belongsToDocument(activeDocumentId)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts",
+      "line": 357,
+      "snippet": "activeDocumentId: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts|SuperDoc.superdocStore<1><0>.commentsStore<3>.belongsToDocument(comment)|comment: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.superdocStore<1><0>.commentsStore<3>.belongsToDocument(comment)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts",
+      "line": 357,
+      "snippet": "comment: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts|SuperDoc.superdocStore<1><0>.commentsStore<3>.cancelComment(superdoc)|superdoc: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.superdocStore<1><0>.commentsStore<3>.cancelComment(superdoc)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts",
+      "line": 376,
+      "snippet": "superdoc: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts|SuperDoc.superdocStore<1><0>.commentsStore<3>.getCommentAliasIds(commentOrId)|commentOrId: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.superdocStore<1><0>.commentsStore<3>.getCommentAliasIds(commentOrId)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts",
+      "line": 338,
+      "snippet": "commentOrId: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts|SuperDoc.superdocStore<1><0>.commentsStore<3>.getCommentDocumentId(comment)|comment: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.superdocStore<1><0>.commentsStore<3>.getCommentDocumentId(comment)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts",
+      "line": 356,
+      "snippet": "comment: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts|SuperDoc.superdocStore<1><0>.commentsStore<3>.getCommentLocation(parent)|parent: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.superdocStore<1><0>.commentsStore<3>.getCommentLocation(parent)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts",
+      "line": 362,
+      "snippet": "parent: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts|SuperDoc.superdocStore<1><0>.commentsStore<3>.getCommentLocation(selection)|selection: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.superdocStore<1><0>.commentsStore<3>.getCommentLocation(selection)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts",
+      "line": 362,
+      "snippet": "selection: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts|SuperDoc.superdocStore<1><0>.commentsStore<3>.handleEditorLocationsUpdate(allCommentPositions)|allCommentPositions: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.superdocStore<1><0>.commentsStore<3>.handleEditorLocationsUpdate(allCommentPositions)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts",
+      "line": 387,
+      "snippet": "allCommentPositions: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts|SuperDoc.superdocStore<1><0>.commentsStore<3>.hasOverlapId(id)|id: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.superdocStore<1><0>.commentsStore<3>.hasOverlapId(id)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts",
+      "line": 366,
+      "snippet": "id: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts|SuperDoc.superdocStore<1><0>.commentsStore<3>.removePendingComment(superdoc)|superdoc: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.superdocStore<1><0>.commentsStore<3>.removePendingComment(superdoc)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts",
+      "line": 381,
+      "snippet": "superdoc: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts|SuperDoc.superdocStore<1><0>.commentsStore<3>.resolveCommentPositionEntry(commentOrId)|commentOrId: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.superdocStore<1><0>.commentsStore<3>.resolveCommentPositionEntry(commentOrId)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts",
+      "line": 352,
+      "snippet": "commentOrId: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts|SuperDoc.superdocStore<1><0>.commentsStore<3>.resolveCommentPositionEntry(preferredId)|preferredId: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.superdocStore<1><0>.commentsStore<3>.resolveCommentPositionEntry(preferredId)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts",
+      "line": 352,
+      "snippet": "preferredId: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts|SuperDoc.superdocStore<1><0>.commentsStore<3>.showAddComment(superdoc)|superdoc: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.superdocStore<1><0>.commentsStore<3>.showAddComment(superdoc)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts",
+      "line": 372,
+      "snippet": "superdoc: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts|SuperDoc.superdocStore<1><0>.getDocument(documentId)|documentId: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.superdocStore<1><0>.getDocument(documentId)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts",
+      "line": 450,
+      "snippet": "documentId: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts|SuperDoc.superdocStore<1><0>.getPageBounds(documentId)|documentId: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.superdocStore<1><0>.getPageBounds(documentId)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts",
+      "line": 451,
+      "snippet": "documentId: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts|SuperDoc.superdocStore<1><0>.getPageBounds(page)|page: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.superdocStore<1><0>.getPageBounds(page)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts",
+      "line": 451,
+      "snippet": "page: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts|SuperDoc.superdocStore<1><0>.handlePageReady(containerBounds)|containerBounds: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.superdocStore<1><0>.handlePageReady(containerBounds)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts",
+      "line": 449,
+      "snippet": "containerBounds: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts|SuperDoc.superdocStore<1><0>.handlePageReady(documentId)|documentId: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.superdocStore<1><0>.handlePageReady(documentId)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts",
+      "line": 449,
+      "snippet": "documentId: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts|SuperDoc.superdocStore<1><0>.handlePageReady(index)|index: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.superdocStore<1><0>.handlePageReady(index)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts",
+      "line": 449,
+      "snippet": "index: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts|SuperDoc.superdocStore<1><0>.init(config)|config: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.superdocStore<1><0>.init(config)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts",
+      "line": 446,
+      "snippet": "config: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts|SuperDoc.superdocStore<1><0>.setExceptionHandler(handler)|handler: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.superdocStore<1><0>.setExceptionHandler(handler)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts",
+      "line": 447,
+      "snippet": "handler: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts|SuperDoc.superdocStore<2><0>.commentsStore<3>.belongsToDocument(activeDocumentId)|activeDocumentId: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.superdocStore<2><0>.commentsStore<3>.belongsToDocument(activeDocumentId)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts",
+      "line": 810,
+      "snippet": "activeDocumentId: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts|SuperDoc.superdocStore<2><0>.commentsStore<3>.belongsToDocument(comment)|comment: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.superdocStore<2><0>.commentsStore<3>.belongsToDocument(comment)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts",
+      "line": 810,
+      "snippet": "comment: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts|SuperDoc.superdocStore<2><0>.commentsStore<3>.cancelComment(superdoc)|superdoc: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.superdocStore<2><0>.commentsStore<3>.cancelComment(superdoc)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts",
+      "line": 829,
+      "snippet": "superdoc: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts|SuperDoc.superdocStore<2><0>.commentsStore<3>.getCommentAliasIds(commentOrId)|commentOrId: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.superdocStore<2><0>.commentsStore<3>.getCommentAliasIds(commentOrId)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts",
+      "line": 791,
+      "snippet": "commentOrId: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts|SuperDoc.superdocStore<2><0>.commentsStore<3>.getCommentDocumentId(comment)|comment: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.superdocStore<2><0>.commentsStore<3>.getCommentDocumentId(comment)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts",
+      "line": 809,
+      "snippet": "comment: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts|SuperDoc.superdocStore<2><0>.commentsStore<3>.getCommentLocation(parent)|parent: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.superdocStore<2><0>.commentsStore<3>.getCommentLocation(parent)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts",
+      "line": 815,
+      "snippet": "parent: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts|SuperDoc.superdocStore<2><0>.commentsStore<3>.getCommentLocation(selection)|selection: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.superdocStore<2><0>.commentsStore<3>.getCommentLocation(selection)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts",
+      "line": 815,
+      "snippet": "selection: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts|SuperDoc.superdocStore<2><0>.commentsStore<3>.handleEditorLocationsUpdate(allCommentPositions)|allCommentPositions: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.superdocStore<2><0>.commentsStore<3>.handleEditorLocationsUpdate(allCommentPositions)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts",
+      "line": 840,
+      "snippet": "allCommentPositions: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts|SuperDoc.superdocStore<2><0>.commentsStore<3>.hasOverlapId(id)|id: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.superdocStore<2><0>.commentsStore<3>.hasOverlapId(id)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts",
+      "line": 819,
+      "snippet": "id: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts|SuperDoc.superdocStore<2><0>.commentsStore<3>.removePendingComment(superdoc)|superdoc: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.superdocStore<2><0>.commentsStore<3>.removePendingComment(superdoc)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts",
+      "line": 834,
+      "snippet": "superdoc: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts|SuperDoc.superdocStore<2><0>.commentsStore<3>.resolveCommentPositionEntry(commentOrId)|commentOrId: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.superdocStore<2><0>.commentsStore<3>.resolveCommentPositionEntry(commentOrId)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts",
+      "line": 805,
+      "snippet": "commentOrId: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts|SuperDoc.superdocStore<2><0>.commentsStore<3>.resolveCommentPositionEntry(preferredId)|preferredId: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.superdocStore<2><0>.commentsStore<3>.resolveCommentPositionEntry(preferredId)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts",
+      "line": 805,
+      "snippet": "preferredId: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts|SuperDoc.superdocStore<2><0>.commentsStore<3>.showAddComment(superdoc)|superdoc: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.superdocStore<2><0>.commentsStore<3>.showAddComment(superdoc)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts",
+      "line": 825,
+      "snippet": "superdoc: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts|SuperDoc.superdocStore<2><0>.getDocument(documentId)|documentId: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.superdocStore<2><0>.getDocument(documentId)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts",
+      "line": 903,
+      "snippet": "documentId: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts|SuperDoc.superdocStore<2><0>.getPageBounds(documentId)|documentId: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.superdocStore<2><0>.getPageBounds(documentId)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts",
+      "line": 904,
+      "snippet": "documentId: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts|SuperDoc.superdocStore<2><0>.getPageBounds(page)|page: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.superdocStore<2><0>.getPageBounds(page)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts",
+      "line": 904,
+      "snippet": "page: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts|SuperDoc.superdocStore<2><0>.handlePageReady(containerBounds)|containerBounds: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.superdocStore<2><0>.handlePageReady(containerBounds)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts",
+      "line": 902,
+      "snippet": "containerBounds: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts|SuperDoc.superdocStore<2><0>.handlePageReady(documentId)|documentId: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.superdocStore<2><0>.handlePageReady(documentId)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts",
+      "line": 902,
+      "snippet": "documentId: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts|SuperDoc.superdocStore<2><0>.handlePageReady(index)|index: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.superdocStore<2><0>.handlePageReady(index)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts",
+      "line": 902,
+      "snippet": "index: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts|SuperDoc.superdocStore<2><0>.init(config)|config: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.superdocStore<2><0>.init(config)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts",
+      "line": 899,
+      "snippet": "config: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts|SuperDoc.superdocStore<2><0>.setExceptionHandler(handler)|handler: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.superdocStore<2><0>.setExceptionHandler(handler)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts",
+      "line": 900,
+      "snippet": "handler: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts|SuperDoc.superdocStore<3><0>.commentsStore<3>.belongsToDocument(activeDocumentId)|activeDocumentId: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.superdocStore<3><0>.commentsStore<3>.belongsToDocument(activeDocumentId)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts",
+      "line": 1263,
+      "snippet": "activeDocumentId: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts|SuperDoc.superdocStore<3><0>.commentsStore<3>.belongsToDocument(comment)|comment: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.superdocStore<3><0>.commentsStore<3>.belongsToDocument(comment)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts",
+      "line": 1263,
+      "snippet": "comment: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts|SuperDoc.superdocStore<3><0>.commentsStore<3>.cancelComment(superdoc)|superdoc: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.superdocStore<3><0>.commentsStore<3>.cancelComment(superdoc)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts",
+      "line": 1282,
+      "snippet": "superdoc: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts|SuperDoc.superdocStore<3><0>.commentsStore<3>.getCommentAliasIds(commentOrId)|commentOrId: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.superdocStore<3><0>.commentsStore<3>.getCommentAliasIds(commentOrId)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts",
+      "line": 1244,
+      "snippet": "commentOrId: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts|SuperDoc.superdocStore<3><0>.commentsStore<3>.getCommentDocumentId(comment)|comment: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.superdocStore<3><0>.commentsStore<3>.getCommentDocumentId(comment)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts",
+      "line": 1262,
+      "snippet": "comment: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts|SuperDoc.superdocStore<3><0>.commentsStore<3>.getCommentLocation(parent)|parent: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.superdocStore<3><0>.commentsStore<3>.getCommentLocation(parent)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts",
+      "line": 1268,
+      "snippet": "parent: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts|SuperDoc.superdocStore<3><0>.commentsStore<3>.getCommentLocation(selection)|selection: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.superdocStore<3><0>.commentsStore<3>.getCommentLocation(selection)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts",
+      "line": 1268,
+      "snippet": "selection: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts|SuperDoc.superdocStore<3><0>.commentsStore<3>.handleEditorLocationsUpdate(allCommentPositions)|allCommentPositions: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.superdocStore<3><0>.commentsStore<3>.handleEditorLocationsUpdate(allCommentPositions)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts",
+      "line": 1293,
+      "snippet": "allCommentPositions: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts|SuperDoc.superdocStore<3><0>.commentsStore<3>.hasOverlapId(id)|id: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.superdocStore<3><0>.commentsStore<3>.hasOverlapId(id)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts",
+      "line": 1272,
+      "snippet": "id: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts|SuperDoc.superdocStore<3><0>.commentsStore<3>.removePendingComment(superdoc)|superdoc: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.superdocStore<3><0>.commentsStore<3>.removePendingComment(superdoc)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts",
+      "line": 1287,
+      "snippet": "superdoc: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts|SuperDoc.superdocStore<3><0>.commentsStore<3>.resolveCommentPositionEntry(commentOrId)|commentOrId: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.superdocStore<3><0>.commentsStore<3>.resolveCommentPositionEntry(commentOrId)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts",
+      "line": 1258,
+      "snippet": "commentOrId: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts|SuperDoc.superdocStore<3><0>.commentsStore<3>.resolveCommentPositionEntry(preferredId)|preferredId: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.superdocStore<3><0>.commentsStore<3>.resolveCommentPositionEntry(preferredId)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts",
+      "line": 1258,
+      "snippet": "preferredId: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts|SuperDoc.superdocStore<3><0>.commentsStore<3>.showAddComment(superdoc)|superdoc: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.superdocStore<3><0>.commentsStore<3>.showAddComment(superdoc)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts",
+      "line": 1278,
+      "snippet": "superdoc: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts|SuperDoc.superdocStore<3><0>.getDocument(documentId)|documentId: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.superdocStore<3><0>.getDocument(documentId)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts",
+      "line": 1356,
+      "snippet": "documentId: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts|SuperDoc.superdocStore<3><0>.getPageBounds(documentId)|documentId: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.superdocStore<3><0>.getPageBounds(documentId)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts",
+      "line": 1357,
+      "snippet": "documentId: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts|SuperDoc.superdocStore<3><0>.getPageBounds(page)|page: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.superdocStore<3><0>.getPageBounds(page)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts",
+      "line": 1357,
+      "snippet": "page: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts|SuperDoc.superdocStore<3><0>.handlePageReady(containerBounds)|containerBounds: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.superdocStore<3><0>.handlePageReady(containerBounds)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts",
+      "line": 1355,
+      "snippet": "containerBounds: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts|SuperDoc.superdocStore<3><0>.handlePageReady(documentId)|documentId: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.superdocStore<3><0>.handlePageReady(documentId)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts",
+      "line": 1355,
+      "snippet": "documentId: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts|SuperDoc.superdocStore<3><0>.handlePageReady(index)|index: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.superdocStore<3><0>.handlePageReady(index)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts",
+      "line": 1355,
+      "snippet": "index: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts|SuperDoc.superdocStore<3><0>.init(config)|config: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.superdocStore<3><0>.init(config)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts",
+      "line": 1352,
+      "snippet": "config: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "param|node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts|SuperDoc.superdocStore<3><0>.setExceptionHandler(handler)|handler: any",
+      "kind": "param",
+      "symbolPath": "SuperDoc.superdocStore<3><0>.setExceptionHandler(handler)",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts",
+      "line": 1353,
+      "snippet": "handler: any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts|SuperDoc.toolbar.config.customButtons[].argument.value|value: any;",
+      "kind": "property",
+      "symbolPath": "SuperDoc.toolbar.config.customButtons[].argument.value",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts",
+      "line": 429,
+      "snippet": "value: any;",
+      "owner": "tier-2-toolbar",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts|SuperDoc.toolbar.config.customButtons[].childItem.value|value: any;",
+      "kind": "property",
+      "symbolPath": "SuperDoc.toolbar.config.customButtons[].childItem.value",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts",
+      "line": 441,
+      "snippet": "value: any;",
+      "owner": "tier-2-toolbar",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts|SuperDoc.toolbar.config.customButtons[].defaultLabel.value|value: any;",
+      "kind": "property",
+      "symbolPath": "SuperDoc.toolbar.config.customButtons[].defaultLabel.value",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts",
+      "line": 477,
+      "snippet": "value: any;",
+      "owner": "tier-2-toolbar",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts|SuperDoc.toolbar.config.customButtons[].dropdownStyles.value|value: any;",
+      "kind": "property",
+      "symbolPath": "SuperDoc.toolbar.config.customButtons[].dropdownStyles.value",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts",
+      "line": 459,
+      "snippet": "value: any;",
+      "owner": "tier-2-toolbar",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts|SuperDoc.toolbar.config.customButtons[].dropdownValueKey.value|value: any;",
+      "kind": "property",
+      "symbolPath": "SuperDoc.toolbar.config.customButtons[].dropdownValueKey.value",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts",
+      "line": 525,
+      "snippet": "value: any;",
+      "owner": "tier-2-toolbar",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts|SuperDoc.toolbar.config.customButtons[].icon.value|value: any;",
+      "kind": "property",
+      "symbolPath": "SuperDoc.toolbar.config.customButtons[].icon.value",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts",
+      "line": 359,
+      "snippet": "value: any;",
+      "owner": "tier-2-toolbar",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts|SuperDoc.toolbar.config.customButtons[].iconColor.value|value: any;",
+      "kind": "property",
+      "symbolPath": "SuperDoc.toolbar.config.customButtons[].iconColor.value",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts",
+      "line": 447,
+      "snippet": "value: any;",
+      "owner": "tier-2-toolbar",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts|SuperDoc.toolbar.config.customButtons[].inputRef.value|value: any;",
+      "kind": "property",
+      "symbolPath": "SuperDoc.toolbar.config.customButtons[].inputRef.value",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts",
+      "line": 537,
+      "snippet": "value: any;",
+      "owner": "tier-2-toolbar",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts|SuperDoc.toolbar.config.customButtons[].label.value|value: any;",
+      "kind": "property",
+      "symbolPath": "SuperDoc.toolbar.config.customButtons[].label.value",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts",
+      "line": 483,
+      "snippet": "value: any;",
+      "owner": "tier-2-toolbar",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts|SuperDoc.toolbar.config.customButtons[].labelAttr.value|value: any;",
+      "kind": "property",
+      "symbolPath": "SuperDoc.toolbar.config.customButtons[].labelAttr.value",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts",
+      "line": 513,
+      "snippet": "value: any;",
+      "owner": "tier-2-toolbar",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts|SuperDoc.toolbar.config.customButtons[].markName.value|value: any;",
+      "kind": "property",
+      "symbolPath": "SuperDoc.toolbar.config.customButtons[].markName.value",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts",
+      "line": 507,
+      "snippet": "value: any;",
+      "owner": "tier-2-toolbar",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts|SuperDoc.toolbar.config.customButtons[].minWidth.value|value: any;",
+      "kind": "property",
+      "symbolPath": "SuperDoc.toolbar.config.customButtons[].minWidth.value",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts",
+      "line": 423,
+      "snippet": "value: any;",
+      "owner": "tier-2-toolbar",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts|SuperDoc.toolbar.config.customButtons[].parentItem.value|value: any;",
+      "kind": "property",
+      "symbolPath": "SuperDoc.toolbar.config.customButtons[].parentItem.value",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts",
+      "line": 435,
+      "snippet": "value: any;",
+      "owner": "tier-2-toolbar",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts|SuperDoc.toolbar.config.customButtons[].selectedValue.value|value: any;",
+      "kind": "property",
+      "symbolPath": "SuperDoc.toolbar.config.customButtons[].selectedValue.value",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts",
+      "line": 531,
+      "snippet": "value: any;",
+      "owner": "tier-2-toolbar",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts|SuperDoc.toolbar.config.customButtons[].style.value|value: any;",
+      "kind": "property",
+      "symbolPath": "SuperDoc.toolbar.config.customButtons[].style.value",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts",
+      "line": 405,
+      "snippet": "value: any;",
+      "owner": "tier-2-toolbar",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts|SuperDoc.toolbar.config.customButtons[].tooltip.value|value: any;",
+      "kind": "property",
+      "symbolPath": "SuperDoc.toolbar.config.customButtons[].tooltip.value",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts",
+      "line": 365,
+      "snippet": "value: any;",
+      "owner": "tier-2-toolbar",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts|SuperDoc.toolbar.config.customButtons[].tooltipTimeout.value|value: any;",
+      "kind": "property",
+      "symbolPath": "SuperDoc.toolbar.config.customButtons[].tooltipTimeout.value",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts",
+      "line": 471,
+      "snippet": "value: any;",
+      "owner": "tier-2-toolbar",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts|SuperDoc.toolbar.emitCommand(__0).argument|argument?: any;",
+      "kind": "property",
+      "symbolPath": "SuperDoc.toolbar.emitCommand(__0).argument",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts",
+      "line": 576,
+      "snippet": "argument?: any;",
+      "owner": "tier-2-toolbar",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts|SuperDoc.toolbar.emitCommand(__0).option|option?: any;",
+      "kind": "property",
+      "symbolPath": "SuperDoc.toolbar.emitCommand(__0).option",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts",
+      "line": 580,
+      "snippet": "option?: any;",
+      "owner": "tier-2-toolbar",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts|SuperDoc.toolbar.isDev|isDev: any;",
+      "kind": "property",
+      "symbolPath": "SuperDoc.toolbar.isDev",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts",
+      "line": 139,
+      "snippet": "isDev: any;",
+      "owner": "tier-2-toolbar",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts|SuperDoc.toolbar.superdoc|superdoc: any;",
+      "kind": "property",
+      "symbolPath": "SuperDoc.toolbar.superdoc",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts",
+      "line": 140,
+      "snippet": "superdoc: any;",
+      "owner": "tier-2-toolbar",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts|SuperDoc.toolbar.toolbarContainer|toolbarContainer: any;",
+      "kind": "property",
+      "symbolPath": "SuperDoc.toolbar.toolbarContainer",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts",
+      "line": 142,
+      "snippet": "toolbarContainer: any;",
+      "owner": "tier-2-toolbar",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts|SuperToolbar.config.customButtons[].argument.value|value: any;",
+      "kind": "property",
+      "symbolPath": "SuperToolbar.config.customButtons[].argument.value",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts",
+      "line": 429,
+      "snippet": "value: any;",
+      "owner": "tier-2-toolbar",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts|SuperToolbar.config.customButtons[].childItem.value|value: any;",
+      "kind": "property",
+      "symbolPath": "SuperToolbar.config.customButtons[].childItem.value",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts",
+      "line": 441,
+      "snippet": "value: any;",
+      "owner": "tier-2-toolbar",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts|SuperToolbar.config.customButtons[].command(arg0).argument|argument?: any;",
+      "kind": "property",
+      "symbolPath": "SuperToolbar.config.customButtons[].command(arg0).argument",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts",
+      "line": 576,
+      "snippet": "argument?: any;",
+      "owner": "tier-2-toolbar",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts|SuperToolbar.config.customButtons[].command(arg0).option|option?: any;",
+      "kind": "property",
+      "symbolPath": "SuperToolbar.config.customButtons[].command(arg0).option",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts",
+      "line": 580,
+      "snippet": "option?: any;",
+      "owner": "tier-2-toolbar",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts|SuperToolbar.config.customButtons[].defaultLabel.value|value: any;",
+      "kind": "property",
+      "symbolPath": "SuperToolbar.config.customButtons[].defaultLabel.value",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts",
+      "line": 477,
+      "snippet": "value: any;",
+      "owner": "tier-2-toolbar",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts|SuperToolbar.config.customButtons[].dropdownStyles.value|value: any;",
+      "kind": "property",
+      "symbolPath": "SuperToolbar.config.customButtons[].dropdownStyles.value",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts",
+      "line": 459,
+      "snippet": "value: any;",
+      "owner": "tier-2-toolbar",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts|SuperToolbar.config.customButtons[].dropdownValueKey.value|value: any;",
+      "kind": "property",
+      "symbolPath": "SuperToolbar.config.customButtons[].dropdownValueKey.value",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts",
+      "line": 525,
+      "snippet": "value: any;",
+      "owner": "tier-2-toolbar",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts|SuperToolbar.config.customButtons[].icon.value|value: any;",
+      "kind": "property",
+      "symbolPath": "SuperToolbar.config.customButtons[].icon.value",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts",
+      "line": 359,
+      "snippet": "value: any;",
+      "owner": "tier-2-toolbar",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts|SuperToolbar.config.customButtons[].iconColor.value|value: any;",
+      "kind": "property",
+      "symbolPath": "SuperToolbar.config.customButtons[].iconColor.value",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts",
+      "line": 447,
+      "snippet": "value: any;",
+      "owner": "tier-2-toolbar",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts|SuperToolbar.config.customButtons[].inputRef.value|value: any;",
+      "kind": "property",
+      "symbolPath": "SuperToolbar.config.customButtons[].inputRef.value",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts",
+      "line": 537,
+      "snippet": "value: any;",
+      "owner": "tier-2-toolbar",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts|SuperToolbar.config.customButtons[].label.value|value: any;",
+      "kind": "property",
+      "symbolPath": "SuperToolbar.config.customButtons[].label.value",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts",
+      "line": 483,
+      "snippet": "value: any;",
+      "owner": "tier-2-toolbar",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts|SuperToolbar.config.customButtons[].labelAttr.value|value: any;",
+      "kind": "property",
+      "symbolPath": "SuperToolbar.config.customButtons[].labelAttr.value",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts",
+      "line": 513,
+      "snippet": "value: any;",
+      "owner": "tier-2-toolbar",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts|SuperToolbar.config.customButtons[].markName.value|value: any;",
+      "kind": "property",
+      "symbolPath": "SuperToolbar.config.customButtons[].markName.value",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts",
+      "line": 507,
+      "snippet": "value: any;",
+      "owner": "tier-2-toolbar",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts|SuperToolbar.config.customButtons[].minWidth.value|value: any;",
+      "kind": "property",
+      "symbolPath": "SuperToolbar.config.customButtons[].minWidth.value",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts",
+      "line": 423,
+      "snippet": "value: any;",
+      "owner": "tier-2-toolbar",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts|SuperToolbar.config.customButtons[].parentItem.value|value: any;",
+      "kind": "property",
+      "symbolPath": "SuperToolbar.config.customButtons[].parentItem.value",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts",
+      "line": 435,
+      "snippet": "value: any;",
+      "owner": "tier-2-toolbar",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts|SuperToolbar.config.customButtons[].selectedValue.value|value: any;",
+      "kind": "property",
+      "symbolPath": "SuperToolbar.config.customButtons[].selectedValue.value",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts",
+      "line": 531,
+      "snippet": "value: any;",
+      "owner": "tier-2-toolbar",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts|SuperToolbar.config.customButtons[].style.value|value: any;",
+      "kind": "property",
+      "symbolPath": "SuperToolbar.config.customButtons[].style.value",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts",
+      "line": 405,
+      "snippet": "value: any;",
+      "owner": "tier-2-toolbar",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts|SuperToolbar.config.customButtons[].tooltip.value|value: any;",
+      "kind": "property",
+      "symbolPath": "SuperToolbar.config.customButtons[].tooltip.value",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts",
+      "line": 365,
+      "snippet": "value: any;",
+      "owner": "tier-2-toolbar",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts|SuperToolbar.config.customButtons[].tooltipTimeout.value|value: any;",
+      "kind": "property",
+      "symbolPath": "SuperToolbar.config.customButtons[].tooltipTimeout.value",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts",
+      "line": 471,
+      "snippet": "value: any;",
+      "owner": "tier-2-toolbar",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts|SuperToolbar.isDev|isDev: any;",
+      "kind": "property",
+      "symbolPath": "SuperToolbar.isDev",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts",
+      "line": 139,
+      "snippet": "isDev: any;",
+      "owner": "tier-2-toolbar",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts|SuperToolbar.superdoc|superdoc: any;",
+      "kind": "property",
+      "symbolPath": "SuperToolbar.superdoc",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts",
+      "line": 140,
+      "snippet": "superdoc: any;",
+      "owner": "tier-2-toolbar",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts|SuperToolbar.toolbarContainer|toolbarContainer: any;",
+      "kind": "property",
+      "symbolPath": "SuperToolbar.toolbarContainer",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts",
+      "line": 142,
+      "snippet": "toolbarContainer: any;",
+      "owner": "tier-2-toolbar",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/field-annotation/fieldAnnotationHelpers/getAllFieldAnnotationsWithRect.d.ts|fieldAnnotationHelpers.getAllFieldAnnotationsWithRect=>return[].node|node: any;",
+      "kind": "property",
+      "symbolPath": "fieldAnnotationHelpers.getAllFieldAnnotationsWithRect=>return[].node",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/field-annotation/fieldAnnotationHelpers/getAllFieldAnnotationsWithRect.d.ts",
+      "line": 8,
+      "snippet": "node: any;",
+      "owner": "tier-3-helpers",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/field-annotation/fieldAnnotationHelpers/getAllFieldAnnotationsWithRect.d.ts|fieldAnnotationHelpers.getAllFieldAnnotationsWithRect=>return[].pos|pos: any;",
+      "kind": "property",
+      "symbolPath": "fieldAnnotationHelpers.getAllFieldAnnotationsWithRect=>return[].pos",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/field-annotation/fieldAnnotationHelpers/getAllFieldAnnotationsWithRect.d.ts",
+      "line": 9,
+      "snippet": "pos: any;",
+      "owner": "tier-3-helpers",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/field-annotation/fieldAnnotationHelpers/getAllFieldAnnotationsWithRect.d.ts|fieldAnnotationHelpers.getAllFieldAnnotationsWithRect=>return[].rect|rect: any;",
+      "kind": "property",
+      "symbolPath": "fieldAnnotationHelpers.getAllFieldAnnotationsWithRect=>return[].rect",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/field-annotation/fieldAnnotationHelpers/getAllFieldAnnotationsWithRect.d.ts",
+      "line": 10,
+      "snippet": "rect: any;",
+      "owner": "tier-3-helpers",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/track-changes/trackChangesHelpers/documentHelpers.d.ts|trackChangesHelpers.documentHelpers.findMarkPosition=>return.attrs|attrs: any;",
+      "kind": "property",
+      "symbolPath": "trackChangesHelpers.documentHelpers.findMarkPosition=>return.attrs",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/track-changes/trackChangesHelpers/documentHelpers.d.ts",
+      "line": 4,
+      "snippet": "attrs: any;",
+      "owner": "tier-3-helpers",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/track-changes/trackChangesHelpers/documentHelpers.d.ts|trackChangesHelpers.documentHelpers.findMarkPosition=>return.from|from: any;",
+      "kind": "property",
+      "symbolPath": "trackChangesHelpers.documentHelpers.findMarkPosition=>return.from",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/track-changes/trackChangesHelpers/documentHelpers.d.ts",
+      "line": 2,
+      "snippet": "from: any;",
+      "owner": "tier-3-helpers",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/track-changes/trackChangesHelpers/documentHelpers.d.ts|trackChangesHelpers.documentHelpers.findMarkPosition=>return.to|to: any;",
+      "kind": "property",
+      "symbolPath": "trackChangesHelpers.documentHelpers.findMarkPosition=>return.to",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/track-changes/trackChangesHelpers/documentHelpers.d.ts",
+      "line": 3,
+      "snippet": "to: any;",
+      "owner": "tier-3-helpers",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/track-changes/trackChangesHelpers/findTrackedMarkBetween.d.ts|trackChangesHelpers.findTrackedMarkBetween(__0).from|from: any;",
+      "kind": "property",
+      "symbolPath": "trackChangesHelpers.findTrackedMarkBetween(__0).from",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/track-changes/trackChangesHelpers/findTrackedMarkBetween.d.ts",
+      "line": 3,
+      "snippet": "from: any;",
+      "owner": "tier-3-helpers",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/track-changes/trackChangesHelpers/findTrackedMarkBetween.d.ts|trackChangesHelpers.findTrackedMarkBetween(__0).markName|markName: any;",
+      "kind": "property",
+      "symbolPath": "trackChangesHelpers.findTrackedMarkBetween(__0).markName",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/track-changes/trackChangesHelpers/findTrackedMarkBetween.d.ts",
+      "line": 5,
+      "snippet": "markName: any;",
+      "owner": "tier-3-helpers",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/track-changes/trackChangesHelpers/findTrackedMarkBetween.d.ts|trackChangesHelpers.findTrackedMarkBetween(__0).to|to: any;",
+      "kind": "property",
+      "symbolPath": "trackChangesHelpers.findTrackedMarkBetween(__0).to",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/track-changes/trackChangesHelpers/findTrackedMarkBetween.d.ts",
+      "line": 4,
+      "snippet": "to: any;",
+      "owner": "tier-3-helpers",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/track-changes/trackChangesHelpers/findTrackedMarkBetween.d.ts|trackChangesHelpers.findTrackedMarkBetween(__0).tr|tr: any;",
+      "kind": "property",
+      "symbolPath": "trackChangesHelpers.findTrackedMarkBetween(__0).tr",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/track-changes/trackChangesHelpers/findTrackedMarkBetween.d.ts",
+      "line": 2,
+      "snippet": "tr: any;",
+      "owner": "tier-3-helpers",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/track-changes/trackChangesHelpers/getLiveInlineMarksInRange.d.ts|trackChangesHelpers.getLiveInlineMarksInRange(__0).doc|doc: any;",
+      "kind": "property",
+      "symbolPath": "trackChangesHelpers.getLiveInlineMarksInRange(__0).doc",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/track-changes/trackChangesHelpers/getLiveInlineMarksInRange.d.ts",
+      "line": 2,
+      "snippet": "doc: any;",
+      "owner": "tier-3-helpers",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/track-changes/trackChangesHelpers/getLiveInlineMarksInRange.d.ts|trackChangesHelpers.getLiveInlineMarksInRange(__0).from|from: any;",
+      "kind": "property",
+      "symbolPath": "trackChangesHelpers.getLiveInlineMarksInRange(__0).from",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/track-changes/trackChangesHelpers/getLiveInlineMarksInRange.d.ts",
+      "line": 3,
+      "snippet": "from: any;",
+      "owner": "tier-3-helpers",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/track-changes/trackChangesHelpers/getLiveInlineMarksInRange.d.ts|trackChangesHelpers.getLiveInlineMarksInRange(__0).to|to: any;",
+      "kind": "property",
+      "symbolPath": "trackChangesHelpers.getLiveInlineMarksInRange(__0).to",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/track-changes/trackChangesHelpers/getLiveInlineMarksInRange.d.ts",
+      "line": 4,
+      "snippet": "to: any;",
+      "owner": "tier-3-helpers",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/track-changes/trackChangesHelpers/markSnapshotHelpers.d.ts|trackChangesHelpers.findMarkInRangeBySnapshot(__0).doc|doc: any;",
+      "kind": "property",
+      "symbolPath": "trackChangesHelpers.findMarkInRangeBySnapshot(__0).doc",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/track-changes/trackChangesHelpers/markSnapshotHelpers.d.ts",
+      "line": 8,
+      "snippet": "doc: any;",
+      "owner": "tier-3-helpers",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/track-changes/trackChangesHelpers/markSnapshotHelpers.d.ts|trackChangesHelpers.findMarkInRangeBySnapshot(__0).from|from: any;",
+      "kind": "property",
+      "symbolPath": "trackChangesHelpers.findMarkInRangeBySnapshot(__0).from",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/track-changes/trackChangesHelpers/markSnapshotHelpers.d.ts",
+      "line": 9,
+      "snippet": "from: any;",
+      "owner": "tier-3-helpers",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/track-changes/trackChangesHelpers/markSnapshotHelpers.d.ts|trackChangesHelpers.findMarkInRangeBySnapshot(__0).snapshot|snapshot: any;",
+      "kind": "property",
+      "symbolPath": "trackChangesHelpers.findMarkInRangeBySnapshot(__0).snapshot",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/track-changes/trackChangesHelpers/markSnapshotHelpers.d.ts",
+      "line": 11,
+      "snippet": "snapshot: any;",
+      "owner": "tier-3-helpers",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/track-changes/trackChangesHelpers/markSnapshotHelpers.d.ts|trackChangesHelpers.findMarkInRangeBySnapshot(__0).to|to: any;",
+      "kind": "property",
+      "symbolPath": "trackChangesHelpers.findMarkInRangeBySnapshot(__0).to",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/track-changes/trackChangesHelpers/markSnapshotHelpers.d.ts",
+      "line": 10,
+      "snippet": "to: any;",
+      "owner": "tier-3-helpers",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/superdoc/src/components/CommentsLayer/commentsList/super-comments-list.d.ts|SuperDoc.commentsList.element|element: any;",
+      "kind": "property",
+      "symbolPath": "SuperDoc.commentsList.element",
+      "file": "node_modules/superdoc/dist/superdoc/src/components/CommentsLayer/commentsList/super-comments-list.d.ts",
+      "line": 9,
+      "snippet": "element: any;",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/superdoc/src/components/CommentsLayer/commentsList/super-comments-list.d.ts|SuperDoc.commentsList.superdoc|superdoc: any;",
+      "kind": "property",
+      "symbolPath": "SuperDoc.commentsList.superdoc",
+      "file": "node_modules/superdoc/dist/superdoc/src/components/CommentsLayer/commentsList/super-comments-list.d.ts",
+      "line": 16,
+      "snippet": "superdoc: any;",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/superdoc/src/core/types/index.d.ts|SuperDoc.config.onTransaction(params).transaction|transaction: any;",
+      "kind": "property",
+      "symbolPath": "SuperDoc.config.onTransaction(params).transaction",
+      "file": "node_modules/superdoc/dist/superdoc/src/core/types/index.d.ts",
+      "line": 1124,
+      "snippet": "transaction: any;",
+      "owner": "tier-4-public-contract",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/superdoc/src/core/types/index.d.ts|SuperDoc.config.proofing.onProofingError(error).cause|cause?: any;",
+      "kind": "property",
+      "symbolPath": "SuperDoc.config.proofing.onProofingError(error).cause",
+      "file": "node_modules/superdoc/dist/superdoc/src/core/types/index.d.ts",
+      "line": 1446,
+      "snippet": "cause?: any;",
+      "owner": "tier-4-public-contract",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts|SuperDoc.commentsStore.documentsWithConverations|documentsWithConverations: import('vue').ComputedRef<any>;",
+      "kind": "property",
+      "symbolPath": "SuperDoc.commentsStore.documentsWithConverations",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts",
+      "line": 183,
+      "snippet": "documentsWithConverations: import('vue').ComputedRef<any>;",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts|SuperDoc.commentsStore<1><0>.deleteComment(__0).commentId|commentId: any;",
+      "kind": "property",
+      "symbolPath": "SuperDoc.commentsStore<1><0>.deleteComment(__0).commentId",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts",
+      "line": 107,
+      "snippet": "commentId: any;",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts|SuperDoc.commentsStore<1><0>.deleteComment(__0).superdoc|superdoc: any;",
+      "kind": "property",
+      "symbolPath": "SuperDoc.commentsStore<1><0>.deleteComment(__0).superdoc",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts",
+      "line": 108,
+      "snippet": "superdoc: any;",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts|SuperDoc.commentsStore<1><0>.getCommentLocation=>return.left|left: any;",
+      "kind": "property",
+      "symbolPath": "SuperDoc.commentsStore<1><0>.getCommentLocation=>return.left",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts",
+      "line": 93,
+      "snippet": "left: any;",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts|SuperDoc.commentsStore<1><0>.getCommentLocation=>return.top|top: any;",
+      "kind": "property",
+      "symbolPath": "SuperDoc.commentsStore<1><0>.getCommentLocation=>return.top",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts",
+      "line": 92,
+      "snippet": "top: any;",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts|SuperDoc.commentsStore<1><0>.getFloatingCommentInstances<0>[].comment|comment: any;",
+      "kind": "property",
+      "symbolPath": "SuperDoc.commentsStore<1><0>.getFloatingCommentInstances<0>[].comment",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts",
+      "line": 61,
+      "snippet": "comment: any;",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts|SuperDoc.commentsStore<1><0>.getFloatingCommentInstances<0>[].pageIndex|pageIndex: any;",
+      "kind": "property",
+      "symbolPath": "SuperDoc.commentsStore<1><0>.getFloatingCommentInstances<0>[].pageIndex",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts",
+      "line": 63,
+      "snippet": "pageIndex: any;",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts|SuperDoc.commentsStore<1><0>.getFloatingCommentInstances<0>[].positionEntry|positionEntry: any;",
+      "kind": "property",
+      "symbolPath": "SuperDoc.commentsStore<1><0>.getFloatingCommentInstances<0>[].positionEntry",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts",
+      "line": 65,
+      "snippet": "positionEntry: any;",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts|SuperDoc.commentsStore<1><0>.getFloatingCommentInstances<0>[].positionKey|positionKey: any;",
+      "kind": "property",
+      "symbolPath": "SuperDoc.commentsStore<1><0>.getFloatingCommentInstances<0>[].positionKey",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts",
+      "line": 62,
+      "snippet": "positionKey: any;",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts|SuperDoc.commentsStore<1><0>.getFloatingCommentInstances<0>[].threadId|threadId: any;",
+      "kind": "property",
+      "symbolPath": "SuperDoc.commentsStore<1><0>.getFloatingCommentInstances<0>[].threadId",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts",
+      "line": 60,
+      "snippet": "threadId: any;",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts|SuperDoc.commentsStore<1><0>.resolveCommentPositionEntry=>return.entry|entry: any;",
+      "kind": "property",
+      "symbolPath": "SuperDoc.commentsStore<1><0>.resolveCommentPositionEntry=>return.entry",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts",
+      "line": 83,
+      "snippet": "entry: any;",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts|SuperDoc.commentsStore<1><0>.syncTrackedChangeComments(__0).editor|editor: any;",
+      "kind": "property",
+      "symbolPath": "SuperDoc.commentsStore<1><0>.syncTrackedChangeComments(__0).editor",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts",
+      "line": 129,
+      "snippet": "editor: any;",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts|SuperDoc.commentsStore<1><0>.syncTrackedChangeComments(__0).superdoc|superdoc: any;",
+      "kind": "property",
+      "symbolPath": "SuperDoc.commentsStore<1><0>.syncTrackedChangeComments(__0).superdoc",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts",
+      "line": 128,
+      "snippet": "superdoc: any;",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts|SuperDoc.commentsStore<2><0>.deleteComment(__0).commentId|commentId: any;",
+      "kind": "property",
+      "symbolPath": "SuperDoc.commentsStore<2><0>.deleteComment(__0).commentId",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts",
+      "line": 242,
+      "snippet": "commentId: any;",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts|SuperDoc.commentsStore<2><0>.deleteComment(__0).superdoc|superdoc: any;",
+      "kind": "property",
+      "symbolPath": "SuperDoc.commentsStore<2><0>.deleteComment(__0).superdoc",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts",
+      "line": 243,
+      "snippet": "superdoc: any;",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts|SuperDoc.commentsStore<2><0>.getCommentLocation=>return.left|left: any;",
+      "kind": "property",
+      "symbolPath": "SuperDoc.commentsStore<2><0>.getCommentLocation=>return.left",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts",
+      "line": 228,
+      "snippet": "left: any;",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts|SuperDoc.commentsStore<2><0>.getCommentLocation=>return.top|top: any;",
+      "kind": "property",
+      "symbolPath": "SuperDoc.commentsStore<2><0>.getCommentLocation=>return.top",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts",
+      "line": 227,
+      "snippet": "top: any;",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts|SuperDoc.commentsStore<2><0>.getFloatingCommentInstances<0>[].comment|comment: any;",
+      "kind": "property",
+      "symbolPath": "SuperDoc.commentsStore<2><0>.getFloatingCommentInstances<0>[].comment",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts",
+      "line": 196,
+      "snippet": "comment: any;",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts|SuperDoc.commentsStore<2><0>.getFloatingCommentInstances<0>[].pageIndex|pageIndex: any;",
+      "kind": "property",
+      "symbolPath": "SuperDoc.commentsStore<2><0>.getFloatingCommentInstances<0>[].pageIndex",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts",
+      "line": 198,
+      "snippet": "pageIndex: any;",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts|SuperDoc.commentsStore<2><0>.getFloatingCommentInstances<0>[].positionEntry|positionEntry: any;",
+      "kind": "property",
+      "symbolPath": "SuperDoc.commentsStore<2><0>.getFloatingCommentInstances<0>[].positionEntry",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts",
+      "line": 200,
+      "snippet": "positionEntry: any;",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts|SuperDoc.commentsStore<2><0>.getFloatingCommentInstances<0>[].positionKey|positionKey: any;",
+      "kind": "property",
+      "symbolPath": "SuperDoc.commentsStore<2><0>.getFloatingCommentInstances<0>[].positionKey",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts",
+      "line": 197,
+      "snippet": "positionKey: any;",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts|SuperDoc.commentsStore<2><0>.getFloatingCommentInstances<0>[].threadId|threadId: any;",
+      "kind": "property",
+      "symbolPath": "SuperDoc.commentsStore<2><0>.getFloatingCommentInstances<0>[].threadId",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts",
+      "line": 195,
+      "snippet": "threadId: any;",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts|SuperDoc.commentsStore<2><0>.resolveCommentPositionEntry=>return.entry|entry: any;",
+      "kind": "property",
+      "symbolPath": "SuperDoc.commentsStore<2><0>.resolveCommentPositionEntry=>return.entry",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts",
+      "line": 218,
+      "snippet": "entry: any;",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts|SuperDoc.commentsStore<2><0>.syncTrackedChangeComments(__0).editor|editor: any;",
+      "kind": "property",
+      "symbolPath": "SuperDoc.commentsStore<2><0>.syncTrackedChangeComments(__0).editor",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts",
+      "line": 264,
+      "snippet": "editor: any;",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts|SuperDoc.commentsStore<2><0>.syncTrackedChangeComments(__0).superdoc|superdoc: any;",
+      "kind": "property",
+      "symbolPath": "SuperDoc.commentsStore<2><0>.syncTrackedChangeComments(__0).superdoc",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts",
+      "line": 263,
+      "snippet": "superdoc: any;",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts|SuperDoc.commentsStore<3><0>.deleteComment(__0).commentId|commentId: any;",
+      "kind": "property",
+      "symbolPath": "SuperDoc.commentsStore<3><0>.deleteComment(__0).commentId",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts",
+      "line": 377,
+      "snippet": "commentId: any;",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts|SuperDoc.commentsStore<3><0>.deleteComment(__0).superdoc|superdoc: any;",
+      "kind": "property",
+      "symbolPath": "SuperDoc.commentsStore<3><0>.deleteComment(__0).superdoc",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts",
+      "line": 378,
+      "snippet": "superdoc: any;",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts|SuperDoc.commentsStore<3><0>.getCommentLocation=>return.left|left: any;",
+      "kind": "property",
+      "symbolPath": "SuperDoc.commentsStore<3><0>.getCommentLocation=>return.left",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts",
+      "line": 363,
+      "snippet": "left: any;",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts|SuperDoc.commentsStore<3><0>.getCommentLocation=>return.top|top: any;",
+      "kind": "property",
+      "symbolPath": "SuperDoc.commentsStore<3><0>.getCommentLocation=>return.top",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts",
+      "line": 362,
+      "snippet": "top: any;",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts|SuperDoc.commentsStore<3><0>.getFloatingCommentInstances<0>[].comment|comment: any;",
+      "kind": "property",
+      "symbolPath": "SuperDoc.commentsStore<3><0>.getFloatingCommentInstances<0>[].comment",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts",
+      "line": 331,
+      "snippet": "comment: any;",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts|SuperDoc.commentsStore<3><0>.getFloatingCommentInstances<0>[].pageIndex|pageIndex: any;",
+      "kind": "property",
+      "symbolPath": "SuperDoc.commentsStore<3><0>.getFloatingCommentInstances<0>[].pageIndex",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts",
+      "line": 333,
+      "snippet": "pageIndex: any;",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts|SuperDoc.commentsStore<3><0>.getFloatingCommentInstances<0>[].positionEntry|positionEntry: any;",
+      "kind": "property",
+      "symbolPath": "SuperDoc.commentsStore<3><0>.getFloatingCommentInstances<0>[].positionEntry",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts",
+      "line": 335,
+      "snippet": "positionEntry: any;",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts|SuperDoc.commentsStore<3><0>.getFloatingCommentInstances<0>[].positionKey|positionKey: any;",
+      "kind": "property",
+      "symbolPath": "SuperDoc.commentsStore<3><0>.getFloatingCommentInstances<0>[].positionKey",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts",
+      "line": 332,
+      "snippet": "positionKey: any;",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts|SuperDoc.commentsStore<3><0>.getFloatingCommentInstances<0>[].threadId|threadId: any;",
+      "kind": "property",
+      "symbolPath": "SuperDoc.commentsStore<3><0>.getFloatingCommentInstances<0>[].threadId",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts",
+      "line": 330,
+      "snippet": "threadId: any;",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts|SuperDoc.commentsStore<3><0>.resolveCommentPositionEntry=>return.entry|entry: any;",
+      "kind": "property",
+      "symbolPath": "SuperDoc.commentsStore<3><0>.resolveCommentPositionEntry=>return.entry",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts",
+      "line": 353,
+      "snippet": "entry: any;",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts|SuperDoc.commentsStore<3><0>.syncTrackedChangeComments(__0).editor|editor: any;",
+      "kind": "property",
+      "symbolPath": "SuperDoc.commentsStore<3><0>.syncTrackedChangeComments(__0).editor",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts",
+      "line": 399,
+      "snippet": "editor: any;",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts|SuperDoc.commentsStore<3><0>.syncTrackedChangeComments(__0).superdoc|superdoc: any;",
+      "kind": "property",
+      "symbolPath": "SuperDoc.commentsStore<3><0>.syncTrackedChangeComments(__0).superdoc",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts",
+      "line": 398,
+      "snippet": "superdoc: any;",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts|SuperDoc.superdocStore.$state.commentsStore.documentsWithConverations|documentsWithConverations: import('vue').ComputedRef<any>;",
+      "kind": "property",
+      "symbolPath": "SuperDoc.superdocStore.$state.commentsStore.documentsWithConverations",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts",
+      "line": 184,
+      "snippet": "documentsWithConverations: import('vue').ComputedRef<any>;",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts|SuperDoc.superdocStore.$state.commentsStore.getFloatingCommentInstances[].comment|comment: any;",
+      "kind": "property",
+      "symbolPath": "SuperDoc.superdocStore.$state.commentsStore.getFloatingCommentInstances[].comment",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts",
+      "line": 197,
+      "snippet": "comment: any;",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts|SuperDoc.superdocStore.$state.commentsStore.getFloatingCommentInstances[].pageIndex|pageIndex: any;",
+      "kind": "property",
+      "symbolPath": "SuperDoc.superdocStore.$state.commentsStore.getFloatingCommentInstances[].pageIndex",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts",
+      "line": 199,
+      "snippet": "pageIndex: any;",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts|SuperDoc.superdocStore.$state.commentsStore.getFloatingCommentInstances[].positionEntry|positionEntry: any;",
+      "kind": "property",
+      "symbolPath": "SuperDoc.superdocStore.$state.commentsStore.getFloatingCommentInstances[].positionEntry",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts",
+      "line": 201,
+      "snippet": "positionEntry: any;",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts|SuperDoc.superdocStore.$state.commentsStore.getFloatingCommentInstances[].positionKey|positionKey: any;",
+      "kind": "property",
+      "symbolPath": "SuperDoc.superdocStore.$state.commentsStore.getFloatingCommentInstances[].positionKey",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts",
+      "line": 198,
+      "snippet": "positionKey: any;",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts|SuperDoc.superdocStore.$state.commentsStore.getFloatingCommentInstances[].threadId|threadId: any;",
+      "kind": "property",
+      "symbolPath": "SuperDoc.superdocStore.$state.commentsStore.getFloatingCommentInstances[].threadId",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts",
+      "line": 196,
+      "snippet": "threadId: any;",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts|SuperDoc.superdocStore<1><0>.commentsStore.documentsWithConverations|documentsWithConverations: import('vue').ComputedRef<any>;",
+      "kind": "property",
+      "symbolPath": "SuperDoc.superdocStore<1><0>.commentsStore.documentsWithConverations",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts",
+      "line": 184,
+      "snippet": "documentsWithConverations: import('vue').ComputedRef<any>;",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts|SuperDoc.superdocStore<2><0>.commentsStore.documentsWithConverations|documentsWithConverations: import('vue').ComputedRef<any>;",
+      "kind": "property",
+      "symbolPath": "SuperDoc.superdocStore<2><0>.commentsStore.documentsWithConverations",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts",
+      "line": 637,
+      "snippet": "documentsWithConverations: import('vue').ComputedRef<any>;",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "property|node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts|SuperDoc.superdocStore<3><0>.commentsStore.documentsWithConverations|documentsWithConverations: import('vue').ComputedRef<any>;",
+      "kind": "property",
+      "symbolPath": "SuperDoc.superdocStore<3><0>.commentsStore.documentsWithConverations",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts",
+      "line": 1090,
+      "snippet": "documentsWithConverations: import('vue').ComputedRef<any>;",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "return|node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts|SuperDoc.toolbar.emitCommand=>return|emitCommand({ item, argument, option }: CommandItem): any;",
+      "kind": "return",
+      "symbolPath": "SuperDoc.toolbar.emitCommand=>return",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts",
+      "line": 228,
+      "snippet": "emitCommand({ item, argument, option }: CommandItem): any;",
+      "owner": "tier-2-toolbar",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "return|node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts|SuperToolbar.emitCommand=>return|emitCommand({ item, argument, option }: CommandItem): any;",
+      "kind": "return",
+      "symbolPath": "SuperToolbar.emitCommand=>return",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/components/toolbar/super-toolbar.d.ts",
+      "line": 228,
+      "snippet": "emitCommand({ item, argument, option }: CommandItem): any;",
+      "owner": "tier-2-toolbar",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "return|node_modules/superdoc/dist/super-editor/src/editors/v1/core/helpers/getActiveFormatting.d.ts|getActiveFormatting=>return|export function getActiveFormatting(editor: any): any;",
+      "kind": "return",
+      "symbolPath": "getActiveFormatting=>return",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/helpers/getActiveFormatting.d.ts",
+      "line": 1,
+      "snippet": "export function getActiveFormatting(editor: any): any;",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "return|node_modules/superdoc/dist/super-editor/src/editors/v1/core/helpers/index.d.ts|helpers.createDocFromHTML=>return|export function createDocFromHTML(...args: any[]): any;",
+      "kind": "return",
+      "symbolPath": "helpers.createDocFromHTML=>return",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/helpers/index.d.ts",
+      "line": 2,
+      "snippet": "export function createDocFromHTML(...args: any[]): any;",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "return|node_modules/superdoc/dist/super-editor/src/editors/v1/core/helpers/index.d.ts|helpers.createDocFromMarkdown=>return|export function createDocFromMarkdown(...args: any[]): any;",
+      "kind": "return",
+      "symbolPath": "helpers.createDocFromMarkdown=>return",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/helpers/index.d.ts",
+      "line": 1,
+      "snippet": "export function createDocFromMarkdown(...args: any[]): any;",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "return|node_modules/superdoc/dist/super-editor/src/editors/v1/core/helpers/index.d.ts|superEditorHelpers.createDocFromHTML=>return|export function createDocFromHTML(...args: any[]): any;",
+      "kind": "return",
+      "symbolPath": "superEditorHelpers.createDocFromHTML=>return",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/helpers/index.d.ts",
+      "line": 2,
+      "snippet": "export function createDocFromHTML(...args: any[]): any;",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "return|node_modules/superdoc/dist/super-editor/src/editors/v1/core/helpers/index.d.ts|superEditorHelpers.createDocFromMarkdown=>return|export function createDocFromMarkdown(...args: any[]): any;",
+      "kind": "return",
+      "symbolPath": "superEditorHelpers.createDocFromMarkdown=>return",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/helpers/index.d.ts",
+      "line": 1,
+      "snippet": "export function createDocFromMarkdown(...args: any[]): any;",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "return|node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/comment/comments-plugin.d.ts|createOrUpdateTrackedChangeComment=>return|export function createOrUpdateTrackedChangeComment(options: any): any;",
+      "kind": "return",
+      "symbolPath": "createOrUpdateTrackedChangeComment=>return",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/comment/comments-plugin.d.ts",
+      "line": 3,
+      "snippet": "export function createOrUpdateTrackedChangeComment(options: any): any;",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "return|node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/track-changes/trackChangesHelpers/markSnapshotHelpers.d.ts|trackChangesHelpers.attrsExactlyMatch=>return|export function attrsExactlyMatch(left?: {}, right?: {}): any;",
+      "kind": "return",
+      "symbolPath": "trackChangesHelpers.attrsExactlyMatch=>return",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/track-changes/trackChangesHelpers/markSnapshotHelpers.d.ts",
+      "line": 3,
+      "snippet": "export function attrsExactlyMatch(left?: {}, right?: {}): any;",
+      "owner": "tier-3-helpers",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "return|node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/track-changes/trackChangesHelpers/markSnapshotHelpers.d.ts|trackChangesHelpers.getTypeName=>return|export function getTypeName(markLike: any): any;",
+      "kind": "return",
+      "symbolPath": "trackChangesHelpers.getTypeName=>return",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/track-changes/trackChangesHelpers/markSnapshotHelpers.d.ts",
+      "line": 1,
+      "snippet": "export function getTypeName(markLike: any): any;",
+      "owner": "tier-3-helpers",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "return|node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/track-changes/trackChangesHelpers/markSnapshotHelpers.d.ts|trackChangesHelpers.hasMatchingMark=>return|export function hasMatchingMark(marks: any, stepMark: any): any;",
+      "kind": "return",
+      "symbolPath": "trackChangesHelpers.hasMatchingMark=>return",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/track-changes/trackChangesHelpers/markSnapshotHelpers.d.ts",
+      "line": 5,
+      "snippet": "export function hasMatchingMark(marks: any, stepMark: any): any;",
+      "owner": "tier-3-helpers",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "return|node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/track-changes/trackChangesHelpers/markSnapshotHelpers.d.ts|trackChangesHelpers.isTrackFormatNoOp=>return|export function isTrackFormatNoOp(before: any, after: any): any;",
+      "kind": "return",
+      "symbolPath": "trackChangesHelpers.isTrackFormatNoOp=>return",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/track-changes/trackChangesHelpers/markSnapshotHelpers.d.ts",
+      "line": 2,
+      "snippet": "export function isTrackFormatNoOp(before: any, after: any): any;",
+      "owner": "tier-3-helpers",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "return|node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/track-changes/trackChangesHelpers/markSnapshotHelpers.d.ts|trackChangesHelpers.markSnapshotMatchesStepMark=>return|export function markSnapshotMatchesStepMark(snapshot: any, stepMark: any, exact?: boolean): any;",
+      "kind": "return",
+      "symbolPath": "trackChangesHelpers.markSnapshotMatchesStepMark=>return",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/track-changes/trackChangesHelpers/markSnapshotHelpers.d.ts",
+      "line": 4,
+      "snippet": "export function markSnapshotMatchesStepMark(snapshot: any, stepMark: any, exact?: boolean): any;",
+      "owner": "tier-3-helpers",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "return|node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/track-changes/trackChangesHelpers/markSnapshotHelpers.d.ts|trackChangesHelpers.upsertMarkSnapshotByType=>return|export function upsertMarkSnapshotByType(snapshots: any, incoming: any): any;",
+      "kind": "return",
+      "symbolPath": "trackChangesHelpers.upsertMarkSnapshotByType=>return",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/track-changes/trackChangesHelpers/markSnapshotHelpers.d.ts",
+      "line": 6,
+      "snippet": "export function upsertMarkSnapshotByType(snapshots: any, incoming: any): any;",
+      "owner": "tier-3-helpers",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "return|node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/track-changes/trackChangesHelpers/trackedTransaction.d.ts|trackChangesHelpers.trackedTransaction=>return|export function trackedTransaction(...args: any[]): any;",
+      "kind": "return",
+      "symbolPath": "trackChangesHelpers.trackedTransaction=>return",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/extensions/track-changes/trackChangesHelpers/trackedTransaction.d.ts",
+      "line": 1,
+      "snippet": "export function trackedTransaction(...args: any[]): any;",
+      "owner": "tier-3-helpers",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "return|node_modules/superdoc/dist/super-editor/src/headless-toolbar/types.d.ts|createHeadlessToolbar=>return.getSnapshot=>return.context.target.commands<1>=>return|(...args: any[]) => any",
+      "kind": "return",
+      "symbolPath": "createHeadlessToolbar=>return.getSnapshot=>return.context.target.commands<1>=>return",
+      "file": "node_modules/superdoc/dist/super-editor/src/headless-toolbar/types.d.ts",
+      "line": 126,
+      "snippet": "(...args: any[]) => any",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "return|node_modules/superdoc/dist/super-editor/src/headless-toolbar/types.d.ts|useHeadlessToolbar=>return.snapshot.context.target.commands<1>=>return|(...args: any[]) => any",
+      "kind": "return",
+      "symbolPath": "useHeadlessToolbar=>return.snapshot.context.target.commands<1>=>return",
+      "file": "node_modules/superdoc/dist/super-editor/src/headless-toolbar/types.d.ts",
+      "line": 126,
+      "snippet": "(...args: any[]) => any",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "return|node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts|SuperDoc.commentsStore<1><0>.belongsToDocument=>return|(comment: any, activeDocumentId: any, options?: {}) => any",
+      "kind": "return",
+      "symbolPath": "SuperDoc.commentsStore<1><0>.belongsToDocument=>return",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts",
+      "line": 86,
+      "snippet": "(comment: any, activeDocumentId: any, options?: {}) => any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "return|node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts|SuperDoc.commentsStore<1><0>.hasOverlapId=>return|(id: any) => any",
+      "kind": "return",
+      "symbolPath": "SuperDoc.commentsStore<1><0>.hasOverlapId=>return",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts",
+      "line": 95,
+      "snippet": "(id: any) => any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "return|node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts|SuperDoc.commentsStore<2><0>.belongsToDocument=>return|(comment: any, activeDocumentId: any, options?: {}) => any",
+      "kind": "return",
+      "symbolPath": "SuperDoc.commentsStore<2><0>.belongsToDocument=>return",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts",
+      "line": 221,
+      "snippet": "(comment: any, activeDocumentId: any, options?: {}) => any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "return|node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts|SuperDoc.commentsStore<2><0>.hasOverlapId=>return|(id: any) => any",
+      "kind": "return",
+      "symbolPath": "SuperDoc.commentsStore<2><0>.hasOverlapId=>return",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts",
+      "line": 230,
+      "snippet": "(id: any) => any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "return|node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts|SuperDoc.commentsStore<3><0>.belongsToDocument=>return|(comment: any, activeDocumentId: any, options?: {}) => any",
+      "kind": "return",
+      "symbolPath": "SuperDoc.commentsStore<3><0>.belongsToDocument=>return",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts",
+      "line": 356,
+      "snippet": "(comment: any, activeDocumentId: any, options?: {}) => any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "return|node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts|SuperDoc.commentsStore<3><0>.hasOverlapId=>return|(id: any) => any",
+      "kind": "return",
+      "symbolPath": "SuperDoc.commentsStore<3><0>.hasOverlapId=>return",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/comments-store.d.ts",
+      "line": 365,
+      "snippet": "(id: any) => any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "return|node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts|SuperDoc.superdocStore<1><0>.commentsStore<3>.belongsToDocument=>return|(comment: any, activeDocumentId: any, options?: {}) => any",
+      "kind": "return",
+      "symbolPath": "SuperDoc.superdocStore<1><0>.commentsStore<3>.belongsToDocument=>return",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts",
+      "line": 357,
+      "snippet": "(comment: any, activeDocumentId: any, options?: {}) => any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "return|node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts|SuperDoc.superdocStore<1><0>.commentsStore<3>.hasOverlapId=>return|(id: any) => any",
+      "kind": "return",
+      "symbolPath": "SuperDoc.superdocStore<1><0>.commentsStore<3>.hasOverlapId=>return",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts",
+      "line": 366,
+      "snippet": "(id: any) => any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "return|node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts|SuperDoc.superdocStore<2><0>.commentsStore<3>.belongsToDocument=>return|(comment: any, activeDocumentId: any, options?: {}) => any",
+      "kind": "return",
+      "symbolPath": "SuperDoc.superdocStore<2><0>.commentsStore<3>.belongsToDocument=>return",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts",
+      "line": 810,
+      "snippet": "(comment: any, activeDocumentId: any, options?: {}) => any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "return|node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts|SuperDoc.superdocStore<2><0>.commentsStore<3>.hasOverlapId=>return|(id: any) => any",
+      "kind": "return",
+      "symbolPath": "SuperDoc.superdocStore<2><0>.commentsStore<3>.hasOverlapId=>return",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts",
+      "line": 819,
+      "snippet": "(id: any) => any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "return|node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts|SuperDoc.superdocStore<3><0>.commentsStore<3>.belongsToDocument=>return|(comment: any, activeDocumentId: any, options?: {}) => any",
+      "kind": "return",
+      "symbolPath": "SuperDoc.superdocStore<3><0>.commentsStore<3>.belongsToDocument=>return",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts",
+      "line": 1263,
+      "snippet": "(comment: any, activeDocumentId: any, options?: {}) => any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "return|node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts|SuperDoc.superdocStore<3><0>.commentsStore<3>.hasOverlapId=>return|(id: any) => any",
+      "kind": "return",
+      "symbolPath": "SuperDoc.superdocStore<3><0>.commentsStore<3>.hasOverlapId=>return",
+      "file": "node_modules/superdoc/dist/superdoc/src/stores/superdoc-store.d.ts",
+      "line": 1272,
+      "snippet": "(id: any) => any",
+      "owner": "tier-1-pinia",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "type|node_modules/superdoc/dist/super-editor/src/editors/v1/core/Editor.d.ts|createHeadlessToolbar(options).superdoc.activeEditor.schema<0>|schema: Schema;",
+      "kind": "type",
+      "symbolPath": "createHeadlessToolbar(options).superdoc.activeEditor.schema<0>",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/Editor.d.ts",
+      "line": 113,
+      "snippet": "schema: Schema;",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "type|node_modules/superdoc/dist/super-editor/src/editors/v1/core/Editor.d.ts|getDocumentApiAdapters(editor).schema<0>|schema: Schema;",
+      "kind": "type",
+      "symbolPath": "getDocumentApiAdapters(editor).schema<0>",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/Editor.d.ts",
+      "line": 113,
+      "snippet": "schema: Schema;",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "type|node_modules/superdoc/dist/super-editor/src/editors/v1/core/Editor.d.ts|useHeadlessToolbar(superdoc).activeEditor.schema<0>|schema: Schema;",
+      "kind": "type",
+      "symbolPath": "useHeadlessToolbar(superdoc).activeEditor.schema<0>",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/Editor.d.ts",
+      "line": 113,
+      "snippet": "schema: Schema;",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory"
+    }
+  ]
+}

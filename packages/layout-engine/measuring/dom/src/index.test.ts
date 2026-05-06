@@ -1782,6 +1782,60 @@ describe('measureBlock', () => {
       expect(rightAlignedSegment?.precedingTabEndX).toBeUndefined();
     });
 
+    it('clears compensated tab geometry when the first following word char-splits', async () => {
+      const block: FlowBlock = {
+        kind: 'paragraph',
+        id: 'negative-left-stale-tab-end-after-char-split',
+        runs: [
+          { text: 'First', fontFamily: 'Arial', fontSize: 16 },
+          { kind: 'lineBreak' },
+          { kind: 'tab', text: '\t', tabIndex: 0 },
+          { text: 'SupercalifragilisticexpialidociousVeryLong', fontFamily: 'Arial', fontSize: 16 },
+          { kind: 'tab', text: '\t', tabIndex: 1 },
+          { text: 'Z', fontFamily: 'Arial', fontSize: 16 },
+        ],
+        attrs: {
+          indent: { left: -40, hanging: 20 },
+          tabs: [{ pos: 200 * 15, val: 'end', leader: 'dot' }],
+        },
+      };
+
+      const measure = expectParagraphMeasure(await measureBlock(block, 120));
+      const rightAlignedSegment = measure.lines
+        .flatMap((line) => line.segments ?? [])
+        .find((segment) => segment.runIndex === 5);
+
+      expect(rightAlignedSegment?.x).toBeDefined();
+      expect(rightAlignedSegment?.precedingTabEndX).toBeUndefined();
+    });
+
+    it('clears compensated tab geometry when the first following space wraps', async () => {
+      const block: FlowBlock = {
+        kind: 'paragraph',
+        id: 'negative-left-stale-tab-end-after-leading-space-wrap',
+        runs: [
+          { text: 'First', fontFamily: 'Arial', fontSize: 16 },
+          { kind: 'lineBreak' },
+          { kind: 'tab', text: '\t', tabIndex: 0 },
+          { text: ' ', fontFamily: 'Arial', fontSize: 16 },
+          { kind: 'tab', text: '\t', tabIndex: 1 },
+          { text: 'Z', fontFamily: 'Arial', fontSize: 16 },
+        ],
+        attrs: {
+          indent: { left: -40, hanging: 20 },
+          tabs: [{ pos: 200 * 15, val: 'end', leader: 'dot' }],
+        },
+      };
+
+      const measure = expectParagraphMeasure(await measureBlock(block, 42));
+      const rightAlignedSegment = measure.lines
+        .flatMap((line) => line.segments ?? [])
+        .find((segment) => segment.runIndex === 5);
+
+      expect(rightAlignedSegment?.x).toBeDefined();
+      expect(rightAlignedSegment?.precedingTabEndX).toBeUndefined();
+    });
+
     it('does not compensate positive explicit start stops in negative-left paragraphs', async () => {
       const leftIndentPx = -24;
       const block: FlowBlock = {

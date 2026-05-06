@@ -2126,6 +2126,11 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
         hasPendingSegmentTabGeometry = false;
         return consumePendingPrecedingTabEndX();
       };
+      const clearWrapState = (): void => {
+        segmentStartX = undefined;
+        hasPendingSegmentTabGeometry = false;
+        clearPendingPrecedingTabEndX();
+      };
 
       for (let wordIndex = 0; wordIndex < words.length; wordIndex++) {
         const word = words[wordIndex];
@@ -2184,6 +2189,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
               pendingLeader = null;
               lastAppliedTabAlign = null;
               activeTabGroup = null;
+              clearWrapState();
 
               // Body line, so use bodyContentWidth for hanging indent
               currentLine = {
@@ -2272,6 +2278,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
             pendingTabAlignment = null;
             pendingLeader = null;
             currentLine = null;
+            clearWrapState();
           }
 
           // Break the word into chunks that fit within maxWidth
@@ -2340,6 +2347,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
                 pendingTabAlignment = null;
                 pendingLeader = null;
                 currentLine = null;
+                clearWrapState();
               }
             } else if (isLastChunk) {
               // Last chunk becomes the start of a new line (will be continued with next word)
@@ -2384,6 +2392,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
               };
               addBarTabsToLine(chunkLine);
               lines.push(chunkLine);
+              clearWrapState();
             }
             chunkCharOffset = chunkEndChar;
           }
@@ -2475,9 +2484,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
 
         if (shouldBreak) {
           if (wordIndex === 0 && hasPendingSegmentTabGeometry) {
-            hasPendingSegmentTabGeometry = false;
-            segmentStartX = undefined;
-            clearPendingPrecedingTabEndX();
+            clearWrapState();
           }
           trimTrailingWrapSpaces(currentLine);
           const metrics = finalizeLineMetrics(currentLine, spacing);

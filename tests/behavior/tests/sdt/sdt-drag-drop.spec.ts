@@ -209,4 +209,85 @@ test.describe('structured content drag and drop', () => {
     expect(sourceAfter).not.toBe(sourceBefore);
     await superdoc.assertTextContains('Inline payload to move');
   });
+
+  // SD-2192 review: the production interaction layer marks the .superdoc-structured-content__label
+  // child element draggable, not the SDT container. The two tests above prime the container and
+  // drag the container, so they would still pass if the interaction layer stopped marking labels.
+  // This test asserts production wiring directly: after a paint, the LABEL element should carry
+  // the drag-source attributes set by StructuredContentInteractionLayer.apply().
+  test('@behavior SD-2192: production layer marks the SDT block label as a drag source', async ({ superdoc }) => {
+    await setBlockDragDoc(superdoc.page);
+    await superdoc.waitForStable();
+
+    const labelLocator = superdoc.page.locator(`${BLOCK_CONTAINER} .superdoc-structured-content__label`).first();
+
+    await expect(labelLocator).toHaveAttribute('draggable', 'true');
+    await expect(labelLocator).toHaveAttribute('data-drag-source-kind', 'structuredContent');
+    await expect(labelLocator).toHaveAttribute('data-sdt-id', /.+/);
+    await expect(labelLocator).toHaveAttribute('data-pm-start', /\d+/);
+    await expect(labelLocator).toHaveAttribute('data-pm-end', /\d+/);
+  });
+
+  // SD-2192 review: a block SDT wrapping a table should still be draggable.
+  // The painter only emits data-pm-start/data-pm-end on paragraph fragments
+  // (renderer.ts:6880-6907), so a table-wrapped block SDT container has no PM range.
+  // StructuredContentInteractionLayer.ts:26 then refuses to mark the label.
+  test('@behavior SD-2192: production layer marks block SDT labels for table-wrapped content', async ({ superdoc }) => {
+    await superdoc.page.evaluate(
+      (nextDoc) => {
+        const editor = (window as any).editor;
+        const { state, view, schema } = editor;
+        const doc = schema.nodeFromJSON(nextDoc);
+        view.dispatch(state.tr.replaceWith(0, state.doc.content.size, doc.content));
+      },
+      {
+        type: 'doc',
+        content: [
+          { type: 'paragraph', content: [{ type: 'text', text: 'Intro' }] },
+          {
+            type: 'structuredContentBlock',
+            attrs: { id: 'table-wrapped-block', alias: 'Table block' },
+            content: [
+              {
+                type: 'table',
+                content: [
+                  {
+                    type: 'tableRow',
+                    content: [
+                      {
+                        type: 'tableCell',
+                        content: [{ type: 'paragraph', content: [{ type: 'text', text: 'cell text' }] }],
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+          { type: 'paragraph', content: [{ type: 'text', text: 'Drop anchor' }] },
+        ],
+      },
+    );
+    await superdoc.waitForStable();
+
+    const labelLocator = superdoc.page.locator(`${BLOCK_CONTAINER} .superdoc-structured-content__label`).first();
+
+    await expect(labelLocator).toHaveAttribute('draggable', 'true');
+    await expect(labelLocator).toHaveAttribute('data-drag-source-kind', 'structuredContent');
+  });
+
+  test('@behavior SD-2192: production layer marks the inline SDT label as a drag source', async ({ superdoc }) => {
+    await setInlineDragDoc(superdoc.page);
+    await superdoc.waitForStable();
+
+    const labelLocator = superdoc.page
+      .locator(`${INLINE_CONTAINER} .superdoc-structured-content-inline__label`)
+      .first();
+
+    await expect(labelLocator).toHaveAttribute('draggable', 'true');
+    await expect(labelLocator).toHaveAttribute('data-drag-source-kind', 'structuredContent');
+    await expect(labelLocator).toHaveAttribute('data-sdt-id', /.+/);
+    await expect(labelLocator).toHaveAttribute('data-pm-start', /\d+/);
+    await expect(labelLocator).toHaveAttribute('data-pm-end', /\d+/);
+  });
 });

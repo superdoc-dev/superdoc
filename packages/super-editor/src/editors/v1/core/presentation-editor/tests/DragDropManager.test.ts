@@ -782,6 +782,114 @@ describe('DragDropManager', () => {
   });
 
   // ==========================================================================
+  // SD-2192 review: hardening for internal-object drops
+  // ==========================================================================
+
+  describe('SD-2192 review: internal object drop hardening', () => {
+    // Today the drop path accepts any well-formed `application/x-superdoc-internal-object`
+    // payload from dataTransfer, even if no local dragstart fired (cross-editor drops, or
+    // a foreign tab dragging onto SuperDoc). With matching positions in the local doc the
+    // foreign payload can drive a delete+insert. The drop should require a local active
+    // payload (or otherwise prove the drag started in this editor instance).
+    it('rejects internal-object drops that did not start in this editor', () => {
+      const sourceNode = {
+        type: { name: 'structuredContentBlock' },
+        attrs: { id: 'foreign-sdt' },
+        nodeSize: 12,
+      };
+      const tr = mockEditor.state.tr as typeof mockEditor.state.tr & {
+        doc: { content: { size: number }; resolve: Mock };
+        delete: Mock;
+        insert: Mock;
+        mapping: { map: Mock };
+      };
+      tr.doc = {
+        content: { size: 1000 },
+        resolve: vi.fn(() => ({ parent: { canReplaceWith: vi.fn(() => true) }, index: vi.fn(() => 0) })),
+      };
+      tr.delete = vi.fn().mockReturnThis();
+      tr.insert = vi.fn().mockReturnThis();
+      tr.mapping = { map: vi.fn(() => 50) };
+      mockEditor.state.doc.nodeAt.mockImplementation((pos: number) => (pos === 100 ? sourceNode : null));
+      mockEditor.state.doc.descendants.mockImplementation((cb: (node: unknown, pos: number) => boolean) => {
+        cb(sourceNode, 100);
+      });
+
+      // No local dragstart fired — straight to drop with foreign payload.
+      viewportHost.dispatchEvent(
+        createInternalObjectDragEvent('drop', {
+          kind: 'structuredContent',
+          nodeType: 'structuredContentBlock',
+          sdtId: 'foreign-sdt',
+          label: 'Foreign',
+          sourceStart: 100,
+          sourceEnd: 112,
+          lockMode: 'unlocked',
+        }),
+      );
+
+      expect(tr.delete).not.toHaveBeenCalled();
+      expect(tr.insert).not.toHaveBeenCalled();
+      expect(mockEditor.view.dispatch).not.toHaveBeenCalled();
+    });
+
+    // Drop path doesn't consult lockMode today, so dragging the label of a locked SDT
+    // (sdtLocked / contentLocked) deletes it from its original position and reinserts.
+    it('rejects internal-object drops when payload lockMode is not unlocked', () => {
+      const sourceNode = {
+        type: { name: 'structuredContentBlock' },
+        attrs: { id: 'locked-sdt' },
+        nodeSize: 12,
+      };
+      const tr = mockEditor.state.tr as typeof mockEditor.state.tr & {
+        doc: { content: { size: number }; resolve: Mock };
+        delete: Mock;
+        insert: Mock;
+        mapping: { map: Mock };
+      };
+      tr.doc = {
+        content: { size: 1000 },
+        resolve: vi.fn(() => ({ parent: { canReplaceWith: vi.fn(() => true) }, index: vi.fn(() => 0) })),
+      };
+      tr.delete = vi.fn().mockReturnThis();
+      tr.insert = vi.fn().mockReturnThis();
+      tr.mapping = { map: vi.fn(() => 50) };
+      mockEditor.state.doc.nodeAt.mockImplementation((pos: number) => (pos === 100 ? sourceNode : null));
+      mockEditor.state.doc.descendants.mockImplementation((cb: (node: unknown, pos: number) => boolean) => {
+        cb(sourceNode, 100);
+      });
+
+      // Simulate local dragstart so #activeInternalObjectPayload is set, then drop with locked payload
+      const sourceElement = document.createElement('div');
+      sourceElement.dataset.dragSourceKind = 'structuredContent';
+      sourceElement.dataset.sdtId = 'locked-sdt';
+      sourceElement.dataset.pmStart = '100';
+      sourceElement.dataset.pmEnd = '112';
+      sourceElement.dataset.nodeType = 'structuredContentBlock';
+      sourceElement.dataset.lockMode = 'sdtLocked';
+      sourceElement.dataset.displayLabel = 'Locked';
+      painterHost.appendChild(sourceElement);
+
+      sourceElement.dispatchEvent(createInternalObjectDragStartEvent());
+      viewportHost.dispatchEvent(
+        createInternalObjectDragEvent('drop', {
+          kind: 'structuredContent',
+          nodeType: 'structuredContentBlock',
+          sdtId: 'locked-sdt',
+          label: 'Locked',
+          sourceStart: 100,
+          sourceEnd: 112,
+          lockMode: 'sdtLocked',
+        }),
+      );
+
+      expect(tr.delete).not.toHaveBeenCalled();
+      expect(tr.insert).not.toHaveBeenCalled();
+      expect(mockEditor.view.dispatch).not.toHaveBeenCalled();
+    });
+  });
+
+  // ==========================================================================
   // hitTest Failure Fallback
   // ==========================================================================
 

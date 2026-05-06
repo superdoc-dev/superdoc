@@ -2,6 +2,8 @@
 import { NodeTranslator } from '@translator';
 import { translator as wRPrNodeTranslator } from '../rpr/rpr-translator.js';
 import { translator as wHyperlinkTranslator } from '../hyperlink/hyperlink-translator.js';
+import { translator as wInsTranslator } from '../ins/index.js';
+import { translator as wDelTranslator } from '../del/index.js';
 
 /** @type {import('@translator').XmlNodeName} */
 const XML_NODE_NAME = 'w:noBreakHyphen';
@@ -36,6 +38,19 @@ const encode = (_, encodedAttrs = {}) => {
 function decode(params, decodedAttrs = {}) {
   const { node } = params || {};
   if (!node) return;
+
+  // Tracked changes: defer to ins/del so the atom exports inside <w:ins> or
+  // <w:del>. Without this, a tracked-insert noBreakHyphen would round-trip as
+  // plain <w:r><w:noBreakHyphen/></w:r> and the tracking would be silently
+  // dropped on save. Mirrors t-translator's hand-off (no `trackingProcessed`
+  // guard needed — wInsTranslator/wDelTranslator strip the tracking marks
+  // before re-dispatching, so re-entry won't re-fire this branch).
+  // Tracked-changes check runs before the link check so a linked + tracked
+  // atom composes as <w:ins><w:hyperlink>...</w:hyperlink></w:ins>.
+  const trackedMark = node.marks?.find((m) => m.type === 'trackInsert' || m.type === 'trackDelete');
+  if (trackedMark) {
+    return (trackedMark.type === 'trackInsert' ? wInsTranslator : wDelTranslator).decode(params);
+  }
 
   // Hyperlinks: defer to wHyperlinkTranslator so the export emits a
   // <w:hyperlink> wrapper and preserves the relationship. Without this, a

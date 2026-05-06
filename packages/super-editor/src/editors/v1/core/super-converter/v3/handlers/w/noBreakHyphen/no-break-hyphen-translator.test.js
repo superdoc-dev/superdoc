@@ -145,4 +145,66 @@ describe('w:noBreakHyphen translator config', () => {
       expect(res.elements.some((el) => el.name === 'w:noBreakHyphen')).toBe(true);
     });
   });
+
+  describe('decode — tracked changes', () => {
+    // Without the hand-off, a tracked-insert noBreakHyphen exported as bare
+    // <w:r><w:noBreakHyphen/></w:r> and the tracking was silently dropped on
+    // save. The branch mirrors t-translator's tracked-changes hand-off.
+    const trackAttrs = { id: 'tc-1', sourceId: '', author: 'A', authorEmail: 'a@x', date: '2026-05-06T00:00:00Z' };
+
+    it('emits <w:ins> wrapping the run when the node carries a trackInsert mark', () => {
+      const res = config.decode({
+        node: { type: 'noBreakHyphen', marks: [{ type: 'trackInsert', attrs: trackAttrs }] },
+      });
+      expect(res?.name).toBe('w:ins');
+      expect(res.attributes['w:author']).toBe('A');
+      const wR = res.elements[0];
+      expect(wR.name).toBe('w:r');
+      expect(wR.elements.some((el) => el.name === 'w:noBreakHyphen')).toBe(true);
+    });
+
+    it('emits <w:del> wrapping the run when the node carries a trackDelete mark', () => {
+      // <w:del> only renames w:t → w:delText. Atoms like w:noBreakHyphen stay
+      // as-is — the deletion is conveyed by the wrapper alone (ECMA-376).
+      const res = config.decode({
+        node: { type: 'noBreakHyphen', marks: [{ type: 'trackDelete', attrs: trackAttrs }] },
+      });
+      expect(res?.name).toBe('w:del');
+      const wR = res.elements[0];
+      expect(wR.name).toBe('w:r');
+      expect(wR.elements.some((el) => el.name === 'w:noBreakHyphen')).toBe(true);
+      expect(wR.elements.some((el) => el.name === 'w:delText')).toBe(false);
+    });
+
+    it('composes <w:ins><w:hyperlink>...</w:hyperlink></w:ins> for a tracked + linked atom', () => {
+      // Tracked-changes branch must run before the link branch — otherwise the
+      // hyperlink wrapper would land outside the <w:ins> and Word would render
+      // the link without the change-tracking attribution.
+      const res = config.decode({
+        node: {
+          type: 'noBreakHyphen',
+          marks: [
+            { type: 'trackInsert', attrs: trackAttrs },
+            {
+              type: 'link',
+              attrs: {
+                href: 'https://example.com',
+                rId: 'rId9',
+                anchor: null,
+                history: null,
+                tooltip: null,
+                target: null,
+              },
+            },
+          ],
+        },
+        relationships: [],
+      });
+      expect(res?.name).toBe('w:ins');
+      const inner = res.elements[0];
+      expect(inner.name).toBe('w:hyperlink');
+      const wR = inner.elements.find((el) => el.name === 'w:r');
+      expect(wR.elements.some((el) => el.name === 'w:noBreakHyphen')).toBe(true);
+    });
+  });
 });

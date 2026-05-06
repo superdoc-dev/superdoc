@@ -163,7 +163,16 @@ if (privateSpecifiers.length > 0) {
 const findings = [];
 let visited;
 let currentSubpath;
-const MAX_DEPTH = 8;
+// MAX_DEPTH is a memory-bound, not just a stack guard. TypeScript
+// materializes generic instantiations on demand with fresh type ids
+// (visited can't dedupe them), so deep walks of pinia/vue/prosemirror
+// type chains allocate without bound. With cap=8 we silently truncated
+// >300K paths in one run; with cap=256 the walker exhausted Node's heap
+// at ~4GB. 16 is the empirical sweet spot: deep enough to reach real
+// public-surface types, shallow enough to bound memory. The
+// depthCapHits counter surfaces in the run report so any deep types
+// being silently skipped are visible.
+const MAX_DEPTH = 16;
 
 function isAnyType(t) {
   if (!t || !(t.flags & ts.TypeFlags.Any)) return false;
@@ -211,8 +220,16 @@ function record(kind, symbolPath, decl) {
     owner: 'owned',
   });
 }
+let depthCapHits = 0;
 function walkType(type, symbolPath, depth, originDecl) {
-  if (depth > MAX_DEPTH) return;
+  if (depth > MAX_DEPTH) {
+    // Surface in the run report instead of dropping silently. With
+    // persistent visited handling cycles, this should remain at 0;
+    // a non-zero count means the walker hit a pathologically deep
+    // public type that needs investigation.
+    depthCapHits++;
+    return;
+  }
   if (!type) return;
   // Always record direct `any` regardless of visited state. The `any`
   // singleton's type id stays the same across all occurrences, so a
@@ -457,6 +474,9 @@ if (doWrite) {
 // -- Report ----------------------------------------------------------------
 console.log(``);
 console.log(`[audit] Findings: ${distinctFindings.size} distinct (owned, after dedup)`);
+if (depthCapHits > 0) {
+  console.log(`[audit] WARN: walker hit MAX_DEPTH=${MAX_DEPTH} cap ${depthCapHits} times; deep public types may be partially audited`);
+}
 console.log(`[audit] Allowlist: ${allowlist.entries.length} entries`);
 console.log(`[audit] New (not in allowlist): ${newFindings.length}`);
 console.log(`[audit] Stale (in allowlist, no longer present): ${staleAllowlistKeys.length}`);

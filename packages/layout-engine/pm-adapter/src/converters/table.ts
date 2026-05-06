@@ -442,6 +442,53 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
       continue;
     }
 
+    // SD-2516: a documentPartObject is a transparent SDT wrapper. Word's
+    // generic SDT in a table cell parses into PM as
+    // `tableCell > documentPartObject > paragraph` and previously fell
+    // through with no branch, dropping the cell content. Flatten the
+    // wrapper's paragraph/table children into the cell's blocks array.
+    if (childNode.type === 'documentPartObject' && Array.isArray(childNode.content)) {
+      for (const nestedNode of childNode.content) {
+        if (nestedNode.type === 'paragraph') {
+          if (!paragraphToFlowBlocks) continue;
+          const paragraphBlocks = paragraphToFlowBlocks({
+            para: nestedNode,
+            nextBlockId: context.nextBlockId,
+            positions: context.positions,
+            storyKey: context.storyKey,
+            trackedChangesConfig: context.trackedChangesConfig,
+            bookmarks: context.bookmarks,
+            hyperlinkConfig: context.hyperlinkConfig,
+            themeColors: context.themeColors,
+            converterContext: cellConverterContext,
+            converters: context.converters,
+            enableComments: context.enableComments,
+          });
+          appendParagraphBlocks(paragraphBlocks);
+          continue;
+        }
+        if (nestedNode.type === 'table' && tableNodeToBlock) {
+          const tableBlock = tableNodeToBlock(nestedNode, {
+            nextBlockId: context.nextBlockId,
+            positions: context.positions,
+            storyKey: context.storyKey,
+            trackedChangesConfig: context.trackedChangesConfig,
+            bookmarks: context.bookmarks,
+            hyperlinkConfig: context.hyperlinkConfig,
+            themeColors: context.themeColors,
+            converterContext: context.converterContext,
+            converters: context.converters,
+            enableComments: context.enableComments,
+          });
+          if (tableBlock && tableBlock.kind === 'table') {
+            blocks.push(tableBlock);
+          }
+          continue;
+        }
+      }
+      continue;
+    }
+
     if (childNode.type === 'image' && context.converters?.imageNodeToBlock) {
       const mergedMarks = [...(childNode.marks ?? [])];
       const trackedMeta = context.trackedChangesConfig

@@ -372,6 +372,52 @@ describe('preProcessNodesForFldChar', () => {
     expect(result.unpairedEnd).toBeNull();
   });
 
+  it('preserves raw field nodes when an active field ends inside a tracked deletion wrapper', () => {
+    const expectedNodes = [
+      { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'begin' } }] },
+      {
+        name: 'w:r',
+        elements: [{ name: 'w:instrText', elements: [{ type: 'text', text: 'HYPERLINK "http://example.com"' }] }],
+      },
+      { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'separate' } }] },
+      { name: 'w:r', elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'link text' }] }] },
+      {
+        name: 'w:p',
+        elements: [
+          {
+            name: 'w:del',
+            attributes: { 'w:id': '1', 'w:author': 'Repro', 'w:date': '2026-04-30T00:00:00Z' },
+            elements: [
+              { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'end' } }] },
+              {
+                name: 'w:r',
+                elements: [
+                  {
+                    name: 'w:delText',
+                    attributes: { 'xml:space': 'preserve' },
+                    elements: [{ type: 'text', text: 'deleted text after field end' }],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ];
+    const nodes = structuredClone(expectedNodes);
+    const docx = {
+      'word/_rels/document.xml.rels': {
+        elements: [{ name: 'Relationships', elements: [] }],
+      },
+    };
+    const { processedNodes, unpairedBegin, unpairedEnd } = preProcessNodesForFldChar(nodes, docx);
+
+    expect(processedNodes).toEqual(expectedNodes);
+    expect(unpairedBegin).toBeNull();
+    expect(unpairedEnd).toBeNull();
+    expect(docx['word/_rels/document.xml.rels'].elements[0].elements).toEqual([]);
+  });
+
   it('should handle unpaired begin', () => {
     const nodes = [
       { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'begin' } }] },

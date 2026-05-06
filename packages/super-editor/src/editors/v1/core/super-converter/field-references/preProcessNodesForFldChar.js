@@ -13,6 +13,7 @@ const isTrackChangeWrapper = (node) => node?.name === 'w:del' || node?.name === 
  * @property {OpenXmlNode[]} processedNodes - The list of nodes after processing.
  * @property {Array<{nodes: OpenXmlNode[], fieldInfo: {instrText: string, instructionTokens?: Array<{type: string, text?: string}>, afterSeparate?: boolean, preserveRaw?: boolean}}>| null} unpairedBegin - If a field 'begin' was found without a matching 'end'. Contains the current field data.
  * @property {boolean | null} unpairedEnd - If a field 'end' was found without a matching 'begin'.
+ * @property {boolean | null} unpairedEndPreserveRaw - If an unpaired field 'end' bubbled through a tracked-change wrapper.
  */
 
 /**
@@ -36,6 +37,7 @@ export const preProcessNodesForFldChar = (nodes = [], docx) => {
   let fieldRunRPrStack = [];
   let currentFieldStack = [];
   let unpairedEnd = null;
+  let unpairedEndPreserveRaw = null;
   let collecting = false;
   const rawNodeSourceTokens = new WeakMap();
 
@@ -223,12 +225,17 @@ export const preProcessNodesForFldChar = (nodes = [], docx) => {
         });
       } else if (childResult.unpairedEnd) {
         // A field from this level or higher ended in the children.
+        const shouldPreserveRaw = childResult.unpairedEndPreserveRaw || isTrackChangeWrapper(node);
         if (collectedNodesStack.length === 0) {
           processedNodes.push(node);
           unpairedEnd = true;
+          if (shouldPreserveRaw) unpairedEndPreserveRaw = true;
           return;
         }
 
+        if (shouldPreserveRaw) {
+          currentFieldStack[currentFieldStack.length - 1].preserveRaw = true;
+        }
         collectedNodesStack[collectedNodesStack.length - 1].push(node);
         captureRawNodeForCurrentField(rawNode, capturedRawNodes, rawSourceToken);
         finalizeField();
@@ -272,7 +279,7 @@ export const preProcessNodesForFldChar = (nodes = [], docx) => {
     }
   }
 
-  return { processedNodes, unpairedBegin, unpairedEnd };
+  return { processedNodes, unpairedBegin, unpairedEnd, unpairedEndPreserveRaw };
 };
 
 /**

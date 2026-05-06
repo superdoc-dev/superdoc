@@ -17,6 +17,11 @@ import { getResolvedParagraphProperties } from '@extensions/paragraph/resolvedPr
  * captured before the command ran still points at the old doc, so dispatching
  * it would throw "Applying a mismatched transaction" — flag it with
  * `preventDispatch` so CommandService skips the dispatch.
+ *
+ * In headless mode (no view) `handleNumberingInvalidation` is a silent no-op,
+ * so the captured tr stays valid. We must let CommandService dispatch it,
+ * otherwise `listRendering` never recomputes and `update`/`transaction`
+ * listeners never fire even though the numbering XML did mutate.
  */
 export const continueNumbering = ({ editor, tr, state }) => {
   const { node: paragraph } = findParentNode(isList)(state.selection) || {};
@@ -26,6 +31,6 @@ export const continueNumbering = ({ editor, tr, state }) => {
   if (numId == null) return false;
 
   ListHelpers.removeLvlOverride(editor, numId, ilvl);
-  tr.setMeta('preventDispatch', true);
+  if (editor.view) tr.setMeta('preventDispatch', true);
   return true;
 };

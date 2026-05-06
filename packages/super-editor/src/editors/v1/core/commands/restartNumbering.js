@@ -38,12 +38,15 @@ export const restartNumbering = ({ editor, tr, state }) => {
   if (!hasPrecedingItems) {
     // Already the first item — pin startOverride on the existing numId.
     // setLvlOverride triggers handleNumberingInvalidation, which dispatches a
-    // fresh tr that updates listRendering synchronously. After that, the tr
-    // CommandService captured before this command ran is built against a stale
-    // doc, so dispatching it would throw "Applying a mismatched transaction".
-    // Flag it with `preventDispatch` so CommandService skips the dispatch.
+    // fresh tr through `editor.view.dispatch` to recompute listRendering. After
+    // that the captured tr points at a stale doc and dispatching it would throw
+    // "Applying a mismatched transaction" — so we flag it with `preventDispatch`.
+    // In headless mode (no view) handleNumberingInvalidation is a silent no-op,
+    // so the captured tr stays valid and we must let CommandService dispatch it
+    // (otherwise listRendering never recomputes and `update`/`transaction`
+    // listeners never fire).
     ListHelpers.setLvlOverride(editor, numId, ilvl, { startOverride: 1 });
-    tr.setMeta('preventDispatch', true);
+    if (editor.view) tr.setMeta('preventDispatch', true);
     return true;
   }
 

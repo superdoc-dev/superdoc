@@ -82,15 +82,28 @@ describe('continueNumbering', () => {
     expect(ListHelpers.removeLvlOverride).not.toHaveBeenCalled();
   });
 
-  it('removes lvlOverride and flags the captured tr with preventDispatch', () => {
+  it('removes lvlOverride and flags the captured tr with preventDispatch (view present)', () => {
     const paragraph = createParagraph({ numId: 7, ilvl: 0 });
     resolveParent.mockReturnValue({ node: paragraph, pos: 5 });
+    editor.view = { dispatch: vi.fn() };
 
     const result = continueNumbering({ editor, tr, state });
 
     expect(result).toBe(true);
     expect(ListHelpers.removeLvlOverride).toHaveBeenCalledWith(editor, 7, 0);
     expect(tr.setMeta).toHaveBeenCalledWith('preventDispatch', true);
+  });
+
+  it('does NOT set preventDispatch in headless mode (no view) so CommandService can dispatch the captured tr', () => {
+    const paragraph = createParagraph({ numId: 7, ilvl: 0 });
+    resolveParent.mockReturnValue({ node: paragraph, pos: 5 });
+    // editor.view intentionally undefined
+
+    const result = continueNumbering({ editor, tr, state });
+
+    expect(result).toBe(true);
+    expect(ListHelpers.removeLvlOverride).toHaveBeenCalledWith(editor, 7, 0);
+    expect(tr.setMeta).not.toHaveBeenCalledWith('preventDispatch', true);
   });
 
   it('defaults ilvl to 0 when not specified', () => {

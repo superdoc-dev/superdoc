@@ -375,7 +375,7 @@ describe('resolveEffectiveParagraphDirection', () => {
     expect(direction).toBe('rtl');
   });
 
-  it('uses docDefaults direction before run inference', () => {
+  it('uses run inference before docDefaults direction', () => {
     const paragraph: PMNode = {
       type: { name: 'paragraph' },
       content: [
@@ -384,15 +384,23 @@ describe('resolveEffectiveParagraphDirection', () => {
     };
 
     const direction = resolveEffectiveParagraphDirection(paragraph as never, {} as never, undefined, 'ltr');
-    expect(direction).toBe('ltr');
+    expect(direction).toBe('rtl');
   });
 
-  it('uses docDefaults rtl before run inference', () => {
+  it('uses run inference when rtl is set on runProperties', () => {
     const paragraph: PMNode = {
       type: { name: 'paragraph' },
-      content: [
-        { type: 'run', attrs: { runProperties: { rightToLeft: false } }, content: [{ type: 'text', text: 'abc' }] },
-      ],
+      content: [{ type: 'run', attrs: { runProperties: { rtl: true } }, content: [{ type: 'text', text: 'אבג' }] }],
+    };
+
+    const direction = resolveEffectiveParagraphDirection(paragraph as never, {} as never, undefined, 'ltr');
+    expect(direction).toBe('rtl');
+  });
+
+  it('uses docDefaults when no explicit run direction exists', () => {
+    const paragraph: PMNode = {
+      type: { name: 'paragraph' },
+      content: [{ type: 'run', attrs: { runProperties: {} }, content: [{ type: 'text', text: 'abc' }] }],
     };
 
     const direction = resolveEffectiveParagraphDirection(paragraph as never, {} as never, undefined, 'rtl');
@@ -412,7 +420,7 @@ describe('resolveEffectiveParagraphDirection', () => {
     expect(direction).toBe('rtl');
   });
 
-  it('infers ltr when explicit ltr runs are the majority', () => {
+  it('does not infer rtl when any explicit ltr run is present', () => {
     const paragraph: PMNode = {
       type: { name: 'paragraph' },
       content: [
@@ -423,10 +431,23 @@ describe('resolveEffectiveParagraphDirection', () => {
     };
 
     const direction = resolveEffectiveParagraphDirection(paragraph as never, {} as never);
-    expect(direction).toBe('ltr');
+    expect(direction).toBeUndefined();
   });
 
-  it('infers rtl when explicit rtl runs are the majority', () => {
+  it('does not infer rtl when rtl and explicit ltr rtl=false are mixed', () => {
+    const paragraph: PMNode = {
+      type: { name: 'paragraph' },
+      content: [
+        { type: 'run', attrs: { runProperties: { rtl: true } }, content: [{ type: 'text', text: 'אבג' }] },
+        { type: 'run', attrs: { runProperties: { rtl: false } }, content: [{ type: 'text', text: 'abc' }] },
+      ],
+    };
+
+    const direction = resolveEffectiveParagraphDirection(paragraph as never, {} as never);
+    expect(direction).toBeUndefined();
+  });
+
+  it('does not infer rtl when explicit rtl and ltr runs are mixed', () => {
     const paragraph: PMNode = {
       type: { name: 'paragraph' },
       content: [
@@ -437,10 +458,10 @@ describe('resolveEffectiveParagraphDirection', () => {
     };
 
     const direction = resolveEffectiveParagraphDirection(paragraph as never, {} as never);
-    expect(direction).toBe('rtl');
+    expect(direction).toBeUndefined();
   });
 
-  it('uses first explicit run direction as tie-breaker for mixed runs', () => {
+  it('does not infer rtl on mixed explicit directions (tie case)', () => {
     const paragraph: PMNode = {
       type: { name: 'paragraph' },
       content: [
@@ -450,7 +471,7 @@ describe('resolveEffectiveParagraphDirection', () => {
     };
 
     const direction = resolveEffectiveParagraphDirection(paragraph as never, {} as never);
-    expect(direction).toBe('rtl');
+    expect(direction).toBeUndefined();
   });
 
   it('returns undefined when no direction signal exists', () => {

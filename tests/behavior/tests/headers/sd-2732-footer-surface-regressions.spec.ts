@@ -49,6 +49,8 @@ test('page-2 footer clicks keep mapping to the second-section footer text', asyn
   await superdoc.waitForStable();
 
   await superdoc.assertPageCount(2);
+  const page1Footer = superdoc.page.locator('.superdoc-page-footer').first();
+  await expect(page1Footer).toContainText('Main footer');
 
   const footer = await activateFooter(superdoc, 1);
   await waitForActiveStory(superdoc.page, {
@@ -77,6 +79,9 @@ test('page-2 footer clicks keep mapping to the second-section footer text', asyn
   await superdoc.waitForStable();
   footerText = 'SAppendix foMoterE';
   await expectActiveStoryText(superdoc.page, footerText);
+
+  await expect(page1Footer).toContainText('Main footer');
+  await expect(page1Footer).not.toContainText('SAppendix');
 });
 
 test('clicking from a footer into a footnote exits footer mode cleanly and keeps note clicks mapped', async ({

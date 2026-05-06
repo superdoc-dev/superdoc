@@ -66,28 +66,25 @@ export const deepClone = <T>(obj: T): T => {
 
 const inferDirectionFromRuns = (para: PMNode): ParagraphDirection | undefined => {
   const content = Array.isArray(para.content) ? para.content : [];
-  let rtlRunCount = 0;
-  let ltrRunCount = 0;
-  let firstExplicitDirection: ParagraphDirection | undefined;
+  let hasExplicitRtl = false;
+  let hasExplicitLtr = false;
 
   for (const node of content) {
     if (node?.type !== 'run') continue;
-    const runDirection = (node.attrs?.runProperties as { rightToLeft?: unknown } | undefined)?.rightToLeft;
+    const runProps = (node.attrs?.runProperties as { rightToLeft?: unknown; rtl?: unknown } | undefined) ?? {};
+    const runDirection = runProps.rightToLeft ?? runProps.rtl;
     if (runDirection === true) {
-      rtlRunCount += 1;
-      if (!firstExplicitDirection) firstExplicitDirection = 'rtl';
+      hasExplicitRtl = true;
       continue;
     }
     if (runDirection === false) {
-      ltrRunCount += 1;
-      if (!firstExplicitDirection) firstExplicitDirection = 'ltr';
+      hasExplicitLtr = true;
     }
   }
 
-  if (rtlRunCount === 0 && ltrRunCount === 0) return undefined;
-  if (rtlRunCount > ltrRunCount) return 'rtl';
-  if (ltrRunCount > rtlRunCount) return 'ltr';
-  return firstExplicitDirection;
+  if (!hasExplicitRtl && !hasExplicitLtr) return undefined;
+  if (hasExplicitLtr) return undefined;
+  return 'rtl';
 };
 
 export const resolveEffectiveParagraphDirection = (
@@ -98,9 +95,11 @@ export const resolveEffectiveParagraphDirection = (
 ): ParagraphDirection | undefined => {
   if (resolvedParagraphProperties.rightToLeft === true) return 'rtl';
   if (resolvedParagraphProperties.rightToLeft === false) return 'ltr';
+  const inferredFromRuns = inferDirectionFromRuns(para);
+  if (inferredFromRuns) return inferredFromRuns;
   if (sectionDirection) return sectionDirection;
   if (docDefaultsDirection) return docDefaultsDirection;
-  return inferDirectionFromRuns(para);
+  return undefined;
 };
 
 /**

@@ -921,6 +921,10 @@ const applyTabLayoutToLines = (
         }
       } else {
         cursorX = Math.max(cursorX, relativeTarget);
+        // Keep start-tab text explicitly positioned to match measuring/dom.
+        // Ordinary start tabs use the same layout and paint x; only compensated
+        // negative-left generated/default tabs carry a distinct precedingTabEndX
+        // for the painter's tab-span sizing.
         pendingTabAlignStartX = {
           layoutX: relativeTarget,
           paintX: paintTarget,

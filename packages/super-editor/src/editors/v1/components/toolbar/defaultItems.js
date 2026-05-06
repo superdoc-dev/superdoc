@@ -5,7 +5,8 @@ import { normalizeFontOption } from './helpers/font-options.js';
 import { useToolbarItem } from './use-toolbar-item';
 import AIWriter from './AIWriter.vue';
 import AlignmentButtons from './AlignmentButtons.vue';
-import BulletStyleButtons from './BulletStyleButtons.vue';
+import StyleButtonsList from './StyleButtonsList.vue';
+import { bulletStyleButtons, numberedStyleButtons } from './list-style-buttons.js';
 import DocumentMode from './DocumentMode.vue';
 import LinkedStyle from './LinkedStyle.vue';
 import LinkInput from './LinkInput.vue';
@@ -641,7 +642,6 @@ export const makeDefaultItems = ({
     hasCaret: true,
     tooltip: toolbarTexts.bulletList,
     restoreEditorFocus: true,
-    suppressActiveHighlight: true,
     attributes: {
       ariaLabel: 'Bullet list',
     },
@@ -655,7 +655,9 @@ export const makeDefaultItems = ({
             const item = { ...bulletedList, command: 'toggleBulletListStyle' };
             superToolbar.emitCommand({ item, argument: style });
           };
-          return h(BulletStyleButtons, {
+          return h(StyleButtonsList, {
+            buttons: bulletStyleButtons,
+            iconSize: 25,
             selectedStyle: bulletedList.selectedValue.value,
             onSelect: handleSelect,
           });
@@ -666,16 +668,37 @@ export const makeDefaultItems = ({
 
   // number list
   const numberedList = useToolbarItem({
-    type: 'button',
+    type: 'dropdown',
     name: 'numberedlist',
-    command: 'toggleOrderedList',
+    command: 'toggleOrderedListStyle',
+    splitButton: true,
+    splitButtonCommand: 'toggleOrderedList',
     icon: toolbarIcons.numberedList,
-    active: false,
+    hasCaret: true,
     tooltip: toolbarTexts.numberedList,
     restoreEditorFocus: true,
     attributes: {
       ariaLabel: 'Numbered list',
     },
+    options: [
+      {
+        type: 'render',
+        key: 'numbered-style-buttons',
+        render: () => {
+          const handleSelect = (style) => {
+            closeDropdown(numberedList);
+            const item = { ...numberedList, command: 'toggleOrderedListStyle' };
+            superToolbar.emitCommand({ item, argument: style });
+          };
+          return h(StyleButtonsList, {
+            buttons: numberedStyleButtons,
+            iconSize: 30,
+            selectedStyle: numberedList.selectedValue.value,
+            onSelect: handleSelect,
+          });
+        },
+      },
+    ],
   });
 
   // indent left

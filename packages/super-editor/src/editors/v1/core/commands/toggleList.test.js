@@ -11,8 +11,24 @@ vi.mock('@helpers/list-numbering-helpers.js', () => ({
     getNewListId: vi.fn(),
     generateNewListDefinition: vi.fn(),
     getListDefinitionDetails: vi.fn(() => null),
+    setListLevelStyles: vi.fn(() => true),
+    cloneListDefinitionWithLevelStyle: vi.fn(({ sourceNumId }) => ({
+      newNumId: 1000 + sourceNumId,
+      newAbstractId: 2000 + sourceNumId,
+    })),
   },
   markerTextToBulletStyle: vi.fn((m) => ({ '•': 'disc', '◦': 'circle', '▪': 'square' })[m] ?? null),
+  numberingInfoToOrderedStyle: vi.fn((numberingType, markerText) => {
+    const suffix = markerText?.slice(-1);
+    const map = {
+      decimal: { '.': 'decimal', ')': 'decimal-paren' },
+      upperRoman: { '.': 'upper-roman' },
+      lowerRoman: { '.': 'lower-roman' },
+      upperLetter: { '.': 'upper-alpha', ')': 'upper-alpha-paren' },
+      lowerLetter: { '.': 'lower-alpha', ')': 'lower-alpha-paren' },
+    };
+    return map[numberingType]?.[suffix] ?? null;
+  }),
 }));
 
 vi.mock('@extensions/paragraph/resolvedPropertiesCache.js', () => ({
@@ -38,22 +54,35 @@ const createParagraph = (attrs, pos, { nodeSize = 12, firstChildName = 'run', la
   pos,
 });
 
-const createState = (paragraphs, { from = 1, to = 10, beforeNode = null } = {}) => ({
-  doc: {
-    nodesBetween: vi.fn((_from, _to, callback) => {
-      for (const { node, pos } of paragraphs) {
-        callback(node, pos);
-      }
-    }),
-    resolve: vi.fn((pos) => {
-      if (paragraphs.length > 0 && pos === paragraphs[0].pos) {
-        return { nodeBefore: beforeNode };
-      }
-      return { nodeBefore: null };
-    }),
-  },
-  selection: { from, to, empty: from === to },
-});
+/**
+ * @param {Array<{ node: any, pos: number }>} paragraphs - Paragraphs inside the user's selection range.
+ * @param {{ from?: number, to?: number, beforeNode?: any, allDocParagraphs?: Array<{ node: any, pos: number }> }} [opts]
+ *   `allDocParagraphs`: full-document set returned by `descendants`. Defaults to `paragraphs`.
+ */
+const createState = (paragraphs, { from = 1, to = 10, beforeNode = null, allDocParagraphs } = {}) => {
+  const docParagraphs = allDocParagraphs ?? paragraphs;
+  return {
+    doc: {
+      nodesBetween: vi.fn((_from, _to, callback) => {
+        for (const { node, pos } of paragraphs) {
+          callback(node, pos);
+        }
+      }),
+      descendants: vi.fn((callback) => {
+        for (const { node, pos } of docParagraphs) {
+          callback(node, pos);
+        }
+      }),
+      resolve: vi.fn((pos) => {
+        if (paragraphs.length > 0 && pos === paragraphs[0].pos) {
+          return { nodeBefore: beforeNode };
+        }
+        return { nodeBefore: null };
+      }),
+    },
+    selection: { from, to, empty: from === to },
+  };
+};
 
 const mockParagraphNodes = (trDoc, paragraphs) => {
   const paragraphsByPos = new Map(paragraphs.map(({ pos, node }) => [pos, node]));
@@ -80,6 +109,7 @@ describe('toggleList', () => {
         resolve: vi.fn((pos) => ({ pos })),
       },
       setSelection: vi.fn(),
+      setMeta: vi.fn(),
     };
     dispatch = vi.fn();
   });
@@ -184,6 +214,7 @@ describe('toggleList', () => {
       editor,
       bulletStyle: undefined,
       bulletStyleLevel: 0,
+      orderedStyleLevel: 0,
     });
     const expectedNumbering = { numId: 42, ilvl: 0 };
     for (const [index, { node, pos }] of paragraphs.entries()) {
@@ -217,6 +248,7 @@ describe('toggleList', () => {
       editor,
       bulletStyle: undefined,
       bulletStyleLevel: 0,
+      orderedStyleLevel: 0,
     });
     expect(dispatch).toHaveBeenCalledWith(tr);
   });
@@ -348,85 +380,92 @@ describe('toggleList', () => {
     expect(ListHelpers.generateNewListDefinition).not.toHaveBeenCalled();
   });
 
-  describe('with bulletStyle argument', () => {
-    it('forwards bulletStyle into generateNewListDefinition on the create path', () => {
-      ListHelpers.getNewListId.mockReturnValue('5');
-      const paragraphs = [createParagraph({ paragraphProperties: {} }, 1)];
+  // -------------------------------------------------------------------------
+  // SD-2526 + SD-2527: style param threading
+  //
+  // toggleList accepts (listType, bulletStyle, orderedStyle) and passes them
+  // through to ListHelpers.generateNewListDefinition. These tests verify that
+  // thread-through for every style the toolbar exposes.
+  // -------------------------------------------------------------------------
+  describe('style parameter threading', () => {
+    it.each(['disc', 'circle', 'square'])(
+      'passes bulletStyle="%s" through to generateNewListDefinition',
+      (bulletStyle) => {
+        ListHelpers.getNewListId.mockReturnValue(7);
+        const paragraphs = [createParagraph({ paragraphProperties: {} }, 3)];
+        const state = createState(paragraphs);
+        const handler = toggleList('bulletList', bulletStyle);
+
+        const result = handler({ editor, state, tr, dispatch });
+
+        expect(result).toBe(true);
+        expect(ListHelpers.generateNewListDefinition).toHaveBeenCalledWith({
+          numId: 7,
+          listType: 'bulletList',
+          editor,
+          bulletStyle,
+          bulletStyleLevel: 0,
+          orderedStyle: undefined,
+          orderedStyleLevel: 0,
+        });
+      },
+    );
+
+    it.each([
+      'decimal',
+      'decimal-paren',
+      'upper-roman',
+      'lower-roman',
+      'upper-alpha',
+      'upper-alpha-paren',
+      'lower-alpha',
+      'lower-alpha-paren',
+    ])('passes orderedStyle="%s" through to generateNewListDefinition', (orderedStyle) => {
+      ListHelpers.getNewListId.mockReturnValue(11);
+      const paragraphs = [createParagraph({ paragraphProperties: {} }, 3)];
       const state = createState(paragraphs);
-      const handler = toggleList('bulletList', 'square');
+      const handler = toggleList('orderedList', null, orderedStyle);
 
       const result = handler({ editor, state, tr, dispatch });
 
       expect(result).toBe(true);
       expect(ListHelpers.generateNewListDefinition).toHaveBeenCalledWith({
-        numId: 5,
-        listType: 'bulletList',
+        numId: 11,
+        listType: 'orderedList',
         editor,
-        bulletStyle: 'square',
+        bulletStyle: null,
         bulletStyleLevel: 0,
+        orderedStyle,
+        orderedStyleLevel: 0,
       });
     });
 
-    it('removes the list when paragraph already matches the requested bulletStyle', () => {
-      ListHelpers.getListDefinitionDetails.mockReturnValue({ listNumberingType: 'bullet' });
+    it('matches existing same-style paragraphs and skips creating a new list', () => {
+      // Cursor is in a paragraph already using 'disc'. Toggling with bulletStyle='disc'
+      // should remove the list (toggle off), not allocate a new numId.
+      const sharedNumbering = { numId: 3, ilvl: 0 };
       const paragraphs = [
         createParagraph(
           {
-            paragraphProperties: { numberingProperties: { numId: 5, ilvl: 0 } },
-            listRendering: { numberingType: 'bullet', markerText: '◦' },
-          },
-          1,
-        ),
-      ];
-      const state = createState(paragraphs);
-      const handler = toggleList('bulletList', 'circle');
-
-      const result = handler({ editor, state, tr, dispatch });
-
-      expect(result).toBe(true);
-      // Marker matches requested style → removal path, no new definition.
-      expect(updateNumberingProperties).toHaveBeenCalledWith(null, paragraphs[0].node, paragraphs[0].pos, editor, tr);
-      expect(ListHelpers.generateNewListDefinition).not.toHaveBeenCalled();
-    });
-
-    it('takes the create path with a fresh numId when swapping to a different bulletStyle', () => {
-      ListHelpers.getListDefinitionDetails.mockReturnValue({ listNumberingType: 'bullet' });
-      ListHelpers.getNewListId.mockReturnValue('99');
-      const paragraphs = [
-        createParagraph(
-          {
-            paragraphProperties: { numberingProperties: { numId: 5, ilvl: 0 } },
+            paragraphProperties: { numberingProperties: sharedNumbering },
             listRendering: { numberingType: 'bullet', markerText: '•' },
           },
           1,
         ),
       ];
       const state = createState(paragraphs);
-      const handler = toggleList('bulletList', 'square');
+      const handler = toggleList('bulletList', 'disc');
 
       const result = handler({ editor, state, tr, dispatch });
 
       expect(result).toBe(true);
-      // Existing disc marker doesn't match 'square' → predicate fails → create path mints new numId.
-      expect(ListHelpers.getNewListId).toHaveBeenCalledWith(editor);
-      expect(ListHelpers.generateNewListDefinition).toHaveBeenCalledWith({
-        numId: 99,
-        listType: 'bulletList',
-        editor,
-        bulletStyle: 'square',
-        bulletStyleLevel: 0,
-      });
-      // Paragraph migrates to the new numId.
-      expect(updateNumberingProperties).toHaveBeenCalledWith(
-        { numId: 99, ilvl: 0 },
-        paragraphs[0].node,
-        paragraphs[0].pos,
-        editor,
-        tr,
-      );
+      // Predicate matched (kind=bullet, style=disc) → mode is 'remove', not 'create'
+      expect(ListHelpers.generateNewListDefinition).not.toHaveBeenCalled();
     });
 
     it('falls back to type-only matching when no bulletStyle is requested', () => {
+      // No style argument: any bullet marker should be treated as "already a bullet list",
+      // so toggling with no style toggles off regardless of which marker the list uses.
       ListHelpers.getListDefinitionDetails.mockReturnValue({ listNumberingType: 'bullet' });
       const paragraphs = [
         createParagraph(
@@ -438,13 +477,318 @@ describe('toggleList', () => {
         ),
       ];
       const state = createState(paragraphs);
-      // No style argument: any bullet marker should be treated as "already a bullet list".
       const handler = toggleList('bulletList');
 
       const result = handler({ editor, state, tr, dispatch });
 
       expect(result).toBe(true);
       expect(updateNumberingProperties).toHaveBeenCalledWith(null, paragraphs[0].node, paragraphs[0].pos, editor, tr);
+      expect(ListHelpers.generateNewListDefinition).not.toHaveBeenCalled();
+    });
+
+    it('clones the abstract and migrates the paragraph when bullet style differs', () => {
+      // Bare caret in a 'disc' bullet list and the caller asks for 'square'. The abstract
+      // is cloned (with the new style applied at lvl0) and the paragraph is migrated to
+      // the new numId via PM-tracked setNodeMarkup so undo can revert the change.
+      const paragraphs = [
+        createParagraph(
+          {
+            paragraphProperties: { numberingProperties: { numId: 3, ilvl: 0 } },
+            listRendering: { numberingType: 'bullet', markerText: '•' },
+          },
+          1,
+        ),
+      ];
+      const state = createState(paragraphs, { from: 2, to: 2 });
+      const handler = toggleList('bulletList', 'square');
+
+      const result = handler({ editor, state, tr, dispatch });
+
+      expect(result).toBe(true);
+      expect(ListHelpers.cloneListDefinitionWithLevelStyle).toHaveBeenCalledTimes(1);
+      expect(ListHelpers.cloneListDefinitionWithLevelStyle).toHaveBeenCalledWith({
+        editor,
+        sourceNumId: 3,
+        ilvl: 0,
+        bulletStyle: 'square',
+        orderedStyle: null,
+      });
+      // The mock returns newNumId = 1000 + sourceNumId = 1003.
+      expect(updateNumberingProperties).toHaveBeenCalledTimes(1);
+      expect(updateNumberingProperties).toHaveBeenCalledWith(
+        { numId: 1003, ilvl: 0 },
+        paragraphs[0].node,
+        paragraphs[0].pos,
+        editor,
+        tr,
+      );
+      expect(ListHelpers.setListLevelStyles).not.toHaveBeenCalled();
+      expect(ListHelpers.generateNewListDefinition).not.toHaveBeenCalled();
+      expect(tr.setMeta).not.toHaveBeenCalledWith('preventDispatch', true);
+    });
+
+    it('clones the abstract and migrates the paragraph when ordered style differs', () => {
+      // Bare caret on a 'decimal' paragraph and the caller asks for 'upper-roman'. The
+      // cloned abstract carries the new ordered style at the paragraph's existing ilvl.
+      const paragraphs = [
+        createParagraph(
+          {
+            paragraphProperties: { numberingProperties: { numId: 5, ilvl: 0 } },
+            listRendering: { numberingType: 'decimal', markerText: '1.' },
+          },
+          1,
+        ),
+      ];
+      const state = createState(paragraphs, { from: 2, to: 2 });
+      const handler = toggleList('orderedList', null, 'upper-roman');
+
+      const result = handler({ editor, state, tr, dispatch });
+
+      expect(result).toBe(true);
+      expect(ListHelpers.cloneListDefinitionWithLevelStyle).toHaveBeenCalledWith({
+        editor,
+        sourceNumId: 5,
+        ilvl: 0,
+        bulletStyle: null,
+        orderedStyle: 'upper-roman',
+      });
+      expect(updateNumberingProperties).toHaveBeenCalledWith(
+        { numId: 1005, ilvl: 0 },
+        paragraphs[0].node,
+        paragraphs[0].pos,
+        editor,
+        tr,
+      );
+    });
+
+    it('clones once per unique (numId, ilvl) when the list spans multiple levels', () => {
+      // Bare caret in a list with sublevels. Each unique (numId, ilvl) gets its own clone
+      // so the new numIds for level 0 and level 1 are different.
+      const paragraphs = [
+        createParagraph(
+          {
+            paragraphProperties: { numberingProperties: { numId: 5, ilvl: 0 } },
+            listRendering: { numberingType: 'decimal', markerText: '1.' },
+          },
+          1,
+        ),
+        createParagraph(
+          {
+            paragraphProperties: { numberingProperties: { numId: 5, ilvl: 1 } },
+            listRendering: { numberingType: 'decimal', markerText: '1.' },
+          },
+          5,
+        ),
+        createParagraph(
+          {
+            paragraphProperties: { numberingProperties: { numId: 5, ilvl: 0 } },
+            listRendering: { numberingType: 'decimal', markerText: '2.' },
+          },
+          9,
+        ),
+      ];
+      const state = createState(paragraphs, { from: 2, to: 2 });
+      const handler = toggleList('orderedList', null, 'upper-roman');
+
+      const result = handler({ editor, state, tr, dispatch });
+
+      expect(result).toBe(true);
+      expect(ListHelpers.cloneListDefinitionWithLevelStyle).toHaveBeenCalledTimes(2);
+      expect(ListHelpers.cloneListDefinitionWithLevelStyle).toHaveBeenNthCalledWith(1, {
+        editor,
+        sourceNumId: 5,
+        ilvl: 0,
+        bulletStyle: null,
+        orderedStyle: 'upper-roman',
+      });
+      expect(ListHelpers.cloneListDefinitionWithLevelStyle).toHaveBeenNthCalledWith(2, {
+        editor,
+        sourceNumId: 5,
+        ilvl: 1,
+        bulletStyle: null,
+        orderedStyle: 'upper-roman',
+      });
+      // Three paragraphs migrate; both lvl-0 paragraphs share the lvl-0 clone's newNumId.
+      expect(updateNumberingProperties).toHaveBeenCalledTimes(3);
+    });
+
+    it('switches the whole list kind when caret is in one item (bullet → ordered)', () => {
+      // Two-item bullet list (numId=5, ilvl=0). Caret in item 1 only.
+      // Kind switch clones the abstract with `orderedStyle: 'decimal'` at lvl 0, then
+      // migrates BOTH siblings (the cursor's paragraph + its expansion-discovered sibling)
+      // to the new numId.
+      const item1 = createParagraph(
+        {
+          paragraphProperties: { numberingProperties: { numId: 5, ilvl: 0 } },
+          listRendering: { numberingType: 'bullet', markerText: '•' },
+        },
+        1,
+      );
+      const item2 = createParagraph(
+        {
+          paragraphProperties: { numberingProperties: { numId: 5, ilvl: 0 } },
+          listRendering: { numberingType: 'bullet', markerText: '•' },
+        },
+        5,
+      );
+      const state = createState([item1], { from: 2, to: 2, allDocParagraphs: [item1, item2] });
+      const handler = toggleList('orderedList');
+
+      const result = handler({ editor, state, tr, dispatch });
+
+      expect(result).toBe(true);
+      expect(ListHelpers.cloneListDefinitionWithLevelStyle).toHaveBeenCalledWith({
+        editor,
+        sourceNumId: 5,
+        ilvl: 0,
+        bulletStyle: null,
+        orderedStyle: 'decimal',
+      });
+      const expectedNumbering = { numId: 1005, ilvl: 0 };
+      expect(updateNumberingProperties).toHaveBeenCalledTimes(2);
+      expect(updateNumberingProperties).toHaveBeenNthCalledWith(
+        1,
+        expectedNumbering,
+        item1.node,
+        item1.pos,
+        editor,
+        tr,
+      );
+      expect(updateNumberingProperties).toHaveBeenNthCalledWith(
+        2,
+        expectedNumbering,
+        item2.node,
+        item2.pos,
+        editor,
+        tr,
+      );
+    });
+
+    it('switches the whole list kind when caret is in one item (ordered → bullet)', () => {
+      const item1 = createParagraph(
+        {
+          paragraphProperties: { numberingProperties: { numId: 9, ilvl: 0 } },
+          listRendering: { numberingType: 'decimal', markerText: '1.' },
+        },
+        1,
+      );
+      const item2 = createParagraph(
+        {
+          paragraphProperties: { numberingProperties: { numId: 9, ilvl: 0 } },
+          listRendering: { numberingType: 'decimal', markerText: '2.' },
+        },
+        5,
+      );
+      const state = createState([item1], { from: 2, to: 2, allDocParagraphs: [item1, item2] });
+      const handler = toggleList('bulletList');
+
+      const result = handler({ editor, state, tr, dispatch });
+
+      expect(result).toBe(true);
+      expect(ListHelpers.cloneListDefinitionWithLevelStyle).toHaveBeenCalledWith({
+        editor,
+        sourceNumId: 9,
+        ilvl: 0,
+        bulletStyle: 'disc',
+        orderedStyle: null,
+      });
+      const expectedNumbering = { numId: 1009, ilvl: 0 };
+      expect(updateNumberingProperties).toHaveBeenCalledTimes(2);
+      expect(updateNumberingProperties).toHaveBeenNthCalledWith(
+        1,
+        expectedNumbering,
+        item1.node,
+        item1.pos,
+        editor,
+        tr,
+      );
+      expect(updateNumberingProperties).toHaveBeenNthCalledWith(
+        2,
+        expectedNumbering,
+        item2.node,
+        item2.pos,
+        editor,
+        tr,
+      );
+    });
+
+    it('expands across siblings when caret is in one item of a multi-item list', () => {
+      // Two disc bullets at the same level. Caret in item 1; expansion picks up item 2.
+      // One clone is minted for (numId=5, ilvl=0) and BOTH paragraphs migrate to it.
+      const item1 = createParagraph(
+        {
+          paragraphProperties: { numberingProperties: { numId: 5, ilvl: 0 } },
+          listRendering: { numberingType: 'bullet', markerText: '•' },
+        },
+        1,
+      );
+      const item2 = createParagraph(
+        {
+          paragraphProperties: { numberingProperties: { numId: 5, ilvl: 0 } },
+          listRendering: { numberingType: 'bullet', markerText: '•' },
+        },
+        5,
+      );
+      const state = createState([item1], { from: 2, to: 2, allDocParagraphs: [item1, item2] });
+      const handler = toggleList('bulletList', 'square');
+
+      const result = handler({ editor, state, tr, dispatch });
+
+      expect(result).toBe(true);
+      expect(ListHelpers.cloneListDefinitionWithLevelStyle).toHaveBeenCalledTimes(1);
+      expect(updateNumberingProperties).toHaveBeenCalledTimes(2);
+    });
+
+    it('with a non-empty selection, scopes the change to the selected paragraphs only (no abstract mutation)', () => {
+      // A non-empty selection bypasses the whole-list-restyle gate: the abstract is NOT
+      // mutated, and a fresh numId is minted via the create path so only the selected
+      // paragraphs migrate. Siblings outside the selection keep their original numId/style.
+      ListHelpers.getNewListId.mockReturnValue('77');
+      const item1 = createParagraph(
+        {
+          paragraphProperties: { numberingProperties: { numId: 5, ilvl: 0 } },
+          listRendering: { numberingType: 'bullet', markerText: '•' },
+        },
+        1,
+      );
+      const item2 = createParagraph(
+        {
+          paragraphProperties: { numberingProperties: { numId: 5, ilvl: 0 } },
+          listRendering: { numberingType: 'bullet', markerText: '•' },
+        },
+        5,
+      );
+      const state = createState([item1], { from: 2, to: 3, allDocParagraphs: [item1, item2] });
+      const handler = toggleList('bulletList', 'square');
+
+      const result = handler({ editor, state, tr, dispatch });
+
+      expect(result).toBe(true);
+      // Abstract gate did NOT fire — sibling items are not touched.
+      expect(ListHelpers.setListLevelStyles).not.toHaveBeenCalled();
+      // A fresh numId is minted for just the selected paragraph.
+      expect(ListHelpers.generateNewListDefinition).toHaveBeenCalledTimes(1);
+      expect(updateNumberingProperties).toHaveBeenCalledTimes(1);
+      expect(updateNumberingProperties).toHaveBeenCalledWith({ numId: 77, ilvl: 0 }, item1.node, item1.pos, editor, tr);
+    });
+
+    it('does not mutate when the requested style change has no dispatch', () => {
+      const paragraphs = [
+        createParagraph(
+          {
+            paragraphProperties: { numberingProperties: { numId: 3, ilvl: 0 } },
+            listRendering: { numberingType: 'bullet', markerText: '•' },
+          },
+          1,
+        ),
+      ];
+      const state = createState(paragraphs);
+      const handler = toggleList('bulletList', 'square');
+
+      const result = handler({ editor, state, tr, dispatch: undefined });
+
+      expect(result).toBe(true);
+      expect(ListHelpers.setListLevelStyles).not.toHaveBeenCalled();
       expect(ListHelpers.generateNewListDefinition).not.toHaveBeenCalled();
     });
   });

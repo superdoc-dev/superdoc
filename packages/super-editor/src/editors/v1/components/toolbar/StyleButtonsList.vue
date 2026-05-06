@@ -1,24 +1,31 @@
 <script setup>
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { useHighContrastMode } from '../../composables/use-high-contrast-mode';
-import { toolbarIcons } from './toolbarIcons.js';
 
 const { isHighContrastMode } = useHighContrastMode();
 const emit = defineEmits(['select']);
 
 const props = defineProps({
+  buttons: {
+    type: Array,
+    required: true,
+  },
   selectedStyle: {
     type: String,
     default: null,
   },
+  iconSize: {
+    type: Number,
+    default: 25,
+  },
 });
 
 const buttonRefs = ref([]);
-const bulletButtons = [
-  { key: 'disc', icon: toolbarIcons.bulletListDisc, ariaLabel: 'Opaque circle' },
-  { key: 'circle', icon: toolbarIcons.bulletListCircle, ariaLabel: 'Outline circle' },
-  { key: 'square', icon: toolbarIcons.bulletListSquare, ariaLabel: 'Opaque square' },
-];
+
+const iconStyle = computed(() => ({
+  width: `${props.iconSize}px`,
+  height: `${props.iconSize}px`,
+}));
 
 const select = (key) => {
   emit('select', key);
@@ -51,7 +58,7 @@ const handleKeyDown = (e, index) => {
       moveToNextButton(index);
       break;
     case 'Enter':
-      select(bulletButtons[index].key);
+      select(props.buttons[index].key);
       break;
     default:
       break;
@@ -68,12 +75,13 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="bullet-style-buttons" :class="{ 'high-contrast': isHighContrastMode }">
+  <div class="style-buttons-list" :class="{ 'high-contrast': isHighContrastMode }">
     <div
-      v-for="(button, index) in bulletButtons"
+      v-for="(button, index) in props.buttons"
       :key="button.key"
       class="button-icon"
       :class="{ selected: props.selectedStyle === button.key }"
+      :style="iconStyle"
       @click="select(button.key)"
       v-html="button.icon"
       role="menuitem"
@@ -85,7 +93,7 @@ onMounted(() => {
 </template>
 
 <style scoped>
-.bullet-style-buttons {
+.style-buttons-list {
   display: flex;
   justify-content: space-between;
   width: 100%;
@@ -97,8 +105,6 @@ onMounted(() => {
     padding: 5px;
     font-size: var(--sd-ui-font-size-600, 16px);
     color: var(--sd-ui-dropdown-text, #47484a);
-    width: 25px;
-    height: 25px;
     border-radius: var(--sd-ui-dropdown-option-radius, 3px);
     display: flex;
     justify-content: center;

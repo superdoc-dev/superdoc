@@ -285,6 +285,86 @@ describe('setLvlStyleOnAbstract', () => {
   });
 });
 
+describe('generateNewListDefinition - nested level cycle', () => {
+  // Word's hybridMultilevel template cycles `decimal → lowerLetter → lowerRoman` across
+  // ilvl 0..8. When the user picks an outer-level style, only that level's marker should
+  // change — the nested levels (ilvl 1..8) must keep cycling lowerLetter / lowerRoman /
+  // decimal so the document looks the way Word renders it. Encoding the full table here
+  // catches any regression that would, for example, leave a level on `decimal` because the
+  // override accidentally rewrote a sibling level.
+  const NESTED_LEVEL_CYCLE: ReadonlyArray<{ ilvl: string; numFmt: string; lvlText: string }> = [
+    { ilvl: '1', numFmt: 'lowerLetter', lvlText: '%2.' },
+    { ilvl: '2', numFmt: 'lowerRoman', lvlText: '%3.' },
+    { ilvl: '3', numFmt: 'decimal', lvlText: '%4.' },
+    { ilvl: '4', numFmt: 'lowerLetter', lvlText: '%5.' },
+    { ilvl: '5', numFmt: 'lowerRoman', lvlText: '%6.' },
+    { ilvl: '6', numFmt: 'decimal', lvlText: '%7.' },
+    { ilvl: '7', numFmt: 'lowerLetter', lvlText: '%8.' },
+    { ilvl: '8', numFmt: 'lowerRoman', lvlText: '%9.' },
+  ];
+
+  const OUTER_STYLES = [
+    'decimal',
+    'decimal-paren',
+    'upper-roman',
+    'lower-roman',
+    'upper-alpha',
+    'upper-alpha-paren',
+    'lower-alpha',
+    'lower-alpha-paren',
+  ] as const;
+
+  it.each(OUTER_STYLES)(
+    'keeps nested ilvl 1..8 on the lowerLetter/lowerRoman/decimal cycle when outer style is "%s"',
+    (orderedStyle) => {
+      const numbering = freshModel();
+      const result = generateNewListDefinition(numbering, {
+        numId: 1,
+        listType: 'orderedList',
+        orderedStyle,
+      });
+
+      for (const expected of NESTED_LEVEL_CYCLE) {
+        const lvl = result.abstractDef.elements.find(
+          (el: any) => el.name === 'w:lvl' && el.attributes['w:ilvl'] === expected.ilvl,
+        );
+        expect(lvl, `ilvl=${expected.ilvl} should be present`).toBeDefined();
+        expect(findChild(lvl, 'w:numFmt').attributes['w:val']).toBe(expected.numFmt);
+        expect(findChild(lvl, 'w:lvlText').attributes['w:val']).toBe(expected.lvlText);
+      }
+    },
+  );
+
+  it('overrides only ilvl 0 — every nested level keeps its template marker', () => {
+    // Belt-and-braces: directly compare the nested-level slice of an overridden abstract
+    // to a freshly-generated one with no override. They must match level-for-level.
+    const overridden = generateNewListDefinition(freshModel(), {
+      numId: 1,
+      listType: 'orderedList',
+      orderedStyle: 'upper-roman',
+    });
+    const baseline = generateNewListDefinition(freshModel(), {
+      numId: 1,
+      listType: 'orderedList',
+    });
+
+    for (const expected of NESTED_LEVEL_CYCLE) {
+      const overriddenLvl = overridden.abstractDef.elements.find(
+        (el: any) => el.name === 'w:lvl' && el.attributes['w:ilvl'] === expected.ilvl,
+      );
+      const baselineLvl = baseline.abstractDef.elements.find(
+        (el: any) => el.name === 'w:lvl' && el.attributes['w:ilvl'] === expected.ilvl,
+      );
+      expect(findChild(overriddenLvl, 'w:numFmt').attributes['w:val']).toBe(
+        findChild(baselineLvl, 'w:numFmt').attributes['w:val'],
+      );
+      expect(findChild(overriddenLvl, 'w:lvlText').attributes['w:val']).toBe(
+        findChild(baselineLvl, 'w:lvlText').attributes['w:val'],
+      );
+    }
+  });
+});
+
 describe('generateNewListDefinition - allocation', () => {
   it('allocates fresh abstractNumIds across calls', () => {
     const numbering = freshModel();

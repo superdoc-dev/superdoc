@@ -3368,7 +3368,7 @@ export class DomPainter {
           // Adjust availableWidth for first-line text indent (hanging indent).
           const isFirstLine = index === 0 && !paraContinuesFromPrev;
           const isListFirstLine = Boolean(hasListFirstLineMarker && fragment.markerTextWidth);
-          if (isFirstLine && !isListFirstLine && !hasExplicitSegmentPositioning) {
+          if (isFirstLine && !isListFirstLine && line.hasExplicitTabStops !== true) {
             availableWidthOverride = adjustAvailableWidthForTextIndent(
               availableWidthOverride,
               firstLineOffset,
@@ -6271,6 +6271,8 @@ export class DomPainter {
 
     // Check if any segments have explicit X positioning (from tab stops)
     const hasExplicitPositioning = line.segments?.some((seg) => seg.x !== undefined);
+    const explicitPositionedSegmentCount = line.segments?.filter((seg) => seg.x !== undefined).length ?? 0;
+    const hasMultipleExplicitPositionedSegments = explicitPositionedSegmentCount > 1;
     const availableWidth = availableWidthOverride ?? line.maxWidth ?? line.width;
 
     const justifyShouldApply = shouldApplyJustify({
@@ -6280,7 +6282,7 @@ export class DomPainter {
       // Caller already folds last-line + trailing lineBreak behavior into skipJustify.
       isLastLineOfParagraph: false,
       paragraphEndsWithLineBreak: false,
-      skipJustifyOverride: skipJustify,
+      skipJustifyOverride: skipJustify || hasMultipleExplicitPositionedSegments,
     });
 
     const countSpaces = (text: string): number => {
@@ -6786,10 +6788,12 @@ export class DomPainter {
               width = measureEl.offsetWidth;
               this.doc.body.removeChild(measureEl);
             }
-            cumulativeX = baseX + width;
+            const justifyExtraWidth = spacingPerSpace !== 0 ? spacingPerSpace * countSpaces(segmentText) : 0;
+            const visualWidth = width + justifyExtraWidth;
+            cumulativeX = baseX + visualWidth;
             // Update SDT wrapper width if actual measured width differs from initial estimate
             if (geoSdtWrapper) {
-              geoSdtMaxRight = Math.max(geoSdtMaxRight, xPos + width);
+              geoSdtMaxRight = Math.max(geoSdtMaxRight, xPos + visualWidth);
             }
           }
         });

@@ -1,10 +1,10 @@
 /**
- * SDM/1 envelope types — read options, query/find, and results.
+ * SDM/1 envelope types: read options, query/find, and results.
  *
  * These types wrap the core node model for API operations:
- *   SDNodeResult  — single-node read/find result
- *   SDFindResult  — paginated find result set
- *   SDReadOptions — projection options for reads
+ *   SDNodeResult : single-node read/find result
+ *   SDFindResult : paginated find result set
+ *   SDReadOptions: projection options for reads
  */
 
 import type { BlockNodeAddress, NodeAddress } from './base.js';

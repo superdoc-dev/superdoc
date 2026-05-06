@@ -1,3 +1,4 @@
+// @ts-check
 import { shallowRef, markRaw } from 'vue';
 
 /** @typedef {import('../core/types').PasswordPromptConfig} PasswordPromptConfig */
@@ -41,7 +42,16 @@ const DEFAULT_TEXTS = {
 export function usePasswordPrompt({ getSurfaceManager, getPasswordPromptConfig, onUnhandled }) {
   // ---- internal state -------------------------------------------------------
 
-  /** @type {Array<{ doc: any, errorCode: string }>} */
+  /**
+   * Pending password-prompt request waiting for a free `activePrompt` slot.
+   * `originalException` is preserved so `onUnhandled` can re-emit the host's
+   * original exception payload verbatim if the prompt cannot render.
+   * @typedef {Object} QueueEntry
+   * @property {any} doc
+   * @property {string} errorCode
+   * @property {{ error?: Error, editor?: any }} [originalException]
+   */
+  /** @type {QueueEntry[]} */
   const queue = [];
 
   /** @type {import('vue').ShallowRef<{ doc: any, surfaceHandle: any } | null>} */
@@ -128,6 +138,7 @@ export function usePasswordPrompt({ getSurfaceManager, getPasswordPromptConfig, 
     if (queue.length === 0) return;
 
     const entry = queue.shift();
+    if (!entry) return;
     showPrompt(entry).catch((err) => {
       // Surface errors (e.g. from a consumer's resolver or invalid config)
       // as console errors rather than letting them become unhandled rejections.
@@ -233,8 +244,11 @@ export function usePasswordPrompt({ getSurfaceManager, getPasswordPromptConfig, 
     } else {
       // Built-in component — use ariaLabelledBy pointing to the component's
       // reactive heading, so the accessible name updates after a bad password
-      // (e.g. "Password Required" → "Incorrect Password").
-      const { default: PasswordPromptSurface } = await import('../components/surfaces/PasswordPromptSurface.vue');
+      // (e.g. "Password Required" → "Incorrect Password"). The `.vue` shim
+      // types the default export as `unknown`; narrow to `object` for
+      // `markRaw()`.
+      const mod = await import('../components/surfaces/PasswordPromptSurface.vue');
+      const PasswordPromptSurface = /** @type {object} */ (mod.default);
       const surfaceId = `password-prompt-${doc.id}`;
       handle = manager.open({
         id: surfaceId,

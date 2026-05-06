@@ -842,11 +842,12 @@ export class ProseMirrorRenderer implements EditorRenderer {
 
         const { from, to } = this.view.state.selection;
         let sliceJson = '';
+        let mediaJson = '';
         if (from !== to) {
           const slice = this.view.state.doc.slice(from, to);
           sliceJson = JSON.stringify(slice.toJSON());
           clipboardData.setData('application/x-superdoc-slice', sliceJson);
-          const mediaJson = collectReferencedImageMediaForClipboard(sliceJson, editor);
+          mediaJson = collectReferencedImageMediaForClipboard(sliceJson, editor);
           if (mediaJson) {
             clipboardData.setData(SUPERDOC_MEDIA_MIME, mediaJson);
           }
@@ -857,7 +858,7 @@ export class ProseMirrorRenderer implements EditorRenderer {
         const bodySectPrJson = bodySectPr && bodySectPrShouldEmbed(bodySectPr) ? JSON.stringify(bodySectPr) : '';
 
         if (richHtml) {
-          clipboardData.setData('text/html', embedSliceInHtml(richHtml, sliceJson, bodySectPrJson));
+          clipboardData.setData('text/html', embedSliceInHtml(richHtml, sliceJson, bodySectPrJson, mediaJson));
           clipboardData.setData('text/plain', getSelectionFromViewRoot(this.view.root)?.toString() ?? '');
           return;
         }
@@ -873,7 +874,7 @@ export class ProseMirrorRenderer implements EditorRenderer {
 
         const html = transformListsInCopiedContent(div.innerHTML);
 
-        clipboardData.setData('text/html', embedSliceInHtml(html, sliceJson, bodySectPrJson));
+        clipboardData.setData('text/html', embedSliceInHtml(html, sliceJson, bodySectPrJson, mediaJson));
         clipboardData.setData('text/plain', this.view.state.doc.textBetween(from, to, '\n'));
       } catch (error) {
         console.warn('Failed to transform copied content:', error);

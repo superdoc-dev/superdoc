@@ -132,6 +132,55 @@ describe('CustomSelection plugin', () => {
     expect(handled).toBe(false);
     expect(event.preventDefault).toHaveBeenCalled();
     expect(view.dispatch).toHaveBeenCalled();
+  });
+
+  // SD-2944: when the consumer turns off SuperDoc's built-in
+  // right-click menu, the editor must NOT call `preventDefault` on
+  // contextmenu. Otherwise both the built-in UI (which is now off)
+  // and the browser's native menu are suppressed and right-click on
+  // plain text is dead. The mousedown-side selection preservation
+  // still runs so a consumer rendering their own menu sees the
+  // visible selection underneath.
+  it('does not call preventDefault when disableContextMenu is true (lets the browser/consumer menu through)', () => {
+    const { editor, plugin, view } = createEnvironment();
+    editor.options.disableContextMenu = true;
+
+    const event = {
+      preventDefault: vi.fn(),
+      detail: 0,
+      button: 2,
+      clientX: 120,
+      clientY: 140,
+      type: 'contextmenu',
+    };
+
+    const handled = plugin.props.handleDOMEvents.contextmenu(view, event);
+
+    expect(handled).toBe(false);
+    expect(event.preventDefault).not.toHaveBeenCalled();
+    // No selection-preservation transaction either: the built-in menu
+    // is the only consumer of that path, and skipping the dispatch
+    // keeps this branch a true pass-through.
+    expect(view.dispatch).not.toHaveBeenCalled();
+  });
+
+  it('still preserves selection (calls preventDefault) when disableContextMenu is false', () => {
+    const { editor, plugin, view } = createEnvironment();
+    editor.options.disableContextMenu = false;
+
+    const event = {
+      preventDefault: vi.fn(),
+      detail: 0,
+      button: 2,
+      clientX: 120,
+      clientY: 140,
+      type: 'contextmenu',
+    };
+
+    plugin.props.handleDOMEvents.contextmenu(view, event);
+
+    expect(event.preventDefault).toHaveBeenCalled();
+    expect(view.dispatch).toHaveBeenCalled();
 
     const dispatchedTr = view.dispatch.mock.calls[0][0];
     expect(dispatchedTr.getMeta(CustomSelectionPluginKey)).toMatchObject({

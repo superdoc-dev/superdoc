@@ -71,6 +71,7 @@ export const HEADLESS_ITEM_MAP = {
   acceptTrackedChangeBySelection: 'track-changes-accept-selection',
   rejectTrackedChangeOnSelection: 'track-changes-reject-selection',
   ruler: 'ruler',
+  formattingMarks: 'formatting-marks',
   zoom: 'zoom',
   documentMode: 'document-mode',
   link: 'link',

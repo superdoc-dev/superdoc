@@ -1,7 +1,7 @@
 /**
  * Shared types for the unified document-wide history coordinator.
  *
- * See `plans/unified-history.md` for the full design rationale. At a glance:
+ * Design at a glance:
  *   - Each editable surface (body, header/footer, …) registers as a
  *     `HistoryParticipant` with its own local PM/Yjs history engine.
  *   - The coordinator observes local history snapshots and maintains a global

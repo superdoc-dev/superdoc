@@ -176,7 +176,7 @@ Key options for the editor:
 | \`modules.comments\` | \`object\` | Comments panel configuration |
 | \`modules.collaboration\` | \`object\` | Real-time collaboration (Yjs) |
 
-Full config: https://docs.superdoc.dev/core/superdoc/configuration
+Full config: https://docs.superdoc.dev/editor/superdoc/configuration
 
 ## Theming
 
@@ -256,7 +256,7 @@ superdoc save && superdoc close
 - Quickstart: https://docs.superdoc.dev/getting-started/quickstart
 - React guide: https://docs.superdoc.dev/getting-started/frameworks/react
 - Document Engine: https://docs.superdoc.dev/document-engine/overview
-- MCP server: https://docs.superdoc.dev/document-engine/ai-agents/mcp-server
+- MCP server: https://docs.superdoc.dev/ai/mcp/overview
 - Examples: https://github.com/superdoc-dev/superdoc/tree/main/examples
 `;
 }

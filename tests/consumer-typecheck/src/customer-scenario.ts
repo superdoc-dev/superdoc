@@ -42,7 +42,6 @@ import {
   CommentsPluginKey,
   SuperEditor,
   SuperInput,
-  BasicUpload,
   Toolbar,
   AIWriter,
   ContextMenu,
@@ -831,7 +830,6 @@ function testAdditionalClasses() {
 function testVueComponents() {
   const superEditor = SuperEditor;
   const superInput = SuperInput;
-  const basicUpload = BasicUpload;
   const toolbarComponent = Toolbar;
   const aiWriter = AIWriter;
   const contextMenu = ContextMenu;
@@ -852,6 +850,7 @@ function testVueComponents() {
  * monorepo and a broken re-export could ship undetected.
  */
 import {
+  BUILT_IN_COMMAND_IDS,
   createSuperDocUI,
   shallowEqual,
   type CommentAddress as UICommentAddress,
@@ -1008,6 +1007,26 @@ function testSuperDocUISubEntry() {
     return c.commentId;
   }
   void readCommentId;
+
+  // SD-2920: command discovery helpers exposed at the consumer surface.
+  // BUILT_IN_COMMAND_IDS is a runtime-readable list; has() / require()
+  // give configurable toolbars and trusted dispatch sites a typed way
+  // to validate id strings without indexing the proxy.
+  function exerciseCommandDiscovery(ui: SuperDocUI): void {
+    const ids: readonly string[] = BUILT_IN_COMMAND_IDS;
+    void ids;
+
+    const present: boolean = ui.commands.has('bold');
+    const missing: boolean = ui.commands.has('blod');
+    void present;
+    void missing;
+
+    const handle = ui.commands.require('bold');
+    handle.observe((_state) => {});
+    const result: boolean | Promise<boolean> = handle.execute();
+    void result;
+  }
+  void exerciseCommandDiscovery;
 }
 
 export {

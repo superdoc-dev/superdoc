@@ -5,7 +5,7 @@
  * Operation-specific truth tables, mode-exclusivity logic, and allowlists
  * stay local to each operation file.
  *
- * Internal — not exported from the package root.
+ * Internal: not exported from the package root.
  */
 
 import type { BlockNodeAddress, TextAddress, TextTarget } from './types/index.js';
@@ -43,7 +43,7 @@ export function isTextAddress(value: unknown): value is TextAddress {
 }
 
 /**
- * Type guard for TextTarget — multi-segment text target used by read
+ * Type guard for TextTarget: multi-segment text target used by read
  * operations and (since round 2 of the drop-in assessment) by
  * `comments.create` for selections that span multiple blocks.
  */

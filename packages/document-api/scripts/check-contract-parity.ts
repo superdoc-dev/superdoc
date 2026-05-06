@@ -387,7 +387,7 @@ function run(): void {
     );
   }
 
-  // Value-level projection checks — catches projection bugs, not just key bugs.
+  // Value-level projection checks: catches projection bugs, not just key bugs.
   for (const id of operationIds) {
     const defEntry = OPERATION_DEFINITIONS[id];
     if (COMMAND_CATALOG[id] !== defEntry.metadata) {

@@ -50,6 +50,7 @@ import { CommentsPluginKey } from '@extensions/comment/comments-plugin.js';
 
 const MULTI_CLICK_TIME_THRESHOLD_MS = 400;
 const MULTI_CLICK_DISTANCE_THRESHOLD_PX = 5;
+const DRAG_SELECTION_DISTANCE_THRESHOLD_PX = 5;
 const AUTO_SCROLL_EDGE_PX = 32;
 const AUTO_SCROLL_MAX_SPEED_PX = 24;
 /** Tolerance for detecting scrollability to handle sub-pixel rounding in browsers */
@@ -570,6 +571,8 @@ export class EditorInputManager {
   #dragLastPointer: SelectionDebugHudState['lastPointer'] = null;
   #dragLastRawHit: PositionHit | null = null;
   #dragUsedPageNotMountedFallback = false;
+  #dragStartClient: { clientX: number; clientY: number } | null = null;
+  #dragThresholdExceeded = false;
   #autoScrollActive = false;
   #autoScrollTimer: { id: number; kind: 'raf' | 'timeout' } | null = null;
   #autoScrollVelocity: { x: number; y: number } = { x: 0, y: 0 };
@@ -846,8 +849,26 @@ export class EditorInputManager {
     this.#dragLastPointer = null;
     this.#dragLastRawHit = null;
     this.#dragUsedPageNotMountedFallback = false;
+    this.#dragStartClient = null;
+    this.#dragThresholdExceeded = false;
     this.#lastPointerClient = null;
     this.#stopAutoScroll();
+  }
+
+  #hasExceededDragSelectionThreshold(clientX: number, clientY: number): boolean {
+    if (this.#dragThresholdExceeded) return true;
+    if (!this.#dragStartClient) return true;
+
+    const deltaX = clientX - this.#dragStartClient.clientX;
+    const deltaY = clientY - this.#dragStartClient.clientY;
+    const thresholdSquared = DRAG_SELECTION_DISTANCE_THRESHOLD_PX * DRAG_SELECTION_DISTANCE_THRESHOLD_PX;
+
+    if (deltaX * deltaX + deltaY * deltaY < thresholdSquared) {
+      return false;
+    }
+
+    this.#dragThresholdExceeded = true;
+    return true;
   }
 
   #clearCellAnchor(): void {
@@ -1620,6 +1641,8 @@ export class EditorInputManager {
     this.#dragLastPointer = { clientX: event.clientX, clientY: event.clientY, x, y };
     this.#dragLastRawHit = hit;
     this.#dragUsedPageNotMountedFallback = false;
+    this.#dragStartClient = { clientX: event.clientX, clientY: event.clientY };
+    this.#dragThresholdExceeded = false;
     this.#lastPointerClient = { clientX: event.clientX, clientY: event.clientY };
 
     this.#isDragging = true;
@@ -1712,6 +1735,10 @@ export class EditorInputManager {
 
     // Handle drag selection
     if (this.#isDragging && this.#dragAnchor !== null && event.buttons & 1) {
+      if (!this.#hasExceededDragSelectionThreshold(event.clientX, event.clientY)) {
+        return;
+      }
+
       this.#lastPointerClient = { clientX: event.clientX, clientY: event.clientY };
       this.#handleDragSelectionAt(event.clientX, event.clientY);
       this.#updateAutoScrollFromPointer(event.clientX, event.clientY);
@@ -1785,6 +1812,8 @@ export class EditorInputManager {
       this.#dragLastPointer = null;
       this.#dragLastRawHit = null;
       this.#dragUsedPageNotMountedFallback = false;
+      this.#dragStartClient = null;
+      this.#dragThresholdExceeded = false;
       this.#lastPointerClient = null;
       return;
     }
@@ -2684,6 +2713,8 @@ export class EditorInputManager {
     this.#dragLastPointer = null;
     this.#dragLastRawHit = null;
     this.#dragUsedPageNotMountedFallback = false;
+    this.#dragStartClient = null;
+    this.#dragThresholdExceeded = false;
     this.#lastPointerClient = null;
     this.#stopAutoScroll();
   }

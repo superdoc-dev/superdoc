@@ -29,6 +29,7 @@ Returns an AuthorityEntryMutationResult indicating success with the entry addres
 | `at` | TextTarget | yes | TextTarget |
 | `at.kind` | `"text"` | yes | Constant: `"text"` |
 | `at.segments` | TextSegment[] | yes |  |
+| `at.story` | StoryLocator | no | StoryLocator |
 | `entry` | object | yes |  |
 | `entry.bold` | boolean | no |  |
 | `entry.category` | string \\| integer | yes | One of: string, integer |
@@ -50,7 +51,11 @@ Returns an AuthorityEntryMutationResult indicating success with the entry addres
           "start": 0
         }
       }
-    ]
+    ],
+    "story": {
+      "kind": "story",
+      "storyType": "body"
+    }
   },
   "entry": {
     "bold": true,

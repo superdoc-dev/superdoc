@@ -700,6 +700,38 @@ describe('createHeadlessToolbar', () => {
     controller.destroy();
   });
 
+  it('executes formatting marks through the registry execute path', () => {
+    const toggleFormattingMarks = vi.fn();
+    const superdoc: HeadlessToolbarSuperdocHost = {
+      activeEditor: {
+        commands: {},
+        doc: {} as any,
+        isEditable: true,
+        state: {
+          selection: {
+            empty: true,
+          },
+        },
+      } as any,
+      toggleFormattingMarks,
+      config: {
+        layoutEngineOptions: {
+          showFormattingMarks: false,
+        },
+      },
+    } as any;
+
+    const controller = createHeadlessToolbar({
+      superdoc,
+      commands: ['formatting-marks'],
+    });
+
+    expect(controller.execute?.('formatting-marks')).toBe(true);
+    expect(toggleFormattingMarks).toHaveBeenCalledTimes(1);
+
+    controller.destroy();
+  });
+
   it('executes zoom through the registry execute path', () => {
     const setZoom = vi.fn();
     const superdoc: HeadlessToolbarSuperdocHost = {

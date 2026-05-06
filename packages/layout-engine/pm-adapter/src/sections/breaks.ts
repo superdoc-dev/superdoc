@@ -130,6 +130,17 @@ export function createSectionBreakBlock(
     attrs: {
       source: 'sectPr',
       sectionIndex: section.sectionIndex,
+      // `typeIsExplicit` is set only when `<w:type>` was authored in the
+      // source XML. We omit the field entirely when it would be `false` so
+      // we don't widen `attrs` for the (vast majority of) sectPrs that
+      // omit `<w:type>` — that would produce a doc-wide snapshot diff
+      // against historical references on every existing fixture.
+      // The layout-engine's column-balance gate reads this to distinguish
+      // a body sectPr that defaulted to `nextPage` (Word does not balance,
+      // sd-1655-col-sep-3-equal-columns) from one with
+      // `<w:type w:val="continuous"/>` written out (Word balances,
+      // sd-1480-two-col-tab-positions, even single-page).
+      ...(section.typeIsExplicit ? { typeIsExplicit: true as const } : {}),
       ...extraAttrs,
     },
     ...(section.pageSize && { pageSize: section.pageSize }),
@@ -202,15 +213,51 @@ interface SectionStateMutable {
 }
 
 /**
+ * Emit the next section's sectionBreak block if the dispatch loop has reached
+ * that section's starting top-level node index.
+ *
+ * ECMA-376 §17.6.17: a section is defined by its end-tagged `<w:sectPr>`. All
+ * body children preceding that tag — paragraphs, tables, top-level drawings —
+ * belong to the section that ENDS at the tag. This helper fires BEFORE any
+ * such node so the appropriate section config is active by the time the node
+ * is laid out.
+ *
+ * Calling it from the main dispatch loop covers every top-level node type —
+ * present and future — with no per-handler opt-in. Paragraph-index emission
+ * still handles transitions inside SDT child content.
+ */
+export function maybeEmitNextSectionBreakForNode(args: {
+  sectionState: {
+    ranges: SectionRange[];
+    currentSectionIndex: number;
+    currentNodeIndex: number;
+  };
+  nextBlockId: BlockIdGenerator;
+  pushBlock: (block: SectionBreakBlock) => void;
+}): void {
+  const { sectionState, nextBlockId, pushBlock } = args;
+  if (sectionState.ranges.length === 0) return;
+  if (sectionState.currentSectionIndex >= sectionState.ranges.length - 1) return;
+
+  const nextSection = sectionState.ranges[sectionState.currentSectionIndex + 1];
+  if (!nextSection) return;
+  if (sectionState.currentNodeIndex !== nextSection.startNodeIndex) return;
+
+  const currentSection = sectionState.ranges[sectionState.currentSectionIndex];
+  const requiresPageBoundary =
+    shouldRequirePageBoundary(currentSection, nextSection) || hasIntrinsicBoundarySignals(nextSection);
+  const extraAttrs = requiresPageBoundary ? { requirePageBoundary: true } : undefined;
+  pushBlock(createSectionBreakBlock(nextSection, nextBlockId, extraAttrs));
+  sectionState.currentSectionIndex++;
+}
+
+/**
  * Emit a pending section break before a paragraph if the current paragraph
  * index matches the start of the next section.
  *
- * Centralizes the "check, emit, advance" pattern used by paragraph and SDT
- * handlers. SDT handlers that process children as an opaque block (e.g.
- * TOC/docPartObj where child paragraphs aren't counted by
- * `findParagraphsWithSectPr`) should call this ONCE at the SDT boundary —
- * if the SDT sits at a section boundary, this emits the break so the SDT's
- * contents render on the new page.
+ * Centralizes the "check, emit, advance" pattern for handlers that process
+ * paragraph children directly, including SDT handlers. This keeps nested
+ * paragraph traversal in sync with `findParagraphsWithSectPr`.
  *
  * No-op when:
  *   - sectionState is undefined or has no ranges

@@ -7,7 +7,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 
 // EXAMPLE can be:
 //   "react", "vue", "vanilla", "cdn", "angular"  (getting-started)
-//   "collaboration/superdoc-yjs", "collaboration/hocuspocus", etc.
+//   "editor/collaboration/providers/superdoc-yjs", etc.
 const example = process.env.EXAMPLE || 'react';
 
 // Resolve example path — getting-started examples use short names
@@ -20,8 +20,8 @@ const examplePath = isGettingStarted
 // These run `npm run dev` which starts both processes — don't append --port.
 const useConcurrently = [
   'ai/streaming',
-  'collaboration/hocuspocus',
-  'collaboration/superdoc-yjs',
+  'editor/collaboration/providers/hocuspocus',
+  'editor/collaboration/providers/superdoc-yjs',
 ];
 
 // Port mapping — must match vite.config or server defaults
@@ -29,7 +29,7 @@ const portMap: Record<string, number> = {
   cdn: 3000,
   nuxt: 3000,
   laravel: 8000,
-  'collaboration/hocuspocus': 3000,
+  'editor/collaboration/providers/hocuspocus': 3000,
   'advanced/headless-toolbar/svelte-shadcn': 5190,
   'ai/streaming': 5180,
 };

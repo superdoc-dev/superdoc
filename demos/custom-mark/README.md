@@ -1,9 +1,5 @@
-# SuperDoc: Creating a Custom Mark
+# Moved to Advanced Examples
 
-An example of creating a custom Mark to use with SuperDoc.
+The custom mark demo moved to [`examples/advanced/extensions/custom-mark`](../../examples/advanced/extensions/custom-mark).
 
-[We create a custom mark here](https://github.com/superdoc-dev/superdoc/blob/main/demos/custom-mark/src/custom-mark.js) — note the custom command `setMyCustomMark`, which can be called from `superdoc.activeEditor.commands`.
-
-[Then we pass it into the editor via the `editorExtensions` key](https://github.com/superdoc-dev/superdoc/blob/main/demos/custom-mark/src/App.vue)
-
-This example also shows one way to export the docx to a blob whenever the content changes in the editor.
+This is a low-level extension-authoring pattern, so it now lives with the advanced examples instead of the composed demo gallery.

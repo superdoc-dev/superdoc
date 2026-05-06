@@ -4,7 +4,7 @@ import { findPreviousTextDeleteRange } from './findPreviousTextDeleteRange.js';
 /**
  * Backspaces a single character when the cursor sits adjacent to a run boundary.
  * Deletes the last character of the previous run (or the previous sibling run) without removing the whole run node.
- * @returns {import('@core/commands/types').Command}
+ * @returns {import('./types/index.js').Command}
  */
 export const backspaceNextToRun =
   () =>

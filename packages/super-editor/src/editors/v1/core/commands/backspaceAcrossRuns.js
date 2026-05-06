@@ -12,7 +12,7 @@ import { findPreviousTextDeleteRange } from './findPreviousTextDeleteRange.js';
  * Placed after the specialized handlers (backspaceSkipEmptyRun,
  * backspaceNextToRun) in the keymap chain so it only fires when they bail.
  *
- * @returns {import('@core/commands/types').Command}
+ * @returns {import('./types/index.js').Command}
  */
 export const backspaceAcrossRuns =
   () =>

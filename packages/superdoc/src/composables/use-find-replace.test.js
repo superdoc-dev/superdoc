@@ -317,6 +317,53 @@ describe('useFindReplace', () => {
     });
   });
 
+  describe('getSearchStorage fallback', () => {
+    // `getSearchStorage` first tries `extensionStorage.Search` and
+    // `storage.Search`. When neither carries a live session, it falls back
+    // to scanning every key for an object with `searchIndex` and
+    // `searchResults`. The fallback is what catches non-default extension
+    // names; without an explicit test the polling path silently skips it.
+    it('finds storage under a non-Search key via the fallback scan', async () => {
+      // Editor with the Search extension registered under a custom key. The
+      // direct `extensionStorage.Search` and `storage.Search` lookups miss;
+      // the fallback iterates keys and matches on the structural probe.
+      const customEditor = {
+        commands: editor.commands,
+        extensionStorage: {
+          CustomFinder: {
+            searchIndex: [{ from: 0, to: 1 }],
+            searchResults: [
+              { from: 0, to: 1 },
+              { from: 5, to: 6 },
+            ],
+            activeMatchIndex: 1,
+          },
+        },
+      };
+      const customFindReplace = useFindReplace({
+        getSurfaceManager: () => manager,
+        getActiveEditor: () => customEditor,
+        activeEditorRef: ref(customEditor),
+        getFindReplaceConfig: () => true,
+      });
+
+      await customFindReplace.open();
+      await vi.dynamicImportSettled();
+
+      // The handle exposed to the surface component carries the live state
+      // refs that polling syncs into.
+      const findReplaceHandle = manager.open.mock.calls.at(-1)[0].props.findReplace;
+
+      // Wait one polling tick (200 ms interval) so syncFromEditorStorage runs.
+      await new Promise((resolve) => setTimeout(resolve, 250));
+
+      expect(findReplaceHandle.matchCount.value).toBe(2);
+      expect(findReplaceHandle.activeMatchIndex.value).toBe(1);
+
+      customFindReplace.close();
+    });
+  });
+
   describe('surface close cleanup', () => {
     it('clears search session when surface settles as closed', async () => {
       await findReplace.open();

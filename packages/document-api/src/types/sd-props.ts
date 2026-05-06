@@ -1,5 +1,5 @@
 /**
- * SDM/1 property models — run, paragraph, table, list, image, drawing props.
+ * SDM/1 property models: run, paragraph, table, list, image, drawing props.
  *
  * These define the direct formatting ("authored") property bags carried by
  * style-bearing nodes. Resolved/provenance fields are separate concerns

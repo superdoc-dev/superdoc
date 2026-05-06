@@ -13,6 +13,12 @@ import vue from '@vitejs/plugin-vue'
 import { version } from './package.json';
 import sourceResolve from '../../vite.sourceResolve';
 
+// SD-2864: derive the dts include list from the canonical type-surface
+// config so vite, ensure-types, audit, and the tsconfig parity check
+// share one source of truth for relocations.
+const cjsRequire = createRequire(import.meta.url);
+const typeSurface = cjsRequire('./scripts/type-surface.config.cjs');
+
 // WORKAROUND: rolldown doesn't support trailing-slash imports (e.g. 'punycode/')
 // which Node.js treats as "resolve the package entry point". node-stdlib-browser's
 // url polyfill uses `import from 'punycode/'` and rolldown tries to open the
@@ -113,25 +119,16 @@ export default defineConfig(({ mode, command }) => {
   const plugins = [
     vue(),
     !skipDts && dts({
-      // SD-2815: include `../document-api/src/**/*` so the doc-api
-      // types re-exported from `superdoc/ui` (CommentInfo, Receipt,
-      // SelectionInfo, TextTarget, etc.) emit real declarations into
-      // the published dist instead of falling through to the
-      // `_internal-shims.d.ts` `any` fallback that ensure-types.cjs
-      // generates for every unshipped `@superdoc/*` package. Without
-      // this, packed consumers see `any` for those public types and
-      // the new re-export surface adds no actual checking.
+      // Foundational sources (superdoc, super-editor, document-api) are
+      // always included; relocation patterns come from the canonical
+      // type-surface config (SD-2864). Each `relocations` entry pairs the
+      // ensure-types rewriter rule with the vite include patterns so the
+      // two cannot drift.
       include: [
         'src/**/*',
         '../super-editor/src/**/*',
         '../document-api/src/**/*',
-        // SD-2842: relocate workspace packages whose types appear on the
-        // public surface so they emit into superdoc's dist and the
-        // rewrite step in ensure-types can redirect bare specifiers to
-        // local relative paths. Same pattern as @superdoc/document-api.
-        '../layout-engine/contracts/src/**/*',
-        '../layout-engine/layout-bridge/src/**/*',
-        '../layout-engine/painters/dom/src/**/*',
+        ...typeSurface.relocations.flatMap((r) => r.viteIncludes),
       ],
       outDir: 'dist',
       // vite-plugin-dts still gathers diagnostics for this mixed JS/Vue source

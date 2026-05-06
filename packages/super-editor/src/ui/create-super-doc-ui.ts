@@ -14,13 +14,21 @@ import type {
   ScrollIntoViewOutput,
   TrackChangesListResult,
 } from '@superdoc/document-api';
+import { collectEntityHitsFromChain } from './entity-at.js';
 import { shallowEqual } from './equality.js';
+import { resolvePositionAt } from './position-at.js';
+import { buildViewportContext, isViewportContextBundle } from './viewport-context.js';
+import { shortcutFromEvent } from './keyboard-shortcuts.js';
 import { scrollRangeIntoView } from './scroll-into-view.js';
+import { getSelectionAnchorRect, getSelectionRects } from './selection-rects.js';
+import { restoreSelection } from './selection-restore.js';
 import { createCustomCommandsRegistry } from './custom-commands.js';
+import { createScope } from './scope.js';
 import type {
   CommandHandle,
   CommandsHandle,
   CommentsHandle,
+  ContextMenuItem,
   DocumentExportInput,
   DocumentHandle,
   DocumentSlice,
@@ -35,13 +43,20 @@ import type {
   SuperDocEditorLike,
   SuperDocUI,
   SuperDocUIOptions,
+  SuperDocUIScope,
   SuperDocUIState,
   Subscribable,
   ToolbarCommandHandleState,
   ToolbarHandle,
   ToolbarSnapshotSlice,
   UIToolbarCommandState,
+  ViewportContext,
+  ViewportContextAtInput,
+  ViewportEntityAtInput,
+  ViewportEntityHit,
   ViewportGetRectInput,
+  ViewportPositionAtInput,
+  ViewportPositionHit,
   ViewportHandle,
   ViewportRect,
   ViewportRectResult,
@@ -288,6 +303,59 @@ function textTargetToSelectionTarget(
     ? { kind: 'text', blockId: last.blockId, offset: last.range.end, story }
     : { kind: 'text', blockId: last.blockId, offset: last.range.end };
   return story ? { kind: 'selection', start, end, story } : { kind: 'selection', start, end };
+}
+
+/**
+ * Reads the currently routed story from the host's PresentationEditor.
+ * Returns `null` when the body editor is active or when no presentation
+ * layer is reachable (older mounts, server-side stubs).
+ *
+ * Routes through `resolveToolbarSources` so all three documented
+ * presentation-resolution paths surface the locator: the direct
+ * `activeEditor.presentationEditor` field, the legacy
+ * `activeEditor._presentationEditor` field, and the
+ * `superdocStore.documents[].getPresentationEditor()` lookup that
+ * non-Vue mounts rely on. Reading `hostEditor.presentationEditor`
+ * directly would silently miss the latter two and the new selection
+ * slice would stay body-scoped on those setups.
+ *
+ * The selection-info resolver runs against the routed editor and has
+ * no path back to the host, so the controller stamps the locator onto
+ * the live TextTarget at the seam where both editors are reachable.
+ * Same shape SD-2943's `ui.viewport.positionAt` uses for the same
+ * reason: without it, downstream doc-api ops fall back to body and
+ * fail to locate the block.
+ */
+function readActiveStoryLocator(
+  superdoc: SuperDocUIOptions['superdoc'],
+): import('@superdoc/document-api').StoryLocator | null {
+  let presentation: { getActiveStoryLocator?: () => unknown } | null = null;
+  try {
+    const sources = resolveToolbarSources(superdoc as never);
+    presentation = (sources.presentationEditor as never) ?? null;
+  } catch {
+    return null;
+  }
+  if (!presentation || typeof presentation.getActiveStoryLocator !== 'function') return null;
+  try {
+    return (presentation.getActiveStoryLocator() ?? null) as import('@superdoc/document-api').StoryLocator | null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Stamp `story` onto a live TextTarget when the routed editor is a
+ * non-body story and the resolver didn't already attach it. Idempotent
+ * when `story` is already present (resolver-attached or otherwise).
+ */
+function attachStoryToTextTarget(
+  textTarget: import('@superdoc/document-api').TextTarget | null,
+  story: import('@superdoc/document-api').StoryLocator | null,
+): import('@superdoc/document-api').TextTarget | null {
+  if (!textTarget || !story) return textTarget;
+  if ((textTarget as { story?: unknown }).story) return textTarget;
+  return { ...textTarget, story };
 }
 
 export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
@@ -593,7 +661,20 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     // inside the resolver) keeps the slice identity stable and lets
     // `shallowEqual` short-circuit `ui.select(s => s.selection)`
     // subscribers.
-    const selectionTextTarget = (selectionInfo?.target ?? null) as import('@superdoc/document-api').TextTarget | null;
+    // SD-2954: when the routed editor is a non-body story, stamp the
+    // active story locator onto the live TextTarget. The selection
+    // resolver runs against the routed editor and has no path back to
+    // the host's PresentationEditor, so the controller seam is the
+    // only place where both are reachable. Direct
+    // `editor.doc.selection.current()` calls are unaffected by design;
+    // a deeper adapter change would be a separate ticket.
+    const hostEditor = resolveHostEditor(superdoc);
+    const routedIsStory = editor != null && hostEditor != null && editor !== hostEditor;
+    const activeStory = routedIsStory ? readActiveStoryLocator(superdoc) : null;
+    const selectionTextTarget = attachStoryToTextTarget(
+      (selectionInfo?.target ?? null) as import('@superdoc/document-api').TextTarget | null,
+      activeStory,
+    );
     const selectionActiveMarks = (selectionInfo?.activeMarks ?? EMPTY_ACTIVE_IDS) as string[];
     const selectionKey = buildSelectionKey(
       empty,
@@ -912,7 +993,7 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     // snapshot — the public `ToolbarSnapshotSlice` shape is the merged
     // one, not the underlying built-ins-only shape.
     getSnapshot: () => computeState().toolbar,
-    subscribe(listener) {
+    observe(listener) {
       // Drives off the same selector substrate so subscribers receive
       // the same coalesced burst pattern as ui.select consumers.
       // Equality is set to "always different" because the headless
@@ -923,11 +1004,14 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
         () => false,
       ).subscribe((snapshot) => {
         try {
-          listener({ snapshot });
+          listener(snapshot);
         } catch {
           // see scheduleNotify
         }
       });
+    },
+    subscribe(listener) {
+      return toolbar.observe((snapshot) => listener({ snapshot }));
     },
     execute: ((id: PublicToolbarItemId, payload?: unknown): boolean => {
       // Routes through the centralized `dispatchCommand` so a later
@@ -1009,6 +1093,60 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
   teardown.push(() => {
     customCommandsRegistry.destroy();
   });
+
+  // Keyboard shortcut dispatch for custom commands registered with a
+  // `shortcut` field. Two important shapes:
+  //
+  // - Bubble phase. ProseMirror's keymap plugin is bubble-phase too
+  //   and `eventBelongsToView` bails on `event.defaultPrevented`. A
+  //   capture-phase listener that calls preventDefault would silently
+  //   suppress every built-in editor keymap (Bold, Enter, Backspace),
+  //   contradicting the documented "fires alongside built-ins"
+  //   contract. Running at bubble lets the editor's own keymap
+  //   process the event first; we dispatch the custom command after.
+  //
+  // - Scope expanded to the editor's hidden ProseMirror DOM in
+  //   addition to the painted host. Once the user clicks the document,
+  //   native focus moves to the hidden contenteditable that PM owns,
+  //   which lives outside `visibleHost`. Filtering only on
+  //   `host.contains(target)` would drop every keystroke from the
+  //   normal editing path.
+  if (typeof globalThis !== 'undefined' && (globalThis as { document?: Document }).document) {
+    const dom = (globalThis as { document: Document }).document;
+    const onKeyDown = (event: Event) => {
+      const ke = event as KeyboardEvent;
+      // Re-resolve every event because the editor mount can happen
+      // after `createSuperDocUI` runs; caching a missing host at
+      // construction time would never recover.
+      const editor = resolveRoutedEditor(superdoc) as
+        | (SuperDocEditorLike & {
+            view?: { dom?: HTMLElement };
+            presentationEditor?: { visibleHost?: HTMLElement };
+          })
+        | null;
+      if (!editor) return;
+      const target = ke.target as Node | null;
+      if (!target) return;
+      const inHost = editor.presentationEditor?.visibleHost?.contains(target) === true;
+      const inPmDom = editor.view?.dom?.contains(target) === true;
+      if (!inHost && !inPmDom) return;
+      const combo = shortcutFromEvent(ke);
+      if (!combo) return;
+      const id = customCommandsRegistry.resolveShortcut(combo);
+      if (!id) return;
+      // Dispatch through the same path `ui.commands.get(id).execute()`
+      // uses. preventDefault runs AFTER dispatch so PM's keymap (which
+      // already ran in this bubble pass) isn't suppressed by an
+      // earlier defaultPrevented check; the call still blocks browser
+      // defaults that haven't run yet (the URL-bar shortcut, etc.).
+      customCommandsRegistry.execute(id);
+      ke.preventDefault();
+    };
+    dom.addEventListener('keydown', onKeyDown);
+    teardown.push(() => {
+      dom.removeEventListener('keydown', onKeyDown);
+    });
+  }
 
   /**
    * Single dispatch path for every `execute`-shaped surface on the
@@ -1137,6 +1275,48 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
       if (prop === 'get') {
         return getDynamicHandle;
       }
+      // `has(id)` and `require(id)` (SD-2920): explicit validation
+      // helpers for config-driven toolbars and trusted dispatch sites.
+      // Both use the same registry lookup as `get(id)`; the difference
+      // is only what they return when the id is unknown.
+      if (prop === 'has') {
+        return (id: string): boolean => {
+          if (typeof id !== 'string' || id.length === 0) return false;
+          return BUILT_IN_COMMAND_ID_SET.has(id) || customCommandsRegistry.has(id);
+        };
+      }
+      if (prop === 'require') {
+        return (id: string): DynamicCommandHandle => {
+          const handle = getDynamicHandle(id);
+          if (!handle) {
+            throw new Error(`[superdoc/ui] commands.require: unknown command id "${id}".`);
+          }
+          return handle;
+        };
+      }
+      // Custom-UI consumers building their own context menu pull
+      // contributed items here. Computed against the current snapshot
+      // (so `selection` matches what observers just saw) and the
+      // caller-supplied entities from `ui.viewport.entityAt`.
+      //
+      // SD-2945: input can also be the full {@link ViewportContext}
+      // bundle from `ui.viewport.contextAt({ x, y })`. Detected by a
+      // valid `point: { x, y }` field. `typeof null === 'object'`, so
+      // we explicitly require `point` to be a non-null object before
+      // routing to the bundle path; otherwise a hand-built input like
+      // `{ entities, point: null }` would be misclassified and the
+      // bundle's other fields would arrive as undefined.
+      if (prop === 'getContextMenuItems') {
+        return (input?: { entities?: ViewportEntityHit[] } | ViewportContext): ContextMenuItem[] => {
+          if (isViewportContextBundle(input)) {
+            return customCommandsRegistry.getContextMenuItems(computeState(), input);
+          }
+          return customCommandsRegistry.getContextMenuItems(
+            computeState(),
+            (input as { entities?: ViewportEntityHit[] } | undefined)?.entities ?? [],
+          );
+        };
+      }
       // Custom-registered ids surface a typed handle from the registry.
       // Built-in ids fall through to the existing per-id cache so they
       // keep the same observe/execute shape they had before SD-2802.
@@ -1188,14 +1368,17 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
 
   const comments: CommentsHandle = {
     getSnapshot: () => computeState().comments,
-    subscribe(listener) {
+    observe(listener) {
       return select((state) => state.comments, shallowEqual).subscribe((snapshot) => {
         try {
-          listener({ snapshot });
+          listener(snapshot);
         } catch {
           // see scheduleNotify
         }
       });
+    },
+    subscribe(listener) {
+      return comments.observe((snapshot) => listener({ snapshot }));
     },
     createFromSelection({ text }) {
       const editor = resolveRoutedEditor(superdoc);
@@ -1350,14 +1533,17 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
 
   const trackChanges: TrackChangesHandle = {
     getSnapshot: () => computeState().trackChanges,
-    subscribe(listener) {
+    observe(listener) {
       return select((state) => state.trackChanges, shallowEqual).subscribe((snapshot) => {
         try {
-          listener({ snapshot });
+          listener(snapshot);
         } catch {
           // see scheduleNotify
         }
       });
+    },
+    subscribe(listener) {
+      return trackChanges.observe((snapshot) => listener({ snapshot }));
     },
     accept(changeId) {
       const api = requireDocTrackChanges();
@@ -1529,6 +1715,72 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     async scrollIntoView(input: ScrollIntoViewInput): Promise<ScrollIntoViewOutput> {
       return runScrollIntoView(input);
     },
+
+    // The painter stamps `data-track-change-id` and `data-comment-ids`
+    // on each painted run; reading them back is what consumers were
+    // doing imperatively from `event.target.closest(...)` in
+    // contextmenu handlers. Centralizing the lookup here keeps the
+    // attribute names an implementation detail of the painter and
+    // surfaces a typed `EntityHit[]` consumers can switch on.
+    entityAt(input: ViewportEntityAtInput): ViewportEntityHit[] {
+      if (!input || typeof input.x !== 'number' || typeof input.y !== 'number') return [];
+      // The DOM `document` is reached through `globalThis.document`
+      // because the local `document: DocumentHandle` declared below
+      // would otherwise shadow it for type-checking. Guard SSR /
+      // non-browser stubs explicitly so the call doesn't throw in
+      // test environments without a global `document`.
+      const dom = (globalThis as { document?: Document }).document;
+      if (!dom || typeof dom.elementFromPoint !== 'function') {
+        return [];
+      }
+      // Scope the lookup to this controller's editor: a page mounting
+      // two SuperDoc instances would otherwise have one's entityAt
+      // return ids from the other's painted DOM. A null host (no
+      // editor mounted, post-destroy, SSR test stub) returns [].
+      const editor = resolveHostEditor(superdoc);
+      const host = editor?.presentationEditor?.visibleHost;
+      if (!host) return [];
+      const startEl = dom.elementFromPoint(input.x, input.y);
+      if (!startEl || !host.contains(startEl)) return [];
+      return collectEntityHitsFromChain(startEl);
+    },
+
+    getHost(): HTMLElement | null {
+      const editor = resolveHostEditor(superdoc);
+      return editor?.presentationEditor?.visibleHost ?? null;
+    },
+
+    positionAt(input: ViewportPositionAtInput): ViewportPositionHit | null {
+      if (!input || typeof input.x !== 'number' || typeof input.y !== 'number') return null;
+      const hostEditor = resolveHostEditor(superdoc);
+      const routedEditor = resolveRoutedEditor(superdoc);
+      return resolvePositionAt(
+        hostEditor as unknown as Parameters<typeof resolvePositionAt>[0],
+        routedEditor as unknown as Parameters<typeof resolvePositionAt>[1],
+        input.x,
+        input.y,
+      );
+    },
+
+    contextAt(input: ViewportContextAtInput): ViewportContext {
+      // Coerce non-numeric coords to 0 so the bundle is still
+      // well-formed (entities = [], position = null,
+      // insideSelection = false). Consumers can ignore `point` /
+      // `position` themselves; returning a partial bundle would
+      // force every consumer to null-check.
+      const x = typeof input?.x === 'number' ? input.x : 0;
+      const y = typeof input?.y === 'number' ? input.y : 0;
+      const hostEditor = resolveHostEditor(superdoc);
+      const routedEditor = resolveRoutedEditor(superdoc);
+      const entities = viewport.entityAt({ x, y });
+      const position = viewport.positionAt({ x, y });
+      const selectionSlice = computeState().selection;
+      const selectionRects = getSelectionRects(
+        hostEditor as unknown as Parameters<typeof getSelectionRects>[0],
+        routedEditor as unknown as Parameters<typeof getSelectionRects>[1],
+      );
+      return buildViewportContext({ x, y, entities, position, selection: selectionSlice, selectionRects });
+    },
   };
 
   // ---- ui.selection ------------------------------------------------------
@@ -1542,14 +1794,17 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
   // selector substrate.
   const selection: SelectionHandle = {
     getSnapshot: () => computeState().selection,
-    subscribe(listener) {
+    observe(listener) {
       return select((state) => state.selection, shallowEqual).subscribe((snapshot) => {
         try {
-          listener({ snapshot });
+          listener(snapshot);
         } catch {
           // see scheduleNotify
         }
       });
+    },
+    subscribe(listener) {
+      return selection.observe((snapshot) => listener({ snapshot }));
     },
     capture() {
       // Capture is sugar over `getSnapshot()` plus a deep clone +
@@ -1567,6 +1822,61 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
       if (!slice.target && !slice.selectionTarget) return null;
       return deepFreeze(deepClone(slice));
     },
+    // Painted-selection rects need both editors:
+    //
+    // - The host editor owns the presentation layer (the rect engine
+    //   lives there). The live path also flows through it because
+    //   `presentationEditor.getSelectionRects()` calls `getActiveEditor()`
+    //   internally and dispatches to the routed surface.
+    // - The routed editor owns the PM document that captured block ids
+    //   belong to. For body captures the two editors are the same; for
+    //   captures taken while editing a header / footer / footnote /
+    //   endnote, the routed editor is the story editor and the host
+    //   editor's PM doc would silently fail to resolve those ids.
+    //
+    // When focus has moved to a sidebar / composer by call time, the
+    // routed editor falls back to the body, and a non-body capture's
+    // block ids won't resolve there. The helper returns [] gracefully
+    // in that case (rather than wrong rects from another surface).
+    getRects(capture) {
+      const hostEditor = resolveHostEditor(superdoc);
+      const routedEditor = resolveRoutedEditor(superdoc);
+      return getSelectionRects(
+        hostEditor as unknown as Parameters<typeof getSelectionRects>[0],
+        routedEditor as unknown as Parameters<typeof getSelectionRects>[1],
+        capture,
+      );
+    },
+    getAnchorRect(options, capture) {
+      const hostEditor = resolveHostEditor(superdoc);
+      const routedEditor = resolveRoutedEditor(superdoc);
+      return getSelectionAnchorRect(
+        hostEditor as unknown as Parameters<typeof getSelectionAnchorRect>[0],
+        routedEditor as unknown as Parameters<typeof getSelectionAnchorRect>[1],
+        options,
+        capture,
+      );
+    },
+    restore(capture) {
+      // Routed editor: same rationale as `getRects(capture)` — block
+      // ids in a non-body capture only resolve in their own story
+      // editor's PM doc. When focus has moved to the body by call
+      // time, the routed editor is body and resolution returns
+      // `'stale'` rather than placing the selection on the wrong
+      // surface.
+      //
+      // Story locator (SD-2954): pre-resolved here so the helper
+      // doesn't have to repeat the presentation-editor lookup.
+      // `readActiveStoryLocator` routes through `resolveToolbarSources`
+      // and covers the direct, legacy `_presentationEditor`, and
+      // `superdocStore.documents[].getPresentationEditor()` paths
+      // uniformly.
+      const editor = resolveRoutedEditor(superdoc);
+      const activeStory = readActiveStoryLocator(superdoc);
+      return restoreSelection(editor as unknown as Parameters<typeof restoreSelection>[0], capture, {
+        activeStory,
+      });
+    },
   };
 
   // ---- ui.document -------------------------------------------------------
@@ -1580,14 +1890,17 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
   // backwards-compat shim once consumers migrate to ui.document).
   const document: DocumentHandle = {
     getSnapshot: () => computeState().document,
-    subscribe(listener) {
+    observe(listener) {
       return select((state) => state.document, shallowEqual).subscribe((snapshot) => {
         try {
-          listener({ snapshot });
+          listener(snapshot);
         } catch {
           // see scheduleNotify
         }
       });
+    },
+    subscribe(listener) {
+      return document.observe((snapshot) => listener({ snapshot }));
     },
     setMode(mode) {
       // Routes through the host setter; ignored when the stub omits
@@ -1658,9 +1971,53 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     },
   };
 
+  // Live scopes created via `ui.createScope()`. The controller's
+  // `destroy()` cascades into every entry before tearing down its own
+  // resources, so consumers do not need to call `scope.destroy()`
+  // themselves on shutdown. Calling `ui.destroy()` is enough.
+  const liveScopes = new Set<SuperDocUIScope>();
+
+  const createScopeFn = (): SuperDocUIScope => {
+    if (destroyed) {
+      // Mirror the destroyed-parent behavior of `scope.child()`:
+      // return an already-destroyed scope so consumers in shutdown
+      // races do not get a live scope that the controller will never
+      // cascade-destroy. Methods on the returned scope follow the
+      // documented post-destroy contract (`add` runs synchronously,
+      // `on` is a no-op, `register` throws, `child` returns destroyed).
+      const inert = createScope({
+        register: customCommandsRegistry.register.bind(customCommandsRegistry),
+        trackScope: () => () => undefined,
+      });
+      inert.destroy();
+      return inert;
+    }
+    return createScope({
+      register: customCommandsRegistry.register.bind(customCommandsRegistry),
+      trackScope: (scope) => {
+        liveScopes.add(scope);
+        return () => {
+          liveScopes.delete(scope);
+        };
+      },
+    });
+  };
+
   const destroy = () => {
     if (destroyed) return;
     destroyed = true;
+    // Cascade into scopes first. Each scope's own destroy untracks
+    // itself from `liveScopes`, so iterate a snapshot to avoid mutating
+    // the set during iteration.
+    const scopeSnapshot = [...liveScopes];
+    liveScopes.clear();
+    for (const scope of scopeSnapshot) {
+      try {
+        scope.destroy();
+      } catch (err) {
+        console.error('[superdoc/ui] scope destroy threw during ui.destroy()', err);
+      }
+    }
     stateChangeListeners.clear();
     commandHandleCache.clear();
     commandSubscribableCache.clear();
@@ -1675,5 +2032,16 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     teardown.length = 0;
   };
 
-  return { select, toolbar, commands, comments, trackChanges, selection, viewport, document, destroy };
+  return {
+    select,
+    toolbar,
+    commands,
+    comments,
+    trackChanges,
+    selection,
+    viewport,
+    document,
+    createScope: createScopeFn,
+    destroy,
+  };
 }

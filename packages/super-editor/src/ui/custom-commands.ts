@@ -1,4 +1,8 @@
+import { normalizeShortcut } from './keyboard-shortcuts.js';
+import { isViewportContextBundle } from './viewport-context.js';
 import type {
+  ContextMenuContribution,
+  ContextMenuItem,
   CustomCommandRegistration,
   CustomCommandRegistrationResult,
   CustomCommandHandle,
@@ -8,13 +12,56 @@ import type {
   SuperDocUIState,
   Subscribable,
   UIToolbarCommandState,
+  ViewportContext,
+  ViewportEntityHit,
 } from './types.js';
+
+const DEFAULT_SHORTCUT_COLLISION_MESSAGE = (shortcut: string, oldId: string, newId: string) =>
+  `[superdoc/ui] ui.commands.register(): shortcut '${shortcut}' was already bound to '${oldId}'. Replacing with '${newId}'.`;
+
+const DEFAULT_INVALID_SHORTCUT_MESSAGE = (id: string, raw: string) =>
+  `[superdoc/ui] ui.commands.register(): id '${id}' carries an invalid shortcut '${raw}' — ignored. Use a string like 'Mod-Shift-K'.`;
+
+/**
+ * Built-in group ids in the order they render in the context menu.
+ * Custom groups land after these, ranked by the smallest registration
+ * seq currently contributing to the group — see `groupRank` below.
+ */
+const BUILTIN_CONTEXT_MENU_GROUPS = ['format', 'clipboard', 'review', 'comment', 'link'] as const;
+const BUILTIN_GROUP_ORDER: ReadonlyMap<string, number> = new Map(
+  BUILTIN_CONTEXT_MENU_GROUPS.map((g, i) => [g, i] as const),
+);
+const DEFAULT_CONTEXT_MENU_GROUP = 'custom';
 
 const DEFAULT_BUILTIN_COLLISION_MESSAGE = (id: string) =>
   `[superdoc/ui] ui.commands.register(): id '${id}' collides with a built-in command. Pass { override: true } to replace deliberately. Registration refused.`;
 
 const DEFAULT_REPLACEMENT_MESSAGE = (id: string) =>
   `[superdoc/ui] ui.commands.register(): id '${id}' was already registered. Replacing prior registration.`;
+
+/**
+ * Property names the `ui.commands` Proxy intercepts before the
+ * registry lookup. A custom command registered with one of these ids
+ * would still be reachable through `ui.commands.get(id)` /
+ * `ui.commands.require(id)`, but indexing `ui.commands[id]` would
+ * return the surface helper instead of the consumer's handle. To keep
+ * the surface consistent, we refuse these ids at registration time.
+ *
+ * `override: true` does not bypass this list. Index access on a Proxy
+ * is not something registration semantics can route around; the only
+ * fix is to choose a different id (a namespaced one like
+ * `'company.has'` is the canonical workaround).
+ */
+const RESERVED_PROXY_PROPERTY_NAMES: ReadonlySet<string> = new Set([
+  'register',
+  'get',
+  'has',
+  'require',
+  'getContextMenuItems',
+]);
+
+const DEFAULT_RESERVED_NAME_MESSAGE = (id: string) =>
+  `[superdoc/ui] ui.commands.register(): id '${id}' shadows a Proxy method on ui.commands and would be unreachable through index access. Use a namespaced id (e.g. 'company.${id}') instead. Registration refused.`;
 
 /**
  * Static fallback state for a custom command when:
@@ -34,11 +81,29 @@ interface InternalCustomEntry {
   getState: CustomCommandRegistration['getState'];
   override: boolean;
   /**
+   * Normalized shortcut strings claimed by this registration.
+   * Tracked so unregister/replacement can drop them from the
+   * shortcut → id index in one pass.
+   */
+  shortcuts: string[];
+  contextMenu: ContextMenuContribution | null;
+  /**
+   * Monotonic counter at registration time; ties in `(group, order)`
+   * are broken by this so the rendered menu is stable across
+   * snapshots and across re-registrations of unrelated commands.
+   */
+  registrationSeq: number;
+  /**
    * Most recent error message thrown from `getState`. Used to dedupe
    * `console.error` calls so a buggy `getState` doesn't flood the console
    * once per snapshot rebuild.
    */
   lastErrorMessage: string | null;
+  /**
+   * Most recent error message thrown from `contextMenu.when`. Same
+   * dedupe posture as `lastErrorMessage`.
+   */
+  lastContextMenuErrorMessage: string | null;
 }
 
 export interface CustomCommandsRegistry {
@@ -66,8 +131,36 @@ export interface CustomCommandsRegistry {
    */
   getHandle<TPayload = unknown, TValue = unknown>(id: string): CustomCommandHandle<TPayload, TValue> | undefined;
 
-  /** Run `execute` for a registered id. Returns false if not registered. */
-  execute(id: string, payload?: unknown): boolean | Promise<boolean>;
+  /**
+   * Run `execute` for a registered id. Returns false if not registered.
+   * `context` (SD-2945) forwards the {@link ViewportContext} bundle when
+   * the dispatch came from a `ContextMenuItem.invoke()`; direct
+   * controller calls leave it `undefined`.
+   */
+  execute(id: string, payload?: unknown, context?: ViewportContext): boolean | Promise<boolean>;
+
+  /**
+   * Collect context-menu items contributed by registered customs.
+   * Filtered by each contribution's `when` predicate against the
+   * supplied entities + the current selection slice; sorted by
+   * `(group, order, registrationSeq)`. Errors from `when` are
+   * caught and the item is hidden for that query.
+   *
+   * SD-2945: when `input` is the full {@link ViewportContext} bundle,
+   * predicates receive `point` / `position` / `insideSelection` and
+   * each returned item carries an `invoke()` closure that fires
+   * execute with the bundle bound. Pass an entities array for the
+   * legacy "entities only" call shape.
+   */
+  getContextMenuItems(state: SuperDocUIState, input: ViewportEntityHit[] | ViewportContext): ContextMenuItem[];
+
+  /**
+   * Look up the custom command id (if any) bound to a normalized
+   * shortcut string. Used by the controller's keydown listener to
+   * dispatch matched shortcuts. Returns `undefined` when nothing is
+   * registered for that combo.
+   */
+  resolveShortcut(shortcut: string): string | undefined;
 
   /** Drop every registration and tear down per-command Subscribables. */
   destroy(): void;
@@ -116,6 +209,41 @@ export function createCustomCommandsRegistry(deps: CustomCommandsRegistryDeps): 
   const entries = new Map<string, InternalCustomEntry>();
   const handleCache = new Map<string, CustomCommandHandle<unknown, unknown>>();
   const subscribableCache = new Map<string, Subscribable<UIToolbarCommandState | undefined>>();
+  // Monotonic counter so `(group, order)` ties in context-menu sort
+  // are broken by registration time. Stable across snapshots, doesn't
+  // reuse values when entries are unregistered + re-registered.
+  let nextRegistrationSeq = 0;
+  // Normalized shortcut string → command id. Replacement / unregister
+  // mutate this through `releaseShortcuts` / `claimShortcuts` so a
+  // stale registration's shortcuts can never dispatch into a removed
+  // entry.
+  const shortcutIndex = new Map<string, string>();
+
+  const releaseShortcuts = (entry: InternalCustomEntry) => {
+    for (const sc of entry.shortcuts) {
+      if (shortcutIndex.get(sc) === entry.id) shortcutIndex.delete(sc);
+    }
+  };
+
+  const claimShortcuts = (id: string, raw: string | string[] | undefined): string[] => {
+    if (raw === undefined) return [];
+    const list = Array.isArray(raw) ? raw : [raw];
+    const claimed: string[] = [];
+    for (const item of list) {
+      const normalized = normalizeShortcut(item);
+      if (!normalized) {
+        console.warn(DEFAULT_INVALID_SHORTCUT_MESSAGE(id, item));
+        continue;
+      }
+      const prior = shortcutIndex.get(normalized);
+      if (prior && prior !== id) {
+        console.warn(DEFAULT_SHORTCUT_COLLISION_MESSAGE(normalized, prior, id));
+      }
+      shortcutIndex.set(normalized, id);
+      claimed.push(normalized);
+    }
+    return claimed;
+  };
   // Active observer disposers per command id. Lets `unregister` (and
   // replacement) actively tear down inner subscriptions instead of
   // waiting for the observer wrapper's lazy `!entries.has(id)` check
@@ -233,6 +361,24 @@ export function createCustomCommandsRegistry(deps: CustomCommandsRegistryDeps): 
     ): CustomCommandRegistrationResult<TPayload, TValue> {
       const { id, execute, getState, override = false } = registration;
 
+      // Reserved Proxy property names refuse unconditionally. Even
+      // `override: true` cannot route around index access on the
+      // `ui.commands` Proxy; the surface helper always wins. Returning
+      // a no-op result here keeps the call site safe (handle.execute
+      // still callable) and warns once.
+      if (RESERVED_PROXY_PROPERTY_NAMES.has(id)) {
+        console.warn(DEFAULT_RESERVED_NAME_MESSAGE(id));
+        return {
+          handle: buildNoOpHandle<TPayload, TValue>(id),
+          invalidate() {
+            // refused registration: nothing to invalidate
+          },
+          unregister() {
+            // refused registration: nothing to remove
+          },
+        };
+      }
+
       // Built-in collision: refuse without `override: true`. We return a
       // no-op registration object so the consumer's call site doesn't
       // crash on `result.handle.execute(...)` — they just see a warned
@@ -254,9 +400,14 @@ export function createCustomCommandsRegistry(deps: CustomCommandsRegistryDeps): 
       // Existing observers attached to the prior registration must be
       // told their command is gone before we install the new one — the
       // observer's `entries.has(id)` short-circuit will then detach.
-      if (entries.has(id)) {
+      const priorEntry = entries.get(id);
+      if (priorEntry) {
         console.warn(DEFAULT_REPLACEMENT_MESSAGE(id));
         disposeAllObservers(id);
+        // Drop the prior registration's shortcuts before claiming the
+        // new ones so a re-registration that drops a binding doesn't
+        // leave a stale shortcut → id mapping.
+        releaseShortcuts(priorEntry);
       }
 
       // Capture the entry by reference so this registration's
@@ -270,7 +421,11 @@ export function createCustomCommandsRegistry(deps: CustomCommandsRegistryDeps): 
         execute: execute as InternalCustomEntry['execute'],
         getState: getState as InternalCustomEntry['getState'],
         override,
+        shortcuts: claimShortcuts(id, registration.shortcut),
+        contextMenu: registration.contextMenu ?? null,
+        registrationSeq: nextRegistrationSeq++,
         lastErrorMessage: null,
+        lastContextMenuErrorMessage: null,
       };
       entries.set(id, ownEntry);
 
@@ -303,6 +458,7 @@ export function createCustomCommandsRegistry(deps: CustomCommandsRegistryDeps): 
           entries.delete(id);
           handleCache.delete(id);
           subscribableCache.delete(id);
+          releaseShortcuts(ownEntry);
           // Actively detach every active observer for this id so they
           // stop holding the inner Subscribable. The observer wrapper's
           // lazy `!entries.has(id)` check would otherwise leave the
@@ -355,7 +511,7 @@ export function createCustomCommandsRegistry(deps: CustomCommandsRegistryDeps): 
 
     getHandle,
 
-    execute(id, payload) {
+    execute(id, payload, context) {
       const entry = entries.get(id);
       if (!entry) return false;
       try {
@@ -363,16 +519,23 @@ export function createCustomCommandsRegistry(deps: CustomCommandsRegistryDeps): 
         // `register<TPayload>(...)` signature carries the consumer's
         // payload type to the captured handle, but the runtime registry
         // stores entries with the default `void` payload. Cast to bridge.
+        // `context` (SD-2945) is forwarded only when the dispatch came
+        // from a `ContextMenuItem.invoke()`; direct
+        // `ui.commands.execute` and `commands.get(id).execute()` calls
+        // pass it through as `undefined`, leaving the prior payload
+        // shape untouched for handlers that don't care about clicks.
         const result = (
           entry.execute as (args: {
             payload?: unknown;
             superdoc: SuperDocLike;
             editor: SuperDocEditorLike | null;
+            context?: ViewportContext;
           }) => unknown
         )({
           payload,
           superdoc: deps.superdoc,
           editor: deps.getEditor(),
+          context,
         });
         if (result instanceof Promise) {
           return result.then(
@@ -390,6 +553,126 @@ export function createCustomCommandsRegistry(deps: CustomCommandsRegistryDeps): 
       }
     },
 
+    // SD-2945: input is either an entities array (consumer built the
+    // menu via `viewport.entityAt(...)` only) or a full
+    // {@link ViewportContext} bundle from `viewport.contextAt(...)`.
+    // Routed through the same `isViewportContextBundle` guard the
+    // controller proxy uses so the two layers can't disagree on
+    // ambiguous inputs (e.g. `{ point: null }`, `undefined`).
+    // Bundle inputs surface `point` / `position` / `insideSelection`
+    // on the `when` predicate AND wire `invoke()` on each returned
+    // item so consumers can fire execute with context bound.
+    getContextMenuItems(state, input) {
+      const context = isViewportContextBundle(input) ? input : null;
+      const entities: ViewportEntityHit[] = context ? context.entities : Array.isArray(input) ? input : [];
+
+      const items: ContextMenuItem[] = [];
+      for (const entry of entries.values()) {
+        const contribution = entry.contextMenu;
+        if (!contribution) continue;
+
+        if (contribution.when) {
+          let applies = true;
+          try {
+            const whenInput = context
+              ? {
+                  entities,
+                  selection: state.selection,
+                  point: context.point,
+                  position: context.position,
+                  insideSelection: context.insideSelection,
+                }
+              : { entities, selection: state.selection };
+            applies = contribution.when(whenInput) === true;
+          } catch (err) {
+            // Same dedupe posture as `getState` errors: log once per
+            // distinct message so a buggy `when` predicate doesn't
+            // flood the console on every right-click.
+            const message = err instanceof Error ? err.message : String(err);
+            if (entry.lastContextMenuErrorMessage !== message) {
+              entry.lastContextMenuErrorMessage = message;
+              console.error(`[superdoc/ui] custom command '${entry.id}' contextMenu.when threw:`, err);
+            }
+            applies = false;
+          }
+          if (!applies) continue;
+        } else {
+          entry.lastContextMenuErrorMessage = null;
+        }
+
+        // Identity-guarded `invoke()` mirrors the captured-handle
+        // pattern at `buildHandle.execute`: the closure refuses to
+        // dispatch when a later `register({ id })` has replaced this
+        // entry between menu open and click. Without that guard, a
+        // menu held open across a re-registration would fire the new
+        // owner's handler with the old item's label / predicate /
+        // bundle, which is exactly the stale-handle class of bug the
+        // prior pattern was added to prevent.
+        const ownEntry = entry;
+        const itemId = entry.id;
+        const invoke = context
+          ? (): boolean | Promise<boolean> => {
+              if (entries.get(itemId) !== ownEntry) return false;
+              return registry.execute(itemId, undefined, context);
+            }
+          : undefined;
+        items.push({
+          id: entry.id,
+          label: contribution.label,
+          group: contribution.group ?? DEFAULT_CONTEXT_MENU_GROUP,
+          order: contribution.order ?? 0,
+          ...(invoke ? { invoke } : {}),
+        });
+      }
+
+      // Rank each custom group by the smallest registration seq
+      // currently contributing to it. Two corners that drive this:
+      //
+      // - Skip entries with no `contextMenu` set. Otherwise a plain
+      //   custom command (no contribution) would default to the
+      //   `'custom'` fallback group via `?? DEFAULT_CONTEXT_MENU_GROUP`
+      //   and silently anchor that group's rank from a non-contribution.
+      // - Use the *minimum* current seq, not the first one encountered.
+      //   `entries` is a Map; replacement keeps the key at its original
+      //   insertion index but stores the new (higher) seq, so reading
+      //   the first encountered seq for a group's lone re-registered
+      //   contributor would use the new seq and reorder the group.
+      //   Min-of-current is stable: while *any* original-seq contributor
+      //   remains in the group, the group's rank stays anchored.
+      const customGroupSeq = new Map<string, number>();
+      for (const entry of entries.values()) {
+        if (!entry.contextMenu) continue;
+        const group = entry.contextMenu.group ?? DEFAULT_CONTEXT_MENU_GROUP;
+        if (BUILTIN_GROUP_ORDER.has(group)) continue;
+        const existing = customGroupSeq.get(group);
+        if (existing === undefined || entry.registrationSeq < existing) {
+          customGroupSeq.set(group, entry.registrationSeq);
+        }
+      }
+
+      const groupRank = (group: string): number => {
+        const builtin = BUILTIN_GROUP_ORDER.get(group);
+        if (builtin !== undefined) return builtin;
+        return BUILTIN_CONTEXT_MENU_GROUPS.length + (customGroupSeq.get(group) ?? 0);
+      };
+
+      const seqById = new Map<string, number>();
+      for (const entry of entries.values()) seqById.set(entry.id, entry.registrationSeq);
+
+      items.sort((a, b) => {
+        const ga = groupRank(a.group);
+        const gb = groupRank(b.group);
+        if (ga !== gb) return ga - gb;
+        if (a.order !== b.order) return a.order - b.order;
+        return (seqById.get(a.id) ?? 0) - (seqById.get(b.id) ?? 0);
+      });
+      return items;
+    },
+
+    resolveShortcut(shortcut) {
+      return shortcutIndex.get(shortcut);
+    },
+
     destroy() {
       // Dispose every active observer before clearing maps so the
       // inner Subscribables release their selector subscriptions; just
@@ -399,6 +682,7 @@ export function createCustomCommandsRegistry(deps: CustomCommandsRegistryDeps): 
       entries.clear();
       handleCache.clear();
       subscribableCache.clear();
+      shortcutIndex.clear();
     },
   };
 

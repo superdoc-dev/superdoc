@@ -1,5 +1,5 @@
 /**
- * markdownToFragment — converts a Markdown string into an SDFragment.
+ * markdownToFragment: converts a Markdown string into an SDFragment.
  *
  * This is a "parse" operation: it takes Markdown text and returns structured
  * SDM/1 content nodes, along with a lossy flag and diagnostics for any

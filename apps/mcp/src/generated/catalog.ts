@@ -89,7 +89,7 @@ export const MCP_TOOL_CATALOG = {
     {
       toolName: 'superdoc_edit',
       description:
-        'The primary tool for inserting content into documents. ALWAYS use action "insert" with type "markdown" to create headings, paragraphs, or any block content — this is faster and creates proper document structure in one call. Do NOT use superdoc_create for headings or paragraphs. The markdown parser creates headings from # markers (# = Heading1, ## = Heading2), bold from **text**, italic from *text*, and numbered/bullet lists. Position markdown inserts with "target" (a BlockNodeAddress like {kind:"block", nodeType, nodeId}) and "placement" (before, after, insideStart, insideEnd). Without a target, content appends at the end of the document. IMPORTANT: After a markdown insert, analyze the document context (what kind of document, how titles and body text are styled) and follow up with ONE superdoc_mutations call to format inserted blocks so they look like they belong. Each format.apply step accepts "inline" (fontFamily, fontSize, bold, underline, color), "alignment", and "scope" in the same step. Use scope: "block" so formatting covers the entire paragraph. Copy the exact property values from the existing get_content blocks (fontFamily, fontSize, color, alignment, bold, underline). Do NOT invent values — use what the blocks show. Also supports replace, delete, and undo/redo. For replace and delete, pass a "ref" from superdoc_search or superdoc_get_content blocks. A search ref covers only the matched substring; a block ref covers the entire block text, so use block refs when rewriting or shortening whole paragraphs. For multi-step redlines or whole-clause rewrites, prefer superdoc_mutations with where:{by:"block", nodeType, nodeId} from superdoc_get_content action "blocks" includeText:true rather than relying on text selectors. Refs expire after any mutation; always re-search before the next edit. For 2+ edits that must succeed or fail atomically, use superdoc_mutations instead. Supports "dryRun" to preview changes and "changeMode: tracked" to record edits as tracked changes (not supported for markdown/html inserts). Do NOT build "target" objects manually when a ref is available; prefer "ref" for simpler, more reliable targeting.',
+        'The primary tool for inserting content into documents. ALWAYS use action "insert" with type "markdown" to create headings, paragraphs, or any block content: this is faster and creates proper document structure in one call. Do NOT use superdoc_create for headings or paragraphs. The markdown parser creates headings from # markers (# = Heading1, ## = Heading2), bold from **text**, italic from *text*, and numbered/bullet lists. Position markdown inserts with "target" (a BlockNodeAddress like {kind:"block", nodeType, nodeId}) and "placement" (before, after, insideStart, insideEnd). Without a target, content appends at the end of the document. IMPORTANT: After a markdown insert, analyze the document context (what kind of document, how titles and body text are styled) and follow up with ONE superdoc_mutations call to format inserted blocks so they look like they belong. Each format.apply step accepts "inline" (fontFamily, fontSize, bold, underline, color), "alignment", and "scope" in the same step. Use scope: "block" so formatting covers the entire paragraph. Copy the exact property values from the existing get_content blocks (fontFamily, fontSize, color, alignment, bold, underline). Do NOT invent values: use what the blocks show. Also supports replace, delete, and undo/redo. For replace and delete, pass a "ref" from superdoc_search or superdoc_get_content blocks. A search ref covers only the matched substring; a block ref covers the entire block text, so use block refs when rewriting or shortening whole paragraphs. For multi-step redlines or whole-clause rewrites, prefer superdoc_mutations with where:{by:"block", nodeType, nodeId} from superdoc_get_content action "blocks" includeText:true rather than relying on text selectors. Refs expire after any mutation; always re-search before the next edit. For 2+ edits that must succeed or fail atomically, use superdoc_mutations instead. Supports "dryRun" to preview changes and "changeMode: tracked" to record edits as tracked changes (not supported for markdown/html inserts). Do NOT build "target" objects manually when a ref is available; prefer "ref" for simpler, more reliable targeting.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -884,7 +884,7 @@ export const MCP_TOOL_CATALOG = {
     {
       toolName: 'superdoc_create',
       description:
-        'IMPORTANT: For headings and paragraphs, use superdoc_edit with type "markdown" instead — it is faster, creates proper styles, and handles positioning via target + placement. Only use superdoc_create for tables or when markdown cannot express the content. Creates a single paragraph, heading, or table. Returns nodeId and ref for the created block. After creating, the returned ref is valid for ONE immediate superdoc_format call. For subsequent operations, re-fetch blocks with superdoc_get_content to get fresh refs (refs expire after any mutation). When the user asks for a "heading", use action "heading" with a level (default 1). Use action "paragraph" for regular body text. Position with "at": {kind:"documentEnd"} (default), {kind:"documentStart"}, or {kind:"after"/"before", target:{kind:"block", nodeType, nodeId}} for relative placement. When creating multiple items in sequence, use the previous response nodeId as the next "at" target to maintain correct ordering. Do NOT use newlines in "text" to create multiple paragraphs; call this tool separately for each one.',
+        'IMPORTANT: For headings and paragraphs, use superdoc_edit with type "markdown" instead: it is faster, creates proper styles, and handles positioning via target + placement. Only use superdoc_create for tables or when markdown cannot express the content. Creates a single paragraph, heading, or table. Returns nodeId and ref for the created block. After creating, the returned ref is valid for ONE immediate superdoc_format call. For subsequent operations, re-fetch blocks with superdoc_get_content to get fresh refs (refs expire after any mutation). When the user asks for a "heading", use action "heading" with a level (default 1). Use action "paragraph" for regular body text. Position with "at": {kind:"documentEnd"} (default), {kind:"documentStart"}, or {kind:"after"/"before", target:{kind:"block", nodeType, nodeId}} for relative placement. When creating multiple items in sequence, use the previous response nodeId as the next "at" target to maintain correct ordering. Do NOT use newlines in "text" to create multiple paragraphs; call this tool separately for each one.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -1007,7 +1007,7 @@ export const MCP_TOOL_CATALOG = {
           text: {
             type: 'string',
             description:
-              'Paragraph text content. Each call creates ONE paragraph. For multiple items (e.g. list items), call superdoc_create separately for each item — do NOT use newlines to put multiple items in one paragraph.',
+              'Paragraph text content. Each call creates ONE paragraph. For multiple items (e.g. list items), call superdoc_create separately for each item: do NOT use newlines to put multiple items in one paragraph.',
           },
           input: {
             type: 'object',
@@ -1050,7 +1050,7 @@ export const MCP_TOOL_CATALOG = {
     {
       toolName: 'superdoc_list',
       description:
-        'Create and manipulate bullet and numbered lists. Most actions require a list-item target: {kind:"block", nodeType:"listItem", nodeId:"<id>"}. Exceptions: "create" and "attach" operate on paragraph targets (they turn paragraphs into list items). Find nodeIds via superdoc_get_content({action:"blocks"}) — pick listItem blocks for most actions, paragraph blocks for create/attach.\n\nCREATE & CONVERT:\n• "create" — make a NEW list from paragraphs. Two modes: mode:"empty" with at:{kind:"block", nodeType:"paragraph", nodeId} converts a single paragraph; mode:"fromParagraphs" with target:{from:{...paragraph block address}, to:{...paragraph block address}} converts a range — ALL paragraphs between from and to become items, so make sure no other content sits between them. Pass a preset ("disc"|"circle"|"square"|"dash" for bullets; "decimal"|"decimalParenthesis"|"lowerLetter"|"upperLetter"|"lowerRoman"|"upperRoman" for ordered) or a custom style. Use "create" to start a fresh list — NOT to extend an existing one (use "attach" for that).\n• "attach" — add paragraphs to an EXISTING list, inheriting its numbering definition. Pass target:{paragraph block address} (or {from, to} range of paragraphs) + attachTo:{kind:"block", nodeType:"listItem", nodeId:"<any item in destination list>"} + optional level:0..8. Use this to extend a list or as the second half of a merge workflow (see "join" below).\n• "set_type" — convert an existing list between ordered and bullet. Pass target:{listItem} + kind:"ordered" or "bullet". Adjacent compatible sequences are merged automatically to preserve continuous numbering.\n• "detach" — convert a list item back to a plain paragraph. Pass target:{listItem}.\n\nITEMS & NESTING:\n• "insert" — add a new list item adjacent to an existing item in the same list. Pass target:{listItem} + position:"before"|"after" + optional text. Use this (NOT superdoc_create) to add items to an existing list.\n• "indent" / "outdent" — bump the target item\'s nesting level by one (0-8 range). Pass target:{listItem}.\n• "set_level" — jump the target item to an explicit level. Pass target:{listItem} + level:0..8.\n\nNUMBERING (ordered lists):\n• "set_value" — restart numbering at the target. Pass target:{listItem} + value:<number> (e.g. value:1 to start over) or value:null to clear a previous override. Mid-sequence targets are atomically split off into their own sequence.\n• "continue_previous" — make the target\'s sequence continue numbering from the nearest compatible previous sequence (same abstract definition). Pass target:{listItem of the sequence you want to renumber}. Fails with NO_COMPATIBLE_PREVIOUS or INCOMPATIBLE_DEFINITIONS if no matching prior sequence exists.\n\nSEQUENCE SHAPE (merge / split):\n• "merge" — merge the target\'s sequence with an adjacent one into one continuous list. Pass target:{listItem} + direction:"withPrevious" or "withNext". Absorbed items adopt the absorbing sequence\'s numbering definition, and empty paragraphs between the two sequences are removed so numbering flows continuously.\n• "split" — split the target\'s sequence at the target item into two independent lists. The target and everything after become a new sequence that restarts numbering at 1. Pass target:{listItem}; add restartNumbering:false to keep the count continuing instead of restarting.',
+        'Create and manipulate bullet and numbered lists. Most actions require a list-item target: {kind:"block", nodeType:"listItem", nodeId:"<id>"}. Exceptions: "create" and "attach" operate on paragraph targets (they turn paragraphs into list items). Find nodeIds via superdoc_get_content({action:"blocks"}): pick listItem blocks for most actions, paragraph blocks for create/attach.\n\nCREATE & CONVERT:\n• "create": make a NEW list from paragraphs. Two modes: mode:"empty" with at:{kind:"block", nodeType:"paragraph", nodeId} converts a single paragraph; mode:"fromParagraphs" with target:{from:{...paragraph block address}, to:{...paragraph block address}} converts a range: ALL paragraphs between from and to become items, so make sure no other content sits between them. Pass a preset ("disc"|"circle"|"square"|"dash" for bullets; "decimal"|"decimalParenthesis"|"lowerLetter"|"upperLetter"|"lowerRoman"|"upperRoman" for ordered) or a custom style. Use "create" to start a fresh list: NOT to extend an existing one (use "attach" for that).\n• "attach": add paragraphs to an EXISTING list, inheriting its numbering definition. Pass target:{paragraph block address} (or {from, to} range of paragraphs) + attachTo:{kind:"block", nodeType:"listItem", nodeId:"<any item in destination list>"} + optional level:0..8. Use this to extend a list or as the second half of a merge workflow (see "join" below).\n• "set_type": convert an existing list between ordered and bullet. Pass target:{listItem} + kind:"ordered" or "bullet". Adjacent compatible sequences are merged automatically to preserve continuous numbering.\n• "detach": convert a list item back to a plain paragraph. Pass target:{listItem}.\n\nITEMS & NESTING:\n• "insert": add a new list item adjacent to an existing item in the same list. Pass target:{listItem} + position:"before"|"after" + optional text. Use this (NOT superdoc_create) to add items to an existing list.\n• "indent" / "outdent": bump the target item\'s nesting level by one (0-8 range). Pass target:{listItem}.\n• "set_level": jump the target item to an explicit level. Pass target:{listItem} + level:0..8.\n\nNUMBERING (ordered lists):\n• "set_value": restart numbering at the target. Pass target:{listItem} + value:<number> (e.g. value:1 to start over) or value:null to clear a previous override. Mid-sequence targets are atomically split off into their own sequence.\n• "continue_previous": make the target\'s sequence continue numbering from the nearest compatible previous sequence (same abstract definition). Pass target:{listItem of the sequence you want to renumber}. Fails with NO_COMPATIBLE_PREVIOUS or INCOMPATIBLE_DEFINITIONS if no matching prior sequence exists.\n\nSEQUENCE SHAPE (merge / split):\n• "merge": merge the target\'s sequence with an adjacent one into one continuous list. Pass target:{listItem} + direction:"withPrevious" or "withNext". Absorbed items adopt the absorbing sequence\'s numbering definition, and empty paragraphs between the two sequences are removed so numbering flows continuously.\n• "split": split the target\'s sequence at the target item into two independent lists. The target and everything after become a new sequence that restarts numbering at 1. Pass target:{listItem}; add restartNumbering:false to keep the count continuing instead of restarting.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -1126,7 +1126,7 @@ export const MCP_TOOL_CATALOG = {
           mode: {
             type: 'string',
             description:
-              "Required. 'fromParagraphs' converts existing paragraphs into list items — each paragraph becomes one item, so create one paragraph per item first. 'empty' creates a new empty list at 'at'. Required for action 'create'.",
+              "Required. 'fromParagraphs' converts existing paragraphs into list items: each paragraph becomes one item, so create one paragraph per item first. 'empty' creates a new empty list at 'at'. Required for action 'create'.",
             enum: ['empty', 'fromParagraphs'],
           },
           at: {
@@ -1450,6 +1450,116 @@ export const MCP_TOOL_CATALOG = {
                       required: ['blockId', 'range'],
                     },
                   },
+                  story: {
+                    oneOf: [
+                      {
+                        type: 'object',
+                        properties: {
+                          kind: {
+                            const: 'story',
+                            type: 'string',
+                          },
+                          storyType: {
+                            const: 'body',
+                            type: 'string',
+                          },
+                        },
+                        required: ['kind', 'storyType'],
+                      },
+                      {
+                        type: 'object',
+                        properties: {
+                          kind: {
+                            const: 'story',
+                            type: 'string',
+                          },
+                          storyType: {
+                            const: 'headerFooterSlot',
+                            type: 'string',
+                          },
+                          section: {
+                            type: 'object',
+                            properties: {
+                              kind: {
+                                const: 'section',
+                                type: 'string',
+                              },
+                              sectionId: {
+                                type: 'string',
+                              },
+                            },
+                            required: ['kind', 'sectionId'],
+                          },
+                          headerFooterKind: {
+                            enum: ['header', 'footer'],
+                          },
+                          variant: {
+                            enum: ['default', 'first', 'even'],
+                          },
+                          resolution: {
+                            enum: ['effective', 'explicit'],
+                          },
+                          onWrite: {
+                            enum: ['materializeIfInherited', 'editResolvedPart', 'error'],
+                          },
+                        },
+                        required: ['kind', 'storyType', 'section', 'headerFooterKind', 'variant'],
+                      },
+                      {
+                        type: 'object',
+                        properties: {
+                          kind: {
+                            const: 'story',
+                            type: 'string',
+                          },
+                          storyType: {
+                            const: 'headerFooterPart',
+                            type: 'string',
+                          },
+                          refId: {
+                            type: 'string',
+                          },
+                        },
+                        required: ['kind', 'storyType', 'refId'],
+                      },
+                      {
+                        type: 'object',
+                        properties: {
+                          kind: {
+                            const: 'story',
+                            type: 'string',
+                          },
+                          storyType: {
+                            const: 'footnote',
+                            type: 'string',
+                          },
+                          noteId: {
+                            type: 'string',
+                          },
+                        },
+                        required: ['kind', 'storyType', 'noteId'],
+                      },
+                      {
+                        type: 'object',
+                        properties: {
+                          kind: {
+                            const: 'story',
+                            type: 'string',
+                          },
+                          storyType: {
+                            const: 'endnote',
+                            type: 'string',
+                          },
+                          noteId: {
+                            type: 'string',
+                          },
+                        },
+                        required: ['kind', 'storyType', 'noteId'],
+                      },
+                    ],
+                    description:
+                      "Story scope. Defaults to document body when omitted. Use {kind:'story', storyType:'body'} for body, or other storyType values for headers, footers, footnotes, endnotes.",
+                  },
                 },
                 required: ['kind', 'segments'],
               },
@@ -1469,8 +1579,8 @@ export const MCP_TOOL_CATALOG = {
           status: {
             type: 'string',
             description:
-              "Set comment status. Use 'resolved' to mark as resolved. Only for action 'update'. Omit for other actions.",
-            enum: ['resolved'],
+              "Set comment status. Use 'resolved' to resolve a comment, or 'active' to reopen a previously resolved comment (lifecycle inverse). Only for action 'update'. Omit for other actions.",
+            enum: ['resolved', 'active'],
           },
           isInternal: {
             type: 'boolean',

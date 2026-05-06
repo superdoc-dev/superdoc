@@ -2,15 +2,15 @@
  * Typed error/diagnostic records for inline formatting.
  *
  * Three frozen schemas:
- * - `INVALID_INLINE_TOKEN` — shared (runtime: thrown; import: collected as diagnostic)
- * - `STYLE_RESOLUTION_FAILED` — runtime-only (thrown)
- * - `INVALID_TARGET` — runtime-only (thrown)
+ * - `INVALID_INLINE_TOKEN`: shared (runtime: thrown; import: collected as diagnostic)
+ * - `STYLE_RESOLUTION_FAILED`: runtime-only (thrown)
+ * - `INVALID_TARGET`: runtime-only (thrown)
  */
 
 import type { CorePropertyId, CoreTogglePropertyId } from './property-ids.js';
 
 // ---------------------------------------------------------------------------
-// INVALID_INLINE_TOKEN — discriminated union by `property`
+// INVALID_INLINE_TOKEN: discriminated union by `property`
 // ---------------------------------------------------------------------------
 
 interface InvalidInlineTokenBase {
@@ -23,13 +23,13 @@ interface InvalidInlineTokenBase {
   context?: string;
 }
 
-/** Toggle property variant (bold/italic/strike) — only `w:val` can fail. */
+/** Toggle property variant (bold/italic/strike): only `w:val` can fail. */
 export interface InvalidInlineTokenToggle extends InvalidInlineTokenBase {
   property: CoreTogglePropertyId;
   attribute: 'val';
 }
 
-/** Underline variant — `w:val` plus rich attrs can each fail independently. */
+/** Underline variant: `w:val` plus rich attrs can each fail independently. */
 export interface InvalidInlineTokenUnderline extends InvalidInlineTokenBase {
   property: 'underline';
   attribute: 'val' | 'color' | 'themeColor' | 'themeTint' | 'themeShade';
@@ -43,12 +43,12 @@ export type InvalidInlineTokenError = InvalidInlineTokenToggle | InvalidInlineTo
 
 /**
  * Type alias for import-site readability.
- * `InlineTokenDiagnostic` IS `InvalidInlineTokenError` — one type, one schema, zero drift.
+ * `InlineTokenDiagnostic` IS `InvalidInlineTokenError`: one type, one schema, zero drift.
  */
 export type InlineTokenDiagnostic = InvalidInlineTokenError;
 
 // ---------------------------------------------------------------------------
-// STYLE_RESOLUTION_FAILED — runtime-only
+// STYLE_RESOLUTION_FAILED: runtime-only
 // ---------------------------------------------------------------------------
 
 /** Required resolution input fields (§4.1 applicability matrix). */
@@ -68,7 +68,7 @@ export interface StyleResolutionFailedError {
 }
 
 // ---------------------------------------------------------------------------
-// INVALID_TARGET — discriminated union by `reason`
+// INVALID_TARGET: discriminated union by `reason`
 // ---------------------------------------------------------------------------
 
 interface InvalidTargetBase {
@@ -89,6 +89,6 @@ export interface InvalidTargetInvalidSelector extends InvalidTargetBase {
 
 /**
  * Discriminated union for invalid mutation target errors.
- * Collapsed ranges (from === to) are NOT an error — they are a silent no-op.
+ * Collapsed ranges (from === to) are NOT an error: they are a silent no-op.
  */
 export type InvalidTargetError = InvalidTargetOutOfRange | InvalidTargetInvalidSelector;

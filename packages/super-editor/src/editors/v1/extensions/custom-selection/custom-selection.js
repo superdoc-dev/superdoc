@@ -198,6 +198,20 @@ export const CustomSelection = Extension.create({
               return false;
             }
 
+            // SD-2944: when the consumer has turned off SuperDoc's
+            // built-in right-click menu (`disableContextMenu: true`),
+            // let the browser native menu (or the consumer's own
+            // `contextmenu` listener) take over. Without this guard,
+            // `preventDefault()` below would suppress every right-click
+            // even though the built-in menu UI also refuses to open,
+            // leaving right-click dead on plain text inside the editor.
+            // The mousedown-side selection preservation still runs, so
+            // a consumer rendering their own menu still sees the
+            // visible selection underneath.
+            if (editor.options?.disableContextMenu) {
+              return false;
+            }
+
             // Prevent context menu from removing focus/selection
             event.preventDefault();
             const { selection } = view.state;

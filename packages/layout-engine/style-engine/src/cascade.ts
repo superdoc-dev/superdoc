@@ -24,27 +24,6 @@ export type PropertyObject = ParagraphProperties | RunProperties | TableCellProp
  * @param propertiesArray - Ordered list of property objects to combine (low -> high priority).
  * @param options - Configuration for full overrides and special handling.
  * @returns Combined property object.
- *
- * @example
- * ```typescript
- * import { combineProperties } from '@superdoc/style-engine/cascade';
- *
- * const result = combineProperties([
- *   { fontSize: 22, bold: true },           // from style
- *   { fontSize: 24, italic: true },         // from inline (wins for fontSize)
- * ]);
- * // result: { fontSize: 24, bold: true, italic: true }
- *
- * // With full override for color (replaces entire object, not merge):
- * const result2 = combineProperties(
- *   [
- *     { color: { val: 'FF0000', theme: 'accent1' } },
- *     { color: { val: '00FF00' } },
- *   ],
- *   { fullOverrideProps: ['color'] }
- * );
- * // result2: { color: { val: '00FF00' } } - NOT merged
- * ```
  */
 export function combineProperties<T extends PropertyObject>(
   propertiesArray: T[],

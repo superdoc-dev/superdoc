@@ -7,6 +7,7 @@
     "test:update": "playwright test --update-snapshots",
     "docs:download": "tsx scripts/download-test-docs.ts",
     "docs:upload": "tsx scripts/upload-test-doc.ts",
+    "screenshot-one": "tsx scripts/screenshot-one.ts",
     "report": "playwright show-report",
     "harness": "vite --config harness/vite.config.ts harness/",
     "setup": "playwright install --with-deps chromium firefox webkit"

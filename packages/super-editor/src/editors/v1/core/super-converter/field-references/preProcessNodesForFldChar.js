@@ -228,8 +228,8 @@ export const preProcessNodesForFldChar = (nodes = [], docx) => {
         // A field from this level or higher ended in the children.
         const shouldPreserveRaw = childResult.unpairedEndPreserveRaw || isTrackChangeElement(node);
         if (collectedNodesStack.length === 0) {
-          // Preserve the original subtree; child processing may have stripped the fldChar end marker.
-          processedNodes.push(rawNode);
+          // Track-change wrappers need the original field boundary; ordinary wrappers can keep processed children.
+          processedNodes.push(shouldPreserveRaw ? rawNode : node);
           unpairedEnd = true;
           if (shouldPreserveRaw) unpairedEndPreserveRaw = true;
           return;

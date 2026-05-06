@@ -303,6 +303,62 @@ describe('preProcessNodesForFldChar', () => {
     ]);
   });
 
+  it('processes known fields that end inside nested non-tracked wrappers', () => {
+    const nodes = [
+      { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'begin' } }] },
+      {
+        name: 'w:r',
+        elements: [{ name: 'w:instrText', elements: [{ type: 'text', text: 'HYPERLINK "http://example.com"' }] }],
+      },
+      { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'separate' } }] },
+      {
+        name: 'w:p',
+        elements: [
+          {
+            name: 'w:sdt',
+            elements: [
+              {
+                name: 'w:sdtContent',
+                elements: [
+                  { name: 'w:r', elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'link text' }] }] },
+                  { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'end' } }] },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ];
+
+    const { processedNodes } = preProcessNodesForFldChar(nodes, mockDocx);
+
+    expect(processedNodes).toEqual([
+      {
+        name: 'w:hyperlink',
+        type: 'element',
+        attributes: { 'r:id': 'rIdabc12345' },
+        elements: [
+          {
+            name: 'w:p',
+            elements: [
+              {
+                name: 'w:sdt',
+                elements: [
+                  {
+                    name: 'w:sdtContent',
+                    elements: [
+                      { name: 'w:r', elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'link text' }] }] },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ]);
+  });
+
   it('preserves a tracked-deletion-wrapped field split across paragraphs without throwing', () => {
     const expectedNodes = [
       {

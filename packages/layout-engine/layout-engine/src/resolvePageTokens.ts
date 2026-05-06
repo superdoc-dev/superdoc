@@ -14,7 +14,7 @@
  * - Integrates with two-pass convergence loop in incrementalLayout
  */
 
-import type { Layout, FlowBlock, ParagraphBlock, Measure } from '@superdoc/contracts';
+import type { Layout, FlowBlock, ParagraphBlock, Measure, TableBlock } from '@superdoc/contracts';
 import type { DisplayPageInfo } from './pageNumbering';
 
 /**
@@ -121,41 +121,106 @@ export function resolvePageNumberTokens(
     const displayPageText = displayPageInfo.displayText;
 
     for (const fragment of page.fragments) {
-      // Only paragraph fragments contain runs with tokens
-      if (fragment.kind !== 'para') continue;
+      // Paragraph fragments — original behaviour.
+      if (fragment.kind === 'para') {
+        const blockId = fragment.blockId;
+        if (processedBlocks.has(blockId)) continue;
 
-      const blockId = fragment.blockId;
+        const hasTokensFlag = blockHasTokensFlags.get(blockId);
+        if (hasTokensFlag === false) continue;
 
-      // Skip if already processed
-      if (processedBlocks.has(blockId)) continue;
+        const block = blockMap.get(blockId);
+        if (!block || block.kind !== 'paragraph') continue;
 
-      // Optimization: skip blocks that don't have page tokens flag
-      const hasTokensFlag = blockHasTokensFlags.get(blockId);
-      if (hasTokensFlag === false) continue;
+        if (!hasPageTokens(block)) {
+          processedBlocks.add(blockId);
+          continue;
+        }
 
-      // Get the original block
-      const block = blockMap.get(blockId);
-      if (!block || block.kind !== 'paragraph') continue;
-
-      // Check if block has any page tokens and resolve them
-      const wasModified = hasPageTokens(block);
-      if (!wasModified) {
-        // Mark as processed even if no tokens (to avoid checking again)
+        const clonedBlock = cloneBlockWithResolvedTokens(block, displayPageText, totalPagesStr);
+        updatedBlocks.set(blockId, clonedBlock);
+        affectedBlockIds.add(blockId);
         processedBlocks.add(blockId);
         continue;
       }
 
-      // Clone the block and resolve tokens
-      const clonedBlock = cloneBlockWithResolvedTokens(block, displayPageText, totalPagesStr);
+      // SD-1332: tables can host paragraphs with page tokens (Word's
+      // typical layout puts PAGE fields in table cells in the footer).
+      // Walk the table tree, find affected paragraphs, and emit one
+      // immutably-cloned table block with the substitutions applied.
+      if (fragment.kind === 'table') {
+        const blockId = fragment.blockId;
+        if (processedBlocks.has(blockId)) continue;
 
-      // Store the updated block
-      updatedBlocks.set(blockId, clonedBlock);
-      affectedBlockIds.add(blockId);
-      processedBlocks.add(blockId);
+        const block = blockMap.get(blockId);
+        if (!block || block.kind !== 'table') continue;
+
+        if (!tableContainsPageTokens(block as TableBlock)) {
+          processedBlocks.add(blockId);
+          continue;
+        }
+
+        const clonedTable = cloneTableWithResolvedTokens(block as TableBlock, displayPageText, totalPagesStr);
+        updatedBlocks.set(blockId, clonedTable);
+        affectedBlockIds.add(blockId);
+        processedBlocks.add(blockId);
+      }
     }
   }
 
   return { affectedBlockIds, updatedBlocks };
+}
+
+/**
+ * SD-1332: walk a TableBlock's cells and detect any paragraph token.
+ */
+function tableContainsPageTokens(table: TableBlock): boolean {
+  for (const row of table.rows ?? []) {
+    for (const cell of row.cells ?? []) {
+      const cellBlocks: FlowBlock[] = cell.blocks
+        ? (cell.blocks as FlowBlock[])
+        : cell.paragraph
+          ? [cell.paragraph]
+          : [];
+      for (const inner of cellBlocks) {
+        if (inner.kind === 'paragraph' && hasPageTokens(inner as ParagraphBlock)) return true;
+        if (inner.kind === 'table' && tableContainsPageTokens(inner as TableBlock)) return true;
+      }
+    }
+  }
+  return false;
+}
+
+/**
+ * SD-1332: deep-clone a TableBlock substituting any pageNumber /
+ * totalPageCount tokens in its nested paragraphs. Original tree stays
+ * untouched (consistent with how cloneBlockWithResolvedTokens treats
+ * top-level paragraphs).
+ */
+function cloneTableWithResolvedTokens(table: TableBlock, displayPageText: string, totalPagesStr: string): TableBlock {
+  return {
+    ...table,
+    rows: (table.rows ?? []).map((row) => ({
+      ...row,
+      cells: (row.cells ?? []).map((cell) => ({
+        ...cell,
+        paragraph: cell.paragraph
+          ? (cloneBlockWithResolvedTokens(cell.paragraph, displayPageText, totalPagesStr) as ParagraphBlock)
+          : cell.paragraph,
+        blocks: cell.blocks
+          ? (cell.blocks.map((inner) => {
+              if (inner.kind === 'paragraph') {
+                return cloneBlockWithResolvedTokens(inner as ParagraphBlock, displayPageText, totalPagesStr);
+              }
+              if (inner.kind === 'table') {
+                return cloneTableWithResolvedTokens(inner as TableBlock, displayPageText, totalPagesStr);
+              }
+              return inner;
+            }) as TableBlock['rows'][number]['cells'][number]['blocks'])
+          : cell.blocks,
+      })),
+    })),
+  };
 }
 
 /**

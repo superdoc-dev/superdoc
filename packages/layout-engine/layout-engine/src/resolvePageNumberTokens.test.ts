@@ -903,4 +903,73 @@ describe('resolvePageNumberTokens', () => {
       expect(updatedBlock.runs[0].text).toBe('100'); // Three digits
     });
   });
+
+  // SD-1332: PAGE fields can live inside a table cell (especially in
+  // footers). The resolver previously iterated only fragments where
+  // `kind === 'para'`, so paragraphs nested in table cells were skipped
+  // and the digit never substituted.
+  describe('SD-1332: tokens nested in table cells', () => {
+    it('substitutes pageNumber inside a TableCell.paragraph and clones the table immutably', () => {
+      const blocks: FlowBlock[] = [
+        {
+          kind: 'table',
+          id: 'tbl-1',
+          rows: [
+            {
+              cells: [
+                {
+                  id: 'cell-1',
+                  paragraph: {
+                    kind: 'paragraph',
+                    id: 'cell-para-1',
+                    runs: [{ text: '0', token: 'pageNumber', fontFamily: 'Arial', fontSize: 12 } as TextRun],
+                  } as ParagraphBlock,
+                },
+              ],
+            },
+          ],
+        } as unknown as FlowBlock,
+      ];
+      const measures: Measure[] = [
+        { kind: 'table' as const, rows: [], columnWidths: [], totalHeight: 0 } as unknown as Measure,
+      ];
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [
+          {
+            number: 1,
+            fragments: [
+              {
+                kind: 'table',
+                blockId: 'tbl-1',
+                fromRow: 0,
+                toRow: 1,
+                x: 0,
+                y: 0,
+                width: 612,
+                height: 20,
+              } as unknown as Layout['pages'][number]['fragments'][number],
+            ],
+          },
+        ],
+      };
+      const numberingCtx: NumberingContext = {
+        totalPages: 5,
+        displayPages: [{ physicalPage: 1, displayNumber: 3, displayText: '3', sectionIndex: 0 }],
+      };
+
+      const result = resolvePageNumberTokens(layout, blocks, measures, numberingCtx);
+
+      expect(result.affectedBlockIds.has('tbl-1')).toBe(true);
+      const updatedTable = result.updatedBlocks.get('tbl-1') as unknown as {
+        rows: { cells: { paragraph: ParagraphBlock }[] }[];
+      };
+      expect(updatedTable.rows[0].cells[0].paragraph.runs[0].text).toBe('3');
+
+      // Original table tree must NOT be mutated.
+      const originalTable = blocks[0] as unknown as { rows: { cells: { paragraph: ParagraphBlock }[] }[] };
+      expect(originalTable.rows[0].cells[0].paragraph.runs[0].text).toBe('0');
+      expect(originalTable.rows[0].cells[0].paragraph.runs[0].token).toBe('pageNumber');
+    });
+  });
 });

@@ -36,6 +36,24 @@ painter.setProviders(newHeader, newFooter); // optional helper for provider chan
 Notes:
 - `paint()` takes only `{ resolvedLayout }` — no raw `Layout`, `blocks`, or `measures`.
 - Header/footer providers must return a `PageDecorationPayload` whose `items` are
-  aligned 1:1 with `fragments` (same length, same order).
+  aligned 1:1 with `fragments` (same length, same order). `offset` is required.
 - Virtualization is opt-in and only supported in vertical mode (windowed pages with spacers).
 - Renderer is read-only: no editing/input handling is included here.
+
+## Hard invariants
+
+- **The painter never measures the DOM at paint time.** Every size, offset,
+  and dimension consumed during rendering must come pre-computed on the
+  `ResolvedLayout` it receives. If a required field is missing, the painter
+  throws — it does not paper over incomplete upstream data with `clientHeight`,
+  `offsetWidth`, or element cloning. Scroll/viewport plumbing and interactive
+  ruler handles are the only allowed DOM-measurement consumers; both are
+  delineated in `painters/dom/src/ruler/` and the scroll mapping in
+  `renderer.ts`. Enforced by Guard E in `tests/src/architecture-boundaries.test.ts`
+  (SD-2957).
+- **The resolve stage is the unique source of truth for every field the
+  painter reads.** The painter does not coalesce resolved-item fields with
+  the legacy `fragment` back-pointer; if `resolvedItem?.X` is absent, that's
+  a producer-completeness issue to fix in `layout-resolved`, not at paint
+  time. Enforced by absence — any future regression to a `?? fragment.X`
+  fallback fails review.

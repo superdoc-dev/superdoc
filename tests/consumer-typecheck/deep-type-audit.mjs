@@ -42,13 +42,9 @@ const doPack = args.has('--pack');
 const doWrite = args.has('--write');
 const reportOnly = args.has('--report-only');
 
-// -- Resolve typescript from the fixture's node_modules --------------------
-// The fixture pins typescript via package-lock.json; the audit must use
-// the same version the matrix uses so behavior matches.
-const tsRequire = createRequire(resolve(here, 'package.json'));
-const ts = tsRequire('typescript');
-
-// -- Optional pack + install -----------------------------------------------
+// -- Optional pack + install (must run BEFORE requiring typescript so a
+// fresh checkout where tests/consumer-typecheck/node_modules is empty can
+// bootstrap the fixture's pinned dev deps from package-lock.json).
 if (doPack) {
   console.log('[audit] Packing superdoc...');
   execSync('pnpm --filter superdoc run pack:es', { cwd: repoRoot, stdio: 'inherit' });
@@ -58,6 +54,12 @@ if (doPack) {
     { cwd: here, stdio: 'inherit' },
   );
 }
+
+// -- Resolve typescript from the fixture's node_modules --------------------
+// The fixture pins typescript via package-lock.json; the audit must use
+// the same version the matrix uses so behavior matches.
+const tsRequire = createRequire(resolve(here, 'package.json'));
+const ts = tsRequire('typescript');
 
 // -- Resolve the installed superdoc package --------------------------------
 const installedRoot = resolve(here, 'node_modules', 'superdoc');
@@ -212,14 +214,41 @@ function record(kind, symbolPath, decl) {
 function walkType(type, symbolPath, depth, originDecl) {
   if (depth > MAX_DEPTH) return;
   if (!type) return;
+  // Always record direct `any` regardless of visited state. The `any`
+  // singleton's type id stays the same across all occurrences, so a
+  // visited-gated check would silently drop subsequent siblings.
+  if (isAnyType(type)) {
+    record('type', symbolPath, originDecl);
+    return;
+  }
+  // Pre-record `any` inside array elements and type arguments BEFORE the
+  // visited gate. TypeScript caches generic instantiations: `Array<any>`
+  // and `Promise<any>` share an id across all sibling occurrences, so
+  // visiting the wrapper once would otherwise short-circuit every later
+  // sibling and miss its inner-any finding. The visited gate stays in
+  // place for structural cycle prevention; the pre-record here gives
+  // siblings their own findings.
+  if (checker.isArrayType && checker.isArrayType(type)) {
+    const args = checker.getTypeArguments(type);
+    for (const t of args) {
+      if (isAnyType(t)) record('type', symbolPath + '[]', originDecl);
+    }
+  }
+  const preRecordTypeArgs = type.aliasTypeArguments || (type.typeArguments ?? []);
+  for (let i = 0; i < preRecordTypeArgs.length; i++) {
+    if (isAnyType(preRecordTypeArgs[i])) {
+      record('type', symbolPath + `<${i}>`, originDecl);
+    }
+  }
+  // Persistent (per-root) visited gate: prevents redundant deep walks of
+  // shared structural types and terminates true self-references. Unlike a
+  // stack-scoped guard, this stays bounded for highly interconnected
+  // public surfaces where the same structural type is reachable from
+  // hundreds of distinct paths.
   const id = type.id;
   if (id != null) {
     if (visited.has(id)) return;
     visited.add(id);
-  }
-  if (isAnyType(type)) {
-    record('type', symbolPath, originDecl);
-    return;
   }
   if (type.flags & ts.TypeFlags.UnionOrIntersection) {
     for (const t of type.types) walkType(t, symbolPath, depth + 1, originDecl);
@@ -300,20 +329,42 @@ function walkType(type, symbolPath, depth, originDecl) {
 }
 function walkExport(symbol, exportName, originDecl) {
   const decl = symbol.valueDeclaration ?? symbol.declarations?.[0] ?? originDecl;
-  let type;
+  // For interfaces and type aliases, getDeclaredTypeOfSymbol returns the
+  // structural type. For classes, it returns the INSTANCE type — which
+  // never has constructor or static signatures. Walking only the declared
+  // type leaves class-side `any` (e.g. `constructor(...args: any[])` and
+  // `static foo(): any`) out of the audit. Walk the value type as well
+  // when the class side differs from the instance side, prefixed with
+  // `.<value>` so consumers can tell where the finding originates.
+  let declaredType;
   try {
-    type = checker.getDeclaredTypeOfSymbol(symbol);
-    if (!type || ((type.flags & ts.TypeFlags.Any) && type.intrinsicName !== 'any')) {
-      type = checker.getTypeOfSymbolAtLocation(symbol, decl);
-    }
+    declaredType = checker.getDeclaredTypeOfSymbol(symbol);
   } catch {
-    type = checker.getTypeOfSymbolAtLocation(symbol, decl);
+    declaredType = undefined;
   }
-  if (isAnyType(type)) {
-    record('export', exportName, decl);
-    return;
+  let valueType;
+  if (decl) {
+    try {
+      valueType = checker.getTypeOfSymbolAtLocation(symbol, decl);
+    } catch {
+      valueType = undefined;
+    }
   }
-  walkType(type, exportName, 0, decl);
+  // Walk the declared (instance / interface / alias) side.
+  if (declaredType) {
+    if (isAnyType(declaredType)) record('export', exportName, decl);
+    else walkType(declaredType, exportName, 0, decl);
+  }
+  // Walk the value side too, but only when it's a distinct type. For
+  // interfaces and type aliases, declaredType === valueType structurally;
+  // for classes and functions, valueType carries the constructor /
+  // static / call shape that the declared type does not.
+  if (valueType && valueType !== declaredType) {
+    // The stack-scoped visited set in walkType pops on exit, so the
+    // declared-type walk above leaves visited empty. No reset needed.
+    if (isAnyType(valueType)) record('export', exportName + '.<value>', decl);
+    else walkType(valueType, exportName + '.<value>', 0, decl);
+  }
 }
 
 // -- Run -------------------------------------------------------------------

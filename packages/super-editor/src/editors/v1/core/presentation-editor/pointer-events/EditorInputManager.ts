@@ -1466,12 +1466,13 @@ export class EditorInputManager {
       if (this.#handleClickInHeaderFooterMode(event, x, y, normalizedPoint.pageIndex, normalizedPoint.pageLocalY))
         return;
       // SD-2749: clicking on body content from inside a header/footer session
-      // exits the session synchronously. Re-derive local mode so the click
-      // dispatches its selection on the body editor instead of the now-stale
-      // active editor — otherwise ProseMirror's scrollIntoView would pull the
-      // viewport back to the header/footer the user just exited.
+      // exits the session synchronously, which also clears the backing story
+      // session. Re-read both so subsequent hit testing and selection dispatch
+      // target the body editor — otherwise ProseMirror's scrollIntoView would
+      // pull the viewport back to the header/footer the user just exited.
       const refreshedSessionMode = this.#deps.getHeaderFooterSession()?.session?.mode ?? 'body';
       if (refreshedSessionMode === 'body' && !isNoteEditing) {
+        activeStorySession = this.#deps.getActiveStorySession?.() ?? null;
         currentSessionMode = 'body';
         useActiveSurfaceHitTest = activeStorySession != null;
         editor = bodyEditor;

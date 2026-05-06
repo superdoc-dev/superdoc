@@ -131,6 +131,16 @@ describe('EditorInputManager - body click during header/footer session', () => {
           ? ({ session: { mode: 'header' } } as ReturnType<EditorInputDependencies['getHeaderFooterSession']>)
           : null,
       ),
+      // Production H/F sessions are story-backed; mirror that here so the test
+      // would catch a fix that recomputes useActiveSurfaceHitTest from the
+      // pre-exit story session instead of re-reading after the exit.
+      getActiveStorySession: vi.fn(() =>
+        sessionMode === 'header'
+          ? ({ kind: 'headerFooter' } as unknown as ReturnType<
+              NonNullable<EditorInputDependencies['getActiveStorySession']>
+            >)
+          : null,
+      ),
       getPageGeometryHelper: vi.fn(() => null),
       getZoom: vi.fn(() => 1),
       isViewLocked: vi.fn(() => false),
@@ -194,5 +204,33 @@ describe('EditorInputManager - body click during header/footer session', () => {
     expect(mockCallbacks.exitHeaderFooterMode as Mock).toHaveBeenCalled();
     expect(headerEditor.view.dispatch).not.toHaveBeenCalled();
     expect(bodyEditor.view.dispatch).toHaveBeenCalled();
+  });
+
+  // Re-reading getActiveStorySession after the H/F session exits is what keeps
+  // useActiveSurfaceHitTest correctly false. Without it, the inter-page gap
+  // guard (clicks where pageIndex is undefined) is skipped and the click
+  // resolves a position, moving the selection.
+  it('preserves selection on inter-page gap click after exiting an H/F session', () => {
+    (mockCallbacks.normalizeClientPoint as Mock).mockReturnValueOnce({ x: 200, y: 400 });
+
+    const target = document.createElement('span');
+    viewportHost.appendChild(target);
+
+    const PointerEventImpl = getPointerEventImpl();
+    target.dispatchEvent(
+      new PointerEventImpl('pointerdown', {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        buttons: 1,
+        clientX: 200,
+        clientY: 400,
+      } as PointerEventInit),
+    );
+
+    expect(mockCallbacks.exitHeaderFooterMode as Mock).toHaveBeenCalled();
+    expect(headerEditor.view.dispatch).not.toHaveBeenCalled();
+    expect(bodyEditor.view.dispatch).not.toHaveBeenCalled();
+    expect(bodyEditor.state.tr.setSelection).not.toHaveBeenCalled();
   });
 });

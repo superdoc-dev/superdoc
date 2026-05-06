@@ -2324,25 +2324,34 @@ describe('PresentationEditor', () => {
         y: 0,
         toJSON: () => ({}),
       } as DOMRect);
+      const originalElementsFromPoint = (document as unknown as { elementsFromPoint?: unknown }).elementsFromPoint;
       (document as unknown as { elementsFromPoint: (x: number, y: number) => Element[] }).elementsFromPoint = () => [
         fakePage,
       ];
 
-      // Clear mock to track fresh calls
-      mockClickToPosition.mockClear();
-      mockResolvePointerPositionHit.mockClear();
+      try {
+        // Clear mock to track fresh calls
+        mockClickToPosition.mockClear();
+        mockResolvePointerPositionHit.mockClear();
 
-      const clickEvent = new MouseEvent('pointerdown', {
-        bubbles: true,
-        clientX: 100,
-        clientY: 100,
-        button: 0,
-      });
+        const clickEvent = new MouseEvent('pointerdown', {
+          bubbles: true,
+          clientX: 100,
+          clientY: 100,
+          button: 0,
+        });
 
-      viewport.dispatchEvent(clickEvent);
+        viewport.dispatchEvent(clickEvent);
 
-      // Verify resolvePointerPositionHit was called (normal flow)
-      expect(mockResolvePointerPositionHit).toHaveBeenCalled();
+        // Verify resolvePointerPositionHit was called (normal flow)
+        expect(mockResolvePointerPositionHit).toHaveBeenCalled();
+      } finally {
+        if (originalElementsFromPoint === undefined) {
+          delete (document as unknown as { elementsFromPoint?: unknown }).elementsFromPoint;
+        } else {
+          (document as unknown as { elementsFromPoint: unknown }).elementsFromPoint = originalElementsFromPoint;
+        }
+      }
     });
 
     it('should handle case where editor view DOM is not available when layout is not ready', () => {
@@ -4901,59 +4910,70 @@ describe('PresentationEditor', () => {
           y: 0,
           toJSON: () => ({}),
         } as DOMRect);
+        const originalElementsFromPoint = (document as unknown as { elementsFromPoint?: unknown }).elementsFromPoint;
         (document as unknown as { elementsFromPoint: (x: number, y: number) => Element[] }).elementsFromPoint = () => [
           page0,
         ];
 
-        // pointerdown: page 0 (mounted), pointermove: page 1 (unmounted), pointerup finalize: page 1
-        mockClickToPosition.mockReset();
-        mockClickToPosition
-          .mockReturnValueOnce({ pos: 1, layoutEpoch: 0, pageIndex: 0 })
-          .mockReturnValueOnce({ pos: 10, layoutEpoch: 0, pageIndex: 1 })
-          .mockReturnValueOnce({ pos: 12, layoutEpoch: 0, pageIndex: 1 });
-        mockResolvePointerPositionHit.mockReset();
-        mockResolvePointerPositionHit
-          .mockReturnValueOnce({ pos: 1, layoutEpoch: 0, pageIndex: 0, blockId: '', column: 0, lineIndex: -1 })
-          .mockReturnValueOnce({ pos: 10, layoutEpoch: 0, pageIndex: 1, blockId: '', column: 0, lineIndex: -1 })
-          .mockReturnValueOnce({ pos: 12, layoutEpoch: 0, pageIndex: 1, blockId: '', column: 0, lineIndex: -1 });
+        try {
+          // pointerdown: page 0 (mounted), pointermove: page 1 (unmounted), pointerup finalize: page 1
+          mockClickToPosition.mockReset();
+          mockClickToPosition
+            .mockReturnValueOnce({ pos: 1, layoutEpoch: 0, pageIndex: 0 })
+            .mockReturnValueOnce({ pos: 10, layoutEpoch: 0, pageIndex: 1 })
+            .mockReturnValueOnce({ pos: 12, layoutEpoch: 0, pageIndex: 1 });
+          mockResolvePointerPositionHit.mockReset();
+          mockResolvePointerPositionHit
+            .mockReturnValueOnce({ pos: 1, layoutEpoch: 0, pageIndex: 0, blockId: '', column: 0, lineIndex: -1 })
+            .mockReturnValueOnce({ pos: 10, layoutEpoch: 0, pageIndex: 1, blockId: '', column: 0, lineIndex: -1 })
+            .mockReturnValueOnce({ pos: 12, layoutEpoch: 0, pageIndex: 1, blockId: '', column: 0, lineIndex: -1 });
 
-        viewport.dispatchEvent(
-          new MouseEvent('pointerdown', {
-            bubbles: true,
-            clientX: 120,
-            clientY: 200,
-            button: 0,
-          }),
-        );
+          viewport.dispatchEvent(
+            new MouseEvent('pointerdown', {
+              bubbles: true,
+              clientX: 120,
+              clientY: 200,
+              button: 0,
+            }),
+          );
 
-        viewport.dispatchEvent(
-          new MouseEvent('pointermove', {
-            bubbles: true,
-            clientX: 120,
-            clientY: 900,
-            buttons: 1,
-          }),
-        );
+          viewport.dispatchEvent(
+            new MouseEvent('pointermove', {
+              bubbles: true,
+              clientX: 120,
+              clientY: 900,
+              buttons: 1,
+            }),
+          );
 
-        const lastPinsBeforePointerUp = setPins.mock.calls[setPins.mock.calls.length - 1]?.[0] as number[] | undefined;
-        expect(lastPinsBeforePointerUp).toEqual([0, 1, 2]);
+          const lastPinsBeforePointerUp = setPins.mock.calls[setPins.mock.calls.length - 1]?.[0] as
+            | number[]
+            | undefined;
+          expect(lastPinsBeforePointerUp).toEqual([0, 1, 2]);
 
-        // Simulate virtualization mounting the endpoint page before pointerup finalization.
-        const page1 = document.createElement('div');
-        page1.setAttribute('data-page-index', '1');
-        pagesHost.appendChild(page1);
+          // Simulate virtualization mounting the endpoint page before pointerup finalization.
+          const page1 = document.createElement('div');
+          page1.setAttribute('data-page-index', '1');
+          pagesHost.appendChild(page1);
 
-        viewport.dispatchEvent(
-          new MouseEvent('pointerup', {
-            bubbles: true,
-            clientX: 120,
-            clientY: 900,
-            button: 0,
-          }),
-        );
+          viewport.dispatchEvent(
+            new MouseEvent('pointerup', {
+              bubbles: true,
+              clientX: 120,
+              clientY: 900,
+              button: 0,
+            }),
+          );
 
-        // pointerup should attempt a DOM-refined finalize after using geometry fallback.
-        expect(mockResolvePointerPositionHit).toHaveBeenCalledTimes(3);
+          // pointerup should attempt a DOM-refined finalize after using geometry fallback.
+          expect(mockResolvePointerPositionHit).toHaveBeenCalledTimes(3);
+        } finally {
+          if (originalElementsFromPoint === undefined) {
+            delete (document as unknown as { elementsFromPoint?: unknown }).elementsFromPoint;
+          } else {
+            (document as unknown as { elementsFromPoint: unknown }).elementsFromPoint = originalElementsFromPoint;
+          }
+        }
       });
     });
 

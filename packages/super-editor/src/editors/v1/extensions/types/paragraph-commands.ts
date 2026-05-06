@@ -4,6 +4,18 @@
  * @module ParagraphCommands
  */
 
+export type BulletStyle = 'disc' | 'circle' | 'square';
+
+export type OrderedListStyle =
+  | 'decimal'
+  | 'decimal-paren'
+  | 'upper-roman'
+  | 'lower-roman'
+  | 'upper-alpha'
+  | 'upper-alpha-paren'
+  | 'lower-alpha'
+  | 'lower-alpha-paren';
+
 export interface ParagraphCommands {
   // ============================================
   // LIST COMMANDS
@@ -16,7 +28,10 @@ export interface ParagraphCommands {
   toggleBulletList: () => boolean;
 
   /** Toggle a bullet list with a specific style ('disc' | 'circle' | 'square') */
-  toggleBulletListStyle: (style: 'disc' | 'circle' | 'square') => boolean;
+  toggleBulletListStyle: (style: BulletStyle) => boolean;
+
+  /** Toggle an ordered list with a specific numbering style */
+  toggleOrderedListStyle: (style: OrderedListStyle) => boolean;
 
   /** Restart numbering for the current list item */
   restartNumbering: () => boolean;

@@ -527,6 +527,65 @@ describe('createHeadlessToolbar', () => {
   });
 
   it('executes numbered-list through the registry direct command path', () => {
+    const toggleOrderedListStyle = vi.fn(() => true);
+    const superdoc = createActiveEditorHost({
+      commands: {
+        toggleOrderedListStyle,
+      },
+      state: createSelectionState({
+        empty: true,
+        $from: {
+          depth: 1,
+          node: vi.fn(() => ({ type: { name: 'doc' } })),
+          before: vi.fn(() => 0),
+          start: vi.fn(() => 0),
+        },
+      }),
+    });
+
+    const controller = createHeadlessToolbar({
+      superdoc,
+      commands: ['numbered-list'],
+    });
+
+    expect(controller.execute?.('numbered-list')).toBe(true);
+    expect(toggleOrderedListStyle).toHaveBeenCalledTimes(1);
+
+    controller.destroy();
+  });
+
+  // PR-2873 (SD-2527): the registry prefers the new style-aware commands
+  // but falls back to the legacy ones so hosts that only expose
+  // toggleBulletList / toggleOrderedList keep working.
+  it('falls back to toggleBulletList when toggleBulletListStyle is unavailable', () => {
+    const toggleBulletList = vi.fn(() => true);
+    const superdoc = createActiveEditorHost({
+      commands: {
+        toggleBulletList,
+      },
+      state: createSelectionState({
+        empty: true,
+        $from: {
+          depth: 1,
+          node: vi.fn(() => ({ type: { name: 'doc' } })),
+          before: vi.fn(() => 0),
+          start: vi.fn(() => 0),
+        },
+      }),
+    });
+
+    const controller = createHeadlessToolbar({
+      superdoc,
+      commands: ['bullet-list'],
+    });
+
+    expect(controller.execute?.('bullet-list')).toBe(true);
+    expect(toggleBulletList).toHaveBeenCalledTimes(1);
+
+    controller.destroy();
+  });
+
+  it('falls back to toggleOrderedList when toggleOrderedListStyle is unavailable', () => {
     const toggleOrderedList = vi.fn(() => true);
     const superdoc = createActiveEditorHost({
       commands: {

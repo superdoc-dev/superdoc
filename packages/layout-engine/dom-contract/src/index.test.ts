@@ -28,6 +28,7 @@ describe('@superdoc/dom-contract', () => {
       SDT_GROUP_HOVER: 'sdt-group-hover',
       IMAGE_FRAGMENT: 'superdoc-image-fragment',
       INLINE_IMAGE: 'superdoc-inline-image',
+      LIST_MARKER: 'superdoc-list-marker',
       INLINE_IMAGE_CLIP_WRAPPER: 'superdoc-inline-image-clip-wrapper',
       ANNOTATION: 'annotation',
       ANNOTATION_CONTENT: 'annotation-content',

@@ -235,6 +235,18 @@ describe('engines-tabs computeTabStops', () => {
     expect(stops.find((stop) => stop.val === 'end' && stop.pos === 10593)).toBeDefined();
   });
 
+  it('does not duplicate default stops when an implicit left-indent stop lands on the default grid', () => {
+    const stops = computeTabStops({
+      explicitStops: [],
+      defaultTabInterval: 720,
+      paragraphIndent: { left: 720, hanging: 720 },
+    });
+
+    expect(stops.filter((stop) => stop.pos === 720)).toHaveLength(1);
+    expect(stops[0]).toEqual({ val: 'start', pos: 720, leader: 'none' });
+    expect(stops.find((stop) => stop.pos === 1440)).toBeDefined();
+  });
+
   it('preserves legacy defaults-after-rightmost behavior when a start stop is present', () => {
     // Paragraphs with a start-aligned explicit stop (e.g. signature lines, invoice
     // headers) must keep the pre-fix behavior: defaults begin after the rightmost

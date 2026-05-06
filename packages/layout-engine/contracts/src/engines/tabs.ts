@@ -168,10 +168,8 @@ export function computeTabStops(context: TabContext): TabStop[] {
   while (pos < targetLimit) {
     pos += defaultTabInterval;
 
-    // Don't add if there's already an explicit stop OR a cleared position at this position
-    const hasExplicitStop = filteredExplicitStops.some(
-      (s) => Math.abs(s.pos - pos) < TAB_STOP_POSITION_TOLERANCE_TWIPS,
-    );
+    // Don't add if there's already an explicit/implicit stop OR a cleared position at this position
+    const hasExistingStop = stops.some((s) => Math.abs(s.pos - pos) < TAB_STOP_POSITION_TOLERANCE_TWIPS);
     const hasClearStop = clearPositions.some(
       (clearPos) => Math.abs(clearPos - pos) < TAB_STOP_POSITION_TOLERANCE_TWIPS,
     );
@@ -179,7 +177,7 @@ export function computeTabStops(context: TabContext): TabStop[] {
     // Default stops must be >= leftIndent (for body text alignment)
     const isValidDefault = pos >= leftIndent;
 
-    if (!hasExplicitStop && !hasClearStop && isValidDefault) {
+    if (!hasExistingStop && !hasClearStop && isValidDefault) {
       stops.push({
         val: 'start',
         pos,

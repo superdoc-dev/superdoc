@@ -2428,6 +2428,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
         if (shouldBreak) {
           if (wordIndex === 0 && hasPendingSegmentTabGeometry) {
             hasPendingSegmentTabGeometry = false;
+            segmentStartX = undefined;
             clearPendingPrecedingTabEndX();
           }
           trimTrailingWrapSpaces(currentLine);

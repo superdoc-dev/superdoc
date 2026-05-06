@@ -1736,10 +1736,15 @@ describe('measureBlock', () => {
       };
 
       const measure = expectParagraphMeasure(await measureBlock(block, 120));
+      const wrappedWordSegment = measure.lines
+        .flatMap((line) => line.segments ?? [])
+        .find((segment) => segment.runIndex === 3);
       const rightAlignedSegment = measure.lines
         .flatMap((line) => line.segments ?? [])
         .find((segment) => segment.runIndex === 5);
 
+      expect(wrappedWordSegment?.x).toBeUndefined();
+      expect(wrappedWordSegment?.precedingTabEndX).toBeUndefined();
       expect(rightAlignedSegment?.x).toBeDefined();
       expect(rightAlignedSegment?.precedingTabEndX).toBeUndefined();
     });

@@ -778,6 +778,7 @@ export class DragDropManager {
     const dataTransferPayload = parseInternalObjectDragPayload(event);
     const payload = dataTransferPayload ?? this.#activeInternalObjectPayload;
     if (!payload) return;
+    if (payload.kind === 'structuredContent' && payload.lockMode !== 'unlocked') return;
 
     const sourceRange = resolveInternalObjectSourceRange(state.doc, payload);
     const { sourceStart, sourceEnd } = sourceRange;

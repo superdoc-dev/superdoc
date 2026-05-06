@@ -25,6 +25,12 @@ export class StructuredContentInteractionLayer {
       ) as HTMLElement | null;
       if (!sdtElement?.dataset.sdtId || !sdtElement.dataset.pmStart || !sdtElement.dataset.pmEnd) continue;
 
+      const lockMode = sdtElement.dataset.lockMode ?? 'unlocked';
+      if (lockMode !== 'unlocked') {
+        label.draggable = false;
+        continue;
+      }
+
       const scope =
         sdtElement.dataset.sdtScope ?? (sdtElement.classList.contains(DOM_CLASS_NAMES.BLOCK_SDT) ? 'block' : 'inline');
       const labelText = label.textContent?.trim() || 'Structured content';
@@ -36,7 +42,7 @@ export class StructuredContentInteractionLayer {
       label.dataset.pmStart = sdtElement.dataset.pmStart;
       label.dataset.pmEnd = sdtElement.dataset.pmEnd;
       label.dataset.sdtScope = scope;
-      label.dataset.lockMode = sdtElement.dataset.lockMode ?? 'unlocked';
+      label.dataset.lockMode = lockMode;
       label.dataset[DATASET_KEYS.DISPLAY_LABEL] = labelText;
       label.dataset.nodeType = scope === 'block' ? 'structuredContentBlock' : 'structuredContent';
     }

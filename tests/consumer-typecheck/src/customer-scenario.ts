@@ -42,7 +42,6 @@ import {
   CommentsPluginKey,
   SuperEditor,
   SuperInput,
-  BasicUpload,
   Toolbar,
   AIWriter,
   ContextMenu,
@@ -831,7 +830,6 @@ function testAdditionalClasses() {
 function testVueComponents() {
   const superEditor = SuperEditor;
   const superInput = SuperInput;
-  const basicUpload = BasicUpload;
   const toolbarComponent = Toolbar;
   const aiWriter = AIWriter;
   const contextMenu = ContextMenu;

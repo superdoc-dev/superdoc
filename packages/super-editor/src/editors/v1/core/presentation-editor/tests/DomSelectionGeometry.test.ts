@@ -573,6 +573,52 @@ describe('computeSelectionRectsFromDom', () => {
       document.createRange = originalCreateRange;
     });
 
+    it('sets range boundaries across descendant text nodes inside one PM-mapped span', () => {
+      painterHost.innerHTML = `
+        <div class="superdoc-page" data-page-index="0">
+          <div class="superdoc-line" data-pm-start="2" data-pm-end="13">
+            <span data-pm-start="2" data-pm-end="13">testing<span class="superdoc-formatting-space-mark"> </span>123</span>
+          </div>
+        </div>
+      `;
+
+      const layout = createMockLayout([{ pmStart: 2, pmEnd: 13 }]);
+      domPositionIndex.rebuild(painterHost);
+
+      const pageEl = painterHost.querySelector('.superdoc-page') as HTMLElement;
+      const spanEl = painterHost.querySelector('span[data-pm-start]') as HTMLElement;
+      const textNodes = Array.from(spanEl.childNodes).filter((node) => node.nodeType === Node.TEXT_NODE) as Text[];
+      const spaceTextNode = spanEl.querySelector('.superdoc-formatting-space-mark')?.firstChild as Text;
+
+      pageEl.getBoundingClientRect = vi.fn(() => createRect(0, 0, 612, 792));
+
+      const mockRange = {
+        setStart: vi.fn(),
+        setEnd: vi.fn(),
+        getClientRects: vi.fn(() => [createRect(10, 20, 100, 16)]),
+      } as unknown as Range;
+
+      const originalCreateRange = document.createRange;
+      document.createRange = vi.fn(() => mockRange);
+
+      const options = createOptions(layout);
+      const rects = computeSelectionRectsFromDom(options, 2, 13);
+
+      expect(rects).not.toBe(null);
+      expect(mockRange.setStart).toHaveBeenCalledWith(textNodes[0], 0);
+      expect(mockRange.setEnd).toHaveBeenCalledWith(textNodes[1], 3);
+
+      vi.mocked(mockRange.setStart).mockClear();
+      vi.mocked(mockRange.setEnd).mockClear();
+
+      const rectsThroughSpace = computeSelectionRectsFromDom(options, 9, 10);
+      expect(rectsThroughSpace).not.toBe(null);
+      expect(mockRange.setStart).toHaveBeenCalledWith(spaceTextNode, 0);
+      expect(mockRange.setEnd).toHaveBeenCalledWith(spaceTextNode, 1);
+
+      document.createRange = originalCreateRange;
+    });
+
     it('returns empty array for collapsed selection (from === to)', () => {
       painterHost.innerHTML = `
         <div class="superdoc-page" data-page-index="0">
@@ -1795,6 +1841,101 @@ describe('computeDomCaretPageLocal', () => {
       expect(caret).not.toBe(null);
       // Should have called setStart with calculated char index
       expect(mockRange.setStart).toHaveBeenCalled();
+
+      document.createRange = originalCreateRange;
+    });
+
+    it('maps PM positions across descendant text nodes inside one PM-mapped span', () => {
+      painterHost.innerHTML = `
+        <div class="superdoc-page" data-page-index="0">
+          <div class="superdoc-line">
+            <span data-pm-start="2" data-pm-end="13">testing<span class="superdoc-formatting-space-mark"> </span>123</span>
+          </div>
+        </div>
+      `;
+
+      domPositionIndex.rebuild(painterHost);
+
+      const pageEl = painterHost.querySelector('.superdoc-page') as HTMLElement;
+      const lineEl = painterHost.querySelector('.superdoc-line') as HTMLElement;
+      const spanEl = painterHost.querySelector('span[data-pm-start]') as HTMLElement;
+      const textNodes = Array.from(spanEl.childNodes).filter((node) => node.nodeType === Node.TEXT_NODE) as Text[];
+
+      pageEl.getBoundingClientRect = vi.fn(() => createRect(0, 0, 612, 792));
+      lineEl.getBoundingClientRect = vi.fn(() => createRect(10, 20, 150, 16));
+      spanEl.getBoundingClientRect = vi.fn(() => createRect(10, 20, 120, 16));
+
+      const mockRange = {
+        setStart: vi.fn(),
+        setEnd: vi.fn(),
+        getBoundingClientRect: vi.fn(() => createRect(90, 20, 0, 16)),
+      } as unknown as Range;
+
+      const originalCreateRange = document.createRange;
+      document.createRange = vi.fn(() => mockRange);
+
+      const options = createCaretOptions();
+      const caret = computeDomCaretPageLocal(options, 12);
+
+      expect(caret).not.toBe(null);
+      expect(mockRange.setStart).toHaveBeenCalledWith(textNodes[1], 2);
+      expect(mockRange.setEnd).toHaveBeenCalledWith(textNodes[1], 2);
+
+      document.createRange = originalCreateRange;
+    });
+
+    it('maps paragraph-boundary positions to the correct visual line', () => {
+      painterHost.innerHTML = `
+        <div class="superdoc-page" data-page-index="0">
+          <div class="superdoc-line">
+            <span data-pm-start="2" data-pm-end="13">testing<span class="superdoc-formatting-space-mark"> </span>123</span>
+          </div>
+          <div class="superdoc-line">
+            <span data-pm-start="17" data-pm-end="27">3123122313</span>
+          </div>
+        </div>
+      `;
+
+      domPositionIndex.rebuild(painterHost);
+
+      const pageEl = painterHost.querySelector('.superdoc-page') as HTMLElement;
+      const lineEls = Array.from(painterHost.querySelectorAll('.superdoc-line')) as HTMLElement[];
+      const spanEls = Array.from(painterHost.querySelectorAll('span[data-pm-start]')) as HTMLElement[];
+      const firstTextNodes = Array.from(spanEls[0].childNodes).filter(
+        (node) => node.nodeType === Node.TEXT_NODE,
+      ) as Text[];
+      const secondTextNode = spanEls[1].firstChild as Text;
+
+      pageEl.getBoundingClientRect = vi.fn(() => createRect(0, 0, 612, 792));
+      lineEls[0].getBoundingClientRect = vi.fn(() => createRect(10, 20, 150, 16));
+      lineEls[1].getBoundingClientRect = vi.fn(() => createRect(10, 40, 150, 16));
+      spanEls[0].getBoundingClientRect = vi.fn(() => createRect(10, 20, 120, 16));
+      spanEls[1].getBoundingClientRect = vi.fn(() => createRect(10, 40, 100, 16));
+
+      const firstLineRange = {
+        setStart: vi.fn(),
+        setEnd: vi.fn(),
+        getBoundingClientRect: vi.fn(() => createRect(90, 20, 0, 16)),
+      } as unknown as Range;
+      const secondLineRange = {
+        setStart: vi.fn(),
+        setEnd: vi.fn(),
+        getBoundingClientRect: vi.fn(() => createRect(10, 40, 0, 16)),
+      } as unknown as Range;
+
+      const originalCreateRange = document.createRange;
+      document.createRange = vi.fn().mockReturnValueOnce(firstLineRange).mockReturnValueOnce(secondLineRange);
+
+      const options = createCaretOptions();
+      const firstLineCaret = computeDomCaretPageLocal(options, 13);
+      const secondLineCaret = computeDomCaretPageLocal(options, 17);
+
+      expect(firstLineCaret).toMatchObject({ pageIndex: 0, y: 20 });
+      expect(firstLineRange.setStart).toHaveBeenCalledWith(firstTextNodes[1], 3);
+      expect(firstLineRange.setEnd).toHaveBeenCalledWith(firstTextNodes[1], 3);
+      expect(secondLineCaret).toMatchObject({ pageIndex: 0, y: 40 });
+      expect(secondLineRange.setStart).toHaveBeenCalledWith(secondTextNode, 0);
+      expect(secondLineRange.setEnd).toHaveBeenCalledWith(secondTextNode, 0);
 
       document.createRange = originalCreateRange;
     });

@@ -1,6 +1,7 @@
 import type { EditorState } from 'prosemirror-state';
 import type { FlowBlock, Run as LayoutRun, TextRun } from '@superdoc/contracts';
-import { toFlowBlocks, type ConverterContext } from '@superdoc/pm-adapter';
+import { toFlowBlocks } from '@superdoc/pm-adapter';
+import type { ConverterContext } from '@superdoc/pm-adapter/converter-context.js';
 import { SUBSCRIPT_SUPERSCRIPT_SCALE } from '@superdoc/pm-adapter/constants.js';
 
 import type { ProseMirrorJSON } from '../../types/EditorTypes.js';

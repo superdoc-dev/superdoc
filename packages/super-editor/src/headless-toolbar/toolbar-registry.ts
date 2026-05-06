@@ -1,6 +1,8 @@
 import {
   createDocumentModeExecute,
   createDocumentModeStateDeriver,
+  createFormattingMarksExecute,
+  createFormattingMarksStateDeriver,
   createHistoryStateDeriver,
   createRulerExecute,
   createRulerStateDeriver,
@@ -153,6 +155,11 @@ export const createToolbarRegistry = (): Partial<Record<PublicToolbarItemId, Bui
       id: 'ruler',
       state: createRulerStateDeriver(),
       execute: createRulerExecute(),
+    },
+    'formatting-marks': {
+      id: 'formatting-marks',
+      state: createFormattingMarksStateDeriver(),
+      execute: createFormattingMarksExecute(),
     },
     zoom: {
       id: 'zoom',

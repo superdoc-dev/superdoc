@@ -286,6 +286,8 @@
   /* Styles: layout — cascades from semantic tier */
   --sd-layout-page-bg: var(--sd-ui-bg);
   --sd-layout-page-shadow: 0 4px 20px rgba(15, 23, 42, 0.08);
+  --sd-formatting-mark-color: var(--sd-color-blue-500);
+  --sd-formatting-paragraph-mark-gap: 0.2em;
 
   /* Proofing: underline colors and metrics */
   --sd-proofing-spelling-color: #e53e3e;

@@ -21,9 +21,6 @@
     "@superdoc/contracts": "workspace:*",
     "@superdoc/dom-contract": "workspace:*",
     "@superdoc/font-utils": "workspace:*",
-    "@superdoc/layout-resolved": "workspace:*",
-    "@superdoc/layout-bridge": "workspace:*",
-    "@superdoc/pm-adapter": "workspace:*",
     "@superdoc/preset-geometry": "workspace:*",
     "@superdoc/url-validation": "workspace:*"
   },

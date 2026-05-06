@@ -1255,6 +1255,42 @@ describe('SuperDoc core', () => {
     expect(setShowBookmarks).toHaveBeenLastCalledWith(false);
   });
 
+  it('propagates setShowFormattingMarks to presentation editors and skips no-op toggles', async () => {
+    const { superdocStore } = createAppHarness();
+    const setShowFormattingMarks = vi.fn();
+    const docStub = {
+      getPresentationEditor: vi.fn(() => ({ setShowFormattingMarks })),
+    };
+
+    const instance = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: {}, toolbar: {} },
+      colors: ['red'],
+      role: 'editor',
+      user: { name: 'Jane', email: 'jane@example.com' },
+      onException: vi.fn(),
+    });
+    await flushMicrotasks();
+
+    superdocStore.documents = [docStub];
+
+    instance.setShowFormattingMarks(true);
+    expect(instance.config.layoutEngineOptions.showFormattingMarks).toBe(true);
+    expect(setShowFormattingMarks).toHaveBeenCalledWith(true);
+
+    instance.setShowFormattingMarks(true);
+    expect(setShowFormattingMarks).toHaveBeenCalledTimes(1);
+
+    instance.setShowFormattingMarks(false);
+    expect(instance.config.layoutEngineOptions.showFormattingMarks).toBe(false);
+    expect(setShowFormattingMarks).toHaveBeenLastCalledWith(false);
+
+    instance.toggleFormattingMarks();
+    expect(setShowFormattingMarks).toHaveBeenLastCalledWith(true);
+  });
+
   it('skips rendering comments list when role is viewer', async () => {
     createAppHarness();
 

@@ -150,6 +150,7 @@ const {
       getMountedPageIndices: vi.fn(() => []),
       onScroll: vi.fn(),
       setScrollContainer: vi.fn(),
+      setShowFormattingMarks: vi.fn(),
       setProviders: vi.fn(),
     })),
     mockMeasureBlock: vi.fn(() => ({ width: 100, height: 100 })),
@@ -182,7 +183,34 @@ const {
       getActiveEditorHost: vi.fn(() => null),
       destroy: vi.fn(),
     })),
-    mockResolveLayout: vi.fn(() => ({ version: 1, flowMode: 'paginated', pageGap: 0, pages: [] })),
+    // SD-2836: rebuildRegions now iterates resolvedLayout.pages, so the mock
+    // must synthesize a ResolvedPage per source Layout page to keep header/footer
+    // region tests from going empty.
+    mockResolveLayout: vi.fn(
+      ({ layout }: { layout: { pages: Array<Record<string, unknown>>; pageSize: { w: number; h: number } } }) => ({
+        version: 1,
+        flowMode: 'paginated',
+        pageGap: 0,
+        pages: (layout?.pages ?? []).map((p, i) => ({
+          id: `page-${i}`,
+          index: i,
+          number: (p.number as number) ?? i + 1,
+          width: ((p.size as { w?: number } | undefined)?.w ?? layout.pageSize?.w) as number,
+          height: ((p.size as { h?: number } | undefined)?.h ?? layout.pageSize?.h) as number,
+          items: [],
+          margins: p.margins,
+          sectionRefs: p.sectionRefs,
+          sectionIndex: p.sectionIndex,
+          numberText: p.numberText,
+          footnoteReserved: p.footnoteReserved,
+          vAlign: p.vAlign,
+          baseMargins: p.baseMargins,
+          orientation: p.orientation,
+          columns: p.columns,
+          columnRegions: p.columnRegions,
+        })),
+      }),
+    ),
     mockFlowBlockCacheInstances,
     MockFlowBlockCache,
   };

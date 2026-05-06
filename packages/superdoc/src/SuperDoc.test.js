@@ -671,6 +671,96 @@ describe('SuperDoc.vue', () => {
     expect(surfaceManager.open).not.toHaveBeenCalled();
   });
 
+  it('toggles formatting marks from a document-level Ctrl+Shift+8 when focus is inside SuperDoc', async () => {
+    const hiddenEditorDom = document.createElement('div');
+    hiddenEditorDom.className = 'ProseMirror ProseMirror-focused';
+
+    const superdocStub = createSuperdocStub();
+    superdocStub.toggleFormattingMarks = vi.fn();
+    superdocStub.activeEditor = {
+      view: {
+        dom: hiddenEditorDom,
+      },
+    };
+
+    await mountComponent(superdocStub);
+    vi.spyOn(document, 'activeElement', 'get').mockReturnValue(hiddenEditorDom);
+
+    const event = new KeyboardEvent('keydown', {
+      key: '8',
+      code: 'Digit8',
+      ctrlKey: true,
+      shiftKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+
+    document.dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(superdocStub.toggleFormattingMarks).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not toggle formatting marks from the document shortcut when focus is outside SuperDoc', async () => {
+    const superdocStub = createSuperdocStub();
+    superdocStub.toggleFormattingMarks = vi.fn();
+
+    await mountComponent(superdocStub);
+    vi.spyOn(document, 'activeElement', 'get').mockReturnValue(document.body);
+
+    const event = new KeyboardEvent('keydown', {
+      key: '8',
+      code: 'Digit8',
+      ctrlKey: true,
+      shiftKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+
+    document.dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(false);
+    expect(superdocStub.toggleFormattingMarks).not.toHaveBeenCalled();
+  });
+
+  it('toggles formatting marks from the SuperDoc container shortcut handler', async () => {
+    const superdocStub = createSuperdocStub();
+    superdocStub.toggleFormattingMarks = vi.fn();
+
+    const wrapper = await mountComponent(superdocStub);
+    vi.spyOn(document, 'activeElement', 'get').mockReturnValue(wrapper.element);
+
+    const event = {
+      key: '*',
+      code: '',
+      ctrlKey: true,
+      metaKey: false,
+      shiftKey: true,
+      altKey: false,
+      defaultPrevented: false,
+      preventDefault: vi.fn(function () {
+        this.defaultPrevented = true;
+      }),
+      stopPropagation: vi.fn(),
+    };
+
+    wrapper.vm.$.setupState.handleContainerKeydown(event);
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(event.preventDefault).toHaveBeenCalledTimes(1);
+    expect(event.stopPropagation).toHaveBeenCalledTimes(1);
+    expect(superdocStub.toggleFormattingMarks).toHaveBeenCalledTimes(1);
+  });
+
+  it('removes the document shortcut listener on unmount', async () => {
+    const removeEventListenerSpy = vi.spyOn(document, 'removeEventListener');
+
+    const wrapper = await mountComponent(createSuperdocStub());
+    wrapper.unmount();
+
+    expect(removeEventListenerSpy).toHaveBeenCalledWith('keydown', expect.any(Function), true);
+  });
+
   it('forwards configured passwords to SuperEditor options', async () => {
     const superdocStub = createSuperdocStub();
     superdocStub.config.password = 'top-secret';

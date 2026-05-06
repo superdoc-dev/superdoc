@@ -11,6 +11,7 @@ const { mockCreateDomPainter, mockPainterHandle } = vi.hoisted(() => {
     setZoom: vi.fn(),
     setScrollContainer: vi.fn(),
     setVirtualizationPins: vi.fn(),
+    setShowFormattingMarks: vi.fn(),
     onScroll: vi.fn(),
     getMountedPageIndices: vi.fn(() => []),
   };
@@ -40,6 +41,7 @@ describe('PresentationPainterAdapter', () => {
     adapter.setZoom(1.5);
     adapter.setScrollContainer(scrollContainer);
     adapter.setVirtualizationPins([3, 1, 3, 2]);
+    adapter.setShowFormattingMarks(true);
 
     adapter.ensurePainter({});
 
@@ -47,6 +49,7 @@ describe('PresentationPainterAdapter', () => {
     expect(mockPainterHandle.setZoom).toHaveBeenCalledWith(1.5);
     expect(mockPainterHandle.setScrollContainer).toHaveBeenCalledWith(scrollContainer);
     expect(mockPainterHandle.setVirtualizationPins).toHaveBeenCalledWith([1, 2, 3]);
+    expect(mockPainterHandle.setShowFormattingMarks).toHaveBeenCalledWith(true);
   });
 
   it('deduplicates equivalent virtualization pin updates', () => {

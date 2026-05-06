@@ -101,7 +101,8 @@ import { resolveStoryRuntime } from '../../document-api-adapters/story-runtime/r
 import { BODY_STORY_KEY, buildStoryKey, parseStoryKey } from '../../document-api-adapters/story-runtime/story-key.js';
 import { createStoryEditor } from '../story-editor-factory.js';
 import { buildEndnoteBlocks } from './layout/EndnotesBuilder.js';
-import { toFlowBlocks, ConverterContext, FlowBlockCache } from '@superdoc/pm-adapter';
+import { toFlowBlocks, FlowBlockCache } from '@superdoc/pm-adapter';
+import type { ConverterContext } from '@superdoc/pm-adapter/converter-context.js';
 import { readSettingsRoot, readDefaultTableStyle } from '../../document-api-adapters/document-settings.js';
 import {
   incrementalLayout,
@@ -130,6 +131,7 @@ import type {
   Layout,
   Measure,
   Page,
+  ResolvedLayout,
   SectionMetadata,
   TrackedChangesMode,
   Fragment,
@@ -631,6 +633,7 @@ export class PresentationEditor extends EventEmitter {
       enableCommentsInViewing: options.layoutEngineOptions?.enableCommentsInViewing,
       presence: validatedPresence,
       showBookmarks: options.layoutEngineOptions?.showBookmarks ?? false,
+      showFormattingMarks: options.layoutEngineOptions?.showFormattingMarks ?? false,
     };
     this.#trackedChangesOverrides = options.layoutEngineOptions?.trackedChanges;
 
@@ -1363,6 +1366,27 @@ export class PresentationEditor extends EventEmitter {
   }
 
   /**
+   * The {@link StoryLocator} for the currently routed editor, or `null`
+   * when the body editor is active. Notes (footnote/endnote) flow
+   * through the generic story-session manager; headers/footers flow
+   * through the legacy header-footer session. Both are unified here so
+   * external surfaces (selection / positionAt) can thread the locator
+   * onto a {@link SelectionTarget} without reaching into private state.
+   */
+  getActiveStoryLocator(): StoryLocator | null {
+    const storySession = this.#storySessionManager?.getActiveSession();
+    if (storySession) return storySession.locator;
+
+    const session = this.#headerFooterSession?.session;
+    if (!session || session.mode === 'body' || !session.headerFooterRefId) return null;
+    return {
+      kind: 'story',
+      storyType: 'headerFooterPart',
+      refId: session.headerFooterRefId,
+    };
+  }
+
+  /**
    * Exit any active non-body editing surface and restore the body editor.
    *
    * This gives tests and editor-integrated helpers a single public entry point
@@ -1648,8 +1672,6 @@ export class PresentationEditor extends EventEmitter {
    * them safe to run multiple times.
    *
    * No-op when unified history is disabled.
-   *
-   * @see plans/unified-history.md § Phase 4
    */
   recordHistoryBatch(batch: BatchHistoryRecord): void {
     this.#historyCoordinator?.withHistoryBatch(batch);
@@ -2933,6 +2955,54 @@ export class PresentationEditor extends EventEmitter {
     this.#flowBlockCache?.clear();
     this.#pendingDocChange = true;
     this.#scheduleRerender();
+  }
+
+  setShowFormattingMarks(showFormattingMarks: boolean): void {
+    const next = !!showFormattingMarks;
+    if (this.#layoutOptions.showFormattingMarks === next) return;
+    this.#layoutOptions.showFormattingMarks = next;
+    this.#painterAdapter.setShowFormattingMarks(next);
+    if (!this.#repaintCurrentLayout()) {
+      this.#pendingDocChange = true;
+      this.#scheduleRerender();
+    }
+  }
+
+  #repaintCurrentLayout(): boolean {
+    const layout = this.#layoutState.layout;
+    if (!layout) return false;
+
+    const blocks = this.#layoutLookupBlocks.length > 0 ? this.#layoutLookupBlocks : this.#layoutState.blocks;
+    const measures = this.#layoutLookupMeasures.length > 0 ? this.#layoutLookupMeasures : this.#layoutState.measures;
+    if (blocks.length === 0 || blocks.length !== measures.length) return false;
+
+    const resolvedLayout = resolveLayout({
+      layout,
+      flowMode: this.#layoutOptions.flowMode ?? 'paginated',
+      blocks,
+      measures,
+    });
+
+    const isSemanticFlow = this.#layoutOptions.flowMode === 'semantic';
+    this.#ensurePainter();
+    if (!isSemanticFlow) {
+      this.#painterAdapter.setProviders(
+        this.#headerFooterSession?.headerDecorationProvider,
+        this.#headerFooterSession?.footerDecorationProvider,
+      );
+    }
+
+    this.#domIndexObserverManager?.pause();
+    try {
+      this.#painterAdapter.paint({ resolvedLayout }, this.#painterHost);
+      this.#refreshEditorDomAugmentations();
+    } finally {
+      this.#domIndexObserverManager?.resume();
+    }
+    this.#revalidateScrollContainer();
+    this.#updatePermissionOverlay();
+    this.#applyZoom();
+    return true;
   }
 
   /**
@@ -5332,8 +5402,8 @@ export class PresentationEditor extends EventEmitter {
   // ===========================================================================
   // Unified History Coordinator (enabled by default; explicit false disables)
   //
-  // See plans/unified-history.md. When the kill-switch is off, these helpers are
-  // no-ops so the legacy active-editor-first routing stays intact.
+  // When the kill-switch is off, these helpers are no-ops so the legacy
+  // active-editor-first routing stays intact.
   // ===========================================================================
 
   #isUnifiedHistoryEnabled(): boolean {
@@ -6168,7 +6238,7 @@ export class PresentationEditor extends EventEmitter {
       // Process per-rId header/footer content and decoration providers (paginated only)
       if (!isSemanticFlow) {
         await this.#layoutPerRIdHeaderFooters(headerFooterInput, layout, sectionMetadata);
-        this.#updateDecorationProviders(layout);
+        this.#updateDecorationProviders(resolvedLayout);
       }
 
       this.#ensurePainter();
@@ -6188,7 +6258,6 @@ export class PresentationEditor extends EventEmitter {
       const painterPaintStart = perfNow();
       const paintInput: DomPainterInput = {
         resolvedLayout,
-        sourceLayout: layout,
       };
       this.#painterAdapter.paint(paintInput, this.#painterHost, mapping ?? undefined);
       const painterPaintEnd = perfNow();
@@ -6266,6 +6335,7 @@ export class PresentationEditor extends EventEmitter {
       footerProvider: this.#headerFooterSession?.footerDecorationProvider,
       ruler: this.#layoutOptions.ruler,
       pageGap: this.#layoutState.layout?.pageGap ?? effectiveGap,
+      showFormattingMarks: this.#layoutOptions.showFormattingMarks ?? false,
     });
 
     // Pass the current zoom so virtualization accounts for the CSS transform scale
@@ -7351,8 +7421,8 @@ export class PresentationEditor extends EventEmitter {
    * Update decoration providers for header/footer.
    * Delegates to HeaderFooterSessionManager which handles provider creation.
    */
-  #updateDecorationProviders(layout: Layout) {
-    this.#headerFooterSession?.updateDecorationProviders(layout);
+  #updateDecorationProviders(resolvedLayout: ResolvedLayout) {
+    this.#headerFooterSession?.updateDecorationProviders(resolvedLayout);
   }
 
   /**

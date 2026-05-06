@@ -59,8 +59,11 @@ One hook. One button. Subscribes only to that command's state. Re-renders only w
   <Card title="Track changes" icon="circle-check" href="/editor/custom-ui/track-changes">
     Custom tracked-change review panel. Accept, reject, navigate.
   </Card>
+  <Card title="Right-click menu" icon="mouse-pointer-click" href="/editor/custom-ui/context-menu">
+    Custom context menu wired through `contextAt` and `getContextMenuItems(context)`.
+  </Card>
   <Card title="Selection and viewport" icon="crosshair" href="/editor/custom-ui/selection-and-viewport">
-    Read the selection. Scroll an entity into view. Capture selections that survive focus changes.
+    Read the selection. Scroll an entity into view. Capture and restore selections that survive focus changes. Resolve a click point to a caret.
   </Card>
   <Card title="Document control" icon="file-output" href="/editor/custom-ui/document-control">
     Switch between editing and suggesting. Export to DOCX. Replace the open file.
@@ -69,4 +72,18 @@ One hook. One button. Subscribes only to that command's state. Re-renders only w
 
 The [API reference](/editor/custom-ui/api-reference) lists every hook and handle in one place.
 
-Want to see it composed end-to-end? The [reference workspace on GitHub](https://github.com/superdoc-dev/superdoc/tree/main/demos/custom-ui) ships a full app: toolbar, custom command, comments sidebar with reply threads, tracked-change review, selection capture, document export: built on the surfaces above.
+## Three surfaces, three subjects
+
+Custom-UI apps tend to land on the same shape: a toolbar, a floating bubble menu, a right-click menu. Each one answers a different "what's the subject of this action?" question. Keep them strictly separated.
+
+| Surface | Subject | Belongs here |
+|---|---|---|
+| **Toolbar** | The **document** | Mode toggle, Export, Import, Undo / Redo. Persistent controls that don't depend on a selection or a click target. |
+| **Floating bubble menu** | The **selection** | Bold, Italic, Comment on selection. Format-on-selection actions where the user's eyes stay on the work. |
+| **Right-click context menu** | The **clicked target** | Accept / Reject (on a tracked change), Resolve (on a comment), Copy / Comment (when the click is *inside* the selection), Insert clause here (on plain text). |
+
+The controller surfaces this split directly. The toolbar reads `state.selection` to gate format buttons. The bubble menu anchors via `ui.selection.getAnchorRect({ placement: 'start' })`. The context menu opens against `ui.viewport.contextAt({ x, y })` and dispatches via `item.invoke()`. Same controller, same hooks, three jobs.
+
+## Worked example
+
+The [reference workspace on GitHub](https://github.com/superdoc-dev/superdoc/tree/main/demos/custom-ui) ships a full app on these surfaces: toolbar, custom command with keyboard shortcut, floating bubble menu, right-click context menu, comments sidebar with reply threads, tracked-change review, selection capture / restore, DOCX export and reimport.

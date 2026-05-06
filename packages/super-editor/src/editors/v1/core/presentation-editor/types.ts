@@ -174,6 +174,8 @@ export type LayoutEngineOptions = {
    * Word's behavior. SD-2454.
    */
   showBookmarks?: boolean;
+  /** Render nonprinting formatting marks such as spaces, tabs, and paragraph marks. */
+  showFormattingMarks?: boolean;
 };
 
 export type PresentationEditorOptions = ConstructorParameters<typeof Editor>[0] & {
@@ -224,7 +226,6 @@ export type PresentationEditorOptions = ConstructorParameters<typeof Editor>[0] 
      * active-surface undo routing.
      *
      * @default true
-     * @see plans/unified-history.md
      */
     unifiedHistory?: boolean;
   };

@@ -46,7 +46,7 @@ const STATIC_DISABLED: CustomCommandHandleState<unknown> = {
  * Demonstrates `ui.commands.register({...})` — the surface SuperDoc
  * exposes for consumer-defined toolbar buttons. The component:
  *
- *   1. Registers `'company.insertClause'` on mount and unregisters
+ *   1. Registers `'demo.insertClause'` on mount and unregisters
  *      on unmount, so the command's lifetime matches the component's.
  *      A real consumer app usually holds the registration for the
  *      session, but the pattern is the same.
@@ -65,7 +65,7 @@ const STATIC_DISABLED: CustomCommandHandleState<unknown> = {
  * Capturing the registration return value (`reg.handle`) is the
  * typed path: it carries the consumer's `TPayload` / `TValue`
  * generics. Dynamic-lookup callers should use
- * `ui.commands.get('company.insertClause')` (returns
+ * `ui.commands.get('demo.insertClause')` (returns
  * `DynamicCommandHandle | undefined`); the older bracket-index path
  * still works at runtime but loses the per-command typing.
  */
@@ -82,7 +82,12 @@ export function InsertClauseButton() {
     if (!ui) return;
 
     const reg = ui.commands.register<InsertClausePayload>({
-      id: 'company.insertClause',
+      id: 'demo.insertClause',
+      // Mod-Shift-C dispatches `execute` with no payload, which the
+      // body below treats as "open the picker" rather than performing
+      // an insert. (A consumer with a single-clause flow would skip
+      // the menu and pass `{ clauseId: 'confidentiality' }` directly.)
+      shortcut: 'Mod-Shift-C',
       getState: ({ state }) => ({
         active: false,
         // Disabled when there's nothing positional to anchor the
@@ -92,8 +97,23 @@ export function InsertClauseButton() {
           state.documentMode === 'viewing' ||
           state.selection.target === null,
       }),
-      execute: ({ payload, editor }) => {
-        if (!payload) return false;
+      execute: ({ payload, editor, superdoc }) => {
+        // The keyboard dispatch path doesn't consult `getState`; without
+        // this gate, Mod-Shift-C would pop the picker even when the
+        // toolbar button is grayed out (no selection target / viewing
+        // mode), letting the user choose a clause that the insert
+        // branch can't honor — silent dead-end. Mirror the disabled
+        // check from `getState` so the shortcut and the button agree.
+        const live = ui.selection.getSnapshot();
+        const documentMode = superdoc.config?.documentMode ?? null;
+        const disabled = documentMode === 'viewing' || live.target === null;
+
+        if (!payload) {
+          if (disabled) return false;
+          setOpen(true);
+          return true;
+        }
+        if (disabled) return false;
         const clause = CLAUSES.find((c) => c.id === payload.clauseId);
         if (!clause) return false;
 

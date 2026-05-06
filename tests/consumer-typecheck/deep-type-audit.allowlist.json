@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-05-06T20:40:22.427Z",
+  "generatedAt": "2026-05-06T21:19:35.546Z",
   "entries": [
     {
       "key": "export|node_modules/superdoc/dist/super-editor/src/editors/v1/index.d.ts|AnnotatorHelpers|AnnotatorHelpers",
@@ -39,6 +39,446 @@
       "file": "node_modules/superdoc/dist/superdoc/src/index.d.ts",
       "line": 170,
       "snippet": "TrackChangesBasePluginKey",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "index|node_modules/superdoc/dist/super-editor/src/editors/v1/core/DocxZipper.d.ts|default[string]|export default class DocxZipper {",
+      "kind": "index",
+      "symbolPath": "default[string]",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/DocxZipper.d.ts",
+      "line": 1,
+      "snippet": "export default class DocxZipper {",
+      "owner": "tier-4-public-contract",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "index|node_modules/superdoc/dist/super-editor/src/editors/v1/core/Editor.d.ts|CommandProps.editor.converter[string]|converter: SuperConverter;",
+      "kind": "index",
+      "symbolPath": "CommandProps.editor.converter[string]",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/Editor.d.ts",
+      "line": 146,
+      "snippet": "converter: SuperConverter;",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "index|node_modules/superdoc/dist/super-editor/src/editors/v1/core/Editor.d.ts|CommandProps.editor.extensionService[string]|extensionService: ExtensionService;",
+      "kind": "index",
+      "symbolPath": "CommandProps.editor.extensionService[string]",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/Editor.d.ts",
+      "line": 104,
+      "snippet": "extensionService: ExtensionService;",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "index|node_modules/superdoc/dist/super-editor/src/editors/v1/core/Editor.d.ts|SuperDoc.config.onEditorBeforeCreate(editor).converter[string]|converter: SuperConverter;",
+      "kind": "index",
+      "symbolPath": "SuperDoc.config.onEditorBeforeCreate(editor).converter[string]",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/Editor.d.ts",
+      "line": 146,
+      "snippet": "converter: SuperConverter;",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "index|node_modules/superdoc/dist/super-editor/src/editors/v1/core/Editor.d.ts|SuperDoc.config.onEditorBeforeCreate(editor).extensionService[string]|extensionService: ExtensionService;",
+      "kind": "index",
+      "symbolPath": "SuperDoc.config.onEditorBeforeCreate(editor).extensionService[string]",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/Editor.d.ts",
+      "line": 104,
+      "snippet": "extensionService: ExtensionService;",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "index|node_modules/superdoc/dist/super-editor/src/editors/v1/core/Editor.d.ts|createHeadlessToolbar(options).superdoc.activeEditor.converter[string]|converter: SuperConverter;",
+      "kind": "index",
+      "symbolPath": "createHeadlessToolbar(options).superdoc.activeEditor.converter[string]",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/Editor.d.ts",
+      "line": 146,
+      "snippet": "converter: SuperConverter;",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "index|node_modules/superdoc/dist/super-editor/src/editors/v1/core/Editor.d.ts|createHeadlessToolbar(options).superdoc.activeEditor.extensionService[string]|extensionService: ExtensionService;",
+      "kind": "index",
+      "symbolPath": "createHeadlessToolbar(options).superdoc.activeEditor.extensionService[string]",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/Editor.d.ts",
+      "line": 104,
+      "snippet": "extensionService: ExtensionService;",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "index|node_modules/superdoc/dist/super-editor/src/editors/v1/core/Editor.d.ts|getDocumentApiAdapters(editor).converter[string]|converter: SuperConverter;",
+      "kind": "index",
+      "symbolPath": "getDocumentApiAdapters(editor).converter[string]",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/Editor.d.ts",
+      "line": 146,
+      "snippet": "converter: SuperConverter;",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "index|node_modules/superdoc/dist/super-editor/src/editors/v1/core/Editor.d.ts|getDocumentApiAdapters(editor).extensionService[string]|extensionService: ExtensionService;",
+      "kind": "index",
+      "symbolPath": "getDocumentApiAdapters(editor).extensionService[string]",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/Editor.d.ts",
+      "line": 104,
+      "snippet": "extensionService: ExtensionService;",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "index|node_modules/superdoc/dist/super-editor/src/editors/v1/core/Editor.d.ts|useHeadlessToolbar(superdoc).activeEditor.converter[string]|converter: SuperConverter;",
+      "kind": "index",
+      "symbolPath": "useHeadlessToolbar(superdoc).activeEditor.converter[string]",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/Editor.d.ts",
+      "line": 146,
+      "snippet": "converter: SuperConverter;",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "index|node_modules/superdoc/dist/super-editor/src/editors/v1/core/Editor.d.ts|useHeadlessToolbar(superdoc).activeEditor.extensionService[string]|extensionService: ExtensionService;",
+      "kind": "index",
+      "symbolPath": "useHeadlessToolbar(superdoc).activeEditor.extensionService[string]",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/Editor.d.ts",
+      "line": 104,
+      "snippet": "extensionService: ExtensionService;",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "index|node_modules/superdoc/dist/super-editor/src/editors/v1/core/EventEmitter.d.ts|CommandProps.editor.emit(args)[number]|...args: EventMap[K]",
+      "kind": "index",
+      "symbolPath": "CommandProps.editor.emit(args)[number]",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/EventEmitter.d.ts",
+      "line": 31,
+      "snippet": "...args: EventMap[K]",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "index|node_modules/superdoc/dist/super-editor/src/editors/v1/core/EventEmitter.d.ts|CommandProps.editor.off(fn)<0>[number]|fn?: EventCallback<EventMap[K]>",
+      "kind": "index",
+      "symbolPath": "CommandProps.editor.off(fn)<0>[number]",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/EventEmitter.d.ts",
+      "line": 45,
+      "snippet": "fn?: EventCallback<EventMap[K]>",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "index|node_modules/superdoc/dist/super-editor/src/editors/v1/core/EventEmitter.d.ts|CommandProps.editor.on(fn)<0>[number]|fn: EventCallback<EventMap[K]>",
+      "kind": "index",
+      "symbolPath": "CommandProps.editor.on(fn)<0>[number]",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/EventEmitter.d.ts",
+      "line": 24,
+      "snippet": "fn: EventCallback<EventMap[K]>",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "index|node_modules/superdoc/dist/super-editor/src/editors/v1/core/EventEmitter.d.ts|CommandProps.editor.once(fn)<0>[number]|fn: EventCallback<EventMap[K]>",
+      "kind": "index",
+      "symbolPath": "CommandProps.editor.once(fn)<0>[number]",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/EventEmitter.d.ts",
+      "line": 52,
+      "snippet": "fn: EventCallback<EventMap[K]>",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "index|node_modules/superdoc/dist/super-editor/src/editors/v1/core/EventEmitter.d.ts|CommandProps.editor.safeEmit(args)[number]|...args: EventMap[K]",
+      "kind": "index",
+      "symbolPath": "CommandProps.editor.safeEmit(args)[number]",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/EventEmitter.d.ts",
+      "line": 37,
+      "snippet": "...args: EventMap[K]",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "index|node_modules/superdoc/dist/super-editor/src/editors/v1/core/EventEmitter.d.ts|SuperDoc.config.onEditorBeforeCreate(editor).emit(args)[number]|...args: EventMap[K]",
+      "kind": "index",
+      "symbolPath": "SuperDoc.config.onEditorBeforeCreate(editor).emit(args)[number]",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/EventEmitter.d.ts",
+      "line": 31,
+      "snippet": "...args: EventMap[K]",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "index|node_modules/superdoc/dist/super-editor/src/editors/v1/core/EventEmitter.d.ts|SuperDoc.config.onEditorBeforeCreate(editor).off(fn)<0>[number]|fn?: EventCallback<EventMap[K]>",
+      "kind": "index",
+      "symbolPath": "SuperDoc.config.onEditorBeforeCreate(editor).off(fn)<0>[number]",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/EventEmitter.d.ts",
+      "line": 45,
+      "snippet": "fn?: EventCallback<EventMap[K]>",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "index|node_modules/superdoc/dist/super-editor/src/editors/v1/core/EventEmitter.d.ts|SuperDoc.config.onEditorBeforeCreate(editor).on(fn)<0>[number]|fn: EventCallback<EventMap[K]>",
+      "kind": "index",
+      "symbolPath": "SuperDoc.config.onEditorBeforeCreate(editor).on(fn)<0>[number]",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/EventEmitter.d.ts",
+      "line": 24,
+      "snippet": "fn: EventCallback<EventMap[K]>",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "index|node_modules/superdoc/dist/super-editor/src/editors/v1/core/EventEmitter.d.ts|SuperDoc.config.onEditorBeforeCreate(editor).once(fn)<0>[number]|fn: EventCallback<EventMap[K]>",
+      "kind": "index",
+      "symbolPath": "SuperDoc.config.onEditorBeforeCreate(editor).once(fn)<0>[number]",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/EventEmitter.d.ts",
+      "line": 52,
+      "snippet": "fn: EventCallback<EventMap[K]>",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "index|node_modules/superdoc/dist/super-editor/src/editors/v1/core/EventEmitter.d.ts|SuperDoc.config.onEditorBeforeCreate(editor).safeEmit(args)[number]|...args: EventMap[K]",
+      "kind": "index",
+      "symbolPath": "SuperDoc.config.onEditorBeforeCreate(editor).safeEmit(args)[number]",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/EventEmitter.d.ts",
+      "line": 37,
+      "snippet": "...args: EventMap[K]",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "index|node_modules/superdoc/dist/super-editor/src/editors/v1/core/EventEmitter.d.ts|createHeadlessToolbar(options).superdoc.activeEditor.emit(args)[number]|...args: EventMap[K]",
+      "kind": "index",
+      "symbolPath": "createHeadlessToolbar(options).superdoc.activeEditor.emit(args)[number]",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/EventEmitter.d.ts",
+      "line": 31,
+      "snippet": "...args: EventMap[K]",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "index|node_modules/superdoc/dist/super-editor/src/editors/v1/core/EventEmitter.d.ts|createHeadlessToolbar(options).superdoc.activeEditor.off(fn)<0>[number]|fn?: EventCallback<EventMap[K]>",
+      "kind": "index",
+      "symbolPath": "createHeadlessToolbar(options).superdoc.activeEditor.off(fn)<0>[number]",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/EventEmitter.d.ts",
+      "line": 45,
+      "snippet": "fn?: EventCallback<EventMap[K]>",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "index|node_modules/superdoc/dist/super-editor/src/editors/v1/core/EventEmitter.d.ts|createHeadlessToolbar(options).superdoc.activeEditor.on(fn)<0>[number]|fn: EventCallback<EventMap[K]>",
+      "kind": "index",
+      "symbolPath": "createHeadlessToolbar(options).superdoc.activeEditor.on(fn)<0>[number]",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/EventEmitter.d.ts",
+      "line": 24,
+      "snippet": "fn: EventCallback<EventMap[K]>",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "index|node_modules/superdoc/dist/super-editor/src/editors/v1/core/EventEmitter.d.ts|createHeadlessToolbar(options).superdoc.activeEditor.once(fn)<0>[number]|fn: EventCallback<EventMap[K]>",
+      "kind": "index",
+      "symbolPath": "createHeadlessToolbar(options).superdoc.activeEditor.once(fn)<0>[number]",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/EventEmitter.d.ts",
+      "line": 52,
+      "snippet": "fn: EventCallback<EventMap[K]>",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "index|node_modules/superdoc/dist/super-editor/src/editors/v1/core/EventEmitter.d.ts|createHeadlessToolbar(options).superdoc.activeEditor.safeEmit(args)[number]|...args: EventMap[K]",
+      "kind": "index",
+      "symbolPath": "createHeadlessToolbar(options).superdoc.activeEditor.safeEmit(args)[number]",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/EventEmitter.d.ts",
+      "line": 37,
+      "snippet": "...args: EventMap[K]",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "index|node_modules/superdoc/dist/super-editor/src/editors/v1/core/EventEmitter.d.ts|getDocumentApiAdapters(editor).emit(args)[number]|...args: EventMap[K]",
+      "kind": "index",
+      "symbolPath": "getDocumentApiAdapters(editor).emit(args)[number]",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/EventEmitter.d.ts",
+      "line": 31,
+      "snippet": "...args: EventMap[K]",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "index|node_modules/superdoc/dist/super-editor/src/editors/v1/core/EventEmitter.d.ts|getDocumentApiAdapters(editor).off(fn)<0>[number]|fn?: EventCallback<EventMap[K]>",
+      "kind": "index",
+      "symbolPath": "getDocumentApiAdapters(editor).off(fn)<0>[number]",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/EventEmitter.d.ts",
+      "line": 45,
+      "snippet": "fn?: EventCallback<EventMap[K]>",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "index|node_modules/superdoc/dist/super-editor/src/editors/v1/core/EventEmitter.d.ts|getDocumentApiAdapters(editor).on(fn)<0>[number]|fn: EventCallback<EventMap[K]>",
+      "kind": "index",
+      "symbolPath": "getDocumentApiAdapters(editor).on(fn)<0>[number]",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/EventEmitter.d.ts",
+      "line": 24,
+      "snippet": "fn: EventCallback<EventMap[K]>",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "index|node_modules/superdoc/dist/super-editor/src/editors/v1/core/EventEmitter.d.ts|getDocumentApiAdapters(editor).once(fn)<0>[number]|fn: EventCallback<EventMap[K]>",
+      "kind": "index",
+      "symbolPath": "getDocumentApiAdapters(editor).once(fn)<0>[number]",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/EventEmitter.d.ts",
+      "line": 52,
+      "snippet": "fn: EventCallback<EventMap[K]>",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "index|node_modules/superdoc/dist/super-editor/src/editors/v1/core/EventEmitter.d.ts|getDocumentApiAdapters(editor).safeEmit(args)[number]|...args: EventMap[K]",
+      "kind": "index",
+      "symbolPath": "getDocumentApiAdapters(editor).safeEmit(args)[number]",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/EventEmitter.d.ts",
+      "line": 37,
+      "snippet": "...args: EventMap[K]",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "index|node_modules/superdoc/dist/super-editor/src/editors/v1/core/EventEmitter.d.ts|useHeadlessToolbar(superdoc).activeEditor.emit(args)[number]|...args: EventMap[K]",
+      "kind": "index",
+      "symbolPath": "useHeadlessToolbar(superdoc).activeEditor.emit(args)[number]",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/EventEmitter.d.ts",
+      "line": 31,
+      "snippet": "...args: EventMap[K]",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "index|node_modules/superdoc/dist/super-editor/src/editors/v1/core/EventEmitter.d.ts|useHeadlessToolbar(superdoc).activeEditor.off(fn)<0>[number]|fn?: EventCallback<EventMap[K]>",
+      "kind": "index",
+      "symbolPath": "useHeadlessToolbar(superdoc).activeEditor.off(fn)<0>[number]",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/EventEmitter.d.ts",
+      "line": 45,
+      "snippet": "fn?: EventCallback<EventMap[K]>",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "index|node_modules/superdoc/dist/super-editor/src/editors/v1/core/EventEmitter.d.ts|useHeadlessToolbar(superdoc).activeEditor.on(fn)<0>[number]|fn: EventCallback<EventMap[K]>",
+      "kind": "index",
+      "symbolPath": "useHeadlessToolbar(superdoc).activeEditor.on(fn)<0>[number]",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/EventEmitter.d.ts",
+      "line": 24,
+      "snippet": "fn: EventCallback<EventMap[K]>",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "index|node_modules/superdoc/dist/super-editor/src/editors/v1/core/EventEmitter.d.ts|useHeadlessToolbar(superdoc).activeEditor.once(fn)<0>[number]|fn: EventCallback<EventMap[K]>",
+      "kind": "index",
+      "symbolPath": "useHeadlessToolbar(superdoc).activeEditor.once(fn)<0>[number]",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/EventEmitter.d.ts",
+      "line": 52,
+      "snippet": "fn: EventCallback<EventMap[K]>",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "index|node_modules/superdoc/dist/super-editor/src/editors/v1/core/EventEmitter.d.ts|useHeadlessToolbar(superdoc).activeEditor.safeEmit(args)[number]|...args: EventMap[K]",
+      "kind": "index",
+      "symbolPath": "useHeadlessToolbar(superdoc).activeEditor.safeEmit(args)[number]",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/EventEmitter.d.ts",
+      "line": 37,
+      "snippet": "...args: EventMap[K]",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "index|node_modules/superdoc/dist/super-editor/src/editors/v1/core/Node.d.ts|EditorExtension.config.renderDOM[number]|renderDOM?: MaybeGetter<DOMOutputSpec>;",
+      "kind": "index",
+      "symbolPath": "EditorExtension.config.renderDOM[number]",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/Node.d.ts",
+      "line": 49,
+      "snippet": "renderDOM?: MaybeGetter<DOMOutputSpec>;",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "index|node_modules/superdoc/dist/super-editor/src/editors/v1/core/Node.d.ts|Extensions.Node.new(config).renderDOM[number]|renderDOM?: MaybeGetter<DOMOutputSpec>;",
+      "kind": "index",
+      "symbolPath": "Extensions.Node.new(config).renderDOM[number]",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/Node.d.ts",
+      "line": 49,
+      "snippet": "renderDOM?: MaybeGetter<DOMOutputSpec>;",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "index|node_modules/superdoc/dist/super-editor/src/editors/v1/core/Node.d.ts|defineNode(config).renderDOM[number]|renderDOM?: MaybeGetter<DOMOutputSpec>;",
+      "kind": "index",
+      "symbolPath": "defineNode(config).renderDOM[number]",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/Node.d.ts",
+      "line": 49,
+      "snippet": "renderDOM?: MaybeGetter<DOMOutputSpec>;",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "index|node_modules/superdoc/dist/super-editor/src/editors/v1/core/super-converter/SuperConverter.d.ts|SuperConverter[string]|export class SuperConverter {",
+      "kind": "index",
+      "symbolPath": "SuperConverter[string]",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/super-converter/SuperConverter.d.ts",
+      "line": 1,
+      "snippet": "export class SuperConverter {",
+      "owner": "tier-4-public-contract",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "index|node_modules/superdoc/dist/super-editor/src/editors/v1/core/types/ChainedCommands.d.ts|CanCommand(args)[number]|...args: CommandArgs<K>",
+      "kind": "index",
+      "symbolPath": "CanCommand(args)[number]",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/types/ChainedCommands.d.ts",
+      "line": 79,
+      "snippet": "...args: CommandArgs<K>",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "index|node_modules/superdoc/dist/super-editor/src/editors/v1/core/types/ChainedCommands.d.ts|ChainedCommand(args)[number]|...args: CommandArgs<K>",
+      "kind": "index",
+      "symbolPath": "ChainedCommand(args)[number]",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/core/types/ChainedCommands.d.ts",
+      "line": 65,
+      "snippet": "...args: CommandArgs<K>",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "index|node_modules/superdoc/dist/super-editor/src/editors/v1/index.d.ts|DocxZipper[string]|DocxZipper",
+      "kind": "index",
+      "symbolPath": "DocxZipper[string]",
+      "file": "node_modules/superdoc/dist/super-editor/src/editors/v1/index.d.ts",
+      "line": 66,
+      "snippet": "DocxZipper",
+      "owner": "tier-5-other",
+      "rationale": "auto-seeded from inventory"
+    },
+    {
+      "key": "index|node_modules/superdoc/dist/superdoc/src/index.d.ts|DocxZipper[string]|DocxZipper",
+      "kind": "index",
+      "symbolPath": "DocxZipper[string]",
+      "file": "node_modules/superdoc/dist/superdoc/src/index.d.ts",
+      "line": 170,
+      "snippet": "DocxZipper",
       "owner": "tier-5-other",
       "rationale": "auto-seeded from inventory"
     },

@@ -234,21 +234,56 @@ function walkType(type, symbolPath, depth, originDecl) {
   for (let i = 0; i < typeArgs.length; i++) {
     walkType(typeArgs[i], symbolPath + `<${i}>`, depth + 1, originDecl);
   }
-  const callSigs = type.getCallSignatures ? type.getCallSignatures() : [];
-  for (const sig of callSigs) {
-    for (const param of sig.getParameters()) {
-      const decl = param.valueDeclaration ?? param.declarations?.[0];
-      const pType = decl
-        ? checker.getTypeOfSymbolAtLocation(param, decl)
-        : checker.getDeclaredTypeOfSymbol(param);
-      const sub = `${symbolPath}(${param.getName()})`;
-      if (isAnyType(pType)) record('param', sub, decl ?? originDecl);
-      else walkType(pType, sub, depth + 1, decl ?? originDecl);
+  // Call signatures + construct signatures both expose param/return any.
+  // `(...args: any[]): any` lives on call sigs; `constructor(...args: any[])`
+  // and similar `new (...): T` shapes live on construct sigs. Walking only
+  // call sigs leaves a public-class blind spot — flagged by Codex on the
+  // initial PR, fixed here.
+  const sigGroups = [
+    { kind: 'call', sigs: type.getCallSignatures ? type.getCallSignatures() : [] },
+    { kind: 'construct', sigs: type.getConstructSignatures ? type.getConstructSignatures() : [] },
+  ];
+  for (const { kind, sigs } of sigGroups) {
+    for (const sig of sigs) {
+      for (const param of sig.getParameters()) {
+        const decl = param.valueDeclaration ?? param.declarations?.[0];
+        const pType = decl
+          ? checker.getTypeOfSymbolAtLocation(param, decl)
+          : checker.getDeclaredTypeOfSymbol(param);
+        const sub = kind === 'construct'
+          ? `${symbolPath}.new(${param.getName()})`
+          : `${symbolPath}(${param.getName()})`;
+        if (isAnyType(pType)) record('param', sub, decl ?? originDecl);
+        else walkType(pType, sub, depth + 1, decl ?? originDecl);
+      }
+      const ret = sig.getReturnType();
+      const retPath = kind === 'construct'
+        ? `${symbolPath}.new=>return`
+        : `${symbolPath}=>return`;
+      if (isAnyType(ret)) record('return', retPath, sig.getDeclaration?.() ?? originDecl);
+      else walkType(ret, retPath, depth + 1, sig.getDeclaration?.() ?? originDecl);
     }
-    const ret = sig.getReturnType();
-    const retPath = `${symbolPath}=>return`;
-    if (isAnyType(ret)) record('return', retPath, sig.getDeclaration?.() ?? originDecl);
-    else walkType(ret, retPath, depth + 1, sig.getDeclaration?.() ?? originDecl);
+  }
+  // Index signatures (`[key: string]: any`, `[key: number]: any`) are NOT
+  // enumerated by getProperties(); they live on getStringIndexType /
+  // getNumberIndexType. Walking only properties misses the
+  // SuperConverter/DocxZipper-style accidentally-public surface. Flagged
+  // by Codex on the initial PR, fixed here.
+  if (type.getStringIndexType) {
+    const sIdx = type.getStringIndexType();
+    if (sIdx) {
+      const sub = `${symbolPath}[string]`;
+      if (isAnyType(sIdx)) record('index', sub, originDecl);
+      else walkType(sIdx, sub, depth + 1, originDecl);
+    }
+  }
+  if (type.getNumberIndexType) {
+    const nIdx = type.getNumberIndexType();
+    if (nIdx) {
+      const sub = `${symbolPath}[number]`;
+      if (isAnyType(nIdx)) record('index', sub, originDecl);
+      else walkType(nIdx, sub, depth + 1, originDecl);
+    }
   }
   const props = type.getProperties ? type.getProperties() : [];
   for (const prop of props) {
@@ -335,6 +370,11 @@ function classifyOwner(f) {
   if (f.file.includes('super-toolbar')) return 'tier-2-toolbar';
   if (f.file.includes('trackChangesHelpers') || f.file.includes('fieldAnnotationHelpers')) return 'tier-3-helpers';
   if (f.file.endsWith('core/types/index.d.ts')) return 'tier-4-public-contract';
+  // SuperConverter + DocxZipper expose `[key: string]: any` and
+  // `constructor(...args: any[])`. SD-2966's done-when criteria explicitly
+  // call these out as accidentally-public — group with tier-4 so the
+  // facade work owns the fix.
+  if (f.file.endsWith('SuperConverter.d.ts') || f.file.endsWith('DocxZipper.d.ts')) return 'tier-4-public-contract';
   return 'tier-5-other';
 }
 

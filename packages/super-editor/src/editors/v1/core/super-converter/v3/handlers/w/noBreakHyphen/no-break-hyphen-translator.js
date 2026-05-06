@@ -47,9 +47,13 @@ function decode(params, decodedAttrs = {}) {
   // before re-dispatching, so re-entry won't re-fire this branch).
   // Tracked-changes check runs before the link check so a linked + tracked
   // atom composes as <w:ins><w:hyperlink>...</w:hyperlink></w:ins>.
-  const trackedMark = node.marks?.find((m) => m.type === 'trackInsert' || m.type === 'trackDelete');
+  const trackedMark = node.marks?.find((m) => {
+    const t = m?.type?.name ?? m?.type;
+    return t === 'trackInsert' || t === 'trackDelete';
+  });
   if (trackedMark) {
-    return (trackedMark.type === 'trackInsert' ? wInsTranslator : wDelTranslator).decode(params);
+    const t = trackedMark.type?.name ?? trackedMark.type;
+    return (t === 'trackInsert' ? wInsTranslator : wDelTranslator).decode(params);
   }
 
   // Hyperlinks: defer to wHyperlinkTranslator so the export emits a
@@ -59,7 +63,7 @@ function decode(params, decodedAttrs = {}) {
   // </w:r>, dropping the link entirely.
   // The linkProcessed guard avoids re-entering once the hyperlink decoder
   // strips the link mark and re-dispatches us.
-  const isLinkNode = node.marks?.some((m) => m.type === 'link');
+  const isLinkNode = node.marks?.some((m) => (m?.type?.name ?? m?.type) === 'link');
   if (isLinkNode && !params.extraParams?.linkProcessed) {
     return wHyperlinkTranslator.decode(params);
   }

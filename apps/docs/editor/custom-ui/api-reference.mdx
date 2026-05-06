@@ -115,16 +115,32 @@ Built-in dispatch and custom-command registration.
 
 ```ts
 ui.commands.get('bold')?.execute();        // dynamic dispatch
+ui.commands.has('company.aiRewrite');      // is this id registered?
+ui.commands.require('company.insertClause'); // get or throw
 ui.commands.bold.execute();                // typed per-built-in handle
 ui.commands.bold.observe(({ active, disabled }) => { ... });
 
 const reg = ui.commands.register({         // custom command
   id: 'company.insertClause',
-  execute: ({ payload, superdoc, editor }) => true,
+  shortcut: 'Mod-Shift-C',                 // optional keyboard binding
+  execute: ({ payload, superdoc, editor, context }) => true,
   getState: ({ state }) => ({ disabled: state.selection.empty }),
+  contextMenu: {                            // optional right-click contribution
+    label: 'Insert clause here',
+    group: 'review',
+    when: ({ entities, position, insideSelection }) =>
+      entities.length === 0 && position !== null && insideSelection !== true,
+  },
 });
 reg.invalidate();
 reg.unregister();
+
+// Right-click menu items returned from getContextMenuItems carry invoke()
+// closures that fire execute({ context }) with the bundle bound.
+const items = ui.commands.getContextMenuItems(
+  ui.viewport.contextAt({ x: event.clientX, y: event.clientY }),
+);
+items[0]?.invoke?.();
 ```
 
 ### `ui.comments`
@@ -173,12 +189,18 @@ await ui.document.replaceFile(file);
 
 ### `ui.selection`
 
-Live slice and capture.
+Live slice, capture, restore, painted geometry.
 
 ```ts
 ui.selection.getSnapshot();
 ui.selection.subscribe(({ snapshot }) => {});
-const captured = ui.selection.capture();    // frozen, holds across focus changes
+const captured = ui.selection.capture();              // frozen, holds across focus changes
+const restore = ui.selection.restore(captured);       // { success, reason? }
+
+ui.selection.getRects();                              // ViewportRect[]
+ui.selection.getRects(captured);                      // rects of a captured selection
+ui.selection.getAnchorRect({ placement: 'start' });   // single rect for popovers
+ui.selection.getAnchorRect({ placement: 'union' }, captured);
 ```
 
 ### `ui.viewport`
@@ -188,6 +210,11 @@ Geometry. Browser-only.
 ```ts
 ui.viewport.getRect({ target: { kind: 'entity', entityType: 'comment', entityId } });
 await ui.viewport.scrollIntoView({ target, block: 'center', behavior: 'smooth' });
+
+ui.viewport.getHost();                                // painted host element | null
+ui.viewport.entityAt({ x, y });                       // ViewportEntityHit[]
+ui.viewport.positionAt({ x, y });                     // ViewportPositionHit | null
+ui.viewport.contextAt({ x, y });                      // ViewportContext (always returns)
 ```
 
 ### `ui.toolbar`
@@ -234,7 +261,15 @@ Imported from `superdoc/ui`.
 | `UIToolbarCommandState` | Per-command state shape. |
 | `CustomCommandRegistration` | Input to `ui.commands.register`. |
 | `CustomCommandRegistrationResult` | Return from `ui.commands.register`. |
+| `ContextMenuContribution` | The `contextMenu` field on a registration. |
+| `ContextMenuWhenInput` | Argument to `contextMenu.when({ entities, selection, point?, position?, insideSelection? })`. |
+| `ContextMenuItem` | Item returned from `ui.commands.getContextMenuItems(input)`. Carries `invoke()` when produced from a `ViewportContext` bundle. |
+| `SelectionAnchorRectOptions` | `{ placement: 'start' \| 'end' \| 'union' }`. |
+| `SelectionRestoreResult` | `{ success: true } \| { success: false, reason }`. |
 | `ScrollIntoViewInput` | Input to `ui.viewport.scrollIntoView`. |
-| `ViewportRect` | Plain value rectangle returned by `ui.viewport.getRect`. |
+| `ViewportRect` | Plain value rectangle. |
+| `ViewportEntityHit` | `{ type: 'comment' \| 'trackedChange', id }`. |
+| `ViewportPositionHit` | `{ point: SelectionPoint, target: SelectionTarget }`. |
+| `ViewportContext` | Bundle returned from `ui.viewport.contextAt({ x, y })`. |
 
 For the source of truth, the types ship with the `superdoc` package and are exported alongside the runtime values.

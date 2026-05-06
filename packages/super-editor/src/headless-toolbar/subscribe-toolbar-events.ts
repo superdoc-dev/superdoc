@@ -9,11 +9,13 @@ const subscribeToSuperdocEvents = (
 
   superdoc.on('editorCreate', onChange);
   superdoc.on('document-mode-change', onChange);
+  superdoc.on('formatting-marks-change', onChange);
   superdoc.on('zoomChange', onChange);
 
   return () => {
     superdoc.off?.('editorCreate', onChange);
     superdoc.off?.('document-mode-change', onChange);
+    superdoc.off?.('formatting-marks-change', onChange);
     superdoc.off?.('zoomChange', onChange);
   };
 };

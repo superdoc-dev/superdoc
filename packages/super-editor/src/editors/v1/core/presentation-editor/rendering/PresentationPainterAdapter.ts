@@ -45,6 +45,7 @@ export class PresentationPainterAdapter {
   #zoom = 1;
   #scrollContainer: HTMLElement | null = null;
   #virtualizationPins: number[] = [];
+  #showFormattingMarks = false;
 
   // ── Lifecycle ───────────────────────────────────────────────────────
 
@@ -54,8 +55,10 @@ export class PresentationPainterAdapter {
 
   ensurePainter(options: DomPainterOptions): void {
     if (!this.#painter) {
+      this.#showFormattingMarks = Boolean(options.showFormattingMarks ?? this.#showFormattingMarks);
       this.#painter = createDomPainter({
         ...options,
+        showFormattingMarks: this.#showFormattingMarks,
         onPaintSnapshot: (snapshot) => {
           this.#lastPaintSnapshot = snapshot;
           this.#paintIndex.update(snapshot);
@@ -85,6 +88,13 @@ export class PresentationPainterAdapter {
     this.#headerProvider = header;
     this.#footerProvider = footer;
     this.#applyProviders();
+  }
+
+  setShowFormattingMarks(showFormattingMarks: boolean): void {
+    const next = Boolean(showFormattingMarks);
+    if (this.#showFormattingMarks === next) return;
+    this.#showFormattingMarks = next;
+    this.#applyShowFormattingMarks();
   }
 
   // ── Zoom / scroll ──────────────────────────────────────────────────
@@ -160,6 +170,7 @@ export class PresentationPainterAdapter {
     this.#applyZoom();
     this.#applyScrollContainer();
     this.#applyVirtualizationPins();
+    this.#applyShowFormattingMarks();
   }
 
   #applyProviders(): void {
@@ -176,5 +187,9 @@ export class PresentationPainterAdapter {
 
   #applyVirtualizationPins(): void {
     this.#painter?.setVirtualizationPins(this.#virtualizationPins);
+  }
+
+  #applyShowFormattingMarks(): void {
+    this.#painter?.setShowFormattingMarks(this.#showFormattingMarks);
   }
 }

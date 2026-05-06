@@ -633,6 +633,7 @@ export class PresentationEditor extends EventEmitter {
       enableCommentsInViewing: options.layoutEngineOptions?.enableCommentsInViewing,
       presence: validatedPresence,
       showBookmarks: options.layoutEngineOptions?.showBookmarks ?? false,
+      showFormattingMarks: options.layoutEngineOptions?.showFormattingMarks ?? false,
     };
     this.#trackedChangesOverrides = options.layoutEngineOptions?.trackedChanges;
 
@@ -2954,6 +2955,54 @@ export class PresentationEditor extends EventEmitter {
     this.#flowBlockCache?.clear();
     this.#pendingDocChange = true;
     this.#scheduleRerender();
+  }
+
+  setShowFormattingMarks(showFormattingMarks: boolean): void {
+    const next = !!showFormattingMarks;
+    if (this.#layoutOptions.showFormattingMarks === next) return;
+    this.#layoutOptions.showFormattingMarks = next;
+    this.#painterAdapter.setShowFormattingMarks(next);
+    if (!this.#repaintCurrentLayout()) {
+      this.#pendingDocChange = true;
+      this.#scheduleRerender();
+    }
+  }
+
+  #repaintCurrentLayout(): boolean {
+    const layout = this.#layoutState.layout;
+    if (!layout) return false;
+
+    const blocks = this.#layoutLookupBlocks.length > 0 ? this.#layoutLookupBlocks : this.#layoutState.blocks;
+    const measures = this.#layoutLookupMeasures.length > 0 ? this.#layoutLookupMeasures : this.#layoutState.measures;
+    if (blocks.length === 0 || blocks.length !== measures.length) return false;
+
+    const resolvedLayout = resolveLayout({
+      layout,
+      flowMode: this.#layoutOptions.flowMode ?? 'paginated',
+      blocks,
+      measures,
+    });
+
+    const isSemanticFlow = this.#layoutOptions.flowMode === 'semantic';
+    this.#ensurePainter();
+    if (!isSemanticFlow) {
+      this.#painterAdapter.setProviders(
+        this.#headerFooterSession?.headerDecorationProvider,
+        this.#headerFooterSession?.footerDecorationProvider,
+      );
+    }
+
+    this.#domIndexObserverManager?.pause();
+    try {
+      this.#painterAdapter.paint({ resolvedLayout }, this.#painterHost);
+      this.#refreshEditorDomAugmentations();
+    } finally {
+      this.#domIndexObserverManager?.resume();
+    }
+    this.#revalidateScrollContainer();
+    this.#updatePermissionOverlay();
+    this.#applyZoom();
+    return true;
   }
 
   /**
@@ -6286,6 +6335,7 @@ export class PresentationEditor extends EventEmitter {
       footerProvider: this.#headerFooterSession?.footerDecorationProvider,
       ruler: this.#layoutOptions.ruler,
       pageGap: this.#layoutState.layout?.pageGap ?? effectiveGap,
+      showFormattingMarks: this.#layoutOptions.showFormattingMarks ?? false,
     });
 
     // Pass the current zoom so virtualization accounts for the CSS transform scale

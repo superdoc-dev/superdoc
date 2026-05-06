@@ -155,5 +155,8 @@ export function createTestPainter(opts: { blocks?: FlowBlock[]; measures?: Measu
     setScrollContainer(el: HTMLElement | null) {
       painter.setScrollContainer(el);
     },
+    setShowFormattingMarks(showFormattingMarks: boolean) {
+      painter.setShowFormattingMarks(showFormattingMarks);
+    },
   };
 }

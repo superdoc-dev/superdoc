@@ -99,6 +99,8 @@ export type DomPainterOptions = {
   ruler?: RulerOptions;
   /** Called with the paint snapshot after each paint cycle completes. */
   onPaintSnapshot?: (snapshot: PaintSnapshot) => void;
+  /** Render nonprinting formatting marks such as spaces, tabs, and paragraph marks. */
+  showFormattingMarks?: boolean;
 };
 
 export type DomPainterHandle = {
@@ -109,6 +111,7 @@ export type DomPainterHandle = {
   onScroll(): void;
   setZoom(zoom: number): void;
   setScrollContainer(el: HTMLElement | null): void;
+  setShowFormattingMarks(showFormattingMarks: boolean): void;
 };
 
 /**
@@ -142,6 +145,9 @@ export const createDomPainter = (options: DomPainterOptions): DomPainterHandle =
     },
     setScrollContainer(el: HTMLElement | null) {
       painter.setScrollContainer(el);
+    },
+    setShowFormattingMarks(showFormattingMarks: boolean) {
+      painter.setShowFormattingMarks(showFormattingMarks);
     },
   };
 };

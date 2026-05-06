@@ -606,6 +606,64 @@ const scenarios = [
     files: ['src/export-params-fields-highlight.ts'],
     mustPass: true,
   },
+  // SD-2953: runtime-only subpaths (./converter, ./docx-zipper, ./file-zipper)
+  // were exported in package.json but lacked `types` fields, leaving strict
+  // consumers with TS7016. Each fixture imports through the public subpath
+  // and asserts the type resolves to a real declaration.
+  {
+    name: 'bundler / converter subpath (SD-2953)',
+    module: 'ESNext',
+    moduleResolution: 'bundler',
+    skipLibCheck: false,
+    strict: true,
+    files: ['src/imports-converter.ts'],
+    mustPass: true,
+  },
+  {
+    name: 'node16 / converter subpath (SD-2953)',
+    module: 'Node16',
+    moduleResolution: 'node16',
+    skipLibCheck: false,
+    strict: true,
+    files: ['src/imports-converter.ts'],
+    mustPass: true,
+  },
+  {
+    name: 'bundler / docx-zipper subpath (SD-2953)',
+    module: 'ESNext',
+    moduleResolution: 'bundler',
+    skipLibCheck: false,
+    strict: true,
+    files: ['src/imports-docx-zipper.ts'],
+    mustPass: true,
+  },
+  {
+    name: 'node16 / docx-zipper subpath (SD-2953)',
+    module: 'Node16',
+    moduleResolution: 'node16',
+    skipLibCheck: false,
+    strict: true,
+    files: ['src/imports-docx-zipper.ts'],
+    mustPass: true,
+  },
+  {
+    name: 'bundler / file-zipper subpath (SD-2953)',
+    module: 'ESNext',
+    moduleResolution: 'bundler',
+    skipLibCheck: false,
+    strict: true,
+    files: ['src/imports-file-zipper.ts'],
+    mustPass: true,
+  },
+  {
+    name: 'node16 / file-zipper subpath (SD-2953)',
+    module: 'Node16',
+    moduleResolution: 'node16',
+    skipLibCheck: false,
+    strict: true,
+    files: ['src/imports-file-zipper.ts'],
+    mustPass: true,
+  },
 ];
 
 const tscPath = join(__dirname, 'node_modules', '.bin', 'tsc');

@@ -394,15 +394,21 @@ function renderListMarker(params: MarkerRenderParams): void {
   const suffixType = markerLayout?.suffix ?? 'tab';
   if (suffixType === 'tab') {
     const tabEl = doc.createElement('span');
-    tabEl.className = 'superdoc-tab';
+    tabEl.classList.add('superdoc-tab', 'superdoc-marker-suffix-tab');
     tabEl.innerHTML = '&nbsp;';
     tabEl.style.display = 'inline-block';
+    if (markerLayout?.run?.fontSize != null) {
+      tabEl.style.fontSize = `${markerLayout.run.fontSize}px`;
+    }
     tabEl.style.wordSpacing = '0px';
     tabEl.style.width = `${listTabWidth}px`;
     lineEl.prepend(tabEl);
   } else if (suffixType === 'space') {
     const spaceEl = doc.createElement('span');
     spaceEl.classList.add('superdoc-marker-suffix-space');
+    if (markerLayout?.run?.fontSize != null) {
+      spaceEl.style.fontSize = `${markerLayout.run.fontSize}px`;
+    }
     spaceEl.style.wordSpacing = '0px';
     spaceEl.textContent = '\u00A0';
     lineEl.prepend(spaceEl);
@@ -517,6 +523,14 @@ const applyInlineStyles = (el: HTMLElement, styles: Partial<CSSStyleDeclaration>
       (el.style as unknown as Record<string, string>)[key] = String(value);
     }
   });
+};
+
+const convertParagraphMarkToCellMark = (lineEl: HTMLElement): void => {
+  const mark = lineEl.querySelector<HTMLElement>('.superdoc-formatting-paragraph-mark');
+  if (!mark) return;
+
+  mark.classList.add('superdoc-formatting-cell-mark');
+  mark.textContent = '¤';
 };
 
 /**
@@ -1298,6 +1312,7 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
         const paragraphMeasure = blockMeasure as ParagraphMeasure;
         const lines = paragraphMeasure.lines;
         const blockLineCount = lines?.length || 0;
+        const isLastBlockInCell = i === Math.min(blockMeasures.length, cellBlocks.length) - 1;
 
         /**
          * Extract Word layout information from paragraph attributes.
@@ -1411,6 +1426,9 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
             isLastLine,
             lineIdx === 0 && localStartLine === 0 ? listFirstLineTextStartPx : undefined,
           );
+          if (isLastBlockInCell && isLastLine) {
+            convertParagraphMarkToCellMark(lineEl);
+          }
           lineEl.style.paddingLeft = '';
           lineEl.style.paddingRight = '';
           lineEl.style.textIndent = '';

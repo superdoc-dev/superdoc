@@ -2,7 +2,7 @@
  * Compile-time + runtime contract lockdown for the painter's public surface.
  *
  * These assertions fail when someone reintroduces a legacy field on
- * `DomPainterInput`, adds a method to `DomPainterHandle`, or makes
+ * `DomPainterInput`, changes `DomPainterHandle`, or makes
  * `PageDecorationPayload.items` optional. The boundary tests in
  * `tests/src/architecture-boundaries.test.ts` cover the import side; this
  * file covers the type-shape side.
@@ -28,7 +28,8 @@ describe('DomPainter public contract shape', () => {
       | 'getMountedPageIndices'
       | 'onScroll'
       | 'setZoom'
-      | 'setScrollContainer';
+      | 'setScrollContainer'
+      | 'setShowFormattingMarks';
     type _Check = AssertTrue<Equal<keyof DomPainterHandle, ExpectedKeys>>;
     expectTypeOf<keyof DomPainterHandle>().toEqualTypeOf<ExpectedKeys>();
   });

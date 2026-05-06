@@ -53,6 +53,7 @@ import type {
   ResolvedTableItem,
   ResolvedImageItem,
   ResolvedDrawingItem,
+  ResolvedListMarkerItem,
 } from '@superdoc/contracts';
 import {
   adjustAvailableWidthForTextIndent,
@@ -90,6 +91,7 @@ import {
   containerStyles,
   containerStylesHorizontal,
   ensureFieldAnnotationStyles,
+  ensureFormattingMarksStyles,
   ensureImageSelectionStyles,
   ensureLinkStyles,
   ensureMathMencloseStyles,
@@ -313,6 +315,8 @@ type PainterOptions = {
   ruler?: RulerOptions;
   /** Called with the paint snapshot after each paint cycle completes. */
   onPaintSnapshot?: (snapshot: PaintSnapshot) => void;
+  /** Render nonprinting formatting marks such as spaces, tabs, and paragraph marks. */
+  showFormattingMarks?: boolean;
 };
 
 type FragmentDomState = {
@@ -1338,6 +1342,7 @@ export class DomPainter {
   private mountedPageIndices: number[] = [];
   /** Resolved layout for the next-gen paint pipeline. */
   private resolvedLayout: ResolvedLayout | null = null;
+  private showFormattingMarks = false;
 
   constructor(options: PainterOptions = {}) {
     this.options = options;
@@ -1345,6 +1350,7 @@ export class DomPainter {
     this.isSemanticFlow = (options.flowMode ?? 'paginated') === 'semantic';
     this.headerProvider = options.headerProvider;
     this.footerProvider = options.footerProvider;
+    this.showFormattingMarks = options.showFormattingMarks === true;
 
     // Initialize page gap (defaults: 24px vertical, 20px horizontal)
     const defaultGap = this.layoutMode === 'horizontal' ? 20 : 24;
@@ -1374,9 +1380,34 @@ export class DomPainter {
     this.onPaintSnapshotCallback = options.onPaintSnapshot ?? null;
   }
 
+  public setShowFormattingMarks(showFormattingMarks: boolean): void {
+    const next = showFormattingMarks === true;
+    if (this.showFormattingMarks === next) return;
+    this.showFormattingMarks = next;
+    this.applyFormattingMarksClass();
+    this.invalidateRenderedContent();
+  }
+
   public setProviders(header?: PageDecorationProvider, footer?: PageDecorationProvider): void {
     this.headerProvider = header;
     this.footerProvider = footer;
+  }
+
+  private applyFormattingMarksClass(mount: HTMLElement | null = this.mount): void {
+    mount?.classList.toggle('superdoc-show-formatting-marks', this.showFormattingMarks);
+  }
+
+  private invalidateRenderedContent(): void {
+    this.pageStates = [];
+    this.currentLayout = null;
+    this.pageIndexToState.clear();
+    this.virtualMountedKey = '';
+    this.clearGapSpacers();
+    this.topSpacerEl = null;
+    this.bottomSpacerEl = null;
+    this.virtualPagesEl = null;
+    this.processedLayoutVersion = -1;
+    this.layoutVersion += 1;
   }
 
   /**
@@ -1650,6 +1681,7 @@ export class DomPainter {
     ensurePrintStyles(doc);
     ensureLinkStyles(doc);
     ensureTrackChangeStyles(doc);
+    ensureFormattingMarksStyles(doc);
     ensureFieldAnnotationStyles(doc);
     ensureSdtContainerStyles(doc);
     ensureImageSelectionStyles(doc);
@@ -1658,9 +1690,11 @@ export class DomPainter {
       ensureRulerStyles(doc);
     }
     mount.classList.add(CLASS_NAMES.container);
+    this.applyFormattingMarksClass(mount);
 
     if (this.mount && this.mount !== mount) {
       this.resetState();
+      this.applyFormattingMarksClass(mount);
     }
     this.layoutVersion += 1;
 
@@ -3135,6 +3169,12 @@ export class DomPainter {
         const expandedRunsForBlock = expandRunsForInlineNewlines(block.runs);
 
         content.lines.forEach((resolvedLine) => {
+          const paragraphMarkLeftOffset = this.resolveResolvedListParagraphMarkOffset(
+            resolvedLine.isListFirstLine ? resolvedMarker : undefined,
+            fragment.markerTextWidth,
+            resolvedLine.indentOffset,
+          );
+
           const lineEl = this.renderLine(
             block,
             resolvedLine.line,
@@ -3145,6 +3185,7 @@ export class DomPainter {
             expandedRunsForBlock,
             resolvedLine.resolvedListTextStartPx,
             resolvedLine.indentOffset,
+            paragraphMarkLeftOffset,
           );
 
           // Apply pre-computed indent values
@@ -3210,15 +3251,17 @@ export class DomPainter {
 
               if (resolvedMarker.suffix === 'tab') {
                 const tabEl = this.doc!.createElement('span');
-                tabEl.className = 'superdoc-tab';
+                tabEl.classList.add('superdoc-tab', 'superdoc-marker-suffix-tab');
                 tabEl.innerHTML = '&nbsp;';
                 tabEl.style.display = 'inline-block';
+                tabEl.style.fontSize = `${resolvedMarker.run.fontSize}px`;
                 tabEl.style.wordSpacing = '0px';
                 tabEl.style.width = `${resolvedMarker.suffixWidthPx}px`;
                 lineEl.prepend(tabEl);
               } else if (resolvedMarker.suffix === 'space') {
                 const spaceEl = this.doc!.createElement('span');
                 spaceEl.classList.add('superdoc-marker-suffix-space');
+                spaceEl.style.fontSize = `${resolvedMarker.run.fontSize}px`;
                 spaceEl.style.wordSpacing = '0px';
                 spaceEl.textContent = '\u00A0';
                 lineEl.prepend(spaceEl);
@@ -3426,15 +3469,17 @@ export class DomPainter {
               const suffix = marker.suffix ?? 'tab';
               if (suffix === 'tab') {
                 const tabEl = this.doc!.createElement('span');
-                tabEl.className = 'superdoc-tab';
+                tabEl.classList.add('superdoc-tab', 'superdoc-marker-suffix-tab');
                 tabEl.innerHTML = '&nbsp;';
                 tabEl.style.display = 'inline-block';
+                tabEl.style.fontSize = `${marker.run.fontSize}px`;
                 tabEl.style.wordSpacing = '0px';
                 tabEl.style.width = `${listTabWidth}px`;
                 lineEl.prepend(tabEl);
               } else if (suffix === 'space') {
                 const spaceEl = this.doc!.createElement('span');
                 spaceEl.classList.add('superdoc-marker-suffix-space');
+                spaceEl.style.fontSize = `${marker.run.fontSize}px`;
                 spaceEl.style.wordSpacing = '0px';
                 spaceEl.textContent = '\u00A0';
                 lineEl.prepend(spaceEl);
@@ -5323,6 +5368,138 @@ export class DomPainter {
     return wrapper;
   }
 
+  private setTextContentWithFormattingSpaceMarks(element: HTMLElement, text: string): void {
+    if (!this.showFormattingMarks || !text.includes(' ') || !this.doc) {
+      element.textContent = text;
+      return;
+    }
+
+    element.textContent = '';
+    let chunkStart = 0;
+    for (let index = 0; index < text.length; index += 1) {
+      if (text[index] !== ' ') continue;
+
+      if (index > chunkStart) {
+        element.appendChild(this.doc.createTextNode(text.slice(chunkStart, index)));
+      }
+
+      const space = this.doc.createElement('span');
+      space.classList.add('superdoc-formatting-space-mark');
+      space.textContent = ' ';
+      element.appendChild(space);
+      chunkStart = index + 1;
+    }
+
+    if (chunkStart < text.length) {
+      element.appendChild(this.doc.createTextNode(text.slice(chunkStart)));
+    }
+  }
+
+  private findLastTextRun(runs: Run[]): { run: TextRun; index: number } | null {
+    for (let index = runs.length - 1; index >= 0; index -= 1) {
+      const run = runs[index];
+      if (run && (run.kind === 'text' || run.kind === undefined) && 'text' in run) {
+        return { run: run as TextRun, index };
+      }
+    }
+    return null;
+  }
+
+  private appendFormattingParagraphMark(
+    lineEl: HTMLElement,
+    line: Line,
+    runs: Run[],
+    leftOffsetPx: number,
+    availableWidth: number,
+    hasExplicitPositioning: boolean,
+  ): void {
+    if (!this.showFormattingMarks || !this.doc) return;
+    const lastRun = runs.length > 0 ? runs[runs.length - 1] : null;
+    if (lastRun) {
+      const lastRunIndex = runs.length - 1;
+      if (line.toRun < lastRunIndex) return;
+      if (
+        line.toRun === lastRunIndex &&
+        (lastRun.kind === 'text' || lastRun.kind === undefined) &&
+        'text' in lastRun &&
+        line.toChar < lastRun.text.length
+      ) {
+        return;
+      }
+    }
+
+    const lastTextRun = this.findLastTextRun(runs);
+
+    const mark = this.doc.createElement('span');
+    mark.classList.add('superdoc-formatting-paragraph-mark');
+    mark.setAttribute('aria-hidden', 'true');
+    mark.textContent = '¶';
+
+    const run = lastTextRun?.run;
+    if (run) {
+      if (run.fontFamily) {
+        mark.style.fontFamily = toCssFontFamily(run.fontFamily) ?? run.fontFamily;
+      }
+      if (typeof run.fontSize === 'number') {
+        mark.style.fontSize = `${run.fontSize}px`;
+      }
+      if (run.bold) {
+        mark.style.fontWeight = 'bold';
+      }
+      if (run.italic) {
+        mark.style.fontStyle = 'italic';
+      }
+      if (run.letterSpacing != null) {
+        mark.style.letterSpacing = `${run.letterSpacing}px`;
+      }
+    }
+    mark.style.lineHeight = `${line.lineHeight}px`;
+
+    const lineWidth = line.naturalWidth ?? line.width ?? 0;
+    const alignmentSlack = Math.max(0, availableWidth - lineWidth);
+    const textAlign = lineEl.style.textAlign;
+    const alignmentOffset =
+      !hasExplicitPositioning && textAlign === 'center'
+        ? alignmentSlack / 2
+        : !hasExplicitPositioning && textAlign === 'right'
+          ? alignmentSlack
+          : 0;
+    const isRtl = lineEl.dir === 'rtl' || lineEl.style.direction === 'rtl';
+    const visualTextEndOffset = isRtl ? alignmentOffset : alignmentOffset + lineWidth;
+    mark.style.left = `${Math.max(0, leftOffsetPx + visualTextEndOffset)}px`;
+    lineEl.appendChild(mark);
+  }
+
+  private resolveResolvedListParagraphMarkOffset(
+    marker: ResolvedListMarkerItem | undefined,
+    markerTextWidth: number | undefined,
+    fallbackOffset: number | undefined,
+  ): number | undefined {
+    if (typeof fallbackOffset === 'number' && Number.isFinite(fallbackOffset) && fallbackOffset > 0) {
+      return fallbackOffset;
+    }
+    if (!marker || marker.vanish) {
+      return fallbackOffset;
+    }
+
+    const paddingLeft = Number.isFinite(marker.firstLinePaddingLeftPx) ? marker.firstLinePaddingLeftPx : 0;
+    const suffixWidth = marker.suffix !== 'nothing' && Number.isFinite(marker.suffixWidthPx) ? marker.suffixWidthPx : 0;
+
+    if (marker.justification === 'left') {
+      const markerWidth =
+        typeof markerTextWidth === 'number' && Number.isFinite(markerTextWidth) && markerTextWidth > 0
+          ? markerTextWidth
+          : 0;
+      return paddingLeft + markerWidth + suffixWidth;
+    }
+
+    const centerPadding =
+      marker.justification === 'center' && Number.isFinite(marker.centerPaddingAdjustPx)
+        ? (marker.centerPaddingAdjustPx ?? 0)
+        : 0;
+    return paddingLeft + centerPadding + suffixWidth;
+  }
+
   private renderRun(
     run: Run,
     context: FragmentRenderContext,
@@ -5364,7 +5541,7 @@ export class DomPainter {
     const isActiveLink = !!(linkData && !linkData.blocked && linkData.href);
     const elem = isActiveLink ? this.doc.createElement('a') : this.doc.createElement('span');
     const text = resolveRunText(run, context);
-    elem.textContent = text;
+    this.setTextContentWithFormattingSpaceMarks(elem, text);
 
     if (linkData?.dataset) {
       applyLinkDataset(elem, linkData.dataset);
@@ -5981,6 +6158,7 @@ export class DomPainter {
    * @param preExpandedRuns - Pre-computed result of expandRunsForInlineNewlines; pass when rendering multiple lines of the same paragraph to avoid recomputing per line
    * @param resolvedListTextStartPx - Optional canonical text-start override for list first lines
    * @param indentOffsetOverride - When defined, used instead of re-deriving indentOffset from block attrs in the segment positioning path
+   * @param paragraphMarkLeftOffsetOverride - Optional text-start override for positioning presentation-only paragraph marks
    * @returns The rendered line element
    */
   private renderLine(
@@ -5993,6 +6171,7 @@ export class DomPainter {
     preExpandedRuns?: Run[],
     resolvedListTextStartPx?: number,
     indentOffsetOverride?: number,
+    paragraphMarkLeftOffsetOverride?: number,
   ): HTMLElement {
     if (!this.doc) {
       throw new Error('DomPainter: document is not available');
@@ -6264,6 +6443,35 @@ export class DomPainter {
       spaceCount,
       shouldJustify: justifyShouldApply,
     });
+    const resolveLineIndentOffset = (): number => {
+      if (indentOffsetOverride != null) {
+        return indentOffsetOverride;
+      }
+
+      const paraIndent = (block.attrs as ParagraphAttrs | undefined)?.indent;
+      const indentLeft = paraIndent?.left ?? 0;
+      const firstLine = paraIndent?.firstLine ?? 0;
+      const hanging = paraIndent?.hanging ?? 0;
+      const isFirstLineOfPara = lineIndex === 0 || lineIndex === undefined;
+      const firstLineOffsetForCumX = isFirstLineOfPara ? firstLine - hanging : 0;
+      const wordLayoutValue = (block.attrs as ParagraphAttrs | undefined)?.wordLayout;
+      const wordLayout = isMinimalWordLayout(wordLayoutValue) ? wordLayoutValue : undefined;
+      const isListParagraph = Boolean(wordLayout?.marker);
+      const fallbackListTextStartPx =
+        typeof wordLayout?.marker?.textStartX === 'number' && Number.isFinite(wordLayout.marker.textStartX)
+          ? wordLayout.marker.textStartX
+          : typeof wordLayout?.textStartPx === 'number' && Number.isFinite(wordLayout.textStartPx)
+            ? wordLayout.textStartPx
+            : undefined;
+      const listIndentOffset = isFirstLineOfPara
+        ? (resolvedListTextStartPx ?? fallbackListTextStartPx ?? indentLeft)
+        : indentLeft;
+
+      return isListParagraph ? listIndentOffset : indentLeft + firstLineOffsetForCumX;
+    };
+    const lineTextStartOffsetPx =
+      paragraphMarkLeftOffsetOverride != null ? paragraphMarkLeftOffsetOverride : resolveLineIndentOffset();
+    const paragraphMarkLeftOffsetPx = lineTextStartOffsetPx;
 
     if (spacingPerSpace !== 0) {
       // Each rendered line is its own block; relying on text-align-last is brittle, so we use word-spacing.
@@ -6278,32 +6486,9 @@ export class DomPainter {
       //
       // The segment x positions from layout are relative to the content area (left margin = 0).
       // We need to add the paragraph indent to ALL positions (both explicit and calculated).
-      let indentOffset: number;
-      if (indentOffsetOverride != null) {
-        // Resolved path: indentOffset was pre-computed by the resolver.
-        indentOffset = indentOffsetOverride;
-      } else {
-        // Legacy path: derive from block attrs.
-        const paraIndent = (block.attrs as ParagraphAttrs | undefined)?.indent;
-        const indentLeft = paraIndent?.left ?? 0;
-        const firstLine = paraIndent?.firstLine ?? 0;
-        const hanging = paraIndent?.hanging ?? 0;
-        const isFirstLineOfPara = lineIndex === 0 || lineIndex === undefined;
-        const firstLineOffsetForCumX = isFirstLineOfPara ? firstLine - hanging : 0;
-        const wordLayoutValue = (block.attrs as ParagraphAttrs | undefined)?.wordLayout;
-        const wordLayout = isMinimalWordLayout(wordLayoutValue) ? wordLayoutValue : undefined;
-        const isListParagraph = Boolean(wordLayout?.marker);
-        const fallbackListTextStartPx =
-          typeof wordLayout?.marker?.textStartX === 'number' && Number.isFinite(wordLayout.marker.textStartX)
-            ? wordLayout.marker.textStartX
-            : typeof wordLayout?.textStartPx === 'number' && Number.isFinite(wordLayout.textStartPx)
-              ? wordLayout.textStartPx
-              : undefined;
-        const listIndentOffset = isFirstLineOfPara
-          ? (resolvedListTextStartPx ?? fallbackListTextStartPx ?? indentLeft)
-          : indentLeft;
-        indentOffset = isListParagraph ? listIndentOffset : indentLeft + firstLineOffsetForCumX;
-      }
+      // Segment x positions and paragraph marks both need the visual text start,
+      // including list marker/suffix space when the resolved layout provides it.
+      const indentOffset = lineTextStartOffsetPx;
       let cumulativeX = 0; // Start at 0, we'll add indentOffset when positioning
 
       const segments = line.segments!;
@@ -6690,6 +6875,15 @@ export class DomPainter {
       // Close any remaining wrapper at end of line
       closeCurrentWrapper();
     }
+
+    this.appendFormattingParagraphMark(
+      el,
+      line,
+      expandedBlock.runs,
+      paragraphMarkLeftOffsetPx,
+      availableWidth,
+      hasExplicitPositioning ?? false,
+    );
 
     // Post-process: Apply tooltip accessibility for any links with pending tooltips
     // This must happen after elements are in the DOM so aria-describedby can reference siblings

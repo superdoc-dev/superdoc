@@ -904,12 +904,16 @@ describe('resolvePageNumberTokens', () => {
     });
   });
 
-  // SD-1332: PAGE fields can live inside a table cell (especially in
-  // footers). The resolver previously iterated only fragments where
-  // `kind === 'para'`, so paragraphs nested in table cells were skipped
-  // and the digit never substituted.
-  describe('SD-1332: tokens nested in table cells', () => {
-    it('substitutes pageNumber inside a TableCell.paragraph and clones the table immutably', () => {
+  // SD-1332: pin the body resolver's intentional limitation. Body tables can
+  // span multiple physical pages (one TableBlock, multiple table fragments,
+  // each with its own fromRow..toRow). Substituting the whole table once
+  // would resolve every PAGE field to the first fragment's page number.
+  // Per-fragment substitution is the correct fix and is deferred until a
+  // body-table-with-PAGE fixture motivates it (see the comment in
+  // resolvePageTokens.ts). For SD-1332 itself the substitution happens in
+  // layout-bridge/resolveHeaderFooterTokens.ts (page-local).
+  describe('SD-1332: body tables intentionally not processed', () => {
+    it('returns no affected blocks when the only token sits inside a body table', () => {
       const blocks: FlowBlock[] = [
         {
           kind: 'table',
@@ -954,19 +958,16 @@ describe('resolvePageNumberTokens', () => {
         ],
       };
       const numberingCtx: NumberingContext = {
-        totalPages: 5,
-        displayPages: [{ physicalPage: 1, displayNumber: 3, displayText: '3', sectionIndex: 0 }],
+        totalPages: 1,
+        displayPages: [{ physicalPage: 1, displayNumber: 1, displayText: '1', sectionIndex: 0 }],
       };
 
       const result = resolvePageNumberTokens(layout, blocks, measures, numberingCtx);
 
-      expect(result.affectedBlockIds.has('tbl-1')).toBe(true);
-      const updatedTable = result.updatedBlocks.get('tbl-1') as unknown as {
-        rows: { cells: { paragraph: ParagraphBlock }[] }[];
-      };
-      expect(updatedTable.rows[0].cells[0].paragraph.runs[0].text).toBe('3');
-
-      // Original table tree must NOT be mutated.
+      // Body resolver does not recurse into tables — the table block must NOT
+      // be reported as affected and the original tree must stay untouched.
+      expect(result.affectedBlockIds.has('tbl-1')).toBe(false);
+      expect(result.updatedBlocks.has('tbl-1')).toBe(false);
       const originalTable = blocks[0] as unknown as { rows: { cells: { paragraph: ParagraphBlock }[] }[] };
       expect(originalTable.rows[0].cells[0].paragraph.runs[0].text).toBe('0');
       expect(originalTable.rows[0].cells[0].paragraph.runs[0].token).toBe('pageNumber');

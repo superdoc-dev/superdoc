@@ -51,6 +51,7 @@ import scissorsIconSvg from '@superdoc/common/icons/scissors-solid.svg?raw';
 import copyIconSvg from '@superdoc/common/icons/copy-solid.svg?raw';
 import pasteIconSvg from '@superdoc/common/icons/paste-solid.svg?raw';
 import strikethroughSvg from '@superdoc/common/icons/strikethrough.svg?raw';
+import paragraphIconSvg from '@superdoc/common/icons/paragraph-solid.svg?raw';
 
 export const toolbarIcons = {
   undo: rotateLeftIconSvg,
@@ -115,4 +116,5 @@ export const toolbarIcons = {
   copy: copyIconSvg,
   paste: pasteIconSvg,
   strikethrough: strikethroughSvg,
+  formattingMarks: paragraphIconSvg,
 };

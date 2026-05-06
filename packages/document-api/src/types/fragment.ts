@@ -1,19 +1,19 @@
 /**
- * SDM/1 Document Fragment — the canonical structural content model.
+ * SDM/1 Document Fragment: the canonical structural content model.
  *
  * This is the single most important type family in the structural API surface.
  * Every structural write operation expresses its content as an SDFragment.
  * Every structural read operation returns SDContentNode / SDInlineNode shapes.
  *
  * File organization:
- *   sd-props.ts      — property models (SDRunProps, SDParagraphProps, etc.)
- *   sd-objects.ts    — object layout, geometry, media, drawing source, provenance
- *   sd-nodes.ts      — all concrete node interfaces + SDContentNode/SDInlineNode unions
- *   sd-styles.ts     — style dictionaries, theme, document defaults
- *   sd-sections.ts   — sections, numbering, annotations, reference catalogs
- *   sd-envelope.ts   — SDNodeResult, SDFindResult, SDReadOptions
- *   sd-contract.ts   — SDErrorCode, SDError, SDMutationReceipt, SDDiagnostic
- *   fragment.ts      — (this file) SDFragment, SDDocument, kind constants, barrel re-exports
+ *   sd-props.ts     : property models (SDRunProps, SDParagraphProps, etc.)
+ *   sd-objects.ts   : object layout, geometry, media, drawing source, provenance
+ *   sd-nodes.ts     : all concrete node interfaces + SDContentNode/SDInlineNode unions
+ *   sd-styles.ts    : style dictionaries, theme, document defaults
+ *   sd-sections.ts  : sections, numbering, annotations, reference catalogs
+ *   sd-envelope.ts  : SDNodeResult, SDFindResult, SDReadOptions
+ *   sd-contract.ts  : SDErrorCode, SDError, SDMutationReceipt, SDDiagnostic
+ *   fragment.ts     : (this file) SDFragment, SDDocument, kind constants, barrel re-exports
  */
 
 import type { SDContentNode } from './sd-nodes.js';
@@ -22,14 +22,14 @@ import type { SDNumberingCatalog, SDSection, SDReferenceCatalogs, SDAnnotations 
 import type { SDDocumentMeta } from './sd-props.js';
 
 // ---------------------------------------------------------------------------
-// SDFragment — the payload for insert/replace
+// SDFragment: the payload for insert/replace
 // ---------------------------------------------------------------------------
 
 /** Structural content payload for insert and replace operations. */
 export type SDFragment = SDContentNode | SDContentNode[];
 
 // ---------------------------------------------------------------------------
-// SDDocument — full document read shape
+// SDDocument: full document read shape
 // ---------------------------------------------------------------------------
 
 export interface SDDocument {

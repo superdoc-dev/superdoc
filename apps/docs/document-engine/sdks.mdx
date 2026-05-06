@@ -22,7 +22,7 @@ SuperDoc SDKs let you open, read, and edit `.docx` files from Node.js or Python.
   </Tab>
 </Tabs>
 
-The CLI is bundled with the SDK — no separate install needed.
+The CLI is bundled with the SDK: no separate install needed.
 
 ## Quick start
 
@@ -171,9 +171,7 @@ The Python SDK also exposes synchronous `SuperDocClient` with the same document-
 
 ## Need file-to-file diffing?
 
-For workflows where you already have `Doc1` and need to compare an uploaded `Doc2`, see [SDK Diffing](/document-engine/sdk-diffing).
-
-That guide covers the recommended `diff.capture -> diff.compare -> diff.apply` flow and how to save the result as a third `.docx` with tracked changes.
+For workflows where you already have `Doc1` and need to compare an uploaded `Doc2`, see [Compare documents](/document-engine/diffing): a Document Engine workflow that wraps `diff.capture`, `diff.compare`, and `diff.apply` into a recommended file-to-file flow.
 
 ## User identity
 
@@ -326,10 +324,10 @@ Attach arbitrary key-value pairs to the WebSocket connection URL with the `param
   </Tab>
 </Tabs>
 
-Keys and values must both be strings — query parameters serialize as strings on the URL. The field is supported for `y-websocket` and `hocuspocus`; Liveblocks manages its transport differently and does not accept this field.
+Keys and values must both be strings: query parameters serialize as strings on the URL. The field is supported for `y-websocket` and `hocuspocus`; Liveblocks manages its transport differently and does not accept this field.
 
 <Note>
-  `token` is reserved — the CLI sets it automatically from `tokenEnv`. Passing `token` inside `params` is a validation error; use `tokenEnv` for authentication.
+  `token` is reserved: the CLI sets it automatically from `tokenEnv`. Passing `token` inside `params` is a validation error; use `tokenEnv` for authentication.
 </Note>
 
 ### Connect to Liveblocks
@@ -479,9 +477,9 @@ What happens when you pass `doc`:
 
 | Parameter | Type | Default | Description |
 | --- | --- | --- | --- |
-| `collabUrl` | `string` | — | WebSocket URL. Shorthand for `y-websocket` only. |
+| `collabUrl` | `string` | none | WebSocket URL. Shorthand for `y-websocket` only. |
 | `collabDocumentId` | `string` | session ID | Room/document ID on the provider. |
-| `doc` | `string` | — | Local `.docx` used only when the room is empty. |
+| `doc` | `string` | none | Local `.docx` used only when the room is empty. |
 | `onMissing` | `string` | `seedFromDoc` | `seedFromDoc`, `blank`, or `error`. |
 | `bootstrapSettlingMs` | `number` | `1500` | Wait time (ms) before seeding to avoid race conditions. |
 
@@ -491,7 +489,7 @@ The three `onMissing` values:
 | --- | --- | --- |
 | `seedFromDoc` (default) | Seeds from `doc` if provided, otherwise seeds a blank document. | First-time opens where you provide a `.docx` template. |
 | `blank` | Always seeds a blank document. | You want an empty starting document regardless of `doc`. |
-| `error` | Throws an error instead of seeding. | Reopening existing ydocs — prevents accidental overwrites. |
+| `error` | Throws an error instead of seeding. | Reopening existing ydocs: prevents accidental overwrites. |
 
 <Warning>
   If you reopen an existing ydoc without providing a `doc` file, the default `seedFromDoc` will seed a blank document if the room appears empty during sync. This **overwrites your existing content**. Always use `onMissing: 'error'` when reopening documents that were previously created or populated.
@@ -500,7 +498,7 @@ The three `onMissing` values:
 <Tabs>
   <Tab title="Node.js">
     ```typescript
-    // Safe reopen — throws if the room is unexpectedly empty
+    // Safe reopen: throws if the room is unexpectedly empty
     const doc = await client.open({
       collabUrl: 'ws://localhost:4000',
       collabDocumentId: 'my-doc-room',
@@ -510,7 +508,7 @@ The three `onMissing` values:
   </Tab>
   <Tab title="Python">
     ```python
-    # Safe reopen — throws if the room is unexpectedly empty
+    # Safe reopen: throws if the room is unexpectedly empty
     doc = await client.open({
         "collabUrl": "ws://localhost:4000",
         "collabDocumentId": "my-doc-room",
@@ -553,7 +551,7 @@ The three `onMissing` values:
 {/* SDK_OPERATIONS_START */}
 ## Available operations
 
-The SDKs expose all operations from the [Document API](/document-api/overview) plus lifecycle and client commands. `client.open()` returns a bound document handle — all document operations run on that handle.
+The SDKs expose all operations from the [Document API](/document-api/overview) plus lifecycle and client commands. `client.open()` returns a bound document handle: all document operations run on that handle.
 
 <Tabs>
   <Tab title="Node.js">
@@ -563,7 +561,7 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | Operation | CLI command | Description |
 | --- | --- | --- |
 | `doc.get` | `get` | Read the full document as an SDDocument structure. |
-| `doc.find` | `find` | Search the document for text or node matches using SDM/1 selectors. Returns discovery-grade results — for mutation targeting, use query.match instead. |
+| `doc.find` | `find` | Search the document for text or node matches using SDM/1 selectors. Returns discovery-grade results: for mutation targeting, use query.match instead. |
 | `doc.getNode` | `get-node` | Retrieve a single node by target position. |
 | `doc.getNodeById` | `get-node-by-id` | Retrieve a single node by its unique ID. |
 | `doc.getText` | `get-text` | Extract the plain-text content of the document. |
@@ -571,7 +569,7 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.getHtml` | `get-html` | Extract the document content as an HTML string. |
 | `doc.markdownToFragment` | `markdown-to-fragment` | Convert a Markdown string into an SDM/1 structural fragment. |
 | `doc.info` | `info` | Return document summary info including word, character, paragraph, heading, table, image, comment, tracked-change, SDT-field, list, and page counts, plus outline and capabilities. |
-| `doc.extract` | `extract` | Extract all document content with stable IDs for RAG pipelines. Returns blocks with full text, comments, and tracked changes — each with an ID compatible with scrollToElement(). |
+| `doc.extract` | `extract` | Extract all document content with stable IDs for RAG pipelines. Returns blocks with full text, comments, and tracked changes: each with an ID compatible with scrollToElement(). |
 | `doc.clearContent` | `clear-content` | Clear all document body content, leaving a single empty paragraph. |
 | `doc.insert` | `insert` | Insert content into the document. Two input shapes: text-based (value + type) inserts inline content at a SelectionTarget or ref position within an existing block; structural SDFragment (content) inserts one or more blocks as siblings relative to a BlockNodeAddress target. When target/ref is omitted, content appends at the end of the document. Text mode supports text (default), markdown, and html content types via the `type` field. Structural mode uses `placement` (before/after/insideStart/insideEnd) to position relative to the target block. |
 | `doc.replace` | `replace` | Replace content at a contiguous document selection. Text path accepts a SelectionTarget or ref plus replacement text. Structural path accepts a BlockNodeAddress (replaces whole block), SelectionTarget (expands to full covered block boundaries), or ref plus SDFragment content. |
@@ -845,7 +843,7 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.lists.list` | `lists list` | List all list nodes in the document, optionally filtered by scope. |
 | `doc.lists.get` | `lists get` | Retrieve a specific list node by target. |
 | `doc.lists.insert` | `lists insert` | Insert a new list item before or after an existing list item. The new item inherits the target list context. |
-| `doc.lists.create` | `lists create` | Create a new list from one or more paragraphs. Supports optional preset or style for new sequences. When sequence.mode is "continuePrevious", preset and style are not allowed — the new items inherit formatting from the previous sequence. |
+| `doc.lists.create` | `lists create` | Create a new list from one or more paragraphs. Supports optional preset or style for new sequences. When sequence.mode is "continuePrevious", preset and style are not allowed: the new items inherit formatting from the previous sequence. |
 | `doc.lists.attach` | `lists attach` | Convert non-list paragraphs to list items under an existing list sequence. |
 | `doc.lists.detach` | `lists detach` | Remove numbering properties from list items, converting them to plain paragraphs. |
 | `doc.lists.indent` | `lists indent` | Increase the indentation level of a list item. |
@@ -853,7 +851,7 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.lists.join` | `lists join` | Merge two adjacent list sequences into one. |
 | `doc.lists.canJoin` | `lists can-join` | Check whether two adjacent list sequences can be joined. |
 | `doc.lists.separate` | `lists separate` | Split a list sequence at the target item, creating a new sequence from that point forward. |
-| `doc.lists.merge` | `lists merge` | Compound: merge two adjacent list sequences into one. Reassigns numId on the absorbed sequence (no strict abstractNumId check — absorbed items adopt the absorbing definition) and deletes empty paragraphs between the two sequences. Use this instead of lists.join for the user-facing "merge these lists" intent. |
+| `doc.lists.merge` | `lists merge` | Compound: merge two adjacent list sequences into one. Reassigns numId on the absorbed sequence (no strict abstractNumId check: absorbed items adopt the absorbing definition) and deletes empty paragraphs between the two sequences. Use this instead of lists.join for the user-facing "merge these lists" intent. |
 | `doc.lists.split` | `lists split` | Compound: split a list sequence at the target item into two independent sequences. Runs lists.separate then (by default) lists.setValue(1) so the new half starts numbering fresh at 1. Pass restartNumbering:false for raw separate semantics (new half continues the previous count). |
 | `doc.lists.setLevel` | `lists set-level` | Set the absolute nesting level (0..8) of a list item. |
 | `doc.lists.setValue` | `lists set-value` | Set an explicit numbering value at the target item. Mid-sequence targets are atomically separated first. |
@@ -876,10 +874,10 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.lists.getStyle` | `lists get-style` | Read the effective reusable style of a list, including instance-level overrides. Returns a ListStyle that can be applied to other lists via lists.applyStyle. |
 | `doc.lists.applyStyle` | `lists apply-style` | Apply a reusable list style to the target list. Sequence-local: if the abstract definition is shared with other lists, it is cloned first to avoid affecting them. |
 | `doc.lists.restartAt` | `lists restart-at` | Restart numbering at the target list item with a specific value. If the item is mid-sequence, it is separated first. |
-| `doc.lists.setLevelNumberStyle` | `lists set-level-number-style` | Set the numbering style (e.g. decimal, lowerLetter, upperRoman) for a specific list level. Rejects "bullet" — use setLevelBullet instead. Sequence-local: clones shared definitions. |
+| `doc.lists.setLevelNumberStyle` | `lists set-level-number-style` | Set the numbering style (e.g. decimal, lowerLetter, upperRoman) for a specific list level. Rejects "bullet": use setLevelBullet instead. Sequence-local: clones shared definitions. |
 | `doc.lists.setLevelText` | `lists set-level-text` | Set the level text pattern (e.g. "%1.", "(%1)") for a specific list level. Uses OOXML level-placeholder syntax. Sequence-local: clones shared definitions. |
 | `doc.lists.setLevelStart` | `lists set-level-start` | Set the start value for a specific list level. Rejects bullet levels and non-positive values. Sequence-local: clones shared definitions. |
-| `doc.lists.setLevelLayout` | `lists set-level-layout` | Set the layout properties (alignment, indentation, trailing character, tab stop) for a specific list level. Accepts partial updates — omitted fields are left unchanged. Sequence-local: clones shared definitions. |
+| `doc.lists.setLevelLayout` | `lists set-level-layout` | Set the layout properties (alignment, indentation, trailing character, tab stop) for a specific list level. Accepts partial updates: omitted fields are left unchanged. Sequence-local: clones shared definitions. |
 
 #### Tables
 
@@ -1027,7 +1025,7 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | Operation | CLI command | Description |
 | --- | --- | --- |
 | `doc.get` | `get` | Read the full document as an SDDocument structure. |
-| `doc.find` | `find` | Search the document for text or node matches using SDM/1 selectors. Returns discovery-grade results — for mutation targeting, use query.match instead. |
+| `doc.find` | `find` | Search the document for text or node matches using SDM/1 selectors. Returns discovery-grade results: for mutation targeting, use query.match instead. |
 | `doc.get_node` | `get-node` | Retrieve a single node by target position. |
 | `doc.get_node_by_id` | `get-node-by-id` | Retrieve a single node by its unique ID. |
 | `doc.get_text` | `get-text` | Extract the plain-text content of the document. |
@@ -1035,7 +1033,7 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.get_html` | `get-html` | Extract the document content as an HTML string. |
 | `doc.markdown_to_fragment` | `markdown-to-fragment` | Convert a Markdown string into an SDM/1 structural fragment. |
 | `doc.info` | `info` | Return document summary info including word, character, paragraph, heading, table, image, comment, tracked-change, SDT-field, list, and page counts, plus outline and capabilities. |
-| `doc.extract` | `extract` | Extract all document content with stable IDs for RAG pipelines. Returns blocks with full text, comments, and tracked changes — each with an ID compatible with scrollToElement(). |
+| `doc.extract` | `extract` | Extract all document content with stable IDs for RAG pipelines. Returns blocks with full text, comments, and tracked changes: each with an ID compatible with scrollToElement(). |
 | `doc.clear_content` | `clear-content` | Clear all document body content, leaving a single empty paragraph. |
 | `doc.insert` | `insert` | Insert content into the document. Two input shapes: text-based (value + type) inserts inline content at a SelectionTarget or ref position within an existing block; structural SDFragment (content) inserts one or more blocks as siblings relative to a BlockNodeAddress target. When target/ref is omitted, content appends at the end of the document. Text mode supports text (default), markdown, and html content types via the `type` field. Structural mode uses `placement` (before/after/insideStart/insideEnd) to position relative to the target block. |
 | `doc.replace` | `replace` | Replace content at a contiguous document selection. Text path accepts a SelectionTarget or ref plus replacement text. Structural path accepts a BlockNodeAddress (replaces whole block), SelectionTarget (expands to full covered block boundaries), or ref plus SDFragment content. |
@@ -1309,7 +1307,7 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.lists.list` | `lists list` | List all list nodes in the document, optionally filtered by scope. |
 | `doc.lists.get` | `lists get` | Retrieve a specific list node by target. |
 | `doc.lists.insert` | `lists insert` | Insert a new list item before or after an existing list item. The new item inherits the target list context. |
-| `doc.lists.create` | `lists create` | Create a new list from one or more paragraphs. Supports optional preset or style for new sequences. When sequence.mode is "continuePrevious", preset and style are not allowed — the new items inherit formatting from the previous sequence. |
+| `doc.lists.create` | `lists create` | Create a new list from one or more paragraphs. Supports optional preset or style for new sequences. When sequence.mode is "continuePrevious", preset and style are not allowed: the new items inherit formatting from the previous sequence. |
 | `doc.lists.attach` | `lists attach` | Convert non-list paragraphs to list items under an existing list sequence. |
 | `doc.lists.detach` | `lists detach` | Remove numbering properties from list items, converting them to plain paragraphs. |
 | `doc.lists.indent` | `lists indent` | Increase the indentation level of a list item. |
@@ -1317,7 +1315,7 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.lists.join` | `lists join` | Merge two adjacent list sequences into one. |
 | `doc.lists.can_join` | `lists can-join` | Check whether two adjacent list sequences can be joined. |
 | `doc.lists.separate` | `lists separate` | Split a list sequence at the target item, creating a new sequence from that point forward. |
-| `doc.lists.merge` | `lists merge` | Compound: merge two adjacent list sequences into one. Reassigns numId on the absorbed sequence (no strict abstractNumId check — absorbed items adopt the absorbing definition) and deletes empty paragraphs between the two sequences. Use this instead of lists.join for the user-facing "merge these lists" intent. |
+| `doc.lists.merge` | `lists merge` | Compound: merge two adjacent list sequences into one. Reassigns numId on the absorbed sequence (no strict abstractNumId check: absorbed items adopt the absorbing definition) and deletes empty paragraphs between the two sequences. Use this instead of lists.join for the user-facing "merge these lists" intent. |
 | `doc.lists.split` | `lists split` | Compound: split a list sequence at the target item into two independent sequences. Runs lists.separate then (by default) lists.setValue(1) so the new half starts numbering fresh at 1. Pass restartNumbering:false for raw separate semantics (new half continues the previous count). |
 | `doc.lists.set_level` | `lists set-level` | Set the absolute nesting level (0..8) of a list item. |
 | `doc.lists.set_value` | `lists set-value` | Set an explicit numbering value at the target item. Mid-sequence targets are atomically separated first. |
@@ -1340,10 +1338,10 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.lists.get_style` | `lists get-style` | Read the effective reusable style of a list, including instance-level overrides. Returns a ListStyle that can be applied to other lists via lists.applyStyle. |
 | `doc.lists.apply_style` | `lists apply-style` | Apply a reusable list style to the target list. Sequence-local: if the abstract definition is shared with other lists, it is cloned first to avoid affecting them. |
 | `doc.lists.restart_at` | `lists restart-at` | Restart numbering at the target list item with a specific value. If the item is mid-sequence, it is separated first. |
-| `doc.lists.set_level_number_style` | `lists set-level-number-style` | Set the numbering style (e.g. decimal, lowerLetter, upperRoman) for a specific list level. Rejects "bullet" — use setLevelBullet instead. Sequence-local: clones shared definitions. |
+| `doc.lists.set_level_number_style` | `lists set-level-number-style` | Set the numbering style (e.g. decimal, lowerLetter, upperRoman) for a specific list level. Rejects "bullet": use setLevelBullet instead. Sequence-local: clones shared definitions. |
 | `doc.lists.set_level_text` | `lists set-level-text` | Set the level text pattern (e.g. "%1.", "(%1)") for a specific list level. Uses OOXML level-placeholder syntax. Sequence-local: clones shared definitions. |
 | `doc.lists.set_level_start` | `lists set-level-start` | Set the start value for a specific list level. Rejects bullet levels and non-positive values. Sequence-local: clones shared definitions. |
-| `doc.lists.set_level_layout` | `lists set-level-layout` | Set the layout properties (alignment, indentation, trailing character, tab stop) for a specific list level. Accepts partial updates — omitted fields are left unchanged. Sequence-local: clones shared definitions. |
+| `doc.lists.set_level_layout` | `lists set-level-layout` | Set the layout properties (alignment, indentation, trailing character, tab stop) for a specific list level. Accepts partial updates: omitted fields are left unchanged. Sequence-local: clones shared definitions. |
 
 #### Tables
 
@@ -1491,8 +1489,8 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 
 The SDKs are request/response wrappers around the CLI. They do **not** expose browser event subscriptions like `editor.on('update', ...)` or `superdoc.on('editor-update', ...)`.
 
-- Call `doc.info()` at workflow boundaries — after opening, after edits, or before saving — not in a polling loop.
-- If you are building a browser live counter, use the [SuperEditor events](/core/supereditor/events) or [SuperDoc events](/core/superdoc/events) instead.
+- Call `doc.info()` at workflow boundaries (after opening, after edits, or before saving), not in a polling loop.
+- If you are building a browser live counter, use the [SuperEditor events](/advanced/supereditor/events) or [SuperDoc events](/editor/superdoc/events) instead.
 
 ```ts
 const doc = await client.open({ doc: './report.docx' });
@@ -1509,6 +1507,6 @@ await doc.close();
 
 ## Related
 
-- [Document API](/document-api/overview) — the in-browser API that defines the operation set
-- [CLI](/document-engine/cli) — use the same operations from the terminal
-- [Collaboration guides](/modules/collaboration/overview) — set up Liveblocks, Hocuspocus, or SuperDoc Yjs
+- [Document API](/document-api/overview): the in-browser API that defines the operation set
+- [CLI](/document-engine/cli): use the same operations from the terminal
+- [Collaboration guides](/editor/collaboration/overview): set up Liveblocks, Hocuspocus, or SuperDoc Yjs

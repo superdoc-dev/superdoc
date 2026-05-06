@@ -21,7 +21,7 @@ None - the component works with zero configuration.
       Document to load. Can be a URL, File object, or Blob
     </ParamField>
     <ParamField path="mode" type="'editing' | 'viewing'" default="'editing'">
-      Document interaction mode. Reactive — changing this at runtime switches modes without recreating the editor.
+      Document interaction mode. Reactive: changing this at runtime switches modes without recreating the editor.
     </ParamField>
   </Expandable>
 </ParamField>
@@ -70,9 +70,9 @@ None - the component works with zero configuration.
 
 <ParamField path="toolbar" type="boolean | string | ToolbarConfig">
   Document editing toolbar.
-  - `true` — render a default toolbar container
-  - `string` — CSS selector of an existing element to mount the toolbar into
-  - `object` — full toolbar configuration (see ToolbarConfig)
+  - `true`: render a default toolbar container
+  - `string`: CSS selector of an existing element to mount the toolbar into
+  - `object`: full toolbar configuration (see ToolbarConfig)
 </ParamField>
 
 <ParamField path="defaultLockMode" type="'unlocked' | 'sdtLocked' | 'contentLocked' | 'sdtContentLocked'">
@@ -80,7 +80,7 @@ None - the component works with zero configuration.
 </ParamField>
 
 <ParamField path="fieldColors" type="Record<string, string>">
-  Colors for field types in the document and sidebar. Keys are `fieldType` values, values are CSS colors (e.g. `{ owner: '#629be7', signer: '#d97706' }`). Generates scoped CSS automatically — no stylesheet import needed.
+  Colors for field types in the document and sidebar. Keys are `fieldType` values, values are CSS colors (e.g. `{ owner: '#629be7', signer: '#d97706' }`). Generates scoped CSS automatically: no stylesheet import needed.
 </ParamField>
 
 <ParamField path="cspNonce" type="string">

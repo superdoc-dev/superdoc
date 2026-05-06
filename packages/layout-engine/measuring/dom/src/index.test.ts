@@ -1621,6 +1621,38 @@ describe('measureBlock', () => {
       }
     });
 
+    it('uses the hanging-indent body text start as the first default tab target', async () => {
+      const block: FlowBlock = {
+        kind: 'paragraph',
+        id: 'manual-numbering-hanging-tab',
+        runs: [
+          { text: '1.', fontFamily: 'Arial', fontSize: 16 },
+          { kind: 'tab', text: '\t', tabIndex: 0, pmStart: 2, pmEnd: 3 },
+          { text: 'The quick brown fox', fontFamily: 'Arial', fontSize: 16 },
+        ],
+        attrs: {
+          indent: { left: 100, hanging: 60 },
+          alignment: 'justify',
+        },
+      };
+
+      const measure = expectParagraphMeasure(await measureBlock(block, 500));
+      expect(measure.lines).toHaveLength(1);
+
+      const firstLine = measure.lines[0];
+      const textSegment = firstLine.segments?.find((segment) => segment.runIndex === 2);
+      expect(firstLine.hasExplicitTabStops).toBeUndefined();
+      expect(textSegment?.x).toBeDefined();
+      // First line starts at left - hanging (40px), so a segment x of 60px
+      // lands the post-tab text exactly at the body indent (100px).
+      expect(Math.round((textSegment?.x ?? 0) + 40)).toBe(100);
+      expect(block.runs[1].kind).toBe('tab');
+      if (block.runs[1].kind === 'tab') {
+        expect(block.runs[1].width).toBeGreaterThan(0);
+        expect(block.runs[1].width).toBeLessThan(60);
+      }
+    });
+
     it('aligns trailing tabs to explicit right stops with dot leaders (TOC regression)', async () => {
       const rightStopTwips = 10593;
       const rightStopPx = rightStopTwips * (96 / 1440); // ~706px
@@ -1643,6 +1675,7 @@ describe('measureBlock', () => {
       const measure = expectParagraphMeasure(await measureBlock(block, 800));
       expect(measure.lines).toHaveLength(1);
       const line = measure.lines[0];
+      expect(line.hasExplicitTabStops).toBe(true);
       expect(line.leaders).toBeDefined();
       expect(line.leaders?.[0]?.style).toBe('dot');
       // Leader must end right before the page number — within ~20px of the right stop
@@ -2004,6 +2037,43 @@ describe('measureBlock', () => {
       const leader = leaders![0];
       expect(leader.from).toBeCloseTo(textWidth + indentLeft, 0);
       expect(leader.to).toBeCloseTo(300 - pageNumWidth, 0);
+    });
+
+    it('emits leaders on both lines when a paragraph contains a <w:br/> between tab groups (sd-1480)', async () => {
+      // Repro for sd-1480-two-col-tab-positions: a single paragraph with right-aligned
+      // dot-leader tab stop and a soft line break. The tabs/pPr applies per line, so
+      // BOTH lines must emit a dot leader.
+      const rightStopTwips = 4306;
+      const block: FlowBlock = {
+        kind: 'paragraph',
+        id: 'multiline-leader',
+        runs: [
+          { text: 'Page', fontFamily: 'Arial', fontSize: 13.333 },
+          { kind: 'tab', text: '\t', tabIndex: 0, pmStart: 4, pmEnd: 5 },
+          { text: '2', fontFamily: 'Arial', fontSize: 13.333 },
+          { kind: 'lineBreak' },
+          { text: 'Page', fontFamily: 'Arial', fontSize: 13.333 },
+          { kind: 'tab', text: '\t', tabIndex: 1, pmStart: 11, pmEnd: 12 },
+          { text: '5', fontFamily: 'Arial', fontSize: 13.333 },
+        ],
+        attrs: {
+          tabs: [{ pos: rightStopTwips, val: 'end', leader: 'dot' }],
+        },
+      };
+
+      const measure = expectParagraphMeasure(await measureBlock(block, 800));
+      expect(measure.lines.length).toBeGreaterThanOrEqual(2);
+
+      const line1 = measure.lines[0];
+      const line2 = measure.lines[1];
+
+      expect(line1.leaders, 'line 1 should have a dot leader').toBeDefined();
+      expect(line1.leaders).toHaveLength(1);
+      expect(line1.leaders?.[0]?.style).toBe('dot');
+
+      expect(line2.leaders, 'line 2 should have a dot leader').toBeDefined();
+      expect(line2.leaders).toHaveLength(1);
+      expect(line2.leaders?.[0]?.style).toBe('dot');
     });
 
     it('preserves trailing spaces after tabs when line breaks', async () => {

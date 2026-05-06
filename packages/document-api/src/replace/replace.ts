@@ -1,5 +1,5 @@
 /**
- * Replace operation — replaces content at a contiguous document selection.
+ * Replace operation: replaces content at a contiguous document selection.
  *
  * Two shapes:
  * - Text replacement (`text` field): routes through SelectionMutationAdapter.
@@ -34,7 +34,7 @@ import { textReceiptToSDReceipt } from '../receipt-bridge.js';
 // Text replacement input (new shape)
 // ---------------------------------------------------------------------------
 
-/** Text replacement input — uses SelectionTarget / ref. */
+/** Text replacement input: uses SelectionTarget / ref. */
 export type TextReplaceInput = TargetLocator & {
   target?: SelectionTarget;
   ref?: string;
@@ -215,12 +215,12 @@ export function executeReplace(
 ): SDMutationReceipt {
   validateReplaceInput(input);
 
-  // Structural content path — returns SDMutationReceipt directly
+  // Structural content path: returns SDMutationReceipt directly
   if (isStructuralReplaceInput(input)) {
     return writeAdapter.replaceStructured(input as unknown as ReplaceInput, normalizeMutationOptions(options));
   }
 
-  // Text replacement path — route through SelectionMutationAdapter
+  // Text replacement path: route through SelectionMutationAdapter
   const textInput = input as TextReplaceInput;
   const request = textInput.target
     ? { kind: 'replace' as const, target: textInput.target, text: textInput.text, in: textInput.in }

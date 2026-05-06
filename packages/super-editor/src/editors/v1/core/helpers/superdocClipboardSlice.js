@@ -9,6 +9,7 @@ export const SUPERDOC_SLICE_MIME = 'application/x-superdoc-slice';
 export const SUPERDOC_MEDIA_MIME = 'application/x-superdoc-media';
 export const SUPERDOC_SLICE_ATTR = 'data-superdoc-slice';
 export const SUPERDOC_BODY_SECT_PR_ATTR = 'data-sd-body-sect-pr';
+export const SUPERDOC_MEDIA_ATTR = 'data-sd-superdoc-media';
 
 /**
  * Walk a ProseMirror Slice JSON object and collect `editor.storage.image.media`
@@ -129,10 +130,11 @@ function rewriteImageSrcsInSliceJsonTree(node, pathRemap) {
  * @param {object} editor
  * @param {DataTransfer | null | undefined} clipboardData
  * @param {string | null} [sliceJson] SuperDoc slice JSON string, if any
+ * @param {string} [mediaJson] media JSON from HTML, if custom clipboard MIME is unavailable
  * @returns {string | null} slice JSON to paste (updated when paths were remapped), or `sliceJson` unchanged
  */
-export function applySuperdocClipboardMedia(editor, clipboardData, sliceJson = null) {
-  const raw = clipboardData?.getData?.(SUPERDOC_MEDIA_MIME);
+export function applySuperdocClipboardMedia(editor, clipboardData, sliceJson = null, mediaJson = '') {
+  const raw = clipboardData?.getData?.(SUPERDOC_MEDIA_MIME) || mediaJson;
   if (!editor?.storage?.image || !raw || typeof raw !== 'string') {
     return sliceJson;
   }
@@ -248,12 +250,16 @@ export function bodySectPrShouldEmbed(bodySectPr) {
   return !!(cols?.count && cols.count > 1);
 }
 
-/** Embeds PM slice (base64 in element text) and optional body sectPr for multi-column paste. */
-export function embedSliceInHtml(html, sliceJson, bodySectPrJson = '') {
+/** Embeds PM slice, media, and optional body sectPr as hidden base64 payloads. */
+export function embedSliceInHtml(html, sliceJson, bodySectPrJson = '', mediaJson = '') {
   let out = html;
   if (bodySectPrJson) {
     const body64 = encodeUtf8Base64(bodySectPrJson);
     out = `<div ${SUPERDOC_BODY_SECT_PR_ATTR} style="display:none">${body64}</div>${out}`;
+  }
+  if (mediaJson) {
+    const media64 = encodeUtf8Base64(mediaJson);
+    out = `<div ${SUPERDOC_MEDIA_ATTR} style="display:none">${media64}</div>${out}`;
   }
   if (!sliceJson) return out;
   const base64 = encodeUtf8Base64(sliceJson);
@@ -294,7 +300,27 @@ export function stripSliceFromHtml(html) {
   if (out.includes(SUPERDOC_BODY_SECT_PR_ATTR)) {
     out = out.replace(/<div[^>]*data-sd-body-sect-pr[^>]*>[\s\S]*?<\/div>/gi, '');
   }
+  if (out.includes(SUPERDOC_MEDIA_ATTR)) {
+    out = out.replace(/<div[^>]*data-sd-superdoc-media[^>]*>[\s\S]*?<\/div>/gi, '');
+  }
   return out;
+}
+
+export function extractMediaFromHtml(html) {
+  if (!html || !html.includes(SUPERDOC_MEDIA_ATTR)) return null;
+  if (typeof DOMParser === 'undefined') return null;
+
+  try {
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    const el = doc.querySelector(`[${SUPERDOC_MEDIA_ATTR}]`);
+    if (!el) return null;
+    const b64 = el.textContent?.trim() ?? '';
+    if (!b64) return null;
+    const decoded = decodeUtf8Base64(b64);
+    return decoded || null;
+  } catch {
+    return null;
+  }
 }
 
 export function extractBodySectPrFromHtml(html) {

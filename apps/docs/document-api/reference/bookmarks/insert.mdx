@@ -29,6 +29,7 @@ Returns a BookmarkMutationResult indicating success with the bookmark address or
 | `at` | TextTarget | yes | TextTarget |
 | `at.kind` | `"text"` | yes | Constant: `"text"` |
 | `at.segments` | TextSegment[] | yes |  |
+| `at.story` | StoryLocator | no | StoryLocator |
 | `name` | string | yes |  |
 | `tableColumn` | object | no |  |
 | `tableColumn.colFirst` | integer | no |  |
@@ -48,7 +49,11 @@ Returns a BookmarkMutationResult indicating success with the bookmark address or
           "start": 0
         }
       }
-    ]
+    ],
+    "story": {
+      "kind": "story",
+      "storyType": "body"
+    }
   },
   "name": "example",
   "tableColumn": {
@@ -68,6 +73,7 @@ Returns a BookmarkMutationResult indicating success with the bookmark address or
 | `bookmark.entityType` | `"bookmark"` | yes | Constant: `"bookmark"` |
 | `bookmark.kind` | `"entity"` | yes | Constant: `"entity"` |
 | `bookmark.name` | string | yes |  |
+| `bookmark.story` | StoryLocator | no | StoryLocator |
 | `success` | `true` | yes | Constant: `true` |
 
 ### Variant 2 (success=false)
@@ -87,7 +93,11 @@ Returns a BookmarkMutationResult indicating success with the bookmark address or
   "bookmark": {
     "entityType": "bookmark",
     "kind": "entity",
-    "name": "example"
+    "name": "example",
+    "story": {
+      "kind": "story",
+      "storyType": "body"
+    }
   },
   "success": true
 }
@@ -161,6 +171,9 @@ Returns a BookmarkMutationResult indicating success with the bookmark address or
             },
             "name": {
               "type": "string"
+            },
+            "story": {
+              "$ref": "#/$defs/StoryLocator"
             }
           },
           "required": [
@@ -231,6 +244,9 @@ Returns a BookmarkMutationResult indicating success with the bookmark address or
         },
         "name": {
           "type": "string"
+        },
+        "story": {
+          "$ref": "#/$defs/StoryLocator"
         }
       },
       "required": [

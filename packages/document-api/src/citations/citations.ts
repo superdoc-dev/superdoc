@@ -106,7 +106,7 @@ function validateBibliographyTarget(target: unknown, operationName: string): ass
 }
 
 // ---------------------------------------------------------------------------
-// Execute wrappers — Citations (inline references)
+// Execute wrappers: Citations (inline references)
 // ---------------------------------------------------------------------------
 
 export function executeCitationsList(adapter: CitationsAdapter, query?: CitationListInput): CitationsListResult {
@@ -148,7 +148,7 @@ export function executeCitationsRemove(
 }
 
 // ---------------------------------------------------------------------------
-// Execute wrappers — Citation Sources
+// Execute wrappers: Citation Sources
 // ---------------------------------------------------------------------------
 
 export function executeCitationSourcesList(
@@ -196,7 +196,7 @@ export function executeCitationSourcesRemove(
 }
 
 // ---------------------------------------------------------------------------
-// Execute wrappers — Bibliography
+// Execute wrappers: Bibliography
 // ---------------------------------------------------------------------------
 
 export function executeBibliographyGet(adapter: CitationsAdapter, input: BibliographyGetInput): BibliographyInfo {

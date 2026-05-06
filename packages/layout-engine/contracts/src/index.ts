@@ -1574,6 +1574,8 @@ export type Line = {
   naturalWidth?: number;
   /** Number of spaces in the line (pre-computed for efficiency in justify calculations). */
   spaceCount?: number;
+  /** True when this line used author-defined OOXML tab stops, not synthesized default stops. */
+  hasExplicitTabStops?: boolean;
   segments?: LineSegment[];
   leaders?: LeaderDecoration[];
   bars?: BarDecoration[];
@@ -2064,5 +2066,9 @@ export type {
   ResolvedHeaderFooterLayout,
 } from './resolved-layout.js';
 export { isResolvedTableItem, isResolvedImageItem, isResolvedDrawingItem } from './resolved-layout.js';
+
+// Pure transformations on inline-run shapes (used by pm-adapter, layout-bridge,
+// and painter-dom). Located in contracts to avoid reverse stage dependencies.
+export { expandRunsForInlineNewlines, sliceRunsForLine } from './run-helpers.js';
 
 export * as Engines from './engines/index.js';

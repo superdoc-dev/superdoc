@@ -87,7 +87,7 @@ describe('ui.document', () => {
     const { superdoc } = makeStubs('suggesting');
     const ui = createSuperDocUI({ superdoc });
 
-    expect(ui.document.getSnapshot()).toEqual({ ready: true, mode: 'suggesting' });
+    expect(ui.document.getSnapshot()).toEqual({ ready: true, mode: 'suggesting', dirty: false });
 
     ui.destroy();
   });
@@ -100,7 +100,7 @@ describe('ui.document', () => {
     ui.document.subscribe(listener);
 
     expect(listener).toHaveBeenCalledTimes(1);
-    expect(listener.mock.calls[0][0]).toEqual({ snapshot: { ready: true, mode: 'editing' } });
+    expect(listener.mock.calls[0][0]).toEqual({ snapshot: { ready: true, mode: 'editing', dirty: false } });
 
     ui.destroy();
   });
@@ -122,7 +122,7 @@ describe('ui.document', () => {
     await Promise.resolve();
 
     expect(listener).toHaveBeenCalledTimes(2);
-    expect(listener.mock.calls[1][0].snapshot).toEqual({ ready: true, mode: 'viewing' });
+    expect(listener.mock.calls[1][0].snapshot).toEqual({ ready: true, mode: 'viewing', dirty: false });
 
     ui.destroy();
   });
@@ -148,6 +148,148 @@ describe('ui.document', () => {
 
     expect(listener).toHaveBeenCalledTimes(1);
 
+    ui.destroy();
+  });
+
+  it('dirty starts false on a freshly-mounted editor', () => {
+    const { superdoc } = makeStubs('editing');
+    const ui = createSuperDocUI({ superdoc });
+    expect(ui.document.getSnapshot().dirty).toBe(false);
+    ui.destroy();
+  });
+
+  it('dirty flips to true on a transaction with docChanged', async () => {
+    const { superdoc } = makeStubs('editing');
+    const ui = createSuperDocUI({ superdoc });
+
+    expect(ui.document.getSnapshot().dirty).toBe(false);
+
+    superdoc.fireEditor('transaction', {
+      editor: superdoc.activeEditor,
+      transaction: { docChanged: true },
+      duration: 1,
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(ui.document.getSnapshot().dirty).toBe(true);
+    ui.destroy();
+  });
+
+  it('dirty stays false on selection-only transactions (docChanged: false)', async () => {
+    const { superdoc } = makeStubs('editing');
+    const ui = createSuperDocUI({ superdoc });
+
+    superdoc.fireEditor('transaction', {
+      editor: superdoc.activeEditor,
+      transaction: { docChanged: false },
+      duration: 1,
+    });
+    await Promise.resolve();
+
+    expect(ui.document.getSnapshot().dirty).toBe(false);
+    ui.destroy();
+  });
+
+  it('dirty re-fires subscribers when it flips', async () => {
+    const { superdoc } = makeStubs('editing');
+    const ui = createSuperDocUI({ superdoc });
+
+    const listener = vi.fn();
+    ui.document.subscribe(listener);
+    expect(listener).toHaveBeenCalledTimes(1); // initial
+
+    superdoc.fireEditor('transaction', {
+      editor: superdoc.activeEditor,
+      transaction: { docChanged: true },
+      duration: 1,
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(listener).toHaveBeenCalledTimes(2);
+    expect(listener.mock.calls[1][0].snapshot.dirty).toBe(true);
+
+    ui.destroy();
+  });
+
+  it('successful export() clears dirty', async () => {
+    const { superdoc } = makeStubs('editing');
+    const ui = createSuperDocUI({ superdoc });
+
+    superdoc.fireEditor('transaction', {
+      editor: superdoc.activeEditor,
+      transaction: { docChanged: true },
+      duration: 1,
+    });
+    await Promise.resolve();
+    expect(ui.document.getSnapshot().dirty).toBe(true);
+
+    await ui.document.export({ exportType: ['docx'] });
+    await Promise.resolve();
+
+    expect(ui.document.getSnapshot().dirty).toBe(false);
+    ui.destroy();
+  });
+
+  it('rejected export() leaves dirty alone so the consumer can retry', async () => {
+    const { superdoc } = makeStubs('editing');
+    superdoc.export = vi.fn(async () => {
+      throw new Error('host explosion');
+    }) as ReturnType<typeof vi.fn>;
+    const ui = createSuperDocUI({ superdoc });
+
+    superdoc.fireEditor('transaction', {
+      editor: superdoc.activeEditor,
+      transaction: { docChanged: true },
+      duration: 1,
+    });
+    await Promise.resolve();
+    expect(ui.document.getSnapshot().dirty).toBe(true);
+
+    await expect(ui.document.export({ exportType: ['docx'] })).rejects.toThrow('host explosion');
+    expect(ui.document.getSnapshot().dirty).toBe(true);
+
+    ui.destroy();
+  });
+
+  it('replaceFile() clears dirty', async () => {
+    const { superdoc, editor } = makeStubs('editing');
+    (editor as unknown as { replaceFile: ReturnType<typeof vi.fn> }).replaceFile = vi.fn(async () => undefined);
+    const ui = createSuperDocUI({ superdoc });
+
+    superdoc.fireEditor('transaction', {
+      editor: superdoc.activeEditor,
+      transaction: { docChanged: true },
+      duration: 1,
+    });
+    await Promise.resolve();
+    expect(ui.document.getSnapshot().dirty).toBe(true);
+
+    await ui.document.replaceFile(new File([''], 'next.docx'));
+    await Promise.resolve();
+
+    expect(ui.document.getSnapshot().dirty).toBe(false);
+    ui.destroy();
+  });
+
+  it('editorCreate resets dirty (new document mounted by the host)', async () => {
+    const { superdoc } = makeStubs('editing');
+    const ui = createSuperDocUI({ superdoc });
+
+    superdoc.fireEditor('transaction', {
+      editor: superdoc.activeEditor,
+      transaction: { docChanged: true },
+      duration: 1,
+    });
+    await Promise.resolve();
+    expect(ui.document.getSnapshot().dirty).toBe(true);
+
+    superdoc.fireSuperdoc('editorCreate');
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(ui.document.getSnapshot().dirty).toBe(false);
     ui.destroy();
   });
 
@@ -246,6 +388,58 @@ describe('ui.document', () => {
 
     expect(before).not.toBe(after);
     expect(after.mode).toBe('viewing');
+
+    ui.destroy();
+  });
+
+  it('replaceFile forwards to activeEditor.replaceFile and re-emits commentsLoaded', async () => {
+    const { superdoc, editor } = makeStubs();
+    const replaceFile = vi.fn(async (_file: File) => undefined);
+    const emit = vi.fn();
+    (editor as unknown as { replaceFile: typeof replaceFile }).replaceFile = replaceFile;
+    (editor as unknown as { emit: typeof emit }).emit = emit;
+    (editor as unknown as { converter: { comments: unknown[] } }).converter = {
+      comments: [{ id: 'c1', text: 'imported' }],
+    };
+
+    const ui = createSuperDocUI({ superdoc });
+    const file = new File(['stub'], 'sample.docx');
+
+    await ui.document.replaceFile(file);
+
+    expect(replaceFile).toHaveBeenCalledWith(file);
+    expect(emit).toHaveBeenCalledWith('commentsLoaded', {
+      editor,
+      comments: [{ id: 'c1', text: 'imported' }],
+    });
+
+    ui.destroy();
+  });
+
+  it('replaceFile rejects when activeEditor has no replaceFile', async () => {
+    const { superdoc } = makeStubs();
+    const ui = createSuperDocUI({ superdoc });
+    const file = new File(['stub'], 'sample.docx');
+
+    await expect(ui.document.replaceFile(file)).rejects.toThrow(/no active editor with replaceFile/);
+
+    ui.destroy();
+  });
+
+  it('replaceFile propagates engine rejection without re-emitting commentsLoaded', async () => {
+    const { superdoc, editor } = makeStubs();
+    const replaceFile = vi.fn(async (_file: File) => {
+      throw new Error('parse failed');
+    });
+    const emit = vi.fn();
+    (editor as unknown as { replaceFile: typeof replaceFile }).replaceFile = replaceFile;
+    (editor as unknown as { emit: typeof emit }).emit = emit;
+
+    const ui = createSuperDocUI({ superdoc });
+    const file = new File(['stub'], 'broken.docx');
+
+    await expect(ui.document.replaceFile(file)).rejects.toThrow(/parse failed/);
+    expect(emit).not.toHaveBeenCalled();
 
     ui.destroy();
   });

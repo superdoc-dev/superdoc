@@ -1,5 +1,5 @@
 /**
- * Diff namespace — engine-agnostic public API and adapter contract.
+ * Diff namespace: engine-agnostic public API and adapter contract.
  *
  * Validates wrapper-level shape, then delegates to the engine adapter.
  * Deep payload validation lives in the engine adapter / shared diff service.
@@ -23,7 +23,7 @@ const SNAPSHOT_VERSIONS = new Set(['sd-diff-snapshot/v1', 'sd-diff-snapshot/v2']
 const PAYLOAD_VERSIONS = new Set(['sd-diff-payload/v1', 'sd-diff-payload/v2']);
 
 // ---------------------------------------------------------------------------
-// Adapter interface — implemented by each engine
+// Adapter interface: implemented by each engine
 // ---------------------------------------------------------------------------
 
 export interface DiffAdapter {
@@ -105,7 +105,7 @@ function validateDiffPayloadWrapper(diff: unknown): asserts diff is DiffPayload 
 }
 
 // ---------------------------------------------------------------------------
-// Execute functions — bridge public API to adapter
+// Execute functions: bridge public API to adapter
 // ---------------------------------------------------------------------------
 
 export function executeDiffCapture(adapter: DiffAdapter): DiffSnapshot {

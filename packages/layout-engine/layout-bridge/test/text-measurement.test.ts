@@ -625,13 +625,14 @@ describe('text measurement utility', () => {
       expect(xWithSlack).toBeGreaterThan(xWithNaturalWidth);
     });
 
-    it('skips justify spacing for manual tabs without explicit segments', () => {
+    it('applies justify spacing for manual default tabs without explicit segments', () => {
       const trailingText = 'Item body';
       const tabWidth = 48;
       const block = createBlock([
         { text: '1 ', fontFamily: 'Arial', fontSize: 16 },
         { kind: 'tab', text: '\t', width: tabWidth },
         { text: trailingText, fontFamily: 'Arial', fontSize: 16 },
+        { text: ' next line', fontFamily: 'Arial', fontSize: 16 },
       ]);
       (block as any).attrs = { alignment: 'justify' };
       const line = baseLine({
@@ -642,13 +643,10 @@ describe('text measurement utility', () => {
         maxWidth: 300,
       });
 
-      const targetCharOffset = 7;
+      const targetCharOffset = 10;
       const baseX = measureCharacterX(block, line, targetCharOffset, line.width);
       const wideX = measureCharacterX(block, line, targetCharOffset, 300);
-      expect(wideX).toBe(baseX);
-
-      const hitResult = findCharacterAtX(block, line, baseX, 0, 300);
-      expect(hitResult.charOffset).toBe(targetCharOffset);
+      expect(wideX).toBeGreaterThan(baseX);
     });
 
     it('still applies justify to lines without any tab runs', () => {

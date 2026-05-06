@@ -51,6 +51,12 @@ const config = {
     [
       '@semantic-release/exec',
       {
+        // MCP's published tarball declares `dist/` in `files` and a
+        // `dist/index.js` bin. Root `pnpm run build` only runs
+        // build:superdoc + type-check and does not produce apps/mcp/dist.
+        // Build MCP here so semantic-release ships a working tarball
+        // regardless of which workflow drives the release.
+        prepareCmd: 'pnpm run build',
         publishCmd: 'pnpm publish --no-git-checks --access public --tag ${nextRelease.channel || "latest"}',
       },
     ],

@@ -7,7 +7,6 @@ on:
   pull_request:
     paths:
       - 'packages/react/**'
-  merge_group:
   workflow_dispatch:
 
 concurrency:

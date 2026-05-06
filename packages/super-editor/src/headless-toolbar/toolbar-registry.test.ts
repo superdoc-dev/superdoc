@@ -706,6 +706,26 @@ describe('createToolbarRegistry', () => {
     });
   });
 
+  it('activates formatting marks state when formatting marks are enabled in superdoc config', () => {
+    const registry = createToolbarRegistry();
+    const state = registry['formatting-marks']?.state({
+      context: null,
+      superdoc: {
+        config: {
+          layoutEngineOptions: {
+            showFormattingMarks: true,
+          },
+        },
+        toggleFormattingMarks: vi.fn(),
+      },
+    });
+
+    expect(state).toEqual({
+      active: true,
+      disabled: false,
+    });
+  });
+
   it('derives zoom value from superdoc', () => {
     const registry = createToolbarRegistry();
     const state = registry.zoom?.state({

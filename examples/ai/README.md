@@ -2,7 +2,7 @@
 
 Give LLMs structured access to document operations. Each example connects SuperDoc's Document Engine to a cloud AI platform or agent framework — open a doc, let the model review and edit it with tools, save the result.
 
-**Docs:** [Integrations](https://docs.superdoc.dev/document-engine/ai-agents/integrations) · [LLM Tools](https://docs.superdoc.dev/document-engine/ai-agents/llm-tools)
+**Docs:** [Integrations](https://docs.superdoc.dev/ai/agents/integrations) · [LLM Tools](https://docs.superdoc.dev/ai/agents/llm-tools)
 
 ## Cloud platforms
 

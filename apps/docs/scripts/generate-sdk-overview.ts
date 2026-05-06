@@ -9,7 +9,7 @@
  *   - Remaps contract `doc.*` operationIds to SDK-accurate paths using the
  *     `sdkSurface` field: client-surface ops render as `client.*`, document-
  *     surface ops render as `doc.*`.
- *   - Splits the flat `session` category into two rendered sections —
+ *   - Splits the flat `session` category into two rendered sections -
  *     Lifecycle (open, save, close) and Client (describe, describeCommand).
  *
  * Requires: `apps/cli/generated/sdk-contract.json` to exist on disk.
@@ -49,7 +49,7 @@ function replaceMarkerBlock(content: string, replacement: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// Contract types (minimal — only what we need for rendering)
+// Contract types (minimal: only what we need for rendering)
 // ---------------------------------------------------------------------------
 
 interface ContractOperation {
@@ -79,8 +79,8 @@ interface SdkContract {
 //
 // Session-category operations are split into two rendered sections:
 //
-//   lifecycle — session management: open, save, close
-//   client    — introspection:      describe, describeCommand
+//   lifecycle - session management: open, save, close
+//   client    - introspection:      describe, describeCommand
 // ---------------------------------------------------------------------------
 
 const SURFACE_HANDLE_PREFIX: Record<string, string> = {
@@ -277,7 +277,7 @@ function renderMarkerBlock(operations: RenderableOperation[]): string {
   return `${MARKER_START}
 ## Available operations
 
-The SDKs expose all operations from the [Document API](/document-api/overview) plus lifecycle and client commands. \`client.open()\` returns a bound document handle — all document operations run on that handle.
+The SDKs expose all operations from the [Document API](/document-api/overview) plus lifecycle and client commands. \`client.open()\` returns a bound document handle: all document operations run on that handle.
 
 <Tabs>
 ${tabs}

@@ -59,6 +59,10 @@ vi.mock('./sections/index.js', () => {
       id: nextBlockId('sectionBreak'),
       type: section.type,
     })),
+    maybeEmitNextSectionBreakForNode: vi.fn(() => {
+      // Mocked as no-op: this test file already provides zero section ranges
+      // via analyzeSectionRanges, so there is never a break to emit.
+    }),
     publishSectionMetadata: vi.fn(),
   };
 });

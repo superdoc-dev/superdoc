@@ -7,9 +7,9 @@
  *   - `createSuperDocUI({ superdoc })` — browser-only state controller
  *
  * Domain namespaces (`ui.toolbar`, `ui.commands`, `ui.comments`,
- * `ui.review`, `ui.viewport`, `ui.selection`) are filed as sibling
- * tickets under SD-2667 and layer on top of the `ui.select` substrate
- * exported here.
+ * `ui.trackChanges`, `ui.viewport`, `ui.selection`) are filed as
+ * sibling tickets under SD-2667 and layer on top of the `ui.select`
+ * substrate exported here.
  *
  * Source lives in `packages/super-editor/src/ui/`; the public sub-entry
  * is `superdoc/ui` (re-exported from `packages/superdoc/src/ui.js`),
@@ -18,15 +18,17 @@
 
 export { createSuperDocUI } from './create-super-doc-ui.js';
 export { shallowEqual } from './equality.js';
+export { BUILT_IN_COMMAND_IDS } from '../headless-toolbar/types.js';
+export type { PublicToolbarItemId } from '../headless-toolbar/types.js';
 
 // Re-export the document-side shapes the controller surfaces so
 // consumers can type their components without reaching into the
 // `@superdoc/document-api` package directly. The set tracks what
 // `ui.*` actually returns / accepts: address shapes for the selection
 // slice and entity targets, list-result shapes for the comments and
-// review snapshots, and the receipt union for action methods. Add a
-// new export here when a controller method's return type or argument
-// type pulls in another doc-api shape.
+// track-changes snapshots, and the receipt union for action methods.
+// Add a new export here when a controller method's return type or
+// argument type pulls in another doc-api shape.
 export type {
   // Address / target shapes for selection + viewport + entity ops.
   // `state.selection.target` returns TextTarget; .selectionTarget
@@ -55,19 +57,20 @@ export type {
   CommentsListQuery,
   CommentsListResult,
 
-  // Review slice items. `TrackChangeInfo` is the per-item shape on
-  // `state.review.items` for tracked-change entries; the result
-  // wrapper carries pagination + total.
+  // Track-changes slice items. `TrackChangeInfo` is the per-item shape
+  // exposed on `state.trackChanges.items[].change`; the result wrapper
+  // carries pagination + total.
   TrackChangeInfo,
   TrackChangesListResult,
 
   // Receipt union returned by every doc-api mutation routed through
-  // ui.comments / ui.review action methods (createFromSelection,
+  // ui.comments / ui.trackChanges action methods (createFromSelection,
   // resolve, reopen, delete, accept, reject, acceptAll, rejectAll).
   Receipt,
 
   // Viewport scroll API shapes. ui.viewport.scrollIntoView /
-  // ui.comments.scrollTo / ui.review.scrollTo return / accept these.
+  // ui.comments.scrollTo / ui.trackChanges.scrollTo return / accept
+  // these.
   ScrollIntoViewInput,
   ScrollIntoViewOutput,
 } from '@superdoc/document-api';
@@ -85,16 +88,22 @@ export type {
   // Controller
   SuperDocUI,
   SuperDocUIOptions,
+  SuperDocUIScope,
   SuperDocUIState,
 
   // Selection
+  SelectionAnchorRectOptions,
   SelectionCapture,
   SelectionHandle,
+  SelectionRestoreResult,
   SelectionSlice,
 
   // Toolbar + commands
   CommandHandle,
   CommandsHandle,
+  ContextMenuContribution,
+  ContextMenuItem,
+  ContextMenuWhenInput,
   CustomCommandHandle,
   CustomCommandHandleState,
   CustomCommandRegistration,
@@ -109,14 +118,20 @@ export type {
   CommentsHandle,
   CommentsSlice,
 
-  // Review
-  ReviewHandle,
-  ReviewItem,
-  ReviewSlice,
+  // Track changes
+  TrackChangesHandle,
+  TrackChangesItem,
+  TrackChangesSlice,
 
   // Viewport
+  ViewportContext,
+  ViewportContextAtInput,
+  ViewportEntityAtInput,
+  ViewportEntityHit,
   ViewportGetRectInput,
   ViewportHandle,
+  ViewportPositionAtInput,
+  ViewportPositionHit,
   ViewportRect,
   ViewportRectResult,
 

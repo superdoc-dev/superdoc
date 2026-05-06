@@ -3,6 +3,7 @@ import { getFileOpener, processAndInsertImageFile } from '../editors/v1/extensio
 
 export { createHeadlessToolbar } from './create-headless-toolbar.js';
 export { headlessToolbarConstants } from './constants.js';
+export { BUILT_IN_COMMAND_IDS } from './types.js';
 
 export const headlessToolbarHelpers = {
   // linked-style helpers

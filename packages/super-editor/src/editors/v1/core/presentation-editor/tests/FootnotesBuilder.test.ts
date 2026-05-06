@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import type { EditorState } from 'prosemirror-state';
 import { buildFootnotesInput, type ConverterLike } from '../layout/FootnotesBuilder.js';
-import type { ConverterContext } from '@superdoc/pm-adapter';
+import type { ConverterContext } from '@superdoc/pm-adapter/converter-context.js';
 import { SUBSCRIPT_SUPERSCRIPT_SCALE } from '@superdoc/pm-adapter/constants.js';
 import { toFlowBlocks } from '@superdoc/pm-adapter';
 

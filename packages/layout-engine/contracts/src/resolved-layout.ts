@@ -1,4 +1,6 @@
 import type {
+  ColumnLayout,
+  ColumnRegion,
   DrawingBlock,
   FlowMode,
   Fragment,
@@ -66,6 +68,10 @@ export type ResolvedPage = {
   };
   /** Page orientation. */
   orientation?: 'portrait' | 'landscape';
+  /** Column layout configuration for this page (reflects page-start config). */
+  columns?: ColumnLayout;
+  /** Vertical column regions when continuous section breaks change column layout mid-page. */
+  columnRegions?: ColumnRegion[];
 };
 
 /** Union of all resolved paint item kinds. */
@@ -89,8 +95,9 @@ export type ResolvedGroupItem = {
 
 /**
  * A resolved fragment wrapper item.
- * Carries positioning and metadata needed to create the fragment's DOM wrapper,
- * while inner content rendering is delegated to legacy fragment renderers via fragmentIndex.
+ * Carries positioning and metadata needed to create the fragment's DOM wrapper.
+ * Inner content rendering is delegated to the Fragment-based render path via
+ * fragmentIndex; see the compat-fallback note on that field.
  */
 export type ResolvedFragmentItem = {
   kind: 'fragment';
@@ -110,9 +117,20 @@ export type ResolvedFragmentItem = {
   zIndex?: number;
   /** Source fragment kind — used by the painter for wrapper style decisions. */
   fragmentKind: Fragment['kind'];
-  /** Block ID — written to data-block-id and used for legacy content lookup. */
+  /** Source fragment back-pointer. Lets the painter iterate resolved items
+   *  and pass the underlying fragment to render helpers without indexing
+   *  back into the legacy `page.fragments` array. */
+  fragment: Fragment;
+  /** Block ID. Written to data-block-id. */
   blockId: string;
-  /** Index within page.fragments — bridge to legacy content rendering. */
+  /**
+   * Index back into page.fragments.
+   *
+   * AIDEV-NOTE: compat-fallback. The painter currently reads inner content from
+   * Fragment via this index because ResolvedFragmentItem does not carry full
+   * content yet. Becomes unused once paint items are self-describing; do not
+   * promote this to a permanent API surface.
+   */
   fragmentIndex: number;
   /** ProseMirror start position for click-to-position mapping. */
   pmStart?: number;
@@ -240,8 +258,17 @@ export type ResolvedTableItem = {
   zIndex?: number;
   /** Block ID — written to data-block-id. */
   blockId: string;
-  /** Index within page.fragments — bridge to legacy rendering. */
+  /**
+   * Index back into page.fragments.
+   *
+   * AIDEV-NOTE: compat-fallback. The painter currently reads inner content from
+   * Fragment via this index because ResolvedFragmentItem does not carry full
+   * content yet. Becomes unused once paint items are self-describing; do not
+   * promote this to a permanent API surface.
+   */
   fragmentIndex: number;
+  /** Source TableFragment back-pointer (see ResolvedFragmentItem.fragment). */
+  fragment: Fragment;
   /** ProseMirror start position for click-to-position mapping. */
   pmStart?: number;
   /** ProseMirror end position for click-to-position mapping. */
@@ -294,8 +321,17 @@ export type ResolvedImageItem = {
   zIndex?: number;
   /** Block ID — written to data-block-id. */
   blockId: string;
-  /** Index within page.fragments — bridge to legacy rendering. */
+  /**
+   * Index back into page.fragments.
+   *
+   * AIDEV-NOTE: compat-fallback. The painter currently reads inner content from
+   * Fragment via this index because ResolvedFragmentItem does not carry full
+   * content yet. Becomes unused once paint items are self-describing; do not
+   * promote this to a permanent API surface.
+   */
   fragmentIndex: number;
+  /** Source ImageFragment back-pointer (see ResolvedFragmentItem.fragment). */
+  fragment: Fragment;
   /** ProseMirror start position for click-to-position mapping. */
   pmStart?: number;
   /** ProseMirror end position for click-to-position mapping. */
@@ -340,8 +376,17 @@ export type ResolvedDrawingItem = {
   zIndex?: number;
   /** Block ID — written to data-block-id. */
   blockId: string;
-  /** Index within page.fragments — bridge to legacy rendering. */
+  /**
+   * Index back into page.fragments.
+   *
+   * AIDEV-NOTE: compat-fallback. The painter currently reads inner content from
+   * Fragment via this index because ResolvedFragmentItem does not carry full
+   * content yet. Becomes unused once paint items are self-describing; do not
+   * promote this to a permanent API surface.
+   */
   fragmentIndex: number;
+  /** Source DrawingFragment back-pointer (see ResolvedFragmentItem.fragment). */
+  fragment: Fragment;
   /** ProseMirror start position for click-to-position mapping. */
   pmStart?: number;
   /** ProseMirror end position for click-to-position mapping. */

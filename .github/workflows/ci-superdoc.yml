@@ -6,19 +6,6 @@ permissions:
 on:
   pull_request:
     branches: [main, stable, 'release/**']
-    paths-ignore:
-      - 'apps/docs/**'
-      - 'apps/mcp/**'
-      - 'apps/vscode-ext/**'
-      - 'demos/**'
-      - 'examples/**'
-      - 'packages/react/**'
-      - 'packages/sdk/**'
-      - 'packages/template-builder/**'
-      - 'packages/esign/**'
-      - 'packages/ai/**'
-      - 'evals/**'
-      - '**/*.md'
   merge_group:
   workflow_dispatch:
 
@@ -27,7 +14,60 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  detect:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      superdoc: ${{ steps.set.outputs.superdoc }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
+        id: filter
+        if: github.event_name == 'pull_request'
+        with:
+          filters: |
+            superdoc:
+              - 'apps/cli/**'
+              - 'packages/superdoc/**'
+              - 'packages/super-editor/**'
+              - 'packages/layout-engine/**'
+              - 'packages/word-layout/**'
+              - 'packages/preset-geometry/**'
+              - 'packages/document-api/**'
+              - 'packages/collaboration-yjs/**'
+              - 'packages/docx-evidence-contracts/**'
+              - 'shared/**'
+              - 'tests/**'
+              - 'scripts/**'
+              - 'package.json'
+              - 'pnpm-lock.yaml'
+              - 'pnpm-workspace.yaml'
+              - 'patches/**'
+              - '.nvmrc'
+              - '.prettierrc'
+              - '.prettierignore'
+              - 'tsconfig.base.json'
+              - 'tsconfig.references.json'
+              - 'vite.sourceResolve.ts'
+              - 'vitest.baseConfig.ts'
+              - 'vitest.config.mjs'
+              - 'eslint.config.mjs'
+              - '.github/workflows/ci-superdoc.yml'
+
+      - id: set
+        run: |
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            echo "superdoc=${{ steps.filter.outputs.superdoc }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "superdoc=true" >> "$GITHUB_OUTPUT"
+          fi
+
   build:
+    needs: detect
+    if: needs.detect.outputs.superdoc == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -73,12 +113,24 @@ jobs:
       - name: Typecheck
         run: pnpm run type-check
 
-      - name: Consumer typecheck
+      - name: Public-contract checkJs (SD-2863)
+        # Gated subset of public-contract files run with `// @ts-check`. The
+        # script greps tsc output for errors in the curated file list and
+        # ignores the wider 1500+ errors from the broader super-editor source
+        # tree (those are tracked under SD-2863 follow-up tickets).
+        run: pnpm --filter superdoc run check:jsdoc
+
+      - name: Consumer typecheck (matrix)
+        # The matrix script owns the published-package validation path:
+        # it packs superdoc, installs the tarball into the standalone
+        # fixture (`pnpm install --ignore-workspace`), then runs every
+        # scenario under its declared resolution mode and strictness
+        # settings. Replaces the pre-SD-2831 bare `tsc --noEmit` step
+        # so the new pack-and-install scenarios are actually exercised
+        # in CI, not just locally.
         run: |
-          cd packages/superdoc && pnpm pack --pack-destination .
-          cd ../../tests/consumer-typecheck
-          npm install ../../packages/superdoc/superdoc-*.tgz --no-save
-          npx tsc --noEmit
+          cd tests/consumer-typecheck
+          node typecheck-matrix.mjs
 
   unit-tests:
     needs: build
@@ -235,12 +287,28 @@ jobs:
   validate:
     name: CI SuperDoc / validate
     if: always()
-    needs: [build, unit-tests, cli-tests, coverage]
+    needs: [detect, build, unit-tests, cli-tests, coverage]
     runs-on: ubuntu-latest
     steps:
       - name: Check results
         run: |
-          if [[ "${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped') }}" == "true" ]]; then
-            echo "One or more required jobs did not succeed."
+          if [[ "${{ needs.detect.result }}" != "success" ]]; then
+            echo "Detect job did not succeed (result: ${{ needs.detect.result }})."
             exit 1
           fi
+          if [[ "${{ needs.detect.outputs.superdoc }}" != "true" ]]; then
+            echo "SuperDoc CI skipped: no relevant paths changed."
+            exit 0
+          fi
+          for job_result in \
+            "build:${{ needs.build.result }}" \
+            "unit-tests:${{ needs.unit-tests.result }}" \
+            "cli-tests:${{ needs.cli-tests.result }}" \
+            "coverage:${{ needs.coverage.result }}"; do
+            name="${job_result%%:*}"
+            result="${job_result##*:}"
+            if [[ "$result" != "success" ]]; then
+              echo "Job '$name' was required but did not succeed (result: $result)."
+              exit 1
+            fi
+          done

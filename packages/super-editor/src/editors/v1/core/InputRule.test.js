@@ -32,6 +32,7 @@ import {
   isWordHtml,
   isSuperdocOriginClipboardHtml,
 } from './InputRule.js';
+import { embedSliceInHtml } from './helpers/superdocClipboardSlice.js';
 
 const createEditorContext = (initialDoc) => {
   const baseState = EditorState.create({ schema, doc: initialDoc });
@@ -48,6 +49,13 @@ const createEditorContext = (initialDoc) => {
   const editor = { schema, view, options: { mode: 'text' } };
   return { editor, view };
 };
+
+const makeSliceJson = (contentNode) => JSON.stringify(contentNode.slice(0, contentNode.content.size).toJSON());
+
+const makeMultiColumnSectPr = () => ({
+  name: 'w:sectPr',
+  elements: [{ name: 'w:cols', attributes: { 'w:num': '2' } }],
+});
 
 describe('InputRule helpers', () => {
   beforeEach(() => {
@@ -177,6 +185,78 @@ describe('InputRule helpers', () => {
     expect(handleDocxPasteMock).not.toHaveBeenCalled();
     expect(flattenListsInHtmlMock).toHaveBeenCalled();
     expect(handled).toBe(true);
+  });
+
+  it('pastes embedded SuperDoc slice data before falling back to hidden slice HTML', () => {
+    const { editor, view } = createEditorContext(doc(p('Base')));
+    const sourceDoc = doc(p('Slice content'));
+    const sliceJson = makeSliceJson(sourceDoc);
+    const html = embedSliceInHtml('<p>Visible fallback</p>', sliceJson);
+
+    const handled = handleClipboardPaste({ editor, view }, html, 'Slice content');
+
+    const text = view.state.doc.textContent;
+    expect(handled).toBe(true);
+    expect(text).toContain('Slice content');
+    expect(text).not.toContain('Visible fallback');
+    expect(text).not.toMatch(/eyJ[A-Za-z0-9+/=]{20,}/);
+  });
+
+  it('imports embedded SuperDoc media when context-menu paste can only read HTML', () => {
+    const { editor, view } = createEditorContext(doc(p('Base')));
+    editor.storage = {
+      image: {
+        media: { 'word/media/image1.png': 'data:image/png;base64,OLD' },
+      },
+    };
+
+    const sourceDoc = schema.nodes.doc.create(null, [
+      schema.nodes.paragraph.create(null, [schema.nodes.image.create({ src: 'word/media/image1.png' })]),
+    ]);
+    const sliceJson = makeSliceJson(sourceDoc);
+    const mediaJson = JSON.stringify({ 'word/media/image1.png': 'data:image/png;base64,NEW' });
+    const html = embedSliceInHtml('<p>Visible fallback</p>', sliceJson, '', mediaJson);
+
+    const handled = handleClipboardPaste({ editor, view }, html, '');
+
+    const imageSrcs = [];
+    view.state.doc.descendants((node) => {
+      if (node.type.name === 'image') imageSrcs.push(node.attrs.src);
+    });
+    expect(handled).toBe(true);
+    expect(imageSrcs).toHaveLength(1);
+    expect(imageSrcs[0]).not.toBe('word/media/image1.png');
+    expect(editor.storage.image.media['word/media/image1.png']).toBe('data:image/png;base64,OLD');
+    expect(editor.storage.image.media[imageSrcs[0]]).toBe('data:image/png;base64,NEW');
+  });
+
+  it('applies embedded body section data when SuperDoc slice paste falls back to HTML', () => {
+    const { editor, view } = createEditorContext(doc(p('Base')));
+    editor.converter = {};
+    const emptySliceJson = JSON.stringify({ content: [], openStart: 0, openEnd: 0 });
+    const sectPr = makeMultiColumnSectPr();
+    const html = embedSliceInHtml('<p>Fallback content</p>', emptySliceJson, JSON.stringify(sectPr));
+
+    const handled = handleClipboardPaste({ editor, view }, html, 'Fallback content');
+
+    expect(handled).toBe(true);
+    expect(view.state.doc.textContent).toContain('Fallback content');
+    expect(editor.converter.bodySectPr).toEqual(sectPr);
+  });
+
+  it('handles SuperDoc-origin HTML with no slice div (block-id only) via stripped HTML paste', () => {
+    const { editor, view } = createEditorContext(doc(p('Base')));
+    editor.converter = {};
+    const sectPr = makeMultiColumnSectPr();
+    const visibleHtml = '<p data-sd-block-id="abc-123">Block content</p>';
+    const html = embedSliceInHtml(visibleHtml, '', JSON.stringify(sectPr));
+
+    const handled = handleClipboardPaste({ editor, view }, html, 'Block content');
+
+    expect(handled).toBe(true);
+    expect(view.state.doc.textContent).toContain('Block content');
+    expect(view.state.doc.textContent).not.toMatch(/eyJ[A-Za-z0-9+/=]{20,}/);
+    expect(editor.converter.bodySectPr).toEqual(sectPr);
   });
 
   it('falls back to browser HTML handling for Word HTML outside docx mode', () => {

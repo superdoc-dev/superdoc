@@ -1,14 +1,14 @@
 ---
 title: How to use
 sidebarTitle: How to use
-description: Build an AI agent that edits documents using SuperDoc LLM tools — complete, copy-pasteable examples
+description: "Build an AI agent that edits documents using SuperDoc LLM tools: complete, copy-pasteable examples"
 keywords: "ai integrations, ai providers, openai, anthropic, vercel ai, tool use, function calling, superdoc sdk, document automation"
 ---
 
 Wire up an LLM agent that reads and edits `.docx` files headlessly. Install the SDK, open a document, and run an agentic tool loop. Full working code below.
 
 <Note>
-If you need real-time sync between the agent and a frontend editor, add [collaboration](/modules/collaboration/overview). The SDK client joins the same Yjs room as the frontend — edits appear live.
+If you need real-time sync between the agent and a frontend editor, add [collaboration](/editor/collaboration/overview). The SDK client joins the same Yjs room as the frontend: edits appear live.
 </Note>
 
 ## Prerequisites
@@ -52,7 +52,7 @@ const doc = await client.open({ doc: './contract.docx' });
 
 ## Step 3: Load tools and system prompt
 
-Load the tool definitions for your provider and the default system prompt. Both can be cached — they don't change between requests.
+Load the tool definitions for your provider and the default system prompt. Both can be cached: they don't change between requests.
 
 <Tabs>
   <Tab title="OpenAI">
@@ -130,7 +130,7 @@ The agent loop sends messages to the LLM, dispatches tool calls, feeds results b
             content: JSON.stringify(result),
           });
         } catch (err: any) {
-          // Return errors as tool results — the model will self-correct
+          // Return errors as tool results: the model will self-correct
           messages.push({
             role: 'tool',
             tool_call_id: toolCall.id,
@@ -194,7 +194,7 @@ The agent loop sends messages to the LLM, dispatches tool calls, feeds results b
             content: JSON.stringify(result),
           });
         } catch (err: any) {
-          // Return errors as tool results — the model will self-correct
+          // Return errors as tool results: the model will self-correct
           toolResults.push({
             type: 'tool_result',
             tool_use_id: block.id,
@@ -255,10 +255,10 @@ The agent loop sends messages to the LLM, dispatches tool calls, feeds results b
 
     **What's happening:**
 
-    1. SDK tool definitions are converted into Vercel AI tool objects — each with an `execute` function that calls `dispatchSuperDocTool`.
-    2. `generateText` handles the agent loop internally — it calls the model, executes tools, feeds results back, and repeats.
+    1. SDK tool definitions are converted into Vercel AI tool objects: each with an `execute` function that calls `dispatchSuperDocTool`.
+    2. `generateText` handles the agent loop internally: it calls the model, executes tools, feeds results back, and repeats.
     3. `stopWhen: stepCountIs(10)` sets a max iteration guard.
-    4. No manual `while(true)` loop needed — Vercel AI manages it for you.
+    4. No manual `while(true)` loop needed: Vercel AI manages it for you.
   </Tab>
 </Tabs>
 
@@ -635,8 +635,8 @@ Full working example: [examples/ai/streaming](https://github.com/superdoc-dev/su
 
 ## Related
 
-- [LLM tools](/ai/agents/llm-tools) — tool catalog and SDK functions
-- [Best practices](/ai/agents/best-practices) — prompting, workflow tips, and tested prompt examples
-- [Debugging](/ai/agents/debugging) — troubleshoot tool call failures
-- [Collaboration](/modules/collaboration/overview) — add real-time sync between agent and frontend
-- [SDKs](/document-engine/sdks) — typed Node.js and Python wrappers
+- [LLM tools](/ai/agents/llm-tools): tool catalog and SDK functions
+- [Best practices](/ai/agents/best-practices): prompting, workflow tips, and tested prompt examples
+- [Debugging](/ai/agents/debugging): troubleshoot tool call failures
+- [Collaboration](/editor/collaboration/overview): add real-time sync between agent and frontend
+- [SDKs](/document-engine/sdks): typed Node.js and Python wrappers

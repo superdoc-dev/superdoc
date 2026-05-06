@@ -14,6 +14,7 @@ describe('engines-tabs computeTabStops', () => {
 
     expect(stops[0].pos).toBeGreaterThanOrEqual(360);
     expect(stops.find((stop) => stop.pos === 1440)?.val).toBe('end');
+    expect(stops.find((stop) => stop.pos === 1440)?.source).toBe('explicit');
   });
 
   it('filters out clear tabs', () => {
@@ -72,6 +73,7 @@ describe('engines-tabs computeTabStops', () => {
     const firstDefault = stops.find((stop) => stop.pos === 720);
     expect(firstDefault?.val).toBe('start');
     expect(firstDefault?.leader).toBe('none');
+    expect(firstDefault?.source).toBe('default');
   });
 
   it('adds an implicit left-margin stop when hanging indent starts before the margin', () => {
@@ -81,7 +83,7 @@ describe('engines-tabs computeTabStops', () => {
       paragraphIndent: { left: 0, hanging: 567 },
     });
 
-    expect(stops[0]).toEqual({ val: 'start', pos: 0, leader: 'none' });
+    expect(stops[0]).toEqual({ val: 'start', pos: 0, leader: 'none', source: 'default' });
     expect(stops.find((stop) => stop.pos === 720)).toBeDefined();
   });
 
@@ -98,8 +100,8 @@ describe('engines-tabs computeTabStops', () => {
       paragraphIndent: { left: -600, hanging: 141 },
     });
 
-    expect(stops[0]).toEqual({ val: 'start', pos: 0, leader: 'none' });
-    expect(stops[1]).toEqual({ val: 'start', pos: 600, leader: 'none' });
+    expect(stops[0]).toEqual({ val: 'start', pos: 0, leader: 'none', source: 'default' });
+    expect(stops[1]).toEqual({ val: 'start', pos: 600, leader: 'none', source: 'default' });
     expect(stops.find((stop) => stop.pos === 720)).toBeDefined();
   });
 
@@ -110,7 +112,7 @@ describe('engines-tabs computeTabStops', () => {
       paragraphIndent: { left: -567, hanging: 0 },
     });
 
-    expect(stops[0]).toEqual({ val: 'start', pos: 0, leader: 'none' });
+    expect(stops[0]).toEqual({ val: 'start', pos: 0, leader: 'none', source: 'default' });
     expect(stops.find((stop) => stop.pos === 567)).toBeUndefined();
     expect(stops.find((stop) => stop.pos === 720)).toBeDefined();
   });
@@ -123,7 +125,7 @@ describe('engines-tabs computeTabStops', () => {
       rawParagraphIndent: { left: -567, hanging: 0 },
     });
 
-    expect(stops[0]).toEqual({ val: 'start', pos: 0, leader: 'none' });
+    expect(stops[0]).toEqual({ val: 'start', pos: 0, leader: 'none', source: 'default' });
     expect(stops.find((stop) => stop.pos === 567)).toBeUndefined();
     expect(stops.find((stop) => stop.pos === 720)).toBeDefined();
   });
@@ -199,6 +201,45 @@ describe('engines-tabs computeTabStops', () => {
     expect(stops.find((stop) => stop.pos === 4320)).toBeDefined(); // Second default at 4320
   });
 
+  it('adds an implicit stop at the hanging-indent body text start', () => {
+    const stops = computeTabStops({
+      explicitStops: [],
+      defaultTabInterval: 720,
+      paragraphIndent: { left: 1000, hanging: 500 },
+    });
+
+    const implicitBodyStop = stops.find((stop) => stop.pos === 1000);
+    expect(implicitBodyStop).toMatchObject({
+      val: 'start',
+      leader: 'none',
+      source: 'default',
+    });
+    expect(stops[0]?.pos).toBe(1000);
+    expect(stops.find((stop) => stop.pos === 720)).toBeUndefined();
+    expect(stops.find((stop) => stop.pos === 1440)).toBeDefined();
+  });
+
+  it('does not duplicate the implicit hanging stop when it lands on the default grid', () => {
+    const stops = computeTabStops({
+      explicitStops: [],
+      defaultTabInterval: 720,
+      paragraphIndent: { left: 3600, hanging: 3600 },
+    });
+
+    expect(stops.filter((stop) => stop.pos === 3600)).toHaveLength(1);
+  });
+
+  it('does not synthesize the implicit hanging stop when it was explicitly cleared', () => {
+    const stops = computeTabStops({
+      explicitStops: [{ val: 'clear', pos: 1000 }],
+      defaultTabInterval: 720,
+      paragraphIndent: { left: 1000, hanging: 500 },
+    });
+
+    expect(stops.find((stop) => stop.pos === 1000)).toBeUndefined();
+    expect(stops.find((stop) => stop.pos === 1440)).toBeDefined();
+  });
+
   it('combines explicit stops in hanging range with defaults starting at leftIndent', () => {
     // When explicit stops exist in the hanging indent range AND there's a gap before leftIndent,
     // explicit stops should be preserved, but defaults should start from leftIndent.
@@ -243,7 +284,7 @@ describe('engines-tabs computeTabStops', () => {
     });
 
     expect(stops.filter((stop) => stop.pos === 720)).toHaveLength(1);
-    expect(stops[0]).toEqual({ val: 'start', pos: 720, leader: 'none' });
+    expect(stops[0]).toEqual({ val: 'start', pos: 720, leader: 'none', source: 'default' });
     expect(stops.find((stop) => stop.pos === 1440)).toBeDefined();
   });
 

@@ -158,7 +158,6 @@ const DEFAULT_TAB_INTERVAL_TWIPS = 720; // 0.5 inch in twips
 const TWIPS_PER_INCH = 1440;
 const PX_PER_INCH = 96; // Standard CSS/DOM DPI
 const TWIPS_PER_PX = TWIPS_PER_INCH / PX_PER_INCH; // 15 twips per pixel
-const TAB_STOP_POSITION_TOLERANCE_TWIPS = 20;
 const _PX_PER_PT = 96 / 72; // Reserved for future pt↔px conversions
 const twipsToPx = (twips: number): number => twips / TWIPS_PER_PX;
 const pxToTwips = (px: number): number => Math.round(px * TWIPS_PER_PX);
@@ -233,7 +232,7 @@ type TabStopPx = {
   pos: number; // px
   val: TabStop['val'];
   leader?: TabStop['leader'];
-  isExplicit?: boolean;
+  source?: TabStop['source'];
 };
 
 // Unused type - may be needed for future decimal tab implementation
@@ -1092,6 +1091,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
     /** Tallest inline image on this line (pixels) */
     maxImageHeight?: number;
     maxWidth: number;
+    hasExplicitTabStops?: boolean;
     segments: Line['segments'];
     leaders?: Line['leaders'];
     /** Count of breakable spaces already included on this line (for justify-aware fitting) */
@@ -1395,17 +1395,52 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
     }
   };
 
+  // Per-line-segment tab counts. The heuristic below binds the last N tabs of a
+  // segment to the last N alignment stops; segments are delimited by explicit
+  // <w:br/> runs because pPr/tabs apply per line, not per paragraph.
+  // sd-1480-two-col-tab-positions: a single paragraph "Page\t2<br/>Page\t5"
+  // must emit a leader on BOTH lines, not only the last.
+  const tabSegmentInfo = new Map<number, { localOrdinal: number; segmentTotal: number }>();
+  {
+    let segmentTabRunIndices: number[] = [];
+    const closeSegment = () => {
+      const total = segmentTabRunIndices.length;
+      segmentTabRunIndices.forEach((runIdx, ord) => {
+        tabSegmentInfo.set(runIdx, { localOrdinal: ord, segmentTotal: total });
+      });
+      segmentTabRunIndices = [];
+    };
+    for (let i = 0; i < runsToProcess.length; i++) {
+      const r = runsToProcess[i];
+      if (isLineBreakRun(r) || (r.kind === 'break' && (r as { breakType?: string }).breakType === 'line')) {
+        closeSegment();
+      } else if (isTabRun(r)) {
+        segmentTabRunIndices.push(i);
+      }
+    }
+    closeSegment();
+  }
+
   // Word-compat heuristic (not ECMA-376 17.3.3.32): the last N tab characters in a
-  // paragraph bind to the last N explicit end/center/decimal stops. Needed for TOC
+  // line bind to the last N explicit end/center/decimal stops. Needed for TOC
   // entries where a right-aligned dot-leader stop coexists with default grid stops —
   // strict greedy next-stop resolution would land the trailing tab on a default stop
   // instead of the leader stop. Mirrored in layout-bridge/src/remeasure.ts.
-  const getAlignmentStopForOrdinal = (ordinal: number): { stop: TabStopPx; index: number } | null => {
+  const getAlignmentStopForOrdinal = (ordinal: number, runIdx?: number): { stop: TabStopPx; index: number } | null => {
     if (alignmentTabStopsPx.length === 0 || totalTabRuns === 0 || !Number.isFinite(ordinal)) {
       return null;
     }
-    if (ordinal < 0 || ordinal >= totalTabRuns) return null;
-    const remainingTabs = totalTabRuns - ordinal - 1;
+    let scopeOrdinal = ordinal;
+    let scopeTotal = totalTabRuns;
+    if (runIdx !== undefined) {
+      const info = tabSegmentInfo.get(runIdx);
+      if (info) {
+        scopeOrdinal = info.localOrdinal;
+        scopeTotal = info.segmentTotal;
+      }
+    }
+    if (scopeOrdinal < 0 || scopeOrdinal >= scopeTotal) return null;
+    const remainingTabs = scopeTotal - scopeOrdinal - 1;
     const targetIndex = alignmentTabStopsPx.length - 1 - remainingTabs;
     if (targetIndex < 0 || targetIndex >= alignmentTabStopsPx.length) return null;
     return alignmentTabStopsPx[targetIndex];
@@ -1549,21 +1584,34 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
       // inputs (explicit + synthetic TabRuns) don't produce out-of-order ordinals.
       // Mirrors consumeTabOrdinal() in layout-bridge/src/remeasure.ts.
       sequentialTabIndex = Math.max(sequentialTabIndex, resolvedTabIndex + 1);
-      const forcedAlignment = getAlignmentStopForOrdinal(resolvedTabIndex);
+      // Compute greedy first so we can decide whether the SD-2447 heuristic is
+      // actually needed. The heuristic exists because when tabStops are seeded
+      // with synthetic 0.5" defaults from origin (TOC styles with only an
+      // alignment stop), greedy lands on a default before reaching the
+      // alignment stop. When the paragraph has an explicit start-aligned stop
+      // ahead of the alignment stop (e.g. TOC1 with `start@740, end@9360`),
+      // greedy already finds the correct stop and the heuristic over-fires.
+      // Only force the heuristic when greedy would land on a `source:default`
+      // stop — which is precisely the SD-2447 condition.
+      const greedy = getNextTabStopPx(absCurrentX, tabStops, tabStopCursor);
+      const greedyOnDefault = greedy.stop?.source === 'default';
+      const forcedAlignment = greedyOnDefault ? getAlignmentStopForOrdinal(resolvedTabIndex, runIndex) : null;
       if (forcedAlignment && forcedAlignment.stop.pos > absCurrentX + TAB_EPSILON) {
         stop = forcedAlignment.stop;
         target = forcedAlignment.stop.pos;
         tabStopCursor = forcedAlignment.index + 1;
       } else {
-        const nextStop = getNextTabStopPx(absCurrentX, tabStops, tabStopCursor);
-        target = nextStop.target;
-        tabStopCursor = nextStop.nextIndex;
-        stop = nextStop.stop;
+        target = greedy.target;
+        tabStopCursor = greedy.nextIndex;
+        stop = greedy.stop;
       }
       const maxAbsWidth = currentLine.maxWidth + effectiveIndent;
       const clampedTarget = Math.min(target, maxAbsWidth);
       const tabAdvance = Math.max(0, clampedTarget - absCurrentX);
       currentLine.width = roundValue(currentLine.width + tabAdvance);
+      if (stop?.source === 'explicit') {
+        currentLine.hasExplicitTabStops = true;
+      }
       // Persist measured tab width on the TabRun for downstream consumers/tests
       (run as TabRun & { width?: number }).width = tabAdvance;
 
@@ -1636,7 +1684,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
             target: relativeTarget,
             val: stop.val,
             compensateNegativeLeft:
-              stop.val === 'start' && indentLeft < 0 && effectiveIndent === indentLeft && stop.isExplicit !== true,
+              stop.val === 'start' && indentLeft < 0 && effectiveIndent === indentLeft && stop.source !== 'explicit',
           };
         }
       } else {
@@ -2609,6 +2657,9 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
         const clampedTarget = Math.min(target, maxAbsWidth);
         const tabAdvance = Math.max(0, clampedTarget - absCurrentX);
         currentLine.width = roundValue(currentLine.width + tabAdvance);
+        if (stop?.source === 'explicit') {
+          currentLine.hasExplicitTabStops = true;
+        }
 
         currentLine.maxFontInfo = updateMaxFontInfo(currentLine.maxFontSize, currentLine.maxFontInfo, run);
         currentLine.maxFontSize = Math.max(currentLine.maxFontSize, lineHeightFontSize(run));
@@ -2622,7 +2673,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
             target: relativeTarget,
             val: stop.val,
             compensateNegativeLeft:
-              stop.val === 'start' && indentLeft < 0 && effectiveIndent === indentLeft && stop.isExplicit !== true,
+              stop.val === 'start' && indentLeft < 0 && effectiveIndent === indentLeft && stop.source !== 'explicit',
           };
         } else {
           pendingTabAlignment = null;
@@ -3618,19 +3669,12 @@ const buildTabStopsPx = (indent?: ParagraphIndent, tabs?: TabStop[], tabInterval
   });
 
   // Convert resulting tab stops from twips to pixels for measurement
-  return stops.map((stop) => {
-    const isExplicit = tabs?.some(
-      (tab) =>
-        tab.val !== 'clear' && tab.val === stop.val && Math.abs(tab.pos - stop.pos) < TAB_STOP_POSITION_TOLERANCE_TWIPS,
-    );
-
-    return {
-      pos: twipsToPx(stop.pos),
-      val: stop.val,
-      leader: stop.leader,
-      isExplicit,
-    };
-  });
+  return stops.map((stop) => ({
+    pos: twipsToPx(stop.pos),
+    val: stop.val,
+    leader: stop.leader,
+    source: stop.source,
+  }));
 };
 
 const getNextTabStopPx = (

@@ -89,6 +89,15 @@ export const createRulerStateDeriver =
     };
   };
 
+export const createFormattingMarksStateDeriver =
+  () =>
+  ({ superdoc }: { context: ToolbarContext | null; superdoc: Record<string, any> }): ToolbarCommandState => {
+    return {
+      active: Boolean(superdoc?.config?.layoutEngineOptions?.showFormattingMarks),
+      disabled: typeof superdoc?.toggleFormattingMarks !== 'function',
+    };
+  };
+
 export const createZoomStateDeriver =
   () =>
   ({ context, superdoc }: { context: ToolbarContext | null; superdoc: Record<string, any> }): ToolbarCommandState => {
@@ -113,6 +122,14 @@ export const createRulerExecute =
   () =>
   ({ superdoc }: { context: ToolbarContext | null; superdoc: Record<string, any>; payload?: unknown }) => {
     superdoc.toggleRuler?.();
+    return true;
+  };
+
+export const createFormattingMarksExecute =
+  () =>
+  ({ superdoc }: { context: ToolbarContext | null; superdoc: Record<string, any>; payload?: unknown }) => {
+    if (typeof superdoc?.toggleFormattingMarks !== 'function') return false;
+    superdoc.toggleFormattingMarks();
     return true;
   };
 

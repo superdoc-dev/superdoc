@@ -1,6 +1,11 @@
-# Sequential stable release orchestrator.
-# This is the only workflow that auto-releases on push to stable.
-name: 📦 Release stable
+# Stable tooling mini-bundle: CLI -> SDK -> MCP, in order, on the same runner.
+# These three share artifacts (SDK packages CLI native binaries; MCP imports
+# SDK + engine code), so they release together with one queue slot and one
+# permission context (including PyPI OIDC).
+#
+# Out of scope: superdoc, react, esign, template-builder, vscode-ext. Each of
+# those has its own per-package stable workflow.
+name: 📦 Release stable tooling (CLI/SDK/MCP)
 
 on:
   push:
@@ -14,8 +19,14 @@ permissions:
   id-token: write
 
 concurrency:
-  # Keep [skip ci] writeback runs out of the shared stable queue so they cannot
-  # replace a real pending stable push while the orchestrator is active.
+  # All stable release workflows (this bundle + superdoc + react/esign/
+  # template-builder/vscode-ext) share the `release-stable` group so that
+  # @semantic-release/git pushes to `stable` serialize. Per-workflow groups
+  # would let multiple workflows publish in parallel and race on
+  # `git push origin stable`, leaving npm/PyPI tarballs published without
+  # a corresponding tag/commit pushed.
+  # [skip ci] writeback runs use a per-run group so they cannot evict a real
+  # pending stable push while the bundle is active.
   group: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[skip ci]') && format('release-stable-skip-{0}', github.run_id) || 'release-stable' }}
   cancel-in-progress: false
 
@@ -92,14 +103,7 @@ jobs:
       - name: Build packages
         run: pnpm run build
 
-      - name: Test vscode-ext
-        run: pnpm --prefix apps/vscode-ext run test
-
-      - name: Snapshot SDK tags before release
-        id: sdk_tags_before
-        run: echo "tags=$(git tag --list 'sdk-v*' | sort | tr '\n' ',')" >> "$GITHUB_OUTPUT"
-
-      - name: Release stable packages sequentially
+      - name: Release stable tooling (CLI -> SDK -> MCP)
         id: stable_release
         env:
           GITHUB_TOKEN: ${{ steps.generate_token.outputs.token }}
@@ -107,44 +111,12 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           LINEAR_TOKEN: ${{ secrets.LINEAR_TOKEN }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          VSCE_PAT: ${{ secrets.VSCE_PAT }}
           GITHUB_REF_NAME: stable
         run: node scripts/release-local-stable.mjs
 
-      - name: Detect SDK release tag at HEAD
-        id: sdk_release
-        run: |
-          BEFORE="${{ steps.sdk_tags_before.outputs.tags }}"
-          AFTER=$(git tag --list 'sdk-v*' | sort | tr '\n' ',')
-          RELEASE_TAG=$(git tag --points-at HEAD --list 'sdk-v*' --sort=-version:refname | head -n 1)
-          if [ -z "$RELEASE_TAG" ]; then
-            echo "release_present=false" >> "$GITHUB_OUTPUT"
-            echo "released=false" >> "$GITHUB_OUTPUT"
-            echo "version=" >> "$GITHUB_OUTPUT"
-            echo "dist_tag=" >> "$GITHUB_OUTPUT"
-            echo "No SDK release tag at HEAD."
-          else
-            echo "release_present=true" >> "$GITHUB_OUTPUT"
-            if [ "$BEFORE" = "$AFTER" ]; then
-              echo "released=false" >> "$GITHUB_OUTPUT"
-            else
-              echo "released=true" >> "$GITHUB_OUTPUT"
-            fi
-            VERSION="${RELEASE_TAG#sdk-v}"
-            if [[ "$VERSION" == *-next.* ]]; then
-              DIST_TAG="next"
-            else
-              DIST_TAG="latest"
-            fi
-            echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-            echo "dist_tag=$DIST_TAG" >> "$GITHUB_OUTPUT"
-            if [ "$BEFORE" = "$AFTER" ]; then
-              echo "SDK release tag already present at HEAD: $RELEASE_TAG"
-            else
-              echo "Released SDK v$VERSION"
-            fi
-          fi
-
+      # SDK release coordinates come from the orchestrator's step outputs, not
+      # `git tag --points-at HEAD`. After CLI -> SDK -> MCP, HEAD lands on
+      # MCP's version commit and the SDK tag is no longer at HEAD.
       - name: Publish recovered SDK companion Python packages to PyPI
         if: steps.stable_release.outputs.sdk_python_snapshot_companion_dir != ''
         uses: pypa/gh-action-pypi-publish@release/v1
@@ -160,32 +132,22 @@ jobs:
           skip-existing: true
 
       - name: Build and verify Python SDK
-        if: steps.sdk_release.outputs.release_present == 'true'
+        if: steps.stable_release.outputs.sdk_release_present == 'true'
         run: node packages/sdk/scripts/build-python-sdk.mjs
 
       - name: Publish companion Python packages to PyPI
-        if: steps.sdk_release.outputs.release_present == 'true'
+        if: steps.stable_release.outputs.sdk_release_present == 'true'
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: packages/sdk/langs/python/companion-dist/
           skip-existing: true
 
       - name: Publish main Python SDK to PyPI
-        if: steps.sdk_release.outputs.release_present == 'true'
+        if: steps.stable_release.outputs.sdk_release_present == 'true'
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: packages/sdk/langs/python/dist/
           skip-existing: true
-
-      # Stable docs deploy from `docs-stable`. The orchestrator emits
-      # `promote_sha` only when the run released (or no-op'd) on the SHA it
-      # checked out; it stays empty on failure or deferral, so production docs
-      # never advance past a commit whose packages were not actually published.
-      - name: Promote stable docs
-        if: steps.stable_release.outputs.promote_sha != ''
-        env:
-          GITHUB_TOKEN: ${{ steps.generate_token.outputs.token }}
-          PROMOTE_SHA: ${{ steps.stable_release.outputs.promote_sha }}
-        run: |
-          set -euo pipefail
-          git push origin "${PROMOTE_SHA}:refs/heads/docs-stable"
+      # Docs promotion lives in promote-stable-docs.yml, which triggers on the
+      # SuperDoc workflow specifically. Tooling-bundle releases (CLI/SDK/MCP)
+      # do not advance docs-stable.

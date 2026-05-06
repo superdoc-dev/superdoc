@@ -336,6 +336,120 @@ describe('ui.comments — actions route through editor.doc.*', () => {
     ui.destroy();
   });
 
+  it('createFromCapture forwards the captured target even when live selection is gone', () => {
+    const captured = {
+      kind: 'text' as const,
+      segments: [{ blockId: 'p1', range: { start: 7, end: 12 } }],
+    };
+    // Stubs intentionally have no live selectionTarget — mimics the
+    // composer flow where focus has moved off the editor.
+    const { superdoc, mocks } = makeStubs();
+    const ui = createSuperDocUI({ superdoc });
+
+    const capture = {
+      empty: false,
+      target: captured,
+      selectionTarget: null,
+      activeMarks: [],
+      activeCommentIds: [],
+      activeChangeIds: [],
+      quotedText: 'hello',
+    } as unknown as Parameters<typeof ui.comments.createFromCapture>[0];
+
+    const receipt = ui.comments.createFromCapture(capture, { text: 'pinned' });
+
+    expect(receipt.success).toBe(true);
+    expect(mocks.create).toHaveBeenCalledWith({ target: captured, text: 'pinned' });
+
+    ui.destroy();
+  });
+
+  it('createFromCapture returns a NO_OP receipt when the capture has no target', () => {
+    const { superdoc, mocks } = makeStubs();
+    const ui = createSuperDocUI({ superdoc });
+
+    const receipt = ui.comments.createFromCapture(
+      { target: null } as unknown as Parameters<typeof ui.comments.createFromCapture>[0],
+      { text: 'orphan' },
+    );
+
+    expect(receipt.success).toBe(false);
+    expect(mocks.create).not.toHaveBeenCalled();
+
+    ui.destroy();
+  });
+
+  it('reply forwards to comments.create with parentCommentId set and no target', () => {
+    const { superdoc, mocks } = makeStubs();
+    const ui = createSuperDocUI({ superdoc });
+
+    const receipt = ui.comments.reply('c-parent', { text: 'thanks!' });
+
+    expect(receipt.success).toBe(true);
+    expect(mocks.create).toHaveBeenCalledWith({ parentCommentId: 'c-parent', text: 'thanks!' });
+    // Reply must NOT carry a `target` — the doc-api adapter resolves
+    // the parent's anchor itself. Sending one would either be ignored
+    // or, worse, override the inherited address.
+    expect(mocks.create.mock.calls[0]?.[0]).not.toHaveProperty('target');
+
+    ui.destroy();
+  });
+
+  it('reply returns a NO_OP receipt when text is empty or whitespace-only', () => {
+    const { superdoc, mocks } = makeStubs();
+    const ui = createSuperDocUI({ superdoc });
+
+    const empty = ui.comments.reply('c-parent', { text: '' });
+    expect(empty.success).toBe(false);
+
+    const whitespace = ui.comments.reply('c-parent', { text: '   \n\t' });
+    expect(whitespace.success).toBe(false);
+
+    expect(mocks.create).not.toHaveBeenCalled();
+
+    ui.destroy();
+  });
+
+  it('reply refreshes the comments snapshot synchronously after the post', async () => {
+    const { superdoc } = makeStubs({
+      comments: [{ id: 'c-parent', commentId: 'c-parent', text: 'parent' }],
+    });
+    const ui = createSuperDocUI({ superdoc });
+
+    expect(ui.comments.getSnapshot().items).toHaveLength(1);
+
+    // Stub mutates list as if a reply was just persisted.
+    superdoc.setComments([
+      { id: 'c-parent', commentId: 'c-parent', text: 'parent' },
+      { id: 'c-reply', commentId: 'c-reply', text: 'thanks', parentCommentId: 'c-parent' },
+    ]);
+    ui.comments.reply('c-parent', { text: 'thanks' });
+
+    // refreshAndNotify should already have re-read the cache.
+    expect(ui.comments.getSnapshot().items.map((i) => i.id)).toEqual(['c-parent', 'c-reply']);
+
+    ui.destroy();
+  });
+
+  it('reply routes through the routed editor (header / footer focus stays scoped)', () => {
+    // Same posture as createFromSelection / createFromCapture: replies
+    // go through `resolveRoutedEditor` so a header-focused composer
+    // posts in the header story, not the body. Mirrors the doc-api
+    // contract: `comments.create` is story-scoped on the routed editor.
+    const { superdoc, mocks } = makeStubs();
+    const ui = createSuperDocUI({ superdoc });
+
+    ui.comments.reply('c-parent', { text: 'in scope' });
+
+    expect(mocks.create).toHaveBeenCalledTimes(1);
+    expect(mocks.create.mock.calls[0]?.[0]).toMatchObject({
+      parentCommentId: 'c-parent',
+      text: 'in scope',
+    });
+
+    ui.destroy();
+  });
+
   it('resolve forwards to comments.patch({ commentId, status: "resolved" })', () => {
     const { superdoc, mocks } = makeStubs();
     const ui = createSuperDocUI({ superdoc });

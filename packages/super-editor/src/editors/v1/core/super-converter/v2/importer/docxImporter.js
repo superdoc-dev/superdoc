@@ -680,13 +680,13 @@ export function addDefaultStylesIfMissing(styles) {
  */
 const importHeadersFooters = (docx, converter, mainEditor, numbering, translatedNumbering, translatedLinkedStyles) => {
   const rels = docx['word/_rels/document.xml.rels'];
-  const relationships = rels?.elements.find((el) => el.name === 'Relationships');
-  const { elements } = relationships || { elements: [] };
+  const relationships = rels?.elements?.find((el) => el.name === 'Relationships');
+  const elements = relationships?.elements ?? [];
 
   const headerType = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/header';
   const footerType = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer';
-  const headers = elements.filter((el) => el.attributes['Type'] === headerType);
-  const footers = elements.filter((el) => el.attributes['Type'] === footerType);
+  const headers = elements.filter((el) => el.attributes?.['Type'] === headerType);
+  const footers = elements.filter((el) => el.attributes?.['Type'] === footerType);
 
   const sectPr = findSectPr(docx['word/document.xml']) || [];
   const allSectPrElements = sectPr.flatMap((el) => el.elements);

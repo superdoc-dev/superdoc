@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ensureSdtContainerStyles, lineStyles } from './styles.js';
+import { ensureSdtContainerStyles, ensureTrackChangeStyles, lineStyles } from './styles.js';
 
 describe('lineStyles', () => {
   it('sets height and lineHeight from the argument', () => {
@@ -29,5 +29,35 @@ describe('ensureSdtContainerStyles', () => {
       '.presentation-editor--viewing .superdoc-structured-content-inline[data-lock-mode]:hover',
     );
     expect(cssText).toContain('background: none;');
+  });
+});
+
+describe('ensureTrackChangeStyles', () => {
+  it('keeps focused tracked-change emphasis paint-only so selection does not change inline geometry', () => {
+    ensureTrackChangeStyles(document);
+
+    const styleEl = document.querySelector('[data-superdoc-track-change-styles="true"]');
+    const cssText = styleEl?.textContent ?? '';
+
+    expect(cssText).toContain('.superdoc-layout .track-insert-dec.highlighted.track-change-focused');
+    expect(cssText).toContain('.superdoc-layout .track-delete-dec.highlighted.track-change-focused');
+    expect(cssText).toContain('.superdoc-layout .track-format-dec.highlighted.track-change-focused');
+    expect(cssText).toContain('border-top-style: solid;');
+    expect(cssText).toContain('border-bottom-style: solid;');
+    expect(cssText).toContain('border-left: none;');
+    expect(cssText).toContain('border-right: none;');
+    expect(cssText).not.toMatch(
+      /track-(insert|delete)-dec\.highlighted\.track-change-focused\s*\{[\s\S]*border-style:/,
+    );
+    expect(cssText).not.toMatch(
+      /track-(insert|delete)-dec\.highlighted\.track-change-focused\s*\{[\s\S]*border-width:/,
+    );
+    expect(cssText).not.toMatch(
+      /track-(insert|delete)-dec\.highlighted\.track-change-focused\s*\{[\s\S]*border-left-width:/,
+    );
+    expect(cssText).not.toMatch(
+      /track-(insert|delete)-dec\.highlighted\.track-change-focused\s*\{[\s\S]*border-right-width:/,
+    );
+    expect(cssText).not.toMatch(/track-format-dec\.highlighted\.track-change-focused\s*\{[\s\S]*border-bottom-width:/);
   });
 });

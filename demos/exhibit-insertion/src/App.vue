@@ -58,20 +58,23 @@
                   <line x1="12" y1="15" x2="12" y2="3"/>
                 </svg>
               </button>
-              <button
-                class="insert-btn"
-                @click.stop="insertExhibit(exhibit, false)"
-                title="Insert at cursor"
-              >
-                Insert
-              </button>
-              <button
-                class="suggest-btn"
-                @click.stop="insertExhibit(exhibit, true)"
-                title="Insert as suggestion"
-              >
-                Suggest
-              </button>
+              <div class="insert-dropdown" :class="{ open: openDropdownId === exhibit.id }">
+                <button
+                  class="insert-btn"
+                  @click.stop="toggleDropdown(exhibit.id)"
+                  title="Insert at cursor"
+                >
+                  Insert
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="6,9 12,15 18,9"/>
+                  </svg>
+                </button>
+                <div class="dropdown-menu" @click.stop>
+                  <button @click="insertExhibit(exhibit, 'content')">As content</button>
+                  <button @click="insertExhibit(exhibit, 'suggestion')">As suggestion</button>
+                  <button @click="insertExhibit(exhibit, 'structured')">As structured content</button>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -91,7 +94,7 @@
 </template>
 
 <script setup>
-import { ref, shallowRef } from 'vue';
+import { ref, shallowRef, onMounted, onUnmounted } from 'vue';
 import { SuperDoc } from 'superdoc';
 import DocumentEditor from './components/DocumentEditor.vue';
 
@@ -102,6 +105,24 @@ const exhibitFileInput = ref(null);
 const documentEditorRef = ref(null);
 const editor = shallowRef(null);
 const isInserting = ref(false);
+const openDropdownId = ref(null);
+
+const toggleDropdown = (exhibitId) => {
+  openDropdownId.value = openDropdownId.value === exhibitId ? null : exhibitId;
+};
+
+// Close dropdown when clicking outside
+const closeDropdown = () => {
+  openDropdownId.value = null;
+};
+
+onMounted(() => {
+  document.addEventListener('click', closeDropdown);
+});
+
+onUnmounted(() => {
+  document.removeEventListener('click', closeDropdown);
+});
 
 // Sample exhibits - in a real app these would come from a database
 const exhibits = ref([
@@ -164,12 +185,19 @@ const downloadExhibit = async (exhibit) => {
   }
 };
 
-const insertExhibit = async (exhibit, asSuggestion = false) => {
+/**
+ * Insert an exhibit into the document
+ * @param {Object} exhibit - The exhibit to insert
+ * @param {'content' | 'suggestion' | 'structured'} mode - How to insert the exhibit
+ */
+const insertExhibit = async (exhibit, mode = 'content') => {
   if (!editor.value) {
     alert('Please load a document first');
     return;
   }
 
+  // Close the dropdown
+  openDropdownId.value = null;
   isInserting.value = true;
 
   try {
@@ -219,20 +247,47 @@ const insertExhibit = async (exhibit, asSuggestion = false) => {
             // Insert using native schema format
             const mainEditor = editor.value;
 
-            // If inserting as suggestion, temporarily switch to suggesting mode
-            const previousMode = mainEditor.options.documentMode;
-            if (asSuggestion) {
-              mainEditor.setDocumentMode('suggesting');
-            }
+            if (mode === 'structured') {
+              // Insert as structured content (SDT / Content Control)
+              //
+              // Note: The Document API's create.contentControl only accepts string content.
+              // For complex DOCX content with full formatting, we use insertContent with
+              // a structuredContentBlock wrapper, which preserves all ProseMirror JSON.
 
-            // Insert content
-            mainEditor.commands.insertContent(docJson, {
-              contentType: 'schema'
-            });
+              // Generate a unique ID for the SDT (MS Word requires integer IDs)
+              const sdtId = String(Math.floor(Math.random() * 2147483647));
 
-            // Restore previous mode if we changed it
-            if (asSuggestion) {
-              mainEditor.setDocumentMode(previousMode);
+              // Build the SDT node JSON with proper structure
+              const sdtNode = {
+                type: 'structuredContentBlock',
+                attrs: {
+                  id: sdtId,
+                  alias: exhibit.name,
+                  tag: 'exhibit_content',
+                },
+                content: docJson.content,
+              };
+
+              console.log('Inserting SDT node:', JSON.stringify(sdtNode, null, 2));
+
+              // Insert the structured content block with the exhibit content inside
+              mainEditor.commands.insertContent(sdtNode, { contentType: 'schema' });
+            } else {
+              // If inserting as suggestion, temporarily switch to suggesting mode
+              const previousMode = mainEditor.options.documentMode;
+              if (mode === 'suggestion') {
+                mainEditor.setDocumentMode('suggesting');
+              }
+
+              // Insert content
+              mainEditor.commands.insertContent(docJson, {
+                contentType: 'schema'
+              });
+
+              // Restore previous mode if we changed it
+              if (mode === 'suggestion') {
+                mainEditor.setDocumentMode(previousMode);
+              }
             }
 
             // Clean up
@@ -252,7 +307,7 @@ const insertExhibit = async (exhibit, asSuggestion = false) => {
       });
     });
 
-    console.log(`Inserted exhibit: ${exhibit.name}`);
+    console.log(`Inserted exhibit: ${exhibit.name} (mode: ${mode})`);
   } catch (error) {
     console.error('Failed to insert exhibit:', error);
     alert(`Failed to insert exhibit: ${error.message}`);
@@ -426,19 +481,84 @@ header button:hover {
   color: #333;
 }
 
-.insert-btn, .suggest-btn {
+.insert-dropdown {
+  position: relative;
+  flex: 1;
+}
+
+.insert-btn {
+  width: 100%;
   background: #1355ff;
   border: none;
   color: white;
-  flex: 1;
   border-radius: 4px;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   font-size: 0.75rem;
   font-weight: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  padding: 0.375rem 0.75rem;
 }
 
-.insert-btn:hover, .suggest-btn:hover {
+.insert-btn:hover {
   background: #0044ff;
+}
+
+.insert-btn svg {
+  transition: transform 0.15s ease;
+}
+
+.insert-dropdown.open .insert-btn svg {
+  transform: rotate(180deg);
+}
+
+.dropdown-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: white;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 100;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-4px);
+  transition: all 0.15s ease;
+}
+
+.insert-dropdown.open .dropdown-menu {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+
+.dropdown-menu button {
+  display: block;
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  background: none;
+  border: none;
+  text-align: left;
+  font-size: 0.8rem;
+  color: #333;
+  cursor: pointer;
+  transition: background 0.1s ease;
+}
+
+.dropdown-menu button:first-child {
+  border-radius: 5px 5px 0 0;
+}
+
+.dropdown-menu button:last-child {
+  border-radius: 0 0 5px 5px;
+}
+
+.dropdown-menu button:hover {
+  background: #f0f7ff;
 }
 
 .empty-state {

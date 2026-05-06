@@ -3,11 +3,11 @@
  */
 import { getInstructionPreProcessor } from './fld-preprocessors';
 import { carbonCopy } from '@core/utilities/carbonCopy.js';
+import { isTrackChangeElement } from '../v2/importer/trackChangeElements.js';
 
 const SKIP_FIELD_PROCESSING_NODE_NAMES = new Set(['w:drawing', 'w:pict']);
 
 const shouldSkipFieldProcessing = (node) => SKIP_FIELD_PROCESSING_NODE_NAMES.has(node?.name);
-const isTrackChangeWrapper = (node) => node?.name === 'w:del' || node?.name === 'w:ins';
 /**
  * @typedef {object} FldCharProcessResult
  * @property {OpenXmlNode[]} processedNodes - The list of nodes after processing.
@@ -212,7 +212,7 @@ export const preProcessNodesForFldChar = (nodes = [], docx) => {
         // A field started in the children, so this node is part of that field.
         childResult.unpairedBegin.forEach((pendingField) => {
           const fieldInfo = { ...pendingField.fieldInfo };
-          if (fieldInfo.preserveRaw || isTrackChangeWrapper(node)) {
+          if (fieldInfo.preserveRaw || isTrackChangeElement(node)) {
             fieldInfo.preserveRaw = true;
           }
           currentFieldStack.push(fieldInfo);
@@ -226,7 +226,7 @@ export const preProcessNodesForFldChar = (nodes = [], docx) => {
         });
       } else if (childResult.unpairedEnd) {
         // A field from this level or higher ended in the children.
-        const shouldPreserveRaw = childResult.unpairedEndPreserveRaw || isTrackChangeWrapper(node);
+        const shouldPreserveRaw = childResult.unpairedEndPreserveRaw || isTrackChangeElement(node);
         if (collectedNodesStack.length === 0) {
           // Preserve the original subtree; child processing may have stripped the fldChar end marker.
           processedNodes.push(rawNode);

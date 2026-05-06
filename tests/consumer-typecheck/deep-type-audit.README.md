@@ -21,9 +21,9 @@ The umbrella's success definition (a public-type contract worth shipping):
 
 Two compliance classes, both required:
 
-- **Type-quality compliance** — every reachable public type is real, not
+- **Type-quality compliance**: every reachable public type is real, not
   `any`. This audit gate enforces it; the tier-by-tier drain achieves it.
-- **Package-shape compliance** — manifest, exports, conditions, CDN
+- **Package-shape compliance**: manifest, exports, conditions, CDN
   fields are honest. SD-2978 (Packaging Honesty) owns this side.
 
 ## What it checks
@@ -32,8 +32,8 @@ For every export entry in `packages/superdoc/package.json`'s `exports` map
 that has a `types` field, the audit:
 
 1. Builds a TypeScript Program rooted at the entry's `.d.ts`
-2. Recursively walks every reachable type — properties, function params,
-   return types, type arguments, union/intersection constituents
+2. Recursively walks every reachable type (properties, function params,
+   return types, type arguments, union/intersection constituents)
 3. Records every `any` declared inside `node_modules/superdoc/...`
 4. Compares findings against `deep-type-audit.allowlist.json`
 5. Fails CI on:
@@ -48,8 +48,8 @@ Skipped on purpose:
 - `#private` class fields (TypeScript represents them as `any` but they are
   legitimately inaccessible to consumers)
 - `private` and `protected` class members (same reason)
-- Upstream `any` (declared in `node_modules/{vue, prosemirror-*, yjs, ...}`)
-  — we don't own those types and can't fix them. The walker stops at
+- Upstream `any` (declared in `node_modules/{vue, prosemirror-*, yjs, ...}`):
+  we don't own those types and can't fix them. The walker stops at
   upstream package boundaries.
 
 ## Why an allowlist instead of a full clean state
@@ -88,10 +88,10 @@ node tests/consumer-typecheck/deep-type-audit.mjs --report-only
 
 Two legitimate reasons to run `--write`:
 
-1. **A fix landed** — the audit reports stale entries. Run `--write`,
+1. **A fix landed**: the audit reports stale entries. Run `--write`,
    commit the diff. Each removed entry should correspond to a real type
    improvement in the same PR.
-2. **A new `any` is intentional and justified** — extremely rare. The new
+2. **A new `any` is intentional and justified**: extremely rare. The new
    entry must include a `rationale` explaining why the type genuinely
    cannot be expressed any better (e.g. ProseMirror's own opaque `Plugin`
    types where we have no upstream type to import). Reviewers should
@@ -104,7 +104,7 @@ default `auto-seeded from inventory` rationale.
 > **Important:** Do not drain the allowlist by replacing `any` with
 > `unknown` unless the value is genuinely opaque. Prefer precise imported
 > or local public types. `unknown` is safer than `any`, but it does not
-> restore IntelliSense — and "no `any`" is a mechanical gate while "good
+> restore IntelliSense, and "no `any`" is a mechanical gate while "good
 > TypeScript support" still requires reviewer judgment. For example,
 > `EditorTransactionEvent.transaction` should resolve to ProseMirror's
 > `Transaction`, not `unknown`. Reviewers should reject `unknown`-only
@@ -121,23 +121,23 @@ default `auto-seeded from inventory` rationale.
   collapsing to `Ref<any>` for every property. Direct customer pain when
   configuring custom toolbar buttons.
 - **tier-3-helpers** (~61 entries): `trackChangesHelpers` and
-  `fieldAnnotationHelpers` — JS files exported via the `helpers` namespace
-  with no JSDoc. Best fix is probably JS→TS conversion.
+  `fieldAnnotationHelpers`. JS files exported via the `helpers` namespace
+  with no JSDoc. Best fix is probably JS to TS conversion.
 - **tier-4-public-contract** (~2 entries): the curated `core/types/index.ts`
-  file. These are surgical fixes — `transaction: any` should import
-  `Transaction` from `prosemirror-state`, etc.
+  file. These are surgical fixes (`transaction: any` should import
+  `Transaction` from `prosemirror-state`, etc).
 - **tier-5-other**: catchall for anything that doesn't match the patterns
   above.
 
 ## Relationship to other gates
 
-- `typecheck-matrix.mjs` — runs `tsc --noEmit` under N consumer tsconfigs.
+- `typecheck-matrix.mjs`: runs `tsc --noEmit` under N consumer tsconfigs.
   Catches *resolution* errors and *missing exports*. Doesn't see member-level
   `any`.
-- `check-public-types.mjs` — verifies every public `@typedef` has an
+- `check-public-types.mjs`: verifies every public `@typedef` has an
   assertion fixture. Asserts top-level type aliases aren't `any`. Doesn't
   see member-level `any`.
-- **deep-type-audit.mjs (this)** — recursive walk; catches what the others
+- **deep-type-audit.mjs (this)**: recursive walk; catches what the others
   cannot. Together the three gates form the public-type contract guarantee.
 
 ## CI wiring

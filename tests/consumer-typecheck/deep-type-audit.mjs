@@ -13,7 +13,7 @@
  *
  * Owned vs upstream:
  *   - Owned: the `any` is declared inside `node_modules/superdoc/...`.
- *   - Upstream: declared elsewhere (prosemirror-*, yjs, etc.) — recorded
+ *   - Upstream: declared elsewhere (prosemirror-*, yjs, etc.); recorded
  *     for visibility but does not block CI on its own.
  *
  * Run:
@@ -283,8 +283,7 @@ function walkType(type, symbolPath, depth, originDecl) {
   // Call signatures + construct signatures both expose param/return any.
   // `(...args: any[]): any` lives on call sigs; `constructor(...args: any[])`
   // and similar `new (...): T` shapes live on construct sigs. Walking only
-  // call sigs leaves a public-class blind spot — flagged by Codex on the
-  // initial PR, fixed here.
+  // call sigs leaves a public-class blind spot.
   const sigGroups = [
     { kind: 'call', sigs: type.getCallSignatures ? type.getCallSignatures() : [] },
     { kind: 'construct', sigs: type.getConstructSignatures ? type.getConstructSignatures() : [] },
@@ -313,8 +312,7 @@ function walkType(type, symbolPath, depth, originDecl) {
   // Index signatures (`[key: string]: any`, `[key: number]: any`) are NOT
   // enumerated by getProperties(); they live on getStringIndexType /
   // getNumberIndexType. Walking only properties misses the
-  // SuperConverter/DocxZipper-style accidentally-public surface. Flagged
-  // by Codex on the initial PR, fixed here.
+  // SuperConverter/DocxZipper-style accidentally-public surface.
   if (type.getStringIndexType) {
     const sIdx = type.getStringIndexType();
     if (sIdx) {
@@ -347,7 +345,7 @@ function walkType(type, symbolPath, depth, originDecl) {
 function walkExport(symbol, exportName, originDecl) {
   const decl = symbol.valueDeclaration ?? symbol.declarations?.[0] ?? originDecl;
   // For interfaces and type aliases, getDeclaredTypeOfSymbol returns the
-  // structural type. For classes, it returns the INSTANCE type — which
+  // structural type. For classes, it returns the INSTANCE type, which
   // never has constructor or static signatures. Walking only the declared
   // type leaves class-side `any` (e.g. `constructor(...args: any[])` and
   // `static foo(): any`) out of the audit. Walk the value type as well
@@ -377,10 +375,17 @@ function walkExport(symbol, exportName, originDecl) {
   // for classes and functions, valueType carries the constructor /
   // static / call shape that the declared type does not.
   if (valueType && valueType !== declaredType) {
-    // The stack-scoped visited set in walkType pops on exit, so the
-    // declared-type walk above leaves visited empty. No reset needed.
+    // visited is per-root and persistent (not stack-scoped), so it carries
+    // over from the declared-type walk above. Snapshot and swap in a fresh
+    // set for the value walk so structural types reachable from both
+    // class sides aren't silently skipped on the value side, then restore
+    // so subsequent exports' declared walks resume against the same
+    // per-root visited they would have seen without the value walk.
+    const savedVisited = visited;
+    visited = new Set();
     if (isAnyType(valueType)) record('export', exportName + '.<value>', decl);
     else walkType(valueType, exportName + '.<value>', 0, decl);
+    visited = savedVisited;
   }
 }
 
@@ -440,7 +445,7 @@ function classifyOwner(f) {
   if (f.file.endsWith('core/types/index.d.ts')) return 'tier-4-public-contract';
   // SuperConverter + DocxZipper expose `[key: string]: any` and
   // `constructor(...args: any[])`. SD-2966's done-when criteria explicitly
-  // call these out as accidentally-public — group with tier-4 so the
+  // call these out as accidentally-public; group with tier-4 so the
   // facade work owns the fix.
   if (f.file.endsWith('SuperConverter.d.ts') || f.file.endsWith('DocxZipper.d.ts')) return 'tier-4-public-contract';
   return 'tier-5-other';
@@ -459,7 +464,7 @@ if (doWrite) {
         kind: f.kind,
         symbolPath: f.symbolPath,
         file: f.file,
-        line: f.line, // informational only — not part of key
+        line: f.line, // informational only, not part of key
         snippet: f.snippet,
         owner: existing?.owner ?? classifyOwner(f),
         rationale: existing?.rationale ?? `auto-seeded from inventory`,

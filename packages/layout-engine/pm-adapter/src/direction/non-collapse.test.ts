@@ -48,16 +48,26 @@ describe('Non-collapse rule 2: table w:bidiVisual MUST NOT make cell paragraphs 
 
   it('table visual RTL with cell having no w:textDirection inherits writing mode only', () => {
     const sectionContext = resolveSectionDirection(undefined);
-    const tableContext = resolveTableDirection({ bidiVisual: true }, sectionContext);
+    // The resolved TableProperties type uses `rightToLeft` (matching the
+    // style-engine convention from the existing importer).
+    const tableContext = resolveTableDirection({ rightToLeft: true }, sectionContext);
     expect(tableContext.visualDirection).toBe('rtl');
 
     const cellContext = resolveCellDirection(undefined, tableContext);
     expect(cellContext.writingMode).toBe('horizontal-tb');
   });
 
-  it('cell paragraph in visually-RTL table with no w:bidi → inlineDirection is undefined', () => {
+  it('table visual RTL accepts the OOXML-shaped bidiVisual alias too', () => {
+    // Callers that read raw w:tblPr without going through the style-engine
+    // may know it as bidiVisual; both should work.
     const sectionContext = resolveSectionDirection(undefined);
     const tableContext = resolveTableDirection({ bidiVisual: true }, sectionContext);
+    expect(tableContext.visualDirection).toBe('rtl');
+  });
+
+  it('cell paragraph in visually-RTL table with no w:bidi → inlineDirection is undefined', () => {
+    const sectionContext = resolveSectionDirection(undefined);
+    const tableContext = resolveTableDirection({ rightToLeft: true }, sectionContext);
     const cellContext = resolveCellDirection(undefined, tableContext);
     const paragraphContext = resolveParagraphDirection({}, sectionContext, cellContext);
     expect(paragraphContext.inlineDirection).toBeUndefined();

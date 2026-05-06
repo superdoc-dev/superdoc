@@ -14,7 +14,7 @@ import {
   type ParagraphIndent,
   type DropCapDescriptor,
   type DropCapRun,
-  type ParagraphFrame,
+  type ParagraphFrame, ParagraphDirectionContext 
 } from '@superdoc/contracts';
 import type { PMNode, ParagraphFont } from '../types.js';
 import type { ResolvedRunProperties } from '@superdoc/word-layout';
@@ -35,6 +35,7 @@ import {
   type ParagraphProperties,
   type RunProperties,
 } from '@superdoc/style-engine/ooxml';
+import { resolveSectionDirection, resolveParagraphDirection } from '../direction/index.js';
 
 const DEFAULT_DECIMAL_SEPARATOR = '.';
 const DEFAULT_TAB_INTERVAL_TWIPS = 720; // 0.5 inch
@@ -64,42 +65,24 @@ export const deepClone = <T>(obj: T): T => {
   return clone as T;
 };
 
-const inferDirectionFromRuns = (para: PMNode): ParagraphDirection | undefined => {
-  const content = Array.isArray(para.content) ? para.content : [];
-  let hasExplicitRtl = false;
-  let hasExplicitLtr = false;
-
-  for (const node of content) {
-    if (node?.type !== 'run') continue;
-    const runProps = (node.attrs?.runProperties as { rightToLeft?: unknown; rtl?: unknown } | undefined) ?? {};
-    const runDirection = runProps.rightToLeft ?? runProps.rtl;
-    if (runDirection === true) {
-      hasExplicitRtl = true;
-      continue;
-    }
-    if (runDirection === false) {
-      hasExplicitLtr = true;
-    }
-  }
-
-  if (!hasExplicitRtl && !hasExplicitLtr) return undefined;
-  if (hasExplicitLtr) return undefined;
-  return 'rtl';
-};
-
-export const resolveEffectiveParagraphDirection = (
-  para: PMNode,
-  resolvedParagraphProperties: ParagraphProperties,
-  _sectionDirection?: ParagraphDirection,
-  docDefaultsDirection?: ParagraphDirection,
-): ParagraphDirection | undefined => {
-  if (resolvedParagraphProperties.rightToLeft === true) return 'rtl';
-  if (resolvedParagraphProperties.rightToLeft === false) return 'ltr';
-  const inferredFromRuns = inferDirectionFromRuns(para);
-  if (inferredFromRuns) return inferredFromRuns;
-  if (docDefaultsDirection) return docDefaultsDirection;
-  return undefined;
-};
+/*
+ * Direction resolution moved to `../direction/`. The previous cascade
+ * (`resolveEffectiveParagraphDirection` + `inferDirectionFromRuns`) folded
+ * section bidi, docDefaults, and a run-content heuristic into one function.
+ *
+ * Per ECMA-376 §17.6.1, section bidi affects section chrome only and must
+ * not propagate to paragraph inline direction. Per §17.7.2, docDefaults
+ * paragraph properties already cascade through the style-engine into
+ * `resolvedParagraphProperties.rightToLeft` before this resolver runs, so
+ * a separate parameter for them is redundant. Per UAX #9, paragraph base
+ * direction without explicit w:bidi comes from the first strong character.
+ * The browser handles UAX #9 natively when `dir` is omitted; SuperDoc does
+ * not need to infer it here.
+ *
+ * The new `resolveParagraphDirection` resolver is direction-aware by
+ * construction and produces a typed `ParagraphDirectionContext` that
+ * downstream consumers read.
+ */
 
 /**
  * Convert indent from twips to pixels.
@@ -335,16 +318,21 @@ export const computeParagraphAttrs = (
     );
   }
 
-  const normalizedDirection = resolveEffectiveParagraphDirection(
-    para,
+  // Direction is resolved via the typed resolver chain.
+  // Inputs:
+  //  - resolvedParagraphProperties.rightToLeft already reflects the style cascade
+  //    including docDefaults/pPrDefault/pPr/bidi (style-engine §17.7.2 cascade).
+  //  - The section context provides writing-mode inheritance only.
+  //
+  // The resolver intentionally does NOT consume sectionDirection or run content as
+  // fallbacks for inline direction. Per ECMA §17.6.1 section bidi affects section
+  // chrome only, and run rtl is per-run script formatting, not paragraph state.
+  const sectionContext = resolveSectionDirection(undefined);
+  const directionContext: ParagraphDirectionContext = resolveParagraphDirection(
     resolvedParagraphProperties,
-    converterContext?.sectionDirection,
-    converterContext?.translatedLinkedStyles?.docDefaults?.paragraphProperties?.rightToLeft === true
-      ? 'rtl'
-      : converterContext?.translatedLinkedStyles?.docDefaults?.paragraphProperties?.rightToLeft === false
-        ? 'ltr'
-        : undefined,
+    sectionContext,
   );
+  const normalizedDirection: ParagraphDirection | undefined = directionContext.inlineDirection;
   const isRtl = normalizedDirection === 'rtl';
 
   const normalizedSpacing = normalizeParagraphSpacing(
@@ -395,6 +383,7 @@ export const computeParagraphAttrs = (
     floatAlignment: floatAlignment,
     pageBreakBefore: resolvedParagraphProperties.pageBreakBefore,
     ...(normalizedDirection ? { direction: normalizedDirection } : {}),
+    directionContext,
   };
 
   if (normalizedNumberingProperties && normalizedListRendering) {

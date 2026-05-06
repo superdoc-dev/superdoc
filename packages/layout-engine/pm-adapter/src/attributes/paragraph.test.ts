@@ -15,7 +15,6 @@ import {
   normalizeFramePr,
   normalizeDropCap,
   computeParagraphAttrs,
-  resolveEffectiveParagraphDirection,
   computeRunAttrs,
   hasExplicitParagraphRunProperties,
 } from './paragraph.js';
@@ -328,7 +327,9 @@ describe('computeParagraphAttrs', () => {
     expect(paragraphAttrs.direction).toBe('rtl');
   });
 
-  it('does not use section direction fallback when paragraph direction is not explicit', () => {
+  it('does NOT inherit section direction for paragraph inline direction (§17.6.1)', () => {
+    // Section bidi affects section chrome only; paragraph inline direction
+    // must come from paragraph w:bidi or its style cascade, never the section.
     const paragraph: PMNode = {
       type: { name: 'paragraph' },
       attrs: {
@@ -348,142 +349,23 @@ describe('computeParagraphAttrs', () => {
   });
 });
 
-describe('resolveEffectiveParagraphDirection', () => {
-  it('prefers resolved paragraph rightToLeft over section direction', () => {
-    const paragraph: PMNode = {
-      type: { name: 'paragraph' },
-      attrs: {
-        paragraphProperties: {
-          rightToLeft: true,
-        },
-      },
-    };
-
-    const direction = resolveEffectiveParagraphDirection(paragraph as never, { rightToLeft: true } as never, 'ltr');
-    expect(direction).toBe('rtl');
-  });
-
-  it('does not use section direction when paragraph direction is not explicit', () => {
-    const paragraph: PMNode = {
-      type: { name: 'paragraph' },
-      attrs: {
-        paragraphProperties: {},
-      },
-    };
-
-    const direction = resolveEffectiveParagraphDirection(paragraph as never, {} as never, 'rtl');
-    expect(direction).toBeUndefined();
-  });
-
-  it('uses run inference before docDefaults direction', () => {
-    const paragraph: PMNode = {
-      type: { name: 'paragraph' },
-      content: [
-        { type: 'run', attrs: { runProperties: { rightToLeft: true } }, content: [{ type: 'text', text: 'אבג' }] },
-      ],
-    };
-
-    const direction = resolveEffectiveParagraphDirection(paragraph as never, {} as never, undefined, 'ltr');
-    expect(direction).toBe('rtl');
-  });
-
-  it('uses run inference when rtl is set on runProperties', () => {
-    const paragraph: PMNode = {
-      type: { name: 'paragraph' },
-      content: [{ type: 'run', attrs: { runProperties: { rtl: true } }, content: [{ type: 'text', text: 'אבג' }] }],
-    };
-
-    const direction = resolveEffectiveParagraphDirection(paragraph as never, {} as never, undefined, 'ltr');
-    expect(direction).toBe('rtl');
-  });
-
-  it('uses docDefaults when no explicit run direction exists', () => {
-    const paragraph: PMNode = {
-      type: { name: 'paragraph' },
-      content: [{ type: 'run', attrs: { runProperties: {} }, content: [{ type: 'text', text: 'abc' }] }],
-    };
-
-    const direction = resolveEffectiveParagraphDirection(paragraph as never, {} as never, undefined, 'rtl');
-    expect(direction).toBe('rtl');
-  });
-
-  it('infers rtl when all runs with explicit direction are rtl', () => {
-    const paragraph: PMNode = {
-      type: { name: 'paragraph' },
-      content: [
-        { type: 'run', attrs: { runProperties: { rightToLeft: true } }, content: [{ type: 'text', text: 'אבג' }] },
-        { type: 'run', attrs: { runProperties: { rightToLeft: true } }, content: [{ type: 'text', text: 'דהו' }] },
-      ],
-    };
-
-    const direction = resolveEffectiveParagraphDirection(paragraph as never, {} as never);
-    expect(direction).toBe('rtl');
-  });
-
-  it('does not infer rtl when any explicit ltr run is present', () => {
-    const paragraph: PMNode = {
-      type: { name: 'paragraph' },
-      content: [
-        { type: 'run', attrs: { runProperties: { rightToLeft: true } }, content: [{ type: 'text', text: 'אבג' }] },
-        { type: 'run', attrs: { runProperties: { rightToLeft: false } }, content: [{ type: 'text', text: 'abc' }] },
-        { type: 'run', attrs: { runProperties: { rightToLeft: false } }, content: [{ type: 'text', text: 'def' }] },
-      ],
-    };
-
-    const direction = resolveEffectiveParagraphDirection(paragraph as never, {} as never);
-    expect(direction).toBeUndefined();
-  });
-
-  it('does not infer rtl when rtl and explicit ltr rtl=false are mixed', () => {
-    const paragraph: PMNode = {
-      type: { name: 'paragraph' },
-      content: [
-        { type: 'run', attrs: { runProperties: { rtl: true } }, content: [{ type: 'text', text: 'אבג' }] },
-        { type: 'run', attrs: { runProperties: { rtl: false } }, content: [{ type: 'text', text: 'abc' }] },
-      ],
-    };
-
-    const direction = resolveEffectiveParagraphDirection(paragraph as never, {} as never);
-    expect(direction).toBeUndefined();
-  });
-
-  it('does not infer rtl when explicit rtl and ltr runs are mixed', () => {
-    const paragraph: PMNode = {
-      type: { name: 'paragraph' },
-      content: [
-        { type: 'run', attrs: { runProperties: { rightToLeft: false } }, content: [{ type: 'text', text: 'abc' }] },
-        { type: 'run', attrs: { runProperties: { rightToLeft: true } }, content: [{ type: 'text', text: 'אבג' }] },
-        { type: 'run', attrs: { runProperties: { rightToLeft: true } }, content: [{ type: 'text', text: 'דהו' }] },
-      ],
-    };
-
-    const direction = resolveEffectiveParagraphDirection(paragraph as never, {} as never);
-    expect(direction).toBeUndefined();
-  });
-
-  it('does not infer rtl on mixed explicit directions (tie case)', () => {
-    const paragraph: PMNode = {
-      type: { name: 'paragraph' },
-      content: [
-        { type: 'run', attrs: { runProperties: { rightToLeft: true } }, content: [{ type: 'text', text: 'אבג' }] },
-        { type: 'run', attrs: { runProperties: { rightToLeft: false } }, content: [{ type: 'text', text: 'abc' }] },
-      ],
-    };
-
-    const direction = resolveEffectiveParagraphDirection(paragraph as never, {} as never);
-    expect(direction).toBeUndefined();
-  });
-
-  it('returns undefined when no direction signal exists', () => {
-    const paragraph: PMNode = {
-      type: { name: 'paragraph' },
-      content: [{ type: 'run', attrs: { runProperties: {} }, content: [{ type: 'text', text: 'plain text' }] }],
-    };
-
-    const direction = resolveEffectiveParagraphDirection(paragraph as never, {} as never);
-    expect(direction).toBeUndefined();
-  });
-});
+/*
+ * The previous tests for `resolveEffectiveParagraphDirection` codified
+ * direction-resolution behavior that the new resolver chain replaces:
+ *
+ *   - Section bidi propagating to paragraph inline direction (§17.6.1
+ *     violation — section bidi affects section chrome only).
+ *   - A run-content heuristic for paragraph base direction (UAX #9 P2/P3
+ *     specifies first-strong-character; the browser handles this via UBA
+ *     when `dir` is omitted, so SuperDoc does not need a server-side
+ *     classifier).
+ *   - A docDefaults parameter (redundant — the style-engine cascade
+ *     already resolves docDefaults/pPrDefault/pPr/bidi into
+ *     `paragraphProperties.rightToLeft` before this resolver runs).
+ *
+ * Direction-axis correctness is now tested in
+ * `direction/non-collapse.test.ts` where each axis stays separate.
+ */
 
 describe('computeRunAttrs', () => {
   it('normalizes font family, font size, and color', () => {

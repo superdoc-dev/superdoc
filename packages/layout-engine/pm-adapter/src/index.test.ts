@@ -3217,7 +3217,10 @@ describe('toFlowBlocks', () => {
       expect(paragraph.attrs?.direction).toBe('ltr');
     });
 
-    it('does not inherit paragraph direction from body sectPr w:bidi when paragraph direction is missing', () => {
+    it('does NOT inherit paragraph inline direction from body sectPr w:bidi (§17.6.1)', () => {
+      // Per ECMA-376 §17.6.1, section bidi affects section chrome only and does
+      // not propagate to paragraph layout. Paragraph direction must come from
+      // paragraph w:bidi (or its style cascade including docDefaults), not section.
       const pmDoc = {
         type: 'doc',
         attrs: {
@@ -3233,7 +3236,7 @@ describe('toFlowBlocks', () => {
             attrs: {
               paragraphProperties: {},
             },
-            content: [{ type: 'text', text: 'Section inherited RTL' }],
+            content: [{ type: 'text', text: 'Latin paragraph in RTL section' }],
           },
         ],
       };
@@ -3242,10 +3245,12 @@ describe('toFlowBlocks', () => {
       expect(blocks).toHaveLength(1);
       const paragraph = blocks[0];
       expect(paragraph.kind).toBe('paragraph');
+      // Paragraph inline direction stays undefined; the browser applies UBA via
+      // the missing dir attribute. Section pageDirection is preserved separately.
       expect(paragraph.attrs?.direction).toBeUndefined();
     });
 
-    it('keeps paragraph direction undefined when body sectPr w:bidi is explicitly false', () => {
+    it('section bidi=0 also does not affect paragraph inline direction', () => {
       const pmDoc = {
         type: 'doc',
         attrs: {
@@ -3261,7 +3266,7 @@ describe('toFlowBlocks', () => {
             attrs: {
               paragraphProperties: {},
             },
-            content: [{ type: 'text', text: 'Section inherited LTR' }],
+            content: [{ type: 'text', text: 'Paragraph in LTR section' }],
           },
         ],
       };

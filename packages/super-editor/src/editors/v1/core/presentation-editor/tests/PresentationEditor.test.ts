@@ -2305,6 +2305,29 @@ describe('PresentationEditor', () => {
         toJSON: () => ({}),
       } as DOMRect);
 
+      // SD-2749: PointerNormalization uses elementsFromPoint to detect the
+      // .superdoc-page under the cursor; happy-dom doesn't compute layout, so
+      // simulate a page element under the click point.
+      const pagesHost = container.querySelector('.presentation-editor__pages') as HTMLElement;
+      const fakePage = document.createElement('div');
+      fakePage.classList.add('superdoc-page');
+      fakePage.setAttribute('data-page-index', '0');
+      pagesHost.appendChild(fakePage);
+      vi.spyOn(fakePage, 'getBoundingClientRect').mockReturnValue({
+        left: 0,
+        top: 0,
+        width: 612,
+        height: 792,
+        right: 612,
+        bottom: 792,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      } as DOMRect);
+      (document as unknown as { elementsFromPoint: (x: number, y: number) => Element[] }).elementsFromPoint = () => [
+        fakePage,
+      ];
+
       // Clear mock to track fresh calls
       mockClickToPosition.mockClear();
       mockResolvePointerPositionHit.mockClear();
@@ -4847,6 +4870,7 @@ describe('PresentationEditor', () => {
         // Mark page 0 as mounted for the drag anchor.
         const pagesHost = container.querySelector('.presentation-editor__pages') as HTMLElement;
         const page0 = document.createElement('div');
+        page0.classList.add('superdoc-page');
         page0.setAttribute('data-page-index', '0');
         pagesHost.appendChild(page0);
 
@@ -4862,6 +4886,24 @@ describe('PresentationEditor', () => {
           y: 0,
           toJSON: () => ({}),
         } as DOMRect);
+
+        // SD-2749: PointerNormalization uses elementsFromPoint to detect the
+        // .superdoc-page under the cursor; happy-dom doesn't compute layout, so
+        // simulate the page element under each click point.
+        vi.spyOn(page0, 'getBoundingClientRect').mockReturnValue({
+          left: 0,
+          top: 0,
+          width: 612,
+          height: 792,
+          right: 612,
+          bottom: 792,
+          x: 0,
+          y: 0,
+          toJSON: () => ({}),
+        } as DOMRect);
+        (document as unknown as { elementsFromPoint: (x: number, y: number) => Element[] }).elementsFromPoint = () => [
+          page0,
+        ];
 
         // pointerdown: page 0 (mounted), pointermove: page 1 (unmounted), pointerup finalize: page 1
         mockClickToPosition.mockReset();

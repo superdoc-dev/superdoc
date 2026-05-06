@@ -149,7 +149,12 @@ describe('EditorInputManager - Footnote click selection behavior', () => {
 
     mockCallbacks = {
       activateRenderedNoteSession: vi.fn(() => true),
-      normalizeClientPoint: vi.fn((clientX: number, clientY: number) => ({ x: clientX, y: clientY })),
+      normalizeClientPoint: vi.fn((clientX: number, clientY: number) => ({
+        x: clientX,
+        y: clientY,
+        pageIndex: 0,
+        pageLocalY: clientY,
+      })),
       scheduleSelectionUpdate: vi.fn(),
       updateSelectionDebugHud: vi.fn(),
     };

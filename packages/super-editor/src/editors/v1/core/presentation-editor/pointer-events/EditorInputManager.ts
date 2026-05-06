@@ -132,7 +132,7 @@ function isOutsidePageBodyContent(layout: Layout, x: number, pageIndex?: number,
     return false;
   }
 
-  const page = layout.pages[pageIndex];
+  const page = layout?.pages?.[pageIndex];
   if (!page) {
     return false;
   }
@@ -1480,13 +1480,21 @@ export class EditorInputManager {
       }
     }
 
-    if (
-      !useActiveSurfaceHitTest &&
-      isOutsidePageBodyContent(layoutState.layout, x, normalizedPoint.pageIndex, normalizedPoint.pageLocalY)
-    ) {
-      event.preventDefault();
-      this.#focusEditor();
-      return;
+    // Bail when the click did not land on any page body. Two cases:
+    // - SD-2356: click inside a page's bounding box but in the margin/header/footer area.
+    // - SD-2749: click in the gap between pages (no .superdoc-page under the cursor),
+    //   in which case normalizeClientPoint leaves pageIndex undefined.
+    // Both should preserve the current selection and scroll position.
+    if (!useActiveSurfaceHitTest) {
+      const pointerOffAnyPage = !Number.isFinite(normalizedPoint.pageIndex);
+      if (
+        pointerOffAnyPage ||
+        isOutsidePageBodyContent(layoutState.layout, x, normalizedPoint.pageIndex, normalizedPoint.pageLocalY)
+      ) {
+        event.preventDefault();
+        this.#focusEditor();
+        return;
+      }
     }
 
     const { rawHit, hit } = this.#resolveSelectionPointerHit({

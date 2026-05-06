@@ -76,6 +76,60 @@ describe('engines-tabs computeTabStops', () => {
     expect(firstDefault?.source).toBe('default');
   });
 
+  it('adds an implicit left-margin stop when hanging indent starts before the margin', () => {
+    const stops = computeTabStops({
+      explicitStops: [{ val: 'start', pos: -1440, leader: 'none' }],
+      defaultTabInterval: 720,
+      paragraphIndent: { left: 0, hanging: 567 },
+    });
+
+    expect(stops[0]).toEqual({ val: 'start', pos: 0, leader: 'none', source: 'default' });
+    expect(stops.find((stop) => stop.pos === 720)).toBeDefined();
+  });
+
+  it.each([
+    {
+      label: 'with explicit negative tab stop',
+      explicitStops: [{ val: 'start' as const, pos: -1440, leader: 'none' as const }],
+    },
+    { label: 'without explicit tab stops', explicitStops: [] },
+  ])('adds an implicit left-indent stop for hanging indent paragraphs $label', ({ explicitStops }) => {
+    const stops = computeTabStops({
+      explicitStops,
+      defaultTabInterval: 720,
+      paragraphIndent: { left: -600, hanging: 141 },
+    });
+
+    expect(stops[0]).toEqual({ val: 'start', pos: 0, leader: 'none', source: 'default' });
+    expect(stops[1]).toEqual({ val: 'start', pos: 600, leader: 'none', source: 'default' });
+    expect(stops.find((stop) => stop.pos === 720)).toBeDefined();
+  });
+
+  it('adds the implicit zero stop without adding a left-indent stop for negative left indent paragraphs', () => {
+    const stops = computeTabStops({
+      explicitStops: [{ val: 'start', pos: -1440, leader: 'none' }],
+      defaultTabInterval: 720,
+      paragraphIndent: { left: -567, hanging: 0 },
+    });
+
+    expect(stops[0]).toEqual({ val: 'start', pos: 0, leader: 'none', source: 'default' });
+    expect(stops.find((stop) => stop.pos === 567)).toBeUndefined();
+    expect(stops.find((stop) => stop.pos === 720)).toBeDefined();
+  });
+
+  it('uses raw negative indent for implicit stops while keeping normalized indent for defaults', () => {
+    const stops = computeTabStops({
+      explicitStops: [{ val: 'start', pos: -1440, leader: 'none' }],
+      defaultTabInterval: 720,
+      paragraphIndent: { left: 0, hanging: 0 },
+      rawParagraphIndent: { left: -567, hanging: 0 },
+    });
+
+    expect(stops[0]).toEqual({ val: 'start', pos: 0, leader: 'none', source: 'default' });
+    expect(stops.find((stop) => stop.pos === 567)).toBeUndefined();
+    expect(stops.find((stop) => stop.pos === 720)).toBeDefined();
+  });
+
   it('preserves tab stops between (left - hanging) and left when hanging indent exists', () => {
     // SD-1472 regression: When left=709 and hanging=709, the first line starts at 0.
     // Tab stops at 340 (between 0 and 709) should be preserved for first-line use.
@@ -208,18 +262,30 @@ describe('engines-tabs computeTabStops', () => {
     expect(stops.filter((stop) => stop.pos === 720).length).toBe(0);
   });
 
-  it('still generates default start tabs before explicit right tabs (TOC regression)', () => {
+  it('adds the implicit left-indent stop before explicit right tabs (TOC regression)', () => {
     const stops = computeTabStops({
       explicitStops: [{ val: 'end', pos: 10593, leader: 'dot' }], // TOC1 style tab
       defaultTabInterval: 720,
       paragraphIndent: { left: 454, hanging: 454 }, // first line begins near 0"
     });
 
-    const firstDefault = stops.find((stop) => stop.val === 'start' && stop.leader === 'none');
-    expect(firstDefault).toBeDefined();
-    expect(firstDefault?.pos).toBe(720); // Word default 0.5" tab stop
-    expect(firstDefault!.pos).toBeLessThan(10593);
+    const startStops = stops.filter((stop) => stop.val === 'start' && stop.leader === 'none');
+    expect(startStops[0]?.pos).toBe(454); // Word implicit stop at left indent
+    expect(startStops.find((stop) => stop.pos === 720)).toBeDefined(); // Word default 0.5" tab stop
+    expect(startStops[0]!.pos).toBeLessThan(10593);
     expect(stops.find((stop) => stop.val === 'end' && stop.pos === 10593)).toBeDefined();
+  });
+
+  it('does not duplicate default stops when an implicit left-indent stop lands on the default grid', () => {
+    const stops = computeTabStops({
+      explicitStops: [],
+      defaultTabInterval: 720,
+      paragraphIndent: { left: 720, hanging: 720 },
+    });
+
+    expect(stops.filter((stop) => stop.pos === 720)).toHaveLength(1);
+    expect(stops[0]).toEqual({ val: 'start', pos: 720, leader: 'none', source: 'default' });
+    expect(stops.find((stop) => stop.pos === 1440)).toBeDefined();
   });
 
   it('preserves legacy defaults-after-rightmost behavior when a start stop is present', () => {

@@ -18,10 +18,12 @@ import type {
   WrapTextMode,
 } from '@superdoc/contracts';
 import { effectiveTableCellSpacing, rescaleColumnWidths, normalizeZIndex, getCellSpacingPx } from '@superdoc/contracts';
-import { createListMarkerElement,
+import {
+  createListMarkerElement,
   computeTabWidth,
   resolvePainterListMarkerGeometry,
-  resolvePainterListTextStartPx } from '../utils/marker-helpers.js';
+  resolvePainterListTextStartPx,
+} from '../utils/marker-helpers.js';
 import type { FragmentRenderContext, RenderedLineInfo } from '../renderer.js';
 import { applyParagraphBorderStyles, applyParagraphShadingStyles } from '../features/paragraph-borders/index.js';
 import { applySquareWrapExclusionsToLines } from '../utils/anchor-helpers';

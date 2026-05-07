@@ -26,6 +26,7 @@ type VisitNodeFn = (
   activeSdt: SdtMetadata | undefined,
   activeRunProperties: RunProperties | undefined,
   activeHidden?: boolean,
+  activeInlineRunProperties?: RunProperties,
 ) => void;
 
 export class HiddenByVanishError extends Error {
@@ -53,6 +54,13 @@ export type InlineConverterParams = {
   hyperlinkConfig: HyperlinkConfig;
   themeColors: ThemeColorPalette | undefined;
   runProperties: RunProperties | undefined;
+  /**
+   * The raw inline w:rPr from the run wrapper, BEFORE the style cascade. Used by
+   * preservation-only metadata (TextRun.bidi / TextRun.script in SD-2781) so
+   * style-inherited values don't surface as if they were direct formatting.
+   * Undefined for callers outside a run wrapper.
+   */
+  inlineRunProperties: RunProperties | undefined;
   paragraphProperties: ParagraphProperties | undefined;
   converterContext: ConverterContext;
   enableComments: boolean;
@@ -116,6 +124,7 @@ export const applyInlineRunProperties = (
   run: TextRun,
   runProperties: RunProperties | undefined,
   converterContext?: ConverterContext,
+  inlineRunProperties?: RunProperties,
 ): TextRun => {
   if (!runProperties) {
     return run;
@@ -129,12 +138,16 @@ export const applyInlineRunProperties = (
       (merged as Record<string, unknown>)[key] = runAttrs[key];
     }
   }
-  // SD-2781: preserve run-level bidi/script metadata. Wave 1a stops at preservation;
-  // Wave 1b consumes script.complexScript to gate CS formatting, Wave 1c consumes
-  // bidi.embedding and bidi.override.
-  const bidi = buildBidiContext(runProperties);
-  if (bidi) merged.bidi = bidi;
-  const script = buildScriptContext(runProperties);
-  if (script) merged.script = script;
+  // SD-2781: preserve run-level bidi/script metadata. Read from `inlineRunProperties`
+  // (the raw inline w:rPr, before the style cascade) so style-inherited runs don't
+  // get false metadata - per ECMA the metadata categories track what the source
+  // document encoded, not what the cascade resolved to. When the caller doesn't
+  // supply inline properties, no metadata is populated.
+  if (inlineRunProperties) {
+    const bidi = buildBidiContext(inlineRunProperties);
+    if (bidi) merged.bidi = bidi;
+    const script = buildScriptContext(inlineRunProperties);
+    if (script) merged.script = script;
+  }
   return merged;
 };

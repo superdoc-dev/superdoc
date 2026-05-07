@@ -1043,4 +1043,36 @@ describe('page break integration tests', () => {
     expect(textRun?.bidi).toBeUndefined();
     expect(textRun?.script).toBeUndefined();
   });
+
+  // SD-2781 round 2 (codex finding): generic-token.ts:64 calls
+  // applyInlineRunProperties without reassigning the return value, so token
+  // runs (page numbers, total page counts) lose run-level bidi/script metadata
+  // even when wrapped in a run that explicitly sets rtl/cs/lang.
+  it('preserves bidi/script on page-number token TextRuns inside an rtl run', () => {
+    const pmDoc = {
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [
+            {
+              type: 'run',
+              attrs: { runProperties: { rtl: true, cs: true } },
+              content: [{ type: 'page-number' }],
+            },
+          ],
+        },
+      ],
+    };
+
+    const { blocks } = toFlowBlocks(pmDoc);
+    const paragraph = blocks.find((block) => block.kind === 'paragraph');
+    if (paragraph?.kind !== 'paragraph') return;
+    const tokenRun = paragraph.runs.find(
+      (run) => 'token' in run && (run.token === 'pageNumber' || run.token === 'totalPageCount'),
+    );
+    expect(tokenRun, 'token run should be present').toBeDefined();
+    expect(tokenRun?.bidi).toEqual({ rtl: true });
+    expect(tokenRun?.script).toEqual({ complexScript: true });
+  });
 });

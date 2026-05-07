@@ -122,7 +122,11 @@ export const isRtlBlock = (block: FlowBlock): boolean => {
   if (block.kind !== 'paragraph') return false;
   const attrs = block.attrs as Record<string, unknown> | undefined;
   if (!attrs) return false;
-  const directionAttr = attrs.direction ?? attrs.dir ?? attrs.textDirection;
+  const directionContext = attrs.directionContext;
+  if (directionContext && typeof directionContext === 'object' && 'inlineDirection' in directionContext) {
+    return directionContext.inlineDirection === 'rtl';
+  }
+  const directionAttr = attrs.direction ?? attrs.dir;
   if (typeof directionAttr === 'string' && directionAttr.toLowerCase() === 'rtl') {
     return true;
   }

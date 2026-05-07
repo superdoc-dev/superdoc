@@ -118,8 +118,7 @@ describe('applyInlineRunProperties', () => {
     expect(result.bold).toBe(false);
   });
 
-  // SD-2781: TextRun.bidi and TextRun.script preserve run-level direction and
-  // script signals from raw run properties. Wave 1a does not render either.
+  // Wave 1a preserves these signals; nothing renders them yet.
   describe('SD-2781 bidi/script preservation', () => {
     it('does not attach bidi or script when no relevant signals are set', () => {
       const result = applyInlineRunProperties(baseRun, { bold: true });

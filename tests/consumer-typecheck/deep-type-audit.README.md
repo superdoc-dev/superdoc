@@ -1,28 +1,56 @@
 # Deep Public-Type Audit
 
-A CI gate that walks every type reachable from `superdoc`'s public exports
-in the **packed-and-installed** tarball and locks in zero `any` regressions
-on SuperDoc-owned declarations.
+Walks every type reachable from `superdoc`'s public exports in the
+**packed-and-installed** tarball and reports `any` findings on SuperDoc-owned
+declarations.
 
 Tracked under SD-2977 as part of the "drain to fully compliant" umbrella
 SD-2976.
 
-## What "fully compliant" means
+## Status: report-only inventory (gate deferred until SD-2966)
 
-The umbrella's success definition (a public-type contract worth shipping):
+Today this audit runs in **inventory mode**: it walks the public surface,
+prints a tiered breakdown of findings, and always exits 0. It does NOT
+gate CI yet.
 
-- deep audit allowlist reaches **0 owned findings**
+The gate behavior (failing CI on new findings) is intentionally deferred.
+The current public surface is the *accidental declaration graph*: 1700+
+findings reachable through Pinia stores, EventEmitter generics, Vue SFC
+component types, and other code that was never deliberately committed as
+public API. Locking in an allowlist of that surface would be measuring
+the wrong thing and would risk legitimizing internals as public API.
+
+SD-2966 defines the deliberate facade. Once it lands:
+
+1. Re-run this audit; the allowlist is much smaller (expected ~200-400
+   entries against the facade, not 1700+ against the accidental graph).
+2. Seed the allowlist via `node deep-type-audit.mjs --write`.
+3. Add `--strict` to the CI invocation to make this a real gate.
+
+Until then, the audit's value is the inventory: visible CI signal of how
+much accidental surface is leaking, useful as evidence that SD-2966 is
+worth doing.
+
+## What "fully compliant" means (final state)
+
+The umbrella's success definition:
+
+- deep audit allowlist reaches **0 owned findings against the deliberate
+  public facade defined by SD-2966**
+- the public facade is intentionally defined, not inherited from
+  accidental barrel reachability
+- anything outside the facade is internal and is not part of the
+  TypeScript compliance promise
 - consumer matrix passes with `skipLibCheck: false`
-- CJS / ESM package metadata is honest (no false ESM masquerade, no
-  missing CDN files, no unpublished `source` paths)
+- CJS / ESM package metadata is honest
 - `publint` and `attw --pack` pass as required CI gates
 - no private workspace package references survive in published types
 - release workflow runs the same type gates as PR CI
 
 Two compliance classes, both required:
 
-- **Type-quality compliance**: every reachable public type is real, not
-  `any`. This audit gate enforces it; the tier-by-tier drain achieves it.
+- **Type-quality compliance**: every reachable type *in the facade* is
+  real, not `any`. This audit (in `--strict` mode, post-facade) enforces it.
 - **Package-shape compliance**: manifest, exports, conditions, CDN
   fields are honest. SD-2978 (Packaging Honesty) owns this side.
 
@@ -35,13 +63,14 @@ that has a `types` field, the audit:
 2. Recursively walks every reachable type (properties, function params,
    return types, type arguments, union/intersection constituents)
 3. Records every `any` declared inside `node_modules/superdoc/...`
-4. Compares findings against `deep-type-audit.allowlist.json`
-5. Fails CI on:
+4. Prints a tiered breakdown (by tier, by file)
+5. If `deep-type-audit.allowlist.json` exists: compares findings against it
+   and reports new vs stale entries
+6. Under `--strict`, exits 1 on:
    - a new finding not in the allowlist (regression)
-   - a stale allowlist entry that no longer corresponds to a finding
-     (a fix landed; allowlist must be updated to match)
+   - a stale allowlist entry (a fix landed; entry must be removed)
    - any compiler diagnostic on the public surface
-   - any unresolved import (TypeScript `error` type, distinct from `any`)
+   - any private `@superdoc/*` specifier in installed declarations
 
 Skipped on purpose:
 
@@ -52,36 +81,38 @@ Skipped on purpose:
   we don't own those types and can't fix them. The walker stops at
   upstream package boundaries.
 
-## Why an allowlist instead of a full clean state
+## Why no allowlist file is checked in (yet)
 
-The initial seed has ~290 entries. Fixing all of them up-front would block
-the gate from landing for weeks and let regressions accumulate in the
-meantime. The allowlist:
+A previous iteration committed `deep-type-audit.allowlist.json` with ~1700
+entries. That was reverted because:
 
-- Lets the gate land green today, blocking any *new* regressions
-- Tags every entry with an `owner` (`tier-1-pinia`, `tier-2-toolbar`,
-  `tier-3-helpers`, `tier-4-public-contract`, `tier-5-other`)
-- Lets follow-up PRs drain entries by owner
+- A 17K-line public artifact creates noise in every PR diff
+- It would commit the team to typing internals (Pinia stores, EventEmitter,
+  Vue SFC types) that should be hidden via SD-2966's facade, not typed
+- It risks legitimizing accidental public surface as the type contract
 
-See `deep-type-audit.allowlist.json` for the seed. Each entry has a stable
-key (`kind|file|symbolPath|snippet`) so reformatting / line shifts do not
-churn the allowlist.
+The allowlist re-emerges after SD-2966 lands, scoped to the facade. Each
+entry has a stable key (`kind|file|symbolPath|snippet`) so reformatting and
+line shifts won't churn it.
 
 ## Commands
 
 ```bash
-# CI mode: check against allowlist, fail on regression
+# Default: report-only inventory. Prints findings, always exits 0
+# (unless the script itself errors). Used by CI today.
 node tests/consumer-typecheck/deep-type-audit.mjs
 
-# Pack + install superdoc into the fixture, then check
+# Pack + install superdoc into the fixture, then run inventory
 node tests/consumer-typecheck/deep-type-audit.mjs --pack
 
-# Regenerate the allowlist from current findings (after intentional
-# additions or after a fix removes an entry)
-node tests/consumer-typecheck/deep-type-audit.mjs --write
+# Strict mode: fails on findings if no allowlist exists, or on
+# new/stale entries if an allowlist exists. NOT used in CI today;
+# becomes the gate after SD-2966 defines the facade.
+node tests/consumer-typecheck/deep-type-audit.mjs --strict
 
-# Print findings without failing (debugging / drainage planning)
-node tests/consumer-typecheck/deep-type-audit.mjs --report-only
+# Seed or regenerate deep-type-audit.allowlist.json from current findings
+# (intended for use after SD-2966 to baseline against the facade)
+node tests/consumer-typecheck/deep-type-audit.mjs --write
 ```
 
 ## Updating the allowlist

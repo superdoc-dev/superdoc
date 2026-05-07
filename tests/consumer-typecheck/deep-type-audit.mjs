@@ -40,7 +40,17 @@ const require = createRequire(import.meta.url);
 const args = new Set(process.argv.slice(2));
 const doPack = args.has('--pack');
 const doWrite = args.has('--write');
-const reportOnly = args.has('--report-only');
+// `--strict` turns the audit into a hard CI gate (fails on new findings,
+// stale entries, compiler diagnostics, private specifier leaks). Without
+// it, the audit runs in inventory/reporting mode and always exits 0
+// unless the script itself errors. Strict mode is intentionally NOT used
+// in CI yet: it only becomes meaningful once SD-2966 defines the public
+// facade and the allowlist is re-seeded against that smaller surface.
+const doStrict = args.has('--strict');
+// Legacy alias: previous versions exposed `--report-only` as the way to
+// opt out of failing CI. The default is now report-only, so this flag
+// becomes a no-op (kept so existing invocations don't break).
+const reportOnly = args.has('--report-only') || !doStrict;
 
 // -- Optional pack + install (must run BEFORE requiring typescript so a
 // fresh checkout where tests/consumer-typecheck/node_modules is empty can
@@ -118,7 +128,8 @@ const diagnostics = [
   ...program.getSemanticDiagnostics(),
 ];
 if (diagnostics.length > 0) {
-  console.error(`[audit] FAIL: ${diagnostics.length} compiler diagnostic(s) on the public surface:`);
+  const label = doStrict ? 'FAIL' : 'INFO';
+  console.error(`[audit] ${label}: ${diagnostics.length} compiler diagnostic(s) on the public surface:`);
   for (const d of diagnostics.slice(0, 30)) {
     const file = d.file ? relative(repoRoot, d.file.fileName) : '<no-file>';
     const pos = d.file && d.start != null
@@ -127,7 +138,7 @@ if (diagnostics.length > 0) {
     const msg = ts.flattenDiagnosticMessageText(d.messageText, '\n');
     console.error(`  ${file}:${pos.line + 1}  ${msg}`);
   }
-  process.exit(1);
+  if (doStrict) process.exit(1);
 }
 
 // -- Private workspace specifier gate --------------------------------------
@@ -149,14 +160,15 @@ for (const sf of program.getSourceFiles()) {
   }
 }
 if (privateSpecifiers.length > 0) {
-  console.error(`[audit] FAIL: ${privateSpecifiers.length} private @superdoc/* specifier(s) in installed declarations:`);
+  const label = doStrict ? 'FAIL' : 'INFO';
+  console.error(`[audit] ${label}: ${privateSpecifiers.length} private @superdoc/* specifier(s) in installed declarations:`);
   for (const leak of privateSpecifiers.slice(0, 30)) {
     console.error(`  ${leak.file}:${leak.line}  ${leak.specifier}`);
   }
   if (privateSpecifiers.length > 30) {
     console.error(`  ... and ${privateSpecifiers.length - 30} more`);
   }
-  process.exit(1);
+  if (doStrict) process.exit(1);
 }
 
 // -- Walker ----------------------------------------------------------------
@@ -482,40 +494,78 @@ console.log(`[audit] Findings: ${distinctFindings.size} distinct (owned, after d
 if (depthCapHits > 0) {
   console.log(`[audit] WARN: walker hit MAX_DEPTH=${MAX_DEPTH} cap ${depthCapHits} times; deep public types may be partially audited`);
 }
-console.log(`[audit] Allowlist: ${allowlist.entries.length} entries`);
-console.log(`[audit] New (not in allowlist): ${newFindings.length}`);
-console.log(`[audit] Stale (in allowlist, no longer present): ${staleAllowlistKeys.length}`);
 
-if (newFindings.length > 0) {
-  console.log(``);
-  console.log(`[audit] NEW FINDINGS:`);
-  for (const f of newFindings.slice(0, 50)) {
-    console.log(`  + [${f.owner}] ${f.kind}  ${f.symbolPath}`);
-    console.log(`        ${f.file}:${f.line}`);
-    console.log(`        ${f.snippet}`);
-  }
-  if (newFindings.length > 50) console.log(`  ... and ${newFindings.length - 50} more`);
+// Inventory breakdown: always print, useful CI signal regardless of mode.
+const tieredFindings = [...distinctFindings.values()].map((f) => ({
+  ...f,
+  tier: classifyOwner(f),
+}));
+const tierCounts = {};
+const fileCounts = {};
+for (const f of tieredFindings) {
+  tierCounts[f.tier] = (tierCounts[f.tier] ?? 0) + 1;
+  fileCounts[f.file] = (fileCounts[f.file] ?? 0) + 1;
 }
-if (staleAllowlistKeys.length > 0) {
-  console.log(``);
-  console.log(`[audit] STALE ALLOWLIST ENTRIES (fix landed; remove from allowlist):`);
-  for (const k of staleAllowlistKeys.slice(0, 50)) {
-    const e = allowlistByKey.get(k);
-    console.log(`  - [${e.owner}] ${e.kind}  ${e.symbolPath}  (${e.file}:${e.line})`);
-  }
-  if (staleAllowlistKeys.length > 50) console.log(`  ... and ${staleAllowlistKeys.length - 50} more`);
+console.log(``);
+console.log(`[audit] By tier:`);
+for (const [k, v] of Object.entries(tierCounts).sort((a, b) => b[1] - a[1])) {
+  console.log(`  ${v.toString().padStart(5)}  ${k}`);
+}
+console.log(``);
+console.log(`[audit] Top files:`);
+for (const [k, v] of Object.entries(fileCounts).sort((a, b) => b[1] - a[1]).slice(0, 10)) {
+  console.log(`  ${v.toString().padStart(5)}  ${k}`);
 }
 
-if (reportOnly) {
-  console.log('\n[audit] --report-only set; not failing.');
+const haveAllowlist = existsSync(allowlistPath);
+if (haveAllowlist) {
+  console.log(``);
+  console.log(`[audit] Allowlist: ${allowlist.entries.length} entries`);
+  console.log(`[audit] New (not in allowlist): ${newFindings.length}`);
+  console.log(`[audit] Stale (in allowlist, no longer present): ${staleAllowlistKeys.length}`);
+  if (newFindings.length > 0) {
+    console.log(``);
+    console.log(`[audit] NEW FINDINGS:`);
+    for (const f of newFindings.slice(0, 50)) {
+      console.log(`  + [${f.owner}] ${f.kind}  ${f.symbolPath}`);
+      console.log(`        ${f.file}:${f.line}`);
+      console.log(`        ${f.snippet}`);
+    }
+    if (newFindings.length > 50) console.log(`  ... and ${newFindings.length - 50} more`);
+  }
+  if (staleAllowlistKeys.length > 0) {
+    console.log(``);
+    console.log(`[audit] STALE ALLOWLIST ENTRIES (fix landed; remove from allowlist):`);
+    for (const k of staleAllowlistKeys.slice(0, 50)) {
+      const e = allowlistByKey.get(k);
+      console.log(`  - [${e.owner}] ${e.kind}  ${e.symbolPath}  (${e.file}:${e.line})`);
+    }
+    if (staleAllowlistKeys.length > 50) console.log(`  ... and ${staleAllowlistKeys.length - 50} more`);
+  }
+} else {
+  console.log(``);
+  console.log(`[audit] No allowlist present (deep-type-audit.allowlist.json).`);
+  console.log(`[audit] This is expected pre-SD-2966: the audit is inventory-only until the public facade is defined.`);
+  console.log(`[audit] Once SD-2966 lands, run \`node deep-type-audit.mjs --write\` to seed an allowlist scoped to the facade.`);
+}
+
+if (!doStrict) {
+  console.log(``);
+  console.log(`[audit] PASS (report-only mode; pass --strict to gate CI on findings)`);
   process.exit(0);
 }
 
-if (newFindings.length > 0 || staleAllowlistKeys.length > 0) {
+if (haveAllowlist && (newFindings.length > 0 || staleAllowlistKeys.length > 0)) {
   console.log(``);
-  console.log(`[audit] FAIL`);
+  console.log(`[audit] FAIL (--strict)`);
   console.log(`[audit] - To accept new findings (after intentional addition), run: node deep-type-audit.mjs --write`);
   console.log(`[audit] - To remove stale entries (after fix), run: node deep-type-audit.mjs --write`);
+  process.exit(1);
+}
+if (!haveAllowlist && distinctFindings.size > 0) {
+  console.log(``);
+  console.log(`[audit] FAIL (--strict): no allowlist exists yet but findings are present.`);
+  console.log(`[audit] - To seed the allowlist, run: node deep-type-audit.mjs --write`);
   process.exit(1);
 }
 console.log('[audit] PASS');

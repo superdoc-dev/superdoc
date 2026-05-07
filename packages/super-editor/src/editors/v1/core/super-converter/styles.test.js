@@ -435,7 +435,7 @@ describe('decodeRPrFromMarks', () => {
       { type: 'strike', attrs: { value: true } },
     ];
     const rPr = decodeRPrFromMarks(marks);
-    expect(rPr).toEqual({ bold: true, italic: true, strike: true });
+    expect(rPr).toEqual({ bold: true, boldCs: true, italic: true, italicCs: true, strike: true });
   });
 
   it('should decode textStyle marks for color and fontSize', () => {
@@ -493,7 +493,9 @@ describe('marks encoding/decoding round-trip', () => {
   it('should correctly round-trip basic properties', () => {
     const initialRPr = {
       bold: true,
+      boldCs: true,
       italic: true,
+      italicCs: true,
       strike: true,
       underline: { 'w:val': 'single', 'w:color': 'auto' },
       color: { val: 'FF0000' },

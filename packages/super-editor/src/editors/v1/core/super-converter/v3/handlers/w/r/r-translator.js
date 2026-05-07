@@ -316,6 +316,10 @@ const decode = (params, decodedAttrs = {}) => {
 
   const runAttrs = runNodeForExport.attrs || {};
   const runProperties = runAttrs.runProperties || {};
+  // Backward compatibility: older payloads used iCs instead of italicCs for w:iCs.
+  if (runProperties?.italicCs == null && runProperties?.iCs != null) {
+    runProperties.italicCs = runProperties.iCs;
+  }
   const inlineKeys = runAttrs.runPropertiesInlineKeys;
   const styleKeys = runAttrs.runPropertiesStyleKeys;
   const overrideKeys = runAttrs.runPropertiesOverrideKeys;
@@ -326,6 +330,9 @@ const decode = (params, decodedAttrs = {}) => {
   // so those documents still round-trip formatting (accepts larger document.xml vs strict allow-list only).
   const candidateKeys =
     inlineKeys != null ? [...new Set([...(inlineKeys || []), ...(overrideKeys || [])])] : Object.keys(runProperties);
+  if (candidateKeys.includes('iCs') && !candidateKeys.includes('italicCs')) {
+    candidateKeys.push('italicCs');
+  }
   // Preserve explicit run-level RTL on export even when allow-lists are incomplete.
   if (runProperties?.rtl != null && !candidateKeys.includes('rtl')) {
     candidateKeys.push('rtl');

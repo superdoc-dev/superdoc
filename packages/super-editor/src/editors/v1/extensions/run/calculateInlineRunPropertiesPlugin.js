@@ -11,7 +11,9 @@ import { collectChangedRangesThroughTransactions } from '@utils/rangeUtils.js';
 const RUN_PROPERTIES_DERIVED_FROM_MARKS = new Set([
   'strike',
   'italic',
+  'italicCs',
   'bold',
+  'boldCs',
   'underline',
   'highlight',
   'textTransform',

@@ -15,7 +15,6 @@ import type { PositionHit } from '@superdoc/layout-bridge';
 import {
   buildInternalObjectDragPayload,
   INTERNAL_OBJECT_MIME_TYPE,
-  parseInternalObjectDragPayload,
   type InternalObjectDragPayload,
 } from './internal-drag-payloads.js';
 import { canInsertNodeAtPosition, createInternalNodeMoveTransaction } from './internal-node-move.js';
@@ -775,8 +774,7 @@ export class DragDropManager {
     const { state, view } = activeEditor;
     if (!state || !view) return;
 
-    const dataTransferPayload = parseInternalObjectDragPayload(event);
-    const payload = dataTransferPayload ?? this.#activeInternalObjectPayload;
+    const payload = this.#activeInternalObjectPayload;
     if (!payload) return;
     if (payload.kind === 'structuredContent' && payload.lockMode !== 'unlocked') return;
 

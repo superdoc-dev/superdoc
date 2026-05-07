@@ -762,6 +762,17 @@ describe('DragDropManager', () => {
         callback(sourceNode, 186);
       });
 
+      const sourceElement = document.createElement('div');
+      sourceElement.dataset.dragSourceKind = 'structuredContent';
+      sourceElement.dataset.sdtId = '1140082372';
+      sourceElement.dataset.pmStart = '187';
+      sourceElement.dataset.pmEnd = '535';
+      sourceElement.dataset.nodeType = 'structuredContentBlock';
+      sourceElement.dataset.lockMode = 'unlocked';
+      sourceElement.dataset.displayLabel = 'Signature';
+      painterHost.appendChild(sourceElement);
+
+      sourceElement.dispatchEvent(createInternalObjectDragStartEvent());
       viewportHost.dispatchEvent(
         createInternalObjectDragEvent('drop', {
           kind: 'structuredContent',

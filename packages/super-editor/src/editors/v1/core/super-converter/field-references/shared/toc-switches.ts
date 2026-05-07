@@ -132,7 +132,8 @@ export function parseTocInstruction(instruction: string): TocSwitchConfig {
   SWITCH_PATTERN.lastIndex = 0;
   while ((match = SWITCH_PATTERN.exec(instruction)) !== null) {
     const switchChar = match[1].toLowerCase();
-    const arg = match[2] ?? '';
+    const rawArg = match[2];
+    const arg = rawArg ?? '';
 
     switch (switchChar) {
       // Configurable source switches
@@ -166,7 +167,10 @@ export function parseTocInstruction(instruction: string): TocSwitchConfig {
         break;
       }
       case 'p':
-        if (arg) display.separator = arg;
+        // \p with an explicit empty arg (`\p ""`) means "no leader" and must be
+        // distinguishable from \p being absent entirely (Word default = dots).
+        // Preserve the empty string so deriveTabLeader can map it to 'none'.
+        if (rawArg !== undefined) display.separator = rawArg;
         break;
 
       // Preserved switches
@@ -274,8 +278,8 @@ export function serializeTocInstruction(config: TocSwitchConfig): string {
     parts.push(`\\n "${display.omitPageNumberLevels.from}-${display.omitPageNumberLevels.to}"`);
   }
 
-  // \p — separator
-  if (display.separator) {
+  // \p — separator. Empty string is meaningful (`\p ""` = explicit "no leader").
+  if (display.separator !== undefined) {
     parts.push(`\\p "${display.separator}"`);
   }
 
@@ -374,7 +378,9 @@ export function applyTocPatch(existing: TocSwitchConfig, patch: TocConfigurePatc
   // Handle tabLeader → \p switch mapping
   if (patch.tabLeader !== undefined) {
     if (patch.tabLeader === 'none') {
-      delete newDisplay.separator;
+      // Use \p "" to record an explicit "no leader" so it round-trips through
+      // serialize → parse without collapsing to "absent \p" (Word default = dots).
+      newDisplay.separator = '';
     } else {
       newDisplay.separator = TAB_LEADER_TO_SEPARATOR[patch.tabLeader];
     }

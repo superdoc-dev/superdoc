@@ -1,6 +1,6 @@
 import { EditorView } from 'prosemirror-view';
 import type { DirectEditorProps } from 'prosemirror-view';
-import { DOMSerializer as PmDOMSerializer } from 'prosemirror-model';
+import { DOMSerializer as PmDOMSerializer, Slice as PmSlice, Fragment as PmFragment } from 'prosemirror-model';
 import type { Node as PmNode } from 'prosemirror-model';
 import {
   annotateFragmentDomWithClipboardData,
@@ -18,6 +18,46 @@ import { canUseDOM } from '../../utils/canUseDOM.js';
 import type { EditorRenderer, EditorRendererAttachParams } from './EditorRenderer.js';
 import type { Editor } from '../Editor.js';
 import type { EditorOptions } from '../types/EditorConfig.js';
+
+/** Heading[1-9] styleId regex — paste/copy must keep these paragraph wrappers intact. */
+const HEADING_STYLE_RE = /^Heading[1-9]$/i;
+
+/**
+ * If the active selection is entirely inside a single Heading[1-9] paragraph
+ * AND the slice PM produced has no paragraph wrapper at the top, wrap the
+ * slice's inline content in a copy of that heading paragraph. The result is
+ * a closed-boundary slice that survives paste with the heading styleId
+ * intact — without this, F9 / "Update table of contents" cannot detect the
+ * pasted heading.
+ */
+function wrapHeadingSelectionAsParagraph(slice: PmSlice, state: { selection: any }): PmSlice {
+  // Only act when the slice content is inline-only (no paragraph wrapper).
+  const firstChild = slice.content.firstChild;
+  if (!firstChild || firstChild.type.name === 'paragraph') return slice;
+
+  const $from = state.selection.$from;
+  const $to = state.selection.$to;
+  if (!$from || !$to) return slice;
+
+  // Selection must be inside a single paragraph.
+  let parentParagraph: PmNode | null = null;
+  for (let depth = $from.depth; depth >= 0; depth--) {
+    const node = $from.node(depth);
+    if (node?.type?.name === 'paragraph') {
+      // Confirm $to has the same paragraph ancestor at the same depth.
+      if ($to.depth >= depth && $to.node(depth) === node) parentParagraph = node;
+      break;
+    }
+  }
+  if (!parentParagraph) return slice;
+
+  const styleId = (parentParagraph.attrs as { paragraphProperties?: { styleId?: string } } | undefined)
+    ?.paragraphProperties?.styleId;
+  if (typeof styleId !== 'string' || !HEADING_STYLE_RE.test(styleId)) return slice;
+
+  const wrapped = parentParagraph.type.create(parentParagraph.attrs, slice.content, parentParagraph.marks);
+  return new PmSlice(PmFragment.from(wrapped), 0, 0);
+}
 
 /**
  * Default fallback margin for presentation mode when pageMargins.top is undefined.
@@ -843,7 +883,16 @@ export class ProseMirrorRenderer implements EditorRenderer {
         const { from, to } = this.view.state.selection;
         let sliceJson = '';
         if (from !== to) {
-          const slice = this.view.state.doc.slice(from, to);
+          const rawSlice = this.view.state.doc.slice(from, to);
+          // PM produces an inline-only slice (no paragraph wrapper) when the
+          // selection covers the full content of a paragraph at exact open
+          // boundaries. Without the wrapper the paragraph's styleId — most
+          // critically Heading[1-9] — is lost on paste, so the receiving
+          // editor can't tell that the source was a heading and the TOC
+          // misses the new entry. When the selection is entirely within a
+          // single heading paragraph, re-wrap the slice's content in that
+          // paragraph node and emit it with closed boundaries.
+          const slice = wrapHeadingSelectionAsParagraph(rawSlice, this.view.state);
           sliceJson = JSON.stringify(slice.toJSON());
           clipboardData.setData('application/x-superdoc-slice', sliceJson);
           const mediaJson = collectReferencedImageMediaForClipboard(sliceJson, editor);

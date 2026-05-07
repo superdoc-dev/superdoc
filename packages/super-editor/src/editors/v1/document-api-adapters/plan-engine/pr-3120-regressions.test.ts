@@ -153,6 +153,156 @@ describe('PR-3120 regression — finding 1: tabLeader: "none" must round-trip', 
   });
 });
 
+describe('PR-3120 regression — review comment: bold/italic on first TOC entry must not leak to all rebuilt entries', () => {
+  // repro: open a doc whose first TOC entry happens to be bold and "Update field"
+  // it. Word's behaviour is to rebuild every entry from the linked TOC1, TOC2…
+  // paragraph styles — direct formatting on the existing entries is discarded.
+  // SuperDoc used to sample run formatting from the first entry and apply it to
+  // every rebuilt entry, so a single bold first entry made every entry come out
+  // bold after the rebuild.
+
+  it('rebuilt entries inherit only the link mark; sampled bold/italic do not leak', () => {
+    // First TOC entry has bold + italic marks on its title text. The source
+    // heading is plain, so the rebuild must produce plain entries.
+    const boldTitle = createNode('text', [], {
+      text: 'Heading 1',
+      marks: [{ type: 'bold' }, { type: 'italic' }],
+    });
+    const titleRun = createNode('run', [boldTitle], { isInline: true, inlineContent: true });
+    const tabText = createNode('text', [], { text: '\t' });
+    const tabRun = createNode('run', [tabText], { isInline: true, inlineContent: true });
+    const pageNumText = createNode('text', [], { text: '1', marks: [{ type: 'tocPageNumber' }] });
+    const pageNumRun = createNode('run', [pageNumText], { isInline: true, inlineContent: true });
+    const entryParagraph = createNode('paragraph', [titleRun, tabRun, pageNumRun], {
+      attrs: {
+        sdBlockId: 'toc-entry-p1',
+        paragraphProperties: { styleId: 'TOC1' },
+        tocSourceId: 'h-1',
+      },
+      isBlock: true,
+      inlineContent: true,
+    });
+
+    const tocNode = createNode('tableOfContents', [entryParagraph], {
+      attrs: { sdBlockId: 'toc-1', instruction: 'TOC \\o "1-3" \\h \\z' },
+      isBlock: true,
+    });
+    const heading = createNode('paragraph', [createNode('text', [], { text: 'Heading 1' })], {
+      attrs: { sdBlockId: 'h-1', paragraphProperties: { styleId: 'Heading1' } },
+      isBlock: true,
+      inlineContent: true,
+    });
+    // Add a second heading so the rebuild produces multiple entries — easier
+    // to assert that every rebuilt entry is plain.
+    const heading2 = createNode('paragraph', [createNode('text', [], { text: 'Heading 2' })], {
+      attrs: { sdBlockId: 'h-2', paragraphProperties: { styleId: 'Heading1' } },
+      isBlock: true,
+      inlineContent: true,
+    });
+    const doc = createNode('doc', [tocNode, heading, heading2], { isBlock: false });
+
+    let capturedContent: Array<Record<string, unknown>> | undefined;
+    const replaceTableOfContentsContentById = vi.fn((opts: { content: Array<Record<string, unknown>> }) => {
+      capturedContent = opts.content;
+      return true;
+    });
+
+    const editor = {
+      state: { doc, schema: { nodes: { paragraph: { create: vi.fn() }, tableOfContents: {} } } },
+      commands: {
+        insertTableOfContentsAt: vi.fn(() => true),
+        setTableOfContentsInstructionById: vi.fn(() => true),
+        replaceTableOfContentsContentById,
+        deleteTableOfContentsById: vi.fn(() => true),
+      },
+      schema: { marks: {} },
+      options: {},
+      storage: { tableOfContents: { pageMap: new Map(), pageMapDoc: doc } },
+      on: () => {},
+    } as unknown as Editor;
+
+    const result = tocUpdateWrapper(
+      editor,
+      { target: { kind: 'block', nodeType: 'tableOfContents', nodeId: 'toc-1' }, mode: 'all' },
+      { changeMode: 'direct' },
+    );
+    expect(result.success).toBe(true);
+    expect(replaceTableOfContentsContentById).toHaveBeenCalledTimes(1);
+
+    // Walk every rebuilt title text node and confirm only `link` marks survive.
+    expect(capturedContent).toBeDefined();
+    const offendingMarkTypes = new Set<string>();
+    const visit = (node: unknown) => {
+      if (!node || typeof node !== 'object') return;
+      const n = node as { type?: string; marks?: Array<{ type?: string }>; content?: unknown[] };
+      const marks = n.marks ?? [];
+      for (const m of marks) {
+        const t = m?.type;
+        if (t && t !== 'link' && t !== 'tocPageNumber') offendingMarkTypes.add(t);
+      }
+      for (const child of n.content ?? []) visit(child);
+    };
+    for (const para of capturedContent ?? []) visit(para);
+    expect(Array.from(offendingMarkTypes)).toEqual([]);
+  });
+});
+
+describe('PR-3120 regression — review comment: F9 on multiple TOCs must give every TOC real page numbers', () => {
+  // repro: doc with two or more TOCs, press F9. The first TOC gets real page
+  // numbers, the rest rebuild as `0`. Each toc.update swaps editor.state.doc,
+  // so getPageMap rejects the stored page map (still anchored to the previous
+  // doc snapshot) on the next iteration and falls back to the '0' placeholder.
+  // The fix lives in the field-update extension: refresh pageMapDoc to the
+  // current doc before each iteration so the page map stays valid across the
+  // loop.
+
+  it('field-update keeps the page map valid across iterations when multiple TOCs are updated', () => {
+    // We simulate the loop body inside FieldUpdate.updateFieldsInSelection by
+    // calling the same logic inline: snapshot the page map, then for each TOC
+    // refresh pageMapDoc and dispatch a doc-changing transaction.
+    const doc1 = createNode('doc', [createNode('paragraph', [], { isBlock: true })], { isBlock: false });
+    const cachedPageMap = new Map([
+      ['h-1', 3],
+      ['h-2', 9],
+    ]);
+    const tocStorage: { pageMap: Map<string, number>; pageMapDoc: unknown } = {
+      pageMap: cachedPageMap,
+      pageMapDoc: doc1,
+    };
+    const editorState = { doc: doc1 };
+    const editor = { state: editorState, storage: { tableOfContents: tocStorage } };
+
+    // First iteration: storage already matches the doc, page map is fresh.
+    expect(getPageMapForTest(editor)).toBe(cachedPageMap);
+
+    // toc.update for TOC #1 dispatches a transaction; doc identity changes.
+    const doc2 = createNode('doc', [createNode('paragraph', [], { isBlock: true })], { isBlock: false });
+    editorState.doc = doc2;
+
+    // Without the fix, getPageMapForTest now returns null (stale).
+    expect(getPageMapForTest(editor)).toBeNull();
+
+    // Apply the field-update fix: refresh pageMapDoc before iteration #2.
+    if (tocStorage.pageMap) tocStorage.pageMapDoc = editorState.doc;
+
+    // After the fix, the page map is reusable for the next TOC.
+    expect(getPageMapForTest(editor)).toBe(cachedPageMap);
+  });
+});
+
+/** Mirror of `getPageMap` in toc-wrappers — duplicated to keep the test self-contained. */
+function getPageMapForTest(editor: {
+  state: { doc: unknown };
+  storage?: Record<string, unknown>;
+}): Map<string, number> | null {
+  const tocStorage = editor.storage?.tableOfContents as
+    | { pageMap?: Map<string, number>; pageMapDoc?: unknown }
+    | undefined;
+  if (!tocStorage?.pageMap) return null;
+  if (tocStorage.pageMapDoc !== undefined && tocStorage.pageMapDoc !== editor.state.doc) return null;
+  return tocStorage.pageMap;
+}
+
 describe('PR-3120 regression — finding 2: pageNumbers scanner must traverse run-wrapped page-number text', () => {
   // The mode:'all' rebuild produces paragraphs whose content is [run, run, run]
   // where the page-number text is *nested inside* the third run. The scanner

@@ -41,7 +41,6 @@ import {
   collectTocSources,
   buildTocEntryParagraphs,
   type BuildTocEntryOptions,
-  type EntryTextMark,
   type EntryParagraphJson,
   type TocSource,
 } from '../helpers/toc-entry-builder.js';
@@ -304,19 +303,6 @@ function readExistingTocTabPos(node: ProseMirrorNode): number | undefined {
 }
 
 /**
- * Run-property overrides (`<w:rPr>` inside `<w:pPr>`) sampled from the first
- * existing TOC entry. These are paragraph-level overrides that disable
- * style-level formatting on rebuild — without preserving them, properties
- * like `bold: false` / `italic: false` baked into Word's TOC1 entries would
- * fall back to the TOC1 paragraph style's own bold/italic.
- */
-function readExistingTocEntryRunProperties(node: ProseMirrorNode): Record<string, unknown> | undefined {
-  const entry = findFirstTocEntryParagraph(node);
-  const runProps = (entry?.attrs as TocParagraphAttrs | undefined)?.paragraphProperties?.runProperties;
-  return runProps && Object.keys(runProps).length > 0 ? { ...runProps } : undefined;
-}
-
-/**
  * Word's TOC field always closes with a paragraph that holds the
  * `<w:fldChar fldCharType="end"/>` — typically a Normal-styled empty
  * paragraph after the entries. SuperDoc's importer preserves it as the last
@@ -333,37 +319,6 @@ function readExistingTocTrailingParagraph(node: ProseMirrorNode): unknown | unde
   const styleId = (last.attrs as TocParagraphAttrs | undefined)?.paragraphProperties?.styleId;
   if (styleId && TOC_ENTRY_STYLE_RE.test(styleId)) return undefined; // it's an entry, not the trailer
   return typeof last.toJSON === 'function' ? last.toJSON() : undefined;
-}
-
-/**
- * Run-formatting marks (font, size, bold, italic, textStyle…) sampled from the
- * first non-empty text run inside an actual TOC entry paragraph (styleId TOC1–TOC9).
- * Skips sibling paragraphs like TOCHeading whose run formatting must not bleed
- * into the rebuilt entries. Drops `link` (rebuilt from the source's bookmark)
- * and `tocPageNumber` (belongs only to the page-number run).
- */
-function readExistingTocEntryTextMarks(node: ProseMirrorNode): EntryTextMark[] {
-  let marks: EntryTextMark[] = [];
-  node.forEach((paragraph) => {
-    if (marks.length > 0 || paragraph.type.name !== 'paragraph') return;
-    const styleId = (paragraph.attrs as TocParagraphAttrs | undefined)?.paragraphProperties?.styleId;
-    if (!styleId || !TOC_ENTRY_STYLE_RE.test(styleId)) return;
-
-    paragraph.descendants((child) => {
-      if (marks.length > 0) return false;
-      if (!child.isText || !child.text) return true;
-      const sampled = (child.marks ?? [])
-        .filter((m) => m.type.name !== 'link' && m.type.name !== 'tocPageNumber')
-        .map((m) => {
-          const json: EntryTextMark = { type: m.type.name };
-          if (m.attrs && Object.keys(m.attrs).length > 0) json.attrs = { ...m.attrs };
-          return json;
-        });
-      if (sampled.length > 0) marks = sampled;
-      return false;
-    });
-  });
-  return marks;
 }
 
 // ---------------------------------------------------------------------------
@@ -398,8 +353,6 @@ export function tocConfigureWrapper(
     {
       pageMap: getPageMap(editor) ?? undefined,
       tabPos: readExistingTocTabPos(resolved.node),
-      entryTextMarks: readExistingTocEntryTextMarks(resolved.node),
-      paragraphRunProperties: readExistingTocEntryRunProperties(resolved.node),
     },
   );
   const trailing = readExistingTocTrailingParagraph(resolved.node);
@@ -495,11 +448,10 @@ function tocUpdateAll(editor: Editor, input: TocUpdateInput, options?: MutationO
     {
       pageMap: getPageMap(editor) ?? undefined,
       tabPos: readExistingTocTabPos(resolved.node),
-      entryTextMarks: readExistingTocEntryTextMarks(resolved.node),
-      paragraphRunProperties: readExistingTocEntryRunProperties(resolved.node),
     },
   );
 
+  console.log('rebuiltEntries', rebuiltEntries);
   // Preserve the trailer paragraph if the existing TOC ends with one — keeps
   // the visual gap below the TOC stable across rebuilds.
   const trailing = readExistingTocTrailingParagraph(resolved.node);
@@ -685,31 +637,40 @@ function buildPageNumberUpdatedContent(
 
     const tocSourceId = child.attrs?.tocSourceId as string | undefined;
     const childJson = child.toJSON() as EntryParagraphJson;
-    const content = childJson.content ?? [];
 
     let paragraphChanged = false;
 
-    const updatedContentArray = content.map((node: Record<string, unknown>) => {
+    // Walk recursively — the rebuilt paragraph wraps its runs in `run` nodes,
+    // so the tocPageNumber mark sits one level below the paragraph's direct
+    // children. A flat scan over `paragraph.content` would miss it and fall
+    // through to PAGE_NUMBERS_NOT_MATERIALIZED.
+    const visit = (node: Record<string, unknown>): Record<string, unknown> => {
       const marks = node.marks as Array<{ type: string }> | undefined;
       const hasTocPageNumberMark = marks?.some((m) => m.type === 'tocPageNumber');
 
-      if (!hasTocPageNumberMark) return node;
+      if (hasTocPageNumberMark) {
+        hasPageNumberMarks = true;
 
-      hasPageNumberMarks = true;
+        if (!tocSourceId) return node;
 
-      // Skip entries without tocSourceId — no anchor for page map lookup
-      if (!tocSourceId) return node;
+        const pageNumber = pageMap.get(tocSourceId);
+        const newText = pageNumber !== undefined ? String(pageNumber) : '??';
 
-      const pageNumber = pageMap.get(tocSourceId);
-      const newText = pageNumber !== undefined ? String(pageNumber) : '??';
-
-      if (node.text !== newText) {
-        paragraphChanged = true;
-        return { ...node, text: newText };
+        if (node.text !== newText) {
+          paragraphChanged = true;
+          return { ...node, text: newText };
+        }
+        return node;
       }
 
-      return node;
-    });
+      const nested = node.content as Array<Record<string, unknown>> | undefined;
+      if (!Array.isArray(nested) || nested.length === 0) return node;
+      const visited = nested.map(visit);
+      const replaced = visited.some((next, idx) => next !== nested[idx]);
+      return replaced ? { ...node, content: visited } : node;
+    };
+
+    const updatedContentArray = (childJson.content ?? []).map(visit);
 
     if (paragraphChanged) {
       anyChanged = true;

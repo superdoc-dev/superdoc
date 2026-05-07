@@ -17,8 +17,16 @@ import { generateTocBookmarkName } from './toc-bookmark-sync.js';
 // ---------------------------------------------------------------------------
 
 export interface TocSource {
-  /** Display text for this entry. */
+  /** Flat display text for this entry (used as a fallback and for diagnostics). */
   text: string;
+  /**
+   * Per-text-node segments captured from the source paragraph, preserving the
+   * character-level marks (bold, italic, color, font…). When present, the
+   * entry builder emits one styled text node per segment so heading-level
+   * formatting is reflected in the TOC. Absent for TC fields, where only a
+   * plain string is available from the field instruction.
+   */
+  segments?: TocTextSegment[];
   /** TOC level (1-based). */
   level: number;
   /**
@@ -31,6 +39,55 @@ export interface TocSource {
   kind: 'heading' | 'appliedOutline' | 'tcField';
   /** Whether to omit the page number for this specific entry (TC \n switch). */
   omitPageNumber?: boolean;
+}
+
+/** A run of source text with its surviving character marks. */
+export interface TocTextSegment {
+  text: string;
+  marks?: EntryTextMark[];
+}
+
+/**
+ * Marks that ARE allowed to flow from the source heading into a TOC entry.
+ * Anything not on this list is dropped — the TOC mirrors a deliberately
+ * narrow subset of character formatting from the heading:
+ *
+ * - `bold`, `italic`, `underline` — font style.
+ * - `color` — font color.
+ * - `highlight` — background color.
+ * - `fontFamily` — font family.
+ * - `textStyle` — kept ONLY for its `fontFamily` attribute; `fontSize` and
+ *   any other attributes are scrubbed so heading point sizes do not bleed
+ *   into the (typically smaller) TOC entry size.
+ *
+ * Notably excluded: `fontSize`, `link` (TOC has its own anchor), comments,
+ * track-changes, strike, baseline shifts, and `tocPageNumber`.
+ */
+const ALLOWED_SOURCE_MARK_TYPES = new Set(['bold', 'italic', 'underline', 'color', 'highlight', 'fontFamily']);
+
+/** Attributes preserved on a passthrough `textStyle` mark — `fontSize` is dropped. */
+const TEXT_STYLE_ALLOWED_ATTRS = new Set(['fontFamily']);
+
+/**
+ * Filters and rewrites a single source mark to the form allowed on a TOC
+ * entry. Returns `null` when the mark must be dropped entirely.
+ */
+function sanitizeSourceMark(mark: EntryTextMark): EntryTextMark | null {
+  if (!mark?.type) return null;
+
+  if (mark.type === 'textStyle') {
+    const attrs = mark.attrs ?? {};
+    const kept: Record<string, unknown> = {};
+    for (const key of Object.keys(attrs)) {
+      if (TEXT_STYLE_ALLOWED_ATTRS.has(key) && attrs[key] != null) kept[key] = attrs[key];
+    }
+    return Object.keys(kept).length > 0 ? { type: 'textStyle', attrs: kept } : null;
+  }
+
+  if (!ALLOWED_SOURCE_MARK_TYPES.has(mark.type)) return null;
+  return mark.attrs && Object.keys(mark.attrs).length > 0
+    ? { type: mark.type, attrs: { ...mark.attrs } }
+    : { type: mark.type };
 }
 
 // ---------------------------------------------------------------------------
@@ -83,7 +140,7 @@ export function collectTocSources(doc: ProseMirrorNode, config: TocSwitchConfig)
       if (outlineLevels) {
         const headingLevel = getHeadingLevel(styleId);
         if (headingLevel != null && headingLevel >= outlineLevels.from && headingLevel <= outlineLevels.to) {
-          sources.push({ text, level: headingLevel, sdBlockId, kind: 'heading' });
+          sources.push({ text, segments: extractTextSegments(node), level: headingLevel, sdBlockId, kind: 'heading' });
           return true; // descend so TC fields inside this paragraph are still collected
         }
       }
@@ -95,7 +152,13 @@ export function collectTocSources(doc: ProseMirrorNode, config: TocSwitchConfig)
         if (rawOutlineLevel != null) {
           const tocLevel = rawOutlineLevel + 1;
           if (tocLevel >= effectiveLevels.from && tocLevel <= effectiveLevels.to) {
-            sources.push({ text, level: tocLevel, sdBlockId, kind: 'appliedOutline' });
+            sources.push({
+              text,
+              segments: extractTextSegments(node),
+              level: tocLevel,
+              sdBlockId,
+              kind: 'appliedOutline',
+            });
             return true;
           }
         }
@@ -150,6 +213,44 @@ function flattenText(node: ProseMirrorNode): string {
   return text;
 }
 
+/**
+ * Walks the paragraph's text descendants and returns one segment per text node,
+ * preserving the marks Word would carry into the TOC entry. Marks in
+ * `DROPPED_SOURCE_MARK_TYPES` are stripped, and adjacent segments with
+ * identical mark sets are coalesced to keep the rebuilt content tidy.
+ */
+function extractTextSegments(node: ProseMirrorNode): TocTextSegment[] {
+  const segments: TocTextSegment[] = [];
+  node.descendants((child) => {
+    if (!child.isText || !child.text) return true;
+    const marks: EntryTextMark[] = [];
+    for (const mark of child.marks ?? []) {
+      const raw: EntryTextMark = { type: mark.type?.name ?? '' };
+      if (mark.attrs && Object.keys(mark.attrs).length > 0) raw.attrs = { ...mark.attrs };
+      const sanitized = sanitizeSourceMark(raw);
+      if (sanitized) marks.push(sanitized);
+    }
+    const last = segments[segments.length - 1];
+    if (last && marksEqual(last.marks, marks)) {
+      last.text += child.text;
+    } else {
+      segments.push(marks.length > 0 ? { text: child.text, marks } : { text: child.text });
+    }
+    return true;
+  });
+  return segments;
+}
+
+function marksEqual(a: EntryTextMark[] | undefined, b: EntryTextMark[] | undefined): boolean {
+  const aLen = a?.length ?? 0;
+  const bLen = b?.length ?? 0;
+  if (aLen !== bLen) return false;
+  if (aLen === 0) return true;
+  // Compare structurally — JSON.stringify is sufficient because attrs are flat
+  // and the iteration order of ProseMirror marks is stable per text node.
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
 // ---------------------------------------------------------------------------
 // Entry paragraph builder
 // ---------------------------------------------------------------------------
@@ -168,23 +269,20 @@ export interface EntryTextMark {
 
 /**
  * Optional context that lets the entry builder produce final-looking output
- * (resolved page numbers, preserved tab spacing, sampled font/size marks)
- * without a follow-up `mode: 'pageNumbers'` pass.
+ * (resolved page numbers, preserved tab spacing) without a follow-up
+ * `mode: 'pageNumbers'` pass.
+ *
+ * Run-level formatting is intentionally NOT sampled from the existing TOC.
+ * Word's "Update field" rebuilds entries from the linked TOC1, TOC2, …
+ * paragraph styles — it does not copy direct formatting from the first entry.
+ * Sampling marks from the existing TOC made any direct formatting on entry 1
+ * (e.g. bold) leak into every rebuilt entry.
  */
 export interface BuildTocEntryOptions {
   /** sdBlockId → page number map from PresentationEditor's last layout cycle. */
   pageMap?: Map<string, number>;
   /** Right-tab stop position (twips) to mirror the existing TOC's spacing. */
   tabPos?: number;
-  /** Marks sampled from the existing TOC entry text. `link` is filtered out and rebuilt. */
-  entryTextMarks?: EntryTextMark[];
-  /**
-   * Paragraph-level `<w:rPr>` overrides sampled from the existing entry. Word
-   * stamps these on TOC entries (e.g. `bold: false`, `italic: false`) to
-   * disable the TOC1 paragraph style's `<w:b/><w:i/>`. Preserving them keeps
-   * the rebuilt entries visually identical to the imported ones.
-   */
-  paragraphRunProperties?: Record<string, unknown>;
 }
 
 /**
@@ -223,23 +321,37 @@ function buildEntryParagraph(
 ): EntryParagraphJson {
   const { display } = config;
 
-  // Title text. Marks are stacked: sampled (font/size/textStyle/bold/italic)
-  // first, link last. Wrapped in a `run` so `wrapTextInRunsPlugin` does not
-  // re-wrap and merge the TOC1 paragraph style's run properties via addToSet,
-  // which would clobber the sampled `textStyle` mark.
-  const titleMarks: EntryTextMark[] = (options.entryTextMarks ?? []).filter(
-    (mark) => mark?.type && mark.type !== 'link',
-  );
-  if (display.hyperlinks) {
-    titleMarks.push({
-      type: 'link',
-      attrs: { anchor: generateTocBookmarkName(source.sdBlockId), rId: null, history: true },
-    });
-  }
-  const titleText: Record<string, unknown> = { type: 'text', text: source.text || ' ' };
-  if (titleMarks.length > 0) titleText.marks = titleMarks;
+  // Title text. Character-level marks (bold, italic, color, font…) are
+  // carried over from the *source heading* — never sampled from the existing
+  // TOC entry, which would leak entry-1's direct formatting onto every
+  // rebuilt entry (Word rebuilds entries from the linked TOC1, TOC2, …
+  // paragraph styles, plus character formatting from the source).
+  // Each text node is wrapped in a `run` so wrapTextInRunsPlugin does not
+  // re-wrap and merge the paragraph style's run properties via addToSet.
+  const linkMark: EntryTextMark | undefined = display.hyperlinks
+    ? { type: 'link', attrs: { anchor: generateTocBookmarkName(source.sdBlockId), rId: null, history: true } }
+    : undefined;
 
-  const content: Array<Record<string, unknown>> = [asRun([titleText])];
+  const segments: TocTextSegment[] =
+    source.segments && source.segments.length > 0 ? source.segments : [{ text: source.text || ' ' }];
+
+  const titleTextNodes: Array<Record<string, unknown>> = segments.map((segment) => {
+    // Re-apply the allowlist at build time so callers passing hand-built
+    // segments cannot smuggle in disallowed marks (font-size, link, comments,
+    // track-changes, etc.). collectTocSources also sanitizes, but the
+    // builder is the contract boundary that users of buildTocEntryParagraphs
+    // hit directly — defending here keeps the rule in one place.
+    const sourceMarks = (segment.marks ?? [])
+      .map((m) => sanitizeSourceMark(m))
+      .filter((m): m is EntryTextMark => m !== null);
+    const marks: EntryTextMark[] = [...sourceMarks];
+    if (linkMark) marks.push(linkMark);
+    const node: Record<string, unknown> = { type: 'text', text: segment.text || ' ' };
+    if (marks.length > 0) node.marks = marks;
+    return node;
+  });
+
+  const content: Array<Record<string, unknown>> = [asRun(titleTextNodes)];
 
   // Determine whether to omit page number for this entry.
   const omitRange = display.omitPageNumberLevels;
@@ -267,9 +379,6 @@ function buildEntryParagraph(
   }
 
   const paragraphProperties: Record<string, unknown> = { styleId: `TOC${source.level}` };
-  if (options.paragraphRunProperties && Object.keys(options.paragraphRunProperties).length > 0) {
-    paragraphProperties.runProperties = { ...options.paragraphRunProperties };
-  }
 
   const rightAlign = display.rightAlignPageNumbers !== false; // default true
   if (rightAlign && !omitPageNumber) {

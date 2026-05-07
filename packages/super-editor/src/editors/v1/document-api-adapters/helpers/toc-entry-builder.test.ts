@@ -112,27 +112,17 @@ describe('buildTocEntryParagraphs', () => {
     });
   });
 
-  describe('entry text marks (SD-2664)', () => {
-    it('prepends preserved marks and stacks the link mark on top', () => {
-      const entryTextMarks = [
-        { type: 'textStyle', attrs: { fontFamily: 'Aptos', fontSize: '12pt' } },
-        { type: 'bold' },
-      ];
-      const paragraphs = buildTocEntryParagraphs([BASE_SOURCE], makeConfig({ hyperlinks: true }), { entryTextMarks });
+  describe('entry formatting (SD-2664)', () => {
+    it('emits only the link mark on the title text — Word rebuilds run formatting from the linked TOC{n} paragraph styles', () => {
+      const paragraphs = buildTocEntryParagraphs([BASE_SOURCE], makeConfig({ hyperlinks: true }));
       const text = titleTextOf(paragraphs);
-      expect(text.marks!.map((m) => m.type)).toEqual(['textStyle', 'bold', 'link']);
-      expect(text.marks![0].attrs).toEqual({ fontFamily: 'Aptos', fontSize: '12pt' });
+      expect(text.marks!.map((m) => m.type)).toEqual(['link']);
     });
 
-    it('drops any incoming link mark; the builder rebuilds it from the source bookmark', () => {
-      const entryTextMarks = [
-        { type: 'textStyle', attrs: { fontFamily: 'Aptos' } },
-        { type: 'link', attrs: { anchor: 'old-stale-anchor' } },
-      ];
-      const paragraphs = buildTocEntryParagraphs([BASE_SOURCE], makeConfig({ hyperlinks: true }), { entryTextMarks });
+    it('the rebuilt link uses the source bookmark anchor', () => {
+      const paragraphs = buildTocEntryParagraphs([BASE_SOURCE], makeConfig({ hyperlinks: true }));
       const linkMark = titleTextOf(paragraphs).marks?.find((m) => m.type === 'link');
       expect(linkMark?.attrs?.anchor).toBe(generateTocBookmarkName(BASE_SOURCE.sdBlockId));
-      expect(linkMark?.attrs?.anchor).not.toBe('old-stale-anchor');
     });
 
     it('wraps each text run in a `run` node so wrapTextInRunsPlugin does not clobber marks', () => {
@@ -141,6 +131,109 @@ describe('buildTocEntryParagraphs', () => {
       // Title run + tab run + page-number run = 3 runs (no \p, no omit).
       expect(runs.length).toBe(3);
       runs.forEach((r) => expect(r.type).toBe('run'));
+    });
+
+    it('carries the allowed character marks from the source heading into the rebuilt entry', () => {
+      const sourceWithMarks: TocSource = {
+        ...BASE_SOURCE,
+        segments: [
+          { text: 'Plain ', marks: [{ type: 'textStyle', attrs: { fontFamily: 'Aptos' } }] },
+          {
+            text: 'Bold',
+            marks: [{ type: 'textStyle', attrs: { fontFamily: 'Aptos' } }, { type: 'bold' }, { type: 'italic' }],
+          },
+        ],
+      };
+      const paragraphs = buildTocEntryParagraphs([sourceWithMarks], makeConfig({ hyperlinks: true }));
+      const titleRun = paragraphs[0]!.content[0] as { content?: TextLike[] };
+      const texts = titleRun.content!;
+      expect(texts).toHaveLength(2);
+      expect(texts[0]!.text).toBe('Plain ');
+      expect(texts[0]!.marks!.map((m) => m.type)).toEqual(['textStyle', 'link']);
+      expect(texts[0]!.marks![0].attrs).toEqual({ fontFamily: 'Aptos' });
+      expect(texts[1]!.text).toBe('Bold');
+      expect(texts[1]!.marks!.map((m) => m.type)).toEqual(['textStyle', 'bold', 'italic', 'link']);
+    });
+
+    it('preserves the standalone color, highlight, fontFamily, and underline marks', () => {
+      const sourceWithMarks: TocSource = {
+        ...BASE_SOURCE,
+        segments: [
+          {
+            text: 'Heading',
+            marks: [
+              { type: 'color', attrs: { color: '#ff0000' } },
+              { type: 'highlight', attrs: { color: '#ffff00' } },
+              { type: 'fontFamily', attrs: { fontFamily: 'Calibri' } },
+              { type: 'underline' },
+            ],
+          },
+        ],
+      };
+      const paragraphs = buildTocEntryParagraphs([sourceWithMarks], makeConfig({ hyperlinks: true }));
+      const text = titleTextOf(paragraphs);
+      expect(text.marks!.map((m) => m.type)).toEqual(['color', 'highlight', 'fontFamily', 'underline', 'link']);
+    });
+
+    it('strips fontSize from passthrough textStyle marks (heading sizes must not bleed into TOC)', () => {
+      const sourceWithFontSize: TocSource = {
+        ...BASE_SOURCE,
+        segments: [
+          {
+            text: 'Heading',
+            marks: [{ type: 'textStyle', attrs: { fontFamily: 'Aptos', fontSize: '24pt' } }, { type: 'bold' }],
+          },
+        ],
+      };
+      const paragraphs = buildTocEntryParagraphs([sourceWithFontSize], makeConfig({ hyperlinks: true }));
+      const text = titleTextOf(paragraphs);
+      const textStyleMark = text.marks!.find((m) => m.type === 'textStyle');
+      expect(textStyleMark!.attrs).toEqual({ fontFamily: 'Aptos' });
+      expect(textStyleMark!.attrs!.fontSize).toBeUndefined();
+      // Other allowed marks still flow through.
+      expect(text.marks!.map((m) => m.type)).toEqual(['textStyle', 'bold', 'link']);
+    });
+
+    it('drops textStyle entirely when only disallowed attrs (e.g. fontSize) are present', () => {
+      const sourceWithOnlyFontSize: TocSource = {
+        ...BASE_SOURCE,
+        segments: [
+          {
+            text: 'Heading',
+            marks: [{ type: 'textStyle', attrs: { fontSize: '24pt' } }],
+          },
+        ],
+      };
+      const paragraphs = buildTocEntryParagraphs([sourceWithOnlyFontSize], makeConfig({ hyperlinks: true }));
+      const text = titleTextOf(paragraphs);
+      // Only the rebuilt link should remain.
+      expect(text.marks!.map((m) => m.type)).toEqual(['link']);
+    });
+
+    it('drops the standalone fontSize mark, plus link, comment, track-changes, strike, tocPageNumber', () => {
+      const sourceWithDisallowed: TocSource = {
+        ...BASE_SOURCE,
+        segments: [
+          {
+            text: 'Heading',
+            marks: [
+              { type: 'bold' },
+              { type: 'fontSize', attrs: { fontSize: '24pt' } },
+              { type: 'strike' },
+              { type: 'link', attrs: { href: 'https://example.com' } },
+              { type: 'commentMark', attrs: { commentId: 'c1' } },
+              { type: 'trackInsert' },
+              { type: 'tocPageNumber' },
+            ],
+          },
+        ],
+      };
+      const paragraphs = buildTocEntryParagraphs([sourceWithDisallowed], makeConfig({ hyperlinks: true }));
+      const text = titleTextOf(paragraphs);
+      expect(text.marks!.map((m) => m.type)).toEqual(['bold', 'link']);
+      const linkMark = text.marks!.find((m) => m.type === 'link');
+      expect(linkMark!.attrs!.anchor).toBe(generateTocBookmarkName(BASE_SOURCE.sdBlockId));
+      expect(linkMark!.attrs!.href).toBeUndefined();
     });
   });
 
@@ -254,6 +347,32 @@ describe('collectTocSources', () => {
     expect(headings.length).toBe(1);
     expect(headings[0].text).toBe('Introduction');
     expect(applied.length).toBe(3);
+  });
+
+  it('picks up a freshly-pasted heading whose paraId/sdBlockId were stripped by the slice paste reset', () => {
+    // Repro for "paste an existing heading, F9, new entry doesn't appear":
+    // SUPERDOC_SLICE_PASTE_IDENTITY_RESETS clears paraId AND sdBlockId on a
+    // pasted paragraph. Until the block-node plugin's appendTransaction runs
+    // and assigns a UUID, the paragraph carries `sdBlockId: null` while still
+    // having its heading styleId. The TOC scanner must fall back to a
+    // synthetic id and still surface it as a TOC source.
+    const docWithPastedHeading = mockDoc([
+      { sdBlockId: 'p-existing', text: 'Conclusion 1', styleId: 'Heading2' },
+      // Pasted heading, identity reset, plugin hasn't re-stamped yet
+      { sdBlockId: null, text: 'Conclusion 2', styleId: 'Heading2' },
+    ]);
+
+    const config: TocSwitchConfig = {
+      source: { outlineLevels: { from: 1, to: 3 } },
+      display: { hyperlinks: true },
+      preserved: {},
+    };
+
+    const sources = collectTocSources(docWithPastedHeading, config);
+    expect(sources.map((s) => s.text)).toEqual(['Conclusion 1', 'Conclusion 2']);
+    // The fallback must produce a non-empty sdBlockId so generateTocBookmarkName
+    // can hash it into a stable anchor for the rebuilt entry.
+    expect(sources[1].sdBlockId).toBeTruthy();
   });
 
   it('collects only headings when \\u is not set', () => {

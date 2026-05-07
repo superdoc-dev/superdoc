@@ -165,11 +165,13 @@ describe('applyTocPatch', () => {
     expect(patched.display.separator).toBe('.');
   });
 
-  it('tabLeader: none removes separator', () => {
+  it('tabLeader: none records an explicit empty separator (\\p "") so the choice round-trips', () => {
     const existing = parseTocInstruction('TOC \\o "1-3" \\p "."');
     const patched = applyTocPatch(existing, { tabLeader: 'none' });
     expect(patched.display.tabLeader).toBe('none');
-    expect(patched.display.separator).toBeUndefined();
+    // Empty string == explicit "no leader" (\p ""); deleting the separator
+    // would collapse to "absent \p" which Word treats as the dot default.
+    expect(patched.display.separator).toBe('');
   });
 
   it('throws on tabLeader + separator conflict', () => {

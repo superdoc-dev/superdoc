@@ -51,7 +51,23 @@ export const FieldUpdate = Extension.create({
             if (tocTargets.length > 0) {
               if (!dispatch) return true; // can()-style probe
 
+              // Each toc.update dispatches its own transaction, which produces
+              // a new editor.state.doc. The TOC storage's page map is stamped
+              // with the doc snapshot it was computed against — getPageMap
+              // rejects the map as stale on every iteration after the first,
+              // so subsequent TOCs rebuild with placeholder zeros instead of
+              // real page numbers. Refresh pageMapDoc to the current doc
+              // before each iteration to keep the map valid across the loop;
+              // the layout has not been recomputed, so the page numbers from
+              // the original layout are still authoritative for this update.
+              const tocStorage = editor.storage?.tableOfContents;
+              const cachedPageMap = tocStorage?.pageMap ?? null;
+
               for (const sdBlockId of tocTargets) {
+                if (tocStorage && cachedPageMap) {
+                  tocStorage.pageMap = cachedPageMap;
+                  tocStorage.pageMapDoc = editor.state.doc;
+                }
                 try {
                   editor.doc.toc.update({
                     target: { kind: 'block', nodeType: 'tableOfContents', nodeId: sdBlockId },

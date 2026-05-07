@@ -328,7 +328,7 @@ describe('computeParagraphAttrs', () => {
     expect(paragraphAttrs.direction).toBe('rtl');
   });
 
-  it('uses section direction fallback when paragraph direction is not explicit', () => {
+  it('does not use section direction fallback when paragraph direction is not explicit', () => {
     const paragraph: PMNode = {
       type: { name: 'paragraph' },
       attrs: {
@@ -344,7 +344,7 @@ describe('computeParagraphAttrs', () => {
     };
 
     const { paragraphAttrs } = computeParagraphAttrs(paragraph as never, converterContext as never);
-    expect(paragraphAttrs.direction).toBe('rtl');
+    expect(paragraphAttrs.direction).toBeUndefined();
   });
 });
 
@@ -363,7 +363,7 @@ describe('resolveEffectiveParagraphDirection', () => {
     expect(direction).toBe('rtl');
   });
 
-  it('uses section direction when paragraph direction is not explicit', () => {
+  it('does not use section direction when paragraph direction is not explicit', () => {
     const paragraph: PMNode = {
       type: { name: 'paragraph' },
       attrs: {
@@ -372,7 +372,7 @@ describe('resolveEffectiveParagraphDirection', () => {
     };
 
     const direction = resolveEffectiveParagraphDirection(paragraph as never, {} as never, 'rtl');
-    expect(direction).toBe('rtl');
+    expect(direction).toBeUndefined();
   });
 
   it('uses run inference before docDefaults direction', () => {

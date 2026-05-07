@@ -507,7 +507,7 @@ describe('w:r r-translator decode (export only inline run properties)', () => {
     expect((rPr.elements ?? []).map((e) => e.name)).toContain('w:b');
   });
 
-  it('preserves run-level rtl even when inline/style key filters omit it', () => {
+  it('does not export rtl when it is style-only and not an inline override', () => {
     const params = runWithContent({
       runProperties: { rtl: true, color: 'FF0000' },
       runPropertiesInlineKeys: ['color'],
@@ -516,8 +516,7 @@ describe('w:r r-translator decode (export only inline run properties)', () => {
     });
     const result = translator.decode(params);
     const rPr = result?.elements?.find((el) => el?.name === 'w:rPr');
-    expect(rPr).toBeDefined();
-    expect((rPr.elements ?? []).map((e) => e.name)).toContain('w:rtl');
+    expect(rPr).toBeUndefined();
   });
 
   it('exports complex-script bold/italic alongside base bold/italic when present', () => {

@@ -3217,7 +3217,7 @@ describe('toFlowBlocks', () => {
       expect(paragraph.attrs?.direction).toBe('ltr');
     });
 
-    it('inherits paragraph direction from body sectPr w:bidi when paragraph direction is missing', () => {
+    it('does not inherit paragraph direction from body sectPr w:bidi when paragraph direction is missing', () => {
       const pmDoc = {
         type: 'doc',
         attrs: {
@@ -3242,10 +3242,10 @@ describe('toFlowBlocks', () => {
       expect(blocks).toHaveLength(1);
       const paragraph = blocks[0];
       expect(paragraph.kind).toBe('paragraph');
-      expect(paragraph.attrs?.direction).toBe('rtl');
+      expect(paragraph.attrs?.direction).toBeUndefined();
     });
 
-    it('does not inherit RTL direction when body sectPr w:bidi is explicitly false', () => {
+    it('keeps paragraph direction undefined when body sectPr w:bidi is explicitly false', () => {
       const pmDoc = {
         type: 'doc',
         attrs: {
@@ -3270,7 +3270,7 @@ describe('toFlowBlocks', () => {
       expect(blocks).toHaveLength(1);
       const paragraph = blocks[0];
       expect(paragraph.kind).toBe('paragraph');
-      expect(paragraph.attrs?.direction).toBe('ltr');
+      expect(paragraph.attrs?.direction).toBeUndefined();
     });
 
     it('handles multiple page breaks', () => {

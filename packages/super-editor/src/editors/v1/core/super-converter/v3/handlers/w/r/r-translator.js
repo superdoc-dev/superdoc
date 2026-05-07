@@ -341,10 +341,9 @@ const decode = (params, decodedAttrs = {}) => {
   }
 
   const shouldExport = (key) =>
-    (key === 'rtl' && runProperties?.rtl != null) ||
-    (key in (runProperties || {}) &&
-      (!(Array.isArray(styleKeys) && styleKeys.includes(key)) ||
-        (Array.isArray(overrideKeys) && overrideKeys.includes(key))));
+    key in (runProperties || {}) &&
+    (!(Array.isArray(styleKeys) && styleKeys.includes(key)) ||
+      (Array.isArray(overrideKeys) && overrideKeys.includes(key)));
 
   const exportKeys = candidateKeys.filter(shouldExport);
 

@@ -90,14 +90,13 @@ const inferDirectionFromRuns = (para: PMNode): ParagraphDirection | undefined =>
 export const resolveEffectiveParagraphDirection = (
   para: PMNode,
   resolvedParagraphProperties: ParagraphProperties,
-  sectionDirection?: ParagraphDirection,
+  _sectionDirection?: ParagraphDirection,
   docDefaultsDirection?: ParagraphDirection,
 ): ParagraphDirection | undefined => {
   if (resolvedParagraphProperties.rightToLeft === true) return 'rtl';
   if (resolvedParagraphProperties.rightToLeft === false) return 'ltr';
   const inferredFromRuns = inferDirectionFromRuns(para);
   if (inferredFromRuns) return inferredFromRuns;
-  if (sectionDirection) return sectionDirection;
   if (docDefaultsDirection) return docDefaultsDirection;
   return undefined;
 };

@@ -74,7 +74,7 @@ jobs:
             # auto-resolve in sync-patches.yml, biased the other direction.
             git diff --name-only --diff-filter=U | while read -r f; do
               case "$f" in
-                */package.json|*/pyproject.toml|*/version.json)
+                package.json|*/package.json|pyproject.toml|*/pyproject.toml|version.json|*/version.json)
                   echo "  Auto-resolving $f (keeping stable's version)"
                   git checkout --ours "$f"
                   git add "$f"

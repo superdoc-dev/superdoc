@@ -44,4 +44,21 @@ describe('isRtlBlock', () => {
       ),
     ).toBe(false);
   });
+
+  it('falls through to legacy direction when directionContext.inlineDirection is undefined', () => {
+    // The resolver may produce inlineDirection: undefined when no paragraph w:bidi is set
+    // anywhere in the cascade. In that case the typed context carries no inline-direction
+    // signal, and the legacy `direction` / `dir` field (if any) should still be honored.
+    expect(
+      isRtlBlock(
+        paragraph({
+          direction: 'rtl',
+          directionContext: {
+            inlineDirection: undefined,
+            writingMode: 'horizontal-tb',
+          },
+        }),
+      ),
+    ).toBe(true);
+  });
 });

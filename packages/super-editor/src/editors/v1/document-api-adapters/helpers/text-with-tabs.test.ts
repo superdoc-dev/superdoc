@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { Fragment, Schema } from 'prosemirror-model';
 import { buildTextWithTabs, parentAllowsNodeAt, textBetweenWithTabs } from './text-with-tabs.js';
 
-function makeRealSchema(options: { hasTab?: boolean } = {}) {
+function makeRealSchema(options: { hasTab?: boolean; hasNoBreakHyphen?: boolean; hasGenericLeaf?: boolean } = {}) {
   const nodes: Record<string, any> = {
     doc: { content: 'paragraph+' },
     paragraph: { group: 'block', content: 'inline*' },
@@ -12,6 +12,14 @@ function makeRealSchema(options: { hasTab?: boolean } = {}) {
     // Mirrors the real extensions/tab/tab.js shape: inline atom with `content: 'inline*'`.
     // Tab is non-leaf, which is why `textBetweenWithTabs` (not PM's built-in textBetween) is needed.
     nodes.tab = { group: 'inline', inline: true, atom: true, content: 'inline*' };
+  }
+  if (options.hasNoBreakHyphen) {
+    // Mirrors the real extensions/no-break-hyphen schema: inline leaf atom with leafText.
+    nodes.noBreakHyphen = { group: 'inline', inline: true, atom: true, leafText: () => '‑' };
+  }
+  if (options.hasGenericLeaf) {
+    // An inline leaf atom WITHOUT leafText — should fall back to leafFallback.
+    nodes.genericLeaf = { group: 'inline', inline: true, atom: true };
   }
   return new Schema({
     nodes,
@@ -142,5 +150,27 @@ describe('textBetweenWithTabs', () => {
     // Reading [2, 10) yields "ello" + tab + "wo".
     const result = textBetweenWithTabs(doc, 2, 10, '\n', '\ufffc');
     expect(result).toBe('ello\two');
+  });
+
+  it('emits the visible character for inline leaves that declare leafText (e.g. noBreakHyphen)', () => {
+    // Repro for SD-2746 follow-up: search/get-text/diff consumers must see
+    // the U+2011 glyph, not the leafFallback placeholder.
+    const schema = makeRealSchema({ hasNoBreakHyphen: true });
+    const doc = schema.nodes.doc.createAndFill({}, [
+      schema.nodes.paragraph.create({}, [schema.text('a'), schema.nodes.noBreakHyphen.create(), schema.text('b')]),
+    ])!;
+    const paragraph = doc.firstChild!;
+    const result = textBetweenWithTabs(doc, 1, 1 + paragraph.content.size, '\n', '\n');
+    expect(result).toBe('a\u2011b');
+  });
+
+  it('falls back to leafFallback for inline leaves without leafText', () => {
+    const schema = makeRealSchema({ hasGenericLeaf: true });
+    const doc = schema.nodes.doc.createAndFill({}, [
+      schema.nodes.paragraph.create({}, [schema.text('a'), schema.nodes.genericLeaf.create(), schema.text('b')]),
+    ])!;
+    const paragraph = doc.firstChild!;
+    const result = textBetweenWithTabs(doc, 1, 1 + paragraph.content.size, '\n', '\ufffc');
+    expect(result).toBe('a\ufffcb');
   });
 });

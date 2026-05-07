@@ -301,6 +301,14 @@ describe('PresentationEditor - Draggable Annotation Focus Suppression (SD-1179)'
       // Clicking on the deeply nested span should still recognize the draggable parent
       expect(deepSpan.closest('[data-draggable="true"]')).toBe(annotation);
     });
+
+    it('should recognize elements with data-drag-source-kind attribute', () => {
+      const source = document.createElement('div');
+      source.setAttribute('data-drag-source-kind', 'structuredContent');
+
+      expect(source.closest('[data-drag-source-kind]')).toBe(source);
+      expect(source.closest('[data-draggable="true"]')).toBeNull();
+    });
   });
 
   describe('editor initialization with draggable support', () => {

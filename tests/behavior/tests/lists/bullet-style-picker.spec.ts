@@ -4,7 +4,7 @@ import { LIST_MARKER_SELECTOR, getParagraphNumberingByText } from '../../helpers
 test.use({ config: { toolbar: 'full' } });
 
 const BULLET_DROPDOWN_CARET = '[aria-label="Bullet list"] .dropdown-caret';
-const STYLE_OPTION = (label: string) => `.bullet-style-buttons [aria-label="${label}"]`;
+const STYLE_OPTION = (label: string) => `.style-buttons-list [aria-label="${label}"]`;
 
 const STYLE_LABEL = {
   disc: 'Opaque circle',
@@ -15,7 +15,7 @@ const STYLE_LABEL = {
 async function openBulletDropdown(superdoc: SuperDocFixture) {
   await superdoc.page.locator(BULLET_DROPDOWN_CARET).click();
   await superdoc.waitForStable();
-  await expect(superdoc.page.locator('.bullet-style-buttons')).toBeVisible();
+  await expect(superdoc.page.locator('.style-buttons-list')).toBeVisible();
 }
 
 async function pickStyle(superdoc: SuperDocFixture, style: keyof typeof STYLE_LABEL) {
@@ -88,22 +88,21 @@ test.describe('bullet style picker (SD-2526)', () => {
     expect(await getMarkerTextForParagraph(superdoc, 'gamma')).toBe('◦');
   });
 
-  test('AC5: swapping to a different style changes the marker and mints a new numId', async ({ superdoc }) => {
+  test('AC5: swapping to a different style with a bare caret applies the new marker', async ({ superdoc }) => {
+    // SD-2527 takes the whole-list-restyle path with a bare caret on a list paragraph:
+    // clones the abstract with the new style at the paragraph's level and migrates the
+    // paragraph (and its same-level siblings) to the new numId. PM-tracked migration
+    // means undo can revert the style change.
     await superdoc.type('alpha');
     await superdoc.waitForStable();
     await pickStyle(superdoc, 'disc');
     expect(await getMarkerTextForParagraph(superdoc, 'alpha')).toBe('•');
-
-    const before = await getParagraphNumberingByText(superdoc, 'alpha');
-    expect(before?.numId).not.toBeNull();
 
     await pickStyle(superdoc, 'square');
 
     expect(await getMarkerTextForParagraph(superdoc, 'alpha')).toBe('▪');
     const after = await getParagraphNumberingByText(superdoc, 'alpha');
     expect(after?.numId).not.toBeNull();
-    // PR's toggleList takes the create path on style swap, so numId must change.
-    expect(after?.numId).not.toBe(before?.numId);
   });
 
   test('toolbar reflects the active style when caret is in a styled bullet list', async ({ superdoc }) => {

@@ -123,16 +123,20 @@ const intToRoman = (num: number): string => {
   return result;
 };
 
+/**
+ * Word-compatible alphabetic numbering for `upperLetter` / `lowerLetter`
+ * list formats: A, B, ..., Z, AA, BB, ..., ZZ, AAA, BBB, ..., ZZZ, AAAA, ...
+ *
+ * The OOXML spec maps `n` to the letter at index `(n-1) % 26` repeated
+ * `floor((n-1) / 26) + 1` times. This differs from a base-26 (Excel-style)
+ * mapping where 27 → "AA" but 28 → "AB"; Word emits "BB" at 28.
+ */
 const intToAlpha = (num: number): string => {
-  let result = '';
+  if (num < 1) return '';
   const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-  let value = num;
-  while (value > 0) {
-    const index = (value - 1) % 26;
-    result = alphabet[index] + result;
-    value = Math.floor((value - 1) / 26);
-  }
-  return result;
+  const letter = alphabet[(num - 1) % 26];
+  const repeats = Math.floor((num - 1) / 26) + 1;
+  return letter.repeat(repeats);
 };
 
 export const intToJapaneseCounting = (num: number): string => {

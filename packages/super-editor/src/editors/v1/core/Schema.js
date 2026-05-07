@@ -68,6 +68,10 @@ export class Schema {
         code: callOrGet(getExtensionConfigField(extension, 'code', context)),
         defining: callOrGet(getExtensionConfigField(extension, 'defining', context)),
         isolating: callOrGet(getExtensionConfigField(extension, 'isolating', context)),
+        // leafText is a function-valued NodeSpec field; it must NOT be invoked here.
+        // It's surfaced into the spec so PM's textBetween (and helpers like
+        // textBetweenWithTabs) can flatten atomic leaves to their visible text.
+        leafText: getExtensionConfigField(extension, 'leafText', context),
         summary: getExtensionConfigField(extension, 'summary', context),
         attrs,
         ...additionalNodeFields,

@@ -46,6 +46,7 @@ const {
   hasCaret,
   splitButton,
   disabled,
+  expand,
   inlineTextInputVisible,
   hasInlineTextInput,
   minWidth,
@@ -108,7 +109,7 @@ const onFontSizeInput = (event) => {
 };
 
 const caretIcon = computed(() => {
-  return active.value ? toolbarIcons.dropdownCaretUp : toolbarIcons.dropdownCaretDown;
+  return expand?.value ? toolbarIcons.dropdownCaretUp : toolbarIcons.dropdownCaretDown;
 });
 </script>
 

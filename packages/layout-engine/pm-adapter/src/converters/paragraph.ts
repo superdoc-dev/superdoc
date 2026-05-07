@@ -53,6 +53,7 @@ import { fieldAnnotationNodeToRun } from './inline-converters/field-annotation.j
 import { bookmarkStartNodeToBlocks } from './inline-converters/bookmark-start.js';
 import { bookmarkEndNodeToRun } from './inline-converters/bookmark-end.js';
 import { tabNodeToRun } from './inline-converters/tab.js';
+import { noBreakHyphenNodeToRun } from './inline-converters/no-break-hyphen.js';
 import { tokenNodeToRun } from './inline-converters/generic-token.js';
 import { imageNodeToRun } from './inline-converters/image.js';
 import { crossReferenceNodeToRun } from './inline-converters/cross-reference.js';
@@ -969,6 +970,9 @@ const INLINE_CONVERTERS_REGISTRY: Record<string, InlineConverterSpec> = {
   },
   tab: {
     inlineConverter: tabNodeToRun,
+  },
+  noBreakHyphen: {
+    inlineConverter: noBreakHyphenNodeToRun,
   },
   image: {
     inlineConverter: imageNodeToRun,

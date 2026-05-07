@@ -199,7 +199,14 @@ const resolveExplicitStandardTextStartPx = (
   }
 
   if (explicitTextStartPx > 0) {
-    return getMinimumReadableTextStartPx(markerContentEndPx, gutterWidthPx);
+    // Marker overflows the hanging-indent text-start (e.g. "mm)" wider than
+    // its level's hanging in a multi-letter alphabetic list). Word's
+    // behavior: the suffix tab advances to the next default tab stop (every
+    // 0.5"), NOT to a fixed small gutter. The minimum-readable gutter remains
+    // as a safety floor when marker happens to land right on a tab stop.
+    const nextTabStopPx = getNextDefaultTabStopPx(markerContentEndPx);
+    const minReadablePx = getMinimumReadableTextStartPx(markerContentEndPx, gutterWidthPx);
+    return Math.max(nextTabStopPx, minReadablePx);
   }
 
   return undefined;

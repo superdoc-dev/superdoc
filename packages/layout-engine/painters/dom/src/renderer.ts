@@ -110,6 +110,7 @@ import { applyImageClipPath } from './utils/image-clip-path.js';
 import { isMinimalWordLayout as isMinimalWordLayoutShared } from '@superdoc/common/list-marker-utils';
 import {
   computeTabWidth,
+  createListMarkerElement,
   resolvePainterListMarkerGeometry,
   resolvePainterListTextStartPx,
 } from './utils/marker-helpers.js';
@@ -257,7 +258,8 @@ export type PageDecorationPayload = {
   height: number;
   /** Optional measured content height to aid bottom alignment in footers. */
   contentHeight?: number;
-  offset?: number;
+  /** Decoration band origin in page-local Y. Producer is the sole source of truth (SD-2957). */
+  offset: number;
   marginLeft?: number;
   // Optional explicit content width (px) for the decoration container
   contentWidth?: number;
@@ -525,7 +527,7 @@ function compactSnapshotObject<T extends Record<string, unknown>>(input: T): T {
   return out;
 }
 
-function applySourceAnchorDataset(element: HTMLElement, sourceAnchor?: SourceAnchor): void {
+export function applySourceAnchorDataset(element: HTMLElement, sourceAnchor?: SourceAnchor): void {
   if (!sourceAnchor) {
     delete element.dataset.sourceAnchor;
     delete element.dataset.sourceNodeId;
@@ -2441,7 +2443,6 @@ export class DomPainter {
    * are measured from.
    */
   private getDecorationAnchorPageOriginY(
-    pageEl: HTMLElement,
     page: ResolvedPage,
     kind: 'header' | 'footer',
     effectiveOffset: number,
@@ -2450,9 +2451,14 @@ export class DomPainter {
       return effectiveOffset;
     }
 
+    if (!Number.isFinite(page.height) || page.height <= 0) {
+      throw new Error(
+        `DomPainter: invalid ResolvedPage.height (${page.height}) for page ${page.index}; resolve stage must produce a positive numeric height.`,
+      );
+    }
+
     const pageMargins = page.margins;
-    const styledPageHeight = Number.parseFloat(pageEl.style.height || '');
-    const pageHeight = page.height ?? (Number.isFinite(styledPageHeight) ? styledPageHeight : pageEl.clientHeight);
+    const pageHeight = page.height;
 
     const footerDistance = pageMargins?.footer;
     if (typeof footerDistance === 'number' && Number.isFinite(footerDistance)) {
@@ -2490,7 +2496,7 @@ export class DomPainter {
     const container = (existing as HTMLElement) ?? this.doc.createElement('div');
     container.className = className;
     container.innerHTML = '';
-    const baseOffset = data.offset ?? (kind === 'footer' ? pageEl.clientHeight - data.height : 0);
+    const baseOffset = data.offset;
     const marginLeft = data.marginLeft ?? 0;
     const pageMargins = page.margins;
     const marginRight = pageMargins?.right ?? 0;
@@ -2533,7 +2539,7 @@ export class DomPainter {
     // Header page-relative anchors use raw inner-layout Y and are handled with
     // the simpler effectiveOffset subtraction (unchanged from the baseline).
     const footerAnchorPageOriginY =
-      kind === 'footer' ? this.getDecorationAnchorPageOriginY(pageEl, page, kind, effectiveOffset) : 0;
+      kind === 'footer' ? this.getDecorationAnchorPageOriginY(page, kind, effectiveOffset) : 0;
     const footerAnchorContainerOffsetY = kind === 'footer' ? footerAnchorPageOriginY - effectiveOffset : 0;
 
     // For footers, calculate offset to push content to bottom of container
@@ -3048,9 +3054,9 @@ export class DomPainter {
       const content = resolvedItem?.content;
 
       // Prefer resolved item metadata over legacy fragment reads
-      const paraContinuesFromPrev = resolvedItem?.continuesFromPrev ?? fragment.continuesFromPrev;
-      const paraContinuesOnNext = resolvedItem?.continuesOnNext ?? fragment.continuesOnNext;
-      const paraMarkerWidth = resolvedItem?.markerWidth ?? fragment.markerWidth;
+      const paraContinuesFromPrev = resolvedItem?.continuesFromPrev;
+      const paraContinuesOnNext = resolvedItem?.continuesOnNext;
+      const paraMarkerWidth = resolvedItem?.markerWidth;
 
       const fragmentEl = this.doc.createElement('div');
       fragmentEl.classList.add(CLASS_NAMES.fragment);
@@ -3210,18 +3216,12 @@ export class DomPainter {
             lineEl.style.paddingLeft = `${resolvedMarker.firstLinePaddingLeftPx}px`;
 
             if (!resolvedMarker.vanish) {
-              const markerContainer = this.doc!.createElement('span');
-              markerContainer.style.display = 'inline-block';
-              markerContainer.style.wordSpacing = '0px';
-
-              const markerEl = this.doc!.createElement('span');
-              markerEl.classList.add('superdoc-paragraph-marker');
-              markerEl.textContent = resolvedMarker.text;
-              applySourceAnchorDataset(
-                markerEl,
-                resolvedMarker.sourceAnchor ?? resolvedItem?.sourceAnchor ?? fragment.sourceAnchor,
+              const markerContainer = createListMarkerElement(
+                this.doc!,
+                resolvedMarker.text,
+                resolvedMarker.run,
+                resolvedMarker.sourceAnchor ?? resolvedItem?.sourceAnchor,
               );
-              markerEl.style.pointerEvents = 'none';
 
               markerContainer.style.position = 'relative';
               if (resolvedMarker.justification === 'right') {
@@ -3233,19 +3233,6 @@ export class DomPainter {
                 lineEl.style.paddingLeft =
                   parseFloat(lineEl.style.paddingLeft) + (resolvedMarker.centerPaddingAdjustPx ?? 0) + 'px';
               }
-
-              markerEl.style.fontFamily =
-                toCssFontFamily(resolvedMarker.run.fontFamily) ?? resolvedMarker.run.fontFamily;
-              markerEl.style.fontSize = `${resolvedMarker.run.fontSize}px`;
-              markerEl.style.fontWeight = resolvedMarker.run.bold ? 'bold' : '';
-              markerEl.style.fontStyle = resolvedMarker.run.italic ? 'italic' : '';
-              if (resolvedMarker.run.color) {
-                markerEl.style.color = resolvedMarker.run.color;
-              }
-              if (resolvedMarker.run.letterSpacing != null) {
-                markerEl.style.letterSpacing = `${resolvedMarker.run.letterSpacing}px`;
-              }
-              markerContainer.appendChild(markerEl);
 
               if (resolvedMarker.suffix === 'tab') {
                 const tabEl = this.doc!.createElement('span');
@@ -3270,7 +3257,7 @@ export class DomPainter {
           this.capturePaintSnapshotLine(lineEl, context, {
             inTableFragment: false,
             inTableParagraph: false,
-            sourceAnchor: resolvedItem?.sourceAnchor ?? fragment.sourceAnchor,
+            sourceAnchor: resolvedItem?.sourceAnchor,
           });
           fragmentEl.appendChild(lineEl);
         });
@@ -3368,7 +3355,7 @@ export class DomPainter {
           // Adjust availableWidth for first-line text indent (hanging indent).
           const isFirstLine = index === 0 && !paraContinuesFromPrev;
           const isListFirstLine = Boolean(hasListFirstLineMarker && fragment.markerTextWidth);
-          if (isFirstLine && !isListFirstLine && !hasExplicitSegmentPositioning) {
+          if (isFirstLine && !isListFirstLine && line.hasExplicitTabStops !== true) {
             availableWidthOverride = adjustAvailableWidthForTextIndent(
               availableWidthOverride,
               firstLineOffset,
@@ -3430,18 +3417,12 @@ export class DomPainter {
             lineEl.style.paddingLeft = `${paraIndentLeft + (paraIndent?.firstLine ?? 0) - (paraIndent?.hanging ?? 0)}px`;
 
             if (!marker.run.vanish) {
-              const markerContainer = this.doc!.createElement('span');
-              markerContainer.style.display = 'inline-block';
-              markerContainer.style.wordSpacing = '0px';
-
-              const markerEl = this.doc!.createElement('span');
-              markerEl.classList.add('superdoc-paragraph-marker');
-              markerEl.textContent = marker.markerText ?? '';
-              applySourceAnchorDataset(
-                markerEl,
-                block.sourceAnchor ?? resolvedItem?.sourceAnchor ?? fragment.sourceAnchor,
+              const markerContainer = createListMarkerElement(
+                this.doc!,
+                marker.markerText ?? '',
+                marker.run,
+                block.sourceAnchor ?? resolvedItem?.sourceAnchor,
               );
-              markerEl.style.pointerEvents = 'none';
 
               const markerJustification = marker.justification ?? 'left';
 
@@ -3454,18 +3435,6 @@ export class DomPainter {
                 markerContainer.style.left = `${markerStartPos - fragment.markerTextWidth! / 2}px`;
                 lineEl.style.paddingLeft = parseFloat(lineEl.style.paddingLeft) + fragment.markerTextWidth! / 2 + 'px';
               }
-
-              markerEl.style.fontFamily = toCssFontFamily(marker.run.fontFamily) ?? marker.run.fontFamily;
-              markerEl.style.fontSize = `${marker.run.fontSize}px`;
-              markerEl.style.fontWeight = marker.run.bold ? 'bold' : '';
-              markerEl.style.fontStyle = marker.run.italic ? 'italic' : '';
-              if (marker.run.color) {
-                markerEl.style.color = marker.run.color;
-              }
-              if (marker.run.letterSpacing != null) {
-                markerEl.style.letterSpacing = `${marker.run.letterSpacing}px`;
-              }
-              markerContainer.appendChild(markerEl);
 
               const suffix = marker.suffix ?? 'tab';
               if (suffix === 'tab') {
@@ -3491,7 +3460,7 @@ export class DomPainter {
           this.capturePaintSnapshotLine(lineEl, context, {
             inTableFragment: false,
             inTableParagraph: false,
-            sourceAnchor: resolvedItem?.sourceAnchor ?? fragment.sourceAnchor,
+            sourceAnchor: resolvedItem?.sourceAnchor,
           });
           fragmentEl.appendChild(lineEl);
         });
@@ -3617,9 +3586,10 @@ export class DomPainter {
       }
 
       // Prefer resolved item metadata over legacy fragment reads
-      const listContinuesFromPrev = resolvedItem?.continuesFromPrev ?? fragment.continuesFromPrev;
-      const listContinuesOnNext = resolvedItem?.continuesOnNext ?? fragment.continuesOnNext;
-      const listMarkerWidth = resolvedItem?.markerWidth ?? fragment.markerWidth;
+      const listContinuesFromPrev = resolvedItem?.continuesFromPrev;
+      const listContinuesOnNext = resolvedItem?.continuesOnNext;
+      // Default to 0 (no marker gutter) when absent — used directly in Math.max below.
+      const listMarkerWidth = resolvedItem?.markerWidth ?? 0;
 
       const fragmentEl = this.doc.createElement('div');
       fragmentEl.classList.add(CLASS_NAMES.fragment, `${CLASS_NAMES.fragment}-list-item`);
@@ -3655,11 +3625,8 @@ export class DomPainter {
       }
 
       const markerEl = this.doc.createElement('span');
-      markerEl.classList.add('superdoc-list-marker');
-      applySourceAnchorDataset(
-        markerEl,
-        item.marker.sourceAnchor ?? item.sourceAnchor ?? resolvedItem?.sourceAnchor ?? fragment.sourceAnchor,
-      );
+      markerEl.classList.add(DOM_CLASS_NAMES.LIST_MARKER);
+      applySourceAnchorDataset(markerEl, item.marker.sourceAnchor ?? item.sourceAnchor ?? resolvedItem?.sourceAnchor);
 
       // Track B: Use marker styling from wordLayout if available
       const wordLayout: MinimalWordLayout | undefined = item.paragraph.attrs?.wordLayout as
@@ -3740,7 +3707,7 @@ export class DomPainter {
         this.capturePaintSnapshotLine(lineEl, context, {
           inTableFragment: false,
           inTableParagraph: false,
-          sourceAnchor: resolvedItem?.sourceAnchor ?? fragment.sourceAnchor,
+          sourceAnchor: resolvedItem?.sourceAnchor,
         });
         contentEl.appendChild(lineEl);
       });
@@ -3788,17 +3755,17 @@ export class DomPainter {
       }
 
       // Add PM position markers for transaction targeting
-      const imgPmStart = resolvedItem?.pmStart ?? fragment.pmStart;
+      const imgPmStart = resolvedItem?.pmStart;
       if (imgPmStart != null) {
         fragmentEl.dataset.pmStart = String(imgPmStart);
       }
-      const imgPmEnd = resolvedItem?.pmEnd ?? fragment.pmEnd;
+      const imgPmEnd = resolvedItem?.pmEnd;
       if (imgPmEnd != null) {
         fragmentEl.dataset.pmEnd = String(imgPmEnd);
       }
 
       // Add metadata for interactive image resizing (skip watermarks - they should not be interactive)
-      const imgMetadata = resolvedItem?.metadata ?? fragment.metadata;
+      const imgMetadata = resolvedItem?.metadata;
       if (imgMetadata && !block.attrs?.vmlWatermark) {
         fragmentEl.setAttribute('data-image-metadata', JSON.stringify(imgMetadata));
       }
@@ -6271,6 +6238,8 @@ export class DomPainter {
 
     // Check if any segments have explicit X positioning (from tab stops)
     const hasExplicitPositioning = line.segments?.some((seg) => seg.x !== undefined);
+    const explicitPositionedSegmentCount = line.segments?.filter((seg) => seg.x !== undefined).length ?? 0;
+    const hasMultipleExplicitPositionedSegments = explicitPositionedSegmentCount > 1;
     const availableWidth = availableWidthOverride ?? line.maxWidth ?? line.width;
 
     const justifyShouldApply = shouldApplyJustify({
@@ -6280,7 +6249,7 @@ export class DomPainter {
       // Caller already folds last-line + trailing lineBreak behavior into skipJustify.
       isLastLineOfParagraph: false,
       paragraphEndsWithLineBreak: false,
-      skipJustifyOverride: skipJustify,
+      skipJustifyOverride: skipJustify || hasMultipleExplicitPositionedSegments,
     });
 
     const countSpaces = (text: string): number => {
@@ -6506,10 +6475,8 @@ export class DomPainter {
       });
 
       /**
-       * Finds the X position where the immediate next segment starts after a given run index.
-       * Only returns the X if the very next run has a segment with explicit positioning.
-       * This handles tab-aligned text where right/center alignment causes the text to start
-       * before the tab stop target.
+       * Finds the immediate next segment carrying tab geometry after a given run index.
+       * This handles tab-aligned text and compensated tab paint geometry.
        *
        * WHY ONLY THE IMMEDIATE NEXT RUN:
        * When rendering a tab, we need to know where the content IMMEDIATELY after this tab begins
@@ -6525,17 +6492,20 @@ export class DomPainter {
        * - TAB2 will independently check "MoreContent" when it's rendered
        *
        * @param fromRunIndex - The run index to search after
-       * @returns The X position of the immediate next segment, or undefined if not found or not immediate
+       * @returns The immediate next tab-positioned segment, or undefined if not found or not immediate
        */
-      const findImmediateNextSegmentX = (fromRunIndex: number): number | undefined => {
+      const findImmediateNextSegment = (fromRunIndex: number): LineSegment | undefined => {
         // Only check the immediate next run - don't skip over other tabs
         const nextRunIdx = fromRunIndex + 1;
         if (nextRunIdx <= line.toRun) {
           const nextSegments = segmentsByRun.get(nextRunIdx);
           if (nextSegments && nextSegments.length > 0) {
             const firstSegment = nextSegments[0];
-            // Return the segment's explicit X if it has one (from tab alignment)
-            return firstSegment.x;
+            // Return only the first segment; later segments in the same run are
+            // not immediately adjacent to this tab.
+            return firstSegment.x !== undefined || firstSegment.precedingTabEndX !== undefined
+              ? firstSegment
+              : undefined;
           }
         }
         return undefined;
@@ -6598,13 +6568,15 @@ export class DomPainter {
 
         if (baseRun.kind === 'tab') {
           // Find where the immediate next content begins (if it's right after this tab)
-          const immediateNextX = findImmediateNextSegmentX(runIndex);
+          const immediateNextSegment = findImmediateNextSegment(runIndex);
           const tabStartX = cumulativeX;
 
           // The tab should span from where previous content ended to where next content begins.
-          // If the immediate next segment has an explicit X (from tab alignment), use that.
-          // Otherwise, use the tab's measured width to calculate the end position.
-          const tabEndX = immediateNextX !== undefined ? immediateNextX : tabStartX + (baseRun.width ?? 0);
+          // If layout supplied a tab-end boundary for the next segment, prefer it.
+          // Otherwise, use the next segment's explicit X (from tab alignment) or the
+          // tab's measured width.
+          const measuredTabEndX = tabStartX + (baseRun.width ?? 0);
+          const tabEndX = immediateNextSegment?.precedingTabEndX ?? immediateNextSegment?.x ?? measuredTabEndX;
           const actualTabWidth = tabEndX - tabStartX;
 
           const tabEl = this.doc!.createElement('span');
@@ -6665,8 +6637,9 @@ export class DomPainter {
             const runSegments = segmentsByRun.get(runIndex);
             const baseSegX = runSegments && runSegments[0]?.x !== undefined ? runSegments[0].x : cumulativeX;
             const segX = baseSegX + indentOffset;
-            const segWidth =
-              (runSegments && runSegments[0]?.width !== undefined ? runSegments[0].width : elem.offsetWidth) ?? 0;
+            // LineSegment.width is required by contract; producer (measuring-dom) always emits it.
+            // No paint-time DOM measurement (SD-2957).
+            const segWidth = runSegments?.[0]?.width ?? 0;
             elem.style.position = 'absolute';
             elem.style.left = `${segX}px`;
             appendToLineGeo(elem, baseRun, segX, segWidth);
@@ -6767,26 +6740,19 @@ export class DomPainter {
 
             elem.style.position = 'absolute';
             elem.style.left = `${xPos}px`;
-            appendToLineGeo(elem, segmentRun, xPos, segment.width ?? 0);
+            appendToLineGeo(elem, segmentRun, xPos, segment.width);
 
-            // Update cumulative X for next segment by measuring this element's width
-            // This applies to ALL segments (both with and without explicit X)
+            // Advance cumulative X by the resolved segment width. LineSegment.width is the
+            // sole source of truth — the painter does not measure inline elements (SD-2957).
             // Use baseX (without indent) to keep cumulativeX relative to content area,
             // matching how segment.x values are calculated in layout.
-            let width = segment.width ?? 0;
-            if (width <= 0 && this.doc) {
-              const measureEl = elem.cloneNode(true) as HTMLElement;
-              measureEl.style.position = 'absolute';
-              measureEl.style.visibility = 'hidden';
-              measureEl.style.left = '-9999px';
-              this.doc.body.appendChild(measureEl);
-              width = measureEl.offsetWidth;
-              this.doc.body.removeChild(measureEl);
-            }
-            cumulativeX = baseX + width;
+            const width = segment.width;
+            const justifyExtraWidth = spacingPerSpace !== 0 ? spacingPerSpace * countSpaces(segmentText) : 0;
+            const visualWidth = width + justifyExtraWidth;
+            cumulativeX = baseX + visualWidth;
             // Update SDT wrapper width if actual measured width differs from initial estimate
             if (geoSdtWrapper) {
-              geoSdtMaxRight = Math.max(geoSdtMaxRight, xPos + width);
+              geoSdtMaxRight = Math.max(geoSdtMaxRight, xPos + visualWidth);
             }
           }
         });
@@ -7067,28 +7033,29 @@ export class DomPainter {
       if (section === 'body' || section === undefined) {
         assertFragmentPmPositions(fragment, 'paragraph fragment');
       }
-      // Narrow to ResolvedFragmentItem to access para-specific resolved fields
+      // Narrow to ResolvedFragmentItem to access para-specific resolved fields.
+      // resolveLayout copies pmStart/pmEnd/continuesFromPrev/continuesOnNext from the
+      // source paragraph onto the resolved item when present, so reading off the
+      // back-pointer would be redundant (SD-2957).
       const resolvedFrag = resolvedItem as ResolvedFragmentItem | undefined;
-      const pmStart = resolvedFrag?.pmStart ?? (fragment as ParaFragment).pmStart;
+      const pmStart = resolvedFrag?.pmStart;
       if (pmStart != null) {
         el.dataset.pmStart = String(pmStart);
       } else {
         delete el.dataset.pmStart;
       }
-      const pmEnd = resolvedFrag?.pmEnd ?? (fragment as ParaFragment).pmEnd;
+      const pmEnd = resolvedFrag?.pmEnd;
       if (pmEnd != null) {
         el.dataset.pmEnd = String(pmEnd);
       } else {
         delete el.dataset.pmEnd;
       }
-      const continuesFromPrev = resolvedFrag?.continuesFromPrev ?? (fragment as ParaFragment).continuesFromPrev;
-      if (continuesFromPrev) {
+      if (resolvedFrag?.continuesFromPrev) {
         el.dataset.continuesFromPrev = 'true';
       } else {
         delete el.dataset.continuesFromPrev;
       }
-      const continuesOnNext = resolvedFrag?.continuesOnNext ?? (fragment as ParaFragment).continuesOnNext;
-      if (continuesOnNext) {
+      if (resolvedFrag?.continuesOnNext) {
         el.dataset.continuesOnNext = 'true';
       } else {
         delete el.dataset.continuesOnNext;
@@ -7146,7 +7113,7 @@ export class DomPainter {
       return '';
     }
 
-    const zIndex = resolvedZIndex ?? fragment.zIndex;
+    const zIndex = resolvedZIndex;
     return zIndex != null ? String(zIndex) : '';
   }
 
@@ -7165,7 +7132,7 @@ export class DomPainter {
     el.style.width = `${item.width}px`;
     el.dataset.blockId = item.blockId;
     el.dataset.layoutEpoch = String(this.layoutEpoch);
-    applySourceAnchorDataset(el, item.sourceAnchor ?? fragment.sourceAnchor);
+    applySourceAnchorDataset(el, item.sourceAnchor);
     this.applyFragmentWrapperZIndex(el, fragment, item.zIndex);
 
     if (item.fragmentKind === 'image' || item.fragmentKind === 'drawing' || item.fragmentKind === 'table') {
@@ -7189,7 +7156,9 @@ export class DomPainter {
     section?: 'body' | 'header' | 'footer',
   ): void {
     this.applyResolvedFragmentFrame(el, item, fragment, section);
-    const mw = item.markerWidth ?? fragment.markerWidth;
+    // Default to 0 (no marker gutter expansion) when markerWidth is absent — the resolve
+    // stage populates this for list items that have a measured marker (SD-2957).
+    const mw = item.markerWidth ?? 0;
     el.style.left = `${item.x - mw}px`;
     el.style.width = `${item.width + mw}px`;
   }

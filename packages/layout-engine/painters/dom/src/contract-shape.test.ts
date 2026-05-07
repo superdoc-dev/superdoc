@@ -39,4 +39,10 @@ describe('DomPainter public contract shape', () => {
     type _Check = AssertTrue<Equal<ItemsType, ResolvedPaintItem[]>>;
     expectTypeOf<ItemsType>().toEqualTypeOf<ResolvedPaintItem[]>();
   });
+
+  it('PageDecorationPayload.offset is required (no paint-time fallback) — SD-2957', () => {
+    type OffsetType = PageDecorationPayload['offset'];
+    type _Check = AssertTrue<Equal<OffsetType, number>>;
+    expectTypeOf<OffsetType>().toEqualTypeOf<number>();
+  });
 });

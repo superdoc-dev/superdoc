@@ -641,6 +641,15 @@ export class SuperToolbar extends EventEmitter {
           item.selectedValue.value = null;
         }
       },
+      numberedlist: () => {
+        if (commandState?.active) {
+          item.activate();
+          item.selectedValue.value = commandState.value;
+        } else {
+          item.deactivate();
+          item.selectedValue.value = null;
+        }
+      },
       default: () => {
         if (commandState?.active) item.activate();
         else item.deactivate();

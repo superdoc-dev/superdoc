@@ -48,6 +48,9 @@ export const DOM_CLASS_NAMES = {
   /** Inline image element (ImageRun inside a paragraph). */
   INLINE_IMAGE: 'superdoc-inline-image',
 
+  /** Wrapper around a paragraph's list marker (bullet glyph or ordered number). */
+  LIST_MARKER: 'superdoc-list-marker',
+
   /** Clip wrapper around a cropped inline image. */
   INLINE_IMAGE_CLIP_WRAPPER: 'superdoc-inline-image-clip-wrapper',
 

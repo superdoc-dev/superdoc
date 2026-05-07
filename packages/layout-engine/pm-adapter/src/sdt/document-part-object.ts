@@ -89,6 +89,32 @@ export function handleDocumentPartObjectNode(node: PMNode, context: NodeHandlerC
           recordBlockKind?.(block.kind);
         }
         if (sectionState) sectionState.currentParagraphIndex++;
+      } else if (child.type === 'tableOfContents' && Array.isArray(child.content)) {
+        // A nested tableOfContents node (e.g. from a "Custom Table of Contents" SDT where
+        // the TOC field codes were preprocessed into an sd:tableOfContents element).
+        // Word stores the TOC field codes on the child node, not the wrapper SDT - prefer
+        // the child's instruction so per-TOC options aren't lost (mirrors the recursion
+        // inside processTocChildren in toc.ts).
+        const metadata = {
+          docPartGallery: docPartGallery ?? '',
+          docPartObjectId,
+          tocInstruction: getNodeInstruction(child) ?? tocInstruction,
+          sdtMetadata: docPartSdtMetadata,
+        };
+        const tocContext = {
+          nextBlockId,
+          positions,
+          bookmarks,
+          hyperlinkConfig,
+          enableComments,
+          trackedChangesConfig,
+          themeColors,
+          converters,
+          converterContext,
+          sectionState,
+        };
+        const output = { blocks, recordBlockKind };
+        processTocChildren(child.content, metadata, tocContext, output);
       }
     }
   }

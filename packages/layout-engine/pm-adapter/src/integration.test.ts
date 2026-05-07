@@ -6,8 +6,8 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { toFlowBlocks as baseToFlowBlocks } from './index.js';
-import type { PMNode, AdapterOptions } from './index.js';
+import { toFlowBlocks as baseToFlowBlocks, toFlowBlocksMap } from './index.js';
+import type { PMNode, AdapterOptions, PMDocumentMap } from './index.js';
 import { measureBlock } from '@superdoc/measuring-dom';
 import { layoutDocument } from '@superdoc/layout-engine';
 import { createDomPainter } from '@superdoc/painter-dom';
@@ -1109,5 +1109,58 @@ describe('page break integration tests', () => {
     expect(textRun, 'text run inside SDT should be present').toBeDefined();
     expect(textRun?.bidi).toEqual({ rtl: true });
     expect(textRun?.script).toEqual({ complexScript: true });
+  });
+
+  // SD-2768: when toFlowBlocksMap reuses one ConverterContext across documents,
+  // the body-level sectionDirectionContext must be recomputed per document. The
+  // original `??` cache let the first doc's context stick, so a vertical doc 1
+  // followed by a horizontal doc 2 would have doc 2's paragraphs inherit doc 1's
+  // writing-mode.
+  it('recomputes body sectionDirectionContext per document in toFlowBlocksMap', () => {
+    const docs: PMDocumentMap = {
+      'doc-vertical': {
+        type: 'doc',
+        attrs: {
+          bodySectPr: {
+            type: 'element',
+            name: 'w:sectPr',
+            attributes: {},
+            elements: [{ type: 'element', name: 'w:textDirection', attributes: { 'w:val': 'tbRl' } }],
+          },
+        },
+        content: [{ type: 'paragraph', content: [{ type: 'text', text: 'vertical text' }] }],
+      },
+      'doc-horizontal': {
+        type: 'doc',
+        attrs: {
+          bodySectPr: {
+            type: 'element',
+            name: 'w:sectPr',
+            attributes: {},
+            elements: [{ type: 'element', name: 'w:textDirection', attributes: { 'w:val': 'lrTb' } }],
+          },
+        },
+        content: [{ type: 'paragraph', content: [{ type: 'text', text: 'horizontal text' }] }],
+      },
+    };
+
+    // Reuse a single converterContext across both calls (the toFlowBlocksMap
+    // pattern). With the bug, doc-horizontal's writingMode would still be
+    // 'vertical-rl' because the cached field from doc-vertical wins.
+    const sharedContext = {
+      ...DEFAULT_CONVERTER_CONTEXT,
+    };
+
+    const results = toFlowBlocksMap(docs, { converterContext: sharedContext });
+
+    const verticalParagraph = results['doc-vertical']?.find((b) => b.kind === 'paragraph');
+    const horizontalParagraph = results['doc-horizontal']?.find((b) => b.kind === 'paragraph');
+
+    expect(verticalParagraph?.kind).toBe('paragraph');
+    expect(horizontalParagraph?.kind).toBe('paragraph');
+    if (verticalParagraph?.kind !== 'paragraph' || horizontalParagraph?.kind !== 'paragraph') return;
+
+    expect(verticalParagraph.attrs?.directionContext?.writingMode).toBe('vertical-rl');
+    expect(horizontalParagraph.attrs?.directionContext?.writingMode).toBe('horizontal-tb');
   });
 });

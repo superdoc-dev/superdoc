@@ -123,10 +123,9 @@ describe('CS companion preservation on style-override roundtrip', () => {
   });
 
   it('exports w:sz and w:szCs when user overrides a docDefaults-provided fontSize', async () => {
-    // Targets PR #3187 round-2 codex finding: when fontSize comes from docDefaults
-    // (not from rStyle), runPropertiesStyleKeys is empty. Round 2's
-    // hasChangedStyleComparableProps gated on styleKeys.includes(k), which excluded
-    // docDefaults-inherited keys, so user fontSize overrides got dropped on export.
+    // The run has no inline w:sz; docDefaults provides sz=22. After setFontSize,
+    // both w:sz (the override) AND w:szCs (the CS companion) must be in the export
+    // so mixed-script text picks up the new size for both Latin and CS chars.
     const buffer = await buildDocDefaultsDocx();
     const [docx, media, mediaFiles, fonts] = await Editor.loadXmlData(buffer, true);
 

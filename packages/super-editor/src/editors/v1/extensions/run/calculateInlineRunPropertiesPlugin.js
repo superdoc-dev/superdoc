@@ -193,17 +193,12 @@ export const calculateInlineRunPropertiesPlugin = (editor) =>
               if (baseKey && existingRunPropsKeys.has(baseKey)) return false;
               return true;
             });
-          // AIDEV-NOTE: Compare against the full style cascade (existingStyleComparableProps),
-          // not just styleKeys. styleKeys only tracks the run's rStyle; for runs whose styled
-          // value comes from paragraph style or docDefaults it is empty, and a user override
-          // would silently drop the CS companion (fontSizeCs/boldCs/italicCs) on export.
           const hasChangedStyleComparableProps =
             segmentInlineProps != null &&
-            existingStyleComparableProps &&
             Object.keys(segmentInlineProps).some((k) => {
-              if (!(k in existingStyleComparableProps)) return false;
+              if (!styleKeys.includes(k)) return false;
               const current = segmentInlineProps[k];
-              const fromStyle = existingStyleComparableProps[k];
+              const fromStyle = existingStyleComparableProps?.[k];
               if (JSON.stringify(current) !== JSON.stringify(fromStyle)) return true;
               const baseKey = COMPANION_INLINE_KEYS[k];
               if (!baseKey) return false;

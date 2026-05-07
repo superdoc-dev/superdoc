@@ -218,3 +218,93 @@ test('@behavior SD-2664 review: pasting "Conclusion 2" below itself produces a d
   // The pasted heading must add exactly one more entry to the rebuild.
   expect(afterCount).toBe(baselineCount + 1);
 });
+
+test('@behavior SD-2664 review: F9 rebuilds page numbers for every TOC in a multi-TOC document', async ({
+  superdoc,
+}) => {
+  await superdoc.loadDocument(DOC_PATH);
+  await superdoc.waitForStable(2000);
+
+  // Clone the imported TOC node and insert a copy at the end of the doc, so
+  // the doc has two TOCs that should rebuild from the same headings.
+  const tocCount = await superdoc.page.evaluate(() => {
+    const editor = (
+      window as unknown as {
+        editor?: { state: { doc: any; tr: any }; view: { dispatch: (tr: any) => void } };
+      }
+    ).editor;
+    if (!editor) return 0;
+
+    let sourceToc: any = null;
+    editor.state.doc.descendants((n: any) => {
+      if (sourceToc) return false;
+      if (n?.type?.name === 'tableOfContents') {
+        sourceToc = n;
+        return false;
+      }
+      return true;
+    });
+    if (!sourceToc) return 0;
+
+    // Fresh sdBlockId so the two TOCs have distinct identities.
+    const cleanAttrs = { ...sourceToc.attrs, sdBlockId: null };
+    const clone = sourceToc.type.create(cleanAttrs, sourceToc.content, sourceToc.marks);
+    const tr = editor.state.tr.insert(editor.state.doc.content.size, clone);
+    editor.view.dispatch(tr);
+
+    let count = 0;
+    editor.state.doc.descendants((n: any) => {
+      if (n?.type?.name === 'tableOfContents') {
+        count += 1;
+        return false;
+      }
+      return true;
+    });
+    return count;
+  });
+  // Some other plugin may dedupe, so guard the precondition we rely on.
+  expect(tocCount).toBeGreaterThanOrEqual(2);
+
+  // Wait for layout to recompute the page map after the insertion.
+  await superdoc.waitForStable(2000);
+
+  // F9 → updateFieldsInSelection iterates every TOC. Without the page-map
+  // refresh in field-update.js, only the FIRST TOC rebuilds with real page
+  // numbers; subsequent TOCs see the stored pageMapDoc as stale (its
+  // snapshot was taken before this iteration's transaction) and fall back
+  // to '0' placeholders.
+  await superdoc.executeCommand('updateFieldsInSelection');
+  await superdoc.waitForStable(2000);
+
+  // Pull the page-number text for every entry in every TOC.
+  const tocPageNumbers = await superdoc.page.evaluate(() => {
+    const editor = (window as unknown as { editor?: { state: { doc: any } } }).editor;
+    if (!editor) return [] as string[][];
+    const result: string[][] = [];
+
+    editor.state.doc.descendants((toc: any) => {
+      if (toc?.type?.name !== 'tableOfContents') return true;
+
+      const numbers: string[] = [];
+      toc.descendants((leaf: any) => {
+        if (!leaf.isText || !leaf.text) return true;
+        const isPageNumber = (leaf.marks ?? []).some((m: any) => m.type?.name === 'tocPageNumber');
+        if (isPageNumber) numbers.push(leaf.text);
+        return true;
+      });
+      if (numbers.length > 0) result.push(numbers);
+      return false;
+    });
+
+    return result;
+  });
+
+  expect(tocPageNumbers.length).toBe(tocCount);
+  // Every TOC must have at least one entry with a non-zero page number —
+  // the bug surfaces as every entry in the second+ TOC reading "0".
+  for (const numbers of tocPageNumbers) {
+    expect(numbers.length).toBeGreaterThan(0);
+    const allZero = numbers.every((n) => n === '0');
+    expect(allZero).toBe(false);
+  }
+});

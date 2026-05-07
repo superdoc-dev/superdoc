@@ -17,14 +17,13 @@ export function handleDocPartObj(params) {
 
   const content = node?.elements.find((el) => el.name === 'w:sdtContent');
 
-  // SD-1333: Mirror handleStructuredContentNode's inline-vs-block detection.
-  // An <w:sdt> sitting inside a <w:p> (e.g. an inline PAGE-field SDT inside
-  // a footer paragraph) has only run-level children in sdtContent. Without
-  // this, we always emit a block-level 'documentPartObject', which the
-  // paragraph translator then lifts out of its parent paragraph — losing the
-  // wrapping that the page-number resolver depends on.
+  // SD-1333: emit inline only when the SDT both sits inside a w:p AND its
+  // sdtContent has no direct w:p/w:tbl children. Word emits Table-of-Figures
+  // SDTs inside a w:p with real w:p children inside sdtContent — those must
+  // stay block so the paragraph translator can hoist them.
+  const isInsideParagraph = (params.path || []).some((p) => p?.name === 'w:p');
   const hasBlockChild = !!content?.elements?.some((el) => el?.name === 'w:p' || el?.name === 'w:tbl');
-  if (!hasBlockChild) {
+  if (isInsideParagraph && !hasBlockChild) {
     return inlineDocPartHandler({
       ...params,
       nodes: [content],
@@ -64,7 +63,8 @@ const inlineDocPartHandler = (params) => {
   });
   const sdtPr = params.extraParams.sdtPr;
   const docPartGalleryType = params.extraParams.docPartGalleryType;
-  const id = sdtPr?.elements?.find((el) => el.name === 'w:id')?.attributes['w:val'] || '';
+  // null (not '') so export can skip emitting an invalid <w:id w:val=""/>.
+  const id = sdtPr?.elements?.find((el) => el.name === 'w:id')?.attributes?.['w:val'] || null;
   const docPartObj = sdtPr?.elements.find((el) => el.name === 'w:docPartObj');
   const docPartGallery =
     docPartGalleryType ??

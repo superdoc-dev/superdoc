@@ -581,4 +581,74 @@ describe('handleDocPartObj — inline context (SD-1333)', () => {
 
     expect(result.type).toBe('documentPartObject');
   });
+
+  it('returns a block documentPartObject when path is block context, even if sdtContent has only a nested w:sdt', () => {
+    const node = {
+      name: 'w:sdt',
+      elements: [
+        {
+          name: 'w:sdtPr',
+          elements: [
+            { name: 'w:id', attributes: { 'w:val': '99' } },
+            {
+              name: 'w:docPartObj',
+              elements: [{ name: 'w:docPartGallery', attributes: { 'w:val': 'Custom Outer' } }],
+            },
+          ],
+        },
+        {
+          name: 'w:sdtContent',
+          // No direct w:p / w:tbl — only a nested SDT wrapper. The nested
+          // SDT itself contains the visible paragraph, so structurally this
+          // IS block-level content; only the direct-child shape hides it.
+          elements: [
+            {
+              name: 'w:sdt',
+              elements: [
+                { name: 'w:sdtPr', elements: [{ name: 'w:id', attributes: { 'w:val': '100' } }] },
+                { name: 'w:sdtContent', elements: [{ name: 'w:p', elements: [] }] },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    const handler = vi.fn(() => [{ type: 'documentPartObject', content: [], attrs: {} }]);
+    // path explicitly indicates a block context (no w:p ancestor).
+    const params = { nodes: [node], nodeListHandler: { handler }, path: [{ name: 'w:body' }] };
+    const result = handleDocPartObj(params);
+
+    expect(result.type).toBe('documentPartObject');
+  });
+
+  it('defaults id to null (not "") when sdtPr has no w:id element', () => {
+    const node = {
+      name: 'w:sdt',
+      elements: [
+        {
+          name: 'w:sdtPr',
+          elements: [
+            // No w:id element on purpose.
+            {
+              name: 'w:docPartObj',
+              elements: [{ name: 'w:docPartGallery', attributes: { 'w:val': 'Page Numbers (Bottom of Page)' } }],
+            },
+          ],
+        },
+        {
+          name: 'w:sdtContent',
+          elements: [{ name: 'w:r', elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'x' }] }] }],
+        },
+      ],
+    };
+
+    const handler = vi.fn(() => []);
+    // Inline context (path has w:p) so inlineDocPartHandler runs.
+    const params = { nodes: [node], nodeListHandler: { handler }, path: [{ name: 'w:p' }] };
+    const result = handleDocPartObj(params);
+
+    expect(result.type).toBe('structuredContent');
+    expect(result.attrs.id).toBeNull();
+  });
 });

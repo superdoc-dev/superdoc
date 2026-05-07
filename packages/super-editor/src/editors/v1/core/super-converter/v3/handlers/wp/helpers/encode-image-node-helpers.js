@@ -1008,6 +1008,29 @@ const handleChartDrawing = (params, node, graphicData, size, padding, marginOffs
  *   wrap: string
  * }|null} Text content with formatting information and line break markers, or null if no text found
  */
+// SD-2804: turn a path-style src ("word/media/image1.png" or "media/image1.png")
+// into a data URI by reading converter.media. Mirrors how layout-engine's
+// hydrateRuns resolves body ImageRuns, but inline since the text-parts model
+// the shape painter consumes has no downstream hydration step.
+function resolveImagePartSrc(src, params, extension) {
+  if (!src || src.startsWith('data:')) return src;
+  const media = params?.converter?.media;
+  if (!media) return src;
+  const candidates = [src];
+  if (src.startsWith('word/')) candidates.push(src.slice(5));
+  else candidates.push(`word/${src}`);
+  for (const candidate of candidates) {
+    const data = media[candidate];
+    if (!data) continue;
+    if (typeof data === 'string') {
+      if (data.startsWith('data:')) return data;
+      const ext = extension || (src.includes('.') ? src.slice(src.lastIndexOf('.') + 1) : 'png');
+      return `data:image/${ext};base64,${data}`;
+    }
+  }
+  return src;
+}
+
 function extractTextFromTextBox(textBoxContent, bodyPr, params = {}) {
   if (!textBoxContent || !textBoxContent.elements) return null;
 
@@ -1061,6 +1084,32 @@ function extractTextFromTextBox(textBoxContent, bodyPr, params = {}) {
       } else if (el.name === 'sd:totalPageNumber') {
         hasText = true;
         appendFieldPart('NUMPAGES', el, paragraphProperties);
+      } else if (el.name === 'w:drawing') {
+        // SD-2804 / ECMA-376 §20.4.2.38: a textbox can hold body-level
+        // content, including runs with inline w:drawing images. Reuse the
+        // existing v3 wp drawing handler so the rId → resolution matches
+        // what body paragraphs use, then upgrade the path-style src to a
+        // data URI from converter.media (the text-parts model has no
+        // downstream hydration step like body ImageRuns do).
+        const inlineOrAnchor = el.elements?.find((child) => child?.name === 'wp:inline' || child?.name === 'wp:anchor');
+        if (inlineOrAnchor) {
+          const isAnchor = inlineOrAnchor.name === 'wp:anchor';
+          const imagePm = handleImageNode(inlineOrAnchor, { ...params, nodes: [el] }, isAnchor);
+          if (imagePm?.attrs?.src) {
+            hasText = true;
+            const sizeAttr = imagePm.attrs.size || imagePm.attrs;
+            const resolvedSrc = resolveImagePartSrc(imagePm.attrs.src, params, imagePm.attrs.extension);
+            textParts.push({
+              text: '',
+              formatting,
+              kind: 'image',
+              src: resolvedSrc,
+              width: typeof sizeAttr?.width === 'number' ? sizeAttr.width : undefined,
+              height: typeof sizeAttr?.height === 'number' ? sizeAttr.height : undefined,
+              alt: imagePm.attrs.alt || '',
+            });
+          }
+        }
       }
     });
 

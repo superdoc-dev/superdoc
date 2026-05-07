@@ -4458,6 +4458,18 @@ export class DomPainter {
         if (part.isEmptyParagraph) {
           currentParagraph.style.minHeight = '1em';
         }
+      } else if (part.kind === 'image' && part.src) {
+        // SD-2804: image part produced by the textbox importer for an
+        // inline w:drawing inside a textbox run. Render as <img> alongside
+        // sibling text spans so layout matches Word's inline flow.
+        const img = this.doc!.createElement('img');
+        img.src = part.src;
+        img.alt = part.alt ?? '';
+        if (typeof part.width === 'number') img.style.width = `${part.width}px`;
+        if (typeof part.height === 'number') img.style.height = `${part.height}px`;
+        img.style.display = 'inline-block';
+        img.style.verticalAlign = 'middle';
+        currentParagraph.appendChild(img);
       } else {
         const span = this.doc!.createElement('span');
         span.textContent = this.resolveShapeTextPartText(part, context);

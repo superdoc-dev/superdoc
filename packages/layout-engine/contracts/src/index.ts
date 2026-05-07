@@ -806,6 +806,18 @@ export type TextPart = {
   isLineBreak?: boolean;
   /** Indicates this line break follows an empty paragraph (creates extra spacing). */
   isEmptyParagraph?: boolean;
+  /**
+   * SD-2804: ECMA-376 §20.4.2.38 lets a textbox hold full body-level
+   * content, including paragraphs whose runs carry inline w:drawing
+   * images. When the importer encounters such a drawing it appends a
+   * part with `kind: 'image'` carrying a resolved data-URI src so the
+   * shape painter can render an <img> alongside the text.
+   */
+  kind?: 'image';
+  src?: string;
+  width?: number;
+  height?: number;
+  alt?: string;
 };
 
 /** Text content configuration for shapes. */

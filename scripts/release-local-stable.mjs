@@ -1,23 +1,30 @@
 #!/usr/bin/env node
 
 /**
- * Stable tooling bundle: CLI -> SDK -> MCP, in order.
+ * Stable release orchestrator. Runs every package release that ships from
+ * stable in one workflow run, so the per-package workflows aren't all
+ * fighting for the same `release-stable` concurrency slot.
  *
  * Used both in CI (release-stable.yml) and locally (`pnpm release:local`).
- * Releasing these three together solves three GitHub Actions semantics
- * problems that per-workflow chains hit: shared concurrency cancellation,
- * `id-token: write` permission propagation for PyPI OIDC, and double-fire
- * from overlapping path filters. One workflow, one queue slot, one
- * permission context.
  *
- * Order rationale:
- * - CLI ships native binaries used by SDK.
- * - SDK packages those CLI binaries into Node + Python distributions.
- * - MCP imports SDK + engine code and ships against pinned SDK versions.
+ * Packages are grouped into chains. Within a chain, fail-stop applies (a
+ * failure upstream skips downstream). Across chains, packages are
+ * independent - a tools failure does not block the core release and
+ * vice versa.
  *
- * superdoc, react, esign, template-builder, and vscode-ext release
- * independently via their own per-package stable workflows. SuperDoc
- * promotion of docs-stable is keyed to the SuperDoc workflow specifically.
+ * Tools chain (CLI -> SDK -> MCP):
+ *   These three share artifacts (SDK packages CLI native binaries; MCP
+ *   imports SDK + engine code), so they must release in this order.
+ *
+ * Core chain:
+ *   Currently superdoc only. react and vscode-ext still ship from their
+ *   per-package stable workflows; pulling them into this chain is a
+ *   separate refactor and is what makes docs-stable promotion (keyed off
+ *   superdoc's v* tag) live in this workflow.
+ *
+ * Per-package adapters live on the descriptor (resumePublish,
+ * preparePythonSnapshot). The recovery engine is generic; new packages
+ * only add their descriptor and adapter.
  *
  * Usage:
  *   pnpm run release:local [-- --dry-run]
@@ -65,6 +72,12 @@ const SDK_PYTHON_PACKAGES = [
   'superdoc-sdk-cli-windows-x64',
   'superdoc-sdk',
 ];
+
+// superdoc ships under two npm names: `superdoc` (unscoped) and a
+// `@harbour-enterprises/superdoc` mirror published from the same tarball.
+// Both must be present at the released version for the publish to count
+// as complete - see scripts/publish-superdoc.cjs.
+const SUPERDOC_NPM_PACKAGES = ['superdoc', '@harbour-enterprises/superdoc'];
 
 function runInWorkspace(workspaceRoot, command, args, options = {}) {
   const { capture = false, env = process.env } = options;
@@ -666,6 +679,19 @@ function prepareSdkPythonSnapshot(workspaceRoot, tag) {
   return copySdkPythonArtifacts(workspaceRoot, tag);
 }
 
+function resumeSuperdocPublish(workspaceRoot, distTag, options = {}) {
+  const { skipBuild = workspaceRoot === REPO_ROOT } = options;
+  const args = [join(workspaceRoot, 'scripts/publish-superdoc.cjs'), '--dist-tag', distTag];
+  // In a tagged worktree we just ran `pnpm install` and have no build output;
+  // let the script run its own build. In REPO_ROOT the build already ran
+  // (release:local does it before invoking the orchestrator, and CI runs
+  // `Build packages` ahead of this script), so skip the duplicate.
+  if (skipBuild) {
+    args.push('--skip-build');
+  }
+  runInWorkspace(workspaceRoot, 'node', args);
+}
+
 async function recoverPackageRelease(pkg, { tag, version, distTag, branchRef, initialState = null }) {
   const targetCommit = getTagCommit(tag);
   const tagAtHead = isTagAtHead(tag);
@@ -803,13 +829,14 @@ const branchRef = `origin/${expectedBranch}`;
 // Release pipeline
 // ---------------------------------------------------------------------------
 
-// Stable bundle: CLI -> SDK -> MCP. These three share artifacts (SDK packages
-// CLI native binaries; MCP imports SDK + engine code), so they must release
-// together in this order. superdoc, react, esign, template-builder, and
-// vscode-ext release independently via their own per-package stable workflows.
+// Packages are grouped by `chain`. Within a chain, fail-stop applies: a
+// failed package skips downstream packages in the same chain. Across
+// chains, packages run independently - a tools failure does not block
+// the core release and vice versa.
 const packages = [
   {
     name: 'cli',
+    chain: 'tools',
     packageCwd: 'apps/cli',
     tagPrefix: 'cli-v',
     tagPattern: 'cli-v*',
@@ -818,6 +845,7 @@ const packages = [
   },
   {
     name: 'sdk',
+    chain: 'tools',
     packageCwd: 'packages/sdk',
     tagPrefix: 'sdk-v',
     tagPattern: 'sdk-v*',
@@ -828,11 +856,21 @@ const packages = [
   },
   {
     name: 'mcp',
+    chain: 'tools',
     packageCwd: 'apps/mcp',
     tagPrefix: 'mcp-v',
     tagPattern: 'mcp-v*',
     npmPackages: ['@superdoc-dev/mcp'],
     resumePublish: resumeMcpPublish,
+  },
+  {
+    name: 'superdoc',
+    chain: 'core',
+    packageCwd: 'packages/superdoc',
+    tagPrefix: 'v',
+    tagPattern: 'v[0-9]*',
+    npmPackages: SUPERDOC_NPM_PACKAGES,
+    resumePublish: resumeSuperdocPublish,
   },
 ];
 
@@ -847,6 +885,7 @@ const results = new Map();
 
 let hasFailed = false;
 let deferredReason = '';
+const failedChains = new Set();
 
 function markRemainingSkipped(startIndex) {
   for (let index = startIndex; index < packages.length; index += 1) {
@@ -857,7 +896,7 @@ function markRemainingSkipped(startIndex) {
 for (let index = 0; index < packages.length; index += 1) {
   const pkg = packages[index];
 
-  if (hasFailed) {
+  if (failedChains.has(pkg.chain)) {
     results.set(pkg.name, { status: 'skipped', newTags: [] });
     continue;
   }
@@ -872,6 +911,7 @@ for (let index = 0; index < packages.length; index += 1) {
       console.error(`\n${pkg.name} recovery failed:\n${error.message || error}`);
       results.set(pkg.name, { status: 'FAILED', newTags: [] });
       hasFailed = true;
+      failedChains.add(pkg.chain);
       continue;
     }
   }
@@ -962,6 +1002,7 @@ for (let index = 0; index < packages.length; index += 1) {
     const status = newTags.length > 0 ? 'FAILED (partial)' : 'FAILED';
     results.set(pkg.name, { status, newTags });
     hasFailed = true;
+    failedChains.add(pkg.chain);
   }
 }
 

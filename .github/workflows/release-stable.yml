@@ -1,10 +1,13 @@
-# Stable tooling mini-bundle: CLI -> SDK -> MCP, in order, on the same runner.
-# These three share artifacts (SDK packages CLI native binaries; MCP imports
-# SDK + engine code), so they release together with one queue slot and one
-# permission context (including PyPI OIDC).
+# Stable release orchestrator. Drives `release-local-stable.mjs`, which
+# releases each package in the right chain on one runner, with one queue
+# slot and one permission context (including PyPI OIDC).
 #
-# Out of scope: superdoc, react, esign, template-builder, vscode-ext. Each of
-# those has its own per-package stable workflow.
+# Tools chain (CLI -> SDK -> MCP) ships together because SDK packages
+# CLI native binaries and MCP imports SDK + engine code. Core chain
+# (currently superdoc) ships independently of the tools chain.
+#
+# Out of scope: esign, template-builder. Each has its own stable workflow
+# until brought into the orchestrator.
 name: 📦 Release stable tooling (CLI/SDK/MCP)
 
 on:
@@ -103,7 +106,7 @@ jobs:
       - name: Build packages
         run: pnpm run build
 
-      - name: Release stable tooling (CLI -> SDK -> MCP)
+      - name: Release stable packages (orchestrator)
         id: stable_release
         env:
           GITHUB_TOKEN: ${{ steps.generate_token.outputs.token }}
@@ -152,6 +155,7 @@ jobs:
       #   with:
       #     packages-dir: packages/sdk/langs/python/dist/
       #     skip-existing: true
-      # Docs promotion lives in promote-stable-docs.yml, which triggers on the
-      # SuperDoc workflow specifically. Tooling-bundle releases (CLI/SDK/MCP)
-      # do not advance docs-stable.
+      # Docs promotion lives in promote-stable-docs.yml. It triggers off this
+      # workflow's completion and gates on whether a real superdoc v* tag was
+      # created during the run, so tools-only releases leave docs-stable
+      # unchanged automatically.

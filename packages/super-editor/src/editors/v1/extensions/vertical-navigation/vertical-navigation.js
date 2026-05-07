@@ -90,6 +90,7 @@ export const VerticalNavigation = Extension.create({
           if (event.key === 'Home' || event.key === 'End') {
             view.dispatch(view.state.tr.setMeta(VerticalNavigationPluginKey, { type: 'reset-goal-x' }));
             if (!isPresenting(editor)) return false;
+            if (event.ctrlKey || event.metaKey || event.altKey) return false;
             const targetPos = resolveLineBoundaryPosition(editor, view.state.selection, event.key);
             if (!Number.isFinite(targetPos)) return false;
             const selection = buildSelection(view.state, targetPos, event.shiftKey);

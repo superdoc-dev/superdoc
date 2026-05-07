@@ -192,9 +192,10 @@ export function toFlowBlocks(pmDoc: PMNode | object, options?: AdapterOptions): 
 
   // Range-aware section analysis (matches toFlowBlocks semantics)
   const bodySectionProps = doc.attrs?.bodySectPr ?? doc.attrs?.sectPr;
-  converterContext.sectionDirection =
-    converterContext.sectionDirection ?? resolveSectionDirectionFromSectPr(bodySectionProps);
   const sectionRanges = options?.emitSectionBreaks ? analyzeSectionRanges(doc, bodySectionProps) : [];
+  converterContext.sectionDirection =
+    converterContext.sectionDirection ??
+    resolveSectionDirectionFromSectPr(sectionRanges[0]?.sectPr ?? bodySectionProps);
   publishSectionMetadata(sectionRanges, options);
 
   // Emit first section break before content to set initial properties.

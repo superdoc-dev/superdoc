@@ -315,11 +315,13 @@ const decode = (params, decodedAttrs = {}) => {
   const runTrackFormatMark = findTrackFormatMark(runNodeForExport.marks);
 
   const runAttrs = runNodeForExport.attrs || {};
-  const runProperties = runAttrs.runProperties || {};
+  const rawRunProperties = runAttrs.runProperties || {};
   // Backward compatibility: older payloads used iCs instead of italicCs for w:iCs.
-  if (runProperties?.italicCs == null && runProperties?.iCs != null) {
-    runProperties.italicCs = runProperties.iCs;
-  }
+  // Normalize to a local copy to avoid mutating node attrs during export.
+  const runProperties =
+    rawRunProperties?.italicCs == null && rawRunProperties?.iCs != null
+      ? { ...rawRunProperties, italicCs: rawRunProperties.iCs }
+      : rawRunProperties;
   const inlineKeys = runAttrs.runPropertiesInlineKeys;
   const styleKeys = runAttrs.runPropertiesStyleKeys;
   const overrideKeys = runAttrs.runPropertiesOverrideKeys;

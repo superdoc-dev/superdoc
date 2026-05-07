@@ -145,4 +145,42 @@ describe('Writing mode IS the one inheriting axis (§17.3.1.41)', () => {
     const paragraphOverride = resolveParagraphDirection({ textDirection: 'lrTb' }, sectionContext, cellContext);
     expect(paragraphOverride.writingMode).toBe('horizontal-tb');
   });
+
+  // ECMA §17.18.93 lists 12 textDirection values. The V-suffix variants are glyph
+  // rotation, not line direction. CSS writing-mode can't express the rotation, so
+  // V variants share the writing-mode of their non-V sibling. The repo's
+  // ST_TEXT_DIRECTION contract publishes lrTbV and tbRlV as accepted values, so
+  // dropping them silently is a contract violation.
+  describe('all ST_TextDirection values are mapped (paragraph, section, cell)', () => {
+    const cases: Array<[string, 'horizontal-tb' | 'vertical-rl' | 'vertical-lr']> = [
+      ['lrTb', 'horizontal-tb'],
+      ['lrTbV', 'horizontal-tb'],
+      ['tb', 'horizontal-tb'],
+      ['tbV', 'horizontal-tb'],
+      ['tbRl', 'vertical-rl'],
+      ['tbRlV', 'vertical-rl'],
+      ['rl', 'vertical-rl'],
+      ['rlV', 'vertical-rl'],
+      ['btLr', 'vertical-lr'],
+      ['lr', 'vertical-lr'],
+      ['lrV', 'vertical-lr'],
+      ['tbLrV', 'vertical-lr'],
+    ];
+
+    for (const [val, expected] of cases) {
+      it(`maps ${val} -> ${expected} on paragraph, section, and cell`, () => {
+        const sectionContext = resolveSectionDirection({
+          elements: [{ name: 'w:textDirection', attributes: { 'w:val': val } }],
+        });
+        expect(sectionContext.writingMode).toBe(expected);
+
+        const tableContext = resolveTableDirection(undefined, sectionContext);
+        const cellContext = resolveCellDirection({ textDirection: val }, tableContext);
+        expect(cellContext.writingMode).toBe(expected);
+
+        const paragraphContext = resolveParagraphDirection({ textDirection: val }, sectionContext);
+        expect(paragraphContext.writingMode).toBe(expected);
+      });
+    }
+  });
 });

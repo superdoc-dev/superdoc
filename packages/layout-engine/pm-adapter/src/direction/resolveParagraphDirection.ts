@@ -44,16 +44,26 @@ export type ParagraphPropertiesLike = {
   textDirection?: string;
 };
 
+// Per ECMA §17.18.93 the V-suffix variants share the line direction of their
+// non-V siblings; the V suffix is glyph rotation, which CSS expresses through
+// text-orientation, not writing-mode. So lrTbV/tbV collapse to horizontal-tb,
+// tbRlV/rlV to vertical-rl, lrV to vertical-lr. Strict-spec short forms (lr,
+// rl, tb) are accepted alongside the Word transitional 4-letter forms.
 const writingModeFromTextDirection = (val: string | undefined): WritingMode | undefined => {
   switch (val) {
     case 'lrTb':
+    case 'lrTbV':
     case 'tb':
+    case 'tbV':
       return 'horizontal-tb';
     case 'tbRl':
+    case 'tbRlV':
     case 'rl':
+    case 'rlV':
       return 'vertical-rl';
     case 'btLr':
     case 'lr':
+    case 'lrV':
     case 'tbLrV':
       return 'vertical-lr';
     default:

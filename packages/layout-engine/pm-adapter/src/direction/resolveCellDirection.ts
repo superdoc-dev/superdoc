@@ -13,16 +13,22 @@ export type CellPropertiesLike = {
   textDirection?: string;
 };
 
+// Per ECMA §17.18.93. See resolveParagraphDirection for the V-suffix rationale.
 const writingModeFromTextDirection = (val: string | undefined): WritingMode | undefined => {
   switch (val) {
     case 'lrTb':
+    case 'lrTbV':
     case 'tb':
+    case 'tbV':
       return 'horizontal-tb';
     case 'tbRl':
+    case 'tbRlV':
     case 'rl':
+    case 'rlV':
       return 'vertical-rl';
     case 'btLr':
     case 'lr':
+    case 'lrV':
     case 'tbLrV':
       return 'vertical-lr';
     default:

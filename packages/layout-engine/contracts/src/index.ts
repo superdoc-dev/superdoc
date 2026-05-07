@@ -16,7 +16,7 @@ export type {
   RunBidiContext,
   RunScriptContext,
 } from './direction-context.js';
-import type { ParagraphDirectionContext } from './direction-context.js';
+import type { ParagraphDirectionContext, RunBidiContext, RunScriptContext } from './direction-context.js';
 
 // Export table contracts
 export {

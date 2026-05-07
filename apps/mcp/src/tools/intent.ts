@@ -50,10 +50,15 @@ function jsonSchemaPropertyToZod(prop: Record<string, unknown>): z.ZodTypeAny {
     }
   }
 
-  // Complex schemas (oneOf, anyOf, allOf) — pass through as opaque;
-  // DocumentApi validates the actual payload at dispatch time.
+  // Complex schemas (oneOf, anyOf, allOf) — pass through as a loose object.
+  // z.unknown() emits a JSON Schema with no `type` field, which some MCP
+  // clients (notably the Claude Code harness) treat as a string and fail
+  // to JSON-encode object payloads. z.looseObject({}) emits
+  // {type: "object", additionalProperties: true}, so the value reaches
+  // the server as an object. DocumentApi validates the actual payload
+  // at dispatch time.
   if (prop.oneOf || prop.anyOf || prop.allOf) {
-    return desc ? z.unknown().describe(desc) : z.unknown();
+    return desc ? z.looseObject({}).describe(desc) : z.looseObject({});
   }
 
   switch (type) {
@@ -69,9 +74,12 @@ function jsonSchemaPropertyToZod(prop: Record<string, unknown>): z.ZodTypeAny {
       // z4-mini toJSONSchema cannot convert z.record() from zod v4 classic.
       return desc ? z.array(z.unknown()).describe(desc) : z.array(z.unknown());
     case 'object':
-      // Use z.unknown() instead of z.record() to avoid MCP SDK Zod v4 classic/mini
-      // incompatibility. DocumentApi validates the actual shape at dispatch time.
-      return desc ? z.unknown().describe(desc) : z.unknown();
+      // Use z.looseObject({}) so the emitted JSON Schema carries
+      // `type: "object"`. z.unknown() drops the type (clients treat it
+      // as a string); z.record() can't be converted by the MCP SDK's
+      // z4-mini toJSONSchema. DocumentApi validates the actual shape
+      // at dispatch time.
+      return desc ? z.looseObject({}).describe(desc) : z.looseObject({});
     default:
       return desc ? z.unknown().describe(desc) : z.unknown();
   }

@@ -335,10 +335,11 @@ const decode = (params, decodedAttrs = {}) => {
   if (candidateKeys.includes('iCs') && !candidateKeys.includes('italicCs')) {
     candidateKeys.push('italicCs');
   }
-  // Preserve explicit run-level RTL on export even when allow-lists are incomplete.
-  if (runProperties?.rtl != null && !candidateKeys.includes('rtl')) {
-    candidateKeys.push('rtl');
-  }
+  // Note: rtl is NOT force-pushed into candidateKeys when set. It must come through
+  // the normal inlineKeys/overrideKeys path so style-inherited rtl (the run references
+  // a character or paragraph style that defines w:rtl) does not get flattened into
+  // direct formatting on every run during export. Per ECMA Annex I, run rtl
+  // participates in the style cascade - exports should preserve the style reference.
 
   const shouldExport = (key) =>
     key in (runProperties || {}) &&

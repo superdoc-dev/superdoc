@@ -149,7 +149,17 @@ export const calculateInlineRunPropertiesPlugin = (editor) =>
           const textNode = segment.content?.find((n) => n.isText);
           return Object.keys(decodeRPrFromMarks(textNode?.marks || []));
         };
-        const overrideKeysFromInlineProps = (inlineProps) => styleKeys.filter((k) => inlineProps && k in inlineProps);
+        // A style-defined key counts as an override only when the inline value actually
+        // differs from the style-provided value. Without this, runs that just reference a
+        // style (e.g. <w:rStyle w:val="RtlChar"/>) get every cascade-resolved key (rtl, sz, ...)
+        // tagged as an override, and r-translator then writes them as inline w:rPr on export -
+        // flattening style-inherited formatting into direct formatting on every run.
+        const overrideKeysFromInlineProps = (inlineProps) =>
+          styleKeys.filter((k) => {
+            if (!inlineProps || !(k in inlineProps)) return false;
+            if (!existingStyleComparableProps || !(k in existingStyleComparableProps)) return true;
+            return JSON.stringify(inlineProps[k]) !== JSON.stringify(existingStyleComparableProps[k]);
+          });
 
         // When the importer set an empty inline keys list ([]), it means the original run
         // had no inline w:rPr — all properties are style-inherited. Preserve that decision
@@ -181,12 +191,18 @@ export const calculateInlineRunPropertiesPlugin = (editor) =>
               if (baseKey && existingRunPropsKeys.has(baseKey)) return false;
               return true;
             });
+          // Detect changes against the full style cascade (rStyle + paragraph style +
+          // docDefaults), not just the run's rStyle. styleKeys only tracks direct run-style
+          // keys; for runs whose styled value comes from paragraph style or docDefaults,
+          // styleKeys is empty and we still need to know if the user has overridden them
+          // so the CS companion (fontSizeCs/boldCs/italicCs) makes it into the export.
           const hasChangedStyleComparableProps =
             segmentInlineProps != null &&
+            existingStyleComparableProps &&
             Object.keys(segmentInlineProps).some((k) => {
-              if (!styleKeys.includes(k)) return false;
+              if (!(k in existingStyleComparableProps)) return false;
               const current = segmentInlineProps[k];
-              const fromStyle = existingStyleComparableProps?.[k];
+              const fromStyle = existingStyleComparableProps[k];
               if (JSON.stringify(current) !== JSON.stringify(fromStyle)) return true;
               const baseKey = COMPANION_INLINE_KEYS[k];
               if (!baseKey) return false;

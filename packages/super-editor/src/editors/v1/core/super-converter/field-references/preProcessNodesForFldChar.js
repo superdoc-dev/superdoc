@@ -3,6 +3,7 @@
  */
 import { getInstructionPreProcessor } from './fld-preprocessors';
 import { carbonCopy } from '@core/utilities/carbonCopy.js';
+import { isTrackChangeElement } from '../v2/importer/trackChangeElements.js';
 
 const SKIP_FIELD_PROCESSING_NODE_NAMES = new Set(['w:drawing', 'w:pict']);
 
@@ -10,8 +11,9 @@ const shouldSkipFieldProcessing = (node) => SKIP_FIELD_PROCESSING_NODE_NAMES.has
 /**
  * @typedef {object} FldCharProcessResult
  * @property {OpenXmlNode[]} processedNodes - The list of nodes after processing.
- * @property {Array<{nodes: OpenXmlNode[], fieldInfo: {instrText: string, instructionTokens?: Array<{type: string, text?: string}>}}>| null} unpairedBegin - If a field 'begin' was found without a matching 'end'. Contains the current field data.
+ * @property {Array<{nodes: OpenXmlNode[], fieldInfo: {instrText: string, instructionTokens?: Array<{type: string, text?: string}>, afterSeparate?: boolean, preserveRaw?: boolean}}>| null} unpairedBegin - If a field 'begin' was found without a matching 'end'. Contains the current field data.
  * @property {boolean | null} unpairedEnd - If a field 'end' was found without a matching 'begin'.
+ * @property {boolean | null} unpairedEndPreserveRaw - If an unpaired field 'end' bubbled through a tracked-change wrapper.
  */
 
 /**
@@ -35,6 +37,7 @@ export const preProcessNodesForFldChar = (nodes = [], docx) => {
   let fieldRunRPrStack = [];
   let currentFieldStack = [];
   let unpairedEnd = null;
+  let unpairedEndPreserveRaw = null;
   let collecting = false;
   const rawNodeSourceTokens = new WeakMap();
 
@@ -48,14 +51,17 @@ export const preProcessNodesForFldChar = (nodes = [], docx) => {
       const rawCollectedNodes = rawCollectedNodesStack.pop().filter((n) => n !== null);
       const fieldRunRPr = fieldRunRPrStack.pop() ?? null;
       const currentField = currentFieldStack.pop();
-      const combinedResult = _processCombinedNodesForFldChar(
-        collectedNodes,
-        currentField.instrText.trim(),
-        docx,
-        currentField.instructionTokens,
-        fieldRunRPr,
-      );
-      const outputNodes = combinedResult.handled ? combinedResult.nodes : rawCollectedNodes;
+      let outputNodes = rawCollectedNodes;
+      if (!currentField.preserveRaw) {
+        const combinedResult = _processCombinedNodesForFldChar(
+          collectedNodes,
+          currentField.instrText.trim(),
+          docx,
+          currentField.instructionTokens,
+          fieldRunRPr,
+        );
+        outputNodes = combinedResult.handled ? combinedResult.nodes : rawCollectedNodes;
+      }
       if (collectedNodesStack.length === 0) {
         // We have completed a top-level field, add the combined nodes to the output.
         processedNodes.push(...outputNodes);
@@ -205,7 +211,11 @@ export const preProcessNodesForFldChar = (nodes = [], docx) => {
       if (childResult.unpairedBegin) {
         // A field started in the children, so this node is part of that field.
         childResult.unpairedBegin.forEach((pendingField) => {
-          currentFieldStack.push(pendingField.fieldInfo);
+          const fieldInfo = { ...pendingField.fieldInfo };
+          if (fieldInfo.preserveRaw || isTrackChangeElement(node)) {
+            fieldInfo.preserveRaw = true;
+          }
+          currentFieldStack.push(fieldInfo);
 
           // The current node should be added to the collected nodes
           collectedNodesStack.push([node]);
@@ -216,6 +226,18 @@ export const preProcessNodesForFldChar = (nodes = [], docx) => {
         });
       } else if (childResult.unpairedEnd) {
         // A field from this level or higher ended in the children.
+        const shouldPreserveRaw = childResult.unpairedEndPreserveRaw || isTrackChangeElement(node);
+        if (collectedNodesStack.length === 0) {
+          // Track-change wrappers need the original field boundary; ordinary wrappers can keep processed children.
+          processedNodes.push(shouldPreserveRaw ? rawNode : node);
+          unpairedEnd = true;
+          if (shouldPreserveRaw) unpairedEndPreserveRaw = true;
+          return;
+        }
+
+        if (shouldPreserveRaw) {
+          currentFieldStack[currentFieldStack.length - 1].preserveRaw = true;
+        }
         collectedNodesStack[collectedNodesStack.length - 1].push(node);
         captureRawNodeForCurrentField(rawNode, capturedRawNodes, rawSourceToken);
         finalizeField();
@@ -259,7 +281,7 @@ export const preProcessNodesForFldChar = (nodes = [], docx) => {
     }
   }
 
-  return { processedNodes, unpairedBegin, unpairedEnd };
+  return { processedNodes, unpairedBegin, unpairedEnd, unpairedEndPreserveRaw };
 };
 
 /**

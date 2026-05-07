@@ -187,6 +187,10 @@ function ReplyComposer({ parent }: { parent: { id: string } }) {
 
 The next snapshot from `useSuperDocComments()` includes the reply, threaded under the parent via `parentCommentId`. The reference demo's `ActivitySidebar` ships this pattern with focus management and Ctrl/Cmd+Enter to post.
 
+## Theming
+
+Comment cards, body text, timestamps, and active states are themable via `--sd-ui-comments-*` CSS variables. See [Theming overview](/editor/theming/overview) and [Custom themes](/editor/theming/custom-themes) for the full token list.
+
 ## Trade-offs
 
 - `useSuperDocComments` returns a memoized snapshot. Re-renders happen only when items, total, or activeIds change.

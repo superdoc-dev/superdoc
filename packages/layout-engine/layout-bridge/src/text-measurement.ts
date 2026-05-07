@@ -1,5 +1,10 @@
 import type { FlowBlock, Line, Run, TabRun } from '@superdoc/contracts';
-import { shouldApplyJustify, calculateJustifySpacing, SPACE_CHARS as SHARED_SPACE_CHARS } from '@superdoc/contracts';
+import {
+  shouldApplyJustify,
+  calculateJustifySpacing,
+  sliceRunsForLine,
+  SPACE_CHARS as SHARED_SPACE_CHARS,
+} from '@superdoc/contracts';
 
 /**
  * Shared text measurement utility for accurate character positioning.
@@ -325,84 +330,6 @@ export function getRunFontString(run: Run): string {
   const fontSize = run.fontSize ?? 16;
   const fontFamily = run.fontFamily ?? 'Arial';
   return `${style} ${weight} ${fontSize}px ${fontFamily}`;
-}
-
-/**
- * Extracts the subset of runs that appear in a specific line.
- * Handles partial runs that span multiple lines.
- *
- * @param block - The paragraph block containing the runs
- * @param line - The line to extract runs for
- * @returns Array of runs present in the line
- */
-export function sliceRunsForLine(block: FlowBlock, line: Line): Run[] {
-  const result: Run[] = [];
-  if (block.kind !== 'paragraph') return result;
-
-  for (let runIndex = line.fromRun; runIndex <= line.toRun; runIndex += 1) {
-    const run = block.runs[runIndex];
-    if (!run) continue;
-
-    if (isTabRun(run)) {
-      result.push(run);
-      continue;
-    }
-
-    // FIXED: ImageRun handling - images are atomic units, no slicing needed
-    if ('src' in run) {
-      result.push(run);
-      continue;
-    }
-
-    // LineBreakRun handling - line breaks are atomic units, no slicing needed
-    if (run.kind === 'lineBreak') {
-      result.push(run);
-      continue;
-    }
-
-    // BreakRun handling - breaks are atomic units, no slicing needed
-    if (run.kind === 'break') {
-      result.push(run);
-      continue;
-    }
-
-    // FieldAnnotationRun handling - field annotations are atomic units, no slicing needed
-    if (run.kind === 'fieldAnnotation') {
-      result.push(run);
-      continue;
-    }
-
-    // MathRun handling - math runs are atomic units, no slicing needed
-    if (run.kind === 'math') {
-      result.push(run);
-      continue;
-    }
-
-    const text = run.text ?? '';
-    const isFirstRun = runIndex === line.fromRun;
-    const isLastRun = runIndex === line.toRun;
-
-    if (isFirstRun || isLastRun) {
-      const start = isFirstRun ? line.fromChar : 0;
-      const end = isLastRun ? line.toChar : text.length;
-      const slice = text.slice(start, end);
-      if (!slice) continue;
-      const pmStart =
-        run.pmStart != null ? run.pmStart + start : run.pmEnd != null ? run.pmEnd - (text.length - start) : undefined;
-      const pmEnd =
-        run.pmStart != null ? run.pmStart + end : run.pmEnd != null ? run.pmEnd - (text.length - end) : undefined;
-      result.push({
-        ...run,
-        text: slice,
-        pmStart,
-        pmEnd,
-      });
-    } else {
-      result.push(run);
-    }
-  }
-
-  return result;
 }
 
 /**

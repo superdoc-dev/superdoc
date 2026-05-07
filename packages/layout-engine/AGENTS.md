@@ -22,8 +22,29 @@ ProseMirror Doc → pm-adapter → FlowBlock[] → layout-engine → Layout[] �
 
 ## Key Insight: DomPainter is "Dumb"
 
-DomPainter receives pre-computed `Layout` with positioned fragments and renders them.
-It does NOT do layout logic - that's in `layout-engine/`.
+DomPainter receives a single paint-ready input — `ResolvedLayout` — and
+renders the result to DOM. It does NOT do layout logic, measurement, or
+PM-adapter conversion (that's upstream in `layout-engine/` /
+`layout-resolved/` / `pm-adapter/`).
+
+This is enforced as two hard invariants, not aspirational language:
+
+1. **No upstream package imports.** The painter has zero runtime imports
+   from `@superdoc/pm-adapter`, `@superdoc/layout-bridge`, or
+   `@superdoc/layout-resolved`. Guard D in
+   `tests/src/architecture-boundaries.test.ts` enforces this (SD-2836).
+2. **No paint-time DOM measurement.** The painter never reads
+   `clientHeight`, `offsetWidth`, or `getBoundingClientRect` off rendered
+   content. Every size and offset comes pre-computed from the resolved
+   layout. If a required field is missing, the painter throws — it does
+   not rescue incomplete upstream data by measuring. Scroll/viewport
+   plumbing and interactive ruler drag handlers are the only exempt
+   consumers. Guard E enforces this (SD-2957).
+
+The painter also does not coalesce resolved-item fields with the legacy
+`fragment` back-pointer (no `resolvedItem?.X ?? fragment.X` patterns); the
+resolve stage is the unique source of truth for every field the painter
+reads.
 
 ## Common Tasks
 

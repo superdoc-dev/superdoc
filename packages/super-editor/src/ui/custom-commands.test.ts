@@ -1147,6 +1147,220 @@ describe('ui.commands.getContextMenuItems', () => {
   });
 });
 
+// SD-2945: getContextMenuItems accepts the full ViewportContext
+// bundle from `viewport.contextAt(...)`. When passed a bundle:
+//   - the `when` predicate sees `point` / `position` / `insideSelection`
+//     in addition to `entities` and `selection`
+//   - each returned item carries an `invoke()` closure that fires
+//     `execute` with the bundle bound, so handlers can read `context`
+//     without re-running geometry
+// The legacy `{ entities }` shape keeps working, with `invoke`
+// absent on returned items.
+describe('ui.commands.getContextMenuItems - ViewportContext bundle', () => {
+  function makeBundle(
+    overrides: Partial<{ x: number; y: number; insideSelection: boolean; entities: unknown[]; position: unknown }> = {},
+  ) {
+    return {
+      point: { x: overrides.x ?? 100, y: overrides.y ?? 200 },
+      entities: (overrides.entities ?? []) as never[],
+      position: (overrides.position ?? null) as never,
+      selection: {
+        empty: true,
+        target: null,
+        selectionTarget: null,
+        activeMarks: [],
+        activeCommentIds: [],
+        activeChangeIds: [],
+        quotedText: '',
+      },
+      insideSelection: overrides.insideSelection ?? false,
+    };
+  }
+
+  it('passes point / position / insideSelection to the when predicate when called with a bundle', () => {
+    const { superdoc } = makeStubs();
+    const ui = createSuperDocUI({ superdoc });
+    const whenSpy = vi.fn(() => true);
+
+    ui.commands.register({
+      id: 'test.bundle.when',
+      execute: () => true,
+      contextMenu: { label: 'Bundle', when: whenSpy },
+    });
+
+    const bundle = makeBundle({ x: 50, y: 60, insideSelection: true });
+    ui.commands.getContextMenuItems(bundle);
+
+    expect(whenSpy).toHaveBeenCalledTimes(1);
+    expect(whenSpy.mock.calls[0]![0]).toMatchObject({
+      entities: [],
+      point: { x: 50, y: 60 },
+      insideSelection: true,
+    });
+    expect((whenSpy.mock.calls[0]![0] as { selection: unknown }).selection).toBeDefined();
+
+    ui.destroy();
+  });
+
+  it('omits point / position / insideSelection from the when input when called with the legacy { entities } shape', () => {
+    const { superdoc } = makeStubs();
+    const ui = createSuperDocUI({ superdoc });
+    const whenSpy = vi.fn(() => true);
+
+    ui.commands.register({
+      id: 'test.legacy.when',
+      execute: () => true,
+      contextMenu: { label: 'Legacy', when: whenSpy },
+    });
+
+    ui.commands.getContextMenuItems({ entities: [{ type: 'comment', id: 'c1' }] });
+
+    expect(whenSpy).toHaveBeenCalledTimes(1);
+    const arg = whenSpy.mock.calls[0]![0] as Record<string, unknown>;
+    expect(arg.entities).toEqual([{ type: 'comment', id: 'c1' }]);
+    expect(arg.selection).toBeDefined();
+    // No bundle fields when the consumer didn't pass one. Handlers
+    // that only destructure { entities, selection } see the same
+    // shape they always have.
+    expect(arg.point).toBeUndefined();
+    expect(arg.position).toBeUndefined();
+    expect(arg.insideSelection).toBeUndefined();
+
+    ui.destroy();
+  });
+
+  it('returns items with an invoke() closure that fires execute with the bundle bound to context', () => {
+    const { superdoc } = makeStubs();
+    const ui = createSuperDocUI({ superdoc });
+    const executeSpy = vi.fn(() => true);
+
+    ui.commands.register({
+      id: 'test.bundle.execute',
+      execute: executeSpy,
+      contextMenu: { label: 'Bundle execute' },
+    });
+
+    const bundle = makeBundle({ x: 10, y: 20, insideSelection: false });
+    const items = ui.commands.getContextMenuItems(bundle);
+    expect(items).toHaveLength(1);
+    expect(typeof items[0]!.invoke).toBe('function');
+
+    items[0]!.invoke!();
+    expect(executeSpy).toHaveBeenCalledTimes(1);
+    const args = executeSpy.mock.calls[0]![0] as Record<string, unknown>;
+    expect((args.context as { point: unknown }).point).toEqual({ x: 10, y: 20 });
+    expect((args.context as { insideSelection: unknown }).insideSelection).toBe(false);
+
+    ui.destroy();
+  });
+
+  it('omits invoke() from returned items when called with the legacy { entities } shape', () => {
+    const { superdoc } = makeStubs();
+    const ui = createSuperDocUI({ superdoc });
+
+    ui.commands.register({
+      id: 'test.legacy.no-invoke',
+      execute: () => true,
+      contextMenu: { label: 'Legacy' },
+    });
+
+    const items = ui.commands.getContextMenuItems({ entities: [] });
+    expect(items).toHaveLength(1);
+    expect(items[0]!.invoke).toBeUndefined();
+
+    ui.destroy();
+  });
+
+  it('does not pass context when the command is invoked through `commands.get(id).execute()` directly', () => {
+    const { superdoc } = makeStubs();
+    const ui = createSuperDocUI({ superdoc });
+    const executeSpy = vi.fn(() => true);
+
+    ui.commands.register({
+      id: 'test.direct.execute',
+      execute: executeSpy,
+      contextMenu: { label: 'Direct' },
+    });
+
+    ui.commands.get('test.direct.execute').execute();
+    expect(executeSpy).toHaveBeenCalledTimes(1);
+    const args = executeSpy.mock.calls[0]![0] as Record<string, unknown>;
+    expect(args.context).toBeUndefined();
+
+    ui.destroy();
+  });
+
+  // A menu held open across a re-registration must not dispatch the
+  // replacement's handler. The captured-handle pattern at
+  // `buildHandle.execute` already guards `commands.get(id).execute()`
+  // against this; `invoke()` follows the same identity check so a
+  // stale menu item cleanly returns false instead of firing the new
+  // owner's handler with the old item's label/predicate.
+  it('invoke() returns false (no dispatch) when the entry was replaced after the menu opened', () => {
+    const { superdoc } = makeStubs();
+    const ui = createSuperDocUI({ superdoc });
+    const oldExecute = vi.fn(() => true);
+    const newExecute = vi.fn(() => true);
+
+    ui.commands.register({
+      id: 'replaceable',
+      execute: oldExecute,
+      contextMenu: { label: 'Old' },
+    });
+
+    const items = ui.commands.getContextMenuItems(makeBundle());
+    expect(items).toHaveLength(1);
+    expect(typeof items[0]!.invoke).toBe('function');
+
+    // Replace the registration after the menu items are captured.
+    ui.commands.register({
+      id: 'replaceable',
+      execute: newExecute,
+      contextMenu: { label: 'New' },
+      override: true,
+    });
+
+    const result = items[0]!.invoke!();
+    expect(result).toBe(false);
+    expect(oldExecute).not.toHaveBeenCalled();
+    expect(newExecute).not.toHaveBeenCalled();
+
+    ui.destroy();
+  });
+
+  // Bundle vs legacy-shape detection must reject inputs whose `point`
+  // is null or non-numeric. A consumer hand-building
+  // `{ entities, point: null }` should keep the legacy path; without
+  // this guard `typeof null === 'object'` would route them to the
+  // bundle branch and the registry would read `position` /
+  // `insideSelection` as undefined.
+  it('routes inputs with `point: null` through the legacy entities path, not the bundle path', () => {
+    const { superdoc } = makeStubs();
+    const ui = createSuperDocUI({ superdoc });
+    const whenSpy = vi.fn(() => true);
+
+    ui.commands.register({
+      id: 'test.partial.input',
+      execute: () => true,
+      contextMenu: { label: 'Partial', when: whenSpy },
+    });
+
+    ui.commands.getContextMenuItems({
+      entities: [{ type: 'comment', id: 'c1' }],
+      point: null,
+    } as never);
+
+    expect(whenSpy).toHaveBeenCalledTimes(1);
+    const arg = whenSpy.mock.calls[0]![0] as Record<string, unknown>;
+    expect(arg.entities).toEqual([{ type: 'comment', id: 'c1' }]);
+    // Legacy shape: bundle-only fields stay absent.
+    expect(arg.point).toBeUndefined();
+    expect(arg.insideSelection).toBeUndefined();
+
+    ui.destroy();
+  });
+});
+
 describe('ui.commands.register — shortcut field', () => {
   function makeStubsWithHost() {
     const stubs = makeStubs();

@@ -1691,6 +1691,175 @@ describe('measureBlock', () => {
       }
     });
 
+    it('compensates start tabs on body lines for negative-left paragraphs with hanging indents', async () => {
+      const leftIndentPx = -40;
+      const block: FlowBlock = {
+        kind: 'paragraph',
+        id: 'negative-left-hanging-body-tab',
+        runs: [
+          { text: 'First', fontFamily: 'Arial', fontSize: 16 },
+          { kind: 'lineBreak' },
+          { kind: 'tab', text: '\t', tabIndex: 0 },
+          { text: 'Body', fontFamily: 'Arial', fontSize: 16 },
+        ],
+        attrs: {
+          indent: { left: leftIndentPx, hanging: 20 },
+        },
+      };
+
+      const measure = expectParagraphMeasure(await measureBlock(block, 200));
+
+      expect(measure.lines).toHaveLength(2);
+      const tabRun = block.runs[2];
+      if (tabRun.kind === 'tab') {
+        expect(tabRun.width).toBeCloseTo(Math.abs(leftIndentPx), 1);
+      }
+
+      const textSegment = measure.lines[1].segments?.find((segment) => segment.runIndex === 3);
+      expect(textSegment?.x).toBeCloseTo(Math.abs(leftIndentPx) * 2, 1);
+      expect(textSegment?.precedingTabEndX).toBeCloseTo(Math.abs(leftIndentPx), 1);
+      expect((textSegment?.x ?? 0) + leftIndentPx).toBeCloseTo(Math.abs(leftIndentPx), 1);
+    });
+
+    it('preserves compensated tab geometry when the following text starts with a space', async () => {
+      const leftIndentPx = -40;
+      const block: FlowBlock = {
+        kind: 'paragraph',
+        id: 'negative-left-hanging-body-tab-leading-space',
+        runs: [
+          { text: 'First', fontFamily: 'Arial', fontSize: 16 },
+          { kind: 'lineBreak' },
+          { kind: 'tab', text: '\t', tabIndex: 0 },
+          { text: ' Body', fontFamily: 'Arial', fontSize: 16 },
+        ],
+        attrs: {
+          indent: { left: leftIndentPx, hanging: 20 },
+        },
+      };
+
+      const measure = expectParagraphMeasure(await measureBlock(block, 200));
+
+      expect(measure.lines).toHaveLength(2);
+      const leadingSpaceSegment = measure.lines[1].segments?.find(
+        (segment) => segment.runIndex === 3 && segment.fromChar === 0 && segment.toChar === 1,
+      );
+
+      expect(leadingSpaceSegment?.x).toBeCloseTo(Math.abs(leftIndentPx) * 2, 1);
+      expect(leadingSpaceSegment?.precedingTabEndX).toBeCloseTo(Math.abs(leftIndentPx), 1);
+      expect((leadingSpaceSegment?.x ?? 0) + leftIndentPx).toBeCloseTo(Math.abs(leftIndentPx), 1);
+    });
+
+    it('clears compensated tab geometry when the first following word wraps', async () => {
+      const leftIndentPx = -40;
+      const block: FlowBlock = {
+        kind: 'paragraph',
+        id: 'negative-left-stale-tab-end-after-wrap',
+        runs: [
+          { text: 'First', fontFamily: 'Arial', fontSize: 16 },
+          { kind: 'lineBreak' },
+          { kind: 'tab', text: '\t', tabIndex: 0 },
+          { text: 'Supercalifragilistic', fontFamily: 'Arial', fontSize: 16 },
+          { kind: 'tab', text: '\t', tabIndex: 1 },
+          { text: '9', fontFamily: 'Arial', fontSize: 16 },
+        ],
+        attrs: {
+          indent: { left: leftIndentPx, hanging: 20 },
+          tabs: [{ pos: 180 * 15, val: 'end', leader: 'dot' }],
+        },
+      };
+
+      const measure = expectParagraphMeasure(await measureBlock(block, 120));
+      const wrappedWordSegment = measure.lines
+        .flatMap((line) => line.segments ?? [])
+        .find((segment) => segment.runIndex === 3);
+      const rightAlignedSegment = measure.lines
+        .flatMap((line) => line.segments ?? [])
+        .find((segment) => segment.runIndex === 5);
+
+      expect(wrappedWordSegment?.x).toBeUndefined();
+      expect(wrappedWordSegment?.precedingTabEndX).toBeUndefined();
+      expect(rightAlignedSegment?.x).toBeDefined();
+      expect(rightAlignedSegment?.precedingTabEndX).toBeUndefined();
+    });
+
+    it('clears compensated tab geometry when the first following word char-splits', async () => {
+      const block: FlowBlock = {
+        kind: 'paragraph',
+        id: 'negative-left-stale-tab-end-after-char-split',
+        runs: [
+          { text: 'First', fontFamily: 'Arial', fontSize: 16 },
+          { kind: 'lineBreak' },
+          { kind: 'tab', text: '\t', tabIndex: 0 },
+          { text: 'SupercalifragilisticexpialidociousVeryLong', fontFamily: 'Arial', fontSize: 16 },
+          { kind: 'tab', text: '\t', tabIndex: 1 },
+          { text: 'Z', fontFamily: 'Arial', fontSize: 16 },
+        ],
+        attrs: {
+          indent: { left: -40, hanging: 20 },
+          tabs: [{ pos: 200 * 15, val: 'end', leader: 'dot' }],
+        },
+      };
+
+      const measure = expectParagraphMeasure(await measureBlock(block, 120));
+      const rightAlignedSegment = measure.lines
+        .flatMap((line) => line.segments ?? [])
+        .find((segment) => segment.runIndex === 5);
+
+      expect(rightAlignedSegment?.x).toBeDefined();
+      expect(rightAlignedSegment?.precedingTabEndX).toBeUndefined();
+    });
+
+    it('clears compensated tab geometry when the first following space wraps', async () => {
+      const block: FlowBlock = {
+        kind: 'paragraph',
+        id: 'negative-left-stale-tab-end-after-leading-space-wrap',
+        runs: [
+          { text: 'First', fontFamily: 'Arial', fontSize: 16 },
+          { kind: 'lineBreak' },
+          { kind: 'tab', text: '\t', tabIndex: 0 },
+          { text: ' ', fontFamily: 'Arial', fontSize: 16 },
+          { kind: 'tab', text: '\t', tabIndex: 1 },
+          { text: 'Z', fontFamily: 'Arial', fontSize: 16 },
+        ],
+        attrs: {
+          indent: { left: -40, hanging: 20 },
+          tabs: [{ pos: 200 * 15, val: 'end', leader: 'dot' }],
+        },
+      };
+
+      const measure = expectParagraphMeasure(await measureBlock(block, 42));
+      const rightAlignedSegment = measure.lines
+        .flatMap((line) => line.segments ?? [])
+        .find((segment) => segment.runIndex === 5);
+
+      expect(rightAlignedSegment?.x).toBeDefined();
+      expect(rightAlignedSegment?.precedingTabEndX).toBeUndefined();
+    });
+
+    it('does not compensate positive explicit start stops in negative-left paragraphs', async () => {
+      const leftIndentPx = -24;
+      const block: FlowBlock = {
+        kind: 'paragraph',
+        id: 'negative-left-positive-start-tabs',
+        runs: [
+          { text: 'AAAA', fontFamily: 'Arial', fontSize: 16 },
+          ...Array.from({ length: 7 }, () => ({ kind: 'tab' as const, text: '\t' })),
+          { text: 'Company', fontFamily: 'Arial', fontSize: 16 },
+        ],
+        attrs: {
+          indent: { left: leftIndentPx },
+          tabs: [48, 96, 144, 192, 240, 288, 336].map((pos) => ({ pos: pos * 15, val: 'start' })),
+        },
+      };
+
+      const measure = expectParagraphMeasure(await measureBlock(block, 600));
+      const textSegment = measure.lines[0].segments?.find((segment) => segment.runIndex === 8);
+
+      expect(textSegment?.x).toBeCloseTo(360, 1);
+      expect(textSegment?.precedingTabEndX).toBeUndefined();
+      expect((textSegment?.x ?? 0) + leftIndentPx).toBeCloseTo(336, 1);
+    });
+
     it('maps three trailing tabs to two explicit alignment stops (asymmetric case)', async () => {
       const centerStopTwips = 5000;
       const endStopTwips = 10000;
@@ -1922,6 +2091,43 @@ describe('measureBlock', () => {
       const leader = leaders![0];
       expect(leader.from).toBeCloseTo(textWidth + indentLeft, 0);
       expect(leader.to).toBeCloseTo(300 - pageNumWidth, 0);
+    });
+
+    it('emits leaders on both lines when a paragraph contains a <w:br/> between tab groups (sd-1480)', async () => {
+      // Repro for sd-1480-two-col-tab-positions: a single paragraph with right-aligned
+      // dot-leader tab stop and a soft line break. The tabs/pPr applies per line, so
+      // BOTH lines must emit a dot leader.
+      const rightStopTwips = 4306;
+      const block: FlowBlock = {
+        kind: 'paragraph',
+        id: 'multiline-leader',
+        runs: [
+          { text: 'Page', fontFamily: 'Arial', fontSize: 13.333 },
+          { kind: 'tab', text: '\t', tabIndex: 0, pmStart: 4, pmEnd: 5 },
+          { text: '2', fontFamily: 'Arial', fontSize: 13.333 },
+          { kind: 'lineBreak' },
+          { text: 'Page', fontFamily: 'Arial', fontSize: 13.333 },
+          { kind: 'tab', text: '\t', tabIndex: 1, pmStart: 11, pmEnd: 12 },
+          { text: '5', fontFamily: 'Arial', fontSize: 13.333 },
+        ],
+        attrs: {
+          tabs: [{ pos: rightStopTwips, val: 'end', leader: 'dot' }],
+        },
+      };
+
+      const measure = expectParagraphMeasure(await measureBlock(block, 800));
+      expect(measure.lines.length).toBeGreaterThanOrEqual(2);
+
+      const line1 = measure.lines[0];
+      const line2 = measure.lines[1];
+
+      expect(line1.leaders, 'line 1 should have a dot leader').toBeDefined();
+      expect(line1.leaders).toHaveLength(1);
+      expect(line1.leaders?.[0]?.style).toBe('dot');
+
+      expect(line2.leaders, 'line 2 should have a dot leader').toBeDefined();
+      expect(line2.leaders).toHaveLength(1);
+      expect(line2.leaders?.[0]?.style).toBe('dot');
     });
 
     it('preserves trailing spaces after tabs when line breaks', async () => {

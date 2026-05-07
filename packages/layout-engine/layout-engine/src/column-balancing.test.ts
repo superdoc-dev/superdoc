@@ -9,7 +9,6 @@ import {
   calculateBalancedColumnHeight,
   shouldBalanceColumns,
   shouldSkipBalancing,
-  balancePageColumns,
   DEFAULT_BALANCING_CONFIG,
   type BalancingContext,
   type BalancingBlock,
@@ -307,21 +306,10 @@ describe('DEFAULT_BALANCING_CONFIG', () => {
 });
 
 // ============================================================================
-// balancePageColumns Tests (Post-Layout Balancing)
+// balanceSectionOnPage Tests (Section-scoped balancing)
 // ============================================================================
 
-/**
- * Helper to create a mock fragment for balancePageColumns testing.
- */
-function createFragment(
-  blockId: string,
-  x: number,
-  y: number,
-  width: number,
-  kind: string = 'para',
-): { x: number; y: number; width: number; kind: string; blockId: string } {
-  return { x, y, width, kind, blockId };
-}
+import { balanceSectionOnPage } from './column-balancing.js';
 
 /**
  * Helper to create measure data for paragraph fragments.
@@ -333,228 +321,179 @@ function createMeasure(kind: string, lineHeights: number[]): { kind: string; lin
   };
 }
 
-describe('balancePageColumns', () => {
-  describe('basic balancing', () => {
-    it('should distribute fragments across 2 columns based on target height', () => {
-      // 4 fragments, each 20px tall = 80px total, target = 40px per column
-      // With >= condition: switch when adding would reach/exceed 40px
-      // Block 1 (20px): column 0, height=20
-      // Block 2 (20px): 20+20=40 >= 40, switch! column 1, height=20
-      // Block 3, 4: stay in column 1
-      // Result: 1 in column 0, 3 in column 1
-      const fragments = [
-        createFragment('block-1', 96, 96, 624),
-        createFragment('block-2', 96, 116, 624),
-        createFragment('block-3', 96, 136, 624),
-        createFragment('block-4', 96, 156, 624),
-      ];
-      const measureMap = new Map([
-        ['block-1', createMeasure('paragraph', [20])],
-        ['block-2', createMeasure('paragraph', [20])],
-        ['block-3', createMeasure('paragraph', [20])],
-        ['block-4', createMeasure('paragraph', [20])],
-      ]);
+describe('balanceSectionOnPage', () => {
+  type TestFragment = { blockId: string; x: number; y: number; width: number; kind: string };
 
-      balancePageColumns(fragments, { count: 2, gap: 48, width: 288 }, { left: 96 }, 96, 40, measureMap);
+  /** Build a fragment + section mapping for section-scoped tests. */
+  function buildSectionFixture(
+    sectionIndex: number,
+    count: number,
+    height = 20,
+    startY = 96,
+  ): {
+    fragments: TestFragment[];
+    measureMap: Map<string, { kind: string; lines: Array<{ lineHeight: number }> }>;
+    blockSectionMap: Map<string, number>;
+  } {
+    const fragments: TestFragment[] = [];
+    const measureMap = new Map<string, { kind: string; lines: Array<{ lineHeight: number }> }>();
+    const blockSectionMap = new Map<string, number>();
+    for (let i = 0; i < count; i++) {
+      const id = `s${sectionIndex}-b${i}`;
+      fragments.push({ blockId: id, x: 96, y: startY + i * height, width: 624, kind: 'para' });
+      measureMap.set(id, createMeasure('paragraph', [height]));
+      blockSectionMap.set(id, sectionIndex);
+    }
+    return { fragments, measureMap, blockSectionMap };
+  }
 
-      // Block 1 stays in column 0
-      expect(fragments[0].x).toBe(96);
-      // Blocks 2, 3, 4 move to column 1
-      expect(fragments[1].x).toBe(432);
-      expect(fragments[2].x).toBe(432);
-      expect(fragments[3].x).toBe(432);
+  it('balances the target section and returns the tallest balanced column bottom', () => {
+    // 6 equal paragraphs in a 2-col section → 3+3 balanced, tallest col ends at top + 3×20 = top + 60.
+    const top = 96;
+    const { fragments, measureMap, blockSectionMap } = buildSectionFixture(2, 6, 20, top);
+
+    const result = balanceSectionOnPage({
+      fragments,
+      sectionIndex: 2,
+      sectionColumns: { count: 2, gap: 48, width: 288 },
+      sectionHasExplicitColumnBreak: false,
+      blockSectionMap,
+      margins: { left: 96 },
+      topMargin: top,
+      columnWidth: 288,
+      availableHeight: 60,
+      measureMap,
     });
 
-    it('should set fragment width to column width', () => {
-      const fragments = [createFragment('block-1', 96, 96, 624), createFragment('block-2', 96, 116, 624)];
-      const measureMap = new Map([
-        ['block-1', createMeasure('paragraph', [20])],
-        ['block-2', createMeasure('paragraph', [20])],
-      ]);
+    // Returned maxY is the bottom of the tallest balanced column.
+    expect(result).not.toBeNull();
+    expect(result!.maxY).toBe(top + 60);
 
-      balancePageColumns(fragments, { count: 2, gap: 48, width: 288 }, { left: 96 }, 96, 30, measureMap);
+    // Observable outcome: fragments split evenly across two columns.
+    const col0 = fragments.filter((f) => f.x === 96).length;
+    const col1 = fragments.filter((f) => f.x === 96 + 288 + 48).length;
+    expect(col0).toBe(3);
+    expect(col1).toBe(3);
+  });
 
-      // Both fragments should have width set to column width
-      expect(fragments[0].width).toBe(288);
-      expect(fragments[1].width).toBe(288);
+  it('returns null and leaves fragments untouched when section has <= 1 column', () => {
+    const { fragments, measureMap, blockSectionMap } = buildSectionFixture(2, 3);
+    const snapshot = fragments.map((f) => ({ x: f.x, y: f.y }));
+
+    const result = balanceSectionOnPage({
+      fragments,
+      sectionIndex: 2,
+      sectionColumns: { count: 1, gap: 0, width: 624 },
+      sectionHasExplicitColumnBreak: false,
+      blockSectionMap,
+      margins: { left: 96 },
+      topMargin: 96,
+      columnWidth: 624,
+      availableHeight: 720,
+      measureMap,
     });
 
-    it('should reset Y positions in each column to start from top margin', () => {
-      // Use 6 fragments so we get a more even split for Y testing
-      // 6 * 20px = 120px total, target = 60px
-      // Blocks 1, 2 = 40px, block 3 would make 60px >= 60px, switch!
-      // Column 0: blocks 1, 2. Column 1: blocks 3, 4, 5, 6
-      const fragments = [
-        createFragment('block-1', 96, 96, 624),
-        createFragment('block-2', 96, 116, 624),
-        createFragment('block-3', 96, 136, 624),
-        createFragment('block-4', 96, 156, 624),
-        createFragment('block-5', 96, 176, 624),
-        createFragment('block-6', 96, 196, 624),
-      ];
-      const measureMap = new Map([
-        ['block-1', createMeasure('paragraph', [20])],
-        ['block-2', createMeasure('paragraph', [20])],
-        ['block-3', createMeasure('paragraph', [20])],
-        ['block-4', createMeasure('paragraph', [20])],
-        ['block-5', createMeasure('paragraph', [20])],
-        ['block-6', createMeasure('paragraph', [20])],
-      ]);
-
-      balancePageColumns(fragments, { count: 2, gap: 48, width: 288 }, { left: 96 }, 96, 50, measureMap);
-
-      // Column 0: blocks 1, 2 - Y positions stack from top
-      expect(fragments[0].y).toBe(96);
-      expect(fragments[1].y).toBe(116);
-      // Column 1: blocks 3+ - Y resets to top margin
-      expect(fragments[2].y).toBe(96);
-      expect(fragments[3].y).toBe(116);
+    expect(result).toBeNull();
+    fragments.forEach((f, i) => {
+      expect(f.x).toBe(snapshot[i].x);
+      expect(f.y).toBe(snapshot[i].y);
     });
   });
 
-  describe('column switching threshold', () => {
-    it('should switch columns when target height is REACHED (not just exceeded)', () => {
-      // This tests the >= vs > fix: Word switches when target is reached, not exceeded.
-      // 6 fragments: 3 at 20px each = 60px, we want exactly 30px per column
-      // With >= condition: switch happens when 30px is reached
-      // With > condition: would need 30+ to switch
-      const fragments = [
-        createFragment('block-1', 96, 96, 624),
-        createFragment('block-2', 96, 116, 624),
-        createFragment('block-3', 96, 136, 624),
-        createFragment('block-4', 96, 156, 624),
-        createFragment('block-5', 96, 176, 624),
-        createFragment('block-6', 96, 196, 624),
-      ];
-      const measureMap = new Map([
-        ['block-1', createMeasure('paragraph', [20])],
-        ['block-2', createMeasure('paragraph', [20])],
-        ['block-3', createMeasure('paragraph', [20])],
-        ['block-4', createMeasure('paragraph', [20])],
-        ['block-5', createMeasure('paragraph', [20])],
-        ['block-6', createMeasure('paragraph', [20])],
-      ]);
+  it('returns null when section contains an explicit column break', () => {
+    // Author-placed column breaks override balancing — preserve their intent.
+    const { fragments, measureMap, blockSectionMap } = buildSectionFixture(2, 6);
+    const snapshot = fragments.map((f) => f.x);
 
-      balancePageColumns(fragments, { count: 2, gap: 48, width: 288 }, { left: 96 }, 96, 50, measureMap);
-
-      // With >= condition: target = 120px / 2 = 60px per column
-      // Block 1 (20px): column 0, height=20
-      // Block 2 (20px): 20+20=40 < 60, stay in column 0
-      // Block 3 (20px): 40+20=60 >= 60, SWITCH to column 1
-      // Blocks 4,5,6 stay in column 1
-      expect(fragments[0].x).toBe(96);
-      expect(fragments[1].x).toBe(96);
-      expect(fragments[2].x).toBe(432); // Switched because 40+20=60 >= 60
-      expect(fragments[3].x).toBe(432);
-      expect(fragments[4].x).toBe(432);
-      expect(fragments[5].x).toBe(432);
+    const result = balanceSectionOnPage({
+      fragments,
+      sectionIndex: 2,
+      sectionColumns: { count: 2, gap: 48, width: 288 },
+      sectionHasExplicitColumnBreak: true,
+      blockSectionMap,
+      margins: { left: 96 },
+      topMargin: 96,
+      columnWidth: 288,
+      availableHeight: 720,
+      measureMap,
     });
 
-    it('should match Word behavior with uneven height distribution', () => {
-      // Simulates the sd-1480 test document scenario:
-      // Block 1: 21px (1 line)
-      // Block 2: 42px (2 lines)
-      // Block 3: 21px (1 line)
-      // Block 4: 21px (1 line)
-      // Block 5: 42px (2 lines)
-      // Block 6: 21px (1 line)
-      // Total: 168px, target: 84px
-      // With >= : blocks 1,2 (63px) + block 3 (21px) = 84px >= 84px → switch
-      // Word puts blocks 1,2 in column 0, blocks 3,4,5,6 in column 1
-      const fragments = [
-        createFragment('block-1', 96, 96, 624),
-        createFragment('block-2', 96, 117, 624),
-        createFragment('block-3', 96, 159, 624),
-        createFragment('block-4', 96, 180, 624),
-        createFragment('block-5', 96, 201, 624),
-        createFragment('block-6', 96, 243, 624),
-      ];
-      const measureMap = new Map([
-        ['block-1', createMeasure('paragraph', [21])],
-        ['block-2', createMeasure('paragraph', [21, 21])], // 2 lines
-        ['block-3', createMeasure('paragraph', [21])],
-        ['block-4', createMeasure('paragraph', [21])],
-        ['block-5', createMeasure('paragraph', [21, 21])], // 2 lines
-        ['block-6', createMeasure('paragraph', [21])],
-      ]);
-
-      balancePageColumns(fragments, { count: 2, gap: 48, width: 288 }, { left: 96 }, 96, 70, measureMap);
-
-      // Blocks 1, 2 should be in column 0
-      expect(fragments[0].x).toBe(96);
-      expect(fragments[1].x).toBe(96);
-      // Blocks 3, 4, 5, 6 should be in column 1
-      expect(fragments[2].x).toBe(432);
-      expect(fragments[3].x).toBe(432);
-      expect(fragments[4].x).toBe(432);
-      expect(fragments[5].x).toBe(432);
-    });
+    expect(result).toBeNull();
+    fragments.forEach((f, i) => expect(f.x).toBe(snapshot[i]));
   });
 
-  describe('edge cases', () => {
-    it('should skip balancing for single column layout', () => {
-      const fragments = [createFragment('block-1', 96, 96, 624), createFragment('block-2', 96, 116, 624)];
-      const measureMap = new Map([
-        ['block-1', createMeasure('paragraph', [20])],
-        ['block-2', createMeasure('paragraph', [20])],
-      ]);
+  it('returns null when section has unequal explicit column widths', () => {
+    const { fragments, measureMap, blockSectionMap } = buildSectionFixture(2, 4);
 
-      // Original positions
-      const origX1 = fragments[0].x;
-      const origX2 = fragments[1].x;
-
-      balancePageColumns(fragments, { count: 1, gap: 0, width: 624 }, { left: 96 }, 96, 1000, measureMap);
-
-      // Should not modify positions for single column
-      expect(fragments[0].x).toBe(origX1);
-      expect(fragments[1].x).toBe(origX2);
+    const result = balanceSectionOnPage({
+      fragments,
+      sectionIndex: 2,
+      sectionColumns: { count: 2, gap: 48, width: 288, equalWidth: false, widths: [200, 376] },
+      sectionHasExplicitColumnBreak: false,
+      blockSectionMap,
+      margins: { left: 96 },
+      topMargin: 96,
+      columnWidth: 288,
+      availableHeight: 720,
+      measureMap,
     });
 
-    it('should skip balancing for empty fragments array', () => {
-      const fragments: { x: number; y: number; width: number; kind: string; blockId: string }[] = [];
-      const measureMap = new Map<string, { kind: string; lines: Array<{ lineHeight: number }> }>();
+    expect(result).toBeNull();
+  });
 
-      // Should not throw
-      expect(() =>
-        balancePageColumns(fragments, { count: 2, gap: 48, width: 288 }, { left: 96 }, 96, 1000, measureMap),
-      ).not.toThrow();
+  it('only moves fragments of the target section when the page has mixed sections', () => {
+    // Page has 3 fragments in section 1 (already positioned in col 0) and 6 in section 2.
+    // Balancing section 2 must not touch section 1 fragments.
+    const sec1 = buildSectionFixture(1, 3, 20, 96);
+    const sec2 = buildSectionFixture(2, 6, 20, 160);
+    const fragments = [...sec1.fragments, ...sec2.fragments];
+    const measureMap = new Map([...sec1.measureMap, ...sec2.measureMap]);
+    const blockSectionMap = new Map([...sec1.blockSectionMap, ...sec2.blockSectionMap]);
+    const sec1Snapshot = sec1.fragments.map((f) => ({ id: f.blockId, x: f.x, y: f.y }));
+
+    const result = balanceSectionOnPage({
+      fragments,
+      sectionIndex: 2,
+      sectionColumns: { count: 2, gap: 48, width: 288 },
+      sectionHasExplicitColumnBreak: false,
+      blockSectionMap,
+      margins: { left: 96 },
+      topMargin: 160,
+      columnWidth: 288,
+      availableHeight: 60,
+      measureMap,
     });
 
-    it('should handle fragments with missing measure data', () => {
-      const fragments = [createFragment('block-1', 96, 96, 624), createFragment('block-2', 96, 116, 624)];
-      // Only provide measure for first block
-      const measureMap = new Map([['block-1', createMeasure('paragraph', [20])]]);
+    expect(result).not.toBeNull();
 
-      // Should not throw - block-2 will have height 0
-      expect(() =>
-        balancePageColumns(fragments, { count: 2, gap: 48, width: 288 }, { left: 96 }, 96, 10, measureMap),
-      ).not.toThrow();
+    // Section 1 fragments unchanged.
+    for (const s of sec1Snapshot) {
+      const f = fragments.find((x) => x.blockId === s.id)!;
+      expect(f.x).toBe(s.x);
+      expect(f.y).toBe(s.y);
+    }
+
+    // Section 2 fragments now split across two columns.
+    const sec2Xs = new Set(sec2.fragments.map((f) => f.x));
+    expect(sec2Xs.size).toBe(2);
+  });
+
+  it('returns null when no fragments on the page belong to the target section', () => {
+    const { fragments, measureMap, blockSectionMap } = buildSectionFixture(1, 3);
+
+    const result = balanceSectionOnPage({
+      fragments,
+      sectionIndex: 99, // different section
+      sectionColumns: { count: 2, gap: 48, width: 288 },
+      sectionHasExplicitColumnBreak: false,
+      blockSectionMap,
+      margins: { left: 96 },
+      topMargin: 96,
+      columnWidth: 288,
+      availableHeight: 720,
+      measureMap,
     });
 
-    it('should handle 3-column layout', () => {
-      // 6 fragments for 3 columns = 2 per column
-      const fragments = [
-        createFragment('block-1', 96, 96, 624),
-        createFragment('block-2', 96, 116, 624),
-        createFragment('block-3', 96, 136, 624),
-        createFragment('block-4', 96, 156, 624),
-        createFragment('block-5', 96, 176, 624),
-        createFragment('block-6', 96, 196, 624),
-      ];
-      const measureMap = new Map([
-        ['block-1', createMeasure('paragraph', [20])],
-        ['block-2', createMeasure('paragraph', [20])],
-        ['block-3', createMeasure('paragraph', [20])],
-        ['block-4', createMeasure('paragraph', [20])],
-        ['block-5', createMeasure('paragraph', [20])],
-        ['block-6', createMeasure('paragraph', [20])],
-      ]);
-
-      balancePageColumns(fragments, { count: 3, gap: 24, width: 192 }, { left: 96 }, 96, 30, measureMap);
-
-      // Verify 3 columns are used
-      const colXValues = new Set(fragments.map((f) => f.x));
-      expect(colXValues.size).toBeLessThanOrEqual(3);
-    });
+    expect(result).toBeNull();
   });
 });

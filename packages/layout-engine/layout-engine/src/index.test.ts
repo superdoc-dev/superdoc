@@ -205,6 +205,19 @@ describe('layoutDocument', () => {
     ).toThrow(/non-positive content area/);
   });
 
+  it('clamps header-inflated margins so oversized header content does not crash body layout', () => {
+    const layout = layoutDocument([block], [makeMeasure([1])], {
+      pageSize: { w: 720, h: 540 },
+      margins: { top: 60, right: 60, bottom: 56, left: 60, header: 48, footer: 56 },
+      sectionMetadata: [{ sectionIndex: 0, headerRefs: { default: 'rId4' } }],
+      headerContentHeightsByRId: new Map([['rId4', 568]]),
+    });
+
+    expect(layout.pages).toHaveLength(1);
+    expect(layout.pages[0].margins.top).toBeCloseTo(483);
+    expect(layout.pages[0].margins.bottom).toBe(56);
+  });
+
   it('fills columns before advancing to a new page', () => {
     const options: LayoutOptions = {
       pageSize: { w: 600, h: 800 },
@@ -2868,6 +2881,280 @@ describe('layoutDocument', () => {
       expect(singleColFragment?.width).not.toBeCloseTo(twoColFragment!.width, 0);
     });
   });
+
+  describe('column balancing at section boundaries (SD-2452)', () => {
+    /**
+     * End-to-end tests for the column-balancing feature.
+     *
+     * These tests drive layoutDocument with synthetic blocks/measures and assert on
+     * the OBSERVABLE fragment positions produced by the full pipeline — not on internal
+     * helper calls. When Word's algorithm changes or when we swap out the balancing
+     * implementation, these tests continue to assert what users see.
+     */
+
+    const PAGE: LayoutOptions = {
+      pageSize: { w: 612, h: 792 },
+      margins: { top: 72, right: 72, bottom: 72, left: 72 },
+    };
+    const LEFT_MARGIN = 72;
+    const CONTENT_WIDTH = 612 - 72 - 72; // 468
+    const COLUMN_GAP = 48;
+    const TWO_COL_WIDTH = (CONTENT_WIDTH - COLUMN_GAP) / 2; // 210
+    const TWO_COL_RIGHT_X = LEFT_MARGIN + TWO_COL_WIDTH + COLUMN_GAP; // 330
+
+    /** Build a 2-col section ending with a section break, surrounded by single-column context. */
+    function buildTwoColumnSection(paragraphCount: number, lineHeight = 20) {
+      const blocks: FlowBlock[] = [
+        {
+          kind: 'sectionBreak',
+          id: 'sb-start',
+          type: 'continuous',
+          columns: { count: 2, gap: COLUMN_GAP },
+          margins: {},
+          attrs: { source: 'sectPr', sectionIndex: 0, isFirstSection: true },
+        } as FlowBlock,
+      ];
+      const measures: Measure[] = [{ kind: 'sectionBreak' }];
+
+      for (let i = 0; i < paragraphCount; i++) {
+        blocks.push({ kind: 'paragraph', id: `p${i}`, runs: [], attrs: { sectionIndex: 0 } } as FlowBlock);
+        measures.push(makeMeasure([lineHeight]));
+      }
+
+      blocks.push({
+        kind: 'sectionBreak',
+        id: 'sb-end',
+        type: 'continuous',
+        columns: { count: 1, gap: 0 },
+        margins: {},
+        attrs: { source: 'sectPr', sectionIndex: 1 },
+      } as FlowBlock);
+      measures.push({ kind: 'sectionBreak' });
+
+      blocks.push({ kind: 'paragraph', id: 'p-after', runs: [], attrs: { sectionIndex: 1 } } as FlowBlock);
+      measures.push(makeMeasure([lineHeight]));
+
+      return { blocks, measures };
+    }
+
+    it('distributes 6 equal paragraphs evenly across 2 columns (3+3)', () => {
+      const { blocks, measures } = buildTwoColumnSection(6, 20);
+
+      const layout = layoutDocument(blocks, measures, PAGE);
+
+      const sectionFragments = layout.pages[0].fragments.filter(
+        (f): f is ParaFragment => f.kind === 'para' && f.blockId.startsWith('p') && f.blockId !== 'p-after',
+      );
+      const col0 = sectionFragments.filter((f) => f.x === LEFT_MARGIN);
+      const col1 = sectionFragments.filter((f) => f.x === TWO_COL_RIGHT_X);
+
+      expect(col0.length + col1.length).toBe(6);
+      // Minimum-height balance of 6 equal 20px paragraphs across 2 columns is 3+3
+      // (tallest column = 60px). Any split closer to 1+5 or 2+4 produces a taller
+      // section than Word would render. This assertion fails if balancing is absent,
+      // uses an incorrect algorithm, or runs with a wrong available height.
+      expect(col0).toHaveLength(3);
+      expect(col1).toHaveLength(3);
+    });
+
+    it('places post-section single-column content just below the balanced columns', () => {
+      // Before the fix: "p-after" sat below all 6 paragraphs stacked in col 0 (y ~= top + 120).
+      // After the fix: columns balance to 3+3 (height = top + 60), so p-after starts at top + 60.
+      const { blocks, measures } = buildTwoColumnSection(6, 20);
+
+      const layout = layoutDocument(blocks, measures, PAGE);
+      const firstSectionPara = layout.pages[0].fragments.find(
+        (f): f is ParaFragment => f.kind === 'para' && f.blockId === 'p0',
+      );
+      const afterSectionPara = layout.pages[0].fragments.find(
+        (f): f is ParaFragment => f.kind === 'para' && f.blockId === 'p-after',
+      );
+      expect(firstSectionPara).toBeDefined();
+      expect(afterSectionPara).toBeDefined();
+
+      // p-after's Y reflects a balanced 3-row column (3 × 20px) above it.
+      const expectedBalancedBottom = firstSectionPara!.y + 3 * 20;
+      expect(afterSectionPara!.y).toBe(expectedBalancedBottom);
+    });
+
+    it('fills BOTH columns on every page of a multi-page 2-col continuous section', () => {
+      // ECMA-376 §17.18.77 (ST_SectionMark): a continuous section break
+      // "balances content of the previous section." Word's observable behavior
+      // is to fill col 0 to the balanced target, wrap to col 1 to the same
+      // target, then wrap to the next page — on EVERY page, not only the last.
+      // Regression for SD-2646: earlier pages must not stack content in col 0.
+      const lineHeight = 20;
+      const paraCount = 100; // ≈ 2000px, exceeds one page's content area
+      const { blocks, measures } = buildTwoColumnSection(paraCount, lineHeight);
+
+      const layout = layoutDocument(blocks, measures, PAGE);
+
+      expect(layout.pages.length).toBeGreaterThanOrEqual(2);
+
+      for (const page of layout.pages) {
+        const sectionFragments = page.fragments.filter(
+          (f): f is ParaFragment => f.kind === 'para' && f.blockId.startsWith('p') && f.blockId !== 'p-after',
+        );
+        if (sectionFragments.length < 2) continue; // tail of last page may have <2 fragments
+        const col0 = sectionFragments.filter((f) => Math.round(f.x) === LEFT_MARGIN);
+        const col1 = sectionFragments.filter((f) => Math.round(f.x) === TWO_COL_RIGHT_X);
+        expect(col0.length).toBeGreaterThan(0);
+        expect(col1.length).toBeGreaterThan(0);
+      }
+    });
+
+    it('flows a narrow multi-page table across both columns on every page (SD-2646 regression)', () => {
+      // IT-945 shape: a narrow table (one column wide) inside a 2-col continuous
+      // section, spanning multiple pages. Regression guard for the layout path
+      // once pm-adapter correctly places the table in the 2-col section.
+      const rowCount = 114;
+      const rowHeight = 18.4;
+      const cellWidth = TWO_COL_WIDTH / 2;
+
+      const rows = Array.from({ length: rowCount }, (_, r) => ({
+        id: `tbl-row-${r}`,
+        cells: [
+          { id: `tbl-cell-${r}-0`, paragraph: { kind: 'paragraph' as const, id: `tbl-cell-${r}-0-p`, runs: [] } },
+          { id: `tbl-cell-${r}-1`, paragraph: { kind: 'paragraph' as const, id: `tbl-cell-${r}-1-p`, runs: [] } },
+        ],
+      }));
+      const tbl: TableBlock = {
+        kind: 'table',
+        id: 'tbl',
+        rows,
+        attrs: { sectionIndex: 0 },
+      } as TableBlock;
+      const tblM: TableMeasure = {
+        kind: 'table',
+        rows: Array.from({ length: rowCount }, () => ({
+          height: rowHeight,
+          cells: [
+            { paragraph: makeMeasure([rowHeight]), width: cellWidth, height: rowHeight },
+            { paragraph: makeMeasure([rowHeight]), width: cellWidth, height: rowHeight },
+          ],
+        })),
+        columnWidths: [cellWidth, cellWidth],
+        totalWidth: cellWidth * 2,
+        totalHeight: rowHeight * rowCount,
+      };
+
+      const blocks: FlowBlock[] = [
+        {
+          kind: 'sectionBreak',
+          id: 'sb-start',
+          type: 'continuous',
+          columns: { count: 2, gap: COLUMN_GAP },
+          margins: {},
+          attrs: { source: 'sectPr', sectionIndex: 0, isFirstSection: true },
+        } as FlowBlock,
+        tbl as FlowBlock,
+        {
+          kind: 'sectionBreak',
+          id: 'sb-end',
+          type: 'continuous',
+          columns: { count: 1, gap: 0 },
+          margins: {},
+          attrs: { source: 'sectPr', sectionIndex: 1 },
+        } as FlowBlock,
+      ];
+      const measures: Measure[] = [{ kind: 'sectionBreak' }, tblM, { kind: 'sectionBreak' }];
+
+      const layout = layoutDocument(blocks, measures, PAGE);
+
+      expect(layout.pages.length).toBeGreaterThanOrEqual(2);
+
+      let pagesWithBothColumns = 0;
+      for (const page of layout.pages) {
+        const tableFragments = page.fragments.filter((f) => f.kind === 'table');
+        if (tableFragments.length === 0) continue;
+        const col0 = tableFragments.filter((f) => Math.round(f.x) === LEFT_MARGIN);
+        const col1 = tableFragments.filter((f) => Math.round(f.x) === TWO_COL_RIGHT_X);
+        if (col0.length > 0 && col1.length > 0) pagesWithBothColumns++;
+      }
+      // At least one page must have fragments in both columns. A stricter
+      // assertion (every page) is made invalid by the tail of the final page
+      // which can reasonably hold <1 column's worth of content.
+      expect(pagesWithBothColumns).toBeGreaterThan(0);
+    });
+
+    it('distributes 6 paragraphs across 3 columns (no column is empty)', () => {
+      const threeColStart: FlowBlock = {
+        kind: 'sectionBreak',
+        id: 'sb-start',
+        type: 'continuous',
+        columns: { count: 3, gap: 24 },
+        margins: {},
+        attrs: { source: 'sectPr', sectionIndex: 0, isFirstSection: true },
+      } as FlowBlock;
+      const sectionEnd: FlowBlock = {
+        kind: 'sectionBreak',
+        id: 'sb-end',
+        type: 'continuous',
+        columns: { count: 1, gap: 0 },
+        margins: {},
+        attrs: { source: 'sectPr', sectionIndex: 1 },
+      } as FlowBlock;
+
+      const blocks: FlowBlock[] = [threeColStart];
+      const measures: Measure[] = [{ kind: 'sectionBreak' }];
+      for (let i = 0; i < 6; i++) {
+        blocks.push({ kind: 'paragraph', id: `p${i}`, runs: [], attrs: { sectionIndex: 0 } } as FlowBlock);
+        measures.push(makeMeasure([20]));
+      }
+      blocks.push(sectionEnd);
+      measures.push({ kind: 'sectionBreak' });
+
+      const layout = layoutDocument(blocks, measures, PAGE);
+
+      const fragments = layout.pages[0].fragments.filter(
+        (f): f is ParaFragment => f.kind === 'para' && f.blockId.startsWith('p'),
+      );
+      const uniqueX = new Set(fragments.map((f) => Math.round(f.x)));
+      // All three columns should be used — no column is empty.
+      expect(uniqueX.size).toBe(3);
+    });
+
+    it('leaves fragments untouched when the section has an explicit column break', () => {
+      // Author-placed <w:br w:type="column"/> must override balancing.
+      const blocks: FlowBlock[] = [
+        {
+          kind: 'sectionBreak',
+          id: 'sb-start',
+          type: 'continuous',
+          columns: { count: 2, gap: COLUMN_GAP },
+          margins: {},
+          attrs: { source: 'sectPr', sectionIndex: 0, isFirstSection: true },
+        } as FlowBlock,
+        { kind: 'paragraph', id: 'p1', runs: [], attrs: { sectionIndex: 0 } } as FlowBlock,
+        { kind: 'columnBreak', id: 'br', attrs: { sectionIndex: 0 } } as ColumnBreakBlock,
+        { kind: 'paragraph', id: 'p2', runs: [], attrs: { sectionIndex: 0 } } as FlowBlock,
+        {
+          kind: 'sectionBreak',
+          id: 'sb-end',
+          type: 'continuous',
+          columns: { count: 1, gap: 0 },
+          margins: {},
+          attrs: { source: 'sectPr', sectionIndex: 1 },
+        } as FlowBlock,
+      ];
+      const measures: Measure[] = [
+        { kind: 'sectionBreak' },
+        makeMeasure([20]),
+        { kind: 'columnBreak' },
+        makeMeasure([20]),
+        { kind: 'sectionBreak' },
+      ];
+
+      const layout = layoutDocument(blocks, measures, PAGE);
+
+      const p1 = layout.pages[0].fragments.find((f) => f.blockId === 'p1') as ParaFragment;
+      const p2 = layout.pages[0].fragments.find((f) => f.blockId === 'p2') as ParaFragment;
+
+      // Author's column break is preserved: p1 in col 0, p2 in col 1.
+      expect(p1.x).toBe(LEFT_MARGIN);
+      expect(p2.x).toBe(TWO_COL_RIGHT_X);
+    });
+  });
 });
 
 describe('layoutHeaderFooter', () => {
@@ -3674,6 +3961,159 @@ describe('layoutHeaderFooter', () => {
     expect(imgFrag).toBeDefined();
     expect(imgFragNoKind).toBeDefined();
     expect(imgFrag!.y).toBe(imgFragNoKind!.y);
+  });
+
+  it('keeps paragraph-relative tall non-page-covering header anchors in measurement height', () => {
+    const paragraphBlock: FlowBlock = {
+      kind: 'paragraph',
+      id: 'header-anchor-paragraph',
+      runs: [{ text: 'Header', fontFamily: 'Arial', fontSize: 12, pmStart: 1, pmEnd: 7 }],
+    };
+    const imageBlock: FlowBlock = {
+      kind: 'image',
+      id: 'header-background',
+      src: 'data:image/png;base64,xxx',
+      anchor: {
+        isAnchored: true,
+        hRelativeFrom: 'column',
+        vRelativeFrom: 'paragraph',
+        offsetH: 120,
+        offsetV: 0,
+      },
+    };
+    const imageMeasure: Measure = {
+      kind: 'image',
+      width: 260,
+      height: 568,
+    };
+    const paragraphMeasure = makeMeasure([1]);
+    const layout = layoutHeaderFooter(
+      [paragraphBlock, imageBlock],
+      [paragraphMeasure, imageMeasure],
+      {
+        width: 600,
+        height: 424,
+        pageWidth: 720,
+        pageHeight: 540,
+        margins: { left: 60, right: 60, top: 60, bottom: 56, header: 48 },
+      },
+      'header',
+    );
+
+    expect(layout.height).toBeCloseTo(568);
+    expect(layout.renderHeight).toBeCloseTo(568);
+  });
+
+  it('excludes wrap=None page-covering overlays from measurement (column/paragraph anchored cover page)', () => {
+    // Regression for SD-2499 review: a foreground cover-page rectangle in a
+    // header is column/paragraph anchored, has wrap=None, and is sized to
+    // cover the body canvas. Treating it as body-reserving content inflates
+    // margins and (combined with the inflation clamp) shrinks the body to a
+    // sliver, which spreads body content across many synthetic pages and
+    // makes the overlay visually repeat per page. wrap=None is OOXML's
+    // explicit "no exclusion zone" signal, so it must not reserve space.
+    const paragraphBlock: FlowBlock = {
+      kind: 'paragraph',
+      id: 'header-para',
+      runs: [{ text: 'Header', fontFamily: 'Arial', fontSize: 12, pmStart: 1, pmEnd: 7 }],
+    };
+    const overlayBlock: FlowBlock = {
+      kind: 'drawing',
+      id: 'cover-overlay',
+      drawingKind: 'vectorShape',
+      geometry: { width: 720, height: 600 },
+      anchor: {
+        isAnchored: true,
+        hRelativeFrom: 'column',
+        vRelativeFrom: 'paragraph',
+        offsetH: -40,
+        offsetV: -50,
+        behindDoc: false,
+      },
+      wrap: { type: 'None' },
+      shapeKind: 'Rectangle',
+    };
+    const paragraphMeasure = makeMeasure([15]);
+    const overlayMeasure: Measure = {
+      kind: 'drawing',
+      drawingKind: 'vectorShape',
+      width: 720,
+      height: 600,
+      scale: 1,
+      naturalWidth: 720,
+      naturalHeight: 600,
+      geometry: { width: 720, height: 600, rotation: 0, flipH: false, flipV: false },
+    };
+
+    const layout = layoutHeaderFooter(
+      [paragraphBlock, overlayBlock],
+      [paragraphMeasure, overlayMeasure],
+      {
+        width: 600,
+        height: 424,
+        pageWidth: 720,
+        pageHeight: 540,
+        margins: { left: 60, right: 60, top: 60, bottom: 56, header: 48 },
+      },
+      'header',
+    );
+
+    expect(layout.height).toBeCloseTo(15);
+    expect(layout.renderHeight).toBeGreaterThan(layout.height);
+  });
+
+  it('keeps tall anchored shape in measurement when wrap reserves flow space', () => {
+    // Anchored content with a non-None wrap (e.g. Square) is real header
+    // content with an exclusion zone — it must continue to reserve body
+    // space, even when its size exceeds the measurement canvas.
+    const paragraphBlock: FlowBlock = {
+      kind: 'paragraph',
+      id: 'header-para',
+      runs: [{ text: 'Header', fontFamily: 'Arial', fontSize: 12, pmStart: 1, pmEnd: 7 }],
+    };
+    const textboxBlock: FlowBlock = {
+      kind: 'drawing',
+      id: 'header-textbox',
+      drawingKind: 'vectorShape',
+      geometry: { width: 720, height: 500 },
+      anchor: {
+        isAnchored: true,
+        hRelativeFrom: 'page',
+        vRelativeFrom: 'paragraph',
+        offsetH: 0,
+        offsetV: 0,
+        behindDoc: false,
+      },
+      wrap: { type: 'Square' },
+      shapeKind: 'Rectangle',
+    };
+    const paragraphMeasure = makeMeasure([15]);
+    const textboxMeasure: Measure = {
+      kind: 'drawing',
+      drawingKind: 'vectorShape',
+      width: 720,
+      height: 500,
+      scale: 1,
+      naturalWidth: 720,
+      naturalHeight: 500,
+      geometry: { width: 720, height: 500, rotation: 0, flipH: false, flipV: false },
+    };
+
+    const layout = layoutHeaderFooter(
+      [paragraphBlock, textboxBlock],
+      [paragraphMeasure, textboxMeasure],
+      {
+        width: 600,
+        height: 424,
+        pageWidth: 720,
+        pageHeight: 540,
+        margins: { left: 60, right: 60, top: 60, bottom: 56, header: 48 },
+      },
+      'header',
+    );
+
+    expect(layout.height).toBeGreaterThan(400);
+    expect(layout.renderHeight).toBeGreaterThanOrEqual(layout.height);
   });
 
   it('does not narrow footer paragraphs around page-relative anchored textboxes', () => {

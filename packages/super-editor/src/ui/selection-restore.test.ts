@@ -20,14 +20,25 @@ vi.mock('../editors/v1/document-api-adapters/helpers/adapter-utils.js', () => ({
  * directly; the rest of the editor surface is unused so the stub is
  * minimal.
  */
-function makeStubs(opts: { isEditable?: boolean; resolves?: boolean; liveText?: string } = {}) {
+function makeStubs(
+  opts: {
+    isEditable?: boolean;
+    resolves?: boolean;
+    liveText?: string;
+    activeStoryLocator?: unknown;
+  } = {},
+) {
   const isEditable = opts.isEditable ?? true;
   const resolves = opts.resolves ?? true;
   const liveText = opts.liveText ?? 'test';
 
   const setTextSelection = vi.fn(() => true);
+  const getActiveStoryLocator = vi.fn(() => opts.activeStoryLocator ?? null);
 
-  const editor = {
+  // Self-reference threaded into presentationEditor below so that
+  // resolveToolbarSources (called from createHeadlessToolbar during
+  // setup) can route through `presentationEditor.getActiveEditor()`.
+  const editor: Record<string, unknown> = {
     on: vi.fn(),
     off: vi.fn(),
     isEditable,
@@ -39,6 +50,7 @@ function makeStubs(opts: { isEditable?: boolean; resolves?: boolean; liveText?: 
       doc: {
         textBetween: () => liveText,
       },
+      selection: { empty: true },
     },
     commands: { setTextSelection },
     doc: {
@@ -61,6 +73,15 @@ function makeStubs(opts: { isEditable?: boolean; resolves?: boolean; liveText?: 
       },
     },
   };
+  editor.presentationEditor = {
+    getActiveEditor: () => editor,
+    getActiveStoryLocator,
+    isEditable,
+    state: { selection: { empty: true } },
+    commands: {},
+    on: vi.fn(),
+    off: vi.fn(),
+  };
 
   const superdoc: SuperDocLike = {
     activeEditor: editor as never,
@@ -69,8 +90,23 @@ function makeStubs(opts: { isEditable?: boolean; resolves?: boolean; liveText?: 
     off: vi.fn(),
   };
 
-  return { superdoc, editor, mocks: { setTextSelection } };
+  return { superdoc, editor, mocks: { setTextSelection, getActiveStoryLocator } };
 }
+
+const headerStory = Object.freeze({ kind: 'story', storyType: 'headerFooterPart', refId: 'rId7' }) as never;
+const headerCapture = Object.freeze({
+  empty: false,
+  target: {
+    kind: 'text',
+    segments: [{ blockId: 'b1', range: { start: 0, end: 4 } }],
+    story: headerStory,
+  },
+  selectionTarget: null,
+  activeMarks: [],
+  activeCommentIds: [],
+  activeChangeIds: [],
+  quotedText: 'test',
+}) as never;
 
 const bodyCapture = Object.freeze({
   empty: false,
@@ -167,6 +203,70 @@ describe('ui.selection.restore', () => {
     const ui = createSuperDocUI({ superdoc });
 
     expect(ui.selection.restore(bodyCapture)).toEqual({ success: false, reason: 'not-ready' });
+    ui.destroy();
+  });
+
+  // SD-2954: a capture taken while editing a header carries
+  // `target.story`. Restore must verify the active surface still
+  // matches the captured story before resolving block ids. Body's
+  // PM doc usually doesn't contain the header's blockId, so the
+  // implicit failure path would surface as `'stale'` anyway, but
+  // the explicit check makes the intent unambiguous and lets the
+  // helper short-circuit before touching the resolver.
+  it('succeeds when the captured story matches the active story (header round-trip)', () => {
+    const { superdoc, mocks } = makeStubs({ activeStoryLocator: headerStory });
+    const ui = createSuperDocUI({ superdoc });
+
+    expect(ui.selection.restore(headerCapture)).toEqual({ success: true });
+    expect(mocks.setTextSelection).toHaveBeenCalledTimes(1);
+    ui.destroy();
+  });
+
+  it('returns "stale" when the captured story is no longer active (focus moved back to body)', () => {
+    const { superdoc, mocks } = makeStubs({ activeStoryLocator: null });
+    const ui = createSuperDocUI({ superdoc });
+
+    expect(ui.selection.restore(headerCapture)).toEqual({ success: false, reason: 'stale' });
+    // Short-circuited before any resolver / dispatch work.
+    expect(mocks.setTextSelection).not.toHaveBeenCalled();
+    ui.destroy();
+  });
+
+  it('returns "stale" when the active story differs from the captured story (different header refId)', () => {
+    const otherHeader = { kind: 'story', storyType: 'headerFooterPart', refId: 'rId-OTHER' };
+    const { superdoc, mocks } = makeStubs({ activeStoryLocator: otherHeader });
+    const ui = createSuperDocUI({ superdoc });
+
+    expect(ui.selection.restore(headerCapture)).toEqual({ success: false, reason: 'stale' });
+    expect(mocks.setTextSelection).not.toHaveBeenCalled();
+    ui.destroy();
+  });
+
+  // The story-mismatch short-circuit must not pre-empt the
+  // `read-only` guard. A consumer storing a header capture and
+  // restoring against an editor that has been switched to viewing
+  // mode should still see `read-only`. Losing that typed reason
+  // would push consumers into branching on `'stale'` to detect
+  // viewing mode, which is what `read-only` exists to avoid.
+  it('returns "read-only" (not "stale") when a story capture meets a non-editable editor', () => {
+    const { superdoc } = makeStubs({ isEditable: false, activeStoryLocator: null });
+    const ui = createSuperDocUI({ superdoc });
+
+    expect(ui.selection.restore(headerCapture)).toEqual({ success: false, reason: 'read-only' });
+    ui.destroy();
+  });
+
+  it('matches the captured story by value, not by object identity', () => {
+    // The host emits a fresh locator object on every call to
+    // `getActiveStoryLocator()`. The match must hold even though the
+    // capture's story object and the active story object are not the
+    // same JS reference, so long as their discriminating fields agree.
+    const equivalentHeader = { kind: 'story', storyType: 'headerFooterPart', refId: 'rId7' };
+    const { superdoc, mocks } = makeStubs({ activeStoryLocator: equivalentHeader });
+    const ui = createSuperDocUI({ superdoc });
+
+    expect(ui.selection.restore(headerCapture)).toEqual({ success: true });
+    expect(mocks.setTextSelection).toHaveBeenCalledTimes(1);
     ui.destroy();
   });
 });

@@ -99,7 +99,7 @@ export function getSdtContainerConfig(sdt: SdtMetadata | null | undefined): SdtC
     return {
       className: 'superdoc-structured-content-block',
       labelText: sdt.alias ?? 'Structured content',
-      labelClassName: 'superdoc-structured-content__label',
+      labelClassName: 'superdoc-structured-content__label superdoc-structured-content-block__label',
       isStart: true,
       isEnd: true,
     };

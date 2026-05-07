@@ -112,6 +112,7 @@ vi.mock('@superdoc/painter-dom', () => ({
     getMountedPageIndices: vi.fn(() => []),
     onScroll: vi.fn(),
     setScrollContainer: vi.fn(),
+    setShowFormattingMarks: vi.fn(),
   })),
   DOM_CLASS_NAMES: { PAGE: '', FRAGMENT: '', LINE: '', INLINE_SDT_WRAPPER: '', BLOCK_SDT: '', DOCUMENT_SECTION: '' },
 }));

@@ -183,6 +183,12 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
   container.classList.add(CLASS_NAMES.fragment);
   applyStyles(container, fragmentStyles);
   applyFragmentFrame(container, fragment);
+  if (fragment.pmStart != null) {
+    container.dataset.pmStart = String(fragment.pmStart);
+  }
+  if (fragment.pmEnd != null) {
+    container.dataset.pmEnd = String(fragment.pmEnd);
+  }
   container.style.height = `${fragment.height}px`;
   applySdtDataset(container, block.attrs?.sdt);
   applyContainerSdtDataset?.(container, block.attrs?.containerSdt);

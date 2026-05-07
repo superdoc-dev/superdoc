@@ -42,6 +42,7 @@ export const toolbarTexts = {
   lineHeight: 'Line height',
   formatText: 'Format text',
   ruler: 'Show or hide ruler',
+  formattingMarks: 'Show or hide formatting marks',
   pageBreak: 'Insert page break',
   documentEditingMode: 'Editing',
   documentSuggestingMode: 'Suggesting',

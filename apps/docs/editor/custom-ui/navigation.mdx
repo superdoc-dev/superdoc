@@ -1,15 +1,37 @@
 ---
-title: Stable navigation after edits
-sidebarTitle: Stable navigation
-description: "Navigate to document elements reliably: during edits and across sessions."
+title: Navigation
+sidebarTitle: Navigation
+description: "Scroll comments and tracked changes into view. Navigate by element id. Track nodes through edits."
 ---
 
-SuperDoc has two navigation approaches depending on your use case:
+The controller exposes navigation helpers for the everyday cases (scroll a comment or a tracked change into view, step through review). For raw element-id navigation and cross-session tracking, the host SuperDoc and the editor expose `scrollToElement` and `PositionTracker`.
 
-| Approach | Use case | Stability |
-|----------|----------|-----------|
-| `scrollToElement(id)` | Navigate to any element by its ID | Cross-session (for DOCX-imported content) |
-| `PositionTracker` | Track nodes that move during edits | Within a single session |
+## Comments and tracked changes
+
+`ui.comments.scrollTo(id)` and `ui.trackChanges.scrollTo(id)` land on a specific entity. `ui.trackChanges.next()` and `previous()` advance `activeId` and return the new id, but they don't move the viewport on their own. Pair them with `scrollTo` to navigate.
+
+```ts
+ui.comments.scrollTo('c-123');
+
+const nextId = ui.trackChanges.next();
+if (nextId) ui.trackChanges.scrollTo(nextId);
+```
+
+`ui.trackChanges.scrollTo` is story-aware: a tracked change in a header, footer, or footnote activates the right surface before alignment. `ui.comments.scrollTo` is body-scoped today; non-body comment scroll lands in a follow-up.
+
+## Generic viewport scroll
+
+`ui.viewport.scrollIntoView` accepts the same `target` shapes the doc-API uses (entity address, text address, text target). Pair it with `block` and `behavior`:
+
+```ts
+await ui.viewport.scrollIntoView({
+  target: { kind: 'entity', entityType: 'comment', entityId: 'c-123' },
+  block: 'center',
+  behavior: 'smooth',
+});
+```
+
+See [Selection and viewport](/editor/custom-ui/selection-and-viewport#scroll-an-entity-into-view) for the full target list and the `not-mounted` / `not-ready` reasons.
 
 ## Navigate by element ID
 
@@ -61,7 +83,8 @@ function goToLink(link) {
 
 ## Best practices
 
-- Use `scrollToElement` when you have an element ID from `doc.extract()` or the Document API.
-- Use `PositionTracker` when you need to follow nodes that move during edits.
+- Use `ui.comments.scrollTo` / `ui.trackChanges.scrollTo` for the everyday cases. They're the shortest path and they activate non-body surfaces correctly.
+- Use `superdoc.scrollToElement` when you have a stable element id from `doc.extract()` or the Document API (RAG citations, cross-references, search hits).
+- Use `editor.positionTracker` when you need to follow a node that moves during edits within the current session.
 - For cross-session use, store `nodeId` values (not `sdBlockId`: those regenerate on each open).
-- Handle missing targets gracefully: both APIs return `false` if the element no longer exists.
+- Handle missing targets gracefully: every API above returns `false` if the element no longer exists.

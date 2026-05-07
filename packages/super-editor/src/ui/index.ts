@@ -124,10 +124,14 @@ export type {
   TrackChangesSlice,
 
   // Viewport
+  ViewportContext,
+  ViewportContextAtInput,
   ViewportEntityAtInput,
   ViewportEntityHit,
   ViewportGetRectInput,
   ViewportHandle,
+  ViewportPositionAtInput,
+  ViewportPositionHit,
   ViewportRect,
   ViewportRectResult,
 

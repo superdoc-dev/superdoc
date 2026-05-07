@@ -7,6 +7,7 @@ import {
   useSuperDocUI,
 } from 'superdoc/ui/react';
 import { CommentComposer } from './CommentComposer';
+import type { DecidedChange, DecidedChangesState } from './useDecidedChanges';
 
 type CommentItem = CommentsListResult['items'][number];
 
@@ -25,14 +26,13 @@ interface Props {
   composeOpen: boolean;
   /** Close the composer without posting. */
   onCloseComposer(): void;
-}
-
-interface DecidedChange {
-  id: string;
-  decision: 'accepted' | 'rejected';
-  decidedAt: number;
-  /** Snapshot taken before the doc-api call so we can render it post-accept. */
-  snapshot: { type?: string; author?: string; authorEmail?: string; excerpt?: string };
+  /**
+   * Shared decided-changes store. The accept/reject buttons on each
+   * card and the right-click context menu both route through the
+   * store's `decideChange` so a tracked-change decision shows up in
+   * the Resolved section regardless of which surface fired it.
+   */
+  decided: DecidedChangesState;
 }
 
 /**
@@ -45,21 +45,17 @@ interface DecidedChange {
  * via `ui.selection.activeCommentIds` / `activeChangeIds`, and the
  * panel highlights that card and scrolls it into view.
  */
-export function ActivitySidebar({ composeOpen, onCloseComposer }: Props) {
+export function ActivitySidebar({ composeOpen, onCloseComposer, decided }: Props) {
   const ui = useSuperDocUI();
   const comments = useSuperDocComments();
   const trackChanges = useSuperDocTrackChanges();
   const selection = useSuperDocSelection();
 
-  // Track tracked-changes that the user has accepted/rejected. Once
-  // decided, the change leaves the live `ui.trackChanges` feed (the
-  // tracked-change row in the document is gone — accepted means
-  // applied, rejected means discarded). To mimic the Google Docs
-  // experience, we capture the change snapshot before calling
-  // accept/reject and render it in the Resolved section as an audit
-  // row. State is component-local: refresh wipes it, which is fine
-  // for a demo.
-  const [decidedChanges, setDecidedChanges] = useState<Map<string, DecidedChange>>(() => new Map());
+  // Decided-changes state is owned by the parent (App) via
+  // `useDecidedChanges` so the right-click context menu can dispatch
+  // through the same `decideChange` and the Resolved audit row shows
+  // up regardless of which surface fired the decision.
+  const { decidedChanges, decideChange } = decided;
 
   // Track which entity (if any) is currently under the editor cursor.
   const activeEntityId = useMemo<string | null>(() => {
@@ -125,44 +121,6 @@ export function ActivitySidebar({ composeOpen, onCloseComposer }: Props) {
     }
     return map;
   }, [feed]);
-
-  const decideChange = (id: string, decision: 'accepted' | 'rejected') => {
-    if (!ui) return;
-    // Capture a snapshot from the live feed BEFORE we mutate, since
-    // accept/reject removes the tracked-change row entirely.
-    const liveItem = trackChanges.items.find((it) => it.id === id);
-    const change = (liveItem?.change ?? null) as DecidedChange['snapshot'] | null;
-    if (decision === 'accepted') ui.trackChanges.accept(id);
-    else ui.trackChanges.reject(id);
-    if (change) {
-      setDecidedChanges((prev) => {
-        const next = new Map(prev);
-        next.set(id, { id, decision, decidedAt: Date.now(), snapshot: change });
-        return next;
-      });
-    }
-  };
-
-  // Reconcile `decidedChanges` against the live track-changes feed:
-  // when a tracked change we previously decided reappears in
-  // `trackChanges.items` (undo of the accept/reject, collaborator
-  // restore, etc.), drop it from the local decided roll-up.
-  useEffect(() => {
-    setDecidedChanges((prev) => {
-      if (prev.size === 0) return prev;
-      const liveChangeIds = new Set<string>();
-      for (const item of trackChanges.items) liveChangeIds.add(item.id);
-      let mutated = false;
-      const next = new Map(prev);
-      for (const id of prev.keys()) {
-        if (liveChangeIds.has(id)) {
-          next.delete(id);
-          mutated = true;
-        }
-      }
-      return mutated ? next : prev;
-    });
-  }, [trackChanges.items]);
 
   // Auto-scroll the matching card into view when the active entity changes.
   const containerRef = useRef<HTMLDivElement | null>(null);

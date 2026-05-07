@@ -98,6 +98,41 @@ export function ensureEditorFieldAnnotationInteractionStyles(doc: Document | nul
 }
 
 // ---------------------------------------------------------------------------
+// Movable Object Interaction Styles
+// ---------------------------------------------------------------------------
+
+const MOVABLE_OBJECT_INTERACTION_STYLES = `
+/* Editing affordance: allow grab cursors for draggable SDT labels and images */
+.superdoc-layout [data-drag-source-kind] {
+  cursor: grab;
+}
+
+.superdoc-layout [data-drag-source-kind]:active {
+  cursor: grabbing;
+}
+
+/* Keep the active drag source from selecting text while dragging */
+.superdoc-layout .superdoc-structured-content__label,
+.superdoc-layout .superdoc-structured-content-inline__label,
+.superdoc-layout .superdoc-image-fragment[data-drag-source-kind="existingImage"],
+.superdoc-layout .superdoc-inline-image-clip-wrapper[data-drag-source-kind="existingImage"],
+.superdoc-layout .superdoc-inline-image[data-drag-source-kind="existingImage"] {
+  user-select: none;
+}
+`;
+
+let movableObjectInteractionStylesInjected = false;
+
+export function ensureEditorMovableObjectInteractionStyles(doc: Document | null | undefined): void {
+  if (movableObjectInteractionStylesInjected || !doc) return;
+  const styleEl = doc.createElement('style');
+  styleEl.setAttribute('data-superdoc-editor-movable-object-interaction-styles', 'true');
+  styleEl.textContent = MOVABLE_OBJECT_INTERACTION_STYLES;
+  doc.head?.appendChild(styleEl);
+  movableObjectInteractionStylesInjected = true;
+}
+
+// ---------------------------------------------------------------------------
 // Test helpers
 // ---------------------------------------------------------------------------
 
@@ -105,4 +140,5 @@ export function ensureEditorFieldAnnotationInteractionStyles(doc: Document | nul
 export function _resetEditorStyleFlags(): void {
   nativeSelectionStylesInjected = false;
   fieldAnnotationInteractionStylesInjected = false;
+  movableObjectInteractionStylesInjected = false;
 }

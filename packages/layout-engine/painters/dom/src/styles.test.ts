@@ -15,6 +15,16 @@ describe('lineStyles', () => {
 });
 
 describe('ensureSdtContainerStyles', () => {
+  it('exposes hover border tokens for structured content overrides', () => {
+    ensureSdtContainerStyles(document);
+
+    const styleEl = document.querySelector('[data-superdoc-sdt-container-styles="true"]');
+    const cssText = styleEl?.textContent ?? '';
+
+    expect(cssText).toContain('border-color: var(--sd-content-controls-block-hover-border, transparent);');
+    expect(cssText).toContain('border-color: var(--sd-content-controls-inline-hover-border, transparent);');
+  });
+
   it('suppresses structured-content hover backgrounds in viewing mode, including grouped hover', () => {
     ensureSdtContainerStyles(document);
 

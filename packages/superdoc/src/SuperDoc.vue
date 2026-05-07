@@ -1219,17 +1219,15 @@ onMounted(() => {
   if (config && !config.readOnly) {
     document.addEventListener('mousedown', handleDocumentMouseDown);
   }
-  document.addEventListener('keydown', handleFindShortcut, true);
+  document.addEventListener('keydown', handleDocumentShortcut, true);
 });
 
-/**
- * Handle Cmd+F / Ctrl+F to open find/replace instead of browser find.
- * Use a document-level capture listener because the dev shell and
- * presentation-mode bridge do not always leave keyboard focus on a node
- * that bubbles through the .superdoc root.
- */
 function isFindShortcutEvent(e) {
   return (e.metaKey || e.ctrlKey) && !e.altKey && e.key?.toLowerCase?.() === 'f';
+}
+
+function isFormattingMarksShortcutEvent(e) {
+  return (e.metaKey || e.ctrlKey) && e.shiftKey && !e.altKey && (e.code === 'Digit8' || e.key === '8' || e.key === '*');
 }
 
 function isFocusInsideSuperDoc() {
@@ -1261,15 +1259,37 @@ function handleFindShortcut(e) {
   findReplace.open();
 }
 
+function handleFormattingMarksShortcut(e) {
+  if (!isFormattingMarksShortcutEvent(e)) return;
+  if (!isFocusInsideSuperDoc()) return;
+
+  e.preventDefault();
+  e.stopPropagation();
+  proxy.$superdoc.toggleFormattingMarks?.();
+}
+
+/**
+ * Handle document-level shortcuts before browser or shell handlers.
+ * Use a capture listener because the dev shell and presentation-mode bridge
+ * do not always leave keyboard focus on a node that bubbles through the root.
+ */
+function handleDocumentShortcut(e) {
+  handleFindShortcut(e);
+  if (e.defaultPrevented) return;
+  handleFormattingMarksShortcut(e);
+}
+
 function handleContainerKeydown(e) {
   handleFindShortcut(e);
+  if (e.defaultPrevented) return;
+  handleFormattingMarksShortcut(e);
 }
 
 onBeforeUnmount(() => {
   passwordPrompt.destroy();
   findReplace.destroy();
   document.removeEventListener('mousedown', handleDocumentMouseDown);
-  document.removeEventListener('keydown', handleFindShortcut, true);
+  document.removeEventListener('keydown', handleDocumentShortcut, true);
   if (selectionUpdateRafId != null) {
     cancelAnimationFrame(selectionUpdateRafId);
     selectionUpdateRafId = null;

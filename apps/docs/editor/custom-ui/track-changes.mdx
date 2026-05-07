@@ -114,6 +114,10 @@ function ActiveAwareList() {
 
 `TrackChangesItem` is `{ id, change }`. The `change` shape mirrors `editor.doc.trackChanges.list()`: `type`, `author`, `authorEmail`, `excerpt`, `address`, etc.
 
+## Theming
+
+Insertion and deletion highlights are themable via `--sd-tracked-changes-*` CSS variables (`--sd-tracked-changes-insert-background`, `--sd-tracked-changes-delete-border`, etc.). See [Theming overview](/editor/theming/overview) and [Custom themes](/editor/theming/custom-themes) for the full token list.
+
 ## Trade-offs
 
 - `acceptAll` and `rejectAll` apply across every story. To scope to body only, call `accept` / `reject` per id.

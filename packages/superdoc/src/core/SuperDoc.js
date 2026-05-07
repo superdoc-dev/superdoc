@@ -1432,6 +1432,36 @@ export class SuperDoc extends EventEmitter {
   }
 
   /**
+   * Toggle nonprinting formatting marks (spaces, tabs, paragraph marks) in the
+   * rendered layout. This is a view-only setting and is not exported to DOCX.
+   * @param {boolean} show
+   * @returns {void}
+   */
+  setShowFormattingMarks(show = true) {
+    const nextValue = Boolean(show);
+    const layoutOptions = (this.config.layoutEngineOptions = this.config.layoutEngineOptions || {});
+    if (layoutOptions.showFormattingMarks === nextValue) return;
+    layoutOptions.showFormattingMarks = nextValue;
+
+    this.superdocStore?.documents?.forEach((doc) => {
+      const presentationEditor = doc.getPresentationEditor?.();
+      presentationEditor?.setShowFormattingMarks?.(nextValue);
+    });
+
+    this.emit('formatting-marks-change', { showFormattingMarks: nextValue, superdoc: this });
+    this.toolbar?.updateToolbarState?.();
+  }
+
+  /**
+   * Toggle nonprinting formatting marks from their current state.
+   * @returns {void}
+   */
+  toggleFormattingMarks() {
+    const currentValue = Boolean(this.config.layoutEngineOptions?.showFormattingMarks);
+    this.setShowFormattingMarks(!currentValue);
+  }
+
+  /**
    * Set the document mode.
    * @param {DocumentMode} type
    * @returns {void}

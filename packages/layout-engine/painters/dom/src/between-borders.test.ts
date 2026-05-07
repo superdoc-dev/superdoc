@@ -22,7 +22,7 @@ const betweenOff: BetweenBorderInfo = {
   suppressBottomBorder: false,
   gapBelow: 0,
 };
-import { createDomPainter } from './index.js';
+import { createTestPainter as createDomPainter } from './_test-utils.js';
 import type {
   ParagraphBorders,
   ParagraphBorder,
@@ -102,6 +102,7 @@ const buildResolvedItems = (fragments: readonly Fragment[], blocks: TestBlockLis
       width: fragment.width,
       height: 'height' in fragment && typeof fragment.height === 'number' ? fragment.height : 0,
       fragmentKind: fragment.kind,
+      fragment,
       blockId: fragment.blockId,
       fragmentIndex: index,
       paragraphBorders: borders,
@@ -113,7 +114,7 @@ const buildResolvedItems = (fragments: readonly Fragment[], blocks: TestBlockLis
 
 /** Test helper: run computeBetweenBorderFlags given fragments and the underlying blocks. */
 const runFlags = (fragments: readonly Fragment[], blocks: TestBlockList) =>
-  computeBetweenBorderFlags(fragments, buildResolvedItems(fragments, blocks));
+  computeBetweenBorderFlags(buildResolvedItems(fragments, blocks));
 
 const paraFragment = (blockId: string, overrides?: Partial<ParaFragment>): ParaFragment => ({
   kind: 'para',

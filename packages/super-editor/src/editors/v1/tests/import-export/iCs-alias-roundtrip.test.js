@@ -1,11 +1,8 @@
 /**
  * Roundtrip test: a run with <w:iCs/> on import should round-trip cleanly
- * through the document-api iCs alias (which now maps to PM attr `italicCs`).
- *
- * Round 2 of PR #3187 added the `'italicCs'` alias on `runAttribute('iCs', ...)`
- * in inline-run-patch.ts. This test confirms the alias actually works:
- * import a doc with <w:iCs/>, the PM mark stores under `italicCs`, and the
- * export emits <w:iCs/> back.
+ * through the document-api iCs alias, which maps to PM attr `italicCs`.
+ * Confirms <w:iCs/> survives import -> export, and that the imported value
+ * is reachable on the PM run mark via either `italicCs` or `iCs`.
  */
 import { describe, it, expect } from 'vitest';
 import JSZip from 'jszip';

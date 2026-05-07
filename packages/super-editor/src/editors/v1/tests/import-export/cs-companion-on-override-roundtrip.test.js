@@ -2,12 +2,6 @@
  * Roundtrip test: when a user overrides a style-provided fontSize via the
  * editor, the export should write BOTH <w:sz> and <w:szCs> so mixed-script
  * (Latin + Hebrew/Arabic) content uses the new size for both Latin and CS chars.
- *
- * Round 2 of PR #3187 added `hasChangedStyleComparableProps` detection in
- * calculateInlineRunPropertiesPlugin.js so the CS companion (fontSizeCs/
- * boldCs/italicCs) makes it into runPropertiesInlineKeys when the user
- * changes a style-comparable property. This test confirms the companion
- * actually reaches the export.
  */
 import { describe, it, expect } from 'vitest';
 import JSZip from 'jszip';

@@ -149,11 +149,13 @@ export const calculateInlineRunPropertiesPlugin = (editor) =>
           const textNode = segment.content?.find((n) => n.isText);
           return Object.keys(decodeRPrFromMarks(textNode?.marks || []));
         };
-        // A style-defined key counts as an override only when the inline value actually
-        // differs from the style-provided value. Without this, runs that just reference a
-        // style (e.g. <w:rStyle w:val="RtlChar"/>) get every cascade-resolved key (rtl, sz, ...)
-        // tagged as an override, and r-translator then writes them as inline w:rPr on export -
-        // flattening style-inherited formatting into direct formatting on every run.
+        // AIDEV-NOTE: A style-defined key counts as an override only when the inline
+        // value actually differs from the style-provided value. The simpler check
+        // `k in inlineProps` looks correct but is wrong: cascade resolution puts every
+        // styled key into inlineProps, so a run that just references a style (e.g.
+        // <w:rStyle w:val="RtlChar"/>) gets every key tagged as an override. r-translator's
+        // export gate then writes them inline, flattening style-inherited formatting onto
+        // every run.
         const overrideKeysFromInlineProps = (inlineProps) =>
           styleKeys.filter((k) => {
             if (!inlineProps || !(k in inlineProps)) return false;
@@ -191,11 +193,10 @@ export const calculateInlineRunPropertiesPlugin = (editor) =>
               if (baseKey && existingRunPropsKeys.has(baseKey)) return false;
               return true;
             });
-          // Detect changes against the full style cascade (rStyle + paragraph style +
-          // docDefaults), not just the run's rStyle. styleKeys only tracks direct run-style
-          // keys; for runs whose styled value comes from paragraph style or docDefaults,
-          // styleKeys is empty and we still need to know if the user has overridden them
-          // so the CS companion (fontSizeCs/boldCs/italicCs) makes it into the export.
+          // AIDEV-NOTE: Compare against the full style cascade (existingStyleComparableProps),
+          // not just styleKeys. styleKeys only tracks the run's rStyle; for runs whose styled
+          // value comes from paragraph style or docDefaults it is empty, and a user override
+          // would silently drop the CS companion (fontSizeCs/boldCs/italicCs) on export.
           const hasChangedStyleComparableProps =
             segmentInlineProps != null &&
             existingStyleComparableProps &&

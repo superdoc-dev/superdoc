@@ -6,11 +6,6 @@
  * style sets <w:rtl/> and a run references that style without inline w:rtl,
  * the export should preserve the style reference, not flatten the rtl into
  * direct formatting on every run.
- *
- * Round 1 of PR #3187 had a short-circuit in r-translator.js shouldExport
- * that always emitted inline <w:rtl/> when runProperties.rtl was set,
- * regardless of style/override membership. Round 2 (commit e21891413)
- * removed that short-circuit. This test locks the fix in.
  */
 import { describe, it, expect } from 'vitest';
 import JSZip from 'jszip';

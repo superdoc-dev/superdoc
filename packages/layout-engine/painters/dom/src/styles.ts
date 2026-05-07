@@ -506,13 +506,13 @@ const SDT_CONTAINER_STYLES = `
 
 .superdoc-structured-content-block:not(.ProseMirror-selectednode):hover {
   background-color: var(--sd-content-controls-block-hover-bg, #f2f2f2);
-  border-color: transparent;
+  border-color: var(--sd-content-controls-block-hover-border, transparent);
 }
 
 /* Group hover (JavaScript-coordinated via PresentationEditor) */
 .superdoc-structured-content-block.sdt-group-hover:not(.ProseMirror-selectednode) {
   background-color: var(--sd-content-controls-block-hover-bg, #f2f2f2);
-  border-color: transparent;
+  border-color: var(--sd-content-controls-block-hover-border, transparent);
 }
 
 .superdoc-structured-content-block.ProseMirror-selectednode {
@@ -606,7 +606,7 @@ const SDT_CONTAINER_STYLES = `
 /* Hover effect for inline structured content */
 .superdoc-structured-content-inline:not(.ProseMirror-selectednode):hover {
   background-color: var(--sd-content-controls-inline-hover-bg, #f2f2f2);
-  border-color: transparent;
+  border-color: var(--sd-content-controls-inline-hover-border, transparent);
 }
 
 .superdoc-structured-content-inline.ProseMirror-selectednode {

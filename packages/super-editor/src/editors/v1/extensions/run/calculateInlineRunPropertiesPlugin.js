@@ -133,6 +133,18 @@ export const calculateInlineRunPropertiesPlugin = (editor) =>
         // The exporter treats null as "export all keys" for backward compat, so [] must be preserved.
         const hadInlineKeysMetadata = Array.isArray(runNode.attrs?.runPropertiesInlineKeys);
         const styleKeys = runNode.attrs?.runPropertiesStyleKeys || [];
+        const existingStyleComparableProps = resolveRunProperties(
+          {
+            translatedNumbering: editor.converter?.translatedNumbering ?? {},
+            translatedLinkedStyles: editor.converter?.translatedLinkedStyles ?? {},
+          },
+          runNode.attrs?.runProperties?.styleId != null ? { styleId: runNode.attrs.runProperties.styleId } : {},
+          getResolvedParagraphProperties(paragraphNode) ||
+            calculateResolvedParagraphProperties(editor, paragraphNode, $pos),
+          tableInfo,
+          false,
+          Boolean(paragraphNode.attrs.paragraphProperties?.numberingProperties),
+        );
         const keysFromMarks = (segment) => {
           const textNode = segment.content?.find((n) => n.isText);
           return Object.keys(decodeRPrFromMarks(textNode?.marks || []));
@@ -169,7 +181,24 @@ export const calculateInlineRunPropertiesPlugin = (editor) =>
               if (baseKey && existingRunPropsKeys.has(baseKey)) return false;
               return true;
             });
-          const shouldAddMarkKeys = !hadInlineKeysMetadata || existingInlineKeys.length > 0 || hasNewInlineProps;
+          const hasChangedStyleComparableProps =
+            segmentInlineProps != null &&
+            Object.keys(segmentInlineProps).some((k) => {
+              if (!styleKeys.includes(k)) return false;
+              const current = segmentInlineProps[k];
+              const fromStyle = existingStyleComparableProps?.[k];
+              if (JSON.stringify(current) !== JSON.stringify(fromStyle)) return true;
+              const baseKey = COMPANION_INLINE_KEYS[k];
+              if (!baseKey) return false;
+              const currentBase = segmentInlineProps[baseKey];
+              const styleBase = existingStyleComparableProps?.[baseKey];
+              return JSON.stringify(currentBase) !== JSON.stringify(styleBase);
+            });
+          const shouldAddMarkKeys =
+            !hadInlineKeysMetadata ||
+            existingInlineKeys.length > 0 ||
+            hasNewInlineProps ||
+            hasChangedStyleComparableProps;
           const markKeysToAdd = shouldAddMarkKeys ? keysFromMarks(segment) : [];
           const keys = [...new Set([...existingInlineKeys, ...markKeysToAdd])];
           const ok = overrideKeysFromInlineProps(segmentInlineProps);

@@ -451,7 +451,6 @@ function tocUpdateAll(editor: Editor, input: TocUpdateInput, options?: MutationO
     },
   );
 
-  console.log('rebuiltEntries', rebuiltEntries);
   // Preserve the trailer paragraph if the existing TOC ends with one — keeps
   // the visual gap below the TOC stable across rebuilds.
   const trailing = readExistingTocTrailingParagraph(resolved.node);

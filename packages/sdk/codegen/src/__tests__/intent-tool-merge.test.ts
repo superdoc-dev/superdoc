@@ -159,4 +159,28 @@ describe('superdoc_table catalog regressions', () => {
     // normalizes back to canonical RRGGBB).
     expect(stringBranch.pattern).toMatch(/#\?/);
   });
+
+  test('set_shading carries `color` in every requiredOneOf branch', async () => {
+    // Regression: codegen previously dropped the top-level `required: ['color']`
+    // when emitting `requiredOneOf`, which let LLMs call setShading without
+    // a color and the runtime then crashed inside normalizeColorInput.
+    interface CatalogWithOps {
+      tools: Array<{
+        toolName: string;
+        operations: Array<{
+          intentAction: string;
+          required?: string[];
+          requiredOneOf?: string[][];
+        }>;
+      }>;
+    }
+    const catalog: CatalogWithOps = JSON.parse(await readFile(CATALOG_PATH, 'utf8'));
+    const table = catalog.tools.find((t) => t.toolName === 'superdoc_table');
+    const setShading = table!.operations.find((o) => o.intentAction === 'set_shading');
+    expect(setShading).toBeDefined();
+    expect(Array.isArray(setShading!.requiredOneOf)).toBe(true);
+    for (const branch of setShading!.requiredOneOf!) {
+      expect(branch).toContain('color');
+    }
+  });
 });

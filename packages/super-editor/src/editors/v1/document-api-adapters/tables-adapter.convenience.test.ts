@@ -720,6 +720,38 @@ describe('SD-2129: table convenience operations', () => {
         expect(second.failure.code).toBe('NO_OP');
       }
     });
+
+    it('does NOT report NO_OP when same text is currently styled (bold)', () => {
+      // Plain-text replacement: a cell holding `<strong>hi</strong>` and a
+      // call asking to set it to "hi" must rewrite (clearing the bold), not
+      // NO_OP.
+      const ed = createEditor();
+      const tableId = createTableAndGetId(ed);
+
+      // First, plant 'hi' in the cell.
+      tablesSetCellTextAdapter(ed, { nodeId: tableId, rowIndex: 0, columnIndex: 0, text: 'hi' }, DIRECT);
+
+      // Apply bold to the cell's text by selecting the cell content and toggling.
+      // Find the run containing 'hi', then toggle bold on its range.
+      let cellPos = -1;
+      let cellNode: any = null;
+      ed.state.doc.descendants((node: any, pos: number) => {
+        if (cellPos !== -1) return false;
+        if (node.type.name === 'tableCell' && node.textContent === 'hi') {
+          cellPos = pos;
+          cellNode = node;
+          return false;
+        }
+        return true;
+      });
+      const from = cellPos + 2; // skip cell + paragraph + run open tokens
+      const to = from + 'hi'.length;
+      ed.commands.setTextSelection({ from, to });
+      ed.commands.toggleBold();
+
+      const second = tablesSetCellTextAdapter(ed, { nodeId: tableId, rowIndex: 0, columnIndex: 0, text: 'hi' }, DIRECT);
+      expect(second.success).toBe(true);
+    });
   });
 
   describe('tables.applyStyle (set_style_options surface)', () => {

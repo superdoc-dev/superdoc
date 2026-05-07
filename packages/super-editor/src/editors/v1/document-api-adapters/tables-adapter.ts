@@ -280,13 +280,24 @@ function normalizeCellAttrsForSingleCell(attrs: Record<string, unknown>): Record
   };
 }
 
+/**
+ * Strip merge metadata (`gridSpan`, `vMerge`) from cloned cell properties
+ * so a singleton cell doesn't inherit the source's merge state.
+ */
+function stripMergeMetadataFromTableCellProperties(attrs: Record<string, unknown>): Record<string, unknown> {
+  const tcp = (attrs.tableCellProperties as Record<string, unknown> | undefined) ?? {};
+  const { gridSpan: _g, vMerge: _v, ...cleanedTcp } = tcp;
+  return { ...attrs, tableCellProperties: cleanedTcp };
+}
+
 function normalizeClonedRowInsertCellAttrs(
   sourceAttrs: Record<string, unknown>,
   fromHeaderToBody: boolean,
 ): Record<string, unknown> {
   const normalizedAttrs: Record<string, unknown> = {
-    ...sourceAttrs,
+    ...stripMergeMetadataFromTableCellProperties(sourceAttrs),
     rowspan: 1,
+    colspan: 1,
   };
 
   // Header rows can carry explicit `borders: null` to suppress drawing.
@@ -301,14 +312,16 @@ function normalizeClonedRowInsertCellAttrs(
 /**
  * Clone attrs from an adjacent column's cell when inserting a new column.
  * Preserves shading, background, vAlign, cell margins, borders, cellWidth —
- * everything the cell carries — but resets `colspan` to 1 (the new cell is a
- * single column) and clears the array-shaped `colwidth` (which is sized to the
- * source's colspan and won't fit a singleton).
+ * everything the cell carries — but resets span to a singleton and strips
+ * merge metadata (`gridSpan`, `vMerge`) so a clone of a merged source doesn't
+ * carry the merge state into the new cell. Also clears the array-shaped
+ * `colwidth` (sized to the source's colspan, won't fit a singleton).
  */
 function normalizeClonedColumnInsertCellAttrs(sourceAttrs: Record<string, unknown>): Record<string, unknown> {
   const normalizedAttrs: Record<string, unknown> = {
-    ...sourceAttrs,
+    ...stripMergeMetadataFromTableCellProperties(sourceAttrs),
     colspan: 1,
+    rowspan: 1,
   };
   if (Array.isArray(normalizedAttrs.colwidth)) {
     delete normalizedAttrs.colwidth;
@@ -2912,6 +2925,50 @@ export function tablesSetCellPropertiesAdapter(
 }
 
 /**
+ * Build the paragraph node that `tables.setCellText` would write into a
+ * cell for the given text. Empty text produces an empty paragraph.
+ * Returns `null` when the schema lacks a paragraph node type.
+ */
+function buildSetCellTextParagraph(
+  schema: Editor['state']['schema'],
+  text: string,
+): import('prosemirror-model').Node | null {
+  const paragraphType = schema.nodes.paragraph;
+  if (!paragraphType) return null;
+  return text.length === 0 ? paragraphType.createAndFill() : paragraphType.createAndFill(null, schema.text(text));
+}
+
+/**
+ * Marks that the schema fills in by default on text inside a paragraph
+ * (rPr-equivalent run properties: font family / size / color). These are
+ * NOT user-applied formatting — they're the cell's inherited typography.
+ * setCellText produces text carrying the same default `textStyle` mark, so
+ * its presence alone doesn't disqualify a NO_OP.
+ */
+const DEFAULT_INHERITED_MARK_NAMES = new Set(['textStyle']);
+
+/**
+ * Check whether a paragraph's inline content carries any user-applied
+ * formatting marks (bold, italic, strike, underline, highlight, link, etc.)
+ * beyond the schema-default inherited marks. Used to ensure setCellText
+ * still rewrites a styled run that prints the same text.
+ */
+function paragraphHasUserAppliedMarks(paragraph: import('prosemirror-model').Node): boolean {
+  let hasUserMarks = false;
+  paragraph.descendants((child) => {
+    if (hasUserMarks) return false;
+    for (const mark of child.marks) {
+      if (!DEFAULT_INHERITED_MARK_NAMES.has(mark.type.name)) {
+        hasUserMarks = true;
+        return false;
+      }
+    }
+    return true;
+  });
+  return hasUserMarks;
+}
+
+/**
  * tables.setCellText — replace the text content of a single cell with a single
  * paragraph holding `text` (plain text). Cell properties (vAlign, shading,
  * borders, colspan/rowspan) are preserved.
@@ -2934,9 +2991,20 @@ export function tablesSetCellTextAdapter(
   );
   const { table, cellPos, cellNode } = resolved;
 
-  // NO_OP: cell already contains exactly this text (single paragraph, identical content).
-  const existingText = cellNode.textContent;
-  if (cellNode.childCount === 1 && cellNode.firstChild?.type.name === 'paragraph' && existingText === input.text) {
+  const candidateParagraph = buildSetCellTextParagraph(editor.state.schema, input.text);
+  if (!candidateParagraph) {
+    return toTableFailure('INVALID_TARGET', 'tables.setCellText: paragraph node type is unavailable.');
+  }
+  // NO_OP: same plain text AND no user-applied marks (bold / italic / color etc).
+  // The op advertises plain-text replacement, so a styled run holding the same
+  // text must still be rewritten so the formatting gets cleared.
+  const existingParagraph =
+    cellNode.childCount === 1 && cellNode.firstChild?.type.name === 'paragraph' ? cellNode.firstChild : null;
+  if (
+    existingParagraph &&
+    existingParagraph.textContent === input.text &&
+    !paragraphHasUserAppliedMarks(existingParagraph)
+  ) {
     return toTableFailure('NO_OP', 'tables.setCellText: cell already contains this text.');
   }
 
@@ -2946,20 +3014,7 @@ export function tablesSetCellTextAdapter(
 
   try {
     const tr = editor.state.tr;
-    const schema = editor.state.schema;
-
-    // Build a paragraph node holding the text. Empty string → empty paragraph.
-    const paragraphType = schema.nodes.paragraph;
-    if (!paragraphType) {
-      return toTableFailure('INVALID_TARGET', 'tables.setCellText: paragraph node type is unavailable.');
-    }
-    const paragraph =
-      input.text.length === 0
-        ? paragraphType.createAndFill()
-        : paragraphType.createAndFill(null, schema.text(input.text));
-    if (!paragraph) {
-      return toTableFailure('INVALID_TARGET', 'tables.setCellText: failed to build paragraph.');
-    }
+    const paragraph = candidateParagraph;
 
     // Replace the entire cell content (between cellPos+1 and cellPos+1+content.size).
     const cellStart = cellPos + 1;
@@ -3498,6 +3553,16 @@ export function tablesSetShadingAdapter(
 ): TableMutationResult {
   if (input.color === null) {
     return tablesClearShadingAdapter(editor, { target: input.target, nodeId: input.nodeId }, options);
+  }
+
+  // The merged `superdoc_table` tool schema can let an LLM call setShading
+  // without a `color`. Reject upfront so `normalizeColorInput` doesn't blow
+  // up on undefined (and to surface a structured failure to the agent).
+  if (typeof input.color !== 'string') {
+    return toTableFailure(
+      'INVALID_INPUT',
+      'tables.setShading: color is required (hex string, "auto", or null to clear).',
+    );
   }
 
   rejectTrackedMode('tables.setShading', options);

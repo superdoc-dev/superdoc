@@ -5050,22 +5050,34 @@ export const MCP_TOOL_CATALOG = {
         {
           operationId: 'doc.tables.insertColumn',
           intentAction: 'insert_column',
-          requiredOneOf: [['target'], ['nodeId']],
+          requiredOneOf: [
+            ['position', 'target'],
+            ['position', 'nodeId'],
+          ],
         },
         {
           operationId: 'doc.tables.deleteColumn',
           intentAction: 'delete_column',
-          requiredOneOf: [['target'], ['nodeId']],
+          requiredOneOf: [
+            ['columnIndex', 'target'],
+            ['columnIndex', 'nodeId'],
+          ],
         },
         {
           operationId: 'doc.tables.setColumnWidth',
           intentAction: 'set_column',
-          requiredOneOf: [['target'], ['nodeId']],
+          requiredOneOf: [
+            ['columnIndex', 'widthPt', 'target'],
+            ['columnIndex', 'widthPt', 'nodeId'],
+          ],
         },
         {
           operationId: 'doc.tables.mergeCells',
           intentAction: 'merge_cells',
-          requiredOneOf: [['target'], ['nodeId']],
+          requiredOneOf: [
+            ['start', 'end', 'target'],
+            ['start', 'end', 'nodeId'],
+          ],
         },
         {
           operationId: 'doc.tables.unmergeCells',
@@ -5095,7 +5107,10 @@ export const MCP_TOOL_CATALOG = {
         {
           operationId: 'doc.tables.setShading',
           intentAction: 'set_shading',
-          requiredOneOf: [['target'], ['nodeId']],
+          requiredOneOf: [
+            ['color', 'target'],
+            ['color', 'nodeId'],
+          ],
         },
         {
           operationId: 'doc.tables.applyStyle',

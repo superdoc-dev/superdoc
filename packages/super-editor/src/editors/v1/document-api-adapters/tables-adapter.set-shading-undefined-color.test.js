@@ -65,6 +65,7 @@ describe('tables.setShading without color', () => {
 
     expect(thrown, `setShading must not throw on missing color; got: ${thrown?.stack}`).toBeNull();
     expect(result?.success, 'should be a failure result, not a thrown error').toBe(false);
-    expect(result?.code, 'should report INVALID_INPUT (or similar)').toBeDefined();
+    // TableMutationFailure carries the code under `failure.code`, not at the top level.
+    expect(result?.failure?.code, 'should report INVALID_INPUT (or similar)').toBeDefined();
   });
 });

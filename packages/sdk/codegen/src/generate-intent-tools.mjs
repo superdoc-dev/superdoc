@@ -284,19 +284,24 @@ function extractRequiredConstraints(operation) {
   const cliParamNames = new Set(Object.keys(cliSchema.properties ?? {}));
   const contractSchema = operation.inputSchema;
 
-  // oneOf in contract schema — collect per-branch required arrays.
-  // (Verified: all oneOf operations use property names matching CLI params.)
+  // oneOf in contract schema — collect per-branch required arrays. The
+  // top-level `required` (often set via objectSchema spread) applies to
+  // EVERY branch, so merge it into each one. Without this, e.g. set_shading
+  // captured `requiredOneOf: [[target], [nodeId]]` and silently dropped the
+  // base `['color']` requirement → LLMs could call setShading without color
+  // and trip the runtime validator.
   if (contractSchema && Array.isArray(contractSchema.oneOf)) {
+    const baseRequired = Array.isArray(contractSchema.required) ? contractSchema.required : [];
     const branches = [];
     for (const branch of contractSchema.oneOf) {
       if (Array.isArray(branch.oneOf)) {
         for (const sub of branch.oneOf) {
           if (Array.isArray(sub.required) && sub.required.length > 0) {
-            branches.push(sub.required);
+            branches.push([...new Set([...baseRequired, ...sub.required])]);
           }
         }
       } else if (Array.isArray(branch.required) && branch.required.length > 0) {
-        branches.push(branch.required);
+        branches.push([...new Set([...baseRequired, ...branch.required])]);
       }
     }
     if (branches.length > 0) return { requiredOneOf: branches };

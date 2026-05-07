@@ -215,9 +215,8 @@ function flattenText(node: ProseMirrorNode): string {
 
 /**
  * Walks the paragraph's text descendants and returns one segment per text node,
- * preserving the marks Word would carry into the TOC entry. Marks in
- * `DROPPED_SOURCE_MARK_TYPES` are stripped, and adjacent segments with
- * identical mark sets are coalesced to keep the rebuilt content tidy.
+ * sanitised through `sanitizeSourceMark`. Adjacent segments with identical
+ * mark sets are coalesced to keep the rebuilt content tidy.
  */
 function extractTextSegments(node: ProseMirrorNode): TocTextSegment[] {
   const segments: TocTextSegment[] = [];

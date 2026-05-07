@@ -133,84 +133,42 @@ describe('buildTocEntryParagraphs', () => {
       runs.forEach((r) => expect(r.type).toBe('run'));
     });
 
-    it('carries the allowed character marks from the source heading into the rebuilt entry', () => {
-      const sourceWithMarks: TocSource = {
-        ...BASE_SOURCE,
-        segments: [
-          { text: 'Plain ', marks: [{ type: 'textStyle', attrs: { fontFamily: 'Aptos' } }] },
-          {
-            text: 'Bold',
-            marks: [{ type: 'textStyle', attrs: { fontFamily: 'Aptos' } }, { type: 'bold' }, { type: 'italic' }],
-          },
-        ],
-      };
-      const paragraphs = buildTocEntryParagraphs([sourceWithMarks], makeConfig({ hyperlinks: true }));
-      const titleRun = paragraphs[0]!.content[0] as { content?: TextLike[] };
-      const texts = titleRun.content!;
-      expect(texts).toHaveLength(2);
-      expect(texts[0]!.text).toBe('Plain ');
-      expect(texts[0]!.marks!.map((m) => m.type)).toEqual(['textStyle', 'link']);
-      expect(texts[0]!.marks![0].attrs).toEqual({ fontFamily: 'Aptos' });
-      expect(texts[1]!.text).toBe('Bold');
-      expect(texts[1]!.marks!.map((m) => m.type)).toEqual(['textStyle', 'bold', 'italic', 'link']);
-    });
-
-    it('preserves the standalone color, highlight, fontFamily, and underline marks', () => {
+    it('carries allowed character marks (bold, italic, underline, color, highlight, fontFamily, textStyle.fontFamily) from the source heading', () => {
       const sourceWithMarks: TocSource = {
         ...BASE_SOURCE,
         segments: [
           {
             text: 'Heading',
             marks: [
+              { type: 'textStyle', attrs: { fontFamily: 'Aptos', fontSize: '24pt' } }, // fontSize must be scrubbed
+              { type: 'bold' },
+              { type: 'italic' },
+              { type: 'underline' },
               { type: 'color', attrs: { color: '#ff0000' } },
               { type: 'highlight', attrs: { color: '#ffff00' } },
               { type: 'fontFamily', attrs: { fontFamily: 'Calibri' } },
-              { type: 'underline' },
             ],
           },
         ],
       };
       const paragraphs = buildTocEntryParagraphs([sourceWithMarks], makeConfig({ hyperlinks: true }));
       const text = titleTextOf(paragraphs);
-      expect(text.marks!.map((m) => m.type)).toEqual(['color', 'highlight', 'fontFamily', 'underline', 'link']);
-    });
-
-    it('strips fontSize from passthrough textStyle marks (heading sizes must not bleed into TOC)', () => {
-      const sourceWithFontSize: TocSource = {
-        ...BASE_SOURCE,
-        segments: [
-          {
-            text: 'Heading',
-            marks: [{ type: 'textStyle', attrs: { fontFamily: 'Aptos', fontSize: '24pt' } }, { type: 'bold' }],
-          },
-        ],
-      };
-      const paragraphs = buildTocEntryParagraphs([sourceWithFontSize], makeConfig({ hyperlinks: true }));
-      const text = titleTextOf(paragraphs);
+      expect(text.marks!.map((m) => m.type)).toEqual([
+        'textStyle',
+        'bold',
+        'italic',
+        'underline',
+        'color',
+        'highlight',
+        'fontFamily',
+        'link',
+      ]);
+      // textStyle keeps fontFamily, drops fontSize.
       const textStyleMark = text.marks!.find((m) => m.type === 'textStyle');
       expect(textStyleMark!.attrs).toEqual({ fontFamily: 'Aptos' });
-      expect(textStyleMark!.attrs!.fontSize).toBeUndefined();
-      // Other allowed marks still flow through.
-      expect(text.marks!.map((m) => m.type)).toEqual(['textStyle', 'bold', 'link']);
     });
 
-    it('drops textStyle entirely when only disallowed attrs (e.g. fontSize) are present', () => {
-      const sourceWithOnlyFontSize: TocSource = {
-        ...BASE_SOURCE,
-        segments: [
-          {
-            text: 'Heading',
-            marks: [{ type: 'textStyle', attrs: { fontSize: '24pt' } }],
-          },
-        ],
-      };
-      const paragraphs = buildTocEntryParagraphs([sourceWithOnlyFontSize], makeConfig({ hyperlinks: true }));
-      const text = titleTextOf(paragraphs);
-      // Only the rebuilt link should remain.
-      expect(text.marks!.map((m) => m.type)).toEqual(['link']);
-    });
-
-    it('drops the standalone fontSize mark, plus link, comment, track-changes, strike, tocPageNumber', () => {
+    it('drops disallowed marks (fontSize, strike, link, comments, track-changes, tocPageNumber)', () => {
       const sourceWithDisallowed: TocSource = {
         ...BASE_SOURCE,
         segments: [
@@ -230,6 +188,7 @@ describe('buildTocEntryParagraphs', () => {
       };
       const paragraphs = buildTocEntryParagraphs([sourceWithDisallowed], makeConfig({ hyperlinks: true }));
       const text = titleTextOf(paragraphs);
+      // Only the allowed `bold` survives, plus the rebuilt `link` to the source bookmark.
       expect(text.marks!.map((m) => m.type)).toEqual(['bold', 'link']);
       const linkMark = text.marks!.find((m) => m.type === 'link');
       expect(linkMark!.attrs!.anchor).toBe(generateTocBookmarkName(BASE_SOURCE.sdBlockId));

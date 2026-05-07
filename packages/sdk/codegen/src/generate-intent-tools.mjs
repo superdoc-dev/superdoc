@@ -284,24 +284,28 @@ function extractRequiredConstraints(operation) {
   const cliParamNames = new Set(Object.keys(cliSchema.properties ?? {}));
   const contractSchema = operation.inputSchema;
 
-  // oneOf in contract schema — collect per-branch required arrays. The
-  // top-level `required` (often set via objectSchema spread) applies to
-  // EVERY branch, so merge it into each one. Without this, e.g. set_shading
-  // captured `requiredOneOf: [[target], [nodeId]]` and silently dropped the
-  // base `['color']` requirement → LLMs could call setShading without color
-  // and trip the runtime validator.
+  // oneOf in contract schema — collect per-branch required arrays. Required
+  // keys can sit at three levels and ALL apply to every leaf:
+  //   1. Top-level `required` (e.g. `['color']` on setShading via objectSchema spread).
+  //   2. Outer branch `required` (e.g. setBorders' applyTo branch carries
+  //      `['mode', 'applyTo', 'border']` — these apply to every nested sub.
+  //   3. Inner sub-branch `required` (e.g. `['target']` vs `['nodeId']` discriminator).
+  // Merge all three into each leaf so the runtime validator sees the full
+  // requirement set. Earlier passes only merged 1+3, dropping 2 and letting
+  // tools like `set_borders` accept `{action, nodeId}` (no mode/border).
   if (contractSchema && Array.isArray(contractSchema.oneOf)) {
     const baseRequired = Array.isArray(contractSchema.required) ? contractSchema.required : [];
     const branches = [];
     for (const branch of contractSchema.oneOf) {
+      const branchRequired = Array.isArray(branch.required) ? branch.required : [];
       if (Array.isArray(branch.oneOf)) {
         for (const sub of branch.oneOf) {
           if (Array.isArray(sub.required) && sub.required.length > 0) {
-            branches.push([...new Set([...baseRequired, ...sub.required])]);
+            branches.push([...new Set([...baseRequired, ...branchRequired, ...sub.required])]);
           }
         }
-      } else if (Array.isArray(branch.required) && branch.required.length > 0) {
-        branches.push([...new Set([...baseRequired, ...branch.required])]);
+      } else if (branchRequired.length > 0) {
+        branches.push([...new Set([...baseRequired, ...branchRequired])]);
       }
     }
     if (branches.length > 0) return { requiredOneOf: branches };

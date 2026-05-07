@@ -160,6 +160,38 @@ describe('superdoc_table catalog regressions', () => {
     expect(stringBranch.pattern).toMatch(/#\?/);
   });
 
+  test('set_borders carries outer-branch `required` (mode/applyTo/border/edges) in every requiredOneOf leaf', async () => {
+    // Regression: round-2 codegen merged only top-level baseRequired + the
+    // inner sub-branch's required, dropping the OUTER branch's required.
+    // For tables.setBorders this meant `mode`, `applyTo`, `border` (and
+    // `edges` for the patch branch) were not enforced at the SDK validator,
+    // so `superdoc_table({action:'set_borders', nodeId:'t1'})` reached the
+    // runtime adapter and threw inside executeTablesSetBorders.
+    interface CatalogWithOps {
+      tools: Array<{
+        toolName: string;
+        operations: Array<{
+          intentAction: string;
+          required?: string[];
+          requiredOneOf?: string[][];
+        }>;
+      }>;
+    }
+    const catalog: CatalogWithOps = JSON.parse(await readFile(CATALOG_PATH, 'utf8'));
+    const table = catalog.tools.find((t) => t.toolName === 'superdoc_table');
+    const setBorders = table!.operations.find((o) => o.intentAction === 'set_borders');
+    expect(setBorders).toBeDefined();
+    expect(Array.isArray(setBorders!.requiredOneOf)).toBe(true);
+    // Every leaf must include `mode` (top-level required for all setBorders calls).
+    for (const branch of setBorders!.requiredOneOf!) {
+      expect(branch).toContain('mode');
+    }
+    // Each leaf carries either `applyTo+border` (apply branch) or `edges` (patch branch).
+    const leafJoined = setBorders!.requiredOneOf!.map((b) => b.slice().sort().join(','));
+    expect(leafJoined.some((s) => s.includes('applyTo') && s.includes('border'))).toBe(true);
+    expect(leafJoined.some((s) => s.includes('edges'))).toBe(true);
+  });
+
   test('set_shading carries `color` in every requiredOneOf branch', async () => {
     // Regression: codegen previously dropped the top-level `required: ['color']`
     // when emitting `requiredOneOf`, which let LLMs call setShading without

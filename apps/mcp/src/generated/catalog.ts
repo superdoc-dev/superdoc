@@ -5120,7 +5120,12 @@ export const MCP_TOOL_CATALOG = {
         {
           operationId: 'doc.tables.setBorders',
           intentAction: 'set_borders',
-          requiredOneOf: [['target'], ['nodeId'], ['target'], ['nodeId']],
+          requiredOneOf: [
+            ['mode', 'applyTo', 'border', 'target'],
+            ['mode', 'applyTo', 'border', 'nodeId'],
+            ['mode', 'edges', 'target'],
+            ['mode', 'edges', 'nodeId'],
+          ],
         },
         {
           operationId: 'doc.tables.setTableOptions',

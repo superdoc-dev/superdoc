@@ -205,6 +205,18 @@ export interface EditorEventMap extends DefaultEventMap {
   /** Called when a document is closed via editor.close() */
   documentClose: [{ editor: Editor }];
 
+  /**
+   * Called when the underlying document file has been replaced via `Editor.replaceFile()`.
+   *
+   * In collaboration mode, `replaceFile` writes the new converter snapshot directly
+   * to the Y.Doc parts map without going through the local `mutateParts` pipeline,
+   * so no `partChanged` event fires on the importing client. Other clients receive
+   * the parts via the consumer → `mutateParts` → `partChanged` and refresh
+   * automatically. The importer relies on this signal to refresh derived state
+   * (such as the header/footer registry) that was bound to the previous document.
+   */
+  documentReplaced: [{ editor: Editor }];
+
   /** Called when page styles are updated */
   pageStyleUpdate: [{ pageMargins?: Record<string, unknown>; pageStyles: Record<string, unknown> }];
 

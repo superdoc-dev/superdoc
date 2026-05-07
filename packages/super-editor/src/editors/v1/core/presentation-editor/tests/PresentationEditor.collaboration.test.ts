@@ -1,50 +1,58 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { PresentationEditor } from '../PresentationEditor.js';
+import { Editor } from '../../Editor';
 import type { Awareness } from 'y-protocols/awareness';
 
 // Create hoisted mocks
-const { mockEditorConverterStore, mockAbsolutePositionToRelativePosition, mockRelativePositionToAbsolutePosition } =
-  vi.hoisted(() => {
-    const createDefaultConverter = () => ({
-      headers: {
-        'rId-header-default': { type: 'doc', content: [{ type: 'paragraph' }] },
-      },
-      footers: {
-        'rId-footer-default': { type: 'doc', content: [{ type: 'paragraph' }] },
-      },
-      headerIds: {
-        default: 'rId-header-default',
-        first: null,
-        even: null,
-        odd: null,
-        ids: ['rId-header-default'],
-      },
-      footerIds: {
-        default: 'rId-footer-default',
-        first: null,
-        even: null,
-        odd: null,
-        ids: ['rId-footer-default'],
-      },
-    });
-
-    const converterStore = {
-      current: createDefaultConverter() as ReturnType<typeof createDefaultConverter> & Record<string, unknown>,
-      mediaFiles: {} as Record<string, string>,
-    };
-
-    return {
-      mockEditorConverterStore: converterStore,
-      mockAbsolutePositionToRelativePosition: vi.fn((pos) => ({ type: 'relative', pos })),
-      mockRelativePositionToAbsolutePosition: vi.fn((relPos) => {
-        if (relPos == null) return null;
-        if (typeof relPos === 'object' && 'pos' in relPos) {
-          return (relPos as { pos: number }).pos;
-        }
-        return null;
-      }),
-    };
+const {
+  mockEditorConverterStore,
+  mockAbsolutePositionToRelativePosition,
+  mockRelativePositionToAbsolutePosition,
+  mockHeaderFooterRefresh,
+  mockHeaderFooterInvalidateAll,
+} = vi.hoisted(() => {
+  const createDefaultConverter = () => ({
+    headers: {
+      'rId-header-default': { type: 'doc', content: [{ type: 'paragraph' }] },
+    },
+    footers: {
+      'rId-footer-default': { type: 'doc', content: [{ type: 'paragraph' }] },
+    },
+    headerIds: {
+      default: 'rId-header-default',
+      first: null,
+      even: null,
+      odd: null,
+      ids: ['rId-header-default'],
+    },
+    footerIds: {
+      default: 'rId-footer-default',
+      first: null,
+      even: null,
+      odd: null,
+      ids: ['rId-footer-default'],
+    },
   });
+
+  const converterStore = {
+    current: createDefaultConverter() as ReturnType<typeof createDefaultConverter> & Record<string, unknown>,
+    mediaFiles: {} as Record<string, string>,
+  };
+
+  return {
+    mockEditorConverterStore: converterStore,
+    mockAbsolutePositionToRelativePosition: vi.fn((pos) => ({ type: 'relative', pos })),
+    mockRelativePositionToAbsolutePosition: vi.fn((relPos) => {
+      if (relPos == null) return null;
+      if (typeof relPos === 'object' && 'pos' in relPos) {
+        return (relPos as { pos: number }).pos;
+      }
+      return null;
+    }),
+    mockHeaderFooterRefresh: vi.fn(),
+    mockHeaderFooterInvalidateAll: vi.fn(),
+  };
+});
 
 // Mock Editor class
 vi.mock('../../Editor', () => ({
@@ -145,6 +153,7 @@ vi.mock('../../header-footer/HeaderFooterRegistry', () => ({
     createEditor: vi.fn(),
     destroyEditor: vi.fn(),
     getEditor: vi.fn(),
+    refresh: mockHeaderFooterRefresh,
     on: vi.fn(),
     off: vi.fn(),
     destroy: vi.fn(),
@@ -153,6 +162,7 @@ vi.mock('../../header-footer/HeaderFooterRegistry', () => ({
     clear: vi.fn(),
     getBatch: vi.fn(() => []),
     getBlocksByRId: vi.fn(() => new Map()),
+    invalidateAll: mockHeaderFooterInvalidateAll,
     setTrackedChangesRenderConfig: vi.fn(),
   })),
 }));
@@ -230,6 +240,63 @@ describe('PresentationEditor - Collaboration Cursor Throttle', () => {
     }
     document.body.removeChild(container);
     vi.clearAllMocks();
+  });
+
+  it('refreshes header/footer caches when collaboration becomes ready', () => {
+    editor = new PresentationEditor({
+      element: container,
+      collaborationProvider: {
+        awareness: mockAwareness,
+      },
+    });
+
+    const editorCtorMock = (
+      Editor as unknown as {
+        mock: { results: Array<{ value: { on: ReturnType<typeof vi.fn> } }> };
+      }
+    ).mock;
+    const mockEditorInstance = editorCtorMock.results[editorCtorMock.results.length - 1]?.value;
+    const onCalls = mockEditorInstance?.on as ReturnType<typeof vi.fn>;
+    const collabReadyHandler = onCalls?.mock?.calls?.find((call) => call[0] === 'collaborationReady')?.[1];
+
+    expect(typeof collabReadyHandler).toBe('function');
+    collabReadyHandler?.();
+
+    expect(mockHeaderFooterRefresh).toHaveBeenCalled();
+    expect(mockHeaderFooterInvalidateAll).toHaveBeenCalled();
+  });
+
+  // Regression: SD-2643 — when the importer tab calls Editor.replaceFile(), parts
+  // are seeded straight into the Y.Doc without firing partChanged on the local
+  // editor. PresentationEditor must rebuild header/footer state on the
+  // documentReplaced signal so the new headers show without waiting for the
+  // collaborator to make an edit.
+  it('refreshes header/footer caches when the document is replaced', () => {
+    editor = new PresentationEditor({
+      element: container,
+      collaborationProvider: {
+        awareness: mockAwareness,
+      },
+    });
+
+    const editorCtorMock = (
+      Editor as unknown as {
+        mock: { results: Array<{ value: { on: ReturnType<typeof vi.fn> } }> };
+      }
+    ).mock;
+    const mockEditorInstance = editorCtorMock.results[editorCtorMock.results.length - 1]?.value;
+    const onCalls = mockEditorInstance?.on as ReturnType<typeof vi.fn>;
+    const documentReplacedHandler = onCalls?.mock?.calls?.find((call) => call[0] === 'documentReplaced')?.[1];
+
+    expect(typeof documentReplacedHandler).toBe('function');
+
+    mockHeaderFooterRefresh.mockClear();
+    mockHeaderFooterInvalidateAll.mockClear();
+
+    documentReplacedHandler?.();
+
+    expect(mockHeaderFooterRefresh).toHaveBeenCalled();
+    expect(mockHeaderFooterInvalidateAll).toHaveBeenCalled();
   });
 
   describe('Race condition fix tests', () => {

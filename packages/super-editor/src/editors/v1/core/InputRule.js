@@ -32,17 +32,6 @@ import {
 } from './helpers/superdocClipboardSlice.js';
 import { annotateFragmentDomWithClipboardData } from './helpers/clipboardFragmentAnnotate.js';
 
-/**
- * True when a node is a Heading[1-9] paragraph. Used to decide whether a
- * pasted paragraph should keep its wrapper (so the heading styleId survives
- * the merge into the cursor's surroundings).
- */
-function isHeadingParagraph(node) {
-  if (!node || node.type?.name !== 'paragraph') return false;
-  const styleId = node.attrs?.paragraphProperties?.styleId;
-  return typeof styleId === 'string' && /^Heading[1-9]$/i.test(styleId);
-}
-
 /** Heuristic: clipboard HTML from SuperDoc copy (slice attrs, list/section metadata). */
 export function isSuperdocOriginClipboardHtml(html) {
   if (!html || typeof html !== 'string') return false;
@@ -484,10 +473,8 @@ export function handleHtmlPaste(html, editor, source) {
   // Check if the pasted content is a single paragraph
   const isSingleParagraph = doc.childCount === 1 && doc.firstChild.type.name === 'paragraph';
 
-  // Heading paragraphs (Heading1..Heading9) must keep their paragraph
-  // wrapper so the styleId survives — otherwise pasting a heading into a
-  // body paragraph silently strips the heading style and the TOC misses
-  // the new entry on F9.
+  // Heading paragraphs must keep their wrapper so the styleId survives —
+  // unwrapping silently strips the heading style and TOC rebuilds miss it.
   const sourceStyleId = isSingleParagraph ? (doc.firstChild.attrs?.paragraphProperties?.styleId ?? null) : null;
   const sourceIsHeading = typeof sourceStyleId === 'string' && /^Heading[1-9]$/i.test(sourceStyleId);
 
@@ -893,22 +880,7 @@ function handleSuperdocSlicePaste(sliceData, editor, view, embeddedBodySectPr = 
 
   const stripped = stripSuperdocSliceBlockIdentities(slice.content);
   const cleanContent = remapPastedListNumberingInFragment(stripped, editor);
-
-  // When the copied slice carries a Heading[1-9] paragraph, the user expects
-  // the heading to land as a discrete heading paragraph (matches Word's
-  // "Update field" behavior on the rebuilt TOC). PM merges open-boundary
-  // slices into the cursor's paragraph and drops the heading styleId — even
-  // when the same logical content was selected. Force closed boundaries
-  // when the leading or trailing paragraph is a heading so the wrapper
-  // survives the merge.
-  let openStart = slice.openStart;
-  let openEnd = slice.openEnd;
-  const firstChild = cleanContent.firstChild;
-  const lastChild = cleanContent.lastChild;
-  if (firstChild && isHeadingParagraph(firstChild)) openStart = 0;
-  if (lastChild && isHeadingParagraph(lastChild)) openEnd = 0;
-
-  const cleanSlice = new Slice(cleanContent, openStart, openEnd);
+  const cleanSlice = new Slice(cleanContent, slice.openStart, slice.openEnd);
 
   const { dispatch, state } = view;
   if (!dispatch) return false;

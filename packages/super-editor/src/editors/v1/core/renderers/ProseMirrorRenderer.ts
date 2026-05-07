@@ -884,14 +884,6 @@ export class ProseMirrorRenderer implements EditorRenderer {
         let sliceJson = '';
         if (from !== to) {
           const rawSlice = this.view.state.doc.slice(from, to);
-          // PM produces an inline-only slice (no paragraph wrapper) when the
-          // selection covers the full content of a paragraph at exact open
-          // boundaries. Without the wrapper the paragraph's styleId — most
-          // critically Heading[1-9] — is lost on paste, so the receiving
-          // editor can't tell that the source was a heading and the TOC
-          // misses the new entry. When the selection is entirely within a
-          // single heading paragraph, re-wrap the slice's content in that
-          // paragraph node and emit it with closed boundaries.
           const slice = wrapHeadingSelectionAsParagraph(rawSlice, this.view.state);
           sliceJson = JSON.stringify(slice.toJSON());
           clipboardData.setData('application/x-superdoc-slice', sliceJson);

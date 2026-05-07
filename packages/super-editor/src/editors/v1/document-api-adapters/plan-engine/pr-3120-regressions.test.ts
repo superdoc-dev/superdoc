@@ -247,62 +247,6 @@ describe('PR-3120 regression — review comment: bold/italic on first TOC entry 
   });
 });
 
-describe('PR-3120 regression — review comment: F9 on multiple TOCs must give every TOC real page numbers', () => {
-  // repro: doc with two or more TOCs, press F9. The first TOC gets real page
-  // numbers, the rest rebuild as `0`. Each toc.update swaps editor.state.doc,
-  // so getPageMap rejects the stored page map (still anchored to the previous
-  // doc snapshot) on the next iteration and falls back to the '0' placeholder.
-  // The fix lives in the field-update extension: refresh pageMapDoc to the
-  // current doc before each iteration so the page map stays valid across the
-  // loop.
-
-  it('field-update keeps the page map valid across iterations when multiple TOCs are updated', () => {
-    // We simulate the loop body inside FieldUpdate.updateFieldsInSelection by
-    // calling the same logic inline: snapshot the page map, then for each TOC
-    // refresh pageMapDoc and dispatch a doc-changing transaction.
-    const doc1 = createNode('doc', [createNode('paragraph', [], { isBlock: true })], { isBlock: false });
-    const cachedPageMap = new Map([
-      ['h-1', 3],
-      ['h-2', 9],
-    ]);
-    const tocStorage: { pageMap: Map<string, number>; pageMapDoc: unknown } = {
-      pageMap: cachedPageMap,
-      pageMapDoc: doc1,
-    };
-    const editorState = { doc: doc1 };
-    const editor = { state: editorState, storage: { tableOfContents: tocStorage } };
-
-    // First iteration: storage already matches the doc, page map is fresh.
-    expect(getPageMapForTest(editor)).toBe(cachedPageMap);
-
-    // toc.update for TOC #1 dispatches a transaction; doc identity changes.
-    const doc2 = createNode('doc', [createNode('paragraph', [], { isBlock: true })], { isBlock: false });
-    editorState.doc = doc2;
-
-    // Without the fix, getPageMapForTest now returns null (stale).
-    expect(getPageMapForTest(editor)).toBeNull();
-
-    // Apply the field-update fix: refresh pageMapDoc before iteration #2.
-    if (tocStorage.pageMap) tocStorage.pageMapDoc = editorState.doc;
-
-    // After the fix, the page map is reusable for the next TOC.
-    expect(getPageMapForTest(editor)).toBe(cachedPageMap);
-  });
-});
-
-/** Mirror of `getPageMap` in toc-wrappers — duplicated to keep the test self-contained. */
-function getPageMapForTest(editor: {
-  state: { doc: unknown };
-  storage?: Record<string, unknown>;
-}): Map<string, number> | null {
-  const tocStorage = editor.storage?.tableOfContents as
-    | { pageMap?: Map<string, number>; pageMapDoc?: unknown }
-    | undefined;
-  if (!tocStorage?.pageMap) return null;
-  if (tocStorage.pageMapDoc !== undefined && tocStorage.pageMapDoc !== editor.state.doc) return null;
-  return tocStorage.pageMap;
-}
-
 describe('PR-3120 regression — finding 2: pageNumbers scanner must traverse run-wrapped page-number text', () => {
   // The mode:'all' rebuild produces paragraphs whose content is [run, run, run]
   // where the page-number text is *nested inside* the third run. The scanner

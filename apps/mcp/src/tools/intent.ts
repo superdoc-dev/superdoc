@@ -50,15 +50,11 @@ export function jsonSchemaPropertyToZod(prop: Record<string, unknown>): z.ZodTyp
     }
   }
 
-  // Complex schemas (oneOf, anyOf, allOf):
-  // When every variant is `type: "object"`, emit z.looseObject({}) so the
-  // JSON Schema carries `type: "object"`. z.unknown() drops the type and
-  // some MCP clients (notably the Claude Code harness) then treat the
-  // value as a string, breaking object payloads.
-  // When any variant is non-object (e.g. object|array, boolean|object),
-  // fall back to z.unknown(). z.looseObject({}) would reject the non-object
-  // variants at the zod layer before DocumentApi sees them.
-  // DocumentApi validates the actual payload at dispatch time.
+  // AIDEV-NOTE: oneOf/anyOf/allOf must gate on "every variant is type:object".
+  // looseObject({}) emits type:"object" (so MCP clients send objects, not strings)
+  // but rejects non-object payloads at the zod layer. For mixed unions like
+  // superdoc_edit.content (object|array), fall back to z.unknown() so the array
+  // form survives. DocumentApi validates the actual shape at dispatch time.
   const variants = (prop.oneOf ?? prop.anyOf ?? prop.allOf) as Array<Record<string, unknown>> | undefined;
   if (variants) {
     const allObjectVariants = variants.every((v) => v?.type === 'object');

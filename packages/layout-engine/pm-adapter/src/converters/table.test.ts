@@ -2312,4 +2312,53 @@ describe('tableCellNodeToBlock — SD-2516: documentPartObject children', () => 
     expect(cellBlocks[0].kind).toBe('paragraph');
     expect((cellBlocks[0] as ParagraphBlock).runs[0].text).toBe('Inner SCB');
   });
+
+  it('flattens a structuredContentBlock wrapping a documentPartObject inside a table cell', () => {
+    const node: PMNode = {
+      type: 'table',
+      content: [
+        {
+          type: 'tableRow',
+          content: [
+            {
+              type: 'tableCell',
+              content: [
+                {
+                  type: 'structuredContentBlock',
+                  attrs: {},
+                  content: [
+                    {
+                      type: 'documentPartObject',
+                      attrs: {},
+                      content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Inner DPO' }] }],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = tableNodeToBlock(
+      node,
+      mockBlockIdGenerator,
+      mockPositionMap,
+      'Arial',
+      16,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      mockParagraphConverter,
+    ) as TableBlock;
+
+    expect(result).toBeDefined();
+    const cell = result.rows[0].cells[0];
+    const cellBlocks = cell.blocks ?? (cell.paragraph ? [cell.paragraph] : []);
+    expect(cellBlocks).toHaveLength(1);
+    expect(cellBlocks[0].kind).toBe('paragraph');
+    expect((cellBlocks[0] as ParagraphBlock).runs[0].text).toBe('Inner DPO');
+  });
 });

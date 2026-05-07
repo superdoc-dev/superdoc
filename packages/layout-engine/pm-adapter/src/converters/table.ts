@@ -440,45 +440,7 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
 
     if (childNode.type === 'structuredContentBlock' && Array.isArray(childNode.content)) {
       const structuredContentMetadata = resolveNodeSdtMetadata(childNode, 'structuredContentBlock');
-      for (const nestedNode of childNode.content) {
-        if (nestedNode.type === 'paragraph') {
-          if (!paragraphToFlowBlocks) continue;
-          const paragraphBlocks = paragraphToFlowBlocks({
-            para: nestedNode,
-            nextBlockId: context.nextBlockId,
-            positions: context.positions,
-            storyKey: context.storyKey,
-            trackedChangesConfig: context.trackedChangesConfig,
-            bookmarks: context.bookmarks,
-            hyperlinkConfig: context.hyperlinkConfig,
-            themeColors: context.themeColors,
-            converterContext: cellConverterContext,
-            converters: context.converters,
-            enableComments: context.enableComments,
-          });
-          appendParagraphBlocks(paragraphBlocks, structuredContentMetadata);
-          continue;
-        }
-        if (nestedNode.type === 'table' && tableNodeToBlock) {
-          const tableBlock = tableNodeToBlock(nestedNode, {
-            nextBlockId: context.nextBlockId,
-            positions: context.positions,
-            storyKey: context.storyKey,
-            trackedChangesConfig: context.trackedChangesConfig,
-            bookmarks: context.bookmarks,
-            hyperlinkConfig: context.hyperlinkConfig,
-            themeColors: context.themeColors,
-            converterContext: context.converterContext,
-            converters: context.converters,
-            enableComments: context.enableComments,
-          });
-          if (tableBlock && tableBlock.kind === 'table') {
-            applySdtMetadataToTableBlock(tableBlock, structuredContentMetadata);
-            blocks.push(tableBlock);
-          }
-          continue;
-        }
-      }
+      flattenSdtWrappersIntoCell(childNode, structuredContentMetadata);
       continue;
     }
 

@@ -47,24 +47,27 @@ vi.mock('prosemirror-tables', () => ({
   })),
 }));
 
+import { selectedRect as selectedRectMock } from 'prosemirror-tables';
+import { undoDepth, redoDepth } from 'prosemirror-history';
+import { yUndoPluginKey } from 'y-prosemirror';
+
+import { isList } from '@core/commands/list-helpers';
+import { isCellSelection as isCellSelectionMock } from '@extensions/table/tableHelpers/isCellSelection.js';
+import {
+  collectTrackedChanges,
+  collectTrackedChangesForContext,
+} from '@extensions/track-changes/permission-helpers.js';
+
 import {
   getEditorContext,
   getPropsByItemId,
   __getStructureFromResolvedPosForTest,
   __isCollaborationEnabledForTest,
   __getCellSelectionInfoForTest,
+  __resolveProofingContextForTest,
 } from '../utils.js';
-import { isList } from '@core/commands/list-helpers';
 import { readFromClipboard } from '../../../core/utilities/clipboardUtils.js';
 import { selectionHasNodeOrMark } from '../../cursor-helpers.js';
-import { undoDepth, redoDepth } from 'prosemirror-history';
-import { yUndoPluginKey } from 'y-prosemirror';
-import { isCellSelection as isCellSelectionMock } from '@extensions/table/tableHelpers/isCellSelection.js';
-import { selectedRect as selectedRectMock } from 'prosemirror-tables';
-import {
-  collectTrackedChanges,
-  collectTrackedChangesForContext,
-} from '@extensions/track-changes/permission-helpers.js';
 
 // Get the mocked functions
 const mockReadFromClipboard = vi.mocked(readFromClipboard);
@@ -129,6 +132,7 @@ describe('utils.js', () => {
         // Document structure
         isInTable: false,
         isInList: false,
+        isOnListMarker: false,
         isInSectionNode: false,
         isCellSelection: false,
         tableSelectionKind: null,
@@ -747,6 +751,140 @@ describe('utils.js', () => {
       expect(__isCollaborationEnabledForTest({ options: { collaborationProvider: {} } })).toBe(false);
       expect(__isCollaborationEnabledForTest({ options: { ydoc: {} } })).toBe(false);
       expect(__isCollaborationEnabledForTest({ options: {} })).toBe(false);
+    });
+  });
+
+  // SD-2875: spelling suggestions vanished from the right-click menu in 1.29
+  // because <ContextMenu> moved from the inner Editor to the PresentationEditor
+  // wrapper, which doesn't carry _presentationEditor.
+  describe('resolveProofingContext (SD-2875 regression)', () => {
+    const buildIssue = () => ({
+      pmFrom: 10,
+      pmTo: 13,
+      word: 'teh',
+      replacements: ['the', 'tech', 'meh'],
+    });
+
+    const buildManager = (issue) => {
+      const ignoreWord = vi.fn();
+      return {
+        manager: {
+          getIssueAtPosition: vi.fn(() => issue),
+          config: { maxSuggestions: 5, allowIgnoreWord: true },
+          ignoreWord,
+        },
+        ignoreWord,
+      };
+    };
+
+    it('reads the manager from the inner editor back-reference (1.28 wiring)', () => {
+      const issue = buildIssue();
+      const { manager } = buildManager(issue);
+      const innerEditor = { _presentationEditor: { proofingManager: manager } };
+
+      const ctx = __resolveProofingContextForTest(innerEditor, 11);
+
+      expect(manager.getIssueAtPosition).toHaveBeenCalledWith(11);
+      expect(ctx).toMatchObject({
+        issue,
+        word: 'teh',
+        canIgnore: true,
+        suggestions: ['the', 'tech', 'meh'],
+      });
+    });
+
+    it('reads the manager from the PresentationEditor wrapper directly (1.29+ wiring)', () => {
+      const issue = buildIssue();
+      const { manager } = buildManager(issue);
+      // The wrapper exposes proofingManager as its own property and has no
+      // _presentationEditor / presentationEditor back-reference. Before the
+      // SD-2875 fix this path returned null and the menu silently dropped
+      // every spelling suggestion.
+      const wrapper = { proofingManager: manager };
+
+      const ctx = __resolveProofingContextForTest(wrapper, 11);
+
+      expect(ctx).not.toBeNull();
+      expect(ctx.issue).toBe(issue);
+    });
+
+    it('reads the manager from a story editor (presentationEditor field)', () => {
+      const issue = buildIssue();
+      const { manager } = buildManager(issue);
+      const storyEditor = { presentationEditor: { proofingManager: manager } };
+
+      const ctx = __resolveProofingContextForTest(storyEditor, 11);
+
+      expect(ctx).not.toBeNull();
+      expect(ctx.issue).toBe(issue);
+    });
+
+    it('returns null when no editor handle exposes a proofing manager', () => {
+      const plainEditor = { view: {} };
+      expect(__resolveProofingContextForTest(plainEditor, 11)).toBeNull();
+    });
+
+    it('returns null when the position is invalid', () => {
+      const { manager } = buildManager(buildIssue());
+      const wrapper = { proofingManager: manager };
+
+      expect(__resolveProofingContextForTest(wrapper, null)).toBeNull();
+      expect(__resolveProofingContextForTest(wrapper, NaN)).toBeNull();
+      expect(manager.getIssueAtPosition).not.toHaveBeenCalled();
+    });
+
+    it('returns null when the manager has no issue at the position', () => {
+      const manager = {
+        getIssueAtPosition: vi.fn(() => null),
+        config: { maxSuggestions: 5, allowIgnoreWord: true },
+        ignoreWord: vi.fn(),
+      };
+      const wrapper = { proofingManager: manager };
+
+      expect(__resolveProofingContextForTest(wrapper, 11)).toBeNull();
+    });
+
+    it('clamps suggestions to maxSuggestions and routes ignoreWord through the manager', () => {
+      const issue = { ...buildIssue(), replacements: ['a', 'b', 'c', 'd', 'e', 'f'] };
+      const { manager, ignoreWord } = buildManager(issue);
+      manager.config = { maxSuggestions: 3, allowIgnoreWord: true };
+      const wrapper = { proofingManager: manager };
+
+      const ctx = __resolveProofingContextForTest(wrapper, 11);
+
+      expect(ctx.suggestions).toEqual(['a', 'b', 'c']);
+      ctx.ignoreWord('teh');
+      expect(ignoreWord).toHaveBeenCalledWith('teh');
+    });
+
+    it('getEditorContext propagates proofingContext when editor is the PresentationEditor wrapper', async () => {
+      const issue = buildIssue();
+      const { manager } = buildManager(issue);
+
+      // Simulate the 1.29+ wiring: the editor passed to <ContextMenu> is the
+      // PresentationEditor wrapper. It exposes view/state/posAtCoords like
+      // the inner Editor and exposes proofingManager directly.
+      const wrapperEditor = {
+        ...mockEditor,
+        proofingManager: manager,
+      };
+      // No back-references — pre-fix this path produced proofingContext: null.
+      delete wrapperEditor._presentationEditor;
+      delete wrapperEditor.presentationEditor;
+
+      wrapperEditor.view.posAtCoords.mockReturnValue({ pos: 11 });
+      wrapperEditor.view.state.doc.nodeAt.mockReturnValue({ type: { name: 'text' } });
+      wrapperEditor.view.state.doc.resolve.mockReturnValue({
+        marks: vi.fn(() => []),
+        nodeBefore: null,
+        nodeAfter: null,
+      });
+
+      const context = await getEditorContext(wrapperEditor, { clientX: 50, clientY: 60 });
+
+      expect(context.proofingContext).not.toBeNull();
+      expect(context.proofingContext.word).toBe('teh');
+      expect(context.proofingContext.suggestions).toEqual(['the', 'tech', 'meh']);
     });
   });
 });

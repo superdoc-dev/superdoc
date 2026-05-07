@@ -33,7 +33,6 @@ import { Mark } from '@core/Mark.js';
 import ContextMenu from './components/context-menu/ContextMenu.vue';
 /** @deprecated Use ContextMenu instead */
 const SlashMenu = ContextMenu;
-import BasicUpload from '@superdoc/common/components/BasicUpload.vue';
 
 import SuperEditor from './components/SuperEditor.vue';
 import Toolbar from './components/toolbar/Toolbar.vue';
@@ -100,8 +99,6 @@ export {
   SuperEditor,
   /** @internal */
   SuperInput,
-  /** @internal */
-  BasicUpload,
   Toolbar,
   AIWriter,
   ContextMenu,

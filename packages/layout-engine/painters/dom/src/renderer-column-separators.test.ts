@@ -1,13 +1,28 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { createDomPainter } from './index.js';
-import type { ColumnRegion, Layout, Page } from '@superdoc/contracts';
+import { createTestPainter as createDomPainter } from './_test-utils.js';
+import type { ColumnRegion, Fragment, Layout, Page } from '@superdoc/contracts';
 
 // These tests pin down DomPainter's column-separator rendering:
 //   - the fallback path (page.columns only, no mid-page regions)
 //   - the region-aware path (page.columnRegions supersedes page.columns)
-//   - all five early-return guards inside renderColumnSeparators
+//   - the early-return guards inside renderColumnSeparators
+//   - the content-presence gate: per Word's behavior, a separator is
+//     suppressed when the column to its right is empty within the region.
 // The layout-engine tests cover which data reaches the painter; these tests
 // cover what the painter does with it.
+
+// Minimal fragment factory for separator-presence assertions. We only need x
+// (column placement) and y (region membership). The other fields are required
+// by the contract but not read by renderColumnSeparators.
+const fragAt = (x: number, y: number = 100): Fragment => ({
+  kind: 'para',
+  blockId: `frag-${x}-${y}`,
+  fromLine: 0,
+  toLine: 1,
+  x,
+  y,
+  width: 100,
+});
 
 const buildPage = (overrides: Partial<Page> = {}): Page => ({
   number: 1,
@@ -50,7 +65,12 @@ describe('DomPainter renderColumnSeparators', () => {
 
   describe('fallback path (page.columns only)', () => {
     it('draws a single separator centered in the gap for 2 equal columns', () => {
-      const page = buildPage({ columns: { count: 2, gap: 48, withSeparator: true } });
+      // 2 cols at x=96 and x=384 (96+288). Fragments in both → separator
+      // gate is satisfied; the test pins down geometry, not the gate.
+      const page = buildPage({
+        columns: { count: 2, gap: 48, withSeparator: true },
+        fragments: [fragAt(96), fragAt(432)],
+      });
       paintOnce(buildLayout(page), mount);
 
       const seps = querySeparators(mount);
@@ -64,7 +84,10 @@ describe('DomPainter renderColumnSeparators', () => {
     });
 
     it('draws count-1 separators for 3 equal columns', () => {
-      const page = buildPage({ columns: { count: 3, gap: 48, withSeparator: true } });
+      const page = buildPage({
+        columns: { count: 3, gap: 48, withSeparator: true },
+        fragments: [fragAt(96), fragAt(320), fragAt(544)],
+      });
       paintOnce(buildLayout(page), mount);
 
       const seps = querySeparators(mount);
@@ -77,6 +100,7 @@ describe('DomPainter renderColumnSeparators', () => {
     it('uses explicit column widths when drawing separators for page.columns', () => {
       const page = buildPage({
         columns: { count: 2, gap: 48, widths: [200, 952], equalWidth: false, withSeparator: true },
+        fragments: [fragAt(96), fragAt(244)],
       });
       paintOnce(buildLayout(page), mount);
 
@@ -146,6 +170,9 @@ describe('DomPainter renderColumnSeparators', () => {
       const page = buildPage({
         columns: regions[0].columns,
         columnRegions: regions,
+        // Region 0 has fragments in both 2-col positions; Region 1 has one
+        // in each of three columns.
+        fragments: [fragAt(96, 200), fragAt(432, 200), fragAt(96, 500), fragAt(320, 500), fragAt(544, 500)],
       });
       paintOnce(buildLayout(page), mount);
 
@@ -173,7 +200,17 @@ describe('DomPainter renderColumnSeparators', () => {
         { yStart: 400, yEnd: 700, columns: { count: 2, gap: 48, withSeparator: false } },
         { yStart: 700, yEnd: 960, columns: { count: 2, gap: 48, withSeparator: true } },
       ];
-      const page = buildPage({ columnRegions: regions });
+      const page = buildPage({
+        columnRegions: regions,
+        fragments: [
+          fragAt(96, 200),
+          fragAt(432, 200),
+          fragAt(96, 500),
+          fragAt(432, 500),
+          fragAt(96, 800),
+          fragAt(432, 800),
+        ],
+      });
       paintOnce(buildLayout(page), mount);
 
       const seps = querySeparators(mount);
@@ -188,7 +225,10 @@ describe('DomPainter renderColumnSeparators', () => {
         { yStart: 96, yEnd: 400, columns: { count: 1, gap: 0, withSeparator: true } },
         { yStart: 400, yEnd: 700, columns: { count: 2, gap: 48, withSeparator: true } },
       ];
-      const page = buildPage({ columnRegions: regions });
+      const page = buildPage({
+        columnRegions: regions,
+        fragments: [fragAt(96, 500), fragAt(432, 500)],
+      });
       paintOnce(buildLayout(page), mount);
 
       const seps = querySeparators(mount);
@@ -201,7 +241,10 @@ describe('DomPainter renderColumnSeparators', () => {
         { yStart: 96, yEnd: 96, columns: { count: 2, gap: 48, withSeparator: true } },
         { yStart: 96, yEnd: 500, columns: { count: 2, gap: 48, withSeparator: true } },
       ];
-      const page = buildPage({ columnRegions: regions });
+      const page = buildPage({
+        columnRegions: regions,
+        fragments: [fragAt(96, 200), fragAt(432, 200)],
+      });
       paintOnce(buildLayout(page), mount);
 
       const seps = querySeparators(mount);
@@ -216,6 +259,7 @@ describe('DomPainter renderColumnSeparators', () => {
       const page = buildPage({
         columns: { count: 2, gap: 48, withSeparator: false },
         columnRegions: [{ yStart: 96, yEnd: 960, columns: { count: 2, gap: 48, withSeparator: true } }],
+        fragments: [fragAt(96), fragAt(432)],
       });
       paintOnce(buildLayout(page), mount);
 
@@ -234,6 +278,7 @@ describe('DomPainter renderColumnSeparators', () => {
             columns: { count: 2, gap: 48, widths: [200, 952], equalWidth: false, withSeparator: true },
           },
         ],
+        fragments: [fragAt(96, 200), fragAt(244, 200)],
       });
       paintOnce(buildLayout(page), mount);
 
@@ -242,6 +287,63 @@ describe('DomPainter renderColumnSeparators', () => {
       expect(seps[0].style.top).toBe('96px');
       expect(seps[0].style.height).toBe('404px');
       expect(seps[0].style.left).toBe('220px');
+    });
+  });
+
+  // The content-presence gate matches Word: a column separator is suppressed
+  // when the column to its right has no content within the region. This is
+  // observable in `multi-column-sections.docx` page 2 — Word draws no line
+  // because the section's content fits entirely in column 0.
+  describe('content-presence gate', () => {
+    it('suppresses the separator when no fragment sits past the column boundary', () => {
+      const page = buildPage({
+        columns: { count: 2, gap: 48, withSeparator: true },
+        // Only column 0 has content (x=96 < separatorX=408). Word draws nothing.
+        fragments: [fragAt(96), fragAt(96, 300)],
+      });
+      paintOnce(buildLayout(page), mount);
+
+      expect(querySeparators(mount)).toHaveLength(0);
+    });
+
+    it('draws only the separator whose right neighbor has content (3-col, col 3 empty)', () => {
+      // 3 cols at x=96, x=320, x=544. Separators at 296 and 520.
+      // Cols 1 and 2 have content; col 3 is empty. Only the 296 separator
+      // draws; the 520 separator (col 2 → col 3 boundary) is suppressed.
+      const page = buildPage({
+        columns: { count: 3, gap: 48, withSeparator: true },
+        fragments: [fragAt(96), fragAt(320)],
+      });
+      paintOnce(buildLayout(page), mount);
+
+      const seps = querySeparators(mount);
+      expect(seps).toHaveLength(1);
+      expect(seps[0].style.left).toBe('296px');
+    });
+
+    it('checks fragment presence within the region only, not the whole page', () => {
+      // Region 0 (2-col): only col 0 has content → no separator.
+      // Region 1 (2-col): both cols have content → separator drawn.
+      // Without the y-bounded gate, region 0's separator would draw because
+      // region 1's col-1 fragment exists somewhere on the page.
+      const regions: ColumnRegion[] = [
+        { yStart: 96, yEnd: 400, columns: { count: 2, gap: 48, withSeparator: true } },
+        { yStart: 400, yEnd: 700, columns: { count: 2, gap: 48, withSeparator: true } },
+      ];
+      const page = buildPage({
+        columnRegions: regions,
+        fragments: [
+          fragAt(96, 200), // region 0, col 0
+          fragAt(96, 500), // region 1, col 0
+          fragAt(432, 500), // region 1, col 1
+        ],
+      });
+      paintOnce(buildLayout(page), mount);
+
+      const seps = querySeparators(mount);
+      expect(seps).toHaveLength(1);
+      expect(seps[0].style.top).toBe('400px');
+      expect(seps[0].style.height).toBe('300px');
     });
   });
 });

@@ -515,3 +515,56 @@ button {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* Selection popover (bubble menu over the user's selection) */
+
+.selection-popover {
+  z-index: 100;
+  display: flex;
+  gap: 2px;
+  padding: 4px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+
+.selection-popover .tb-btn {
+  padding: 4px 9px;
+  font-size: 12px;
+}
+
+/* Right-click context menu */
+
+.context-menu {
+  z-index: 100;
+  min-width: 180px;
+  padding: 4px 0;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+
+.context-menu-item {
+  display: block;
+  width: 100%;
+  padding: 6px 12px;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.context-menu-item:hover:not(:disabled) {
+  background: var(--bg-muted);
+  color: var(--accent);
+}
+
+.context-menu-separator {
+  height: 1px;
+  margin: 4px 0;
+  background: var(--border);
+}

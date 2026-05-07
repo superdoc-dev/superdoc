@@ -69,24 +69,73 @@ import { getFormattingStateAtPos } from '../../core/helpers/getMarksFromSelectio
  * corresponding ProseMirror document position.  Needed because inline
  * node boundaries (run open/close) create gaps in the position space
  * that `textBetween` hides.
+ *
+ * Must mirror `textBetweenWithTabs`'s character accounting exactly — the diff
+ * loop above computes prefix/suffix offsets against that string, then asks
+ * this function to translate them back into PM positions. Any disagreement
+ * (e.g. an atom that contributed a char on one side but not the other) maps
+ * the edit to the wrong place. We count:
+ *   - text nodes by char length (the obvious case),
+ *   - `tab` nodes as 1 char (textBetweenWithTabs emits '\t'),
+ *   - inline leaves declaring `leafText` by `leafText(node).length`
+ *     (e.g. noBreakHyphen → '‑', length 1).
+ * Everything else contributes 0 — matching the executor's call site, which
+ * passes `leafFallback=''` so unknown leaves don't widen `originalText`.
+ *
+ * Atoms cannot be sliced mid-glyph, so when an offset lands strictly past an
+ * atom's first char we resolve to the position immediately after the atom.
  */
-function charOffsetToDocPos(doc: ProseMirrorNode, rangeFrom: number, rangeTo: number, charOffset: number): number {
+export function charOffsetToDocPos(
+  doc: ProseMirrorNode,
+  rangeFrom: number,
+  rangeTo: number,
+  charOffset: number,
+): number {
   let count = 0;
   let foundPos = -1;
 
+  const resolveAtom = (pos: number, nodeSize: number, len: number) => {
+    if (count + len < charOffset) return false;
+    foundPos = charOffset === count ? pos : pos + nodeSize;
+    return true;
+  };
+
   doc.nodesBetween(rangeFrom, rangeTo, (node, pos) => {
     if (foundPos >= 0) return false;
-    if (!node.isText) return true; // descend into non-text nodes
 
-    const textStart = Math.max(pos, rangeFrom);
-    const textEnd = Math.min(pos + node.nodeSize, rangeTo);
-    const textLen = textEnd - textStart;
-
-    if (count + textLen >= charOffset) {
-      foundPos = textStart + (charOffset - count);
+    if (node.isText) {
+      const textStart = Math.max(pos, rangeFrom);
+      const textEnd = Math.min(pos + node.nodeSize, rangeTo);
+      const textLen = textEnd - textStart;
+      if (count + textLen >= charOffset) {
+        foundPos = textStart + (charOffset - count);
+      }
+      count += textLen;
+      return false;
     }
-    count += textLen;
-    return false;
+
+    // tab nodes are non-leaf (content: 'inline*') but textBetweenWithTabs
+    // surfaces them as '\t', so they consume one offset slot here too.
+    if (node.type?.name === 'tab') {
+      resolveAtom(pos, node.nodeSize, 1);
+      count += 1;
+      return false;
+    }
+
+    // Inline leaves with a `leafText` spec contribute their visible text.
+    if (node.isLeaf && node.isInline) {
+      const leafTextFn = (node.type?.spec as { leafText?: (n: ProseMirrorNode) => string } | undefined)?.leafText;
+      if (typeof leafTextFn === 'function') {
+        const leafText = leafTextFn(node);
+        if (typeof leafText === 'string' && leafText.length > 0) {
+          resolveAtom(pos, node.nodeSize, leafText.length);
+          count += leafText.length;
+        }
+      }
+      return false;
+    }
+
+    return true; // descend into non-text, non-leaf nodes
   });
 
   return foundPos >= 0 ? foundPos : rangeTo;

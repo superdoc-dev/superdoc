@@ -132,7 +132,12 @@ describe('EditorInputManager - Drag Auto Scroll', () => {
     };
 
     mockCallbacks = {
-      normalizeClientPoint: vi.fn((clientX: number, clientY: number) => ({ x: clientX, y: clientY })),
+      normalizeClientPoint: vi.fn((clientX: number, clientY: number) => ({
+        x: clientX,
+        y: clientY,
+        pageIndex: 0,
+        pageLocalY: clientY,
+      })),
       updateSelectionVirtualizationPins: vi.fn(),
       scheduleSelectionUpdate: vi.fn(),
       notifyDragSelectionEnded: vi.fn(),

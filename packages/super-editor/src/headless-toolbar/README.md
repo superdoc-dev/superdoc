@@ -80,6 +80,7 @@ For commands not covered by `execute()`, you can use `snapshot.context?.target.c
 | `undo` | none | — |
 | `redo` | none | — |
 | `ruler` | none | — |
+| `formatting-marks` | none | — |
 | `zoom` | number, e.g. `125` | current zoom number |
 | `document-mode` | `'editing'` \| `'suggesting'` \| `'viewing'` | current mode string |
 | `clear-formatting` | none | — |

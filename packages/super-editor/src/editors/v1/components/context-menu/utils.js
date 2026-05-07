@@ -10,6 +10,7 @@ import {
 import { isList } from '@core/commands/list-helpers';
 import { isCellSelection } from '@extensions/table/tableHelpers/isCellSelection.js';
 import { hasExpandedSelection } from '@utils/selectionUtils.js';
+import { DOM_CLASS_NAMES } from '@superdoc/dom-contract';
 import { selectedRect } from 'prosemirror-tables';
 
 export const resolveContextMenuCommandEditor = (editor) => {
@@ -126,6 +127,9 @@ export async function getEditorContext(editor, event) {
   const isInTable =
     structureFromResolvedPos?.isInTable ?? selectionHasNodeOrMark(state, 'table', { requireEnds: true });
   const isInList = structureFromResolvedPos?.isInList ?? selectionIncludesListParagraph(state);
+  // .superdoc-list-marker = DomPainter markerContainer / presentation mode
+  // .list-marker = ParagraphNodeView / flow editor mode
+  const isOnListMarker = Boolean(event?.target?.closest?.(`.${DOM_CLASS_NAMES.LIST_MARKER}, .list-marker`));
   const isInSectionNode =
     structureFromResolvedPos?.isInSectionNode ??
     selectionHasNodeOrMark(state, 'documentSection', { requireEnds: true });
@@ -203,6 +207,7 @@ export async function getEditorContext(editor, event) {
     selectionEnd: selection.to,
     isInTable,
     isInList,
+    isOnListMarker,
     isInSectionNode,
     isCellSelection: cellSelectionInfo.isCellSelection,
     tableSelectionKind: cellSelectionInfo.tableSelectionKind,
@@ -416,11 +421,17 @@ function resolveProofingContext(editor, pos) {
   if (pos == null || !Number.isFinite(pos)) return null;
 
   try {
-    // Access PresentationEditor's proofing manager via the editor's back-reference
-    const pe = editor?._presentationEditor;
-    if (!pe?.proofingManager) return null;
-
-    const manager = pe.proofingManager;
+    // The context menu is wired to either the PresentationEditor wrapper
+    // (since SD-2875: 1.29+) or the inner / story Editor that carries a
+    // back-reference to it. Resolve the manager from whichever shape the
+    // caller passed — without this fallback, suggestions silently vanish
+    // when the wrapper itself is the menu's editor handle.
+    const manager =
+      editor?._presentationEditor?.proofingManager ??
+      editor?.presentationEditor?.proofingManager ??
+      editor?.proofingManager ??
+      null;
+    if (!manager) return null;
     const issue = manager.getIssueAtPosition(pos);
     if (!issue) return null;
 
@@ -443,4 +454,5 @@ export {
   getStructureFromResolvedPos as __getStructureFromResolvedPosForTest,
   isCollaborationEnabled as __isCollaborationEnabledForTest,
   getCellSelectionInfo as __getCellSelectionInfoForTest,
+  resolveProofingContext as __resolveProofingContextForTest,
 };

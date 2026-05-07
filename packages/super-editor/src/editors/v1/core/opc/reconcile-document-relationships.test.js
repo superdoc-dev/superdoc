@@ -146,6 +146,39 @@ describe('reconcileDocumentRelationships', () => {
     });
   });
 
+  describe('XML entity preservation (SD-2888)', () => {
+    it('preserves &amp; in hyperlink Target attributes when reconciliation rewrites the rels file', () => {
+      const target = 'https://example.com/page?foo=1&amp;bar=2';
+      const relsXml = buildDocRelsXml([{ id: 'rId1', type: REL_HYPERLINK, target }]);
+
+      const result = reconcileDocumentRelationships(relsXml, (path) => path === 'word/numbering.xml');
+
+      // Reconciliation must have run (numbering rel was added) → file was rewritten.
+      expect(result).not.toBe(relsXml);
+      expect(result).toContain('numbering.xml');
+
+      // Hyperlink target must round-trip its &amp; entity, not collapse to a bare &.
+      expect(result).toContain('foo=1&amp;bar=2');
+      expect(result).not.toMatch(/foo=1&bar=2/);
+
+      // Output must be well-formed XML (Word rejects malformed rels with "unreadable content").
+      expect(() => new DOMParser().parseFromString(result, 'application/xml')).not.toThrow();
+      const parsed = new DOMParser().parseFromString(result, 'application/xml');
+      expect(parsed.querySelector('parsererror')).toBeNull();
+    });
+
+    it('preserves <, >, and " inside attribute values across reconciliation', () => {
+      const target = 'https://example.com/?q=&lt;tag&gt;&quot;value&quot;';
+      const relsXml = buildDocRelsXml([{ id: 'rId1', type: REL_HYPERLINK, target }]);
+
+      const result = reconcileDocumentRelationships(relsXml, (path) => path === 'word/numbering.xml');
+
+      expect(result).toContain('&lt;tag&gt;');
+      expect(result).toContain('&quot;value&quot;');
+      expect(result).not.toMatch(/<tag>/);
+    });
+  });
+
   describe('error handling', () => {
     it('returns null input unchanged', () => {
       expect(reconcileDocumentRelationships(null, () => true)).toBeNull();

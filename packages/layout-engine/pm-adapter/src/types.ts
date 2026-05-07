@@ -316,6 +316,13 @@ export interface NodeHandlerContext {
     ranges: SectionRange[];
     currentSectionIndex: number;
     currentParagraphIndex: number;
+    /**
+     * Index of the current top-level `doc.content` child being dispatched.
+     * Advanced by the main dispatch loop in internal.ts — drives end-tagged
+     * section transitions for non-paragraph nodes (tables, top-level
+     * drawings, …) per ECMA-376 §17.6.17.
+     */
+    currentNodeIndex: number;
   };
 
   // Converters for nested content

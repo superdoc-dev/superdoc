@@ -78,6 +78,7 @@ const {
       getMountedPageIndices: vi.fn(() => []),
       onScroll: vi.fn(),
       setScrollContainer: vi.fn(),
+      setShowFormattingMarks: vi.fn(),
     })),
     mockEditorConverterStore: converterStore,
     mockEditorOverlayManager: vi.fn().mockImplementation(() => ({

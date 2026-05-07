@@ -120,7 +120,16 @@ export function textBetweenWithTabs(
     }
     if (node.isLeaf) {
       if (node.isInline) {
-        out += leafFallback;
+        // Honor PM's `leafText` NodeSpec contract: an inline leaf can declare
+        // its visible text representation (e.g. noBreakHyphen → U+2011) so
+        // flattened reads match the rendered glyph instead of producing the
+        // generic placeholder. Falls back to `leafFallback` when undefined.
+        const leafTextFn = node.type?.spec?.leafText;
+        if (typeof leafTextFn === 'function') {
+          out += leafTextFn(node);
+        } else {
+          out += leafFallback;
+        }
         emitted = true;
       }
       return false;

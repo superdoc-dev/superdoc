@@ -37,6 +37,7 @@ export function resolveTableItem(
     zIndex: undefined, // tables don't have zIndex at fragment level
     blockId: fragment.blockId,
     fragmentIndex,
+    fragment,
     block,
     measure,
     cellSpacingPx: measure.cellSpacingPx ?? getCellSpacingPx(block.attrs?.cellSpacing),

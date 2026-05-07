@@ -108,9 +108,9 @@ Starter projects to get you running quickly:
 | [React](examples/getting-started/react) | [Vue](examples/getting-started/vue) |
 | [Angular](examples/getting-started/angular) | [Next.js](examples/getting-started/nextjs) |
 | [Vanilla JS](examples/getting-started/vanilla) | [CDN](examples/getting-started/cdn) |
-| [Comments](examples/features/comments) | [Track changes](examples/features/track-changes) |
-| [Custom toolbar](examples/features/custom-toolbar) | [AI redlining](examples/features/ai-redlining) |
-| [Headless AI redlining](examples/headless/ai-redlining) | |
+| [Comments](examples/editor/built-in-ui/comments) | [Track changes](examples/editor/built-in-ui/track-changes) |
+| [Toolbar](examples/editor/built-in-ui/toolbar) | [AI redlining](examples/ai/redlining) |
+| [AI redlining (server-side)](examples/document-engine/ai-redlining) | |
 
 [Browse all examples](examples/)
 

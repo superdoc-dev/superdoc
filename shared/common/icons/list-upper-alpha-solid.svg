@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <path fill="currentColor" d="M260 54c-17.7 0-32 14.3-32 32s14.3 32 32 32l220 0c17.7 0 32-14.3 32-32s-14.3-32-32-32L260 54zm0 170c-17.7 0-32 14.3-32 32s14.3 32 32 32l220 0c17.7 0 32-14.3 32-32s-14.3-32-32-32l-220 0zm0 170c-17.7 0-32 14.3-32 32s14.3 32 32 32l220 0c17.7 0 32-14.3 32-32s-14.3-32-32-32l-220 0z"/>
+  <text fill="currentColor" font-family="sans-serif" font-weight="bold" font-size="140" text-anchor="end" x="210" y="86" dominant-baseline="central">A.</text>
+  <text fill="currentColor" font-family="sans-serif" font-weight="bold" font-size="140" text-anchor="end" x="210" y="256" dominant-baseline="central">B.</text>
+  <text fill="currentColor" font-family="sans-serif" font-weight="bold" font-size="140" text-anchor="end" x="210" y="426" dominant-baseline="central">C.</text>
+</svg>

@@ -2703,6 +2703,12 @@ export class Editor extends EventEmitter<EditorEventMap> {
     const prevState = this.state;
     let nextState: EditorState;
     let transactionToApply = transaction;
+    // appendTransaction plugins (e.g. numberingPlugin) may produce transactions that
+    // change the doc even when the original transaction does not. We resolve the
+    // effective doc-carrying tr after applyTransaction so the 'update' event is
+    // emitted with `docChanged` / `mapping` that consumers (notably
+    // PresentationEditor.handleUpdate) actually need.
+    let effectiveTransaction: Transaction = transaction;
     const forceTrackChanges = transactionToApply.getMeta('forceTrackChanges') === true;
     try {
       const trackChangesState = TrackChangesBasePluginKey.getState(prevState);
@@ -2723,8 +2729,12 @@ export class Editor extends EventEmitter<EditorEventMap> {
           })
         : transactionToApply;
 
-      const { state: appliedState } = prevState.applyTransaction(transactionToApply);
+      const { state: appliedState, transactions: appliedTransactions } = prevState.applyTransaction(transactionToApply);
       nextState = appliedState;
+      // Pick whichever applied tr carries the doc delta — when the input tr is empty an
+      // appendTransaction plugin (e.g. numberingPlugin) may have produced the real change,
+      // and downstream listeners read `transaction.docChanged`/`mapping` off this tr.
+      effectiveTransaction = appliedTransactions.find((t) => t.docChanged) ?? transactionToApply;
     } catch (error) {
       if (forceTrackChanges) throw error;
       // just in case
@@ -2772,8 +2782,9 @@ export class Editor extends EventEmitter<EditorEventMap> {
       });
     }
 
-    if (transactionToApply.docChanged) {
-      // Track document modifications and promote to GUID if needed
+    if (effectiveTransaction.docChanged) {
+      // Track document modifications and promote to GUID if needed.
+      // Only count user-initiated (original) transactions as document modifications.
       if (transaction.docChanged && this.converter) {
         if (!this.converter.documentGuid) {
           this.converter.promoteToGuid();
@@ -2784,7 +2795,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
 
       this.emit('update', {
         editor: this,
-        transaction: transactionToApply,
+        transaction: effectiveTransaction,
       });
     }
   }

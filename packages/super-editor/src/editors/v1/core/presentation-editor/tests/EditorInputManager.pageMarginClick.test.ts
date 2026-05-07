@@ -204,4 +204,23 @@ describe('EditorInputManager - page margin clicks', () => {
 
     expect(resolvePointerPositionHit).toHaveBeenCalled();
   });
+
+  // SD-2749: clicking in the inter-page gap caused the viewer to jump to a
+  // different page. normalizeClientPoint returns pageIndex undefined when
+  // elementsFromPoint finds no .superdoc-page under the cursor (e.g. the gap
+  // between two pages). The pointer-down handler must bail out the same way it
+  // does for in-page margin clicks (SD-2356) — no selection change, no scroll.
+  it('does not resolve a position hit for clicks in the gap between pages', () => {
+    (mockCallbacks.normalizeClientPoint as Mock).mockReturnValueOnce({ x: 200, y: 410 });
+
+    const target = document.createElement('span');
+    viewportHost.appendChild(target);
+
+    dispatchPointerDown(target, { clientX: 200, clientY: 410 });
+
+    expect(resolvePointerPositionHit).not.toHaveBeenCalled();
+    expect(TextSelection.create as unknown as Mock).not.toHaveBeenCalled();
+    expect(mockEditor.state.tr.setSelection).not.toHaveBeenCalled();
+    expect(mockEditor.view.focus).toHaveBeenCalled();
+  });
 });

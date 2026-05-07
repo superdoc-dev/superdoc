@@ -150,6 +150,7 @@ const {
       getMountedPageIndices: vi.fn(() => []),
       onScroll: vi.fn(),
       setScrollContainer: vi.fn(),
+      setShowFormattingMarks: vi.fn(),
       setProviders: vi.fn(),
     })),
     mockMeasureBlock: vi.fn(() => ({ width: 100, height: 100 })),
@@ -182,7 +183,34 @@ const {
       getActiveEditorHost: vi.fn(() => null),
       destroy: vi.fn(),
     })),
-    mockResolveLayout: vi.fn(() => ({ version: 1, flowMode: 'paginated', pageGap: 0, pages: [] })),
+    // SD-2836: rebuildRegions now iterates resolvedLayout.pages, so the mock
+    // must synthesize a ResolvedPage per source Layout page to keep header/footer
+    // region tests from going empty.
+    mockResolveLayout: vi.fn(
+      ({ layout }: { layout: { pages: Array<Record<string, unknown>>; pageSize: { w: number; h: number } } }) => ({
+        version: 1,
+        flowMode: 'paginated',
+        pageGap: 0,
+        pages: (layout?.pages ?? []).map((p, i) => ({
+          id: `page-${i}`,
+          index: i,
+          number: (p.number as number) ?? i + 1,
+          width: ((p.size as { w?: number } | undefined)?.w ?? layout.pageSize?.w) as number,
+          height: ((p.size as { h?: number } | undefined)?.h ?? layout.pageSize?.h) as number,
+          items: [],
+          margins: p.margins,
+          sectionRefs: p.sectionRefs,
+          sectionIndex: p.sectionIndex,
+          numberText: p.numberText,
+          footnoteReserved: p.footnoteReserved,
+          vAlign: p.vAlign,
+          baseMargins: p.baseMargins,
+          orientation: p.orientation,
+          columns: p.columns,
+          columnRegions: p.columnRegions,
+        })),
+      }),
+    ),
     mockFlowBlockCacheInstances,
     MockFlowBlockCache,
   };
@@ -2277,21 +2305,53 @@ describe('PresentationEditor', () => {
         toJSON: () => ({}),
       } as DOMRect);
 
-      // Clear mock to track fresh calls
-      mockClickToPosition.mockClear();
-      mockResolvePointerPositionHit.mockClear();
+      // SD-2749: PointerNormalization uses elementsFromPoint to detect the
+      // .superdoc-page under the cursor; happy-dom doesn't compute layout, so
+      // simulate a page element under the click point.
+      const pagesHost = container.querySelector('.presentation-editor__pages') as HTMLElement;
+      const fakePage = document.createElement('div');
+      fakePage.classList.add('superdoc-page');
+      fakePage.setAttribute('data-page-index', '0');
+      pagesHost.appendChild(fakePage);
+      vi.spyOn(fakePage, 'getBoundingClientRect').mockReturnValue({
+        left: 0,
+        top: 0,
+        width: 612,
+        height: 792,
+        right: 612,
+        bottom: 792,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      } as DOMRect);
+      const originalElementsFromPoint = (document as unknown as { elementsFromPoint?: unknown }).elementsFromPoint;
+      (document as unknown as { elementsFromPoint: (x: number, y: number) => Element[] }).elementsFromPoint = () => [
+        fakePage,
+      ];
 
-      const clickEvent = new MouseEvent('pointerdown', {
-        bubbles: true,
-        clientX: 100,
-        clientY: 100,
-        button: 0,
-      });
+      try {
+        // Clear mock to track fresh calls
+        mockClickToPosition.mockClear();
+        mockResolvePointerPositionHit.mockClear();
 
-      viewport.dispatchEvent(clickEvent);
+        const clickEvent = new MouseEvent('pointerdown', {
+          bubbles: true,
+          clientX: 100,
+          clientY: 100,
+          button: 0,
+        });
 
-      // Verify resolvePointerPositionHit was called (normal flow)
-      expect(mockResolvePointerPositionHit).toHaveBeenCalled();
+        viewport.dispatchEvent(clickEvent);
+
+        // Verify resolvePointerPositionHit was called (normal flow)
+        expect(mockResolvePointerPositionHit).toHaveBeenCalled();
+      } finally {
+        if (originalElementsFromPoint === undefined) {
+          delete (document as unknown as { elementsFromPoint?: unknown }).elementsFromPoint;
+        } else {
+          (document as unknown as { elementsFromPoint: unknown }).elementsFromPoint = originalElementsFromPoint;
+        }
+      }
     });
 
     it('should handle case where editor view DOM is not available when layout is not ready', () => {
@@ -4819,6 +4879,7 @@ describe('PresentationEditor', () => {
         // Mark page 0 as mounted for the drag anchor.
         const pagesHost = container.querySelector('.presentation-editor__pages') as HTMLElement;
         const page0 = document.createElement('div');
+        page0.classList.add('superdoc-page');
         page0.setAttribute('data-page-index', '0');
         pagesHost.appendChild(page0);
 
@@ -4835,55 +4896,84 @@ describe('PresentationEditor', () => {
           toJSON: () => ({}),
         } as DOMRect);
 
-        // pointerdown: page 0 (mounted), pointermove: page 1 (unmounted), pointerup finalize: page 1
-        mockClickToPosition.mockReset();
-        mockClickToPosition
-          .mockReturnValueOnce({ pos: 1, layoutEpoch: 0, pageIndex: 0 })
-          .mockReturnValueOnce({ pos: 10, layoutEpoch: 0, pageIndex: 1 })
-          .mockReturnValueOnce({ pos: 12, layoutEpoch: 0, pageIndex: 1 });
-        mockResolvePointerPositionHit.mockReset();
-        mockResolvePointerPositionHit
-          .mockReturnValueOnce({ pos: 1, layoutEpoch: 0, pageIndex: 0, blockId: '', column: 0, lineIndex: -1 })
-          .mockReturnValueOnce({ pos: 10, layoutEpoch: 0, pageIndex: 1, blockId: '', column: 0, lineIndex: -1 })
-          .mockReturnValueOnce({ pos: 12, layoutEpoch: 0, pageIndex: 1, blockId: '', column: 0, lineIndex: -1 });
+        // SD-2749: PointerNormalization uses elementsFromPoint to detect the
+        // .superdoc-page under the cursor; happy-dom doesn't compute layout, so
+        // simulate the page element under each click point.
+        vi.spyOn(page0, 'getBoundingClientRect').mockReturnValue({
+          left: 0,
+          top: 0,
+          width: 612,
+          height: 792,
+          right: 612,
+          bottom: 792,
+          x: 0,
+          y: 0,
+          toJSON: () => ({}),
+        } as DOMRect);
+        const originalElementsFromPoint = (document as unknown as { elementsFromPoint?: unknown }).elementsFromPoint;
+        (document as unknown as { elementsFromPoint: (x: number, y: number) => Element[] }).elementsFromPoint = () => [
+          page0,
+        ];
 
-        viewport.dispatchEvent(
-          new MouseEvent('pointerdown', {
-            bubbles: true,
-            clientX: 120,
-            clientY: 200,
-            button: 0,
-          }),
-        );
+        try {
+          // pointerdown: page 0 (mounted), pointermove: page 1 (unmounted), pointerup finalize: page 1
+          mockClickToPosition.mockReset();
+          mockClickToPosition
+            .mockReturnValueOnce({ pos: 1, layoutEpoch: 0, pageIndex: 0 })
+            .mockReturnValueOnce({ pos: 10, layoutEpoch: 0, pageIndex: 1 })
+            .mockReturnValueOnce({ pos: 12, layoutEpoch: 0, pageIndex: 1 });
+          mockResolvePointerPositionHit.mockReset();
+          mockResolvePointerPositionHit
+            .mockReturnValueOnce({ pos: 1, layoutEpoch: 0, pageIndex: 0, blockId: '', column: 0, lineIndex: -1 })
+            .mockReturnValueOnce({ pos: 10, layoutEpoch: 0, pageIndex: 1, blockId: '', column: 0, lineIndex: -1 })
+            .mockReturnValueOnce({ pos: 12, layoutEpoch: 0, pageIndex: 1, blockId: '', column: 0, lineIndex: -1 });
 
-        viewport.dispatchEvent(
-          new MouseEvent('pointermove', {
-            bubbles: true,
-            clientX: 120,
-            clientY: 900,
-            buttons: 1,
-          }),
-        );
+          viewport.dispatchEvent(
+            new MouseEvent('pointerdown', {
+              bubbles: true,
+              clientX: 120,
+              clientY: 200,
+              button: 0,
+            }),
+          );
 
-        const lastPinsBeforePointerUp = setPins.mock.calls[setPins.mock.calls.length - 1]?.[0] as number[] | undefined;
-        expect(lastPinsBeforePointerUp).toEqual([0, 1, 2]);
+          viewport.dispatchEvent(
+            new MouseEvent('pointermove', {
+              bubbles: true,
+              clientX: 120,
+              clientY: 900,
+              buttons: 1,
+            }),
+          );
 
-        // Simulate virtualization mounting the endpoint page before pointerup finalization.
-        const page1 = document.createElement('div');
-        page1.setAttribute('data-page-index', '1');
-        pagesHost.appendChild(page1);
+          const lastPinsBeforePointerUp = setPins.mock.calls[setPins.mock.calls.length - 1]?.[0] as
+            | number[]
+            | undefined;
+          expect(lastPinsBeforePointerUp).toEqual([0, 1, 2]);
 
-        viewport.dispatchEvent(
-          new MouseEvent('pointerup', {
-            bubbles: true,
-            clientX: 120,
-            clientY: 900,
-            button: 0,
-          }),
-        );
+          // Simulate virtualization mounting the endpoint page before pointerup finalization.
+          const page1 = document.createElement('div');
+          page1.setAttribute('data-page-index', '1');
+          pagesHost.appendChild(page1);
 
-        // pointerup should attempt a DOM-refined finalize after using geometry fallback.
-        expect(mockResolvePointerPositionHit).toHaveBeenCalledTimes(3);
+          viewport.dispatchEvent(
+            new MouseEvent('pointerup', {
+              bubbles: true,
+              clientX: 120,
+              clientY: 900,
+              button: 0,
+            }),
+          );
+
+          // pointerup should attempt a DOM-refined finalize after using geometry fallback.
+          expect(mockResolvePointerPositionHit).toHaveBeenCalledTimes(3);
+        } finally {
+          if (originalElementsFromPoint === undefined) {
+            delete (document as unknown as { elementsFromPoint?: unknown }).elementsFromPoint;
+          } else {
+            (document as unknown as { elementsFromPoint: unknown }).elementsFromPoint = originalElementsFromPoint;
+          }
+        }
       });
     });
 
@@ -5134,7 +5224,7 @@ describe('PresentationEditor', () => {
         expect(mockHitTest).not.toHaveBeenCalled();
       });
 
-      it('should update cursor position during drag', () => {
+      it('should compute drag preview during drag without mutating selection', () => {
         const dragEvent = createDragEvent('dragover', {
           clientX: 100,
           clientY: 100,
@@ -5145,9 +5235,9 @@ describe('PresentationEditor', () => {
         viewport.dispatchEvent(dragEvent);
 
         expect(mockHitTest).toHaveBeenCalledWith(100, 100);
-        expect(mockActiveEditor.state.tr.setSelection).toHaveBeenCalled();
-        expect(mockActiveEditor.state.tr.setMeta).toHaveBeenCalledWith('addToHistory', false);
-        expect(mockActiveEditor.view.dispatch).toHaveBeenCalled();
+        expect(mockActiveEditor.state.tr.setSelection).not.toHaveBeenCalled();
+        expect(mockActiveEditor.state.tr.setMeta).not.toHaveBeenCalled();
+        expect(mockActiveEditor.view.dispatch).not.toHaveBeenCalled();
       });
 
       it('should handle null hit gracefully', () => {

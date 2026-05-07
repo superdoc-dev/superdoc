@@ -141,6 +141,7 @@ const normalizeReplaceStepSingleCharDelete = ({ step, doc }) => {
 
 /**
  * Replace step.
+ * @param {object} options Replace step options.
  * @param {import('prosemirror-state').EditorState} options.state Editor state.
  * @param {import('prosemirror-state').Transaction} options.tr Transaction.
  * @param {import('prosemirror-transform').ReplaceStep} options.step Step.
@@ -151,6 +152,7 @@ const normalizeReplaceStepSingleCharDelete = ({ step, doc }) => {
  * @param {string} options.date Date.
  * @param {import('prosemirror-transform').ReplaceStep} options.originalStep Original step.
  * @param {number} options.originalStepIndex Original step index.
+ * @param {'paired' | 'independent'} [options.replacements] Replacement id pairing mode.
  */
 export const replaceStep = ({
   state,

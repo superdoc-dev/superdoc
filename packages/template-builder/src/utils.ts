@@ -82,22 +82,42 @@ export const getFieldTypeStyle = (fieldType: string, fieldColors?: Record<string
 const SDT_INLINE = '.superdoc-structured-content-inline';
 const SDT_BLOCK = '.superdoc-structured-content-block';
 const INLINE_LABEL = '.superdoc-structured-content-inline__label';
-const BLOCK_LABEL = '.superdoc-structured-content__label';
+const BLOCK_LABEL = '.superdoc-structured-content-block__label';
+// Keep legacy selector support while we align the structured-content label API.
+const LEGACY_BLOCK_LABEL = '.superdoc-structured-content__label';
 
 function buildColorRules(scope: string, selector: string, color: string): string {
+  const hoverFill = `color-mix(in srgb, ${color} 8%, transparent)`;
+  const labelFill = `color-mix(in srgb, ${color} 87%, transparent)`;
+
   return `
 ${scope} ${SDT_INLINE}${selector},
 ${scope} ${SDT_BLOCK}${selector} {
   border-color: ${color};
+  --sd-content-controls-inline-border: ${color};
+  --sd-content-controls-inline-hover-border: ${color};
+  --sd-content-controls-inline-hover-bg: ${hoverFill};
+  --sd-content-controls-block-border: ${color};
+  --sd-content-controls-block-hover-border: ${color};
+  --sd-content-controls-block-hover-bg: ${hoverFill};
+  --sd-content-controls-lock-hover-bg: ${hoverFill};
+  --sd-content-controls-label-border: ${color};
+  --sd-content-controls-label-bg: ${labelFill};
 }
 ${scope} ${SDT_INLINE}${selector}:hover,
 ${scope} ${SDT_BLOCK}${selector}:hover {
   border-color: ${color};
 }
-${scope} ${SDT_INLINE}${selector} ${INLINE_LABEL},
-${scope} ${SDT_BLOCK}${selector} ${BLOCK_LABEL} {
+${scope} ${SDT_INLINE}${selector}.ProseMirror-selectednode,
+${scope} ${SDT_BLOCK}${selector}.ProseMirror-selectednode {
   border-color: ${color};
-  background-color: color-mix(in srgb, ${color} 87%, transparent);
+}
+${scope} ${SDT_INLINE}${selector} ${INLINE_LABEL},
+${scope} ${SDT_BLOCK}${selector} ${BLOCK_LABEL},
+${scope} ${SDT_BLOCK}${selector} ${LEGACY_BLOCK_LABEL} {
+  border-color: ${color};
+  background-color: ${labelFill};
+  color: var(--sd-content-controls-label-text, #ffffff);
 }`;
 }
 

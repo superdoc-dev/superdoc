@@ -1587,6 +1587,8 @@ export type LineSegment = {
   toChar: number;
   width: number;
   x?: number;
+  /** End x for an immediately preceding tab when it differs from this segment's paint x. */
+  precedingTabEndX?: number;
 };
 
 export type LeaderDecoration = {
@@ -2064,5 +2066,9 @@ export type {
   ResolvedHeaderFooterLayout,
 } from './resolved-layout.js';
 export { isResolvedTableItem, isResolvedImageItem, isResolvedDrawingItem } from './resolved-layout.js';
+
+// Pure transformations on inline-run shapes (used by pm-adapter, layout-bridge,
+// and painter-dom). Located in contracts to avoid reverse stage dependencies.
+export { expandRunsForInlineNewlines, sliceRunsForLine } from './run-helpers.js';
 
 export * as Engines from './engines/index.js';

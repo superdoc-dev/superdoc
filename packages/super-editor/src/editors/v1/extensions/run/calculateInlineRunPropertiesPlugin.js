@@ -29,6 +29,11 @@ const RUN_PROPERTIES_DERIVED_FROM_MARKS = new Set([
 const TRANSIENT_HYPERLINK_STYLE_IDS = new Set(['Hyperlink', 'FollowedHyperlink']);
 
 const RUN_PROPERTY_PRESERVE_META_KEY = 'sdPreserveRunPropertiesKeys';
+const COMPANION_INLINE_KEYS = {
+  fontSizeCs: 'fontSize',
+  boldCs: 'bold',
+  italicCs: 'italic',
+};
 
 /**
  * ProseMirror plugin that recalculates inline `runProperties` for changed runs,
@@ -157,7 +162,13 @@ export const calculateInlineRunPropertiesPlugin = (editor) =>
           // Detect genuinely new inline properties (user-applied formatting, not just
           // recomputation artifacts from mark round-trip fidelity loss).
           const hasNewInlineProps =
-            segmentInlineProps != null && Object.keys(segmentInlineProps).some((k) => !existingRunPropsKeys.has(k));
+            segmentInlineProps != null &&
+            Object.keys(segmentInlineProps).some((k) => {
+              if (existingRunPropsKeys.has(k)) return false;
+              const baseKey = COMPANION_INLINE_KEYS[k];
+              if (baseKey && existingRunPropsKeys.has(baseKey)) return false;
+              return true;
+            });
           const shouldAddMarkKeys = !hadInlineKeysMetadata || existingInlineKeys.length > 0 || hasNewInlineProps;
           const markKeysToAdd = shouldAddMarkKeys ? keysFromMarks(segment) : [];
           const keys = [...new Set([...existingInlineKeys, ...markKeysToAdd])];

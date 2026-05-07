@@ -5,6 +5,8 @@ import type { ProofingAnnotation } from '../proofing/types.js';
 import { CommentHighlightDecorator } from './CommentHighlightDecorator.js';
 import { DecorationBridge } from './DecorationBridge.js';
 import { FieldAnnotationInteractionLayer } from './FieldAnnotationInteractionLayer.js';
+import { ImageInteractionLayer } from './ImageInteractionLayer.js';
+import { StructuredContentInteractionLayer } from './StructuredContentInteractionLayer.js';
 import { PresentationProofingDecorator } from './PresentationProofingDecorator.js';
 
 type DecorationRange = {
@@ -16,6 +18,8 @@ type DecorationRange = {
 };
 
 type FieldAnnotationLayerLike = Pick<FieldAnnotationInteractionLayer, 'setContainer' | 'apply' | 'clear'>;
+type ImageLayerLike = Pick<ImageInteractionLayer, 'setContainer' | 'apply' | 'clear'>;
+type StructuredContentLayerLike = Pick<StructuredContentInteractionLayer, 'setContainer' | 'apply' | 'clear'>;
 type CommentHighlightDecoratorLike = Pick<
   CommentHighlightDecorator,
   'setContainer' | 'setActiveComment' | 'apply' | 'destroy'
@@ -28,6 +32,8 @@ type ProofingDecoratorLike = Pick<PresentationProofingDecorator, 'setContainer' 
 
 type PresentationPostPaintPipelineDeps = {
   fieldAnnotationLayer?: FieldAnnotationLayerLike;
+  imageLayer?: ImageLayerLike;
+  structuredContentLayer?: StructuredContentLayerLike;
   commentHighlightDecorator?: CommentHighlightDecoratorLike;
   decorationBridge?: DecorationBridgeLike;
   proofingDecorator?: ProofingDecoratorLike;
@@ -55,12 +61,16 @@ type RefreshAfterPaintOptions = {
  */
 export class PresentationPostPaintPipeline {
   #fieldAnnotationLayer: FieldAnnotationLayerLike;
+  #imageLayer: ImageLayerLike;
+  #structuredContentLayer: StructuredContentLayerLike;
   #commentHighlightDecorator: CommentHighlightDecoratorLike;
   #decorationBridge: DecorationBridgeLike;
   #proofingDecorator: ProofingDecoratorLike;
 
   constructor(deps: PresentationPostPaintPipelineDeps = {}) {
     this.#fieldAnnotationLayer = deps.fieldAnnotationLayer ?? new FieldAnnotationInteractionLayer();
+    this.#imageLayer = deps.imageLayer ?? new ImageInteractionLayer();
+    this.#structuredContentLayer = deps.structuredContentLayer ?? new StructuredContentInteractionLayer();
     this.#commentHighlightDecorator = deps.commentHighlightDecorator ?? new CommentHighlightDecorator();
     this.#decorationBridge = deps.decorationBridge ?? new DecorationBridge();
     this.#proofingDecorator = deps.proofingDecorator ?? new PresentationProofingDecorator();
@@ -68,6 +78,8 @@ export class PresentationPostPaintPipeline {
 
   setContainer(container: HTMLElement | null): void {
     this.#fieldAnnotationLayer.setContainer(container);
+    this.#imageLayer.setContainer(container);
+    this.#structuredContentLayer.setContainer(container);
     this.#commentHighlightDecorator.setContainer(container);
     this.#proofingDecorator.setContainer(container);
   }
@@ -124,6 +136,8 @@ export class PresentationPostPaintPipeline {
   refreshAfterPaint(options: RefreshAfterPaintOptions): void {
     this.#fieldAnnotationLayer.apply(options.layoutEpoch);
     options.rebuildDomPositionIndex();
+    this.#imageLayer.apply(options.layoutEpoch);
+    this.#structuredContentLayer.apply(options.layoutEpoch);
     this.syncInlineStyleLayers(options.editorState, options.domPositionIndex);
     this.applyProofingAnnotations(options.proofingAnnotations, options.rebuildDomPositionIndex);
     options.reapplyStructuredContentHover?.();
@@ -132,6 +146,8 @@ export class PresentationPostPaintPipeline {
   destroy(): void {
     this.#proofingDecorator.clear();
     this.#fieldAnnotationLayer.clear();
+    this.#imageLayer.clear();
+    this.#structuredContentLayer.clear();
     this.#commentHighlightDecorator.destroy();
     this.#decorationBridge.destroy();
   }

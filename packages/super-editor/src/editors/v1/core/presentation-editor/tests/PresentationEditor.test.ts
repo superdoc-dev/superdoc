@@ -5224,7 +5224,7 @@ describe('PresentationEditor', () => {
         expect(mockHitTest).not.toHaveBeenCalled();
       });
 
-      it('should update cursor position during drag', () => {
+      it('should compute drag preview during drag without mutating selection', () => {
         const dragEvent = createDragEvent('dragover', {
           clientX: 100,
           clientY: 100,
@@ -5235,9 +5235,9 @@ describe('PresentationEditor', () => {
         viewport.dispatchEvent(dragEvent);
 
         expect(mockHitTest).toHaveBeenCalledWith(100, 100);
-        expect(mockActiveEditor.state.tr.setSelection).toHaveBeenCalled();
-        expect(mockActiveEditor.state.tr.setMeta).toHaveBeenCalledWith('addToHistory', false);
-        expect(mockActiveEditor.view.dispatch).toHaveBeenCalled();
+        expect(mockActiveEditor.state.tr.setSelection).not.toHaveBeenCalled();
+        expect(mockActiveEditor.state.tr.setMeta).not.toHaveBeenCalled();
+        expect(mockActiveEditor.view.dispatch).not.toHaveBeenCalled();
       });
 
       it('should handle null hit gracefully', () => {

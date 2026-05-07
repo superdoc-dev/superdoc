@@ -12595,7 +12595,7 @@ describe('applyRunDataAttributes', () => {
               type: 'structuredContent',
               scope: 'block',
               id: 'scb-block-1',
-              tag: 'dropdown',
+              tag: '{"fieldType":"signer"}',
               alias: 'Block Content Control',
             },
           },
@@ -12652,10 +12652,12 @@ describe('applyRunDataAttributes', () => {
         expect(fragment.dataset.sdtType).toBe('structuredContent');
         expect(fragment.dataset.sdtScope).toBe('block');
         expect(fragment.dataset.sdtId).toBe('scb-block-1');
+        expect(fragment.dataset.sdtTag).toBe('{"fieldType":"signer"}');
 
         // Should have the label element
         const label = fragment.querySelector('.superdoc-structured-content__label') as HTMLElement;
         expect(label).toBeTruthy();
+        expect(label.classList.contains('superdoc-structured-content-block__label')).toBe(true);
         expect(label.textContent).toBe('Block Content Control');
 
         // Should have container boundary markers

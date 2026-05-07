@@ -25,6 +25,7 @@ import { importFootnoteData, importEndnoteData } from './documentFootnotesImport
 import { getDefaultStyleDefinition } from '@converter/docx-helpers/index.js';
 import { pruneIgnoredNodes } from './ignoredNodes.js';
 import { tabNodeEntityHandler } from './tabImporter.js';
+import { noBreakHyphenNodeEntityHandler } from './noBreakHyphenImporter.js';
 import { footnoteReferenceHandlerEntity } from './footnoteReferenceImporter.js';
 import { endnoteReferenceHandlerEntity } from './endnoteReferenceImporter.js';
 import { tableNodeHandlerEntity } from './tableImporter.js';
@@ -246,6 +247,7 @@ export const defaultNodeListHandler = () => {
     footnoteReferenceHandlerEntity,
     endnoteReferenceHandlerEntity,
     tabNodeEntityHandler,
+    noBreakHyphenNodeEntityHandler,
     tableOfContentsHandlerEntity,
     indexHandlerEntity,
     bibliographyHandlerEntity,

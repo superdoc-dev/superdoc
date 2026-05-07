@@ -39,6 +39,7 @@ export const handleBackspace = (editor) => {
     },
     () => commands.backspaceEmptyRunParagraph(),
     () => commands.backspaceSkipEmptyRun(),
+    () => commands.backspaceAtomBefore(),
     () => commands.backspaceNextToRun(),
     () => commands.backspaceAcrossRuns(),
     () => commands.deleteSelection(),
@@ -55,6 +56,7 @@ export const handleDelete = (editor) => {
 
   return editor.commands.first(({ commands }) => [
     () => commands.deleteSkipEmptyRun(),
+    () => commands.deleteAtomAfter(),
     () => commands.deleteNextToRun(),
     () => commands.deleteSelection(),
     () => commands.joinForward(),

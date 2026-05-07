@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
   ensureEditorNativeSelectionStyles,
   ensureEditorFieldAnnotationInteractionStyles,
+  ensureEditorMovableObjectInteractionStyles,
   _resetEditorStyleFlags,
 } from './EditorStyleInjector.js';
 
@@ -9,6 +10,7 @@ afterEach(() => {
   // Clean up injected styles and reset flags between tests
   document.querySelectorAll('[data-superdoc-editor-native-selection-styles]').forEach((el) => el.remove());
   document.querySelectorAll('[data-superdoc-editor-field-annotation-interaction-styles]').forEach((el) => el.remove());
+  document.querySelectorAll('[data-superdoc-editor-movable-object-interaction-styles]').forEach((el) => el.remove());
   _resetEditorStyleFlags();
 });
 
@@ -67,5 +69,22 @@ describe('ensureEditorFieldAnnotationInteractionStyles', () => {
     expect(css).toContain('[data-draggable="true"]');
     expect(css).toContain('cursor: grabbing');
     expect(css).toContain('.superdoc-drop-indicator');
+  });
+});
+
+describe('ensureEditorMovableObjectInteractionStyles', () => {
+  it('injects styles into document head', () => {
+    ensureEditorMovableObjectInteractionStyles(document);
+    const styleEl = document.querySelector('[data-superdoc-editor-movable-object-interaction-styles="true"]');
+    expect(styleEl).not.toBeNull();
+    expect(styleEl?.tagName).toBe('STYLE');
+  });
+
+  it('CSS contains grab cursor rules for draggable object sources', () => {
+    ensureEditorMovableObjectInteractionStyles(document);
+    const css = document.querySelector('[data-superdoc-editor-movable-object-interaction-styles]')?.textContent ?? '';
+    expect(css).toContain('[data-drag-source-kind]');
+    expect(css).toContain('cursor: grab');
+    expect(css).toContain('user-select: none');
   });
 });

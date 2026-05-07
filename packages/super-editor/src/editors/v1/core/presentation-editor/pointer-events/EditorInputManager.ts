@@ -43,6 +43,13 @@ import { DOM_CLASS_NAMES, buildAnnotationSelector, DRAGGABLE_SELECTOR } from '@s
 import { applyEditableSlotAtInlineBoundary } from '@helpers/ensure-editable-slot-inline-boundary.js';
 import { isSemanticFootnoteBlockId } from '../semantic-flow-constants.js';
 import { CommentsPluginKey } from '@extensions/comment/comments-plugin.js';
+import {
+  findStructuredContentBlockAtPos,
+  findStructuredContentBlockById,
+  findStructuredContentInlineAtPos,
+  findStructuredContentInlineById,
+  type StructuredContentSelection,
+} from '../input/structured-content-resolution.js';
 
 // =============================================================================
 // Constants
@@ -70,6 +77,7 @@ const COMMENT_THREAD_HIT_SAMPLE_OFFSETS: ReadonlyArray<readonly [number, number]
   [0, COMMENT_THREAD_HIT_TOLERANCE_PX],
 ];
 const clamp = (value: number, min: number, max: number): number => Math.max(min, Math.min(max, value));
+const DRAG_SOURCE_SELECTOR = '[data-draggable="true"], [data-drag-source-kind]';
 
 type CommentThreadHit = {
   isAmbiguous: boolean;
@@ -418,13 +426,6 @@ export type LayoutState = {
   layout: Layout | null;
   blocks: FlowBlock[];
   measures: Measure[];
-};
-
-type StructuredContentSelection = {
-  node: ProseMirrorNode;
-  pos: number;
-  start: number;
-  end: number;
 };
 
 /**
@@ -1363,7 +1364,9 @@ export class EditorInputManager {
     // Handle field annotation clicks
     const annotationEl = target?.closest?.(buildAnnotationSelector()) as HTMLElement | null;
     const isDraggableAnnotation = target?.closest?.(DRAGGABLE_SELECTOR) != null;
-    this.#suppressFocusInFromDraggable = isDraggableAnnotation;
+    const isNativeDragSource = target?.closest?.(DRAG_SOURCE_SELECTOR) != null;
+    const suppressFocusForDrag = isDraggableAnnotation || isNativeDragSource;
+    this.#suppressFocusInFromDraggable = suppressFocusForDrag;
 
     if (annotationEl) {
       this.#handleAnnotationClick(event, annotationEl);
@@ -1381,7 +1384,7 @@ export class EditorInputManager {
 
     if (!layoutState.layout) {
       if (clickedNoteTarget && !isSameRenderedNoteTarget(activeNoteTarget, clickedNoteTarget)) {
-        if (!isDraggableAnnotation) {
+        if (!suppressFocusForDrag) {
           event.preventDefault();
         }
         const activated = this.#callbacks.activateRenderedNoteSession?.(clickedNoteTarget, {
@@ -1413,7 +1416,7 @@ export class EditorInputManager {
         this.#syncNonBodyCommentActivation(event, target, bodyEditor);
       }
 
-      this.#handleClickWithoutLayout(event, isDraggableAnnotation);
+      this.#handleClickWithoutLayout(event, suppressFocusForDrag);
       return;
     }
 
@@ -1426,7 +1429,7 @@ export class EditorInputManager {
     if (clickedNoteTarget) {
       const isSameActiveNote = isSameRenderedNoteTarget(activeNoteTarget, clickedNoteTarget);
       if (!isSameActiveNote) {
-        if (!isDraggableAnnotation) event.preventDefault();
+        if (!suppressFocusForDrag) event.preventDefault();
         const activated = this.#callbacks.activateRenderedNoteSession?.(clickedNoteTarget, {
           clientX: event.clientX,
           clientY: event.clientY,
@@ -1526,7 +1529,7 @@ export class EditorInputManager {
     this.#callbacks.updateSelectionDebugHud?.();
 
     // Don't preventDefault for draggable annotations
-    if (!isDraggableAnnotation) {
+    if (!suppressFocusForDrag) {
       event.preventDefault();
     }
 
@@ -1704,7 +1707,7 @@ export class EditorInputManager {
         // SD-1584: clicking inside a block SDT selects the node (NodeSelection).
         // Exception: clicks inside tables nested in this SDT should use text
         // selection so caret placement/editing inside table cells works.
-        const sdtBlock = clickDepth === 1 ? this.#findStructuredContentBlockAtPos(doc, hit.pos) : null;
+        const sdtBlock = clickDepth === 1 ? findStructuredContentBlockAtPos(doc, hit.pos) : null;
         let nextSelection: Selection;
         let inlineSdtBoundaryPos: number | null = null;
         let inlineSdtBoundaryDirection: 'before' | 'after' | null = null;
@@ -1713,7 +1716,7 @@ export class EditorInputManager {
         if (sdtBlock && !insideTableInSdt) {
           nextSelection = NodeSelection.create(doc, sdtBlock.pos);
         } else {
-          const inlineSdt = clickDepth === 1 ? this.#findStructuredContentInlineAtPos(doc, hit.pos) : null;
+          const inlineSdt = clickDepth === 1 ? findStructuredContentInlineAtPos(doc, hit.pos) : null;
           if (inlineSdt && hit.pos >= inlineSdt.end) {
             const afterInlineSdt = inlineSdt.pos + inlineSdt.node.nodeSize;
             inlineSdtBoundaryPos = afterInlineSdt;
@@ -2056,29 +2059,6 @@ export class EditorInputManager {
     }
   }
 
-  #findStructuredContentBlockAtPos(doc: ProseMirrorNode, pos: number): StructuredContentSelection | null {
-    if (!Number.isFinite(pos)) return null;
-
-    try {
-      const $pos = doc.resolve(pos);
-      for (let depth = $pos.depth; depth > 0; depth--) {
-        const node = $pos.node(depth);
-        if (node.type?.name === 'structuredContentBlock') {
-          return {
-            node,
-            pos: $pos.before(depth),
-            start: $pos.start(depth),
-            end: $pos.end(depth),
-          };
-        }
-      }
-    } catch {
-      return null;
-    }
-
-    return null;
-  }
-
   #isInsideTableWithinStructuredContentBlock(doc: ProseMirrorNode, pos: number, sdtPos: number): boolean {
     if (!Number.isFinite(pos) || !Number.isFinite(sdtPos)) return false;
 
@@ -2107,65 +2087,6 @@ export class EditorInputManager {
     }
   }
 
-  #findStructuredContentBlockById(doc: ProseMirrorNode, id: string): StructuredContentSelection | null {
-    let found: StructuredContentSelection | null = null;
-    doc.descendants((node, pos) => {
-      if (node.type?.name !== 'structuredContentBlock') return true;
-      const nodeId = (node.attrs as { id?: unknown } | null | undefined)?.id;
-      if (String(nodeId ?? '') !== id) return true;
-
-      found = {
-        node,
-        pos,
-        start: pos + 1,
-        end: pos + node.nodeSize - 1,
-      };
-      return false;
-    });
-    return found;
-  }
-
-  #findStructuredContentInlineAtPos(doc: ProseMirrorNode, pos: number): StructuredContentSelection | null {
-    if (!Number.isFinite(pos)) return null;
-
-    try {
-      const $pos = doc.resolve(pos);
-      for (let depth = $pos.depth; depth > 0; depth--) {
-        const node = $pos.node(depth);
-        if (node.type?.name === 'structuredContent') {
-          return {
-            node,
-            pos: $pos.before(depth),
-            start: $pos.start(depth),
-            end: $pos.end(depth),
-          };
-        }
-      }
-    } catch {
-      return null;
-    }
-
-    return null;
-  }
-
-  #findStructuredContentInlineById(doc: ProseMirrorNode, id: string): StructuredContentSelection | null {
-    let found: StructuredContentSelection | null = null;
-    doc.descendants((node, pos) => {
-      if (node.type?.name !== 'structuredContent') return true;
-      const nodeId = (node.attrs as { id?: unknown } | null | undefined)?.id;
-      if (String(nodeId ?? '') !== id) return true;
-
-      found = {
-        node,
-        pos,
-        start: pos + 1,
-        end: pos + node.nodeSize - 1,
-      };
-      return false;
-    });
-    return found;
-  }
-
   #resolveStructuredContentBlockFromElement(
     doc: ProseMirrorNode,
     element: HTMLElement,
@@ -2175,20 +2096,20 @@ export class EditorInputManager {
 
     const sdtId = container.dataset?.sdtId;
     if (sdtId) {
-      const match = this.#findStructuredContentBlockById(doc, sdtId);
+      const match = findStructuredContentBlockById(doc, sdtId);
       if (match) return match;
     }
 
     const containerSdtId = container.dataset?.sdtContainerId;
     if (containerSdtId) {
-      const match = this.#findStructuredContentBlockById(doc, containerSdtId);
+      const match = findStructuredContentBlockById(doc, containerSdtId);
       if (match) return match;
     }
 
     const pmStartRaw = container.dataset?.pmStart;
     const pmStart = pmStartRaw != null ? Number(pmStartRaw) : NaN;
     if (Number.isFinite(pmStart)) {
-      return this.#findStructuredContentBlockAtPos(doc, pmStart);
+      return findStructuredContentBlockAtPos(doc, pmStart);
     }
 
     return null;
@@ -2203,14 +2124,14 @@ export class EditorInputManager {
 
     const sdtId = container.dataset?.sdtId;
     if (sdtId) {
-      const match = this.#findStructuredContentInlineById(doc, sdtId);
+      const match = findStructuredContentInlineById(doc, sdtId);
       if (match) return match;
     }
 
     const pmStartRaw = container.dataset?.pmStart;
     const pmStart = pmStartRaw != null ? Number(pmStartRaw) : NaN;
     if (Number.isFinite(pmStart)) {
-      return this.#findStructuredContentInlineAtPos(doc, pmStart);
+      return findStructuredContentInlineAtPos(doc, pmStart);
     }
 
     return null;

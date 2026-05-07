@@ -31,6 +31,7 @@ import { FootnoteReference } from './footnote/index.js';
 import { EndnoteReference } from './endnote/index.js';
 import { TabNode } from './tab/index.js';
 import { LineBreak, HardBreak } from './line-break/index.js';
+import { NoBreakHyphenNode } from './no-break-hyphen/index.js';
 import { Table } from './table/index.js';
 import { TableHeader } from './table-header/index.js';
 import { TableRow } from './table-row/index.js';
@@ -164,6 +165,7 @@ const getStarterExtensions = () => {
     ContextMenu,
     Strike,
     TabNode,
+    NoBreakHyphenNode,
     TableOfContents,
     TocPageNumber,
     DocumentIndex,
@@ -253,6 +255,7 @@ export {
   FootnoteReference,
   EndnoteReference,
   TabNode,
+  NoBreakHyphenNode,
   LineBreak,
   HardBreak,
   Bold,

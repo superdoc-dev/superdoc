@@ -117,4 +117,57 @@ describe('applyInlineRunProperties', () => {
 
     expect(result.bold).toBe(false);
   });
+
+  // SD-2781: TextRun.bidi and TextRun.script preserve run-level direction and
+  // script signals from raw run properties. Wave 1a does not render either.
+  describe('SD-2781 bidi/script preservation', () => {
+    it('does not attach bidi or script when no relevant signals are set', () => {
+      const result = applyInlineRunProperties(baseRun, { bold: true });
+      expect(result.bidi).toBeUndefined();
+      expect(result.script).toBeUndefined();
+    });
+
+    it('preserves run rtl on TextRun.bidi (does not affect script)', () => {
+      const result = applyInlineRunProperties(baseRun, { rtl: true });
+      expect(result.bidi).toEqual({ rtl: true });
+      expect(result.script).toBeUndefined();
+    });
+
+    it('preserves explicit rtl=false (a meaningful override of inherited rtl)', () => {
+      const result = applyInlineRunProperties(baseRun, { rtl: false });
+      expect(result.bidi).toEqual({ rtl: false });
+    });
+
+    it('preserves complex-script flag on TextRun.script (does not affect bidi)', () => {
+      const result = applyInlineRunProperties(baseRun, { cs: true });
+      expect(result.script).toEqual({ complexScript: true });
+      expect(result.bidi).toBeUndefined();
+    });
+
+    it('preserves the three lang tags on separate fields per ECMA §17.3.2.20', () => {
+      const result = applyInlineRunProperties(baseRun, {
+        lang: { val: 'en-US', bidi: 'ar-SA', eastAsia: 'ja-JP' },
+      });
+      expect(result.script?.language).toEqual({
+        default: 'en-US',
+        complexScript: 'ar-SA',
+        eastAsian: 'ja-JP',
+      });
+    });
+
+    it('partial lang attrs only fill the fields that were set', () => {
+      const result = applyInlineRunProperties(baseRun, { lang: { bidi: 'he-IL' } });
+      expect(result.script?.language).toEqual({ complexScript: 'he-IL' });
+    });
+
+    it('keeps rtl and cs on separate axes (axis non-collapse)', () => {
+      const result = applyInlineRunProperties(baseRun, { rtl: true, cs: true });
+      // rtl goes to bidi only; cs goes to script only
+      expect(result.bidi).toEqual({ rtl: true });
+      expect(result.script).toEqual({ complexScript: true });
+      // cs must NOT leak into bidi, and rtl must NOT leak into script
+      expect(result.bidi).not.toHaveProperty('complexScript');
+      expect(result.script).not.toHaveProperty('rtl');
+    });
+  });
 });

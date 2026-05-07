@@ -1,5 +1,12 @@
 import type { RunProperties, ParagraphProperties } from '@superdoc/style-engine/ooxml';
-import type { FlowBlock, SdtMetadata, TextRun, ParagraphAttrs } from '@superdoc/contracts';
+import type {
+  FlowBlock,
+  RunBidiContext,
+  RunScriptContext,
+  SdtMetadata,
+  TextRun,
+  ParagraphAttrs,
+} from '@superdoc/contracts';
 import {
   HyperlinkConfig,
   NodeHandlerContext,
@@ -73,6 +80,38 @@ export type BlockConverterOptions = {
   paragraphAttrs: ParagraphAttrs;
 };
 
+/**
+ * Build a RunBidiContext from raw run properties when any direction signal is set.
+ * Returns undefined when nothing to preserve, so empty contexts don't bloat the
+ * layout tree. Wave 1c will populate `embedding` (w:dir) and `override` (w:bdo).
+ */
+const buildBidiContext = (runProperties: RunProperties): RunBidiContext | undefined => {
+  if (runProperties.rtl == null) return undefined;
+  return { rtl: runProperties.rtl === true };
+};
+
+/**
+ * Build a RunScriptContext from raw run properties when any script signal is set.
+ * Per ECMA §17.3.2.20, w:lang carries three independent language tags - default
+ * (Latin), bidi (complex-script), eastAsia - mapped here to one structured field.
+ */
+const buildScriptContext = (runProperties: RunProperties): RunScriptContext | undefined => {
+  const cs = runProperties.cs;
+  const lang = runProperties.lang;
+  const hasLang = lang != null && (lang.val != null || lang.bidi != null || lang.eastAsia != null);
+  if (cs == null && !hasLang) return undefined;
+
+  const ctx: RunScriptContext = { complexScript: cs === true };
+  if (hasLang) {
+    const language: NonNullable<RunScriptContext['language']> = {};
+    if (lang.val != null) language.default = lang.val;
+    if (lang.bidi != null) language.complexScript = lang.bidi;
+    if (lang.eastAsia != null) language.eastAsian = lang.eastAsia;
+    ctx.language = language;
+  }
+  return ctx;
+};
+
 export const applyInlineRunProperties = (
   run: TextRun,
   runProperties: RunProperties | undefined,
@@ -90,5 +129,12 @@ export const applyInlineRunProperties = (
       (merged as Record<string, unknown>)[key] = runAttrs[key];
     }
   }
+  // SD-2781: preserve run-level bidi/script metadata. Wave 1a stops at preservation;
+  // Wave 1b consumes script.complexScript to gate CS formatting, Wave 1c consumes
+  // bidi.embedding and bidi.override.
+  const bidi = buildBidiContext(runProperties);
+  if (bidi) merged.bidi = bidi;
+  const script = buildScriptContext(runProperties);
+  if (script) merged.script = script;
   return merged;
 };

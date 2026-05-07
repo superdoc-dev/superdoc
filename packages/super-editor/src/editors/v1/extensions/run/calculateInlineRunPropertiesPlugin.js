@@ -17,6 +17,7 @@ const RUN_PROPERTIES_DERIVED_FROM_MARKS = new Set([
   'textTransform',
   'color',
   'fontSize',
+  'fontSizeCs',
   'letterSpacing',
   'fontFamily',
   'vertAlign',

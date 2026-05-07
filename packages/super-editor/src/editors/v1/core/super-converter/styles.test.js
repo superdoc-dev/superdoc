@@ -441,7 +441,14 @@ describe('decodeRPrFromMarks', () => {
   it('should decode textStyle marks for color and fontSize', () => {
     const marks = [{ type: 'textStyle', attrs: { color: '#FF0000', fontSize: '12pt' } }];
     const rPr = decodeRPrFromMarks(marks);
-    expect(rPr).toEqual({ color: { val: 'FF0000' }, fontSize: 24 });
+    expect(rPr).toEqual({ color: { val: 'FF0000' }, fontSize: 24, fontSizeCs: 24 });
+  });
+
+  it('keeps fontSize and fontSizeCs in sync when decoding textStyle fontSize', () => {
+    const marks = [{ type: 'textStyle', attrs: { fontSize: '36pt' } }];
+    const rPr = decodeRPrFromMarks(marks);
+    expect(rPr.fontSize).toBe(72);
+    expect(rPr.fontSizeCs).toBe(72);
   });
 
   it('should decode underline marks', () => {
@@ -491,6 +498,7 @@ describe('marks encoding/decoding round-trip', () => {
       underline: { 'w:val': 'single', 'w:color': 'auto' },
       color: { val: 'FF0000' },
       fontSize: 28,
+      fontSizeCs: 28,
       letterSpacing: 20,
     };
 

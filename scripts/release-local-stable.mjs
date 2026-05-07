@@ -16,11 +16,12 @@
  *   These three share artifacts (SDK packages CLI native binaries; MCP
  *   imports SDK + engine code), so they must release in this order.
  *
- * Core chain:
- *   Currently superdoc only. react and vscode-ext still ship from their
- *   per-package stable workflows; pulling them into this chain is a
- *   separate refactor and is what makes docs-stable promotion (keyed off
- *   superdoc's v* tag) live in this workflow.
+ * Core chain (superdoc -> react):
+ *   superdoc is the npm core; react consumes it. They release in order so
+ *   react is never published against an older superdoc than what just
+ *   shipped. docs-stable promotion is keyed off superdoc's v* tag and
+ *   lives in this workflow as a result. vscode-ext still ships from its
+ *   per-package stable workflow and joins the chain in a separate refactor.
  *
  * Per-package adapters live on the descriptor (resumePublish,
  * preparePythonSnapshot). The recovery engine is generic; new packages
@@ -679,6 +680,25 @@ function prepareSdkPythonSnapshot(workspaceRoot, tag) {
   return copySdkPythonArtifacts(workspaceRoot, tag);
 }
 
+function resumeReactPublish(workspaceRoot, distTag, options = {}) {
+  const { skipBuild = workspaceRoot === REPO_ROOT } = options;
+  // react's `prepublishOnly` runs `vite build`, whose `dts` plugin rolls up
+  // types imported from `superdoc`. That import resolves through
+  // packages/superdoc/dist via the workspace symlink. The snapshot only ran
+  // `pnpm install`, so build superdoc first; in REPO_ROOT it is already on
+  // disk from the workflow's `Build packages` step.
+  if (!skipBuild) {
+    runInWorkspace(workspaceRoot, 'pnpm', ['run', 'build:superdoc']);
+  }
+  runInWorkspace(workspaceRoot, 'node', [
+    join(workspaceRoot, 'scripts/npm-publish-package.cjs'),
+    '--package-dir',
+    'packages/react',
+    '--tag',
+    distTag,
+  ]);
+}
+
 function resumeSuperdocPublish(workspaceRoot, distTag, options = {}) {
   const { skipBuild = workspaceRoot === REPO_ROOT } = options;
   const args = [join(workspaceRoot, 'scripts/publish-superdoc.cjs'), '--dist-tag', distTag];
@@ -871,6 +891,15 @@ const packages = [
     tagPattern: 'v[0-9]*',
     npmPackages: SUPERDOC_NPM_PACKAGES,
     resumePublish: resumeSuperdocPublish,
+  },
+  {
+    name: 'react',
+    chain: 'core',
+    packageCwd: 'packages/react',
+    tagPrefix: 'react-v',
+    tagPattern: 'react-v*',
+    npmPackages: ['@superdoc-dev/react'],
+    resumePublish: resumeReactPublish,
   },
 ];
 

@@ -1,11 +1,12 @@
-# Auto-releases on push to main (@next) and stable (@latest).
+# Auto-releases on push to main (@next).
+# Stable releases are orchestrated centrally by release-stable.yml so that
+# every stable release shares one concurrency slot and one git push lane.
 name: 📦 Release react
 
 on:
   push:
     branches:
       - main
-      - stable
     paths:
       # React declares `superdoc` in dependencies (not peerDependencies), so
       # existing consumers with lockfiles won't pick up a new core version

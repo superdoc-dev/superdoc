@@ -176,18 +176,23 @@ test('stable orchestrator prunes before snapshot and reports would-release previ
   );
 });
 
-test('stable orchestrator releases tools chain (CLI, SDK, MCP) and core chain (superdoc) in order', async () => {
+test('stable orchestrator releases tools chain (CLI, SDK, MCP) and core chain (superdoc, react) in order', async () => {
   const content = await readRepoFile('scripts/release-local-stable.mjs');
   assertOrder(content, "name: 'cli'", "name: 'sdk'", 'scripts/release-local-stable.mjs (cli before sdk)');
   assertOrder(content, "name: 'sdk'", "name: 'mcp'", 'scripts/release-local-stable.mjs (sdk before mcp)');
+  assertOrder(content, "name: 'superdoc'", "name: 'react'", 'scripts/release-local-stable.mjs (superdoc before react)');
   assert.ok(
     content.includes("name: 'superdoc'"),
     'scripts/release-local-stable.mjs: orchestrator must release superdoc so the v* tag drives docs-stable promotion in the same workflow',
   );
+  assert.ok(
+    content.includes("name: 'react'"),
+    'scripts/release-local-stable.mjs: orchestrator must release react after superdoc so consumers see them ship together',
+  );
   assert.equal(
-    content.includes("name: 'esign'") || content.includes("name: 'react'") || content.includes("name: 'template-builder'") || content.includes("name: 'vscode-ext'"),
+    content.includes("name: 'esign'") || content.includes("name: 'template-builder'") || content.includes("name: 'vscode-ext'"),
     false,
-    'scripts/release-local-stable.mjs: react, vscode-ext, esign, and template-builder are added in follow-up PRs',
+    'scripts/release-local-stable.mjs: vscode-ext, esign, and template-builder are added in follow-up PRs',
   );
 });
 
@@ -258,11 +263,10 @@ test('stable release workflows serialize on the shared release-stable concurrenc
   );
 
   // Per-package workflows that still auto-fire on stable directly.
-  // superdoc is excluded because release-stable.yml drives its stable
-  // releases now. The remaining workflows have not yet been brought into
-  // the orchestrator.
+  // superdoc and react are excluded because release-stable.yml drives
+  // their stable releases now. The remaining workflows have not yet been
+  // brought into the orchestrator.
   const perPackageStableWorkflows = [
-    '.github/workflows/release-react.yml',
     '.github/workflows/release-esign.yml',
     '.github/workflows/release-template-builder.yml',
     '.github/workflows/release-vscode-ext.yml',
@@ -275,14 +279,20 @@ test('stable release workflows serialize on the shared release-stable concurrenc
     );
   }
 
-  // superdoc no longer auto-fires on stable - the orchestrator is its
-  // single stable release path.
-  const superdocWorkflow = await readRepoFile('.github/workflows/release-superdoc.yml');
-  assert.equal(
-    /branches:\s*\n\s*-\s*main\s*\n\s*-\s*stable/.test(superdocWorkflow),
-    false,
-    '.github/workflows/release-superdoc.yml: stable releases are driven by release-stable.yml; this workflow only fires on main',
-  );
+  // Workflows that no longer auto-fire on stable - the orchestrator is
+  // their single stable release path.
+  const orchestratorOnlyOnStable = [
+    '.github/workflows/release-superdoc.yml',
+    '.github/workflows/release-react.yml',
+  ];
+  for (const file of orchestratorOnlyOnStable) {
+    const content = await readRepoFile(file);
+    assert.equal(
+      /branches:\s*\n\s*-\s*main\s*\n\s*-\s*stable/.test(content),
+      false,
+      `${file}: stable releases are driven by release-stable.yml; this workflow only fires on main`,
+    );
+  }
 });
 
 test('MCP releaserc builds the package before publish so the tarball ships dist/', async () => {

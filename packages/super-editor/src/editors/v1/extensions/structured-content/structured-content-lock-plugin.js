@@ -110,9 +110,12 @@ export function createStructuredContentLockPlugin() {
         // content of an SDT (e.g., the select-plugin's first-click select-all,
         // a triple-click that lands on the content range, or precise keyboard
         // selection). For wrapper-deletable lock modes, promote to a
-        // NodeSelection on the wrapper so the user sees the whole field
-        // highlighted and the next destructive press deletes it (matches
-        // Word's "click to select, key to delete").
+        // NodeSelection on the wrapper so the next operation targets the whole
+        // field. For Backspace/Delete we stop here — the user sees the wrapper
+        // highlighted and presses again to confirm (matches Word's "click to
+        // select, key to delete"). For Cut we let the event continue so PM's
+        // clipboard handler runs against the just-installed NodeSelection and
+        // the wrapper is cut in a single keystroke.
         if (from !== to && !(selection instanceof NodeSelection)) {
           const exactContentSDT = sdtNodes.find((s) => from === s.pos + 1 && to === s.end - 1);
           if (exactContentSDT) {
@@ -121,6 +124,9 @@ export function createStructuredContentLockPlugin() {
             if (!isSdtLocked) {
               const tr = state.tr.setSelection(NodeSelection.create(state.doc, exactContentSDT.pos));
               view.dispatch(tr);
+              if (isCut) {
+                return false;
+              }
               event.preventDefault();
               return true;
             }

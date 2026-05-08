@@ -418,14 +418,14 @@ describe('StructuredContentLockPlugin', () => {
     // plugin's own decision (block vs let through) without other plugins
     // (e.g. the keymap plugin) running real Backspace commands and mutating
     // the document mid-test.
-    function invokeLockHandleKeyDown(key) {
+    function invokeLockHandleKeyDown(key, { metaKey = false, ctrlKey = false } = {}) {
       const view = editor.view;
       const lockPlugin = view.state.plugins.find((p) => p.spec.key === STRUCTURED_CONTENT_LOCK_KEY);
       let prevented = false;
       const event = {
         key,
-        metaKey: false,
-        ctrlKey: false,
+        metaKey,
+        ctrlKey,
         preventDefault() {
           prevented = true;
         },
@@ -561,6 +561,31 @@ describe('StructuredContentLockPlugin', () => {
         const finalState = editor.state.apply(tr);
         expect(sdtNodeExists(finalState.doc, 'structuredContent')).toBe(false);
       });
+
+      it.each([['unlocked'], ['contentLocked']])(
+        '%s: select-all + Cmd+X promotes to NodeSelection in one keystroke (no preventDefault)',
+        (lockMode) => {
+          const doc = createDocWithSDTAndSurroundingText(lockMode, 'structuredContent');
+          const state = applyDocToEditor(doc);
+          const sdtInfo = findSDTNode(state.doc, 'structuredContent');
+
+          setSelection(state, TextSelection.create(state.doc, sdtInfo.pos + 1, sdtInfo.end - 1));
+
+          // Cut must NOT be consumed by handleKeyDown — PM's clipboard handler
+          // needs to run after the promotion so the wrapper is cut on the first
+          // press (vs Backspace/Delete which require a confirming second press).
+          const result = invokeLockHandleKeyDown('x', { metaKey: true });
+          expect(result.handled).toBe(false);
+          expect(result.prevented).toBe(false);
+
+          // The selection has been promoted to a NodeSelection on the wrapper,
+          // ready for PM to serialize and replace.
+          const sel = editor.state.selection;
+          expect(sel).toBeInstanceOf(NodeSelection);
+          expect(sel.from).toBe(sdtInfo.pos);
+          expect(sel.to).toBe(sdtInfo.end);
+        },
+      );
 
       it('sdtLocked: select-all + Backspace still allows content deletion (no promotion)', () => {
         const doc = createDocWithSDTAndSurroundingText('sdtLocked', 'structuredContent');

@@ -389,6 +389,40 @@ describe('ooxml - resolveParagraphProperties', () => {
     expect(result.spacing).toEqual({ before: 120, after: 240 });
     expect(result.keepNext).toBe(true);
   });
+
+  it('lets a table style override docDefaults line spacing for cell paragraphs without inline spacing (SD-2735)', () => {
+    // Pins the cascade path that pm-adapter's old `applyTableGridSpacingCascade`
+    // hack was working around: Word's Normal template sets docDefaults
+    // `<w:spacing w:line="276" w:lineRule="auto"/>` (≈ 1.15 multiplier) and
+    // TableGrid sets `<w:spacing w:line="240" w:lineRule="auto"/>` (= 1.0
+    // multiplier). For a cell paragraph with no inline spacing, the cascade
+    // must yield TableGrid's 240, not docDefaults' 276 — otherwise table
+    // rows render ~5 % taller than Word.
+    const params = buildParams({
+      translatedLinkedStyles: {
+        ...emptyStyles,
+        docDefaults: { paragraphProperties: { spacing: { line: 276, lineRule: 'auto' } } },
+        styles: {
+          Normal: { default: true, paragraphProperties: {} },
+          TableGrid: {
+            type: 'table',
+            paragraphProperties: { spacing: { line: 240, lineRule: 'auto' } },
+            tableProperties: {},
+          },
+        },
+      },
+    });
+    const tableInfo = {
+      tableProperties: { tableStyleId: 'TableGrid', tblLook: { noHBand: true, noVBand: true } },
+      rowIndex: 0,
+      cellIndex: 0,
+      numRows: 1,
+      numCells: 1,
+    };
+    const result = resolveParagraphProperties(params, {}, tableInfo);
+    expect(result.spacing?.line).toBe(240);
+    expect(result.spacing?.lineRule).toBe('auto');
+  });
 });
 
 describe('ooxml - resolveCellStyles', () => {

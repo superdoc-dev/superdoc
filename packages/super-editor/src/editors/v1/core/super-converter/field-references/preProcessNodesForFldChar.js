@@ -2,9 +2,9 @@
  * @typedef {import('../v2/types/index.js').OpenXmlNode} OpenXmlNode
  */
 import { getInstructionPreProcessor } from './fld-preprocessors';
+import { resolveHyperlinkAttributes } from './fld-preprocessors/hyperlink-preprocessor.js';
 import { carbonCopy } from '@core/utilities/carbonCopy.js';
 import { isTrackChangeElement, isConstructiveTrackChangeElement } from '../v2/importer/trackChangeElements.js';
-import { generateDocxRandomId } from '@helpers/generateDocxRandomId.js';
 
 const SKIP_FIELD_PROCESSING_NODE_NAMES = new Set(['w:drawing', 'w:pict']);
 
@@ -346,30 +346,8 @@ const applyConstructiveFieldInterpretation = (rawNodes, instrText, docx) => {
   const instructionType = instrText.split(' ')[0];
   if (instructionType !== 'HYPERLINK') return;
 
-  const urlMatch = instrText.match(/HYPERLINK\s+"([^"]+)"/);
-  let linkAttributes;
-  if (urlMatch && urlMatch.length >= 2) {
-    const url = urlMatch[1];
-    const rels = docx?.['word/_rels/document.xml.rels'];
-    const relationships = rels?.elements?.find((el) => el.name === 'Relationships');
-    if (!relationships) return;
-    const rId = 'rId' + generateDocxRandomId();
-    relationships.elements.push({
-      type: 'element',
-      name: 'Relationship',
-      attributes: {
-        Id: rId,
-        Type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink',
-        Target: url,
-        TargetMode: 'External',
-      },
-    });
-    linkAttributes = { 'r:id': rId };
-  } else {
-    const anchorMatch = instrText.match(/(?:\\)?l "(?<value>[^"]+)"/);
-    if (!anchorMatch?.groups?.value) return;
-    linkAttributes = { 'w:anchor': anchorMatch.groups.value };
-  }
+  const linkAttributes = resolveHyperlinkAttributes(instrText, docx);
+  if (!linkAttributes) return;
 
   // State machine: visit every run; when we cross a `separate` fldChar
   // turn collection on; when we cross an `end` fldChar turn it off. Runs

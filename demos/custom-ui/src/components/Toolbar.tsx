@@ -7,6 +7,7 @@ import {
   useSuperDocDocument,
 } from 'superdoc/ui/react';
 import { InsertClauseButton } from './InsertClauseButton';
+import { DisplaySettings } from './DisplaySettings';
 
 interface ToolbarProps {
   /** Called when the user clicks the comment button to start composing. */
@@ -96,6 +97,10 @@ export function Toolbar({ onComposeComment }: ToolbarProps) {
 
       <div className="toolbar-group">
         <ModeToggle />
+      </div>
+
+      <div className="toolbar-group">
+        <DisplaySettings />
       </div>
 
       <div className="toolbar-group" style={{ marginLeft: 'auto' }}>

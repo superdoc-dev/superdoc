@@ -14,7 +14,8 @@ import {
   type ParagraphIndent,
   type DropCapDescriptor,
   type DropCapRun,
-  type ParagraphFrame, ParagraphDirectionContext 
+  type ParagraphFrame,
+  ParagraphDirectionContext,
 } from '@superdoc/contracts';
 import type { PMNode, ParagraphFont } from '../types.js';
 import type { ResolvedRunProperties } from '@superdoc/word-layout';

@@ -57,7 +57,9 @@ function AppInner() {
               <Toolbar onComposeComment={openComposer} />
             </div>
             <div className="editor-shell">
-              <EditorMount />
+              <div className="editor-canvas">
+                <EditorMount />
+              </div>
             </div>
             <SelectionPopover onComposeComment={openComposer} />
             <ContextMenu />

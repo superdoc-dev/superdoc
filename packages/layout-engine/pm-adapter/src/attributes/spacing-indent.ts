@@ -9,8 +9,18 @@ import type { ParagraphAttrs, ParagraphSpacing } from '@superdoc/contracts';
 import type { ParagraphSpacing as OoxmlParagraphSpacing } from '@superdoc/style-engine/ooxml';
 import { twipsToPx, pickNumber } from '../utilities.js';
 
-const AUTO_SPACING_DEFAULT_MULTIPLIER = 1.15;
-
+// Per ECMA-376 §17.18.48 (ST_LineSpacingRule), `lineRule="auto"` means:
+//   `lineHeight = (w:line / 240) × naturalSingleLineHeight`.
+// `w:line/240` is a dimensionless ratio of the font's intrinsic single-line
+// height; the multiplication against natural-single happens in measuring-dom
+// (`resolveLineHeight`). Earlier versions baked an extra 1.15 here so that
+// measuring-dom's pre-§17.18.48 formula `mult × fontSize` coincidentally
+// produced approximately the right pixels for Word's Normal style. After
+// SD-2735 measuring-dom does `mult × naturalSingle` end-to-end; the fudge
+// would double-apply, so we keep this normalization at the spec-canonical
+// pure ratio.
+const SINGLE_LINE_AUTO_DEFAULT = 1.0;
+const AUTO_SPACING_BEFORE_AFTER_DEFAULT_MULTIPLIER = 1.15;
 const AUTO_SPACING_LINE_DEFAULT = 240; // Default OOXML auto line spacing in twips
 
 /**
@@ -104,14 +114,14 @@ export const normalizeParagraphSpacing = (
     if (isList) {
       before = undefined;
     } else {
-      before = (lineRaw ?? AUTO_SPACING_LINE_DEFAULT) * AUTO_SPACING_DEFAULT_MULTIPLIER;
+      before = (lineRaw ?? AUTO_SPACING_LINE_DEFAULT) * AUTO_SPACING_BEFORE_AFTER_DEFAULT_MULTIPLIER;
     }
   }
   if (afterAutospacing) {
     if (isList) {
       after = undefined;
     } else {
-      after = (lineRaw ?? AUTO_SPACING_LINE_DEFAULT) * AUTO_SPACING_DEFAULT_MULTIPLIER;
+      after = (lineRaw ?? AUTO_SPACING_LINE_DEFAULT) * AUTO_SPACING_BEFORE_AFTER_DEFAULT_MULTIPLIER;
     }
   }
 
@@ -127,22 +137,27 @@ export const normalizeParagraphSpacing = (
 };
 
 /**
- * Normalizes line spacing value based on line rule.
- * Converts OOXML line spacing values to a multiplier of font size.
- * @param value - OOXML line spacing value in twips
+ * Normalizes the OOXML `w:line` value into the canonical pipeline format
+ * consumed by `measuring-dom`. Per ECMA-376 §17.18.48 (ST_LineSpacingRule):
+ *
+ * - `auto`: `w:line` is in 240ths-of-a-line. Output is the dimensionless
+ *   ratio `value/240`; measuring-dom multiplies it by the font's natural
+ *   single-line height.
+ * - `atLeast`/`exact`: `w:line` is in twentieths-of-a-point. Output is in
+ *   pixels (twips → px).
+ * - missing rule: treat like `auto` per OOXML default but emit the pure
+ *   ratio (no fudge).
+ *
+ * @param value - OOXML line spacing value
  * @param lineRule - Line rule ('auto', 'exact', 'atLeast')
- * @returns Normalized line spacing value as a multiplier, or undefined
  */
 export const normalizeLineValue = (
   value: number | undefined,
   lineRule: ParagraphSpacing['lineRule'] | undefined,
 ): { value: number; unit: 'multiplier' | 'px' } => {
-  if (value == null) return { value: AUTO_SPACING_DEFAULT_MULTIPLIER, unit: 'multiplier' };
+  if (value == null) return { value: SINGLE_LINE_AUTO_DEFAULT, unit: 'multiplier' };
   if (lineRule == 'exact' || lineRule == 'atLeast') {
     return { value: twipsToPx(value), unit: 'px' };
-  }
-  if (lineRule === 'auto') {
-    return { value: (value * AUTO_SPACING_DEFAULT_MULTIPLIER) / AUTO_SPACING_LINE_DEFAULT, unit: 'multiplier' };
   }
   return { value: value / AUTO_SPACING_LINE_DEFAULT, unit: 'multiplier' };
 };

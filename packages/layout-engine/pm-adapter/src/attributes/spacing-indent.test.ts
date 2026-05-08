@@ -45,7 +45,12 @@ describe('normalizeParagraphSpacing', () => {
   it('converts auto line values > 10 from 240ths of a line', () => {
     const spacing = { line: 360, lineRule: 'auto' as const } as ParagraphSpacing; // 1.5x
     const result = normalizeParagraphSpacing(spacing, false);
-    expect(result?.line).toBeCloseTo(1.725, 5);
+    // Per ECMA-376 §17.18.48: w:line=360 with lineRule=auto means 360/240 = 1.5
+    // multiplier of natural single-line height. The pre-fix code multiplied by an
+    // extra 1.15 so measuring-dom (which used to do mult × fontSize) coincidentally
+    // matched naturalSingle. Now that measuring-dom does mult × naturalSingle, the
+    // 1.15 fudge would double-apply.
+    expect(result?.line).toBeCloseTo(1.5, 5);
     expect(result?.lineRule).toBe('auto');
   });
 
@@ -83,7 +88,10 @@ describe('normalizeParagraphSpacing', () => {
   it('returns undefined for empty or invalid inputs', () => {
     expect(normalizeParagraphSpacing(undefined, false)).toBeUndefined();
     expect(normalizeParagraphSpacing(null as never, false)).toBeUndefined();
-    expect(normalizeParagraphSpacing({} as ParagraphSpacing, false)).toEqual({ line: 1.15, lineUnit: 'multiplier' });
+    // Empty spacing → single-spacing (1.0 × naturalSingle) per spec. The pre-fix
+    // default of 1.15 was load-bearing only because measuring-dom didn't have the
+    // naturalSingle concept; with the §17.18.48 model the canonical default is 1.0.
+    expect(normalizeParagraphSpacing({} as ParagraphSpacing, false)).toEqual({ line: 1.0, lineUnit: 'multiplier' });
   });
 
   it('skips non-numeric values but preserves valid ones', () => {

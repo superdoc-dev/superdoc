@@ -39,6 +39,7 @@ export const FieldUpdate = Extension.create({
         () =>
         ({ editor, state, tr: outerTr, dispatch }) => {
           const { from, to } = state.selection;
+          let tocPathRan = false;
 
           // toc.update dispatches its own transaction per TOC; CommandService
           // would then auto-apply its captured (now-stale) `tr` to the new
@@ -76,13 +77,16 @@ export const FieldUpdate = Extension.create({
               }
 
               outerTr?.setMeta?.('preventDispatch', true);
-              return true;
+              tocPathRan = true;
+              // Fall through to the stat-field path so a doc that contains
+              // both a TOC and stat fields (NUMWORDS / NUMCHARS / NUMPAGES)
+              // refreshes both on F9.
             }
           }
 
           const fields = findFieldsInRange(state.doc, from, to);
           const updatable = fields.filter((f) => UPDATABLE_FIELD_TYPES.has(f.fieldType));
-          if (updatable.length === 0) return false;
+          if (updatable.length === 0) return tocPathRan;
 
           const mainEditor = resolveMainBodyEditor(editor);
           const stats = getWordStatistics(mainEditor);
@@ -121,7 +125,7 @@ export const FieldUpdate = Extension.create({
             }
           }
 
-          if (!changed) return false;
+          if (!changed) return tocPathRan;
           if (dispatch) dispatch(tr);
           return true;
         },

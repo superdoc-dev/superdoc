@@ -23,12 +23,16 @@ import type { EditorOptions } from '../types/EditorConfig.js';
 const HEADING_STYLE_RE = /^Heading[1-9]$/i;
 
 /**
- * If the active selection is entirely inside a single Heading[1-9] paragraph
- * AND the slice PM produced has no paragraph wrapper at the top, wrap the
- * slice's inline content in a copy of that heading paragraph. The result is
+ * If the active selection covers the *entire* content of a single Heading[1-9]
+ * paragraph AND the slice PM produced has no paragraph wrapper at the top, wrap
+ * the slice's inline content in a copy of that heading paragraph. The result is
  * a closed-boundary slice that survives paste with the heading styleId
  * intact — without this, F9 / "Update table of contents" cannot detect the
  * pasted heading.
+ *
+ * Partial selections inside a heading (e.g. a single word) are intentionally
+ * left as inline-only slices so pasting them back yields inline text, matching
+ * MS Word's behavior.
  */
 function wrapHeadingSelectionAsParagraph(slice: PmSlice, state: { selection: any }): PmSlice {
   // Only act when the slice content is inline-only (no paragraph wrapper).
@@ -41,15 +45,29 @@ function wrapHeadingSelectionAsParagraph(slice: PmSlice, state: { selection: any
 
   // Selection must be inside a single paragraph.
   let parentParagraph: PmNode | null = null;
+  let parentDepth = -1;
   for (let depth = $from.depth; depth >= 0; depth--) {
     const node = $from.node(depth);
     if (node?.type?.name === 'paragraph') {
       // Confirm $to has the same paragraph ancestor at the same depth.
-      if ($to.depth >= depth && $to.node(depth) === node) parentParagraph = node;
+      if ($to.depth >= depth && $to.node(depth) === node) {
+        parentParagraph = node;
+        parentDepth = depth;
+      }
       break;
     }
   }
   if (!parentParagraph) return slice;
+
+  // Only wrap when the selection spans the whole paragraph's content. A partial
+  // selection (e.g. one word inside a heading) must remain inline so paste
+  // produces inline text rather than a new heading block.
+  const startOffset = $from.parentOffset;
+  const endOffset = $to.parentOffset;
+  if (startOffset !== 0 || endOffset !== parentParagraph.content.size) return slice;
+
+  // Defensive: ensure the matched paragraph is the immediate parent of the selection.
+  if ($from.depth !== parentDepth || $to.depth !== parentDepth) return slice;
 
   const styleId = (parentParagraph.attrs as { paragraphProperties?: { styleId?: string } } | undefined)
     ?.paragraphProperties?.styleId;

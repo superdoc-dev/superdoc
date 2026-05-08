@@ -509,6 +509,13 @@ function calculateEmptyParagraphMetrics(
   const resolvedFontSize = normalizeFontSize(fontSize);
   let ascent: number;
   let descent: number;
+  // Symmetric with `calculateTypographyMetrics`: when fontInfo is present,
+  // forward the calibrated `naturalSingleLine` so `resolveLineHeight` scales
+  // a multiplier off Word's intrinsic single-line height (Aptos/Calibri etc.)
+  // instead of the WORD_SINGLE_LINE_SPACING_MULTIPLIER × fontSize fallback.
+  // Otherwise empty cells render shorter than text-bearing cells under the
+  // same auto multiplier.
+  let naturalSingle: number | undefined;
 
   if (
     fontInfo &&
@@ -520,14 +527,15 @@ function calculateEmptyParagraphMetrics(
     const metrics = getFontMetrics(ctx, fontInfo, measurementConfig.mode, measurementConfig.fonts);
     ascent = roundValue(metrics.ascent);
     descent = roundValue(metrics.descent);
+    naturalSingle = metrics.naturalSingleLine;
   } else {
     ascent = roundValue(resolvedFontSize * 0.8);
     descent = roundValue(resolvedFontSize * 0.2);
   }
 
   // Word treats empty paragraphs as a single font-sized line unless line spacing is explicitly set.
-  const maxLineHeight = Math.max(resolvedFontSize, ascent + descent);
-  const lineHeight = roundValue(resolveLineHeight(spacing, resolvedFontSize, maxLineHeight));
+  const fallbackNaturalSingle = Math.max(resolvedFontSize, ascent + descent);
+  const lineHeight = roundValue(resolveLineHeight(spacing, resolvedFontSize, naturalSingle ?? fallbackNaturalSingle));
 
   return {
     ascent,

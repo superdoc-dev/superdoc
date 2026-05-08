@@ -1175,6 +1175,42 @@ describe('measureBlock', () => {
       expect(measure.lines[0].lineHeight).toBeCloseTo(0.5 * baseNaturalSingle, 1);
     });
 
+    it('applies multiplier × naturalSingle to empty paragraphs in calibrated fonts (SD-2735)', async () => {
+      // Caio's third PR-review repro (arial-empty-rows.docx): empty cell
+      // paragraphs go through `calculateEmptyParagraphMetrics`, which does
+      // not plumb the font's calibrated `naturalSingleLine` through to
+      // `resolveLineHeight`. For uncalibrated fonts the bug hides because
+      // naturalSingle ≈ WORD_SINGLE_LINE_SPACING_MULTIPLIER × fontSize
+      // (18.4 px at 16 px) matches the fallback floor inside resolveLineHeight.
+      // For Aptos (calibrated to ~19.5 px at 16 px), the gap surfaces:
+      // empty rows measure 1.15 × fontSize instead of the calibrated value,
+      // so empty cells render shorter than text-bearing cells in the same
+      // table. The fix is symmetric with `calculateTypographyMetrics`:
+      // populate naturalSingle from the calibration table when fontInfo is
+      // present, and forward it to resolveLineHeight.
+      const fontSize = 16; // 12 pt
+      const block: FlowBlock = {
+        kind: 'paragraph',
+        id: 'empty-aptos',
+        runs: [
+          {
+            text: '',
+            fontFamily: 'Aptos',
+            fontSize,
+          },
+        ],
+        attrs: {
+          spacing: { line: 1.5, lineUnit: 'multiplier', lineRule: 'auto' },
+        },
+      };
+
+      const measure = expectParagraphMeasure(await measureBlock(block, 400));
+      // Aptos calibrated naturalSingle ≈ 19.488 px (see fontMetricsCache.test.ts).
+      // 1.5 × 19.488 ≈ 29.2.
+      const aptosNaturalSingle = 19.488;
+      expect(measure.lines[0].lineHeight).toBeCloseTo(1.5 * aptosNaturalSingle, 0);
+    });
+
     it('ensures line height is never smaller than glyph bounds to prevent clipping', async () => {
       // This test verifies the clamp: Math.max(fontSize * 1.15, ascent + descent)
       // For any font, line height must be >= ascent + descent to prevent glyph overlap

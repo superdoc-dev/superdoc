@@ -96,6 +96,8 @@ import type {
   ListsAttachInput,
   ListsDetachInput,
   ListsDetachResult,
+  ListsDeleteInput,
+  ListsDeleteResult,
   ListsJoinInput,
   ListsJoinResult,
   ListsCanJoinInput,
@@ -391,6 +393,7 @@ import type {
   TablesUnmergeCellsInput,
   TablesSplitCellInput,
   TablesSetCellPropertiesInput,
+  TablesSetCellTextInput,
   TablesSortInput,
   TablesSetAltTextInput,
   TablesSetStyleInput,
@@ -408,6 +411,7 @@ import type {
   TablesApplyStyleInput,
   TablesSetBordersInput,
   TablesSetTableOptionsInput,
+  TablesApplyPresetInput,
   TableMutationResult,
   TablesGetInput,
   TablesGetOutput,
@@ -673,6 +677,7 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
   'lists.create': { input: ListsCreateInput; options: MutationOptions; output: ListsCreateResult };
   'lists.attach': { input: ListsAttachInput; options: MutationOptions; output: ListsMutateItemResult };
   'lists.detach': { input: ListsDetachInput; options: MutationOptions; output: ListsDetachResult };
+  'lists.delete': { input: ListsDeleteInput; options: MutationOptions; output: ListsDeleteResult };
   'lists.indent': { input: ListTargetInput; options: MutationOptions; output: ListsMutateItemResult };
   'lists.outdent': { input: ListTargetInput; options: MutationOptions; output: ListsMutateItemResult };
   'lists.join': { input: ListsJoinInput; options: MutationOptions; output: ListsJoinResult };
@@ -906,6 +911,7 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
     options: MutationOptions;
     output: TableMutationResult;
   };
+  'tables.setCellText': { input: TablesSetCellTextInput; options: MutationOptions; output: TableMutationResult };
   'tables.sort': { input: TablesSortInput; options: MutationOptions; output: TableMutationResult };
   'tables.setAltText': { input: TablesSetAltTextInput; options: MutationOptions; output: TableMutationResult };
   'tables.setStyle': { input: TablesSetStyleInput; options: MutationOptions; output: TableMutationResult };
@@ -939,6 +945,7 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
     options: MutationOptions;
     output: TableMutationResult;
   };
+  'tables.applyPreset': { input: TablesApplyPresetInput; options: MutationOptions; output: TableMutationResult };
 
   // --- tables.* reads ---
   'tables.get': { input: TablesGetInput; options: never; output: TablesGetOutput };

@@ -1234,6 +1234,11 @@ export interface SuperDocLayoutEngineOptions {
    * at runtime via `superdoc.setShowBookmarks()`.
    */
   showBookmarks?: boolean;
+  /**
+   * Whether nonprinting formatting marks are shown in the rendered layout.
+   * Toggleable at runtime via `superdoc.setShowFormattingMarks()`.
+   */
+  showFormattingMarks?: boolean;
 }
 
 export interface ViewingVisibilityConfig {

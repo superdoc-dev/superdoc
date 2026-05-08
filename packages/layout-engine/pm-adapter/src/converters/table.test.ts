@@ -2155,3 +2155,210 @@ describe('parseTableCell - theme shading resolution', () => {
     expect(result.rows[0].cells[0].attrs?.background).toBeUndefined();
   });
 });
+
+// SD-2516: Word's "SDT in a table cell" parses into PM as
+// `tableCell > documentPartObject > paragraph`. Before the fix, the table
+// cell's child loop did not branch on documentPartObject — only paragraph,
+// structuredContentBlock, and table — so the wrapped paragraph was silently
+// dropped, producing a visually empty cell.
+describe('tableCellNodeToBlock — SD-2516: documentPartObject children', () => {
+  const mockBlockIdGenerator: BlockIdGenerator = vi.fn((kind) => `test-${kind}`);
+  const mockPositionMap: PositionMap = new Map();
+  const mockParagraphConverter = vi.fn((params) => [
+    {
+      kind: 'paragraph',
+      id: 'p1',
+      runs: [{ text: params.para.content?.[0]?.text || '', fontFamily: 'Arial', fontSize: 12 }],
+    } as ParagraphBlock,
+  ]);
+
+  it('flattens a documentPartObject inside a table cell into the cell.blocks array', () => {
+    const node: PMNode = {
+      type: 'table',
+      content: [
+        {
+          type: 'tableRow',
+          content: [
+            {
+              type: 'tableCell',
+              content: [
+                {
+                  type: 'documentPartObject',
+                  attrs: {},
+                  content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Hello' }] }],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = tableNodeToBlock(
+      node,
+      mockBlockIdGenerator,
+      mockPositionMap,
+      'Arial',
+      16,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      mockParagraphConverter,
+    ) as TableBlock;
+
+    expect(result).toBeDefined();
+    const cell = result.rows[0].cells[0];
+    const cellBlocks = cell.blocks ?? (cell.paragraph ? [cell.paragraph] : []);
+    expect(cellBlocks).toHaveLength(1);
+    expect(cellBlocks[0].kind).toBe('paragraph');
+    expect((cellBlocks[0] as ParagraphBlock).runs[0].text).toBe('Hello');
+  });
+
+  it('flattens a nested documentPartObject inside a table cell into the cell.blocks array', () => {
+    const node: PMNode = {
+      type: 'table',
+      content: [
+        {
+          type: 'tableRow',
+          content: [
+            {
+              type: 'tableCell',
+              content: [
+                {
+                  type: 'documentPartObject',
+                  attrs: {},
+                  content: [
+                    {
+                      type: 'documentPartObject',
+                      attrs: {},
+                      content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Nested' }] }],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = tableNodeToBlock(
+      node,
+      mockBlockIdGenerator,
+      mockPositionMap,
+      'Arial',
+      16,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      mockParagraphConverter,
+    ) as TableBlock;
+
+    expect(result).toBeDefined();
+    const cell = result.rows[0].cells[0];
+    const cellBlocks = cell.blocks ?? (cell.paragraph ? [cell.paragraph] : []);
+    expect(cellBlocks).toHaveLength(1);
+    expect(cellBlocks[0].kind).toBe('paragraph');
+    expect((cellBlocks[0] as ParagraphBlock).runs[0].text).toBe('Nested');
+  });
+
+  it('flattens a documentPartObject wrapping a structuredContentBlock inside a table cell', () => {
+    const node: PMNode = {
+      type: 'table',
+      content: [
+        {
+          type: 'tableRow',
+          content: [
+            {
+              type: 'tableCell',
+              content: [
+                {
+                  type: 'documentPartObject',
+                  attrs: {},
+                  content: [
+                    {
+                      type: 'structuredContentBlock',
+                      attrs: {},
+                      content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Inner SCB' }] }],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = tableNodeToBlock(
+      node,
+      mockBlockIdGenerator,
+      mockPositionMap,
+      'Arial',
+      16,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      mockParagraphConverter,
+    ) as TableBlock;
+
+    expect(result).toBeDefined();
+    const cell = result.rows[0].cells[0];
+    const cellBlocks = cell.blocks ?? (cell.paragraph ? [cell.paragraph] : []);
+    expect(cellBlocks).toHaveLength(1);
+    expect(cellBlocks[0].kind).toBe('paragraph');
+    expect((cellBlocks[0] as ParagraphBlock).runs[0].text).toBe('Inner SCB');
+  });
+
+  it('flattens a structuredContentBlock wrapping a documentPartObject inside a table cell', () => {
+    const node: PMNode = {
+      type: 'table',
+      content: [
+        {
+          type: 'tableRow',
+          content: [
+            {
+              type: 'tableCell',
+              content: [
+                {
+                  type: 'structuredContentBlock',
+                  attrs: {},
+                  content: [
+                    {
+                      type: 'documentPartObject',
+                      attrs: {},
+                      content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Inner DPO' }] }],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = tableNodeToBlock(
+      node,
+      mockBlockIdGenerator,
+      mockPositionMap,
+      'Arial',
+      16,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      mockParagraphConverter,
+    ) as TableBlock;
+
+    expect(result).toBeDefined();
+    const cell = result.rows[0].cells[0];
+    const cellBlocks = cell.blocks ?? (cell.paragraph ? [cell.paragraph] : []);
+    expect(cellBlocks).toHaveLength(1);
+    expect(cellBlocks[0].kind).toBe('paragraph');
+    expect((cellBlocks[0] as ParagraphBlock).runs[0].text).toBe('Inner DPO');
+  });
+});

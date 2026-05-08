@@ -1,14 +1,14 @@
 ---
 title: tables.insertColumn
 sidebarTitle: tables.insertColumn
-description: Insert a new column into the target table.
+description: Insert a new column into the target table. The new column is cloned from an adjacent column, so it inherits the existing cell shading, borders, alignment, and width. No follow-up styling call is needed unless the new column should look different from the rest of the table.
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
 
 ## Summary
 
-Insert a new column into the target table.
+Insert a new column into the target table. The new column is cloned from an adjacent column, so it inherits the existing cell shading, borders, alignment, and width. No follow-up styling call is needed unless the new column should look different from the rest of the table.
 
 - Operation ID: `tables.insertColumn`
 - API member path: `editor.doc.tables.insertColumn(...)`
@@ -28,9 +28,9 @@ Returns a TableMutationResult receipt confirming a column was inserted.
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `columnIndex` | integer | yes |  |
+| `columnIndex` | integer | no |  |
 | `count` | integer | no |  |
-| `position` | enum | yes | `"left"`, `"right"` |
+| `position` | enum | yes | `"left"`, `"right"`, `"first"`, `"last"` |
 | `target` | TableAddress | yes | TableAddress |
 | `target.kind` | `"block"` | yes | Constant: `"block"` |
 | `target.nodeId` | string | yes |  |
@@ -40,10 +40,10 @@ Returns a TableMutationResult receipt confirming a column was inserted.
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `columnIndex` | integer | yes |  |
+| `columnIndex` | integer | no |  |
 | `count` | integer | no |  |
 | `nodeId` | string | yes |  |
-| `position` | enum | yes | `"left"`, `"right"` |
+| `position` | enum | yes | `"left"`, `"right"`, `"first"`, `"last"` |
 
 ### Example request
 
@@ -151,7 +151,9 @@ When present, `result.table` is the follow-up address to reuse after this call. 
     "position": {
       "enum": [
         "left",
-        "right"
+        "right",
+        "first",
+        "last"
       ]
     },
     "target": {
@@ -159,7 +161,6 @@ When present, `result.table` is the follow-up address to reuse after this call. 
     }
   },
   "required": [
-    "columnIndex",
     "position"
   ],
   "type": "object"

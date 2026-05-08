@@ -59,6 +59,8 @@ function InsertClauseButton() {
 }
 ```
 
+See the [configurable toolbar example](https://github.com/superdoc-dev/superdoc/tree/main/examples/editor/custom-ui/configurable-toolbar) for a runnable vanilla version that registers an `example.insertClause` command alongside the built-in bold / italic / underline buttons.
+
 ## Naming
 
 Use a namespace to avoid colliding with future built-ins. `company.insertClause`, `acme.aiRewrite`, `support.translate`. Bare names like `'rewrite'` will warn if SuperDoc later adds a built-in with the same id.
@@ -87,7 +89,7 @@ function onPermissionsChange() {
 
 ## execute
 
-`execute` receives `{ payload, superdoc }`. The cleanest custom commands are additive: they call your services, open your modals, fire telemetry, and don't mutate the document. The runtime cares about the return value (`boolean` or `Promise<boolean>`); the engine doesn't see the work.
+`execute` receives `{ payload, superdoc, editor, context }`. The cleanest custom commands are additive: they call your services, open your modals, fire telemetry, and don't mutate the document. The runtime cares about the return value (`boolean` or `Promise<boolean>`); the engine doesn't see the work.
 
 ```ts
 ui.commands.register<{ clauseId: string }>({
@@ -99,6 +101,15 @@ ui.commands.register<{ clauseId: string }>({
   },
 });
 ```
+
+The arguments:
+
+| Field | Meaning |
+|---|---|
+| `payload` | Whatever the caller passed to `commands.get(id).execute(payload)`. Typed via `register<TPayload>(...)`. |
+| `superdoc` | The host SuperDoc instance. Useful when you need `superdoc.config` or other host-only fields. |
+| `editor` | The currently routed editor. Tracks header / footer / footnote focus, so `editor.doc.*` calls land on the right surface. `null` until ready. |
+| `context` | The `ViewportContext` bundle when the command was invoked from a right-click menu via `ContextMenuItem.invoke()`. `undefined` for direct dispatch. See [Custom right-click menu](/editor/custom-ui/context-menu). |
 
 Async work is fine. The runtime awaits internally.
 
@@ -143,6 +154,85 @@ Two things make the snippet safe to copy:
 - `editor` is typed and resolved late-bound by the controller. It tracks header / footer / footnote focus the same way every other `ui.*` mutation does, so a custom command run from a header-focused composer hits the right story.
 
 The reference demo's `InsertClauseButton` ships this exact pattern.
+
+## Keyboard shortcut
+
+Add `shortcut: 'Mod-Shift-K'` to bind a key combo. The controller installs one bubble-phase listener scoped to the painted host, matches the combo, and dispatches `execute` through the same path the toolbar button uses. No per-command keymap wiring.
+
+```ts
+ui.commands.register<{ clauseId?: string }>({
+  id: 'company.insertClause',
+  shortcut: 'Mod-Shift-C',
+  execute: ({ payload }) => {
+    if (!payload) {
+      openClausePicker();
+      return true;
+    }
+    insertClause(payload.clauseId);
+    return true;
+  },
+});
+```
+
+Format follows ProseMirror keymap syntax: `Mod` (Ctrl on Windows / Linux, Cmd on macOS), `Shift`, `Alt`, `Ctrl`, then a key (`A` through `Z`, `0` through `9`, `Enter`, `Space`, etc.). Examples: `'Mod-K'`, `'Mod-Shift-C'`, `'Alt-Enter'`.
+
+The keyboard path doesn't consult `getState`. If your toolbar button is disabled, the shortcut still fires unless you mirror the gate inside `execute`:
+
+```ts
+execute: ({ payload, superdoc }) => {
+  const live = ui.selection.getSnapshot();
+  const disabled = superdoc.config?.documentMode === 'viewing' || live.target === null;
+  if (disabled) return false;
+  // ... do the work
+  return true;
+},
+```
+
+Two custom commands declaring the same shortcut warn at registration time; the most recent registration wins.
+
+## Contribute to the right-click menu
+
+Add a `contextMenu` field to surface the command in your custom right-click menu. The `when` predicate filters on the bundle from `ui.viewport.contextAt({ x, y })`.
+
+```ts
+ui.commands.register({
+  id: 'demo.acceptSuggestion',
+  execute: ({ context }) => {
+    const id = context?.entities.find((e) => e.type === 'trackedChange')?.id;
+    if (!id) return false;
+    ui.trackChanges.accept(id);
+    return true;
+  },
+  contextMenu: {
+    label: 'Accept suggestion',
+    group: 'review',
+    order: 0,
+    when: ({ entities }) => entities.some((e) => e.type === 'trackedChange'),
+  },
+});
+```
+
+| Field | Type | Meaning |
+|---|---|---|
+| `label` | `string` | Item text. Required. |
+| `group` | `string` | Sort key. Built-in groups: `format`, `clipboard`, `review`, `comment`, `link`. Customs land after, in registration order. Default `'custom'`. |
+| `order` | `number` | Sort order within a group. Default `0`. |
+| `when` | `(input) => boolean` | Filter on `{ entities, selection, point?, position?, insideSelection? }`. Returns `true` to show the item. |
+
+Items returned from `ui.commands.getContextMenuItems(context)` carry an `invoke()` closure that fires `execute({ context })` with the bundle bound. Your menu component dispatches with one call, no payload threading. See [Custom right-click menu](/editor/custom-ui/context-menu) for the full pattern.
+
+## Look up commands by id
+
+`ui.commands.get(id)` returns a typed handle. `ui.commands.has(id)` reports whether the id is registered. `ui.commands.require(id)` returns the handle or throws when missing, useful when the registration is set up earlier in your component tree and the lookup site can rely on it.
+
+```ts
+if (ui.commands.has('company.aiRewrite')) {
+  ui.commands.get('company.aiRewrite')?.execute({ tone: 'concise' });
+}
+
+const insert = ui.commands.require('company.insertClause');
+insert.execute({ clauseId: 'nda' });
+```
 
 ## Override a built-in
 

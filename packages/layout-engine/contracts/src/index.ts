@@ -4,6 +4,20 @@ export { computeTabStops, layoutWithTabs, calculateTabWidth } from './engines/ta
 // Re-export TabStop for external consumers
 export type { TabStop };
 
+// Direction context types (orthogonal axes for RTL/BIDI).
+// See `direction-context.ts` for the spec rationale and axis semantics.
+export type {
+  BaseDirection,
+  WritingMode,
+  SectionDirectionContext,
+  TableDirectionContext,
+  CellDirectionContext,
+  ParagraphDirectionContext,
+  RunBidiContext,
+  RunScriptContext,
+} from './direction-context.js';
+import type { ParagraphDirectionContext } from './direction-context.js';
+
 // Export table contracts
 export {
   OOXML_PCT_DIVISOR,
@@ -1466,8 +1480,22 @@ export type ParagraphAttrs = {
   trackedChangesEnabled?: boolean;
   /** Marks an empty paragraph that only exists to carry section properties. */
   sectPrMarker?: boolean;
+  /**
+   * Resolved paragraph inline base direction. Populated from `directionContext.inlineDirection`
+   * during pm-adapter conversion; left undefined when no explicit bidi is set so the browser
+   * can apply UBA via missing `dir` attribute.
+   *
+   * Prefer reading `directionContext` (typed, complete) over this scalar field. The scalar
+   * remains for backwards compatibility with consumers that only need inline direction.
+   */
   direction?: 'ltr' | 'rtl';
-  rtl?: boolean;
+  /**
+   * Resolved direction context for the paragraph (inline direction + writing mode).
+   * Single source of truth for paragraph direction-aware rendering decisions.
+   *
+   * See `@superdoc/contracts/direction-context` for axis semantics.
+   */
+  directionContext?: ParagraphDirectionContext;
   isTocEntry?: boolean;
   tocInstruction?: string;
   /** Floating alignment for positioned paragraphs (from w:framePr/@w:xAlign). */
@@ -1587,6 +1615,8 @@ export type LineSegment = {
   toChar: number;
   width: number;
   x?: number;
+  /** End x for an immediately preceding tab when it differs from this segment's paint x. */
+  precedingTabEndX?: number;
 };
 
 export type LeaderDecoration = {
@@ -2064,5 +2094,9 @@ export type {
   ResolvedHeaderFooterLayout,
 } from './resolved-layout.js';
 export { isResolvedTableItem, isResolvedImageItem, isResolvedDrawingItem } from './resolved-layout.js';
+
+// Pure transformations on inline-run shapes (used by pm-adapter, layout-bridge,
+// and painter-dom). Located in contracts to avoid reverse stage dependencies.
+export { expandRunsForInlineNewlines, sliceRunsForLine } from './run-helpers.js';
 
 export * as Engines from './engines/index.js';

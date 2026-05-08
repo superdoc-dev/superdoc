@@ -535,6 +535,11 @@ export function decodeRPrFromMarks(marks) {
       case 'italic':
       case 'bold':
         runProperties[type] = mark.attrs.value !== '0' && mark.attrs.value !== false;
+        if (type === 'bold') {
+          runProperties.boldCs = runProperties.bold;
+        } else if (type === 'italic') {
+          runProperties.italicCs = runProperties.italic;
+        }
         break;
       case 'underline': {
         const { underlineType, underlineColor, underlineThemeColor, underlineThemeTint, underlineThemeShade } =
@@ -589,7 +594,9 @@ export function decodeRPrFromMarks(marks) {
             case 'fontSize': {
               const points = parseFloat(value);
               if (!isNaN(points)) {
-                runProperties.fontSize = points * 2;
+                const halfPoints = points * 2;
+                runProperties.fontSize = halfPoints;
+                runProperties.fontSizeCs = halfPoints;
               }
               break;
             }

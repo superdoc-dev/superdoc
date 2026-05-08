@@ -846,6 +846,7 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.lists.create` | `lists create` | Create a new list from one or more paragraphs. Supports optional preset or style for new sequences. When sequence.mode is "continuePrevious", preset and style are not allowed: the new items inherit formatting from the previous sequence. |
 | `doc.lists.attach` | `lists attach` | Convert non-list paragraphs to list items under an existing list sequence. |
 | `doc.lists.detach` | `lists detach` | Remove numbering properties from list items, converting them to plain paragraphs. |
+| `doc.lists.delete` | `lists delete` | Delete the entire list that contains the targeted list item. Removes ALL items in the same numbered sequence (the contiguous run of list items sharing the target's numbering) AND their text content from the document. Pass any single list item from the list as `target`; the op walks adjacent siblings to find the full list. Use this for "remove the list" / "delete this list" intents and for the cleanup step of a list-to-table conversion. |
 | `doc.lists.indent` | `lists indent` | Increase the indentation level of a list item. |
 | `doc.lists.outdent` | `lists outdent` | Decrease the indentation level of a list item. |
 | `doc.lists.join` | `lists join` | Merge two adjacent list sequences into one. |
@@ -890,12 +891,12 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.tables.split` | `tables split` | Split a table into two tables at the target row. |
 | `doc.tables.convertToText` | `tables convert-to-text` | Convert a table back to plain text. |
 | `doc.tables.setLayout` | `tables set-layout` | Set the layout mode of the target table. |
-| `doc.tables.insertRow` | `tables insert-row` | Insert a new row into the target table. |
+| `doc.tables.insertRow` | `tables insert-row` | Insert a new row into the target table. The new row is cloned from an adjacent row, so it inherits the existing cell shading, borders, alignment, and padding. No follow-up styling call is needed unless the new row should look different from the rest of the table. |
 | `doc.tables.deleteRow` | `tables delete-row` | Delete a row from the target table. |
 | `doc.tables.setRowHeight` | `tables set-row-height` | Set the height of a table row. |
 | `doc.tables.distributeRows` | `tables distribute-rows` | Distribute row heights evenly across the target table. |
 | `doc.tables.setRowOptions` | `tables set-row-options` | Set options on a table row such as header repeat or page break. |
-| `doc.tables.insertColumn` | `tables insert-column` | Insert a new column into the target table. |
+| `doc.tables.insertColumn` | `tables insert-column` | Insert a new column into the target table. The new column is cloned from an adjacent column, so it inherits the existing cell shading, borders, alignment, and width. No follow-up styling call is needed unless the new column should look different from the rest of the table. |
 | `doc.tables.deleteColumn` | `tables delete-column` | Delete a column from the target table. |
 | `doc.tables.setColumnWidth` | `tables set-column-width` | Set the width of a table column. |
 | `doc.tables.distributeColumns` | `tables distribute-columns` | Distribute column widths evenly across the target table. |
@@ -904,7 +905,8 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.tables.mergeCells` | `tables merge-cells` | Merge a range of table cells into one. |
 | `doc.tables.unmergeCells` | `tables unmerge-cells` | Unmerge a previously merged table cell. |
 | `doc.tables.splitCell` | `tables split-cell` | Split a table cell into multiple cells. |
-| `doc.tables.setCellProperties` | `tables set-cell-properties` | Set properties on a table cell such as vertical alignment or text direction. |
+| `doc.tables.setCellProperties` | `tables set-cell-properties` | Set non-text properties on a single table cell: vertical alignment, text wrapping, fit-text, or preferred width. Requires a cell-level target (a tableCell block address with kind, nodeType, nodeId). Does NOT accept a table target with rowIndex/columnIndex. To set the text content of a cell, use action "set_cell_text" instead. |
+| `doc.tables.setCellText` | `tables set-cell-text` | Replace the text content of a single table cell with plain text (one paragraph). Accepts either a direct cell locator (a tableCell block address with kind, nodeType, nodeId) OR a table target with rowIndex + columnIndex. Cell properties (vertical alignment, shading, borders, colspan/rowspan) are preserved. Use this for filling cells with values, replacing cell text, or populating empty tables. Much simpler than walking paragraphs and runs through superdoc_edit. |
 | `doc.tables.sort` | `tables sort` | Sort table rows by a column value. |
 | `doc.tables.setAltText` | `tables set-alt-text` | Set the alternative text description for a table. |
 | `doc.tables.setStyle` | `tables set-style` | Apply a named table style to the target table. |
@@ -919,9 +921,10 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.tables.setCellPadding` | `tables set-cell-padding` | Set padding on a specific table cell or cell range. |
 | `doc.tables.setCellSpacing` | `tables set-cell-spacing` | Set the cell spacing for the target table. |
 | `doc.tables.clearCellSpacing` | `tables clear-cell-spacing` | Remove custom cell spacing from the target table. |
-| `doc.tables.applyStyle` | `tables apply-style` | Apply a table style and/or style options in one call. |
+| `doc.tables.applyStyle` | `tables apply-style` | Toggle conditional-format flags (header row, banded rows/columns, first/last column, last row) on a table. Pass `styleOptions` with the flags you want to set or clear (omitted flags stay unchanged). For "format the first row as a header" use `styleOptions: { headerRow: true }`. Optional `styleId` applies a named table style. Leave it unset unless you have a styleId from `superdoc_get_content` (no need to invent one). |
 | `doc.tables.setBorders` | `tables set-borders` | Set borders on a table using a target set or per-edge patch. |
 | `doc.tables.setTableOptions` | `tables set-table-options` | Set table-level default cell margins and/or cell spacing. |
+| `doc.tables.applyPreset` | `tables apply-preset` | Apply a named visual preset to a table. Presets: "grid" (1pt black borders all around), "minimal" (no outer borders, hairline grey row separators + thicker bottom), "striped" (banded rows on, 0.5pt grey borders), "accent" (filled header row + thick accent top/bottom; defaults to dark blue, override with `accentColor`). Composes set_borders + set_style_options + header-row shading in one call. Available via the document API and `superdoc_mutations` (intentionally NOT exposed as a top-level action on `superdoc_table`. Agents should compose explicit set_borders / set_shading / set_style_options calls so they always pick concrete colors that match the document context). |
 | `doc.tables.get` | `tables get` | Retrieve table structure and dimensions by locator. |
 | `doc.tables.getCells` | `tables get-cells` | Retrieve cell information for a table, optionally filtered by row or column. |
 | `doc.tables.getProperties` | `tables get-properties` | Retrieve layout and style properties of a table. |
@@ -1310,6 +1313,7 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.lists.create` | `lists create` | Create a new list from one or more paragraphs. Supports optional preset or style for new sequences. When sequence.mode is "continuePrevious", preset and style are not allowed: the new items inherit formatting from the previous sequence. |
 | `doc.lists.attach` | `lists attach` | Convert non-list paragraphs to list items under an existing list sequence. |
 | `doc.lists.detach` | `lists detach` | Remove numbering properties from list items, converting them to plain paragraphs. |
+| `doc.lists.delete` | `lists delete` | Delete the entire list that contains the targeted list item. Removes ALL items in the same numbered sequence (the contiguous run of list items sharing the target's numbering) AND their text content from the document. Pass any single list item from the list as `target`; the op walks adjacent siblings to find the full list. Use this for "remove the list" / "delete this list" intents and for the cleanup step of a list-to-table conversion. |
 | `doc.lists.indent` | `lists indent` | Increase the indentation level of a list item. |
 | `doc.lists.outdent` | `lists outdent` | Decrease the indentation level of a list item. |
 | `doc.lists.join` | `lists join` | Merge two adjacent list sequences into one. |
@@ -1354,12 +1358,12 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.tables.split` | `tables split` | Split a table into two tables at the target row. |
 | `doc.tables.convert_to_text` | `tables convert-to-text` | Convert a table back to plain text. |
 | `doc.tables.set_layout` | `tables set-layout` | Set the layout mode of the target table. |
-| `doc.tables.insert_row` | `tables insert-row` | Insert a new row into the target table. |
+| `doc.tables.insert_row` | `tables insert-row` | Insert a new row into the target table. The new row is cloned from an adjacent row, so it inherits the existing cell shading, borders, alignment, and padding. No follow-up styling call is needed unless the new row should look different from the rest of the table. |
 | `doc.tables.delete_row` | `tables delete-row` | Delete a row from the target table. |
 | `doc.tables.set_row_height` | `tables set-row-height` | Set the height of a table row. |
 | `doc.tables.distribute_rows` | `tables distribute-rows` | Distribute row heights evenly across the target table. |
 | `doc.tables.set_row_options` | `tables set-row-options` | Set options on a table row such as header repeat or page break. |
-| `doc.tables.insert_column` | `tables insert-column` | Insert a new column into the target table. |
+| `doc.tables.insert_column` | `tables insert-column` | Insert a new column into the target table. The new column is cloned from an adjacent column, so it inherits the existing cell shading, borders, alignment, and width. No follow-up styling call is needed unless the new column should look different from the rest of the table. |
 | `doc.tables.delete_column` | `tables delete-column` | Delete a column from the target table. |
 | `doc.tables.set_column_width` | `tables set-column-width` | Set the width of a table column. |
 | `doc.tables.distribute_columns` | `tables distribute-columns` | Distribute column widths evenly across the target table. |
@@ -1368,7 +1372,8 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.tables.merge_cells` | `tables merge-cells` | Merge a range of table cells into one. |
 | `doc.tables.unmerge_cells` | `tables unmerge-cells` | Unmerge a previously merged table cell. |
 | `doc.tables.split_cell` | `tables split-cell` | Split a table cell into multiple cells. |
-| `doc.tables.set_cell_properties` | `tables set-cell-properties` | Set properties on a table cell such as vertical alignment or text direction. |
+| `doc.tables.set_cell_properties` | `tables set-cell-properties` | Set non-text properties on a single table cell: vertical alignment, text wrapping, fit-text, or preferred width. Requires a cell-level target (a tableCell block address with kind, nodeType, nodeId). Does NOT accept a table target with rowIndex/columnIndex. To set the text content of a cell, use action "set_cell_text" instead. |
+| `doc.tables.set_cell_text` | `tables set-cell-text` | Replace the text content of a single table cell with plain text (one paragraph). Accepts either a direct cell locator (a tableCell block address with kind, nodeType, nodeId) OR a table target with rowIndex + columnIndex. Cell properties (vertical alignment, shading, borders, colspan/rowspan) are preserved. Use this for filling cells with values, replacing cell text, or populating empty tables. Much simpler than walking paragraphs and runs through superdoc_edit. |
 | `doc.tables.sort` | `tables sort` | Sort table rows by a column value. |
 | `doc.tables.set_alt_text` | `tables set-alt-text` | Set the alternative text description for a table. |
 | `doc.tables.set_style` | `tables set-style` | Apply a named table style to the target table. |
@@ -1383,9 +1388,10 @@ The SDKs expose all operations from the [Document API](/document-api/overview) p
 | `doc.tables.set_cell_padding` | `tables set-cell-padding` | Set padding on a specific table cell or cell range. |
 | `doc.tables.set_cell_spacing` | `tables set-cell-spacing` | Set the cell spacing for the target table. |
 | `doc.tables.clear_cell_spacing` | `tables clear-cell-spacing` | Remove custom cell spacing from the target table. |
-| `doc.tables.apply_style` | `tables apply-style` | Apply a table style and/or style options in one call. |
+| `doc.tables.apply_style` | `tables apply-style` | Toggle conditional-format flags (header row, banded rows/columns, first/last column, last row) on a table. Pass `styleOptions` with the flags you want to set or clear (omitted flags stay unchanged). For "format the first row as a header" use `styleOptions: { headerRow: true }`. Optional `styleId` applies a named table style. Leave it unset unless you have a styleId from `superdoc_get_content` (no need to invent one). |
 | `doc.tables.set_borders` | `tables set-borders` | Set borders on a table using a target set or per-edge patch. |
 | `doc.tables.set_table_options` | `tables set-table-options` | Set table-level default cell margins and/or cell spacing. |
+| `doc.tables.apply_preset` | `tables apply-preset` | Apply a named visual preset to a table. Presets: "grid" (1pt black borders all around), "minimal" (no outer borders, hairline grey row separators + thicker bottom), "striped" (banded rows on, 0.5pt grey borders), "accent" (filled header row + thick accent top/bottom; defaults to dark blue, override with `accentColor`). Composes set_borders + set_style_options + header-row shading in one call. Available via the document API and `superdoc_mutations` (intentionally NOT exposed as a top-level action on `superdoc_table`. Agents should compose explicit set_borders / set_shading / set_style_options calls so they always pick concrete colors that match the document context). |
 | `doc.tables.get` | `tables get` | Retrieve table structure and dimensions by locator. |
 | `doc.tables.get_cells` | `tables get-cells` | Retrieve cell information for a table, optionally filtered by row or column. |
 | `doc.tables.get_properties` | `tables get-properties` | Retrieve layout and style properties of a table. |

@@ -134,6 +134,34 @@ jobs:
         working-directory: examples/__tests__
         run: EXAMPLE=editor/built-in-ui/${{ matrix.example }} npx playwright test
 
+  custom-ui:
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        example: [selection-capture, configurable-toolbar]
+    steps:
+      - name: Restore workspace
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            .
+            ~/.cache/ms-playwright
+          key: examples-workspace-${{ github.sha }}
+
+      - uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Run smoke test
+        working-directory: examples/__tests__
+        run: EXAMPLE=editor/custom-ui/${{ matrix.example }} npx playwright test
+
   ai:
     needs: build
     runs-on: ubuntu-latest
@@ -174,7 +202,27 @@ jobs:
         working-directory: examples/__tests__
         run: EXAMPLE=advanced/headless-toolbar/${{ matrix.example }} npx playwright test
 
-  headless:
+  advanced-extensions:
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        example: [custom-mark, custom-node]
+    steps:
+      - name: Restore workspace
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            .
+            ~/.cache/ms-playwright
+          key: examples-workspace-${{ github.sha }}
+
+      - name: Run smoke test
+        working-directory: examples/__tests__
+        run: EXAMPLE=advanced/extensions/${{ matrix.example }} npx playwright test
+
+  document-engine:
     needs: build
     runs-on: ubuntu-latest
     steps:
@@ -186,14 +234,14 @@ jobs:
             ~/.cache/ms-playwright
           key: examples-workspace-${{ github.sha }}
 
-      - name: Run headless tests
-        working-directory: examples/headless/ai-redlining
+      - name: Run AI redlining (server-side) tests
+        working-directory: examples/document-engine/ai-redlining
         run: npx tsx src/index.test.ts
 
   validate:
     name: CI Examples / validate
     if: always()
-    needs: [getting-started, collaboration, built-in-ui, ai, advanced-headless-toolbar, headless]
+    needs: [getting-started, collaboration, built-in-ui, custom-ui, ai, advanced-headless-toolbar, advanced-extensions, document-engine]
     runs-on: ubuntu-latest
     steps:
       - name: Check results

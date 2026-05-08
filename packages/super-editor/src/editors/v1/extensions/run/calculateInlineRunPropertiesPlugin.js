@@ -11,12 +11,15 @@ import { collectChangedRangesThroughTransactions } from '@utils/rangeUtils.js';
 const RUN_PROPERTIES_DERIVED_FROM_MARKS = new Set([
   'strike',
   'italic',
+  'italicCs',
   'bold',
+  'boldCs',
   'underline',
   'highlight',
   'textTransform',
   'color',
   'fontSize',
+  'fontSizeCs',
   'letterSpacing',
   'fontFamily',
   'vertAlign',
@@ -26,6 +29,11 @@ const RUN_PROPERTIES_DERIVED_FROM_MARKS = new Set([
 const TRANSIENT_HYPERLINK_STYLE_IDS = new Set(['Hyperlink', 'FollowedHyperlink']);
 
 const RUN_PROPERTY_PRESERVE_META_KEY = 'sdPreserveRunPropertiesKeys';
+const COMPANION_INLINE_KEYS = {
+  fontSizeCs: 'fontSize',
+  boldCs: 'bold',
+  italicCs: 'italic',
+};
 
 /**
  * ProseMirror plugin that recalculates inline `runProperties` for changed runs,
@@ -125,11 +133,35 @@ export const calculateInlineRunPropertiesPlugin = (editor) =>
         // The exporter treats null as "export all keys" for backward compat, so [] must be preserved.
         const hadInlineKeysMetadata = Array.isArray(runNode.attrs?.runPropertiesInlineKeys);
         const styleKeys = runNode.attrs?.runPropertiesStyleKeys || [];
+        const existingStyleComparableProps = resolveRunProperties(
+          {
+            translatedNumbering: editor.converter?.translatedNumbering ?? {},
+            translatedLinkedStyles: editor.converter?.translatedLinkedStyles ?? {},
+          },
+          runNode.attrs?.runProperties?.styleId != null ? { styleId: runNode.attrs.runProperties.styleId } : {},
+          getResolvedParagraphProperties(paragraphNode) ||
+            calculateResolvedParagraphProperties(editor, paragraphNode, $pos),
+          tableInfo,
+          false,
+          Boolean(paragraphNode.attrs.paragraphProperties?.numberingProperties),
+        );
         const keysFromMarks = (segment) => {
           const textNode = segment.content?.find((n) => n.isText);
           return Object.keys(decodeRPrFromMarks(textNode?.marks || []));
         };
-        const overrideKeysFromInlineProps = (inlineProps) => styleKeys.filter((k) => inlineProps && k in inlineProps);
+        // AIDEV-NOTE: A style-defined key counts as an override only when the inline
+        // value actually differs from the style-provided value. The simpler check
+        // `k in inlineProps` looks correct but is wrong: cascade resolution puts every
+        // styled key into inlineProps, so a run that just references a style (e.g.
+        // <w:rStyle w:val="RtlChar"/>) gets every key tagged as an override. r-translator's
+        // export gate then writes them inline, flattening style-inherited formatting onto
+        // every run.
+        const overrideKeysFromInlineProps = (inlineProps) =>
+          styleKeys.filter((k) => {
+            if (!inlineProps || !(k in inlineProps)) return false;
+            if (!existingStyleComparableProps || !(k in existingStyleComparableProps)) return true;
+            return JSON.stringify(inlineProps[k]) !== JSON.stringify(existingStyleComparableProps[k]);
+          });
 
         // When the importer set an empty inline keys list ([]), it means the original run
         // had no inline w:rPr — all properties are style-inherited. Preserve that decision
@@ -154,8 +186,31 @@ export const calculateInlineRunPropertiesPlugin = (editor) =>
           // Detect genuinely new inline properties (user-applied formatting, not just
           // recomputation artifacts from mark round-trip fidelity loss).
           const hasNewInlineProps =
-            segmentInlineProps != null && Object.keys(segmentInlineProps).some((k) => !existingRunPropsKeys.has(k));
-          const shouldAddMarkKeys = !hadInlineKeysMetadata || existingInlineKeys.length > 0 || hasNewInlineProps;
+            segmentInlineProps != null &&
+            Object.keys(segmentInlineProps).some((k) => {
+              if (existingRunPropsKeys.has(k)) return false;
+              const baseKey = COMPANION_INLINE_KEYS[k];
+              if (baseKey && existingRunPropsKeys.has(baseKey)) return false;
+              return true;
+            });
+          const hasChangedStyleComparableProps =
+            segmentInlineProps != null &&
+            Object.keys(segmentInlineProps).some((k) => {
+              if (!styleKeys.includes(k)) return false;
+              const current = segmentInlineProps[k];
+              const fromStyle = existingStyleComparableProps?.[k];
+              if (JSON.stringify(current) !== JSON.stringify(fromStyle)) return true;
+              const baseKey = COMPANION_INLINE_KEYS[k];
+              if (!baseKey) return false;
+              const currentBase = segmentInlineProps[baseKey];
+              const styleBase = existingStyleComparableProps?.[baseKey];
+              return JSON.stringify(currentBase) !== JSON.stringify(styleBase);
+            });
+          const shouldAddMarkKeys =
+            !hadInlineKeysMetadata ||
+            existingInlineKeys.length > 0 ||
+            hasNewInlineProps ||
+            hasChangedStyleComparableProps;
           const markKeysToAdd = shouldAddMarkKeys ? keysFromMarks(segment) : [];
           const keys = [...new Set([...existingInlineKeys, ...markKeysToAdd])];
           const ok = overrideKeysFromInlineProps(segmentInlineProps);

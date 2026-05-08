@@ -1,6 +1,7 @@
 import type { Locator, Page } from '@playwright/test';
 import { expect, test } from '../../fixtures/superdoc.js';
 import { LONGER_HEADER_SIGN_AREA_DOC_PATH as DOC_PATH } from '../../helpers/story-fixtures.js';
+import { RTL_PATTERN1_HEADER_FOOTER_DOC_PATH } from '../../helpers/story-fixtures.js';
 import {
   getFooterEditorLocator,
   getFooterSurfaceLocator,
@@ -112,6 +113,44 @@ async function assertWordSelectionOverlayAlignment(page: Page, surface: Locator,
   expect(Math.abs(overlayRect.height - wordRect.height)).toBeLessThan(2);
 }
 
+async function assertWordSelectionOverlayOverlapsRenderedWord(
+  page: Page,
+  surface: Locator,
+  word: string,
+): Promise<void> {
+  const wordRect = await getRenderedWordRect(surface, word);
+  expect(wordRect).toBeTruthy();
+
+  await page.mouse.dblclick(wordRect.left + wordRect.width / 2, wordRect.top + wordRect.height / 2);
+  await page.waitForTimeout(100);
+
+  const selectionRect = page.locator('.presentation-editor__selection-rect').first();
+  await expect(selectionRect).toBeVisible();
+
+  const overlayRect = await selectionRect.evaluate((element) => {
+    const bounds = element.getBoundingClientRect();
+    return {
+      left: bounds.left,
+      top: bounds.top,
+      right: bounds.right,
+      bottom: bounds.bottom,
+      width: bounds.width,
+      height: bounds.height,
+    };
+  });
+
+  const wordRight = wordRect.left + wordRect.width;
+  const wordBottom = wordRect.top + wordRect.height;
+  const overlapX = Math.max(0, Math.min(overlayRect.right, wordRight) - Math.max(overlayRect.left, wordRect.left));
+  const overlapY = Math.max(0, Math.min(overlayRect.bottom, wordBottom) - Math.max(overlayRect.top, wordRect.top));
+  const overlapArea = overlapX * overlapY;
+  const wordArea = Math.max(1, wordRect.width * wordRect.height);
+
+  // For RTL story overlays, strict left-edge equality is not stable across engines.
+  // Require substantial overlap with the rendered word bounds instead.
+  expect(overlapArea / wordArea).toBeGreaterThan(0.6);
+}
+
 test('layout engine renders selection rectangles while editing a header', async ({ superdoc }) => {
   await superdoc.loadDocument(DOC_PATH);
   await superdoc.waitForStable();
@@ -152,4 +191,13 @@ test('footer word selection overlay aligns with the rendered word bounds', async
   const surface = getFooterSurfaceLocator(superdoc.page);
   await enterHeaderFooterEditMode(surface, getFooterEditorLocator(superdoc.page));
   await assertWordSelectionOverlayAlignment(superdoc.page, surface, 'Footer');
+});
+
+test('RTL footer word selection overlay aligns with rendered Hebrew word bounds', async ({ superdoc }) => {
+  await superdoc.loadDocument(RTL_PATTERN1_HEADER_FOOTER_DOC_PATH);
+  await superdoc.waitForStable();
+
+  const surface = getFooterSurfaceLocator(superdoc.page);
+  await enterHeaderFooterEditMode(surface, getFooterEditorLocator(superdoc.page));
+  await assertWordSelectionOverlayOverlapsRenderedWord(superdoc.page, surface, 'שלום');
 });

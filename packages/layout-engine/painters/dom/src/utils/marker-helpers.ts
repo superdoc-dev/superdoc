@@ -1,3 +1,5 @@
+import { DOM_CLASS_NAMES } from '@superdoc/dom-contract';
+import { toCssFontFamily } from '@superdoc/font-utils';
 import {
   resolveListMarkerGeometry,
   resolveListTextStartPx,
@@ -6,6 +8,8 @@ import {
   type MinimalWordLayout,
   type ResolvedListMarkerGeometry,
 } from '@superdoc/common/list-marker-utils';
+import { applySourceAnchorDataset } from '../renderer';
+import { SourceAnchor } from '@superdoc/contracts';
 
 type PainterListTextStartParams = {
   wordLayout: MinimalWordLayout | undefined;
@@ -74,3 +78,54 @@ export const resolvePainterListTextStartPx = ({
 
 // Re-export computeTabWidth from shared module
 export { computeTabWidth };
+
+type MarkerRunStyle = {
+  fontFamily?: string | null;
+  fontSize?: number | null;
+  bold?: boolean | null;
+  italic?: boolean | null;
+  color?: string | null;
+  letterSpacing?: number | null;
+};
+
+/**
+ * Build the marker container `<span class="superdoc-list-marker">` with the inner
+ * `<span class="superdoc-paragraph-marker">` already appended and styled from the
+ * given run. Callers handle positioning, suffix separators, and the final prepend.
+ */
+export const createListMarkerElement = (
+  doc: Document,
+  markerText: string,
+  run: MarkerRunStyle,
+  sourceAnchor?: SourceAnchor,
+): HTMLElement => {
+  const markerContainer = doc.createElement('span');
+  markerContainer.classList.add(DOM_CLASS_NAMES.LIST_MARKER);
+  markerContainer.style.display = 'inline-block';
+  markerContainer.style.wordSpacing = '0px';
+
+  const markerEl = doc.createElement('span');
+  markerEl.classList.add('superdoc-paragraph-marker');
+  markerEl.textContent = markerText;
+  markerEl.style.pointerEvents = 'none';
+  markerEl.style.fontFamily = toCssFontFamily(run.fontFamily) ?? run.fontFamily ?? '';
+
+  if (run.fontSize != null) {
+    markerEl.style.fontSize = `${run.fontSize}px`;
+  }
+  markerEl.style.fontWeight = run.bold ? 'bold' : '';
+  markerEl.style.fontStyle = run.italic ? 'italic' : '';
+
+  if (run.color) {
+    markerEl.style.color = run.color;
+  }
+  if (run.letterSpacing != null) {
+    markerEl.style.letterSpacing = `${run.letterSpacing}px`;
+  }
+
+  markerContainer.appendChild(markerEl);
+  if (sourceAnchor) {
+    applySourceAnchorDataset(markerEl, sourceAnchor);
+  }
+  return markerContainer;
+};

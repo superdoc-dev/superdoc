@@ -27,7 +27,13 @@
     "../super-editor/src",
     "../document-api/src",
     "../layout-engine/contracts/src",
+    "../layout-engine/dom-contract/src",
     "../layout-engine/layout-bridge/src",
-    "../layout-engine/painters/dom/src"
+    "../layout-engine/layout-engine/src",
+    "../layout-engine/painters/dom/src",
+    "../layout-engine/pm-adapter/src/converter-context.ts",
+    "../layout-engine/pm-adapter/src/sections/types.ts",
+    "../layout-engine/style-engine/src/ooxml",
+    "../layout-engine/style-engine/src/cascade.ts"
   ]
 }

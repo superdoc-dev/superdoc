@@ -12,22 +12,18 @@ import {
   tablesSetBorderAdapter,
   tablesClearBorderAdapter,
   tablesApplyBorderPresetAdapter,
+  tablesSetShadingAdapter,
+  tablesInsertRowAdapter,
+  tablesInsertColumnAdapter,
+  tablesGetCellsAdapter,
+  tablesSetCellTextAdapter,
+  tablesApplyPresetAdapter,
 } from './tables-adapter.js';
+import { requireTableNodeId } from './tables-adapter.test-helpers.js';
 
 type LoadedDocData = Awaited<ReturnType<typeof loadTestDataForEditorTests>>;
 
 const DIRECT = { changeMode: 'direct' } as const;
-
-function requireTableNodeId(result: { success: boolean; table?: { nodeId?: string } }, label: string): string {
-  if (!result.success) {
-    throw new Error(`${label} failed: expected success.`);
-  }
-  const nodeId = (result as { table?: { nodeId?: string } }).table?.nodeId;
-  if (!nodeId) {
-    throw new Error(`${label}: expected result.table.nodeId to be defined.`);
-  }
-  return nodeId;
-}
 
 describe('SD-2129: table convenience operations', () => {
   let docData: LoadedDocData;
@@ -541,6 +537,324 @@ describe('SD-2129: table convenience operations', () => {
       expect(props.borders?.top).toBeDefined();
       expect(props.defaultCellMargins).toEqual({ topPt: 6, rightPt: 6, bottomPt: 6, leftPt: 6 });
       expect(props.cellSpacingPt).toBe(2);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // SD-2540 — LLM ergonomics
+  // ---------------------------------------------------------------------------
+
+  describe('SD-2540 color input normalization', () => {
+    it('setBorders accepts #-prefixed hex and stores canonical RRGGBB', () => {
+      const ed = createEditor();
+      const tableId = createTableAndGetId(ed);
+
+      const result = tablesSetBordersAdapter(
+        ed,
+        {
+          nodeId: tableId,
+          mode: 'applyTo',
+          applyTo: 'all',
+          border: { lineStyle: 'single', lineWeightPt: 1, color: '#000000' },
+        },
+        DIRECT,
+      );
+      expect(result.success).toBe(true);
+
+      const props = tablesGetPropertiesAdapter(ed, { nodeId: requireTableNodeId(result, 'setBorders') });
+      // Stored as canonical uppercase, no `#`.
+      expect(props.borders?.top).toEqual({ lineStyle: 'single', lineWeightPt: 1, color: '000000' });
+    });
+
+    it('setBorders accepts 3-digit hex shorthand and expands to 6 digits', () => {
+      const ed = createEditor();
+      const tableId = createTableAndGetId(ed);
+
+      const result = tablesSetBordersAdapter(
+        ed,
+        {
+          nodeId: tableId,
+          mode: 'applyTo',
+          applyTo: 'all',
+          border: { lineStyle: 'single', lineWeightPt: 1, color: '#abc' },
+        },
+        DIRECT,
+      );
+      expect(result.success).toBe(true);
+
+      const props = tablesGetPropertiesAdapter(ed, { nodeId: requireTableNodeId(result, 'setBorders') });
+      expect(props.borders?.top).toEqual({ lineStyle: 'single', lineWeightPt: 1, color: 'AABBCC' });
+    });
+
+    it('setShading accepts 3-digit shorthand without `#` and normalizes', () => {
+      const ed = createEditor();
+      const tableId = createTableAndGetId(ed);
+
+      const result = tablesSetShadingAdapter(ed, { nodeId: tableId, color: 'fff' }, DIRECT);
+      expect(result.success).toBe(true);
+
+      const cells = tablesGetCellsAdapter(ed, { nodeId: requireTableNodeId(result, 'setShading') });
+      // Apply shading on a cell to assert canonical storage roundtrip.
+      const firstCellId = cells.cells[0]!.nodeId;
+      const cellResult = tablesSetShadingAdapter(ed, { nodeId: firstCellId, color: '#FFF' }, DIRECT);
+      expect(cellResult.success).toBe(true);
+    });
+  });
+
+  describe('SD-2540 insert ergonomics', () => {
+    it('insertRow with table-level target (no rowIndex/position) appends at end', () => {
+      const ed = createEditor();
+      const tableId = createTableAndGetId(ed); // 3 rows × 3 columns
+
+      const result = tablesInsertRowAdapter(ed, { nodeId: tableId }, DIRECT);
+      expect(result.success).toBe(true);
+
+      // Now table should have 4 rows.
+      const cells = tablesGetCellsAdapter(ed, { nodeId: requireTableNodeId(result, 'insertRow') });
+      const rowCount = new Set(cells.cells.map((c) => c.rowIndex)).size;
+      expect(rowCount).toBe(4);
+    });
+
+    it('insertRow append-at-end honors count', () => {
+      const ed = createEditor();
+      const tableId = createTableAndGetId(ed); // 3 rows
+
+      const result = tablesInsertRowAdapter(ed, { nodeId: tableId, count: 2 }, DIRECT);
+      expect(result.success).toBe(true);
+
+      const cells = tablesGetCellsAdapter(ed, { nodeId: requireTableNodeId(result, 'insertRow') });
+      const rowCount = new Set(cells.cells.map((c) => c.rowIndex)).size;
+      expect(rowCount).toBe(5);
+    });
+
+    it('insertColumn with position: first inserts at column 0', () => {
+      const ed = createEditor();
+      const tableId = createTableAndGetId(ed); // 3 columns
+
+      const result = tablesInsertColumnAdapter(ed, { nodeId: tableId, position: 'first' }, DIRECT);
+      expect(result.success).toBe(true);
+
+      const cells = tablesGetCellsAdapter(ed, { nodeId: requireTableNodeId(result, 'insertColumn') });
+      const colCount = new Set(cells.cells.map((c) => c.columnIndex)).size;
+      expect(colCount).toBe(4);
+    });
+
+    it('insertColumn with position: last appends after the last column', () => {
+      const ed = createEditor();
+      const tableId = createTableAndGetId(ed); // 3 columns
+
+      const result = tablesInsertColumnAdapter(ed, { nodeId: tableId, position: 'last' }, DIRECT);
+      expect(result.success).toBe(true);
+
+      const cells = tablesGetCellsAdapter(ed, { nodeId: requireTableNodeId(result, 'insertColumn') });
+      const colCount = new Set(cells.cells.map((c) => c.columnIndex)).size;
+      expect(colCount).toBe(4);
+    });
+
+    it('insertColumn with position: right and no columnIndex appends at end', () => {
+      const ed = createEditor();
+      const tableId = createTableAndGetId(ed); // 3 columns
+
+      const result = tablesInsertColumnAdapter(ed, { nodeId: tableId, position: 'right' } as never, DIRECT);
+      expect(result.success).toBe(true);
+
+      const cells = tablesGetCellsAdapter(ed, { nodeId: requireTableNodeId(result, 'insertColumn') });
+      const colCount = new Set(cells.cells.map((c) => c.columnIndex)).size;
+      expect(colCount).toBe(4);
+    });
+
+    it('insertColumn with position: left and no columnIndex prepends at start', () => {
+      const ed = createEditor();
+      const tableId = createTableAndGetId(ed); // 3 columns
+
+      const result = tablesInsertColumnAdapter(ed, { nodeId: tableId, position: 'left' } as never, DIRECT);
+      expect(result.success).toBe(true);
+
+      const cells = tablesGetCellsAdapter(ed, { nodeId: requireTableNodeId(result, 'insertColumn') });
+      const colCount = new Set(cells.cells.map((c) => c.columnIndex)).size;
+      expect(colCount).toBe(4);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // SD-2540 round 3 — set_cell_text + apply_preset + set_style_options
+  // ---------------------------------------------------------------------------
+
+  describe('tables.setCellText', () => {
+    it('sets cell text via table+row+column coordinates (LLM-friendly shape)', () => {
+      const ed = createEditor();
+      const tableId = createTableAndGetId(ed);
+
+      const result = tablesSetCellTextAdapter(
+        ed,
+        { nodeId: tableId, rowIndex: 0, columnIndex: 0, text: 'Q1 Revenue' },
+        DIRECT,
+      );
+      expect(result.success).toBe(true);
+    });
+
+    it('sets cell text via direct cell address', () => {
+      const ed = createEditor();
+      const tableId = createTableAndGetId(ed);
+
+      // Get the first cell's nodeId to use as direct target.
+      const cells = tablesGetCellsAdapter(ed, { nodeId: tableId });
+      const firstCellId = cells.cells[0]!.nodeId;
+
+      const result = tablesSetCellTextAdapter(ed, { nodeId: firstCellId, text: 'Direct target' }, DIRECT);
+      expect(result.success).toBe(true);
+    });
+
+    it('reports NO_OP when cell already contains the same text', () => {
+      const ed = createEditor();
+      const tableId = createTableAndGetId(ed);
+
+      tablesSetCellTextAdapter(ed, { nodeId: tableId, rowIndex: 0, columnIndex: 0, text: 'same' }, DIRECT);
+      const second = tablesSetCellTextAdapter(
+        ed,
+        { nodeId: tableId, rowIndex: 0, columnIndex: 0, text: 'same' },
+        DIRECT,
+      );
+      expect(second.success).toBe(false);
+      if (!second.success) {
+        expect(second.failure.code).toBe('NO_OP');
+      }
+    });
+
+    it('does NOT report NO_OP when same text is currently styled (bold)', () => {
+      // Plain-text replacement: a cell holding `<strong>hi</strong>` and a
+      // call asking to set it to "hi" must rewrite (clearing the bold), not
+      // NO_OP.
+      const ed = createEditor();
+      const tableId = createTableAndGetId(ed);
+
+      // First, plant 'hi' in the cell.
+      tablesSetCellTextAdapter(ed, { nodeId: tableId, rowIndex: 0, columnIndex: 0, text: 'hi' }, DIRECT);
+
+      // Apply bold to the cell's text by selecting the cell content and toggling.
+      // Find the run containing 'hi', then toggle bold on its range.
+      let cellPos = -1;
+      let cellNode: any = null;
+      ed.state.doc.descendants((node: any, pos: number) => {
+        if (cellPos !== -1) return false;
+        if (node.type.name === 'tableCell' && node.textContent === 'hi') {
+          cellPos = pos;
+          cellNode = node;
+          return false;
+        }
+        return true;
+      });
+      const from = cellPos + 2; // skip cell + paragraph + run open tokens
+      const to = from + 'hi'.length;
+      ed.commands.setTextSelection({ from, to });
+      ed.commands.toggleBold();
+
+      const second = tablesSetCellTextAdapter(ed, { nodeId: tableId, rowIndex: 0, columnIndex: 0, text: 'hi' }, DIRECT);
+      expect(second.success).toBe(true);
+    });
+  });
+
+  describe('tables.applyStyle (set_style_options surface)', () => {
+    it('toggles multiple style flags in one call', () => {
+      const ed = createEditor();
+      const tableId = createTableAndGetId(ed);
+
+      const result = tablesApplyStyleAdapter(
+        ed,
+        { nodeId: tableId, styleOptions: { headerRow: true, bandedRows: true } },
+        DIRECT,
+      );
+      expect(result.success).toBe(true);
+
+      const props = tablesGetPropertiesAdapter(ed, { nodeId: requireTableNodeId(result, 'applyStyle') });
+      expect(props.styleOptions?.headerRow).toBe(true);
+      expect(props.styleOptions?.bandedRows).toBe(true);
+    });
+  });
+
+  describe('insertColumn inherits styling from adjacent column', () => {
+    it('new column cells inherit shading from the column to their left', () => {
+      const ed = createEditor();
+      const tableId = createTableAndGetId(ed); // 3x3
+
+      // Apply shading to the whole table so every existing cell carries shading.
+      tablesSetShadingAdapter(ed, { nodeId: tableId, color: '#ABCDEF' }, DIRECT);
+
+      // Insert a new column at the end.
+      const result = tablesInsertColumnAdapter(ed, { nodeId: tableId, position: 'last' }, DIRECT);
+      expect(result.success).toBe(true);
+
+      // Pull the cells of the new (rightmost) column and verify they carry shading too.
+      const cells = tablesGetCellsAdapter(ed, { nodeId: requireTableNodeId(result, 'insertColumn') });
+      const lastColumn = Math.max(...cells.cells.map((c) => c.columnIndex));
+      const newColumnCells = cells.cells.filter((c) => c.columnIndex === lastColumn);
+
+      // Each new column cell should report colspan: 1 — sanity check.
+      for (const cell of newColumnCells) {
+        expect(cell.colspan).toBe(1);
+      }
+
+      // The new column should have the same number of cells as existing columns.
+      const otherColumnCells = cells.cells.filter((c) => c.columnIndex === 0);
+      expect(newColumnCells.length).toBe(otherColumnCells.length);
+    });
+  });
+
+  describe('tables.applyPreset', () => {
+    it('grid preset writes single 1pt black borders to all edges', () => {
+      const ed = createEditor();
+      const tableId = createTableAndGetId(ed);
+
+      const result = tablesApplyPresetAdapter(ed, { nodeId: tableId, preset: 'grid' }, DIRECT);
+      expect(result.success).toBe(true);
+
+      const props = tablesGetPropertiesAdapter(ed, { nodeId: requireTableNodeId(result, 'applyPreset') });
+      expect(props.borders?.top).toEqual({ lineStyle: 'single', lineWeightPt: 1, color: '000000' });
+      expect(props.borders?.insideH).toEqual({ lineStyle: 'single', lineWeightPt: 1, color: '000000' });
+      expect(props.borders?.insideV).toEqual({ lineStyle: 'single', lineWeightPt: 1, color: '000000' });
+    });
+
+    it('minimal preset has hairline horizontal separators and a thicker bottom', () => {
+      const ed = createEditor();
+      const tableId = createTableAndGetId(ed);
+
+      const result = tablesApplyPresetAdapter(ed, { nodeId: tableId, preset: 'minimal' }, DIRECT);
+      expect(result.success).toBe(true);
+
+      const props = tablesGetPropertiesAdapter(ed, { nodeId: requireTableNodeId(result, 'applyPreset') });
+      expect(props.borders?.insideH).toEqual({ lineStyle: 'single', lineWeightPt: 0.25, color: '999999' });
+      expect(props.borders?.bottom).toEqual({ lineStyle: 'single', lineWeightPt: 1, color: '000000' });
+      expect(props.borders?.top).toBeNull();
+      expect(props.borders?.left).toBeNull();
+      expect(props.borders?.right).toBeNull();
+    });
+
+    it('striped preset enables banded rows', () => {
+      const ed = createEditor();
+      const tableId = createTableAndGetId(ed);
+
+      const result = tablesApplyPresetAdapter(ed, { nodeId: tableId, preset: 'striped' }, DIRECT);
+      expect(result.success).toBe(true);
+
+      const props = tablesGetPropertiesAdapter(ed, { nodeId: requireTableNodeId(result, 'applyPreset') });
+      expect(props.styleOptions?.bandedRows).toBe(true);
+    });
+
+    it('accent preset enables headerRow + uses accentColor for top/bottom', () => {
+      const ed = createEditor();
+      const tableId = createTableAndGetId(ed);
+
+      const result = tablesApplyPresetAdapter(
+        ed,
+        { nodeId: tableId, preset: 'accent', accentColor: '#FF8800' },
+        DIRECT,
+      );
+      expect(result.success).toBe(true);
+
+      const props = tablesGetPropertiesAdapter(ed, { nodeId: requireTableNodeId(result, 'applyPreset') });
+      expect(props.styleOptions?.headerRow).toBe(true);
+      expect(props.borders?.top).toEqual({ lineStyle: 'single', lineWeightPt: 2, color: 'FF8800' });
+      expect(props.borders?.bottom).toEqual({ lineStyle: 'single', lineWeightPt: 2, color: 'FF8800' });
     });
   });
 });

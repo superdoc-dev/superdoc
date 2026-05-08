@@ -5,6 +5,14 @@ import listIconSvg from '@superdoc/common/icons/list-solid.svg?raw';
 import listCircleIconSvg from '@superdoc/common/icons/list-circle-solid.svg?raw';
 import listSquareIconSvg from '@superdoc/common/icons/list-square-solid.svg?raw';
 import listOlIconSvg from '@superdoc/common/icons/list-ol-solid.svg?raw';
+import listDecimalIconSvg from '@superdoc/common/icons/list-decimal-solid.svg?raw';
+import listDecimalParenIconSvg from '@superdoc/common/icons/list-decimal-paren-solid.svg?raw';
+import listUpperRomanIconSvg from '@superdoc/common/icons/list-upper-roman-solid.svg?raw';
+import listLowerRomanIconSvg from '@superdoc/common/icons/list-lower-roman-solid.svg?raw';
+import listUpperAlphaIconSvg from '@superdoc/common/icons/list-upper-alpha-solid.svg?raw';
+import listUpperAlphaParenIconSvg from '@superdoc/common/icons/list-upper-alpha-paren-solid.svg?raw';
+import listLowerAlphaIconSvg from '@superdoc/common/icons/list-lower-alpha-solid.svg?raw';
+import listLowerAlphaParenIconSvg from '@superdoc/common/icons/list-lower-alpha-paren-solid.svg?raw';
 import imageIconSvg from '@superdoc/common/icons/image-solid.svg?raw';
 import linkIconSvg from '@superdoc/common/icons/link-solid.svg?raw';
 import alignLeftIconSvg from '@superdoc/common/icons/align-left-solid.svg?raw';
@@ -51,6 +59,7 @@ import scissorsIconSvg from '@superdoc/common/icons/scissors-solid.svg?raw';
 import copyIconSvg from '@superdoc/common/icons/copy-solid.svg?raw';
 import pasteIconSvg from '@superdoc/common/icons/paste-solid.svg?raw';
 import strikethroughSvg from '@superdoc/common/icons/strikethrough.svg?raw';
+import paragraphIconSvg from '@superdoc/common/icons/paragraph-solid.svg?raw';
 
 export const toolbarIcons = {
   undo: rotateLeftIconSvg,
@@ -70,6 +79,14 @@ export const toolbarIcons = {
   bulletListCircle: listCircleIconSvg,
   bulletListSquare: listSquareIconSvg,
   numberedList: listOlIconSvg,
+  numberedListDecimal: listDecimalIconSvg,
+  numberedListDecimalParen: listDecimalParenIconSvg,
+  numberedListUpperRoman: listUpperRomanIconSvg,
+  numberedListLowerRoman: listLowerRomanIconSvg,
+  numberedListUpperAlpha: listUpperAlphaIconSvg,
+  numberedListUpperAlphaParen: listUpperAlphaParenIconSvg,
+  numberedListLowerAlpha: listLowerAlphaIconSvg,
+  numberedListLowerAlphaParen: listLowerAlphaParenIconSvg,
   indentLeft: outdentIconSvg,
   indentRight: indentIconSvg,
   pageBreak: fileHalfDashedIconSvg,
@@ -115,4 +132,5 @@ export const toolbarIcons = {
   copy: copyIconSvg,
   paste: pasteIconSvg,
   strikethrough: strikethroughSvg,
+  formattingMarks: paragraphIconSvg,
 };

@@ -66,6 +66,21 @@ describe('resolveLayout', () => {
     expect(result.pages[2].height).toBe(1600);
   });
 
+  it('forwards page-level columns and columnRegions onto ResolvedPage', () => {
+    const columns = { count: 2, gap: 24, withSeparator: true } as const;
+    const columnRegions = [
+      { yStart: 0, yEnd: 400, columns: { count: 1, gap: 0 } },
+      { yStart: 400, yEnd: 1000, columns: { count: 3, gap: 12 } },
+    ] as const;
+    const layout: Layout = {
+      pageSize: { w: 800, h: 1000 },
+      pages: [{ number: 1, fragments: [], columns, columnRegions: [...columnRegions] }],
+    };
+    const result = resolveLayout({ layout, flowMode: 'paginated', blocks: [], measures: [] });
+    expect(result.pages[0].columns).toEqual(columns);
+    expect(result.pages[0].columnRegions).toEqual(columnRegions);
+  });
+
   it('falls back to layout.pageSize when page.size is undefined', () => {
     const layout: Layout = {
       pageSize: { w: 612, h: 792 },
@@ -663,6 +678,102 @@ describe('resolveLayout', () => {
       };
       const result = resolveLayout({ layout, flowMode: 'paginated', blocks: [], measures: [] });
       expect(result.pages[0].items[0].zIndex).toBeUndefined();
+    });
+  });
+
+  describe('fragment back-pointer', () => {
+    it('attaches the source ParaFragment to a paragraph item', () => {
+      const paraFragment: ParaFragment = {
+        kind: 'para',
+        blockId: 'p1',
+        fromLine: 0,
+        toLine: 1,
+        x: 72,
+        y: 100,
+        width: 468,
+      };
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [{ number: 1, fragments: [paraFragment] }],
+      };
+      const blocks: FlowBlock[] = [{ kind: 'paragraph', id: 'p1', runs: [] }];
+      const measures: Measure[] = [{ kind: 'paragraph', lines: [], totalHeight: 20 }];
+      const result = resolveLayout({ layout, flowMode: 'paginated', blocks, measures });
+      const item = result.pages[0].items[0] as { fragment?: ParaFragment };
+      expect(item.fragment).toBe(paraFragment);
+    });
+
+    it('attaches the source TableFragment to a table item', () => {
+      const tableFragment: TableFragment = {
+        kind: 'table',
+        blockId: 't1',
+        fromRow: 0,
+        toRow: 1,
+        x: 0,
+        y: 0,
+        width: 400,
+        height: 100,
+      };
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [{ number: 1, fragments: [tableFragment] }],
+      };
+      const blocks: FlowBlock[] = [
+        { kind: 'table', id: 't1', rows: [{ id: 'r1', cells: [] }], attrs: { columnWidths: [400] } },
+      ];
+      const measures: Measure[] = [
+        { kind: 'table', rowHeights: [100], columnWidths: [400], cells: [], rows: [] } as unknown as Measure,
+      ];
+      const result = resolveLayout({ layout, flowMode: 'paginated', blocks, measures });
+      const item = result.pages[0].items[0] as { fragment?: TableFragment };
+      expect(item.fragment).toBe(tableFragment);
+    });
+
+    it('attaches the source ImageFragment to an image item', () => {
+      const imageFragment: ImageFragment = {
+        kind: 'image',
+        blockId: 'img1',
+        x: 0,
+        y: 0,
+        width: 200,
+        height: 150,
+        isAnchored: false,
+      };
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [{ number: 1, fragments: [imageFragment] }],
+      };
+      const blocks: FlowBlock[] = [
+        { kind: 'image', id: 'img1', attrs: { src: 'about:blank', width: 200, height: 150 } },
+      ];
+      const measures: Measure[] = [{ kind: 'image' } as unknown as Measure];
+      const result = resolveLayout({ layout, flowMode: 'paginated', blocks, measures });
+      const item = result.pages[0].items[0] as { fragment?: ImageFragment };
+      expect(item.fragment).toBe(imageFragment);
+    });
+
+    it('attaches the source DrawingFragment to a drawing item', () => {
+      const drawingFragment: DrawingFragment = {
+        kind: 'drawing',
+        blockId: 'd1',
+        x: 0,
+        y: 0,
+        width: 200,
+        height: 200,
+        isAnchored: false,
+        geometry: { width: 200, height: 200 },
+      } as DrawingFragment;
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [{ number: 1, fragments: [drawingFragment] }],
+      };
+      const blocks: FlowBlock[] = [
+        { kind: 'drawing', id: 'd1', drawingKind: 'image', shapes: [], attrs: {} } as unknown as FlowBlock,
+      ];
+      const measures: Measure[] = [{ kind: 'drawing' } as unknown as Measure];
+      const result = resolveLayout({ layout, flowMode: 'paginated', blocks, measures });
+      const item = result.pages[0].items[0] as { fragment?: DrawingFragment };
+      expect(item.fragment).toBe(drawingFragment);
     });
   });
 
@@ -1616,6 +1727,95 @@ describe('resolveLayout', () => {
       expect(content.lines[0].isListFirstLine).toBe(true);
     });
 
+    it('preserves increasing first-line marker anchor for nested RTL list levels', () => {
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [
+          {
+            number: 1,
+            fragments: [
+              {
+                kind: 'para',
+                blockId: 'rtl-l0',
+                fromLine: 0,
+                toLine: 1,
+                x: 72,
+                y: 100,
+                width: 468,
+                markerWidth: 36,
+                markerTextWidth: 10,
+              },
+              {
+                kind: 'para',
+                blockId: 'rtl-l1',
+                fromLine: 0,
+                toLine: 1,
+                x: 72,
+                y: 130,
+                width: 468,
+                markerWidth: 36,
+                markerTextWidth: 10,
+              },
+              {
+                kind: 'para',
+                blockId: 'rtl-l2',
+                fromLine: 0,
+                toLine: 1,
+                x: 72,
+                y: 160,
+                width: 468,
+                markerWidth: 36,
+                markerTextWidth: 10,
+              },
+            ],
+          },
+        ],
+      };
+
+      const makeRtlBlock = (id: string, right: number, markerText: string): FlowBlock => ({
+        kind: 'paragraph',
+        id,
+        runs: [{ kind: 'text', text: 'RTL list item' }],
+        attrs: {
+          direction: 'rtl',
+          indent: { right, hanging: -24 },
+          wordLayout: {
+            marker: {
+              markerText,
+              justification: 'right',
+              suffix: 'tab',
+              run: { fontFamily: 'Arial', fontSize: 12 },
+            },
+          },
+        },
+      });
+
+      const blocks: FlowBlock[] = [
+        makeRtlBlock('rtl-l0', 24, '1.'),
+        makeRtlBlock('rtl-l1', 48, 'a.'),
+        makeRtlBlock('rtl-l2', 72, 'i.'),
+      ];
+      const measures: Measure[] = [
+        { kind: 'paragraph', lines: [makeLine()], totalHeight: 20 },
+        { kind: 'paragraph', lines: [makeLine()], totalHeight: 20 },
+        { kind: 'paragraph', lines: [makeLine()], totalHeight: 20 },
+      ];
+
+      const result = resolveLayout({ layout, flowMode: 'paginated', blocks, measures });
+      const pageItems = result.pages[0].items as any[];
+
+      const m0 = pageItems[0].content.marker;
+      const m1 = pageItems[1].content.marker;
+      const m2 = pageItems[2].content.marker;
+
+      expect(m0.firstLinePaddingLeftPx).toBeLessThan(m1.firstLinePaddingLeftPx);
+      expect(m1.firstLinePaddingLeftPx).toBeLessThan(m2.firstLinePaddingLeftPx);
+      expect(m1.firstLinePaddingLeftPx - m0.firstLinePaddingLeftPx).toBe(24);
+      expect(m2.firstLinePaddingLeftPx - m1.firstLinePaddingLeftPx).toBe(24);
+      expect(m0.markerStartPx).toBeLessThan(m1.markerStartPx);
+      expect(m1.markerStartPx).toBeLessThan(m2.markerStartPx);
+    });
+
     it('omits marker on continuation fragment', () => {
       const layout: Layout = {
         pageSize: { w: 612, h: 792 },
@@ -1852,6 +2052,58 @@ describe('resolveLayout', () => {
       // First line: min(468, 308) = 308, then adjusted by -(-160) = 468
       expect(content.lines[0].textIndentPx).toBe(-160);
       expect(content.lines[0].availableWidth).toBe(468);
+    });
+
+    it('adjusts first-line hanging availableWidth for default-tab segment positioning', () => {
+      const layout: Layout = {
+        pageSize: { w: 816, h: 1056 },
+        pages: [
+          {
+            number: 1,
+            fragments: [{ kind: 'para', blockId: 'p1', fromLine: 0, toLine: 2, x: 96, y: 100, width: 624 }],
+          },
+        ],
+      };
+      const blocks: FlowBlock[] = [
+        {
+          kind: 'paragraph',
+          id: 'p1',
+          runs: [
+            { kind: 'text', text: 'WHEREAS:' },
+            { kind: 'tab', text: '\t' },
+            { kind: 'text', text: "The Board of Directors of the Corporation has reviewed the Corporation's " },
+          ],
+          attrs: { alignment: 'justify', indent: { left: 144, hanging: 144 } },
+        },
+      ];
+      const measures: Measure[] = [
+        {
+          kind: 'paragraph',
+          lines: [
+            makeLine({
+              fromRun: 0,
+              fromChar: 0,
+              toRun: 2,
+              toChar: 73,
+              width: 620.96875,
+              maxWidth: 624,
+              segments: [
+                { runIndex: 0, fromChar: 0, toChar: 8, width: 81.7734375 },
+                { runIndex: 2, fromChar: 0, toChar: 73, width: 476.96875, x: 144 },
+              ],
+            }),
+            makeLine({ fromRun: 2, fromChar: 73, toRun: 2, toChar: 80, width: 60, maxWidth: 480 }),
+          ],
+          totalHeight: 40,
+        },
+      ];
+
+      const result = resolveLayout({ layout, flowMode: 'paginated', blocks, measures });
+      const content = (result.pages[0].items[0] as any).content;
+      expect(content.lines[0].textIndentPx).toBe(0);
+      expect(content.lines[0].hasExplicitSegmentPositioning).toBe(true);
+      expect(content.lines[0].availableWidth).toBe(624);
+      expect(content.lines[1].availableWidth).toBe(480);
     });
 
     it('does not adjust availableWidth for list paragraphs with hanging indent', () => {

@@ -110,3 +110,6 @@ packages/sdk/tools/*.json
 .playwright-cli/
 .prqrc.json
 tmp/
+
+# Local-only Promptfoo benchmark config (do not commit)
+evals/promptfooconfig.benchmark.yaml

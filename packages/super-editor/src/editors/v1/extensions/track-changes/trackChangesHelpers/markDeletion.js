@@ -1,3 +1,4 @@
+// @ts-check
 import { Mapping, ReplaceStep } from 'prosemirror-transform';
 import { Slice } from 'prosemirror-model';
 import { v4 as uuidv4 } from 'uuid';
@@ -10,14 +11,20 @@ import { findTrackedMarkBetween } from './findTrackedMarkBetween.js';
  * @param {import('prosemirror-state').Transaction} options.tr Transaction.
  * @param {number} options.from From position.
  * @param {number} options.to To position.
- * @param {object} options.user User object ({ name, email }).
+ * @param {import('../../../core/types/EditorConfig.js').User} options.user User object ({ name, email }).
  * @param {string} options.date Date.
  * @param {string} [options.id] Optional ID to use (for replace operations where insertion and deletion share the same ID).
- * @returns {Object} Deletion map and deletionMark
+ * @returns {{ deletionMark: import('prosemirror-model').Mark, deletionMap: Mapping, nodes: import('prosemirror-model').Node[] }} Deletion map and deletion mark.
  */
 export const markDeletion = ({ tr, from, to, user, date, id: providedId }) => {
+  /**
+   * @param {unknown} value
+   */
   const normalizeEmail = (value) => (typeof value === 'string' ? value.trim().toLowerCase() : '');
   const userEmail = normalizeEmail(user?.email);
+  /**
+   * @param {import('prosemirror-model').Mark | null | undefined} mark
+   */
   const isOwnInsertion = (mark) => {
     const authorEmail = normalizeEmail(mark?.attrs?.authorEmail);
     // Word imports often omit authorEmail, treat missing as "own" to allow deletion.
@@ -25,13 +32,16 @@ export const markDeletion = ({ tr, from, to, user, date, id: providedId }) => {
     return authorEmail === userEmail;
   };
 
-  let trackedMark = findTrackedMarkBetween({
-    tr,
-    from,
-    to,
-    markName: TrackDeleteMarkName,
-    attrs: { authorEmail: user.email || '' },
-  });
+  const trackedMark =
+    /** @type {{ from: number, to: number, mark: import('prosemirror-model').Mark } | null | undefined} */ (
+      findTrackedMarkBetween({
+        tr,
+        from,
+        to,
+        markName: TrackDeleteMarkName,
+        attrs: { authorEmail: user.email || '' },
+      })
+    );
 
   let id;
   if (providedId) {
@@ -59,6 +69,7 @@ export const markDeletion = ({ tr, from, to, user, date, id: providedId }) => {
   // - Own insertions are removed (collapsed).
   // - Existing deletions are reassigned to the new deletion mark ID.
   // - Non-deleted inline nodes are marked as deleted.
+  /** @type {import('prosemirror-model').Node[]} */
   let nodes = [];
   tr.doc.nodesBetween(from, to, (node, pos) => {
     if (node.type.name.includes('table')) {

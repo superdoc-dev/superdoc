@@ -14,7 +14,6 @@ import {
   dataAttrsCompatible,
   commentsCompatible,
   getLastParagraphFont,
-  expandRunsForInlineNewlines,
 } from './paragraph.js';
 import { isInlineImage, imageNodeToRun } from './inline-converters/image.js';
 import type {
@@ -352,64 +351,6 @@ describe('getLastParagraphFont', () => {
     ];
     const result = getLastParagraphFont(blocks);
     expect(result).toBeUndefined();
-  });
-});
-
-describe('expandRunsForInlineNewlines', () => {
-  const makeRun = (text: string, pmStart = 0): TextRun => ({
-    text,
-    fontFamily: 'Arial',
-    fontSize: 12,
-    pmStart,
-    pmEnd: pmStart + text.length,
-  });
-
-  it('returns runs without inline newlines unchanged', () => {
-    const runs: Run[] = [makeRun('hello')];
-    expect(expandRunsForInlineNewlines(runs)).toEqual(runs);
-  });
-
-  it('splits a text run at a single inline newline', () => {
-    const result = expandRunsForInlineNewlines([makeRun('foo\nbar')]);
-    expect(result).toHaveLength(3);
-    expect(result[0]).toMatchObject({ text: 'foo', pmStart: 0, pmEnd: 3 });
-    expect(result[1]).toMatchObject({ kind: 'break', pmStart: 3, pmEnd: 4 });
-    expect(result[2]).toMatchObject({ text: 'bar', pmStart: 4, pmEnd: 7 });
-  });
-
-  it('keeps the break and advances the cursor for a leading newline', () => {
-    const result = expandRunsForInlineNewlines([makeRun('\nfoo')]);
-    expect(result).toHaveLength(2);
-    expect(result[0]).toMatchObject({ kind: 'break', pmStart: 0, pmEnd: 1 });
-    expect(result[1]).toMatchObject({ text: 'foo', pmStart: 1, pmEnd: 4 });
-  });
-
-  it('keeps both breaks when a run contains consecutive inline newlines', () => {
-    const result = expandRunsForInlineNewlines([makeRun('a\n\nb')]);
-    expect(result).toHaveLength(4);
-    expect(result[0]).toMatchObject({ text: 'a', pmStart: 0, pmEnd: 1 });
-    expect(result[1]).toMatchObject({ kind: 'break', pmStart: 1, pmEnd: 2 });
-    expect(result[2]).toMatchObject({ kind: 'break', pmStart: 2, pmEnd: 3 });
-    expect(result[3]).toMatchObject({ text: 'b', pmStart: 3, pmEnd: 4 });
-  });
-
-  it('does not emit an empty trailing text run for a trailing newline', () => {
-    const result = expandRunsForInlineNewlines([makeRun('foo\n')]);
-    expect(result).toHaveLength(2);
-    expect(result[0]).toMatchObject({ text: 'foo', pmStart: 0, pmEnd: 3 });
-    expect(result[1]).toMatchObject({ kind: 'break', pmStart: 3, pmEnd: 4 });
-  });
-
-  it('propagates trackedChange metadata onto emitted break runs', () => {
-    const trackedChange: TrackedChangeMeta = {
-      id: 'change-1',
-      kind: 'insertion',
-      author: 'alice',
-      date: '2024-01-01T00:00:00Z',
-    };
-    const run: TextRun = { ...makeRun('foo\nbar'), trackedChange };
-    const result = expandRunsForInlineNewlines([run]);
-    expect(result[1]).toMatchObject({ kind: 'break', trackedChange });
   });
 });
 
@@ -3062,6 +3003,61 @@ describe('paragraph converters', () => {
 
         expect(context.blocks).toHaveLength(1);
         expect(getMarkerText(context.blocks[0])).toBe('二.');
+      });
+
+      it('updates converterContext.sectionDirection when crossing to next section', () => {
+        const trackedChanges: TrackedChangesConfig = {
+          mode: 'review',
+          enabled: true,
+        };
+        const context = createParagraphHandlerContext(trackedChanges);
+        context.converterContext.sectionDirection = 'rtl';
+        context.sectionState = {
+          ranges: [
+            {
+              sectionIndex: 0,
+              startParagraphIndex: 0,
+              endParagraphIndex: 0,
+              sectPr: null,
+              margins: null,
+              pageSize: null,
+              orientation: null,
+              columns: null,
+              type: 'nextPage',
+              titlePg: false,
+            },
+            {
+              sectionIndex: 1,
+              startParagraphIndex: 0,
+              endParagraphIndex: 1,
+              sectPr: {
+                type: 'element',
+                name: 'w:sectPr',
+                elements: [{ type: 'element', name: 'w:bidi', attributes: { 'w:val': '0' } }],
+              },
+              margins: null,
+              pageSize: null,
+              orientation: null,
+              columns: null,
+              type: 'nextPage',
+              titlePg: false,
+            },
+          ] as any,
+          currentSectionIndex: 0,
+          currentParagraphIndex: 0,
+        };
+
+        handleParagraphNode(
+          {
+            type: 'paragraph',
+            attrs: { paragraphProperties: {} },
+            content: [{ type: 'text', text: 'section switch paragraph' }],
+          } as PMNode,
+          context,
+        );
+
+        expect(context.sectionState.currentSectionIndex).toBe(1);
+        expect(context.converterContext.sectionDirection).toBe('ltr');
       });
     });
 

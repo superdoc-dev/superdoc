@@ -165,16 +165,20 @@ function readOddEvenHeadersFlag(editor: Editor): boolean {
 }
 
 function createSyntheticRange(bodySectPr: XmlElement | null, paragraphCount: number): SectionRange {
+  const lastIndex = Math.max(paragraphCount - 1, 0);
   return {
     sectionIndex: 0,
+    startNodeIndex: 0,
+    endNodeIndex: lastIndex,
     startParagraphIndex: 0,
-    endParagraphIndex: Math.max(paragraphCount - 1, 0),
+    endParagraphIndex: lastIndex,
     sectPr: (bodySectPr as unknown as SectionRange['sectPr']) ?? null,
     margins: null,
     pageSize: null,
     orientation: null,
     columns: null,
     type: SectionType.CONTINUOUS,
+    typeIsExplicit: false,
     titlePg: false,
     headerRefs: undefined,
     footerRefs: undefined,

@@ -246,7 +246,93 @@ export const INTENT_GROUP_META: Record<string, IntentGroupMeta> = {
       },
     ],
   },
-  table: { toolName: 'superdoc_table', description: 'Table structure and cell operations' },
+  table: {
+    toolName: 'superdoc_table',
+    description:
+      'Create and modify table structure, content, and styling. Find table/row/cell nodeIds via superdoc_get_content({action:"blocks"}) or superdoc_search.\n' +
+      '\n' +
+      'ACTIONS:\n' +
+      '• Structure: delete, insert_row, delete_row, insert_column, delete_column, merge_cells, unmerge_cells.\n' +
+      '• Cell content: set_cell_text (text). set_cell (vAlign / wrap / fit / preferred width).\n' +
+      '• Row / column: set_row (height + rule), set_row_options (repeat-header, allow-break), set_column (widthPt).\n' +
+      '• Table styling: set_borders, set_shading, set_style_options (headerRow / bandedRows / firstColumn / lastColumn / lastRow / bandedColumns), set_layout (autofit / alignment / direction / preferredWidth), set_options (default cell margins + cell spacing).\n' +
+      '\n' +
+      'LOCATORS (the shapes ops accept):\n' +
+      '• insert_row append shorthand: { nodeId: "<tableId>" } with no rowIndex/position appends at the end. Three other forms: target a row + position, table + rowIndex + position, or any of the above with count:N for multiple.\n' +
+      '• insert_column shorthand: position:"first"|"last" with no columnIndex. Otherwise columnIndex + position:"left"|"right".\n' +
+      '• merge_cells: table target + start:{rowIndex, columnIndex} + end:{rowIndex, columnIndex}.\n' +
+      '• set_cell_text: table target + rowIndex + columnIndex (preferred) OR cell target.\n' +
+      '• set_cell: cell target only. Does NOT accept table+rowIndex+columnIndex.\n' +
+      '• set_borders / set_shading: table OR cell target. NOT a row target.\n' +
+      '\n' +
+      'COLOR FORMAT:\n' +
+      'Hex strings accept #RRGGBB, RRGGBB, #RGB, or 3-digit RGB; also "auto"; also null to clear (where supported). Stored canonically as uppercase RRGGBB. Always pass a concrete color when one is implied. Never call set_borders with `auto` for a "make it look [X]" ask.\n' +
+      '\n' +
+      'STYLING (TWO MODES):\n' +
+      '\n' +
+      'A. STRUCTURAL CHANGE → re-apply the existing styling.\n' +
+      "   Triggers: insert_row / insert_column / delete_row / delete_column / merge_cells / unmerge_cells. (NOT set_cell_text or set_cell: those don't disturb borders/shading.)\n" +
+      '   Recipe: read the current borders/shading/cnf flags via superdoc_get_content({action:"blocks"}) before the change, then re-apply the SAME values after with set_borders + set_shading + set_style_options. The goal is consistency, not a redesign.\n' +
+      '   Skip on a freshly created table. A new table starts un-styled.\n' +
+      '\n' +
+      'B. STYLE-CHANGE REQUEST ("make it look [X]" / "style the whole table") → apply the FULL set with concrete colors.\n' +
+      '   Touch every axis: borders, shading, text alignment, font color/weight, cnf flags, spacing. A single set_borders call without shading and font tweaks always looks half-finished. That\'s the #1 cause of "no visual change" complaints.\n' +
+      '   Color palette: discover the document\'s palette by reading superdoc_get_content({action:"blocks"}) and reusing the colors on existing tables/headings. When no palette is obvious, default to corporate blue "1F3864" or dark grey "444444" for accents and "F2F2F2" / "E7E6E6" for banding.\n' +
+      '   Recipe (call ALL of these):\n' +
+      '     1. set_borders applyTo:"all" with an explicit color and weight.\n' +
+      '     2. set_shading on the header row cells with the accent color. Add banding on alternate body rows if appropriate.\n' +
+      '     3. set_style_options { headerRow: true, bandedRows?: true } so cnf regions are recognized.\n' +
+      '     4. Cell-text alignment via superdoc_format action:"set_alignment". Center the header, left-align body, right-align numeric columns. Paragraph-level: target the paragraph inside each cell.\n' +
+      '     5. Font color + weight via superdoc_format action:"inline". Header gets a contrasting color (white on dark fill, accent on light fill) plus bold:true.\n' +
+      '     6. set_options if the user asks for tighter or looser spacing.\n' +
+      '   Steps 4–5 cross to superdoc_format. Use superdoc_mutations to batch many format.apply steps in one call.\n' +
+      '\n' +
+      'AFTER set_cell_text, match the new cell to its siblings:\n' +
+      'set_cell_text writes plain text with the document\'s default font/size/color and no weight. Always follow up with one superdoc_format inline call copying fontFamily/fontSize/color/bold from a sibling cell (or any non-empty body paragraph if the table is fresh and has no sibling content). If sibling cells show a bold-prefix pattern like "Label: value", replicate it on the new cell via superdoc_search + superdoc_format inline (or one superdoc_mutations batch with format.apply steps).\n' +
+      '\n' +
+      'LIST-TO-TABLE:\n' +
+      '(1) superdoc_create action:"table" with the desired rows/columns. (2) Populate cells with set_cell_text using rowIndex/columnIndex (one call per cell). (3) DELETE THE WHOLE LIST in one call: superdoc_list({action:"delete", target:{kind:"block", nodeType:"listItem", nodeId:"<any-item-id>"}}). The op walks the contiguous list and removes all items.\n' +
+      'Wrong paths for list deletion (all leave bullets/empty paragraphs behind): text.delete, superdoc_edit action:"delete" on text refs, lists.detach, lists.convertToText.',
+    // One canonical example per non-obvious shape. Other actions follow the
+    // same {action, nodeId, ...args} pattern documented in the prose above.
+    inputExamples: [
+      // Append a row at the end (no rowIndex/position needed).
+      { action: 'insert_row', nodeId: '<tableNodeId>' },
+      // Insert a column at the end (use 'first' / 'last' to skip columnIndex).
+      { action: 'insert_column', nodeId: '<tableNodeId>', position: 'last' },
+      // Merge a rectangular range.
+      {
+        action: 'merge_cells',
+        nodeId: '<tableNodeId>',
+        start: { rowIndex: 0, columnIndex: 0 },
+        end: { rowIndex: 1, columnIndex: 1 },
+      },
+      // Fill a cell with text using table+row+col coordinates.
+      { action: 'set_cell_text', nodeId: '<tableNodeId>', rowIndex: 0, columnIndex: 0, text: 'Q1 Revenue' },
+      // Set row height (rule: atLeast | exact | auto).
+      { action: 'set_row', nodeId: '<tableNodeId>', rowIndex: 0, heightPt: 24, rule: 'atLeast' },
+      // Border with a hex color (accepts #RRGGBB, RRGGBB, #RGB, RGB, or 'auto').
+      {
+        action: 'set_borders',
+        nodeId: '<tableNodeId>',
+        mode: 'applyTo',
+        applyTo: 'all',
+        border: { lineStyle: 'single', lineWeightPt: 1, color: '#000000' },
+      },
+      // Shade a single cell (use color: null to clear, or apply to a table nodeId for whole-table fill).
+      {
+        action: 'set_shading',
+        target: { kind: 'block', nodeType: 'tableCell', nodeId: '<cellNodeId>' },
+        color: '#E3F2FD',
+      },
+      // Toggle one or more cnf flags in a single call.
+      {
+        action: 'set_style_options',
+        nodeId: '<tableNodeId>',
+        styleOptions: { headerRow: true, bandedRows: true },
+      },
+    ],
+  },
   list: {
     toolName: 'superdoc_list',
     description:
@@ -1741,6 +1827,27 @@ export const OPERATION_DEFINITIONS = {
     intentGroup: 'list',
     intentAction: 'detach',
   },
+  'lists.delete': {
+    memberPath: 'lists.delete',
+    description:
+      "Delete the entire list that contains the targeted list item. Removes ALL items in the same numbered sequence (the contiguous run of list items sharing the target's numbering) AND their text content from the document. " +
+      'Pass any single list item from the list as `target`; the op walks adjacent siblings to find the full list. ' +
+      'Use this for "remove the list" / "delete this list" intents and for the cleanup step of a list-to-table conversion.',
+    expectedResult:
+      'Returns a ListsDeleteResult with `deletedCount` (number of items removed). Reports failure (INVALID_TARGET) if the target is not a list item.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'conditional',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['INVALID_TARGET'],
+      throws: [...T_NOT_FOUND_CAPABLE, 'INVALID_TARGET'],
+    }),
+    referenceDocPath: 'lists/delete.mdx',
+    referenceGroup: 'lists',
+    intentGroup: 'list',
+    intentAction: 'delete',
+  },
   'lists.indent': {
     memberPath: 'lists.indent',
     description: 'Increase the indentation level of a list item.',
@@ -2549,6 +2656,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'tables/delete.mdx',
     referenceGroup: 'tables',
+    intentGroup: 'table',
+    intentAction: 'delete',
   },
   'tables.clearContents': {
     memberPath: 'tables.clearContents',
@@ -2631,6 +2740,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'tables/set-layout.mdx',
     referenceGroup: 'tables',
+    intentGroup: 'table',
+    intentAction: 'set_layout',
   },
 
   // -------------------------------------------------------------------------
@@ -2639,7 +2750,8 @@ export const OPERATION_DEFINITIONS = {
 
   'tables.insertRow': {
     memberPath: 'tables.insertRow',
-    description: 'Insert a new row into the target table.',
+    description:
+      'Insert a new row into the target table. The new row is cloned from an adjacent row, so it inherits the existing cell shading, borders, alignment, and padding. No follow-up styling call is needed unless the new row should look different from the rest of the table.',
     expectedResult: 'Returns a TableMutationResult receipt confirming a row was inserted.',
     requiresDocumentContext: true,
     metadata: mutationOperation({
@@ -2651,6 +2763,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'tables/insert-row.mdx',
     referenceGroup: 'tables',
+    intentGroup: 'table',
+    intentAction: 'insert_row',
   },
   'tables.deleteRow': {
     memberPath: 'tables.deleteRow',
@@ -2666,6 +2780,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'tables/delete-row.mdx',
     referenceGroup: 'tables',
+    intentGroup: 'table',
+    intentAction: 'delete_row',
   },
   'tables.setRowHeight': {
     memberPath: 'tables.setRowHeight',
@@ -2681,6 +2797,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'tables/set-row-height.mdx',
     referenceGroup: 'tables',
+    intentGroup: 'table',
+    intentAction: 'set_row',
   },
   'tables.distributeRows': {
     memberPath: 'tables.distributeRows',
@@ -2711,6 +2829,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'tables/set-row-options.mdx',
     referenceGroup: 'tables',
+    intentGroup: 'table',
+    intentAction: 'set_row_options',
   },
 
   // -------------------------------------------------------------------------
@@ -2719,7 +2839,8 @@ export const OPERATION_DEFINITIONS = {
 
   'tables.insertColumn': {
     memberPath: 'tables.insertColumn',
-    description: 'Insert a new column into the target table.',
+    description:
+      'Insert a new column into the target table. The new column is cloned from an adjacent column, so it inherits the existing cell shading, borders, alignment, and width. No follow-up styling call is needed unless the new column should look different from the rest of the table.',
     expectedResult: 'Returns a TableMutationResult receipt confirming a column was inserted.',
     requiresDocumentContext: true,
     metadata: mutationOperation({
@@ -2731,6 +2852,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'tables/insert-column.mdx',
     referenceGroup: 'tables',
+    intentGroup: 'table',
+    intentAction: 'insert_column',
   },
   'tables.deleteColumn': {
     memberPath: 'tables.deleteColumn',
@@ -2746,6 +2869,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'tables/delete-column.mdx',
     referenceGroup: 'tables',
+    intentGroup: 'table',
+    intentAction: 'delete_column',
   },
   'tables.setColumnWidth': {
     memberPath: 'tables.setColumnWidth',
@@ -2761,6 +2886,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'tables/set-column-width.mdx',
     referenceGroup: 'tables',
+    intentGroup: 'table',
+    intentAction: 'set_column',
   },
   'tables.distributeColumns': {
     memberPath: 'tables.distributeColumns',
@@ -2826,6 +2953,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'tables/merge-cells.mdx',
     referenceGroup: 'tables',
+    intentGroup: 'table',
+    intentAction: 'merge_cells',
   },
   'tables.unmergeCells': {
     memberPath: 'tables.unmergeCells',
@@ -2841,6 +2970,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'tables/unmerge-cells.mdx',
     referenceGroup: 'tables',
+    intentGroup: 'table',
+    intentAction: 'unmerge_cells',
   },
   'tables.splitCell': {
     memberPath: 'tables.splitCell',
@@ -2859,7 +2990,10 @@ export const OPERATION_DEFINITIONS = {
   },
   'tables.setCellProperties': {
     memberPath: 'tables.setCellProperties',
-    description: 'Set properties on a table cell such as vertical alignment or text direction.',
+    description:
+      'Set non-text properties on a single table cell: vertical alignment, text wrapping, fit-text, or preferred width. ' +
+      'Requires a cell-level target (a tableCell block address with kind, nodeType, nodeId). Does NOT accept a table target with rowIndex/columnIndex. ' +
+      'To set the text content of a cell, use action "set_cell_text" instead.',
     expectedResult: 'Returns a TableMutationResult receipt; reports NO_OP if cell properties already match.',
     requiresDocumentContext: true,
     metadata: mutationOperation({
@@ -2871,6 +3005,30 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'tables/set-cell-properties.mdx',
     referenceGroup: 'tables',
+    intentGroup: 'table',
+    intentAction: 'set_cell',
+  },
+  'tables.setCellText': {
+    memberPath: 'tables.setCellText',
+    description:
+      'Replace the text content of a single table cell with plain text (one paragraph). ' +
+      'Accepts either a direct cell locator (a tableCell block address with kind, nodeType, nodeId) OR a table target with rowIndex + columnIndex. ' +
+      'Cell properties (vertical alignment, shading, borders, colspan/rowspan) are preserved. ' +
+      'Use this for filling cells with values, replacing cell text, or populating empty tables. Much simpler than walking paragraphs and runs through superdoc_edit.',
+    expectedResult:
+      'Returns a TableMutationResult receipt; reports NO_OP if the cell already contains exactly this text.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'idempotent',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['INVALID_TARGET', 'NO_OP'],
+      throws: T_NOT_FOUND_COMMAND,
+    }),
+    referenceDocPath: 'tables/set-cell-text.mdx',
+    referenceGroup: 'tables',
+    intentGroup: 'table',
+    intentAction: 'set_cell_text',
   },
 
   // -------------------------------------------------------------------------
@@ -3017,6 +3175,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'tables/set-shading.mdx',
     referenceGroup: 'tables',
+    intentGroup: 'table',
+    intentAction: 'set_shading',
   },
   'tables.clearShading': {
     memberPath: 'tables.clearShading',
@@ -3100,7 +3260,11 @@ export const OPERATION_DEFINITIONS = {
 
   'tables.applyStyle': {
     memberPath: 'tables.applyStyle',
-    description: 'Apply a table style and/or style options in one call.',
+    description:
+      'Toggle conditional-format flags (header row, banded rows/columns, first/last column, last row) on a table. ' +
+      'Pass `styleOptions` with the flags you want to set or clear (omitted flags stay unchanged). ' +
+      'For "format the first row as a header" use `styleOptions: { headerRow: true }`. ' +
+      'Optional `styleId` applies a named table style. Leave it unset unless you have a styleId from `superdoc_get_content` (no need to invent one).',
     expectedResult:
       'Returns a TableMutationResult receipt; reports NO_OP if the style and all provided options already match.',
     requiresDocumentContext: true,
@@ -3113,6 +3277,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'tables/apply-style.mdx',
     referenceGroup: 'tables',
+    intentGroup: 'table',
+    intentAction: 'set_style_options',
   },
   'tables.setBorders': {
     memberPath: 'tables.setBorders',
@@ -3128,6 +3294,8 @@ export const OPERATION_DEFINITIONS = {
     }),
     referenceDocPath: 'tables/set-borders.mdx',
     referenceGroup: 'tables',
+    intentGroup: 'table',
+    intentAction: 'set_borders',
   },
   'tables.setTableOptions': {
     memberPath: 'tables.setTableOptions',
@@ -3143,6 +3311,25 @@ export const OPERATION_DEFINITIONS = {
       throws: T_NOT_FOUND_COMMAND,
     }),
     referenceDocPath: 'tables/set-table-options.mdx',
+    referenceGroup: 'tables',
+    intentGroup: 'table',
+    intentAction: 'set_options',
+  },
+  'tables.applyPreset': {
+    memberPath: 'tables.applyPreset',
+    description:
+      'Apply a named visual preset to a table. Presets: "grid" (1pt black borders all around), "minimal" (no outer borders, hairline grey row separators + thicker bottom), "striped" (banded rows on, 0.5pt grey borders), "accent" (filled header row + thick accent top/bottom; defaults to dark blue, override with `accentColor`). ' +
+      'Composes set_borders + set_style_options + header-row shading in one call. Available via the document API and `superdoc_mutations` (intentionally NOT exposed as a top-level action on `superdoc_table`. Agents should compose explicit set_borders / set_shading / set_style_options calls so they always pick concrete colors that match the document context).',
+    expectedResult: 'Returns a TableMutationResult receipt.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'idempotent',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['INVALID_TARGET'],
+      throws: T_NOT_FOUND_COMMAND,
+    }),
+    referenceDocPath: 'tables/apply-preset.mdx',
     referenceGroup: 'tables',
   },
 

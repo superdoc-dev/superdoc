@@ -36,7 +36,14 @@ type BorderConversionOptions = {
  *
  * Clamps results to reasonable bounds to prevent edge cases.
  */
-export const borderSizeToPx = (size?: number): number | undefined => eighthPointsToPixels(size, { clamp: true });
+export const borderSizeToPx = (size?: number): number | undefined => {
+  if (!isFiniteNumber(size)) return undefined;
+  if (size <= 0) return 0;
+
+  const width = eighthPointsToPixels(size);
+  if (width == null) return undefined;
+  return clampPixelBorderWidth(width);
+};
 
 const clampPixelBorderWidth = (width: number): number =>
   Math.min(MAX_BORDER_SIZE_PX, Math.max(MIN_BORDER_SIZE_PX, width));

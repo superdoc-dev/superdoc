@@ -196,7 +196,9 @@ export function computeCaretLayoutRectGeometry(
 
   const availableWidth = Math.max(0, fragment.width - (indentAdjust + indent.right));
   const charX = measureCharacterX(block, line, pmOffset, availableWidth);
-  const localX = fragment.x + indentAdjust + charX;
+  const isRtlParagraph = block.attrs?.direction === 'rtl';
+  const resolvedCharX = isRtlParagraph ? Math.max(0, availableWidth - charX) : charX;
+  const localX = fragment.x + indentAdjust + resolvedCharX;
   const lineOffset = lineHeightBeforeIndex(measure.lines, fragment.fromLine, index);
   const localY = fragment.y + lineOffset;
 

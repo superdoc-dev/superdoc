@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * SD-2863: per-file checkJs gate for the public-contract surface.
+ * SD-2833: per-file checkJs gate for the public-contract surface.
  *
  * Why this exists in this shape (and not as a plain `tsc -p tsconfig.checkjs.json`):
  *
@@ -24,8 +24,7 @@
  * Adding a new file to the gate:
  *
  *   1. Add `// @ts-check` as the first line of the file.
- *   2. Add the file's path (relative to `packages/superdoc/`) to
- *      CHECKED_FILES below.
+ *   2. Add the file's repo-relative path to CHECKED_FILES below.
  *   3. Run `node packages/superdoc/scripts/check-jsdoc.cjs` and fix what
  *      surfaces.
  *
@@ -37,18 +36,210 @@
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
+const ts = require('typescript');
 
 const CHECKED_FILES = [
-  'src/helpers/schema-introspection.js',
-  'src/composables/use-find-replace.js',
-  'src/composables/use-password-prompt.js',
+  'packages/superdoc/src/helpers/schema-introspection.js',
+  'packages/superdoc/src/composables/use-find-replace.js',
+  'packages/superdoc/src/composables/use-password-prompt.js',
+  'packages/super-editor/src/editors/v1/extensions/track-changes/trackChangesHelpers/addMarkStep.js',
+  'packages/super-editor/src/editors/v1/extensions/track-changes/trackChangesHelpers/markDeletion.js',
+  'packages/super-editor/src/editors/v1/extensions/track-changes/trackChangesHelpers/markInsertion.js',
 ];
+
+const PUBLIC_ENTRY_FILES = [
+  'packages/superdoc/src/index.js',
+  'packages/superdoc/src/super-editor.js',
+  'packages/superdoc/src/ui.js',
+];
+
+const REACHABILITY_EXEMPT_CHECKED_FILES = new Set([
+  // These files predate SD-2833. They are kept under the gate because their
+  // typedefs feed exported SuperDoc configuration types, but they are reached
+  // through implementation imports rather than direct public barrel exports.
+  'packages/superdoc/src/composables/use-find-replace.js',
+  'packages/superdoc/src/composables/use-password-prompt.js',
+]);
 
 const packageDir = path.resolve(__dirname, '..');
 const repoRoot = path.resolve(packageDir, '..', '..');
 
 const tscBin = path.join(repoRoot, 'node_modules', '.bin', 'tsc');
 const tsconfigPath = path.join(packageDir, 'tsconfig.json');
+
+const SOURCE_EXTENSIONS = ['.ts', '.tsx', '.js', '.jsx', '.vue'];
+
+const PACKAGE_EXPORT_SOURCES = {
+  '@superdoc/super-editor': 'packages/super-editor/src/index.ts',
+  '@superdoc/super-editor/blank-docx': 'packages/super-editor/src/editors/v1/core/blank-docx.ts',
+  '@superdoc/super-editor/document-api-adapters': 'packages/super-editor/src/editors/v1/document-api-adapters/index.ts',
+  '@superdoc/super-editor/markdown': 'packages/super-editor/src/editors/v1/core/helpers/markdown/index.ts',
+  '@superdoc/super-editor/parts-runtime': 'packages/super-editor/src/editors/v1/core/parts/init-parts-runtime.ts',
+  '@superdoc/super-editor/ui': 'packages/super-editor/src/ui/index.ts',
+};
+
+const SOURCE_ALIASES = [
+  ['@core/', 'packages/super-editor/src/editors/v1/core/'],
+  ['@extensions/', 'packages/super-editor/src/editors/v1/extensions/'],
+  ['@features/', 'packages/super-editor/src/editors/v1/features/'],
+  ['@components/', 'packages/super-editor/src/editors/v1/components/'],
+  ['@helpers/', 'packages/super-editor/src/editors/v1/core/helpers/'],
+  ['@converter/', 'packages/super-editor/src/editors/v1/core/super-converter/'],
+  ['@tests/', 'packages/super-editor/src/editors/v1/tests/'],
+  ['@translator', 'packages/super-editor/src/editors/v1/core/super-converter/v3/node-translator/'],
+  ['@utils/', 'packages/super-editor/src/editors/v1/utils/'],
+  ['@shared/', 'shared/'],
+];
+
+const toRepoRelative = (abs) => path.relative(repoRoot, abs).split(path.sep).join('/');
+
+const tryResolveSourcePath = (basePath) => {
+  if (path.extname(basePath)) {
+    if (fs.existsSync(basePath) && fs.statSync(basePath).isFile()) return basePath;
+    if (basePath.endsWith('.js')) {
+      for (const extension of ['.ts', '.tsx']) {
+        const sourcePath = `${basePath.slice(0, -3)}${extension}`;
+        if (fs.existsSync(sourcePath)) return sourcePath;
+      }
+    }
+    return null;
+  }
+
+  for (const extension of SOURCE_EXTENSIONS) {
+    const sourcePath = `${basePath}${extension}`;
+    if (fs.existsSync(sourcePath)) return sourcePath;
+  }
+
+  for (const extension of SOURCE_EXTENSIONS) {
+    const sourcePath = path.join(basePath, `index${extension}`);
+    if (fs.existsSync(sourcePath)) return sourcePath;
+  }
+
+  return null;
+};
+
+const resolveSourceSpecifier = (specifier, containingFile) => {
+  if (Object.prototype.hasOwnProperty.call(PACKAGE_EXPORT_SOURCES, specifier)) {
+    return path.join(repoRoot, PACKAGE_EXPORT_SOURCES[specifier]);
+  }
+
+  if (specifier.startsWith('@superdoc/super-editor/')) {
+    return tryResolveSourcePath(
+      path.join(repoRoot, 'packages/super-editor/src', specifier.slice('@superdoc/super-editor/'.length)),
+    );
+  }
+
+  if (specifier.startsWith('.')) {
+    return tryResolveSourcePath(path.resolve(path.dirname(containingFile), specifier));
+  }
+
+  for (const [alias, target] of SOURCE_ALIASES) {
+    if (specifier === alias.replace(/\/$/, '')) return tryResolveSourcePath(path.join(repoRoot, target));
+    if (specifier.startsWith(alias)) {
+      return tryResolveSourcePath(path.join(repoRoot, target, specifier.slice(alias.length)));
+    }
+  }
+
+  return null;
+};
+
+const createSourceFile = (filePath) => {
+  const source = fs.readFileSync(filePath, 'utf8');
+  const scriptKind = filePath.endsWith('.tsx')
+    ? ts.ScriptKind.TSX
+    : filePath.endsWith('.ts')
+      ? ts.ScriptKind.TS
+      : ts.ScriptKind.JS;
+  return ts.createSourceFile(filePath, source, ts.ScriptTarget.Latest, true, scriptKind);
+};
+
+const findExportReachableTargets = (filePath) => {
+  if (!/\.[jt]sx?$/.test(filePath)) return [];
+
+  const sourceFile = createSourceFile(filePath);
+  const importedBindings = new Map();
+  const reachableTargets = [];
+
+  for (const statement of sourceFile.statements) {
+    if (!ts.isImportDeclaration(statement)) continue;
+    if (!statement.moduleSpecifier || !ts.isStringLiteral(statement.moduleSpecifier)) continue;
+
+    const target = resolveSourceSpecifier(statement.moduleSpecifier.text, filePath);
+    const clause = statement.importClause;
+    if (!target || !clause) continue;
+
+    if (clause.name) importedBindings.set(clause.name.text, target);
+
+    const namedBindings = clause.namedBindings;
+    if (!namedBindings) continue;
+    if (ts.isNamespaceImport(namedBindings)) {
+      importedBindings.set(namedBindings.name.text, target);
+      continue;
+    }
+    if (ts.isNamedImports(namedBindings)) {
+      for (const element of namedBindings.elements) {
+        importedBindings.set(element.name.text, target);
+      }
+    }
+  }
+
+  for (const statement of sourceFile.statements) {
+    if (!ts.isExportDeclaration(statement)) continue;
+
+    if (statement.moduleSpecifier && ts.isStringLiteral(statement.moduleSpecifier)) {
+      const target = resolveSourceSpecifier(statement.moduleSpecifier.text, filePath);
+      if (target) reachableTargets.push(target);
+      continue;
+    }
+
+    if (!statement.exportClause || !ts.isNamedExports(statement.exportClause)) continue;
+    for (const element of statement.exportClause.elements) {
+      const localName = (element.propertyName || element.name).text;
+      const target = importedBindings.get(localName);
+      if (target) reachableTargets.push(target);
+    }
+  }
+
+  return [...new Set(reachableTargets)];
+};
+
+const collectPublicExportSurface = () => {
+  const seen = new Set();
+  const stack = PUBLIC_ENTRY_FILES.map((file) => path.join(repoRoot, file));
+
+  while (stack.length > 0) {
+    const current = stack.pop();
+    if (!current || seen.has(current)) continue;
+
+    seen.add(current);
+    for (const target of findExportReachableTargets(current)) {
+      if (!seen.has(target)) stack.push(target);
+    }
+  }
+
+  return seen;
+};
+
+const hasJSDocTypeSurface = (abs) => {
+  if (!abs.endsWith('.js')) return false;
+  const source = fs.readFileSync(abs, 'utf8');
+  return /\/\*\*[\s\S]*?@(typedef|param|returns|template|callback|property|type)\b/.test(source);
+};
+
+const publicExportSurface = collectPublicExportSurface();
+const publicExportSurfaceRelative = new Set([...publicExportSurface].map(toRepoRelative));
+const publicJSDocFiles = [...publicExportSurface].filter(hasJSDocTypeSurface).sort();
+const checkedFileSet = new Set(CHECKED_FILES);
+const nonPublicCheckedFiles = CHECKED_FILES.filter(
+  (rel) => !publicExportSurfaceRelative.has(rel) && !REACHABILITY_EXEMPT_CHECKED_FILES.has(rel),
+);
+
+if (nonPublicCheckedFiles.length > 0) {
+  console.error('[check-jsdoc] gated files are not reachable from the public superdoc export surface:');
+  for (const f of nonPublicCheckedFiles) console.error(`  - ${f}`);
+  console.error('Gated JSDoc files must be exported from superdoc, superdoc/super-editor, or superdoc/ui.');
+  process.exit(1);
+}
 
 // Pre-flight: every file in CHECKED_FILES must opt into `// @ts-check`.
 // The project's tsconfig sets `checkJs: false`, so a JS file without the
@@ -59,7 +250,7 @@ const tsconfigPath = path.join(packageDir, 'tsconfig.json');
 const missingDirective = [];
 const missingFiles = [];
 for (const rel of CHECKED_FILES) {
-  const abs = path.join(packageDir, rel);
+  const abs = path.join(repoRoot, rel);
   if (!fs.existsSync(abs)) {
     missingFiles.push(rel);
     continue;
@@ -128,7 +319,7 @@ if (result.status !== 0 && allErrors.length === 0) {
   process.exit(1);
 }
 
-const checkedAbsolute = CHECKED_FILES.map((rel) => path.join(packageDir, rel));
+const checkedAbsolute = CHECKED_FILES.map((rel) => path.join(repoRoot, rel));
 
 const isCheckedError = (line) => {
   const match = line.match(/^([^(]+)\(\d+,\d+\):/);
@@ -139,17 +330,20 @@ const isCheckedError = (line) => {
 
 const checkedErrors = allErrors.filter(isCheckedError);
 
-console.log('[check-jsdoc] SD-2863 public-contract checkJs gate');
+console.log('[check-jsdoc] SD-2833 public-contract checkJs gate');
 console.log('='.repeat(72));
+console.log(`Public JSDoc files discovered: ${publicJSDocFiles.length}`);
 console.log(`Files under gate: ${CHECKED_FILES.length}`);
 for (const f of CHECKED_FILES) {
   console.log(`  - ${f}`);
 }
+const ungatedPublicJSDocCount = publicJSDocFiles.filter((abs) => !checkedFileSet.has(toRepoRelative(abs))).length;
+console.log(`Ungated public JSDoc files: ${ungatedPublicJSDocCount}`);
 console.log();
 
 if (checkedErrors.length === 0) {
   console.log(`OK    ${CHECKED_FILES.length} gated file${CHECKED_FILES.length === 1 ? '' : 's'} clean.`);
-  console.log(`      (${allErrors.length} non-gated error${allErrors.length === 1 ? '' : 's'} in the wider tsc run, ignored — see SD-2863 follow-up tickets.)`);
+  console.log(`      (${allErrors.length} non-gated error${allErrors.length === 1 ? '' : 's'} in the wider tsc run, ignored — see SD-2863/SD-2833 follow-ups.)`);
   process.exit(0);
 }
 

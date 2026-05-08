@@ -124,6 +124,8 @@ export function CommentComposer({ onPosted }: { onPosted(): void }) {
 
 `captured.target` is the same shape `editor.doc.comments.create({ target })` accepts. `quotedText` gives you the anchored text for previewing in the composer.
 
+See the [selection capture example](https://github.com/superdoc-dev/superdoc/tree/main/examples/editor/custom-ui/selection-capture) for a runnable vanilla version: open a composer, move focus to a textarea, and post against the original selection.
+
 ## Resolve and reopen
 
 ```tsx
@@ -184,6 +186,10 @@ function ReplyComposer({ parent }: { parent: { id: string } }) {
 ```
 
 The next snapshot from `useSuperDocComments()` includes the reply, threaded under the parent via `parentCommentId`. The reference demo's `ActivitySidebar` ships this pattern with focus management and Ctrl/Cmd+Enter to post.
+
+## Theming
+
+Comment cards, body text, timestamps, and active states are themable via `--sd-ui-comments-*` CSS variables. See [Theming overview](/editor/theming/overview) and [Custom themes](/editor/theming/custom-themes) for the full token list.
 
 ## Trade-offs
 

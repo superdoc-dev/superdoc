@@ -14,6 +14,10 @@ import {
   getFirstTextPosition as getFirstTextPositionFromHelper,
   registerPointerClick as registerPointerClickFromHelper,
 } from './input/ClickSelectionUtilities.js';
+import {
+  findStructuredContentBlockAtPos,
+  findStructuredContentInlineAtPos,
+} from './input/structured-content-resolution.js';
 import type { EditorState, Transaction } from 'prosemirror-state';
 import type { Node as ProseMirrorNode } from 'prosemirror-model';
 import type { Mapping } from 'prosemirror-transform';
@@ -101,7 +105,8 @@ import { resolveStoryRuntime } from '../../document-api-adapters/story-runtime/r
 import { BODY_STORY_KEY, buildStoryKey, parseStoryKey } from '../../document-api-adapters/story-runtime/story-key.js';
 import { createStoryEditor } from '../story-editor-factory.js';
 import { buildEndnoteBlocks } from './layout/EndnotesBuilder.js';
-import { toFlowBlocks, ConverterContext, FlowBlockCache } from '@superdoc/pm-adapter';
+import { toFlowBlocks, FlowBlockCache } from '@superdoc/pm-adapter';
+import type { ConverterContext } from '@superdoc/pm-adapter/converter-context.js';
 import { readSettingsRoot, readDefaultTableStyle } from '../../document-api-adapters/document-settings.js';
 import {
   incrementalLayout,
@@ -130,6 +135,7 @@ import type {
   Layout,
   Measure,
   Page,
+  ResolvedLayout,
   SectionMetadata,
   TrackedChangesMode,
   Fragment,
@@ -239,6 +245,7 @@ import { DOM_CLASS_NAMES, buildSdtBlockSelector } from '@superdoc/dom-contract';
 import {
   ensureEditorNativeSelectionStyles,
   ensureEditorFieldAnnotationInteractionStyles,
+  ensureEditorMovableObjectInteractionStyles,
 } from './dom/EditorStyleInjector.js';
 
 import type {
@@ -467,6 +474,8 @@ export class PresentationEditor extends EventEmitter {
    * this unset so they don't fight the user's scroll position.
    */
   #shouldScrollSelectionIntoView = false;
+  /** PM position for transient drag/drop insertion preview, rendered even while editor focus is elsewhere. */
+  #dragDropIndicatorPos: number | null = null;
   #epochMapper = new EpochPositionMapper();
   #layoutEpoch = 0;
   #htmlAnnotationHeights: Map<string, number> = new Map();
@@ -631,6 +640,7 @@ export class PresentationEditor extends EventEmitter {
       enableCommentsInViewing: options.layoutEngineOptions?.enableCommentsInViewing,
       presence: validatedPresence,
       showBookmarks: options.layoutEngineOptions?.showBookmarks ?? false,
+      showFormattingMarks: options.layoutEngineOptions?.showFormattingMarks ?? false,
     };
     this.#trackedChangesOverrides = options.layoutEngineOptions?.trackedChanges;
 
@@ -657,6 +667,7 @@ export class PresentationEditor extends EventEmitter {
     // Inject editor-owned styles (idempotent, once per document)
     ensureEditorNativeSelectionStyles(doc);
     ensureEditorFieldAnnotationInteractionStyles(doc);
+    ensureEditorMovableObjectInteractionStyles(doc);
 
     // Add event listeners for structured content hover coordination
     this.#painterHost.addEventListener('mouseover', this.#handleStructuredContentBlockMouseEnter);
@@ -1360,6 +1371,27 @@ export class PresentationEditor extends EventEmitter {
    */
   getStorySessionManager(): StoryPresentationSessionManager | null {
     return this.#storySessionManager;
+  }
+
+  /**
+   * The {@link StoryLocator} for the currently routed editor, or `null`
+   * when the body editor is active. Notes (footnote/endnote) flow
+   * through the generic story-session manager; headers/footers flow
+   * through the legacy header-footer session. Both are unified here so
+   * external surfaces (selection / positionAt) can thread the locator
+   * onto a {@link SelectionTarget} without reaching into private state.
+   */
+  getActiveStoryLocator(): StoryLocator | null {
+    const storySession = this.#storySessionManager?.getActiveSession();
+    if (storySession) return storySession.locator;
+
+    const session = this.#headerFooterSession?.session;
+    if (!session || session.mode === 'body' || !session.headerFooterRefId) return null;
+    return {
+      kind: 'story',
+      storyType: 'headerFooterPart',
+      refId: session.headerFooterRefId,
+    };
   }
 
   /**
@@ -2933,6 +2965,54 @@ export class PresentationEditor extends EventEmitter {
     this.#scheduleRerender();
   }
 
+  setShowFormattingMarks(showFormattingMarks: boolean): void {
+    const next = !!showFormattingMarks;
+    if (this.#layoutOptions.showFormattingMarks === next) return;
+    this.#layoutOptions.showFormattingMarks = next;
+    this.#painterAdapter.setShowFormattingMarks(next);
+    if (!this.#repaintCurrentLayout()) {
+      this.#pendingDocChange = true;
+      this.#scheduleRerender();
+    }
+  }
+
+  #repaintCurrentLayout(): boolean {
+    const layout = this.#layoutState.layout;
+    if (!layout) return false;
+
+    const blocks = this.#layoutLookupBlocks.length > 0 ? this.#layoutLookupBlocks : this.#layoutState.blocks;
+    const measures = this.#layoutLookupMeasures.length > 0 ? this.#layoutLookupMeasures : this.#layoutState.measures;
+    if (blocks.length === 0 || blocks.length !== measures.length) return false;
+
+    const resolvedLayout = resolveLayout({
+      layout,
+      flowMode: this.#layoutOptions.flowMode ?? 'paginated',
+      blocks,
+      measures,
+    });
+
+    const isSemanticFlow = this.#layoutOptions.flowMode === 'semantic';
+    this.#ensurePainter();
+    if (!isSemanticFlow) {
+      this.#painterAdapter.setProviders(
+        this.#headerFooterSession?.headerDecorationProvider,
+        this.#headerFooterSession?.footerDecorationProvider,
+      );
+    }
+
+    this.#domIndexObserverManager?.pause();
+    try {
+      this.#painterAdapter.paint({ resolvedLayout }, this.#painterHost);
+      this.#refreshEditorDomAugmentations();
+    } finally {
+      this.#domIndexObserverManager?.resume();
+    }
+    this.#revalidateScrollContainer();
+    this.#updatePermissionOverlay();
+    this.#applyZoom();
+    return true;
+  }
+
   /**
    * Convert a viewport coordinate into a document hit using the current layout.
    */
@@ -3004,7 +3084,10 @@ export class PresentationEditor extends EventEmitter {
         x: localX,
         y: localY,
       };
-      const hit = clickToPositionGeometry(context.layout, context.blocks, context.measures, headerPoint) ?? null;
+      const geometryHit =
+        clickToPositionGeometry(context.layout, context.blocks, context.measures, headerPoint) ?? null;
+      const domHit = this.#resolveHeaderFooterDomHit(context, clientX, clientY);
+      const hit = domHit ?? geometryHit;
       if (!hit) {
         return null;
       }
@@ -4754,11 +4837,28 @@ export class PresentationEditor extends EventEmitter {
       getActiveEditor: () => this.getActiveEditor(),
       hitTest: (clientX, clientY) => this.hitTest(clientX, clientY),
       scheduleSelectionUpdate: () => this.#scheduleSelectionUpdate(),
+      showDragDropIndicator: (pos) => this.#showDragDropIndicator(pos),
+      clearDragDropIndicator: () => this.#clearDragDropIndicator(),
       getViewportHost: () => this.#viewportHost,
       getPainterHost: () => this.#painterHost,
       insertImageFile: (params) => processAndInsertImageFile(params),
     });
     this.#dragDropManager.bind();
+  }
+
+  #showDragDropIndicator(pos: number): void {
+    const docSize = this.getActiveEditor()?.state?.doc?.content.size;
+    if (!Number.isFinite(pos) || docSize == null) return;
+    const clampedPos = Math.min(Math.max(pos, 1), docSize);
+    if (this.#dragDropIndicatorPos === clampedPos) return;
+    this.#dragDropIndicatorPos = clampedPos;
+    this.#scheduleSelectionUpdate({ immediate: true });
+  }
+
+  #clearDragDropIndicator(): void {
+    if (this.#dragDropIndicatorPos == null) return;
+    this.#dragDropIndicatorPos = null;
+    this.#scheduleSelectionUpdate({ immediate: true });
   }
 
   /**
@@ -6166,7 +6266,7 @@ export class PresentationEditor extends EventEmitter {
       // Process per-rId header/footer content and decoration providers (paginated only)
       if (!isSemanticFlow) {
         await this.#layoutPerRIdHeaderFooters(headerFooterInput, layout, sectionMetadata);
-        this.#updateDecorationProviders(layout);
+        this.#updateDecorationProviders(resolvedLayout);
       }
 
       this.#ensurePainter();
@@ -6186,7 +6286,6 @@ export class PresentationEditor extends EventEmitter {
       const painterPaintStart = perfNow();
       const paintInput: DomPainterInput = {
         resolvedLayout,
-        sourceLayout: layout,
       };
       this.#painterAdapter.paint(paintInput, this.#painterHost, mapping ?? undefined);
       const painterPaintEnd = perfNow();
@@ -6264,6 +6363,7 @@ export class PresentationEditor extends EventEmitter {
       footerProvider: this.#headerFooterSession?.footerDecorationProvider,
       ruler: this.#layoutOptions.ruler,
       pageGap: this.#layoutState.layout?.pageGap ?? effectiveGap,
+      showFormattingMarks: this.#layoutOptions.showFormattingMarks ?? false,
     });
 
     // Pass the current zoom so virtualization accounts for the CSS transform scale
@@ -6438,6 +6538,7 @@ export class PresentationEditor extends EventEmitter {
     }
 
     let node: ProseMirrorNode | null = null;
+    let pos: number | null = null;
     let id: string | null = null;
 
     if (selection instanceof NodeSelection) {
@@ -6446,24 +6547,27 @@ export class PresentationEditor extends EventEmitter {
         return;
       }
       node = selection.node;
+      pos = selection.from;
     } else {
-      const $pos = (selection as Selection & { $from?: { depth?: number; node?: (depth: number) => ProseMirrorNode } })
-        .$from;
-      if (!$pos || typeof $pos.depth !== 'number' || typeof $pos.node !== 'function') {
+      const editorDoc = this.#editor?.view?.state?.doc;
+      if (!editorDoc) {
         this.#clearSelectedStructuredContentBlockClass();
         return;
       }
-      for (let depth = $pos.depth; depth > 0; depth--) {
-        const candidate = $pos.node(depth);
-        if (candidate.type?.name === 'structuredContentBlock') {
-          node = candidate;
-          break;
-        }
-      }
-      if (!node) {
+
+      const resolved = findStructuredContentBlockAtPos(editorDoc, selection.from);
+      if (!resolved) {
         this.#clearSelectedStructuredContentBlockClass();
         return;
       }
+
+      node = resolved.node;
+      pos = resolved.pos;
+    }
+
+    if (pos == null) {
+      this.#clearSelectedStructuredContentBlockClass();
+      return;
     }
 
     if (!this.#painterHost) {
@@ -6480,7 +6584,7 @@ export class PresentationEditor extends EventEmitter {
     }
 
     if (elements.length === 0) {
-      const elementAtPos = this.getElementAtPos(selection.from, { fallbackToCoords: true });
+      const elementAtPos = this.getElementAtPos(pos, { fallbackToCoords: true });
       const container = elementAtPos?.closest?.(`.${DOM_CLASS_NAMES.BLOCK_SDT}`) as HTMLElement | null;
       if (container) {
         elements = [container];
@@ -6653,31 +6757,20 @@ export class PresentationEditor extends EventEmitter {
       node = selection.node;
       pos = selection.from;
     } else {
-      const $pos = (
-        selection as Selection & {
-          $from?: { depth?: number; node?: (depth: number) => ProseMirrorNode; before?: (depth: number) => number };
-        }
-      ).$from;
-      if (!$pos || typeof $pos.depth !== 'number' || typeof $pos.node !== 'function') {
+      const editorDoc = this.#editor?.view?.state?.doc;
+      if (!editorDoc) {
         this.#clearSelectedStructuredContentInlineClass();
         return;
       }
-      for (let depth = $pos.depth; depth > 0; depth--) {
-        const candidate = $pos.node(depth);
-        if (candidate.type?.name === 'structuredContent') {
-          if (typeof $pos.before !== 'function') {
-            this.#clearSelectedStructuredContentInlineClass();
-            return;
-          }
-          node = candidate;
-          pos = $pos.before(depth);
-          break;
-        }
-      }
-      if (!node || pos == null) {
+
+      const resolved = findStructuredContentInlineAtPos(editorDoc, selection.from);
+      if (!resolved) {
         this.#clearSelectedStructuredContentInlineClass();
         return;
       }
+
+      node = resolved.node;
+      pos = resolved.pos;
     }
 
     if (!this.#painterHost) {
@@ -6793,8 +6886,9 @@ export class PresentationEditor extends EventEmitter {
     const isOnEditorUi = !!(activeEl as Element)?.closest?.(
       '[data-editor-ui-surface], .sd-toolbar-dropdown-menu, .toolbar-dropdown-menu',
     );
+    const isDragDropIndicatorActive = this.#dragDropIndicatorPos != null;
 
-    if (!hasFocus && !contextMenuOpen && !isOnEditorUi) {
+    if (!hasFocus && !contextMenuOpen && !isOnEditorUi && !isDragDropIndicatorActive) {
       try {
         this.#clearSelectedFieldAnnotationClass();
         this.#localSelectionLayer.innerHTML = '';
@@ -6852,8 +6946,9 @@ export class PresentationEditor extends EventEmitter {
       return;
     }
 
-    if (from === to) {
-      const caretLayout = this.#computeCaretLayoutRect(from);
+    if (from === to || isDragDropIndicatorActive) {
+      const caretPos = this.#dragDropIndicatorPos ?? from;
+      const caretLayout = this.#computeCaretLayoutRect(caretPos);
       if (!caretLayout) {
         // Keep existing cursor visible rather than clearing it
         return;
@@ -6872,7 +6967,7 @@ export class PresentationEditor extends EventEmitter {
           console.warn('[PresentationEditor] Failed to render caret overlay:', error);
         }
       }
-      if (shouldScrollIntoView) {
+      if (shouldScrollIntoView && !isDragDropIndicatorActive) {
         this.#scrollActiveEndIntoView(caretLayout.pageIndex);
       }
       return;
@@ -7349,8 +7444,8 @@ export class PresentationEditor extends EventEmitter {
    * Update decoration providers for header/footer.
    * Delegates to HeaderFooterSessionManager which handles provider creation.
    */
-  #updateDecorationProviders(layout: Layout) {
-    this.#headerFooterSession?.updateDecorationProviders(layout);
+  #updateDecorationProviders(resolvedLayout: ResolvedLayout) {
+    this.#headerFooterSession?.updateDecorationProviders(resolvedLayout);
   }
 
   /**
@@ -7742,6 +7837,76 @@ export class PresentationEditor extends EventEmitter {
       column: 0,
       lineIndex: -1,
     };
+  }
+
+  #resolveHeaderFooterDomHit(context: HeaderFooterLayoutContext, clientX: number, clientY: number): PositionHit | null {
+    const layout = this.#layoutState.layout;
+    if (!layout) return null;
+
+    const blockIds = new Set(
+      context.blocks.map((block) => block.id).filter((id): id is string => typeof id === 'string' && id.length > 0),
+    );
+    if (blockIds.size === 0) return null;
+
+    const doc = this.#viewportHost.ownerDocument ?? document;
+    const elementsFromPoint = typeof doc.elementsFromPoint === 'function' ? doc.elementsFromPoint.bind(doc) : null;
+
+    const tryResolve = (element: Element | null, enforceKnownBlockIds = true): PositionHit | null => {
+      const fragmentElement = element instanceof HTMLElement ? element.closest<HTMLElement>('[data-block-id]') : null;
+      const blockId = fragmentElement?.getAttribute('data-block-id') ?? '';
+      if (!fragmentElement) return null;
+      if (enforceKnownBlockIds && !blockIds.has(blockId)) return null;
+
+      const pos = resolvePositionWithinFragmentDomFromDom(fragmentElement, clientX, clientY);
+      if (pos == null) return null;
+
+      return {
+        pos,
+        layoutEpoch: readLayoutEpochFromDomFromDom(fragmentElement, clientX, clientY) ?? layout.layoutEpoch ?? 0,
+        blockId,
+        pageIndex: this.#resolveRenderedPageIndexForElement(fragmentElement),
+        column: 0,
+        lineIndex: -1,
+      };
+    };
+
+    if (elementsFromPoint) {
+      for (const element of elementsFromPoint(clientX, clientY)) {
+        const hit = tryResolve(element, true);
+        if (hit) return hit;
+      }
+
+      // Fallback: when rendered block IDs differ from context block IDs (e.g. split/derived
+      // header/footer fragments), still resolve from the visible fragment under pointer.
+      // Scope to the header/footer surface to avoid matching body fragments at the same
+      // viewport coordinates (header/footer has pointer-events: none, so elementsFromPoint
+      // may return body elements that sit visually behind the header/footer area).
+      for (const element of elementsFromPoint(clientX, clientY)) {
+        if (!element.closest('.superdoc-page-header, .superdoc-page-footer')) continue;
+        const hit = tryResolve(element, false);
+        if (hit) return hit;
+      }
+    }
+
+    // Header/footer surfaces are rendered with pointer-events: none on the container
+    // in presentation mode. In that case elementsFromPoint may miss the intended
+    // fragment chain, so fallback to a geometric fragment pick by bounding box.
+    const surfaceSelector = context.region.kind === 'footer' ? '.superdoc-page-footer' : '.superdoc-page-header';
+    const pageElement = getPageElementByIndex(this.#viewportHost, context.region.pageIndex);
+    const surface = pageElement?.querySelector(surfaceSelector) ?? null;
+    if (surface instanceof HTMLElement) {
+      const fragments = Array.from(surface.querySelectorAll<HTMLElement>('.superdoc-fragment'));
+      for (const fragment of fragments) {
+        const rect = fragment.getBoundingClientRect();
+        if (clientX < rect.left || clientX > rect.right || clientY < rect.top || clientY > rect.bottom) {
+          continue;
+        }
+        const hit = tryResolve(fragment, false);
+        if (hit) return hit;
+      }
+    }
+
+    return null;
   }
 
   #createCollapsedSelectionNearInlineContent(doc: ProseMirrorNode, pos: number): Selection {

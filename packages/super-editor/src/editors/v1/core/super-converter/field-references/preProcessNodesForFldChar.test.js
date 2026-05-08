@@ -303,6 +303,255 @@ describe('preProcessNodesForFldChar', () => {
     ]);
   });
 
+  it('processes known fields that end inside nested non-tracked wrappers', () => {
+    const nodes = [
+      { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'begin' } }] },
+      {
+        name: 'w:r',
+        elements: [{ name: 'w:instrText', elements: [{ type: 'text', text: 'HYPERLINK "http://example.com"' }] }],
+      },
+      { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'separate' } }] },
+      {
+        name: 'w:p',
+        elements: [
+          {
+            name: 'w:sdt',
+            elements: [
+              {
+                name: 'w:sdtContent',
+                elements: [
+                  { name: 'w:r', elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'link text' }] }] },
+                  { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'end' } }] },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ];
+
+    const { processedNodes } = preProcessNodesForFldChar(nodes, mockDocx);
+
+    expect(processedNodes).toEqual([
+      {
+        name: 'w:hyperlink',
+        type: 'element',
+        attributes: { 'r:id': 'rIdabc12345' },
+        elements: [
+          {
+            name: 'w:p',
+            elements: [
+              {
+                name: 'w:sdt',
+                elements: [
+                  {
+                    name: 'w:sdtContent',
+                    elements: [
+                      { name: 'w:r', elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'link text' }] }] },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ]);
+  });
+
+  it('preserves a tracked-deletion-wrapped field split across paragraphs without throwing', () => {
+    const expectedNodes = [
+      {
+        name: 'w:p',
+        elements: [
+          {
+            name: 'w:del',
+            attributes: { 'w:id': '1', 'w:author': 'Repro', 'w:date': '2026-04-30T00:00:00Z' },
+            elements: [
+              { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'begin' } }] },
+              {
+                name: 'w:r',
+                elements: [
+                  {
+                    name: 'w:instrText',
+                    attributes: { 'xml:space': 'preserve' },
+                    elements: [{ type: 'text', text: ' HYPERLINK \\l "Bookmark" ' }],
+                  },
+                ],
+              },
+              { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'separate' } }] },
+              {
+                name: 'w:r',
+                elements: [
+                  {
+                    name: 'w:delText',
+                    attributes: { 'xml:space': 'preserve' },
+                    elements: [{ type: 'text', text: 'deleted link text' }],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+      {
+        name: 'w:p',
+        elements: [
+          {
+            name: 'w:del',
+            attributes: { 'w:id': '2', 'w:author': 'Repro', 'w:date': '2026-04-30T00:00:00Z' },
+            elements: [
+              { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'end' } }] },
+              {
+                name: 'w:r',
+                elements: [
+                  {
+                    name: 'w:delText',
+                    attributes: { 'xml:space': 'preserve' },
+                    elements: [{ type: 'text', text: 'deleted text after field end' }],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ];
+    const nodes = structuredClone(expectedNodes);
+
+    let result;
+    expect(() => {
+      result = preProcessNodesForFldChar(nodes, mockDocx);
+    }).not.toThrow();
+    expect(result.processedNodes).toEqual(expectedNodes);
+    expect(result.unpairedBegin).toBeNull();
+    expect(result.unpairedEnd).toBeNull();
+  });
+
+  it('preserves raw field nodes when an active field ends inside a tracked deletion wrapper', () => {
+    const expectedNodes = [
+      { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'begin' } }] },
+      {
+        name: 'w:r',
+        elements: [{ name: 'w:instrText', elements: [{ type: 'text', text: 'HYPERLINK "http://example.com"' }] }],
+      },
+      { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'separate' } }] },
+      { name: 'w:r', elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'link text' }] }] },
+      {
+        name: 'w:p',
+        elements: [
+          {
+            name: 'w:del',
+            attributes: { 'w:id': '1', 'w:author': 'Repro', 'w:date': '2026-04-30T00:00:00Z' },
+            elements: [
+              { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'end' } }] },
+              {
+                name: 'w:r',
+                elements: [
+                  {
+                    name: 'w:delText',
+                    attributes: { 'xml:space': 'preserve' },
+                    elements: [{ type: 'text', text: 'deleted text after field end' }],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ];
+    const nodes = structuredClone(expectedNodes);
+    const docx = {
+      'word/_rels/document.xml.rels': {
+        elements: [{ name: 'Relationships', elements: [] }],
+      },
+    };
+    const { processedNodes, unpairedBegin, unpairedEnd } = preProcessNodesForFldChar(nodes, docx);
+
+    expect(processedNodes).toEqual(expectedNodes);
+    expect(unpairedBegin).toBeNull();
+    expect(unpairedEnd).toBeNull();
+    expect(docx['word/_rels/document.xml.rels'].elements[0].elements).toEqual([]);
+  });
+
+  it('preserves raw field nodes when an active field ends inside a tracked move wrapper', () => {
+    const expectedNodes = [
+      { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'begin' } }] },
+      {
+        name: 'w:r',
+        elements: [{ name: 'w:instrText', elements: [{ type: 'text', text: 'HYPERLINK "http://example.com"' }] }],
+      },
+      { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'separate' } }] },
+      { name: 'w:r', elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'link text' }] }] },
+      {
+        name: 'w:p',
+        elements: [
+          {
+            name: 'w:moveFrom',
+            attributes: { 'w:id': '1', 'w:author': 'Repro', 'w:date': '2026-04-30T00:00:00Z' },
+            elements: [
+              { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'end' } }] },
+              {
+                name: 'w:r',
+                elements: [
+                  {
+                    name: 'w:t',
+                    attributes: { 'xml:space': 'preserve' },
+                    elements: [{ type: 'text', text: 'moved text after field end' }],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ];
+    const nodes = structuredClone(expectedNodes);
+    const docx = {
+      'word/_rels/document.xml.rels': {
+        elements: [{ name: 'Relationships', elements: [] }],
+      },
+    };
+    const { processedNodes, unpairedBegin, unpairedEnd } = preProcessNodesForFldChar(nodes, docx);
+
+    expect(processedNodes).toEqual(expectedNodes);
+    expect(unpairedBegin).toBeNull();
+    expect(unpairedEnd).toBeNull();
+    expect(docx['word/_rels/document.xml.rels'].elements[0].elements).toEqual([]);
+  });
+
+  it('preserves raw child nodes when an unpaired end bubbles through a non-collecting wrapper', () => {
+    const expectedNodes = [
+      { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'begin' } }] },
+      {
+        name: 'w:r',
+        elements: [{ name: 'w:instrText', elements: [{ type: 'text', text: 'CUSTOMFIELD foo' }] }],
+      },
+      { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'separate' } }] },
+      { name: 'w:r', elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'value' }] }] },
+      {
+        name: 'w:p',
+        elements: [
+          {
+            name: 'w:sdt',
+            elements: [
+              {
+                name: 'w:sdtContent',
+                elements: [{ name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'end' } }] }],
+              },
+            ],
+          },
+        ],
+      },
+    ];
+    const nodes = structuredClone(expectedNodes);
+    const { processedNodes, unpairedBegin, unpairedEnd } = preProcessNodesForFldChar(nodes, mockDocx);
+
+    expect(processedNodes).toEqual(expectedNodes);
+    expect(unpairedBegin).toBeNull();
+    expect(unpairedEnd).toBeNull();
+  });
+
   it('should handle unpaired begin', () => {
     const nodes = [
       { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'begin' } }] },

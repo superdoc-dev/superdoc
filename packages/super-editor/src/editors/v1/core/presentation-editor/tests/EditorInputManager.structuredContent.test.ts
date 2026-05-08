@@ -216,7 +216,12 @@ describe('EditorInputManager structuredContentBlock table exception', () => {
       isSelectionAwareVirtualizationEnabled: vi.fn(() => false),
     });
     manager.setCallbacks({
-      normalizeClientPoint: vi.fn((clientX: number, clientY: number) => ({ x: clientX, y: clientY })),
+      normalizeClientPoint: vi.fn((clientX: number, clientY: number) => ({
+        x: clientX,
+        y: clientY,
+        pageIndex: 0,
+        pageLocalY: clientY,
+      })),
       scheduleSelectionUpdate: vi.fn(),
       updateSelectionDebugHud: vi.fn(),
       hitTestTable: (mockHitTestTable = vi.fn(() => null)),

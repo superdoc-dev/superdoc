@@ -207,5 +207,23 @@ describe('w:del translator', () => {
         }),
       );
     });
+
+    it('does not crash when the deleted run holds non-text content (e.g. w:noBreakHyphen)', () => {
+      // ECMA-376: only w:t / w:instrText are renamed inside <w:del>. Atoms like
+      // w:noBreakHyphen, w:tab, w:br stay as-is. The decoder used to assume a
+      // w:t was always present and would throw setting `.name` on undefined.
+      exportSchemaToJson.mockReturnValue({ elements: [{ name: 'w:noBreakHyphen', elements: [] }] });
+
+      const node = {
+        type: 'noBreakHyphen',
+        marks: [{ type: 'trackDelete', attrs: { id: '7', author: 'A', authorEmail: 'a@x', date: 'd' } }],
+      };
+
+      const result = config.decode({ node });
+
+      expect(result.name).toBe('w:del');
+      // The non-text element survives unchanged inside the wrapper.
+      expect(result.elements[0].elements[0]).toEqual({ name: 'w:noBreakHyphen', elements: [] });
+    });
   });
 });

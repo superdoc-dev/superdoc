@@ -14,6 +14,7 @@
 
 import * as xmljs from 'xml-js';
 import { MANAGED_PACKAGE_PARTS } from './managed-parts-registry.js';
+import { serializeOpcXml } from './xml-serialization.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -90,7 +91,7 @@ function parseXml(xmlString) {
  * Serialize an xml-js non-compact JS object back to an XML string.
  */
 function serializeXml(jsObject) {
-  return xmljs.js2xml(jsObject, { spaces: 0 });
+  return serializeOpcXml(jsObject);
 }
 
 /**

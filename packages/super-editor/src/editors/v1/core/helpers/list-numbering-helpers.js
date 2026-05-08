@@ -5,7 +5,6 @@ import { translator as wNumTranslator } from '@core/super-converter/v3/handlers/
 import { baseBulletList, baseOrderedListDef } from './baseListDefinitions';
 import { updateNumberingProperties } from '@core/commands/changeListLevel';
 import { findParentNode } from './findParentNode.js';
-
 import {
   generateNewListDefinition as pureGenerateNewListDefinition,
   changeNumIdSameAbstract as pureChangeNumIdSameAbstract,
@@ -14,9 +13,11 @@ import {
   removeLvlOverride as pureRemoveLvlOverride,
   createNumDefinition as pureCreateNumDefinition,
   setLvlRestartOnAbstract as pureSetLvlRestartOnAbstract,
+  setLvlStyleOnAbstract as pureSetLvlStyleOnAbstract,
+  cloneListDefinitionWithLevelStyle as pureCloneListDefinitionWithLevelStyle,
   getNextNumberingId,
 } from '@core/parts/adapters/numbering-transforms';
-import { mutateNumbering } from '@core/parts/adapters/numbering-mutation';
+import { mutateNumbering, mutateNumberingBatch } from '@core/parts/adapters/numbering-mutation';
 
 // ---------------------------------------------------------------------------
 // Side-effectful shims (thin wrappers around pure transforms)
@@ -41,6 +42,27 @@ export function markerTextToBulletStyle(markerText) {
 }
 
 /**
+ * Map a `(numFmt, markerText)` pair from `listRendering` to a named ordered style.
+ * The last char of `markerText` disambiguates suffix variants (e.g. "1." vs "1)").
+ * Returns null for combinations not exposed in the toolbar.
+ * @param {string|null|undefined} numFmt OOXML numFmt value, e.g. 'decimal', 'upperRoman'.
+ * @param {string|null|undefined} markerText
+ * @returns {import('../../extensions/types/paragraph-commands.js').OrderedListStyle|null}
+ */
+export function numberingInfoToOrderedStyle(numFmt, markerText) {
+  const suffix = markerText?.slice(-1);
+  /** @type {Record<string, Record<string, import('../../extensions/types/paragraph-commands.js').OrderedListStyle>>} */
+  const map = {
+    decimal: { '.': 'decimal', ')': 'decimal-paren' },
+    upperRoman: { '.': 'upper-roman' },
+    lowerRoman: { '.': 'lower-roman' },
+    upperLetter: { '.': 'upper-alpha', ')': 'upper-alpha-paren' },
+    lowerLetter: { '.': 'lower-alpha', ')': 'lower-alpha-paren' },
+  };
+  return map[numFmt]?.[suffix] ?? null;
+}
+
+/**
  * Generate a new list definition for the given list type.
  * @param {Object} param0
  * @param {number} param0.numId
@@ -50,8 +72,10 @@ export function markerTextToBulletStyle(markerText) {
  * @param {string} [param0.text]
  * @param {string} [param0.fmt]
  * @param {string} [param0.markerFontFamily]
- * @param {'disc'|'circle'|'square'} [param0.bulletStyle]
+ * @param {'disc'|'circle'|'square'|null} [param0.bulletStyle]
  * @param {number} [param0.bulletStyleLevel]
+ * @param {import('../../extensions/types/paragraph-commands.js').OrderedListStyle|null} [param0.orderedStyle]
+ * @param {number} [param0.orderedStyleLevel]
  * @param {import('../Editor').Editor} param0.editor
  * @returns {Object} The new abstract and num definitions.
  */
@@ -66,6 +90,8 @@ export const generateNewListDefinition = ({
   markerFontFamily,
   bulletStyle,
   bulletStyleLevel,
+  orderedStyle,
+  orderedStyleLevel,
 }) => {
   /** @type {{ abstractDef: any, numDef: any }} */
   let resultDefs;
@@ -81,6 +107,8 @@ export const generateNewListDefinition = ({
       markerFontFamily,
       bulletStyle,
       bulletStyleLevel,
+      orderedStyle,
+      orderedStyleLevel,
     });
     resultDefs = { abstractDef: result.abstractDef, numDef: result.numDef };
   });
@@ -494,6 +522,69 @@ export const setLvlRestartOnAbstract = (editor, abstractNumId, ilvl, restartAfte
 };
 
 /**
+ * Apply bullet/ordered style overrides to one or more list levels. Each entry resolves
+ * its own abstract via `w:numStyleLink` (style-linked lists land on the real abstract);
+ * all updates run in a single `mutateNumberingBatch` so a multi-level selection costs
+ * one invalidation cycle.
+ *
+ * @param {Object} param0
+ * @param {import('../Editor').Editor} param0.editor
+ * @param {Array<{ numId: number, ilvl: number, bulletStyle?: 'disc'|'circle'|'square'|null, orderedStyle?: import('../../extensions/types/paragraph-commands.js').OrderedListStyle|null }>} param0.levels
+ * @returns {boolean} `true` when at least one abstract level was actually changed.
+ */
+export const setListLevelStyles = ({ editor, levels }) => {
+  if (!levels?.length) return false;
+
+  const resolved = [];
+  for (const level of levels) {
+    const abstractIdRaw = getListDefinitionDetails({ numId: level.numId, level: level.ilvl, editor })?.abstractId;
+    const abstractNumId = abstractIdRaw != null ? Number(abstractIdRaw) : NaN;
+    if (!Number.isFinite(abstractNumId)) continue;
+    resolved.push({
+      abstractNumId,
+      ilvl: level.ilvl,
+      bulletStyle: level.bulletStyle,
+      orderedStyle: level.orderedStyle,
+    });
+  }
+  if (!resolved.length) return false;
+
+  let anyChanged = false;
+  mutateNumberingBatch(
+    editor,
+    'list-numbering-helpers:setListLevelStyles',
+    resolved.map(({ abstractNumId, ilvl, bulletStyle, orderedStyle }) => (numbering) => {
+      if (pureSetLvlStyleOnAbstract(numbering, abstractNumId, ilvl, { bulletStyle, orderedStyle })) {
+        anyChanged = true;
+      }
+    }),
+  );
+  return anyChanged;
+};
+
+/**
+ * Clone the abstract behind `sourceNumId`, apply a style override at `ilvl`, and register
+ * the cloned abstract + a fresh numId pointing to it. Returns the new IDs (or `null` if
+ * the source was missing). Callers migrate paragraphs to the new numId via PM-tracked
+ * `setNodeMarkup` so undo can reverse the migration.
+ *
+ * @param {Object} param0
+ * @param {import('../Editor').Editor} param0.editor
+ * @param {number} param0.sourceNumId
+ * @param {number} param0.ilvl
+ * @param {'disc'|'circle'|'square'|null} [param0.bulletStyle]
+ * @param {import('../../extensions/types/paragraph-commands.js').OrderedListStyle|null} [param0.orderedStyle]
+ * @returns {{ newNumId: number, newAbstractId: number } | null}
+ */
+export const cloneListDefinitionWithLevelStyle = ({ editor, sourceNumId, ilvl, bulletStyle, orderedStyle }) => {
+  let result = null;
+  mutateNumbering(editor, 'list-numbering-helpers:cloneListDefinitionWithLevelStyle', (numbering) => {
+    result = pureCloneListDefinitionWithLevelStyle(numbering, sourceNumId, ilvl, { bulletStyle, orderedStyle });
+  });
+  return result;
+};
+
+/**
  * ListHelpers is a collection of utility functions for managing lists in the editor.
  */
 export const ListHelpers = {
@@ -516,6 +607,8 @@ export const ListHelpers = {
   // Numbering definition helpers
   createNumDefinition,
   setLvlRestartOnAbstract,
+  setListLevelStyles,
+  cloneListDefinitionWithLevelStyle,
   rebuildRawNumberingFromTranslated,
 
   // Schema helpers

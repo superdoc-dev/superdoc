@@ -8,7 +8,7 @@
  * @ooxml w:pPr/w:pBdr/w:between — between border for grouped paragraphs
  * @spec  ECMA-376 §17.3.1.24 (pBdr)
  */
-import type { Fragment, ListItemFragment, ResolvedPaintItem, ResolvedFragmentItem } from '@superdoc/contracts';
+import type { ListItemFragment, ResolvedPaintItem, ResolvedFragmentItem } from '@superdoc/contracts';
 import { hashParagraphBorders } from '../../paragraph-hash-utils.js';
 
 /**
@@ -69,23 +69,25 @@ function isResolvedFragmentWithBorders(
  * Middle fragments in a chain of 3+ get both flags.
  */
 export const computeBetweenBorderFlags = (
-  fragments: readonly Fragment[],
   resolvedItems: readonly ResolvedPaintItem[],
 ): Map<number, BetweenBorderInfo> => {
   // Phase 1: determine which consecutive pairs form between-border groups
   const pairFlags = new Set<number>();
   const noBetweenPairs = new Set<number>();
 
-  for (let i = 0; i < fragments.length - 1; i += 1) {
-    const frag = fragments[i];
+  for (let i = 0; i < resolvedItems.length - 1; i += 1) {
+    const resolvedCur = resolvedItems[i];
+    if (resolvedCur.kind !== 'fragment') continue;
+    const frag = resolvedCur.fragment;
     if (frag.kind !== 'para' && frag.kind !== 'list-item') continue;
     if (frag.continuesOnNext) continue;
 
-    const resolvedCur = resolvedItems[i];
     if (!isResolvedFragmentWithBorders(resolvedCur)) continue;
     const borders = resolvedCur.paragraphBorders;
 
-    const next = fragments[i + 1];
+    const resolvedNext = resolvedItems[i + 1];
+    if (resolvedNext.kind !== 'fragment') continue;
+    const next = resolvedNext.fragment;
     if (next.kind !== 'para' && next.kind !== 'list-item') continue;
     if (next.continuesFromPrev) continue;
     if (next.blockId === frag.blockId && next.kind === 'para') continue;
@@ -97,7 +99,6 @@ export const computeBetweenBorderFlags = (
     )
       continue;
 
-    const resolvedNext = resolvedItems[i + 1];
     if (!isResolvedFragmentWithBorders(resolvedNext)) continue;
     const nextBorders = resolvedNext.paragraphBorders;
 
@@ -129,10 +130,12 @@ export const computeBetweenBorderFlags = (
   const result = new Map<number, BetweenBorderInfo>();
 
   for (const i of pairFlags) {
-    const frag = fragments[i];
-    const next = fragments[i + 1];
     const resolvedCur = resolvedItems[i];
-    const fragHeight = resolvedCur && 'height' in resolvedCur && resolvedCur.height != null ? resolvedCur.height : 0;
+    const resolvedNext = resolvedItems[i + 1];
+    if (resolvedCur.kind !== 'fragment' || resolvedNext.kind !== 'fragment') continue;
+    const frag = resolvedCur.fragment;
+    const next = resolvedNext.fragment;
+    const fragHeight = 'height' in resolvedCur && resolvedCur.height != null ? resolvedCur.height : 0;
     const gapBelow = Math.max(0, next.y - (frag.y + fragHeight));
     const isNoBetween = noBetweenPairs.has(i);
 

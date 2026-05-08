@@ -9,10 +9,12 @@ import { findParentNode } from '@helpers/index.js';
 import { InputRule } from '@core/InputRule.js';
 import { toggleList } from '@core/commands/index.js';
 import { restartNumbering } from '@core/commands/restartNumbering.js';
+import { continueNumbering } from '@core/commands/continueNumbering.js';
 import { ParagraphNodeView } from './ParagraphNodeView.js';
 import { createNumberingPlugin } from './numberingPlugin.js';
 import { createLeadingCaretPlugin } from './leadingCaretPlugin.js';
 import { createDropcapPlugin } from './dropcapPlugin.js';
+import { createListBoundaryNavigationPlugin } from './listBoundaryNavigationPlugin.js';
 import { shouldSkipNodeView } from '../../utils/headless-helpers.js';
 import { parseAttrs } from './helpers/parseAttrs.js';
 
@@ -335,6 +337,16 @@ export const Paragraph = OxmlNode.create({
       },
 
       /**
+       * Toggle an ordered list with a specific numbering style at the current selection
+       * @category Command
+       * @example
+       * editor.commands.toggleOrderedListStyle('upper-roman')
+       */
+      toggleOrderedListStyle: (style) => (params) => {
+        return toggleList('orderedList', null, style)(params);
+      },
+
+      /**
        * Restart numbering for the current list
        * @category Command
        * @example
@@ -343,6 +355,14 @@ export const Paragraph = OxmlNode.create({
        * @note Resets list numbering for the current list item and following items
        */
       restartNumbering: () => restartNumbering,
+      /**
+       * Remove the startOverride for the current list level so numbering continues
+       * from the previous chain instead of restarting.
+       * @category Command
+       * @example
+       * editor.commands.continueNumbering()
+       */
+      continueNumbering: () => continueNumbering,
     };
   },
 
@@ -392,6 +412,12 @@ export const Paragraph = OxmlNode.create({
         },
       },
     });
-    return [dropcapPlugin, numberingPlugin, listInputFallbackPlugin, createLeadingCaretPlugin()];
+    return [
+      dropcapPlugin,
+      numberingPlugin,
+      listInputFallbackPlugin,
+      createLeadingCaretPlugin(),
+      createListBoundaryNavigationPlugin(),
+    ];
   },
 });

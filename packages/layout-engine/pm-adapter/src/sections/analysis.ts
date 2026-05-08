@@ -65,15 +65,27 @@ export function shouldIgnoreSectionBreak(
 /**
  * Find all paragraphs in the document that contain sectPr elements.
  *
+ * Records two indices per match:
+ *   - `paragraphIndex` counts only paragraph nodes (including those nested
+ *     inside SDT wrappers), matching the long-standing contract callers use
+ *     for SDT-internal section transitions.
+ *   - `nodeIndex` counts every top-level `doc.content` child (paragraph,
+ *     table, top-level drawing, SDT, …). This is required to fix SD-2646:
+ *     a non-paragraph node between two sectPr markers belongs to the LATER
+ *     marker's section per ECMA-376 §17.6.17, so the dispatch loop must
+ *     know each section's bounds in top-level-node terms.
+ *
  * @param doc - ProseMirror document node
- * @returns Object containing paragraphs with sectPr and total paragraph count
+ * @returns Paragraph matches plus both totals
  */
 export function findParagraphsWithSectPr(doc: PMNode): {
-  paragraphs: Array<{ index: number; node: PMNode }>;
+  paragraphs: Array<{ index: number; nodeIndex: number; node: PMNode }>;
   totalCount: number;
+  totalNodeCount: number;
 } {
-  const paragraphs: Array<{ index: number; node: PMNode }> = [];
+  const paragraphs: Array<{ index: number; nodeIndex: number; node: PMNode }> = [];
   let paragraphIndex = 0;
+  let nodeIndex = 0;
   const getNodeChildren = (node: PMNode): PMNode[] => {
     if (Array.isArray(node.content)) return node.content;
     const content = node.content as { forEach?: (cb: (child: PMNode) => void) => void } | undefined;
@@ -87,10 +99,10 @@ export function findParagraphsWithSectPr(doc: PMNode): {
     return [];
   };
 
-  const visitNode = (node: PMNode): void => {
+  const visitNode = (node: PMNode, outerNodeIndex: number): void => {
     if (node.type === 'paragraph') {
       if (hasSectPr(node)) {
-        paragraphs.push({ index: paragraphIndex, node });
+        paragraphs.push({ index: paragraphIndex, nodeIndex: outerNodeIndex, node });
       }
       paragraphIndex++;
       return;
@@ -100,6 +112,10 @@ export function findParagraphsWithSectPr(doc: PMNode): {
     // of these nodes are counted as paragraphs for section-range purposes and
     // their handlers increment `currentParagraphIndex` + call the section-break
     // emission helper per child.
+    //
+    // SDT descendants share the outer SDT's nodeIndex — dispatch-level
+    // section transitions fire on the SDT as a whole, while child handlers can
+    // still emit paragraph-index transitions within the SDT.
     //
     // `documentPartObject` / `tableOfContents` are important for SD-2557:
     // Word stores the closing sectPr of a TOC section on the trailing empty
@@ -113,17 +129,18 @@ export function findParagraphsWithSectPr(doc: PMNode): {
       node.type === 'documentPartObject' ||
       node.type === 'tableOfContents'
     ) {
-      getNodeChildren(node).forEach(visitNode);
+      getNodeChildren(node).forEach((child) => visitNode(child, outerNodeIndex));
     }
   };
 
   if (doc.content) {
     for (const node of doc.content) {
-      visitNode(node);
+      visitNode(node, nodeIndex);
+      nodeIndex++;
     }
   }
 
-  return { paragraphs, totalCount: paragraphIndex };
+  return { paragraphs, totalCount: paragraphIndex, totalNodeCount: nodeIndex };
 }
 
 /**
@@ -144,11 +161,12 @@ export function findParagraphsWithSectPr(doc: PMNode): {
  * @returns Array of section ranges
  */
 export function buildSectionRangesFromParagraphs(
-  paragraphs: Array<{ index: number; node: PMNode }>,
+  paragraphs: Array<{ index: number; nodeIndex: number; node: PMNode }>,
   hasBodySectPr: boolean,
 ): SectionRange[] {
   const ranges: SectionRange[] = [];
   let currentStart = 0;
+  let currentStartNode = 0;
 
   paragraphs.forEach((item, idx) => {
     if (shouldIgnoreSectionBreak(item.node, idx, paragraphs.length, hasBodySectPr)) {
@@ -170,6 +188,8 @@ export function buildSectionRangesFromParagraphs(
 
     const range: SectionRange = {
       sectionIndex: idx,
+      startNodeIndex: currentStartNode,
+      endNodeIndex: item.nodeIndex,
       startParagraphIndex: currentStart,
       endParagraphIndex: item.index,
       sectPr,
@@ -187,6 +207,7 @@ export function buildSectionRangesFromParagraphs(
       orientation: sectionData.orientation ?? null,
       columns: sectionData.columnsPx ?? null,
       type: (sectionData.type as SectionType) ?? DEFAULT_PARAGRAPH_SECTION_TYPE,
+      typeIsExplicit: sectionData.typeIsExplicit ?? false,
       titlePg: sectionData.titlePg ?? false,
       headerRefs: sectionData.headerRefs,
       footerRefs: sectionData.footerRefs,
@@ -196,6 +217,7 @@ export function buildSectionRangesFromParagraphs(
     ranges.push(range);
 
     currentStart = item.index + 1;
+    currentStartNode = item.nodeIndex + 1;
   });
 
   return ranges;
@@ -244,6 +266,7 @@ export function createFinalSectionFromBodySectPr(
   currentStart: number,
   totalParagraphs: number,
   sectionIndex: number,
+  nodeBounds?: { startNodeIndex: number; totalNodeCount: number },
 ): SectionRange | null {
   const clampedStart = Math.max(0, Math.min(currentStart, Math.max(totalParagraphs - 1, 0)));
 
@@ -267,8 +290,15 @@ export function createFinalSectionFromBodySectPr(
     bodySectionData.bottomPx != null ||
     bodySectionData.leftPx != null;
 
+  const totalNodes = nodeBounds?.totalNodeCount ?? totalParagraphs;
+  const startNodeIndex = nodeBounds
+    ? Math.max(0, Math.min(nodeBounds.startNodeIndex, Math.max(totalNodes - 1, 0)))
+    : clampedStart;
+
   return {
     sectionIndex,
+    startNodeIndex,
+    endNodeIndex: Math.max(startNodeIndex, totalNodes - 1),
     startParagraphIndex: clampedStart,
     endParagraphIndex: totalParagraphs - 1,
     sectPr: bodySectPr,
@@ -286,6 +316,7 @@ export function createFinalSectionFromBodySectPr(
     orientation: bodySectionData.orientation ?? null,
     columns: bodySectionData.columnsPx ?? null,
     type: (bodySectionData.type as SectionType) ?? DEFAULT_BODY_SECTION_TYPE,
+    typeIsExplicit: bodySectionData.typeIsExplicit ?? false,
     titlePg: bodySectionData.titlePg ?? false,
     headerRefs: bodySectionData.headerRefs,
     footerRefs: bodySectionData.footerRefs,
@@ -307,9 +338,14 @@ export function createDefaultFinalSection(
   currentStart: number,
   totalParagraphs: number,
   sectionIndex: number,
+  nodeBounds?: { startNodeIndex: number; totalNodeCount: number },
 ): SectionRange {
+  const totalNodes = nodeBounds?.totalNodeCount ?? totalParagraphs;
+  const startNodeIndex = nodeBounds?.startNodeIndex ?? currentStart;
   return {
     sectionIndex,
+    startNodeIndex,
+    endNodeIndex: Math.max(startNodeIndex, totalNodes - 1),
     startParagraphIndex: currentStart,
     endParagraphIndex: totalParagraphs - 1,
     sectPr: null,
@@ -318,6 +354,7 @@ export function createDefaultFinalSection(
     orientation: null,
     columns: null,
     type: DEFAULT_BODY_SECTION_TYPE,
+    typeIsExplicit: false,
     titlePg: false,
     headerRefs: undefined,
     footerRefs: undefined,
@@ -334,11 +371,13 @@ export function createDefaultFinalSection(
  * @returns Array of section ranges with backward-looking semantics
  */
 export function analyzeSectionRanges(doc: PMNode, bodySectPr?: unknown): SectionRange[] {
-  const { paragraphs, totalCount } = findParagraphsWithSectPr(doc);
+  const { paragraphs, totalCount, totalNodeCount } = findParagraphsWithSectPr(doc);
   const hasBody = Boolean(bodySectPr);
   const ranges = buildSectionRangesFromParagraphs(paragraphs, hasBody);
 
-  const currentStart = ranges.length > 0 ? ranges[ranges.length - 1].endParagraphIndex + 1 : 0;
+  const last = ranges[ranges.length - 1];
+  const currentStart = last ? last.endParagraphIndex + 1 : 0;
+  const currentStartNode = last ? last.endNodeIndex + 1 : 0;
 
   // Always represent the final section defined by bodySectPr, even if there are
   // no remaining paragraphs after the last paragraph-level sectPr. This ensures
@@ -349,12 +388,16 @@ export function analyzeSectionRanges(doc: PMNode, bodySectPr?: unknown): Section
       Math.min(currentStart, totalCount),
       totalCount,
       ranges.length,
+      { startNodeIndex: Math.min(currentStartNode, totalNodeCount), totalNodeCount },
     );
     if (finalSection) {
       ranges.push(finalSection);
     }
   } else if (ranges.length > 0) {
-    const fallbackFinal = createDefaultFinalSection(Math.min(currentStart, totalCount), totalCount, ranges.length);
+    const fallbackFinal = createDefaultFinalSection(Math.min(currentStart, totalCount), totalCount, ranges.length, {
+      startNodeIndex: Math.min(currentStartNode, totalNodeCount),
+      totalNodeCount,
+    });
     if (fallbackFinal) {
       fallbackFinal.type = DEFAULT_PARAGRAPH_SECTION_TYPE;
       ranges.push(fallbackFinal);

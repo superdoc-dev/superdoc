@@ -83,9 +83,20 @@ export const VerticalNavigation = Extension.create({
         handleKeyDown(view, event) {
           // Guard clauses
           if (view.composing || !editor.isEditable) return false;
-          if (event.key === 'ArrowLeft' || event.key === 'ArrowRight' || event.key === 'Home' || event.key === 'End') {
+          if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
             view.dispatch(view.state.tr.setMeta(VerticalNavigationPluginKey, { type: 'reset-goal-x' }));
             return false;
+          }
+          if (event.key === 'Home' || event.key === 'End') {
+            view.dispatch(view.state.tr.setMeta(VerticalNavigationPluginKey, { type: 'reset-goal-x' }));
+            if (!isPresenting(editor)) return false;
+            if (event.ctrlKey || event.metaKey || event.altKey) return false;
+            const targetPos = resolveLineBoundaryPosition(editor, view.state.selection, event.key);
+            if (!Number.isFinite(targetPos)) return false;
+            const selection = buildSelection(view.state, targetPos, event.shiftKey);
+            if (!selection) return false;
+            view.dispatch(view.state.tr.setSelection(selection));
+            return true;
           }
           if (event.key === 'PageUp' || event.key === 'PageDown') {
             view.dispatch(view.state.tr.setMeta(VerticalNavigationPluginKey, { type: 'reset-goal-x' }));
@@ -232,6 +243,29 @@ function getCurrentCoords(editor, selection) {
     x: layoutSpaceCoords.x,
     y: layoutSpaceCoords.y,
   };
+}
+
+/**
+ * Resolves the PM boundary position for Home/End within the current visual line.
+ *
+ * @param {Object} editor
+ * @param {import('prosemirror-state').Selection} selection
+ * @param {'Home'|'End'} key
+ * @returns {number | null}
+ */
+function resolveLineBoundaryPosition(editor, selection, key) {
+  const coords = getCurrentCoords(editor, selection);
+  if (!coords) return null;
+  const doc = editor.presentationEditor?.visibleHost?.ownerDocument ?? document;
+  const caretX = coords.clientX;
+  const caretY = coords.clientY + coords.height / 2;
+  const lineEl = findLineElementAtPoint(doc, caretX, caretY);
+  if (!lineEl) return null;
+
+  const pmStart = Number(lineEl.dataset?.pmStart);
+  const pmEnd = Number(lineEl.dataset?.pmEnd);
+  if (!Number.isFinite(pmStart) || !Number.isFinite(pmEnd)) return null;
+  return key === 'Home' ? pmStart : pmEnd;
 }
 
 /**

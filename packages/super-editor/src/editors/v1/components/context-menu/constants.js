@@ -14,6 +14,9 @@ import checkIconSvg from '@superdoc/common/icons/check-solid.svg?raw';
 import xMarkIconSvg from '@superdoc/common/icons/xmark-solid.svg?raw';
 import paintRollerIconSvg from '@superdoc/common/icons/paint-roller-solid.svg?raw';
 import rotateRightIconSvg from '@superdoc/common/icons/rotate-right-solid.svg?raw';
+import indentIconSvg from '@superdoc/common/icons/indent-solid.svg?raw';
+import outdentIconSvg from '@superdoc/common/icons/outdent-solid.svg?raw';
+import listOlIconSvg from '@superdoc/common/icons/list-ol-solid.svg?raw';
 
 export const ICONS = {
   addRowBefore: plusIconSvg,
@@ -39,6 +42,10 @@ export const ICONS = {
   trackChangesReject: xMarkIconSvg,
   cellBackground: paintRollerIconSvg,
   updateTableOfContents: rotateRightIconSvg,
+  listRestartNumbering: listOlIconSvg,
+  listContinueNumbering: listOlIconSvg,
+  listDecreaseIndent: outdentIconSvg,
+  listIncreaseIndent: indentIconSvg,
 };
 
 // Table actions constant
@@ -68,6 +75,10 @@ export const TEXTS = {
   trackChangesReject: 'Reject change',
   cellBackground: 'Cell background',
   updateTableOfContents: 'Update table of contents',
+  listRestartNumbering: 'Restart numbering',
+  listContinueNumbering: 'Continue numbering',
+  listDecreaseIndent: 'Decrease indent',
+  listIncreaseIndent: 'Increase indent',
 };
 
 export const tableActionsOptions = [

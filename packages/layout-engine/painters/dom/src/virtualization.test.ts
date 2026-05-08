@@ -1,53 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { createDomPainter } from './index.js';
-import { resolveLayout } from '@superdoc/layout-resolved';
-import type { DomPainterOptions, DomPainterInput, PaintSnapshot } from './index.js';
-import type { FlowBlock, Measure, Layout, Fragment, PageMargins, ResolvedLayout } from '@superdoc/contracts';
-
-const emptyResolved: ResolvedLayout = { version: 1, flowMode: 'paginated', pageGap: 0, pages: [] };
-
-/** Test-only bridge: see index.test.ts for full JSDoc. */
-function createTestPainter(opts: { blocks?: FlowBlock[]; measures?: Measure[] } & DomPainterOptions) {
-  const { blocks: initBlocks, measures: initMeasures, ...painterOpts } = opts;
-  let lastPaintSnapshot: PaintSnapshot | null = null;
-  const painter = createDomPainter({
-    ...painterOpts,
-    onPaintSnapshot: (snapshot) => {
-      lastPaintSnapshot = snapshot;
-    },
-  });
-  let currentBlocks: FlowBlock[] = initBlocks ?? [];
-  let currentMeasures: Measure[] = initMeasures ?? [];
-  let currentResolved: ResolvedLayout = emptyResolved;
-
-  return {
-    paint(layout: Layout, mount: HTMLElement, mapping?: unknown) {
-      const effectiveResolved =
-        currentBlocks.length === 0 && currentMeasures.length === 0
-          ? currentResolved
-          : resolveLayout({
-              layout,
-              flowMode: opts.flowMode ?? 'paginated',
-              blocks: currentBlocks,
-              measures: currentMeasures,
-            });
-      const input: DomPainterInput = {
-        resolvedLayout: effectiveResolved,
-        sourceLayout: layout,
-      };
-      painter.paint(input, mount, mapping as any);
-    },
-    setProviders: painter.setProviders,
-    setVirtualizationPins: painter.setVirtualizationPins,
-    getMountedPageIndices: painter.getMountedPageIndices,
-    getPaintSnapshot() {
-      return lastPaintSnapshot;
-    },
-    onScroll: painter.onScroll,
-    setZoom: painter.setZoom,
-    setScrollContainer: painter.setScrollContainer,
-  };
-}
+import { createTestPainter } from './_test-utils.js';
+import type { FlowBlock, Measure, Layout, Fragment, PageMargins } from '@superdoc/contracts';
 
 // Minimal paragraph block/measure to satisfy painter
 const block: FlowBlock = {

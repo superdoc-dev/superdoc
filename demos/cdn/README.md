@@ -1,5 +1,5 @@
-# SuperDoc - From CDN example
+# Moved to Getting Started
 
-This is a very basic example of loading SuperDoc from CDN without any bundlers.
+The CDN starter moved to [`examples/getting-started/cdn`](../../examples/getting-started/cdn).
 
-Note: You can test this locally by using something like ```npx http-server```
+This folder is kept as a compatibility shim for existing GitHub links. New starter projects should use the examples path.

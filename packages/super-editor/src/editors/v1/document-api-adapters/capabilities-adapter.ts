@@ -38,6 +38,7 @@ const REQUIRED_COMMANDS: Partial<Record<OperationId, readonly EditorCommandName[
   'lists.create': [],
   'lists.attach': [],
   'lists.detach': [],
+  'lists.delete': [],
   'lists.join': [],
   'lists.separate': [],
   'lists.setLevel': [],

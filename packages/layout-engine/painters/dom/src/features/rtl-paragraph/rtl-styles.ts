@@ -11,10 +11,8 @@ import type { ParagraphAttrs } from '@superdoc/contracts';
 
 /**
  * Returns true when the paragraph attributes indicate right-to-left direction.
- * Checks both the `direction` string and the legacy `rtl` boolean flag.
  */
-export const isRtlParagraph = (attrs: ParagraphAttrs | undefined): boolean =>
-  attrs?.direction === 'rtl' || attrs?.rtl === true;
+export const isRtlParagraph = (attrs: ParagraphAttrs | undefined): boolean => attrs?.direction === 'rtl';
 
 /**
  * Compute the effective CSS text-align for a paragraph.
@@ -45,6 +43,9 @@ export const applyRtlStyles = (element: HTMLElement, attrs: ParagraphAttrs | und
   if (rtl) {
     element.setAttribute('dir', 'rtl');
     element.style.direction = 'rtl';
+  } else {
+    element.removeAttribute('dir');
+    element.style.direction = '';
   }
   element.style.textAlign = resolveTextAlign(attrs?.alignment, rtl);
   return rtl;

@@ -13,6 +13,12 @@ import vue from '@vitejs/plugin-vue'
 import { version } from './package.json';
 import sourceResolve from '../../vite.sourceResolve';
 
+// SD-2864: derive the dts include list from the canonical type-surface
+// config so vite, ensure-types, audit, and the tsconfig parity check
+// share one source of truth for relocations.
+const cjsRequire = createRequire(import.meta.url);
+const typeSurface = cjsRequire('./scripts/type-surface.config.cjs');
+
 // WORKAROUND: rolldown doesn't support trailing-slash imports (e.g. 'punycode/')
 // which Node.js treats as "resolve the package entry point". node-stdlib-browser's
 // url polyfill uses `import from 'punycode/'` and rolldown tries to open the
@@ -85,6 +91,11 @@ export const getAliases = (_isDev) => {
     { find: '@superdoc/super-editor/headless-toolbar/react', replacement: path.resolve(__dirname, '../super-editor/src/headless-toolbar/react.ts') },
     { find: '@superdoc/super-editor/headless-toolbar/vue', replacement: path.resolve(__dirname, '../super-editor/src/headless-toolbar/vue.ts') },
     { find: '@superdoc/super-editor/presentation-editor', replacement: path.resolve(__dirname, '../super-editor/src/index.ts') },
+    // The longer `/ui/react` alias must come before `/ui` so the
+    // prefix match resolves it first; otherwise `/ui` would swallow
+    // `/ui/react` and the React entry would resolve to the controller.
+    { find: '@superdoc/super-editor/ui/react', replacement: path.resolve(__dirname, '../super-editor/src/ui/react/index.ts') },
+    { find: '@superdoc/super-editor/ui', replacement: path.resolve(__dirname, '../super-editor/src/ui/index.ts') },
     { find: '@superdoc/super-editor', replacement: path.resolve(__dirname, '../super-editor/src/index.ts') },
 
     // Map @superdoc/<name> to ./src/<name> for internal paths
@@ -108,7 +119,17 @@ export default defineConfig(({ mode, command }) => {
   const plugins = [
     vue(),
     !skipDts && dts({
-      include: ['src/**/*', '../super-editor/src/**/*'],
+      // Foundational sources (superdoc, super-editor, document-api) are
+      // always included; relocation patterns come from the canonical
+      // type-surface config (SD-2864). Each `relocations` entry pairs the
+      // ensure-types rewriter rule with the vite include patterns so the
+      // two cannot drift.
+      include: [
+        'src/**/*',
+        '../super-editor/src/**/*',
+        '../document-api/src/**/*',
+        ...typeSurface.relocations.flatMap((r) => r.viteIncludes),
+      ],
       outDir: 'dist',
       // vite-plugin-dts still gathers diagnostics for this mixed JS/Vue source
       // tree, but we do not use this build as the authoritative type-check gate.
@@ -180,6 +201,13 @@ export default defineConfig(({ mode, command }) => {
           'src/headless-toolbar.js',
           'src/headless-toolbar-react.js',
           'src/headless-toolbar-vue.js',
+          'src/ui.js',
+          // Same pattern as the other public re-export barrels above:
+          // `ui-react.js` is a thin pass-through to
+          // `@superdoc/super-editor/ui/react`. The provider / hook
+          // implementations are tested in the super-editor package
+          // (`src/ui/react/*.test.tsx`).
+          'src/ui-react.js',
           // Pure JSDoc typedef files (body is `export {}`, no runtime code)
           'src/core/types/**',
           '**/types.js',
@@ -202,6 +230,8 @@ export default defineConfig(({ mode, command }) => {
           'headless-toolbar': 'src/headless-toolbar.js',
           'headless-toolbar-react': 'src/headless-toolbar-react.js',
           'headless-toolbar-vue': 'src/headless-toolbar-vue.js',
+          'ui': 'src/ui.js',
+          'ui-react': 'src/ui-react.js',
           'super-editor': 'src/super-editor.js',
           'types': 'src/types.ts',
           'super-editor/docx-zipper': '@core/DocxZipper',
@@ -216,6 +246,7 @@ export default defineConfig(({ mode, command }) => {
           'pdfjs-dist/legacy/build/pdf.mjs',
           'pdfjs-dist/web/pdf_viewer.mjs',
           'react',
+          'react/jsx-runtime',
           'vue',
         ],
         output: [

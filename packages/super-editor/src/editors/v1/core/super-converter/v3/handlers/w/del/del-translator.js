@@ -23,14 +23,17 @@ const validXmlAttributes = [
  * @returns {import('@translator').SCEncoderResult}
  */
 const encode = (params, encodedAttrs = {}) => {
-  const { nodeListHandler, extraParams = {}, converter } = params;
+  const { nodeListHandler, extraParams = {}, converter, filename } = params;
   const { node } = extraParams;
 
   // Preserve the original OOXML w:id for round-trip export fidelity.
   // The internal id is remapped to a shared UUID for replacement pairing.
   const originalWordId = encodedAttrs.id;
-  if (originalWordId && converter?.trackedChangeIdMap?.has(originalWordId)) {
-    encodedAttrs.id = converter.trackedChangeIdMap.get(originalWordId);
+  const partPath = typeof filename === 'string' && filename.length > 0 ? `word/${filename}` : 'word/document.xml';
+  const trackedChangeIdMap =
+    converter?.trackedChangeIdMapsByPart?.get?.(partPath) ?? converter?.trackedChangeIdMap ?? null;
+  if (originalWordId && trackedChangeIdMap?.has(originalWordId)) {
+    encodedAttrs.id = trackedChangeIdMap.get(originalWordId);
   }
   encodedAttrs.sourceId = originalWordId || '';
 
@@ -83,8 +86,12 @@ function decode(params) {
   node.marks = marks.filter((m) => !trackingMarks.includes(m.type));
 
   const translatedTextNode = exportSchemaToJson({ ...params, node });
+  // ECMA-376 renames w:t → w:delText inside <w:del>. Other inline content —
+  // w:noBreakHyphen, w:tab, w:br, etc. — stays as-is; the deletion is
+  // conveyed by the <w:del> wrapper alone. Guard the rename so non-text
+  // atoms inside <w:del> don't crash.
   const textNode = translatedTextNode.elements.find((n) => n.name === 'w:t');
-  textNode.name = 'w:delText';
+  if (textNode) textNode.name = 'w:delText';
 
   return {
     name: 'w:del',

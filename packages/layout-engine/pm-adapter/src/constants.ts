@@ -89,6 +89,7 @@ export const DEFAULT_HYPERLINK_CONFIG: HyperlinkConfig = {
  * - page-number, total-page-number: Document tokens
  * - indexEntry: Index entry field markers (see index-entry.js)
  * - tab: Tab stops (see tab.js)
+ * - noBreakHyphen: Non-breaking hyphen (U+2011 from <w:noBreakHyphen/>; see no-break-hyphen.js)
  * - passthroughInline: Passthrough content like FORMCHECKBOX (see passthrough.js)
  * - bookmarkEnd: Bookmark end markers (see bookmark-end.js)
  *
@@ -103,6 +104,7 @@ export const ATOMIC_INLINE_TYPES = new Set([
   'total-page-number',
   'indexEntry',
   'tab',
+  'noBreakHyphen',
   'footnoteReference',
   'mathInline',
   'passthroughInline',

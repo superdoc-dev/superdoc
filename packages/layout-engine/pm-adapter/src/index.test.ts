@@ -70,7 +70,7 @@ describe('toFlowBlocks', () => {
         runs: [
           {
             text: 'Hello world',
-            fontFamily: 'Times New Roman, sans-serif',
+            fontFamily: 'Times New Roman, serif',
           },
         ],
       });
@@ -114,7 +114,7 @@ describe('toFlowBlocks', () => {
       });
 
       expect(blocks[0].runs[0]).toMatchObject({
-        fontFamily: 'Times New Roman, sans-serif',
+        fontFamily: 'Times New Roman, serif',
       });
       expect(blocks[0].runs[0]?.fontSize).toBeCloseTo(14, 5);
     });
@@ -2177,6 +2177,12 @@ describe('toFlowBlocks', () => {
 
       expect(sectionBreaks).toHaveLength(1);
       expect(sectionBreaks[0].type).toBe('nextPage');
+      // `typeIsExplicit` is only set on attrs when `<w:type>` was authored.
+      // The body sectPr in this fixture has no `<w:type>`, so the flag is
+      // omitted (undefined). The column-balancing gate treats absence as
+      // "defaulted" and skips balancing for default-nextPage body sections
+      // (sd-1655 behavior).
+      expect(sectionBreaks[0].attrs?.typeIsExplicit).toBeUndefined();
     });
 
     it('emits section breaks even when w:type element is missing (defaults to nextPage)', () => {
@@ -2223,6 +2229,14 @@ describe('toFlowBlocks', () => {
       expect(sectionBreaks).toHaveLength(2);
       expect(sectionBreaks[0].type).toBe('nextPage');
       expect(sectionBreaks[1].type).toBe('nextPage');
+      // Section 1's sectPr writes `<w:type w:val="nextPage"/>` explicitly
+      // so the flag is set true. Section 2's body sectPr omits `<w:type>`
+      // so the flag is omitted. The column-balance gate uses this to tell
+      // explicit-nextPage (author intent: don't balance) from defaulted
+      // nextPage (could still balance if the doc has explicit continuous
+      // somewhere or is multi-page).
+      expect(sectionBreaks[0].attrs?.typeIsExplicit).toBe(true);
+      expect(sectionBreaks[1].attrs?.typeIsExplicit).toBeUndefined();
     });
 
     it('keeps final paragraph section break even without type when no body sectPr', () => {
@@ -3175,9 +3189,8 @@ describe('toFlowBlocks', () => {
       const paragraph = blocks[0];
       expect(paragraph.kind).toBe('paragraph');
       expect(paragraph.attrs?.direction).toBe('rtl');
-      expect(paragraph.attrs?.rtl).toBe(true);
-      expect(paragraph.attrs?.indent?.left).toBe(24);
-      expect(paragraph.attrs?.indent?.right).toBe(12);
+      expect(paragraph.attrs?.indent?.left).toBe(12);
+      expect(paragraph.attrs?.indent?.right).toBe(24);
     });
 
     it('does not mark paragraphs as RTL when w:bidi is explicitly false', () => {
@@ -3202,7 +3215,67 @@ describe('toFlowBlocks', () => {
       const paragraph = blocks[0];
       expect(paragraph.kind).toBe('paragraph');
       expect(paragraph.attrs?.direction).toBe('ltr');
-      expect(paragraph.attrs?.rtl).toBe(false);
+    });
+
+    it('does NOT inherit paragraph inline direction from body sectPr w:bidi (§17.6.1)', () => {
+      // Per ECMA-376 §17.6.1, section bidi affects section chrome only and does
+      // not propagate to paragraph layout. Paragraph direction must come from
+      // paragraph w:bidi (or its style cascade including docDefaults), not section.
+      const pmDoc = {
+        type: 'doc',
+        attrs: {
+          bodySectPr: {
+            type: 'element',
+            name: 'w:sectPr',
+            elements: [{ type: 'element', name: 'w:bidi', attributes: {} }],
+          },
+        },
+        content: [
+          {
+            type: 'paragraph',
+            attrs: {
+              paragraphProperties: {},
+            },
+            content: [{ type: 'text', text: 'Latin paragraph in RTL section' }],
+          },
+        ],
+      };
+
+      const { blocks } = toFlowBlocks(pmDoc);
+      expect(blocks).toHaveLength(1);
+      const paragraph = blocks[0];
+      expect(paragraph.kind).toBe('paragraph');
+      // Paragraph inline direction stays undefined; the browser applies UBA via
+      // the missing dir attribute. Section pageDirection is preserved separately.
+      expect(paragraph.attrs?.direction).toBeUndefined();
+    });
+
+    it('section bidi=0 also does not affect paragraph inline direction', () => {
+      const pmDoc = {
+        type: 'doc',
+        attrs: {
+          bodySectPr: {
+            type: 'element',
+            name: 'w:sectPr',
+            elements: [{ type: 'element', name: 'w:bidi', attributes: { 'w:val': '0' } }],
+          },
+        },
+        content: [
+          {
+            type: 'paragraph',
+            attrs: {
+              paragraphProperties: {},
+            },
+            content: [{ type: 'text', text: 'Paragraph in LTR section' }],
+          },
+        ],
+      };
+
+      const { blocks } = toFlowBlocks(pmDoc);
+      expect(blocks).toHaveLength(1);
+      const paragraph = blocks[0];
+      expect(paragraph.kind).toBe('paragraph');
+      expect(paragraph.attrs?.direction).toBeUndefined();
     });
 
     it('handles multiple page breaks', () => {
@@ -3722,6 +3795,25 @@ describe('toFlowBlocks', () => {
       expect(blocks[0].attrs?.trackedChangesEnabled).toBe(true);
     });
 
+    it('propagates storyKey into tracked change metadata for non-body stories', () => {
+      const pmDoc = buildDocWithMarks([
+        {
+          type: 'trackInsert',
+          attrs: {
+            id: 'ins-story',
+          },
+        },
+      ]);
+
+      const { blocks } = toFlowBlocks(pmDoc, { storyKey: 'hf:part:rId7' });
+      const run = blocks[0].runs[0] as never;
+      expect(run.trackedChange).toMatchObject({
+        kind: 'insert',
+        id: 'ins-story',
+        storyKey: 'hf:part:rId7',
+      });
+    });
+
     it('hides insertions when trackedChangesMode is original', () => {
       const pmDoc = {
         type: 'doc',
@@ -3940,6 +4032,14 @@ describe('toFlowBlocks', () => {
       const { blocks: reviewBlocks } = toFlowBlocks(pmDoc);
       const reviewImage = reviewBlocks.find((block): block is ImageBlock => block.kind === 'image');
       expect(reviewImage?.attrs?.trackedChange).toMatchObject({ id: 'del-img', kind: 'delete' });
+
+      const { blocks: storyBlocks } = toFlowBlocks(pmDoc, { storyKey: 'hf:part:rId7' });
+      const storyImage = storyBlocks.find((block): block is ImageBlock => block.kind === 'image');
+      expect(storyImage?.attrs?.trackedChange).toMatchObject({
+        id: 'del-img',
+        kind: 'delete',
+        storyKey: 'hf:part:rId7',
+      });
 
       const { blocks: finalBlocks } = toFlowBlocks(pmDoc, { trackedChangesMode: 'final' });
       expect(finalBlocks.some((block) => block.kind === 'image')).toBe(false);
@@ -4521,7 +4621,6 @@ describe('toFlowBlocks', () => {
 
       expect(blocks).toHaveLength(1);
       expect(blocks[0].attrs?.direction).toBe('rtl');
-      expect(blocks[0].attrs?.rtl).toBe(true);
       expect(blocks[0].attrs?.alignment).toBeUndefined();
     });
 
@@ -4551,7 +4650,6 @@ describe('toFlowBlocks', () => {
 
       expect(blocks).toHaveLength(1);
       expect(blocks[0].attrs?.direction).toBe('rtl');
-      expect(blocks[0].attrs?.rtl).toBe(true);
       expect(blocks[0].attrs).toMatchObject({
         alignment: 'center',
       });
@@ -4584,7 +4682,6 @@ describe('toFlowBlocks', () => {
 
       expect(blocks).toHaveLength(1);
       expect(blocks[0].attrs?.direction).toBe('rtl');
-      expect(blocks[0].attrs?.rtl).toBe(true);
       expect(blocks[0].attrs).toMatchObject({
         alignment: 'left',
       });

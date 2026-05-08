@@ -124,6 +124,7 @@ vi.mock('@superdoc/painter-dom', () => ({
     getMountedPageIndices: vi.fn(() => []),
     onScroll: vi.fn(),
     setScrollContainer: vi.fn(),
+    setShowFormattingMarks: vi.fn(),
   })),
   DOM_CLASS_NAMES: {
     PAGE: 'superdoc-page',
@@ -152,6 +153,7 @@ vi.mock('../../header-footer/HeaderFooterRegistry', () => ({
     clear: vi.fn(),
     getBatch: vi.fn(() => []),
     getBlocksByRId: vi.fn(() => new Map()),
+    setTrackedChangesRenderConfig: vi.fn(),
   })),
 }));
 
@@ -186,6 +188,7 @@ vi.mock('y-prosemirror', () => ({
 
 vi.mock('@superdoc/layout-resolved', () => ({
   resolveLayout: vi.fn(() => ({ version: 1, flowMode: 'paginated', pageGap: 0, pages: [] })),
+  resolveHeaderFooterLayout: vi.fn(() => ({ height: 0, pages: [] })),
 }));
 
 /**

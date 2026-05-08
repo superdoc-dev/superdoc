@@ -5,6 +5,7 @@
  */
 
 import type {
+  BorderSpec,
   BorderStyle,
   BoxSpacing,
   CellBorders,
@@ -21,6 +22,7 @@ import type {
   TableBlock,
   TableAnchor,
   TableWrap,
+  SourceAnchor,
 } from '@superdoc/contracts';
 import type {
   PMNode,
@@ -39,6 +41,7 @@ import {
   extractCellPadding,
   convertBorderSpec,
   normalizeShadingColor,
+  borderSizeToPx,
 } from '../attributes/index.js';
 import { pickNumber, twipsToPx } from '../utilities.js';
 import { hydrateTableStyleAttrs } from './table-styles.js';
@@ -75,6 +78,13 @@ function normalizeCellSpacing(raw: number | { value?: number; type?: string } | 
   return { value, type };
 }
 
+function sourceAnchorFromNode(node: PMNode): SourceAnchor | undefined {
+  const sourceAnchor = (node.attrs as Record<string, unknown> | undefined)?.sourceAnchor;
+  return sourceAnchor && typeof sourceAnchor === 'object' && !Array.isArray(sourceAnchor)
+    ? (sourceAnchor as SourceAnchor)
+    : undefined;
+}
+
 function normalizeLegacyBorderStyle(value: string | undefined): BorderStyle {
   switch ((value ?? '').trim().toLowerCase()) {
     case 'none':
@@ -108,6 +118,7 @@ function normalizeLegacyBorderStyle(value: string | undefined): BorderStyle {
 type TableParserDependencies = {
   nextBlockId: BlockIdGenerator;
   positions: PositionMap;
+  storyKey?: string;
   trackedChangesConfig: TrackedChangesConfig;
   bookmarks: Map<string, number>;
   hyperlinkConfig: HyperlinkConfig;
@@ -146,6 +157,21 @@ const isTableCellNode = (node: PMNode): boolean =>
   node.type === 'table_cell' ||
   node.type === 'tableHeader' ||
   node.type === 'table_header';
+
+const isTableSkipPlaceholderCell = (node: PMNode): boolean => {
+  const placeholder = node.attrs?.__placeholder;
+  return placeholder === 'gridBefore' || placeholder === 'gridAfter';
+};
+
+const convertResolvedCellBorder = (value: unknown): BorderSpec | undefined => {
+  if (!value || typeof value !== 'object') return undefined;
+
+  const border = value as Record<string, unknown>;
+  const size = typeof border.size === 'number' ? borderSizeToPx(border.size) : undefined;
+  const normalized = size != null ? { ...border, size } : border;
+
+  return convertBorderSpec(normalized);
+};
 
 type NormalizedRowHeight =
   | {
@@ -358,6 +384,65 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
     });
   };
 
+  // SDT wrappers (documentPartObject, structuredContentBlock) can nest
+  // arbitrarily deep around the visible paragraph/table content.
+  const flattenSdtWrappersIntoCell = (
+    wrapperNode: PMNode,
+    inheritedSdtMetadata: ReturnType<typeof resolveNodeSdtMetadata> | undefined,
+  ): void => {
+    if (!Array.isArray(wrapperNode.content)) return;
+    for (const nestedNode of wrapperNode.content) {
+      if (nestedNode.type === 'paragraph') {
+        if (!paragraphToFlowBlocks) continue;
+        const paragraphBlocks = paragraphToFlowBlocks({
+          para: nestedNode,
+          nextBlockId: context.nextBlockId,
+          positions: context.positions,
+          storyKey: context.storyKey,
+          trackedChangesConfig: context.trackedChangesConfig,
+          bookmarks: context.bookmarks,
+          hyperlinkConfig: context.hyperlinkConfig,
+          themeColors: context.themeColors,
+          converterContext: cellConverterContext,
+          converters: context.converters,
+          enableComments: context.enableComments,
+        });
+        appendParagraphBlocks(paragraphBlocks, inheritedSdtMetadata);
+        continue;
+      }
+      if (nestedNode.type === 'table' && tableNodeToBlock) {
+        const tableBlock = tableNodeToBlock(nestedNode, {
+          nextBlockId: context.nextBlockId,
+          positions: context.positions,
+          storyKey: context.storyKey,
+          trackedChangesConfig: context.trackedChangesConfig,
+          bookmarks: context.bookmarks,
+          hyperlinkConfig: context.hyperlinkConfig,
+          themeColors: context.themeColors,
+          converterContext: context.converterContext,
+          converters: context.converters,
+          enableComments: context.enableComments,
+        });
+        if (tableBlock && tableBlock.kind === 'table') {
+          if (inheritedSdtMetadata) {
+            applySdtMetadataToTableBlock(tableBlock, inheritedSdtMetadata);
+          }
+          blocks.push(tableBlock);
+        }
+        continue;
+      }
+      if (nestedNode.type === 'documentPartObject') {
+        flattenSdtWrappersIntoCell(nestedNode, inheritedSdtMetadata);
+        continue;
+      }
+      if (nestedNode.type === 'structuredContentBlock') {
+        const innerMetadata = inheritedSdtMetadata ?? resolveNodeSdtMetadata(nestedNode, 'structuredContentBlock');
+        flattenSdtWrappersIntoCell(nestedNode, innerMetadata);
+        continue;
+      }
+    }
+  };
+
   for (const childNode of cellNode.content) {
     if (childNode.type === 'paragraph') {
       if (!paragraphToFlowBlocks) continue;
@@ -365,6 +450,7 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
         para: childNode,
         nextBlockId: context.nextBlockId,
         positions: context.positions,
+        storyKey: context.storyKey,
         trackedChangesConfig: context.trackedChangesConfig,
         bookmarks: context.bookmarks,
         hyperlinkConfig: context.hyperlinkConfig,
@@ -379,43 +465,7 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
 
     if (childNode.type === 'structuredContentBlock' && Array.isArray(childNode.content)) {
       const structuredContentMetadata = resolveNodeSdtMetadata(childNode, 'structuredContentBlock');
-      for (const nestedNode of childNode.content) {
-        if (nestedNode.type === 'paragraph') {
-          if (!paragraphToFlowBlocks) continue;
-          const paragraphBlocks = paragraphToFlowBlocks({
-            para: nestedNode,
-            nextBlockId: context.nextBlockId,
-            positions: context.positions,
-            trackedChangesConfig: context.trackedChangesConfig,
-            bookmarks: context.bookmarks,
-            hyperlinkConfig: context.hyperlinkConfig,
-            themeColors: context.themeColors,
-            converterContext: cellConverterContext,
-            converters: context.converters,
-            enableComments: context.enableComments,
-          });
-          appendParagraphBlocks(paragraphBlocks, structuredContentMetadata, nestedNode);
-          continue;
-        }
-        if (nestedNode.type === 'table' && tableNodeToBlock) {
-          const tableBlock = tableNodeToBlock(nestedNode, {
-            nextBlockId: context.nextBlockId,
-            positions: context.positions,
-            trackedChangesConfig: context.trackedChangesConfig,
-            bookmarks: context.bookmarks,
-            hyperlinkConfig: context.hyperlinkConfig,
-            themeColors: context.themeColors,
-            converterContext: context.converterContext,
-            converters: context.converters,
-            enableComments: context.enableComments,
-          });
-          if (tableBlock && tableBlock.kind === 'table') {
-            applySdtMetadataToTableBlock(tableBlock, structuredContentMetadata);
-            blocks.push(tableBlock);
-          }
-          continue;
-        }
-      }
+      flattenSdtWrappersIntoCell(childNode, structuredContentMetadata);
       continue;
     }
 
@@ -423,6 +473,7 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
       const tableBlock = tableNodeToBlock(childNode, {
         nextBlockId: context.nextBlockId,
         positions: context.positions,
+        storyKey: context.storyKey,
         trackedChangesConfig: context.trackedChangesConfig,
         bookmarks: context.bookmarks,
         hyperlinkConfig: context.hyperlinkConfig,
@@ -437,9 +488,18 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
       continue;
     }
 
+    // SD-2516: documentPartObject is a transparent wrapper; flatten its
+    // (possibly nested) paragraph/table leaves into the cell.
+    if (childNode.type === 'documentPartObject' && Array.isArray(childNode.content)) {
+      flattenSdtWrappersIntoCell(childNode, undefined);
+      continue;
+    }
+
     if (childNode.type === 'image' && context.converters?.imageNodeToBlock) {
       const mergedMarks = [...(childNode.marks ?? [])];
-      const trackedMeta = context.trackedChangesConfig ? collectTrackedChangeFromMarks(mergedMarks) : undefined;
+      const trackedMeta = context.trackedChangesConfig
+        ? collectTrackedChangeFromMarks(mergedMarks, context.storyKey)
+        : undefined;
       if (shouldHideTrackedNode(trackedMeta, context.trackedChangesConfig)) {
         continue;
       }
@@ -518,7 +578,7 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
   if (resolvedTcProps?.borders && typeof resolvedTcProps.borders === 'object') {
     const resolvedBorders: CellBorders = {};
     for (const side of ['top', 'right', 'bottom', 'left'] as const) {
-      const spec = convertBorderSpec((resolvedTcProps.borders as Record<string, unknown>)[side]);
+      const spec = convertResolvedCellBorder((resolvedTcProps.borders as Record<string, unknown>)[side]);
       if (spec) resolvedBorders[side] = spec;
     }
     if (Object.keys(resolvedBorders).length > 0) {
@@ -588,6 +648,7 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
     rowSpan: rowSpan ?? undefined,
     colSpan: colSpan ?? undefined,
     attrs: Object.keys(cellAttrs).length > 0 ? cellAttrs : undefined,
+    sourceAnchor: sourceAnchorFromNode(cellNode),
   };
 };
 
@@ -635,6 +696,10 @@ const parseTableRow = (args: ParseTableRowArgs): TableRow | null => {
     | Record<string, unknown>
     | undefined;
   rowNode.content.forEach((cellNode, cellIndex) => {
+    if (isTableCellNode(cellNode) && isTableSkipPlaceholderCell(cellNode)) {
+      return;
+    }
+
     const parsedCell = parseTableCell({
       cellNode,
       rowIndex,
@@ -673,6 +738,7 @@ const parseTableRow = (args: ParseTableRowArgs): TableRow | null => {
     id: context.nextBlockId(`row-${rowIndex}`),
     cells,
     attrs,
+    sourceAnchor: sourceAnchorFromNode(rowNode),
   };
 };
 
@@ -813,6 +879,7 @@ export function tableNodeToBlock(
   {
     nextBlockId,
     positions,
+    storyKey,
     trackedChangesConfig,
     bookmarks,
     hyperlinkConfig,
@@ -829,6 +896,7 @@ export function tableNodeToBlock(
   const parserDeps: TableParserDependencies = {
     nextBlockId,
     positions,
+    storyKey,
     trackedChangesConfig,
     bookmarks,
     hyperlinkConfig,
@@ -878,26 +946,35 @@ export function tableNodeToBlock(
   if (rows.length === 0) return null;
 
   const tableAttrs: Record<string, unknown> = {};
-  const getBorderSource = (): Record<string, unknown> | undefined => {
+
+  const getBorderSource = (): { borders: Record<string, unknown>; unit: 'px' | 'eighthPoints' } | undefined => {
     if (
       node.attrs?.borders &&
       typeof node.attrs.borders === 'object' &&
       node.attrs.borders !== null &&
       Object.keys(node.attrs.borders as Record<string, unknown>).length > 0
     ) {
-      return node.attrs.borders as Record<string, unknown>;
+      return {
+        borders: node.attrs.borders as Record<string, unknown>,
+        unit: 'px',
+      };
     }
     if (
       hydratedTableStyle?.borders &&
       typeof hydratedTableStyle.borders === 'object' &&
       hydratedTableStyle.borders !== null
     ) {
-      return hydratedTableStyle.borders as Record<string, unknown>;
+      return {
+        borders: hydratedTableStyle.borders as Record<string, unknown>,
+        unit: 'eighthPoints',
+      };
     }
-    return undefined;
   };
+
   const borderSource = getBorderSource();
-  const tableBorders: TableBorders | undefined = extractTableBorders(borderSource);
+  const tableBorders: TableBorders | undefined = borderSource
+    ? extractTableBorders(borderSource.borders, { unit: borderSource.unit })
+    : undefined;
   if (tableBorders) tableAttrs.borders = tableBorders;
 
   if (node.attrs?.borderCollapse) {
@@ -928,16 +1005,19 @@ export function tableNodeToBlock(
 
   if (node.attrs?.tableIndent && typeof node.attrs.tableIndent === 'object') {
     tableAttrs.tableIndent = { ...node.attrs.tableIndent };
+  } else if (hydratedTableStyle?.tableIndent) {
+    tableAttrs.tableIndent = { ...hydratedTableStyle.tableIndent };
   }
 
   if (defaultCellPadding && typeof defaultCellPadding === 'object') {
     tableAttrs.defaultCellPadding = { ...defaultCellPadding };
   }
 
-  // Pass tableLayout through (extracted by tblLayout-translator.js)
   const tableLayout = node.attrs?.tableLayout;
   if (tableLayout) {
     tableAttrs.tableLayout = tableLayout;
+  } else if (hydratedTableStyle?.tableLayout) {
+    tableAttrs.tableLayout = hydratedTableStyle.tableLayout;
   }
 
   // Preserve tableProperties for floating table detection and other OOXML metadata
@@ -1033,6 +1113,7 @@ export function tableNodeToBlock(
     columnWidths,
     ...(anchor ? { anchor } : {}),
     ...(wrap ? { wrap } : {}),
+    sourceAnchor: sourceAnchorFromNode(node),
   };
 
   return tableBlock;
@@ -1062,6 +1143,7 @@ export function handleTableNode(node: PMNode, context: NodeHandlerContext): void
   const tableBlock = tableNodeToBlock(node, {
     nextBlockId,
     positions,
+    storyKey: context.storyKey,
     trackedChangesConfig,
     bookmarks,
     hyperlinkConfig,

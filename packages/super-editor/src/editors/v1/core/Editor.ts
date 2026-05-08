@@ -84,6 +84,8 @@ import { syncPackageMetadata } from './opc/sync-package-metadata.js';
 import { readSettingsRoot, parseProtectionState } from '../document-api-adapters/document-settings.js';
 import { applyEffectiveEditability, getProtectionStorage } from '../extensions/protection/editability.js';
 import { getViewModeSelectionWithoutStructuredContent } from './helpers/getViewModeSelectionWithoutStructuredContent.js';
+import { resolveMainBodyEditor } from '../document-api-adapters/helpers/word-statistics.js';
+import { commitLiveStorySessionRuntimes } from '../document-api-adapters/story-runtime/live-story-session-runtime-registry.js';
 
 declare const __APP_VERSION__: string | undefined;
 declare const version: string | undefined;
@@ -424,6 +426,9 @@ export class Editor extends EventEmitter<EditorEventMap> {
     onCommentsLoaded: () => null,
     onCommentClicked: () => null,
     onCommentLocationsUpdate: () => null,
+    onPointerDown: () => null,
+    onPointerUp: () => null,
+    onRightClick: () => null,
     onDocumentLocked: () => null,
     onFirstRender: () => null,
     onCollaborationReady: () => null,
@@ -600,7 +605,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
     }
 
     // Skip for sub-editors that are not primary document editors
-    if (this.options.mode === 'text' || this.options.isHeaderOrFooter) {
+    if (this.options.mode === 'text' || this.options.isHeaderOrFooter || this.options.isChildEditor) {
       return;
     }
 
@@ -761,6 +766,9 @@ export class Editor extends EventEmitter<EditorEventMap> {
     this.on('list-definitions-change', this.options.onListDefinitionsChange!);
     this.on('fonts-resolved', this.options.onFontsResolved!);
     this.on('exception', this.options.onException!);
+    this.on('pointerDown', this.options.onPointerDown!);
+    this.on('pointerUp', this.options.onPointerUp!);
+    this.on('rightClick', this.options.onRightClick!);
   }
 
   /**
@@ -1159,6 +1167,9 @@ export class Editor extends EventEmitter<EditorEventMap> {
     this.on('list-definitions-change', this.options.onListDefinitionsChange!);
     this.on('fonts-resolved', this.options.onFontsResolved!);
     this.on('exception', this.options.onException!);
+    this.on('pointerDown', this.options.onPointerDown!);
+    this.on('pointerUp', this.options.onPointerUp!);
+    this.on('rightClick', this.options.onRightClick!);
 
     if (!shouldMountRenderer) {
       this.#emitCreateAsync();
@@ -1235,6 +1246,9 @@ export class Editor extends EventEmitter<EditorEventMap> {
     this.on('commentClick', this.options.onCommentClicked!);
     this.on('locked', this.options.onDocumentLocked!);
     this.on('list-definitions-change', this.options.onListDefinitionsChange!);
+    this.on('pointerDown', this.options.onPointerDown!);
+    this.on('pointerUp', this.options.onPointerUp!);
+    this.on('rightClick', this.options.onRightClick!);
 
     if (!shouldMountRenderer) {
       this.#emitCreateAsync();
@@ -1864,10 +1878,27 @@ export class Editor extends EventEmitter<EditorEventMap> {
    * Set editor options and update state.
    */
   setOptions(options: Partial<EditorOptions> = {}): void {
-    this.options = {
-      ...this.options,
+    const previousOptions = this.options ?? {};
+    const nextOptions = {
+      ...previousOptions,
       ...options,
     };
+
+    // Preserve non-enumerable option metadata (for example the story editor's
+    // `parentEditor` getter) across option updates. Plain object spreading drops
+    // those descriptors, which breaks commit routing for child/story editors.
+    const previousDescriptors = Object.getOwnPropertyDescriptors(previousOptions);
+    for (const [key, descriptor] of Object.entries(previousDescriptors)) {
+      if (descriptor.enumerable) {
+        continue;
+      }
+      if (Object.prototype.hasOwnProperty.call(options, key)) {
+        continue;
+      }
+      Object.defineProperty(nextOptions, key, descriptor);
+    }
+
+    this.options = nextOptions;
 
     if ((this.options.isNewFile || !this.options.ydoc) && this.options.isCommentsEnabled) {
       this.options.shouldLoadComments = true;
@@ -1909,7 +1940,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
       }
     }
 
-    if (emitUpdate) {
+    if (emitUpdate && this.state) {
       this.emit('update', { editor: this, transaction: this.state.tr });
     }
   }
@@ -2093,6 +2124,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
         mockWindow: this.options.mockWindow ?? null,
         mockDocument: this.options.mockDocument ?? null,
         isNewFile: this.options.isNewFile ?? false,
+        trackedChangesOptions: this.options.trackedChanges ?? null,
       });
     }
   }
@@ -2671,6 +2703,12 @@ export class Editor extends EventEmitter<EditorEventMap> {
     const prevState = this.state;
     let nextState: EditorState;
     let transactionToApply = transaction;
+    // appendTransaction plugins (e.g. numberingPlugin) may produce transactions that
+    // change the doc even when the original transaction does not. We resolve the
+    // effective doc-carrying tr after applyTransaction so the 'update' event is
+    // emitted with `docChanged` / `mapping` that consumers (notably
+    // PresentationEditor.handleUpdate) actually need.
+    let effectiveTransaction: Transaction = transaction;
     const forceTrackChanges = transactionToApply.getMeta('forceTrackChanges') === true;
     try {
       const trackChangesState = TrackChangesBasePluginKey.getState(prevState);
@@ -2687,11 +2725,16 @@ export class Editor extends EventEmitter<EditorEventMap> {
             tr: transactionToApply,
             state: prevState,
             user: this.options.user!,
+            replacements: this.options.trackedChanges?.replacements === 'independent' ? 'independent' : 'paired',
           })
         : transactionToApply;
 
-      const { state: appliedState } = prevState.applyTransaction(transactionToApply);
+      const { state: appliedState, transactions: appliedTransactions } = prevState.applyTransaction(transactionToApply);
       nextState = appliedState;
+      // Pick whichever applied tr carries the doc delta — when the input tr is empty an
+      // appendTransaction plugin (e.g. numberingPlugin) may have produced the real change,
+      // and downstream listeners read `transaction.docChanged`/`mapping` off this tr.
+      effectiveTransaction = appliedTransactions.find((t) => t.docChanged) ?? transactionToApply;
     } catch (error) {
       if (forceTrackChanges) throw error;
       // just in case
@@ -2739,8 +2782,9 @@ export class Editor extends EventEmitter<EditorEventMap> {
       });
     }
 
-    if (transactionToApply.docChanged) {
-      // Track document modifications and promote to GUID if needed
+    if (effectiveTransaction.docChanged) {
+      // Track document modifications and promote to GUID if needed.
+      // Only count user-initiated (original) transactions as document modifications.
       if (transaction.docChanged && this.converter) {
         if (!this.converter.documentGuid) {
           this.converter.promoteToGuid();
@@ -2751,7 +2795,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
 
       this.emit('update', {
         editor: this,
-        transaction: transactionToApply,
+        transaction: effectiveTransaction,
       });
     }
   }
@@ -3130,6 +3174,9 @@ export class Editor extends EventEmitter<EditorEventMap> {
     compression,
   }: ExportDocxParams = {}): Promise<Blob | Buffer | Record<string, string | null> | string | undefined> {
     try {
+      const exportHostEditor = resolveMainBodyEditor(this);
+      commitLiveStorySessionRuntimes(exportHostEditor);
+
       // Use provided comments, or fall back to imported comments from converter
       const effectiveComments = comments ?? this.converter.comments ?? [];
 

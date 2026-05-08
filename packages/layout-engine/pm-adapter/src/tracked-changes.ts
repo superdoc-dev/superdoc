@@ -22,6 +22,7 @@ const generateRandomBase36Id = (length: number): string => {
 import type {
   Run,
   TextRun,
+  BreakRun,
   TrackedChangeMeta,
   TrackedChangeKind,
   TrackedChangesMode,
@@ -213,7 +214,7 @@ export const deriveTrackedChangeId = (kind: TrackedChangeKind, attrs: Record<str
  * @param mark - ProseMirror mark containing tracked change attributes
  * @returns TrackedChangeMeta object, or undefined if not a tracked change mark
  */
-export const buildTrackedChangeMetaFromMark = (mark: PMMark): TrackedChangeMeta | undefined => {
+export const buildTrackedChangeMetaFromMark = (mark: PMMark, storyKey?: string): TrackedChangeMeta | undefined => {
   const kind = pickTrackedChangeKind(mark.type);
   if (!kind) return undefined;
   const attrs = mark.attrs ?? {};
@@ -236,6 +237,9 @@ export const buildTrackedChangeMetaFromMark = (mark: PMMark): TrackedChangeMeta 
   if (kind === 'format') {
     meta.before = normalizeRunMarkList((attrs as { before?: unknown }).before);
     meta.after = normalizeRunMarkList((attrs as { after?: unknown }).after);
+  }
+  if (typeof storyKey === 'string' && storyKey.length > 0) {
+    meta.storyKey = storyKey;
   }
   return meta;
 };
@@ -363,9 +367,11 @@ export const applyFormatChangeMarks = (
     themeColors?: ThemeColorPalette,
     backgroundColor?: string,
     enableComments?: boolean,
+    storyKey?: string,
   ) => void,
   themeColors?: ThemeColorPalette,
   enableComments = true,
+  storyKey?: string,
 ): void => {
   const tracked = run.trackedChange;
   if (!tracked || tracked.kind !== 'format') {
@@ -402,7 +408,7 @@ export const applyFormatChangeMarks = (
   resetRunFormatting(run);
 
   try {
-    applyMarksToRun(run, beforeMarks as PMMark[], hyperlinkConfig, themeColors, undefined, enableComments);
+    applyMarksToRun(run, beforeMarks as PMMark[], hyperlinkConfig, themeColors, undefined, enableComments, storyKey);
   } catch (error) {
     if (process.env.NODE_ENV === 'development') {
       console.warn('[PM-Adapter] Error applying format change marks, resetting formatting:', error);
@@ -433,9 +439,11 @@ export const applyTrackedChangesModeToRuns = (
     themeColors?: ThemeColorPalette,
     backgroundColor?: string,
     enableComments?: boolean,
+    storyKey?: string,
   ) => void,
   themeColors?: ThemeColorPalette,
   enableComments = true,
+  storyKey?: string,
 ): Run[] => {
   if (!config) {
     return runs;
@@ -451,7 +459,7 @@ export const applyTrackedChangesModeToRuns = (
       // Apply format changes even when not filtering insertions/deletions
       runs.forEach((run) => {
         if (isTextRun(run)) {
-          applyFormatChangeMarks(run, config, hyperlinkConfig, applyMarksToRun, themeColors, enableComments);
+          applyFormatChangeMarks(run, config, hyperlinkConfig, applyMarksToRun, themeColors, enableComments, storyKey);
         }
       });
     }
@@ -460,7 +468,7 @@ export const applyTrackedChangesModeToRuns = (
 
   const filtered: Run[] = [];
   runs.forEach((run) => {
-    if (!isTextRun(run)) {
+    if (!isTextRun(run) && run.kind !== 'break') {
       filtered.push(run);
       return;
     }
@@ -491,6 +499,7 @@ export const applyTrackedChangesModeToRuns = (
           applyMarksToRun,
           themeColors,
           enableComments,
+          storyKey,
         );
       }
     });

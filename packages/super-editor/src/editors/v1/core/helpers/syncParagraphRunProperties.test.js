@@ -50,6 +50,7 @@ describe('syncParagraphRunProperties', () => {
       italic: true,
       styleId: 'Heading1Char',
       bold: true,
+      boldCs: true,
     });
   });
 

@@ -17,14 +17,17 @@ import { alternateChoiceHandler } from './alternateChoiceImporter.js';
 import { autoPageHandlerEntity, autoTotalPageCountEntity } from './autoPageNumberImporter.js';
 import { documentStatFieldHandlerEntity } from './documentStatFieldImporter.js';
 import { pageReferenceEntity } from './pageReferenceImporter.js';
+import { crossReferenceEntity } from './crossReferenceImporter.js';
 import { pictNodeHandlerEntity } from './pictNodeImporter.js';
 import { importCommentData } from './documentCommentsImporter.js';
-import { buildTrackedChangeIdMap } from './trackedChangeIdMapper.js';
+import { buildTrackedChangeIdMap, buildTrackedChangeIdMapsByPart } from './trackedChangeIdMapper.js';
 import { importFootnoteData, importEndnoteData } from './documentFootnotesImporter.js';
 import { getDefaultStyleDefinition } from '@converter/docx-helpers/index.js';
 import { pruneIgnoredNodes } from './ignoredNodes.js';
 import { tabNodeEntityHandler } from './tabImporter.js';
+import { noBreakHyphenNodeEntityHandler } from './noBreakHyphenImporter.js';
 import { footnoteReferenceHandlerEntity } from './footnoteReferenceImporter.js';
+import { endnoteReferenceHandlerEntity } from './endnoteReferenceImporter.js';
 import { tableNodeHandlerEntity } from './tableImporter.js';
 import { tableOfContentsHandlerEntity } from './tableOfContentsImporter.js';
 import { indexHandlerEntity, indexEntryHandlerEntity } from './indexImporter.js';
@@ -152,7 +155,11 @@ export const createDocumentJson = (docx, converter, editor) => {
 
     patchNumberingDefinitions(docx);
     const numbering = getNumberingDefinitions(docx);
-    converter.trackedChangeIdMap = buildTrackedChangeIdMap(docx);
+    const trackedChangeIdMapOptions = {
+      replacements: converter.trackedChangesOptions?.replacements ?? 'paired',
+    };
+    converter.trackedChangeIdMap = buildTrackedChangeIdMap(docx, trackedChangeIdMapOptions);
+    converter.trackedChangeIdMapsByPart = buildTrackedChangeIdMapsByPart(docx, trackedChangeIdMapOptions);
     const comments = importCommentData({ docx, nodeListHandler, converter, editor });
     const footnotes = importFootnoteData({ docx, nodeListHandler, converter, editor, numbering });
     const endnotes = importEndnoteData({ docx, nodeListHandler, converter, editor, numbering });
@@ -238,7 +245,9 @@ export const defaultNodeListHandler = () => {
     trackChangeNodeHandlerEntity,
     tableNodeHandlerEntity,
     footnoteReferenceHandlerEntity,
+    endnoteReferenceHandlerEntity,
     tabNodeEntityHandler,
+    noBreakHyphenNodeEntityHandler,
     tableOfContentsHandlerEntity,
     indexHandlerEntity,
     bibliographyHandlerEntity,
@@ -247,6 +256,7 @@ export const defaultNodeListHandler = () => {
     autoTotalPageCountEntity,
     documentStatFieldHandlerEntity,
     pageReferenceEntity,
+    crossReferenceEntity,
     permStartHandlerEntity,
     permEndHandlerEntity,
     mathNodeHandlerEntity,
@@ -672,13 +682,13 @@ export function addDefaultStylesIfMissing(styles) {
  */
 const importHeadersFooters = (docx, converter, mainEditor, numbering, translatedNumbering, translatedLinkedStyles) => {
   const rels = docx['word/_rels/document.xml.rels'];
-  const relationships = rels?.elements.find((el) => el.name === 'Relationships');
-  const { elements } = relationships || { elements: [] };
+  const relationships = rels?.elements?.find((el) => el.name === 'Relationships');
+  const elements = relationships?.elements ?? [];
 
   const headerType = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/header';
   const footerType = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer';
-  const headers = elements.filter((el) => el.attributes['Type'] === headerType);
-  const footers = elements.filter((el) => el.attributes['Type'] === footerType);
+  const headers = elements.filter((el) => el.attributes?.['Type'] === headerType);
+  const footers = elements.filter((el) => el.attributes?.['Type'] === footerType);
 
   const sectPr = findSectPr(docx['word/document.xml']) || [];
   const allSectPrElements = sectPr.flatMap((el) => el.elements);
@@ -1239,11 +1249,22 @@ function getNumberingDefinitions(docx, converter) {
  * @param {Object} docx The parsed docx object
  * @returns {Boolean} True if the document has alternating headers and footers, false otherwise
  */
-const isAlternatingHeadersOddEven = (docx) => {
+const ST_ON_OFF_TRUE_VALUES = new Set(['1', 'true', 'on']);
+
+const isStOnOffEnabled = (element) => {
+  if (!element) return false;
+
+  const rawValue = element.attributes?.['w:val'];
+  if (rawValue == null) return true;
+
+  return ST_ON_OFF_TRUE_VALUES.has(String(rawValue).trim().toLowerCase());
+};
+
+export const isAlternatingHeadersOddEven = (docx) => {
   const settings = docx['word/settings.xml'];
   if (!settings || !settings.elements?.length) return false;
 
   const { elements = [] } = settings.elements[0];
   const evenOdd = elements.find((el) => el.name === 'w:evenAndOddHeaders');
-  return !!evenOdd;
+  return isStOnOffEnabled(evenOdd);
 };

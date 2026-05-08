@@ -3,7 +3,11 @@ import type {
   TextAddress,
   SelectionTarget,
   MatchContext,
+  StoryLocator,
   TrackChangeType,
+  TrackChangesAcceptInput,
+  TrackChangesListInput,
+  TrackChangesRejectInput,
   CommentsListResult,
   TrackChangesListResult,
   TextMutationReceipt,
@@ -267,6 +271,17 @@ export async function resolveComment(page: Page, input: { commentId: string }): 
   );
 }
 
+/**
+ * Reopen a previously-resolved comment via the public Document API.
+ * Routes through `comments.patch({ status: 'active' })` (SD-2789).
+ */
+export async function reopenComment(page: Page, input: { commentId: string }): Promise<void> {
+  await page.evaluate(
+    (payload) => (window as any).editor.doc.comments.patch({ commentId: payload.commentId, status: 'active' }),
+    input,
+  );
+}
+
 export async function listComments(
   page: Page,
   query: { includeResolved?: boolean } = { includeResolved: true },
@@ -320,10 +335,7 @@ export async function deleteText(
   });
 }
 
-export async function listTrackChanges(
-  page: Page,
-  query: { limit?: number; offset?: number; type?: TrackChangeType } = {},
-): Promise<TrackChangesListResult> {
+export async function listTrackChanges(page: Page, query: TrackChangesListInput = {}): Promise<TrackChangesListResult> {
   return page.evaluate((input) => {
     const result = (window as any).editor.doc.trackChanges.list(input);
     if (Array.isArray(result?.changes)) {
@@ -376,16 +388,24 @@ export async function listSeparate(
   return invokeListMutation(page, 'separate', input, options) as Promise<ListsSeparateResult>;
 }
 
-export async function acceptTrackChange(page: Page, input: { id: string }): Promise<void> {
+export async function acceptTrackChange(page: Page, input: TrackChangesAcceptInput): Promise<void> {
   await page.evaluate(
-    (payload) => (window as any).editor.doc.trackChanges.decide({ decision: 'accept', target: { id: payload.id } }),
+    (payload) =>
+      (window as any).editor.doc.trackChanges.decide({
+        decision: 'accept',
+        target: payload.story ? { id: payload.id, story: payload.story } : { id: payload.id },
+      }),
     input,
   );
 }
 
-export async function rejectTrackChange(page: Page, input: { id: string }): Promise<void> {
+export async function rejectTrackChange(page: Page, input: TrackChangesRejectInput): Promise<void> {
   await page.evaluate(
-    (payload) => (window as any).editor.doc.trackChanges.decide({ decision: 'reject', target: { id: payload.id } }),
+    (payload) =>
+      (window as any).editor.doc.trackChanges.decide({
+        decision: 'reject',
+        target: payload.story ? { id: payload.id, story: payload.story } : { id: payload.id },
+      }),
     input,
   );
 }

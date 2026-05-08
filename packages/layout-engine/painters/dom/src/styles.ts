@@ -197,6 +197,21 @@ const LINK_AND_TOC_STYLES = `
   }
 }
 
+/* SD-2454: bookmark bracket indicators.
+ * When the showBookmarks layout option is enabled, the pm-adapter emits
+ * [ and ] marker TextRuns at bookmark start/end positions. Mirror Word's
+ * visual treatment: subtle gray, non-selectable so users can't accidentally
+ * include the brackets in copied text. The bookmark name is surfaced via
+ * the native title tooltip on the opening bracket. */
+[data-bookmark-marker="start"],
+[data-bookmark-marker="end"] {
+  color: #8b8b8b;
+  user-select: none;
+  cursor: default;
+  font-weight: normal;
+}
+
+
 /* Reduced motion support */
 @media (prefers-reduced-motion: reduce) {
   .superdoc-link {
@@ -280,20 +295,101 @@ const TRACK_CHANGE_STYLES = `
 }
 
 .superdoc-layout .track-insert-dec.highlighted.track-change-focused {
-  border-style: solid;
-  border-width: var(--sd-tracked-changes-insert-focused-border-width, 2px);
+  border-left: none;
+  border-right: none;
+  border-top-style: solid;
+  border-bottom-style: solid;
   background-color: var(--sd-tracked-changes-insert-background-focused, #399c7244);
 }
 
 .superdoc-layout .track-delete-dec.highlighted.track-change-focused {
-  border-style: solid;
-  border-width: var(--sd-tracked-changes-delete-focused-border-width, 2px);
+  border-left: none;
+  border-right: none;
+  border-top-style: solid;
+  border-bottom-style: solid;
   background-color: var(--sd-tracked-changes-delete-background-focused, #cb0e4744);
 }
 
 .superdoc-layout .track-format-dec.highlighted.track-change-focused {
-  border-bottom-width: 3px;
   background-color: var(--sd-tracked-changes-format-background-focused, #ffd70033);
+}
+`;
+
+const FORMATTING_MARKS_STYLES = `
+.superdoc-formatting-space-mark,
+.superdoc-marker-suffix-space {
+  position: relative;
+}
+
+.superdoc-formatting-space-mark {
+  white-space: pre;
+}
+
+.superdoc-layout.superdoc-show-formatting-marks .superdoc-tab {
+  position: relative;
+  visibility: visible !important;
+}
+
+.superdoc-layout.superdoc-show-formatting-marks .superdoc-tab::after {
+  content: "→";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  color: var(--sd-formatting-mark-color, var(--sd-ui-action, currentColor));
+  font-size: 0.75em;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.superdoc-layout.superdoc-show-formatting-marks [dir="rtl"] .superdoc-tab::after {
+  content: "←";
+}
+
+.superdoc-layout.superdoc-show-formatting-marks .superdoc-formatting-space-mark::after,
+.superdoc-layout.superdoc-show-formatting-marks .superdoc-marker-suffix-space::after {
+  content: "·";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  color: var(--sd-formatting-mark-color, var(--sd-ui-action, currentColor));
+  font-size: 0.75em;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.superdoc-formatting-paragraph-mark {
+  display: none;
+  position: absolute;
+  top: 0;
+  transform: translateX(var(--sd-formatting-paragraph-mark-gap, 0.2em));
+  color: var(--sd-formatting-mark-color, var(--sd-ui-action, currentColor));
+  pointer-events: none;
+  user-select: none;
+  white-space: pre;
+  z-index: 2;
+}
+
+.superdoc-layout.superdoc-show-formatting-marks .superdoc-formatting-paragraph-mark {
+  display: inline;
+}
+
+.superdoc-layout.superdoc-show-formatting-marks [dir="rtl"] .superdoc-formatting-paragraph-mark {
+  transform: translateX(calc(-100% - var(--sd-formatting-paragraph-mark-gap, 0.2em)));
+}
+
+@media print {
+  .superdoc-layout.superdoc-show-formatting-marks .superdoc-tab::after,
+  .superdoc-layout.superdoc-show-formatting-marks .superdoc-formatting-space-mark::after,
+  .superdoc-layout.superdoc-show-formatting-marks .superdoc-marker-suffix-space::after {
+    content: "";
+    display: none;
+  }
+
+  .superdoc-layout.superdoc-show-formatting-marks .superdoc-formatting-paragraph-mark {
+    display: none;
+  }
 }
 `;
 
@@ -410,13 +506,13 @@ const SDT_CONTAINER_STYLES = `
 
 .superdoc-structured-content-block:not(.ProseMirror-selectednode):hover {
   background-color: var(--sd-content-controls-block-hover-bg, #f2f2f2);
-  border-color: transparent;
+  border-color: var(--sd-content-controls-block-hover-border, transparent);
 }
 
 /* Group hover (JavaScript-coordinated via PresentationEditor) */
 .superdoc-structured-content-block.sdt-group-hover:not(.ProseMirror-selectednode) {
   background-color: var(--sd-content-controls-block-hover-bg, #f2f2f2);
-  border-color: transparent;
+  border-color: var(--sd-content-controls-block-hover-border, transparent);
 }
 
 .superdoc-structured-content-block.ProseMirror-selectednode {
@@ -502,13 +598,15 @@ const SDT_CONTAINER_STYLES = `
   border: 1px solid transparent;
   position: relative;
   display: inline;
+  font-size: initial;
+  line-height: normal;
   z-index: 10;
 }
 
 /* Hover effect for inline structured content */
 .superdoc-structured-content-inline:not(.ProseMirror-selectednode):hover {
   background-color: var(--sd-content-controls-inline-hover-bg, #f2f2f2);
-  border-color: transparent;
+  border-color: var(--sd-content-controls-inline-hover-border, transparent);
 }
 
 .superdoc-structured-content-inline.ProseMirror-selectednode {
@@ -721,6 +819,7 @@ menclose::after {
 let printStylesInjected = false;
 let linkStylesInjected = false;
 let trackChangeStylesInjected = false;
+let formattingMarksStylesInjected = false;
 let sdtContainerStylesInjected = false;
 let fieldAnnotationStylesInjected = false;
 let imageSelectionStylesInjected = false;
@@ -751,6 +850,15 @@ export const ensureTrackChangeStyles = (doc: Document | null | undefined) => {
   styleEl.textContent = TRACK_CHANGE_STYLES;
   doc.head?.appendChild(styleEl);
   trackChangeStylesInjected = true;
+};
+
+export const ensureFormattingMarksStyles = (doc: Document | null | undefined) => {
+  if (formattingMarksStylesInjected || !doc) return;
+  const styleEl = doc.createElement('style');
+  styleEl.setAttribute('data-superdoc-formatting-marks-styles', 'true');
+  styleEl.textContent = FORMATTING_MARKS_STYLES;
+  doc.head?.appendChild(styleEl);
+  formattingMarksStylesInjected = true;
 };
 
 export const ensureSdtContainerStyles = (doc: Document | null | undefined) => {

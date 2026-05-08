@@ -1,9 +1,12 @@
 import { h, ref } from 'vue';
 
 import { sanitizeNumber } from './helpers';
+import { normalizeFontOption } from './helpers/font-options.js';
 import { useToolbarItem } from './use-toolbar-item';
 import AIWriter from './AIWriter.vue';
 import AlignmentButtons from './AlignmentButtons.vue';
+import StyleButtonsList from './StyleButtonsList.vue';
+import { bulletStyleButtons, numberedStyleButtons } from './list-style-buttons.js';
 import DocumentMode from './DocumentMode.vue';
 import LinkedStyle from './LinkedStyle.vue';
 import LinkInput from './LinkInput.vue';
@@ -14,7 +17,7 @@ import { scrollToElement } from './scroll-helpers.js';
 
 import checkIconSvg from '@superdoc/common/icons/check.svg?raw';
 import SearchInput from './SearchInput.vue';
-import { TOOLBAR_FONTS, TOOLBAR_FONT_SIZES } from './constants.js';
+import { RESPONSIVE_BREAKPOINTS, TOOLBAR_FONTS, TOOLBAR_FONT_SIZES } from './constants.js';
 import { getQuickFormatList } from '@extensions/linked-styles/index.js';
 
 const closeDropdown = (dropdown) => {
@@ -44,7 +47,7 @@ export const makeDefaultItems = ({
   });
 
   // font
-  const fontOptions = [...(toolbarFonts ? toolbarFonts : TOOLBAR_FONTS)];
+  const fontOptions = (toolbarFonts ?? TOOLBAR_FONTS).map(normalizeFontOption);
   const fontButton = useToolbarItem({
     type: 'dropdown',
     name: 'fontFamily',
@@ -322,7 +325,7 @@ export const makeDefaultItems = ({
 
   const renderSearchDropdown = () => {
     const handleSubmit = ({ value }) => {
-      superToolbar.activeEditor.commands.search(value);
+      superToolbar.activeEditor.commands.search(value, { searchModel: 'visible' });
     };
 
     return h('div', {}, [
@@ -630,30 +633,72 @@ export const makeDefaultItems = ({
 
   // bullet list
   const bulletedList = useToolbarItem({
-    type: 'button',
+    type: 'dropdown',
     name: 'list',
-    command: 'toggleBulletList',
+    command: 'toggleBulletListStyle',
+    splitButton: true,
+    splitButtonCommand: 'toggleBulletList',
     icon: toolbarIcons.bulletList,
-    active: false,
+    hasCaret: true,
     tooltip: toolbarTexts.bulletList,
     restoreEditorFocus: true,
     attributes: {
       ariaLabel: 'Bullet list',
     },
+    options: [
+      {
+        type: 'render',
+        key: 'bullet-style-buttons',
+        render: () => {
+          const handleSelect = (style) => {
+            closeDropdown(bulletedList);
+            const item = { ...bulletedList, command: 'toggleBulletListStyle' };
+            superToolbar.emitCommand({ item, argument: style });
+          };
+          return h(StyleButtonsList, {
+            buttons: bulletStyleButtons,
+            iconSize: 25,
+            selectedStyle: bulletedList.selectedValue.value,
+            onSelect: handleSelect,
+          });
+        },
+      },
+    ],
   });
 
   // number list
   const numberedList = useToolbarItem({
-    type: 'button',
+    type: 'dropdown',
     name: 'numberedlist',
-    command: 'toggleOrderedList',
+    command: 'toggleOrderedListStyle',
+    splitButton: true,
+    splitButtonCommand: 'toggleOrderedList',
     icon: toolbarIcons.numberedList,
-    active: false,
+    hasCaret: true,
     tooltip: toolbarTexts.numberedList,
     restoreEditorFocus: true,
     attributes: {
       ariaLabel: 'Numbered list',
     },
+    options: [
+      {
+        type: 'render',
+        key: 'numbered-style-buttons',
+        render: () => {
+          const handleSelect = (style) => {
+            closeDropdown(numberedList);
+            const item = { ...numberedList, command: 'toggleOrderedListStyle' };
+            superToolbar.emitCommand({ item, argument: style });
+          };
+          return h(StyleButtonsList, {
+            buttons: numberedStyleButtons,
+            iconSize: 30,
+            selectedStyle: numberedList.selectedValue.value,
+            onSelect: handleSelect,
+          });
+        },
+      },
+    ],
   });
 
   // indent left
@@ -908,6 +953,19 @@ export const makeDefaultItems = ({
     },
   });
 
+  const formattingMarks = useToolbarItem({
+    type: 'button',
+    name: 'formattingMarks',
+    command: 'toggleFormattingMarks',
+    allowWithoutEditor: true,
+    icon: toolbarIcons.formattingMarks,
+    active: false,
+    tooltip: toolbarTexts.formattingMarks,
+    attributes: {
+      ariaLabel: 'Formatting marks',
+    },
+  });
+
   const selectedLinkedStyle = ref(null);
   const linkedStyles = useToolbarItem({
     type: 'dropdown',
@@ -995,18 +1053,33 @@ export const makeDefaultItems = ({
     }),
   });
 
-  // Responsive toolbar calculations
-  const breakpoints = {
-    sm: 768,
-    md: 1024,
-    lg: 1280,
-    xl: 1410,
-  };
+  // Responsive toolbar calculations.
+  // `availableWidth` comes from SuperToolbar and represents either:
+  // - container width when `responsiveToContainer: true`
+  // - viewport/document width when `responsiveToContainer: false`
+
+  // Extra headroom to prevent toolbar jitter at the XL edge.
+  const XL_OVERFLOW_SAFETY_BUFFER = 20;
   const stickyItemsWidth = 120;
   const toolbarPadding = 32;
 
-  const itemsToHideXL = ['linkedStyles', 'clearFormatting', 'copyFormat', 'ruler'];
+  const itemsToHideXL = ['linkedStyles', 'clearFormatting', 'copyFormat', 'ruler', 'formattingMarks'];
   const itemsToHideSM = ['zoom', 'fontFamily', 'fontSize', 'redo'];
+  const shouldUseLgCompactStyles = availableWidth <= RESPONSIVE_BREAKPOINTS.lg;
+
+  if (shouldUseLgCompactStyles) {
+    documentMode.attributes.value = {
+      ...documentMode.attributes.value,
+      className: `${documentMode.attributes.value.className} toolbar-item--doc-mode-compact`,
+    };
+  }
+
+  if (shouldUseLgCompactStyles) {
+    linkedStyles.attributes.value = {
+      ...linkedStyles.attributes.value,
+      className: `${linkedStyles.attributes.value.className} toolbar-item--linked-styles-compact`,
+    };
+  }
 
   let toolbarItems = [
     undo,
@@ -1041,6 +1114,7 @@ export const makeDefaultItems = ({
     linkedStyles,
     separator,
     ruler,
+    formattingMarks,
     copyFormat,
     clearFormatting,
     aiButton,
@@ -1053,7 +1127,7 @@ export const makeDefaultItems = ({
   }
 
   // Hide separators on small screens
-  if (availableWidth <= breakpoints.md && hideButtons) {
+  if (availableWidth <= RESPONSIVE_BREAKPOINTS.md && hideButtons) {
     toolbarItems = toolbarItems.filter((item) => item.type !== 'separator');
   }
 
@@ -1062,7 +1136,7 @@ export const makeDefaultItems = ({
     const getLinkedStylesIndex = toolbarItems.findIndex((item) => item.name.value === 'linkedStyles');
     toolbarItems.splice(getLinkedStylesIndex - 1, 2);
 
-    const filterItems = ['ruler', 'zoom', 'undo', 'redo'];
+    const filterItems = ['ruler', 'formattingMarks', 'zoom', 'undo', 'redo'];
     toolbarItems = toolbarItems.filter((item) => !filterItems.includes(item.name.value));
   }
 
@@ -1088,7 +1162,11 @@ export const makeDefaultItems = ({
   toolbarItems.forEach((item) => {
     const itemWidth = controlSizes.get(item.name.value) || controlSizes.get('default');
 
-    if (availableWidth < breakpoints.xl && itemsToHideXL.includes(item.name.value) && hideButtons) {
+    if (
+      availableWidth < RESPONSIVE_BREAKPOINTS.xl + XL_OVERFLOW_SAFETY_BUFFER &&
+      itemsToHideXL.includes(item.name.value) &&
+      hideButtons
+    ) {
       overflowItems.push(item);
       if (item.name.value === 'linkedStyles') {
         const linkedStylesIdx = toolbarItems.findIndex((item) => item.name.value === 'linkedStyles');
@@ -1097,7 +1175,7 @@ export const makeDefaultItems = ({
       return;
     }
 
-    if (availableWidth < breakpoints.sm && itemsToHideSM.includes(item.name.value) && hideButtons) {
+    if (availableWidth < RESPONSIVE_BREAKPOINTS.sm && itemsToHideSM.includes(item.name.value) && hideButtons) {
       overflowItems.push(item);
       return;
     }

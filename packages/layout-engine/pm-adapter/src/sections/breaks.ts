@@ -130,6 +130,17 @@ export function createSectionBreakBlock(
     attrs: {
       source: 'sectPr',
       sectionIndex: section.sectionIndex,
+      // `typeIsExplicit` is set only when `<w:type>` was authored in the
+      // source XML. We omit the field entirely when it would be `false` so
+      // we don't widen `attrs` for the (vast majority of) sectPrs that
+      // omit `<w:type>` — that would produce a doc-wide snapshot diff
+      // against historical references on every existing fixture.
+      // The layout-engine's column-balance gate reads this to distinguish
+      // a body sectPr that defaulted to `nextPage` (Word does not balance,
+      // sd-1655-col-sep-3-equal-columns) from one with
+      // `<w:type w:val="continuous"/>` written out (Word balances,
+      // sd-1480-two-col-tab-positions, even single-page).
+      ...(section.typeIsExplicit ? { typeIsExplicit: true as const } : {}),
       ...extraAttrs,
     },
     ...(section.pageSize && { pageSize: section.pageSize }),
@@ -192,6 +203,16 @@ export function hasIntrinsicBoundarySignals(_: SectionRange): boolean {
 }
 
 /**
+ * Minimal mutable sectionState shape used by section-break emission helpers.
+ * Kept local so callers can pass `NodeHandlerContext['sectionState']` directly.
+ */
+interface SectionStateMutable {
+  ranges: SectionRange[];
+  currentSectionIndex: number;
+  currentParagraphIndex: number;
+}
+
+/**
  * Emit the next section's sectionBreak block if the dispatch loop has reached
  * that section's starting top-level node index.
  *
@@ -201,10 +222,9 @@ export function hasIntrinsicBoundarySignals(_: SectionRange): boolean {
  * such node so the appropriate section config is active by the time the node
  * is laid out.
  *
- * This centralises the check that previously lived (duplicated) inside
- * `handleParagraphNode` and the SDT handlers. Calling it from the main
- * dispatch loop covers every top-level node type — present and future —
- * with no per-handler opt-in.
+ * Calling it from the main dispatch loop covers every top-level node type —
+ * present and future — with no per-handler opt-in. Paragraph-index emission
+ * still handles transitions inside SDT child content.
  */
 export function maybeEmitNextSectionBreakForNode(args: {
   sectionState: {
@@ -228,5 +248,44 @@ export function maybeEmitNextSectionBreakForNode(args: {
     shouldRequirePageBoundary(currentSection, nextSection) || hasIntrinsicBoundarySignals(nextSection);
   const extraAttrs = requiresPageBoundary ? { requirePageBoundary: true } : undefined;
   pushBlock(createSectionBreakBlock(nextSection, nextBlockId, extraAttrs));
+  sectionState.currentSectionIndex++;
+}
+
+/**
+ * Emit a pending section break before a paragraph if the current paragraph
+ * index matches the start of the next section.
+ *
+ * Centralizes the "check, emit, advance" pattern for handlers that process
+ * paragraph children directly, including SDT handlers. This keeps nested
+ * paragraph traversal in sync with `findParagraphsWithSectPr`.
+ *
+ * No-op when:
+ *   - sectionState is undefined or has no ranges
+ *   - currentParagraphIndex doesn't match the next section's startParagraphIndex
+ *
+ * Side effects (when emitted):
+ *   - Pushes a sectionBreak block onto `blocks`
+ *   - Invokes `recordBlockKind`
+ *   - Increments `sectionState.currentSectionIndex`
+ */
+export function emitPendingSectionBreakForParagraph(args: {
+  sectionState: SectionStateMutable | undefined;
+  nextBlockId: BlockIdGenerator;
+  blocks: FlowBlock[];
+  recordBlockKind?: (kind: FlowBlock['kind']) => void;
+}): void {
+  const { sectionState, nextBlockId, blocks, recordBlockKind } = args;
+  if (!sectionState || sectionState.ranges.length === 0) return;
+
+  const nextSection = sectionState.ranges[sectionState.currentSectionIndex + 1];
+  if (!nextSection || sectionState.currentParagraphIndex !== nextSection.startParagraphIndex) return;
+
+  const currentSection = sectionState.ranges[sectionState.currentSectionIndex];
+  const requiresPageBoundary =
+    shouldRequirePageBoundary(currentSection, nextSection) || hasIntrinsicBoundarySignals(nextSection);
+  const extraAttrs = requiresPageBoundary ? { requirePageBoundary: true } : undefined;
+  const sectionBreak = createSectionBreakBlock(nextSection, nextBlockId, extraAttrs);
+  blocks.push(sectionBreak);
+  recordBlockKind?.(sectionBreak.kind);
   sectionState.currentSectionIndex++;
 }

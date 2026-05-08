@@ -53,21 +53,35 @@ async function collectFiles(dir) {
   return files.sort();
 }
 
+function shouldSkipGeneratedArtifact(relPath, { skipPythonToolDispatch = false } = {}) {
+  const normalized = relPath.split(path.sep).join('/');
+  return (
+    normalized === '__init__.py' ||
+    normalized.startsWith('__pycache__/') ||
+    normalized.includes('/__pycache__/') ||
+    normalized.startsWith('prompt-templates/') ||
+    (skipPythonToolDispatch && normalized === 'intent_dispatch_generated.py')
+  );
+}
+
 /**
  * Compare generated artifacts against checked-in versions.
  * Returns an array of mismatched relative paths.
  */
 async function diffGeneratedArtifacts(tempRoot) {
   const drifted = [];
+  const toolsRepoDir = path.join(REPO_ROOT, 'packages/sdk/tools');
 
   // Artifact groups: [tempSubDir, repoSubDir]
   const artifactDirs = [
     [path.join(tempRoot, 'node-generated'), path.join(REPO_ROOT, 'packages/sdk/langs/node/src/generated')],
     [path.join(tempRoot, 'python-generated'), path.join(REPO_ROOT, 'packages/sdk/langs/python/superdoc/generated')],
-    [path.join(tempRoot, 'tools'), path.join(REPO_ROOT, 'packages/sdk/tools')],
+    [path.join(tempRoot, 'tools'), toolsRepoDir],
+    [path.join(tempRoot, 'mcp-generated'), path.join(REPO_ROOT, 'apps/mcp/src/generated')],
   ];
 
   for (const [tempDir, repoDir] of artifactDirs) {
+    const skipPythonToolDispatch = repoDir === toolsRepoDir;
     let tempFiles = [];
     let repoFiles = [];
     try {
@@ -84,7 +98,7 @@ async function diffGeneratedArtifacts(tempRoot) {
     // Forward check: every generated file must match repo
     for (const relPath of tempFiles) {
       // Skip manually maintained files that live alongside generated artifacts
-      if (relPath === '__init__.py' || relPath.split(path.sep).join('/').startsWith('prompt-templates/')) continue;
+      if (shouldSkipGeneratedArtifact(relPath, { skipPythonToolDispatch })) continue;
 
       const tempFile = path.join(tempDir, relPath);
       const repoFile = path.join(repoDir, relPath);
@@ -108,7 +122,7 @@ async function diffGeneratedArtifacts(tempRoot) {
     // Reverse check: repo files absent from generated output are stale
     const tempFileSet = new Set(tempFiles);
     for (const relPath of repoFiles) {
-      if (relPath === '__init__.py' || relPath.split(path.sep).join('/').startsWith('prompt-templates/')) continue;
+      if (shouldSkipGeneratedArtifact(relPath, { skipPythonToolDispatch })) continue;
       if (!tempFileSet.has(relPath)) {
         drifted.push(`${relPath} (stale — no longer generated)`);
       }

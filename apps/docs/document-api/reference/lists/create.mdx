@@ -1,14 +1,14 @@
 ---
 title: lists.create
 sidebarTitle: lists.create
-description: "Create a new list from one or more paragraphs. Supports optional preset or style for new sequences. When sequence.mode is \"continuePrevious\", preset and style are not allowed — the new items inherit formatting from the previous sequence."
+description: "Create a new list from one or more paragraphs. Supports optional preset or style for new sequences. When sequence.mode is \"continuePrevious\", preset and style are not allowed: the new items inherit formatting from the previous sequence."
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
 
 ## Summary
 
-Create a new list from one or more paragraphs. Supports optional preset or style for new sequences. When sequence.mode is "continuePrevious", preset and style are not allowed — the new items inherit formatting from the previous sequence.
+Create a new list from one or more paragraphs. Supports optional preset or style for new sequences. When sequence.mode is "continuePrevious", preset and style are not allowed: the new items inherit formatting from the previous sequence.
 
 - Operation ID: `lists.create`
 - API member path: `editor.doc.lists.create(...)`
@@ -178,7 +178,7 @@ _No fields._
       "type": "integer"
     },
     "mode": {
-      "description": "Required. 'fromParagraphs' converts existing paragraphs into list items — each paragraph becomes one item, so create one paragraph per item first. 'empty' creates a new empty list at 'at'.",
+      "description": "Required. 'fromParagraphs' converts existing paragraphs into list items: each paragraph becomes one item, so create one paragraph per item first. 'empty' creates a new empty list at 'at'.",
       "enum": [
         "empty",
         "fromParagraphs"

@@ -226,6 +226,17 @@ pnpm run format   # Run Prettier
 
 ## Pull Request Process
 
+### Adding a public API
+
+If your PR adds a new public export from `superdoc` (a new `@typedef` in `packages/superdoc/src/index.js`, a new value re-exported from a public subpath, or a new subpath in `package.json` `exports`), it must ship with a type test that exercises the new surface under strict mode.
+
+The consumer matrix at `tests/consumer-typecheck/` is the regression net. Two automated checks enforce this on every PR:
+
+- **`check-public-types.mjs`** -- the assertion list in `tests/consumer-typecheck/src/all-public-types.ts` is auto-derived from the `@typedef` block in `packages/superdoc/src/index.js`. Adding a new typedef without regenerating the list fails CI. Run `npm run check:types:write` from inside `tests/consumer-typecheck/` (or `node tests/consumer-typecheck/check-public-types.mjs --write` from the repo root) and commit the regenerated file.
+- **`typecheck-matrix.mjs`** -- every typed public subpath in the RFC inventory has at least one matrix scenario. If you add a new subpath, add a fixture under `tests/consumer-typecheck/src/` and a corresponding entry in the matrix, and update the inventory in `docs/architecture/package-boundaries.md`.
+
+The point of these gates is to keep customer TypeScript builds working. A new export that ships without a type test can collapse to `any` (or fail to resolve) for consumers without the team noticing.
+
 ### Branch Naming
 
 - `feature/description` for new features
@@ -273,6 +284,7 @@ When you open a PR, the following checks run automatically:
 - [ ] Code is formatted (`pnpm run format:check`)
 - [ ] Commit messages follow conventional commits
 - [ ] PR description links to related issue
+- [ ] If you added a public API, the consumer-typecheck gates pass (see [Adding a public API](#adding-a-public-api))
 
 ## Release Process
 

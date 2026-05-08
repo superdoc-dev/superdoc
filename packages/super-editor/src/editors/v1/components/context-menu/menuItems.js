@@ -4,6 +4,7 @@ import TableActions from '../toolbar/TableActions.vue';
 import LinkInput from '../toolbar/LinkInput.vue';
 import CellBackgroundPicker from './CellBackgroundPicker.vue';
 import { TEXTS, ICONS, TRIGGERS } from './constants.js';
+import { resolveContextMenuCommandEditor } from './utils.js';
 import { isTrackedChangeActionAllowed } from '@extensions/track-changes/permission-helpers.js';
 import { readClipboardRaw } from '../../core/utilities/clipboardUtils.js';
 import { handleClipboardPaste } from '../../core/InputRule.js';
@@ -268,7 +269,6 @@ export function getItems(context, customItems = [], includeDefaultItems = true) 
           action: (editor) => {
             editor.commands.createDocumentSection();
           },
-          // TODO: Temporarily disabled - restore original: `return trigger === TRIGGERS.click;`
           showWhen: () => {
             return false;
           },
@@ -285,6 +285,44 @@ export function getItems(context, customItems = [], includeDefaultItems = true) 
             const { trigger, isInSectionNode } = context;
             return trigger === TRIGGERS.click && isInSectionNode;
           },
+        },
+      ],
+    },
+    {
+      id: 'list-marker',
+      isDefault: true,
+      items: [
+        {
+          id: 'list-restart-numbering',
+          label: TEXTS.listRestartNumbering,
+          icon: ICONS.listRestartNumbering,
+          isDefault: true,
+          action: (editor) => editor.commands.restartNumbering(),
+          showWhen: (context) => context.trigger === TRIGGERS.click && context.isOnListMarker,
+        },
+        {
+          id: 'list-continue-numbering',
+          label: TEXTS.listContinueNumbering,
+          icon: ICONS.listContinueNumbering,
+          isDefault: true,
+          action: (editor) => editor.commands.continueNumbering(),
+          showWhen: (context) => context.trigger === TRIGGERS.click && context.isOnListMarker,
+        },
+        {
+          id: 'list-decrease-indent',
+          label: TEXTS.listDecreaseIndent,
+          icon: ICONS.listDecreaseIndent,
+          isDefault: true,
+          action: (editor) => editor.commands.decreaseListIndent(),
+          showWhen: (context) => context.trigger === TRIGGERS.click && context.isOnListMarker,
+        },
+        {
+          id: 'list-increase-indent',
+          label: TEXTS.listIncreaseIndent,
+          icon: ICONS.listIncreaseIndent,
+          isDefault: true,
+          action: (editor) => editor.commands.increaseListIndent(),
+          showWhen: (context) => context.trigger === TRIGGERS.click && context.isOnListMarker,
         },
       ],
     },
@@ -377,7 +415,8 @@ export function getItems(context, customItems = [], includeDefaultItems = true) 
           icon: ICONS.paste,
           isDefault: true,
           action: async (editor) => {
-            const { view } = editor ?? {};
+            const targetEditor = resolveContextMenuCommandEditor(editor);
+            const { view } = targetEditor ?? {};
             if (!view) return;
             // Save the current selection before focusing. When the context menu
             // is open, its hidden search input holds focus, so the PM editor's
@@ -404,7 +443,7 @@ export function getItems(context, customItems = [], includeDefaultItems = true) 
                 view.dispatch(tr.setSelection(SelectionType.create(doc, safeFrom, safeTo)));
               }
             }
-            const handled = handleClipboardPaste({ editor, view }, html, text);
+            const handled = handleClipboardPaste({ editor: targetEditor, view }, html, text);
             if (!handled) {
               const pasteEvent = createPasteEventShim({ html, text });
 
@@ -418,8 +457,8 @@ export function getItems(context, customItems = [], includeDefaultItems = true) 
                 return;
               }
 
-              if (text && editor.commands?.insertContent) {
-                editor.commands.insertContent(text, { contentType: 'text' });
+              if (text && targetEditor.commands?.insertContent) {
+                targetEditor.commands.insertContent(text, { contentType: 'text' });
               }
             }
           },

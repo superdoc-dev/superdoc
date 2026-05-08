@@ -104,10 +104,22 @@ const HrbrFieldsLayerStub = stubComponent('HrbrFieldsLayer');
 const AiLayerStub = stubComponent('AiLayer');
 const HtmlViewerStub = stubComponent('HtmlViewer');
 
+const createTrackedChangeIndexStub = () => ({
+  subscribe: vi.fn(() => () => {}),
+  getAll: vi.fn(() => []),
+  get: vi.fn(() => []),
+  invalidate: vi.fn(),
+  invalidateAll: vi.fn(),
+  dispose: vi.fn(),
+});
+
+const getTrackedChangeIndexMock = vi.fn(() => createTrackedChangeIndexStub());
+
 // Mock @superdoc/super-editor with stubs and PresentationEditor class
 vi.mock('@superdoc/super-editor', () => ({
   SuperEditor: SuperEditorStub,
   AIWriter: AIWriterStub,
+  getTrackedChangeIndex: getTrackedChangeIndexMock,
   PresentationEditor: class PresentationEditorMock {
     static getInstance(documentId) {
       return mockState.instances.get(documentId);
@@ -254,9 +266,28 @@ const buildCommentsStore = () => ({
   isCommentHighlighted: ref(false),
 });
 
-const mountComponent = async (superdocStub, { surfaceManager = null } = {}) => {
-  superdocStoreStub = buildSuperdocStore();
-  commentsStoreStub = buildCommentsStore();
+const createCommentsStoreWithFloatingGetter = () => {
+  const store = buildCommentsStore();
+  const floatingCommentsState = ref([]);
+
+  delete store.getFloatingComments;
+  Object.defineProperty(store, 'getFloatingComments', {
+    configurable: true,
+    enumerable: true,
+    get() {
+      return floatingCommentsState.value;
+    },
+  });
+
+  return { store, floatingCommentsState };
+};
+
+const mountComponent = async (
+  superdocStub,
+  { surfaceManager = null, superdocStore = null, commentsStore = null } = {},
+) => {
+  superdocStoreStub = superdocStore ?? buildSuperdocStore();
+  commentsStoreStub = commentsStore ?? buildCommentsStore();
   superdocStoreStub.modules.ai = { endpoint: '/ai' };
   commentsStoreStub.documentsWithConverations.value = [{ id: 'doc-1' }];
 
@@ -387,6 +418,8 @@ describe('SuperDoc.vue', () => {
     useSelectionMock.mockClear();
     useAiMock.mockClear();
     useSelectedTextMock.mockClear();
+    getTrackedChangeIndexMock.mockClear();
+    getTrackedChangeIndexMock.mockImplementation(() => createTrackedChangeIndexStub());
     mockState.instances.clear();
 
     // Make RAF synchronous in tests — jsdom has no rendering loop, and
@@ -638,6 +671,96 @@ describe('SuperDoc.vue', () => {
     expect(surfaceManager.open).not.toHaveBeenCalled();
   });
 
+  it('toggles formatting marks from a document-level Ctrl+Shift+8 when focus is inside SuperDoc', async () => {
+    const hiddenEditorDom = document.createElement('div');
+    hiddenEditorDom.className = 'ProseMirror ProseMirror-focused';
+
+    const superdocStub = createSuperdocStub();
+    superdocStub.toggleFormattingMarks = vi.fn();
+    superdocStub.activeEditor = {
+      view: {
+        dom: hiddenEditorDom,
+      },
+    };
+
+    await mountComponent(superdocStub);
+    vi.spyOn(document, 'activeElement', 'get').mockReturnValue(hiddenEditorDom);
+
+    const event = new KeyboardEvent('keydown', {
+      key: '8',
+      code: 'Digit8',
+      ctrlKey: true,
+      shiftKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+
+    document.dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(superdocStub.toggleFormattingMarks).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not toggle formatting marks from the document shortcut when focus is outside SuperDoc', async () => {
+    const superdocStub = createSuperdocStub();
+    superdocStub.toggleFormattingMarks = vi.fn();
+
+    await mountComponent(superdocStub);
+    vi.spyOn(document, 'activeElement', 'get').mockReturnValue(document.body);
+
+    const event = new KeyboardEvent('keydown', {
+      key: '8',
+      code: 'Digit8',
+      ctrlKey: true,
+      shiftKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+
+    document.dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(false);
+    expect(superdocStub.toggleFormattingMarks).not.toHaveBeenCalled();
+  });
+
+  it('toggles formatting marks from the SuperDoc container shortcut handler', async () => {
+    const superdocStub = createSuperdocStub();
+    superdocStub.toggleFormattingMarks = vi.fn();
+
+    const wrapper = await mountComponent(superdocStub);
+    vi.spyOn(document, 'activeElement', 'get').mockReturnValue(wrapper.element);
+
+    const event = {
+      key: '*',
+      code: '',
+      ctrlKey: true,
+      metaKey: false,
+      shiftKey: true,
+      altKey: false,
+      defaultPrevented: false,
+      preventDefault: vi.fn(function () {
+        this.defaultPrevented = true;
+      }),
+      stopPropagation: vi.fn(),
+    };
+
+    wrapper.vm.$.setupState.handleContainerKeydown(event);
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(event.preventDefault).toHaveBeenCalledTimes(1);
+    expect(event.stopPropagation).toHaveBeenCalledTimes(1);
+    expect(superdocStub.toggleFormattingMarks).toHaveBeenCalledTimes(1);
+  });
+
+  it('removes the document shortcut listener on unmount', async () => {
+    const removeEventListenerSpy = vi.spyOn(document, 'removeEventListener');
+
+    const wrapper = await mountComponent(createSuperdocStub());
+    wrapper.unmount();
+
+    expect(removeEventListenerSpy).toHaveBeenCalledWith('keydown', expect.any(Function), true);
+  });
+
   it('forwards configured passwords to SuperEditor options', async () => {
     const superdocStub = createSuperdocStub();
     superdocStub.config.password = 'top-secret';
@@ -742,6 +865,8 @@ describe('SuperDoc.vue', () => {
       documentId: 'doc-1',
       editor: editorMock,
     });
+    expect(commentsStoreStub.syncTrackedChangeComments).not.toHaveBeenCalled();
+    await Promise.resolve();
     expect(commentsStoreStub.syncTrackedChangeComments).toHaveBeenCalledWith({
       superdoc: superdocStub,
       editor: editorMock,
@@ -761,6 +886,8 @@ describe('SuperDoc.vue', () => {
       documentId: 'doc-1',
       editor: editorMock,
     });
+    expect(commentsStoreStub.syncTrackedChangeComments).not.toHaveBeenCalled();
+    await Promise.resolve();
     expect(commentsStoreStub.syncTrackedChangeComments).toHaveBeenCalledWith({
       superdoc: superdocStub,
       editor: editorMock,
@@ -796,6 +923,8 @@ describe('SuperDoc.vue', () => {
       documentId: 'doc-1',
       editor: editorMock,
     });
+    expect(commentsStoreStub.syncTrackedChangeComments).not.toHaveBeenCalled();
+    await Promise.resolve();
     expect(commentsStoreStub.syncTrackedChangeComments).toHaveBeenCalledWith({
       superdoc: superdocStub,
       editor: editorMock,
@@ -833,6 +962,8 @@ describe('SuperDoc.vue', () => {
       documentId: 'doc-1',
       editor: editorMock,
     });
+    expect(commentsStoreStub.syncTrackedChangeComments).not.toHaveBeenCalled();
+    await Promise.resolve();
     expect(commentsStoreStub.syncTrackedChangeComments).toHaveBeenCalledWith({
       superdoc: superdocStub,
       editor: editorMock,
@@ -1285,6 +1416,79 @@ describe('SuperDoc.vue', () => {
     expect(doc.setPresentationEditor).toHaveBeenCalledWith(presentationEditor);
     expect(presentationEditor.setContextMenuDisabled).toHaveBeenCalledWith(true);
     expect(presentationEditor.on).toHaveBeenCalledWith('commentPositions', expect.any(Function));
+    expect(getTrackedChangeIndexMock).toHaveBeenCalledWith(editor);
+  });
+
+  it('resyncs tracked-change comments from non-body tracked-changes-changed events', async () => {
+    const superdocStub = createSuperdocStub();
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+    superdocStoreStub.documents.value[0].setPresentationEditor = vi.fn();
+
+    const listeners = {};
+    const presentationEditor = {
+      setContextMenuDisabled: vi.fn(),
+      on: vi.fn((event, handler) => {
+        listeners[event] = handler;
+      }),
+      getCommentBounds: vi.fn(() => ({})),
+    };
+    const bodyEditor = {
+      options: { documentId: 'doc-1' },
+      on: vi.fn((event, handler) => {
+        listeners[`editor:${event}`] = handler;
+      }),
+    };
+    const sourceEditor = { options: { documentId: 'header-doc' } };
+
+    wrapper.findComponent(SuperEditorStub).vm.$emit('editor-ready', {
+      editor: bodyEditor,
+      presentationEditor,
+    });
+    await nextTick();
+
+    listeners['editor:tracked-changes-changed']?.({ editor: sourceEditor, source: 'story-edit' });
+    expect(commentsStoreStub.syncTrackedChangeComments).toHaveBeenCalledWith({
+      superdoc: superdocStub,
+      editor: sourceEditor,
+    });
+
+    commentsStoreStub.syncTrackedChangeComments.mockClear();
+    listeners['editor:tracked-changes-changed']?.({ editor: sourceEditor, source: 'body-edit' });
+    expect(commentsStoreStub.syncTrackedChangeComments).not.toHaveBeenCalled();
+  });
+
+  it('clears tracked-change positions for non-body tracked-change updates when viewing-mode comments are hidden', async () => {
+    const superdocStub = createSuperdocStub();
+    superdocStub.config.documentMode = 'viewing';
+    const wrapper = await mountComponent(superdocStub);
+    await nextTick();
+    superdocStoreStub.documents.value[0].setPresentationEditor = vi.fn();
+
+    const listeners = {};
+    const presentationEditor = {
+      setContextMenuDisabled: vi.fn(),
+      on: vi.fn((event, handler) => {
+        listeners[event] = handler;
+      }),
+      getCommentBounds: vi.fn(() => ({})),
+    };
+    const bodyEditor = {
+      options: { documentId: 'doc-1' },
+      on: vi.fn((event, handler) => {
+        listeners[`editor:${event}`] = handler;
+      }),
+    };
+
+    wrapper.findComponent(SuperEditorStub).vm.$emit('editor-ready', {
+      editor: bodyEditor,
+      presentationEditor,
+    });
+    await nextTick();
+
+    listeners['editor:tracked-changes-changed']?.({ source: 'story-edit' });
+    expect(commentsStoreStub.clearEditorCommentPositions).toHaveBeenCalled();
+    expect(commentsStoreStub.syncTrackedChangeComments).not.toHaveBeenCalled();
   });
 
   it('forwards header/footer presentation events through the public update callbacks', async () => {
@@ -1541,6 +1745,20 @@ describe('SuperDoc.vue', () => {
     );
 
     await nextTick();
+    superdocStoreStub.isReady.value = true;
+    await nextTick();
+
+    expect(wrapper.vm.showCommentsSidebar).toBe(true);
+    expect(wrapper.find('.floating-comments').exists()).toBe(true);
+  });
+
+  it('shows floating comments when the comments store exposes them through a getter', async () => {
+    const superdocStub = createSuperdocStub();
+    const { store, floatingCommentsState } = createCommentsStoreWithFloatingGetter();
+    const wrapper = await mountComponent(superdocStub, { commentsStore: store });
+    await nextTick();
+
+    floatingCommentsState.value = [{ commentId: 'tracked-1' }];
     superdocStoreStub.isReady.value = true;
     await nextTick();
 

@@ -54,6 +54,13 @@ export const TOOLBAR_FONT_SIZES = [
   { label: '96', key: '96pt', props: { 'data-item': 'btn-fontSize-option' } },
 ];
 
+export const RESPONSIVE_BREAKPOINTS = {
+  sm: 768,
+  md: 1024,
+  lg: 1280,
+  xl: 1410,
+};
+
 export const HEADLESS_ITEM_MAP = {
   undo: 'undo',
   redo: 'redo',
@@ -64,6 +71,7 @@ export const HEADLESS_ITEM_MAP = {
   acceptTrackedChangeBySelection: 'track-changes-accept-selection',
   rejectTrackedChangeOnSelection: 'track-changes-reject-selection',
   ruler: 'ruler',
+  formattingMarks: 'formatting-marks',
   zoom: 'zoom',
   documentMode: 'document-mode',
   link: 'link',

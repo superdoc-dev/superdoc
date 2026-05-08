@@ -31,22 +31,6 @@ const NATIVE_SELECTION_STYLES = `
   background: transparent;
 }
 
-/* Keep native selection visible inside live header/footer editors.
- * Unlike the main document surface, header/footer editing uses a visible
- * ProseMirror host. If we suppress native selection there, users can end up
- * with no obvious selection feedback when the custom overlay is subtle or
- * still syncing to the current drag gesture. */
-.superdoc-layout .superdoc-header-editor-host *::selection,
-.superdoc-layout .superdoc-footer-editor-host *::selection {
-  background: Highlight;
-  color: HighlightText;
-}
-
-.superdoc-layout .superdoc-header-editor-host *::-moz-selection,
-.superdoc-layout .superdoc-footer-editor-host *::-moz-selection {
-  background: Highlight;
-  color: HighlightText;
-}
 `;
 
 let nativeSelectionStylesInjected = false;
@@ -114,6 +98,41 @@ export function ensureEditorFieldAnnotationInteractionStyles(doc: Document | nul
 }
 
 // ---------------------------------------------------------------------------
+// Movable Object Interaction Styles
+// ---------------------------------------------------------------------------
+
+const MOVABLE_OBJECT_INTERACTION_STYLES = `
+/* Editing affordance: allow grab cursors for draggable SDT labels and images */
+.superdoc-layout [data-drag-source-kind] {
+  cursor: grab;
+}
+
+.superdoc-layout [data-drag-source-kind]:active {
+  cursor: grabbing;
+}
+
+/* Keep the active drag source from selecting text while dragging */
+.superdoc-layout .superdoc-structured-content__label,
+.superdoc-layout .superdoc-structured-content-inline__label,
+.superdoc-layout .superdoc-image-fragment[data-drag-source-kind="existingImage"],
+.superdoc-layout .superdoc-inline-image-clip-wrapper[data-drag-source-kind="existingImage"],
+.superdoc-layout .superdoc-inline-image[data-drag-source-kind="existingImage"] {
+  user-select: none;
+}
+`;
+
+let movableObjectInteractionStylesInjected = false;
+
+export function ensureEditorMovableObjectInteractionStyles(doc: Document | null | undefined): void {
+  if (movableObjectInteractionStylesInjected || !doc) return;
+  const styleEl = doc.createElement('style');
+  styleEl.setAttribute('data-superdoc-editor-movable-object-interaction-styles', 'true');
+  styleEl.textContent = MOVABLE_OBJECT_INTERACTION_STYLES;
+  doc.head?.appendChild(styleEl);
+  movableObjectInteractionStylesInjected = true;
+}
+
+// ---------------------------------------------------------------------------
 // Test helpers
 // ---------------------------------------------------------------------------
 
@@ -121,4 +140,5 @@ export function ensureEditorFieldAnnotationInteractionStyles(doc: Document | nul
 export function _resetEditorStyleFlags(): void {
   nativeSelectionStylesInjected = false;
   fieldAnnotationInteractionStylesInjected = false;
+  movableObjectInteractionStylesInjected = false;
 }

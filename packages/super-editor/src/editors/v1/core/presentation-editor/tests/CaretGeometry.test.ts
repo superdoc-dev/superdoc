@@ -434,5 +434,144 @@ describe('CaretGeometry', () => {
       expect(result).not.toBe(null);
       expect(result?.pageIndex).toBe(0);
     });
+
+    it('places caret at right edge for RTL paragraph start boundary', () => {
+      const block: FlowBlock = {
+        kind: 'paragraph',
+        id: 'rtl-para',
+        runs: [{ text: 'אבגדה', fontFamily: 'Arial', fontSize: 14, pmStart: 1, pmEnd: 6 }],
+        attrs: { direction: 'rtl' },
+      };
+      const line: Line = {
+        fromRun: 0,
+        toRun: 0,
+        fromChar: 0,
+        toChar: 5,
+        width: 100,
+        ascent: 12,
+        descent: 4,
+        lineHeight: 16,
+      };
+      const measure = createMockParagraphMeasure([line]);
+      const fragment = createMockParaFragment('rtl-para', 10, 10, 200, 16, 0, 1, 1, 6);
+      const layout = createMockLayout(fragment);
+
+      const deps: ComputeCaretLayoutRectGeometryDeps = {
+        layout,
+        blocks: [block],
+        measures: [measure],
+        painterHost: null,
+        viewportHost: mockDom.viewportHost,
+        visibleHost: mockDom.visibleHost,
+        zoom: 1,
+      };
+
+      const result = computeCaretLayoutRectGeometry(deps, 1, false);
+      expect(result).not.toBe(null);
+      expect(result?.x).toBeCloseTo(210, 3);
+    });
+
+    it('keeps caret on right side for RTL empty paragraph boundary fallback', () => {
+      const block: FlowBlock = {
+        kind: 'paragraph',
+        id: 'rtl-empty',
+        runs: [{ text: '', fontFamily: 'Arial', fontSize: 14, pmStart: 1, pmEnd: 1 }],
+        attrs: { direction: 'rtl' },
+      };
+      const line: Line = {
+        fromRun: 0,
+        toRun: 0,
+        fromChar: 0,
+        toChar: 0,
+        width: 0,
+        ascent: 12,
+        descent: 4,
+        lineHeight: 16,
+      };
+      const measure = createMockParagraphMeasure([line]);
+      const fragment = createMockParaFragment('rtl-empty', 10, 10, 200, 16, 0, 1, 1, 1);
+      const layout = createMockLayout(fragment);
+
+      const deps: ComputeCaretLayoutRectGeometryDeps = {
+        layout,
+        blocks: [block],
+        measures: [measure],
+        painterHost: null,
+        viewportHost: mockDom.viewportHost,
+        visibleHost: mockDom.visibleHost,
+        zoom: 1,
+      };
+
+      const result = computeCaretLayoutRectGeometry(deps, 1, false);
+      expect(result).not.toBe(null);
+      expect(result?.x).toBeCloseTo(210, 3);
+    });
+
+    it('places caret at visual left for RTL line end boundary', () => {
+      const block: FlowBlock = {
+        kind: 'paragraph',
+        id: 'rtl-line-end',
+        runs: [{ text: 'אבגדה', fontFamily: 'Arial', fontSize: 14, pmStart: 1, pmEnd: 6 }],
+        attrs: { direction: 'rtl' },
+      };
+      const line: Line = {
+        fromRun: 0,
+        toRun: 0,
+        fromChar: 0,
+        toChar: 5,
+        width: 100,
+        ascent: 12,
+        descent: 4,
+        lineHeight: 16,
+      };
+      const measure = createMockParagraphMeasure([line]);
+      const fragment = createMockParaFragment('rtl-line-end', 10, 10, 200, 16, 0, 1, 1, 6);
+      const layout = createMockLayout(fragment);
+
+      const deps: ComputeCaretLayoutRectGeometryDeps = {
+        layout,
+        blocks: [block],
+        measures: [measure],
+        painterHost: null,
+        viewportHost: mockDom.viewportHost,
+        visibleHost: mockDom.visibleHost,
+        zoom: 1,
+      };
+
+      const result = computeCaretLayoutRectGeometry(deps, 6, false);
+      expect(result).not.toBe(null);
+      expect(result?.x).toBeCloseTo(110, 3);
+    });
+
+    it('computes decreasing X across mid-line positions for RTL paragraphs without DOM fallback', () => {
+      const block: FlowBlock = {
+        ...createMockParagraphBlock('rtl-midline', 1, 12),
+        attrs: { direction: 'rtl' },
+      };
+      const line = createMockLine(1, 12, 16);
+      const measure = createMockParagraphMeasure([line]);
+      const fragment = createMockParaFragment('rtl-midline', 10, 10, 200, 16, 0, 1, 1, 12);
+      const layout = createMockLayout(fragment);
+
+      const deps: ComputeCaretLayoutRectGeometryDeps = {
+        layout,
+        blocks: [block],
+        measures: [measure],
+        painterHost: null,
+        viewportHost: mockDom.viewportHost,
+        visibleHost: mockDom.visibleHost,
+        zoom: 1,
+      };
+
+      const start = computeCaretLayoutRectGeometry(deps, 1, false);
+      const middle = computeCaretLayoutRectGeometry(deps, 6, false);
+      const end = computeCaretLayoutRectGeometry(deps, 11, false);
+
+      expect(start).not.toBeNull();
+      expect(middle).not.toBeNull();
+      expect(end).not.toBeNull();
+      expect(start!.x).toBeGreaterThan(middle!.x);
+      expect(middle!.x).toBeGreaterThan(end!.x);
+    });
   });
 });

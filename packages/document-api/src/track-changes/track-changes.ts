@@ -1,4 +1,5 @@
 import type { Receipt, TrackChangeInfo, TrackChangesListQuery, TrackChangesListResult } from '../types/index.js';
+import type { StoryLocator } from '../types/story.types.js';
 import type { RevisionGuardOptions } from '../write/write.js';
 import { DocumentApiValidationError } from '../errors.js';
 
@@ -6,14 +7,20 @@ export type TrackChangesListInput = TrackChangesListQuery;
 
 export interface TrackChangesGetInput {
   id: string;
+  /** Story containing the tracked change. Omit for body (backward compatible). */
+  story?: StoryLocator;
 }
 
 export interface TrackChangesAcceptInput {
   id: string;
+  /** Story containing the tracked change. Omit for body (backward compatible). */
+  story?: StoryLocator;
 }
 
 export interface TrackChangesRejectInput {
   id: string;
+  /** Story containing the tracked change. Omit for body (backward compatible). */
+  story?: StoryLocator;
 }
 
 export type TrackChangesAcceptAllInput = Record<string, never>;
@@ -21,12 +28,12 @@ export type TrackChangesAcceptAllInput = Record<string, never>;
 export type TrackChangesRejectAllInput = Record<string, never>;
 
 // ---------------------------------------------------------------------------
-// trackChanges.decide — consolidated accept/reject operation
+// trackChanges.decide: consolidated accept/reject operation
 // ---------------------------------------------------------------------------
 
 export type ReviewDecideInput =
-  | { decision: 'accept'; target: { id: string } }
-  | { decision: 'reject'; target: { id: string } }
+  | { decision: 'accept'; target: { id: string; story?: StoryLocator } }
+  | { decision: 'reject'; target: { id: string; story?: StoryLocator } }
   | { decision: 'accept'; target: { scope: 'all' } }
   | { decision: 'reject'; target: { scope: 'all' } };
 
@@ -84,7 +91,7 @@ export function executeTrackChangesGet(adapter: TrackChangesAdapter, input: Trac
  * Executes the consolidated `trackChanges.decide` operation by routing to the
  * appropriate adapter method based on the discriminated input.
  *
- * Accepting/rejecting changes is a resolution action, not a content mutation —
+ * Accepting/rejecting changes is a resolution action, not a content mutation -
  * changeMode and dryRun are not applicable, so this accepts
  * {@link RevisionGuardOptions} rather than `MutationOptions`.
  */
@@ -93,7 +100,7 @@ export function executeTrackChangesDecide(
   rawInput: ReviewDecideInput,
   options?: RevisionGuardOptions,
 ): Receipt {
-  // Dynamic invoke callers may pass arbitrary values — validate before narrowing.
+  // Dynamic invoke callers may pass arbitrary values: validate before narrowing.
   const raw = rawInput as unknown;
 
   if (typeof raw !== 'object' || raw == null) {
@@ -133,11 +140,13 @@ export function executeTrackChangesDecide(
     }
   }
 
+  const story = (target as { story?: StoryLocator }).story;
+
   if (input.decision === 'accept') {
     if (isAll) return adapter.acceptAll({} as TrackChangesAcceptAllInput, options);
-    return adapter.accept({ id: target.id as string }, options);
+    return adapter.accept({ id: target.id as string, ...(story ? { story } : {}) }, options);
   }
 
   if (isAll) return adapter.rejectAll({} as TrackChangesRejectAllInput, options);
-  return adapter.reject({ id: target.id as string }, options);
+  return adapter.reject({ id: target.id as string, ...(story ? { story } : {}) }, options);
 }

@@ -108,9 +108,27 @@ export function findParagraphsWithSectPr(doc: PMNode): {
       return;
     }
 
-    if (node.type === 'index' || node.type === 'bibliography' || node.type === 'tableOfAuthorities') {
-      // SDT descendants share the outer SDT's nodeIndex — dispatch-level
-      // section transitions fire on the SDT as a whole, not on its children.
+    // Recurse into container node types that wrap body paragraphs. Children
+    // of these nodes are counted as paragraphs for section-range purposes and
+    // their handlers increment `currentParagraphIndex` + call the section-break
+    // emission helper per child.
+    //
+    // SDT descendants share the outer SDT's nodeIndex — dispatch-level
+    // section transitions fire on the SDT as a whole, while child handlers can
+    // still emit paragraph-index transitions within the SDT.
+    //
+    // `documentPartObject` / `tableOfContents` are important for SD-2557:
+    // Word stores the closing sectPr of a TOC section on the trailing empty
+    // paragraph INSIDE the SDT. Without recursion, that sectPr is invisible to
+    // section-range analysis and the nextPage break between TOC and the next
+    // body section is silently dropped.
+    if (
+      node.type === 'index' ||
+      node.type === 'bibliography' ||
+      node.type === 'tableOfAuthorities' ||
+      node.type === 'documentPartObject' ||
+      node.type === 'tableOfContents'
+    ) {
       getNodeChildren(node).forEach((child) => visitNode(child, outerNodeIndex));
     }
   };
@@ -189,6 +207,7 @@ export function buildSectionRangesFromParagraphs(
       orientation: sectionData.orientation ?? null,
       columns: sectionData.columnsPx ?? null,
       type: (sectionData.type as SectionType) ?? DEFAULT_PARAGRAPH_SECTION_TYPE,
+      typeIsExplicit: sectionData.typeIsExplicit ?? false,
       titlePg: sectionData.titlePg ?? false,
       headerRefs: sectionData.headerRefs,
       footerRefs: sectionData.footerRefs,
@@ -297,6 +316,7 @@ export function createFinalSectionFromBodySectPr(
     orientation: bodySectionData.orientation ?? null,
     columns: bodySectionData.columnsPx ?? null,
     type: (bodySectionData.type as SectionType) ?? DEFAULT_BODY_SECTION_TYPE,
+    typeIsExplicit: bodySectionData.typeIsExplicit ?? false,
     titlePg: bodySectionData.titlePg ?? false,
     headerRefs: bodySectionData.headerRefs,
     footerRefs: bodySectionData.footerRefs,
@@ -334,6 +354,7 @@ export function createDefaultFinalSection(
     orientation: null,
     columns: null,
     type: DEFAULT_BODY_SECTION_TYPE,
+    typeIsExplicit: false,
     titlePg: false,
     headerRefs: undefined,
     footerRefs: undefined,

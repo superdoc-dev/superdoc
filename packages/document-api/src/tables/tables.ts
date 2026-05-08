@@ -1,6 +1,7 @@
 import type { MutationOptions } from '../write/write.js';
 import { normalizeMutationOptions } from '../write/write.js';
 import { DocumentApiValidationError } from '../errors.js';
+import { TABLE_COLOR_PATTERN as TABLE_BORDER_COLOR_PATTERN } from './color-formats.js';
 import type {
   TablesApplyStyleInput,
   TablesSetBordersInput,
@@ -52,11 +53,28 @@ function validateTableLocator(input: { target?: unknown; nodeId?: unknown }, ope
   }
 }
 
-function validateRowLocator(input: RowLocatorInput, operationName: string): void {
+/**
+ * Validation options for the row locator.
+ *
+ * `allowAppendShorthand`: when true, a table-level locator (target/nodeId
+ * pointing at a table) with NEITHER `rowIndex` NOR `position` is accepted —
+ * the caller's adapter is expected to compute "below the last row". Used by
+ * `tables.insertRow`. All other row ops require `rowIndex` when targeting a
+ * table; pass this as `false` (the default) for them.
+ */
+interface RowLocatorOptions {
+  allowAppendShorthand?: boolean;
+}
+
+function validateRowLocator(input: RowLocatorInput, operationName: string, options: RowLocatorOptions = {}): void {
   validateTableLocator(input, operationName);
 
+  const hasPosition = (input as { position?: unknown }).position != null;
+  const hasRowIndex = input.rowIndex != null;
+  const isAppendShorthand = !!options.allowAppendShorthand && !hasRowIndex && !hasPosition;
+
   if (input.nodeId != null) {
-    if (input.rowIndex == null) {
+    if (!hasRowIndex && !isAppendShorthand) {
       throw new DocumentApiValidationError(
         'INVALID_TARGET',
         `${operationName}: rowIndex is required when using nodeId for row operations. ` +
@@ -68,14 +86,14 @@ function validateRowLocator(input: RowLocatorInput, operationName: string): void
 
   if (!isObjectRecord(input.target) || input.target.kind !== 'block') return;
 
-  if (input.target.nodeType === 'table' && input.rowIndex == null) {
+  if (input.target.nodeType === 'table' && !hasRowIndex && !isAppendShorthand) {
     throw new DocumentApiValidationError(
       'INVALID_TARGET',
       `${operationName}: rowIndex is required when target is a table.`,
     );
   }
 
-  if (input.target.nodeType === 'tableRow' && input.rowIndex != null) {
+  if (input.target.nodeType === 'tableRow' && hasRowIndex) {
     throw new DocumentApiValidationError(
       'INVALID_TARGET',
       `${operationName}: rowIndex must not be provided when target is a row node. ` +
@@ -202,8 +220,9 @@ export function executeRowLocatorOp<TInput extends RowLocatorInput, TResult>(
   adapter: (input: TInput, options?: MutationOptions) => TResult,
   input: TInput,
   options?: MutationOptions,
+  rowLocatorOptions?: RowLocatorOptions,
 ): TResult {
-  validateRowLocator(input, operationName);
+  validateRowLocator(input, operationName, rowLocatorOptions);
   return adapter(input, normalizeMutationOptions(options));
 }
 
@@ -315,7 +334,8 @@ function validateBorderPatchEdge(
   validateBorderSpec(value, `edges.${edgeName}`, operationName);
 }
 
-const TABLE_BORDER_COLOR_PATTERN = /^([0-9A-Fa-f]{6}|auto)$/u;
+// TABLE_BORDER_COLOR_PATTERN imported above from ./color-formats.js — single
+// source of truth shared with the schema validator in contract/schemas.ts.
 
 const VALID_APPLY_TO_VALUES = new Set([
   'all',

@@ -20,6 +20,7 @@ import { useToolbarItem } from '@components/toolbar/use-toolbar-item';
 import { calculateResolvedParagraphProperties } from '@extensions/paragraph/resolvedPropertiesCache.js';
 import { parseSizeUnit } from '@core/utilities';
 import { findElementBySelector, getParagraphFontFamilyFromProperties } from './helpers/general.js';
+import { markerTextToBulletStyle } from '@helpers/list-numbering-helpers.js';
 
 /**
  * @typedef {function(CommandItem): void} CommandCallback
@@ -133,6 +134,7 @@ import { findElementBySelector, getParagraphFontFamilyFromProperties } from './h
  * @typedef {Object} CommandItem
  * @property {ToolbarItem} item - The toolbar item
  * @property {*} [argument] - The argument to pass to the command
+ * @property {*} [option] - The selected nested option for option-style commands
  */
 
 /**
@@ -387,6 +389,16 @@ export class SuperToolbar extends EventEmitter {
   }
 
   /**
+   * Get the width used for responsive toolbar decisions.
+   * @returns {number} Available width in pixels
+   */
+  getAvailableWidth() {
+    const documentWidth = document.documentElement.clientWidth; // take into account the scrollbar
+    const containerWidth = this.toolbarContainer?.offsetWidth ?? 0;
+    return this.config.responsiveToContainer ? containerWidth : documentWidth;
+  }
+
+  /**
    * Create toolbar items based on configuration
    * @private
    * @param {SuperToolbar} options.superToolbar - The toolbar instance
@@ -397,9 +409,7 @@ export class SuperToolbar extends EventEmitter {
    * @returns {void}
    */
   #makeToolbarItems({ superToolbar, icons, texts, fonts, hideButtons, isDev = false } = {}) {
-    const documentWidth = document.documentElement.clientWidth; // take into account the scrollbar
-    const containerWidth = this.toolbarContainer?.offsetWidth ?? 0;
-    const availableWidth = this.config.responsiveToContainer ? containerWidth : documentWidth;
+    const availableWidth = this.getAvailableWidth();
 
     const { defaultItems, overflowItems } = makeDefaultItems({
       superToolbar,
@@ -622,6 +632,24 @@ export class SuperToolbar extends EventEmitter {
         if (commandState?.value != null) item.activate({ styleId: commandState.value });
         else item.label.value = this.config.texts?.formatText || 'Format text';
       },
+      list: () => {
+        if (commandState?.active) {
+          item.activate();
+          item.selectedValue.value = markerTextToBulletStyle(commandState.value);
+        } else {
+          item.deactivate();
+          item.selectedValue.value = null;
+        }
+      },
+      numberedlist: () => {
+        if (commandState?.active) {
+          item.activate();
+          item.selectedValue.value = commandState.value;
+        } else {
+          item.deactivate();
+          item.selectedValue.value = null;
+        }
+      },
       default: () => {
         if (commandState?.active) item.activate();
         else item.deactivate();
@@ -672,6 +700,9 @@ export class SuperToolbar extends EventEmitter {
 
     if (!this.activeEditor || currentMode === 'viewing') {
       this.#deactivateAll();
+      this.toolbarItems.forEach((item) => {
+        if (item.allowWithoutEditor?.value) this.#applyHeadlessState(item);
+      });
       return;
     }
 
@@ -767,9 +798,10 @@ export class SuperToolbar extends EventEmitter {
       return;
     }
 
-    // If the editor wasn't focused and this is a mark toggle, queue it and keep the button active
-    // until the next selection update (after the user clicks into the editor).
-    if (!wasFocused && isMarkToggle) {
+    // Queue unfocused mark toggles only for body editors.
+    // Header/footer mark toggles execute immediately to avoid waiting for
+    // selectionUpdate and requiring an extra selection change.
+    if (!wasFocused && isMarkToggle && !this.activeEditor?.options?.isHeaderOrFooter) {
       this.pendingMarkCommands.push({ command, argument, item });
       const labelAttr = item?.labelAttr?.value;
       if (labelAttr && argument) {

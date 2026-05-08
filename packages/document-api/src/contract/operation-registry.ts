@@ -96,12 +96,18 @@ import type {
   ListsAttachInput,
   ListsDetachInput,
   ListsDetachResult,
+  ListsDeleteInput,
+  ListsDeleteResult,
   ListsJoinInput,
   ListsJoinResult,
   ListsCanJoinInput,
   ListsCanJoinResult,
   ListsSeparateInput,
   ListsSeparateResult,
+  ListsMergeInput,
+  ListsMergeResult,
+  ListsSplitInput,
+  ListsSplitResult,
   ListsSetLevelInput,
   ListsSetValueInput,
   ListsContinuePreviousInput,
@@ -184,6 +190,7 @@ import type {
 } from '../sections/sections.types.js';
 import type { QueryMatchInput, QueryMatchOutput } from '../types/query-match.types.js';
 import type { ResolveRangeInput, ResolveRangeOutput } from '../ranges/ranges.types.js';
+import type { SelectionCurrentInput, SelectionInfo } from '../selection/selection.js';
 import type {
   CreateImageInput,
   CreateImageResult,
@@ -386,6 +393,7 @@ import type {
   TablesUnmergeCellsInput,
   TablesSplitCellInput,
   TablesSetCellPropertiesInput,
+  TablesSetCellTextInput,
   TablesSortInput,
   TablesSetAltTextInput,
   TablesSetStyleInput,
@@ -403,6 +411,7 @@ import type {
   TablesApplyStyleInput,
   TablesSetBordersInput,
   TablesSetTableOptionsInput,
+  TablesApplyPresetInput,
   TableMutationResult,
   TablesGetInput,
   TablesGetOutput,
@@ -668,11 +677,14 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
   'lists.create': { input: ListsCreateInput; options: MutationOptions; output: ListsCreateResult };
   'lists.attach': { input: ListsAttachInput; options: MutationOptions; output: ListsMutateItemResult };
   'lists.detach': { input: ListsDetachInput; options: MutationOptions; output: ListsDetachResult };
+  'lists.delete': { input: ListsDeleteInput; options: MutationOptions; output: ListsDeleteResult };
   'lists.indent': { input: ListTargetInput; options: MutationOptions; output: ListsMutateItemResult };
   'lists.outdent': { input: ListTargetInput; options: MutationOptions; output: ListsMutateItemResult };
   'lists.join': { input: ListsJoinInput; options: MutationOptions; output: ListsJoinResult };
   'lists.canJoin': { input: ListsCanJoinInput; options: never; output: ListsCanJoinResult };
   'lists.separate': { input: ListsSeparateInput; options: MutationOptions; output: ListsSeparateResult };
+  'lists.merge': { input: ListsMergeInput; options: MutationOptions; output: ListsMergeResult };
+  'lists.split': { input: ListsSplitInput; options: MutationOptions; output: ListsSplitResult };
   'lists.setLevel': { input: ListsSetLevelInput; options: MutationOptions; output: ListsMutateItemResult };
   'lists.setValue': { input: ListsSetValueInput; options: MutationOptions; output: ListsMutateItemResult };
   'lists.continuePrevious': {
@@ -786,7 +798,7 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
     options: MutationOptions;
     output: SectionMutationResult;
   };
-  // Returns DocumentMutationResult (not SectionMutationResult) — document-level setting, not per-section.
+  // Returns DocumentMutationResult (not SectionMutationResult): document-level setting, not per-section.
   'sections.setOddEvenHeadersFooters': {
     input: SectionsSetOddEvenHeadersFootersInput;
     options: MutationOptions;
@@ -846,6 +858,9 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
   // --- ranges.* ---
   'ranges.resolve': { input: ResolveRangeInput; options: never; output: ResolveRangeOutput };
 
+  // --- selection.* ---
+  'selection.current': { input: SelectionCurrentInput | undefined; options: never; output: SelectionInfo };
+
   // --- mutations.* ---
   'mutations.preview': { input: MutationsPreviewInput; options: never; output: MutationsPreviewOutput };
   'mutations.apply': { input: MutationsApplyInput; options: never; output: PlanReceipt };
@@ -896,6 +911,7 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
     options: MutationOptions;
     output: TableMutationResult;
   };
+  'tables.setCellText': { input: TablesSetCellTextInput; options: MutationOptions; output: TableMutationResult };
   'tables.sort': { input: TablesSortInput; options: MutationOptions; output: TableMutationResult };
   'tables.setAltText': { input: TablesSetAltTextInput; options: MutationOptions; output: TableMutationResult };
   'tables.setStyle': { input: TablesSetStyleInput; options: MutationOptions; output: TableMutationResult };
@@ -929,6 +945,7 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
     options: MutationOptions;
     output: TableMutationResult;
   };
+  'tables.applyPreset': { input: TablesApplyPresetInput; options: MutationOptions; output: TableMutationResult };
 
   // --- tables.* reads ---
   'tables.get': { input: TablesGetInput; options: never; output: TablesGetOutput };

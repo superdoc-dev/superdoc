@@ -46,8 +46,7 @@ const OPERATOR_CHARS = new Set([
   '\u220C', // ∈, ∉, ∋, ∌
   '\u2211',
   '\u220F', // ∑, ∏
-  '\u221A',
-  '\u221E', // √, ∞
+  '\u221A', // √ (radical sign — prefix operator)
   '\u2227',
   '\u2228',
   '\u2229',
@@ -65,16 +64,70 @@ const OPERATOR_CHARS = new Set([
   '\u2287', // ⊂, ⊃, ⊆, ⊇
 ]);
 
+type MathAtomTag = 'mi' | 'mo' | 'mn';
+
+function isDigit(ch: string): boolean {
+  return ch >= '0' && ch <= '9';
+}
+
 /**
- * Classify a text string into MathML element type.
- * - All-digit strings → <mn> (number)
- * - Known operators → <mo> (operator)
- * - Everything else → <mi> (identifier)
+ * Length in UTF-16 code units of the code point starting at `text[i]`.
+ * Handles surrogate pairs so astral-plane characters (e.g. mathematical
+ * italic U+1D465) don't get split into two bogus <mi> atoms.
  */
-function classifyMathText(text: string): 'mn' | 'mo' | 'mi' {
-  if (/^\d*\.?\d+$/.test(text)) return 'mn';
-  if (text.length === 1 && OPERATOR_CHARS.has(text)) return 'mo';
-  return 'mi';
+function codePointUnitLength(text: string, i: number): number {
+  const hi = text.charCodeAt(i);
+  if (hi >= 0xd800 && hi <= 0xdbff && i + 1 < text.length) {
+    const lo = text.charCodeAt(i + 1);
+    if (lo >= 0xdc00 && lo <= 0xdfff) return 2;
+  }
+  return 1;
+}
+
+/**
+ * Split a math run's text into MathML atoms, matching Word's OMML2MML.XSL.
+ *
+ * Rules (ECMA-376 §22.1.2.116 example + Annex L.6.1.13):
+ * - Consecutive digits — optionally containing one decimal point between digits —
+ *   group into a single `<mn>`.
+ * - Each recognized operator character becomes its own `<mo>`.
+ * - Every other character becomes its own `<mi>`.
+ *
+ * Example: `"n+1"` → `[<mi>n</mi>, <mo>+</mo>, <mn>1</mn>]`.
+ */
+export function tokenizeMathText(text: string): Array<{ tag: MathAtomTag; content: string }> {
+  const atoms: Array<{ tag: MathAtomTag; content: string }> = [];
+  let i = 0;
+  while (i < text.length) {
+    const step = codePointUnitLength(text, i);
+    const ch = text.slice(i, i + step);
+    if (step === 1 && isDigit(ch)) {
+      let end = i + 1;
+      let sawDot = false;
+      while (end < text.length) {
+        const c = text[end]!;
+        if (isDigit(c)) {
+          end++;
+          continue;
+        }
+        if (c === '.' && !sawDot && end + 1 < text.length && isDigit(text[end + 1]!)) {
+          sawDot = true;
+          end++;
+          continue;
+        }
+        break;
+      }
+      atoms.push({ tag: 'mn', content: text.slice(i, end) });
+      i = end;
+    } else if (step === 1 && OPERATOR_CHARS.has(ch)) {
+      atoms.push({ tag: 'mo', content: ch });
+      i++;
+    } else {
+      atoms.push({ tag: 'mi', content: ch });
+      i += step;
+    }
+  }
+  return atoms;
 }
 
 /** ECMA-376 m:sty → MathML mathvariant (§22.1.2 math run properties). */
@@ -115,47 +168,140 @@ function resolveMathVariant(rPr: OmmlJsonNode | undefined): string | null {
   return null;
 }
 
+function extractText(node: OmmlJsonNode): string {
+  let text = '';
+  for (const child of node.elements ?? []) {
+    if (child.name === 'm:t') {
+      for (const tc of child.elements ?? []) {
+        if (tc.type === 'text' && typeof tc.text === 'string') text += tc.text;
+      }
+    }
+  }
+  return text;
+}
+
 /**
- * Convert an m:r (math run) element to MathML.
+ * Convert an m:r (math run) element to MathML atoms.
  *
  * m:r contains:
  * - m:rPr (math run properties: script, style, normal text flag)
  * - m:t (text content)
  * - Optionally w:rPr (WordprocessingML run properties for formatting)
  *
- * The text is classified as <mi>, <mo>, or <mn> based on content.
+ * The run's text is split per-character into `<mi>` / `<mo>` / `<mn>` atoms
+ * per Word's OMML2MML.XSL. For a single-atom run (common case — a one-letter
+ * variable, single operator, or an all-digit number) the converter returns a
+ * single Element. For a multi-atom run (e.g. "→∞", "x+1") it returns a
+ * DocumentFragment whose children become siblings of the parent mrow.
+ *
+ * @spec ECMA-376 §22.1.2.116 (t) — example shows multi-char mixed runs as the
+ *   normal authored shape; §22.1.2.58 (lit) implies operators are classified
+ *   per-character by default.
  */
 export const convertMathRun: MathObjectConverter = (node, doc) => {
-  const elements = node.elements ?? [];
-
-  // Extract text from m:t children
-  let text = '';
-  for (const child of elements) {
-    if (child.name === 'm:t') {
-      const textChildren = child.elements ?? [];
-      for (const tc of textChildren) {
-        if (tc.type === 'text' && typeof tc.text === 'string') {
-          text += tc.text;
-        }
-      }
-    }
-  }
-
+  const text = extractText(node);
   if (!text) return null;
 
-  const rPr = elements.find((el) => el.name === 'm:rPr');
+  const rPr = (node.elements ?? []).find((el) => el.name === 'm:rPr');
   const variant = resolveMathVariant(rPr);
-  const tag = classifyMathText(text);
+  const atoms = tokenizeMathText(text);
 
-  const el = doc.createElementNS(MATHML_NS, tag);
-  el.textContent = text;
+  const createAtom = (atom: { tag: MathAtomTag; content: string }): Element => {
+    const el = doc.createElementNS(MATHML_NS, atom.tag);
+    el.textContent = atom.content;
+    // Apply m:rPr-derived variant to every atom in the run. Omitted attribute
+    // means "use the MathML default" (italic for single-char <mi>, normal
+    // for multi-char <mi>/<mo>/<mn>).
+    if (variant) el.setAttribute('mathvariant', variant);
+    return el;
+  };
 
-  // Apply mathvariant when the spec properties resolve to one. The default
-  // for single-char <mi> is italic and for multi-char <mi>/<mo>/<mn> is
-  // normal — we only set an attribute when m:rPr explicitly specifies it.
-  if (variant) {
-    el.setAttribute('mathvariant', variant);
-  }
+  if (atoms.length === 1) return createAtom(atoms[0]!);
 
-  return el;
+  const fragment = doc.createDocumentFragment();
+  for (const atom of atoms) fragment.appendChild(createAtom(atom));
+  return fragment;
 };
+
+/**
+ * Tokenize a math run's text for the m:fName context: consecutive non-digit,
+ * non-operator characters stay grouped in one `<mi>` (so "log" in "log_2"
+ * remains a single identifier), while digits still group into `<mn>` and
+ * each operator character is its own `<mo>`.
+ *
+ * Matches Word's OMML2MML.XSL run-internal classification for m:fName
+ * content: `log_2` → `<mi>log</mi><mo>_</mo><mn>2</mn>`.
+ */
+function tokenizeFunctionNameText(text: string): Array<{ tag: MathAtomTag; content: string }> {
+  const atoms: Array<{ tag: MathAtomTag; content: string }> = [];
+  let i = 0;
+  while (i < text.length) {
+    const step = codePointUnitLength(text, i);
+    const ch = text.slice(i, i + step);
+    if (step === 1 && isDigit(ch)) {
+      let end = i + 1;
+      let sawDot = false;
+      while (end < text.length) {
+        const c = text[end]!;
+        if (isDigit(c)) {
+          end++;
+          continue;
+        }
+        if (c === '.' && !sawDot && end + 1 < text.length && isDigit(text[end + 1]!)) {
+          sawDot = true;
+          end++;
+          continue;
+        }
+        break;
+      }
+      atoms.push({ tag: 'mn', content: text.slice(i, end) });
+      i = end;
+    } else if (step === 1 && OPERATOR_CHARS.has(ch)) {
+      atoms.push({ tag: 'mo', content: ch });
+      i++;
+    } else {
+      // Group consecutive non-digit, non-operator code points into one <mi>.
+      let end = i + step;
+      while (end < text.length) {
+        const s = codePointUnitLength(text, end);
+        const c = text.slice(end, end + s);
+        if (s === 1 && (isDigit(c) || OPERATOR_CHARS.has(c))) break;
+        end += s;
+      }
+      atoms.push({ tag: 'mi', content: text.slice(i, end) });
+      i = end;
+    }
+  }
+  return atoms;
+}
+
+/**
+ * Convert an m:r inside m:fName (m:func's function-name slot). Word's
+ * OMML2MML.XSL keeps each letter-sequence whole while still splitting out
+ * digits and operators — so `sin` stays `<mi>sin</mi>`, but `log_2` becomes
+ * `<mi>log</mi><mo>_</mo><mn>2</mn>`.
+ *
+ * Returns a single Element for single-atom runs or a DocumentFragment when
+ * the run emits multiple atoms. Returns null for empty text.
+ */
+export function convertMathRunAsFunctionName(node: OmmlJsonNode, doc: Document): Node | null {
+  const text = extractText(node);
+  if (!text) return null;
+
+  const rPr = (node.elements ?? []).find((el) => el.name === 'm:rPr');
+  const variant = resolveMathVariant(rPr);
+  const atoms = tokenizeFunctionNameText(text);
+
+  const createAtom = (atom: { tag: MathAtomTag; content: string }): Element => {
+    const el = doc.createElementNS(MATHML_NS, atom.tag);
+    el.textContent = atom.content;
+    if (variant) el.setAttribute('mathvariant', variant);
+    return el;
+  };
+
+  if (atoms.length === 1) return createAtom(atoms[0]!);
+
+  const fragment = doc.createDocumentFragment();
+  for (const atom of atoms) fragment.appendChild(createAtom(atom));
+  return fragment;
+}

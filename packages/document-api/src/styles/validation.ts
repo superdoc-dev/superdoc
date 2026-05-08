@@ -1,7 +1,7 @@
 /**
  * Validation functions for `styles.apply` input.
  *
- * Walks the ValueSchema AST recursively — one function handles all depths.
+ * Walks the ValueSchema AST recursively: one function handles all depths.
  * Imports only from registry.ts.
  */
 

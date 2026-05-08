@@ -7,7 +7,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { createDomPainter } from './index.js';
+import { createTestPainter as createDomPainter } from './_test-utils.js';
 import type { FlowBlock, Measure, Layout, DrawingGeometry } from '@superdoc/contracts';
 
 describe('DomPainter vector shape geometry', () => {

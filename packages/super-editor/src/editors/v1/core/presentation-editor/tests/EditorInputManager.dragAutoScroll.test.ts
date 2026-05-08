@@ -132,9 +132,15 @@ describe('EditorInputManager - Drag Auto Scroll', () => {
     };
 
     mockCallbacks = {
-      normalizeClientPoint: vi.fn((clientX: number, clientY: number) => ({ x: clientX, y: clientY })),
+      normalizeClientPoint: vi.fn((clientX: number, clientY: number) => ({
+        x: clientX,
+        y: clientY,
+        pageIndex: 0,
+        pageLocalY: clientY,
+      })),
       updateSelectionVirtualizationPins: vi.fn(),
       scheduleSelectionUpdate: vi.fn(),
+      notifyDragSelectionEnded: vi.fn(),
     };
 
     manager = new EditorInputManager();
@@ -213,6 +219,39 @@ describe('EditorInputManager - Drag Auto Scroll', () => {
     expect(mockEditor.view.dispatch).toHaveBeenCalled();
   });
 
+  it('does not extend selection when pointer movement stays below the drag threshold', () => {
+    startDrag(10, 10);
+    mockEditor.view.dispatch.mockClear();
+    (mockCallbacks.scheduleSelectionUpdate as ReturnType<typeof vi.fn>).mockClear();
+
+    moveDrag(13, 13);
+
+    expect(mockEditor.view.dispatch).not.toHaveBeenCalled();
+    expect(mockCallbacks.scheduleSelectionUpdate).not.toHaveBeenCalled();
+  });
+
+  it('extends selection once Euclidean pointer movement reaches the drag threshold', () => {
+    startDrag(10, 10);
+    mockEditor.view.dispatch.mockClear();
+    (mockCallbacks.scheduleSelectionUpdate as ReturnType<typeof vi.fn>).mockClear();
+
+    moveDrag(13, 14);
+
+    expect(mockEditor.view.dispatch).toHaveBeenCalledTimes(1);
+    expect(mockCallbacks.scheduleSelectionUpdate).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not start edge auto-scroll while pointer movement stays below the drag threshold', () => {
+    startDrag(10, 94);
+    mockEditor.view.dispatch.mockClear();
+
+    moveDrag(10, 96);
+
+    expect(rafCallback).toBeNull();
+    expect(scrollContainer.scrollTop).toBe(0);
+    expect(mockEditor.view.dispatch).not.toHaveBeenCalled();
+  });
+
   it('stops auto-scroll when pointer moves away from edge zone', () => {
     startDrag(10, 10);
     moveDrag(10, 95);
@@ -254,6 +293,8 @@ describe('EditorInputManager - Drag Auto Scroll', () => {
 
     // Auto-scroll should be stopped
     expect(rafCallback).toBeNull();
+    // one post-drag hook so PresentationEditor can scroll selection into view after auto-scroll stops
+    expect(mockCallbacks.notifyDragSelectionEnded).toHaveBeenCalledTimes(1);
   });
 
   it('does not auto-scroll in header/footer mode', () => {
@@ -326,6 +367,43 @@ describe('EditorInputManager - Drag Auto Scroll', () => {
       }
 
       expect(scrollContainer.scrollLeft).toBe(0);
+    });
+  });
+
+  describe('notifyDragSelectionEnded (selection scroll after drag)', () => {
+    it('invokes notifyDragSelectionEnded exactly once when a text drag ends after movement', () => {
+      startDrag(10, 10);
+      moveDrag(40, 25);
+      endDrag(40, 25);
+
+      expect(mockCallbacks.notifyDragSelectionEnded).toHaveBeenCalledTimes(1);
+    });
+
+    it('invokes notifyDragSelectionEnded when pointer goes down and up without move (click-hold-release)', () => {
+      startDrag(10, 10);
+      endDrag(10, 10);
+
+      expect(mockCallbacks.notifyDragSelectionEnded).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not invoke notifyDragSelectionEnded on pointer up if no drag was started', () => {
+      endDrag(10, 10);
+
+      expect(mockCallbacks.notifyDragSelectionEnded).not.toHaveBeenCalled();
+    });
+
+    it('invokes notifyDragSelectionEnded once per completed drag gesture', () => {
+      startDrag(10, 10);
+      moveDrag(20, 15);
+      endDrag(20, 15);
+      expect(mockCallbacks.notifyDragSelectionEnded).toHaveBeenCalledTimes(1);
+
+      (mockCallbacks.notifyDragSelectionEnded as ReturnType<typeof vi.fn>).mockClear();
+
+      startDrag(50, 50);
+      moveDrag(60, 55);
+      endDrag(60, 55);
+      expect(mockCallbacks.notifyDragSelectionEnded).toHaveBeenCalledTimes(1);
     });
   });
 });

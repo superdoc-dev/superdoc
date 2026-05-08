@@ -517,8 +517,10 @@ export interface MeasureData {
   kind: string;
   /** Line measurements for paragraph content */
   lines?: Array<{ lineHeight: number }>;
-  /** Total height for non-paragraph content */
+  /** Total height for non-paragraph content (image, drawing) */
   height?: number;
+  /** Total height for table content (TableMeasure stores this rather than `height`). */
+  totalHeight?: number;
 }
 
 /**
@@ -559,14 +561,27 @@ function getFragmentHeight(fragment: BalancingFragment, measureMap: Map<string, 
     return sum;
   }
 
-  // For non-paragraph content, use explicit height or measure height
+  // For non-paragraph content, prefer the layout-engine-assigned fragment.height,
+  // then fall back to the measure's height field. TableMeasure stores totalHeight
+  // (not `height`), so consult that as the final fallback for table fragments —
+  // otherwise a fragment with height=0 (e.g. a layout that allocated zero height
+  // for a header-less table) silently disappears from balancing math and the
+  // balancer over-packs other blocks into column 0.
   if (fragment.kind === 'image' || fragment.kind === 'drawing' || fragment.kind === 'table') {
-    if (typeof fragment.height === 'number') {
+    if (typeof fragment.height === 'number' && fragment.height > 0) {
       return fragment.height;
     }
     const measure = measureMap.get(fragment.blockId);
-    if (measure && typeof measure.height === 'number') {
-      return measure.height;
+    if (measure) {
+      if (typeof measure.height === 'number' && measure.height > 0) {
+        return measure.height;
+      }
+      if (fragment.kind === 'table' && typeof measure.totalHeight === 'number') {
+        return measure.totalHeight;
+      }
+    }
+    if (typeof fragment.height === 'number') {
+      return fragment.height;
     }
   }
 
@@ -576,187 +591,32 @@ function getFragmentHeight(fragment: BalancingFragment, measureMap: Map<string, 
 /**
  * Return the fragment height that the column balancer should use.
  *
- * This differs from `getFragmentHeight` for one case: an empty sectPr-marker
+ * Differs from `getFragmentHeight` for one case: an empty sectPr-marker
  * paragraph. In OOXML a paragraph that exists solely to carry `<w:sectPr>`
- * has no text content — all measured lines have `width === 0`. Word does
- * NOT render an empty line for such markers, so they take no vertical space
- * in the balanced layout. Treating them as balance-neutral prevents them
- * from pushing their column's cursor down and unbalancing the section's
- * final page against Word's output (ECMA-376 §17.18.77).
+ * is invisible to Word's renderer, so it must take no vertical space in the
+ * balanced layout (ECMA-376 §17.18.77). The pm-adapter stamps these
+ * paragraphs with `attrs.sectPrMarker === true` (paragraph.ts), and the
+ * caller threads the resulting block-id set through here.
  *
- * For every other paragraph, image, drawing, or table this delegates to
- * the standard `getFragmentHeight` so existing behavior is preserved.
+ * Earlier versions of this function tried to detect markers from line
+ * geometry (`line.width === 0`), but a regular blank paragraph also
+ * measures with width 0 and DOES occupy line height — collapsing those to
+ * 0 caused the next paragraph to overlap the blank line. The metadata-based
+ * gate is the only safe signal.
  */
-function getBalancingHeight(fragment: BalancingFragment, measureMap: Map<string, MeasureData>): number {
-  if (fragment.kind === 'para') {
-    const measure = measureMap.get(fragment.blockId) as
-      | (MeasureData & { lines?: Array<{ lineHeight: number; width?: number }> })
-      | undefined;
-    if (measure?.kind === 'paragraph' && Array.isArray(measure.lines) && measure.lines.length > 0) {
-      const fromLine = fragment.fromLine ?? 0;
-      const toLine = fragment.toLine ?? measure.lines.length;
-      // A sectPr-marker paragraph is empty: every measured line has an
-      // EXPLICIT width of 0 (measuring-dom sets width per line). Treat
-      // undefined width as "has content" so synthetic test fixtures and any
-      // other callers that don't set line.width keep their existing height.
-      let allEmpty = true;
-      let sawAnyLine = false;
-      for (let i = fromLine; i < toLine; i++) {
-        const line = measure.lines[i];
-        if (!line) continue;
-        sawAnyLine = true;
-        if (line.width !== 0) {
-          allEmpty = false;
-          break;
-        }
-      }
-      if (sawAnyLine && allEmpty) return 0;
-    }
+function getBalancingHeight(
+  fragment: BalancingFragment,
+  measureMap: Map<string, MeasureData>,
+  sectPrMarkerBlockIds?: Set<string>,
+): number {
+  if (fragment.kind === 'para' && sectPrMarkerBlockIds && sectPrMarkerBlockIds.has(fragment.blockId)) {
+    return 0;
   }
   return getFragmentHeight(fragment, measureMap);
 }
 
-/**
- * Balances column content on a page by redistributing fragments.
- *
- * This function post-processes a page's fragments to achieve balanced column heights,
- * matching Microsoft Word's column balancing behavior. It:
- *
- * 1. Groups fragments into logical rows by Y position
- * 2. Calculates total content height and target height per column
- * 3. Redistributes rows across columns using a greedy algorithm
- * 4. Updates fragment x, y, and width properties in place
- *
- * The algorithm switches to the next column when adding a row would reach or exceed
- * the target height (using >= comparison to match Word's behavior).
- *
- * @param fragments - Page fragments to balance (mutated in place)
- * @param columns - Column configuration with count, gap between columns, and column width
- * @param margins - Page margins (left margin determines column 0 start position)
- * @param topMargin - Top margin where content starts vertically
- * @param measureMap - Map of block IDs to measure data for height calculation
- *
- * @example
- * ```typescript
- * balancePageColumns(
- *   page.fragments,
- *   { count: 2, gap: 48, width: 288 },
- *   { left: 96 },
- *   96,
- *   measureMap
- * );
- * // Fragments are now redistributed: first half at x=96, second half at x=432
- * ```
- */
-export function balancePageColumns(
-  fragments: BalancingFragment[],
-  columns: { count: number; gap: number; width: number },
-  margins: { left: number },
-  topMargin: number,
-  availableHeight: number,
-  measureMap: Map<string, MeasureData>,
-): void {
-  // Skip balancing for single-column layouts or empty pages
-  if (columns.count <= 1 || fragments.length === 0) {
-    return;
-  }
-
-  /**
-   * Calculates the X position for a given column index.
-   * Column 0 starts at the left margin, subsequent columns offset by (width + gap).
-   */
-  const columnX = (columnIndex: number): number => {
-    return margins.left + columnIndex * (columns.width + columns.gap);
-  };
-
-  // Group fragments by Y position into logical rows.
-  // Fragments at the same Y coordinate are part of the same row and move together.
-  const rowMap = new Map<number, FragmentInfo[]>();
-  fragments.forEach((fragment, idx) => {
-    // Round Y to handle floating point precision
-    const y = Math.round(fragment.y);
-    if (!rowMap.has(y)) {
-      rowMap.set(y, []);
-    }
-    const height = getFragmentHeight(fragment, measureMap);
-    rowMap.get(y)!.push({
-      fragment,
-      height,
-      originalIndex: idx,
-    });
-  });
-
-  // Sort rows by Y position (top to bottom)
-  const sortedRows = [...rowMap.entries()].sort((a, b) => a[0] - b[0]);
-
-  // Calculate total content height by summing max height of each row
-  let totalHeight = 0;
-  const contentBlocks: BalancingBlock[] = [];
-  for (const [, rowFragments] of sortedRows) {
-    const maxHeight = Math.max(...rowFragments.map((f) => f.height));
-    totalHeight += maxHeight;
-    contentBlocks.push({
-      blockId: rowFragments[0]?.fragment.blockId ?? `row-${contentBlocks.length}`,
-      measuredHeight: maxHeight,
-      canBreak: false,
-      keepWithNext: false,
-      keepTogether: true,
-    });
-  }
-
-  if (
-    shouldSkipBalancing({
-      columnCount: columns.count,
-      columnWidth: columns.width,
-      columnGap: columns.gap,
-      availableHeight,
-      contentBlocks,
-    })
-  ) {
-    return;
-  }
-
-  // Skip balancing if balanced height per column would be below minimum threshold
-  if (totalHeight / columns.count < DEFAULT_BALANCING_CONFIG.minColumnHeight) {
-    return;
-  }
-
-  // Delegate to the binary-search algorithm to find the minimum section height
-  // where all content fits across N columns. This matches Word's behavior: Word
-  // finds the smallest max-column-height that keeps content within constraints,
-  // rather than greedily splitting at total/N (which can leave col1 barely
-  // populated when one paragraph is much taller than the rest).
-  const result = calculateBalancedColumnHeight(
-    {
-      columnCount: columns.count,
-      columnWidth: columns.width,
-      columnGap: columns.gap,
-      availableHeight,
-      contentBlocks,
-    },
-    DEFAULT_BALANCING_CONFIG,
-  );
-
-  // Apply the assignments to fragments: pack each column top-to-bottom from topMargin,
-  // indexing back into sortedRows via the same ordering used to build contentBlocks.
-  const colCursors = new Array<number>(columns.count).fill(topMargin);
-  for (let i = 0; i < sortedRows.length; i++) {
-    const [, rowFragments] = sortedRows[i];
-    const block = contentBlocks[i];
-    const col = result.columnAssignments.get(block.blockId) ?? 0;
-    const colX = columnX(col);
-    const rowHeight = block.measuredHeight;
-    for (const info of rowFragments) {
-      info.fragment.x = colX;
-      info.fragment.y = colCursors[col];
-      info.fragment.width = columns.width;
-    }
-    colCursors[col] += rowHeight;
-  }
-}
-
 // ============================================================================
-// Section-scoped balancing (wraps balancePageColumns with per-section guards)
+// Section-scoped balancing
 // ============================================================================
 
 /**
@@ -792,6 +652,12 @@ export interface BalanceSectionOnPageArgs {
   availableHeight: number;
   /** Measurement data for fragments (built from measures array). */
   measureMap: Map<string, MeasureData>;
+  /**
+   * Block IDs of paragraphs that exist only to carry `<w:sectPr>` properties.
+   * These contribute zero height to balanced columns — see `getBalancingHeight`.
+   * Optional; when omitted no fragment is treated as a marker.
+   */
+  sectPrMarkerBlockIds?: Set<string>;
 }
 
 /**
@@ -852,11 +718,28 @@ export function balanceSectionOnPage(args: BalanceSectionOnPageArgs): { maxY: nu
   // section; extending to N > 2 would iterate). SD-2646: IT-945 page 2 has a
   // 515px / 28-row table; splitting into ~257px halves lets the balancer
   // assign half to each column.
-  splitDominantTableAtRowBoundary({
+  //
+  // The split takes the cumulative height of fragments preceding the table
+  // (in document order) so the per-column target accounts for content
+  // already destined for column 0. Without this, a 100px paragraph + 300px
+  // table in 2 cols hits target=200, splits the table at row=200 → 100+200
+  // / 100; subtracting the leading 100 gives target=150 → 100+100 / 200.
+  //
+  // The split returns a rollback closure. We invoke it if the post-split
+  // shouldSkipBalancing check still rejects, so the page never carries a
+  // mutated half table when balancing was ultimately skipped.
+  let precedingHeightBeforeTable = 0;
+  for (const f of sectionFragments) {
+    if (f.kind === 'table') break;
+    precedingHeightBeforeTable += getBalancingHeight(f, args.measureMap, args.sectPrMarkerBlockIds);
+  }
+  const splitResult = splitDominantTableAtRowBoundary({
     sectionFragments,
     fragments,
     columnCount,
     measureMap: args.measureMap,
+    sectPrMarkerBlockIds: args.sectPrMarkerBlockIds,
+    precedingHeight: precedingHeightBeforeTable,
   });
 
   // Order fragments in document order: by current column (x → left-to-right),
@@ -878,7 +761,7 @@ export function balanceSectionOnPage(args: BalanceSectionOnPageArgs): { maxY: nu
   // blank line for such markers.
   const contentBlocks: BalancingBlock[] = ordered.map((f, i) => ({
     blockId: `${f.blockId}#${i}`,
-    measuredHeight: getBalancingHeight(f, args.measureMap),
+    measuredHeight: getBalancingHeight(f, args.measureMap, args.sectPrMarkerBlockIds),
     canBreak: false,
     keepWithNext: false,
     keepTogether: true,
@@ -893,6 +776,7 @@ export function balanceSectionOnPage(args: BalanceSectionOnPageArgs): { maxY: nu
       contentBlocks,
     })
   ) {
+    splitResult?.rollback();
     return null;
   }
 
@@ -932,16 +816,19 @@ interface TableMeasureLike {
 }
 
 /**
- * Row-boundary record used by the renderer to draw horizontal dividers.
- * Mirrors the subset of `TableFragmentMetadata['rowBoundaries']` that the
- * split helper needs to read and regenerate.
+ * Row-boundary record matching the contract `TableRowBoundary` shape.
+ *
+ * The DOM renderer serializes these into the compact `{i,y,h,min,r}` keys
+ * for `data-table-boundaries`; storing them in the contract shape here
+ * keeps the layout-engine/contract boundary intact and prevents `undefined`
+ * row-boundary values from reaching the renderer when a table is split.
  */
 interface RowBoundaryLike {
-  i: number;
+  index: number;
   y: number;
-  h: number;
-  min: number;
-  r: number;
+  height: number;
+  minHeight: number;
+  resizable: boolean;
 }
 
 /**
@@ -976,17 +863,42 @@ interface RowBoundaryLike {
  *             full page fragments (mutated in place), column count, and the
  *             measure map.
  */
+/**
+ * Result of attempting a dominant-table split. When `applied` is true the
+ * caller is responsible for invoking `rollback()` if downstream balancing
+ * decides to skip — otherwise the page is left with overlapping table halves
+ * (the original table mutated to a partial range plus the inserted second
+ * half). Returns `null` when the split preconditions (single splittable
+ * table, rowSpan ≥ 2, oversized vs target) aren't met, in which case nothing
+ * was mutated and there is nothing to roll back.
+ */
+type DominantTableSplitResult = {
+  applied: true;
+  rollback: () => void;
+} | null;
+
 function splitDominantTableAtRowBoundary(args: {
   sectionFragments: BalancingFragment[];
   fragments: BalancingFragment[];
   columnCount: number;
   measureMap: Map<string, MeasureData>;
-}): void {
-  const { sectionFragments, fragments, columnCount, measureMap } = args;
-  if (columnCount <= 1) return;
+  sectPrMarkerBlockIds?: Set<string>;
+  /**
+   * Cumulative height of fragments already placed in earlier columns, BEFORE
+   * the dominant table. Subtracted from the per-column target so the split
+   * row produces halves that pack alongside preceding atomic blocks (e.g.
+   * a 100px paragraph + 300px table in 2 cols should split the table at
+   * row=100 → 100+100 vs 100+200, not row=200 → 100+200 vs 100). Defaults
+   * to 0 when caller doesn't track this.
+   */
+  precedingHeight?: number;
+}): DominantTableSplitResult {
+  const { sectionFragments, fragments, columnCount, measureMap, sectPrMarkerBlockIds } = args;
+  const precedingHeight = Math.max(0, args.precedingHeight ?? 0);
+  if (columnCount <= 1) return null;
 
   const tables = sectionFragments.filter((f) => f.kind === 'table');
-  if (tables.length !== 1) return;
+  if (tables.length !== 1) return null;
   const table = tables[0] as BalancingFragment & {
     fromRow?: number;
     toRow?: number;
@@ -998,20 +910,31 @@ function splitDominantTableAtRowBoundary(args: {
   const fromRow = table.fromRow ?? 0;
   const toRow = table.toRow ?? fromRow;
   const rowSpan = toRow - fromRow;
-  if (rowSpan < 2) return;
+  if (rowSpan < 2) return null;
 
   const measure = measureMap.get(table.blockId) as TableMeasureLike | undefined;
-  if (!measure || measure.kind !== 'table' || !Array.isArray(measure.rows)) return;
+  if (!measure || measure.kind !== 'table' || !Array.isArray(measure.rows)) return null;
 
-  const totalSectionHeight = sectionFragments.reduce((sum, f) => sum + getBalancingHeight(f, measureMap), 0);
-  if (totalSectionHeight <= 0) return;
-  const target = totalSectionHeight / columnCount;
+  const totalSectionHeight = sectionFragments.reduce(
+    (sum, f) => sum + getBalancingHeight(f, measureMap, sectPrMarkerBlockIds),
+    0,
+  );
+  if (totalSectionHeight <= 0) return null;
+  // Per-column target. Subtract the height already placed in earlier columns
+  // before this table so the split row produces halves that pack alongside
+  // those preceding atomic blocks. Without this adjustment, e.g. a 100px
+  // paragraph + 300px table in 2 cols hits target=200, splits the table
+  // at row=200 → cols 100+200 vs 100, max=300; subtracting precedingHeight
+  // gives target=150 → splits at row=100 → cols 100+100 vs 200, max=200.
+  // Floor at 1 so the pathological "preceding height already exceeds
+  // target" case still yields a forward-progressing split row search.
+  const target = Math.max(1, totalSectionHeight / columnCount - precedingHeight);
 
-  const tableHeight = getBalancingHeight(table, measureMap);
+  const tableHeight = getBalancingHeight(table, measureMap, sectPrMarkerBlockIds);
   // Small-epsilon guard: if the table alone fits within the target, the
   // atomic balancer already produces a correct assignment — splitting would
   // only introduce visual churn.
-  if (tableHeight <= target + 1) return;
+  if (tableHeight <= target + 1) return null;
 
   // Find the row K in [fromRow + 1, toRow) such that cumulative height from
   // fromRow to K first reaches the target. Guaranteed to succeed because
@@ -1028,7 +951,7 @@ function splitDominantTableAtRowBoundary(args: {
     splitRow = r + 2; // continue; r+2 so if we exit the loop we split before the last row
   }
   // Clamp to valid range (defensive — loop logic above should always hit the break).
-  if (splitRow <= fromRow || splitRow >= toRow) return;
+  if (splitRow <= fromRow || splitRow >= toRow) return null;
 
   const firstHalfRows = measure.rows.slice(fromRow, splitRow);
   const secondHalfRows = measure.rows.slice(splitRow, toRow);
@@ -1038,12 +961,17 @@ function splitDominantTableAtRowBoundary(args: {
   // Regenerate rowBoundaries so the renderer draws horizontal dividers at the
   // right y-offsets inside each half. rowBoundaries are 0-origin within the
   // fragment; we walk the measure's rows for each half and accumulate.
+  // Use the contract `TableRowBoundary` shape ({index, y, height, minHeight,
+  // resizable}). The DOM renderer compresses these into {i,y,h,min,r} for the
+  // serialized data-table-boundaries attribute; emitting the compact shape
+  // here would produce undefined values after the renderer's projection and
+  // break interactive row resize handles for split fragments.
   const makeRowBoundaries = (rows: Array<{ height: number }>, startIndex: number): RowBoundaryLike[] => {
     const out: RowBoundaryLike[] = [];
     let y = 0.5;
     for (let i = 0; i < rows.length; i++) {
       const h = rows[i].height ?? 0;
-      out.push({ i: startIndex + i, y, h, min: h, r: 1 });
+      out.push({ index: startIndex + i, y, height: h, minHeight: h, resizable: true });
       y += h;
     }
     return out;
@@ -1063,6 +991,20 @@ function splitDominantTableAtRowBoundary(args: {
       }
     : undefined;
 
+  // Capture original mutable fields BEFORE applying the split. Required for:
+  //   (a) Rollback: if the caller decides to skip balancing post-split, we
+  //       restore the table fragment to its pre-split state.
+  //   (b) Correctly inheriting `continuesOnNext` on the second half. Reading
+  //       `table.continuesOnNext` AFTER setting `table.continuesOnNext = true`
+  //       always yielded `true`, so the prior `? false : (… ?? false)`
+  //       ternary collapsed to `false` and the second half could never inherit
+  //       the original cross-page continuation. Capturing first preserves the
+  //       original intent: if the source table continued onto a later page,
+  //       the SECOND half is the one that now carries that continuation.
+  const originalToRow = table.toRow;
+  const originalHeight = table.height;
+  const originalContinuesOnNext = table.continuesOnNext ?? false;
+
   // Construct the first half by mutating the original (preserves object
   // identity so `fragments.indexOf(table)` still works below).
   table.toRow = splitRow;
@@ -1076,12 +1018,9 @@ function splitDominantTableAtRowBoundary(args: {
     toRow,
     height: secondHalfHeight,
     continuesFromPrev: true,
-    continuesOnNext: table.continuesOnNext ? false : (table.continuesOnNext ?? false),
+    continuesOnNext: originalContinuesOnNext,
     metadata: secondMetadata ?? table.metadata,
   } as BalancingFragment;
-  // Preserve the original's continuesOnNext intent: if the original fragment
-  // continued onto a later page, the SECOND half now inherits that role.
-  (secondHalf as { continuesOnNext?: boolean }).continuesOnNext = false;
 
   // Insert the second half right after the first in both arrays so the
   // balancer's (x, y) ordering keeps them adjacent in document order.
@@ -1089,4 +1028,18 @@ function splitDominantTableAtRowBoundary(args: {
   if (fragIdx >= 0) fragments.splice(fragIdx + 1, 0, secondHalf);
   const sectIdx = sectionFragments.indexOf(table);
   if (sectIdx >= 0) sectionFragments.splice(sectIdx + 1, 0, secondHalf);
+
+  return {
+    applied: true,
+    rollback: () => {
+      table.toRow = originalToRow;
+      table.height = originalHeight;
+      table.continuesOnNext = originalContinuesOnNext;
+      table.metadata = originalMetadata;
+      const fIdx = fragments.indexOf(secondHalf);
+      if (fIdx >= 0) fragments.splice(fIdx, 1);
+      const sIdx = sectionFragments.indexOf(secondHalf);
+      if (sIdx >= 0) sectionFragments.splice(sIdx, 1);
+    },
+  };
 }

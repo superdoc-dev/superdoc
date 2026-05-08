@@ -77,7 +77,7 @@ function validateAuthorityEntryTarget(target: unknown, operationName: string): a
 }
 
 // ---------------------------------------------------------------------------
-// Execute wrappers — TOA lifecycle
+// Execute wrappers: TOA lifecycle
 // ---------------------------------------------------------------------------
 
 export function executeAuthoritiesList(
@@ -129,7 +129,7 @@ export function executeAuthoritiesRemove(
 }
 
 // ---------------------------------------------------------------------------
-// Execute wrappers — TA entries
+// Execute wrappers: TA entries
 // ---------------------------------------------------------------------------
 
 export function executeAuthorityEntriesList(

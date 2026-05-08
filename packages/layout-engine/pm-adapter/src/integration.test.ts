@@ -11,6 +11,7 @@ import type { PMNode, AdapterOptions } from './index.js';
 import { measureBlock } from '@superdoc/measuring-dom';
 import { layoutDocument } from '@superdoc/layout-engine';
 import { createDomPainter } from '@superdoc/painter-dom';
+import { resolveLayout } from '@superdoc/layout-resolved';
 // Cleaned: remove unused PDF painter import
 import type { Measure, ParaFragment, ParagraphMeasure, TabStop } from '@superdoc/contracts';
 import basicParagraphFixture from './fixtures/basic-paragraph.json';
@@ -19,6 +20,7 @@ import twoColumnFixture from './fixtures/two-column-two-page.json';
 import tabsDecimalFixture from './fixtures/tabs-decimal.json';
 import tabsCenterEndFixture from './fixtures/tabs-center-end.json';
 import paragraphPPrVariationsFixture from './fixtures/paragraph_pPr_variations.json';
+import { twipsToPx } from './utilities.js';
 
 const DEFAULT_CONVERTER_CONTEXT = {
   docx: {},
@@ -292,7 +294,12 @@ describe('PM → FlowBlock → Measure integration', () => {
     const decimalMeasure = expectParagraphMeasure(await measureBlock(blocks[0], 400));
     const controlMeasure = expectParagraphMeasure(await measureBlock(controlBlocks[0], 400));
 
-    expect(decimalMeasure.lines[0].width).toBeLessThanOrEqual(controlMeasure.lines[0].width);
+    const rightAlignedStopTwips = blocks[0].attrs?.tabs?.find((stop) => stop.val === 'end')?.pos;
+    if (typeof rightAlignedStopTwips === 'number') {
+      expect(decimalMeasure.lines[0].width).toBeCloseTo(twipsToPx(rightAlignedStopTwips), 2);
+    }
+    // Decimal-aligned measurement should reserve at least as much width as the control case
+    expect(decimalMeasure.lines[0].width).toBeGreaterThanOrEqual(controlMeasure.lines[0].width);
   });
 
   it('derives default decimal separator from document language when not explicitly set', async () => {
@@ -486,8 +493,9 @@ describe('PM → FlowBlock → Measure integration', () => {
     const mount = document.createElement('div');
     document.body.appendChild(mount);
 
-    const painter = createDomPainter({ blocks, measures });
-    painter.paint(layout, mount);
+    const painter = createDomPainter({});
+    const resolvedLayout = resolveLayout({ layout, flowMode: 'paginated', blocks, measures });
+    painter.paint({ resolvedLayout }, mount);
 
     expect(mount.children.length).toBeGreaterThan(0);
     expect(mount.textContent).toContain('This is a simple paragraph');
@@ -541,8 +549,9 @@ describe('PM → FlowBlock → Measure integration', () => {
     const mount = document.createElement('div');
     document.body.appendChild(mount);
 
-    const painter = createDomPainter({ blocks, measures });
-    painter.paint(layout, mount);
+    const painter = createDomPainter({});
+    const resolvedLayout = resolveLayout({ layout, flowMode: 'paginated', blocks, measures });
+    painter.paint({ resolvedLayout }, mount);
 
     const fragment = mount.querySelector('.superdoc-fragment') as HTMLElement;
     const shadingLayer = fragment.querySelector('.superdoc-paragraph-shading') as HTMLElement;
@@ -753,8 +762,9 @@ describe('page break integration tests', () => {
     const mount = document.createElement('div');
     document.body.appendChild(mount);
 
-    const painter = createDomPainter({ blocks, measures });
-    painter.paint(layout, mount);
+    const painter = createDomPainter({});
+    const resolvedLayout = resolveLayout({ layout, flowMode: 'paginated', blocks, measures });
+    painter.paint({ resolvedLayout }, mount);
 
     // Verify multiple pages were created in DOM
     const pages = mount.querySelectorAll('.superdoc-page');

@@ -145,6 +145,107 @@ function createImageDragEvent(
 }
 
 /**
+ * Creates a mock DragEvent with an internal object payload.
+ */
+function createInternalObjectDragEvent(type: string, payload: Record<string, unknown>): DragEvent {
+  const event = new MouseEvent(type, {
+    bubbles: true,
+    cancelable: true,
+    clientX: 100,
+    clientY: 200,
+  }) as DragEvent;
+
+  Object.defineProperty(event, 'dataTransfer', {
+    value: {
+      types: ['application/x-superdoc-internal-object'],
+      files: { length: 0, item: () => null },
+      getData: vi.fn((mimeType: string) => {
+        if (mimeType === 'application/x-superdoc-internal-object') {
+          return JSON.stringify(payload);
+        }
+        return '';
+      }),
+      setData: vi.fn(),
+      dropEffect: 'none' as DataTransferDropEffect,
+      effectAllowed: 'all' as DataTransferEffectAllowed,
+    },
+    writable: false,
+  });
+
+  return event;
+}
+
+function createInternalObjectDragOverEvent(type: string): DragEvent {
+  const event = new MouseEvent(type, {
+    bubbles: true,
+    cancelable: true,
+    clientX: 100,
+    clientY: 200,
+  }) as DragEvent;
+
+  Object.defineProperty(event, 'dataTransfer', {
+    value: {
+      types: ['application/x-superdoc-internal-object'],
+      files: { length: 0, item: () => null },
+      getData: vi.fn(() => ''),
+      setData: vi.fn(),
+      dropEffect: 'none' as DataTransferDropEffect,
+      effectAllowed: 'all' as DataTransferEffectAllowed,
+    },
+    writable: false,
+  });
+
+  return event;
+}
+
+function createInternalObjectDragStartEvent(): DragEvent {
+  const event = new MouseEvent('dragstart', {
+    bubbles: true,
+    cancelable: true,
+    clientX: 100,
+    clientY: 200,
+  }) as DragEvent;
+
+  Object.defineProperty(event, 'dataTransfer', {
+    value: {
+      types: [],
+      files: { length: 0, item: () => null },
+      getData: vi.fn(() => ''),
+      setData: vi.fn(),
+      setDragImage: vi.fn(),
+      dropEffect: 'none' as DataTransferDropEffect,
+      effectAllowed: 'all' as DataTransferEffectAllowed,
+    },
+    writable: false,
+  });
+
+  return event;
+}
+
+function createInternalObjectDropEventWithEmptyDataTransfer(): DragEvent {
+  const event = new MouseEvent('drop', {
+    bubbles: true,
+    cancelable: true,
+    clientX: 100,
+    clientY: 200,
+  }) as DragEvent;
+
+  Object.defineProperty(event, 'dataTransfer', {
+    value: {
+      types: ['application/x-superdoc-internal-object'],
+      files: { length: 0, item: () => null },
+      getData: vi.fn(() => ''),
+      setData: vi.fn(),
+      dropEffect: 'move' as DataTransferDropEffect,
+      effectAllowed: 'move' as DataTransferEffectAllowed,
+    },
+    writable: false,
+  });
+
+  return event;
+}
+
+/**
  * Creates a mock DragEvent with no recognized payload.
  */
 function createEmptyDragEvent(type: string): DragEvent {
@@ -179,6 +280,12 @@ describe('Payload classification helpers', () => {
     it('returns "fieldAnnotation" for field annotation payloads', () => {
       const event = createFieldAnnotationDragEvent('dragover');
       expect(getDropPayloadKind(event)).toBe('fieldAnnotation');
+    });
+
+    it('returns "internalObject" for internal object dragover payloads even before JSON is readable', () => {
+      const event = createInternalObjectDragOverEvent('dragover');
+
+      expect(getDropPayloadKind(event)).toBe('internalObject');
     });
 
     it('returns "imageFiles" for image file payloads', () => {
@@ -279,7 +386,7 @@ describe('DragDropManager', () => {
     isEditable: boolean;
     options: Record<string, unknown>;
     state: {
-      doc: { content: { size: number }; nodeAt: Mock };
+      doc: { content: { size: number }; nodeAt: Mock; descendants: Mock };
       tr: { setSelection: Mock; setMeta: Mock };
       selection: { from: number; to: number };
     };
@@ -291,6 +398,8 @@ describe('DragDropManager', () => {
   let mockDeps: DragDropDependencies;
   let hitTestMock: Mock;
   let scheduleSelectionUpdateMock: Mock;
+  let showDragDropIndicatorMock: Mock;
+  let clearDragDropIndicatorMock: Mock;
   let insertImageFileMock: Mock;
 
   beforeEach(() => {
@@ -322,7 +431,7 @@ describe('DragDropManager', () => {
       isEditable: true,
       options: {},
       state: {
-        doc: { content: { size: 100 }, nodeAt: vi.fn() },
+        doc: { content: { size: 100 }, nodeAt: vi.fn(), descendants: vi.fn() },
         tr: mockTr,
         selection: { from: 0, to: 0 },
       },
@@ -340,12 +449,16 @@ describe('DragDropManager', () => {
 
     hitTestMock = vi.fn(() => ({ pos: 50 }));
     scheduleSelectionUpdateMock = vi.fn();
+    showDragDropIndicatorMock = vi.fn();
+    clearDragDropIndicatorMock = vi.fn();
     insertImageFileMock = vi.fn().mockResolvedValue('success');
 
     mockDeps = {
       getActiveEditor: vi.fn(() => mockEditor as unknown as ReturnType<DragDropDependencies['getActiveEditor']>),
       hitTest: hitTestMock,
       scheduleSelectionUpdate: scheduleSelectionUpdateMock,
+      showDragDropIndicator: showDragDropIndicatorMock,
+      clearDragDropIndicator: clearDragDropIndicatorMock,
       getViewportHost: vi.fn(() => viewportHost),
       getPainterHost: vi.fn(() => painterHost),
       insertImageFile: insertImageFileMock,
@@ -393,16 +506,17 @@ describe('DragDropManager', () => {
       expect(hitTestMock).toHaveBeenCalledWith(200, 300);
     });
 
-    it('should update selection when RAF fires', () => {
+    it('should update only the drag indicator when RAF fires', () => {
       viewportHost.dispatchEvent(createFieldAnnotationDragEvent('dragover', { clientX: 100, clientY: 200 }));
 
       expect(mockEditor.view.dispatch).not.toHaveBeenCalled();
 
       rafScheduler.flush();
 
-      expect(mockEditor.state.tr.setSelection).toHaveBeenCalled();
-      expect(mockEditor.view.dispatch).toHaveBeenCalled();
-      expect(scheduleSelectionUpdateMock).toHaveBeenCalled();
+      expect(mockEditor.state.tr.setSelection).not.toHaveBeenCalled();
+      expect(mockEditor.view.dispatch).not.toHaveBeenCalled();
+      expect(scheduleSelectionUpdateMock).not.toHaveBeenCalled();
+      expect(showDragDropIndicatorMock).toHaveBeenCalledWith(50);
     });
 
     it('should allow scheduling new RAF after previous one fires', () => {
@@ -446,6 +560,7 @@ describe('DragDropManager', () => {
       rafScheduler.flush();
 
       expect(hitTestMock).toHaveBeenCalledWith(120, 220);
+      expect(showDragDropIndicatorMock).toHaveBeenCalledWith(50);
     });
 
     it('should not schedule RAF when editor is not editable', () => {
@@ -540,7 +655,248 @@ describe('DragDropManager', () => {
       });
 
       expect(mockEditor.view.focus).toHaveBeenCalled();
+      expect(clearDragDropIndicatorMock).toHaveBeenCalled();
       expect(scheduleSelectionUpdateMock).toHaveBeenCalled();
+    });
+  });
+
+  describe('drag indicator cleanup', () => {
+    it('clears the drag indicator on dragleave when leaving the viewport', () => {
+      const event = createFieldAnnotationDragEvent('dragleave');
+      Object.defineProperty(event, 'relatedTarget', {
+        value: null,
+        configurable: true,
+      });
+
+      viewportHost.dispatchEvent(event);
+
+      expect(clearDragDropIndicatorMock).toHaveBeenCalled();
+    });
+
+    it('clears the drag indicator on dragend', () => {
+      const event = new MouseEvent('dragend', {
+        bubbles: true,
+        cancelable: true,
+      }) as DragEvent;
+
+      painterHost.dispatchEvent(event);
+
+      expect(clearDragDropIndicatorMock).toHaveBeenCalled();
+    });
+  });
+
+  // ==========================================================================
+  // Internal Object Drop
+  // ==========================================================================
+
+  describe('internal object drop', () => {
+    it('uses the active drag payload when drop getData is empty', () => {
+      const sourceNode = {
+        type: { name: 'image' },
+        nodeSize: 1,
+      };
+      const tr = mockEditor.state.tr as typeof mockEditor.state.tr & {
+        doc: { content: { size: number }; resolve: Mock };
+        delete: Mock;
+        insert: Mock;
+        mapping: { map: Mock };
+      };
+      tr.doc = {
+        content: { size: 100 },
+        resolve: vi.fn(() => ({
+          parent: {
+            canReplaceWith: vi.fn(() => true),
+          },
+          index: vi.fn(() => 0),
+        })),
+      };
+      tr.delete = vi.fn().mockReturnThis();
+      tr.insert = vi.fn().mockReturnThis();
+      tr.mapping = { map: vi.fn(() => 50) };
+      mockEditor.state.doc.nodeAt.mockImplementation((pos: number) => (pos === 20 ? sourceNode : null));
+
+      const sourceElement = document.createElement('img');
+      sourceElement.dataset.dragSourceKind = 'existingImage';
+      sourceElement.dataset.imageKind = 'inline';
+      sourceElement.dataset.nodeType = 'image';
+      sourceElement.dataset.pmStart = '20';
+      sourceElement.dataset.pmEnd = '21';
+      sourceElement.dataset.displayLabel = 'Picture 1';
+      painterHost.appendChild(sourceElement);
+
+      sourceElement.dispatchEvent(createInternalObjectDragStartEvent());
+      viewportHost.dispatchEvent(createInternalObjectDropEventWithEmptyDataTransfer());
+
+      expect(tr.delete).toHaveBeenCalledWith(20, 21);
+      expect(tr.insert).toHaveBeenCalledWith(50, sourceNode);
+      expect(mockEditor.view.dispatch).toHaveBeenCalledWith(tr);
+      expect(scheduleSelectionUpdateMock).toHaveBeenCalled();
+    });
+
+    it('resolves structured content source nodes by SDT id before moving', () => {
+      const sourceNode = {
+        type: { name: 'structuredContentBlock' },
+        attrs: { id: '1140082372' },
+        nodeSize: 348,
+      };
+      const tr = mockEditor.state.tr as typeof mockEditor.state.tr & {
+        doc: { content: { size: number }; resolve: Mock };
+        delete: Mock;
+        insert: Mock;
+        mapping: { map: Mock };
+      };
+      tr.doc = {
+        content: { size: 1000 },
+        resolve: vi.fn(() => ({
+          parent: {
+            canReplaceWith: vi.fn(() => true),
+          },
+          index: vi.fn(() => 0),
+        })),
+      };
+      tr.delete = vi.fn().mockReturnThis();
+      tr.insert = vi.fn().mockReturnThis();
+      tr.mapping = { map: vi.fn(() => 134) };
+      mockEditor.state.doc.nodeAt.mockImplementation((pos: number) => (pos === 186 ? sourceNode : null));
+      mockEditor.state.doc.descendants.mockImplementation((callback: (node: unknown, pos: number) => boolean) => {
+        callback(sourceNode, 186);
+      });
+
+      const sourceElement = document.createElement('div');
+      sourceElement.dataset.dragSourceKind = 'structuredContent';
+      sourceElement.dataset.sdtId = '1140082372';
+      sourceElement.dataset.pmStart = '187';
+      sourceElement.dataset.pmEnd = '535';
+      sourceElement.dataset.nodeType = 'structuredContentBlock';
+      sourceElement.dataset.lockMode = 'unlocked';
+      sourceElement.dataset.displayLabel = 'Signature';
+      painterHost.appendChild(sourceElement);
+
+      sourceElement.dispatchEvent(createInternalObjectDragStartEvent());
+      viewportHost.dispatchEvent(
+        createInternalObjectDragEvent('drop', {
+          kind: 'structuredContent',
+          nodeType: 'structuredContentBlock',
+          sdtId: '1140082372',
+          label: 'Signature',
+          sourceStart: 187,
+          sourceEnd: 535,
+          lockMode: 'unlocked',
+        }),
+      );
+
+      expect(tr.delete).toHaveBeenCalledWith(186, 534);
+      expect(tr.insert).toHaveBeenCalledWith(134, sourceNode);
+      expect(mockEditor.view.dispatch).toHaveBeenCalledWith(tr);
+      expect(scheduleSelectionUpdateMock).toHaveBeenCalled();
+    });
+  });
+
+  // ==========================================================================
+  // SD-2192 review: hardening for internal-object drops
+  // ==========================================================================
+
+  describe('SD-2192 review: internal object drop hardening', () => {
+    // Today the drop path accepts any well-formed `application/x-superdoc-internal-object`
+    // payload from dataTransfer, even if no local dragstart fired (cross-editor drops, or
+    // a foreign tab dragging onto SuperDoc). With matching positions in the local doc the
+    // foreign payload can drive a delete+insert. The drop should require a local active
+    // payload (or otherwise prove the drag started in this editor instance).
+    it('rejects internal-object drops that did not start in this editor', () => {
+      const sourceNode = {
+        type: { name: 'structuredContentBlock' },
+        attrs: { id: 'foreign-sdt' },
+        nodeSize: 12,
+      };
+      const tr = mockEditor.state.tr as typeof mockEditor.state.tr & {
+        doc: { content: { size: number }; resolve: Mock };
+        delete: Mock;
+        insert: Mock;
+        mapping: { map: Mock };
+      };
+      tr.doc = {
+        content: { size: 1000 },
+        resolve: vi.fn(() => ({ parent: { canReplaceWith: vi.fn(() => true) }, index: vi.fn(() => 0) })),
+      };
+      tr.delete = vi.fn().mockReturnThis();
+      tr.insert = vi.fn().mockReturnThis();
+      tr.mapping = { map: vi.fn(() => 50) };
+      mockEditor.state.doc.nodeAt.mockImplementation((pos: number) => (pos === 100 ? sourceNode : null));
+      mockEditor.state.doc.descendants.mockImplementation((cb: (node: unknown, pos: number) => boolean) => {
+        cb(sourceNode, 100);
+      });
+
+      // No local dragstart fired — straight to drop with foreign payload.
+      viewportHost.dispatchEvent(
+        createInternalObjectDragEvent('drop', {
+          kind: 'structuredContent',
+          nodeType: 'structuredContentBlock',
+          sdtId: 'foreign-sdt',
+          label: 'Foreign',
+          sourceStart: 100,
+          sourceEnd: 112,
+          lockMode: 'unlocked',
+        }),
+      );
+
+      expect(tr.delete).not.toHaveBeenCalled();
+      expect(tr.insert).not.toHaveBeenCalled();
+      expect(mockEditor.view.dispatch).not.toHaveBeenCalled();
+    });
+
+    // Drop path doesn't consult lockMode today, so dragging the label of a locked SDT
+    // (sdtLocked / contentLocked) deletes it from its original position and reinserts.
+    it('rejects internal-object drops when payload lockMode is not unlocked', () => {
+      const sourceNode = {
+        type: { name: 'structuredContentBlock' },
+        attrs: { id: 'locked-sdt' },
+        nodeSize: 12,
+      };
+      const tr = mockEditor.state.tr as typeof mockEditor.state.tr & {
+        doc: { content: { size: number }; resolve: Mock };
+        delete: Mock;
+        insert: Mock;
+        mapping: { map: Mock };
+      };
+      tr.doc = {
+        content: { size: 1000 },
+        resolve: vi.fn(() => ({ parent: { canReplaceWith: vi.fn(() => true) }, index: vi.fn(() => 0) })),
+      };
+      tr.delete = vi.fn().mockReturnThis();
+      tr.insert = vi.fn().mockReturnThis();
+      tr.mapping = { map: vi.fn(() => 50) };
+      mockEditor.state.doc.nodeAt.mockImplementation((pos: number) => (pos === 100 ? sourceNode : null));
+      mockEditor.state.doc.descendants.mockImplementation((cb: (node: unknown, pos: number) => boolean) => {
+        cb(sourceNode, 100);
+      });
+
+      // Simulate local dragstart so #activeInternalObjectPayload is set, then drop with locked payload
+      const sourceElement = document.createElement('div');
+      sourceElement.dataset.dragSourceKind = 'structuredContent';
+      sourceElement.dataset.sdtId = 'locked-sdt';
+      sourceElement.dataset.pmStart = '100';
+      sourceElement.dataset.pmEnd = '112';
+      sourceElement.dataset.nodeType = 'structuredContentBlock';
+      sourceElement.dataset.lockMode = 'sdtLocked';
+      sourceElement.dataset.displayLabel = 'Locked';
+      painterHost.appendChild(sourceElement);
+
+      sourceElement.dispatchEvent(createInternalObjectDragStartEvent());
+      viewportHost.dispatchEvent(
+        createInternalObjectDragEvent('drop', {
+          kind: 'structuredContent',
+          nodeType: 'structuredContentBlock',
+          sdtId: 'locked-sdt',
+          label: 'Locked',
+          sourceStart: 100,
+          sourceEnd: 112,
+          lockMode: 'sdtLocked',
+        }),
+      );
+
+      expect(tr.delete).not.toHaveBeenCalled();
+      expect(tr.insert).not.toHaveBeenCalled();
+      expect(mockEditor.view.dispatch).not.toHaveBeenCalled();
     });
   });
 
@@ -630,6 +986,20 @@ describe('DragDropManager', () => {
       rafScheduler.flush();
 
       expect(hitTestMock).not.toHaveBeenCalled();
+    });
+
+    it('keeps the original editor selection after a cancelled drag preview', () => {
+      mockEditor.state.selection = { from: 12, to: 12 } as unknown as typeof mockEditor.state.selection;
+      hitTestMock.mockReturnValue({ pos: 75 });
+
+      viewportHost.dispatchEvent(createFieldAnnotationDragEvent('dragover'));
+      rafScheduler.flush();
+      painterHost.dispatchEvent(createFieldAnnotationDragEvent('dragend'));
+
+      expect(mockEditor.state.tr.setSelection).not.toHaveBeenCalled();
+      expect(mockEditor.view.dispatch).not.toHaveBeenCalled();
+      expect(mockEditor.state.selection.from).toBe(12);
+      expect(clearDragDropIndicatorMock).toHaveBeenCalled();
     });
 
     it('should cancel pending RAF on dragleave with null relatedTarget', () => {
@@ -813,7 +1183,7 @@ describe('DragDropManager', () => {
       expect(() => rafScheduler.flush()).not.toThrow();
     });
 
-    it('should skip selection update if position unchanged', () => {
+    it('should still compute drag preview when position matches current selection', () => {
       hitTestMock.mockReturnValue({ pos: 50 });
 
       mockEditor.state.selection = { from: 50, to: 50 } as unknown as typeof mockEditor.state.selection;
@@ -822,6 +1192,8 @@ describe('DragDropManager', () => {
       rafScheduler.flush();
 
       expect(hitTestMock).toHaveBeenCalled();
+      expect(showDragDropIndicatorMock).toHaveBeenCalledWith(50);
+      expect(mockEditor.state.tr.setSelection).not.toHaveBeenCalled();
     });
   });
 });

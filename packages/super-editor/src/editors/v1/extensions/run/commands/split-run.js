@@ -32,7 +32,7 @@ function clearHeadingStyleId(attrs) {
 
 /**
  * Splits a run node at the current selection into two paragraphs.
- * @returns {import('@core/commands/types').Command}
+ * @returns {import('../../../core/commands/types/index.js').Command}
  */
 export const splitRunToParagraph = () => (props) => {
   const { state, view, tr, editor } = props;
@@ -274,7 +274,7 @@ function applyStyleMarks(state, tr, editor, paragraphAttrs, tableInfo) {
 
 /**
  * Splits the current run node into two sibling runs at the cursor position.
- * @returns {import('@core/commands/types').Command}
+ * @returns {import('../../../core/commands/types/index.js').Command}
  */
 export const splitRunAtCursor = () => (props) => {
   let { state, dispatch, tr } = props;

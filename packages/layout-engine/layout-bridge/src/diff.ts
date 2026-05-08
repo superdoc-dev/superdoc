@@ -370,7 +370,6 @@ const paragraphAttrsEqual = (a?: ParagraphAttrs, b?: ParagraphAttrs): boolean =>
     a.keepNext !== b.keepNext ||
     a.keepLines !== b.keepLines ||
     a.direction !== b.direction ||
-    a.rtl !== b.rtl ||
     a.floatAlignment !== b.floatAlignment
   ) {
     return false;
@@ -396,6 +395,20 @@ const paragraphBlocksEqual = (a: FlowBlock & { kind: 'paragraph' }, b: FlowBlock
   const aEnabled = resolveTrackedChangesEnabled(a.attrs, true);
   const bEnabled = resolveTrackedChangesEnabled(b.attrs, true);
   if (aEnabled !== bEnabled) return false;
+
+  // Marker text/justification change requires a re-measure even when the
+  // paragraph runs are unchanged (e.g. switching list style from decimal to
+  // alpha changes "10." → "j." — different glyph widths and thus a different
+  // suffix-tab width). `wordLayout` is computed output but its
+  // marker.markerText is the canvas measurement input, so we treat a change
+  // as a dirty signal rather than relying on `paragraphAttrsEqual`'s
+  // wordLayout exclusion.
+  const aMarker = (a.attrs as { wordLayout?: { marker?: { markerText?: string; justification?: string } } } | undefined)
+    ?.wordLayout?.marker;
+  const bMarker = (b.attrs as { wordLayout?: { marker?: { markerText?: string; justification?: string } } } | undefined)
+    ?.wordLayout?.marker;
+  if ((aMarker?.markerText ?? null) !== (bMarker?.markerText ?? null)) return false;
+  if ((aMarker?.justification ?? null) !== (bMarker?.justification ?? null)) return false;
 
   // Check paragraph-level visual attributes (alignment, spacing, indent, borders, etc.)
   if (!paragraphAttrsEqual(a.attrs, b.attrs)) return false;

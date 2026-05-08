@@ -10,6 +10,7 @@ import { resolveParagraphProperties, encodeCSSFromPPr } from '@converter/styles.
 import { twipsToPixels } from '@converter/helpers.js';
 import { calculateTabStyle } from '../tab/helpers/tabDecorations.js';
 import { isList } from '@core/commands/list-helpers';
+import { resolveParagraphProperties as resolveParagraphPropertiesFromStyleEngine } from '@superdoc/style-engine/ooxml';
 
 vi.mock('@core/Attribute.js', () => ({
   Attribute: {
@@ -39,6 +40,10 @@ vi.mock('@core/commands/list-helpers', () => ({
 
 vi.mock('@helpers/index.js', () => ({
   findParentNodeClosestToPos: vi.fn().mockReturnValue(null),
+}));
+
+vi.mock('@superdoc/style-engine/ooxml', () => ({
+  resolveParagraphProperties: vi.fn((_params, inlineProps) => inlineProps || {}),
 }));
 
 const createEditor = () => {
@@ -199,6 +204,82 @@ describe('ParagraphNodeView', () => {
     expect(nodeView.separator.textContent).toBe('\u00A0');
   });
 
+  it('does not throw when listRendering is null', () => {
+    // Regression: #updateListStyles destructured `{ suffix, justification }`
+    // from `this.node.attrs.listRendering` without a null-check, throwing
+    // `TypeError: Cannot destructure property 'suffix' of ... as it is null`
+    // whenever a paragraph node carried `listRendering: null`.
+    isList.mockReturnValue(true);
+    const baseAttrs = createNode().attrs;
+    const { nodeView } = mountNodeView({ attrs: { ...baseAttrs } });
+
+    const nextNode = createNode({
+      attrs: {
+        ...baseAttrs,
+        listRendering: null,
+      },
+    });
+
+    expect(() => nodeView.update(nextNode, [])).not.toThrow();
+  });
+
+  it('does not try to style a text-node separator when switching to null listRendering', () => {
+    // Regression: when transitioning from a 'space'/'nothing' suffix (which
+    // creates a text-node separator) to `listRendering: null`, the null-guarded
+    // path must not fall back to the 'tab' branch, since writing
+    // `this.separator.style.cssText` on a Text node throws.
+    isList.mockReturnValue(true);
+    const spaceAttrs = {
+      ...createNode().attrs,
+      listRendering: { suffix: 'space', justification: 'left', markerText: '1.' },
+    };
+    const { nodeView } = mountNodeView({ attrs: spaceAttrs });
+    // The separator should be a Text node under the 'space' suffix.
+    expect(nodeView.separator?.nodeType).toBe(Node.TEXT_NODE);
+    const textSeparator = nodeView.separator;
+
+    const nullNode = createNode({
+      attrs: { ...spaceAttrs, listRendering: null },
+    });
+
+    expect(() => nodeView.update(nullNode, [])).not.toThrow();
+    // The text-node separator must be left alone (not replaced, not styled).
+    expect(nodeView.separator).toBe(textSeparator);
+  });
+
+  it('does not throw when mounted with listRendering null', () => {
+    // Regression: the null guards in #initList and #updateListStyles must also
+    // cover the constructor path — mounting a paragraph whose listRendering is
+    // already null previously threw before update() ever ran.
+    isList.mockReturnValue(true);
+    const nullAttrs = { ...createNode().attrs, listRendering: null };
+    expect(() => mountNodeView({ attrs: nullAttrs })).not.toThrow();
+  });
+
+  it('recovers marker/separator when listRendering returns from null to tab', () => {
+    // Regression: the null-guarded path leaves the existing marker/separator in
+    // place. When listRendering clears and later returns with a different suffix
+    // (here: space → null → tab), the separator has to swap from a text node
+    // back to a span element — #createSeparator handles this only if the
+    // recovery path actually runs, so exercise it end-to-end.
+    isList.mockReturnValue(true);
+    const spaceAttrs = {
+      ...createNode().attrs,
+      listRendering: { suffix: 'space', justification: 'left', markerText: '1.' },
+    };
+    const { nodeView } = mountNodeView({ attrs: spaceAttrs });
+
+    nodeView.update(createNode({ attrs: { ...spaceAttrs, listRendering: null } }), []);
+
+    const tabNode = createNode({
+      attrs: { ...spaceAttrs, listRendering: { suffix: 'tab', justification: 'left', markerText: '2.' } },
+    });
+    nodeView.update(tabNode, []);
+
+    expect(nodeView.marker?.textContent).toBe('2.');
+    expect(nodeView.separator?.tagName?.toLowerCase()).toBe('span');
+  });
+
   it('uses hanging indent width for right-justified tabs and skips tab helper', () => {
     isList.mockReturnValue(true);
     const attrs = {
@@ -339,6 +420,66 @@ describe('ParagraphNodeView', () => {
 
     const ltrNode = createNode({ attrs: { paragraphProperties: {}, listRendering: {} } });
     nodeView.update(ltrNode, []);
+
+    expect(nodeView.dom.getAttribute('dir')).toBeNull();
+  });
+
+  it('sets dir="rtl" for Pattern 1 paragraphs with run-level RTL only', () => {
+    isList.mockReturnValue(false);
+    resolveParagraphProperties.mockReturnValue({});
+
+    const makeRun = (rtl) => ({
+      type: { name: 'run' },
+      attrs: { runProperties: { rtl } },
+    });
+    const runs = [makeRun(true), makeRun(true)];
+    const fragment = { childCount: runs.length, child: (i) => runs[i] };
+
+    const { nodeView } = mountNodeView({
+      attrs: {
+        paragraphProperties: {},
+        listRendering: {},
+      },
+      content: fragment,
+    });
+
+    expect(nodeView.dom.getAttribute('dir')).toBe('rtl');
+  });
+
+  it('sets dir="rtl" when resolved paragraph properties inherit rightToLeft from styles/docDefaults', () => {
+    isList.mockReturnValue(false);
+    resolveParagraphPropertiesFromStyleEngine.mockReturnValue({
+      rightToLeft: true,
+      styleId: 'Normal',
+    });
+
+    const { nodeView } = mountNodeView({
+      attrs: {
+        paragraphProperties: {
+          styleId: 'Normal',
+        },
+        listRendering: {},
+      },
+    });
+
+    expect(nodeView.dom.getAttribute('dir')).toBe('rtl');
+  });
+
+  it('does not force dir when inherited resolved properties are explicit ltr', () => {
+    isList.mockReturnValue(false);
+    resolveParagraphPropertiesFromStyleEngine.mockReturnValue({
+      rightToLeft: false,
+      styleId: 'Normal',
+    });
+
+    const { nodeView } = mountNodeView({
+      attrs: {
+        paragraphProperties: {
+          styleId: 'Normal',
+        },
+        listRendering: {},
+      },
+    });
 
     expect(nodeView.dom.getAttribute('dir')).toBeNull();
   });

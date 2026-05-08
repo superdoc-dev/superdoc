@@ -1,5 +1,5 @@
 /**
- * `styles.apply` — stylesheet mutation for document-level defaults.
+ * `styles.apply`: stylesheet mutation for document-level defaults.
  *
  * Defines the contract types, validation orchestration, and execution entry point.
  * Engine-agnostic: no ProseMirror, Yjs, or converter imports.

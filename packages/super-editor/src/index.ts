@@ -15,7 +15,28 @@ export type { EditorState, Transaction } from 'prosemirror-state';
 export type { Schema } from 'prosemirror-model';
 
 // Document API types
-export type { ResolveRangeOutput, DocumentApi, DocumentProtectionState } from '@superdoc/document-api';
+export type {
+  ResolveRangeOutput,
+  DocumentApi,
+  DocumentProtectionState,
+  SelectionApi,
+  SelectionInfo,
+  SelectionCurrentInput,
+  ScrollIntoViewInput,
+  ScrollIntoViewOutput,
+  StoryLocator,
+  TextAddress,
+  TextTarget,
+  TextSegment,
+  EntityAddress,
+  BlockNavigationAddress,
+  CommentAddress,
+  TrackedChangeAddress,
+  NavigableAddress,
+  BlocksListResult,
+  BookmarkInfo,
+  BookmarkAddress,
+} from '@superdoc/document-api';
 
 // Selection handle types
 export type { SelectionHandle } from './editors/v1/core/selection-state.js';
@@ -43,6 +64,7 @@ export type {
   FontsResolvedPayload,
   PaginationPayload,
   ListDefinitionsPayload,
+  TrackedChangesChangedPayload,
   ProtectionChangeSource,
   EditorEventMap,
 } from './editors/v1/core/types/EditorEvents.js';
@@ -147,3 +169,25 @@ export type {
   ToolbarTarget,
   ToolbarValueMap,
 } from './headless-toolbar/types.js';
+
+// superdoc/ui public types (browser UI controller)
+export type {
+  CommentsHandle,
+  CommentsSlice,
+  EqualityFn,
+  SelectorFn,
+  SelectionSlice,
+  Subscribable,
+  SuperDocEditorLike,
+  SuperDocLike,
+  SuperDocUI,
+  SuperDocUIOptions,
+  SuperDocUIState,
+  TrackChangesHandle,
+  TrackChangesItem,
+  TrackChangesSlice,
+  ViewportGetRectInput,
+  ViewportHandle,
+  ViewportRect,
+  ViewportRectResult,
+} from './ui/types.js';

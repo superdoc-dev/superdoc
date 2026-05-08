@@ -51,6 +51,7 @@ const {
       getMountedPageIndices: vi.fn(() => []),
       onScroll: vi.fn(),
       setScrollContainer: vi.fn(),
+      setShowFormattingMarks: vi.fn(),
     })),
     mockEditorConverterStore: converterStore,
     mockEditorOverlayManager: vi.fn().mockImplementation(() => ({
@@ -184,6 +185,7 @@ vi.mock('../../header-footer/EditorOverlayManager.js', () => ({
 
 vi.mock('@superdoc/layout-resolved', () => ({
   resolveLayout: vi.fn(() => ({ version: 1, flowMode: 'paginated', pageGap: 0, pages: [] })),
+  resolveHeaderFooterLayout: vi.fn(() => ({ height: 0, pages: [] })),
 }));
 
 describe('PresentationEditor.getElementAtPos', () => {

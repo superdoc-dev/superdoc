@@ -118,6 +118,7 @@ import { translator as w_personalCompose_translator } from './w/personalCompose/
 import { translator as w_personalReply_translator } from './w/personalReply/personalReply-translator.js';
 import { translator as w_position_translator } from './w/position/position-translator.js';
 import { translator as w_pPr_translator } from './w/pPr/pPr-translator.js';
+import { translator as w_pPrChange_translator } from './w/pPrChange/pPrChange-translator.js';
 import { translator as w_pStyle_translator } from './w/pStyle/pStyle-translator.js';
 import { translator as w_permEnd_translator } from './w/perm-end/perm-end-translator.js';
 import { translator as w_permStart_translator } from './w/perm-start/perm-start-translator.js';
@@ -149,6 +150,7 @@ import { translator as w_sz_translator } from './w/sz/sz-translator.js';
 import { translator as w_szCs_translator } from './w/szcs/szcs-translator.js';
 import { translator as w_t_translator } from './w/t/t-translator.js';
 import { translator as w_tab_translator } from './w/tab/tab-translator.js';
+import { translator as w_noBreakHyphen_translator } from './w/noBreakHyphen/no-break-hyphen-translator.js';
 import { translator as w_tabs_translator } from './w/tabs/tabs-translator.js';
 import { translator as w_tbl_translator } from './w/tbl/tbl-translator.js';
 import { translator as w_tblBorders_translator } from './w/tblBorders/tblBorders-translator.js';
@@ -324,6 +326,7 @@ const translatorList = Array.from(
     w_personalReply_translator,
     w_position_translator,
     w_pPr_translator,
+    w_pPrChange_translator,
     w_pStyle_translator,
     w_permStart_translator,
     w_permEnd_translator,
@@ -356,6 +359,7 @@ const translatorList = Array.from(
     w_szCs_translator,
     w_t_translator,
     w_tab_translator,
+    w_noBreakHyphen_translator,
     w_tabs_translator,
     w_tbl_translator,
     w_tblBorders_translator,

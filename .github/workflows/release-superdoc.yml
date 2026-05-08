@@ -1,6 +1,6 @@
-# Auto-releases on push to:
-# - main (@next channel)
-# - stable (@latest channel)
+# Auto-releases on push to main (@next) and stable (@latest).
+# docs-stable is advanced by promote-stable-docs.yml when this workflow
+# completes a real release on stable (not a no-op or PR preview).
 # Manual PR preview: dispatch with pr_number to publish @pr-<number>
 name: 📦 Release superdoc
 
@@ -13,9 +13,9 @@ on:
       - 'packages/superdoc/**'
       - 'packages/layout-engine/**'
       - 'packages/super-editor/**'
-      - 'packages/ai/**'
       - 'packages/word-layout/**'
       - 'packages/preset-geometry/**'
+      - 'shared/**'
       - 'pnpm-workspace.yaml'
       - '!**/*.md'
   workflow_dispatch:
@@ -31,7 +31,10 @@ permissions:
   pull-requests: write
 
 concurrency:
-  group: ${{ github.ref_name == 'stable' && 'release-stable-writeback' || format('{0}-{1}', github.workflow, github.ref) }}
+  # Stable releases share the `release-stable` group so @semantic-release/git
+  # pushes to `stable` serialize across workflows; per-workflow groups would
+  # let releases race on `git push origin stable`.
+  group: ${{ github.ref_name == 'stable' && 'release-stable' || format('{0}-{1}', github.workflow, github.ref) }}
   cancel-in-progress: ${{ github.ref_name != 'stable' }}
 
 jobs:

@@ -1,12 +1,12 @@
 /**
- * Types for the `ranges.resolve` operation — deterministic range construction
+ * Types for the `ranges.resolve` operation: deterministic range construction
  * from explicit document anchors.
  *
  * This is a read-only composition layer that resolves two anchor endpoints
  * into a contiguous `SelectionTarget` + mutation-ready `ref`.
  */
 
-import type { SelectionTarget, SelectionPoint } from '../types/address.js';
+import type { SelectionTarget, SelectionPoint, TextAddress, TextTarget, EntityAddress } from '../types/address.js';
 import type { BlockNodeType } from '../types/base.js';
 import type { StoryLocator } from '../types/story.types.js';
 
@@ -34,7 +34,7 @@ export type RefBoundaryAnchor = {
 };
 
 /**
- * A range endpoint — one of three deterministic anchor forms.
+ * A range endpoint: one of three deterministic anchor forms.
  *
  * - `document`: absolute document boundary (start/end of body)
  * - `point`: explicit `SelectionPoint` (text offset or node edge)
@@ -92,10 +92,10 @@ export interface ResolveRangeOutput {
     /**
      * Whether the ref faithfully covers the exact same range as the target.
      *
-     * `true` — the ref encodes the full range; using it for delete/replace/format
+     * `true`: the ref encodes the full range; using it for delete/replace/format
      * produces the same result as operating directly on the target.
      *
-     * `false` — the range spans structural block boundaries (e.g. table, image)
+     * `false`: the range spans structural block boundaries (e.g. table, image)
      * that the text-based ref format cannot capture. The ref covers only the text
      * content within the range, or is `null` if no text content exists.
      */
@@ -119,4 +119,38 @@ export interface ResolveRangeOutput {
  */
 export interface RangeResolverAdapter {
   resolve(input: ResolveRangeInput): ResolveRangeOutput;
+}
+
+// ---------------------------------------------------------------------------
+// scrollIntoView: input/output value types
+// ---------------------------------------------------------------------------
+
+/**
+ * Input for `ui.viewport.scrollIntoView`: scrolls the editor
+ * viewport so the given target is visible. Handles paginated,
+ * virtualized layouts by mounting the target page if it isn't yet in
+ * the DOM.
+ */
+export interface ScrollIntoViewInput {
+  /**
+   * The target to scroll to. Accepts:
+   * - {@link TextAddress}: single-block text range
+   * - {@link TextTarget}: multi-segment text target
+   * - {@link EntityAddress}: reference to a comment or tracked change by id
+   *   (e.g. `{ kind: 'entity', entityType: 'trackedChange', entityId: 'tc_123' }`)
+   */
+  target: TextAddress | TextTarget | EntityAddress;
+  /** Alignment within the viewport. Defaults to `'center'`. */
+  block?: 'start' | 'center' | 'end' | 'nearest';
+  /** Scroll behavior. Defaults to `'smooth'`. */
+  behavior?: 'auto' | 'smooth';
+}
+
+/**
+ * Result of `ui.viewport.scrollIntoView`. `success: false` when the
+ * target couldn't be resolved or a page failed to mount within the
+ * navigation timeout.
+ */
+export interface ScrollIntoViewOutput {
+  success: boolean;
 }

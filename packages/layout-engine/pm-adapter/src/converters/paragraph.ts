@@ -16,7 +16,9 @@ import type {
   SdtMetadata,
   DrawingBlock,
   TrackedChangeMeta,
+  SourceAnchor,
 } from '@superdoc/contracts';
+import { expandRunsForInlineNewlines } from '@superdoc/contracts';
 import type {
   PMNode,
   PMMark,
@@ -49,7 +51,9 @@ import { structuredContentNodeToBlocks } from './inline-converters/structured-co
 import { pageReferenceNodeToBlock } from './inline-converters/page-reference.js';
 import { fieldAnnotationNodeToRun } from './inline-converters/field-annotation.js';
 import { bookmarkStartNodeToBlocks } from './inline-converters/bookmark-start.js';
+import { bookmarkEndNodeToRun } from './inline-converters/bookmark-end.js';
 import { tabNodeToRun } from './inline-converters/tab.js';
+import { noBreakHyphenNodeToRun } from './inline-converters/no-break-hyphen.js';
 import { tokenNodeToRun } from './inline-converters/generic-token.js';
 import { imageNodeToRun } from './inline-converters/image.js';
 import { crossReferenceNodeToRun } from './inline-converters/cross-reference.js';
@@ -73,6 +77,24 @@ import {
 import { chartNodeToDrawingBlock } from './chart.js';
 import { tableNodeToBlock } from './table.js';
 
+function resolveSectionDirectionFromSectPr(sectPr: unknown): 'ltr' | 'rtl' | undefined {
+  if (!sectPr || typeof sectPr !== 'object') return undefined;
+  const elements = (sectPr as { elements?: Array<{ name?: string; attributes?: Record<string, unknown> }> }).elements;
+  if (!Array.isArray(elements)) return undefined;
+  const bidi = elements.find((element) => element?.name === 'w:bidi');
+  if (!bidi) return undefined;
+  const val = bidi.attributes?.['w:val'] ?? bidi.attributes?.val;
+  if (val === '0' || val === 0 || val === false || val === 'false' || val === 'off') return 'ltr';
+  return 'rtl';
+}
+
+function sourceAnchorFromNode(node: PMNode): SourceAnchor | undefined {
+  const sourceAnchor = (node.attrs as Record<string, unknown> | undefined)?.sourceAnchor;
+  return sourceAnchor && typeof sourceAnchor === 'object' && !Array.isArray(sourceAnchor)
+    ? (sourceAnchor as SourceAnchor)
+    : undefined;
+}
+
 // ============================================================================
 // Helper functions for inline image detection and conversion
 // ============================================================================
@@ -89,7 +111,7 @@ const isHiddenShape = (node: PMNode): boolean => {
 /**
  * Helper to check if a run is a text run.
  */
-const isTextRun = (run: Run): run is TextRun => {
+export const isTextRun = (run: Run): run is TextRun => {
   const kind = (run as { kind?: string }).kind;
   return (kind === undefined || kind === 'text') && 'text' in run;
 };
@@ -249,7 +271,10 @@ const toTrackChangeAttrs = (value: unknown): Record<string, unknown> | undefined
 
 // Paragraph-mark revisions are stored in paragraphProperties.runProperties (pPr/rPr), not inline text marks.
 // Convert them into mark-like metadata so tracked-change filtering can reuse the same projection pipeline.
-const getParagraphMarkTrackedChange = (paragraphProperties: ParagraphProperties): TrackedChangeMeta | undefined => {
+const getParagraphMarkTrackedChange = (
+  paragraphProperties: ParagraphProperties,
+  storyKey?: string,
+): TrackedChangeMeta | undefined => {
   const runProperties =
     paragraphProperties?.runProperties && typeof paragraphProperties.runProperties === 'object'
       ? (paragraphProperties.runProperties as Record<string, unknown>)
@@ -271,7 +296,7 @@ const getParagraphMarkTrackedChange = (paragraphProperties: ParagraphProperties)
   if (trackDeleteAttrs) {
     marks.push({ type: 'trackDelete', attrs: trackDeleteAttrs });
   }
-  return collectTrackedChangeFromMarks(marks);
+  return collectTrackedChangeFromMarks(marks, storyKey);
 };
 
 const isEmptyTextRun = (run: Run): boolean => {
@@ -509,6 +534,7 @@ export function paragraphToFlowBlocks({
   para,
   nextBlockId,
   positions,
+  storyKey,
   trackedChangesConfig,
   bookmarks,
   hyperlinkConfig = DEFAULT_HYPERLINK_CONFIG,
@@ -541,6 +567,7 @@ export function paragraphToFlowBlocks({
 
   const blocks: FlowBlock[] = [];
   const paraAttrs = (para.attrs ?? {}) as Record<string, unknown>;
+  const sourceAnchor = sourceAnchorFromNode(para);
   const rawParagraphProps =
     typeof paraAttrs.paragraphProperties === 'object' && paraAttrs.paragraphProperties !== null
       ? (paraAttrs.paragraphProperties as Record<string, unknown>)
@@ -572,7 +599,7 @@ export function paragraphToFlowBlocks({
     if (paragraphProps.runProperties?.vanish) {
       return blocks;
     }
-    const paragraphMarkTrackedChange = getParagraphMarkTrackedChange(paragraphProps);
+    const paragraphMarkTrackedChange = getParagraphMarkTrackedChange(paragraphProps, storyKey);
     // Get the PM position of the empty paragraph for caret rendering
     const paraPos = positions.get(para);
     const emptyRun: TextRun = {
@@ -602,6 +629,7 @@ export function paragraphToFlowBlocks({
       id: baseBlockId,
       runs: [emptyRun],
       attrs: emptyParagraphAttrs,
+      sourceAnchor,
     });
     if (!trackedChangesConfig) {
       return blocks;
@@ -619,6 +647,7 @@ export function paragraphToFlowBlocks({
       applyMarksToRun,
       themeColors,
       enableComments,
+      storyKey,
     );
 
     // Ghost list artifact suppression only applies in markup/review modes.
@@ -704,6 +733,7 @@ export function paragraphToFlowBlocks({
       id: nextId(),
       runs,
       attrs: deepClone(paragraphAttrs),
+      sourceAnchor,
     });
     partIndex += 1;
   };
@@ -726,6 +756,7 @@ export function paragraphToFlowBlocks({
     const inlineConverterParams = {
       node: node,
       positions,
+      storyKey,
       defaultFont,
       defaultSize,
       inheritedMarks: inheritedMarks ?? [],
@@ -748,6 +779,7 @@ export function paragraphToFlowBlocks({
       nextBlockId: stableNextBlockId,
       nextId,
       positions,
+      storyKey,
       trackedChangesConfig,
       defaultFont,
       defaultSize,
@@ -833,6 +865,7 @@ export function paragraphToFlowBlocks({
         },
       ],
       attrs: deepClone(paragraphAttrs),
+      sourceAnchor,
     });
   }
 
@@ -842,6 +875,21 @@ export function paragraphToFlowBlocks({
     if (block.kind === 'paragraph' && block.runs.length > 1) {
       block.runs = mergeAdjacentRuns(block.runs);
       // Silent optimization: no console noise in tests/production
+    }
+  });
+
+  // Expand text runs containing inline '\n' into separate text + break runs.
+  // The measurer does the same expansion locally and emits fromRun/toRun indices
+  // relative to the expanded array. By expanding here, all downstream consumers
+  // (measurer, renderer, computeLinePmRange, selectionToRects) see consistent indices.
+  blocks.forEach((block) => {
+    if (
+      block.kind === 'paragraph' &&
+      block.runs.some(
+        (r) => 'text' in r && typeof (r as TextRun).text === 'string' && (r as TextRun).text.includes('\n'),
+      )
+    ) {
+      block.runs = expandRunsForInlineNewlines(block.runs);
     }
   });
 
@@ -862,6 +910,7 @@ export function paragraphToFlowBlocks({
       applyMarksToRun,
       themeColors,
       enableComments,
+      storyKey,
     );
     if (trackedChangesConfig.enabled && filteredRuns.length === 0) {
       return;
@@ -927,8 +976,14 @@ const INLINE_CONVERTERS_REGISTRY: Record<string, InlineConverterSpec> = {
   bookmarkStart: {
     inlineConverter: bookmarkStartNodeToBlocks,
   },
+  bookmarkEnd: {
+    inlineConverter: bookmarkEndNodeToRun,
+  },
   tab: {
     inlineConverter: tabNodeToRun,
+  },
+  noBreakHyphen: {
+    inlineConverter: noBreakHyphenNodeToRun,
   },
   image: {
     inlineConverter: imageNodeToRun,
@@ -1041,6 +1096,7 @@ export function handleParagraphNode(node: PMNode, context: NodeHandlerContext): 
       blocks.push(sectionBreak);
       recordBlockKind?.(sectionBreak.kind);
       sectionState!.currentSectionIndex++;
+      converterContext.sectionDirection = resolveSectionDirectionFromSectPr(nextSection.sectPr);
     }
   }
 
@@ -1082,6 +1138,7 @@ export function handleParagraphNode(node: PMNode, context: NodeHandlerContext): 
       para: node,
       nextBlockId,
       positions,
+      storyKey: context.storyKey,
       trackedChangesConfig,
       bookmarks,
       hyperlinkConfig,
@@ -1110,6 +1167,7 @@ export function handleParagraphNode(node: PMNode, context: NodeHandlerContext): 
     para: node,
     nextBlockId,
     positions,
+    storyKey: context.storyKey,
     trackedChangesConfig,
     bookmarks,
     hyperlinkConfig,

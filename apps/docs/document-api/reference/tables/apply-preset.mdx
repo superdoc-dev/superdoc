@@ -1,0 +1,292 @@
+---
+title: tables.applyPreset
+sidebarTitle: tables.applyPreset
+description: "Apply a named visual preset to a table. Presets: \"grid\" (1pt black borders all around), \"minimal\" (no outer borders, hairline grey row separators + thicker bottom), \"striped\" (banded rows on, 0.5pt grey borders), \"accent\" (filled header row + thick accent top/bottom; defaults to dark blue, override with `accentColor`). Composes set_borders + set_style_options + header-row shading in one call. Available via the document API and `superdoc_mutations` (intentionally NOT exposed as a top-level action on `superdoc_table`. Agents should compose explicit set_borders / set_shading / set_style_options calls so they always pick concrete colors that match the document context)."
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+## Summary
+
+Apply a named visual preset to a table. Presets: "grid" (1pt black borders all around), "minimal" (no outer borders, hairline grey row separators + thicker bottom), "striped" (banded rows on, 0.5pt grey borders), "accent" (filled header row + thick accent top/bottom; defaults to dark blue, override with `accentColor`). Composes set_borders + set_style_options + header-row shading in one call. Available via the document API and `superdoc_mutations` (intentionally NOT exposed as a top-level action on `superdoc_table`. Agents should compose explicit set_borders / set_shading / set_style_options calls so they always pick concrete colors that match the document context).
+
+- Operation ID: `tables.applyPreset`
+- API member path: `editor.doc.tables.applyPreset(...)`
+- Mutates document: `yes`
+- Idempotency: `idempotent`
+- Supports tracked mode: `no`
+- Supports dry run: `yes`
+- Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a TableMutationResult receipt.
+
+## Input fields
+
+### Variant 1 (target.nodeType="table")
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `accentColor` | string | no |  |
+| `preset` | enum | yes | `"grid"`, `"minimal"`, `"striped"`, `"accent"` |
+| `target` | TableAddress | yes | TableAddress |
+| `target.kind` | `"block"` | yes | Constant: `"block"` |
+| `target.nodeId` | string | yes |  |
+| `target.nodeType` | `"table"` | yes | Constant: `"table"` |
+
+### Variant 2 (required: nodeId)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `accentColor` | string | no |  |
+| `nodeId` | string | yes |  |
+| `preset` | enum | yes | `"grid"`, `"minimal"`, `"striped"`, `"accent"` |
+
+### Example request
+
+```json
+{
+  "accentColor": "example",
+  "preset": "grid",
+  "target": {
+    "kind": "block",
+    "nodeId": "node-def456",
+    "nodeType": "table"
+  }
+}
+```
+
+## Output fields
+
+### Variant 1 (success=true)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `success` | `true` | yes | Constant: `true` |
+| `table` | TableAddress | no | TableAddress |
+| `table.kind` | `"block"` | no | Constant: `"block"` |
+| `table.nodeId` | string | no |  |
+| `table.nodeType` | `"table"` | no | Constant: `"table"` |
+| `trackedChangeRefs` | EntityAddress[] | no |  |
+
+### Variant 2 (success=false)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `failure` | object | yes |  |
+| `failure.code` | enum | yes | `"NO_OP"`, `"INVALID_TARGET"`, `"TARGET_NOT_FOUND"`, `"CAPABILITY_UNAVAILABLE"` |
+| `failure.details` | any | no |  |
+| `failure.message` | string | yes |  |
+| `success` | `false` | yes | Constant: `false` |
+
+<Tip>
+When present, `result.table` is the follow-up address to reuse after this call. For non-destructive table-targeted mutations, pass `result.table.nodeId` to the next table operation instead of re-running `find()`. Destructive operations may omit `table`.
+</Tip>
+
+### Example response
+
+```json
+{
+  "success": true,
+  "table": {
+    "kind": "block",
+    "nodeId": "node-def456",
+    "nodeType": "table"
+  },
+  "trackedChangeRefs": [
+    {
+      "entityId": "entity-789",
+      "entityType": "comment",
+      "kind": "entity"
+    }
+  ]
+}
+```
+
+## Pre-apply throws
+
+- `TARGET_NOT_FOUND`
+- `INVALID_TARGET`
+- `CAPABILITY_UNAVAILABLE`
+
+## Non-applied failure codes
+
+- `INVALID_TARGET`
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "oneOf": [
+    {
+      "required": [
+        "target"
+      ]
+    },
+    {
+      "required": [
+        "nodeId"
+      ]
+    }
+  ],
+  "properties": {
+    "accentColor": {
+      "pattern": "^(#?([0-9A-Fa-f]{6}|[0-9A-Fa-f]{3})|auto)$",
+      "type": "string"
+    },
+    "nodeId": {
+      "type": "string"
+    },
+    "preset": {
+      "enum": [
+        "grid",
+        "minimal",
+        "striped",
+        "accent"
+      ]
+    },
+    "target": {
+      "$ref": "#/$defs/TableAddress"
+    }
+  },
+  "required": [
+    "preset"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "oneOf": [
+    {
+      "additionalProperties": false,
+      "properties": {
+        "success": {
+          "const": true
+        },
+        "table": {
+          "$ref": "#/$defs/TableAddress"
+        },
+        "trackedChangeRefs": {
+          "items": {
+            "$ref": "#/$defs/EntityAddress"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "success"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "failure": {
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "enum": [
+                "NO_OP",
+                "INVALID_TARGET",
+                "TARGET_NOT_FOUND",
+                "CAPABILITY_UNAVAILABLE"
+              ]
+            },
+            "details": {},
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "message"
+          ],
+          "type": "object"
+        },
+        "success": {
+          "const": false
+        }
+      },
+      "required": [
+        "success",
+        "failure"
+      ],
+      "type": "object"
+    }
+  ]
+}
+```
+</Accordion>
+
+<Accordion title="Raw success schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "success": {
+      "const": true
+    },
+    "table": {
+      "$ref": "#/$defs/TableAddress"
+    },
+    "trackedChangeRefs": {
+      "items": {
+        "$ref": "#/$defs/EntityAddress"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "success"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw failure schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "failure": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "enum": [
+            "NO_OP",
+            "INVALID_TARGET",
+            "TARGET_NOT_FOUND",
+            "CAPABILITY_UNAVAILABLE"
+          ]
+        },
+        "details": {},
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "type": "object"
+    },
+    "success": {
+      "const": false
+    }
+  },
+  "required": [
+    "success",
+    "failure"
+  ],
+  "type": "object"
+}
+```
+</Accordion>

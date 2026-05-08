@@ -8,15 +8,7 @@
  * @ooxml w:pPr/w:pBdr/w:between — between border for grouped paragraphs
  * @spec  ECMA-376 §17.3.1.24 (pBdr)
  */
-import type {
-  Fragment,
-  ListItemFragment,
-  ListBlock,
-  ListMeasure,
-  ParagraphBlock,
-  ParagraphAttrs,
-} from '@superdoc/contracts';
-import type { BlockLookup } from './types.js';
+import type { ListItemFragment, ResolvedPaintItem, ResolvedFragmentItem } from '@superdoc/contracts';
 import { hashParagraphBorders } from '../../paragraph-hash-utils.js';
 
 /**
@@ -34,72 +26,24 @@ export type BetweenBorderInfo = {
 };
 
 /**
- * Extracts the paragraph borders for a fragment, looking up the block data.
- * Handles both paragraph and list-item fragments.
- */
-export const getFragmentParagraphBorders = (
-  fragment: Fragment,
-  blockLookup: BlockLookup,
-): ParagraphAttrs['borders'] | undefined => {
-  const lookup = blockLookup.get(fragment.blockId);
-  if (!lookup) return undefined;
-
-  if (fragment.kind === 'para' && lookup.block.kind === 'paragraph') {
-    return (lookup.block as ParagraphBlock).attrs?.borders;
-  }
-
-  if (fragment.kind === 'list-item' && lookup.block.kind === 'list') {
-    const block = lookup.block as ListBlock;
-    const item = block.items.find((entry) => entry.id === fragment.itemId);
-    return item?.paragraph.attrs?.borders;
-  }
-
-  return undefined;
-};
-
-/**
- * Computes the height of a fragment from its measured line heights.
- * Used to calculate the spacing gap between consecutive fragments.
- */
-export const getFragmentHeight = (fragment: Fragment, blockLookup: BlockLookup): number => {
-  if (fragment.kind === 'table' || fragment.kind === 'image' || fragment.kind === 'drawing') {
-    return fragment.height;
-  }
-
-  const lookup = blockLookup.get(fragment.blockId);
-  if (!lookup) return 0;
-
-  if (fragment.kind === 'para' && lookup.measure.kind === 'paragraph') {
-    const lines = fragment.lines ?? lookup.measure.lines.slice(fragment.fromLine, fragment.toLine);
-    let totalHeight = 0;
-    for (const line of lines) {
-      totalHeight += line.lineHeight ?? 0;
-    }
-    return totalHeight;
-  }
-
-  if (fragment.kind === 'list-item' && lookup.measure.kind === 'list') {
-    const listMeasure = lookup.measure as ListMeasure;
-    const item = listMeasure.items.find((it) => it.itemId === fragment.itemId);
-    if (!item) return 0;
-    const lines = item.paragraph.lines.slice(fragment.fromLine, fragment.toLine);
-    let totalHeight = 0;
-    for (const line of lines) {
-      totalHeight += line.lineHeight ?? 0;
-    }
-    return totalHeight;
-  }
-
-  return 0;
-};
-
-/**
  * Whether a between border is effectively absent (nil/none or missing).
  */
-const isBetweenBorderNone = (borders: ParagraphAttrs['borders']): boolean => {
+const isBetweenBorderNone = (borders: ResolvedFragmentItem['paragraphBorders']): boolean => {
   if (!borders?.between) return true;
   return borders.between.style === 'none';
 };
+
+/**
+ * Helper: check whether a resolved item is a ResolvedFragmentItem (para/list-item)
+ * with pre-computed paragraph border data.
+ */
+function isResolvedFragmentWithBorders(
+  item: ResolvedPaintItem | undefined,
+): item is ResolvedFragmentItem & { paragraphBorders: NonNullable<ResolvedFragmentItem['paragraphBorders']> } {
+  return (
+    item !== undefined && item.kind === 'fragment' && 'paragraphBorders' in item && item.paragraphBorders !== undefined
+  );
+}
 
 /**
  * Pre-computes per-fragment between-border rendering info for a page.
@@ -125,22 +69,25 @@ const isBetweenBorderNone = (borders: ParagraphAttrs['borders']): boolean => {
  * Middle fragments in a chain of 3+ get both flags.
  */
 export const computeBetweenBorderFlags = (
-  fragments: readonly Fragment[],
-  blockLookup: BlockLookup,
+  resolvedItems: readonly ResolvedPaintItem[],
 ): Map<number, BetweenBorderInfo> => {
   // Phase 1: determine which consecutive pairs form between-border groups
   const pairFlags = new Set<number>();
   const noBetweenPairs = new Set<number>();
 
-  for (let i = 0; i < fragments.length - 1; i += 1) {
-    const frag = fragments[i];
+  for (let i = 0; i < resolvedItems.length - 1; i += 1) {
+    const resolvedCur = resolvedItems[i];
+    if (resolvedCur.kind !== 'fragment') continue;
+    const frag = resolvedCur.fragment;
     if (frag.kind !== 'para' && frag.kind !== 'list-item') continue;
     if (frag.continuesOnNext) continue;
 
-    const borders = getFragmentParagraphBorders(frag, blockLookup);
-    if (!borders) continue;
+    if (!isResolvedFragmentWithBorders(resolvedCur)) continue;
+    const borders = resolvedCur.paragraphBorders;
 
-    const next = fragments[i + 1];
+    const resolvedNext = resolvedItems[i + 1];
+    if (resolvedNext.kind !== 'fragment') continue;
+    const next = resolvedNext.fragment;
     if (next.kind !== 'para' && next.kind !== 'list-item') continue;
     if (next.continuesFromPrev) continue;
     if (next.blockId === frag.blockId && next.kind === 'para') continue;
@@ -152,9 +99,19 @@ export const computeBetweenBorderFlags = (
     )
       continue;
 
-    const nextBorders = getFragmentParagraphBorders(next, blockLookup);
-    if (!nextBorders) continue;
-    if (hashParagraphBorders(borders) !== hashParagraphBorders(nextBorders)) continue;
+    if (!isResolvedFragmentWithBorders(resolvedNext)) continue;
+    const nextBorders = resolvedNext.paragraphBorders;
+
+    // Compare using pre-computed hashes when available, falling back to computing on-the-fly.
+    const curHash =
+      'paragraphBorderHash' in resolvedCur && (resolvedCur as ResolvedFragmentItem).paragraphBorderHash
+        ? (resolvedCur as ResolvedFragmentItem).paragraphBorderHash!
+        : hashParagraphBorders(borders);
+    const nextHash =
+      'paragraphBorderHash' in resolvedNext && (resolvedNext as ResolvedFragmentItem).paragraphBorderHash
+        ? (resolvedNext as ResolvedFragmentItem).paragraphBorderHash!
+        : hashParagraphBorders(nextBorders);
+    if (curHash !== nextHash) continue;
 
     // Skip fragments in different columns (different x positions)
     if (frag.x !== next.x) continue;
@@ -173,9 +130,12 @@ export const computeBetweenBorderFlags = (
   const result = new Map<number, BetweenBorderInfo>();
 
   for (const i of pairFlags) {
-    const frag = fragments[i];
-    const next = fragments[i + 1];
-    const fragHeight = getFragmentHeight(frag, blockLookup);
+    const resolvedCur = resolvedItems[i];
+    const resolvedNext = resolvedItems[i + 1];
+    if (resolvedCur.kind !== 'fragment' || resolvedNext.kind !== 'fragment') continue;
+    const frag = resolvedCur.fragment;
+    const next = resolvedNext.fragment;
+    const fragHeight = 'height' in resolvedCur && resolvedCur.height != null ? resolvedCur.height : 0;
     const gapBelow = Math.max(0, next.y - (frag.y + fragHeight));
     const isNoBetween = noBetweenPairs.has(i);
 

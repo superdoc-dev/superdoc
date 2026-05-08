@@ -108,9 +108,9 @@ Starter projects to get you running quickly:
 | [React](examples/getting-started/react) | [Vue](examples/getting-started/vue) |
 | [Angular](examples/getting-started/angular) | [Next.js](examples/getting-started/nextjs) |
 | [Vanilla JS](examples/getting-started/vanilla) | [CDN](examples/getting-started/cdn) |
-| [Comments](examples/features/comments) | [Track changes](examples/features/track-changes) |
-| [Custom toolbar](examples/features/custom-toolbar) | [AI redlining](examples/features/ai-redlining) |
-| [Headless AI redlining](examples/headless/ai-redlining) | |
+| [Comments](examples/editor/built-in-ui/comments) | [Track changes](examples/editor/built-in-ui/track-changes) |
+| [Toolbar](examples/editor/built-in-ui/toolbar) | [AI redlining](examples/ai/redlining) |
+| [AI redlining (server-side)](examples/document-engine/ai-redlining) | |
 
 [Browse all examples](examples/)
 
@@ -168,6 +168,8 @@ Special thanks to these community members who have contributed code to SuperDoc:
 <a href="https://github.com/JoaaoVerona"><img src="https://github.com/JoaaoVerona.png" width="50" height="50" alt="JoaaoVerona" title="João Vitor Verona Biazibetti" /></a>
 <a href="https://github.com/michaelreavant"><img src="https://github.com/michaelreavant.png" width="50" height="50" alt="michaelreavant" title="michaelreavant" /></a>
 <a href="https://github.com/ArturQuirino"><img src="https://github.com/ArturQuirino.png" width="50" height="50" alt="ArturQuirino" title="ARTUR QUIRINO" /></a>
+<a href="https://github.com/kiluazen"><img src="https://github.com/kiluazen.png" width="50" height="50" alt="kiluazen" title="Kushal" /></a>
+<a href="https://github.com/kendaller"><img src="https://github.com/kendaller.png" width="50" height="50" alt="kendaller" title="Kendall Ernst" /></a>
 
 Want to see your avatar here? Check the [Contributing Guide](CONTRIBUTING.md) to get started.
 

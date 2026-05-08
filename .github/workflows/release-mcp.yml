@@ -7,7 +7,19 @@ on:
     branches:
       - main
     paths:
+      # MCP depends on SDK (workspace:*) and imports engine/session code directly.
+      # Keep in sync with apps/mcp/.releaserc.cjs include list and
+      # .github/package-impact-map.md.
       - 'apps/mcp/**'
+      - 'packages/sdk/**'
+      - 'apps/cli/**'
+      - 'packages/document-api/**'
+      - 'packages/superdoc/**'
+      - 'packages/super-editor/**'
+      - 'packages/layout-engine/**'
+      - 'packages/word-layout/**'
+      - 'packages/preset-geometry/**'
+      - 'shared/**'
       - 'pnpm-workspace.yaml'
       - '!**/*.md'
   workflow_dispatch:
@@ -17,8 +29,8 @@ permissions:
   packages: write
 
 concurrency:
-  group: release-mcp-${{ github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.ref_name == 'stable' && 'release-stable' || format('{0}-{1}', github.workflow, github.ref) }}
+  cancel-in-progress: ${{ github.ref_name != 'stable' }}
 
 jobs:
   release:
@@ -35,6 +47,12 @@ jobs:
         with:
           fetch-depth: 0
           token: ${{ steps.generate_token.outputs.token }}
+
+      - name: Refresh stable branch head
+        if: github.ref_name == 'stable'
+        run: |
+          git fetch origin "${{ github.ref_name }}" --tags
+          git checkout -B "${{ github.ref_name }}" "origin/${{ github.ref_name }}"
 
       - uses: pnpm/action-setup@v4
 

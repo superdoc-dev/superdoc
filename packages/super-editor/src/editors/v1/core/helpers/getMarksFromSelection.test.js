@@ -451,7 +451,7 @@ describe('getMarksFromSelection', () => {
 
     const result = getSelectionFormattingState(cursorState);
 
-    expect(result.inlineRunProperties).toEqual({ bold: true });
+    expect(result.inlineRunProperties).toEqual({ bold: true, boldCs: true });
     expect(result.inlineMarks.some((mark) => mark.type.name === 'bold')).toBe(true);
     expect(result.resolvedMarks.some((mark) => mark.type.name === 'bold')).toBe(true);
   });

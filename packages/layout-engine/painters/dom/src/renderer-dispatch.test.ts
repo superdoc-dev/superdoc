@@ -7,7 +7,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { createDomPainter } from './index.js';
+import { createTestPainter as createDomPainter } from './_test-utils.js';
 import { DomPainter } from './renderer.js';
 import type { FlowBlock, Measure, Layout } from '@superdoc/contracts';
 

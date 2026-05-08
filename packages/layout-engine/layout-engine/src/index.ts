@@ -153,6 +153,10 @@ function getMeasureHeight(block: FlowBlock, measure: Measure): number {
   }
 }
 
+function buildSectionAwareReferenceKey(refId: string, sectionIndex: number): string {
+  return `${refId}::s${sectionIndex}`;
+}
+
 // ConstraintBoundary and PageState now come from paginator
 
 /**
@@ -504,6 +508,14 @@ export type LayoutOptions = {
    */
   headerContentHeightsByRId?: Map<string, number>;
   /**
+   * Actual measured header content heights per section-specific reference.
+   *
+   * Keys combine the relationship ID and section index using the form
+   * `${rId}::s${sectionIndex}` so the reserve path can distinguish documents
+   * that reuse the same header part across sections with different geometry.
+   */
+  headerContentHeightsBySectionRef?: Map<string, number>;
+  /**
    * Actual measured footer content heights per relationship ID.
    * Used for multi-section documents where each section may have unique
    * footers referenced by their relationship IDs.
@@ -512,6 +524,14 @@ export type LayoutOptions = {
    * Values are the actual content heights in pixels.
    */
   footerContentHeightsByRId?: Map<string, number>;
+  /**
+   * Actual measured footer content heights per section-specific reference.
+   *
+   * Keys combine the relationship ID and section index using the form
+   * `${rId}::s${sectionIndex}` so the reserve path can distinguish documents
+   * that reuse the same footer part across sections with different geometry.
+   */
+  footerContentHeightsBySectionRef?: Map<string, number>;
   /**
    * Allow body layout to synthesize page 1 for anchored tables when a document has
    * no anchor paragraphs and would otherwise render zero pages.
@@ -528,6 +548,17 @@ export type LayoutOptions = {
    * behavior for paragraph-free overlays.
    */
   allowSectionBreakOnlyPageFallback?: boolean;
+  /**
+   * Whether the document has odd/even header/footer differentiation enabled.
+   * Corresponds to the w:evenAndOddHeaders element in OOXML settings.xml.
+   * When true, odd pages use the 'odd' variant and even pages use the 'even' variant.
+   * When false or omitted, all pages use the 'default' variant.
+   *
+   * Must stay in sync with `getHeaderFooterTypeForSection` in
+   * `layout-bridge/src/headerFooterUtils.ts` — both sides read this value
+   * and must agree on variant selection.
+   */
+  alternateHeaders?: boolean;
 };
 
 export type HeaderFooterConstraints = {
@@ -541,8 +572,9 @@ export type HeaderFooterConstraints = {
   /**
    * Page margins for anchor positioning.
    * `left`/`right`: horizontal page-relative conversion.
-   * `top`/`bottom`: vertical margin-relative conversion and footer band origin.
+   * `top`/`bottom`: vertical margin-relative conversion and fallback footer band origin.
    * `header`: header distance from page top edge (header band origin).
+   * `footer`: footer distance from page bottom edge (footer band origin).
    */
   margins?: {
     left: number;
@@ -550,6 +582,7 @@ export type HeaderFooterConstraints = {
     top?: number;
     bottom?: number;
     header?: number;
+    footer?: number;
   };
   /**
    * Optional base height used to bound behindDoc overflow handling.
@@ -604,10 +637,6 @@ const shouldSkipRedundantPageBreakBefore = (block: PageBreakBlock, state: PageSt
 const hasOnlySectionBreakBlocks = (blocks: readonly FlowBlock[]): boolean => {
   return blocks.length > 0 && blocks.every((block) => block.kind === 'sectionBreak');
 };
-
-// List constants sourced from shared/common
-
-// Context types moved to modular layouters
 
 const layoutDebugEnabled =
   typeof process !== 'undefined' && typeof process.env !== 'undefined' && Boolean(process.env.SD_DEBUG_LAYOUT);
@@ -664,28 +693,36 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
   const headerContentHeights = options.headerContentHeights;
   const footerContentHeights = options.footerContentHeights;
   const headerContentHeightsByRId = options.headerContentHeightsByRId;
+  const headerContentHeightsBySectionRef = options.headerContentHeightsBySectionRef;
   const footerContentHeightsByRId = options.footerContentHeightsByRId;
+  const footerContentHeightsBySectionRef = options.footerContentHeightsBySectionRef;
 
   /**
    * Determines the header/footer variant type for a given page based on section settings.
    *
-   * @param sectionPageNumber - The page number within the current section (1-indexed)
+   * Takes a params object because the two page-number fields have very similar
+   * names and types — a positional call site is easy to get wrong.
+   *
+   * @param sectionPageNumber - The page number within the current section (1-indexed), used for titlePg
+   * @param documentPageNumber - The absolute document page number (1-indexed), used for even/odd
    * @param titlePgEnabled - Whether the section has "different first page" enabled
-   * @param alternateHeaders - Whether the section has odd/even differentiation enabled
+   * @param alternateHeaders - Whether the document has odd/even differentiation enabled
    * @returns The variant type: 'first', 'even', 'odd', or 'default'
    */
-  const getVariantTypeForPage = (
-    sectionPageNumber: number,
-    titlePgEnabled: boolean,
-    alternateHeaders: boolean,
-  ): 'default' | 'first' | 'even' | 'odd' => {
+  const getVariantTypeForPage = (args: {
+    sectionPageNumber: number;
+    documentPageNumber: number;
+    titlePgEnabled: boolean;
+    alternateHeaders: boolean;
+  }): 'default' | 'first' | 'even' | 'odd' => {
     // First page of section with titlePg enabled uses 'first' variant
-    if (sectionPageNumber === 1 && titlePgEnabled) {
+    if (args.sectionPageNumber === 1 && args.titlePgEnabled) {
       return 'first';
     }
-    // Alternate headers (even/odd differentiation)
-    if (alternateHeaders) {
-      return sectionPageNumber % 2 === 0 ? 'even' : 'odd';
+    // Alternate headers: even/odd based on document page number, matching
+    // the rendering side (getHeaderFooterTypeForSection in headerFooterUtils.ts)
+    if (args.alternateHeaders) {
+      return args.documentPageNumber % 2 === 0 ? 'even' : 'odd';
     }
     return 'default';
   };
@@ -699,12 +736,23 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
    * @param headerRef - Optional relationship ID from section's headerRefs
    * @returns The appropriate header content height, or 0 if not found
    */
-  const getHeaderHeightForPage = (variantType: 'default' | 'first' | 'even' | 'odd', headerRef?: string): number => {
-    // Priority 1: Check per-rId heights if we have a specific rId
+  const getHeaderHeightForPage = (
+    variantType: 'default' | 'first' | 'even' | 'odd',
+    headerRef?: string,
+    sectionIndex?: number,
+  ): number => {
+    // Priority 1: Check section-aware heights when the same part is reused across sections.
+    if (headerRef && sectionIndex != null) {
+      const sectionKey = buildSectionAwareReferenceKey(headerRef, sectionIndex);
+      if (headerContentHeightsBySectionRef?.has(sectionKey)) {
+        return validateContentHeight(headerContentHeightsBySectionRef.get(sectionKey));
+      }
+    }
+    // Priority 2: Check per-rId heights if we have a specific rId
     if (headerRef && headerContentHeightsByRId?.has(headerRef)) {
       return validateContentHeight(headerContentHeightsByRId.get(headerRef));
     }
-    // Priority 2: Fall back to per-variant heights
+    // Priority 3: Fall back to per-variant heights
     if (headerContentHeights) {
       return validateContentHeight(headerContentHeights[variantType]);
     }
@@ -720,12 +768,23 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
    * @param footerRef - Optional relationship ID from section's footerRefs
    * @returns The appropriate footer content height, or 0 if not found
    */
-  const getFooterHeightForPage = (variantType: 'default' | 'first' | 'even' | 'odd', footerRef?: string): number => {
-    // Priority 1: Check per-rId heights if we have a specific rId
+  const getFooterHeightForPage = (
+    variantType: 'default' | 'first' | 'even' | 'odd',
+    footerRef?: string,
+    sectionIndex?: number,
+  ): number => {
+    // Priority 1: Check section-aware heights when the same part is reused across sections.
+    if (footerRef && sectionIndex != null) {
+      const sectionKey = buildSectionAwareReferenceKey(footerRef, sectionIndex);
+      if (footerContentHeightsBySectionRef?.has(sectionKey)) {
+        return validateContentHeight(footerContentHeightsBySectionRef.get(sectionKey));
+      }
+    }
+    // Priority 2: Check per-rId heights if we have a specific rId
     if (footerRef && footerContentHeightsByRId?.has(footerRef)) {
       return validateContentHeight(footerContentHeightsByRId.get(footerRef));
     }
-    // Priority 2: Fall back to per-variant heights
+    // Priority 3: Fall back to per-variant heights
     if (footerContentHeights) {
       return validateContentHeight(footerContentHeights[variantType]);
     }
@@ -770,6 +829,32 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
     return baseBottomMargin;
   };
 
+  const MIN_BODY_CONTENT_HEIGHT = 1;
+  const clampHeaderFooterInflatedMargins = (
+    topMargin: number,
+    bottomMargin: number,
+    baseTopMargin: number,
+    baseBottomMargin: number,
+    currentPageHeight: number,
+  ): { top: number; bottom: number } => {
+    const maxMarginTotal = currentPageHeight - MIN_BODY_CONTENT_HEIGHT;
+    if (topMargin + bottomMargin <= maxMarginTotal) return { top: topMargin, bottom: bottomMargin };
+
+    const baseMarginTotal = baseTopMargin + baseBottomMargin;
+    if (baseMarginTotal >= maxMarginTotal) return { top: topMargin, bottom: bottomMargin };
+
+    const topInflation = Math.max(0, topMargin - baseTopMargin);
+    const bottomInflation = Math.max(0, bottomMargin - baseBottomMargin);
+    const totalInflation = topInflation + bottomInflation;
+    if (totalInflation <= 0) return { top: topMargin, bottom: bottomMargin };
+
+    const availableInflation = maxMarginTotal - baseMarginTotal;
+    return {
+      top: baseTopMargin + availableInflation * (topInflation / totalInflation),
+      bottom: baseBottomMargin + availableInflation * (bottomInflation / totalInflation),
+    };
+  };
+
   // Calculate the maximum header/footer content heights (used for fallback and section breaks)
   // These are still needed for cases where we don't have per-page information
   const maxHeaderContentHeight = headerContentHeights
@@ -794,13 +879,18 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
   // Initial effective margins use default variant (will be adjusted per-page)
   const headerDistance = margins.header ?? margins.top;
   const footerDistance = margins.footer ?? margins.bottom;
-  const defaultHeaderHeight = getHeaderHeightForPage('default', undefined);
-  const defaultFooterHeight = getFooterHeightForPage('default', undefined);
-  const effectiveTopMargin = calculateEffectiveTopMargin(defaultHeaderHeight, headerDistance, margins.top);
-  const effectiveBottomMargin = calculateEffectiveBottomMargin(defaultFooterHeight, footerDistance, margins.bottom);
+  const defaultHeaderHeight = getHeaderHeightForPage('default', undefined, 0);
+  const defaultFooterHeight = getFooterHeightForPage('default', undefined, 0);
+  const effectiveMargins = clampHeaderFooterInflatedMargins(
+    calculateEffectiveTopMargin(defaultHeaderHeight, headerDistance, margins.top),
+    calculateEffectiveBottomMargin(defaultFooterHeight, footerDistance, margins.bottom),
+    margins.top,
+    margins.bottom,
+    pageSize.h,
+  );
 
-  let activeTopMargin = effectiveTopMargin;
-  let activeBottomMargin = effectiveBottomMargin;
+  let activeTopMargin = effectiveMargins.top;
+  let activeBottomMargin = effectiveMargins.bottom;
   let activeLeftMargin = margins.left;
   let activeRightMargin = margins.right;
   let pendingTopMargin: number | null = null;
@@ -1082,7 +1172,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
     }
 
     if (activeColumns.count > 1) {
-      page.columns = { count: activeColumns.count, gap: activeColumns.gap, withSeparator: activeColumns.withSeparator };
+      page.columns = cloneColumnLayout(activeColumns);
     }
 
     // Set vertical alignment from active section state
@@ -1295,11 +1385,15 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
         // Get section metadata for titlePg setting
         const sectionMetadata = sectionMetadataList[activeSectionIndex];
         const titlePgEnabled = sectionMetadata?.titlePg ?? false;
-        // TODO: Support alternateHeaders (odd/even) when needed
-        const alternateHeaders = false;
+        const alternateHeaders = options.alternateHeaders ?? false;
 
         // Determine which header/footer variant applies to this page
-        const variantType = getVariantTypeForPage(sectionPageNumber, titlePgEnabled, alternateHeaders);
+        const variantType = getVariantTypeForPage({
+          sectionPageNumber,
+          documentPageNumber: newPageNumber,
+          titlePgEnabled,
+          alternateHeaders,
+        });
 
         // Resolve header/footer refs for margin calculation using OOXML inheritance model.
         // This must match the rendering logic in PresentationEditor to ensure margins
@@ -1333,33 +1427,47 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
           }
         }
 
-        // Step 3: Fall back to current section's 'default'
-        if (!headerRef && variantType !== 'default' && activeSectionRefs?.headerRefs?.default) {
-          headerRef = activeSectionRefs.headerRefs.default;
+        // Step 3: Fall back to current section's default only when that ref is
+        // the selected OOXML slot. With even/odd headers enabled, `default`
+        // represents the odd-page header, not a replacement for a missing even
+        // header.
+        const defaultHeaderRef = activeSectionRefs?.headerRefs?.default;
+        const defaultFooterRef = activeSectionRefs?.footerRefs?.default;
+        const shouldUseDefaultHeaderRef =
+          variantType !== 'default' && defaultHeaderRef && (!alternateHeaders || variantType === 'odd');
+        const shouldUseDefaultFooterRef =
+          variantType !== 'default' && defaultFooterRef && (!alternateHeaders || variantType === 'odd');
+
+        if (!headerRef && shouldUseDefaultHeaderRef) {
+          headerRef = defaultHeaderRef;
           effectiveVariantType = 'default';
         }
-        if (!footerRef && variantType !== 'default' && activeSectionRefs?.footerRefs?.default) {
-          footerRef = activeSectionRefs.footerRefs.default;
+        if (!footerRef && shouldUseDefaultFooterRef) {
+          footerRef = defaultFooterRef;
         }
 
         // Calculate the actual header/footer heights for this page's variant
         // Use effectiveVariantType for header height lookup to match the fallback
-        const headerHeight = getHeaderHeightForPage(effectiveVariantType, headerRef);
+        const headerHeight = getHeaderHeightForPage(effectiveVariantType, headerRef, activeSectionIndex);
         const footerHeight = getFooterHeightForPage(
           variantType !== 'default' && !activeSectionRefs?.footerRefs?.[variantType] ? 'default' : variantType,
           footerRef,
+          activeSectionIndex,
         );
 
         // Adjust margins based on the actual header/footer for this page.
         // Always recalculate to ensure pages without headers reset to base margin
         // (not the inflated margin from a previous page with a header).
         // Use section base margins, not document defaults, for correct per-section behavior.
-        activeTopMargin = calculateEffectiveTopMargin(headerHeight, activeHeaderDistance, activeSectionBaseTopMargin);
-        activeBottomMargin = calculateEffectiveBottomMargin(
-          footerHeight,
-          activeFooterDistance,
+        const adjustedMargins = clampHeaderFooterInflatedMargins(
+          calculateEffectiveTopMargin(headerHeight, activeHeaderDistance, activeSectionBaseTopMargin),
+          calculateEffectiveBottomMargin(footerHeight, activeFooterDistance, activeSectionBaseBottomMargin),
+          activeSectionBaseTopMargin,
           activeSectionBaseBottomMargin,
+          activePageSize.h,
         );
+        activeTopMargin = adjustedMargins.top;
+        activeBottomMargin = adjustedMargins.bottom;
 
         layoutLog(
           `[Layout] Page ${newPageNumber}: Using variant '${variantType}' - headerHeight: ${headerHeight}, footerHeight: ${footerHeight}`,
@@ -1495,6 +1603,50 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
   const blockSectionMap = new Map<string, number>();
   const sectionColumnsMap = new Map<number, ColumnLayout>();
   const sectionHasExplicitColumnBreak = new Set<number>();
+  // sectionIndex -> type of the section break that ENDS this section (per
+  // pm-adapter end-tagged semantics, ECMA-376 §17.6.17: a paragraph's sectPr
+  // describes the section ENDING at that paragraph, so SectionBreakBlock.type
+  // here is the type of the break that closes the section). Per ECMA-376
+  // §17.18.77 only `continuous` breaks trigger column balancing — `nextPage`,
+  // `evenPage`, `oddPage` do not. Tracked here so the post-layout pass can
+  // skip the wrong section types.
+  const sectionEndBreakType = new Map<number, string>();
+  // sectionIndex -> whether `<w:type>` was EXPLICIT in the source sectPr.
+  // Body sectPrs default to `continuous` when w:type is omitted; Word does
+  // NOT balance those single-page docs (sd-1655). Body sectPrs with explicit
+  // `<w:type w:val="continuous"/>` DO balance (sd-1480), even single-page.
+  // The flag carries the distinction across pm-adapter -> layout-engine.
+  const sectionTypeIsExplicit = new Map<number, boolean>();
+  // sectionIndex of the LAST section in the document. The body sectPr is
+  // always the final section break and represents the end of the document,
+  // not an actual mid-document break. Even when its type defaults to
+  // `continuous` (DEFAULT_BODY_SECTION_TYPE), there is no break AFTER the
+  // last section's content to trigger balancing. Excluding the last section
+  // matches Word: a 3-column doc with only a body sectPr (e.g.
+  // `sd-1655-col-sep-3-equal-columns`) is NOT balanced — content fills
+  // top-to-bottom by column. Without this guard the previous post-layout
+  // pass over-balanced single-section docs and split heading/body across
+  // columns when Word kept them together.
+  let lastSectionIdx: number | null = null;
+  // Block IDs of empty paragraphs that exist only to carry sectPr properties.
+  // These are invisible in Word's output and must contribute zero height to
+  // balanced columns (ECMA-376 §17.18.77). Threading explicit metadata avoids
+  // the older `line.width === 0` heuristic, which incorrectly collapsed normal
+  // blank paragraphs and caused overlap on the next paragraph.
+  const sectPrMarkerBlockIds = new Set<string>();
+  // True if any block in the document is a column break. Used as a guard for
+  // the document-wide balancing fallback (Nick comment 2): when callers use
+  // LayoutOptions.columns without section metadata, we still want Word's
+  // balanced-final-page behavior unless the author placed an explicit column
+  // break, in which case we preserve their intent.
+  let documentHasExplicitColumnBreak = false;
+  // True if any block in the document is a sectionBreak. The document-wide
+  // fallback only fires when there are NO sectionBreak blocks — otherwise the
+  // section-scoped path is the source of truth (even if pm-adapter or a
+  // synthetic caller didn't stamp `attrs.sectionIndex`, treating it as a
+  // single fallback section would clobber regions that the mid-page handler
+  // already balanced).
+  let documentHasAnySectionBreak = false;
   // Tracks sections already balanced mid-page — the post-layout pass skips these
   // to avoid double-balancing, which would overlap fragments at the same x/y.
   const alreadyBalancedSections = new Set<number>();
@@ -1509,19 +1661,42 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
     if (measure) {
       balancingMeasureMap.set(block.id, measure as MeasureData);
     }
-    const blockWithAttrs = block as { attrs?: { sectionIndex?: number } };
+    const blockWithAttrs = block as { attrs?: { sectionIndex?: number; typeIsExplicit?: boolean } };
     const attrSectionIdx = blockWithAttrs.attrs?.sectionIndex;
-    if (block.kind === 'sectionBreak' && typeof attrSectionIdx === 'number') {
-      currentSectionIdx = attrSectionIdx;
-      if (block.columns) {
-        sectionColumnsMap.set(attrSectionIdx, cloneColumnLayout(block.columns));
+    if (block.kind === 'sectionBreak') {
+      documentHasAnySectionBreak = true;
+      if (typeof attrSectionIdx === 'number') {
+        currentSectionIdx = attrSectionIdx;
+        lastSectionIdx = attrSectionIdx;
+        if (block.columns) {
+          sectionColumnsMap.set(attrSectionIdx, cloneColumnLayout(block.columns));
+        }
+        if (typeof block.type === 'string') {
+          sectionEndBreakType.set(attrSectionIdx, block.type);
+        }
+        if (typeof blockWithAttrs.attrs?.typeIsExplicit === 'boolean') {
+          sectionTypeIsExplicit.set(attrSectionIdx, blockWithAttrs.attrs.typeIsExplicit);
+        }
       }
     }
     if (currentSectionIdx !== null) {
       blockSectionMap.set(block.id, currentSectionIdx);
       if (block.kind === 'columnBreak') {
         sectionHasExplicitColumnBreak.add(currentSectionIdx);
+        documentHasExplicitColumnBreak = true;
       }
+    } else if (block.kind === 'columnBreak') {
+      documentHasExplicitColumnBreak = true;
+    }
+    // Block paragraphs that exist only to carry sectPr metadata (pm-adapter
+    // sets this attr on otherwise-empty section-property paragraphs). These
+    // are invisible in Word's renderer and must not contribute height when
+    // balancing columns.
+    if (
+      block.kind === 'paragraph' &&
+      (blockWithAttrs as { attrs?: { sectPrMarker?: boolean } }).attrs?.sectPrMarker === true
+    ) {
+      sectPrMarkerBlockIds.add(block.id);
     }
   });
 
@@ -1889,10 +2064,15 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
         // vertical region — there's no risk of the new 1-col region overwriting
         // prior column content, because the cursor moves to maxY below them.
         //
-        // When not balancing (e.g. single-col → multi-col, or explicit column
-        // break), fall back to the original "force a new page if currently in a
-        // column that won't exist after the change" guard so new content doesn't
-        // overwrite earlier column positions on the same page.
+        // `willBalance` is a coarse approval: balanceSectionOnPage has its own
+        // late skip conditions (unequal column widths, zero remaining height,
+        // section content too small for shouldSkipBalancing's thresholds) that
+        // can return null even when willBalance was true. The page-break
+        // fallback below must consider the actual balance outcome, not just
+        // willBalance, otherwise we leave the new region starting on the same
+        // page from a stale column index and overwriting the previous
+        // section's column content.
+        let balanceResult: { maxY: number } | null = null;
         if (willBalance) {
           // The current region starts at the last constraint boundary's Y, or at
           // the page's top margin if no mid-page region change has happened yet.
@@ -1901,7 +2081,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
           const availableHeight = activePageSize.h - activeBottomMargin - activeRegionTop;
           const contentWidth = activePageSize.w - (activeLeftMargin + activeRightMargin);
           const normalized = normalizeColumns(endingSectionColumns!, contentWidth);
-          const balanceResult = balanceSectionOnPage({
+          balanceResult = balanceSectionOnPage({
             fragments: state.page.fragments as BalancingFragment[],
             sectionIndex: endingSectionIndex!,
             sectionColumns: {
@@ -1918,6 +2098,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
             columnWidth: normalized.width,
             availableHeight,
             measureMap: balancingMeasureMap,
+            sectPrMarkerBlockIds,
           });
           if (balanceResult) {
             // Collapse both cursors to the balanced section bottom so the new
@@ -1926,10 +2107,12 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
             state.maxCursorY = balanceResult.maxY;
             alreadyBalancedSections.add(endingSectionIndex!);
           }
-        } else if (columnIndexBefore >= newColumns.count) {
-          // Non-balancing case: reducing column count without balancing means
-          // starting the new region at col 0 could overwrite earlier column
-          // content. Force a fresh page to avoid that.
+        }
+        if (balanceResult === null && columnIndexBefore >= newColumns.count) {
+          // No balancing applied (either willBalance was false, or
+          // balanceSectionOnPage skipped late). Reducing column count without
+          // balancing means starting the new region at col 0 could overwrite
+          // earlier column content. Force a fresh page to avoid that.
           state = paginator.startNewPage();
         }
 
@@ -2286,6 +2469,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
           behindDoc: imgBlock.anchor?.behindDoc === true,
           zIndex: getFragmentZIndex(imgBlock),
           metadata,
+          sourceAnchor: imgBlock.sourceAnchor,
         };
 
         const attrs = imgBlock.attrs as Record<string, unknown> | undefined;
@@ -2334,6 +2518,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
           behindDoc: drawBlock.anchor?.behindDoc === true,
           zIndex: getFragmentZIndex(drawBlock),
           drawingContentId: drawBlock.drawingContentId,
+          sourceAnchor: drawBlock.sourceAnchor,
         };
 
         const attrs = drawBlock.attrs as Record<string, unknown> | undefined;
@@ -2548,11 +2733,133 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
   // Mid-page continuous breaks are handled in the layout loop itself (see the
   // forceMidPageRegion branch above). This post-layout pass handles sections that
   // end at a page boundary or at document end.
-  const contentWidth = pageSize.w - (activeLeftMargin + activeRightMargin);
+  //
+  // Document-wide fallback: when callers pass `LayoutOptions.columns` directly
+  // without sectionBreak metadata, pm-adapter never stamps sectionIndex on any
+  // block and `sectionColumnsMap` stays empty. Synthesize a single virtual
+  // section that spans the whole document so multi-column callers still get
+  // their final page balanced (preserves the pre-SD-2452 behavior). Skip when
+  // the document carries an explicit column break — author intent wins.
+  const FALLBACK_SECTION_IDX = -1;
+  if (
+    sectionColumnsMap.size === 0 &&
+    !documentHasAnySectionBreak &&
+    activeColumns.count > 1 &&
+    !documentHasExplicitColumnBreak
+  ) {
+    sectionColumnsMap.set(FALLBACK_SECTION_IDX, cloneColumnLayout(activeColumns));
+    for (const block of blocks) {
+      blockSectionMap.set(block.id, FALLBACK_SECTION_IDX);
+    }
+  }
+
   for (const [sectionIdx, sectionCols] of sectionColumnsMap) {
     if (sectionCols.count <= 1) continue;
     if (sectionHasExplicitColumnBreak.has(sectionIdx)) continue;
     if (alreadyBalancedSections.has(sectionIdx)) continue;
+
+    // Gate balancing per ECMA-376 §17.18.77 + empirical Word behavior. The
+    // section type defaults to `nextPage` for any sectPr without `<w:type>`,
+    // so we lean on `typeIsExplicit` to know what was actually authored:
+    //
+    //   - Explicit `<w:type w:val="continuous"/>` ending the section (or
+    //     anywhere in the doc) signals continuous flow. Word balances the
+    //     adjacent multi-column sections.
+    //   - A multi-page multi-column section is balanced on its last page
+    //     regardless of explicitness — this is the long-standing
+    //     two_column_two_page-arial p17 behavior driven by SD-2646.
+    //
+    // Skip-when-not-allowed is the default. The three allowed scenarios:
+    //
+    //   1. Mid-doc explicit continuous: section's own end-break is
+    //      `continuous` AND it is not the last section. Covers spec-test-1..5
+    //      and sd-2326 (explicit continuous mid-doc).
+    //
+    //   2. Doc-wide explicit continuous + non-explicitly-non-continuous
+    //      section: the doc has at least one EXPLICIT continuous break
+    //      somewhere AND this section's type was NOT explicitly set to a
+    //      page-forcing type. Covers sd-1480-two-col-tab-positions: section 0
+    //      ends with default `nextPage` but the body sectPr has explicit
+    //      `continuous` — Word balances 6 entries 3+3 on a single page.
+    //
+    //   3. Multi-page section: any section whose content spans more than one
+    //      page. Covers `two_column_two_page-arial 2` p17 (body default,
+    //      single section, 17 pages → balanced 3+2 on the final page).
+    //
+    // Skip path covers `sd-1655-col-sep-3-equal-columns` (single section,
+    // body without `<w:type>`, single page, 3-col): no scenario fires →
+    // Word fills column-by-column without balancing.
+    //
+    // FALLBACK_SECTION_IDX (-1) bypasses the gate — synthesized only when
+    // pm-adapter emitted no section metadata at all.
+    if (sectionIdx !== FALLBACK_SECTION_IDX) {
+      const endBreakType = sectionEndBreakType.get(sectionIdx);
+      const typeIsExplicit = sectionTypeIsExplicit.get(sectionIdx) === true;
+      const isLast = lastSectionIdx !== null && sectionIdx === lastSectionIdx;
+
+      // Per ECMA-376 §17.18.77, a continuous break balances the section it
+      // ENDS — i.e., the section BEFORE the break, not the section that
+      // contains or follows it. When the body sectPr authors an explicit
+      // continuous break, the affected section is the one IMMEDIATELY
+      // preceding the body. Compare:
+      //
+      //   sd-1480: 2 sections; body (section 1) is explicit-continuous,
+      //            section 0 has the 2-col content. Word balances section 0
+      //            (3+3) — exactly bodyExplicitContinuousIdx - 1.
+      //   mixed-columns-tabs-tnr: body explicit-continuous, body has the
+      //            2-col Test list, section 0 is 1-col descriptions. Word
+      //            does NOT balance section 1 (14+5 column-flow); the
+      //            body-as-trigger applies to section 0 (single-col, no-op).
+      //
+      // Earlier this rule used a doc-wide `docHasExplicitContinuous` flag,
+      // which over-fired for any multi-col section in the document whenever
+      // some other section was explicit-continuous — including a single-page
+      // body section with omitted `<w:type>` that should match sd-1655's
+      // skip rule. Tying it to bodyExplicitContinuousIdx − 1 (the section
+      // the break actually ends) restores ECMA-correct scope.
+      const bodyExplicitContinuousIdx =
+        lastSectionIdx !== null &&
+        sectionTypeIsExplicit.get(lastSectionIdx) === true &&
+        sectionEndBreakType.get(lastSectionIdx) === 'continuous'
+          ? lastSectionIdx
+          : null;
+
+      const isExplicitNonContinuous =
+        typeIsExplicit && (endBreakType === 'nextPage' || endBreakType === 'evenPage' || endBreakType === 'oddPage');
+
+      // Page-count probe used by both the multi-page allow rule (3) and the
+      // mid-doc multi-page skip below. Computed once and short-circuits at >1.
+      let sectionPagesCount = 0;
+      for (const p of pages) {
+        if (p.fragments.some((f) => blockSectionMap.get(f.blockId) === sectionIdx)) {
+          sectionPagesCount += 1;
+          if (sectionPagesCount > 1) break;
+        }
+      }
+      const isMultiPage = sectionPagesCount > 1;
+
+      // Mid-doc multi-page multi-column sections: Word does NOT balance the
+      // last page. ECMA's "minimum section height" balancing makes sense for
+      // single-page sections (rebalancing visibly shrinks the section) but
+      // not for multi-page sections whose height is already pinned by the
+      // page boundary — last-page rebalancing would just reshuffle a
+      // handful of overflow fragments. Verified against:
+      //   layout/ivosass-sub p3   (section 1, mid-doc, 2-page, 4 overflow
+      //                            fragments → Word leaves them in col 0).
+      //   lists/saas_original p4  (similar — overflow content stays single).
+      // Multi-page LAST sections still balance via rule 3 below
+      // (two_column_two_page-arial 2 p17 keeps its 3+2 split).
+      if (isMultiPage && !isLast) continue;
+
+      const allowedByMidDocContinuous = endBreakType === 'continuous' && !isLast;
+      // Body-explicit-continuous balances the section IT ENDS, which is the
+      // section immediately preceding the body. No doc-wide flag.
+      const allowedByBodyExplicitContinuous =
+        bodyExplicitContinuousIdx !== null && sectionIdx === bodyExplicitContinuousIdx - 1 && !isExplicitNonContinuous;
+      const allowedByMultiPage = isMultiPage;
+
+      if (!allowedByMidDocContinuous && !allowedByBodyExplicitContinuous && !allowedByMultiPage) continue;
+    }
 
     // Find the last page carrying any fragments from this section.
     let lastPageForSection: (typeof pages)[number] | null = null;
@@ -2563,8 +2870,22 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
     }
     if (!lastPageForSection) continue;
 
-    const normalized = normalizeColumns(sectionCols, contentWidth);
-    const availableHeight = pageSize.h - activeBottomMargin - activeTopMargin;
+    // Section-local page geometry. Each page snapshots its own margins and size
+    // at startNewPage time (paginator.ts), so different sections with different
+    // page setups (margins, paper size, orientation) carry their own values on
+    // their pages. Earlier code derived the content box from the FINAL active*
+    // state, which silently rewrote earlier sections' fragments using the last
+    // section's content width and left margin. Use the target page's metrics.
+    const sectionPageSize = lastPageForSection.size ?? pageSize;
+    const sectionPageMargins = lastPageForSection.margins;
+    const sectionLeftMargin = sectionPageMargins?.left ?? activeLeftMargin;
+    const sectionRightMargin = sectionPageMargins?.right ?? activeRightMargin;
+    const sectionTopMarginPx = sectionPageMargins?.top ?? activeTopMargin;
+    const sectionBottomMargin = sectionPageMargins?.bottom ?? activeBottomMargin;
+    const sectionContentWidth = sectionPageSize.w - (sectionLeftMargin + sectionRightMargin);
+    const sectionAvailableHeight = sectionPageSize.h - sectionBottomMargin - sectionTopMarginPx;
+
+    const normalized = normalizeColumns(sectionCols, sectionContentWidth);
 
     balanceSectionOnPage({
       fragments: lastPageForSection.fragments as BalancingFragment[],
@@ -2578,11 +2899,12 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
       },
       sectionHasExplicitColumnBreak: false, // already filtered above
       blockSectionMap,
-      margins: { left: activeLeftMargin },
-      topMargin: activeTopMargin,
+      margins: { left: sectionLeftMargin },
+      topMargin: sectionTopMarginPx,
       columnWidth: normalized.width,
-      availableHeight,
+      availableHeight: sectionAvailableHeight,
       measureMap: balancingMeasureMap,
+      sectPrMarkerBlockIds,
     });
   }
 
@@ -2626,10 +2948,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
     // after processing sections. Page/region-specific column changes are encoded
     // implicitly via fragment positions. Consumers should not assume this is
     // a static document-wide value.
-    columns:
-      activeColumns.count > 1
-        ? { count: activeColumns.count, gap: activeColumns.gap, withSeparator: activeColumns.withSeparator }
-        : undefined,
+    columns: activeColumns.count > 1 ? cloneColumnLayout(activeColumns) : undefined,
   };
 }
 
@@ -2711,6 +3030,12 @@ function getPageRelativeMeasurementBand(
  * 3. Page-relative header/footer overlays that do not intersect the region's
  *    reserved margin band — they should still render, but must not reserve
  *    body space like true header/footer content.
+ * 4. Header/footer anchored overlays with wrap=None that cover the full
+ *    measurement canvas — `wrap=None` is OOXML's "absolute overlay, no flow
+ *    exclusion zone", so by definition such fragments must not reserve body
+ *    space. Combined with full-canvas bounds this catches page-covering
+ *    background shapes regardless of vRelativeFrom/hRelativeFrom (which the
+ *    authoring tool is free to set to column/paragraph for cover pages).
  */
 function shouldExcludeFromMeasurement(
   fragment: Fragment,
@@ -2752,6 +3077,24 @@ function shouldExcludeFromMeasurement(
     if (measurementBand && !rangesIntersect(fragment.y, fragmentBottom, measurementBand.start, measurementBand.end)) {
       return true;
     }
+  }
+
+  // Only treat anchored content as a non-measurement overlay when it is
+  // unambiguously a page-covering decoration: wrap=None (no exclusion zone,
+  // so by definition the shape never reserves body space) AND fragment size
+  // covers the measurement canvas in both dimensions. Real anchored
+  // header/footer content uses wrap modes that affect flow (Square / Tight /
+  // TopAndBottom / Through), so it continues to reserve space.
+  const fragmentHeight = typeof fragment.height === 'number' ? fragment.height : fragmentBottom - fragment.y;
+  const fragmentWidth = typeof fragment.width === 'number' ? fragment.width : 0;
+  const heightCoversCanvas = Number.isFinite(fragmentHeight) && fragmentHeight >= canvasHeight;
+  const widthCoversCanvas =
+    Number.isFinite(constraints.width) && constraints.width > 0 && fragmentWidth >= constraints.width;
+  const wrapType = anchoredBlock.wrap?.type;
+  const isOverlayWrap = wrapType === 'None';
+
+  if (kind && heightCoversCanvas && widthCoversCanvas && isOverlayWrap) {
+    return true;
   }
 
   return false;
@@ -3054,7 +3397,7 @@ export { resolvePageNumberTokens } from './resolvePageTokens.js';
 export type { NumberingContext, ResolvePageTokensResult } from './resolvePageTokens.js';
 
 // Table utilities consumed by layout-bridge and cross-package sync tests
-export { getCellLines, getEmbeddedRowLines } from './layout-table.js';
+export { getCellLines, getEmbeddedRowLines, resolveTableFrame, resolveRenderedTableWidth } from './layout-table.js';
 export { describeCellRenderBlocks, computeCellSliceContentHeight } from './table-cell-slice.js';
 
 export { SINGLE_COLUMN_DEFAULT } from './section-breaks.js';

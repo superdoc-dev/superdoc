@@ -8,15 +8,41 @@ import { wrapTextInRun } from '@converter/exporter';
  */
 export function translateContentBlock(params) {
   const { node } = params;
-  const { vmlAttributes, horizontalRule } = node.attrs;
+  const { vmlAttributes, horizontalRule, attributes, style } = node.attrs;
+  const hasLegacyVmlMarkers = detectLegacyVmlRectMarkers(attributes, style);
 
   // Handle VML v:rect elements (like horizontal rules)
-  if (vmlAttributes || horizontalRule) {
+  if (vmlAttributes || horizontalRule || hasLegacyVmlMarkers) {
     return translateVRectContentBlock(params);
   }
 
   const alternateContent = alternateChoiceTranslator.decode(params);
+  if (!alternateContent) {
+    return null;
+  }
   return wrapTextInRun(alternateContent);
+}
+
+/**
+ * Detects legacy VML rect signatures preserved in contentBlock attrs.
+ * This prevents generic legacy w:pict content from being routed into
+ * DrawingML alternate-content export paths.
+ *
+ * @param {Record<string, unknown>|null|undefined} rawAttributes
+ * @param {unknown} style
+ * @returns {boolean}
+ */
+function detectLegacyVmlRectMarkers(rawAttributes, style) {
+  if (style) return true;
+  if (!rawAttributes || typeof rawAttributes !== 'object') return false;
+
+  const attrs = rawAttributes;
+
+  if (typeof attrs.style === 'string' && attrs.style.trim().length > 0) return true;
+  if (attrs.fillcolor != null) return true;
+  if (attrs.stroked != null) return true;
+
+  return Object.keys(attrs).some((key) => key.startsWith('o:'));
 }
 
 // Nominal full-width value for VML style. Word ignores this when o:hr="t"

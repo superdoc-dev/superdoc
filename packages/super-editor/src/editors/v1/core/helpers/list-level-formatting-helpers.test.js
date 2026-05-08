@@ -760,6 +760,262 @@ describe('preset catalog', () => {
 });
 
 // ──────────────────────────────────────────────────────────────────────────────
+// Shared helpers for rFonts-centric tests below
+// ──────────────────────────────────────────────────────────────────────────────
+
+/** Swap a specific ilvl inside an editor's abstract with a freshly-built level. */
+function replaceLevel(editor, abstractNumId, ilvl, overrides) {
+  const abstract = editor.converter.numbering.abstracts[abstractNumId];
+  const idx = abstract.elements.findIndex((el) => el.name === 'w:lvl' && el.attributes?.['w:ilvl'] === String(ilvl));
+  abstract.elements[idx] = makeLvlElement(ilvl, overrides);
+}
+
+/** Read the rFonts ascii value from a level, or undefined if not present. */
+function getLevelFontAscii(editor, abstractNumId, ilvl) {
+  const lvl = LevelFormattingHelpers.findLevelElement(editor.converter.numbering.abstracts[abstractNumId], ilvl);
+  const rPr = lvl.elements.find((el) => el.name === 'w:rPr');
+  const rFonts = rPr?.elements?.find((el) => el.name === 'w:rFonts');
+  return rFonts?.attributes?.['w:ascii'];
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Symbol-font normalization on bullet → ordered transitions
+// ──────────────────────────────────────────────────────────────────────────────
+
+describe('symbol-font normalization on bullet → ordered transitions', () => {
+  it('clears Wingdings rFonts when applying a decimal preset to a bullet level', () => {
+    const editor = makeEditor();
+    replaceLevel(editor, 1, 2, { numFmt: 'bullet', lvlText: '', fontFamily: 'Wingdings' });
+
+    const template = LevelFormattingHelpers.getPresetTemplate('decimal');
+    const result = LevelFormattingHelpers.applyTemplateToAbstract(editor, 1, template);
+
+    expect(result.changed).toBe(true);
+    expect(getLevelFontAscii(editor, 1, 2)).toBeUndefined();
+    const lvl = LevelFormattingHelpers.findLevelElement(editor.converter.numbering.abstracts[1], 2);
+    expect(lvl.elements.find((e) => e.name === 'w:numFmt').attributes['w:val']).toBe('decimal');
+  });
+
+  it('clears Symbol and Webdings rFonts when applying an ordered preset', () => {
+    const editor = makeEditor();
+    replaceLevel(editor, 1, 1, { numFmt: 'bullet', lvlText: '•', fontFamily: 'Symbol' });
+    replaceLevel(editor, 1, 3, { numFmt: 'bullet', lvlText: '■', fontFamily: 'Webdings' });
+
+    LevelFormattingHelpers.applyTemplateToAbstract(editor, 1, LevelFormattingHelpers.getPresetTemplate('lowerLetter'));
+
+    expect(getLevelFontAscii(editor, 1, 1)).toBeUndefined();
+    expect(getLevelFontAscii(editor, 1, 3)).toBeUndefined();
+  });
+
+  it('preserves legitimate text-font rFonts (Courier New) on ordered transition', () => {
+    const editor = makeEditor();
+    replaceLevel(editor, 1, 2, { numFmt: 'bullet', lvlText: 'o', fontFamily: 'Courier New' });
+
+    LevelFormattingHelpers.applyTemplateToAbstract(editor, 1, LevelFormattingHelpers.getPresetTemplate('decimal'));
+
+    expect(getLevelFontAscii(editor, 1, 2)).toBe('Courier New');
+  });
+
+  it('does not strip rFonts on bullet → bullet transitions', () => {
+    const editor = makeEditor();
+    replaceLevel(editor, 1, 2, { numFmt: 'bullet', lvlText: '', fontFamily: 'Wingdings' });
+
+    // Apply only level 2 from the 'square' bullet preset, so rFonts handling
+    // comes exclusively from the normalizer (which must no-op for bullet targets).
+    // The subsequent markerFont path would then overwrite, but this asserts the
+    // normalizer itself is a no-op for bullet numFmt.
+    const square = LevelFormattingHelpers.getPresetTemplate('square');
+    // Strip markerFont from the entry we apply so nothing else touches rFonts.
+    const entryWithoutFont = { ...square.levels[2], markerFont: undefined };
+    const template = { version: 1, levels: [entryWithoutFont] };
+
+    LevelFormattingHelpers.applyTemplateToAbstract(editor, 1, template, [2]);
+
+    // Font must survive — bullet numFmt never triggers the symbol-font sweep.
+    expect(getLevelFontAscii(editor, 1, 2)).toBe('Wingdings');
+  });
+
+  it('clears rFonts via setLevelNumberStyle (single-numFmt path)', () => {
+    const editor = makeEditor();
+    replaceLevel(editor, 1, 0, { numFmt: 'bullet', lvlText: '•', fontFamily: 'Symbol' });
+
+    const changed = LevelFormattingHelpers.setLevelNumberStyle(editor, 1, 0, 'lowerLetter');
+
+    expect(changed).toBe(true);
+    expect(getLevelFontAscii(editor, 1, 0)).toBeUndefined();
+    const lvl = LevelFormattingHelpers.findLevelElement(editor.converter.numbering.abstracts[1], 0);
+    expect(lvl.elements.find((e) => e.name === 'w:numFmt').attributes['w:val']).toBe('lowerLetter');
+  });
+
+  it('clears rFonts via setLevelNumberingFormat (numFmt+lvlText path)', () => {
+    const editor = makeEditor();
+    replaceLevel(editor, 1, 0, { numFmt: 'bullet', lvlText: '', fontFamily: 'Wingdings' });
+
+    LevelFormattingHelpers.setLevelNumberingFormat(editor, 1, 0, {
+      numFmt: 'decimal',
+      lvlText: '%1.',
+    });
+
+    expect(getLevelFontAscii(editor, 1, 0)).toBeUndefined();
+  });
+
+  it('removes the enclosing w:rPr when stripping rFonts empties it', () => {
+    const editor = makeEditor();
+    replaceLevel(editor, 1, 0, { numFmt: 'bullet', lvlText: '', fontFamily: 'Wingdings' });
+
+    LevelFormattingHelpers.setLevelNumberStyle(editor, 1, 0, 'decimal');
+
+    const lvl = LevelFormattingHelpers.findLevelElement(editor.converter.numbering.abstracts[1], 0);
+    expect(lvl.elements.find((e) => e.name === 'w:rPr')).toBeUndefined();
+  });
+
+  it('strips rFonts when a symbol font is on hAnsi but not ascii', () => {
+    const editor = makeEditor();
+    const lvl = {
+      type: 'element',
+      name: 'w:lvl',
+      attributes: { 'w:ilvl': '0' },
+      elements: [
+        { type: 'element', name: 'w:numFmt', attributes: { 'w:val': 'bullet' } },
+        { type: 'element', name: 'w:lvlText', attributes: { 'w:val': '' } },
+        {
+          type: 'element',
+          name: 'w:rPr',
+          elements: [{ type: 'element', name: 'w:rFonts', attributes: { 'w:hAnsi': 'Wingdings' } }],
+        },
+      ],
+    };
+    const abstract = editor.converter.numbering.abstracts[1];
+    const idx = abstract.elements.findIndex((el) => el.name === 'w:lvl' && el.attributes?.['w:ilvl'] === '0');
+    abstract.elements[idx] = lvl;
+
+    LevelFormattingHelpers.setLevelNumberStyle(editor, 1, 0, 'decimal');
+
+    const updated = LevelFormattingHelpers.findLevelElement(editor.converter.numbering.abstracts[1], 0);
+    expect(updated.elements.find((e) => e.name === 'w:rPr')).toBeUndefined();
+  });
+
+  it('matches symbol-font names case-insensitively', () => {
+    const editor = makeEditor();
+    replaceLevel(editor, 1, 0, { numFmt: 'bullet', lvlText: 'x', fontFamily: 'WINGDINGS' });
+
+    LevelFormattingHelpers.setLevelNumberStyle(editor, 1, 0, 'decimal');
+
+    expect(getLevelFontAscii(editor, 1, 0)).toBeUndefined();
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Donor font propagation in applyTemplateToAbstract
+// ──────────────────────────────────────────────────────────────────────────────
+
+describe('donor font propagation in applyTemplateToAbstract', () => {
+  it('propagates a surviving text font onto stripped nested levels', () => {
+    const editor = makeEditor();
+    // L0, L1: legitimate text font (Courier New) — survives the normalizer
+    replaceLevel(editor, 1, 0, { numFmt: 'bullet', lvlText: '•', fontFamily: 'Courier New' });
+    replaceLevel(editor, 1, 1, { numFmt: 'bullet', lvlText: 'o', fontFamily: 'Courier New' });
+    // L2, L3: symbol fonts — get stripped, then must inherit Courier New
+    replaceLevel(editor, 1, 2, { numFmt: 'bullet', lvlText: '', fontFamily: 'Wingdings' });
+    replaceLevel(editor, 1, 3, { numFmt: 'bullet', lvlText: '', fontFamily: 'Symbol' });
+
+    LevelFormattingHelpers.applyTemplateToAbstract(editor, 1, LevelFormattingHelpers.getPresetTemplate('decimal'));
+
+    expect(getLevelFontAscii(editor, 1, 0)).toBe('Courier New');
+    expect(getLevelFontAscii(editor, 1, 1)).toBe('Courier New');
+    expect(getLevelFontAscii(editor, 1, 2)).toBe('Courier New');
+    expect(getLevelFontAscii(editor, 1, 3)).toBe('Courier New');
+  });
+
+  it('leaves levels bare when no donor font exists (all levels were symbol fonts)', () => {
+    const editor = makeEditor();
+    replaceLevel(editor, 1, 0, { numFmt: 'bullet', lvlText: '•', fontFamily: 'Symbol' });
+    replaceLevel(editor, 1, 1, { numFmt: 'bullet', lvlText: 'o', fontFamily: 'Symbol' });
+    replaceLevel(editor, 1, 2, { numFmt: 'bullet', lvlText: '', fontFamily: 'Wingdings' });
+
+    LevelFormattingHelpers.applyTemplateToAbstract(editor, 1, LevelFormattingHelpers.getPresetTemplate('decimal'));
+
+    // No donor → propagation skipped, all three fall back to cascade.
+    expect(getLevelFontAscii(editor, 1, 0)).toBeUndefined();
+    expect(getLevelFontAscii(editor, 1, 1)).toBeUndefined();
+    expect(getLevelFontAscii(editor, 1, 2)).toBeUndefined();
+  });
+
+  it('does not override an explicit markerFont on a template entry', () => {
+    const editor = makeEditor();
+    replaceLevel(editor, 1, 0, { numFmt: 'bullet', lvlText: '•', fontFamily: 'Courier New' });
+    replaceLevel(editor, 1, 1, { numFmt: 'bullet', lvlText: '', fontFamily: 'Wingdings' });
+
+    const template = {
+      version: 1,
+      levels: [
+        { level: 0, numFmt: 'decimal', lvlText: '%1.' },
+        { level: 1, numFmt: 'decimal', lvlText: '%2.', markerFont: 'Arial' },
+      ],
+    };
+
+    LevelFormattingHelpers.applyTemplateToAbstract(editor, 1, template);
+
+    // L1's explicit markerFont wins over the donor propagation.
+    expect(getLevelFontAscii(editor, 1, 1)).toBe('Arial');
+    // L0 keeps its legitimate font (and also happens to be the donor).
+    expect(getLevelFontAscii(editor, 1, 0)).toBe('Courier New');
+  });
+
+  it('skips propagation for bullet-target entries in the same template', () => {
+    const editor = makeEditor();
+    replaceLevel(editor, 1, 0, { numFmt: 'bullet', lvlText: '•', fontFamily: 'Courier New' });
+    replaceLevel(editor, 1, 1, { numFmt: 'bullet', lvlText: '', fontFamily: 'Wingdings' });
+
+    const template = {
+      version: 1,
+      levels: [
+        { level: 0, numFmt: 'decimal', lvlText: '%1.' },
+        { level: 1, numFmt: 'bullet', lvlText: '•' },
+      ],
+    };
+
+    LevelFormattingHelpers.applyTemplateToAbstract(editor, 1, template);
+
+    // L1 remains bullet → normalizer doesn't strip → Wingdings is preserved.
+    expect(getLevelFontAscii(editor, 1, 1)).toBe('Wingdings');
+  });
+
+  it('does not inject donor font into bare levels that were not stripped this call', () => {
+    const editor = makeEditor();
+    // L0 already ordered with a legitimate font — serves as a potential donor.
+    replaceLevel(editor, 1, 0, { numFmt: 'decimal', fontFamily: 'Courier New' });
+    // L2 is bare — user's intent is "inherit from paragraph style cascade."
+    // L2 was not changed from any prior state in this call; no rFonts gets stripped.
+
+    // Partial update: touch only indents/start at L2, leaving numFmt/lvlText alone.
+    const template = {
+      version: 1,
+      levels: [{ level: 2, start: 5, indents: { left: 1000, hanging: 200 } }],
+    };
+
+    LevelFormattingHelpers.applyTemplateToAbstract(editor, 1, template, [2]);
+
+    // L2 must remain bare — the normalizer stripped nothing, so donor propagation
+    // must not synthesize a font onto it.
+    expect(getLevelFontAscii(editor, 1, 2)).toBeUndefined();
+  });
+
+  it('does not inject donor font onto already-ordered levels keeping their rFonts', () => {
+    const editor = makeEditor();
+    replaceLevel(editor, 1, 0, { numFmt: 'decimal', fontFamily: 'Courier New' });
+    // L2 already ordered with its own legitimate font. Re-applying a template
+    // must not overwrite it with L0's donor font.
+    replaceLevel(editor, 1, 2, { numFmt: 'decimal', fontFamily: 'Arial' });
+
+    LevelFormattingHelpers.applyTemplateToAbstract(editor, 1, LevelFormattingHelpers.getPresetTemplate('decimal'));
+
+    expect(getLevelFontAscii(editor, 1, 0)).toBe('Courier New');
+    expect(getLevelFontAscii(editor, 1, 2)).toBe('Arial');
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────────
 // Pure mutation behavior (no transaction side effects)
 // ──────────────────────────────────────────────────────────────────────────────
 

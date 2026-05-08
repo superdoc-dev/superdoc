@@ -8,11 +8,14 @@ const { mockLayoutHeaderFooterWithCache, mockComputeDisplayPageNumber, mockMeasu
   mockMeasureBlock: vi.fn(),
 }));
 
-vi.mock('@superdoc/layout-bridge', () => ({
-  OOXML_PCT_DIVISOR: 5000,
-  computeDisplayPageNumber: mockComputeDisplayPageNumber,
-  layoutHeaderFooterWithCache: mockLayoutHeaderFooterWithCache,
-}));
+vi.mock('@superdoc/layout-bridge', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@superdoc/layout-bridge')>();
+  return {
+    ...actual,
+    computeDisplayPageNumber: mockComputeDisplayPageNumber,
+    layoutHeaderFooterWithCache: mockLayoutHeaderFooterWithCache,
+  };
+});
 
 vi.mock('@superdoc/measuring-dom', () => ({
   measureBlock: mockMeasureBlock,
@@ -22,6 +25,12 @@ const makeBlock = (id: string): FlowBlock => ({
   kind: 'paragraph',
   id,
   runs: [{ text: id, fontFamily: 'Arial', fontSize: 12 }],
+});
+
+const makeParagraph = (id: string, text: string): FlowBlock => ({
+  kind: 'paragraph',
+  id,
+  runs: [{ text, fontFamily: 'Arial', fontSize: 12 }],
 });
 
 const makeMeasure = (): Measure => ({
@@ -128,5 +137,142 @@ describe('layoutPerRIdHeaderFooters', () => {
     expect(deps.headerLayoutsByRId.has('rId-header-default')).toBe(true);
     expect(deps.headerLayoutsByRId.has('rId-header-first')).toBe(true);
     expect(deps.headerLayoutsByRId.has('rId-header-orphan')).toBe(false);
+  });
+
+  it('lays out first-page header refs in multi-section documents with per-section constraints', async () => {
+    const headerBlocksByRId = new Map<string, FlowBlock[]>([
+      ['rId-header-default', [makeBlock('block-default')]],
+      ['rId-header-first', [makeBlock('block-first')]],
+      ['rId-header-section-1', [makeBlock('block-section-1')]],
+    ]);
+
+    const headerFooterInput = {
+      headerBlocksByRId,
+      footerBlocksByRId: undefined,
+      headerBlocks: undefined,
+      footerBlocks: undefined,
+      constraints: {
+        width: 400,
+        height: 80,
+        pageWidth: 600,
+        pageHeight: 800,
+        margins: {
+          top: 50,
+          right: 50,
+          bottom: 50,
+          left: 50,
+          header: 20,
+        },
+      },
+    };
+
+    const layout = {
+      pages: [
+        { number: 1, fragments: [], sectionIndex: 0 },
+        { number: 2, fragments: [], sectionIndex: 1 },
+      ],
+    } as unknown as Layout;
+
+    const sectionMetadata: SectionMetadata[] = [
+      {
+        sectionIndex: 0,
+        margins: { top: 50, right: 50, bottom: 50, left: 50, header: 20 },
+        headerRefs: {
+          default: 'rId-header-default',
+          first: 'rId-header-first',
+        },
+      },
+      {
+        sectionIndex: 1,
+        margins: { top: 55, right: 55, bottom: 55, left: 55, header: 20 },
+        headerRefs: {
+          default: 'rId-header-section-1',
+        },
+      },
+    ];
+
+    const deps = {
+      headerLayoutsByRId: new Map(),
+      footerLayoutsByRId: new Map(),
+    };
+
+    await layoutPerRIdHeaderFooters(headerFooterInput, layout, sectionMetadata, deps);
+
+    const laidOutBlockIds = new Set(
+      mockLayoutHeaderFooterWithCache.mock.calls.map((call) => call[0].default?.[0]?.id).filter(Boolean),
+    );
+
+    expect(laidOutBlockIds).toEqual(new Set(['block-default', 'block-first', 'block-section-1']));
+    expect(deps.headerLayoutsByRId.has('rId-header-default::s0')).toBe(true);
+    expect(deps.headerLayoutsByRId.has('rId-header-first::s0')).toBe(true);
+    expect(deps.headerLayoutsByRId.has('rId-header-section-1::s1')).toBe(true);
+  });
+
+  it('lays out referenced default/odd/even variants in per-section mode', async () => {
+    const headerBlocksByRId = new Map<string, FlowBlock[]>([
+      ['rId-header-default', [makeBlock('block-default')]],
+      ['rId-header-odd', [makeBlock('block-odd')]],
+      ['rId-header-even', [makeBlock('block-even')]],
+      ['rId-header-orphan', [makeBlock('block-orphan')]],
+    ]);
+
+    const headerFooterInput = {
+      headerBlocksByRId,
+      footerBlocksByRId: undefined,
+      headerBlocks: undefined,
+      footerBlocks: undefined,
+      constraints: {
+        width: 400,
+        height: 80,
+        pageWidth: 600,
+        pageHeight: 800,
+        margins: {
+          top: 50,
+          right: 50,
+          bottom: 50,
+          left: 50,
+          header: 20,
+        },
+      },
+    };
+
+    const layout = {
+      pages: [{ number: 1, fragments: [], sectionIndex: 0 }],
+    } as unknown as Layout;
+
+    const sectionMetadata: SectionMetadata[] = [
+      {
+        sectionIndex: 0,
+        margins: { left: 50, right: 50, top: 50, bottom: 50, header: 20 },
+        headerRefs: {
+          default: 'rId-header-default',
+          odd: 'rId-header-odd',
+        },
+      },
+      {
+        sectionIndex: 1,
+        margins: { left: 60, right: 60, top: 50, bottom: 50, header: 20 },
+        headerRefs: {
+          even: 'rId-header-even',
+        },
+      },
+    ];
+
+    const deps = {
+      headerLayoutsByRId: new Map(),
+      footerLayoutsByRId: new Map(),
+    };
+
+    await layoutPerRIdHeaderFooters(headerFooterInput, layout, sectionMetadata, deps);
+
+    const laidOutBlockIds = new Set(
+      mockLayoutHeaderFooterWithCache.mock.calls.map((call) => call[0].default?.[0]?.id).filter(Boolean),
+    );
+
+    expect(laidOutBlockIds).toEqual(new Set(['block-default', 'block-odd', 'block-even']));
+    expect(deps.headerLayoutsByRId.has('rId-header-default::s0')).toBe(true);
+    expect(deps.headerLayoutsByRId.has('rId-header-odd::s0')).toBe(true);
+    expect(deps.headerLayoutsByRId.has('rId-header-even::s1')).toBe(true);
+    expect(deps.headerLayoutsByRId.has('rId-header-orphan::s0')).toBe(false);
   });
 });

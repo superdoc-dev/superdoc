@@ -276,6 +276,7 @@ describe('remeasureParagraph', () => {
       // "A" = 10px, tab advances to 48px, "B" starts at 48px
       // Total width should be ~48px + 10px = 58px
       expect(measure.lines[0].width).toBeGreaterThan(48);
+      expect(measure.lines[0].hasExplicitTabStops).toBe(true);
     });
 
     it('advances cursor for multiple tabs in same line sequentially', () => {
@@ -329,6 +330,101 @@ describe('remeasureParagraph', () => {
 
       expect(measure.lines).toHaveLength(1);
       expect(measure.lines[0].width).toBeGreaterThan(48);
+      expect(measure.lines[0].hasExplicitTabStops).toBeUndefined();
+    });
+
+    it('advances a leading tab to the left margin when hanging indent starts before it', () => {
+      const hangingPx = 567 / TWIPS_PER_PX;
+      const run = tabRun();
+      const block = createBlock([run, textRun('Test doc')], {
+        indent: { hanging: hangingPx },
+        tabs: [{ pos: -1440, val: 'start' }],
+        tabIntervalTwips: DEFAULT_TAB_INTERVAL_TWIPS,
+      });
+      const measure = remeasureParagraph(block, 200);
+
+      expect(measure.lines).toHaveLength(1);
+      expect((run as { width?: number }).width).toBeCloseTo(hangingPx, 1);
+      expect(measure.lines[0].width).toBeCloseTo(hangingPx + 'Test doc'.length * CHAR_WIDTH, 1);
+    });
+
+    it('advances a leading tab to the left indent stop for negative left indent paragraphs', () => {
+      const leftIndentPx = -567 / TWIPS_PER_PX;
+      const expectedTabAdvance = Math.abs(leftIndentPx);
+      const run = tabRun();
+      const block = createBlock([run, textRun('Test doc')], {
+        indent: { left: leftIndentPx },
+        tabs: [{ pos: -1440, val: 'start' }],
+        tabIntervalTwips: DEFAULT_TAB_INTERVAL_TWIPS,
+      });
+      const measure = remeasureParagraph(block, 200);
+
+      expect(measure.lines).toHaveLength(1);
+      expect((run as { width?: number }).width).toBeCloseTo(expectedTabAdvance, 1);
+      expect(measure.lines[0].width).toBeCloseTo(expectedTabAdvance + 'Test doc'.length * CHAR_WIDTH, 1);
+
+      const textSegment = measure.lines[0].segments?.find((segment) => segment.runIndex === 1);
+      expect(textSegment?.x).toBeCloseTo(expectedTabAdvance * 2, 1);
+      expect(textSegment?.precedingTabEndX).toBeCloseTo(expectedTabAdvance, 1);
+      // Explicit segment x is pre-painter geometry. The DOM painter later adds the
+      // negative paragraph indent, so the final fragment-local text position remains
+      // one indent width from the negative-left fragment origin: 2*indent - indent.
+      expect((textSegment?.x ?? 0) + leftIndentPx).toBeCloseTo(expectedTabAdvance, 1);
+    });
+
+    it('compensates start tabs on wrapped body lines for negative-left paragraphs with hanging indents', () => {
+      const leftIndentPx = -40;
+      const run = tabRun();
+      const block = createBlock([textRun('AAAAA AAAAA AAAAA'), run, textRun('Body')], {
+        indent: { left: leftIndentPx, hanging: 20 },
+      });
+      const measure = remeasureParagraph(block, 100);
+
+      expect(measure.lines.length).toBeGreaterThan(1);
+      expect((run as { width?: number }).width).toBeCloseTo(30, 1);
+
+      const textSegment = measure.lines
+        .slice(1)
+        .flatMap((line) => line.segments ?? [])
+        .find((segment) => segment.runIndex === 2);
+      expect(textSegment?.x).toBeCloseTo(120, 1);
+      expect(textSegment?.precedingTabEndX).toBeCloseTo(80, 1);
+      expect((textSegment?.x ?? 0) + leftIndentPx).toBeCloseTo(80, 1);
+    });
+
+    it('explicitly positions positive explicit start stops without negative-left compensation', () => {
+      const leftIndentPx = -24;
+      const runs: Run[] = [textRun('AAAA'), ...Array.from({ length: 7 }, () => tabRun()), textRun('Company')];
+      const block = createBlock(runs, {
+        indent: { left: leftIndentPx },
+        tabs: [48, 96, 144, 192, 240, 288, 336].map((pos) => ({ pos: pxToTwips(pos), val: 'start' })),
+      });
+
+      const measure = remeasureParagraph(block, 600);
+      const textSegment = measure.lines[0].segments?.find((segment) => segment.runIndex === 8);
+
+      // Start-tab segments intentionally carry x in remeasure, matching measuring/dom.
+      // Positive authored stops do not need the painter tab-span compensation signal.
+      expect(textSegment?.x).toBeCloseTo(360, 1);
+      expect(textSegment?.precedingTabEndX).toBeUndefined();
+      expect((textSegment?.x ?? 0) + leftIndentPx).toBeCloseTo(336, 1);
+    });
+
+    it('does not clamp tabs early when negative left indent expands content width', () => {
+      const leftIndentPx = -40;
+      const tabStopPx = 190;
+      const run = tabRun();
+      const block = createBlock([textRun('AAAAA'), run, textRun('X')], {
+        indent: { left: leftIndentPx },
+        tabs: [{ pos: pxToTwips(tabStopPx), val: 'start' }],
+      });
+
+      remeasureParagraph(block, 200);
+
+      // The leading implicit zero stop is already behind the cursor:
+      // absCurrentX = 50px text + -40px indent = 10px, target = 190px.
+      // The old mixed model clamped at 160px and advanced only 150px.
+      expect((run as { width?: number }).width).toBeCloseTo(180, 1);
     });
 
     it('keeps right-aligned tab groups on the same line', () => {
@@ -413,6 +509,28 @@ describe('remeasureParagraph', () => {
       expect(leader.to).toBeCloseTo(300 - pageNumWidth, 0);
     });
 
+    it('keeps negative-left right-aligned tab segments in initial-measurement coordinates', () => {
+      const indentLeft = -40;
+      const tabStopPx = 190;
+      const tabStop: TabStop = { pos: pxToTwips(tabStopPx), val: 'end', leader: 'dot' };
+      const block = createBlock([textRun('AAA'), tabRun(), textRun('12')], {
+        indent: { left: indentLeft },
+        tabs: [tabStop],
+      });
+      const measure = remeasureParagraph(block, 200);
+
+      expect(measure.lines).toHaveLength(1);
+
+      const pageNumberSegment = measure.lines[0].segments?.find((segment) => segment.runIndex === 2);
+      const leader = measure.lines[0].leaders?.[0];
+      const pageNumberWidth = '12'.length * CHAR_WIDTH;
+      const expectedPaintedX = tabStopPx - pageNumberWidth;
+
+      expect(pageNumberSegment?.x).toBeCloseTo(expectedPaintedX - indentLeft, 1);
+      expect((pageNumberSegment?.x ?? 0) + indentLeft).toBeCloseTo(expectedPaintedX, 1);
+      expect(leader?.to).toBeCloseTo(expectedPaintedX, 1);
+    });
+
     it('handles tab with hyphen leader', () => {
       const tabStop: TabStop = { pos: pxToTwips(100), val: 'end', leader: 'hyphen' };
       const block = createBlock([textRun('Entry'), tabRun(), textRun('99')], { tabs: [tabStop] });
@@ -443,6 +561,27 @@ describe('remeasureParagraph', () => {
 
       expect(measure.lines[0].segments).toBeDefined();
       expect(measure.lines[0].segments?.length).toBeGreaterThan(0);
+    });
+
+    it('aligns trailing TOC-style tab to explicit right stop with leader', () => {
+      const rightStopPx = 300;
+      const block = createBlock(
+        [textRun('1.'), tabRun({ tabIndex: 0 }), textRun('Generalities'), tabRun({ tabIndex: 1 }), textRun('5')],
+        {
+          tabs: [{ pos: pxToTwips(rightStopPx), val: 'end', leader: 'dot' }],
+          indent: { left: 30, hanging: 30 },
+          tabIntervalTwips: DEFAULT_TAB_INTERVAL_TWIPS,
+        },
+      );
+
+      const measure = remeasureParagraph(block, 800);
+      expect(measure.lines).toHaveLength(1);
+      const leaders = measure.lines[0].leaders;
+      expect(leaders).toBeDefined();
+      expect(leaders?.length).toBe(1);
+      const leader = leaders![0];
+      expect(leader.style).toBe('dot');
+      expect(leader.to).toBeCloseTo(rightStopPx - CHAR_WIDTH, 0);
     });
 
     it('handles tab at various positions within text', () => {
@@ -481,7 +620,6 @@ describe('remeasureParagraph', () => {
       const tabStop: TabStop = { pos: 1440, val: 'start' };
       const block = createBlock([textRun('A'), tabRun(), textRun('B')], { tabs: [tabStop] });
       const measure = remeasureParagraph(block, 200);
-
       expect(measure.lines).toHaveLength(1);
       // Tab should advance to 96px (1 inch)
       expect(measure.lines[0].width).toBeGreaterThan(96);
@@ -587,19 +725,18 @@ describe('remeasureParagraph', () => {
       // This should be reflected in line breaking behavior
     });
 
-    it('handles negative indent values by clamping to zero', () => {
-      // Implementation uses Math.max(0, indent) to prevent negative indents
+    it('preserves negative left and right indents in available width calculations', () => {
       const block = createBlock([textRun('Hello')], {
         indent: { left: -50, right: -30, firstLine: -20, hanging: -10 },
       });
       const measure = remeasureParagraph(block, 100);
 
-      // Should treat negative values as 0, so full width is available
       expect(measure.lines).toHaveLength(1);
       expect(measure.lines[0].width).toBe(5 * CHAR_WIDTH);
+      expect(measure.lines[0].maxWidth).toBe(180);
     });
 
-    it('avoids widening first line when negative indents are present with hanging', () => {
+    it('uses expanded content width when negative indents are present with hanging', () => {
       const maxWidth = 200;
       const block = createBlock([textRun('A'.repeat(40))], {
         indent: { left: -20, right: -30, hanging: 20 },
@@ -607,8 +744,8 @@ describe('remeasureParagraph', () => {
       const measure = remeasureParagraph(block, maxWidth);
 
       expect(measure.lines.length).toBeGreaterThan(1);
-      expect(measure.lines[0].maxWidth).toBe(maxWidth);
-      expect(measure.lines[1].maxWidth).toBe(maxWidth);
+      expect(measure.lines[0].maxWidth).toBe(250);
+      expect(measure.lines[1].maxWidth).toBe(250);
     });
 
     // SD-2415: the guard was relaxed from `hasNegativeIndent` to `hasNegativeLeftIndent`.
@@ -621,12 +758,12 @@ describe('remeasureParagraph', () => {
       const measure = remeasureParagraph(block, maxWidth);
 
       expect(measure.lines.length).toBeGreaterThan(1);
-      // First line widens by hanging amount; body lines use plain content width.
-      expect(measure.lines[0].maxWidth).toBe(maxWidth + 20);
-      expect(measure.lines[1].maxWidth).toBe(maxWidth);
+      // First line widens by hanging amount; body lines use content width expanded by negative right indent.
+      expect(measure.lines[0].maxWidth).toBe(250);
+      expect(measure.lines[1].maxWidth).toBe(230);
     });
 
-    it('does NOT widen first line when left indent is negative (SD-1401 regression guard)', () => {
+    it('keeps SD-1401 negative-left hanging paragraphs from wrapping prematurely under expanded-width semantics', () => {
       const maxWidth = 200;
       const block = createBlock([textRun('A'.repeat(40))], {
         indent: { left: -20, right: 0, hanging: 20 },
@@ -634,8 +771,12 @@ describe('remeasureParagraph', () => {
       const measure = remeasureParagraph(block, maxWidth);
 
       expect(measure.lines.length).toBeGreaterThan(1);
-      expect(measure.lines[0].maxWidth).toBe(maxWidth);
-      expect(measure.lines[1].maxWidth).toBe(maxWidth);
+      // SD-1401 originally guarded against premature body-line wrapping for
+      // negative-left + hanging paragraphs. The correct current model preserves
+      // the negative-left expanded content width, but does not add another
+      // hanging-width expansion on top of it.
+      expect(measure.lines[0].maxWidth).toBe(220);
+      expect(measure.lines[1].maxWidth).toBe(220);
     });
 
     // SD-2415: remeasure must match the initial measurer on `suppressFirstLineIndent`.
@@ -872,7 +1013,111 @@ describe('remeasureParagraph', () => {
       const block = createBlock([textRun('Hello'), { kind: 'lineBreak' } as Run, textRun('World')]);
       const measure = remeasureParagraph(block, 200);
 
-      expect(measure.lines.length).toBeGreaterThanOrEqual(1);
+      expect(measure.lines).toHaveLength(2);
+      expect(measure.lines[0].fromRun).toBe(0);
+      expect(measure.lines[0].toRun).toBe(0);
+      expect(measure.lines[1].fromRun).toBe(2);
+      expect(measure.lines[1].toRun).toBe(2);
+    });
+
+    it('creates an empty line for leading lineBreak at start of paragraph', () => {
+      const block = createBlock([{ kind: 'lineBreak' } as Run, textRun('Text')]);
+      const measure = remeasureParagraph(block, 200);
+
+      expect(measure.lines).toHaveLength(2);
+      expect(measure.lines[0].fromRun).toBe(0);
+      expect(measure.lines[0].toRun).toBe(0);
+      expect(measure.lines[0].toChar).toBe(0);
+      expect(measure.lines[1].fromRun).toBe(1);
+      expect(measure.lines[1].toRun).toBe(1);
+    });
+
+    it('preserves multiple explicit lineBreak boundaries', () => {
+      const block = createBlock([
+        textRun('One'),
+        { kind: 'lineBreak' } as Run,
+        textRun('Two'),
+        { kind: 'lineBreak' } as Run,
+        textRun('Three'),
+      ]);
+      const measure = remeasureParagraph(block, 200);
+
+      expect(measure.lines).toHaveLength(3);
+      expect(measure.lines[0].fromRun).toBe(0);
+      expect(measure.lines[0].toRun).toBe(0);
+      expect(measure.lines[1].fromRun).toBe(2);
+      expect(measure.lines[1].toRun).toBe(2);
+      expect(measure.lines[2].fromRun).toBe(4);
+      expect(measure.lines[2].toRun).toBe(4);
+    });
+
+    it('preserves trailing explicit lineBreak as final empty line', () => {
+      const block = createBlock([textRun('Hello'), { kind: 'lineBreak' } as Run]);
+      const measure = remeasureParagraph(block, 200);
+
+      expect(measure.lines).toHaveLength(2);
+      expect(measure.lines[0].fromRun).toBe(0);
+      expect(measure.lines[0].toRun).toBe(0);
+      // Final empty line should be anchored to trailing break run.
+      expect(measure.lines[1].fromRun).toBe(1);
+      expect(measure.lines[1].toRun).toBe(1);
+      expect(measure.lines[1].toChar).toBe(0);
+    });
+
+    it('handles a single explicit lineBreak run as the only paragraph content', () => {
+      const block = createBlock([{ kind: 'lineBreak' } as Run]);
+      const measure = remeasureParagraph(block, 200);
+
+      expect(measure.lines).toHaveLength(1);
+      expect(measure.lines[0].fromRun).toBe(0);
+      expect(measure.lines[0].toRun).toBe(0);
+      expect(measure.lines[0].fromChar).toBe(0);
+      expect(measure.lines[0].toChar).toBe(0);
+    });
+
+    it('uses previous text font size for trailing explicit lineBreak empty line height', () => {
+      const block = createBlock([textRun('Heading', { fontSize: 24 }), { kind: 'lineBreak' } as Run]);
+      const measure = remeasureParagraph(block, 200);
+
+      expect(measure.lines).toHaveLength(2);
+      expect(measure.lines[0].lineHeight).toBe(24 * 1.2);
+      expect(measure.lines[1].fromRun).toBe(1);
+      expect(measure.lines[1].toRun).toBe(1);
+      expect(measure.lines[1].lineHeight).toBe(24 * 1.2);
+    });
+
+    it('preserves multiple trailing explicit lineBreak runs as multiple empty lines', () => {
+      const block = createBlock([textRun('Hello'), { kind: 'lineBreak' } as Run, { kind: 'lineBreak' } as Run]);
+      const measure = remeasureParagraph(block, 200);
+
+      expect(measure.lines).toHaveLength(3);
+      expect(measure.lines[0].fromRun).toBe(0);
+      expect(measure.lines[0].toRun).toBe(0);
+      expect(measure.lines[1].fromRun).toBe(1);
+      expect(measure.lines[1].toRun).toBe(1);
+      expect(measure.lines[1].toChar).toBe(0);
+      expect(measure.lines[2].fromRun).toBe(2);
+      expect(measure.lines[2].toRun).toBe(2);
+      expect(measure.lines[2].toChar).toBe(0);
+    });
+
+    it('matches measureParagraphBlock for text + break + break + text', () => {
+      const block = createBlock([
+        textRun('A'),
+        { kind: 'lineBreak' } as Run,
+        { kind: 'lineBreak' } as Run,
+        textRun('B'),
+      ]);
+      const measure = remeasureParagraph(block, 200);
+
+      expect(measure.lines).toHaveLength(3);
+      expect(measure.lines[0].fromRun).toBe(0);
+      expect(measure.lines[0].toRun).toBe(0);
+      expect(measure.lines[1].fromRun).toBe(2);
+      expect(measure.lines[1].toRun).toBe(2);
+      expect(measure.lines[1].toChar).toBe(0);
+      expect(measure.lines[2].fromRun).toBe(3);
+      expect(measure.lines[2].toRun).toBe(3);
     });
 
     it('handles tabs followed immediately by line break', () => {

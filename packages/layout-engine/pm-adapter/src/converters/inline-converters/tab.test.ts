@@ -221,9 +221,15 @@ describe('tabNodeToRun', () => {
       tabNodeToRun({ node: tabNode, positions, tabOrdinal: 0, paragraphAttrs });
 
       expect(applyMarksToRunMock).toHaveBeenCalledTimes(1);
-      expect(applyMarksToRunMock).toHaveBeenCalledWith(expect.objectContaining({ kind: 'tab' }), [
-        { type: 'underline', attrs: { underlineType: 'single' } },
-      ]);
+      expect(applyMarksToRunMock).toHaveBeenCalledWith(
+        expect.objectContaining({ kind: 'tab' }),
+        [{ type: 'underline', attrs: { underlineType: 'single' } }],
+        undefined,
+        undefined,
+        undefined,
+        true,
+        undefined,
+      );
     });
 
     it('calls applyMarksToRun with inherited marks', () => {
@@ -238,9 +244,15 @@ describe('tabNodeToRun', () => {
       tabNodeToRun({ node: tabNode, positions, tabOrdinal: 0, paragraphAttrs, inheritedMarks });
 
       expect(applyMarksToRunMock).toHaveBeenCalledTimes(1);
-      expect(applyMarksToRunMock).toHaveBeenCalledWith(expect.objectContaining({ kind: 'tab' }), [
-        { type: 'underline', attrs: { underlineType: 'single' } },
-      ]);
+      expect(applyMarksToRunMock).toHaveBeenCalledWith(
+        expect.objectContaining({ kind: 'tab' }),
+        [{ type: 'underline', attrs: { underlineType: 'single' } }],
+        undefined,
+        undefined,
+        undefined,
+        true,
+        undefined,
+      );
     });
 
     it('combines node marks and inherited marks', () => {
@@ -258,10 +270,15 @@ describe('tabNodeToRun', () => {
       tabNodeToRun({ node: tabNode, positions, tabOrdinal: 0, paragraphAttrs, inheritedMarks });
 
       expect(applyMarksToRunMock).toHaveBeenCalledTimes(1);
-      expect(applyMarksToRunMock).toHaveBeenCalledWith(expect.objectContaining({ kind: 'tab' }), [
-        { type: 'bold' },
-        { type: 'underline', attrs: { underlineType: 'single' } },
-      ]);
+      expect(applyMarksToRunMock).toHaveBeenCalledWith(
+        expect.objectContaining({ kind: 'tab' }),
+        [{ type: 'bold' }, { type: 'underline', attrs: { underlineType: 'single' } }],
+        undefined,
+        undefined,
+        undefined,
+        true,
+        undefined,
+      );
     });
 
     it('does not call applyMarksToRun when no marks present', () => {

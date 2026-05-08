@@ -123,6 +123,7 @@ const {
       getMountedPageIndices: vi.fn(() => []),
       onScroll: vi.fn(),
       setScrollContainer: vi.fn(),
+      setShowFormattingMarks: vi.fn(),
     })),
     mockMeasureBlock: vi.fn(() => ({ width: 100, height: 100 })),
     mockEditorConverterStore: converterStore,
@@ -289,6 +290,7 @@ vi.mock('../../header-footer/EditorOverlayManager', () => ({
 
 vi.mock('@superdoc/layout-resolved', () => ({
   resolveLayout: vi.fn(() => ({ version: 1, flowMode: 'paginated', pageGap: 0, pages: [] })),
+  resolveHeaderFooterLayout: vi.fn(() => ({ height: 0, pages: [] })),
 }));
 
 describe('PresentationEditor - Zoom Functionality', () => {

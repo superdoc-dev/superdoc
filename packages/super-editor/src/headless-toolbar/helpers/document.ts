@@ -4,7 +4,22 @@ import { isCommandDisabled } from './general.js';
 import { resolveStateEditor } from './context.js';
 import type { ToolbarCommandState, ToolbarContext } from '../types.js';
 
+/**
+ * Document-wide history state takes precedence when a PresentationEditor
+ * with an active unified-history coordinator is wired up — it reports the
+ * cross-surface stack depths instead of whichever editor currently holds
+ * focus.
+ */
+const readCoordinatorDepths = (context: ToolbarContext | null): { undoDepth: number; redoDepth: number } | null => {
+  const state = context?.presentationEditor?.getHistoryState?.();
+  if (!state) return null;
+  return { undoDepth: state.undoDepth, redoDepth: state.redoDepth };
+};
+
 export const getCurrentUndoDepth = (context: ToolbarContext | null) => {
+  const coordinatorDepths = readCoordinatorDepths(context);
+  if (coordinatorDepths) return coordinatorDepths.undoDepth;
+
   const stateEditor = resolveStateEditor(context);
 
   if (!stateEditor?.state) {
@@ -24,6 +39,9 @@ export const getCurrentUndoDepth = (context: ToolbarContext | null) => {
 };
 
 export const getCurrentRedoDepth = (context: ToolbarContext | null) => {
+  const coordinatorDepths = readCoordinatorDepths(context);
+  if (coordinatorDepths) return coordinatorDepths.redoDepth;
+
   const stateEditor = resolveStateEditor(context);
 
   if (!stateEditor?.state) {
@@ -71,6 +89,15 @@ export const createRulerStateDeriver =
     };
   };
 
+export const createFormattingMarksStateDeriver =
+  () =>
+  ({ superdoc }: { context: ToolbarContext | null; superdoc: Record<string, any> }): ToolbarCommandState => {
+    return {
+      active: Boolean(superdoc?.config?.layoutEngineOptions?.showFormattingMarks),
+      disabled: typeof superdoc?.toggleFormattingMarks !== 'function',
+    };
+  };
+
 export const createZoomStateDeriver =
   () =>
   ({ context, superdoc }: { context: ToolbarContext | null; superdoc: Record<string, any> }): ToolbarCommandState => {
@@ -95,6 +122,14 @@ export const createRulerExecute =
   () =>
   ({ superdoc }: { context: ToolbarContext | null; superdoc: Record<string, any>; payload?: unknown }) => {
     superdoc.toggleRuler?.();
+    return true;
+  };
+
+export const createFormattingMarksExecute =
+  () =>
+  ({ superdoc }: { context: ToolbarContext | null; superdoc: Record<string, any>; payload?: unknown }) => {
+    if (typeof superdoc?.toggleFormattingMarks !== 'function') return false;
+    superdoc.toggleFormattingMarks();
     return true;
   };
 

@@ -244,7 +244,7 @@ if (caps.global.trackChanges.enabled) {
 
 ## Cross-session block addressing
 
-When you load a DOCX, close the editor, and load the same file again, `sdBlockId` values change — they're regenerated on every open. For cross-session block targeting, use `query.match` addresses (`NodeAddress` with `kind: 'block'`), which carry DOCX-native `paraId`-derived IDs when available.
+When you load a DOCX, close the editor, and load the same file again, `sdBlockId` values change: they're regenerated on every open. For cross-session block targeting, use `query.match` addresses (`NodeAddress` with `kind: 'block'`), which carry DOCX-native `paraId`-derived IDs when available.
 
 This pattern is common in headless pipelines: extract block references in one session, then apply edits in another.
 
@@ -261,7 +261,7 @@ const result = editor1.doc.query.match({
   require: 'any',
 });
 
-// Save addresses — for DOCX-imported blocks, nodeId uses paraId when available
+// Save addresses: for DOCX-imported blocks, nodeId uses paraId when available
 const addresses = result.items.map((item) => ({
   address: item.address,
 }));
@@ -284,7 +284,7 @@ editor2.destroy();
 When the saved addresses are used in a browser-based viewer (RAG citations, search results, cross-references), pass the `nodeId` directly to `scrollToElement`:
 
 ```ts
-// In the browser — user clicks a citation
+// In the browser: user clicks a citation
 const savedNodeId = citation.nodeId; // from your database / vector store
 const found = await superdoc.scrollToElement(savedNodeId);
 
@@ -310,7 +310,7 @@ No ID is guaranteed to survive all Microsoft Word round-trips. Re-extract addres
 
 ## Content extraction for RAG
 
-`doc.extract()` returns all document content in one call — blocks with full text, comments, and tracked changes. Each item has a stable ID that works directly with [`scrollToElement`](/core/superdoc/methods#scrolltoelement).
+`doc.extract()` returns all document content in one call: blocks with full text, comments, and tracked changes. Each item has a stable ID that works directly with [`scrollToElement`](/editor/superdoc/methods#scrolltoelement).
 
 ```ts
 const content = editor.doc.extract();
@@ -355,13 +355,13 @@ const embeddings = await embedChunks(chunks);
 // 3. Store embeddings with nodeIds
 await vectorStore.upsert(embeddings);
 
-// 4. Later — user clicks a citation
+// 4. Later: user clicks a citation
 const citation = await vectorStore.query(userQuestion);
 await superdoc.scrollToElement(citation.id);
 ```
 
 <Info>
-All IDs from `doc.extract()` work directly with `scrollToElement()` — no conversion needed. For DOCX-imported content, block `nodeId` values are stable across sessions.
+All IDs from `doc.extract()` work directly with `scrollToElement()`: no conversion needed. For DOCX-imported content, block `nodeId` values are stable across sessions.
 </Info>
 
 ## Read document counts
@@ -387,7 +387,7 @@ All counts reflect the current editor state, not OOXML metadata. They update nat
 
 ### Build a live counter in the browser
 
-`doc.info()` is a snapshot read. To build a live counter, subscribe to document-change events and refresh counts in the handler — do not poll in a render loop.
+`doc.info()` is a snapshot read. To build a live counter, subscribe to document-change events and refresh counts in the handler: do not poll in a render loop.
 
 **SuperEditor (raw editor):**
 
@@ -421,7 +421,7 @@ superdoc.on('editor-update', ({ editor }) => {
 
 ### SDK usage
 
-The SDKs do not expose browser event subscriptions. Call `doc.info()` at workflow boundaries — after opening a document, after a batch of mutations, or before saving.
+The SDKs do not expose browser event subscriptions. Call `doc.info()` at workflow boundaries: after opening a document, after a batch of mutations, or before saving.
 
 ```ts
 const doc = await client.open({ doc: './contract.docx' });

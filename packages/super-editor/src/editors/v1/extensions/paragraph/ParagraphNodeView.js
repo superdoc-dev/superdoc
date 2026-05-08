@@ -12,6 +12,31 @@ import { getResolvedParagraphProperties, calculateResolvedParagraphProperties } 
 const nodeViewMap = new WeakMap();
 
 /**
+ * Pattern 1 fallback for header/footer PM DOM:
+ * infer RTL paragraph direction only when all explicit-direction runs are RTL
+ * and no explicit LTR run exists.
+ * @param {import('prosemirror-model').Node} node
+ * @returns {boolean}
+ */
+function inferParagraphRtlFromRuns(node) {
+  const fragment = node?.content;
+  if (!fragment || !fragment.childCount) return false;
+  let hasExplicitRtl = false;
+
+  for (let i = 0; i < fragment.childCount; i++) {
+    const child = fragment.child(i);
+    if (child.type.name !== 'run') continue;
+    const runProperties = child.attrs?.runProperties || {};
+    const isRtl = runProperties.rightToLeft === true || runProperties.rtl === true;
+    const isLtr = runProperties.rightToLeft === false || runProperties.rtl === false;
+    if (isLtr) return false;
+    if (isRtl) hasExplicitRtl = true;
+  }
+
+  return hasExplicitRtl;
+}
+
+/**
  * ProseMirror node view that renders paragraphs, including special handling for
  * numbered/bulleted lists so marker/separator elements stay in sync with docx
  * layout expectations.
@@ -142,7 +167,10 @@ export class ParagraphNodeView {
       this.dom.setAttribute('styleid', paragraphProperties.styleId);
     }
 
-    if (paragraphProperties.rightToLeft) {
+    if (
+      paragraphProperties.rightToLeft === true ||
+      (paragraphProperties.rightToLeft !== false && inferParagraphRtlFromRuns(this.node))
+    ) {
       this.dom.setAttribute('dir', 'rtl');
     } else {
       this.dom.removeAttribute('dir');
@@ -232,7 +260,16 @@ export class ParagraphNodeView {
    * @returns {boolean}
    */
   #updateListStyles() {
-    let { suffix, justification } = this.node.attrs.listRendering;
+    const listRendering = this.node.attrs.listRendering;
+    // When listRendering is null (can happen transiently during certain
+    // transactions, e.g. after a setDocAttribute + paragraph delete), leave
+    // the existing marker/separator untouched. Forcing a default `suffix` here
+    // would risk writing tab-style CSS onto a text-node separator created by
+    // a prior 'space'/'nothing' suffix and scheduled RAF pass.
+    if (!listRendering) {
+      return true;
+    }
+    let { suffix, justification } = listRendering;
     suffix = suffix ?? 'tab';
     this.#calculateMarkerStyle(justification);
     if (suffix === 'tab') {
@@ -280,9 +317,15 @@ export class ParagraphNodeView {
   }
 
   /**
-   * @param {{ markerText: string, suffix?: string }} listRendering
+   * @param {{ markerText: string, suffix?: string } | null} listRendering
    */
   #initList(listRendering) {
+    // See #updateListStyles: when listRendering is null the previous marker/
+    // separator are left in place; avoid invoking the create helpers with
+    // undefined values.
+    if (!listRendering) {
+      return;
+    }
     this.#createMarker(listRendering.markerText);
     this.#createSeparator(listRendering.suffix);
   }

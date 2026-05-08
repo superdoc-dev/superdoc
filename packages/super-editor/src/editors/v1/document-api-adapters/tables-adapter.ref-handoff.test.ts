@@ -13,21 +13,11 @@ import {
   tablesSetShadingAdapter,
   tablesGetCellsAdapter,
 } from './tables-adapter.js';
+import { requireTableNodeId } from './tables-adapter.test-helpers.js';
 
 type LoadedDocData = Awaited<ReturnType<typeof loadTestDataForEditorTests>>;
 
 const DIRECT = { changeMode: 'direct' } as const;
-
-function requireTableNodeId(result: { success: boolean; table?: { nodeId?: string } }, label: string): string {
-  if (!result.success) {
-    throw new Error(`${label} failed: expected success.`);
-  }
-  const nodeId = (result as { table?: { nodeId?: string } }).table?.nodeId;
-  if (!nodeId) {
-    throw new Error(`${label}: expected result.table.nodeId to be defined.`);
-  }
-  return nodeId;
-}
 
 describe('SD-2126: post-mutation table ref handoff', () => {
   let docData: LoadedDocData;

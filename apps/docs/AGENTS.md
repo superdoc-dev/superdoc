@@ -96,10 +96,22 @@ Example:
 
 Don't add Tips, Warnings, or deep explanations in overview pages. Keep examples concise.
 
+## Layer model
+
+When documenting a customer-facing operation, name the right layer:
+
+- **Document API** (`editor.doc.*`) — request/response document operations: comments, tracked changes, format apply, insert/replace/delete, mark up. Same shape on server, client, and AI agents. **Use this for any document mutation.**
+- **`superdoc/ui` and `superdoc/ui/react`** — browser UI controller for custom toolbar, comments sidebar, review panel, selection capture, viewport, document controls (export / mode toggle / dirty indicator). **Use this for new custom React UI.**
+- **Modules** (`modules/*`) — built-in SuperDoc-rendered UI. Use this when the customer is happy with the built-in look and just wants config.
+- **Core** (`core/*`) — low-level instance/reference surface. Lifecycle, refs, host events. Reach for it when the higher layers don't cover the case (rare).
+
+Recommend the highest layer that solves the problem. Mutate documents through the Document API. Build custom React UI through `superdoc/ui/react`. Reach `superdoc.activeEditor.*` only when documenting legacy compat or a known escape hatch (and call it out as such).
+
 ## API naming
 
 - `superdoc.export()` for SuperDoc-level methods
-- `superdoc.activeEditor.commands.X()` for editor commands
+- `editor.doc.*` for document operations (the recommended path)
+- `superdoc.activeEditor.commands.X()` for editor chain commands. **Legacy/compat only — prefer `editor.doc.*` for mutations and `ui.commands.*` for UI dispatch.**
 - `superdoc.activeEditor.getHTML()` for editor-level methods
 - `superdoc.getHTML()` returns `Array<string>` (one per document section)
 
@@ -111,6 +123,9 @@ Always verify API names against the source code before documenting. Key source f
 | SuperDoc config | `packages/superdoc/src/core/types/index.js` |
 | Editor methods | `packages/super-editor/src/editors/v1/core/Editor.ts` |
 | Extensions | `packages/super-editor/src/editors/v1/extensions/` |
+| Document API contract | `packages/document-api/src/contract/operation-definitions.ts` |
+| `superdoc/ui` controller | `packages/super-editor/src/ui/types.ts`, `create-super-doc-ui.ts` |
+| `superdoc/ui/react` hooks | `packages/super-editor/src/ui/react/` |
 
 ## Mintlify components
 
@@ -155,6 +170,29 @@ const superdoc = new SuperDoc({
 | Extension commands | `editor.commands.X()` inside SuperDoc onReady or Editor.open |
 
 **When NOT to use CodeGroup:** Snippets that are already complete (have imports + initialization), config-only blocks, bash commands, XML/HTML examples.
+
+## Icons
+
+`docs.json` sets `"icons": { "library": "lucide" }`. Mintlify resolves every `icon="..."` value (in `<Card>`, `<CardGroup>`, `<Icon>`, etc.) against **Lucide only** — there is no per-icon library override. Names from Font Awesome, Material Design, Tabler, or brand icon sets silently render as a blank box.
+
+**Rule of thumb:** before adding an icon, check the name exists at https://lucide.dev/icons/. If it doesn't, pick a Lucide alternative or use a custom SVG path.
+
+Common name traps when migrating from Font Awesome:
+
+| Don't use (FA only) | Use this (Lucide) |
+|---|---|
+| `gear` | `cog` or `settings` |
+| `crosshairs` | `crosshair` (singular) |
+| `compass-drafting` | `compass` |
+| `screwdriver-wrench` | `wrench` |
+| `arrow-up-right-from-square` | `external-link` or `square-arrow-out-up-right` |
+| `arrow-right-arrow-left` | `arrow-left-right` |
+| `file-export` | `file-output` or `download` |
+| `react`, `vuejs`, `js`, `microsoft`, `google` | No Lucide brand icons — pick a generic (`code`, `book`, `file-text`) or use an SVG path |
+
+For brand/language icons (React, Vue.js, Microsoft, etc.), Lucide doesn't ship them. Either use a generic Lucide icon that fits the context, or supply an SVG via `icon="/path/to/icon.svg"` or an external URL.
+
+A `pnpm run check:icons` validator runs in pre-commit and walks every `<Card icon="...">`, `<Icon icon="...">`, and `docs.json` icon reference against the locally installed Lucide set. Catches drift before deploy. Add new icons through this validator — if it complains, the name isn't in the Lucide library.
 
 ## Testing
 

@@ -11,7 +11,7 @@ import type { DocumentApi } from '../index.js';
 import { INLINE_PROPERTY_REGISTRY } from '../format/inline-run-patch.js';
 
 // ---------------------------------------------------------------------------
-// TypedDispatchTable — compile-time contract between registry and dispatch
+// TypedDispatchTable: compile-time contract between registry and dispatch
 // ---------------------------------------------------------------------------
 
 type TypedDispatchHandler<K extends OperationId> = OperationRegistry[K]['options'] extends never
@@ -49,7 +49,7 @@ function buildFormatInlineAliasDispatch(api: DocumentApi): Pick<TypedDispatchTab
  * Builds a dispatch table that maps every OperationId to the corresponding
  * direct method call on the given DocumentApi instance.
  *
- * Each entry delegates to the direct method — no parallel execution path.
+ * Each entry delegates to the direct method: no parallel execution path.
  * The return type is {@link TypedDispatchTable}, which validates at compile
  * time that each handler conforms to the {@link OperationRegistry} contract.
  */
@@ -124,11 +124,14 @@ export function buildDispatchTable(api: DocumentApi): TypedDispatchTable {
     'lists.create': (input, options) => api.lists.create(input, options),
     'lists.attach': (input, options) => api.lists.attach(input, options),
     'lists.detach': (input, options) => api.lists.detach(input, options),
+    'lists.delete': (input, options) => api.lists.delete(input, options),
     'lists.indent': (input, options) => api.lists.indent(input, options),
     'lists.outdent': (input, options) => api.lists.outdent(input, options),
     'lists.join': (input, options) => api.lists.join(input, options),
     'lists.canJoin': (input) => api.lists.canJoin(input),
     'lists.separate': (input, options) => api.lists.separate(input, options),
+    'lists.merge': (input, options) => api.lists.merge(input, options),
+    'lists.split': (input, options) => api.lists.split(input, options),
     'lists.setLevel': (input, options) => api.lists.setLevel(input, options),
     'lists.setValue': (input, options) => api.lists.setValue(input, options),
     'lists.continuePrevious': (input, options) => api.lists.continuePrevious(input, options),
@@ -197,6 +200,9 @@ export function buildDispatchTable(api: DocumentApi): TypedDispatchTable {
     // --- ranges.* ---
     'ranges.resolve': (input) => api.ranges.resolve(input),
 
+    // --- selection.* ---
+    'selection.current': (input) => api.selection.current(input),
+
     // --- mutations.* ---
     'mutations.preview': (input) => api.mutations.preview(input),
     'mutations.apply': (input) => api.mutations.apply(input),
@@ -235,6 +241,7 @@ export function buildDispatchTable(api: DocumentApi): TypedDispatchTable {
     'tables.unmergeCells': (input, options) => api.tables.unmergeCells(input, options),
     'tables.splitCell': (input, options) => api.tables.splitCell(input, options),
     'tables.setCellProperties': (input, options) => api.tables.setCellProperties(input, options),
+    'tables.setCellText': (input, options) => api.tables.setCellText(input, options),
     'tables.sort': (input, options) => api.tables.sort(input, options),
     'tables.setAltText': (input, options) => api.tables.setAltText(input, options),
     'tables.setStyle': (input, options) => api.tables.setStyle(input, options),
@@ -252,6 +259,7 @@ export function buildDispatchTable(api: DocumentApi): TypedDispatchTable {
     'tables.applyStyle': (input, options) => api.tables.applyStyle(input, options),
     'tables.setBorders': (input, options) => api.tables.setBorders(input, options),
     'tables.setTableOptions': (input, options) => api.tables.setTableOptions(input, options),
+    'tables.applyPreset': (input, options) => api.tables.applyPreset(input, options),
 
     // --- tables.* reads ---
     'tables.get': (input) => api.tables.get(input),

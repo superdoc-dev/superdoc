@@ -13,6 +13,8 @@
 
 import type { ParagraphIndent } from './paragraph.js';
 
+const TAB_POSITION_TOLERANCE_TWIPS = 20;
+
 /**
  * OOXML-aligned tab stop definition.
  * Positions are in twips (1/1440 inch) to preserve exact OOXML values.
@@ -22,6 +24,7 @@ export interface TabStop {
   val: 'start' | 'end' | 'center' | 'decimal' | 'bar' | 'clear';
   pos: number; // Twips from paragraph start (after left indent)
   leader?: 'none' | 'dot' | 'hyphen' | 'heavy' | 'underscore' | 'middleDot';
+  source?: 'explicit' | 'default';
 }
 
 /**
@@ -32,6 +35,7 @@ export interface TabContext {
   explicitStops: TabStop[]; // Stops defined in paragraph style (OOXML format)
   defaultTabInterval: number; // Twips (default 720 = 0.5 inch)
   paragraphIndent: ParagraphIndent; // Left/right/hanging indents (in twips)
+  rawParagraphIndent?: ParagraphIndent; // Unclamped indents, used for Word implicit tab-stop rules
 }
 
 /**
@@ -109,9 +113,11 @@ export interface CalculateTabWidthResult {
  * @returns Sorted array of tab stops in twips
  */
 export function computeTabStops(context: TabContext): TabStop[] {
-  const { explicitStops, defaultTabInterval, paragraphIndent } = context;
+  const { explicitStops, defaultTabInterval, paragraphIndent, rawParagraphIndent } = context;
   const leftIndent = paragraphIndent.left ?? 0;
   const hanging = paragraphIndent.hanging ?? 0;
+  const rawLeftIndent = rawParagraphIndent?.left ?? leftIndent;
+  const rawHanging = rawParagraphIndent?.hanging ?? hanging;
 
   // With a hanging indent, the first line starts at (leftIndent - hanging).
   // EXPLICIT tab stops between this effective position and leftIndent are valid for the first line
@@ -125,38 +131,82 @@ export function computeTabStops(context: TabContext): TabStop[] {
   // Filter explicit stops: keep those >= effectiveMinIndent (supports hanging indent first lines)
   const filteredExplicitStops = explicitStops
     .filter((stop) => stop.val !== 'clear')
-    .filter((stop) => stop.pos >= effectiveMinIndent);
+    .filter((stop) => stop.pos >= effectiveMinIndent)
+    .map((stop) => ({ ...stop, source: 'explicit' as const }));
 
   // Find the rightmost explicit stop (use original stops for this calculation)
   const maxExplicit = filteredExplicitStops.reduce((max, stop) => Math.max(max, stop.pos), 0);
-  const hasExplicit = filteredExplicitStops.length > 0;
-
   // Collect all stops: start with filtered explicit stops
-  const stops = [...filteredExplicitStops];
+  const stops: TabStop[] = [...filteredExplicitStops];
+  const hasStartAlignedExplicit = filteredExplicitStops.some((stop) => stop.val === 'start');
+  const hasExplicitStops = filteredExplicitStops.length > 0;
+  const hasClearAtPosition = (position: number): boolean =>
+    clearPositions.some((clearPos) => Math.abs(clearPos - position) < TAB_POSITION_TOLERANCE_TWIPS);
+  const hasClearAtLeftIndent = clearPositions.some(
+    (clearPos) => Math.abs(clearPos - leftIndent) < TAB_POSITION_TOLERANCE_TWIPS,
+  );
+
+  // Word treats the body text start of a hanging-indent paragraph as an implicit
+  // tab target. This is what lets manual numbering like "1.\tText" align the
+  // first-line text with wrapped body lines even when the left indent is not on
+  // the document's default tab grid.
+  if (!hasExplicitStops && !hasClearAtLeftIndent && hanging > 0 && leftIndent > effectiveMinIndent) {
+    stops.push({
+      val: 'start',
+      pos: leftIndent,
+      leader: 'none',
+      source: 'default',
+    });
+  }
+
+  // Word places an implicit tab stop at the left margin. This matters when a
+  // hanging indent pulls the first-line origin before the content left edge:
+  // a leading tab should advance back to the left margin instead of jumping to
+  // the first default tab interval.
+  const firstLineOrigin = rawLeftIndent - rawHanging;
+  if (
+    firstLineOrigin < 0 &&
+    !hasClearAtPosition(0) &&
+    !stops.some((stop) => Math.abs(stop.pos) < TAB_POSITION_TOLERANCE_TWIPS)
+  ) {
+    stops.push({ val: 'start', pos: 0, leader: 'none', source: 'default' });
+  }
+  const leftIndentStop = Math.abs(rawLeftIndent);
+  if (
+    rawHanging > 0 &&
+    leftIndentStop > 0 &&
+    firstLineOrigin < leftIndentStop &&
+    !hasClearAtPosition(leftIndentStop) &&
+    !stops.some((stop) => Math.abs(stop.pos - leftIndentStop) < TAB_POSITION_TOLERANCE_TWIPS)
+  ) {
+    stops.push({ val: 'start', pos: leftIndentStop, leader: 'none', source: 'default' });
+  }
 
   // Generate default stops at regular intervals.
-  // When explicit stops exist, start after the rightmost explicit or leftIndent.
-  // When no explicit stops, generate from 0 to ensure we hit multiples that land at/near leftIndent.
-  // Then filter defaults by leftIndent (body text alignment).
-  const defaultStart = hasExplicit ? Math.max(maxExplicit, leftIndent) : 0;
+  // - When no explicit start tabs exist (e.g., TOC paragraphs with only right-aligned tabs),
+  //   seed defaults from the origin so numbering/content still lands on the default grid.
+  // - Otherwise, preserve legacy behavior: defaults start after the rightmost explicit or left indent.
+  const seedDefaultsFromZero = !hasStartAlignedExplicit;
+  const defaultStart = seedDefaultsFromZero ? 0 : Math.max(maxExplicit, leftIndent);
   let pos = defaultStart;
-  const targetLimit = Math.max(defaultStart, leftIndent) + 14400; // 14400 twips = 10 inches
+  const targetLimit = Math.max(defaultStart, leftIndent, maxExplicit) + 14400; // 14400 twips = 10 inches
 
   while (pos < targetLimit) {
     pos += defaultTabInterval;
 
-    // Don't add if there's already an explicit stop OR a cleared position at this position
-    const hasExplicitStop = filteredExplicitStops.some((s) => Math.abs(s.pos - pos) < 20);
-    const hasClearStop = clearPositions.some((clearPos) => Math.abs(clearPos - pos) < 20);
+    // Don't add if there's already a stop OR a cleared position at this position
+    const hasExistingStop = stops.some((s) => Math.abs(s.pos - pos) < TAB_POSITION_TOLERANCE_TWIPS);
+    const hasClearStop = clearPositions.some((clearPos) => Math.abs(clearPos - pos) < TAB_POSITION_TOLERANCE_TWIPS);
 
     // Default stops must be >= leftIndent (for body text alignment)
     const isValidDefault = pos >= leftIndent;
 
-    if (!hasExplicitStop && !hasClearStop && isValidDefault) {
+    if (!hasExistingStop && !hasClearStop && isValidDefault) {
       stops.push({
         val: 'start',
         pos,
         leader: 'none',
+        source: 'default',
       });
     }
   }

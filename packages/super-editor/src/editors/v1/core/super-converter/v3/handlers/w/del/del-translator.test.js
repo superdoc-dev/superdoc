@@ -30,7 +30,7 @@ describe('w:del translator', () => {
   describe('encode', () => {
     const mockNode = { elements: [{ text: 'deleted text' }] };
 
-    function encodeWith({ converter, id = '123' } = {}) {
+    function encodeWith({ converter, id = '123', filename } = {}) {
       const mockSubNodes = [{ content: [{ type: 'text', text: 'deleted text' }] }];
       const mockNodeListHandler = { handler: vi.fn().mockReturnValue(mockSubNodes) };
 
@@ -46,6 +46,7 @@ describe('w:del translator', () => {
           nodeListHandler: mockNodeListHandler,
           extraParams: { node: mockNode },
           converter,
+          filename,
           path: [],
         },
         { ...encodedAttrs },
@@ -87,6 +88,19 @@ describe('w:del translator', () => {
       const attrs = getMarkAttrs(result);
 
       expect(attrs.id).toBe('shared-uuid-abc');
+      expect(attrs.sourceId).toBe('123');
+    });
+
+    it('prefers the per-part trackedChangeIdMapsByPart entry when filename is provided', () => {
+      const converter = {
+        trackedChangeIdMap: new Map([['123', 'body-uuid']]),
+        trackedChangeIdMapsByPart: new Map([['word/footnotes.xml', new Map([['123', 'footnote-uuid']])]]),
+      };
+
+      const result = encodeWith({ converter, filename: 'footnotes.xml' });
+      const attrs = getMarkAttrs(result);
+
+      expect(attrs.id).toBe('footnote-uuid');
       expect(attrs.sourceId).toBe('123');
     });
   });
@@ -192,6 +206,24 @@ describe('w:del translator', () => {
           }),
         }),
       );
+    });
+
+    it('does not crash when the deleted run holds non-text content (e.g. w:noBreakHyphen)', () => {
+      // ECMA-376: only w:t / w:instrText are renamed inside <w:del>. Atoms like
+      // w:noBreakHyphen, w:tab, w:br stay as-is. The decoder used to assume a
+      // w:t was always present and would throw setting `.name` on undefined.
+      exportSchemaToJson.mockReturnValue({ elements: [{ name: 'w:noBreakHyphen', elements: [] }] });
+
+      const node = {
+        type: 'noBreakHyphen',
+        marks: [{ type: 'trackDelete', attrs: { id: '7', author: 'A', authorEmail: 'a@x', date: 'd' } }],
+      };
+
+      const result = config.decode({ node });
+
+      expect(result.name).toBe('w:del');
+      // The non-text element survives unchanged inside the wrapper.
+      expect(result.elements[0].elements[0]).toEqual({ name: 'w:noBreakHyphen', elements: [] });
     });
   });
 });

@@ -18,8 +18,10 @@ export const SPACE_CHARS = new Set([' ', '\u00A0']);
 export type ShouldApplyJustifyParams = {
   /** Paragraph alignment value (must be 'justify' for justify to apply). */
   alignment: string | undefined;
-  /** Whether the line has explicit tab positioning (tab stops with x values). */
-  hasExplicitPositioning: boolean;
+  /** Whether the line has explicit segment positioning. Used as a legacy fallback. */
+  hasExplicitPositioning?: boolean;
+  /** Whether the line used author-defined OOXML tab stops. */
+  hasExplicitTabStops?: boolean;
   /** Whether this is the last line of the paragraph. */
   isLastLineOfParagraph: boolean;
   /** Whether the paragraph ends with a soft break (Shift+Enter / LineBreak run). */
@@ -34,20 +36,28 @@ export type ShouldApplyJustifyParams = {
  * Justify is applied when ALL of the following are true:
  * - Alignment is 'justify'
  * - No explicit skip override
- * - Line doesn't have tab stops (explicit positioning)
+ * - Line doesn't have author-defined tab stops
  * - Line is NOT the last line, OR paragraph ends with a soft break
  *
  * This matches Microsoft Word's behavior:
  * - All lines are justified except the true last line
  * - Soft breaks (Shift+Enter) do NOT count as "last line"
- * - Tab-aligned text is never justified
+ * - Explicit tab-aligned text is never justified
+ * - Default/manual tab-aligned text can still be justified
  *
  * @param params - Parameters for justify decision
  * @returns true if justify should be applied, false otherwise
  */
 export function shouldApplyJustify(params: ShouldApplyJustifyParams): boolean {
-  const { alignment, hasExplicitPositioning, isLastLineOfParagraph, paragraphEndsWithLineBreak, skipJustifyOverride } =
-    params;
+  const {
+    alignment,
+    hasExplicitPositioning,
+    hasExplicitTabStops,
+    isLastLineOfParagraph,
+    paragraphEndsWithLineBreak,
+    skipJustifyOverride,
+  } = params;
+  const lineHasExplicitTabStops = hasExplicitTabStops ?? hasExplicitPositioning ?? false;
 
   // Must be justify alignment
   // Accept both 'justify' (normalized) and 'both' (raw OOXML) for defensive compatibility
@@ -60,8 +70,8 @@ export function shouldApplyJustify(params: ShouldApplyJustifyParams): boolean {
     return false;
   }
 
-  // Lines with tab stops use explicit positioning
-  if (hasExplicitPositioning) {
+  // Author-defined tab stops control horizontal positioning and should not be stretched.
+  if (lineHasExplicitTabStops) {
     return false;
   }
 

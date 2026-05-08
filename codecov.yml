@@ -8,3 +8,10 @@ coverage:
       default:
         target: 90%
         threshold: 0%
+
+# Type-only declaration files (`.d.ts`) carry no runnable code — they
+# describe shapes consumed at compile time. Coverage tools count any
+# changed line as "0% covered" because there's nothing to instrument.
+# Excluding them keeps the patch coverage signal honest.
+ignore:
+  - '**/*.d.ts'

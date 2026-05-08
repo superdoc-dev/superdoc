@@ -1,0 +1,181 @@
+---
+title: 'Controller setup'
+description: 'Use Custom UI without React. createSuperDocUI, scope, observe, destroy.'
+---
+
+`superdoc/ui/react` is sugar over a controller. If you are not using React, talk to the controller directly. The hooks just call its methods on your behalf.
+
+## When to use this page
+
+| You are... | Read |
+|---|---|
+| Building with React | [React setup](/editor/custom-ui/react-setup). Skip this page. |
+| Building with Vue, Svelte, Angular, or vanilla | This page. |
+| Building a framework adapter | This page is the contract. |
+
+The controller exposes the same surface the React hooks consume. Domain handles, scope-based lifecycle, value-shaped observers. No framework primitives.
+
+## Install
+
+```bash
+pnpm add superdoc
+```
+
+## Create the controller
+
+`createSuperDocUI({ superdoc })` runs once per editor mount and returns a controller. Hand it the SuperDoc instance.
+
+```ts
+import { SuperDoc } from 'superdoc';
+import { createSuperDocUI } from 'superdoc/ui';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: '/contract.docx',
+});
+
+const ui = createSuperDocUI({ superdoc });
+```
+
+`ui` is `null`-safe to keep around until your app tears down. Call `ui.destroy()` on unmount.
+
+## Bind state with observe
+
+Domain handles emit through `observe(snapshot => ...)`. The listener fires once synchronously with the current snapshot, then again on every change. Returns an unsubscribe.
+
+```ts
+const off = ui.comments.observe((snapshot) => {
+  renderSidebar(snapshot.items);
+});
+
+// Later, on tear-down:
+off();
+```
+
+The same shape works for every domain: `ui.toolbar.observe`, `ui.selection.observe`, `ui.trackChanges.observe`, `ui.document.observe`. Per-command state binds the same way: `ui.commands.bold.observe(state => ...)`.
+
+A wrapped `subscribe(({ snapshot }) => ...)` form is also exported. Either works; pick one and stay consistent.
+
+## Group teardown with createScope
+
+Without `useEffect` cleanup, you have to track every unsubscribe yourself. `ui.createScope()` does that for you.
+
+```ts
+const scope = ui.createScope();
+
+scope.add(ui.commands.bold.observe((state) => render(state)));
+scope.add(ui.comments.observe((snapshot) => renderSidebar(snapshot.items)));
+scope.on(window, 'beforeunload', save);
+
+// One call drops everything:
+scope.destroy();
+```
+
+`ui.destroy()` cascades into every live scope, so a typical app needs only one teardown call:
+
+```ts
+const teardown = () => {
+  ui.destroy();
+  superdoc.destroy();
+};
+window.addEventListener('beforeunload', teardown);
+```
+
+## Register custom commands
+
+`scope.register(...)` is the same as `ui.commands.register(...)` but the scope auto-unregisters on tear-down. The registration is reachable through the same `ui.commands.<id>` and `ui.commands.get(id)` paths as built-ins.
+
+```ts
+scope.register({
+  id: 'company.aiRewrite',
+  getState: ({ state }) => ({ disabled: state.selection.empty }),
+  execute: async ({ editor }) => {
+    const target = ui.selection.getSnapshot().selectionTarget;
+    if (!target || !editor?.doc?.insert) return false;
+    const next = await rewrite(ui.selection.getSnapshot().quotedText);
+    return editor.doc.insert({ target, value: next, type: 'text' }).success;
+  },
+});
+```
+
+## Validate config-driven command ids
+
+If your toolbar reads ids from a config file or feature flag, validate at startup. `ui.commands.has(id)` is the cheap check; `ui.commands.require(id)` throws on unknown ids at trusted dispatch sites.
+
+```ts
+import { BUILT_IN_COMMAND_IDS } from 'superdoc/ui';
+
+for (const id of toolbarConfig) {
+  if (!ui.commands.has(id)) {
+    console.warn(`[toolbar] unknown command: ${id}`);
+    continue;
+  }
+  const handle = ui.commands.require(id);
+  scope.add(handle.observe(state => updateButton(id, state)));
+}
+```
+
+`BUILT_IN_COMMAND_IDS` is the readonly list of every valid built-in id. `PublicToolbarItemId` is the matching type.
+
+## Tiny skeleton
+
+The whole picture in one file:
+
+```ts
+import { SuperDoc } from 'superdoc';
+import { createSuperDocUI } from 'superdoc/ui';
+import 'superdoc/style.css';
+
+const superdoc = new SuperDoc({
+  selector: '#editor',
+  document: '/contract.docx',
+});
+
+const ui = createSuperDocUI({ superdoc });
+const scope = ui.createScope();
+
+scope.add(
+  ui.commands.bold.observe((state) => {
+    document.querySelector('#bold')!.classList.toggle('active', state.active);
+  }),
+);
+
+document.querySelector('#bold')!.addEventListener('click', () => {
+  ui.commands.bold.execute();
+});
+
+const teardown = () => {
+  ui.destroy();
+  superdoc.destroy();
+};
+window.addEventListener('beforeunload', teardown);
+```
+
+## What ships
+
+| Surface | Purpose |
+|---|---|
+| `createSuperDocUI({ superdoc })` | One controller per editor mount |
+| `ui.createScope()` | Lifecycle bag for subscriptions, registrations, DOM listeners |
+| `ui.<domain>.observe(snapshot => ...)` | Read state. Domains: `toolbar`, `commands.<id>`, `comments`, `trackChanges`, `selection`, `document` |
+| `ui.<domain>.<action>(...)` | Mutate. Examples: `ui.comments.resolve(id)`, `ui.trackChanges.accept(id)`, `ui.document.setMode('suggesting')` |
+| `ui.commands.has(id)` / `require(id)` | Validate config-driven ids |
+| `BUILT_IN_COMMAND_IDS` | Readonly list of every built-in command id |
+| `ui.destroy()` | Teardown. Cascades into every live scope. |
+
+See the [API reference](/editor/custom-ui/api-reference) for full signatures.
+
+## Common pitfalls
+
+<AccordionGroup>
+  <Accordion title="Forgetting to call ui.destroy()">
+    Without `ui.destroy()`, internal listeners and any live scope keep running after your app unmounts. Hot-reload sessions accumulate dead controllers. Always call it on unload and on every framework-specific destroy hook (`onScopeDispose` in Vue, `onDestroy` in Svelte, `DestroyRef` in Angular).
+  </Accordion>
+  <Accordion title="Reading the live selection at submit time">
+    A composer that reads `ui.selection.getSnapshot()` at submit time will see `null` if the user typed in a textarea between opening the composer and pressing Send. Capture the selection at composer-open with `ui.selection.capture()` and pass the snapshot into `ui.comments.createFromCapture(capture, { text })`.
+  </Accordion>
+  <Accordion title="Built-in UI overlapping with yours">
+    Pass `modules: { comments: false }` to `new SuperDoc(...)` to disable the built-in comment bubble. Same shape for tracked changes. Document-level features (DOCX import/export, comments round-trip) keep working.
+  </Accordion>
+</AccordionGroup>

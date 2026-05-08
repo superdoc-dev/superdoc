@@ -1,5 +1,6 @@
 import type {
   ChartDrawing,
+  ColumnLayout,
   CustomGeometryData,
   DrawingBlock,
   DrawingFragment,
@@ -16,19 +17,15 @@ import type {
   ImageFragment,
   ImageHyperlink,
   ImageRun,
-  Layout,
   Line,
   LineSegment,
   ListBlock,
   ListItemFragment,
   ListMeasure,
-  Measure,
-  Page,
   PageMargins,
   ParaFragment,
   ParagraphAttrs,
   ParagraphBlock,
-  ParagraphBorder,
   ParagraphMeasure,
   PositionedDrawingGeometry,
   Run,
@@ -37,6 +34,7 @@ import type {
   ShapeGroupDrawing,
   ShapeTextContent,
   SolidFillWithAlpha,
+  SourceAnchor,
   TableAttrs,
   TableBlock,
   TableCellAttrs,
@@ -55,15 +53,19 @@ import type {
   ResolvedTableItem,
   ResolvedImageItem,
   ResolvedDrawingItem,
+  ResolvedListMarkerItem,
 } from '@superdoc/contracts';
 import {
   adjustAvailableWidthForTextIndent,
   calculateJustifySpacing,
   computeLinePmRange,
+  expandRunsForInlineNewlines,
   getCellSpacingPx,
+  normalizeColumnLayout,
   normalizeBaselineShift,
   resolveBaseFontSizeForVerticalText,
   shouldApplyJustify,
+  sliceRunsForLine,
   SPACE_CHARS,
 } from '@superdoc/contracts';
 import { toCssFontFamily } from '@superdoc/font-utils';
@@ -89,6 +91,7 @@ import {
   containerStyles,
   containerStylesHorizontal,
   ensureFieldAnnotationStyles,
+  ensureFormattingMarksStyles,
   ensureImageSelectionStyles,
   ensureLinkStyles,
   ensureMathMencloseStyles,
@@ -104,26 +107,20 @@ import {
 import { applyAlphaToSVG, applyGradientToSVG, validateHexColor } from './svg-utils.js';
 import { renderTableFragment as renderTableFragmentElement } from './table/renderTableFragment.js';
 import { applyImageClipPath } from './utils/image-clip-path.js';
-import { isMinimalWordLayout as isMinimalWordLayoutShared } from '@superdoc/common/list-marker-utils';
+import {
+  isMinimalWordLayout as isMinimalWordLayoutShared,
+  resolveMarkerIndent,
+} from '@superdoc/common/list-marker-utils';
 import {
   computeTabWidth,
+  createListMarkerElement,
   resolvePainterListMarkerGeometry,
   resolvePainterListTextStartPx,
 } from './utils/marker-helpers.js';
-import {
-  applySdtContainerStyling,
-  getSdtContainerKey,
-  shouldRebuildForSdtBoundary,
-  type SdtBoundaryOptions,
-} from './utils/sdt-helpers.js';
+import { applySdtContainerStyling, shouldRebuildForSdtBoundary, type SdtBoundaryOptions } from './utils/sdt-helpers.js';
 import {
   computeBetweenBorderFlags,
-  getFragmentParagraphBorders,
-  getFragmentHeight,
   createParagraphDecorationLayers,
-  applyParagraphBorderStyles,
-  applyParagraphShadingStyles,
-  getParagraphBorderBox,
   stampBetweenBorderDataset,
   type BetweenBorderInfo,
 } from './features/paragraph-borders/index.js';
@@ -247,33 +244,25 @@ export type RenderedLineInfo = {
 /**
  * Input to `DomPainter.paint()`.
  *
- * `resolvedLayout` is the canonical resolved data. The remaining fields are
- * bridge data carried for internal rendering of non-paragraph fragments
- * (tables, images, drawings) that have not yet been migrated to resolved items.
+ * The painter consumes only `resolvedLayout`. All fragment, geometry, and
+ * page-level metadata it needs is reachable from `ResolvedPaintItem.fragment`
+ * back-pointers and `ResolvedPage` fields.
  */
 export type DomPainterInput = {
   resolvedLayout: ResolvedLayout;
-  /** Raw Layout for internal fragment access (bridge — will be removed once all fragment types are resolved). */
-  sourceLayout: Layout;
-  blocks: FlowBlock[];
-  measures: Measure[];
-  headerBlocks?: FlowBlock[];
-  headerMeasures?: Measure[];
-  footerBlocks?: FlowBlock[];
-  footerMeasures?: Measure[];
 };
 
-type OptionalBlockMeasurePair = {
-  blocks: FlowBlock[];
-  measures: Measure[];
-};
-
-type PageDecorationPayload = {
+export type PageDecorationPayload = {
   fragments: Fragment[];
+  /** Resolved items aligned 1:1 with `fragments`. Same length, same order. */
+  items: ResolvedPaintItem[];
+  /** Minimum Y coordinate from layout; negative when content extends above y=0. */
+  minY?: number;
   height: number;
   /** Optional measured content height to aid bottom alignment in footers. */
   contentHeight?: number;
-  offset?: number;
+  /** Decoration band origin in page-local Y. Producer is the sole source of truth (SD-2957). */
+  offset: number;
   marginLeft?: number;
   // Optional explicit content width (px) for the decoration container
   contentWidth?: number;
@@ -289,13 +278,13 @@ type PageDecorationPayload = {
  *
  * @param {number} pageNumber - The page number (1-indexed)
  * @param {PageMargins} [pageMargins] - Page margin configuration
- * @param {Page} [page] - Full page object from the layout
+ * @param {ResolvedPage} [page] - Resolved page from the layout
  * @returns {PageDecorationPayload | null} Decoration payload containing fragments and layout info, or null if no decoration
  */
 export type PageDecorationProvider = (
   pageNumber: number,
   pageMargins?: PageMargins,
-  page?: Page,
+  page?: ResolvedPage,
 ) => PageDecorationPayload | null;
 
 /**
@@ -330,11 +319,9 @@ type PainterOptions = {
   ruler?: RulerOptions;
   /** Called with the paint snapshot after each paint cycle completes. */
   onPaintSnapshot?: (snapshot: PaintSnapshot) => void;
+  /** Render nonprinting formatting marks such as spaces, tabs, and paragraph marks. */
+  showFormattingMarks?: boolean;
 };
-
-// BlockLookup lives in the shared types module (single source of truth)
-import type { BlockLookupEntry, BlockLookup } from './features/paragraph-borders/types.js';
-export type { BlockLookup, BlockLookupEntry };
 
 type FragmentDomState = {
   key: string;
@@ -394,6 +381,7 @@ export type PaintSnapshotMarkerStyle = {
   fontWeight?: string;
   fontStyle?: string;
   color?: string;
+  sourceAnchor?: SourceAnchor;
 };
 
 export type PaintSnapshotTabStyle = {
@@ -436,6 +424,7 @@ export type PaintSnapshotImageEntity = {
   pmStart?: number;
   pmEnd?: number;
   blockId?: string;
+  sourceAnchor?: SourceAnchor;
 };
 
 export type PaintSnapshotEntities = {
@@ -452,6 +441,7 @@ export type PaintSnapshotLine = {
   style: PaintSnapshotLineStyle;
   markers?: PaintSnapshotMarkerStyle[];
   tabs?: PaintSnapshotTabStyle[];
+  sourceAnchor?: SourceAnchor;
 };
 
 export type PaintSnapshotPage = {
@@ -490,6 +480,7 @@ type PaintSnapshotCaptureOptions = {
   inTableFragment?: boolean;
   inTableParagraph?: boolean;
   wrapperEl?: HTMLElement;
+  sourceAnchor?: SourceAnchor;
 };
 
 function roundSnapshotMetric(value: number): number | null {
@@ -539,6 +530,52 @@ function compactSnapshotObject<T extends Record<string, unknown>>(input: T): T {
   return out;
 }
 
+export function applySourceAnchorDataset(element: HTMLElement, sourceAnchor?: SourceAnchor): void {
+  if (!sourceAnchor) {
+    delete element.dataset.sourceAnchor;
+    delete element.dataset.sourceNodeId;
+    delete element.dataset.sourceOccurrenceId;
+    return;
+  }
+
+  try {
+    element.dataset.sourceAnchor = JSON.stringify(sourceAnchor);
+  } catch {
+    delete element.dataset.sourceAnchor;
+  }
+  if (sourceAnchor.sourceNodeId) {
+    element.dataset.sourceNodeId = sourceAnchor.sourceNodeId;
+  } else {
+    delete element.dataset.sourceNodeId;
+  }
+  if (sourceAnchor.occurrenceId) {
+    element.dataset.sourceOccurrenceId = sourceAnchor.occurrenceId;
+  } else {
+    delete element.dataset.sourceOccurrenceId;
+  }
+}
+
+function readSourceAnchorDataset(element: HTMLElement | null | undefined): SourceAnchor | undefined {
+  if (!element) return undefined;
+  const encoded = element.dataset?.sourceAnchor;
+  if (typeof encoded !== 'string' || encoded.length === 0) return undefined;
+
+  try {
+    const parsed = JSON.parse(encoded) as SourceAnchor;
+    return parsed && typeof parsed === 'object' ? parsed : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function readNearestSourceAnchor(element: HTMLElement | null | undefined): SourceAnchor | undefined {
+  if (!element) return undefined;
+  return (
+    readSourceAnchorDataset(element) ??
+    readSourceAnchorDataset(element.closest(`.${CLASS_NAMES.fragment}`) as HTMLElement | null)
+  );
+}
+
 function shouldIncludeInlineImageSnapshotElement(element: HTMLElement): boolean {
   if (element.classList.contains(DOM_CLASS_NAMES.INLINE_IMAGE_CLIP_WRAPPER)) {
     return true;
@@ -549,6 +586,15 @@ function shouldIncludeInlineImageSnapshotElement(element: HTMLElement): boolean 
   }
 
   return !element.closest(`.${DOM_CLASS_NAMES.INLINE_IMAGE_CLIP_WRAPPER}`);
+}
+
+function resolvedPaintCacheSignature(resolvedItem: ResolvedPaintItem | undefined): string {
+  if (!resolvedItem) return '';
+  return (
+    (resolvedItem as { paintCacheVersion?: string }).paintCacheVersion ??
+    (resolvedItem as { version?: string }).version ??
+    ''
+  );
 }
 
 function collectPaintSnapshotEntitiesFromDomRoot(rootEl: HTMLElement): PaintSnapshotEntities {
@@ -630,6 +676,7 @@ function collectPaintSnapshotEntitiesFromDomRoot(rootEl: HTMLElement): PaintSnap
         kind: 'inline',
         pmStart: readSnapshotDatasetNumber(element.dataset.pmStart),
         pmEnd: readSnapshotDatasetNumber(element.dataset.pmEnd),
+        sourceAnchor: readNearestSourceAnchor(element),
       }) as PaintSnapshotImageEntity,
     );
   }
@@ -649,6 +696,7 @@ function collectPaintSnapshotEntitiesFromDomRoot(rootEl: HTMLElement): PaintSnap
         pmStart: readSnapshotDatasetNumber(element.dataset.pmStart),
         pmEnd: readSnapshotDatasetNumber(element.dataset.pmEnd),
         blockId: element.getAttribute('data-sd-block-id'),
+        sourceAnchor: readNearestSourceAnchor(element),
       }) as PaintSnapshotImageEntity,
     );
   }
@@ -703,6 +751,7 @@ function snapshotMarkerStyleFromElement(markerEl: HTMLElement): PaintSnapshotMar
     fontWeight: readSnapshotStyleValue(style.fontWeight),
     fontStyle: readSnapshotStyleValue(style.fontStyle),
     color: readSnapshotStyleValue(style.color),
+    sourceAnchor: readNearestSourceAnchor(markerEl),
   }) as PaintSnapshotMarkerStyle;
 }
 
@@ -1227,12 +1276,11 @@ const applyLinkDataset = (element: HTMLElement, dataset?: Record<string, string>
  * ```
  */
 export class DomPainter {
-  private blockLookup: BlockLookup;
   private readonly options: PainterOptions;
   private mount: HTMLElement | null = null;
   private doc: Document | null = null;
   private pageStates: PageDomState[] = [];
-  private currentLayout: Layout | null = null;
+  private currentLayout: ResolvedLayout | null = null;
   private changedBlocks = new Set<string>();
   private readonly layoutMode: LayoutMode;
   private readonly isSemanticFlow: boolean;
@@ -1298,14 +1346,15 @@ export class DomPainter {
   private mountedPageIndices: number[] = [];
   /** Resolved layout for the next-gen paint pipeline. */
   private resolvedLayout: ResolvedLayout | null = null;
+  private showFormattingMarks = false;
 
   constructor(options: PainterOptions = {}) {
     this.options = options;
     this.layoutMode = options.layoutMode ?? 'vertical';
     this.isSemanticFlow = (options.flowMode ?? 'paginated') === 'semantic';
-    this.blockLookup = new Map();
     this.headerProvider = options.headerProvider;
     this.footerProvider = options.footerProvider;
+    this.showFormattingMarks = options.showFormattingMarks === true;
 
     // Initialize page gap (defaults: 24px vertical, 20px horizontal)
     const defaultGap = this.layoutMode === 'horizontal' ? 20 : 24;
@@ -1335,9 +1384,34 @@ export class DomPainter {
     this.onPaintSnapshotCallback = options.onPaintSnapshot ?? null;
   }
 
+  public setShowFormattingMarks(showFormattingMarks: boolean): void {
+    const next = showFormattingMarks === true;
+    if (this.showFormattingMarks === next) return;
+    this.showFormattingMarks = next;
+    this.applyFormattingMarksClass();
+    this.invalidateRenderedContent();
+  }
+
   public setProviders(header?: PageDecorationProvider, footer?: PageDecorationProvider): void {
     this.headerProvider = header;
     this.footerProvider = footer;
+  }
+
+  private applyFormattingMarksClass(mount: HTMLElement | null = this.mount): void {
+    mount?.classList.toggle('superdoc-show-formatting-marks', this.showFormattingMarks);
+  }
+
+  private invalidateRenderedContent(): void {
+    this.pageStates = [];
+    this.currentLayout = null;
+    this.pageIndexToState.clear();
+    this.virtualMountedKey = '';
+    this.clearGapSpacers();
+    this.topSpacerEl = null;
+    this.bottomSpacerEl = null;
+    this.virtualPagesEl = null;
+    this.processedLayoutVersion = -1;
+    this.layoutVersion += 1;
   }
 
   /**
@@ -1404,14 +1478,6 @@ export class DomPainter {
     return this.resolvedLayout?.pages[pageIndex] ?? null;
   }
 
-  /** Returns the resolved fragment item for a given page/fragment index, or undefined. */
-  private getResolvedFragmentItem(pageIndex: number, fragmentIndex: number): ResolvedPaintItem | undefined {
-    const page = this.getResolvedPage(pageIndex);
-    if (!page) return undefined;
-    const item = page.items[fragmentIndex];
-    return item?.kind === 'fragment' ? item : undefined;
-  }
-
   /**
    * Returns the latest painter snapshot captured during the last paint cycle.
    */
@@ -1442,7 +1508,7 @@ export class DomPainter {
     this.onPaintSnapshotCallback?.(snapshot);
   }
 
-  private beginPaintSnapshot(layout: Layout): void {
+  private beginPaintSnapshot(layout: ResolvedLayout): void {
     this.paintSnapshotBuilder = {
       formatVersion: 1,
       lineCount: 0,
@@ -1511,6 +1577,8 @@ export class DomPainter {
         style,
         markers,
         tabs,
+        sourceAnchor:
+          readNearestSourceAnchor(lineEl) ?? readNearestSourceAnchor(options.wrapperEl) ?? options.sourceAnchor,
       }) as PaintSnapshotLine,
     );
 
@@ -1554,6 +1622,7 @@ export class DomPainter {
             style: snapshotLineStyleFromElement(lineEl),
             markers,
             tabs,
+            sourceAnchor: readNearestSourceAnchor(lineEl),
           }) as PaintSnapshotLine,
         );
       }
@@ -1582,71 +1651,10 @@ export class DomPainter {
     };
   }
 
-  /**
-   * Builds a new block lookup from the input data, merging header/footer blocks,
-   * and tracks which blocks changed since the last paint cycle.
-   */
-  private normalizeOptionalBlockMeasurePair(
-    label: 'header' | 'footer',
-    blocks: FlowBlock[] | undefined,
-    measures: Measure[] | undefined,
-  ): OptionalBlockMeasurePair | undefined {
-    const hasBlocks = blocks !== undefined;
-    const hasMeasures = measures !== undefined;
-
-    if (hasBlocks !== hasMeasures) {
-      throw new Error(
-        `DomPainter.paint requires ${label}Blocks and ${label}Measures to both be provided or both be omitted`,
-      );
-    }
-
-    if (!hasBlocks || !hasMeasures) {
-      return undefined;
-    }
-
-    return { blocks, measures };
-  }
-
-  private updateBlockLookup(input: DomPainterInput): void {
-    const { blocks, measures, headerBlocks, headerMeasures, footerBlocks, footerMeasures } = input;
-
-    // Build lookup for main document blocks
-    const nextLookup = this.buildBlockLookup(blocks, measures);
-
-    const normalizedHeader = this.normalizeOptionalBlockMeasurePair('header', headerBlocks, headerMeasures);
-    if (normalizedHeader) {
-      const headerLookup = this.buildBlockLookup(normalizedHeader.blocks, normalizedHeader.measures);
-      headerLookup.forEach((entry, id) => {
-        nextLookup.set(id, entry);
-      });
-    }
-
-    const normalizedFooter = this.normalizeOptionalBlockMeasurePair('footer', footerBlocks, footerMeasures);
-    if (normalizedFooter) {
-      const footerLookup = this.buildBlockLookup(normalizedFooter.blocks, normalizedFooter.measures);
-      footerLookup.forEach((entry, id) => {
-        nextLookup.set(id, entry);
-      });
-    }
-
-    // Track changed blocks
-    const changed = new Set<string>();
-    nextLookup.forEach((entry, id) => {
-      const previous = this.blockLookup.get(id);
-      if (!previous || previous.version !== entry.version) {
-        changed.add(id);
-      }
-    });
-    this.blockLookup = nextLookup;
-    this.changedBlocks = changed;
-  }
-
   public paint(input: DomPainterInput, mount: HTMLElement, mapping?: PositionMapping): void {
-    const layout = input.sourceLayout;
-    this.resolvedLayout = input.resolvedLayout;
-
-    // Update block lookup and change tracking (absorbs former setData logic)
-    this.updateBlockLookup(input);
+    const resolvedLayout = input.resolvedLayout;
+    this.resolvedLayout = resolvedLayout;
+    this.changedBlocks.clear();
 
     if (!(mount instanceof HTMLElement)) {
       throw new Error('DomPainter.paint requires a valid HTMLElement mount');
@@ -1663,8 +1671,12 @@ export class DomPainter {
     // Complex transactions (paste, multi-step replace, etc.) fall back to full rebuild.
     const isSimpleTransaction = mapping && mapping.maps.length === 1;
     if (mapping && !isSimpleTransaction) {
-      // Complex transaction - force all fragments to rebuild (safe fallback)
-      this.blockLookup.forEach((_, id) => this.changedBlocks.add(id));
+      // Complex transaction, force all body fragments to rebuild (safe fallback).
+      for (const page of input.resolvedLayout.pages) {
+        for (const item of page.items) {
+          if ('blockId' in item) this.changedBlocks.add(item.blockId);
+        }
+      }
       this.currentMapping = null;
     } else {
       this.currentMapping = mapping ?? null;
@@ -1673,6 +1685,7 @@ export class DomPainter {
     ensurePrintStyles(doc);
     ensureLinkStyles(doc);
     ensureTrackChangeStyles(doc);
+    ensureFormattingMarksStyles(doc);
     ensureFieldAnnotationStyles(doc);
     ensureSdtContainerStyles(doc);
     ensureImageSelectionStyles(doc);
@@ -1681,29 +1694,31 @@ export class DomPainter {
       ensureRulerStyles(doc);
     }
     mount.classList.add(CLASS_NAMES.container);
+    this.applyFormattingMarksClass(mount);
 
     if (this.mount && this.mount !== mount) {
       this.resetState();
+      this.applyFormattingMarksClass(mount);
     }
     this.layoutVersion += 1;
 
-    this.layoutEpoch = layout.layoutEpoch ?? 0;
+    this.layoutEpoch = resolvedLayout.layoutEpoch ?? 0;
     this.mount = mount;
-    this.beginPaintSnapshot(layout);
+    this.beginPaintSnapshot(resolvedLayout);
 
-    this.totalPages = layout.pages.length;
+    this.totalPages = resolvedLayout.pages.length;
     if (this.isSemanticFlow) {
       // Semantic mode always renders as a single continuous surface.
       applyStyles(mount, containerStyles);
       mount.style.gap = '0px';
       mount.style.alignItems = 'stretch';
       if (!this.currentLayout || this.pageStates.length === 0) {
-        this.fullRender(layout);
+        this.fullRender(resolvedLayout);
       } else {
-        this.patchLayout(layout);
+        this.patchLayout(resolvedLayout);
       }
-      this.setMountedPageIndices(this.createAllPageIndices(layout.pages.length));
-      this.currentLayout = layout;
+      this.setMountedPageIndices(this.createAllPageIndices(resolvedLayout.pages.length));
+      this.currentLayout = resolvedLayout;
       this.changedBlocks.clear();
       this.currentMapping = null;
       return;
@@ -1715,10 +1730,10 @@ export class DomPainter {
       applyStyles(mount, containerStylesHorizontal);
       // Use configured page gap for horizontal rendering
       mount.style.gap = `${this.pageGap}px`;
-      this.renderHorizontal(layout, mount);
+      this.renderHorizontal(resolvedLayout, mount);
       this.finalizePaintSnapshotFromBuilder(mount);
-      this.setMountedPageIndices(this.createAllPageIndices(layout.pages.length));
-      this.currentLayout = layout;
+      this.setMountedPageIndices(this.createAllPageIndices(resolvedLayout.pages.length));
+      this.currentLayout = resolvedLayout;
       this.pageStates = [];
       this.changedBlocks.clear();
       this.currentMapping = null;
@@ -1726,10 +1741,10 @@ export class DomPainter {
     }
     if (mode === 'book') {
       applyStyles(mount, containerStyles);
-      this.renderBookMode(layout, mount);
+      this.renderBookMode(resolvedLayout, mount);
       this.finalizePaintSnapshotFromBuilder(mount);
-      this.setMountedPageIndices(this.createAllPageIndices(layout.pages.length));
-      this.currentLayout = layout;
+      this.setMountedPageIndices(this.createAllPageIndices(resolvedLayout.pages.length));
+      this.currentLayout = resolvedLayout;
       this.pageStates = [];
       this.changedBlocks.clear();
       this.currentMapping = null;
@@ -1742,21 +1757,21 @@ export class DomPainter {
     if (this.virtualEnabled) {
       // Keep container gap at 0 so spacer elements don't introduce extra offsets.
       mount.style.gap = '0px';
-      this.renderVirtualized(layout, mount);
+      this.renderVirtualized(resolvedLayout, mount);
       useDomSnapshotFallback = true;
-      this.currentLayout = layout;
+      this.currentLayout = resolvedLayout;
       this.changedBlocks.clear();
       this.currentMapping = null;
     } else {
       // Use configured page gap for normal vertical rendering
       mount.style.gap = `${this.pageGap}px`;
       if (!this.currentLayout || this.pageStates.length === 0) {
-        this.fullRender(layout);
+        this.fullRender(resolvedLayout);
       } else {
-        this.patchLayout(layout);
+        this.patchLayout(resolvedLayout);
         useDomSnapshotFallback = true;
       }
-      this.setMountedPageIndices(this.createAllPageIndices(layout.pages.length));
+      this.setMountedPageIndices(this.createAllPageIndices(resolvedLayout.pages.length));
     }
 
     if (useDomSnapshotFallback) {
@@ -1766,7 +1781,7 @@ export class DomPainter {
       this.finalizePaintSnapshotFromBuilder(mount);
     }
 
-    this.currentLayout = layout;
+    this.currentLayout = resolvedLayout;
     this.changedBlocks.clear();
     this.currentMapping = null;
   }
@@ -1774,7 +1789,7 @@ export class DomPainter {
   // ----------------
   // Virtualized path
   // ----------------
-  private renderVirtualized(layout: Layout, mount: HTMLElement): void {
+  private renderVirtualized(layout: ResolvedLayout, mount: HTMLElement): void {
     if (!this.doc) return;
     // Always keep the latest layout reference for handlers
     this.currentLayout = layout;
@@ -1883,10 +1898,7 @@ export class DomPainter {
     if (!this.currentLayout) return;
     const N = this.currentLayout.pages.length;
     if (N !== this.virtualHeights.length) {
-      this.virtualHeights = this.currentLayout.pages.map((p, i) => {
-        const resolved = this.getResolvedPage(i);
-        return resolved?.height ?? p.size?.h ?? this.currentLayout!.pageSize.h;
-      });
+      this.virtualHeights = this.currentLayout.pages.map((p) => p.height);
     }
     // Build offsets where offsets[i] = sum_{k < i} (height[k] + gap).
     // Use virtualGap to match CSS gap on virtualPagesEl.
@@ -2045,20 +2057,18 @@ export class DomPainter {
     // Insert or patch needed pages
     for (const i of mounted) {
       const page = layout.pages[i];
-      const resolved = this.getResolvedPage(i);
-      const pageSize = resolved ? { w: resolved.width, h: resolved.height } : (page.size ?? layout.pageSize);
       const existing = this.pageIndexToState.get(i);
       if (!existing) {
-        const newState = this.createPageState(page, pageSize, i);
+        const newState = this.createPageState(page, i);
         newState.element.dataset.pageNumber = String(page.number);
         newState.element.dataset.pageIndex = String(i);
         // Ensure virtualization uses page margin 0
-        applyStyles(newState.element, pageStyles(pageSize.w, pageSize.h, this.getEffectivePageStyles()));
+        applyStyles(newState.element, pageStyles(page.width, page.height, this.getEffectivePageStyles()));
         this.virtualPagesEl.appendChild(newState.element);
         this.pageIndexToState.set(i, newState);
       } else {
         // Patch in place
-        this.patchPage(existing, page, pageSize, i);
+        this.patchPage(existing, page, i);
       }
     }
 
@@ -2143,28 +2153,23 @@ export class DomPainter {
     this.virtualGapSpacers = [];
   }
 
-  private renderHorizontal(layout: Layout, mount: HTMLElement): void {
+  private renderHorizontal(layout: ResolvedLayout, mount: HTMLElement): void {
     if (!this.doc) return;
     mount.innerHTML = '';
     layout.pages.forEach((page, pageIndex) => {
-      const resolved = this.getResolvedPage(pageIndex);
-      const pageSize = resolved ? { w: resolved.width, h: resolved.height } : (page.size ?? layout.pageSize);
-      const pageEl = this.renderPage(pageSize.w, pageSize.h, page, pageIndex);
+      const pageEl = this.renderPage(page.width, page.height, page, pageIndex);
       mount.appendChild(pageEl);
     });
   }
 
-  private renderBookMode(layout: Layout, mount: HTMLElement): void {
+  private renderBookMode(layout: ResolvedLayout, mount: HTMLElement): void {
     if (!this.doc) return;
     mount.innerHTML = '';
     const pages = layout.pages;
     if (pages.length === 0) return;
 
-    const firstResolved = this.getResolvedPage(0);
-    const firstPageSize = firstResolved
-      ? { w: firstResolved.width, h: firstResolved.height }
-      : (pages[0].size ?? layout.pageSize);
-    const firstPageEl = this.renderPage(firstPageSize.w, firstPageSize.h, pages[0], 0);
+    const firstPage = pages[0];
+    const firstPageEl = this.renderPage(firstPage.width, firstPage.height, firstPage, 0);
     mount.appendChild(firstPageEl);
 
     for (let i = 1; i < pages.length; i += 2) {
@@ -2173,20 +2178,12 @@ export class DomPainter {
       applyStyles(spreadEl, spreadStyles);
 
       const leftPage = pages[i];
-      const leftResolved = this.getResolvedPage(i);
-      const leftPageSize = leftResolved
-        ? { w: leftResolved.width, h: leftResolved.height }
-        : (leftPage.size ?? layout.pageSize);
-      const leftPageEl = this.renderPage(leftPageSize.w, leftPageSize.h, leftPage, i);
+      const leftPageEl = this.renderPage(leftPage.width, leftPage.height, leftPage, i);
       spreadEl.appendChild(leftPageEl);
 
       if (i + 1 < pages.length) {
         const rightPage = pages[i + 1];
-        const rightResolved = this.getResolvedPage(i + 1);
-        const rightPageSize = rightResolved
-          ? { w: rightResolved.width, h: rightResolved.height }
-          : (rightPage.size ?? layout.pageSize);
-        const rightPageEl = this.renderPage(rightPageSize.w, rightPageSize.h, rightPage, i + 1);
+        const rightPageEl = this.renderPage(rightPage.width, rightPage.height, rightPage, i + 1);
         spreadEl.appendChild(rightPageEl);
       }
 
@@ -2194,7 +2191,7 @@ export class DomPainter {
     }
   }
 
-  private renderPage(width: number, height: number, page: Page, pageIndex: number): HTMLElement {
+  private renderPage(width: number, height: number, page: ResolvedPage, pageIndex: number): HTMLElement {
     if (!this.doc) {
       throw new Error('DomPainter: document is not available');
     }
@@ -2222,19 +2219,20 @@ export class DomPainter {
       pageIndex,
     };
 
-    const sdtBoundaries = computeSdtBoundaries(page.fragments, this.blockLookup, this.sdtLabelsRendered);
-    const betweenBorderFlags = computeBetweenBorderFlags(page.fragments, this.blockLookup);
+    const resolvedItems = page.items;
+    const sdtBoundaries = computeSdtBoundaries(resolvedItems, this.sdtLabelsRendered);
+    const betweenBorderFlags = computeBetweenBorderFlags(resolvedItems);
 
-    page.fragments.forEach((fragment, index) => {
+    resolvedItems.forEach((resolvedItem, index) => {
+      if (resolvedItem.kind !== 'fragment') return;
+      const fragment = resolvedItem.fragment;
       const sdtBoundary = sdtBoundaries.get(index);
-      const resolvedItem = this.getResolvedFragmentItem(pageIndex, index);
       el.appendChild(
         this.renderFragment(fragment, contextBase, sdtBoundary, betweenBorderFlags.get(index), resolvedItem),
       );
     });
     this.renderDecorationsForPage(el, page, pageIndex);
     this.renderColumnSeparators(el, page, width, height);
-
     return el;
   }
 
@@ -2256,25 +2254,25 @@ export class DomPainter {
    * - Uses DEFAULT_PAGE_HEIGHT_PX (1056px = 11 inches) if page.size.h is not available
    * - Defaults margins to 0 if not explicitly provided
    */
-  private renderPageRuler(pageWidthPx: number, page: Page): HTMLElement | null {
+  private renderPageRuler(pageWidthPx: number, page: ResolvedPage): HTMLElement | null {
     if (!this.doc) {
       console.warn('[renderPageRuler] Cannot render ruler: document is not available.');
       return null;
     }
 
-    if (!page.margins) {
+    const margins = page.margins;
+    if (!margins) {
       console.warn(`[renderPageRuler] Cannot render ruler for page ${page.number}: margins not available.`);
       return null;
     }
 
-    const margins = page.margins;
     const leftMargin = margins.left ?? 0;
     const rightMargin = margins.right ?? 0;
 
     try {
       const rulerDefinition = generateRulerDefinitionFromPx({
         pageWidthPx,
-        pageHeightPx: page.size?.h ?? DEFAULT_PAGE_HEIGHT_PX,
+        pageHeightPx: page.height ?? DEFAULT_PAGE_HEIGHT_PX,
         leftMarginPx: leftMargin,
         rightMarginPx: rightMargin,
       });
@@ -2315,14 +2313,17 @@ export class DomPainter {
     }
   }
 
-  private renderColumnSeparators(pageEl: HTMLElement, page: Page, pageWidth: number, pageHeight: number): void {
+  private renderColumnSeparators(pageEl: HTMLElement, page: ResolvedPage, pageWidth: number, pageHeight: number): void {
     if (!this.doc) return;
-    if (!page.margins) return;
+    pageEl.querySelectorAll('[data-superdoc-column-separator="true"]').forEach((separator) => separator.remove());
 
-    const leftMargin = page.margins.left ?? 0;
-    const rightMargin = page.margins.right ?? 0;
-    const topMargin = page.margins.top ?? 0;
-    const bottomMargin = page.margins.bottom ?? 0;
+    const pageMargins = page.margins;
+    if (!pageMargins) return;
+
+    const leftMargin = pageMargins.left ?? 0;
+    const rightMargin = pageMargins.right ?? 0;
+    const topMargin = pageMargins.top ?? 0;
+    const bottomMargin = pageMargins.bottom ?? 0;
     const contentWidth = pageWidth - leftMargin - rightMargin;
 
     // Prefer columnRegions (per-region configs for pages with continuous
@@ -2346,16 +2347,26 @@ export class DomPainter {
       if (!columns.withSeparator) continue;
       if (columns.count <= 1) continue;
 
-      const columnWidth = (contentWidth - columns.gap * (columns.count - 1)) / columns.count;
-      // Given the separator will have 1px width, ensure column has a larger width.
-      if (columnWidth <= 1) continue;
-
       const regionHeight = yEnd - yStart;
       if (regionHeight <= 0) continue;
 
-      for (let i = 0; i < columns.count - 1; i++) {
-        const separatorX = leftMargin + (i + 1) * columnWidth + i * columns.gap + columns.gap / 2;
+      const separatorPositions = this.getColumnSeparatorPositions(columns, leftMargin, contentWidth);
+      if (separatorPositions.length === 0) continue;
+
+      // Word only renders the column separator between columns that both have
+      // content. For a 2-col page where col 1 is empty (e.g. the last page of
+      // a multi-column section that fits in col 0, or a `nextPage` section
+      // where Word fills col 0 first without balancing), Word draws no line
+      // even when the section's `w:cols` declared `w:sep="1"`. Gate each
+      // separator on whether any fragment sits past it within the region.
+      const fragmentsInRegion = page.items.filter((item) => item.y >= yStart - 0.5 && item.y < yEnd + 0.5);
+
+      for (const separatorX of separatorPositions) {
+        const hasContentPastSeparator = fragmentsInRegion.some((f) => f.x >= separatorX);
+        if (!hasContentPastSeparator) continue;
+
         const separatorEl = this.doc.createElement('div');
+        separatorEl.dataset.superdocColumnSeparator = 'true';
 
         separatorEl.style.position = 'absolute';
         separatorEl.style.left = `${separatorX}px`;
@@ -2369,7 +2380,40 @@ export class DomPainter {
     }
   }
 
-  private renderDecorationsForPage(pageEl: HTMLElement, page: Page, pageIndex: number): void {
+  private getColumnSeparatorPositions(columns: ColumnLayout, leftMargin: number, contentWidth: number): number[] {
+    const hasExplicitWidths = Array.isArray(columns.widths) && columns.widths.length > 0;
+
+    if (!hasExplicitWidths) {
+      const equalWidth = (contentWidth - columns.gap * (columns.count - 1)) / columns.count;
+      if (equalWidth <= 1) return [];
+
+      const separatorPositions: number[] = [];
+      for (let index = 0; index < columns.count - 1; index += 1) {
+        separatorPositions.push(leftMargin + (index + 1) * equalWidth + index * columns.gap + columns.gap / 2);
+      }
+      return separatorPositions;
+    }
+
+    const normalizedColumns = normalizeColumnLayout(columns, contentWidth);
+    if (normalizedColumns.count <= 1) return [];
+
+    const columnWidths =
+      normalizedColumns.widths ?? Array.from({ length: normalizedColumns.count }, () => normalizedColumns.width);
+    // A 1px separator only makes sense when every participating column is wider than the separator itself.
+    if (columnWidths.some((columnWidth) => columnWidth <= 1)) return [];
+
+    const separatorPositions: number[] = [];
+    let cursorX = leftMargin;
+
+    for (let index = 0; index < normalizedColumns.count - 1; index += 1) {
+      const currentColumnWidth = columnWidths[index] ?? normalizedColumns.width;
+      separatorPositions.push(cursorX + currentColumnWidth + normalizedColumns.gap / 2);
+      cursorX += currentColumnWidth + normalizedColumns.gap;
+    }
+
+    return separatorPositions;
+  }
+  private renderDecorationsForPage(pageEl: HTMLElement, page: ResolvedPage, pageIndex: number): void {
     if (this.isSemanticFlow) return;
     this.renderDecorationSection(pageEl, page, pageIndex, 'header');
     this.renderDecorationSection(pageEl, page, pageIndex, 'footer');
@@ -2380,16 +2424,12 @@ export class DomPainter {
    * Used to determine special Y positioning for page-relative anchored media
    * in header/footer decoration sections.
    */
-  private isPageRelativeAnchoredFragment(fragment: Fragment): boolean {
+  private isPageRelativeAnchoredFragment(fragment: Fragment, resolvedItem: ResolvedPaintItem | undefined): boolean {
     if (fragment.kind !== 'image' && fragment.kind !== 'drawing') {
       return false;
     }
-    const lookup = this.blockLookup.get(fragment.blockId);
-    if (!lookup) {
-      return false;
-    }
-    const block = lookup.block;
-    if (block.kind !== 'image' && block.kind !== 'drawing') {
+    const block = resolvedItem && 'block' in resolvedItem ? resolvedItem.block : undefined;
+    if (!block || (block.kind !== 'image' && block.kind !== 'drawing')) {
       return false;
     }
     return block.anchor?.vRelativeFrom === 'page';
@@ -2406,8 +2446,7 @@ export class DomPainter {
    * are measured from.
    */
   private getDecorationAnchorPageOriginY(
-    pageEl: HTMLElement,
-    page: Page,
+    page: ResolvedPage,
     kind: 'header' | 'footer',
     effectiveOffset: number,
   ): number {
@@ -2415,23 +2454,37 @@ export class DomPainter {
       return effectiveOffset;
     }
 
-    const bottomMargin = page.margins?.bottom;
+    if (!Number.isFinite(page.height) || page.height <= 0) {
+      throw new Error(
+        `DomPainter: invalid ResolvedPage.height (${page.height}) for page ${page.index}; resolve stage must produce a positive numeric height.`,
+      );
+    }
+
+    const pageMargins = page.margins;
+    const pageHeight = page.height;
+
+    const footerDistance = pageMargins?.footer;
+    if (typeof footerDistance === 'number' && Number.isFinite(footerDistance)) {
+      return Math.max(0, pageHeight - Math.max(0, footerDistance));
+    }
+
+    const bottomMargin = pageMargins?.bottom;
     if (bottomMargin == null) {
       return effectiveOffset;
     }
 
     const footnoteReserve = page.footnoteReserved ?? 0;
     const adjustedBottomMargin = Math.max(0, bottomMargin - footnoteReserve);
-    const styledPageHeight = Number.parseFloat(pageEl.style.height || '');
-    const pageHeight =
-      page.size?.h ??
-      this.currentLayout?.pageSize?.h ??
-      (Number.isFinite(styledPageHeight) ? styledPageHeight : pageEl.clientHeight);
 
     return Math.max(0, pageHeight - adjustedBottomMargin);
   }
 
-  private renderDecorationSection(pageEl: HTMLElement, page: Page, pageIndex: number, kind: 'header' | 'footer'): void {
+  private renderDecorationSection(
+    pageEl: HTMLElement,
+    page: ResolvedPage,
+    pageIndex: number,
+    kind: 'header' | 'footer',
+  ): void {
     if (!this.doc) return;
     const provider = kind === 'header' ? this.headerProvider : this.footerProvider;
     const className = kind === 'header' ? CLASS_NAMES.pageHeader : CLASS_NAMES.pageFooter;
@@ -2446,9 +2499,10 @@ export class DomPainter {
     const container = (existing as HTMLElement) ?? this.doc.createElement('div');
     container.className = className;
     container.innerHTML = '';
-    const baseOffset = data.offset ?? (kind === 'footer' ? pageEl.clientHeight - data.height : 0);
+    const baseOffset = data.offset;
     const marginLeft = data.marginLeft ?? 0;
-    const marginRight = page.margins?.right ?? 0;
+    const pageMargins = page.margins;
+    const marginRight = pageMargins?.right ?? 0;
 
     // For footers, if content is taller than reserved space, expand container upward
     // The container bottom stays anchored at footerMargin from page bottom
@@ -2488,7 +2542,7 @@ export class DomPainter {
     // Header page-relative anchors use raw inner-layout Y and are handled with
     // the simpler effectiveOffset subtraction (unchanged from the baseline).
     const footerAnchorPageOriginY =
-      kind === 'footer' ? this.getDecorationAnchorPageOriginY(pageEl, page, kind, effectiveOffset) : 0;
+      kind === 'footer' ? this.getDecorationAnchorPageOriginY(page, kind, effectiveOffset) : 0;
     const footerAnchorContainerOffsetY = kind === 'footer' ? footerAnchorPageOriginY - effectiveOffset : 0;
 
     // For footers, calculate offset to push content to bottom of container
@@ -2499,9 +2553,10 @@ export class DomPainter {
       const contentHeight =
         typeof data.contentHeight === 'number'
           ? data.contentHeight
-          : data.fragments.reduce((max, f) => {
+          : data.fragments.reduce((max, f, fi) => {
+              const resolvedItem = data.items?.[fi];
               const fragHeight =
-                'height' in f && typeof f.height === 'number' ? f.height : this.estimateFragmentHeight(f);
+                'height' in f && typeof f.height === 'number' ? f.height : this.estimateFragmentHeight(f, resolvedItem);
               return Math.max(max, f.y + Math.max(0, fragHeight));
             }, 0);
       // Offset to push content to bottom of container
@@ -2518,7 +2573,8 @@ export class DomPainter {
     };
 
     // Compute between-border flags for header/footer paragraph fragments
-    const betweenBorderFlags = computeBetweenBorderFlags(data.fragments, this.blockLookup);
+    const decorationItems = data.items ?? [];
+    const betweenBorderFlags = computeBetweenBorderFlags(decorationItems);
 
     // Separate behindDoc fragments from normal fragments.
     // Prefer explicit fragment.behindDoc when present. Keep zIndex===0 as a
@@ -2531,10 +2587,11 @@ export class DomPainter {
       const fragment = data.fragments[fi];
       let isBehindDoc = false;
       if (fragment.kind === 'image' || fragment.kind === 'drawing') {
+        const resolvedItem = decorationItems[fi] as ResolvedDrawingItem | undefined;
         isBehindDoc =
           fragment.behindDoc === true ||
           (fragment.behindDoc == null && 'zIndex' in fragment && fragment.zIndex === 0) ||
-          this.shouldRenderBehindPageContent(fragment, kind);
+          this.shouldRenderBehindPageContent(fragment, kind, resolvedItem);
       }
       if (isBehindDoc) {
         behindDocFragments.push({ fragment, originalIndex: fi });
@@ -2555,8 +2612,15 @@ export class DomPainter {
     // By inserting at the beginning and using z-index: 0, they render below body content
     // which also has z-index values but comes later in DOM order.
     behindDocFragments.forEach(({ fragment, originalIndex }) => {
-      const fragEl = this.renderFragment(fragment, context, undefined, betweenBorderFlags.get(originalIndex));
-      const isPageRelative = this.isPageRelativeAnchoredFragment(fragment);
+      const resolvedItem = data.items?.[originalIndex];
+      const fragEl = this.renderFragment(
+        fragment,
+        context,
+        undefined,
+        betweenBorderFlags.get(originalIndex),
+        resolvedItem,
+      );
+      const isPageRelative = this.isPageRelativeAnchoredFragment(fragment, resolvedItem);
 
       let pageY: number;
       if (isPageRelative && kind === 'footer') {
@@ -2579,8 +2643,15 @@ export class DomPainter {
 
     // Render normal fragments in the header/footer container
     normalFragments.forEach(({ fragment, originalIndex }) => {
-      const fragEl = this.renderFragment(fragment, context, undefined, betweenBorderFlags.get(originalIndex));
-      const isPageRelative = this.isPageRelativeAnchoredFragment(fragment);
+      const resolvedItem = data.items?.[originalIndex];
+      const fragEl = this.renderFragment(
+        fragment,
+        context,
+        undefined,
+        betweenBorderFlags.get(originalIndex),
+        resolvedItem,
+      );
+      const isPageRelative = this.isPageRelativeAnchoredFragment(fragment, resolvedItem);
 
       if (isPageRelative && kind === 'footer') {
         // Footer page-relative: fragment.y is normalized to band-local coords
@@ -2638,15 +2709,13 @@ export class DomPainter {
     this.mountedPageIndices = [];
   }
 
-  private fullRender(layout: Layout): void {
+  private fullRender(layout: ResolvedLayout): void {
     if (!this.mount || !this.doc) return;
     this.mount.innerHTML = '';
     this.pageStates = [];
 
     layout.pages.forEach((page, pageIndex) => {
-      const resolved = this.getResolvedPage(pageIndex);
-      const pageSize = resolved ? { w: resolved.width, h: resolved.height } : (page.size ?? layout.pageSize);
-      const pageState = this.createPageState(page, pageSize, pageIndex);
+      const pageState = this.createPageState(page, pageIndex);
       pageState.element.dataset.pageNumber = String(page.number);
       pageState.element.dataset.pageIndex = String(pageIndex);
       this.mount!.appendChild(pageState.element);
@@ -2654,24 +2723,22 @@ export class DomPainter {
     });
   }
 
-  private patchLayout(layout: Layout): void {
+  private patchLayout(layout: ResolvedLayout): void {
     if (!this.mount || !this.doc) return;
 
     const nextStates: PageDomState[] = [];
 
     layout.pages.forEach((page, index) => {
-      const resolved = this.getResolvedPage(index);
-      const pageSize = resolved ? { w: resolved.width, h: resolved.height } : (page.size ?? layout.pageSize);
       const prevState = this.pageStates[index];
       if (!prevState) {
-        const newState = this.createPageState(page, pageSize, index);
+        const newState = this.createPageState(page, index);
         newState.element.dataset.pageNumber = String(page.number);
         newState.element.dataset.pageIndex = String(index);
         this.mount!.insertBefore(newState.element, this.mount!.children[index] ?? null);
         nextStates.push(newState);
         return;
       }
-      this.patchPage(prevState, page, pageSize, index);
+      this.patchPage(prevState, page, index);
       nextStates.push(prevState);
     });
 
@@ -2684,9 +2751,9 @@ export class DomPainter {
     this.pageStates = nextStates;
   }
 
-  private patchPage(state: PageDomState, page: Page, pageSize: { w: number; h: number }, pageIndex: number): void {
+  private patchPage(state: PageDomState, page: ResolvedPage, pageIndex: number): void {
     const pageEl = state.element;
-    applyStyles(pageEl, pageStyles(pageSize.w, pageSize.h, this.getEffectivePageStyles()));
+    applyStyles(pageEl, pageStyles(page.width, page.height, this.getEffectivePageStyles()));
     this.applySemanticPageOverrides(pageEl);
     pageEl.dataset.pageNumber = String(page.number);
     pageEl.dataset.layoutEpoch = String(this.layoutEpoch);
@@ -2694,8 +2761,9 @@ export class DomPainter {
 
     const existing = new Map(state.fragments.map((frag) => [frag.key, frag]));
     const nextFragments: FragmentDomState[] = [];
-    const sdtBoundaries = computeSdtBoundaries(page.fragments, this.blockLookup, this.sdtLabelsRendered);
-    const betweenBorderFlags = computeBetweenBorderFlags(page.fragments, this.blockLookup);
+    const resolvedItems = page.items;
+    const sdtBoundaries = computeSdtBoundaries(resolvedItems, this.sdtLabelsRendered);
+    const betweenBorderFlags = computeBetweenBorderFlags(resolvedItems);
 
     const contextBase: FragmentRenderContext = {
       pageNumber: page.number,
@@ -2705,15 +2773,18 @@ export class DomPainter {
       pageIndex,
     };
 
-    page.fragments.forEach((fragment, index) => {
+    resolvedItems.forEach((resolvedItem, index) => {
+      if (resolvedItem.kind !== 'fragment') return;
+      const fragment = resolvedItem.fragment;
       const key = fragmentKey(fragment);
       const current = existing.get(key);
       const sdtBoundary = sdtBoundaries.get(index);
       const betweenInfo = betweenBorderFlags.get(index);
-      const resolvedItem = this.getResolvedFragmentItem(pageIndex, index);
+      const resolvedSig = resolvedPaintCacheSignature(resolvedItem);
 
       if (current) {
         existing.delete(key);
+        const geometryChanged = hasFragmentGeometryChanged(current.fragment, fragment);
         const sdtBoundaryMismatch = shouldRebuildForSdtBoundary(current.element, sdtBoundary);
         // Detect mismatch in any between-border property
         const betweenBorderMismatch =
@@ -2730,8 +2801,9 @@ export class DomPainter {
           current.element.dataset.pmStart != null &&
           this.currentMapping.map(Number(current.element.dataset.pmStart)) !== newPmStart;
         const needsRebuild =
+          geometryChanged ||
           this.changedBlocks.has(fragment.blockId) ||
-          current.signature !== fragmentSignature(fragment, this.blockLookup) ||
+          current.signature !== resolvedSig ||
           sdtBoundaryMismatch ||
           betweenBorderMismatch ||
           mappingUnreliable;
@@ -2740,7 +2812,7 @@ export class DomPainter {
           const replacement = this.renderFragment(fragment, contextBase, sdtBoundary, betweenInfo, resolvedItem);
           pageEl.replaceChild(replacement, current.element);
           current.element = replacement;
-          current.signature = fragmentSignature(fragment, this.blockLookup);
+          current.signature = resolvedSig;
         } else if (this.currentMapping) {
           // Fragment NOT rebuilt - update position attributes to reflect document changes
           this.updatePositionAttributes(current.element, this.currentMapping);
@@ -2764,7 +2836,7 @@ export class DomPainter {
         key,
         fragment,
         element: fresh,
-        signature: fragmentSignature(fragment, this.blockLookup),
+        signature: resolvedSig,
         context: contextBase,
       });
     });
@@ -2780,6 +2852,7 @@ export class DomPainter {
 
     state.fragments = nextFragments;
     this.renderDecorationsForPage(pageEl, page, pageIndex);
+    this.renderColumnSeparators(pageEl, page, page.width, page.height);
   }
 
   /**
@@ -2790,6 +2863,10 @@ export class DomPainter {
   private updatePositionAttributes(fragmentEl: HTMLElement, mapping: PositionMapping): void {
     // Skip header/footer elements (they use a separate PM coordinate space)
     if (fragmentEl.closest('.superdoc-page-header, .superdoc-page-footer')) {
+      return;
+    }
+    // Notes use local story positions, so body mappings must not rewrite them.
+    if (isNonBodyStoryBlockId(fragmentEl.dataset.blockId)) {
       return;
     }
 
@@ -2835,13 +2912,13 @@ export class DomPainter {
     }
   }
 
-  private createPageState(page: Page, pageSize: { w: number; h: number }, pageIndex: number): PageDomState {
+  private createPageState(page: ResolvedPage, pageIndex: number): PageDomState {
     if (!this.doc) {
       throw new Error('DomPainter.createPageState requires a document');
     }
     const el = this.doc.createElement('div');
     el.classList.add(CLASS_NAMES.page);
-    applyStyles(el, pageStyles(pageSize.w, pageSize.h, this.getEffectivePageStyles()));
+    applyStyles(el, pageStyles(page.width, page.height, this.getEffectivePageStyles()));
     this.applySemanticPageOverrides(el);
     el.dataset.layoutEpoch = String(this.layoutEpoch);
 
@@ -2849,14 +2926,17 @@ export class DomPainter {
       pageNumber: page.number,
       totalPages: this.totalPages,
       section: 'body',
+      pageNumberText: page.numberText,
       pageIndex,
     };
 
-    const sdtBoundaries = computeSdtBoundaries(page.fragments, this.blockLookup, this.sdtLabelsRendered);
-    const betweenBorderFlags = computeBetweenBorderFlags(page.fragments, this.blockLookup);
-    const fragmentStates: FragmentDomState[] = page.fragments.map((fragment, index) => {
+    const resolvedItems = page.items;
+    const sdtBoundaries = computeSdtBoundaries(resolvedItems, this.sdtLabelsRendered);
+    const betweenBorderFlags = computeBetweenBorderFlags(resolvedItems);
+    const fragmentStates: FragmentDomState[] = resolvedItems.flatMap((resolvedItem, index) => {
+      if (resolvedItem.kind !== 'fragment') return [];
+      const fragment = resolvedItem.fragment;
       const sdtBoundary = sdtBoundaries.get(index);
-      const resolvedItem = this.getResolvedFragmentItem(pageIndex, index);
       const fragmentEl = this.renderFragment(
         fragment,
         contextBase,
@@ -2865,18 +2945,20 @@ export class DomPainter {
         resolvedItem,
       );
       el.appendChild(fragmentEl);
-      return {
-        key: fragmentKey(fragment),
-        signature: fragmentSignature(fragment, this.blockLookup),
-        fragment,
-        element: fragmentEl,
-        context: contextBase,
-      };
+      const initSig = resolvedPaintCacheSignature(resolvedItem);
+      return [
+        {
+          key: fragmentKey(fragment),
+          signature: initSig,
+          fragment,
+          element: fragmentEl,
+          context: contextBase,
+        },
+      ];
     });
 
     this.renderDecorationsForPage(el, page, pageIndex);
-    this.renderColumnSeparators(el, page, pageSize.w, pageSize.h);
-
+    this.renderColumnSeparators(el, page, page.width, page.height);
     return { element: el, fragments: fragmentStates };
   }
 
@@ -2961,19 +3043,23 @@ export class DomPainter {
     resolvedItem?: ResolvedFragmentItem,
   ): HTMLElement {
     try {
-      const lookup = this.blockLookup.get(fragment.blockId);
-      if (!lookup || lookup.block.kind !== 'paragraph' || lookup.measure.kind !== 'paragraph') {
-        throw new Error(`DomPainter: missing block/measure for fragment ${fragment.blockId}`);
-      }
-
       if (!this.doc) {
         throw new Error('DomPainter: document is not available');
       }
 
-      const block = lookup.block as ParagraphBlock;
-      const measure = lookup.measure as ParagraphMeasure;
+      // Pre-extracted block/measure from the resolved item.
+      if (resolvedItem?.block?.kind !== 'paragraph' || resolvedItem?.measure?.kind !== 'paragraph') {
+        throw new Error(`DomPainter: missing resolved paragraph block/measure for fragment ${fragment.blockId}`);
+      }
+      const block = resolvedItem.block as ParagraphBlock;
+      const measure = resolvedItem.measure as ParagraphMeasure;
       const wordLayout = isMinimalWordLayout(block.attrs?.wordLayout) ? block.attrs.wordLayout : undefined;
       const content = resolvedItem?.content;
+
+      // Prefer resolved item metadata over legacy fragment reads
+      const paraContinuesFromPrev = resolvedItem?.continuesFromPrev;
+      const paraContinuesOnNext = resolvedItem?.continuesOnNext;
+      const paraMarkerWidth = resolvedItem?.markerWidth;
 
       const fragmentEl = this.doc.createElement('div');
       fragmentEl.classList.add(CLASS_NAMES.fragment);
@@ -2981,7 +3067,7 @@ export class DomPainter {
       // For TOC entries, override white-space to prevent wrapping
       const isTocEntry = block.attrs?.isTocEntry;
       // For fragments with markers, allow overflow to show markers positioned at negative left
-      const hasMarker = !fragment.continuesFromPrev && fragment.markerWidth && wordLayout?.marker;
+      const hasMarker = !paraContinuesFromPrev && paraMarkerWidth && wordLayout?.marker;
       // SDT containers need overflow visible for tooltips/labels positioned above
       const hasSdtContainer =
         block.attrs?.sdt?.type === 'documentSection' ||
@@ -3008,10 +3094,10 @@ export class DomPainter {
         fragmentEl.classList.add('superdoc-toc-entry');
       }
 
-      if (fragment.continuesFromPrev) {
+      if (paraContinuesFromPrev) {
         fragmentEl.dataset.continuesFromPrev = 'true';
       }
-      if (fragment.continuesOnNext) {
+      if (paraContinuesOnNext) {
         fragmentEl.dataset.continuesOnNext = 'true';
       }
 
@@ -3067,7 +3153,7 @@ export class DomPainter {
       } else {
         const dropCapDescriptor = block.attrs?.dropCapDescriptor;
         const dropCapMeasure = measure.dropCap;
-        if (dropCapDescriptor && dropCapMeasure && !fragment.continuesFromPrev) {
+        if (dropCapDescriptor && dropCapMeasure && !paraContinuesFromPrev) {
           const dropCapEl = this.renderDropCap(dropCapDescriptor, dropCapMeasure);
           fragmentEl.appendChild(dropCapEl);
         }
@@ -3084,8 +3170,15 @@ export class DomPainter {
       if (content) {
         // ── Resolved path: read pre-computed values from ResolvedParagraphContent ──
         const resolvedMarker = content.marker;
+        const expandedRunsForBlock = expandRunsForInlineNewlines(block.runs);
 
         content.lines.forEach((resolvedLine) => {
+          const paragraphMarkLeftOffset = this.resolveResolvedListParagraphMarkOffset(
+            resolvedLine.isListFirstLine ? resolvedMarker : undefined,
+            fragment.markerTextWidth,
+            resolvedLine.indentOffset,
+          );
+          const isRtl = block.attrs?.direction === 'rtl';
           const lineEl = this.renderLine(
             block,
             resolvedLine.line,
@@ -3093,8 +3186,10 @@ export class DomPainter {
             resolvedLine.availableWidth,
             resolvedLine.lineIndex,
             resolvedLine.skipJustify,
+            expandedRunsForBlock,
             resolvedLine.resolvedListTextStartPx,
             resolvedLine.indentOffset,
+            paragraphMarkLeftOffset,
           );
 
           // Apply pre-computed indent values
@@ -3121,53 +3216,56 @@ export class DomPainter {
 
           // Render marker on list first line
           if (resolvedLine.isListFirstLine && resolvedMarker) {
-            lineEl.style.paddingLeft = `${resolvedMarker.firstLinePaddingLeftPx}px`;
+            if (isRtl) {
+              lineEl.style.paddingRight = `${resolvedMarker.firstLinePaddingLeftPx}px`;
+            } else {
+              lineEl.style.paddingLeft = `${resolvedMarker.firstLinePaddingLeftPx}px`;
+            }
 
             if (!resolvedMarker.vanish) {
-              const markerContainer = this.doc!.createElement('span');
-              markerContainer.style.display = 'inline-block';
-              markerContainer.style.wordSpacing = '0px';
-
-              const markerEl = this.doc!.createElement('span');
-              markerEl.classList.add('superdoc-paragraph-marker');
-              markerEl.textContent = resolvedMarker.text;
-              markerEl.style.pointerEvents = 'none';
+              const markerContainer = createListMarkerElement(
+                this.doc!,
+                resolvedMarker.text,
+                resolvedMarker.run,
+                resolvedMarker.sourceAnchor ?? resolvedItem?.sourceAnchor,
+              );
 
               markerContainer.style.position = 'relative';
               if (resolvedMarker.justification === 'right') {
                 markerContainer.style.position = 'absolute';
-                markerContainer.style.left = `${resolvedMarker.markerStartPx}px`;
+                if (isRtl) {
+                  markerContainer.style.right = `${resolvedMarker.markerStartPx}px`;
+                } else {
+                  markerContainer.style.left = `${resolvedMarker.markerStartPx}px`;
+                }
               } else if (resolvedMarker.justification === 'center') {
                 markerContainer.style.position = 'absolute';
-                markerContainer.style.left = `${resolvedMarker.markerStartPx - (resolvedMarker.centerPaddingAdjustPx ?? 0)}px`;
-                lineEl.style.paddingLeft =
-                  parseFloat(lineEl.style.paddingLeft) + (resolvedMarker.centerPaddingAdjustPx ?? 0) + 'px';
+                if (isRtl) {
+                  markerContainer.style.right = `${resolvedMarker.markerStartPx - (resolvedMarker.centerPaddingAdjustPx ?? 0)}px`;
+                  lineEl.style.paddingRight =
+                    (
+                      parseFloat(lineEl.style.paddingRight || '0') + (resolvedMarker.centerPaddingAdjustPx ?? 0)
+                    ).toString() + 'px';
+                } else {
+                  markerContainer.style.left = `${resolvedMarker.markerStartPx - (resolvedMarker.centerPaddingAdjustPx ?? 0)}px`;
+                  lineEl.style.paddingLeft =
+                    parseFloat(lineEl.style.paddingLeft) + (resolvedMarker.centerPaddingAdjustPx ?? 0) + 'px';
+                }
               }
-
-              markerEl.style.fontFamily =
-                toCssFontFamily(resolvedMarker.run.fontFamily) ?? resolvedMarker.run.fontFamily;
-              markerEl.style.fontSize = `${resolvedMarker.run.fontSize}px`;
-              markerEl.style.fontWeight = resolvedMarker.run.bold ? 'bold' : '';
-              markerEl.style.fontStyle = resolvedMarker.run.italic ? 'italic' : '';
-              if (resolvedMarker.run.color) {
-                markerEl.style.color = resolvedMarker.run.color;
-              }
-              if (resolvedMarker.run.letterSpacing != null) {
-                markerEl.style.letterSpacing = `${resolvedMarker.run.letterSpacing}px`;
-              }
-              markerContainer.appendChild(markerEl);
 
               if (resolvedMarker.suffix === 'tab') {
                 const tabEl = this.doc!.createElement('span');
-                tabEl.className = 'superdoc-tab';
+                tabEl.classList.add('superdoc-tab', 'superdoc-marker-suffix-tab');
                 tabEl.innerHTML = '&nbsp;';
                 tabEl.style.display = 'inline-block';
+                tabEl.style.fontSize = `${resolvedMarker.run.fontSize}px`;
                 tabEl.style.wordSpacing = '0px';
                 tabEl.style.width = `${resolvedMarker.suffixWidthPx}px`;
                 lineEl.prepend(tabEl);
               } else if (resolvedMarker.suffix === 'space') {
                 const spaceEl = this.doc!.createElement('span');
                 spaceEl.classList.add('superdoc-marker-suffix-space');
+                spaceEl.style.fontSize = `${resolvedMarker.run.fontSize}px`;
                 spaceEl.style.wordSpacing = '0px';
                 spaceEl.textContent = '\u00A0';
                 lineEl.prepend(spaceEl);
@@ -3178,6 +3276,7 @@ export class DomPainter {
           this.capturePaintSnapshotLine(lineEl, context, {
             inTableFragment: false,
             inTableParagraph: false,
+            sourceAnchor: resolvedItem?.sourceAnchor,
           });
           fragmentEl.appendChild(lineEl);
         });
@@ -3186,26 +3285,33 @@ export class DomPainter {
         const paraIndent = block.attrs?.indent;
         const paraIndentLeft = paraIndent?.left ?? 0;
         const paraIndentRight = paraIndent?.right ?? 0;
+        const isRtl = block.attrs?.direction === 'rtl';
+        const {
+          anchorIndentPx: paraMarkerAnchorIndent,
+          firstLinePx: markerFirstLine,
+          hangingPx: markerHanging,
+        } = resolveMarkerIndent(paraIndent, isRtl);
         const suppressFirstLineIndent = (block.attrs as Record<string, unknown>)?.suppressFirstLineIndent === true;
         const firstLineOffset = suppressFirstLineIndent ? 0 : (paraIndent?.firstLine ?? 0) - (paraIndent?.hanging ?? 0);
 
+        const expandedRunsForBlock = expandRunsForInlineNewlines(block.runs);
         const lastRun = block.runs.length > 0 ? block.runs[block.runs.length - 1] : null;
         const paragraphEndsWithLineBreak = lastRun?.kind === 'lineBreak';
 
         const listFirstLineTextStartPx =
-          !fragment.continuesFromPrev && fragment.markerWidth && wordLayout?.marker
+          !paraContinuesFromPrev && paraMarkerWidth && wordLayout?.marker
             ? resolvePainterListTextStartPx({
                 wordLayout,
-                indentLeftPx: paraIndentLeft,
-                hangingIndentPx: paraIndent?.hanging ?? 0,
-                firstLineIndentPx: paraIndent?.firstLine ?? 0,
+                indentLeftPx: paraMarkerAnchorIndent,
+                hangingIndentPx: markerHanging,
+                firstLineIndentPx: markerFirstLine,
                 markerTextWidthPx: fragment.markerTextWidth,
               })
             : undefined;
 
         const shouldUseSharedInlinePrefixGeometry =
-          !fragment.continuesFromPrev &&
-          fragment.markerWidth &&
+          !paraContinuesFromPrev &&
+          paraMarkerWidth &&
           wordLayout?.marker?.justification === 'left' &&
           wordLayout.firstLineIndentMode !== true &&
           typeof fragment.markerTextWidth === 'number' &&
@@ -3214,18 +3320,18 @@ export class DomPainter {
         const listFirstLineMarkerGeometry = shouldUseSharedInlinePrefixGeometry
           ? resolvePainterListMarkerGeometry({
               wordLayout,
-              indentLeftPx: paraIndentLeft,
-              hangingIndentPx: paraIndent?.hanging ?? 0,
-              firstLineIndentPx: paraIndent?.firstLine ?? 0,
+              indentLeftPx: paraMarkerAnchorIndent,
+              hangingIndentPx: markerHanging,
+              firstLineIndentPx: markerFirstLine,
               markerTextWidthPx: fragment.markerTextWidth,
             })
           : undefined;
 
         let listTabWidth = 0;
         let markerStartPos = 0;
-        if (!fragment.continuesFromPrev && fragment.markerWidth && wordLayout?.marker) {
+        if (!paraContinuesFromPrev && paraMarkerWidth && wordLayout?.marker) {
           const markerTextWidth = fragment.markerTextWidth!;
-          const anchorPoint = paraIndentLeft - (paraIndent?.hanging ?? 0) + (paraIndent?.firstLine ?? 0);
+          const anchorPoint = paraMarkerAnchorIndent - markerHanging + markerFirstLine;
           const markerJustification = wordLayout.marker.justification ?? 'left';
           let currentPos: number;
           if (markerJustification === 'left') {
@@ -3247,9 +3353,9 @@ export class DomPainter {
               currentPos,
               markerJustification,
               wordLayout.tabsPx,
-              paraIndent?.hanging,
-              paraIndent?.firstLine,
-              paraIndentLeft,
+              markerHanging,
+              markerFirstLine,
+              paraMarkerAnchorIndent,
             );
           } else if (suffix === 'space') {
             listTabWidth = 4;
@@ -3258,8 +3364,7 @@ export class DomPainter {
 
         lines.forEach((line, index) => {
           const hasExplicitSegmentPositioning = line.segments?.some((segment) => segment.x !== undefined) === true;
-          const hasListFirstLineMarker =
-            index === 0 && !fragment.continuesFromPrev && fragment.markerWidth && wordLayout?.marker;
+          const hasListFirstLineMarker = index === 0 && !paraContinuesFromPrev && paraMarkerWidth && wordLayout?.marker;
           const shouldUseResolvedListTextStart =
             hasListFirstLineMarker && hasExplicitSegmentPositioning && listFirstLineTextStartPx != null;
 
@@ -3273,9 +3378,9 @@ export class DomPainter {
           }
 
           // Adjust availableWidth for first-line text indent (hanging indent).
-          const isFirstLine = index === 0 && !fragment.continuesFromPrev;
+          const isFirstLine = index === 0 && !paraContinuesFromPrev;
           const isListFirstLine = Boolean(hasListFirstLineMarker && fragment.markerTextWidth);
-          if (isFirstLine && !isListFirstLine && !hasExplicitSegmentPositioning) {
+          if (isFirstLine && !isListFirstLine && line.hasExplicitTabStops !== true) {
             availableWidthOverride = adjustAvailableWidthForTextIndent(
               availableWidthOverride,
               firstLineOffset,
@@ -3284,7 +3389,7 @@ export class DomPainter {
           }
 
           const isLastLineOfFragment = index === lines.length - 1;
-          const isLastLineOfParagraph = isLastLineOfFragment && !fragment.continuesOnNext;
+          const isLastLineOfParagraph = isLastLineOfFragment && !paraContinuesOnNext;
           const shouldSkipJustifyForLastLine = isLastLineOfParagraph && !paragraphEndsWithLineBreak;
 
           const lineEl = this.renderLine(
@@ -3294,6 +3399,7 @@ export class DomPainter {
             availableWidthOverride,
             fragment.fromLine + index,
             shouldSkipJustifyForLastLine,
+            expandedRunsForBlock,
             shouldUseResolvedListTextStart ? listFirstLineTextStartPx : undefined,
           );
 
@@ -3320,7 +3426,7 @@ export class DomPainter {
           if (paraIndentRight && paraIndentRight > 0) {
             lineEl.style.paddingRight = `${paraIndentRight}px`;
           }
-          if (!fragment.continuesFromPrev && index === 0 && firstLineOffset && !isListFirstLine) {
+          if (!paraContinuesFromPrev && index === 0 && firstLineOffset && !isListFirstLine) {
             if (!hasExplicitSegmentPositioning) {
               lineEl.style.textIndent = `${firstLineOffset}px`;
             }
@@ -3333,54 +3439,58 @@ export class DomPainter {
             if (!marker) {
               return;
             }
-            lineEl.style.paddingLeft = `${paraIndentLeft + (paraIndent?.firstLine ?? 0) - (paraIndent?.hanging ?? 0)}px`;
+            const firstLineIndent = paraMarkerAnchorIndent - markerHanging + markerFirstLine;
+            if (isRtl) {
+              lineEl.style.paddingRight = `${firstLineIndent}px`;
+            } else {
+              lineEl.style.paddingLeft = `${firstLineIndent}px`;
+            }
 
             if (!marker.run.vanish) {
-              const markerContainer = this.doc!.createElement('span');
-              markerContainer.style.display = 'inline-block';
-              markerContainer.style.wordSpacing = '0px';
-
-              const markerEl = this.doc!.createElement('span');
-              markerEl.classList.add('superdoc-paragraph-marker');
-              markerEl.textContent = marker.markerText ?? '';
-              markerEl.style.pointerEvents = 'none';
+              const markerContainer = createListMarkerElement(
+                this.doc!,
+                marker.markerText ?? '',
+                marker.run,
+                block.sourceAnchor ?? resolvedItem?.sourceAnchor,
+              );
 
               const markerJustification = marker.justification ?? 'left';
 
               markerContainer.style.position = 'relative';
               if (markerJustification === 'right') {
                 markerContainer.style.position = 'absolute';
-                markerContainer.style.left = `${markerStartPos}px`;
+                if (isRtl) {
+                  markerContainer.style.right = `${markerStartPos}px`;
+                } else {
+                  markerContainer.style.left = `${markerStartPos}px`;
+                }
               } else if (markerJustification === 'center') {
                 markerContainer.style.position = 'absolute';
-                markerContainer.style.left = `${markerStartPos - fragment.markerTextWidth! / 2}px`;
-                lineEl.style.paddingLeft = parseFloat(lineEl.style.paddingLeft) + fragment.markerTextWidth! / 2 + 'px';
+                if (isRtl) {
+                  markerContainer.style.right = `${markerStartPos - fragment.markerTextWidth! / 2}px`;
+                  lineEl.style.paddingRight =
+                    (parseFloat(lineEl.style.paddingRight || '0') + fragment.markerTextWidth! / 2).toString() + 'px';
+                } else {
+                  markerContainer.style.left = `${markerStartPos - fragment.markerTextWidth! / 2}px`;
+                  lineEl.style.paddingLeft =
+                    parseFloat(lineEl.style.paddingLeft) + fragment.markerTextWidth! / 2 + 'px';
+                }
               }
-
-              markerEl.style.fontFamily = toCssFontFamily(marker.run.fontFamily) ?? marker.run.fontFamily;
-              markerEl.style.fontSize = `${marker.run.fontSize}px`;
-              markerEl.style.fontWeight = marker.run.bold ? 'bold' : '';
-              markerEl.style.fontStyle = marker.run.italic ? 'italic' : '';
-              if (marker.run.color) {
-                markerEl.style.color = marker.run.color;
-              }
-              if (marker.run.letterSpacing != null) {
-                markerEl.style.letterSpacing = `${marker.run.letterSpacing}px`;
-              }
-              markerContainer.appendChild(markerEl);
 
               const suffix = marker.suffix ?? 'tab';
               if (suffix === 'tab') {
                 const tabEl = this.doc!.createElement('span');
-                tabEl.className = 'superdoc-tab';
+                tabEl.classList.add('superdoc-tab', 'superdoc-marker-suffix-tab');
                 tabEl.innerHTML = '&nbsp;';
                 tabEl.style.display = 'inline-block';
+                tabEl.style.fontSize = `${marker.run.fontSize}px`;
                 tabEl.style.wordSpacing = '0px';
                 tabEl.style.width = `${listTabWidth}px`;
                 lineEl.prepend(tabEl);
               } else if (suffix === 'space') {
                 const spaceEl = this.doc!.createElement('span');
                 spaceEl.classList.add('superdoc-marker-suffix-space');
+                spaceEl.style.fontSize = `${marker.run.fontSize}px`;
                 spaceEl.style.wordSpacing = '0px';
                 spaceEl.textContent = '\u00A0';
                 lineEl.prepend(spaceEl);
@@ -3391,6 +3501,7 @@ export class DomPainter {
           this.capturePaintSnapshotLine(lineEl, context, {
             inTableFragment: false,
             inTableParagraph: false,
+            sourceAnchor: resolvedItem?.sourceAnchor,
           });
           fragmentEl.appendChild(lineEl);
         });
@@ -3499,22 +3610,27 @@ export class DomPainter {
     resolvedItem?: ResolvedFragmentItem,
   ): HTMLElement {
     try {
-      const lookup = this.blockLookup.get(fragment.blockId);
-      if (!lookup || lookup.block.kind !== 'list' || lookup.measure.kind !== 'list') {
-        throw new Error(`DomPainter: missing list data for fragment ${fragment.blockId}`);
-      }
-
       if (!this.doc) {
         throw new Error('DomPainter: document is not available');
       }
 
-      const block = lookup.block as ListBlock;
-      const measure = lookup.measure as ListMeasure;
+      // Pre-extracted block/measure from the resolved item.
+      if (resolvedItem?.block?.kind !== 'list' || resolvedItem?.measure?.kind !== 'list') {
+        throw new Error(`DomPainter: missing resolved list block/measure for fragment ${fragment.blockId}`);
+      }
+      const block = resolvedItem.block as ListBlock;
+      const measure = resolvedItem.measure as ListMeasure;
       const item = block.items.find((entry) => entry.id === fragment.itemId);
       const itemMeasure = measure.items.find((entry) => entry.itemId === fragment.itemId);
       if (!item || !itemMeasure) {
         throw new Error(`DomPainter: missing list item ${fragment.itemId}`);
       }
+
+      // Prefer resolved item metadata over legacy fragment reads
+      const listContinuesFromPrev = resolvedItem?.continuesFromPrev;
+      const listContinuesOnNext = resolvedItem?.continuesOnNext;
+      // Default to 0 (no marker gutter) when absent — used directly in Math.max below.
+      const listMarkerWidth = resolvedItem?.markerWidth ?? 0;
 
       const fragmentEl = this.doc.createElement('div');
       fragmentEl.classList.add(CLASS_NAMES.fragment, `${CLASS_NAMES.fragment}-list-item`);
@@ -3526,6 +3642,7 @@ export class DomPainter {
         fragmentEl.style.top = `${fragment.y}px`;
         fragmentEl.style.width = `${fragment.markerWidth + fragment.width}px`;
         fragmentEl.dataset.blockId = fragment.blockId;
+        applySourceAnchorDataset(fragmentEl, fragment.sourceAnchor);
       }
       fragmentEl.dataset.itemId = fragment.itemId;
 
@@ -3541,15 +3658,16 @@ export class DomPainter {
         sdtBoundary,
       );
 
-      if (fragment.continuesFromPrev) {
+      if (listContinuesFromPrev) {
         fragmentEl.dataset.continuesFromPrev = 'true';
       }
-      if (fragment.continuesOnNext) {
+      if (listContinuesOnNext) {
         fragmentEl.dataset.continuesOnNext = 'true';
       }
 
       const markerEl = this.doc.createElement('span');
-      markerEl.classList.add('superdoc-list-marker');
+      markerEl.classList.add(DOM_CLASS_NAMES.LIST_MARKER);
+      applySourceAnchorDataset(markerEl, item.marker.sourceAnchor ?? item.sourceAnchor ?? resolvedItem?.sourceAnchor);
 
       // Track B: Use marker styling from wordLayout if available
       const wordLayout: MinimalWordLayout | undefined = item.paragraph.attrs?.wordLayout as
@@ -3559,7 +3677,7 @@ export class DomPainter {
       if (marker) {
         markerEl.textContent = marker.markerText ?? null;
         markerEl.style.display = 'inline-block';
-        markerEl.style.width = `${Math.max(0, fragment.markerWidth - LIST_MARKER_GAP)}px`;
+        markerEl.style.width = `${Math.max(0, listMarkerWidth - LIST_MARKER_GAP)}px`;
         markerEl.style.paddingRight = `${LIST_MARKER_GAP}px`;
         markerEl.style.textAlign = marker.justification ?? 'left';
 
@@ -3574,7 +3692,7 @@ export class DomPainter {
         // Fallback: legacy behavior
         markerEl.textContent = item.marker.text;
         markerEl.style.display = 'inline-block';
-        markerEl.style.width = `${Math.max(0, fragment.markerWidth - LIST_MARKER_GAP)}px`;
+        markerEl.style.width = `${Math.max(0, listMarkerWidth - LIST_MARKER_GAP)}px`;
         markerEl.style.paddingRight = `${LIST_MARKER_GAP}px`;
         if (item.marker.align) {
           markerEl.style.textAlign = item.marker.align;
@@ -3616,11 +3734,21 @@ export class DomPainter {
         ...item.paragraph,
         attrs: { ...(item.paragraph.attrs || {}), alignment: 'left' },
       };
+      const expandedRunsForList = expandRunsForInlineNewlines(paraForList.runs);
       lines.forEach((line, idx) => {
-        const lineEl = this.renderLine(paraForList, line, context, fragment.width, fragment.fromLine + idx, true);
+        const lineEl = this.renderLine(
+          paraForList,
+          line,
+          context,
+          fragment.width,
+          fragment.fromLine + idx,
+          true,
+          expandedRunsForList,
+        );
         this.capturePaintSnapshotLine(lineEl, context, {
           inTableFragment: false,
           inTableParagraph: false,
+          sourceAnchor: resolvedItem?.sourceAnchor,
         });
         contentEl.appendChild(lineEl);
       });
@@ -3639,17 +3767,11 @@ export class DomPainter {
     resolvedItem?: ResolvedImageItem,
   ): HTMLElement {
     try {
-      // Use pre-extracted block from resolved item; fall back to blockLookup when resolved item
-      // is a legacy ResolvedFragmentItem without the block field.
-      const block: ImageBlock =
-        resolvedItem?.block ??
-        (() => {
-          const lookup = this.blockLookup.get(fragment.blockId);
-          if (!lookup || lookup.block.kind !== 'image' || lookup.measure.kind !== 'image') {
-            throw new Error(`DomPainter: missing image block for fragment ${fragment.blockId}`);
-          }
-          return lookup.block as ImageBlock;
-        })();
+      // Pre-extracted block from the resolved item.
+      if (resolvedItem?.block?.kind !== 'image') {
+        throw new Error(`DomPainter: missing resolved image block for fragment ${fragment.blockId}`);
+      }
+      const block = resolvedItem.block as ImageBlock;
 
       if (!this.doc) {
         throw new Error('DomPainter: document is not available');
@@ -3674,16 +3796,19 @@ export class DomPainter {
       }
 
       // Add PM position markers for transaction targeting
-      if (fragment.pmStart != null) {
-        fragmentEl.dataset.pmStart = String(fragment.pmStart);
+      const imgPmStart = resolvedItem?.pmStart;
+      if (imgPmStart != null) {
+        fragmentEl.dataset.pmStart = String(imgPmStart);
       }
-      if (fragment.pmEnd != null) {
-        fragmentEl.dataset.pmEnd = String(fragment.pmEnd);
+      const imgPmEnd = resolvedItem?.pmEnd;
+      if (imgPmEnd != null) {
+        fragmentEl.dataset.pmEnd = String(imgPmEnd);
       }
 
       // Add metadata for interactive image resizing (skip watermarks - they should not be interactive)
-      if (fragment.metadata && !block.attrs?.vmlWatermark) {
-        fragmentEl.setAttribute('data-image-metadata', JSON.stringify(fragment.metadata));
+      const imgMetadata = resolvedItem?.metadata;
+      if (imgMetadata && !block.attrs?.vmlWatermark) {
+        fragmentEl.setAttribute('data-image-metadata', JSON.stringify(imgMetadata));
       }
 
       // behindDoc images are supported via z-index; suppress noisy debug logs
@@ -3844,17 +3969,11 @@ export class DomPainter {
     resolvedItem?: ResolvedDrawingItem,
   ): HTMLElement {
     try {
-      // Use pre-extracted block from resolved item; fall back to blockLookup when resolved item
-      // is a legacy ResolvedFragmentItem without the block field.
-      const block: DrawingBlock =
-        resolvedItem?.block ??
-        (() => {
-          const lookup = this.blockLookup.get(fragment.blockId);
-          if (!lookup || lookup.block.kind !== 'drawing' || lookup.measure.kind !== 'drawing') {
-            throw new Error(`DomPainter: missing drawing block for fragment ${fragment.blockId}`);
-          }
-          return lookup.block as DrawingBlock;
-        })();
+      // Pre-extracted block from the resolved item.
+      if (resolvedItem?.block?.kind !== 'drawing') {
+        throw new Error(`DomPainter: missing resolved drawing block for fragment ${fragment.blockId}`);
+      }
+      const block = resolvedItem.block as DrawingBlock;
       if (!this.doc) {
         throw new Error('DomPainter: document is not available');
       }
@@ -4855,28 +4974,14 @@ export class DomPainter {
     cellSpacingPx: number;
     effectiveColumnWidths: number[];
   } {
-    if (resolvedItem) {
-      return {
-        block: resolvedItem.block,
-        measure: resolvedItem.measure,
-        cellSpacingPx: resolvedItem.cellSpacingPx,
-        effectiveColumnWidths: resolvedItem.effectiveColumnWidths,
-      };
+    if (!resolvedItem) {
+      throw new Error(`DomPainter: missing resolved table item for fragment ${fragment.blockId}`);
     }
-
-    const lookup = this.blockLookup.get(fragment.blockId);
-    if (!lookup || lookup.block.kind !== 'table' || lookup.measure.kind !== 'table') {
-      throw new Error(`DomPainter: missing table block for fragment ${fragment.blockId}`);
-    }
-
-    const block = lookup.block as TableBlock;
-    const measure = lookup.measure as TableMeasure;
-
     return {
-      block,
-      measure,
-      cellSpacingPx: measure.cellSpacingPx ?? getCellSpacingPx(block.attrs?.cellSpacing),
-      effectiveColumnWidths: fragment.columnWidths ?? measure.columnWidths,
+      block: resolvedItem.block,
+      measure: resolvedItem.measure,
+      cellSpacingPx: resolvedItem.cellSpacingPx,
+      effectiveColumnWidths: resolvedItem.effectiveColumnWidths,
     };
   }
 
@@ -4899,6 +5004,7 @@ export class DomPainter {
 
       // Word justifies text inside table cells, but not the final line unless the
       // paragraph ends with an explicit line break.
+      const tableCellExpandedRunsCache = new WeakMap<ParagraphBlock, Run[]>();
       const renderLineForTableCell = (
         block: ParagraphBlock,
         line: Line,
@@ -4911,7 +5017,22 @@ export class DomPainter {
         const paragraphEndsWithLineBreak = lastRun?.kind === 'lineBreak';
         const shouldSkipJustify = isLastLine && !paragraphEndsWithLineBreak;
 
-        return this.renderLine(block, line, ctx, undefined, lineIndex, shouldSkipJustify, resolvedListTextStartPx);
+        let expandedRuns = tableCellExpandedRunsCache.get(block);
+        if (!expandedRuns) {
+          expandedRuns = expandRunsForInlineNewlines(block.runs);
+          tableCellExpandedRunsCache.set(block, expandedRuns);
+        }
+
+        return this.renderLine(
+          block,
+          line,
+          ctx,
+          undefined,
+          lineIndex,
+          shouldSkipJustify,
+          expandedRuns,
+          resolvedListTextStartPx,
+        );
       };
 
       /**
@@ -4964,6 +5085,11 @@ export class DomPainter {
       // Inner cell fragments still use legacy applyFragmentFrame via deps closure.
       if (resolvedItem) {
         this.applyResolvedFragmentFrame(el, resolvedItem, fragment, context.section);
+        // Re-apply the SDT group width override after the resolved frame, so block-SDT
+        // containers can stretch table fragments to match sibling paragraph widths.
+        if (sdtBoundary?.widthOverride != null) {
+          el.style.width = `${sdtBoundary.widthOverride}px`;
+        }
       }
 
       return el;
@@ -5253,6 +5379,138 @@ export class DomPainter {
     return wrapper;
   }
 
+  private setTextContentWithFormattingSpaceMarks(element: HTMLElement, text: string): void {
+    if (!this.showFormattingMarks || !text.includes(' ') || !this.doc) {
+      element.textContent = text;
+      return;
+    }
+
+    element.textContent = '';
+    let chunkStart = 0;
+    for (let index = 0; index < text.length; index += 1) {
+      if (text[index] !== ' ') continue;
+
+      if (index > chunkStart) {
+        element.appendChild(this.doc.createTextNode(text.slice(chunkStart, index)));
+      }
+
+      const space = this.doc.createElement('span');
+      space.classList.add('superdoc-formatting-space-mark');
+      space.textContent = ' ';
+      element.appendChild(space);
+      chunkStart = index + 1;
+    }
+
+    if (chunkStart < text.length) {
+      element.appendChild(this.doc.createTextNode(text.slice(chunkStart)));
+    }
+  }
+
+  private findLastTextRun(runs: Run[]): { run: TextRun; index: number } | null {
+    for (let index = runs.length - 1; index >= 0; index -= 1) {
+      const run = runs[index];
+      if (run && (run.kind === 'text' || run.kind === undefined) && 'text' in run) {
+        return { run: run as TextRun, index };
+      }
+    }
+    return null;
+  }
+
+  private appendFormattingParagraphMark(
+    lineEl: HTMLElement,
+    line: Line,
+    runs: Run[],
+    leftOffsetPx: number,
+    availableWidth: number,
+    hasExplicitPositioning: boolean,
+  ): void {
+    if (!this.showFormattingMarks || !this.doc) return;
+    const lastRun = runs.length > 0 ? runs[runs.length - 1] : null;
+    if (lastRun) {
+      const lastRunIndex = runs.length - 1;
+      if (line.toRun < lastRunIndex) return;
+      if (
+        line.toRun === lastRunIndex &&
+        (lastRun.kind === 'text' || lastRun.kind === undefined) &&
+        'text' in lastRun &&
+        line.toChar < lastRun.text.length
+      ) {
+        return;
+      }
+    }
+
+    const lastTextRun = this.findLastTextRun(runs);
+
+    const mark = this.doc.createElement('span');
+    mark.classList.add('superdoc-formatting-paragraph-mark');
+    mark.setAttribute('aria-hidden', 'true');
+    mark.textContent = '¶';
+
+    const run = lastTextRun?.run;
+    if (run) {
+      if (run.fontFamily) {
+        mark.style.fontFamily = toCssFontFamily(run.fontFamily) ?? run.fontFamily;
+      }
+      if (typeof run.fontSize === 'number') {
+        mark.style.fontSize = `${run.fontSize}px`;
+      }
+      if (run.bold) {
+        mark.style.fontWeight = 'bold';
+      }
+      if (run.italic) {
+        mark.style.fontStyle = 'italic';
+      }
+      if (run.letterSpacing != null) {
+        mark.style.letterSpacing = `${run.letterSpacing}px`;
+      }
+    }
+    mark.style.lineHeight = `${line.lineHeight}px`;
+
+    const lineWidth = line.naturalWidth ?? line.width ?? 0;
+    const alignmentSlack = Math.max(0, availableWidth - lineWidth);
+    const textAlign = lineEl.style.textAlign;
+    const alignmentOffset =
+      !hasExplicitPositioning && textAlign === 'center'
+        ? alignmentSlack / 2
+        : !hasExplicitPositioning && textAlign === 'right'
+          ? alignmentSlack
+          : 0;
+    const isRtl = lineEl.dir === 'rtl' || lineEl.style.direction === 'rtl';
+    const visualTextEndOffset = isRtl ? alignmentOffset : alignmentOffset + lineWidth;
+    mark.style.left = `${Math.max(0, leftOffsetPx + visualTextEndOffset)}px`;
+    lineEl.appendChild(mark);
+  }
+
+  private resolveResolvedListParagraphMarkOffset(
+    marker: ResolvedListMarkerItem | undefined,
+    markerTextWidth: number | undefined,
+    fallbackOffset: number | undefined,
+  ): number | undefined {
+    if (typeof fallbackOffset === 'number' && Number.isFinite(fallbackOffset) && fallbackOffset > 0) {
+      return fallbackOffset;
+    }
+    if (!marker || marker.vanish) {
+      return fallbackOffset;
+    }
+
+    const paddingLeft = Number.isFinite(marker.firstLinePaddingLeftPx) ? marker.firstLinePaddingLeftPx : 0;
+    const suffixWidth = marker.suffix !== 'nothing' && Number.isFinite(marker.suffixWidthPx) ? marker.suffixWidthPx : 0;
+
+    if (marker.justification === 'left') {
+      const markerWidth =
+        typeof markerTextWidth === 'number' && Number.isFinite(markerTextWidth) && markerTextWidth > 0
+          ? markerTextWidth
+          : 0;
+      return paddingLeft + markerWidth + suffixWidth;
+    }
+
+    const centerPadding =
+      marker.justification === 'center' && Number.isFinite(marker.centerPaddingAdjustPx)
+        ? (marker.centerPaddingAdjustPx ?? 0)
+        : 0;
+    return paddingLeft + centerPadding + suffixWidth;
+  }
+
   private renderRun(
     run: Run,
     context: FragmentRenderContext,
@@ -5294,7 +5552,7 @@ export class DomPainter {
     const isActiveLink = !!(linkData && !linkData.blocked && linkData.href);
     const elem = isActiveLink ? this.doc.createElement('a') : this.doc.createElement('span');
     const text = resolveRunText(run, context);
-    elem.textContent = text;
+    this.setTextContentWithFormattingSpaceMarks(elem, text);
 
     if (linkData?.dataset) {
       applyLinkDataset(elem, linkData.dataset);
@@ -5348,6 +5606,14 @@ export class DomPainter {
     // Ensure text renders above tab leaders (leaders are z-index: 0)
     elem.style.zIndex = '1';
     applyRunDataAttributes(elem as HTMLElement, (run as TextRun).dataAttrs);
+
+    // SD-2454: bookmark marker runs carry a data-bookmark-name attribute.
+    // Surface the bookmark name as a native `title` tooltip so hovering the
+    // opening bracket identifies which bookmark is being marked.
+    const bookmarkName = (run as TextRun).dataAttrs?.['data-bookmark-name'];
+    if (bookmarkName) {
+      (elem as HTMLElement).title = bookmarkName;
+    }
 
     // Assert PM positions are present for cursor fallback
     assertPmPositions(run, 'paragraph text run');
@@ -5509,6 +5775,7 @@ export class DomPainter {
       // Position and z-index on the image only (not the line) so resize overlay can stack above.
       img.style.position = 'relative';
       img.style.zIndex = '1';
+      img.style.maxWidth = '100%';
     }
 
     // Apply rotation and flip transforms from OOXML a:xfrm
@@ -5899,8 +6166,10 @@ export class DomPainter {
    * @param availableWidthOverride - Optional override for available width used in justification calculations
    * @param lineIndex - Optional zero-based index of the line within the fragment
    * @param skipJustify - When true, prevents justification even if alignment is 'justify'
+   * @param preExpandedRuns - Pre-computed result of expandRunsForInlineNewlines; pass when rendering multiple lines of the same paragraph to avoid recomputing per line
    * @param resolvedListTextStartPx - Optional canonical text-start override for list first lines
    * @param indentOffsetOverride - When defined, used instead of re-deriving indentOffset from block attrs in the segment positioning path
+   * @param paragraphMarkLeftOffsetOverride - Optional text-start override for positioning presentation-only paragraph marks
    * @returns The rendered line element
    */
   private renderLine(
@@ -5910,15 +6179,18 @@ export class DomPainter {
     availableWidthOverride?: number,
     lineIndex?: number,
     skipJustify?: boolean,
+    preExpandedRuns?: Run[],
     resolvedListTextStartPx?: number,
     indentOffsetOverride?: number,
+    paragraphMarkLeftOffsetOverride?: number,
   ): HTMLElement {
     if (!this.doc) {
       throw new Error('DomPainter: document is not available');
     }
 
-    const lineRange = computeLinePmRange(block, line);
-    let runsForLine = sliceRunsForLine(block, line);
+    const expandedBlock = { ...block, runs: preExpandedRuns ?? expandRunsForInlineNewlines(block.runs) };
+    const lineRange = computeLinePmRange(expandedBlock, line);
+    let runsForLine = sliceRunsForLine(expandedBlock, line);
 
     const el = this.doc.createElement('div');
     el.classList.add(CLASS_NAMES.line);
@@ -6007,17 +6279,18 @@ export class DomPainter {
 
     // Check if any segments have explicit X positioning (from tab stops)
     const hasExplicitPositioning = line.segments?.some((seg) => seg.x !== undefined);
-    const lineContainsTabRun = runsForLine.some((run) => run.kind === 'tab');
-    const manualTabWithoutSegments = lineContainsTabRun && !hasExplicitPositioning;
+    const explicitPositionedSegmentCount = line.segments?.filter((seg) => seg.x !== undefined).length ?? 0;
+    const hasMultipleExplicitPositionedSegments = explicitPositionedSegmentCount > 1;
     const availableWidth = availableWidthOverride ?? line.maxWidth ?? line.width;
 
     const justifyShouldApply = shouldApplyJustify({
       alignment: (block as ParagraphBlock).attrs?.alignment,
       hasExplicitPositioning: hasExplicitPositioning ?? false,
+      hasExplicitTabStops: line.hasExplicitTabStops === true,
       // Caller already folds last-line + trailing lineBreak behavior into skipJustify.
       isLastLineOfParagraph: false,
       paragraphEndsWithLineBreak: false,
-      skipJustifyOverride: skipJustify || manualTabWithoutSegments,
+      skipJustifyOverride: skipJustify || hasMultipleExplicitPositionedSegments,
     });
 
     const countSpaces = (text: string): number => {
@@ -6183,6 +6456,35 @@ export class DomPainter {
       spaceCount,
       shouldJustify: justifyShouldApply,
     });
+    const resolveLineIndentOffset = (): number => {
+      if (indentOffsetOverride != null) {
+        return indentOffsetOverride;
+      }
+
+      const paraIndent = (block.attrs as ParagraphAttrs | undefined)?.indent;
+      const indentLeft = paraIndent?.left ?? 0;
+      const firstLine = paraIndent?.firstLine ?? 0;
+      const hanging = paraIndent?.hanging ?? 0;
+      const isFirstLineOfPara = lineIndex === 0 || lineIndex === undefined;
+      const firstLineOffsetForCumX = isFirstLineOfPara ? firstLine - hanging : 0;
+      const wordLayoutValue = (block.attrs as ParagraphAttrs | undefined)?.wordLayout;
+      const wordLayout = isMinimalWordLayout(wordLayoutValue) ? wordLayoutValue : undefined;
+      const isListParagraph = Boolean(wordLayout?.marker);
+      const fallbackListTextStartPx =
+        typeof wordLayout?.marker?.textStartX === 'number' && Number.isFinite(wordLayout.marker.textStartX)
+          ? wordLayout.marker.textStartX
+          : typeof wordLayout?.textStartPx === 'number' && Number.isFinite(wordLayout.textStartPx)
+            ? wordLayout.textStartPx
+            : undefined;
+      const listIndentOffset = isFirstLineOfPara
+        ? (resolvedListTextStartPx ?? fallbackListTextStartPx ?? indentLeft)
+        : indentLeft;
+
+      return isListParagraph ? listIndentOffset : indentLeft + firstLineOffsetForCumX;
+    };
+    const lineTextStartOffsetPx =
+      paragraphMarkLeftOffsetOverride != null ? paragraphMarkLeftOffsetOverride : resolveLineIndentOffset();
+    const paragraphMarkLeftOffsetPx = lineTextStartOffsetPx;
 
     if (spacingPerSpace !== 0) {
       // Each rendered line is its own block; relying on text-align-last is brittle, so we use word-spacing.
@@ -6197,32 +6499,9 @@ export class DomPainter {
       //
       // The segment x positions from layout are relative to the content area (left margin = 0).
       // We need to add the paragraph indent to ALL positions (both explicit and calculated).
-      let indentOffset: number;
-      if (indentOffsetOverride != null) {
-        // Resolved path: indentOffset was pre-computed by the resolver.
-        indentOffset = indentOffsetOverride;
-      } else {
-        // Legacy path: derive from block attrs.
-        const paraIndent = (block.attrs as ParagraphAttrs | undefined)?.indent;
-        const indentLeft = paraIndent?.left ?? 0;
-        const firstLine = paraIndent?.firstLine ?? 0;
-        const hanging = paraIndent?.hanging ?? 0;
-        const isFirstLineOfPara = lineIndex === 0 || lineIndex === undefined;
-        const firstLineOffsetForCumX = isFirstLineOfPara ? firstLine - hanging : 0;
-        const wordLayoutValue = (block.attrs as ParagraphAttrs | undefined)?.wordLayout;
-        const wordLayout = isMinimalWordLayout(wordLayoutValue) ? wordLayoutValue : undefined;
-        const isListParagraph = Boolean(wordLayout?.marker);
-        const fallbackListTextStartPx =
-          typeof wordLayout?.marker?.textStartX === 'number' && Number.isFinite(wordLayout.marker.textStartX)
-            ? wordLayout.marker.textStartX
-            : typeof wordLayout?.textStartPx === 'number' && Number.isFinite(wordLayout.textStartPx)
-              ? wordLayout.textStartPx
-              : undefined;
-        const listIndentOffset = isFirstLineOfPara
-          ? (resolvedListTextStartPx ?? fallbackListTextStartPx ?? indentLeft)
-          : indentLeft;
-        indentOffset = isListParagraph ? listIndentOffset : indentLeft + firstLineOffsetForCumX;
-      }
+      // Segment x positions and paragraph marks both need the visual text start,
+      // including list marker/suffix space when the resolved layout provides it.
+      const indentOffset = lineTextStartOffsetPx;
       let cumulativeX = 0; // Start at 0, we'll add indentOffset when positioning
 
       const segments = line.segments!;
@@ -6237,10 +6516,8 @@ export class DomPainter {
       });
 
       /**
-       * Finds the X position where the immediate next segment starts after a given run index.
-       * Only returns the X if the very next run has a segment with explicit positioning.
-       * This handles tab-aligned text where right/center alignment causes the text to start
-       * before the tab stop target.
+       * Finds the immediate next segment carrying tab geometry after a given run index.
+       * This handles tab-aligned text and compensated tab paint geometry.
        *
        * WHY ONLY THE IMMEDIATE NEXT RUN:
        * When rendering a tab, we need to know where the content IMMEDIATELY after this tab begins
@@ -6256,17 +6533,20 @@ export class DomPainter {
        * - TAB2 will independently check "MoreContent" when it's rendered
        *
        * @param fromRunIndex - The run index to search after
-       * @returns The X position of the immediate next segment, or undefined if not found or not immediate
+       * @returns The immediate next tab-positioned segment, or undefined if not found or not immediate
        */
-      const findImmediateNextSegmentX = (fromRunIndex: number): number | undefined => {
+      const findImmediateNextSegment = (fromRunIndex: number): LineSegment | undefined => {
         // Only check the immediate next run - don't skip over other tabs
         const nextRunIdx = fromRunIndex + 1;
         if (nextRunIdx <= line.toRun) {
           const nextSegments = segmentsByRun.get(nextRunIdx);
           if (nextSegments && nextSegments.length > 0) {
             const firstSegment = nextSegments[0];
-            // Return the segment's explicit X if it has one (from tab alignment)
-            return firstSegment.x;
+            // Return only the first segment; later segments in the same run are
+            // not immediately adjacent to this tab.
+            return firstSegment.x !== undefined || firstSegment.precedingTabEndX !== undefined
+              ? firstSegment
+              : undefined;
           }
         }
         return undefined;
@@ -6313,6 +6593,7 @@ export class DomPainter {
             geoSdtWrapper.style.top = '0px';
             geoSdtWrapper.style.height = `${line.lineHeight}px`;
           }
+          this.syncInlineSdtWrapperTypography(geoSdtWrapper, runForSdt);
           elem.style.left = `${elemLeftPx - geoSdtWrapperLeft}px`;
           geoSdtMaxRight = Math.max(geoSdtMaxRight, elemLeftPx + elemWidthPx);
           this.expandSdtWrapperPmRange(geoSdtWrapper, (runForSdt as TextRun).pmStart, (runForSdt as TextRun).pmEnd);
@@ -6328,13 +6609,15 @@ export class DomPainter {
 
         if (baseRun.kind === 'tab') {
           // Find where the immediate next content begins (if it's right after this tab)
-          const immediateNextX = findImmediateNextSegmentX(runIndex);
+          const immediateNextSegment = findImmediateNextSegment(runIndex);
           const tabStartX = cumulativeX;
 
           // The tab should span from where previous content ended to where next content begins.
-          // If the immediate next segment has an explicit X (from tab alignment), use that.
-          // Otherwise, use the tab's measured width to calculate the end position.
-          const tabEndX = immediateNextX !== undefined ? immediateNextX : tabStartX + (baseRun.width ?? 0);
+          // If layout supplied a tab-end boundary for the next segment, prefer it.
+          // Otherwise, use the next segment's explicit X (from tab alignment) or the
+          // tab's measured width.
+          const measuredTabEndX = tabStartX + (baseRun.width ?? 0);
+          const tabEndX = immediateNextSegment?.precedingTabEndX ?? immediateNextSegment?.x ?? measuredTabEndX;
           const actualTabWidth = tabEndX - tabStartX;
 
           const tabEl = this.doc!.createElement('span');
@@ -6395,8 +6678,9 @@ export class DomPainter {
             const runSegments = segmentsByRun.get(runIndex);
             const baseSegX = runSegments && runSegments[0]?.x !== undefined ? runSegments[0].x : cumulativeX;
             const segX = baseSegX + indentOffset;
-            const segWidth =
-              (runSegments && runSegments[0]?.width !== undefined ? runSegments[0].width : elem.offsetWidth) ?? 0;
+            // LineSegment.width is required by contract; producer (measuring-dom) always emits it.
+            // No paint-time DOM measurement (SD-2957).
+            const segWidth = runSegments?.[0]?.width ?? 0;
             elem.style.position = 'absolute';
             elem.style.left = `${segX}px`;
             appendToLineGeo(elem, baseRun, segX, segWidth);
@@ -6497,26 +6781,19 @@ export class DomPainter {
 
             elem.style.position = 'absolute';
             elem.style.left = `${xPos}px`;
-            appendToLineGeo(elem, segmentRun, xPos, segment.width ?? 0);
+            appendToLineGeo(elem, segmentRun, xPos, segment.width);
 
-            // Update cumulative X for next segment by measuring this element's width
-            // This applies to ALL segments (both with and without explicit X)
+            // Advance cumulative X by the resolved segment width. LineSegment.width is the
+            // sole source of truth — the painter does not measure inline elements (SD-2957).
             // Use baseX (without indent) to keep cumulativeX relative to content area,
             // matching how segment.x values are calculated in layout.
-            let width = segment.width ?? 0;
-            if (width <= 0 && this.doc) {
-              const measureEl = elem.cloneNode(true) as HTMLElement;
-              measureEl.style.position = 'absolute';
-              measureEl.style.visibility = 'hidden';
-              measureEl.style.left = '-9999px';
-              this.doc.body.appendChild(measureEl);
-              width = measureEl.offsetWidth;
-              this.doc.body.removeChild(measureEl);
-            }
-            cumulativeX = baseX + width;
+            const width = segment.width;
+            const justifyExtraWidth = spacingPerSpace !== 0 ? spacingPerSpace * countSpaces(segmentText) : 0;
+            const visualWidth = width + justifyExtraWidth;
+            cumulativeX = baseX + visualWidth;
             // Update SDT wrapper width if actual measured width differs from initial estimate
             if (geoSdtWrapper) {
-              geoSdtMaxRight = Math.max(geoSdtMaxRight, xPos + width);
+              geoSdtMaxRight = Math.max(geoSdtMaxRight, xPos + visualWidth);
             }
           }
         });
@@ -6600,8 +6877,11 @@ export class DomPainter {
           if (resolved && this.doc) {
             if (!currentInlineSdtWrapper) {
               currentInlineSdtWrapper = this.createInlineSdtWrapper(resolved.sdt);
+              this.syncInlineSdtWrapperTypography(currentInlineSdtWrapper, run);
               currentInlineSdtId = runSdtId;
             }
+            // Typography is set when wrapper is created from the first run.
+            // Follow-up (SD-2744): define a deterministic mixed-typography rule.
             this.expandSdtWrapperPmRange(currentInlineSdtWrapper, run.pmStart, run.pmEnd);
             currentInlineSdtWrapper.appendChild(elem);
           } else {
@@ -6613,6 +6893,15 @@ export class DomPainter {
       // Close any remaining wrapper at end of line
       closeCurrentWrapper();
     }
+
+    this.appendFormattingParagraphMark(
+      el,
+      line,
+      expandedBlock.runs,
+      paragraphMarkLeftOffsetPx,
+      availableWidth,
+      hasExplicitPositioning ?? false,
+    );
 
     // Post-process: Apply tooltip accessibility for any links with pending tooltips
     // This must happen after elements are in the DOM so aria-describedby can reference siblings
@@ -6658,6 +6947,7 @@ export class DomPainter {
 
     elem.dataset.trackChangeId = meta.id;
     elem.dataset.trackChangeKind = meta.kind;
+    elem.dataset.storyKey = meta.storyKey ?? 'body';
     if (meta.author) {
       elem.dataset.trackChangeAuthor = meta.author;
     }
@@ -6726,6 +7016,7 @@ export class DomPainter {
     el.style.width = `${fragment.width}px`;
     el.dataset.blockId = fragment.blockId;
     el.dataset.layoutEpoch = String(this.layoutEpoch);
+    applySourceAnchorDataset(el, fragment.sourceAnchor);
 
     // Footnote content is read-only: prevent cursor placement and typing (blockId prefix from FootnotesBuilder)
     if (typeof fragment.blockId === 'string' && fragment.blockId.startsWith('footnote-')) {
@@ -6766,8 +7057,14 @@ export class DomPainter {
   /**
    * Applies PM position data attributes from a legacy Fragment.
    * Extracted from applyFragmentFrame for use in the resolved wrapper path.
+   * When a resolvedItem is provided, its fields take precedence over fragment fields.
    */
-  private applyFragmentPmAttributes(el: HTMLElement, fragment: Fragment, section?: 'body' | 'header' | 'footer'): void {
+  private applyFragmentPmAttributes(
+    el: HTMLElement,
+    fragment: Fragment,
+    section?: 'body' | 'header' | 'footer',
+    resolvedItem?: ResolvedFragmentItem | ResolvedTableItem | ResolvedImageItem | ResolvedDrawingItem,
+  ): void {
     // Footnote content is read-only: prevent cursor placement and typing
     if (typeof fragment.blockId === 'string' && fragment.blockId.startsWith('footnote-')) {
       el.setAttribute('contenteditable', 'false');
@@ -6777,22 +7074,29 @@ export class DomPainter {
       if (section === 'body' || section === undefined) {
         assertFragmentPmPositions(fragment, 'paragraph fragment');
       }
-      if (fragment.pmStart != null) {
-        el.dataset.pmStart = String(fragment.pmStart);
+      // Narrow to ResolvedFragmentItem to access para-specific resolved fields.
+      // resolveLayout copies pmStart/pmEnd/continuesFromPrev/continuesOnNext from the
+      // source paragraph onto the resolved item when present, so reading off the
+      // back-pointer would be redundant (SD-2957).
+      const resolvedFrag = resolvedItem as ResolvedFragmentItem | undefined;
+      const pmStart = resolvedFrag?.pmStart;
+      if (pmStart != null) {
+        el.dataset.pmStart = String(pmStart);
       } else {
         delete el.dataset.pmStart;
       }
-      if (fragment.pmEnd != null) {
-        el.dataset.pmEnd = String(fragment.pmEnd);
+      const pmEnd = resolvedFrag?.pmEnd;
+      if (pmEnd != null) {
+        el.dataset.pmEnd = String(pmEnd);
       } else {
         delete el.dataset.pmEnd;
       }
-      if (fragment.continuesFromPrev) {
+      if (resolvedFrag?.continuesFromPrev) {
         el.dataset.continuesFromPrev = 'true';
       } else {
         delete el.dataset.continuesFromPrev;
       }
-      if (fragment.continuesOnNext) {
+      if (resolvedFrag?.continuesOnNext) {
         el.dataset.continuesOnNext = 'true';
       } else {
         delete el.dataset.continuesOnNext;
@@ -6811,21 +7115,20 @@ export class DomPainter {
   private shouldRenderBehindPageContent(
     fragment: ImageFragment | DrawingFragment,
     section: 'header' | 'footer',
+    resolvedItem?: ResolvedDrawingItem,
   ): boolean {
     if (fragment.behindDoc === true || (fragment.behindDoc == null && 'zIndex' in fragment && fragment.zIndex === 0)) {
       return true;
     }
 
-    return section === 'header' && fragment.kind === 'drawing' && this.isHeaderWordArtWatermark(fragment);
+    return section === 'header' && fragment.kind === 'drawing' && this.isHeaderWordArtWatermark(resolvedItem?.block);
   }
 
-  private isHeaderWordArtWatermark(fragment: DrawingFragment): boolean {
-    const lookup = this.blockLookup.get(fragment.blockId);
-    if (!lookup || lookup.block.kind !== 'drawing' || lookup.block.drawingKind !== 'vectorShape') {
+  private isHeaderWordArtWatermark(block: DrawingBlock | undefined): boolean {
+    if (!block || block.kind !== 'drawing' || block.drawingKind !== 'vectorShape') {
       return false;
     }
 
-    const block = lookup.block;
     const attrs = (block.attrs as Record<string, unknown> | undefined) ?? {};
     const hasTextContent = Array.isArray(block.textContent?.parts) && block.textContent.parts.length > 0;
 
@@ -6851,7 +7154,7 @@ export class DomPainter {
       return '';
     }
 
-    const zIndex = resolvedZIndex ?? fragment.zIndex;
+    const zIndex = resolvedZIndex;
     return zIndex != null ? String(zIndex) : '';
   }
 
@@ -6870,13 +7173,14 @@ export class DomPainter {
     el.style.width = `${item.width}px`;
     el.dataset.blockId = item.blockId;
     el.dataset.layoutEpoch = String(this.layoutEpoch);
+    applySourceAnchorDataset(el, item.sourceAnchor);
     this.applyFragmentWrapperZIndex(el, fragment, item.zIndex);
 
     if (item.fragmentKind === 'image' || item.fragmentKind === 'drawing' || item.fragmentKind === 'table') {
       el.style.height = `${item.height}px`;
     }
 
-    this.applyFragmentPmAttributes(el, fragment, section);
+    this.applyFragmentPmAttributes(el, fragment, section, item);
   }
 
   /**
@@ -6893,8 +7197,11 @@ export class DomPainter {
     section?: 'body' | 'header' | 'footer',
   ): void {
     this.applyResolvedFragmentFrame(el, item, fragment, section);
-    el.style.left = `${item.x - fragment.markerWidth}px`;
-    el.style.width = `${item.width + fragment.markerWidth}px`;
+    // Default to 0 (no marker gutter expansion) when markerWidth is absent — the resolve
+    // stage populates this for list items that have a measured marker (SD-2957).
+    const mw = item.markerWidth ?? 0;
+    el.style.left = `${item.x - mw}px`;
+    el.style.width = `${item.width + mw}px`;
   }
 
   /**
@@ -6907,43 +7214,15 @@ export class DomPainter {
    * @param fragment - The fragment to estimate height for
    * @returns Estimated height in pixels, or 0 if height cannot be determined
    */
-  private estimateFragmentHeight(fragment: Fragment): number {
-    const lookup = this.blockLookup.get(fragment.blockId);
-    const measure = lookup?.measure;
-
-    if (fragment.kind === 'para' && measure?.kind === 'paragraph') {
-      return measure.totalHeight;
+  private estimateFragmentHeight(fragment: Fragment, resolvedItem?: ResolvedPaintItem): number {
+    if (resolvedItem && 'height' in resolvedItem && typeof resolvedItem.height === 'number') {
+      return resolvedItem.height;
     }
-
-    if (fragment.kind === 'list-item' && measure?.kind === 'list') {
-      return measure.totalHeight;
-    }
-
-    if (fragment.kind === 'table') {
+    // Atomic fragment kinds carry their own height on the fragment.
+    if (fragment.kind === 'table' || fragment.kind === 'image' || fragment.kind === 'drawing') {
       return fragment.height;
     }
-
-    if (fragment.kind === 'image' || fragment.kind === 'drawing') {
-      return fragment.height;
-    }
-
     return 0;
-  }
-
-  private buildBlockLookup(blocks: FlowBlock[], measures: Measure[]): BlockLookup {
-    if (blocks.length !== measures.length) {
-      throw new Error('DomPainter requires the same number of blocks and measures');
-    }
-
-    const lookup: BlockLookup = new Map();
-    blocks.forEach((block, index) => {
-      lookup.set(block.id, {
-        block,
-        measure: measures[index],
-        version: deriveBlockVersion(block),
-      });
-    });
-    return lookup;
   }
 
   /**
@@ -7015,6 +7294,17 @@ export class DomPainter {
     labelEl.textContent = alias;
     wrapper.appendChild(labelEl);
     return wrapper;
+  }
+
+  private syncInlineSdtWrapperTypography(wrapper: HTMLElement, runForSizing?: Run): void {
+    // The line container sets fontSize:0 (strut fix). Keep wrapper typography
+    // synced with the current run so border height tracks text-size edits.
+    const runFontSize =
+      runForSizing && 'fontSize' in runForSizing && typeof runForSizing.fontSize === 'number'
+        ? `${runForSizing.fontSize}px`
+        : BROWSER_DEFAULT_FONT_SIZE;
+    wrapper.style.fontSize = runFontSize;
+    wrapper.style.lineHeight = 'normal';
   }
 
   /**
@@ -7112,70 +7402,62 @@ export class DomPainter {
   }
 }
 
-const getFragmentSdtContainerKey = (fragment: Fragment, blockLookup: BlockLookup): string | null => {
-  const lookup = blockLookup.get(fragment.blockId);
-  if (!lookup) return null;
-  const block = lookup.block;
-
-  if (fragment.kind === 'para' && block.kind === 'paragraph') {
-    const attrs = (block as { attrs?: { sdt?: SdtMetadata; containerSdt?: SdtMetadata } }).attrs;
-    return getSdtContainerKey(attrs?.sdt, attrs?.containerSdt);
-  }
-
-  if (fragment.kind === 'list-item' && block.kind === 'list') {
-    const item = block.items.find((listItem) => listItem.id === fragment.itemId);
-    const attrs = item?.paragraph.attrs;
-    return getSdtContainerKey(attrs?.sdt, attrs?.containerSdt);
-  }
-
-  if (fragment.kind === 'table' && block.kind === 'table') {
-    const attrs = (block as { attrs?: { sdt?: SdtMetadata; containerSdt?: SdtMetadata } }).attrs;
-    return getSdtContainerKey(attrs?.sdt, attrs?.containerSdt);
-  }
-
-  return null;
-};
-
 const computeSdtBoundaries = (
-  fragments: readonly Fragment[],
-  blockLookup: BlockLookup,
+  resolvedItems: readonly ResolvedPaintItem[],
   sdtLabelsRendered: Set<string>,
 ): Map<number, SdtBoundaryOptions> => {
   const boundaries = new Map<number, SdtBoundaryOptions>();
-  const containerKeys = fragments.map((fragment) => getFragmentSdtContainerKey(fragment, blockLookup));
+  const containerKeys: (string | null)[] = resolvedItems.map((item) => {
+    if (item && 'sdtContainerKey' in item) {
+      const key = (item as { sdtContainerKey?: string | null }).sdtContainerKey;
+      return key ?? null;
+    }
+    return null;
+  });
+
+  const fragmentOf = (idx: number): Fragment | null => {
+    const item = resolvedItems[idx];
+    return item && item.kind === 'fragment' ? item.fragment : null;
+  };
 
   let i = 0;
-  while (i < fragments.length) {
+  while (i < resolvedItems.length) {
     const currentKey = containerKeys[i];
-    if (!currentKey) {
+    const startFrag = fragmentOf(i);
+    if (!currentKey || !startFrag) {
       i += 1;
       continue;
     }
 
-    let groupRight = fragments[i].x + fragments[i].width;
+    let groupRight = startFrag.x + startFrag.width;
     let j = i;
 
-    while (j + 1 < fragments.length && containerKeys[j + 1] === currentKey) {
+    while (j + 1 < resolvedItems.length && containerKeys[j + 1] === currentKey) {
       j += 1;
-      const fragmentRight = fragments[j].x + fragments[j].width;
+      const nextFrag = fragmentOf(j);
+      if (!nextFrag) break;
+      const fragmentRight = nextFrag.x + nextFrag.width;
       if (fragmentRight > groupRight) {
         groupRight = fragmentRight;
       }
     }
 
     for (let k = i; k <= j; k += 1) {
-      const fragment = fragments[k];
+      const fragment = fragmentOf(k);
+      if (!fragment) continue;
       const isStart = k === i;
       const isEnd = k === j;
 
       let paddingBottomOverride: number | undefined;
       if (!isEnd) {
-        const nextFragment = fragments[k + 1];
-        const currentHeight = getFragmentHeight(fragment, blockLookup);
+        const nextFragment = fragmentOf(k + 1);
+        const currentHeight = (resolvedItems[k] as { height?: number } | undefined)?.height ?? 0;
         const currentBottom = fragment.y + currentHeight;
-        const gapToNext = nextFragment.y - currentBottom;
-        if (gapToNext > 0) {
-          paddingBottomOverride = gapToNext;
+        if (nextFragment) {
+          const gapToNext = nextFragment.y - currentBottom;
+          if (gapToNext > 0) {
+            paddingBottomOverride = gapToNext;
+          }
         }
       }
 
@@ -7199,7 +7481,7 @@ const computeSdtBoundaries = (
   return boundaries;
 };
 
-// getFragmentParagraphBorders, computeBetweenBorderFlags — moved to features/paragraph-borders/
+// computeBetweenBorderFlags — moved to features/paragraph-borders/
 
 const fragmentKey = (fragment: Fragment): string => {
   if (fragment.kind === 'para') {
@@ -7227,65 +7509,22 @@ const fragmentKey = (fragment: Fragment): string => {
   return _exhaustiveCheck;
 };
 
-const fragmentSignature = (fragment: Fragment, lookup: BlockLookup): string => {
-  const base = lookup.get(fragment.blockId)?.version ?? 'missing';
-  if (fragment.kind === 'para') {
-    // Note: pmStart/pmEnd intentionally excluded to prevent O(n) change detection
-    return [
-      base,
-      fragment.fromLine,
-      fragment.toLine,
-      fragment.continuesFromPrev ? 1 : 0,
-      fragment.continuesOnNext ? 1 : 0,
-      fragment.markerWidth ?? '', // Include markerWidth to trigger re-render when list status changes
-    ].join('|');
-  }
-  if (fragment.kind === 'list-item') {
-    return [
-      base,
-      fragment.itemId,
-      fragment.fromLine,
-      fragment.toLine,
-      fragment.continuesFromPrev ? 1 : 0,
-      fragment.continuesOnNext ? 1 : 0,
-    ].join('|');
-  }
-  if (fragment.kind === 'image') {
-    return [base, fragment.width, fragment.height].join('|');
-  }
-  if (fragment.kind === 'drawing') {
-    return [
-      base,
-      fragment.drawingKind,
-      fragment.drawingContentId ?? '',
-      fragment.width,
-      fragment.height,
-      fragment.geometry.width,
-      fragment.geometry.height,
-      fragment.geometry.rotation ?? 0,
-      fragment.scale ?? 1,
-      fragment.zIndex ?? '',
-    ].join('|');
-  }
-  if (fragment.kind === 'table') {
-    // Include all properties that affect table fragment rendering
-    const partialSig = fragment.partialRow
-      ? `${fragment.partialRow.fromLineByCell.join(',')}-${fragment.partialRow.toLineByCell.join(',')}-${fragment.partialRow.partialHeight}`
-      : '';
-    return [
-      base,
-      fragment.fromRow,
-      fragment.toRow,
-      fragment.width,
-      fragment.height,
-      fragment.continuesFromPrev ? 1 : 0,
-      fragment.continuesOnNext ? 1 : 0,
-      fragment.repeatHeaderCount ?? 0,
-      partialSig,
-    ].join('|');
-  }
-  return base;
-};
+const hasFragmentGeometryChanged = (previous: Fragment, next: Fragment): boolean =>
+  previous.x !== next.x ||
+  previous.y !== next.y ||
+  previous.width !== next.width ||
+  ('height' in previous &&
+    'height' in next &&
+    typeof previous.height === 'number' &&
+    typeof next.height === 'number' &&
+    previous.height !== next.height);
+
+const isNonBodyStoryBlockId = (blockId: string | undefined): boolean =>
+  typeof blockId === 'string' &&
+  (blockId.startsWith('footnote-') ||
+    blockId.startsWith('endnote-') ||
+    blockId.startsWith('__sd_semantic_footnote-') ||
+    blockId.startsWith('__sd_semantic_endnote-'));
 
 const getSdtMetadataId = (metadata: SdtMetadata | null | undefined): string => {
   if (!metadata) return '';
@@ -7367,7 +7606,7 @@ const hasListMarkerProperties = (
  * - Position markers (pmStart, pmEnd)
  * - Special tokens (page numbers, etc.)
  * - List marker properties (numId, ilvl, markerText) - for list indent changes
- * - Paragraph attributes (alignment, spacing, indent, borders, shading, direction, rtl, tabs)
+ * - Paragraph attributes (alignment, spacing, indent, borders, shading, direction, tabs)
  * - Table cell content and paragraph formatting within cells
  *
  * For table blocks, a deep hash is computed across all rows and cells, including:
@@ -7454,6 +7693,19 @@ const deriveBlockVersion = (block: FlowBlock): string => {
 
         // Handle TextRun (kind is 'text' or undefined)
         const textRun = run as TextRun;
+        const trackedChangeVersion = textRun.trackedChange
+          ? [
+              textRun.trackedChange.kind ?? '',
+              textRun.trackedChange.id ?? '',
+              textRun.trackedChange.storyKey ?? '',
+              textRun.trackedChange.author ?? '',
+              textRun.trackedChange.authorEmail ?? '',
+              textRun.trackedChange.authorImage ?? '',
+              textRun.trackedChange.date ?? '',
+              textRun.trackedChange.before ? JSON.stringify(textRun.trackedChange.before) : '',
+              textRun.trackedChange.after ? JSON.stringify(textRun.trackedChange.after) : '',
+            ].join(':')
+          : '';
         return [
           textRun.text ?? '',
           textRun.fontFamily,
@@ -7471,8 +7723,8 @@ const deriveBlockVersion = (block: FlowBlock): string => {
           textRun.baselineShift != null ? textRun.baselineShift : '',
           // Note: pmStart/pmEnd intentionally excluded to prevent O(n) change detection
           textRun.token ?? '',
-          // Tracked changes - force re-render when added or removed tracked change
-          textRun.trackedChange ? 1 : 0,
+          // Tracked changes - force re-render when any rendered tracked-change metadata changes.
+          trackedChangeVersion,
           // Comment annotations - force re-render when comments are enabled/disabled
           textRun.comments?.length ?? 0,
         ].join(',');
@@ -7498,7 +7750,6 @@ const deriveBlockVersion = (block: FlowBlock): string => {
           attrs.shading?.fill ?? '',
           attrs.shading?.color ?? '',
           attrs.direction ?? '',
-          attrs.rtl ? '1' : '',
           attrs.tabs?.length ? JSON.stringify(attrs.tabs) : '',
         ].join(':')
       : '';
@@ -7685,7 +7936,6 @@ const deriveBlockVersion = (block: FlowBlock): string => {
               hash = hashString(hash, attrs.shading?.fill ?? '');
               hash = hashString(hash, attrs.shading?.color ?? '');
               hash = hashString(hash, attrs.direction ?? '');
-              hash = hashString(hash, attrs.rtl ? '1' : '');
               if (attrs.borders) {
                 hash = hashString(hash, hashParagraphBorders(attrs.borders));
               }
@@ -7911,28 +8161,6 @@ export const applyRunDataAttributes = (element: HTMLElement, dataAttrs?: Record<
   });
 };
 
-const resolveParagraphDirection = (attrs?: ParagraphAttrs): 'ltr' | 'rtl' | undefined => {
-  if (attrs?.direction) {
-    return attrs.direction;
-  }
-  if (attrs?.rtl === true) {
-    return 'rtl';
-  }
-  if (attrs?.rtl === false) {
-    return 'ltr';
-  }
-  return undefined;
-};
-
-const applyParagraphDirection = (element: HTMLElement, attrs?: ParagraphAttrs): void => {
-  const direction = resolveParagraphDirection(attrs);
-  if (!direction) {
-    return;
-  }
-  element.setAttribute('dir', direction);
-  element.style.direction = direction;
-};
-
 const applyParagraphBlockStyles = (element: HTMLElement, attrs?: ParagraphAttrs): void => {
   if (!attrs) return;
   if (attrs.styleId) {
@@ -7981,109 +8209,6 @@ const stripListIndent = (attrs?: ParagraphAttrs): ParagraphAttrs | undefined => 
 };
 
 // applyParagraphShadingStyles — moved to features/paragraph-borders/border-layer.ts
-
-/**
- * Extracts and slices text runs that belong to a specific line within a paragraph block.
- * Handles partial runs at line boundaries by creating sliced copies with correct character ranges.
- *
- * @param {ParagraphBlock} block - The paragraph block containing runs
- * @param {Line} line - The line definition with fromRun/toRun and fromChar/toChar ranges
- * @returns {Run[]} Array of runs (or sliced run portions) that comprise the line
- *
- * @remarks
- * - Preserves run styling and metadata (pmStart, pmEnd positions) in sliced runs
- * - Tab runs are only included if the slice contains the actual tab character
- * - Text runs are sliced to match exact character boundaries of the line
- * - Returns empty array if no valid runs are found within the line range
- *
- * @example
- * ```typescript
- * const line = { fromRun: 0, toRun: 2, fromChar: 5, toChar: 10 };
- * const runs = sliceRunsForLine(paragraphBlock, line);
- * // Returns runs or run slices that fall within the specified character range
- * ```
- */
-export const sliceRunsForLine = (block: ParagraphBlock, line: Line): Run[] => {
-  const result: Run[] = [];
-
-  for (let runIndex = line.fromRun; runIndex <= line.toRun; runIndex += 1) {
-    const run = block.runs[runIndex];
-    if (!run) continue;
-
-    // FIXED: ImageRun handling - images are atomic units, no slicing needed
-    if (run.kind === 'image') {
-      result.push(run);
-      continue;
-    }
-
-    // LineBreakRun handling - line breaks don't have text content and are handled
-    // by the measurer creating new lines. Include them for PM position tracking.
-    if (run.kind === 'lineBreak') {
-      result.push(run);
-      continue;
-    }
-
-    // BreakRun handling - similar to LineBreakRun
-    if (run.kind === 'break') {
-      result.push(run);
-      continue;
-    }
-
-    // TabRun handling - tabs don't need slicing
-    if (run.kind === 'tab') {
-      result.push(run);
-      continue;
-    }
-
-    // FieldAnnotationRun handling - field annotations are atomic units like images
-    if (run.kind === 'fieldAnnotation') {
-      result.push(run);
-      continue;
-    }
-
-    // MathRun handling - math runs are atomic units like images
-    if (run.kind === 'math') {
-      result.push(run);
-      continue;
-    }
-
-    // At this point, run must be TextRun (has .text property)
-    if (!('text' in run)) {
-      continue;
-    }
-
-    const text = run.text ?? '';
-    const isFirstRun = runIndex === line.fromRun;
-    const isLastRun = runIndex === line.toRun;
-    const runLength = text.length;
-    const runPmStart = run.pmStart ?? null;
-    const fallbackPmEnd = runPmStart != null && run.pmEnd == null ? runPmStart + runLength : (run.pmEnd ?? null);
-
-    if (isFirstRun || isLastRun) {
-      const start = isFirstRun ? line.fromChar : 0;
-      const end = isLastRun ? line.toChar : text.length;
-      const slice = text.slice(start, end);
-      if (!slice) continue;
-
-      const pmSliceStart = runPmStart != null ? runPmStart + start : undefined;
-      const pmSliceEnd = runPmStart != null ? runPmStart + end : (fallbackPmEnd ?? undefined);
-
-      // TextRun: return a sliced TextRun preserving styles
-      const sliced: TextRun = {
-        ...(run as TextRun),
-        text: slice,
-        pmStart: pmSliceStart,
-        pmEnd: pmSliceEnd,
-        comments: (run as TextRun).comments ? [...(run as TextRun).comments!] : undefined,
-      };
-      result.push(sliced);
-    } else {
-      result.push(run);
-    }
-  }
-
-  return result;
-};
 
 const applyStyles = (el: HTMLElement, styles: Partial<CSSStyleDeclaration>): void => {
   Object.entries(styles).forEach(([key, value]) => {

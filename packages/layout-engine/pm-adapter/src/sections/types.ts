@@ -120,6 +120,12 @@ export interface SectionRange {
   orientation: 'portrait' | 'landscape' | null;
   columns: ColumnLayout | null;
   type: SectionType;
+  /** True iff the section's `<w:type>` was explicitly written in the source.
+   *  Distinguishes "the body sectPr defaulted to continuous because OOXML
+   *  omitted w:type" (sd-1655) from "an explicit w:type=continuous on the
+   *  body sectPr" (sd-1480). Only the explicit form triggers Word's
+   *  end-of-document column balancing for single-page sections. */
+  typeIsExplicit: boolean;
   titlePg: boolean;
   headerRefs?: Partial<Record<'default' | 'first' | 'even' | 'odd', string>>;
   footerRefs?: Partial<Record<'default' | 'first' | 'even' | 'odd', string>>;

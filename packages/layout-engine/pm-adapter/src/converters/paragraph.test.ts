@@ -119,7 +119,7 @@ import {
 const DEFAULT_HYPERLINK_CONFIG: HyperlinkConfig = { enableRichHyperlinks: false };
 const DEFAULT_TEST_FONT_FAMILY = 'Arial, sans-serif';
 const DEFAULT_TEST_FONT_SIZE_PX = (16 * 96) / 72;
-const FALLBACK_FONT_FAMILY = 'Times New Roman, sans-serif';
+const FALLBACK_FONT_FAMILY = 'Times New Roman, serif';
 const FALLBACK_FONT_SIZE_PX = 12;
 let defaultConverterContext: ConverterContext = {
   translatedNumbering: {},
@@ -2731,6 +2731,7 @@ describe('paragraph converters', () => {
           applyMarksToRun,
           undefined,
           true,
+          undefined,
         );
 
         const paraBlock = blocks[0] as ParagraphBlock;
@@ -3002,6 +3003,61 @@ describe('paragraph converters', () => {
 
         expect(context.blocks).toHaveLength(1);
         expect(getMarkerText(context.blocks[0])).toBe('二.');
+      });
+
+      it('updates converterContext.sectionDirection when crossing to next section', () => {
+        const trackedChanges: TrackedChangesConfig = {
+          mode: 'review',
+          enabled: true,
+        };
+        const context = createParagraphHandlerContext(trackedChanges);
+        context.converterContext.sectionDirection = 'rtl';
+        context.sectionState = {
+          ranges: [
+            {
+              sectionIndex: 0,
+              startParagraphIndex: 0,
+              endParagraphIndex: 0,
+              sectPr: null,
+              margins: null,
+              pageSize: null,
+              orientation: null,
+              columns: null,
+              type: 'nextPage',
+              titlePg: false,
+            },
+            {
+              sectionIndex: 1,
+              startParagraphIndex: 0,
+              endParagraphIndex: 1,
+              sectPr: {
+                type: 'element',
+                name: 'w:sectPr',
+                elements: [{ type: 'element', name: 'w:bidi', attributes: { 'w:val': '0' } }],
+              },
+              margins: null,
+              pageSize: null,
+              orientation: null,
+              columns: null,
+              type: 'nextPage',
+              titlePg: false,
+            },
+          ] as any,
+          currentSectionIndex: 0,
+          currentParagraphIndex: 0,
+        };
+
+        handleParagraphNode(
+          {
+            type: 'paragraph',
+            attrs: { paragraphProperties: {} },
+            content: [{ type: 'text', text: 'section switch paragraph' }],
+          } as PMNode,
+          context,
+        );
+
+        expect(context.sectionState.currentSectionIndex).toBe(1);
+        expect(context.converterContext.sectionDirection).toBe('ltr');
       });
     });
 

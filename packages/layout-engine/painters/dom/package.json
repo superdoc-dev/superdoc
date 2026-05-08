@@ -26,6 +26,7 @@
   },
   "devDependencies": {
     "@superdoc/layout-engine": "workspace:*",
+    "@superdoc/layout-resolved": "workspace:*",
     "vitest": "catalog:"
   }
 }

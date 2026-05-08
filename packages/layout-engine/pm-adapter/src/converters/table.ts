@@ -228,38 +228,6 @@ const normalizeRowHeight = (rowProps?: Record<string, unknown>): NormalizedRowHe
 };
 
 /**
- * Apply Word's TableGrid pPr cascade to table-cell paragraphs (ECMA-376
- * §17.3.1.33).
- *
- * The super-converter resolves paragraph attrs at DOCX-import time before the
- * table context is known, so paragraphs inside table cells inherit spacing
- * from docDefaults (`w:line="278"` ≈ 1.15 multiplier) instead of TableGrid's
- * `w:line="240"` (= 1.0 multiplier). We rewrite the line multiplier here
- * where the table context is available.
- *
- * Only paragraphs whose source PM node had no explicit `<w:spacing>` are
- * adjusted — explicit spacing is the author's intent. Only the auto-multiplier
- * form is touched; atLeast/exact are absolute values.
- *
- * TODO(SD-2735 cascade): move this to super-converter / style-engine so the
- * cascade is applied once at DOCX-import time for all consumers.
- */
-const applyTableGridSpacingCascade = (paragraphBlocks: FlowBlock[], sourceChildNode?: PMNode): void => {
-  if (!sourceChildNode) return;
-  const sourceParaProps = (sourceChildNode.attrs as { paragraphProperties?: { spacing?: unknown } } | undefined)
-    ?.paragraphProperties;
-  if (sourceParaProps?.spacing) return;
-
-  for (const block of paragraphBlocks) {
-    if (block.kind !== 'paragraph' || !block.attrs) continue;
-    const spacing = block.attrs.spacing;
-    if (spacing?.lineUnit === 'multiplier' && spacing.lineRule === 'auto') {
-      block.attrs.spacing = { ...spacing, line: 1.0 };
-    }
-  }
-};
-
-/**
  * Parse a ProseMirror table cell node into a TableCell block.
  *
  * Converts a PM table cell node (tableCell, table_cell, tableHeader, or table_header)
@@ -368,15 +336,11 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
   const appendParagraphBlocks = (
     paragraphBlocks: FlowBlock[],
     sdtMetadata?: ReturnType<typeof resolveNodeSdtMetadata>,
-    sourceChildNode?: PMNode,
   ) => {
     applySdtMetadataToParagraphBlocks(
       paragraphBlocks.filter((block) => block.kind === 'paragraph') as ParagraphBlock[],
       sdtMetadata,
     );
-    if (tableInfo?.tableProperties?.tableStyleId) {
-      applyTableGridSpacingCascade(paragraphBlocks, sourceChildNode);
-    }
     paragraphBlocks.forEach((block) => {
       if (block.kind === 'paragraph' || block.kind === 'image' || block.kind === 'drawing') {
         blocks.push(block);
@@ -459,7 +423,7 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
         converters: context.converters,
         enableComments: context.enableComments,
       });
-      appendParagraphBlocks(paragraphBlocks, undefined, childNode);
+      appendParagraphBlocks(paragraphBlocks);
       continue;
     }
 

@@ -2362,3 +2362,99 @@ describe('tableCellNodeToBlock — SD-2516: documentPartObject children', () => 
     expect((cellBlocks[0] as ParagraphBlock).runs[0].text).toBe('Inner DPO');
   });
 });
+
+// SD-2735 P2: previously every table-cell paragraph in a styled table was
+// flattened to spacing.line=1.0 by a TableGrid-only workaround that the
+// converter applied to ANY tableStyleId. Custom table styles (e.g. a
+// "1.5×-spacing" table style) lost their explicit multiplier. With the
+// pm-adapter normalization producing spec-correct ratios end-to-end, the
+// style-engine cascade already pulls the table style's pPr.spacing — the
+// workaround is redundant and must not flatten cell paragraphs whose source
+// has no inline spacing.
+describe('parseTableCell — SD-2735 P2: preserves custom table-style line multiplier', () => {
+  const mockBlockIdGenerator: BlockIdGenerator = vi.fn((kind) => `test-${kind}`);
+  const mockPositionMap: PositionMap = new Map();
+
+  it('does not flatten a 1.5× line multiplier produced by a custom table-style cascade', () => {
+    // mockParagraphConverter simulates the cascade output: a cell paragraph
+    // whose source had no explicit `<w:spacing>` but whose tableStyle pPr
+    // resolves to `line=360 lineRule=auto` (= 1.5× multiplier post-fix).
+    const mockParagraphConverter = vi.fn(
+      (params: { para: PMNode }) =>
+        [
+          {
+            kind: 'paragraph',
+            id: 'p1',
+            attrs: {
+              spacing: { line: 1.5, lineUnit: 'multiplier', lineRule: 'auto' },
+            },
+            runs: [
+              {
+                text: (params.para.content?.[0] as { text?: string } | undefined)?.text || 'cell',
+                fontFamily: 'Arial',
+                fontSize: 12,
+              },
+            ],
+          },
+        ] as ParagraphBlock[],
+    );
+
+    const node: PMNode = {
+      type: 'table',
+      attrs: {
+        tableStyleId: 'CustomLineSpacing',
+        tableProperties: { tableStyleId: 'CustomLineSpacing', tblLook: { noHBand: true, noVBand: true } },
+      },
+      content: [
+        {
+          type: 'tableRow',
+          content: [
+            {
+              type: 'tableCell',
+              // Source paragraph has NO `<w:spacing>` — explicit-spacing guard
+              // does not apply, so the workaround would flatten this to 1.0.
+              content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Cell' }] }],
+            },
+          ],
+        },
+      ],
+    };
+
+    // Register the custom style so `resolveExistingTableEffectiveStyleId`
+    // resolves `tableStyleId` to a non-null value and the cascade gate fires.
+    const converterContext: ConverterContext = {
+      ...DEFAULT_CONVERTER_CONTEXT,
+      translatedLinkedStyles: {
+        ...DEFAULT_CONVERTER_CONTEXT.translatedLinkedStyles,
+        styles: {
+          CustomLineSpacing: {
+            type: 'table',
+            paragraphProperties: { spacing: { line: 360, lineRule: 'auto' } },
+            tableProperties: {},
+          },
+        },
+      },
+    };
+
+    const result = tableNodeToBlock(
+      node,
+      mockBlockIdGenerator,
+      mockPositionMap,
+      'Arial',
+      16,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      mockParagraphConverter,
+      converterContext,
+    ) as TableBlock;
+
+    const cell = result.rows[0].cells[0];
+    const cellBlocks = cell.blocks ?? (cell.paragraph ? [cell.paragraph] : []);
+    const para = cellBlocks[0] as ParagraphBlock;
+    expect(para.attrs?.spacing?.line).toBe(1.5);
+    expect(para.attrs?.spacing?.lineUnit).toBe('multiplier');
+    expect(para.attrs?.spacing?.lineRule).toBe('auto');
+  });
+});

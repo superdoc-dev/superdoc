@@ -312,12 +312,32 @@ function readExistingTocTabPos(node: ProseMirrorNode): number | undefined {
  * shifts. Capture the original trailing non-entry paragraph (when present)
  * as JSON so we can append it after the rebuilt entries to keep the visual
  * end of the TOC stable.
+ *
+ * A real trailer only exists in TOCs that already have entries above it.
+ * When the TOC currently shows only the `NO_ENTRIES_PLACEHOLDER` (i.e.
+ * after a previous rebuild found no headings), the lastChild is the
+ * placeholder itself — preserving it as a trailer would re-inject the
+ * "No table of contents entries found." paragraph into the next rebuild.
  */
 function readExistingTocTrailingParagraph(node: ProseMirrorNode): unknown | undefined {
   const last = node.lastChild;
   if (!last || last.type.name !== 'paragraph') return undefined;
   const styleId = (last.attrs as TocParagraphAttrs | undefined)?.paragraphProperties?.styleId;
   if (styleId && TOC_ENTRY_STYLE_RE.test(styleId)) return undefined; // it's an entry, not the trailer
+
+  // Only treat the last paragraph as a trailer when at least one real TOC
+  // entry precedes it. Without this guard, a TOC whose only child is the
+  // "no entries" placeholder would have that placeholder treated as the
+  // trailer and re-appended to every subsequent rebuild.
+  let hasPrecedingEntry = false;
+  node.forEach((child) => {
+    if (hasPrecedingEntry || child === last) return;
+    if (child.type.name !== 'paragraph') return;
+    const childStyleId = (child.attrs as TocParagraphAttrs | undefined)?.paragraphProperties?.styleId;
+    if (childStyleId && TOC_ENTRY_STYLE_RE.test(childStyleId)) hasPrecedingEntry = true;
+  });
+  if (!hasPrecedingEntry) return undefined;
+
   return typeof last.toJSON === 'function' ? last.toJSON() : undefined;
 }
 

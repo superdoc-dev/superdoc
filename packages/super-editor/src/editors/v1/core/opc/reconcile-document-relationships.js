@@ -17,6 +17,7 @@
  */
 
 import * as xmljs from 'xml-js';
+import { serializeOpcXml } from './xml-serialization.js';
 
 // ---------------------------------------------------------------------------
 // Registry
@@ -112,5 +113,5 @@ export function reconcileDocumentRelationships(relsXml, fileExists) {
   }
 
   if (!changed) return relsXml;
-  return xmljs.js2xml(parsed, { spaces: 0 });
+  return serializeOpcXml(parsed);
 }

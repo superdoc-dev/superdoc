@@ -53,12 +53,29 @@ export function CommentComposer({ onCancel, onPosted }: Props) {
         onPosted(null);
         return;
       }
+      // Put the editor's visible selection back where the user picked
+      // it — `createFromCapture` only writes the comment; the live
+      // editor selection is wherever it was when the textarea took
+      // focus, which is usually nothing visible. `restore` rejoins
+      // the user where they were so the next keystroke continues
+      // their flow.
+      ui.selection.restore(captured);
       const entity = (receipt.inserted as Array<{ entityId?: string }> | undefined)?.[0];
       onPosted(entity?.entityId ?? null);
     } catch (err) {
       console.error('[CommentComposer] createFromCapture threw', err);
       setPosting(false);
     }
+  };
+
+  const cancel = () => {
+    // Same restore call on cancel: the user clicked into the textarea
+    // (losing the visible selection), then bailed without posting.
+    // Without restore, the editor stays unfocused with no visible
+    // range; the next keystroke would land at whatever caret position
+    // the editor last knew, which is rarely what the user expects.
+    if (ui && captured) ui.selection.restore(captured);
+    onCancel();
   };
 
   return (
@@ -75,11 +92,11 @@ export function CommentComposer({ onCancel, onPosted }: Props) {
         onChange={(e) => setText(e.target.value)}
         onKeyDown={(e) => {
           if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') post();
-          if (e.key === 'Escape') onCancel();
+          if (e.key === 'Escape') cancel();
         }}
       />
       <div className="composer-actions">
-        <button onClick={onCancel}>Cancel</button>
+        <button onClick={cancel}>Cancel</button>
         <button className="primary" disabled={!canPost} onClick={post}>
           {posting ? 'Posting…' : 'Comment'}
         </button>

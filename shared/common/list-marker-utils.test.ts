@@ -729,17 +729,16 @@ describe('resolveListTextStartPx', () => {
         expect(result).toBe(24); // text starts at indentLeft
       });
 
-      it('wide numbered marker "viii." overflows hanging area with minimum gap', () => {
+      it('wide numbered marker "viii." overflows hanging area and snaps to next default tab stop', () => {
         const wordLayout: MinimalWordLayout = {
           marker: { glyphWidthPx: 22, suffix: 'tab' },
           textStartPx: 24,
         };
-        // markerStartPos = 6, currentPosStandard = 6 + 22 = 28
-        // gap = max(24 - 28, 8) = max(-4, 8) = 8
+        // markerStartPos = 6, markerContentEnd = 6 + 22 = 28
+        // overflow (28 > 24) → snap to next default tab stop after 28 = 48
         const result = resolveListTextStartPx(wordLayout, 24, 0, 18, mockMeasureMarkerText);
 
-        expect(result).toBe(28 + LIST_MARKER_GAP); // 36, not 28 + 48 = 76
-        expect(result).not.toBe(28 + DEFAULT_TAB_INTERVAL_PX);
+        expect(result).toBe(DEFAULT_TAB_INTERVAL_PX); // 48
       });
 
       it('bullet marker "•" fits comfortably in hanging area', () => {
@@ -785,36 +784,34 @@ describe('resolveListTextStartPx', () => {
         expect(result).toBe(12);
       });
 
-      it('marker overflows tiny hanging space', () => {
+      it('marker overflows tiny hanging space and snaps to next default tab stop', () => {
         const wordLayout: MinimalWordLayout = {
           marker: { glyphWidthPx: 15, suffix: 'tab' },
           textStartPx: 12,
         };
         // indentLeft=12, hanging=10 → markerStartPos = 2
-        // currentPosStandard = 2 + 15 = 17
-        // gap = max(12 - 17, 8) = max(-5, 8) = 8
+        // markerContentEnd = 2 + 15 = 17, overflows textStartPx=12
+        // → snap to next default tab stop after 17 = 48
         const result = resolveListTextStartPx(wordLayout, 12, 0, 10, mockMeasureMarkerText);
 
-        expect(result).toBe(17 + LIST_MARKER_GAP); // 25
-        expect(result).not.toBe(17 + DEFAULT_TAB_INTERVAL_PX);
+        expect(result).toBe(DEFAULT_TAB_INTERVAL_PX); // 48
       });
     });
 
     // Pattern: legal numbering (wider markers like "(a)", "1.1.1")
     // Representative of template_format.docx and sd-1356 patterns
     describe('legal numbering pattern (wide markers)', () => {
-      it('compound marker "1.1.1" overflows standard hanging with minimum gap', () => {
+      it('compound marker "1.1.1" overflows standard hanging and snaps to next default tab stop', () => {
         const wordLayout: MinimalWordLayout = {
           marker: { glyphWidthPx: 30, suffix: 'tab' },
           textStartPx: 36,
         };
         // indentLeft=36, hanging=18 → markerStartPos = 18
-        // currentPosStandard = 18 + 30 = 48
-        // gap = max(36 - 48, 8) = max(-12, 8) = 8
+        // markerContentEnd = 18 + 30 = 48 (overflows textStartPx=36)
+        // → snap to next default tab stop strictly past 48 = 48 + 48 = 96
         const result = resolveListTextStartPx(wordLayout, 36, 0, 18, mockMeasureMarkerText);
 
-        expect(result).toBe(48 + LIST_MARKER_GAP); // 56
-        expect(result).not.toBe(48 + DEFAULT_TAB_INTERVAL_PX); // not 96
+        expect(result).toBe(2 * DEFAULT_TAB_INTERVAL_PX); // 96
       });
 
       it('parenthetical marker "(a)" fits in standard hanging', () => {

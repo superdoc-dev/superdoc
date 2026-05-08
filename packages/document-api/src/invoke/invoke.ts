@@ -124,6 +124,7 @@ export function buildDispatchTable(api: DocumentApi): TypedDispatchTable {
     'lists.create': (input, options) => api.lists.create(input, options),
     'lists.attach': (input, options) => api.lists.attach(input, options),
     'lists.detach': (input, options) => api.lists.detach(input, options),
+    'lists.delete': (input, options) => api.lists.delete(input, options),
     'lists.indent': (input, options) => api.lists.indent(input, options),
     'lists.outdent': (input, options) => api.lists.outdent(input, options),
     'lists.join': (input, options) => api.lists.join(input, options),
@@ -240,6 +241,7 @@ export function buildDispatchTable(api: DocumentApi): TypedDispatchTable {
     'tables.unmergeCells': (input, options) => api.tables.unmergeCells(input, options),
     'tables.splitCell': (input, options) => api.tables.splitCell(input, options),
     'tables.setCellProperties': (input, options) => api.tables.setCellProperties(input, options),
+    'tables.setCellText': (input, options) => api.tables.setCellText(input, options),
     'tables.sort': (input, options) => api.tables.sort(input, options),
     'tables.setAltText': (input, options) => api.tables.setAltText(input, options),
     'tables.setStyle': (input, options) => api.tables.setStyle(input, options),
@@ -257,6 +259,7 @@ export function buildDispatchTable(api: DocumentApi): TypedDispatchTable {
     'tables.applyStyle': (input, options) => api.tables.applyStyle(input, options),
     'tables.setBorders': (input, options) => api.tables.setBorders(input, options),
     'tables.setTableOptions': (input, options) => api.tables.setTableOptions(input, options),
+    'tables.applyPreset': (input, options) => api.tables.applyPreset(input, options),
 
     // --- tables.* reads ---
     'tables.get': (input) => api.tables.get(input),

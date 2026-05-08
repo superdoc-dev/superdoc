@@ -434,11 +434,11 @@ test('stable orchestrator recovers incomplete merged tags and defers stale check
     'scripts/release-local-stable.mjs: SDK reruns must resume npm publish explicitly',
   );
   assert.ok(
-    content.includes("case 'mcp'") && content.includes('apps/mcp'),
+    content.includes('resumeMcpPublish') && content.includes('apps/mcp'),
     'scripts/release-local-stable.mjs: MCP reruns must have an explicit resume path',
   );
   assert.ok(
-    content.includes("case 'cli'") && content.includes('apps/cli/scripts/publish.js'),
+    content.includes('resumeCliPublish') && content.includes('apps/cli/scripts/publish.js'),
     'scripts/release-local-stable.mjs: CLI reruns must resume via its dedicated publish script',
   );
   assert.ok(

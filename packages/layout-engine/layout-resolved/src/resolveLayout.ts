@@ -247,6 +247,7 @@ export function resolveFragmentItem(
         height: computeFragmentHeight(fragment, blockMap),
         zIndex: resolveFragmentZIndex(fragment),
         fragmentKind: fragment.kind,
+        fragment,
         blockId: fragment.blockId,
         fragmentIndex,
         content: resolveParagraphContentIfApplicable(fragment, blockMap),
@@ -307,6 +308,8 @@ export function resolveLayout(input: ResolveLayoutInput): ResolvedLayout {
   const pages: ResolvedPage[] = layout.pages.map((page, pageIndex) => ({
     id: `page-${pageIndex}`,
     index: pageIndex,
+    columns: page.columns,
+    columnRegions: page.columnRegions,
     number: page.number,
     width: page.size?.w ?? layout.pageSize.w,
     height: page.size?.h ?? layout.pageSize.h,

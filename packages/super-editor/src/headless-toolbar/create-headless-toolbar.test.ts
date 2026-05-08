@@ -527,6 +527,65 @@ describe('createHeadlessToolbar', () => {
   });
 
   it('executes numbered-list through the registry direct command path', () => {
+    const toggleOrderedListStyle = vi.fn(() => true);
+    const superdoc = createActiveEditorHost({
+      commands: {
+        toggleOrderedListStyle,
+      },
+      state: createSelectionState({
+        empty: true,
+        $from: {
+          depth: 1,
+          node: vi.fn(() => ({ type: { name: 'doc' } })),
+          before: vi.fn(() => 0),
+          start: vi.fn(() => 0),
+        },
+      }),
+    });
+
+    const controller = createHeadlessToolbar({
+      superdoc,
+      commands: ['numbered-list'],
+    });
+
+    expect(controller.execute?.('numbered-list')).toBe(true);
+    expect(toggleOrderedListStyle).toHaveBeenCalledTimes(1);
+
+    controller.destroy();
+  });
+
+  // PR-2873 (SD-2527): the registry prefers the new style-aware commands
+  // but falls back to the legacy ones so hosts that only expose
+  // toggleBulletList / toggleOrderedList keep working.
+  it('falls back to toggleBulletList when toggleBulletListStyle is unavailable', () => {
+    const toggleBulletList = vi.fn(() => true);
+    const superdoc = createActiveEditorHost({
+      commands: {
+        toggleBulletList,
+      },
+      state: createSelectionState({
+        empty: true,
+        $from: {
+          depth: 1,
+          node: vi.fn(() => ({ type: { name: 'doc' } })),
+          before: vi.fn(() => 0),
+          start: vi.fn(() => 0),
+        },
+      }),
+    });
+
+    const controller = createHeadlessToolbar({
+      superdoc,
+      commands: ['bullet-list'],
+    });
+
+    expect(controller.execute?.('bullet-list')).toBe(true);
+    expect(toggleBulletList).toHaveBeenCalledTimes(1);
+
+    controller.destroy();
+  });
+
+  it('falls back to toggleOrderedList when toggleOrderedListStyle is unavailable', () => {
     const toggleOrderedList = vi.fn(() => true);
     const superdoc = createActiveEditorHost({
       commands: {
@@ -696,6 +755,38 @@ describe('createHeadlessToolbar', () => {
 
     expect(controller.execute?.('ruler')).toBe(true);
     expect(toggleRuler).toHaveBeenCalledTimes(1);
+
+    controller.destroy();
+  });
+
+  it('executes formatting marks through the registry execute path', () => {
+    const toggleFormattingMarks = vi.fn();
+    const superdoc: HeadlessToolbarSuperdocHost = {
+      activeEditor: {
+        commands: {},
+        doc: {} as any,
+        isEditable: true,
+        state: {
+          selection: {
+            empty: true,
+          },
+        },
+      } as any,
+      toggleFormattingMarks,
+      config: {
+        layoutEngineOptions: {
+          showFormattingMarks: false,
+        },
+      },
+    } as any;
+
+    const controller = createHeadlessToolbar({
+      superdoc,
+      commands: ['formatting-marks'],
+    });
+
+    expect(controller.execute?.('formatting-marks')).toBe(true);
+    expect(toggleFormattingMarks).toHaveBeenCalledTimes(1);
 
     controller.destroy();
   });

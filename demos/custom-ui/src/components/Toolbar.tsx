@@ -110,8 +110,8 @@ export function Toolbar({ onComposeComment }: ToolbarProps) {
  * Edit / Suggest mode toggle. Edits in Suggest mode are recorded as
  * tracked changes (insertions / deletions) and surface in the activity
  * sidebar for accept / reject. Reads the current mode from the
- * `ui.document` snapshot and writes through `ui.document.setMode`
- * (SD-2816); no host-instance access required.
+ * `ui.document` snapshot and writes through `ui.document.setMode`;
+ * no host-instance access required.
  */
 function ModeToggle() {
   const ui = useSuperDocUI();
@@ -223,8 +223,7 @@ function ExportButton() {
  * adds comments / tracks changes / edits there, then reimports the
  * modified file here. `ui.document.replaceFile` swaps the doc and
  * re-emits `commentsLoaded` internally so the activity sidebar
- * refreshes regardless of `modules.comments: false` (engine fix
- * tracked under SD-2839).
+ * refreshes regardless of `modules.comments: false`.
  */
 function ReimportButton() {
   const ui = useSuperDocUI();

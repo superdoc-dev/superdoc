@@ -315,6 +315,84 @@ const TRACK_CHANGE_STYLES = `
 }
 `;
 
+const FORMATTING_MARKS_STYLES = `
+.superdoc-formatting-space-mark,
+.superdoc-marker-suffix-space {
+  position: relative;
+}
+
+.superdoc-formatting-space-mark {
+  white-space: pre;
+}
+
+.superdoc-layout.superdoc-show-formatting-marks .superdoc-tab {
+  position: relative;
+  visibility: visible !important;
+}
+
+.superdoc-layout.superdoc-show-formatting-marks .superdoc-tab::after {
+  content: "→";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  color: var(--sd-formatting-mark-color, var(--sd-ui-action, currentColor));
+  font-size: 0.75em;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.superdoc-layout.superdoc-show-formatting-marks [dir="rtl"] .superdoc-tab::after {
+  content: "←";
+}
+
+.superdoc-layout.superdoc-show-formatting-marks .superdoc-formatting-space-mark::after,
+.superdoc-layout.superdoc-show-formatting-marks .superdoc-marker-suffix-space::after {
+  content: "·";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  color: var(--sd-formatting-mark-color, var(--sd-ui-action, currentColor));
+  font-size: 0.75em;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.superdoc-formatting-paragraph-mark {
+  display: none;
+  position: absolute;
+  top: 0;
+  transform: translateX(var(--sd-formatting-paragraph-mark-gap, 0.2em));
+  color: var(--sd-formatting-mark-color, var(--sd-ui-action, currentColor));
+  pointer-events: none;
+  user-select: none;
+  white-space: pre;
+  z-index: 2;
+}
+
+.superdoc-layout.superdoc-show-formatting-marks .superdoc-formatting-paragraph-mark {
+  display: inline;
+}
+
+.superdoc-layout.superdoc-show-formatting-marks [dir="rtl"] .superdoc-formatting-paragraph-mark {
+  transform: translateX(calc(-100% - var(--sd-formatting-paragraph-mark-gap, 0.2em)));
+}
+
+@media print {
+  .superdoc-layout.superdoc-show-formatting-marks .superdoc-tab::after,
+  .superdoc-layout.superdoc-show-formatting-marks .superdoc-formatting-space-mark::after,
+  .superdoc-layout.superdoc-show-formatting-marks .superdoc-marker-suffix-space::after {
+    content: "";
+    display: none;
+  }
+
+  .superdoc-layout.superdoc-show-formatting-marks .superdoc-formatting-paragraph-mark {
+    display: none;
+  }
+}
+`;
+
 /**
  * SDT Container Styles - Styling for document sections and structured content containers.
  *
@@ -428,13 +506,13 @@ const SDT_CONTAINER_STYLES = `
 
 .superdoc-structured-content-block:not(.ProseMirror-selectednode):hover {
   background-color: var(--sd-content-controls-block-hover-bg, #f2f2f2);
-  border-color: transparent;
+  border-color: var(--sd-content-controls-block-hover-border, transparent);
 }
 
 /* Group hover (JavaScript-coordinated via PresentationEditor) */
 .superdoc-structured-content-block.sdt-group-hover:not(.ProseMirror-selectednode) {
   background-color: var(--sd-content-controls-block-hover-bg, #f2f2f2);
-  border-color: transparent;
+  border-color: var(--sd-content-controls-block-hover-border, transparent);
 }
 
 .superdoc-structured-content-block.ProseMirror-selectednode {
@@ -528,7 +606,7 @@ const SDT_CONTAINER_STYLES = `
 /* Hover effect for inline structured content */
 .superdoc-structured-content-inline:not(.ProseMirror-selectednode):hover {
   background-color: var(--sd-content-controls-inline-hover-bg, #f2f2f2);
-  border-color: transparent;
+  border-color: var(--sd-content-controls-inline-hover-border, transparent);
 }
 
 .superdoc-structured-content-inline.ProseMirror-selectednode {
@@ -741,6 +819,7 @@ menclose::after {
 let printStylesInjected = false;
 let linkStylesInjected = false;
 let trackChangeStylesInjected = false;
+let formattingMarksStylesInjected = false;
 let sdtContainerStylesInjected = false;
 let fieldAnnotationStylesInjected = false;
 let imageSelectionStylesInjected = false;
@@ -771,6 +850,15 @@ export const ensureTrackChangeStyles = (doc: Document | null | undefined) => {
   styleEl.textContent = TRACK_CHANGE_STYLES;
   doc.head?.appendChild(styleEl);
   trackChangeStylesInjected = true;
+};
+
+export const ensureFormattingMarksStyles = (doc: Document | null | undefined) => {
+  if (formattingMarksStylesInjected || !doc) return;
+  const styleEl = doc.createElement('style');
+  styleEl.setAttribute('data-superdoc-formatting-marks-styles', 'true');
+  styleEl.textContent = FORMATTING_MARKS_STYLES;
+  doc.head?.appendChild(styleEl);
+  formattingMarksStylesInjected = true;
 };
 
 export const ensureSdtContainerStyles = (doc: Document | null | undefined) => {

@@ -359,6 +359,65 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
     });
   };
 
+  // SDT wrappers (documentPartObject, structuredContentBlock) can nest
+  // arbitrarily deep around the visible paragraph/table content.
+  const flattenSdtWrappersIntoCell = (
+    wrapperNode: PMNode,
+    inheritedSdtMetadata: ReturnType<typeof resolveNodeSdtMetadata> | undefined,
+  ): void => {
+    if (!Array.isArray(wrapperNode.content)) return;
+    for (const nestedNode of wrapperNode.content) {
+      if (nestedNode.type === 'paragraph') {
+        if (!paragraphToFlowBlocks) continue;
+        const paragraphBlocks = paragraphToFlowBlocks({
+          para: nestedNode,
+          nextBlockId: context.nextBlockId,
+          positions: context.positions,
+          storyKey: context.storyKey,
+          trackedChangesConfig: context.trackedChangesConfig,
+          bookmarks: context.bookmarks,
+          hyperlinkConfig: context.hyperlinkConfig,
+          themeColors: context.themeColors,
+          converterContext: cellConverterContext,
+          converters: context.converters,
+          enableComments: context.enableComments,
+        });
+        appendParagraphBlocks(paragraphBlocks, inheritedSdtMetadata);
+        continue;
+      }
+      if (nestedNode.type === 'table' && tableNodeToBlock) {
+        const tableBlock = tableNodeToBlock(nestedNode, {
+          nextBlockId: context.nextBlockId,
+          positions: context.positions,
+          storyKey: context.storyKey,
+          trackedChangesConfig: context.trackedChangesConfig,
+          bookmarks: context.bookmarks,
+          hyperlinkConfig: context.hyperlinkConfig,
+          themeColors: context.themeColors,
+          converterContext: context.converterContext,
+          converters: context.converters,
+          enableComments: context.enableComments,
+        });
+        if (tableBlock && tableBlock.kind === 'table') {
+          if (inheritedSdtMetadata) {
+            applySdtMetadataToTableBlock(tableBlock, inheritedSdtMetadata);
+          }
+          blocks.push(tableBlock);
+        }
+        continue;
+      }
+      if (nestedNode.type === 'documentPartObject') {
+        flattenSdtWrappersIntoCell(nestedNode, inheritedSdtMetadata);
+        continue;
+      }
+      if (nestedNode.type === 'structuredContentBlock') {
+        const innerMetadata = inheritedSdtMetadata ?? resolveNodeSdtMetadata(nestedNode, 'structuredContentBlock');
+        flattenSdtWrappersIntoCell(nestedNode, innerMetadata);
+        continue;
+      }
+    }
+  };
+
   for (const childNode of cellNode.content) {
     if (childNode.type === 'paragraph') {
       if (!paragraphToFlowBlocks) continue;
@@ -381,45 +440,7 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
 
     if (childNode.type === 'structuredContentBlock' && Array.isArray(childNode.content)) {
       const structuredContentMetadata = resolveNodeSdtMetadata(childNode, 'structuredContentBlock');
-      for (const nestedNode of childNode.content) {
-        if (nestedNode.type === 'paragraph') {
-          if (!paragraphToFlowBlocks) continue;
-          const paragraphBlocks = paragraphToFlowBlocks({
-            para: nestedNode,
-            nextBlockId: context.nextBlockId,
-            positions: context.positions,
-            storyKey: context.storyKey,
-            trackedChangesConfig: context.trackedChangesConfig,
-            bookmarks: context.bookmarks,
-            hyperlinkConfig: context.hyperlinkConfig,
-            themeColors: context.themeColors,
-            converterContext: cellConverterContext,
-            converters: context.converters,
-            enableComments: context.enableComments,
-          });
-          appendParagraphBlocks(paragraphBlocks, structuredContentMetadata);
-          continue;
-        }
-        if (nestedNode.type === 'table' && tableNodeToBlock) {
-          const tableBlock = tableNodeToBlock(nestedNode, {
-            nextBlockId: context.nextBlockId,
-            positions: context.positions,
-            storyKey: context.storyKey,
-            trackedChangesConfig: context.trackedChangesConfig,
-            bookmarks: context.bookmarks,
-            hyperlinkConfig: context.hyperlinkConfig,
-            themeColors: context.themeColors,
-            converterContext: context.converterContext,
-            converters: context.converters,
-            enableComments: context.enableComments,
-          });
-          if (tableBlock && tableBlock.kind === 'table') {
-            applySdtMetadataToTableBlock(tableBlock, structuredContentMetadata);
-            blocks.push(tableBlock);
-          }
-          continue;
-        }
-      }
+      flattenSdtWrappersIntoCell(childNode, structuredContentMetadata);
       continue;
     }
 
@@ -439,6 +460,13 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
       if (tableBlock && tableBlock.kind === 'table') {
         blocks.push(tableBlock);
       }
+      continue;
+    }
+
+    // SD-2516: documentPartObject is a transparent wrapper; flatten its
+    // (possibly nested) paragraph/table leaves into the cell.
+    if (childNode.type === 'documentPartObject' && Array.isArray(childNode.content)) {
+      flattenSdtWrappersIntoCell(childNode, undefined);
       continue;
     }
 

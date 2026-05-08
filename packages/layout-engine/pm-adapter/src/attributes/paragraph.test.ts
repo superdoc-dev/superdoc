@@ -159,6 +159,58 @@ describe('computeParagraphAttrs', () => {
     expect(paragraphAttrs.tabs?.[0]).toEqual({ val: 'start', pos: 720 });
   });
 
+  it('maps logical indent start/end to physical left/right for LTR paragraphs', () => {
+    const paragraph: PMNode = {
+      type: { name: 'paragraph' },
+      attrs: {
+        paragraphProperties: {
+          indent: { start: 720, end: 1440 },
+        },
+      },
+    };
+
+    const { paragraphAttrs } = computeParagraphAttrs(paragraph as never);
+
+    expect(paragraphAttrs.indent?.left).toBe(twipsToPx(720));
+    expect(paragraphAttrs.indent?.right).toBe(twipsToPx(1440));
+  });
+
+  it('maps logical indent start/end for RTL paragraphs and applies mirroring', () => {
+    const paragraph: PMNode = {
+      type: { name: 'paragraph' },
+      attrs: {
+        paragraphProperties: {
+          rightToLeft: true,
+          indent: { start: 720, end: 1440 },
+        },
+      },
+    };
+
+    const { paragraphAttrs } = computeParagraphAttrs(paragraph as never);
+
+    expect(paragraphAttrs.indent?.left).toBe(twipsToPx(1440));
+    expect(paragraphAttrs.indent?.right).toBe(twipsToPx(720));
+  });
+
+  it('mirrors physical indent values for RTL paragraphs', () => {
+    const paragraph: PMNode = {
+      type: { name: 'paragraph' },
+      attrs: {
+        paragraphProperties: {
+          rightToLeft: true,
+          indent: { left: 720, right: 1440, firstLine: 360, hanging: 240 },
+        },
+      },
+    };
+
+    const { paragraphAttrs } = computeParagraphAttrs(paragraph as never);
+
+    expect(paragraphAttrs.indent?.left).toBe(twipsToPx(1440));
+    expect(paragraphAttrs.indent?.right).toBe(twipsToPx(720));
+    expect(paragraphAttrs.indent?.firstLine).toBe(-twipsToPx(360));
+    expect(paragraphAttrs.indent?.hanging).toBe(-twipsToPx(240));
+  });
+
   it('exposes resolved paragraph properties when no converter context is provided', () => {
     const paragraph: PMNode = {
       type: { name: 'paragraph' },
@@ -273,9 +325,47 @@ describe('computeParagraphAttrs', () => {
     const { paragraphAttrs } = computeParagraphAttrs(paragraph as never);
 
     expect(paragraphAttrs.direction).toBe('rtl');
-    expect(paragraphAttrs.rtl).toBe(true);
+  });
+
+  it('does NOT inherit section direction for paragraph inline direction (§17.6.1)', () => {
+    // Section bidi affects section chrome only; paragraph inline direction
+    // must come from paragraph w:bidi or its style cascade, never the section.
+    const paragraph: PMNode = {
+      type: { name: 'paragraph' },
+      attrs: {
+        paragraphProperties: {},
+      },
+    };
+
+    const converterContext = {
+      sectionDirection: 'rtl',
+      translatedNumbering: {},
+      translatedLinkedStyles: { docDefaults: {}, styles: {} },
+      tableInfo: null,
+    };
+
+    const { paragraphAttrs } = computeParagraphAttrs(paragraph as never, converterContext as never);
+    expect(paragraphAttrs.direction).toBeUndefined();
   });
 });
+
+/*
+ * The previous tests for `resolveEffectiveParagraphDirection` codified
+ * direction-resolution behavior that the new resolver chain replaces:
+ *
+ *   - Section bidi propagating to paragraph inline direction (§17.6.1
+ *     violation — section bidi affects section chrome only).
+ *   - A run-content heuristic for paragraph base direction (UAX #9 P2/P3
+ *     specifies first-strong-character; the browser handles this via UBA
+ *     when `dir` is omitted, so SuperDoc does not need a server-side
+ *     classifier).
+ *   - A docDefaults parameter (redundant — the style-engine cascade
+ *     already resolves docDefaults/pPrDefault/pPr/bidi into
+ *     `paragraphProperties.rightToLeft` before this resolver runs).
+ *
+ * Direction-axis correctness is now tested in
+ * `direction/non-collapse.test.ts` where each axis stays separate.
+ */
 
 describe('computeRunAttrs', () => {
   it('normalizes font family, font size, and color', () => {

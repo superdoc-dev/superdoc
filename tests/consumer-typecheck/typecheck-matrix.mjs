@@ -304,6 +304,39 @@ const scenarios = [
     files: ['src/prosemirror-coexistence.ts'],
     mustPass: true,
   },
+  // SD-2833: trackChangesHelpers are public through `superdoc/super-editor`.
+  // These targeted scenarios guard runtime-valid call shapes that `@ts-check`
+  // does not reject when JSDoc over-tightens generated declarations.
+  {
+    name: 'bundler / track changes helper call shapes (SD-2833)',
+    module: 'ESNext',
+    moduleResolution: 'bundler',
+    skipLibCheck: false,
+    strict: true,
+    noPropertyAccessFromIndexSignature: true,
+    files: ['src/track-changes-helpers.ts'],
+    mustPass: true,
+  },
+  {
+    name: 'node16 / track changes helper call shapes (SD-2833)',
+    module: 'Node16',
+    moduleResolution: 'node16',
+    skipLibCheck: false,
+    strict: true,
+    noPropertyAccessFromIndexSignature: true,
+    files: ['src/track-changes-helpers.ts'],
+    mustPass: true,
+  },
+  {
+    name: 'nodenext / track changes helper call shapes (SD-2833)',
+    module: 'NodeNext',
+    moduleResolution: 'nodenext',
+    skipLibCheck: false,
+    strict: true,
+    noPropertyAccessFromIndexSignature: true,
+    files: ['src/track-changes-helpers.ts'],
+    mustPass: true,
+  },
   // SD-2892: full public-facing surface with skipLibCheck=false. These
   // scenarios pack SuperDoc, install it into the consumer fixture, and compile
   // every public consumer assertion under the resolution modes customers use.
@@ -571,6 +604,64 @@ const scenarios = [
     skipLibCheck: true,
     strict: true,
     files: ['src/export-params-fields-highlight.ts'],
+    mustPass: true,
+  },
+  // SD-2953: runtime-only subpaths (./converter, ./docx-zipper, ./file-zipper)
+  // were exported in package.json but lacked `types` fields, leaving strict
+  // consumers with TS7016. Each fixture imports through the public subpath
+  // and asserts the type resolves to a real declaration.
+  {
+    name: 'bundler / converter subpath (SD-2953)',
+    module: 'ESNext',
+    moduleResolution: 'bundler',
+    skipLibCheck: false,
+    strict: true,
+    files: ['src/imports-converter.ts'],
+    mustPass: true,
+  },
+  {
+    name: 'node16 / converter subpath (SD-2953)',
+    module: 'Node16',
+    moduleResolution: 'node16',
+    skipLibCheck: false,
+    strict: true,
+    files: ['src/imports-converter.ts'],
+    mustPass: true,
+  },
+  {
+    name: 'bundler / docx-zipper subpath (SD-2953)',
+    module: 'ESNext',
+    moduleResolution: 'bundler',
+    skipLibCheck: false,
+    strict: true,
+    files: ['src/imports-docx-zipper.ts'],
+    mustPass: true,
+  },
+  {
+    name: 'node16 / docx-zipper subpath (SD-2953)',
+    module: 'Node16',
+    moduleResolution: 'node16',
+    skipLibCheck: false,
+    strict: true,
+    files: ['src/imports-docx-zipper.ts'],
+    mustPass: true,
+  },
+  {
+    name: 'bundler / file-zipper subpath (SD-2953)',
+    module: 'ESNext',
+    moduleResolution: 'bundler',
+    skipLibCheck: false,
+    strict: true,
+    files: ['src/imports-file-zipper.ts'],
+    mustPass: true,
+  },
+  {
+    name: 'node16 / file-zipper subpath (SD-2953)',
+    module: 'Node16',
+    moduleResolution: 'node16',
+    skipLibCheck: false,
+    strict: true,
+    files: ['src/imports-file-zipper.ts'],
     mustPass: true,
   },
 ];

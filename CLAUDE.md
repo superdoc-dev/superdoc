@@ -282,4 +282,6 @@ Preset theme overrides are defined in `packages/superdoc/src/assets/styles/helpe
 
 ## Comments
 
-Follow `comment-policy.md`. Short version: write comments only when they encode information the code cannot express (invariants, business rules, non-local coupling, refactor-sensitive rationale). Don't paraphrase the next line. Use `AIDEV-NOTE:` anchors for rules that must survive future agent edits. Treat stale comments as bugs.
+**Always check for `comment-policy.md` at the repo root (or any ancestor of files you're touching) before adding, removing, or rewording comments.** The policy overrides defaults. Run `/comment-audit` to validate comment changes against it before commit.
+
+Short version: write comments only when they encode information the code cannot express (invariants, business rules, non-local coupling, refactor-sensitive rationale). Don't paraphrase the next line. Use `AIDEV-NOTE:` anchors for rules that must survive future agent edits. Treat stale comments as bugs.

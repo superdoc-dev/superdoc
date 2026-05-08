@@ -1,0 +1,218 @@
+---
+title: lists.delete
+sidebarTitle: lists.delete
+description: "Delete the entire list that contains the targeted list item. Removes ALL items in the same numbered sequence (the contiguous run of list items sharing the target's numbering) AND their text content from the document. Pass any single list item from the list as `target`; the op walks adjacent siblings to find the full list. Use this for \"remove the list\" / \"delete this list\" intents and for the cleanup step of a list-to-table conversion."
+---
+
+{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
+
+## Summary
+
+Delete the entire list that contains the targeted list item. Removes ALL items in the same numbered sequence (the contiguous run of list items sharing the target's numbering) AND their text content from the document. Pass any single list item from the list as `target`; the op walks adjacent siblings to find the full list. Use this for "remove the list" / "delete this list" intents and for the cleanup step of a list-to-table conversion.
+
+- Operation ID: `lists.delete`
+- API member path: `editor.doc.lists.delete(...)`
+- Mutates document: `yes`
+- Idempotency: `conditional`
+- Supports tracked mode: `no`
+- Supports dry run: `yes`
+- Deterministic target resolution: `yes`
+
+## Expected result
+
+Returns a ListsDeleteResult with `deletedCount` (number of items removed). Reports failure (INVALID_TARGET) if the target is not a list item.
+
+## Input fields
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `target` | ListItemAddress | yes | ListItemAddress |
+| `target.kind` | `"block"` | yes | Constant: `"block"` |
+| `target.nodeId` | string | yes |  |
+| `target.nodeType` | `"listItem"` | yes | Constant: `"listItem"` |
+
+### Example request
+
+```json
+{
+  "target": {
+    "kind": "block",
+    "nodeId": "node-def456",
+    "nodeType": "listItem"
+  }
+}
+```
+
+## Output fields
+
+### Variant 1 (success=true)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `deletedCount` | integer | yes |  |
+| `success` | `true` | yes | Constant: `true` |
+
+### Variant 2 (success=false)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `failure` | object | yes |  |
+| `failure.code` | enum | yes | `"INVALID_TARGET"` |
+| `failure.details` | any | no |  |
+| `failure.message` | string | yes |  |
+| `success` | `false` | yes | Constant: `false` |
+
+### Example response
+
+```json
+{
+  "deletedCount": 1,
+  "success": true
+}
+```
+
+## Pre-apply throws
+
+- `TARGET_NOT_FOUND`
+- `CAPABILITY_UNAVAILABLE`
+- `INVALID_TARGET`
+
+## Non-applied failure codes
+
+- `INVALID_TARGET`
+
+## Raw schemas
+
+<Accordion title="Raw input schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "target": {
+      "$ref": "#/$defs/ListItemAddress"
+    }
+  },
+  "required": [
+    "target"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw output schema">
+```json
+{
+  "oneOf": [
+    {
+      "additionalProperties": false,
+      "properties": {
+        "deletedCount": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "success": {
+          "const": true
+        }
+      },
+      "required": [
+        "success",
+        "deletedCount"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "failure": {
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "enum": [
+                "INVALID_TARGET"
+              ]
+            },
+            "details": {},
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "message"
+          ],
+          "type": "object"
+        },
+        "success": {
+          "const": false
+        }
+      },
+      "required": [
+        "success",
+        "failure"
+      ],
+      "type": "object"
+    }
+  ]
+}
+```
+</Accordion>
+
+<Accordion title="Raw success schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "deletedCount": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "success": {
+      "const": true
+    }
+  },
+  "required": [
+    "success",
+    "deletedCount"
+  ],
+  "type": "object"
+}
+```
+</Accordion>
+
+<Accordion title="Raw failure schema">
+```json
+{
+  "additionalProperties": false,
+  "properties": {
+    "failure": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "enum": [
+            "INVALID_TARGET"
+          ]
+        },
+        "details": {},
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "type": "object"
+    },
+    "success": {
+      "const": false
+    }
+  },
+  "required": [
+    "success",
+    "failure"
+  ],
+  "type": "object"
+}
+```
+</Accordion>

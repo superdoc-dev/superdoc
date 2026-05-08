@@ -1113,7 +1113,8 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
   /** Tracks whether we've encountered a text run yet; used to apply fallback font info to leading line breaks. */
   let hasSeenTextRun = false;
   let tabStopCursor = 0;
-  let pendingTabAlignment: { target: number; val: TabStop['val'] } | null = null;
+  let pendingTabAlignment: { target: number; val: TabStop['val']; compensateNegativeLeft?: boolean } | null = null;
+  let pendingSegmentPrecedingTabEndX: number | undefined;
   let pendingLeader: LeaderDecoration | null = null;
   let pendingRunSpacing = 0;
   // Remember the last applied tab alignment so we can clamp end-aligned
@@ -1176,7 +1177,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
       segmentWidth = 0;
     }
 
-    const { target, val } = pendingTabAlignment;
+    const { target, val, compensateNegativeLeft } = pendingTabAlignment;
     let startX = currentLine.width;
 
     if (val === 'decimal') {
@@ -1190,9 +1191,10 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
       startX = Math.max(0, target);
     }
 
+    const effectiveIndent = lines.length === 0 ? indentLeft + rawFirstLineOffset : indentLeft;
+
     // Update pending leader to end where aligned content begins
     if (pendingLeader) {
-      const effectiveIndent = lines.length === 0 ? indentLeft + rawFirstLineOffset : indentLeft;
       pendingLeader.to = startX + effectiveIndent;
     }
 
@@ -1202,7 +1204,25 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
     pendingTabAlignment = null;
     pendingLeader = null;
 
-    return startX;
+    const shouldCompensateNegativeLeft = compensateNegativeLeft === true;
+    pendingSegmentPrecedingTabEndX = shouldCompensateNegativeLeft ? startX : undefined;
+
+    // Negative-left paragraphs move the fragment itself left. Explicit segment
+    // x values are still consumed by the DOM painter with indentOffset added.
+    // Only compensate generated/default stops that advance from the negative
+    // line origin; authored explicit stops already have the same geometry Word
+    // uses. The uncompensated tab end is carried on the
+    // following segment as precedingTabEndX.
+    return shouldCompensateNegativeLeft ? startX - Math.min(effectiveIndent, 0) : startX;
+  };
+
+  const consumePendingPrecedingTabEndX = (): number | undefined => {
+    const value = pendingSegmentPrecedingTabEndX;
+    pendingSegmentPrecedingTabEndX = undefined;
+    return value;
+  };
+  const clearPendingPrecedingTabEndX = (): void => {
+    pendingSegmentPrecedingTabEndX = undefined;
   };
 
   /**
@@ -1375,17 +1395,52 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
     }
   };
 
+  // Per-line-segment tab counts. The heuristic below binds the last N tabs of a
+  // segment to the last N alignment stops; segments are delimited by explicit
+  // <w:br/> runs because pPr/tabs apply per line, not per paragraph.
+  // sd-1480-two-col-tab-positions: a single paragraph "Page\t2<br/>Page\t5"
+  // must emit a leader on BOTH lines, not only the last.
+  const tabSegmentInfo = new Map<number, { localOrdinal: number; segmentTotal: number }>();
+  {
+    let segmentTabRunIndices: number[] = [];
+    const closeSegment = () => {
+      const total = segmentTabRunIndices.length;
+      segmentTabRunIndices.forEach((runIdx, ord) => {
+        tabSegmentInfo.set(runIdx, { localOrdinal: ord, segmentTotal: total });
+      });
+      segmentTabRunIndices = [];
+    };
+    for (let i = 0; i < runsToProcess.length; i++) {
+      const r = runsToProcess[i];
+      if (isLineBreakRun(r) || (r.kind === 'break' && (r as { breakType?: string }).breakType === 'line')) {
+        closeSegment();
+      } else if (isTabRun(r)) {
+        segmentTabRunIndices.push(i);
+      }
+    }
+    closeSegment();
+  }
+
   // Word-compat heuristic (not ECMA-376 17.3.3.32): the last N tab characters in a
-  // paragraph bind to the last N explicit end/center/decimal stops. Needed for TOC
+  // line bind to the last N explicit end/center/decimal stops. Needed for TOC
   // entries where a right-aligned dot-leader stop coexists with default grid stops —
   // strict greedy next-stop resolution would land the trailing tab on a default stop
   // instead of the leader stop. Mirrored in layout-bridge/src/remeasure.ts.
-  const getAlignmentStopForOrdinal = (ordinal: number): { stop: TabStopPx; index: number } | null => {
+  const getAlignmentStopForOrdinal = (ordinal: number, runIdx?: number): { stop: TabStopPx; index: number } | null => {
     if (alignmentTabStopsPx.length === 0 || totalTabRuns === 0 || !Number.isFinite(ordinal)) {
       return null;
     }
-    if (ordinal < 0 || ordinal >= totalTabRuns) return null;
-    const remainingTabs = totalTabRuns - ordinal - 1;
+    let scopeOrdinal = ordinal;
+    let scopeTotal = totalTabRuns;
+    if (runIdx !== undefined) {
+      const info = tabSegmentInfo.get(runIdx);
+      if (info) {
+        scopeOrdinal = info.localOrdinal;
+        scopeTotal = info.segmentTotal;
+      }
+    }
+    if (scopeOrdinal < 0 || scopeOrdinal >= scopeTotal) return null;
+    const remainingTabs = scopeTotal - scopeOrdinal - 1;
     const targetIndex = alignmentTabStopsPx.length - 1 - remainingTabs;
     if (targetIndex < 0 || targetIndex >= alignmentTabStopsPx.length) return null;
     return alignmentTabStopsPx[targetIndex];
@@ -1529,16 +1584,26 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
       // inputs (explicit + synthetic TabRuns) don't produce out-of-order ordinals.
       // Mirrors consumeTabOrdinal() in layout-bridge/src/remeasure.ts.
       sequentialTabIndex = Math.max(sequentialTabIndex, resolvedTabIndex + 1);
-      const forcedAlignment = getAlignmentStopForOrdinal(resolvedTabIndex);
+      // Compute greedy first so we can decide whether the SD-2447 heuristic is
+      // actually needed. The heuristic exists because when tabStops are seeded
+      // with synthetic 0.5" defaults from origin (TOC styles with only an
+      // alignment stop), greedy lands on a default before reaching the
+      // alignment stop. When the paragraph has an explicit start-aligned stop
+      // ahead of the alignment stop (e.g. TOC1 with `start@740, end@9360`),
+      // greedy already finds the correct stop and the heuristic over-fires.
+      // Only force the heuristic when greedy would land on a `source:default`
+      // stop — which is precisely the SD-2447 condition.
+      const greedy = getNextTabStopPx(absCurrentX, tabStops, tabStopCursor);
+      const greedyOnDefault = greedy.stop?.source === 'default';
+      const forcedAlignment = greedyOnDefault ? getAlignmentStopForOrdinal(resolvedTabIndex, runIndex) : null;
       if (forcedAlignment && forcedAlignment.stop.pos > absCurrentX + TAB_EPSILON) {
         stop = forcedAlignment.stop;
         target = forcedAlignment.stop.pos;
         tabStopCursor = forcedAlignment.index + 1;
       } else {
-        const nextStop = getNextTabStopPx(absCurrentX, tabStops, tabStopCursor);
-        target = nextStop.target;
-        tabStopCursor = nextStop.nextIndex;
-        stop = nextStop.stop;
+        target = greedy.target;
+        tabStopCursor = greedy.nextIndex;
+        stop = greedy.stop;
       }
       const maxAbsWidth = currentLine.maxWidth + effectiveIndent;
       const clampedTarget = Math.min(target, maxAbsWidth);
@@ -1614,7 +1679,13 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
           pendingLeader = null;
         } else {
           // For start-aligned tabs, use the existing pendingTabAlignment mechanism
-          pendingTabAlignment = { target: clampedTarget - effectiveIndent, val: stop.val };
+          const relativeTarget = clampedTarget - effectiveIndent;
+          pendingTabAlignment = {
+            target: relativeTarget,
+            val: stop.val,
+            compensateNegativeLeft:
+              stop.val === 'start' && indentLeft < 0 && effectiveIndent === indentLeft && stop.source !== 'explicit',
+          };
         }
       } else {
         pendingTabAlignment = null;
@@ -1646,6 +1717,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
         // Legacy: single-segment tab alignment (for start-aligned tabs)
         imageStartX = alignPendingTabForWidth(imageWidth);
       }
+      const imagePrecedingTabEndX = imageStartX !== undefined ? consumePendingPrecedingTabEndX() : undefined;
 
       // Initialize line if needed
       if (!currentLine) {
@@ -1666,6 +1738,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
               toChar: 1,
               width: imageWidth,
               ...(imageStartX !== undefined ? { x: imageStartX } : {}),
+              ...(imagePrecedingTabEndX !== undefined ? { precedingTabEndX: imagePrecedingTabEndX } : {}),
             },
           ],
         };
@@ -1732,6 +1805,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
           toChar: 1,
           width: imageWidth,
           ...(imageStartX !== undefined ? { x: imageStartX } : {}),
+          ...(imagePrecedingTabEndX !== undefined ? { precedingTabEndX: imagePrecedingTabEndX } : {}),
         });
       }
 
@@ -1838,6 +1912,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
       if (pendingTabAlignment && currentLine) {
         annotationStartX = alignPendingTabForWidth(annotationWidth);
       }
+      const annotationPrecedingTabEndX = annotationStartX !== undefined ? consumePendingPrecedingTabEndX() : undefined;
 
       // Initialize line if needed
       if (!currentLine) {
@@ -1857,6 +1932,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
               toChar: 1,
               width: annotationWidth,
               ...(annotationStartX !== undefined ? { x: annotationStartX } : {}),
+              ...(annotationPrecedingTabEndX !== undefined ? { precedingTabEndX: annotationPrecedingTabEndX } : {}),
             },
           ],
         };
@@ -1913,6 +1989,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
           toChar: 1,
           width: annotationWidth,
           ...(annotationStartX !== undefined ? { x: annotationStartX } : {}),
+          ...(annotationPrecedingTabEndX !== undefined ? { precedingTabEndX: annotationPrecedingTabEndX } : {}),
         });
       }
 
@@ -2043,6 +2120,17 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
           segmentStartX = currentLine.width;
         }
       }
+      let hasPendingSegmentTabGeometry = segmentStartX !== undefined;
+      const consumeSegmentPrecedingTabEndX = (): number | undefined => {
+        if (!hasPendingSegmentTabGeometry) return undefined;
+        hasPendingSegmentTabGeometry = false;
+        return consumePendingPrecedingTabEndX();
+      };
+      const clearWrapState = (): void => {
+        segmentStartX = undefined;
+        hasPendingSegmentTabGeometry = false;
+        clearPendingPrecedingTabEndX();
+      };
 
       for (let wordIndex = 0; wordIndex < words.length; wordIndex++) {
         const word = words[wordIndex];
@@ -2101,6 +2189,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
               pendingLeader = null;
               lastAppliedTabAlign = null;
               activeTabGroup = null;
+              clearWrapState();
 
               // Body line, so use bodyContentWidth for hanging indent
               currentLine = {
@@ -2124,9 +2213,13 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
               currentLine.maxFontSize = Math.max(currentLine.maxFontSize, lineHeightFontSize(run));
               // If in an active tab alignment group, use explicit X positioning
               let spaceExplicitX: number | undefined;
+              let spacePrecedingTabEndX: number | undefined;
               if (inActiveTabGroup && activeTabGroup) {
                 spaceExplicitX = activeTabGroup.currentX;
                 activeTabGroup.currentX = roundValue(activeTabGroup.currentX + singleSpaceWidth);
+              } else if (wordIndex === 0 && segmentStartX !== undefined) {
+                spaceExplicitX = segmentStartX;
+                spacePrecedingTabEndX = consumeSegmentPrecedingTabEndX();
               }
               appendSegment(
                 currentLine.segments,
@@ -2135,6 +2228,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
                 spaceEndChar,
                 singleSpaceWidth,
                 spaceExplicitX,
+                spacePrecedingTabEndX,
               );
               currentLine.spaceCount += 1;
             }
@@ -2184,6 +2278,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
             pendingTabAlignment = null;
             pendingLeader = null;
             currentLine = null;
+            clearWrapState();
           }
 
           // Break the word into chunks that fit within maxWidth
@@ -2252,6 +2347,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
                 pendingTabAlignment = null;
                 pendingLeader = null;
                 currentLine = null;
+                clearWrapState();
               }
             } else if (isLastChunk) {
               // Last chunk becomes the start of a new line (will be continued with next word)
@@ -2296,6 +2392,7 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
               };
               addBarTabsToLine(chunkLine);
               lines.push(chunkLine);
+              clearWrapState();
             }
             chunkCharOffset = chunkEndChar;
           }
@@ -2386,6 +2483,9 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
         }
 
         if (shouldBreak) {
+          if (wordIndex === 0 && hasPendingSegmentTabGeometry) {
+            clearWrapState();
+          }
           trimTrailingWrapSpaces(currentLine);
           const metrics = finalizeLineMetrics(currentLine, spacing);
           const lineBase = currentLine;
@@ -2450,7 +2550,15 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
             } else if (wordIndex === 0 && segmentStartX !== undefined) {
               explicitXHere = segmentStartX;
             }
-            appendSegment(currentLine.segments, runIndex, wordStartChar, wordEndNoSpace, wordOnlyWidth, explicitXHere);
+            appendSegment(
+              currentLine.segments,
+              runIndex,
+              wordStartChar,
+              wordEndNoSpace,
+              wordOnlyWidth,
+              explicitXHere,
+              wordIndex === 0 ? consumeSegmentPrecedingTabEndX() : undefined,
+            );
             // finish current line and start a new one on next iteration
             trimTrailingWrapSpaces(currentLine);
             const metrics = finalizeLineMetrics(currentLine, spacing);
@@ -2492,7 +2600,15 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
           currentLine.width = roundValue(targetWidth);
           currentLine.maxFontInfo = updateMaxFontInfo(currentLine.maxFontSize, currentLine.maxFontInfo, run);
           currentLine.maxFontSize = Math.max(currentLine.maxFontSize, lineHeightFontSize(run));
-          appendSegment(currentLine.segments, runIndex, wordStartChar, newToChar, wordCommitWidth, explicitX);
+          appendSegment(
+            currentLine.segments,
+            runIndex,
+            wordStartChar,
+            newToChar,
+            wordCommitWidth,
+            explicitX,
+            wordIndex === 0 ? consumeSegmentPrecedingTabEndX() : undefined,
+          );
           if (shouldIncludeDelimiterSpace) {
             currentLine.spaceCount += 1;
           }
@@ -2559,7 +2675,13 @@ async function measureParagraphBlock(block: ParagraphBlock, maxWidth: number): P
         charPosInRun += 1;
         if (stop) {
           validateTabStopVal(stop);
-          pendingTabAlignment = { target: clampedTarget - effectiveIndent, val: stop.val };
+          const relativeTarget = clampedTarget - effectiveIndent;
+          pendingTabAlignment = {
+            target: relativeTarget,
+            val: stop.val,
+            compensateNegativeLeft:
+              stop.val === 'start' && indentLeft < 0 && effectiveIndent === indentLeft && stop.source !== 'explicit',
+          };
         } else {
           pendingTabAlignment = null;
           pendingLeader = null;
@@ -3392,17 +3514,33 @@ const appendSegment = (
   toChar: number,
   width: number,
   x?: number,
+  precedingTabEndX?: number,
 ): void => {
   if (!segments) return;
   const last = segments[segments.length - 1];
   // Only merge segments if they are contiguous AND have no explicit X positioning
   // (explicit X means tab-aligned, shouldn't merge)
-  if (last && last.runIndex === runIndex && last.toChar === fromChar && x === undefined) {
+  if (
+    last &&
+    last.runIndex === runIndex &&
+    last.toChar === fromChar &&
+    last.x === undefined &&
+    last.precedingTabEndX === undefined &&
+    x === undefined &&
+    precedingTabEndX === undefined
+  ) {
     last.toChar = toChar;
     last.width += width;
     return;
   }
-  segments.push({ runIndex, fromChar, toChar, width, x });
+  segments.push({
+    runIndex,
+    fromChar,
+    toChar,
+    width,
+    ...(x !== undefined ? { x } : {}),
+    ...(precedingTabEndX !== undefined ? { precedingTabEndX } : {}),
+  });
 };
 
 const resolveLineHeight = (spacing: ParagraphSpacing | undefined, fontSize: number, maxHeight: number = -1): number => {
@@ -3521,12 +3659,20 @@ const buildTabStopsPx = (indent?: ParagraphIndent, tabs?: TabStop[], tabInterval
     firstLine: pxToTwips(sanitizePositive(indent?.firstLine)),
     hanging: pxToTwips(sanitizePositive(indent?.hanging)),
   };
+  const rawParagraphIndentTwips = {
+    left: pxToTwips(sanitizeIndent(indent?.left)),
+    right: pxToTwips(sanitizeIndent(indent?.right)),
+    firstLine: pxToTwips(sanitizeIndent(indent?.firstLine)),
+    // Hanging is unsigned in OOXML; preserve negative left/right/firstLine only.
+    hanging: pxToTwips(sanitizePositive(indent?.hanging)),
+  };
 
   // Engine works in twips (tabs already in twips from PM adapter)
   const stops = computeTabStops({
     explicitStops: tabs ?? [],
     defaultTabInterval: tabIntervalTwips ?? DEFAULT_TAB_INTERVAL_TWIPS,
     paragraphIndent: paragraphIndentTwips,
+    rawParagraphIndent: rawParagraphIndentTwips,
   });
 
   // Convert resulting tab stops from twips to pixels for measurement

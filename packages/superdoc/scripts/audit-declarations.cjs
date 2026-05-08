@@ -5,33 +5,27 @@
  * and reports:
  *
  *  Rule 1 (FAIL in strict mode): private workspace specifier in an emitted
- *    declaration that is NOT covered by `_internal-shims.d.ts` and NOT a
- *    legacy public surface. The shim file is the registry of "known
- *    unresolved" private modules whose types the RFC tolerates collapsing
- *    to `any`; legacy public surfaces (currently `@superdoc/super-editor`)
- *    resolve through the published dist tree. Anything outside that
- *    allowlist is a leak the RFC forbids: a consumer's strict-mode build
- *    fails to resolve the import.
+ *    declaration that is NOT in `RULE1_ALLOWLIST` (legacy public surfaces,
+ *    currently only `@superdoc/super-editor`). After SD-2942 there is no
+ *    `_internal-shims.d.ts` fallback, so any unrelocated `@superdoc/*`
+ *    specifier on the public surface fails the build instead of riding
+ *    through silently as `any`. If the file is present (a stale dist from
+ *    before SD-2942), its `declare module` entries still suppress Rule 1
+ *    for backward compatibility.
  *
  *  Rule 2 (FAIL in strict mode): package-manager-internal paths.
  *    `node_modules/.pnpm/...` paths leak the local install layout into a
  *    declaration that consumers cannot resolve.
  *
  *  Rule 3 (FAIL in strict mode): a relocated package reappears in
- *    `_internal-shims.d.ts`. The RFC's relocation pattern (SD-2842) routes
- *    Document API, contracts, layout-bridge, and painter-dom types through
- *    `superdoc`'s own dist tree; if any of those packages collapse back into
- *    an `any` shim, customers see the regression. This rule overlaps with
- *    the build-time check in `ensure-types.cjs`; keeping both lets the audit
- *    run as a standalone gate against any tarball, not just during a fresh
- *    build.
+ *    `_internal-shims.d.ts`. With SD-2942 the file is no longer emitted
+ *    by the build, so this rule is a no-op in steady state — kept as a
+ *    defense if a future change re-introduces the file or runs against
+ *    a stale tarball.
  *
- *  Informational: the set of modules still declared in `_internal-shims.d.ts`.
- *    The shim file may legitimately exist for legacy or internal-only
- *    declarations; the RFC's audit-gate rule is "no public type may resolve
- *    through it", not "the file must not exist". This list is reported so
- *    drift is visible and the surface can be tightened over time, but its
- *    contents do not fail the audit.
+ *  Informational: the set of modules still declared in `_internal-shims.d.ts`
+ *    when the file exists. After SD-2942 the file is not emitted, so this
+ *    section is normally absent.
  *
  * Default mode is strict: findings exit non-zero so a regression cannot
  * ship silently. Pass `--informational` (or set
@@ -41,6 +35,11 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
+
+// SD-2864: canonical taxonomy for the published type surface. The lists
+// below previously duplicated data from ensure-types.cjs; both now derive
+// from the same config so the two scripts cannot drift.
+const typeSurface = require('./type-surface.config.cjs');
 
 const distRoot = path.resolve(__dirname, '..', 'dist');
 
@@ -58,28 +57,17 @@ if (!fs.existsSync(distRoot)) {
   process.exit(1);
 }
 
-// Packages whose types have been relocated into `superdoc`'s published
-// declaration tree. They must NEVER appear as a `declare module` block in
-// `_internal-shims.d.ts` — if they do, their types collapse to `any` for
-// consumers and we have a regression. Mirror of SD-2842's `RELOCATION_RULES`
-// in `ensure-types.cjs`; keep the two lists in sync.
-const RELOCATED_PACKAGES = [
-  '@superdoc/document-api',
-  '@superdoc/contracts',
-  '@superdoc/layout-bridge',
-  '@superdoc/painter-dom',
-];
+// Packages that must NEVER appear as a `declare module` block in
+// `_internal-shims.d.ts`. After SD-2942 the file is no longer emitted, so
+// this list is a defense against stale tarballs and future re-introduction.
+// Source: type-surface.config.cjs `relocationGuardPackages`.
+const RELOCATION_GUARD_PACKAGES = typeSurface.relocationGuardPackages;
 
 // Specifiers that may appear as bare imports in published d.ts files even
 // though they are private workspace packages. Each entry has a documented
-// reason; anything outside this allowlist (and outside the shim file) is a
-// real leak per Rule 1.
-const RULE1_ALLOWLIST = {
-  // Legacy public surface per the RFC. Resolves through `superdoc`'s
-  // published dist tree at runtime via the existing rewrite/include rules.
-  // Deep subpaths beyond the curated public surface are NOT allowlisted.
-  '@superdoc/super-editor': 'legacy public surface (RFC Decision 1)',
-};
+// reason; anything outside this allowlist is a real leak per Rule 1.
+// Source: type-surface.config.cjs `rule1Allowlist`.
+const RULE1_ALLOWLIST = typeSurface.rule1Allowlist;
 
 function isRule1Allowed(specifier, shimmedSet) {
   if (RULE1_ALLOWLIST[specifier]) return true;
@@ -165,7 +153,7 @@ const totalPnpmOccurrences = [...pnpmPathFindings.values()].reduce(
   0,
 );
 
-const relocatedInShim = RELOCATED_PACKAGES.filter((pkg) =>
+const relocatedInShim = RELOCATION_GUARD_PACKAGES.filter((pkg) =>
   [...shimmedModules].some((mod) => mod === pkg || mod.startsWith(pkg + '/')),
 );
 
@@ -203,7 +191,7 @@ if (relocatedInShim.length > 0) {
   console.log(`FAIL  Relocated packages reappeared in _internal-shims.d.ts: ${relocatedInShim.join(', ')}`);
   console.log('      These packages have dedicated relocation rules in ensure-types.cjs and must not fall back to ambient any shims.');
 } else {
-  console.log(`OK    Relocated packages do not appear in shim file (${RELOCATED_PACKAGES.length} guarded)`);
+  console.log(`OK    Relocated packages do not appear in shim file (${RELOCATION_GUARD_PACKAGES.length} guarded)`);
 }
 
 // Informational: remaining shimmed modules

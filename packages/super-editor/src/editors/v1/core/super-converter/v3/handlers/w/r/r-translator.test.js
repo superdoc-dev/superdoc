@@ -506,4 +506,46 @@ describe('w:r r-translator decode (export only inline run properties)', () => {
     expect((rPr.elements ?? []).map((e) => e.name)).toContain('w:color');
     expect((rPr.elements ?? []).map((e) => e.name)).toContain('w:b');
   });
+
+  it('does not export rtl when it is style-only and not an inline override', () => {
+    const params = runWithContent({
+      runProperties: { rtl: true, color: 'FF0000' },
+      runPropertiesInlineKeys: ['color'],
+      runPropertiesStyleKeys: ['rtl'],
+      runPropertiesOverrideKeys: [],
+    });
+    const result = translator.decode(params);
+    const rPr = result?.elements?.find((el) => el?.name === 'w:rPr');
+    expect(rPr).toBeUndefined();
+  });
+
+  it('exports complex-script bold/italic alongside base bold/italic when present', () => {
+    const params = runWithContent({
+      runProperties: { bold: true, boldCs: true, italic: true, italicCs: true },
+      runPropertiesInlineKeys: ['bold', 'boldCs', 'italic', 'italicCs'],
+      runPropertiesStyleKeys: [],
+    });
+    const result = translator.decode(params);
+    const rPr = result?.elements?.find((el) => el?.name === 'w:rPr');
+    expect(rPr).toBeDefined();
+    const names = (rPr.elements ?? []).map((e) => e.name);
+    expect(names).toContain('w:b');
+    expect(names).toContain('w:bCs');
+    expect(names).toContain('w:i');
+    expect(names).toContain('w:iCs');
+  });
+
+  it('exports w:iCs from legacy runProperties.iCs payloads', () => {
+    const params = runWithContent({
+      runProperties: { italic: true, iCs: true },
+      runPropertiesInlineKeys: ['italic', 'iCs'],
+      runPropertiesStyleKeys: [],
+    });
+    const result = translator.decode(params);
+    const rPr = result?.elements?.find((el) => el?.name === 'w:rPr');
+    expect(rPr).toBeDefined();
+    const names = (rPr.elements ?? []).map((e) => e.name);
+    expect(names).toContain('w:i');
+    expect(names).toContain('w:iCs');
+  });
 });

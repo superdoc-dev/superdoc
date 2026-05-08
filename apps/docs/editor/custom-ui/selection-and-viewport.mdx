@@ -72,6 +72,133 @@ export function LinkComposer({ onPosted }: { onPosted(): void }) {
 
 `capture()` returns `null` when the selection has no positional target. Captures are deep-frozen at runtime, so the consumer copy can't mutate the controller's memo.
 
+See the [selection capture example](https://github.com/superdoc-dev/superdoc/tree/main/examples/editor/custom-ui/selection-capture) for a runnable vanilla version showing why a captured selection survives composer focus changes.
+
+## Restore the visible selection
+
+`ui.selection.restore(capture)` puts the visible selection back where the capture was taken. Call it after the composer submits so the user keeps their place.
+
+```ts
+const result = ui.selection.restore(captured);
+if (!result.success) {
+  // 'stale' | 'missing-target' | 'read-only' | 'not-ready'
+  console.warn('restore failed:', result.reason);
+}
+```
+
+The capture carries a story locator (body / header / footer / footnote / endnote). Restore short-circuits with `'stale'` when the captured story is no longer the active surface (the user switched between header and body between capture and restore), so the cursor never lands on the wrong surface.
+
+| `reason` | Meaning |
+|---|---|
+| `'stale'` | The captured target no longer resolves (collaborator edit, surface switch). |
+| `'missing-target'` | The capture had no positional target (collapsed cursor at a non-addressable point). |
+| `'read-only'` | Editor is in `viewing` mode and won't accept selection mutations. |
+| `'not-ready'` | Editor or layout hasn't bootstrapped yet. |
+
+## Anchor a floating bubble menu
+
+`ui.selection.getAnchorRect(options, capture?)` returns one viewport-relative rect for positioning a popover over the selection. Don't reach for `window.getSelection().getRangeAt(0).getBoundingClientRect()`: that reads from the offscreen ProseMirror DOM and lands the popover in the wrong place. The painted DOM is separate.
+
+```tsx
+import { useEffect, useState } from 'react';
+import type { ViewportRect } from 'superdoc/ui';
+import { useSuperDocSelection, useSuperDocUI } from 'superdoc/ui/react';
+
+export function SelectionPopover() {
+  const ui = useSuperDocUI();
+  const selection = useSuperDocSelection();
+  const [rect, setRect] = useState<ViewportRect | null>(null);
+
+  useEffect(() => {
+    if (!ui || selection.empty) {
+      setRect(null);
+      return;
+    }
+    const update = () => setRect(ui.selection.getAnchorRect({ placement: 'start' }));
+    update();
+    window.addEventListener('scroll', update, true);
+    window.addEventListener('resize', update);
+    return () => {
+      window.removeEventListener('scroll', update, true);
+      window.removeEventListener('resize', update);
+    };
+  }, [ui, selection.empty, selection.target, selection.quotedText]);
+
+  if (!rect) return null;
+  return (
+    <div style={{ position: 'fixed', left: rect.left, top: rect.top - 8 }}>
+      Bold / Italic / Comment
+    </div>
+  );
+}
+```
+
+`placement` accepts `'start'` (top of the first rect), `'end'` (bottom of the last rect), or `'union'` (the bounding rect across all line rects). Pass an optional second argument (a `SelectionCapture`) to anchor against a captured selection instead of the live one.
+
+`ui.selection.getRects(capture?)` returns every painted rect for the current or captured selection. Use it for AABB hit-testing, custom highlight overlays, or "is this point inside the selection?" gates.
+
+```ts
+const rects = ui.selection.getRects();
+// [{ top, left, width, height, pageIndex }, ...]
+```
+
+## Resolve a click to a caret position
+
+`ui.viewport.positionAt({ x, y })` returns the caret position the editor would place if the user clicked at `(x, y)`. Use it for "Paste here" or "Insert clause here" actions where the click point is the subject, not the prior selection.
+
+```ts
+const hit = ui.viewport.positionAt({ x: event.clientX, y: event.clientY });
+if (hit) {
+  // hit.point is a SelectionPoint at the click
+  // hit.target is a collapsed SelectionTarget at the same position
+  editor.doc.insert({ value: 'note', type: 'text', target: hit.target });
+}
+```
+
+Returns `null` when the click is outside the painted host or the editor isn't mounted. The resolved point carries a story locator when the click landed inside a header / footer / footnote, so passing the target straight to `editor.doc.insert` routes to the right surface.
+
+## Read entities under a point
+
+`ui.viewport.entityAt({ x, y })` returns the comments and tracked changes under a point, innermost first. Replaces walking the DOM for `data-comment-ids` / `data-track-change-id` attributes.
+
+```ts
+const entities = ui.viewport.entityAt({ x: event.clientX, y: event.clientY });
+// [{ type: 'trackedChange', id: 'tc-7' }, { type: 'comment', id: 'c-3' }]
+```
+
+Returns `[]` when no entity is under the point. Coordinates are in the same space as `MouseEvent.clientX` / `clientY`.
+
+## Get the painted host
+
+`ui.viewport.getHost()` returns the painted host element so you can scope listeners with `host.contains(target)` instead of a CSS class on a wrapper you happen to control.
+
+```ts
+const host = ui.viewport.getHost();
+document.addEventListener('contextmenu', (event) => {
+  if (!host || !(event.target instanceof Node) || !host.contains(event.target)) return;
+  // Click is inside the editor: open your custom menu, run hit-tests, etc.
+});
+```
+
+The painted host is separate from the offscreen ProseMirror DOM. Reach for `getHost()` when you need the element a `MouseEvent.target` would resolve to inside the editor.
+
+## The right-click bundle
+
+`ui.viewport.contextAt({ x, y })` composes the four primitives above into one bundle. Use it for custom right-click menus where the same shape filters items and runs handlers. See [Custom right-click menu](/editor/custom-ui/context-menu) for the full pattern.
+
+```ts
+const context = ui.viewport.contextAt({ x: event.clientX, y: event.clientY });
+// {
+//   point: { x, y },
+//   entities,         // ViewportEntityHit[]
+//   position,         // ViewportPositionHit | null
+//   selection,        // SelectionSlice
+//   insideSelection,  // boolean
+// }
+```
+
+Always returns a bundle (no `null`). Inner fields carry the absent-case defaults each primitive defines.
+
 ## Scroll an entity into view
 
 ```ts
@@ -118,5 +245,6 @@ Rects are plain values in viewport coordinates. Multi-page or multi-line targets
 ## Trade-offs
 
 - The selection slice updates on every editor change. Subscribe via the typed hook, not via raw `ui.select(...)`, so the controller can dedupe by shallow equality.
-- `getRect` is synchronous and DOM-driven. Text-anchored targets are deferred until story-aware text resolution lands.
+- `getRect`, `getRects`, `getAnchorRect`, `entityAt`, and `positionAt` are synchronous and DOM-driven. Run them inside a `useLayoutEffect` if you need them to settle before paint. Text-anchored `getRect` targets are deferred until story-aware text resolution lands.
 - `scrollIntoView` honors `behavior: 'smooth'` for body content. Non-body entities (header / footer / footnote / endnote) snap to view because story activation has to mount the surface synchronously before alignment. If smooth animation across non-body entities matters, scroll the editor surface yourself first with `behavior: 'smooth'`, then call `scrollIntoView` to land the entity.
+- `contextAt({ x, y })` always returns a bundle. Non-numeric coords coerce to `(0, 0)`, which is a real point and may sit inside the painted host. Pass real coordinates if you want the result to reflect a specific click.

@@ -83,6 +83,8 @@ def dispatch_intent_tool(
             return execute('doc.lists.attach', rest)
         elif action == 'detach':
             return execute('doc.lists.detach', rest)
+        elif action == 'delete':
+            return execute('doc.lists.delete', rest)
         elif action == 'indent':
             return execute('doc.lists.indent', rest)
         elif action == 'outdent':
@@ -136,5 +138,44 @@ def dispatch_intent_tool(
             return execute('doc.mutations.apply', rest)
         else:
             raise SuperDocError(f'Unknown action for superdoc_mutations: {action}', code='TOOL_DISPATCH_NOT_FOUND', details={'toolName': 'superdoc_mutations', 'action': action})
+    elif tool_name == 'superdoc_table':
+        action = args.get('action')
+        rest = {k: v for k, v in args.items() if k != 'action'}
+        if action == 'delete':
+            return execute('doc.tables.delete', rest)
+        elif action == 'set_layout':
+            return execute('doc.tables.setLayout', rest)
+        elif action == 'insert_row':
+            return execute('doc.tables.insertRow', rest)
+        elif action == 'delete_row':
+            return execute('doc.tables.deleteRow', rest)
+        elif action == 'set_row':
+            return execute('doc.tables.setRowHeight', rest)
+        elif action == 'set_row_options':
+            return execute('doc.tables.setRowOptions', rest)
+        elif action == 'insert_column':
+            return execute('doc.tables.insertColumn', rest)
+        elif action == 'delete_column':
+            return execute('doc.tables.deleteColumn', rest)
+        elif action == 'set_column':
+            return execute('doc.tables.setColumnWidth', rest)
+        elif action == 'merge_cells':
+            return execute('doc.tables.mergeCells', rest)
+        elif action == 'unmerge_cells':
+            return execute('doc.tables.unmergeCells', rest)
+        elif action == 'set_cell':
+            return execute('doc.tables.setCellProperties', rest)
+        elif action == 'set_cell_text':
+            return execute('doc.tables.setCellText', rest)
+        elif action == 'set_shading':
+            return execute('doc.tables.setShading', rest)
+        elif action == 'set_style_options':
+            return execute('doc.tables.applyStyle', rest)
+        elif action == 'set_borders':
+            return execute('doc.tables.setBorders', rest)
+        elif action == 'set_options':
+            return execute('doc.tables.setTableOptions', rest)
+        else:
+            raise SuperDocError(f'Unknown action for superdoc_table: {action}', code='TOOL_DISPATCH_NOT_FOUND', details={'toolName': 'superdoc_table', 'action': action})
     else:
         raise SuperDocError(f'Unknown intent tool: {tool_name}', code='TOOL_DISPATCH_NOT_FOUND', details={'toolName': tool_name})

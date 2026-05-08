@@ -265,7 +265,6 @@ const DEFAULT_TAB_INTERVAL_TWIPS = 720; // 0.5in
 const TWIPS_PER_INCH = 1440;
 const PX_PER_INCH = 96;
 const TWIPS_PER_PX = TWIPS_PER_INCH / PX_PER_INCH; // 15 twips per px
-
 /**
  * Floating-point tolerance for tab stop comparison (0.1 pixels).
  *
@@ -319,6 +318,8 @@ const pxToTwips = (px: number): number => Math.round(px * TWIPS_PER_PX);
  */
 const sanitizeIndent = (value: number | undefined): number =>
   typeof value === 'number' && Number.isFinite(value) ? Math.max(0, value) : 0;
+const sanitizeRawIndent = (value: number | undefined): number =>
+  typeof value === 'number' && Number.isFinite(value) ? value : 0;
 
 /**
  * Sanitizes the decimal separator to ensure it's a valid value for decimal tab alignment.
@@ -366,6 +367,12 @@ type TabStopPx = {
   leader?: TabStop['leader'];
   /** Whether this came from author-defined tabs or the default tab grid. */
   source?: TabStop['source'];
+};
+
+type PendingTabAlignStart = {
+  layoutX: number;
+  paintX: number;
+  precedingTabEndX?: number;
 };
 
 /**
@@ -457,11 +464,19 @@ const buildTabStopsPx = (indent?: ParagraphIndent, tabs?: TabStop[], tabInterval
     firstLine: pxToTwips(sanitizeIndent(indent?.firstLine)),
     hanging: pxToTwips(sanitizeIndent(indent?.hanging)),
   };
+  const rawParagraphIndentTwips = {
+    left: pxToTwips(sanitizeRawIndent(indent?.left)),
+    right: pxToTwips(sanitizeRawIndent(indent?.right)),
+    firstLine: pxToTwips(sanitizeRawIndent(indent?.firstLine)),
+    // Hanging is unsigned in OOXML; preserve negative left/right/firstLine only.
+    hanging: pxToTwips(sanitizeIndent(indent?.hanging)),
+  };
 
   const stops = Engines.computeTabStops({
     explicitStops: tabs ?? [],
     defaultTabInterval: tabIntervalTwips ?? DEFAULT_TAB_INTERVAL_TWIPS,
     paragraphIndent: paragraphIndentTwips,
+    rawParagraphIndent: rawParagraphIndentTwips,
   });
 
   return stops.map((stop: TabStop) => ({
@@ -789,14 +804,49 @@ const applyTabLayoutToLines = (
   const alignmentTabStopsPx = tabStops
     .map((stop, index) => ({ stop, index }))
     .filter(({ stop }) => stop.val === 'end' || stop.val === 'center' || stop.val === 'decimal');
+
+  // Per-line-segment tab counts. Segments are delimited by explicit <w:br/> because
+  // pPr/tabs apply per line, not per paragraph. sd-1480: "Page\t2<br/>Page\t5" must
+  // bind the trailing tab of EACH segment to the alignment stop, not just the
+  // paragraph-final tab.
+  const tabSegmentInfo = new Map<number, { localOrdinal: number; segmentTotal: number }>();
+  {
+    let segmentTabRunIndices: number[] = [];
+    const closeSegment = () => {
+      const total = segmentTabRunIndices.length;
+      segmentTabRunIndices.forEach((runIdx, ord) => {
+        tabSegmentInfo.set(runIdx, { localOrdinal: ord, segmentTotal: total });
+      });
+      segmentTabRunIndices = [];
+    };
+    for (let i = 0; i < runs.length; i++) {
+      const r = runs[i];
+      if (r.kind === 'lineBreak' || (r.kind === 'break' && (r as { breakType?: string }).breakType === 'line')) {
+        closeSegment();
+      } else if (r.kind === 'tab') {
+        segmentTabRunIndices.push(i);
+      }
+    }
+    closeSegment();
+  }
+
   // Word-compat heuristic (not ECMA-376 17.3.3.32): the last N tab characters in a
-  // paragraph bind to the last N explicit end/center/decimal stops. Needed for TOC
+  // line bind to the last N explicit end/center/decimal stops. Needed for TOC
   // entries where a right-aligned dot-leader stop coexists with default grid stops.
   // Mirrored in measuring/dom/src/index.ts.
-  const getAlignmentStopForOrdinal = (ordinal: number): { stop: TabStopPx; index: number } | null => {
+  const getAlignmentStopForOrdinal = (ordinal: number, runIdx?: number): { stop: TabStopPx; index: number } | null => {
     if (alignmentTabStopsPx.length === 0 || totalTabRuns === 0 || !Number.isFinite(ordinal)) return null;
-    if (ordinal < 0 || ordinal >= totalTabRuns) return null;
-    const remainingTabs = totalTabRuns - ordinal - 1;
+    let scopeOrdinal = ordinal;
+    let scopeTotal = totalTabRuns;
+    if (runIdx !== undefined) {
+      const info = tabSegmentInfo.get(runIdx);
+      if (info) {
+        scopeOrdinal = info.localOrdinal;
+        scopeTotal = info.segmentTotal;
+      }
+    }
+    if (scopeOrdinal < 0 || scopeOrdinal >= scopeTotal) return null;
+    const remainingTabs = scopeTotal - scopeOrdinal - 1;
     const targetIndex = alignmentTabStopsPx.length - 1 - remainingTabs;
     if (targetIndex < 0 || targetIndex >= alignmentTabStopsPx.length) return null;
     return alignmentTabStopsPx[targetIndex];
@@ -816,7 +866,7 @@ const applyTabLayoutToLines = (
     let cursorX = 0;
     let lineWidth = 0;
     let tabStopCursor = 0;
-    let pendingTabAlignStartX: number | null = null;
+    let pendingTabAlignStartX: PendingTabAlignStart | null = null;
     const segments: NonNullable<Line['segments']> = [];
     const leaders: NonNullable<Line['leaders']> = [];
     const effectiveIndent = lineIndex === 0 ? indentLeft + rawFirstLineOffset : indentLeft;
@@ -828,25 +878,48 @@ const applyTabLayoutToLines = (
     /**
      * Processes a tab character, calculating position and handling alignment.
      */
-    const applyTab = (startRunIndex: number, startChar: number, run?: Run, tabOrdinal?: number): void => {
+    const applyTab = (
+      startRunIndex: number,
+      startChar: number,
+      run?: Run,
+      tabOrdinal?: number,
+      tabRunIdx?: number,
+    ): void => {
       const originX = cursorX;
       const absCurrentX = cursorX + effectiveIndent;
       let stop: TabStopPx | undefined;
       let target: number;
+      // Mirror of measuring/dom: only force the SD-2447 heuristic when greedy
+      // would land on a `source:default` stop (synthetic 0.5" grid). Explicit
+      // start stops should win greedy.
+      const greedy = getNextTabStopPx(absCurrentX, tabStops, tabStopCursor);
+      const greedyOnDefault = greedy.stop?.source === 'default';
       const forcedAlignment =
-        typeof tabOrdinal === 'number' && Number.isFinite(tabOrdinal) ? getAlignmentStopForOrdinal(tabOrdinal) : null;
+        greedyOnDefault && typeof tabOrdinal === 'number' && Number.isFinite(tabOrdinal)
+          ? getAlignmentStopForOrdinal(tabOrdinal, tabRunIdx)
+          : null;
       if (forcedAlignment && forcedAlignment.stop.pos > absCurrentX + TAB_EPSILON) {
         stop = forcedAlignment.stop;
         target = forcedAlignment.stop.pos;
         tabStopCursor = forcedAlignment.index + 1;
       } else {
-        const next = getNextTabStopPx(absCurrentX, tabStops, tabStopCursor);
-        stop = next.stop;
-        target = next.target;
-        tabStopCursor = next.nextIndex;
+        stop = greedy.stop;
+        target = greedy.target;
+        tabStopCursor = greedy.nextIndex;
       }
       const clampedTarget = Number.isFinite(maxAbsWidth) ? Math.min(target, maxAbsWidth) : target;
       const relativeTarget = clampedTarget - effectiveIndent;
+      const stopVal = stop?.val ?? 'start';
+      const shouldCompensateNegativeLeft =
+        stopVal === 'start' && indentLeft < 0 && effectiveIndent === indentLeft && stop?.source !== 'explicit';
+      // `relativeTarget` is layout geometry and controls the tab run width.
+      // `paintTarget` is explicit segment geometry consumed by the DOM painter,
+      // which adds the current line indentOffset again. For negative-left body
+      // lines, only compensate generated/default stops that advance from the
+      // negative line origin. Authored explicit stops already have the same
+      // geometry Word uses.
+      const paintTarget = shouldCompensateNegativeLeft ? relativeTarget - Math.min(effectiveIndent, 0) : relativeTarget;
+      const precedingTabEndX = shouldCompensateNegativeLeft ? relativeTarget : undefined;
       lineWidth = Math.max(lineWidth, relativeTarget);
       if (stop?.source === 'explicit') {
         line.hasExplicitTabStops = true;
@@ -862,7 +935,6 @@ const applyTabLayoutToLines = (
       }
 
       // Handle alignment types
-      const stopVal = stop?.val ?? 'start';
       if (stopVal === 'end' || stopVal === 'center' || stopVal === 'decimal') {
         const groupMeasure = measureTabAlignmentGroupInLine(runs, line, startRunIndex, startChar, decimalSeparator);
         if (groupMeasure.totalWidth > 0) {
@@ -881,12 +953,24 @@ const applyTabLayoutToLines = (
             currentLeader.to = groupStartX + effectiveIndent;
           }
 
-          pendingTabAlignStartX = groupStartX;
+          pendingTabAlignStartX = {
+            layoutX: groupStartX,
+            paintX: groupStartX,
+          };
         } else {
           cursorX = Math.max(cursorX, relativeTarget);
         }
       } else {
         cursorX = Math.max(cursorX, relativeTarget);
+        // Keep start-tab text explicitly positioned to match measuring/dom.
+        // Ordinary start tabs use the same layout and paint x; only compensated
+        // negative-left generated/default tabs carry a distinct precedingTabEndX
+        // for the painter's tab-span sizing.
+        pendingTabAlignStartX = {
+          layoutX: relativeTarget,
+          paintX: paintTarget,
+          ...(precedingTabEndX !== undefined ? { precedingTabEndX } : {}),
+        };
       }
 
       // Set tab run width for rendering
@@ -895,13 +979,19 @@ const applyTabLayoutToLines = (
       }
     };
 
+    const consumePendingTabAlignStart = (): PendingTabAlignStart | null => {
+      const pending = pendingTabAlignStartX;
+      pendingTabAlignStartX = null;
+      return pending;
+    };
+
     for (let runIndex = line.fromRun; runIndex <= line.toRun; runIndex += 1) {
       const run = runs[runIndex];
       if (!run) continue;
       if (run.kind === 'tab') {
         const tabRun = run as TabRun;
         const ordinal = consumeTabOrdinal(tabRun.tabIndex);
-        applyTab(runIndex + 1, 0, run, ordinal);
+        applyTab(runIndex + 1, 0, run, ordinal, runIndex);
         continue;
       }
 
@@ -927,10 +1017,13 @@ const applyTabLayoutToLines = (
             toChar: i,
             width: segmentWidth,
           };
-          if (pendingTabAlignStartX != null) {
-            segment.x = pendingTabAlignStartX;
-            cursorX = pendingTabAlignStartX + segmentWidth;
-            pendingTabAlignStartX = null;
+          const pendingTabAlign = consumePendingTabAlignStart();
+          if (pendingTabAlign != null) {
+            segment.x = pendingTabAlign.paintX;
+            if (pendingTabAlign.precedingTabEndX !== undefined) {
+              segment.precedingTabEndX = pendingTabAlign.precedingTabEndX;
+            }
+            cursorX = pendingTabAlign.layoutX + segmentWidth;
           } else {
             cursorX += segmentWidth;
           }
@@ -950,10 +1043,13 @@ const applyTabLayoutToLines = (
           toChar: sliceEnd,
           width: segmentWidth,
         };
-        if (pendingTabAlignStartX != null) {
-          segment.x = pendingTabAlignStartX;
-          cursorX = pendingTabAlignStartX + segmentWidth;
-          pendingTabAlignStartX = null;
+        const pendingTabAlign = consumePendingTabAlignStart();
+        if (pendingTabAlign != null) {
+          segment.x = pendingTabAlign.paintX;
+          if (pendingTabAlign.precedingTabEndX !== undefined) {
+            segment.precedingTabEndX = pendingTabAlign.precedingTabEndX;
+          }
+          cursorX = pendingTabAlign.layoutX + segmentWidth;
         } else {
           cursorX += segmentWidth;
         }
@@ -1125,12 +1221,13 @@ export function remeasureParagraph(
   const attrs = block.attrs as ParagraphBlockAttrs | undefined;
   const indent = attrs?.indent;
   const wordLayout = attrs?.wordLayout;
-  // Keep raw values for hasNegativeIndent check (negative indents disable certain optimizations)
+  // Preserve finite negative indents for paragraph width geometry. This mirrors
+  // measuring/dom: negative indents expand the usable line width into the margin
+  // area, so tab cursor math and tab clamp bounds stay in the same coordinate space.
   const rawIndentLeft = typeof indent?.left === 'number' && Number.isFinite(indent.left) ? indent.left : 0;
   const rawIndentRight = typeof indent?.right === 'number' && Number.isFinite(indent.right) ? indent.right : 0;
-  // Clamp to 0 for actual layout calculations (negative indents shouldn't widen content area)
-  const indentLeft = Math.max(0, rawIndentLeft);
-  const indentRight = Math.max(0, rawIndentRight);
+  const indentLeft = rawIndentLeft;
+  const indentRight = rawIndentRight;
   const indentFirstLine = Math.max(0, indent?.firstLine ?? 0);
   const indentHanging = Math.max(0, indent?.hanging ?? 0);
   // Match measuring/dom/src/index.ts: `suppressFirstLineIndent` is a Word quirk where

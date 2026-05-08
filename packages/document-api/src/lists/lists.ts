@@ -26,6 +26,8 @@ import type {
   ListsAttachInput,
   ListsDetachInput,
   ListsDetachResult,
+  ListsDeleteInput,
+  ListsDeleteResult,
   ListsJoinInput,
   ListsJoinResult,
   ListsCanJoinInput,
@@ -81,6 +83,8 @@ export type {
   ListsAttachInput,
   ListsDetachInput,
   ListsDetachResult,
+  ListsDeleteInput,
+  ListsDeleteResult,
   ListsJoinInput,
   ListsJoinResult,
   ListsCanJoinInput,
@@ -485,6 +489,7 @@ export interface ListsAdapter {
   create(input: ListsCreateInput, options?: MutationOptions): ListsCreateResult;
   attach(input: ListsAttachInput, options?: MutationOptions): ListsMutateItemResult;
   detach(input: ListsDetachInput, options?: MutationOptions): ListsDetachResult;
+  delete(input: ListsDeleteInput, options?: MutationOptions): ListsDeleteResult;
   join(input: ListsJoinInput, options?: MutationOptions): ListsJoinResult;
   canJoin(input: ListsCanJoinInput): ListsCanJoinResult;
   separate(input: ListsSeparateInput, options?: MutationOptions): ListsSeparateResult;
@@ -682,6 +687,15 @@ export function executeListsDetach(
 ): ListsDetachResult {
   validateListItemTarget(input, 'lists.detach');
   return adapter.detach(input, normalizeMutationOptions(options));
+}
+
+export function executeListsDelete(
+  adapter: ListsAdapter,
+  input: ListsDeleteInput,
+  options?: MutationOptions,
+): ListsDeleteResult {
+  validateListItemTarget(input, 'lists.delete');
+  return adapter.delete(input, normalizeMutationOptions(options));
 }
 
 export function executeListsJoin(

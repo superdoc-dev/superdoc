@@ -391,9 +391,8 @@ const hashRuns = (block: FlowBlock): string => {
               if (sh.color) parts.push(`shc:${sh.color}`);
             }
 
-            // Direction and RTL
+            // Direction
             if (attrs.direction) parts.push(`dir:${attrs.direction}`);
-            if (attrs.rtl) parts.push('rtl');
 
             if (parts.length > 0) {
               cellHashes.push(`pa:${parts.join(':')}`);
@@ -547,9 +546,8 @@ const hashRuns = (block: FlowBlock): string => {
       parts.push(`tb:${tabsHash}`);
     }
 
-    // Direction and RTL
+    // Direction
     if (attrs.direction) parts.push(`dir:${attrs.direction}`);
-    if (attrs.rtl) parts.push('rtl');
 
     // Pagination properties
     if (attrs.keepNext) parts.push('kn');

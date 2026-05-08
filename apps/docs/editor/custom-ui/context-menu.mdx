@@ -1,0 +1,259 @@
+---
+title: 'Custom right-click menu'
+sidebarTitle: 'Context menu'
+description: 'Suppress the built-in menu, render your own with the controller bundle, dispatch with the click target bound to your handler.'
+---
+
+## Quick start
+
+Three pieces: a registration that contributes an item, a `contextmenu` listener that opens the menu, and a `<SuperDocEditor disableContextMenu>` to keep the built-in out of the way.
+
+```tsx
+import { useEffect, useState } from 'react';
+import type { ContextMenuItem } from 'superdoc/ui';
+import { useSuperDocUI } from 'superdoc/ui/react';
+
+export function ContextMenu() {
+  const ui = useSuperDocUI();
+  const [open, setOpen] = useState<{ x: number; y: number; items: ContextMenuItem[] } | null>(null);
+
+  useEffect(() => {
+    if (!ui) return;
+    const onContextMenu = (event: MouseEvent) => {
+      const host = ui.viewport.getHost();
+      if (!host || !(event.target instanceof Node) || !host.contains(event.target)) return;
+
+      const context = ui.viewport.contextAt({ x: event.clientX, y: event.clientY });
+      const items = ui.commands.getContextMenuItems(context);
+      if (items.length === 0) return; // browser native menu falls through
+
+      event.preventDefault();
+      setOpen({ x: event.clientX, y: event.clientY, items });
+    };
+    document.addEventListener('contextmenu', onContextMenu);
+    return () => document.removeEventListener('contextmenu', onContextMenu);
+  }, [ui]);
+
+  if (!open) return null;
+  return (
+    <div className="context-menu" style={{ position: 'fixed', left: open.x, top: open.y }}>
+      {open.items.map((item) => (
+        <button key={item.id} onClick={() => { item.invoke?.(); setOpen(null); }}>
+          {item.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+```
+
+Suppress the built-in menu so your own takes over:
+
+```tsx
+<SuperDocEditor document={file} disableContextMenu onReady={onReady} />
+```
+
+`disableContextMenu` switches off SuperDoc's own menu UI and lets the browser's native `contextmenu` event proceed. When `getContextMenuItems(context)` returns nothing for a click, the listener returns without `preventDefault` and the browser native menu falls through (Copy / Paste / Inspect). No dead right-click.
+
+## The bundle
+
+`ui.viewport.contextAt({ x, y })` always returns an object, never `null`. Empty defaults make destructuring safe.
+
+| Field | Type | Meaning |
+|---|---|---|
+| `point` | `{ x, y }` | Echoes the input. Useful for anchoring floating UI. |
+| `entities` | `ViewportEntityHit[]` | Tracked changes / comments under the click, innermost first. Empty when none. |
+| `position` | `ViewportPositionHit \| null` | Resolved caret position at the click. `null` when the click is outside the painted host. |
+| `selection` | `SelectionSlice` | Mirrors the live `state.selection` slice. |
+| `insideSelection` | `boolean` | True when the click lands inside the rects the live selection currently paints. |
+
+`position.target` is a collapsed `SelectionTarget` at the click, story-aware when the click landed inside a header / footer / footnote. Pass it straight to `editor.doc.insert` for "Paste here" / "Insert clause here" actions.
+
+```ts
+const context = ui.viewport.contextAt({ x: 100, y: 200 });
+// context.point             { x: 100, y: 200 }
+// context.entities          [{ type: 'trackedChange', id: 'tc-7' }, ...]
+// context.position          { point: { kind: 'text', blockId, offset, story? }, target }
+// context.selection         { empty, target, selectionTarget, activeMarks, ... }
+// context.insideSelection   true | false
+```
+
+## Contribute an item
+
+Add a `contextMenu` field to your registration. The `when` predicate filters on the same bundle the handler will receive.
+
+```tsx
+ui.commands.register({
+  id: 'demo.acceptSuggestion',
+  execute: ({ context }) => {
+    const id = context?.entities.find((e) => e.type === 'trackedChange')?.id;
+    if (!id) return false;
+    ui.trackChanges.accept(id);
+    return true;
+  },
+  contextMenu: {
+    label: 'Accept suggestion',
+    group: 'review',
+    order: 0,
+    when: ({ entities }) => entities.some((e) => e.type === 'trackedChange'),
+  },
+});
+```
+
+Each contribution is grouped (built-ins are `format`, `clipboard`, `review`, `comment`, `link`, then customs in registration order). Items inside a group sort by `order`. Predicates that throw are caught and the item is hidden for that menu.
+
+### Predicate examples
+
+The bundle's optional fields make scope rules direct.
+
+```ts
+// Entity-scoped: accept / reject / resolve
+when: ({ entities }) => entities.some((e) => e.type === 'trackedChange'),
+
+// Selection-scoped: copy / comment, only when click is inside the selection
+when: ({ selection, insideSelection }) =>
+  !selection.empty && insideSelection === true,
+
+// Point-scoped: insert at the click, only on plain caret-only text
+when: ({ entities, position, insideSelection }) =>
+  entities.length === 0 && position !== null && insideSelection !== true,
+```
+
+The predicate sees `entities`, `selection`, `point`, `position`, `insideSelection`. Old predicates that only destructure `{ entities, selection }` keep working.
+
+## item.invoke()
+
+Items returned from `getContextMenuItems(context)` carry an `invoke()` closure that fires the registered `execute` with the bundle bound to `context`. Your menu component dispatches without re-threading the click target through a payload.
+
+```tsx
+<button onClick={() => item.invoke?.()}>{item.label}</button>
+```
+
+Inside `execute`, the same bundle the predicate filtered on is available as `context`:
+
+```ts
+execute: ({ payload, superdoc, editor, context }) => {
+  // context.position?.target is the collapsed SelectionTarget at the click
+  // context.entities is the entity list under the click
+  // context.selection is the live selection at the time the menu opened
+  // context.insideSelection is the hit-test result
+  return true;
+}
+```
+
+`context` is `undefined` when the command is dispatched directly (`ui.commands.get(id)?.execute(payload)`, `ui.commands.require(id).execute(...)`, or `ui.toolbar.execute(id, payload)` for built-ins). Handlers that only depend on `payload` keep working unchanged.
+
+## Falling through to the native menu
+
+When `getContextMenuItems(context)` returns no items, your listener returns early without calling `event.preventDefault()`. The browser shows its native menu (Copy / Paste / Inspect) instead of producing a dead right-click. This relies on `disableContextMenu: true` on the editor: with the built-in menu suppressed, no other listener swallows the event.
+
+If you'd rather suppress the native menu in the empty case too, call `event.preventDefault()` regardless of items length and render nothing.
+
+## Worked example
+
+The reference workspace at [`demos/custom-ui`](https://github.com/superdoc-dev/superdoc/tree/main/demos/custom-ui) wires the full pattern end-to-end. The four registrations below mirror the demo's `ContextMenuRegistrations.tsx`. They cover the three subjects the menu can act on: an entity, the selection, or the click point.
+
+<CodeGroup>
+
+```tsx Usage
+const accept = ui.commands.register({
+  id: 'demo.acceptSuggestion',
+  execute: ({ context }) => {
+    const id = context?.entities.find((e) => e.type === 'trackedChange')?.id;
+    if (!id) return false;
+    ui.trackChanges.accept(id);
+    return true;
+  },
+  contextMenu: {
+    label: 'Accept suggestion',
+    group: 'review',
+    when: ({ entities }) => entities.some((e) => e.type === 'trackedChange'),
+  },
+});
+
+const copy = ui.commands.register({
+  id: 'demo.copy',
+  execute: ({ context }) => {
+    const text = context?.selection.quotedText ?? '';
+    if (text) navigator.clipboard.writeText(text).catch(() => {});
+    return true;
+  },
+  contextMenu: {
+    label: 'Copy',
+    group: 'clipboard',
+    when: ({ selection, insideSelection }) =>
+      !selection.empty && insideSelection === true,
+  },
+});
+
+const insertHere = ui.commands.register({
+  id: 'demo.insertClauseHere',
+  execute: ({ context, editor }) => {
+    const target = context?.position?.target;
+    if (!target || !editor?.doc?.insert) return false;
+    const receipt = editor.doc.insert({
+      value: 'Standard clause text.',
+      type: 'text',
+      target,
+    });
+    return receipt?.success === true;
+  },
+  contextMenu: {
+    label: 'Insert clause here',
+    group: 'review',
+    order: 10,
+    when: ({ entities, position, insideSelection }) =>
+      entities.length === 0 && position !== null && insideSelection !== true,
+  },
+});
+```
+
+```tsx Full Example
+import { useEffect } from 'react';
+import { SuperDocUIProvider, useSuperDocUI } from 'superdoc/ui/react';
+
+function Registrations() {
+  const ui = useSuperDocUI();
+  useEffect(() => {
+    if (!ui) return;
+    const reg = ui.commands.register({
+      id: 'demo.insertClauseHere',
+      execute: ({ context, editor }) => {
+        const target = context?.position?.target;
+        if (!target || !editor?.doc?.insert) return false;
+        const receipt = editor.doc.insert({
+          value: 'Standard clause text.',
+          type: 'text',
+          target,
+        });
+        return receipt?.success === true;
+      },
+      contextMenu: {
+        label: 'Insert clause here',
+        group: 'review',
+        when: ({ entities, position, insideSelection }) =>
+          entities.length === 0 && position !== null && insideSelection !== true,
+      },
+    });
+    return () => reg.unregister();
+  }, [ui]);
+  return null;
+}
+
+export function App() {
+  return (
+    <SuperDocUIProvider>
+      <Registrations />
+    </SuperDocUIProvider>
+  );
+}
+```
+
+</CodeGroup>
+
+## Trade-offs
+
+- The bundle is computed once when the menu opens. If your registration's `execute` runs much later (popover, multi-step picker), `context.selection` reflects the open-time selection, not the current one. Re-read `ui.selection.getSnapshot()` when you need fresh selection.
+- `item.invoke?.()` is `undefined` for items returned from the legacy `getContextMenuItems({ entities })` shape. Always call as `item.invoke?.()`. The full bundle path always populates it.
+- Scope your `contextmenu` listener to `ui.viewport.getHost()`. An empty bundle alone isn't a scope signal: it can mean "outside the editor" or "inside plain text with no selection and no entities".
+- `position` is `null` when the click is outside the painted host. Predicates that act on the click point should check `position !== null` first.

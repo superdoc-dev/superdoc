@@ -1,6 +1,8 @@
 import {
   createDocumentModeExecute,
   createDocumentModeStateDeriver,
+  createFormattingMarksExecute,
+  createFormattingMarksStateDeriver,
   createHistoryStateDeriver,
   createRulerExecute,
   createRulerStateDeriver,
@@ -28,11 +30,13 @@ import {
   createUnderlineExecute,
 } from './helpers/formatting.js';
 import {
+  createBulletListExecute,
   createIndentDecreaseExecute,
   createIndentIncreaseExecute,
   createLineHeightStateDeriver,
   createLinkedStyleStateDeriver,
   createListStateDeriver,
+  createOrderedListExecute,
   createTextAlignStateDeriver,
 } from './helpers/paragraph.js';
 import { createDirectCommandExecute, createDisabledStateDeriver } from './helpers/general.js';
@@ -121,11 +125,13 @@ export const createToolbarRegistry = (): Partial<Record<PublicToolbarItemId, Bui
       id: 'bullet-list',
       directCommandName: 'toggleBulletListStyle',
       state: createListStateDeriver('bullet'),
+      execute: createBulletListExecute(),
     },
     'numbered-list': {
       id: 'numbered-list',
-      directCommandName: 'toggleOrderedList',
+      directCommandName: 'toggleOrderedListStyle',
       state: createListStateDeriver('ordered'),
+      execute: createOrderedListExecute(),
     },
     'indent-increase': {
       id: 'indent-increase',
@@ -153,6 +159,11 @@ export const createToolbarRegistry = (): Partial<Record<PublicToolbarItemId, Bui
       id: 'ruler',
       state: createRulerStateDeriver(),
       execute: createRulerExecute(),
+    },
+    'formatting-marks': {
+      id: 'formatting-marks',
+      state: createFormattingMarksStateDeriver(),
+      execute: createFormattingMarksExecute(),
     },
     zoom: {
       id: 'zoom',

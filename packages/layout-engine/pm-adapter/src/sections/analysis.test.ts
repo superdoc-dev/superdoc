@@ -296,8 +296,9 @@ describe('analysis', () => {
       const result = findParagraphsWithSectPr(doc);
 
       expect(result.paragraphs).toHaveLength(1);
-      expect(result.paragraphs[0]).toEqual({ index: 1, node: para2 });
+      expect(result.paragraphs[0]).toEqual({ index: 1, nodeIndex: 1, node: para2 });
       expect(result.totalCount).toBe(2);
+      expect(result.totalNodeCount).toBe(2);
     });
 
     it('should find multiple paragraphs with sectPr', () => {
@@ -315,12 +316,13 @@ describe('analysis', () => {
       const result = findParagraphsWithSectPr(doc);
 
       expect(result.paragraphs).toHaveLength(2);
-      expect(result.paragraphs[0]).toEqual({ index: 0, node: para1 });
-      expect(result.paragraphs[1]).toEqual({ index: 2, node: para3 });
+      expect(result.paragraphs[0]).toEqual({ index: 0, nodeIndex: 0, node: para1 });
+      expect(result.paragraphs[1]).toEqual({ index: 2, nodeIndex: 2, node: para3 });
       expect(result.totalCount).toBe(3);
+      expect(result.totalNodeCount).toBe(3);
     });
 
-    it('should skip non-paragraph nodes', () => {
+    it('should skip non-paragraph nodes for paragraphIndex but count them in nodeIndex', () => {
       const para1 = { type: 'paragraph', content: [] };
       const para2 = { type: 'paragraph', content: [] };
 
@@ -334,11 +336,15 @@ describe('analysis', () => {
       const result = findParagraphsWithSectPr(doc);
 
       expect(result.paragraphs).toHaveLength(1);
-      expect(result.paragraphs[0]).toEqual({ index: 1, node: para2 });
+      // paragraphIndex = 1 (second paragraph), nodeIndex = 2 (third top-level child
+      // after the heading). Non-paragraph top-level children count toward nodeIndex
+      // because ECMA-376 §17.6.17 sections span all body children.
+      expect(result.paragraphs[0]).toEqual({ index: 1, nodeIndex: 2, node: para2 });
       expect(result.totalCount).toBe(2);
+      expect(result.totalNodeCount).toBe(4);
     });
 
-    it('should include paragraphs inside index nodes', () => {
+    it('should include paragraphs inside index nodes and share the SDT nodeIndex', () => {
       const para1 = { type: 'paragraph', content: [] };
       const para2 = { type: 'paragraph', content: [] };
       const para3 = { type: 'paragraph', content: [] };
@@ -352,8 +358,11 @@ describe('analysis', () => {
 
       const result = findParagraphsWithSectPr(doc);
 
-      expect(result.paragraphs).toEqual([{ index: 1, node: para2 }]);
+      // para2 is inside the SDT (index node) at top-level nodeIndex 1.
+      // paragraphIndex 1 still reflects paragraph order across descent.
+      expect(result.paragraphs).toEqual([{ index: 1, nodeIndex: 1, node: para2 }]);
       expect(result.totalCount).toBe(3);
+      expect(result.totalNodeCount).toBe(2);
     });
   });
 
@@ -385,7 +394,7 @@ describe('analysis', () => {
         },
       };
 
-      const paragraphs = [{ index: 0, node: para1 }];
+      const paragraphs = [{ index: 0, nodeIndex: 0, node: para1 }];
 
       vi.mocked(extractionModule.extractSectionData).mockReturnValue(null);
 
@@ -408,7 +417,7 @@ describe('analysis', () => {
         },
       };
 
-      const paragraphs = [{ index: 0, node: para1 }];
+      const paragraphs = [{ index: 0, nodeIndex: 0, node: para1 }];
       const sectPr: SectPrElement = { type: 'element', name: 'w:sectPr', elements: [] };
 
       vi.mocked(extractionModule.extractSectionData).mockReturnValue({
@@ -450,8 +459,8 @@ describe('analysis', () => {
       };
 
       const paragraphs = [
-        { index: 2, node: para1 },
-        { index: 5, node: para2 },
+        { index: 2, nodeIndex: 2, node: para1 },
+        { index: 5, nodeIndex: 5, node: para2 },
       ];
 
       const sectPr: SectPrElement = { type: 'element', name: 'w:sectPr' };
@@ -487,7 +496,7 @@ describe('analysis', () => {
         },
       };
 
-      const paragraphs = [{ index: 0, node: para1 }];
+      const paragraphs = [{ index: 0, nodeIndex: 0, node: para1 }];
 
       vi.mocked(extractionModule.extractSectionData).mockReturnValue({
         type: SectionType.NEXT_PAGE,
@@ -512,7 +521,7 @@ describe('analysis', () => {
         },
       };
 
-      const paragraphs = [{ index: 0, node: para1 }];
+      const paragraphs = [{ index: 0, nodeIndex: 0, node: para1 }];
 
       // Mock section data with page margins but no header/footer margins
       vi.mocked(extractionModule.extractSectionData).mockReturnValue({
@@ -550,7 +559,7 @@ describe('analysis', () => {
         },
       };
 
-      const paragraphs = [{ index: 0, node: para1 }];
+      const paragraphs = [{ index: 0, nodeIndex: 0, node: para1 }];
 
       // Only header margin specified
       vi.mocked(extractionModule.extractSectionData).mockReturnValue({
@@ -583,7 +592,7 @@ describe('analysis', () => {
         },
       };
 
-      const paragraphs = [{ index: 0, node: para1 }];
+      const paragraphs = [{ index: 0, nodeIndex: 0, node: para1 }];
 
       // Only footer margin specified
       vi.mocked(extractionModule.extractSectionData).mockReturnValue({
@@ -616,7 +625,7 @@ describe('analysis', () => {
         },
       };
 
-      const paragraphs = [{ index: 0, node: para1 }];
+      const paragraphs = [{ index: 0, nodeIndex: 0, node: para1 }];
 
       // Only top margin specified
       vi.mocked(extractionModule.extractSectionData).mockReturnValue({
@@ -649,7 +658,7 @@ describe('analysis', () => {
         },
       };
 
-      const paragraphs = [{ index: 0, node: para1 }];
+      const paragraphs = [{ index: 0, nodeIndex: 0, node: para1 }];
 
       // Explicit zero values for all margins
       vi.mocked(extractionModule.extractSectionData).mockReturnValue({
@@ -688,7 +697,7 @@ describe('analysis', () => {
         },
       };
 
-      const paragraphs = [{ index: 0, node: para1 }];
+      const paragraphs = [{ index: 0, nodeIndex: 0, node: para1 }];
 
       // Mix of header/footer and page margins
       vi.mocked(extractionModule.extractSectionData).mockReturnValue({
@@ -725,7 +734,7 @@ describe('analysis', () => {
         },
       };
 
-      const paragraphs = [{ index: 0, node: para1 }];
+      const paragraphs = [{ index: 0, nodeIndex: 0, node: para1 }];
 
       vi.mocked(extractionModule.extractSectionData).mockReturnValue({
         titlePg: false,
@@ -747,7 +756,7 @@ describe('analysis', () => {
         },
       };
 
-      const paragraphs = [{ index: 0, node: para1 }];
+      const paragraphs = [{ index: 0, nodeIndex: 0, node: para1 }];
 
       vi.mocked(extractionModule.extractSectionData).mockReturnValue({
         type: SectionType.CONTINUOUS,

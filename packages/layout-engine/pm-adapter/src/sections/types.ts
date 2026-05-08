@@ -89,11 +89,22 @@ export type SectionVerticalAlign = 'top' | 'center' | 'bottom' | 'both';
 
 /**
  * Section range represents a contiguous section in the document.
- * Word uses "end-tagged" section semantics: a paragraph's sectPr defines
- * properties for the section ENDING at that paragraph, not starting after it.
+ *
+ * Word uses "end-tagged" section semantics (ECMA-376 §17.6.17): a paragraph's
+ * sectPr defines properties for the section ENDING at that paragraph, not
+ * starting after it. All body children preceding the section-terminating
+ * paragraph — paragraphs, tables, top-level drawings — belong to that section.
+ *
+ * `startNodeIndex`/`endNodeIndex` are computed over every top-level
+ * `doc.content` child and are the authoritative boundaries for dispatching
+ * section breaks at emission time. `startParagraphIndex`/`endParagraphIndex`
+ * are retained for callers (SDT handlers) that count only paragraphs during
+ * recursive descent.
  */
 export interface SectionRange {
   sectionIndex: number;
+  startNodeIndex: number;
+  endNodeIndex: number;
   startParagraphIndex: number;
   endParagraphIndex: number;
   sectPr: SectPrElement | null;
@@ -109,6 +120,12 @@ export interface SectionRange {
   orientation: 'portrait' | 'landscape' | null;
   columns: ColumnLayout | null;
   type: SectionType;
+  /** True iff the section's `<w:type>` was explicitly written in the source.
+   *  Distinguishes "the body sectPr defaulted to continuous because OOXML
+   *  omitted w:type" (sd-1655) from "an explicit w:type=continuous on the
+   *  body sectPr" (sd-1480). Only the explicit form triggers Word's
+   *  end-of-document column balancing for single-page sections. */
+  typeIsExplicit: boolean;
   titlePg: boolean;
   headerRefs?: Partial<Record<'default' | 'first' | 'even' | 'odd', string>>;
   footerRefs?: Partial<Record<'default' | 'first' | 'even' | 'odd', string>>;

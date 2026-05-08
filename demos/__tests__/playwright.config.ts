@@ -5,8 +5,11 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-// DEMO env var: "react", "vue", "cdn", "nextjs-ssr", etc.
-const demo = process.env.DEMO || 'react';
+// DEMO env var: "custom-ui", "grading-papers", "slack-redlining", etc.
+// Default points at a curated source demo that survives the SD-2928 reorg.
+// `demos/react` is now a README-only shim, so the prior default would fail
+// when running this suite locally without an explicit DEMO override.
+const demo = process.env.DEMO || 'custom-ui';
 
 // Demos are flat: demos/<name>/
 const demoPath = `../${demo}`;

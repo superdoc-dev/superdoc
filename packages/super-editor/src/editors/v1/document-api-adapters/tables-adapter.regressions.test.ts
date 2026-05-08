@@ -1026,6 +1026,32 @@ describe('tables-adapter regressions', () => {
     }
   });
 
+  it('delegates to clearShading when setShading is called with color: null', () => {
+    const editor = makeTableEditor();
+    const tr = editor.state.tr as unknown as { setNodeMarkup: ReturnType<typeof vi.fn> };
+
+    const result = tablesSetShadingAdapter(editor, {
+      nodeId: 'cell-1',
+      color: null,
+    });
+
+    expect(result).toMatchObject({
+      success: true,
+      table: { kind: 'block', nodeType: 'table', nodeId: 'table-1' },
+    });
+
+    // Clear path deletes the shading prop rather than setting it to a color
+    const cellMarkupCalls = tr.setNodeMarkup.mock.calls.filter(
+      (call) =>
+        typeof call[2] === 'object' && call[2] != null && 'tableCellProperties' in (call[2] as Record<string, unknown>),
+    );
+    expect(cellMarkupCalls.length).toBeGreaterThan(0);
+    for (const call of cellMarkupCalls) {
+      const props = (call[2] as { tableCellProperties: Record<string, unknown> }).tableCellProperties;
+      expect(props).not.toHaveProperty('shading');
+    }
+  });
+
   it.each([
     {
       name: 'tables.setBorder',

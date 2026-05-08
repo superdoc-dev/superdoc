@@ -232,8 +232,16 @@ export {
   dispatchSuperDocTool,
   getMcpPrompt,
   getSystemPrompt,
+  getSystemPromptForProvider,
   getToolCatalog,
   listTools,
+} from './tools.js';
+export type {
+  AnthropicSystemPrompt,
+  CacheStrategy,
+  SystemPromptForProviderResult,
+  ToolChooserInput,
+  ToolProvider,
 } from './tools.js';
 export { dispatchIntentTool } from './generated/intent-dispatch.generated.js';
 export { SuperDocCliError } from './runtime/errors.js';
@@ -244,5 +252,4 @@ export type {
   RuntimeInvoker,
   SuperDocClientOptions,
 } from './runtime/process.js';
-export type { ToolChooserInput, ToolProvider } from './tools.js';
 export type { DocOpenResult } from './generated/client.js';

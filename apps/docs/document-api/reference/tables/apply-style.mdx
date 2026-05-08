@@ -1,14 +1,14 @@
 ---
 title: tables.applyStyle
 sidebarTitle: tables.applyStyle
-description: Apply a table style and/or style options in one call.
+description: "Toggle conditional-format flags (header row, banded rows/columns, first/last column, last row) on a table. Pass `styleOptions` with the flags you want to set or clear (omitted flags stay unchanged). For \"format the first row as a header\" use `styleOptions: { headerRow: true }`. Optional `styleId` applies a named table style. Leave it unset unless you have a styleId from `superdoc_get_content` (no need to invent one)."
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
 
 ## Summary
 
-Apply a table style and/or style options in one call.
+Toggle conditional-format flags (header row, banded rows/columns, first/last column, last row) on a table. Pass `styleOptions` with the flags you want to set or clear (omitted flags stay unchanged). For "format the first row as a header" use `styleOptions: \{ headerRow: true \}`. Optional `styleId` applies a named table style. Leave it unset unless you have a styleId from `superdoc_get_content` (no need to invent one).
 
 - Operation ID: `tables.applyStyle`
 - API member path: `editor.doc.tables.applyStyle(...)`

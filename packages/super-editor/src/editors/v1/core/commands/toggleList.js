@@ -1,6 +1,6 @@
 // @ts-check
 import { updateNumberingProperties } from './changeListLevel.js';
-import { ListHelpers, markerTextToBulletStyle } from '@helpers/list-numbering-helpers.js';
+import { ListHelpers, markerTextToBulletStyle, numberingInfoToOrderedStyle } from '@helpers/list-numbering-helpers.js';
 import { getResolvedParagraphProperties } from '@extensions/paragraph/resolvedPropertiesCache.js';
 import { isVisuallyEmptyParagraph } from './removeNumberingProperties.js';
 import { Selection, TextSelection } from 'prosemirror-state';
@@ -26,7 +26,14 @@ function getParagraphListKind(node, editor) {
   return numFmtIsBullet(fmt) ? 'bullet' : 'ordered';
 }
 
-function paragraphMatchesToggleListType(node, editor, listType, bulletStyle) {
+/**
+ * @param {any} node
+ * @param {any} editor
+ * @param {string} listType
+ * @param {'disc'|'circle'|'square'|null} [bulletStyle]
+ * @param {import('../../extensions/types/paragraph-commands.js').OrderedListStyle|null} [orderedStyle]
+ */
+function paragraphMatchesToggleListType(node, editor, listType, bulletStyle, orderedStyle) {
   const kind = getParagraphListKind(node, editor);
   if (!kind) return false;
   if (listType === 'bulletList') {
@@ -35,7 +42,12 @@ function paragraphMatchesToggleListType(node, editor, listType, bulletStyle) {
     const markerText = node.attrs.listRendering?.markerText;
     return markerTextToBulletStyle(markerText) === bulletStyle;
   }
-  if (listType === 'orderedList') return kind === 'ordered';
+  if (listType === 'orderedList') {
+    if (kind !== 'ordered') return false;
+    if (!orderedStyle) return true;
+    const { numberingType, markerText } = node.attrs.listRendering ?? {};
+    return numberingInfoToOrderedStyle(numberingType, markerText) === orderedStyle;
+  }
   return false;
 }
 
@@ -64,14 +76,19 @@ function getPrecedingParagraphForListReuse(doc, from, paragraphsInSelection) {
   return nb?.type?.name === 'paragraph' ? nb : null;
 }
 
+/**
+ * @param {string} listType
+ * @param {'disc'|'circle'|'square'|null} [bulletStyle]
+ * @param {import('../../extensions/types/paragraph-commands.js').OrderedListStyle|null} [orderedStyle]
+ */
 export const toggleList =
-  (listType, bulletStyle) =>
+  (listType, bulletStyle, orderedStyle) =>
   ({ editor, state, tr, dispatch }) => {
     if (listType !== 'orderedList' && listType !== 'bulletList') {
       return false;
     }
 
-    const predicate = (n) => paragraphMatchesToggleListType(n, editor, listType, bulletStyle);
+    const predicate = (n) => paragraphMatchesToggleListType(n, editor, listType, bulletStyle, orderedStyle);
     const { selection } = state;
     const { from, to } = selection;
     let firstListNode = null;
@@ -85,13 +102,43 @@ export const toggleList =
       return true;
     });
 
-    // Skip visually empty paragraphs (e.g., paragraphs with only an empty run)
-    // but only when creating a list from multiple paragraphs.
-    // If only a single paragraph is selected (even if empty), we should still apply the list.
-    let paragraphsInSelection =
+    // Skip visually empty paragraphs when creating a list from multiple paragraphs;
+    // a single selected paragraph (even if empty) should still toggle.
+    const originalParagraphsInSelection =
       allParagraphsInSelection.length === 1
         ? allParagraphsInSelection
         : allParagraphsInSelection.filter(({ node }) => !isVisuallyEmptyParagraph(node));
+
+    // Expand to every sibling paragraph at the same `(numId, ilvl)` when the selection is
+    // entirely inside a list, so a caret in one item flips every item at that level.
+    let paragraphsInSelection = originalParagraphsInSelection;
+    const seenLevels = new Set();
+    let allListItems = paragraphsInSelection.length > 0;
+    for (const { node } of paragraphsInSelection) {
+      const np = getResolvedParagraphProperties(node)?.numberingProperties;
+      if (!np?.numId) {
+        allListItems = false;
+        break;
+      }
+      seenLevels.add(`${Number(np.numId)}:${Number(np.ilvl ?? 0)}`);
+    }
+
+    // Bare-caret toggles target the whole list level (every sibling at the same
+    // (numId, ilvl) is restyled together). A non-empty selection narrows the scope
+    // to exactly the paragraphs the user picked.
+    if (allListItems && seenLevels.size > 0 && selection.empty) {
+      const expanded = new Map(paragraphsInSelection.map((p) => [p.pos, p]));
+      state.doc.descendants((node, pos) => {
+        if (node.type.name !== 'paragraph') return true;
+        if (expanded.has(pos)) return false;
+        const np = getResolvedParagraphProperties(node)?.numberingProperties;
+        if (np?.numId && seenLevels.has(`${Number(np.numId)}:${Number(np.ilvl ?? 0)}`)) {
+          expanded.set(pos, { node, pos });
+        }
+        return false;
+      });
+      paragraphsInSelection = [...expanded.values()].sort((a, b) => a.pos - b.pos);
+    }
 
     for (const { node } of paragraphsInSelection) {
       if (!firstListNode && predicate(node)) {
@@ -100,14 +147,9 @@ export const toggleList =
         hasNonListParagraphs = true;
       }
     }
-    // Only borrow numbering from a preceding list paragraph when the selection
-    // is made up of *plain* paragraphs (no numbering yet). The borrow is meant
-    // to extend a previous list onto adjacent non-list paragraphs. If a
-    // paragraph in the selection is already a list item — even one whose
-    // marker doesn't match the requested style — we should not reuse a
-    // neighbor's numId, because that throws away the existing nesting and
-    // overrides the user's style choice with the neighbor's level. Falling
-    // through to `create` mints a fresh abstract instead.
+    // Only borrow numbering from a preceding list paragraph when the selection is made up
+    // entirely of plain paragraphs. If any selected paragraph already has numbering, fall
+    // through to `create` so we mint a fresh abstract and don't clobber existing nesting.
     const selectionAlreadyHasListNumbering = paragraphsInSelection.some(
       ({ node }) => getResolvedParagraphProperties(node)?.numberingProperties != null,
     );
@@ -115,6 +157,59 @@ export const toggleList =
       const beforeNode = getPrecedingParagraphForListReuse(state.doc, from, paragraphsInSelection);
       if (beforeNode && predicate(beforeNode)) {
         firstListNode = beforeNode;
+      }
+    }
+
+    // Whole-list restyle: with a bare caret on a list paragraph (and none already in the
+    // requested kind+style), clone the abstract per unique (numId, ilvl) and migrate every
+    // sibling at that level to the new numId via PM-tracked `setNodeMarkup`. The original
+    // abstract is never mutated, so PM history undo can revert the migration → siblings
+    // return to the source numId → markers go back to the original style.
+    //   - Style swap within the same kind (disc → square, decimal → upper-roman).
+    //   - Kind switch (bullet → ordered) — the new abstract carries the new kind at the
+    //     paragraph's existing ilvl, so the parent level (e.g. level 0 bullet) is preserved.
+    if (firstListNode == null && allListItems && selection.empty) {
+      // Default each kind to its canonical style when the caller didn't specify one,
+      // so plain `toggleOrderedList()` / `toggleBulletList()` still flips the level.
+      const effectiveBulletStyle = listType === 'bulletList' ? (bulletStyle ?? 'disc') : null;
+      const effectiveOrderedStyle = listType === 'orderedList' ? (orderedStyle ?? 'decimal') : null;
+
+      // Group paragraphs by (sourceNumId, ilvl) so each unique level mints exactly one clone.
+      const groups = new Map();
+      for (const p of paragraphsInSelection) {
+        const np = getResolvedParagraphProperties(p.node).numberingProperties;
+        const sourceNumId = Number(np.numId);
+        const ilvl = Number(np.ilvl ?? 0);
+        const key = `${sourceNumId}:${ilvl}`;
+        if (!groups.has(key)) groups.set(key, { sourceNumId, ilvl, paragraphs: [] });
+        groups.get(key).paragraphs.push(p);
+      }
+
+      if (groups.size > 0) {
+        if (!dispatch) return true;
+
+        for (const { sourceNumId, ilvl, paragraphs } of groups.values()) {
+          const minted = ListHelpers.cloneListDefinitionWithLevelStyle({
+            editor,
+            sourceNumId,
+            ilvl,
+            bulletStyle: effectiveBulletStyle,
+            orderedStyle: effectiveOrderedStyle,
+          });
+          if (!minted) continue;
+          for (const { node, pos } of paragraphs) {
+            updateNumberingProperties({ numId: minted.newNumId, ilvl }, node, pos, editor, tr);
+          }
+        }
+
+        // The numbering model has already been mutated via mutateNumbering
+        // inside cloneListDefinitionWithLevelStyle. The setNodeMarkup steps
+        // added to `tr` above need to be dispatched too — otherwise direct
+        // command callers (e.g. `editor.commands.toggleOrderedListStyle(...)`
+        // invoked outside the toolbar wiring) would see the numbering
+        // definitions change without the paragraphs migrating to them.
+        dispatch(tr);
+        return true;
       }
     }
     // 3. Resolve numbering properties
@@ -142,21 +237,21 @@ export const toggleList =
     if (!dispatch) return true;
 
     if (mode === 'create') {
-      // If we're swapping the bullet style on an already-nested item, mint the
+      // If we're swapping the bullet/ordered style on an already-nested item, mint the
       // new list with the override applied at that paragraph's existing level —
       // otherwise the override only lands on level 0 and the nested paragraph
       // ends up rendering whatever marker the base template assigned to its
       // level. We pick the level from the first list paragraph in the
       // selection so style swaps stay coherent with the existing nesting.
-      let bulletStyleLevel = 0;
-      if (bulletStyle) {
+      let styleOverrideLevel = 0;
+      if (bulletStyle || orderedStyle) {
         const firstExistingListPara = paragraphsInSelection.find(
           ({ node }) => getResolvedParagraphProperties(node)?.numberingProperties?.ilvl != null,
         );
         const existingIlvl = firstExistingListPara
           ? getResolvedParagraphProperties(firstExistingListPara.node)?.numberingProperties?.ilvl
           : null;
-        if (existingIlvl != null) bulletStyleLevel = existingIlvl;
+        if (existingIlvl != null) styleOverrideLevel = existingIlvl;
       }
 
       const numId = ListHelpers.getNewListId(editor);
@@ -165,7 +260,9 @@ export const toggleList =
         listType,
         editor,
         bulletStyle,
-        bulletStyleLevel,
+        bulletStyleLevel: styleOverrideLevel,
+        orderedStyle,
+        orderedStyleLevel: styleOverrideLevel,
       });
       sharedNumberingProperties = {
         numId: Number(numId),
@@ -196,11 +293,10 @@ export const toggleList =
       updateNumberingProperties(propertiesForParagraph, node, pos, editor, tr);
     }
 
-    // Restore a natural post-toggle selection.
-    // Collapsed caret toggles should keep a caret. Ranged toggles should keep a range.
-    if (paragraphsInSelection.length > 0) {
-      const firstPara = paragraphsInSelection[0];
-      const lastPara = paragraphsInSelection[paragraphsInSelection.length - 1];
+    // Restore selection anchored to the user's original range, not the expanded one.
+    if (originalParagraphsInSelection.length > 0) {
+      const firstPara = originalParagraphsInSelection[0];
+      const lastPara = originalParagraphsInSelection[originalParagraphsInSelection.length - 1];
       // `toggleList()` only updates paragraph attributes via `setNodeMarkup()`,
       // so the paragraph boundaries stay stable inside the transaction.
       const firstParagraphPos = firstPara.pos;
@@ -209,7 +305,7 @@ export const toggleList =
       const lastNode = tr.doc.nodeAt(lastParagraphPos);
       const restoredSelectionRange = computeToggleListSelectionRange({
         selectionWasCollapsed: selection.empty,
-        affectedParagraphCount: paragraphsInSelection.length,
+        affectedParagraphCount: originalParagraphsInSelection.length,
         firstParagraphPos,
         lastParagraphPos,
         firstNode,
@@ -223,7 +319,7 @@ export const toggleList =
         restoredSelectionRange.from <= restoredSelectionRange.to
       ) {
         try {
-          if (selection.empty && paragraphsInSelection.length === 1) {
+          if (selection.empty && originalParagraphsInSelection.length === 1) {
             tr.setSelection(Selection.near(tr.doc.resolve(restoredSelectionRange.to), -1));
           } else {
             tr.setSelection(TextSelection.create(tr.doc, restoredSelectionRange.from, restoredSelectionRange.to));

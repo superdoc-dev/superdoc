@@ -74,6 +74,33 @@ describe('generateOrderedListIndex', () => {
     expect(result).toBeNull();
   });
 
+  // Word's `upperLetter` / `lowerLetter` use repeated-letter notation (AA, BB,
+  // CC, ..., AAA, BBB, ...) rather than Excel-style base-26 (AA, AB, AC, ...).
+  // OOXML spec: at value n, repeat the letter at index (n-1)%26 floor((n-1)/26)+1 times.
+  it('formats upperLetter markers with Word-compatible repeated letters', () => {
+    const at = (n: number) =>
+      generateOrderedListIndex({ listLevel: [n], lvlText: '%1.', listNumberingType: 'upperLetter' });
+    expect(at(1)).toBe('A.');
+    expect(at(26)).toBe('Z.');
+    expect(at(27)).toBe('AA.');
+    expect(at(28)).toBe('BB.');
+    expect(at(52)).toBe('ZZ.');
+    expect(at(53)).toBe('AAA.');
+    expect(at(78)).toBe('ZZZ.');
+    expect(at(79)).toBe('AAAA.');
+  });
+
+  it('formats lowerLetter markers with Word-compatible repeated letters', () => {
+    const at = (n: number) =>
+      generateOrderedListIndex({ listLevel: [n], lvlText: '%1)', listNumberingType: 'lowerLetter' });
+    expect(at(1)).toBe('a)');
+    expect(at(26)).toBe('z)');
+    expect(at(27)).toBe('aa)');
+    expect(at(28)).toBe('bb)');
+    expect(at(52)).toBe('zz)');
+    expect(at(53)).toBe('aaa)');
+  });
+
   describe('malformed lvlText', () => {
     it('returns null when lvlText is null', () => {
       const result = generateOrderedListIndex({

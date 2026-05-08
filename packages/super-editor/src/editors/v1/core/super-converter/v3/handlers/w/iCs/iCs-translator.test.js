@@ -6,14 +6,14 @@ import { NodeTranslator } from '../../../node-translator/node-translator.js';
 describe('w:iCs translator (attribute)', () => {
   it('exposes correct translator meta', () => {
     expect(translator.xmlName).toBe('w:iCs');
-    expect(translator.sdNodeOrKeyName).toBe('iCs');
+    expect(translator.sdNodeOrKeyName).toBe('italicCs');
     expect(typeof translator.encode).toBe('function');
   });
 
   it('builds NodeTranslator instance', () => {
     expect(translator).toBeInstanceOf(NodeTranslator);
     expect(translator.xmlName).toBe('w:iCs');
-    expect(translator.sdNodeOrKeyName).toBe('iCs');
+    expect(translator.sdNodeOrKeyName).toBe('italicCs');
   });
 
   describe('encode', () => {

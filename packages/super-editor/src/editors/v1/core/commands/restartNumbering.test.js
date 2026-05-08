@@ -20,6 +20,8 @@ vi.mock('@core/commands/list-helpers', () => ({
 vi.mock('@helpers/list-numbering-helpers.js', () => ({
   ListHelpers: {
     setLvlOverride: vi.fn(),
+    getAllListDefinitions: vi.fn(),
+    createNumDefinition: vi.fn(),
   },
 }));
 
@@ -28,6 +30,12 @@ vi.mock('@extensions/paragraph/resolvedPropertiesCache.js', () => ({
     return node?.attrs?.paragraphProperties || { numberingProperties: null };
   }),
 }));
+
+vi.mock('@core/commands/changeListLevel.js', () => ({
+  updateNumberingProperties: vi.fn(),
+}));
+
+import { updateNumberingProperties } from '@core/commands/changeListLevel.js';
 
 describe('restartNumbering', () => {
   /** @type {ReturnType<typeof vi.fn>} */
@@ -38,8 +46,6 @@ describe('restartNumbering', () => {
   let tr;
   /** @type {any} */
   let editor;
-  /** @type {ReturnType<typeof vi.fn>} */
-  let dispatch;
 
   const createParagraph = ({ numId, ilvl = 0 }) => ({
     type: { name: 'paragraph' },
@@ -55,22 +61,26 @@ describe('restartNumbering', () => {
     resolveParent = vi.fn();
     findParentNode.mockReturnValue(resolveParent);
 
-    state = { selection: {} };
-    tr = {};
+    const sharedDoc = {
+      content: { size: 100 },
+      nodesBetween: vi.fn(),
+    };
+    state = { selection: {}, doc: sharedDoc };
+    tr = { setMeta: vi.fn() };
     editor = {};
-    dispatch = vi.fn();
 
     isList.mockReturnValue(true);
+    ListHelpers.getAllListDefinitions.mockReturnValue({});
+    ListHelpers.createNumDefinition.mockReturnValue({ numId: 99 });
   });
 
   it('returns false when no list paragraph is found', () => {
     resolveParent.mockReturnValue(null);
 
-    const result = restartNumbering({ editor, tr, state, dispatch });
+    const result = restartNumbering({ editor, tr, state });
 
     expect(result).toBe(false);
     expect(ListHelpers.setLvlOverride).not.toHaveBeenCalled();
-    expect(dispatch).not.toHaveBeenCalled();
   });
 
   it('returns false when paragraph has no numId', () => {
@@ -80,58 +90,132 @@ describe('restartNumbering', () => {
     };
     resolveParent.mockReturnValue({ node: paragraph, pos: 5 });
 
-    const result = restartNumbering({ editor, tr, state, dispatch });
+    const result = restartNumbering({ editor, tr, state });
 
     expect(result).toBe(false);
     expect(ListHelpers.setLvlOverride).not.toHaveBeenCalled();
-    expect(dispatch).not.toHaveBeenCalled();
   });
 
-  it('sets startOverride on the existing numId and dispatches', () => {
-    const paragraph = createParagraph({ numId: 7, ilvl: 0 });
-    resolveParent.mockReturnValue({ node: paragraph, pos: 5 });
+  describe('first item in list (no preceding items)', () => {
+    beforeEach(() => {
+      // nodesBetween finds no preceding items
+      state.doc.nodesBetween.mockImplementation((from, to) => {
+        if (to === 5) return; // searching for preceding items — none found
+      });
+    });
 
-    const result = restartNumbering({ editor, tr, state, dispatch });
+    it('sets startOverride on the existing numId and flags the captured tr with preventDispatch (view present)', () => {
+      const paragraph = createParagraph({ numId: 7, ilvl: 0 });
+      resolveParent.mockReturnValue({ node: paragraph, pos: 5 });
+      editor.view = { dispatch: vi.fn() };
 
-    expect(result).toBe(true);
-    expect(ListHelpers.setLvlOverride).toHaveBeenCalledWith(editor, 7, 0, { startOverride: 1 });
-    expect(dispatch).toHaveBeenCalledWith(tr);
+      const result = restartNumbering({ editor, tr, state });
+
+      expect(result).toBe(true);
+      expect(ListHelpers.setLvlOverride).toHaveBeenCalledWith(editor, 7, 0, { startOverride: 1 });
+      expect(ListHelpers.createNumDefinition).not.toHaveBeenCalled();
+      expect(tr.setMeta).toHaveBeenCalledWith('preventDispatch', true);
+    });
+
+    it('does NOT set preventDispatch in headless mode (no view) so CommandService can dispatch the captured tr', () => {
+      const paragraph = createParagraph({ numId: 7, ilvl: 0 });
+      resolveParent.mockReturnValue({ node: paragraph, pos: 5 });
+      // editor.view intentionally undefined
+
+      const result = restartNumbering({ editor, tr, state });
+
+      expect(result).toBe(true);
+      expect(ListHelpers.setLvlOverride).toHaveBeenCalledWith(editor, 7, 0, { startOverride: 1 });
+      expect(tr.setMeta).not.toHaveBeenCalledWith('preventDispatch', true);
+    });
+
+    it('defaults ilvl to 0 when not specified', () => {
+      const paragraph = {
+        type: { name: 'paragraph' },
+        attrs: {
+          paragraphProperties: { numberingProperties: { numId: 5 } },
+        },
+        nodeSize: 4,
+      };
+      resolveParent.mockReturnValue({ node: paragraph, pos: 3 });
+
+      const result = restartNumbering({ editor, tr, state });
+
+      expect(result).toBe(true);
+      expect(ListHelpers.setLvlOverride).toHaveBeenCalledWith(editor, 5, 0, { startOverride: 1 });
+    });
   });
 
-  it('uses the correct ilvl from paragraph properties', () => {
-    const paragraph = createParagraph({ numId: 3, ilvl: 2 });
-    resolveParent.mockReturnValue({ node: paragraph, pos: 10 });
-
-    const result = restartNumbering({ editor, tr, state, dispatch });
-
-    expect(result).toBe(true);
-    expect(ListHelpers.setLvlOverride).toHaveBeenCalledWith(editor, 3, 2, { startOverride: 1 });
-    expect(dispatch).toHaveBeenCalledWith(tr);
-  });
-
-  it('defaults ilvl to 0 when not specified', () => {
-    const paragraph = {
+  describe('mid-list restart (preceding items exist)', () => {
+    const precedingParagraph = {
       type: { name: 'paragraph' },
-      attrs: {
-        paragraphProperties: { numberingProperties: { numId: 5 } },
-      },
+      attrs: { paragraphProperties: { numberingProperties: { numId: 7, ilvl: 0 } } },
       nodeSize: 4,
     };
-    resolveParent.mockReturnValue({ node: paragraph, pos: 3 });
 
-    const result = restartNumbering({ editor, tr, state, dispatch });
+    beforeEach(() => {
+      // nodesBetween[0..paragraphPos] finds a preceding item with numId=7
+      state.doc.nodesBetween.mockImplementation((from, to, cb) => {
+        if (to === 20) {
+          // preceding search range
+          cb(precedingParagraph, 5);
+        }
+        // forward range (paragraphPos..end): no further items to remap in this stub
+      });
 
-    expect(result).toBe(true);
-    expect(ListHelpers.setLvlOverride).toHaveBeenCalledWith(editor, 5, 0, { startOverride: 1 });
-  });
+      ListHelpers.getAllListDefinitions.mockReturnValue({
+        7: { 0: { abstractId: '42' } },
+      });
+      ListHelpers.createNumDefinition.mockReturnValue({ numId: 99 });
+    });
 
-  it('does not dispatch when dispatch is not provided', () => {
-    const paragraph = createParagraph({ numId: 7, ilvl: 0 });
-    resolveParent.mockReturnValue({ node: paragraph, pos: 5 });
+    it('creates a new numId and sets startOverride on it', () => {
+      const paragraph = createParagraph({ numId: 7, ilvl: 0 });
+      resolveParent.mockReturnValue({ node: paragraph, pos: 20 });
 
-    const result = restartNumbering({ editor, tr, state });
+      const result = restartNumbering({ editor, tr, state });
 
-    expect(result).toBe(true);
-    expect(ListHelpers.setLvlOverride).toHaveBeenCalledWith(editor, 7, 0, { startOverride: 1 });
+      expect(result).toBe(true);
+      expect(ListHelpers.createNumDefinition).toHaveBeenCalledWith(editor, 42);
+      expect(ListHelpers.setLvlOverride).toHaveBeenCalledWith(editor, 99, 0, { startOverride: 1 });
+    });
+
+    it('remaps paragraphs from current position to the new numId', () => {
+      const paragraph = createParagraph({ numId: 7, ilvl: 0 });
+      const followingParagraph = createParagraph({ numId: 7, ilvl: 0 });
+      resolveParent.mockReturnValue({ node: paragraph, pos: 20 });
+
+      state.doc.nodesBetween.mockImplementation((from, to, cb) => {
+        if (to === 20) {
+          cb(precedingParagraph, 5); // preceding item
+        } else {
+          // forward range: current and following item
+          cb(paragraph, 20);
+          cb(followingParagraph, 30);
+        }
+      });
+
+      restartNumbering({ editor, tr, state });
+
+      expect(updateNumberingProperties).toHaveBeenCalledWith({ numId: 99, ilvl: 0 }, paragraph, 20, editor, tr);
+      expect(updateNumberingProperties).toHaveBeenCalledWith(
+        { numId: 99, ilvl: 0 },
+        followingParagraph,
+        30,
+        editor,
+        tr,
+      );
+    });
+
+    it('returns false when abstractId cannot be resolved', () => {
+      const paragraph = createParagraph({ numId: 7, ilvl: 0 });
+      resolveParent.mockReturnValue({ node: paragraph, pos: 20 });
+      ListHelpers.getAllListDefinitions.mockReturnValue({}); // no definition
+
+      const result = restartNumbering({ editor, tr, state });
+
+      expect(result).toBe(false);
+      expect(ListHelpers.createNumDefinition).not.toHaveBeenCalled();
+    });
   });
 });

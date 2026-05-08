@@ -616,6 +616,7 @@ describe('createToolbarRegistry', () => {
                         attrs: {
                           listRendering: {
                             numberingType: 'decimal',
+                            markerText: '1.',
                           },
                           paragraphProperties: {
                             numberingProperties: {
@@ -639,6 +640,7 @@ describe('createToolbarRegistry', () => {
     expect(state).toEqual({
       active: true,
       disabled: false,
+      value: 'decimal',
     });
   });
 
@@ -697,6 +699,26 @@ describe('createToolbarRegistry', () => {
         config: {
           rulers: true,
         },
+      },
+    });
+
+    expect(state).toEqual({
+      active: true,
+      disabled: false,
+    });
+  });
+
+  it('activates formatting marks state when formatting marks are enabled in superdoc config', () => {
+    const registry = createToolbarRegistry();
+    const state = registry['formatting-marks']?.state({
+      context: null,
+      superdoc: {
+        config: {
+          layoutEngineOptions: {
+            showFormattingMarks: true,
+          },
+        },
+        toggleFormattingMarks: vi.fn(),
       },
     });
 
@@ -925,6 +947,122 @@ describe('createToolbarRegistry', () => {
     expect(state).toEqual({
       active: false,
       disabled: true,
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // PR-2873 (SD-2527) — full coverage of bullet + ordered style derivation
+  //
+  // The existing 'activates bullet-list' / 'activates numbered-list' tests
+  // above only cover one bullet case (null markerText) and one ordered case
+  // (decimal). These new tests exercise every PR-supported combination of
+  // numFmt + marker suffix that flows through createListStateDeriver.
+  // -------------------------------------------------------------------------
+  const makeListContext = (listRendering: { numberingType: string; markerText?: string | null }) => ({
+    ...createContext(),
+    editor: {
+      state: {
+        doc: { resolve: vi.fn(() => '$resolved-pos') },
+        selection: {
+          $from: {
+            depth: 1,
+            node: vi.fn((depth) =>
+              depth === 1
+                ? {
+                    type: { name: 'paragraph' },
+                    attrs: {
+                      listRendering,
+                      paragraphProperties: { numberingProperties: { numId: 1 } },
+                    },
+                  }
+                : null,
+            ),
+            before: vi.fn(() => 5),
+            start: vi.fn(() => 6),
+          },
+        },
+      },
+    } as any,
+  });
+
+  describe('bullet-list state value (PR-2873)', () => {
+    // The headless deriver currently returns the raw markerText for bullets
+    // (vs ordered which returns a normalized style key). External consumers
+    // need to know this asymmetry — these tests document it.
+    it.each([['•'], ['◦'], ['▪']])('returns markerText "%s" verbatim when bullet is active', (markerText) => {
+      const registry = createToolbarRegistry();
+      const state = registry['bullet-list']?.state({
+        context: makeListContext({ numberingType: 'bullet', markerText }),
+        superdoc: {},
+      });
+      expect(state).toEqual({ active: true, disabled: false, value: markerText });
+    });
+
+    it('returns markerText for legacy Symbol-font middle dot (·) — not normalized', () => {
+      const registry = createToolbarRegistry();
+      const state = registry['bullet-list']?.state({
+        context: makeListContext({ numberingType: 'bullet', markerText: '·' }),
+        superdoc: {},
+      });
+      // Legacy Symbol-font bullet is not in BULLET_STYLE_CHARS but the deriver
+      // surfaces the raw glyph anyway; the dropdown UI does the recognition.
+      expect(state).toEqual({ active: true, disabled: false, value: '·' });
+    });
+
+    it('returns null when current paragraph is ordered, not bullet', () => {
+      const registry = createToolbarRegistry();
+      const state = registry['bullet-list']?.state({
+        context: makeListContext({ numberingType: 'decimal', markerText: '1.' }),
+        superdoc: {},
+      });
+      expect(state).toEqual({ active: false, disabled: false, value: null });
+    });
+  });
+
+  describe('numbered-list state value (PR-2873)', () => {
+    it.each([
+      ['decimal', '1.', 'decimal'],
+      ['decimal', '1)', 'decimal-paren'],
+      ['decimal', '23.', 'decimal'],
+      ['upperRoman', 'I.', 'upper-roman'],
+      ['upperRoman', 'XIV.', 'upper-roman'],
+      ['lowerRoman', 'i.', 'lower-roman'],
+      ['upperLetter', 'A.', 'upper-alpha'],
+      ['upperLetter', 'A)', 'upper-alpha-paren'],
+      ['upperLetter', 'Z)', 'upper-alpha-paren'],
+      ['lowerLetter', 'a.', 'lower-alpha'],
+      ['lowerLetter', 'a)', 'lower-alpha-paren'],
+      ['lowerLetter', 'z)', 'lower-alpha-paren'],
+    ])('maps (%s, %s) to value=%s', (numberingType, markerText, expected) => {
+      const registry = createToolbarRegistry();
+      const state = registry['numbered-list']?.state({
+        context: makeListContext({ numberingType, markerText }),
+        superdoc: {},
+      });
+      expect(state).toEqual({ active: true, disabled: false, value: expected });
+    });
+
+    it.each([
+      ['decimalZero', '01.', 'decimalZero numFmt is not in the lookup'],
+      ['decimal', 'Step 1:', 'unrecognized suffix ":"'],
+    ])('returns value=null for unsupported combo (%s, %s) — %s', (numberingType, markerText) => {
+      const registry = createToolbarRegistry();
+      const state = registry['numbered-list']?.state({
+        context: makeListContext({ numberingType, markerText }),
+        superdoc: {},
+      });
+      // active is true (it IS an ordered list) but value is null because the
+      // PR doesn't recognize this combo — the dropdown won't highlight any option.
+      expect(state).toEqual({ active: true, disabled: false, value: null });
+    });
+
+    it('returns null when current paragraph is bullet, not ordered', () => {
+      const registry = createToolbarRegistry();
+      const state = registry['numbered-list']?.state({
+        context: makeListContext({ numberingType: 'bullet', markerText: '•' }),
+        superdoc: {},
+      });
+      expect(state).toEqual({ active: false, disabled: false, value: null });
     });
   });
 });

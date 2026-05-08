@@ -4,7 +4,7 @@ import JSZip from 'jszip';
 test.use({ config: { toolbar: 'full' } });
 
 const BULLET_DROPDOWN_CARET = '[aria-label="Bullet list"] .dropdown-caret';
-const STYLE_OPTION = (label: string) => `.bullet-style-buttons [aria-label="${label}"]`;
+const STYLE_OPTION = (label: string) => `.style-buttons-list [aria-label="${label}"]`;
 
 const STYLE_LABEL = {
   disc: 'Opaque circle',
@@ -96,7 +96,9 @@ function getExportedBulletMarker({
 }
 
 test.describe('bullet style export (SD-2526)', () => {
-  test('exports a style change applied from the second item in an existing bullet list', async ({ superdoc }) => {
+  test('exports a style change applied from the second item — restyles every sibling at the same level (SD-2527)', async ({
+    superdoc,
+  }) => {
     await superdoc.type('alpha');
     await superdoc.waitForStable();
 
@@ -108,8 +110,10 @@ test.describe('bullet style export (SD-2526)', () => {
     await superdoc.waitForStable();
     expect(await getMarkerTextForParagraph(superdoc, 'beta')).toBe(STYLE_MARKER.disc);
 
+    // Bare caret in `beta`. SD-2527 restyles every sibling at the same (numId, ilvl) by
+    // mutating the abstract — so `alpha` flips too.
     await pickStyle(superdoc, 'square');
-    expect(await getMarkerTextForParagraph(superdoc, 'alpha')).toBe(STYLE_MARKER.disc);
+    expect(await getMarkerTextForParagraph(superdoc, 'alpha')).toBe(STYLE_MARKER.square);
     expect(await getMarkerTextForParagraph(superdoc, 'beta')).toBe(STYLE_MARKER.square);
 
     const bytes: number[] = await superdoc.page.evaluate(async () => {
@@ -122,7 +126,7 @@ test.describe('bullet style export (SD-2526)', () => {
     const documentXml = await zip.file('word/document.xml')!.async('string');
     const numberingXml = await zip.file('word/numbering.xml')!.async('string');
 
-    expect(getExportedBulletMarker({ documentXml, numberingXml, paragraphText: 'alpha' })).toBe(STYLE_MARKER.disc);
+    expect(getExportedBulletMarker({ documentXml, numberingXml, paragraphText: 'alpha' })).toBe(STYLE_MARKER.square);
     expect(getExportedBulletMarker({ documentXml, numberingXml, paragraphText: 'beta' })).toBe(STYLE_MARKER.square);
   });
 });

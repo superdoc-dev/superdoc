@@ -471,11 +471,9 @@ function setDomRangeStart(range: Range, entry: DomPositionIndexEntry, pos: numbe
   const el = entry.el;
   const pmStart = entry.pmStart;
 
-  const firstChild = el.firstChild;
-  if (firstChild && firstChild.nodeType === Node.TEXT_NODE) {
-    const textNode = firstChild as Text;
-    const charIndex = mapPmPosToCharIndex(pos, pmStart, entry.pmEnd, textNode.length);
-    range.setStart(textNode, charIndex);
+  const boundary = resolveTextBoundaryInElement(el, pos, pmStart, entry.pmEnd, 'forward');
+  if (boundary) {
+    range.setStart(boundary.node, boundary.offset);
     return true;
   }
 
@@ -505,11 +503,9 @@ function setDomRangeEnd(range: Range, entry: DomPositionIndexEntry, pos: number)
   const el = entry.el;
   const pmStart = entry.pmStart;
 
-  const firstChild = el.firstChild;
-  if (firstChild && firstChild.nodeType === Node.TEXT_NODE) {
-    const textNode = firstChild as Text;
-    const charIndex = mapPmPosToCharIndex(pos, pmStart, entry.pmEnd, textNode.length);
-    range.setEnd(textNode, charIndex);
+  const boundary = resolveTextBoundaryInElement(el, pos, pmStart, entry.pmEnd, 'backward');
+  if (boundary) {
+    range.setEnd(boundary.node, boundary.offset);
     return true;
   }
 
@@ -577,8 +573,8 @@ export function computeDomCaretPageLocal(
   const pageRect = page.getBoundingClientRect();
   const zoom = options.zoom;
 
-  const textNode = targetEl.firstChild;
-  if (!textNode || textNode.nodeType !== Node.TEXT_NODE) {
+  const boundary = resolveTextBoundaryInElement(targetEl, pos, entry.pmStart, entry.pmEnd, 'forward');
+  if (!boundary) {
     const elRect = targetEl.getBoundingClientRect();
     // For non-text elements (images, math), position caret at the right edge
     // when pos matches pmEnd (cursor after the element)
@@ -590,10 +586,9 @@ export function computeDomCaretPageLocal(
     };
   }
 
-  const charIndex = mapPmPosToCharIndex(pos, entry.pmStart, entry.pmEnd, (textNode as Text).length);
   const range = document.createRange();
-  range.setStart(textNode, charIndex);
-  range.setEnd(textNode, charIndex);
+  range.setStart(boundary.node, boundary.offset);
+  range.setEnd(boundary.node, boundary.offset);
   const rangeRect = range.getBoundingClientRect();
   const lineEl = targetEl.closest('.superdoc-line') as HTMLElement | null;
   const lineRect = lineEl?.getBoundingClientRect() ?? rangeRect;
@@ -602,6 +597,72 @@ export function computeDomCaretPageLocal(
     x: (rangeRect.left - pageRect.left) / zoom,
     y: (lineRect.top - pageRect.top) / zoom,
   };
+}
+
+type TextBoundaryAffinity = 'forward' | 'backward';
+
+function resolveTextBoundaryInElement(
+  element: HTMLElement,
+  pos: number,
+  pmStart: number,
+  pmEnd: number,
+  affinity: TextBoundaryAffinity,
+): { node: Text; offset: number } | null {
+  const textLength = element.textContent?.length ?? 0;
+  if (textLength <= 0) {
+    return null;
+  }
+
+  const charIndex = mapPmPosToCharIndex(pos, pmStart, pmEnd, textLength);
+  return resolveDescendantTextBoundary(element, charIndex, affinity);
+}
+
+function resolveDescendantTextBoundary(
+  element: HTMLElement,
+  targetOffset: number,
+  affinity: TextBoundaryAffinity,
+): { node: Text; offset: number } | null {
+  const doc = element.ownerDocument ?? document;
+  const walker = doc.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+  let consumed = 0;
+  let previous: { node: Text; offset: number } | null = null;
+  let current = walker.nextNode();
+
+  while (current) {
+    const textNode = current as Text;
+    const textLength = textNode.textContent?.length ?? 0;
+    if (textLength <= 0) {
+      current = walker.nextNode();
+      continue;
+    }
+
+    const segmentEnd = consumed + textLength;
+    if (targetOffset < segmentEnd) {
+      return {
+        node: textNode,
+        offset: Math.max(0, targetOffset - consumed),
+      };
+    }
+
+    if (targetOffset === segmentEnd) {
+      if (affinity === 'backward') {
+        return {
+          node: textNode,
+          offset: textLength,
+        };
+      }
+      previous = { node: textNode, offset: textLength };
+      consumed = segmentEnd;
+      current = walker.nextNode();
+      continue;
+    }
+
+    previous = { node: textNode, offset: textLength };
+    consumed = segmentEnd;
+    current = walker.nextNode();
+  }
+
+  return previous;
 }
 
 /**

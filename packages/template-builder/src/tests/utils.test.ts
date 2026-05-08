@@ -225,13 +225,35 @@ describe('generateFieldColorCSS', () => {
   it('uses correct label selectors for inline and block', () => {
     const css = generateFieldColorCSS({ owner: '#629be7' }, '.scope');
     expect(css).toContain('.superdoc-structured-content-inline__label');
+    expect(css).toContain('.superdoc-structured-content-block__label');
     expect(css).toContain('.superdoc-structured-content__label');
-    // Should NOT contain the wrong block label class
-    expect(css).not.toContain('.superdoc-structured-content-block__label');
   });
 
   it('uses color-mix for label backgrounds', () => {
     const css = generateFieldColorCSS({ owner: '#629be7' }, '.scope');
     expect(css).toContain('color-mix(in srgb, #629be7 87%, transparent)');
+  });
+
+  it('sets block styling variables from field colors', () => {
+    const css = generateFieldColorCSS({ signer: '#d97706' }, '.scope');
+
+    expect(css).toContain('--sd-content-controls-block-border: #d97706;');
+    expect(css).toContain('--sd-content-controls-block-hover-border: #d97706;');
+    expect(css).toContain('--sd-content-controls-block-hover-bg: color-mix(in srgb, #d97706 8%, transparent);');
+    expect(css).toContain('--sd-content-controls-lock-hover-bg: color-mix(in srgb, #d97706 8%, transparent);');
+  });
+
+  it('keeps label text color configurable through the content control token', () => {
+    const css = generateFieldColorCSS({ owner: '#629be7' }, '.scope');
+
+    expect(css).toContain('color: var(--sd-content-controls-label-text, #ffffff);');
+  });
+
+  it('includes selected block border rules for field colors', () => {
+    const css = generateFieldColorCSS({ signer: '#d97706' }, '.scope');
+
+    expect(css).toContain(
+      '.scope .superdoc-structured-content-block[data-sdt-tag*=\'"fieldType":"signer"\'].ProseMirror-selectednode',
+    );
   });
 });

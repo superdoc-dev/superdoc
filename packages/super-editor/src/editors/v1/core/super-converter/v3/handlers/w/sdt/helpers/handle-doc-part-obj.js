@@ -17,6 +17,20 @@ export function handleDocPartObj(params) {
 
   const content = node?.elements.find((el) => el.name === 'w:sdtContent');
 
+  // SD-1333: emit inline only when the SDT both sits inside a w:p AND its
+  // sdtContent has no direct w:p/w:tbl children. Word emits Table-of-Figures
+  // SDTs inside a w:p with real w:p children inside sdtContent — those must
+  // stay block so the paragraph translator can hoist them.
+  const isInsideParagraph = (params.path || []).some((p) => p?.name === 'w:p');
+  const hasBlockChild = !!content?.elements?.some((el) => el?.name === 'w:p' || el?.name === 'w:tbl');
+  if (isInsideParagraph && !hasBlockChild) {
+    return inlineDocPartHandler({
+      ...params,
+      nodes: [content],
+      extraParams: { ...(params.extraParams || {}), sdtPr, docPartGalleryType },
+    });
+  }
+
   // Use specific handler if available, otherwise fall back to generic handler
   const handler = validGalleryTypeMap[docPartGalleryType] || genericDocPartHandler;
   const result = handler({
@@ -27,6 +41,48 @@ export function handleDocPartObj(params) {
 
   return result;
 }
+
+/**
+ * Inline variant of the docPartObj handler. Used when the SDT contains only
+ * run-level children (no <w:p> or <w:tbl>) — i.e. an inline structured
+ * content tag wrapping inline runs / fields. Returns a 'structuredContent'
+ * PM node so the parent paragraph translator keeps it as inline content.
+ *
+ * docPartObj-specific metadata (gallery, unique flag) is preserved on the
+ * node attrs so export can round-trip back to <w:sdt><w:docPartObj/></w:sdt>.
+ *
+ * @param {Object} params
+ * @returns {Object}
+ */
+const inlineDocPartHandler = (params) => {
+  const node = params.nodes[0];
+  const translatedContent = params.nodeListHandler.handler({
+    ...params,
+    nodes: node?.elements || [],
+    path: [...(params.path || []), node],
+  });
+  const sdtPr = params.extraParams.sdtPr;
+  const docPartGalleryType = params.extraParams.docPartGalleryType;
+  // null (not '') so export can skip emitting an invalid <w:id w:val=""/>.
+  const id = sdtPr?.elements?.find((el) => el.name === 'w:id')?.attributes?.['w:val'] || null;
+  const docPartObj = sdtPr?.elements.find((el) => el.name === 'w:docPartObj');
+  const docPartGallery =
+    docPartGalleryType ??
+    docPartObj?.elements?.find((el) => el.name === 'w:docPartGallery')?.attributes?.['w:val'] ??
+    null;
+  const docPartUnique = docPartObj?.elements?.some((el) => el.name === 'w:docPartUnique') ?? false;
+
+  return {
+    type: 'structuredContent',
+    content: translatedContent,
+    attrs: {
+      id,
+      docPartGallery,
+      docPartUnique,
+      sdtPr, // Passthrough for round-trip preservation
+    },
+  };
+};
 
 /**
  * Handler for Table of Contents docPartGallery type.

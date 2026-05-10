@@ -51,7 +51,7 @@ export const setTextIndentation = (points) => modifyIndentation(() => ptToTwips(
  * @category Command
  * @returns {Function} Command function
  * @example
- * unsetTextIndent()
+ * unsetTextIndentation()
  * @note Removes inline indentation from the selected nodes
  */
 export const unsetTextIndentation = () => modifyIndentation(() => null);

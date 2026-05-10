@@ -3,11 +3,15 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Schema } from 'prosemirror-model';
 import { EditorState, TextSelection } from 'prosemirror-state';
 import { increaseTextIndent, decreaseTextIndent, setTextIndentation, unsetTextIndentation } from './textIndent.js';
-import { getResolvedParagraphProperties } from '@extensions/paragraph/resolvedPropertiesCache.js';
+import {
+  getResolvedParagraphProperties,
+  calculateResolvedParagraphProperties,
+} from '@extensions/paragraph/resolvedPropertiesCache.js';
 import { ptToTwips } from '@converter/helpers';
 
 vi.mock('@extensions/paragraph/resolvedPropertiesCache.js', () => ({
   getResolvedParagraphProperties: vi.fn((node) => node.attrs.paragraphProperties || {}),
+  calculateResolvedParagraphProperties: vi.fn((_editor, node) => node.attrs.paragraphProperties || {}),
 }));
 
 vi.mock('@converter/helpers', () => ({
@@ -38,9 +42,10 @@ const createState = (paragraphAttrs) => {
   return EditorState.create({ doc, selection });
 };
 
-const runCommand = (command, state) => {
+const runCommand = (command, state, editor = {}) => {
   let nextState = state;
   const dispatched = command({
+    editor,
     state,
     dispatch: (tr) => {
       nextState = state.apply(tr);
@@ -89,5 +94,54 @@ describe('text indent commands', () => {
     expect(dispatched).toBe(true);
     const finalNode = afterUnset.doc.firstChild;
     expect(finalNode.attrs.paragraphProperties.indent).toBeUndefined();
+  });
+
+  describe('uncached paragraphs (cache miss fallback)', () => {
+    it('increaseTextIndent does not throw and applies a default increment', () => {
+      const state = createState({ paragraphProperties: {} });
+      getResolvedParagraphProperties.mockReturnValueOnce(undefined);
+      calculateResolvedParagraphProperties.mockReturnValueOnce({});
+
+      expect(() => runCommand(increaseTextIndent(), state)).not.toThrow();
+      expect(calculateResolvedParagraphProperties).toHaveBeenCalledTimes(1);
+    });
+
+    it('decreaseTextIndent does not throw and clears indent when no resolved indent exists', () => {
+      const state = createState({ paragraphProperties: {} });
+      getResolvedParagraphProperties.mockReturnValueOnce(undefined);
+      calculateResolvedParagraphProperties.mockReturnValueOnce({});
+
+      const { dispatched, nextState } = runCommand(decreaseTextIndent(), state);
+
+      expect(dispatched).toBe(true);
+      const updated = nextState.doc.firstChild;
+      expect(updated.attrs.paragraphProperties.indent).toBeUndefined();
+    });
+
+    it('setTextIndentation and unsetTextIndentation skip the resolve fallback entirely', () => {
+      const state = createState({ paragraphProperties: {} });
+
+      runCommand(setTextIndentation(10), state);
+      runCommand(unsetTextIndentation(), state);
+
+      expect(calculateResolvedParagraphProperties).not.toHaveBeenCalled();
+      expect(getResolvedParagraphProperties).not.toHaveBeenCalled();
+    });
+
+    it('increaseTextIndent honors style-derived indent on cache miss', () => {
+      // Paragraph has no inline indent; the style cascade resolves to a
+      // 36pt left indent. Increase should produce 36pt + 36pt, not 36pt
+      // alone (which would silently drop the inherited baseline).
+      const inheritedLeft = ptToTwips(36);
+      const state = createState({ paragraphProperties: {} });
+      getResolvedParagraphProperties.mockReturnValueOnce(undefined);
+      calculateResolvedParagraphProperties.mockReturnValueOnce({ indent: { left: inheritedLeft } });
+
+      const { dispatched, nextState } = runCommand(increaseTextIndent(), state);
+
+      expect(dispatched).toBe(true);
+      const updated = nextState.doc.firstChild;
+      expect(updated.attrs.paragraphProperties.indent.left).toBe(inheritedLeft + ptToTwips(36));
+    });
   });
 });

@@ -167,6 +167,9 @@ describe('utils.js', () => {
 
         // Proofing context (null when no PresentationEditor proofing active)
         proofingContext: null,
+
+        // TOC ancestor (null when not inside a tableOfContents node)
+        tocAncestor: null,
       });
 
       // Verify clipboard is not read during context gathering

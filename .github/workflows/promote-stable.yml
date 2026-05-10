@@ -68,9 +68,28 @@ jobs:
           if git merge --no-ff --no-edit "origin/${SOURCE_BRANCH}"; then
             MERGE_STATUS="clean"
           else
-            MERGE_STATUS="conflicts"
-            git add -A
-            git commit -m "chore: merge main into stable (conflicts need resolution)"
+            # Auto-resolve release artifact conflicts: keep stable's version.
+            # npm/PyPI already have stable's published version; downgrading to
+            # main's track would break the next stable release. Mirrors the
+            # auto-resolve in sync-patches.yml, biased the other direction.
+            git diff --name-only --diff-filter=U | while read -r f; do
+              case "$f" in
+                package.json|*/package.json|pyproject.toml|*/pyproject.toml|version.json|*/version.json)
+                  echo "  Auto-resolving $f (keeping stable's version)"
+                  git checkout --ours "$f"
+                  git add "$f"
+                  ;;
+              esac
+            done
+
+            if [ -z "$(git diff --name-only --diff-filter=U)" ]; then
+              MERGE_STATUS="auto_resolved"
+              git commit -m "chore: merge main into stable (release conflicts auto-resolved)"
+            else
+              MERGE_STATUS="conflicts"
+              git add -A
+              git commit -m "chore: merge main into stable (conflicts need resolution)"
+            fi
           fi
 
           if git diff --quiet "origin/${BASE_BRANCH}"...HEAD; then
@@ -107,6 +126,19 @@ jobs:
           ## Next Step
 
           Resolve the conflicts on \`${BRANCH_NAME}\`, push the fixes, and then merge this PR into \`${BASE_BRANCH}\`.
+
+          ---
+          _Auto-created by promote-stable workflow._
+          EOF
+            )"
+          elif [[ "${MERGE_STATUS}" == "auto_resolved" ]]; then
+            PR_TITLE="Merge main into stable"
+            PR_BODY="$(cat <<EOF
+          ## Summary
+
+          - creates \`${BRANCH_NAME}\` from \`${BASE_BRANCH}\`
+          - merges \`${SOURCE_BRANCH}\` into the candidate branch
+          - release artifact conflicts (package.json, pyproject.toml, version.json) auto-resolved to keep stable's published version
 
           ---
           _Auto-created by promote-stable workflow._

@@ -306,4 +306,25 @@ describe('parseAttrs', () => {
       expect(result.paragraphProperties.indent.left).toBe(720);
     });
   });
+
+  describe('RTL direction and logical margin parsing', () => {
+    it('preserves dir="rtl" as paragraph rightToLeft', () => {
+      const node = createMockNode({ dir: 'rtl' }, {});
+      const result = parseAttrs(node);
+      expect(result.paragraphProperties.rightToLeft).toBe(true);
+    });
+
+    it('maps CSS direction: rtl to paragraph rightToLeft', () => {
+      const node = createMockNode({}, { direction: 'rtl' });
+      const result = parseAttrs(node);
+      expect(result.paragraphProperties.rightToLeft).toBe(true);
+    });
+
+    it('maps logical margins to indent start/end', () => {
+      const node = createMockNode({}, { marginInlineStart: '36pt', marginInlineEnd: '18pt' });
+      const result = parseAttrs(node);
+      expect(result.paragraphProperties.indent.start).toBe(720);
+      expect(result.paragraphProperties.indent.end).toBe(360);
+    });
+  });
 });

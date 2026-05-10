@@ -53,6 +53,7 @@ import { fieldAnnotationNodeToRun } from './inline-converters/field-annotation.j
 import { bookmarkStartNodeToBlocks } from './inline-converters/bookmark-start.js';
 import { bookmarkEndNodeToRun } from './inline-converters/bookmark-end.js';
 import { tabNodeToRun } from './inline-converters/tab.js';
+import { noBreakHyphenNodeToRun } from './inline-converters/no-break-hyphen.js';
 import { tokenNodeToRun } from './inline-converters/generic-token.js';
 import { imageNodeToRun } from './inline-converters/image.js';
 import { crossReferenceNodeToRun } from './inline-converters/cross-reference.js';
@@ -75,6 +76,17 @@ import {
 } from './shapes.js';
 import { chartNodeToDrawingBlock } from './chart.js';
 import { tableNodeToBlock } from './table.js';
+
+function resolveSectionDirectionFromSectPr(sectPr: unknown): 'ltr' | 'rtl' | undefined {
+  if (!sectPr || typeof sectPr !== 'object') return undefined;
+  const elements = (sectPr as { elements?: Array<{ name?: string; attributes?: Record<string, unknown> }> }).elements;
+  if (!Array.isArray(elements)) return undefined;
+  const bidi = elements.find((element) => element?.name === 'w:bidi');
+  if (!bidi) return undefined;
+  const val = bidi.attributes?.['w:val'] ?? bidi.attributes?.val;
+  if (val === '0' || val === 0 || val === false || val === 'false' || val === 'off') return 'ltr';
+  return 'rtl';
+}
 
 function sourceAnchorFromNode(node: PMNode): SourceAnchor | undefined {
   const sourceAnchor = (node.attrs as Record<string, unknown> | undefined)?.sourceAnchor;
@@ -970,6 +982,9 @@ const INLINE_CONVERTERS_REGISTRY: Record<string, InlineConverterSpec> = {
   tab: {
     inlineConverter: tabNodeToRun,
   },
+  noBreakHyphen: {
+    inlineConverter: noBreakHyphenNodeToRun,
+  },
   image: {
     inlineConverter: imageNodeToRun,
     blockConverter: handleImageNode,
@@ -1081,6 +1096,7 @@ export function handleParagraphNode(node: PMNode, context: NodeHandlerContext): 
       blocks.push(sectionBreak);
       recordBlockKind?.(sectionBreak.kind);
       sectionState!.currentSectionIndex++;
+      converterContext.sectionDirection = resolveSectionDirectionFromSectPr(nextSection.sectPr);
     }
   }
 

@@ -38,6 +38,7 @@ Patterns for the browser editor surface.
 | Example | Docs |
 |---------|------|
 | [selection-capture](./editor/custom-ui/selection-capture) | [docs](https://docs.superdoc.dev/editor/custom-ui/selection-and-viewport) |
+| [configurable-toolbar](./editor/custom-ui/configurable-toolbar) | [docs](https://docs.superdoc.dev/editor/custom-ui/toolbar-and-commands) |
 
 ### Theming
 

@@ -71,6 +71,7 @@ import {
   tablesUnmergeCellsWrapper,
   tablesSplitCellWrapper,
   tablesSetCellPropertiesWrapper,
+  tablesSetCellTextWrapper,
   tablesSortWrapper,
   tablesSetStyleWrapper,
   tablesClearStyleWrapper,
@@ -87,6 +88,7 @@ import {
   tablesApplyStyleWrapper,
   tablesSetBordersWrapper,
   tablesSetTableOptionsWrapper,
+  tablesApplyPresetWrapper,
 } from '../plan-engine/tables-wrappers.js';
 import { getDocumentApiCapabilities } from '../capabilities-adapter.js';
 import {
@@ -150,6 +152,7 @@ import {
   listsCreateWrapper,
   listsAttachWrapper,
   listsDetachWrapper,
+  listsDeleteWrapper,
   listsJoinWrapper,
   listsSeparateWrapper,
   listsMergeWrapper,
@@ -1589,6 +1592,7 @@ const IMPLEMENTED_TABLE_OPS: ReadonlySet<OperationId> = new Set([
   'tables.unmergeCells',
   'tables.splitCell',
   'tables.setCellProperties',
+  'tables.setCellText',
   'tables.convertFromText',
   'tables.split',
   'tables.convertToText',
@@ -1608,6 +1612,7 @@ const IMPLEMENTED_TABLE_OPS: ReadonlySet<OperationId> = new Set([
   'tables.applyStyle',
   'tables.setBorders',
   'tables.setTableOptions',
+  'tables.applyPreset',
   'tables.getStyles',
   'tables.setDefaultStyle',
   'tables.clearDefaultStyle',
@@ -4911,6 +4916,28 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       return listsDetachWrapper(editor, { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' } });
     },
   },
+  'lists.delete': {
+    throwCase: () => {
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      return listsDeleteWrapper(
+        editor,
+        { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' } },
+        { changeMode: 'tracked' },
+      );
+    },
+    failureCase: () => {
+      const noopReceipt = { steps: [{ effect: 'noop' }], revision: 'r0' };
+      const execSpy = vi.spyOn(planWrappers, 'executeDomainCommand').mockReturnValue(noopReceipt as any);
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      const result = listsDeleteWrapper(editor, { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' } });
+      execSpy.mockRestore();
+      return result;
+    },
+    applyCase: () => {
+      const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+      return listsDeleteWrapper(editor, { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' } });
+    },
+  },
   'lists.join': {
     throwCase: () => {
       const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
@@ -6377,6 +6404,20 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
       );
     },
   },
+  'tables.setCellText': {
+    throwCase: () => {
+      const editor = makeTableEditor();
+      return tablesSetCellTextWrapper(editor, { nodeId: 'missing', text: 'hi' }, { changeMode: 'direct' });
+    },
+    failureCase: () => {
+      const editor = makeTableEditor({}, { throwOnDispatch: true });
+      return tablesSetCellTextWrapper(editor, { nodeId: 'cell-1', text: 'hi' }, { changeMode: 'direct' });
+    },
+    applyCase: () => {
+      const editor = makeTableEditor();
+      return tablesSetCellTextWrapper(editor, { nodeId: 'cell-1', text: 'hi' }, { changeMode: 'direct' });
+    },
+  },
   'tables.convertFromText': {
     throwCase: () => {
       const editor = makeTableEditor();
@@ -6745,6 +6786,20 @@ const mutationVectors: Partial<Record<OperationId, MutationVector>> = {
         { nodeId: 'table-1', defaultCellMargins: { topPt: 6, rightPt: 6, bottomPt: 6, leftPt: 6 } },
         { changeMode: 'direct' },
       );
+    },
+  },
+  'tables.applyPreset': {
+    throwCase: () => {
+      const editor = makeTableEditor();
+      return tablesApplyPresetWrapper(editor, { nodeId: 'missing', preset: 'grid' }, { changeMode: 'direct' });
+    },
+    failureCase: () => {
+      const editor = makeTableEditor({}, { throwOnDispatch: true });
+      return tablesApplyPresetWrapper(editor, { nodeId: 'table-1', preset: 'grid' }, { changeMode: 'direct' });
+    },
+    applyCase: () => {
+      const editor = makeTableEditor();
+      return tablesApplyPresetWrapper(editor, { nodeId: 'table-1', preset: 'grid' }, { changeMode: 'direct' });
     },
   },
   'tables.setDefaultStyle': {
@@ -9049,6 +9104,14 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
       { changeMode: 'direct', dryRun: true },
     );
   },
+  'lists.delete': () => {
+    const editor = makeListEditor([makeListParagraph({ id: 'li-1', numId: 1, ilvl: 0, numberingType: 'decimal' })]);
+    return listsDeleteWrapper(
+      editor,
+      { target: { kind: 'block', nodeType: 'listItem', nodeId: 'li-1' } },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
   'lists.join': () => {
     const canJoinSpy = vi.spyOn(listSequenceHelpers, 'evaluateCanJoin').mockReturnValue({
       canJoin: true,
@@ -9659,6 +9722,17 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
     expect(dispatch).not.toHaveBeenCalled();
     return result;
   },
+  'tables.setCellText': () => {
+    const editor = makeTableEditor();
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const result = tablesSetCellTextWrapper(
+      editor,
+      { nodeId: 'cell-1', text: 'hi' },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
   'tables.convertFromText': () => {
     const editor = makeTableEditor();
     const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
@@ -9854,6 +9928,17 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
     const result = tablesSetTableOptionsWrapper(
       editor,
       { nodeId: 'table-1', defaultCellMargins: { topPt: 6, rightPt: 6, bottomPt: 6, leftPt: 6 } },
+      { changeMode: 'direct', dryRun: true },
+    );
+    expect(dispatch).not.toHaveBeenCalled();
+    return result;
+  },
+  'tables.applyPreset': () => {
+    const editor = makeTableEditor();
+    const dispatch = (editor as unknown as { dispatch: ReturnType<typeof vi.fn> }).dispatch;
+    const result = tablesApplyPresetWrapper(
+      editor,
+      { nodeId: 'table-1', preset: 'grid' },
       { changeMode: 'direct', dryRun: true },
     );
     expect(dispatch).not.toHaveBeenCalled();
@@ -11438,6 +11523,7 @@ describe('document-api adapter conformance', () => {
       'tables.unmergeCells',
       'tables.splitCell',
       'tables.setCellProperties',
+      'tables.setCellText',
       'tables.sort',
       'tables.setStyle',
       'tables.clearStyle',
@@ -11454,6 +11540,7 @@ describe('document-api adapter conformance', () => {
       'tables.applyStyle',
       'tables.setBorders',
       'tables.setTableOptions',
+      'tables.applyPreset',
       'tables.insertCell',
       'tables.deleteCell',
       'tables.setDefaultStyle',

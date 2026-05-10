@@ -23,6 +23,8 @@ import type {
   ListsAttachInput,
   ListsDetachInput,
   ListsDetachResult,
+  ListsDeleteInput,
+  ListsDeleteResult,
   ListsJoinInput,
   ListsJoinResult,
   ListsCanJoinInput,
@@ -763,6 +765,55 @@ export function listsDetachWrapper(
   }
 
   return { success: true, paragraph: { kind: 'block', nodeType: 'paragraph', nodeId: target.address.nodeId } };
+}
+
+/**
+ * lists.delete — delete the entire list that contains the targeted item.
+ * Walks the contiguous numbered sequence and removes every item (and its
+ * content) as a block. Returns the count of removed items.
+ */
+export function listsDeleteWrapper(
+  editor: Editor,
+  input: ListsDeleteInput,
+  options?: MutationOptions,
+): ListsDeleteResult {
+  rejectTrackedMode('lists.delete', options);
+  const target = resolveListItem(editor, input.target);
+  const sequence = getContiguousSequence(editor, target);
+  if (sequence.length === 0) {
+    return toListsFailure('INVALID_TARGET', 'List sequence could not be resolved.', { target: input.target });
+  }
+
+  if (options?.dryRun) {
+    return { success: true, deletedCount: sequence.length };
+  }
+
+  const receipt = executeDomainCommand(
+    editor,
+    () => {
+      const { tr } = editor.state;
+      // Delete in reverse so earlier positions stay valid as we mutate.
+      const sortedDesc = [...sequence].sort((a, b) => b.candidate.pos - a.candidate.pos);
+      for (const item of sortedDesc) {
+        const start = item.candidate.pos;
+        const end = start + item.candidate.node.nodeSize;
+        // Re-resolve the position through prior mappings.
+        const mappedStart = tr.mapping.map(start, -1);
+        const mappedEnd = tr.mapping.map(end, 1);
+        if (mappedEnd > mappedStart) tr.delete(mappedStart, mappedEnd);
+      }
+      dispatchEditorTransaction(editor, tr);
+      clearIndexCache(editor);
+      return true;
+    },
+    { expectedRevision: options?.expectedRevision },
+  );
+
+  if (receipt.steps[0]?.effect !== 'changed') {
+    return toListsFailure('INVALID_TARGET', 'List deletion could not be applied.', { target: input.target });
+  }
+
+  return { success: true, deletedCount: sequence.length };
 }
 
 export function listsJoinWrapper(editor: Editor, input: ListsJoinInput, options?: MutationOptions): ListsJoinResult {

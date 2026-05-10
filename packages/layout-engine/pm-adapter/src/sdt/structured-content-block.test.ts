@@ -891,5 +891,64 @@ describe('structured-content-block', () => {
         expect(node.content).toEqual(contentCopy);
       });
     });
+
+    // SD-1333: an SDT in Word that wraps a documentPartObject (e.g. a Signature
+    // SDT containing a PAGE field) parses into PM as
+    // `structuredContentBlock > documentPartObject > paragraph > page-number`.
+    // Before the fix, the inner documentPartObject was not a recognised child
+    // type, so the wrapped paragraph (and its page-number token) was silently
+    // dropped, producing an empty SDT in the rendered footer.
+    describe('SD-1333: documentPartObject children', () => {
+      it('flattens a documentPartObject child by processing its inner paragraphs', () => {
+        const node: PMNode = {
+          type: 'structuredContentBlock',
+          attrs: { id: 'scb-1', alias: 'Signature' },
+          content: [
+            {
+              type: 'documentPartObject',
+              attrs: {},
+              content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Page ' }] }],
+            },
+          ],
+        };
+
+        const blocks: FlowBlock[] = [];
+        const recordBlockKind = vi.fn();
+        vi.mocked(metadataModule.resolveNodeSdtMetadata).mockReturnValue(scbMetadata);
+
+        const mockParagraphConverter = vi.fn(() => [
+          {
+            kind: 'paragraph',
+            id: 'p1',
+            runs: [{ text: 'Page ', fontFamily: 'Arial', fontSize: 12 }],
+          } as ParagraphBlock,
+        ]);
+
+        const context: NodeHandlerContext = {
+          blocks,
+          recordBlockKind,
+          nextBlockId: mockBlockIdGenerator,
+          positions: mockPositionMap,
+          defaultFont: 'Arial',
+          defaultSize: 12,
+          trackedChangesConfig: mockTrackedChangesConfig,
+          bookmarks: mockBookmarks,
+          hyperlinkConfig: mockHyperlinkConfig,
+          enableComments: mockEnableComments,
+          converterContext: mockConverterContext,
+          converters: { paragraphToFlowBlocks: mockParagraphConverter },
+        };
+
+        handleStructuredContentBlockNode(node, context);
+
+        expect(mockParagraphConverter).toHaveBeenCalledTimes(1);
+        expect(blocks).toHaveLength(1);
+        expect(blocks[0].kind).toBe('paragraph');
+        expect(metadataModule.applySdtMetadataToParagraphBlocks).toHaveBeenCalledWith(
+          expect.arrayContaining([expect.objectContaining({ kind: 'paragraph' })]),
+          scbMetadata,
+        );
+      });
+    });
   });
 });

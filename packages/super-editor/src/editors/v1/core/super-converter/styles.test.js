@@ -435,13 +435,20 @@ describe('decodeRPrFromMarks', () => {
       { type: 'strike', attrs: { value: true } },
     ];
     const rPr = decodeRPrFromMarks(marks);
-    expect(rPr).toEqual({ bold: true, italic: true, strike: true });
+    expect(rPr).toEqual({ bold: true, boldCs: true, italic: true, italicCs: true, strike: true });
   });
 
   it('should decode textStyle marks for color and fontSize', () => {
     const marks = [{ type: 'textStyle', attrs: { color: '#FF0000', fontSize: '12pt' } }];
     const rPr = decodeRPrFromMarks(marks);
-    expect(rPr).toEqual({ color: { val: 'FF0000' }, fontSize: 24 });
+    expect(rPr).toEqual({ color: { val: 'FF0000' }, fontSize: 24, fontSizeCs: 24 });
+  });
+
+  it('keeps fontSize and fontSizeCs in sync when decoding textStyle fontSize', () => {
+    const marks = [{ type: 'textStyle', attrs: { fontSize: '36pt' } }];
+    const rPr = decodeRPrFromMarks(marks);
+    expect(rPr.fontSize).toBe(72);
+    expect(rPr.fontSizeCs).toBe(72);
   });
 
   it('should decode underline marks', () => {
@@ -486,11 +493,14 @@ describe('marks encoding/decoding round-trip', () => {
   it('should correctly round-trip basic properties', () => {
     const initialRPr = {
       bold: true,
+      boldCs: true,
       italic: true,
+      italicCs: true,
       strike: true,
       underline: { 'w:val': 'single', 'w:color': 'auto' },
       color: { val: 'FF0000' },
       fontSize: 28,
+      fontSizeCs: 28,
       letterSpacing: 20,
     };
 

@@ -580,18 +580,18 @@ async function inspectPackageReleaseState(pkg, { tag, version, workspaceRoot = R
   const release = hasGitHubReleaseContext() ? await getGitHubReleaseByTag(tag) : null;
   const githubComplete = isGitHubReleaseComplete(pkg, release);
 
-  let sdkPythonPublished = true;
+  let pythonPublished = true;
   if (pkg.pythonPackages) {
     const publishedFlags = await Promise.all(
       pkg.pythonPackages.map((packageName) => isPyPiVersionPublished(packageName, version)),
     );
-    sdkPythonPublished = publishedFlags.every(Boolean);
+    pythonPublished = publishedFlags.every(Boolean);
   }
 
   return {
     publishComplete,
     githubComplete,
-    sdkPythonPublished,
+    pythonPublished,
     release,
   };
 }
@@ -617,48 +617,53 @@ function ensureBranchHeadCurrent(branchName) {
   }
 }
 
-function resumePackagePublish(pkg, distTag, options = {}) {
-  const { workspaceRoot = REPO_ROOT, skipBuild = workspaceRoot === REPO_ROOT } = options;
+// Per-package publish-resume adapters. Each runs after a tagged snapshot is
+// checked out (or in-place when the tag is at HEAD), and is responsible for
+// republishing whatever the original release attempt left missing on npm.
+// PyPI publishing for the SDK lives in the workflow, not here - see
+// preparePythonSnapshot for the snapshot artifact handoff.
 
-  switch (pkg.name) {
-    case 'cli':
-      runInWorkspace(workspaceRoot, 'pnpm', ['--prefix', join(workspaceRoot, 'apps/cli'), 'run', 'build:prepublish']);
-      runInWorkspace(workspaceRoot, 'node', [join(workspaceRoot, 'apps/cli/scripts/publish.js'), '--tag', distTag]);
-      break;
-    case 'sdk':
-      runInWorkspace(workspaceRoot, 'node', [
-        join(workspaceRoot, 'packages/sdk/scripts/sdk-release-publish.mjs'),
-        '--tag',
-        distTag,
-        '--npm-only',
-      ]);
-      break;
-    case 'mcp': {
-      // MCP recovery snapshots only run `pnpm install`, so MCP's build output
-      // isn't on disk. Rebuild before publishing so the `dist/` tarball
-      // declared in apps/mcp/package.json files actually ships.
-      if (!skipBuild) {
-        runInWorkspace(workspaceRoot, 'pnpm', ['run', 'generate:all']);
-        runInWorkspace(workspaceRoot, 'pnpm', ['run', 'build:superdoc']);
-        runInWorkspace(workspaceRoot, 'pnpm', ['--prefix', join(workspaceRoot, 'packages/sdk/langs/node'), 'run', 'build']);
-      }
-      const mcpRoot = join(workspaceRoot, 'apps/mcp');
-      runInWorkspace(mcpRoot, 'pnpm', ['run', 'build']);
-      // `pnpm publish` does not honor `--prefix` (passes through to npm and
-      // errors with EUSAGE); it must run with cwd at the package root.
-      runInWorkspace(mcpRoot, 'pnpm', [
-        'publish',
-        '--no-git-checks',
-        '--access',
-        'public',
-        '--tag',
-        distTag,
-      ]);
-      break;
-    }
-    default:
-      throw new Error(`No resume command configured for ${pkg.name}`);
+function resumeCliPublish(workspaceRoot, distTag) {
+  runInWorkspace(workspaceRoot, 'pnpm', ['--prefix', join(workspaceRoot, 'apps/cli'), 'run', 'build:prepublish']);
+  runInWorkspace(workspaceRoot, 'node', [join(workspaceRoot, 'apps/cli/scripts/publish.js'), '--tag', distTag]);
+}
+
+function resumeSdkPublish(workspaceRoot, distTag) {
+  runInWorkspace(workspaceRoot, 'node', [
+    join(workspaceRoot, 'packages/sdk/scripts/sdk-release-publish.mjs'),
+    '--tag',
+    distTag,
+    '--npm-only',
+  ]);
+}
+
+function resumeMcpPublish(workspaceRoot, distTag, options = {}) {
+  const { skipBuild = workspaceRoot === REPO_ROOT } = options;
+  // MCP recovery snapshots only run `pnpm install`, so MCP's build output
+  // isn't on disk. Rebuild before publishing so the `dist/` tarball
+  // declared in apps/mcp/package.json files actually ships.
+  if (!skipBuild) {
+    runInWorkspace(workspaceRoot, 'pnpm', ['run', 'generate:all']);
+    runInWorkspace(workspaceRoot, 'pnpm', ['run', 'build:superdoc']);
+    runInWorkspace(workspaceRoot, 'pnpm', ['--prefix', join(workspaceRoot, 'packages/sdk/langs/node'), 'run', 'build']);
   }
+  const mcpRoot = join(workspaceRoot, 'apps/mcp');
+  runInWorkspace(mcpRoot, 'pnpm', ['run', 'build']);
+  // `pnpm publish` does not honor `--prefix` (passes through to npm and
+  // errors with EUSAGE); it must run with cwd at the package root.
+  runInWorkspace(mcpRoot, 'pnpm', [
+    'publish',
+    '--no-git-checks',
+    '--access',
+    'public',
+    '--tag',
+    distTag,
+  ]);
+}
+
+function prepareSdkPythonSnapshot(workspaceRoot, tag) {
+  runInWorkspace(workspaceRoot, 'node', [join(workspaceRoot, 'packages/sdk/scripts/build-python-sdk.mjs')]);
+  return copySdkPythonArtifacts(workspaceRoot, tag);
 }
 
 async function recoverPackageRelease(pkg, { tag, version, distTag, branchRef, initialState = null }) {
@@ -671,22 +676,21 @@ async function recoverPackageRelease(pkg, { tag, version, distTag, branchRef, in
     }
 
     let state = initialState ?? (await inspectPackageReleaseState(pkg, { tag, version, workspaceRoot }));
-    const needsSnapshotPython = pkg.name === 'sdk' && !state.sdkPythonPublished && snapshot;
+    const needsSnapshotPython = Boolean(pkg.pythonPackages) && !state.pythonPublished && snapshot;
     const needsPublishResume = !state.publishComplete || needsSnapshotPython;
 
     if (needsPublishResume) {
       console.log(
         `${pkg.name} release ${tag} is incomplete; resuming publish (${distTag})${snapshot ? ' from tagged snapshot' : ''}.`,
       );
-      resumePackagePublish(pkg, distTag, { workspaceRoot, skipBuild: !snapshot });
+      pkg.resumePublish(workspaceRoot, distTag, { skipBuild: !snapshot });
       state = await inspectPackageReleaseState(pkg, { tag, version, workspaceRoot });
     }
 
-    let sdkPythonSnapshot = null;
-    if (pkg.name === 'sdk' && !state.sdkPythonPublished && snapshot) {
-      console.log(`Preparing Python SDK artifacts for recovered ${tag} snapshot.`);
-      runInWorkspace(workspaceRoot, 'node', [join(workspaceRoot, 'packages/sdk/scripts/build-python-sdk.mjs')]);
-      sdkPythonSnapshot = copySdkPythonArtifacts(workspaceRoot, tag);
+    let pythonSnapshot = null;
+    if (pkg.preparePythonSnapshot && !state.pythonPublished && snapshot) {
+      console.log(`Preparing Python artifacts for recovered ${tag} snapshot.`);
+      pythonSnapshot = pkg.preparePythonSnapshot(workspaceRoot, tag);
     }
 
     const previousTag = getPreviousMergedReleaseTag(pkg.tagPattern, tag, branchRef);
@@ -698,7 +702,7 @@ async function recoverPackageRelease(pkg, { tag, version, distTag, branchRef, in
     });
 
     const finalState = await inspectPackageReleaseState(pkg, { tag, version, workspaceRoot });
-    const readyForWorkflowPython = pkg.name !== 'sdk' || finalState.sdkPythonPublished || sdkPythonSnapshot || tagAtHead;
+    const readyForWorkflowPython = !pkg.pythonPackages || finalState.pythonPublished || pythonSnapshot || tagAtHead;
     const missingParts = [
       finalState.publishComplete ? '' : 'package publish',
       finalState.githubComplete ? '' : 'GitHub release',
@@ -709,7 +713,7 @@ async function recoverPackageRelease(pkg, { tag, version, distTag, branchRef, in
       throw new Error(`Recovery for ${pkg.name} ${tag} is still incomplete: ${missingParts.join(', ')}`);
     }
 
-    return { tag, version, distTag, sdkPythonSnapshot };
+    return { tag, version, distTag, pythonSnapshot };
   };
 
   if (tagAtHead) {
@@ -738,7 +742,7 @@ async function maybeRecoverIncompleteRelease(pkg, branchRef) {
     version,
   });
 
-  const needsSnapshotPython = pkg.name === 'sdk' && !state.sdkPythonPublished && !isTagAtHead(latestTag);
+  const needsSnapshotPython = Boolean(pkg.pythonPackages) && !state.pythonPublished && !isTagAtHead(latestTag);
   const needsRecovery = !state.publishComplete || !state.githubComplete || needsSnapshotPython;
   if (!needsRecovery) {
     return null;
@@ -754,7 +758,7 @@ async function maybeRecoverIncompleteRelease(pkg, branchRef) {
     branchRef,
     initialState: state,
   });
-  recordSdkPythonSnapshot(recovery.sdkPythonSnapshot);
+  recordSdkPythonSnapshot(recovery.pythonSnapshot);
   return recovery;
 }
 
@@ -810,6 +814,7 @@ const packages = [
     tagPrefix: 'cli-v',
     tagPattern: 'cli-v*',
     npmPackages: CLI_NPM_PACKAGES,
+    resumePublish: resumeCliPublish,
   },
   {
     name: 'sdk',
@@ -818,6 +823,8 @@ const packages = [
     tagPattern: 'sdk-v*',
     npmPackages: SDK_NODE_NPM_PACKAGES,
     pythonPackages: SDK_PYTHON_PACKAGES,
+    resumePublish: resumeSdkPublish,
+    preparePythonSnapshot: prepareSdkPythonSnapshot,
   },
   {
     name: 'mcp',
@@ -825,6 +832,7 @@ const packages = [
     tagPrefix: 'mcp-v',
     tagPattern: 'mcp-v*',
     npmPackages: ['@superdoc-dev/mcp'],
+    resumePublish: resumeMcpPublish,
   },
 ];
 
@@ -943,7 +951,7 @@ for (let index = 0; index < packages.length; index += 1) {
           distTag: recoveryDistTag,
           branchRef,
         });
-        recordSdkPythonSnapshot(recovery.sdkPythonSnapshot);
+        recordSdkPythonSnapshot(recovery.pythonSnapshot);
         results.set(pkg.name, { status: 'released', newTags });
         continue;
       } catch (recoveryError) {

@@ -1,0 +1,53 @@
+:root {
+  --bg: #fff;
+  --bg-muted: #f7f7f8;
+  --border: #e4e4e7;
+  --text: #18181b;
+  --text-muted: #71717a;
+  --accent: #2563eb;
+  --accent-soft: #eff6ff;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, sans-serif; font-size: 14px; color: var(--text); background: var(--bg-muted); }
+button { font: inherit; cursor: pointer; }
+
+.app { display: flex; flex-direction: column; height: 100vh; }
+.toolbar {
+  display: flex;
+  gap: 4px;
+  padding: 8px 12px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  align-items: center;
+}
+.toolbar .sep { width: 1px; height: 18px; background: var(--border); margin: 0 4px; }
+.toolbar button {
+  min-width: 32px;
+  height: 30px;
+  padding: 0 10px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--text);
+  font-weight: 600;
+}
+.toolbar button:hover:not(:disabled) { background: var(--bg-muted); }
+.toolbar button.active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.toolbar button:disabled { color: var(--text-muted); cursor: not-allowed; opacity: 0.5; }
+
+.toolbar button.italic { font-style: italic; }
+.toolbar button.underline { text-decoration: underline; }
+
+.toolbar button.custom {
+  font-weight: 500;
+  padding: 0 12px;
+  border-color: var(--border);
+}
+.toolbar button.custom:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+
+#editor { flex: 1; overflow: auto; padding: 12px; background: var(--bg-muted); }

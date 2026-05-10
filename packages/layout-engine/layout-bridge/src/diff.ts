@@ -370,7 +370,6 @@ const paragraphAttrsEqual = (a?: ParagraphAttrs, b?: ParagraphAttrs): boolean =>
     a.keepNext !== b.keepNext ||
     a.keepLines !== b.keepLines ||
     a.direction !== b.direction ||
-    a.rtl !== b.rtl ||
     a.floatAlignment !== b.floatAlignment
   ) {
     return false;

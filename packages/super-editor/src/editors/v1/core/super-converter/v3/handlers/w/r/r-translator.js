@@ -315,7 +315,13 @@ const decode = (params, decodedAttrs = {}) => {
   const runTrackFormatMark = findTrackFormatMark(runNodeForExport.marks);
 
   const runAttrs = runNodeForExport.attrs || {};
-  const runProperties = runAttrs.runProperties || {};
+  const rawRunProperties = runAttrs.runProperties || {};
+  // Backward compatibility: older payloads used iCs instead of italicCs for w:iCs.
+  // Normalize to a local copy to avoid mutating node attrs during export.
+  const runProperties =
+    rawRunProperties?.italicCs == null && rawRunProperties?.iCs != null
+      ? { ...rawRunProperties, italicCs: rawRunProperties.iCs }
+      : rawRunProperties;
   const inlineKeys = runAttrs.runPropertiesInlineKeys;
   const styleKeys = runAttrs.runPropertiesStyleKeys;
   const overrideKeys = runAttrs.runPropertiesOverrideKeys;
@@ -326,6 +332,12 @@ const decode = (params, decodedAttrs = {}) => {
   // so those documents still round-trip formatting (accepts larger document.xml vs strict allow-list only).
   const candidateKeys =
     inlineKeys != null ? [...new Set([...(inlineKeys || []), ...(overrideKeys || [])])] : Object.keys(runProperties);
+  if (candidateKeys.includes('iCs') && !candidateKeys.includes('italicCs')) {
+    candidateKeys.push('italicCs');
+  }
+  // AIDEV-NOTE: Do NOT force-push 'rtl' into candidateKeys here. Per ECMA Annex I,
+  // run rtl participates in the style cascade - flattening it inline on every export
+  // breaks style-inherited rtl (e.g. <w:rStyle w:val="RtlChar"/> with rtl in the style).
 
   const shouldExport = (key) =>
     key in (runProperties || {}) &&

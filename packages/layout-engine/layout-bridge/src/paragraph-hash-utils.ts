@@ -201,9 +201,8 @@ export const hashParagraphAttrs = (attrs: ParagraphAttrs | undefined): string =>
     if (sh.color) parts.push(`shc:${sh.color}`);
   }
 
-  // Direction and RTL
+  // Direction
   if (attrs.direction) parts.push(`dir:${attrs.direction}`);
-  if (attrs.rtl) parts.push('rtl');
 
   return parts.join(':');
 };

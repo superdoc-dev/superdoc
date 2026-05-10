@@ -205,6 +205,19 @@ describe('layoutDocument', () => {
     ).toThrow(/non-positive content area/);
   });
 
+  it('clamps header-inflated margins so oversized header content does not crash body layout', () => {
+    const layout = layoutDocument([block], [makeMeasure([1])], {
+      pageSize: { w: 720, h: 540 },
+      margins: { top: 60, right: 60, bottom: 56, left: 60, header: 48, footer: 56 },
+      sectionMetadata: [{ sectionIndex: 0, headerRefs: { default: 'rId4' } }],
+      headerContentHeightsByRId: new Map([['rId4', 568]]),
+    });
+
+    expect(layout.pages).toHaveLength(1);
+    expect(layout.pages[0].margins.top).toBeCloseTo(483);
+    expect(layout.pages[0].margins.bottom).toBe(56);
+  });
+
   it('fills columns before advancing to a new page', () => {
     const options: LayoutOptions = {
       pageSize: { w: 600, h: 800 },
@@ -3948,6 +3961,159 @@ describe('layoutHeaderFooter', () => {
     expect(imgFrag).toBeDefined();
     expect(imgFragNoKind).toBeDefined();
     expect(imgFrag!.y).toBe(imgFragNoKind!.y);
+  });
+
+  it('keeps paragraph-relative tall non-page-covering header anchors in measurement height', () => {
+    const paragraphBlock: FlowBlock = {
+      kind: 'paragraph',
+      id: 'header-anchor-paragraph',
+      runs: [{ text: 'Header', fontFamily: 'Arial', fontSize: 12, pmStart: 1, pmEnd: 7 }],
+    };
+    const imageBlock: FlowBlock = {
+      kind: 'image',
+      id: 'header-background',
+      src: 'data:image/png;base64,xxx',
+      anchor: {
+        isAnchored: true,
+        hRelativeFrom: 'column',
+        vRelativeFrom: 'paragraph',
+        offsetH: 120,
+        offsetV: 0,
+      },
+    };
+    const imageMeasure: Measure = {
+      kind: 'image',
+      width: 260,
+      height: 568,
+    };
+    const paragraphMeasure = makeMeasure([1]);
+    const layout = layoutHeaderFooter(
+      [paragraphBlock, imageBlock],
+      [paragraphMeasure, imageMeasure],
+      {
+        width: 600,
+        height: 424,
+        pageWidth: 720,
+        pageHeight: 540,
+        margins: { left: 60, right: 60, top: 60, bottom: 56, header: 48 },
+      },
+      'header',
+    );
+
+    expect(layout.height).toBeCloseTo(568);
+    expect(layout.renderHeight).toBeCloseTo(568);
+  });
+
+  it('excludes wrap=None page-covering overlays from measurement (column/paragraph anchored cover page)', () => {
+    // Regression for SD-2499 review: a foreground cover-page rectangle in a
+    // header is column/paragraph anchored, has wrap=None, and is sized to
+    // cover the body canvas. Treating it as body-reserving content inflates
+    // margins and (combined with the inflation clamp) shrinks the body to a
+    // sliver, which spreads body content across many synthetic pages and
+    // makes the overlay visually repeat per page. wrap=None is OOXML's
+    // explicit "no exclusion zone" signal, so it must not reserve space.
+    const paragraphBlock: FlowBlock = {
+      kind: 'paragraph',
+      id: 'header-para',
+      runs: [{ text: 'Header', fontFamily: 'Arial', fontSize: 12, pmStart: 1, pmEnd: 7 }],
+    };
+    const overlayBlock: FlowBlock = {
+      kind: 'drawing',
+      id: 'cover-overlay',
+      drawingKind: 'vectorShape',
+      geometry: { width: 720, height: 600 },
+      anchor: {
+        isAnchored: true,
+        hRelativeFrom: 'column',
+        vRelativeFrom: 'paragraph',
+        offsetH: -40,
+        offsetV: -50,
+        behindDoc: false,
+      },
+      wrap: { type: 'None' },
+      shapeKind: 'Rectangle',
+    };
+    const paragraphMeasure = makeMeasure([15]);
+    const overlayMeasure: Measure = {
+      kind: 'drawing',
+      drawingKind: 'vectorShape',
+      width: 720,
+      height: 600,
+      scale: 1,
+      naturalWidth: 720,
+      naturalHeight: 600,
+      geometry: { width: 720, height: 600, rotation: 0, flipH: false, flipV: false },
+    };
+
+    const layout = layoutHeaderFooter(
+      [paragraphBlock, overlayBlock],
+      [paragraphMeasure, overlayMeasure],
+      {
+        width: 600,
+        height: 424,
+        pageWidth: 720,
+        pageHeight: 540,
+        margins: { left: 60, right: 60, top: 60, bottom: 56, header: 48 },
+      },
+      'header',
+    );
+
+    expect(layout.height).toBeCloseTo(15);
+    expect(layout.renderHeight).toBeGreaterThan(layout.height);
+  });
+
+  it('keeps tall anchored shape in measurement when wrap reserves flow space', () => {
+    // Anchored content with a non-None wrap (e.g. Square) is real header
+    // content with an exclusion zone — it must continue to reserve body
+    // space, even when its size exceeds the measurement canvas.
+    const paragraphBlock: FlowBlock = {
+      kind: 'paragraph',
+      id: 'header-para',
+      runs: [{ text: 'Header', fontFamily: 'Arial', fontSize: 12, pmStart: 1, pmEnd: 7 }],
+    };
+    const textboxBlock: FlowBlock = {
+      kind: 'drawing',
+      id: 'header-textbox',
+      drawingKind: 'vectorShape',
+      geometry: { width: 720, height: 500 },
+      anchor: {
+        isAnchored: true,
+        hRelativeFrom: 'page',
+        vRelativeFrom: 'paragraph',
+        offsetH: 0,
+        offsetV: 0,
+        behindDoc: false,
+      },
+      wrap: { type: 'Square' },
+      shapeKind: 'Rectangle',
+    };
+    const paragraphMeasure = makeMeasure([15]);
+    const textboxMeasure: Measure = {
+      kind: 'drawing',
+      drawingKind: 'vectorShape',
+      width: 720,
+      height: 500,
+      scale: 1,
+      naturalWidth: 720,
+      naturalHeight: 500,
+      geometry: { width: 720, height: 500, rotation: 0, flipH: false, flipV: false },
+    };
+
+    const layout = layoutHeaderFooter(
+      [paragraphBlock, textboxBlock],
+      [paragraphMeasure, textboxMeasure],
+      {
+        width: 600,
+        height: 424,
+        pageWidth: 720,
+        pageHeight: 540,
+        margins: { left: 60, right: 60, top: 60, bottom: 56, header: 48 },
+      },
+      'header',
+    );
+
+    expect(layout.height).toBeGreaterThan(400);
+    expect(layout.renderHeight).toBeGreaterThanOrEqual(layout.height);
   });
 
   it('does not narrow footer paragraphs around page-relative anchored textboxes', () => {

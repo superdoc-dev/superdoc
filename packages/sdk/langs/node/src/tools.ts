@@ -105,7 +105,7 @@ async function loadCatalog(): Promise<ToolCatalog> {
 }
 
 export async function getToolCatalog(): Promise<ToolCatalog> {
-  return loadCatalog();
+  return getCachedCatalog();
 }
 
 export async function listTools(provider: ToolProvider): Promise<unknown[]> {
@@ -122,16 +122,39 @@ export async function listTools(provider: ToolProvider): Promise<unknown[]> {
 
 export type ToolChooserInput = {
   provider: ToolProvider;
+  /**
+   * When `true`, applies provider-specific prompt-caching markers to the
+   * returned tools so subsequent identical requests reuse the cached prefix.
+   *
+   * Per-provider behavior:
+   * - **anthropic**: marks the last tool entry with
+   *   `cache_control: { type: "ephemeral" }`. The full tools block becomes
+   *   cacheable; cache TTL is ~5 minutes by default.
+   * - **openai**: no-op. OpenAI caches prompts ≥ 1024 tokens automatically;
+   *   the helper returns tools unchanged but still reports
+   *   `cacheStrategy: 'automatic'` so callers can rely on the indicator.
+   * - **vercel** / **generic**: pass-through. Caching depends on the
+   *   underlying model; reported as `'unsupported'`.
+   */
+  cache?: boolean;
 };
+
+export type CacheStrategy = 'explicit' | 'automatic' | 'unsupported' | 'disabled';
 
 /**
  * Select all intent tools for a specific provider.
  *
- * Returns all intent tools in the requested provider format.
+ * Returns all intent tools in the requested provider format. Pass
+ * `cache: true` to apply provider-specific caching markers (see
+ * {@link ToolChooserInput.cache}).
  *
  * @example
  * ```ts
- * const { tools } = await chooseTools({ provider: 'openai' });
+ * // Anthropic — last tool gets cache_control automatically.
+ * const { tools, meta } = await chooseTools({ provider: 'anthropic', cache: true });
+ *
+ * // OpenAI — caching is automatic when prompts exceed 1024 tokens.
+ * const { tools } = await chooseTools({ provider: 'openai', cache: true });
  * ```
  */
 export async function chooseTools(input: ToolChooserInput): Promise<{
@@ -139,18 +162,63 @@ export async function chooseTools(input: ToolChooserInput): Promise<{
   meta: {
     provider: ToolProvider;
     toolCount: number;
+    cacheStrategy: CacheStrategy;
   };
 }> {
   const bundle = await loadProviderBundle(input.provider);
-  const tools = Array.isArray(bundle.tools) ? bundle.tools : [];
+  const rawTools = Array.isArray(bundle.tools) ? bundle.tools : [];
+  const cacheRequested = input.cache === true;
+
+  const { tools, cacheStrategy } = applyCacheMarkers(rawTools, input.provider, cacheRequested);
 
   return {
     tools,
     meta: {
       provider: input.provider,
       toolCount: tools.length,
+      cacheStrategy,
     },
   };
+}
+
+/**
+ * Apply provider-specific caching markers to the tools array. Mutates a clone,
+ * never the input. Anthropic gets an explicit `cache_control` on the last
+ * tool; other providers pass through.
+ */
+function applyCacheMarkers(
+  tools: unknown[],
+  provider: ToolProvider,
+  cacheRequested: boolean,
+): { tools: unknown[]; cacheStrategy: CacheStrategy } {
+  if (!cacheRequested) {
+    return { tools, cacheStrategy: 'disabled' };
+  }
+
+  if (provider === 'anthropic') {
+    if (tools.length === 0) return { tools, cacheStrategy: 'explicit' };
+    // Anthropic: marking the LAST tool with cache_control caches the entire
+    // tools block (and everything before it in the request — system prompt
+    // first if it also has cache_control). Shallow-spread the last entry so we
+    // don't mutate the cached bundle in place.
+    const next = tools.slice(0, -1);
+    const last = {
+      ...(tools[tools.length - 1] as Record<string, unknown>),
+      cache_control: { type: 'ephemeral' },
+    };
+    next.push(last);
+    return { tools: next, cacheStrategy: 'explicit' };
+  }
+
+  if (provider === 'openai') {
+    // OpenAI caches prompts ≥ 1024 tokens automatically. No marker needed,
+    // but we still report cacheStrategy:'automatic' so callers can branch on
+    // it (e.g. for measurement).
+    return { tools, cacheStrategy: 'automatic' };
+  }
+
+  // vercel / generic — depends on underlying model.
+  return { tools, cacheStrategy: 'unsupported' };
 }
 
 function resolveDocApiMethod(
@@ -367,4 +435,72 @@ export async function getMcpPrompt(): Promise<string> {
       details: { filePath: promptPath },
     });
   }
+}
+
+// ---------------------------------------------------------------------------
+// Provider-aware system prompt (with optional caching markers)
+// ---------------------------------------------------------------------------
+
+/**
+ * Anthropic content block representation of the system prompt with optional
+ * `cache_control` for prompt caching.
+ */
+export type AnthropicSystemPrompt = Array<{
+  type: 'text';
+  text: string;
+  cache_control?: { type: 'ephemeral' };
+}>;
+
+export type SystemPromptForProviderResult =
+  | { provider: 'anthropic'; content: AnthropicSystemPrompt; cacheStrategy: CacheStrategy }
+  | { provider: 'openai' | 'vercel' | 'generic'; content: string; cacheStrategy: CacheStrategy };
+
+/**
+ * Get the system prompt formatted for a specific LLM provider, with optional
+ * prompt caching applied.
+ *
+ * - **anthropic** with `cache: true`: returns a content array with
+ *   `cache_control: { type: "ephemeral" }` so the system prompt block is
+ *   cached. Pass directly as the `system` parameter on `messages.create()`.
+ * - **openai**: returns the prompt as a string. OpenAI caches prompts
+ *   ≥ 1024 tokens automatically — `cache: true` is informational only and
+ *   sets `cacheStrategy: 'automatic'`.
+ * - **vercel** / **generic**: returns the prompt as a string. Caching is
+ *   delegated to the underlying model.
+ *
+ * @example
+ * ```ts
+ * // Anthropic
+ * const sys = await getSystemPromptForProvider({ provider: 'anthropic', cache: true });
+ * await client.messages.create({ system: sys.content, tools, messages, model });
+ *
+ * // OpenAI
+ * const sys = await getSystemPromptForProvider({ provider: 'openai', cache: true });
+ * messages.unshift({ role: 'system', content: sys.content });
+ * ```
+ */
+export async function getSystemPromptForProvider(input: {
+  provider: ToolProvider;
+  cache?: boolean;
+}): Promise<SystemPromptForProviderResult> {
+  const text = await getSystemPrompt();
+  const cacheRequested = input.cache === true;
+
+  if (input.provider === 'anthropic') {
+    const block: AnthropicSystemPrompt[number] = { type: 'text', text };
+    if (cacheRequested) block.cache_control = { type: 'ephemeral' };
+    return {
+      provider: 'anthropic',
+      content: [block],
+      cacheStrategy: cacheRequested ? 'explicit' : 'disabled',
+    };
+  }
+
+  const cacheStrategy: CacheStrategy = !cacheRequested
+    ? 'disabled'
+    : input.provider === 'openai'
+      ? 'automatic'
+      : 'unsupported';
+
+  return { provider: input.provider, content: text, cacheStrategy };
 }

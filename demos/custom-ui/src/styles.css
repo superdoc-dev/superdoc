@@ -80,6 +80,14 @@ button {
 .editor-area .editor-shell {
   flex: 1;
   overflow: auto;
+  display: flex;
+  justify-content: center;
+}
+
+.editor-canvas {
+  width: 100%;
+  max-width: 880px;
+  height: 100%;
 }
 
 .sidebar {
@@ -250,6 +258,44 @@ button {
 .tb-btn.export-btn:hover:not(:disabled) {
   border-color: var(--accent);
   color: var(--accent);
+}
+
+/* Color swatch (DisplaySettings) — native <input type="color"> hidden
+   behind a styled label so the swatch matches `.tb-btn` sizing. */
+
+.color-swatch {
+  position: relative;
+  overflow: hidden;
+  padding: 0;
+  border: 1px solid var(--border);
+}
+
+.color-swatch:hover {
+  border-color: var(--text-muted);
+}
+
+.color-swatch input[type='color'] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: none;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+  opacity: 0;
+}
+
+.color-swatch-icon {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  /* Difference flips against any picked color so the icon stays readable
+     across the full hue range without per-color contrast logic. */
+  color: #fff;
+  mix-blend-mode: difference;
 }
 
 /* Sidebar cards */

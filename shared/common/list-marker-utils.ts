@@ -434,6 +434,25 @@ export function isMinimalWordLayout(value: unknown): value is MinimalWordLayout 
  * Used for marker modes whose rendering contract differs from the shared geometry
  * helper, such as right/center-justified markers and firstLineIndentMode paragraphs.
  */
+export type MarkerIndent = {
+  anchorIndentPx: number;
+  firstLinePx: number;
+  hangingPx: number;
+};
+
+export function resolveMarkerIndent(
+  indent: { left?: number; right?: number; firstLine?: number; hanging?: number } | undefined,
+  isRtl: boolean,
+): MarkerIndent {
+  const left = indent?.left ?? 0;
+  const right = indent?.right ?? 0;
+  return {
+    anchorIndentPx: isRtl ? right : left,
+    firstLinePx: isRtl ? -(indent?.firstLine ?? 0) : (indent?.firstLine ?? 0),
+    hangingPx: isRtl ? -(indent?.hanging ?? 0) : (indent?.hanging ?? 0),
+  };
+}
+
 export function computeTabWidth(
   currentPos: number,
   justification: string,

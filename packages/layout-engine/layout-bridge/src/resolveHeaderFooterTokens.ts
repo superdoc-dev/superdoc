@@ -10,7 +10,32 @@
  * page number is used when calculating dimensions and caching layouts.
  */
 
-import type { FlowBlock, ParagraphBlock } from '@superdoc/contracts';
+import type { FlowBlock, ParagraphBlock, TableBlock } from '@superdoc/contracts';
+
+/**
+ * Walk every paragraph block reachable through `blocks`, including those
+ * nested inside table cells (and tables nested inside cells). Used so the
+ * page-number resolver finds tokens that live in footers like
+ * `tableCell > paragraph > PAGE field` (SD-1332).
+ */
+function forEachParagraphBlock(blocks: FlowBlock[], visit: (para: ParagraphBlock) => void): void {
+  for (const block of blocks) {
+    if (block.kind === 'paragraph') {
+      visit(block as ParagraphBlock);
+    } else if (block.kind === 'table') {
+      const table = block as TableBlock;
+      for (const row of table.rows ?? []) {
+        for (const cell of row.cells ?? []) {
+          if (cell.blocks && cell.blocks.length > 0) {
+            forEachParagraphBlock(cell.blocks as FlowBlock[], visit);
+          } else if (cell.paragraph) {
+            forEachParagraphBlock([cell.paragraph], visit);
+          }
+        }
+      }
+    }
+  }
+}
 
 /**
  * Resolves page number tokens in a batch of header or footer blocks.
@@ -66,14 +91,11 @@ export function resolveHeaderFooterTokens(
   const pageNumberStr = pageNumberText ?? String(pageNumber);
   const totalPagesStr = String(totalPages);
 
-  // Process each block in the header/footer
-  for (const block of blocks) {
-    // Only paragraph blocks can contain runs with tokens
-    if (block.kind !== 'paragraph') continue;
-
-    const paraBlock = block as ParagraphBlock;
-
-    // Iterate through runs in the paragraph
+  // Process every paragraph block, including those nested in table cells
+  // (SD-1332). The page-number field can live in `tableCell > paragraph >
+  // PAGE` inside a footer; the previous top-level-only walk silently
+  // skipped those tokens and the digit never rendered.
+  forEachParagraphBlock(blocks, (paraBlock) => {
     for (const run of paraBlock.runs) {
       // Type guard: only TextRun can have token property
       if ('token' in run && run.token) {
@@ -92,7 +114,7 @@ export function resolveHeaderFooterTokens(
         // but if they do, they'll be handled by the PAGEREF resolution logic
       }
     }
-  }
+  });
 }
 
 /**
@@ -123,17 +145,37 @@ export function cloneHeaderFooterBlocks(blocks: FlowBlock[]): FlowBlock[] {
     return [];
   }
 
-  return blocks.map((block) => {
-    if (block.kind === 'paragraph') {
-      const paraBlock = block as ParagraphBlock;
-      return {
-        ...paraBlock,
-        runs: paraBlock.runs.map((run) => ({ ...run })),
-        attrs: paraBlock.attrs ? { ...paraBlock.attrs } : undefined,
-      };
-    }
-    // For other block types, shallow copy is sufficient
-    // (they don't contain tokens)
-    return { ...block };
-  });
+  return blocks.map(cloneHeaderFooterBlock);
+}
+
+function cloneHeaderFooterBlock(block: FlowBlock): FlowBlock {
+  if (block.kind === 'paragraph') {
+    const paraBlock = block as ParagraphBlock;
+    return {
+      ...paraBlock,
+      runs: paraBlock.runs.map((run) => ({ ...run })),
+      attrs: paraBlock.attrs ? { ...paraBlock.attrs } : undefined,
+    };
+  }
+  if (block.kind === 'table') {
+    // SD-1332: tables can host paragraphs with page-number tokens. Without
+    // deep-cloning the table-row-cell tree the per-page mutations would
+    // share state across pages and the same digit would leak between them.
+    const table = block as TableBlock;
+    return {
+      ...table,
+      rows: (table.rows ?? []).map((row) => ({
+        ...row,
+        cells: (row.cells ?? []).map((cell) => ({
+          ...cell,
+          paragraph: cell.paragraph ? (cloneHeaderFooterBlock(cell.paragraph) as ParagraphBlock) : cell.paragraph,
+          blocks: cell.blocks
+            ? (cell.blocks.map(cloneHeaderFooterBlock) as TableBlock['rows'][number]['cells'][number]['blocks'])
+            : cell.blocks,
+        })),
+      })),
+    } as TableBlock;
+  }
+  // For other block types, shallow copy is sufficient (they don't contain tokens)
+  return { ...block };
 }

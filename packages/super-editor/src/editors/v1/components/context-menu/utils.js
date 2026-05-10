@@ -1,5 +1,6 @@
 import { selectionHasNodeOrMark } from '../cursor-helpers.js';
 import { tableActionsOptions } from './constants.js';
+import { findTocAncestor } from '@extensions/table-of-contents/find-toc-ancestor.js';
 import { markRaw } from 'vue';
 import { undoDepth, redoDepth } from 'prosemirror-history';
 import { yUndoPluginKey } from 'y-prosemirror';
@@ -124,6 +125,7 @@ export async function getEditorContext(editor, event) {
   };
 
   const structureFromResolvedPos = pos !== null ? getStructureFromResolvedPos(state, pos) : null;
+  const tocAncestor = pos !== null ? findTocAncestor(state.doc, pos) : null;
   const isInTable =
     structureFromResolvedPos?.isInTable ?? selectionHasNodeOrMark(state, 'table', { requireEnds: true });
   const isInList = structureFromResolvedPos?.isInList ?? selectionIncludesListParagraph(state);
@@ -228,6 +230,7 @@ export async function getEditorContext(editor, event) {
     editor,
     trackedChanges,
     proofingContext,
+    tocAncestor,
   };
 }
 

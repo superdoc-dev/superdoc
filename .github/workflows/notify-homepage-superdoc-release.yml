@@ -1,0 +1,53 @@
+# Fires repository_dispatch to superdoc-dev/homepage when a stable SuperDoc
+# release ships, so the homepage can auto-bump its superdoc dependency.
+# Same trigger and tag-diff pattern as promote-stable-docs.yml.
+name: 📨 Notify homepage of SuperDoc release
+
+on:
+  workflow_run:
+    workflows: ["📦 Release superdoc"]
+    types: [completed]
+
+jobs:
+  notify:
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'stable'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - uses: actions/create-github-app-token@v2
+        id: token
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          owner: superdoc-dev
+          repositories: homepage
+
+      - name: Detect release and dispatch
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          SOURCE_RUN_ID: ${{ github.event.workflow_run.id }}
+        run: |
+          set -euo pipefail
+          git fetch origin stable --tags --force
+
+          new_tag=$(comm -23 \
+            <(git tag --merged origin/stable --list 'v[0-9]*' | sort -u) \
+            <(git tag --merged "$HEAD_SHA" --list 'v[0-9]*' | sort -u) \
+            | { grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' || true; } \
+            | sort -V | tail -n1)
+
+          if [ -z "$new_tag" ]; then
+            echo "No new stable v* tag — release-superdoc was a no-op."
+            exit 0
+          fi
+
+          version="${new_tag#v}"
+          echo "Dispatching superdoc@$version to superdoc-dev/homepage"
+          gh api -X POST repos/superdoc-dev/homepage/dispatches \
+            -f event_type=superdoc-stable-release \
+            -f "client_payload[version]=$version" \
+            -f "client_payload[source_run_id]=$SOURCE_RUN_ID"

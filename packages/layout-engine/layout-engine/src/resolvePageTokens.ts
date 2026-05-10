@@ -121,37 +121,46 @@ export function resolvePageNumberTokens(
     const displayPageText = displayPageInfo.displayText;
 
     for (const fragment of page.fragments) {
-      // Only paragraph fragments contain runs with tokens
-      if (fragment.kind !== 'para') continue;
+      // Paragraph fragments — original behaviour.
+      if (fragment.kind === 'para') {
+        const blockId = fragment.blockId;
+        if (processedBlocks.has(blockId)) continue;
 
-      const blockId = fragment.blockId;
+        const hasTokensFlag = blockHasTokensFlags.get(blockId);
+        if (hasTokensFlag === false) continue;
 
-      // Skip if already processed
-      if (processedBlocks.has(blockId)) continue;
+        const block = blockMap.get(blockId);
+        if (!block || block.kind !== 'paragraph') continue;
 
-      // Optimization: skip blocks that don't have page tokens flag
-      const hasTokensFlag = blockHasTokensFlags.get(blockId);
-      if (hasTokensFlag === false) continue;
+        if (!hasPageTokens(block)) {
+          processedBlocks.add(blockId);
+          continue;
+        }
 
-      // Get the original block
-      const block = blockMap.get(blockId);
-      if (!block || block.kind !== 'paragraph') continue;
-
-      // Check if block has any page tokens and resolve them
-      const wasModified = hasPageTokens(block);
-      if (!wasModified) {
-        // Mark as processed even if no tokens (to avoid checking again)
+        const clonedBlock = cloneBlockWithResolvedTokens(block, displayPageText, totalPagesStr);
+        updatedBlocks.set(blockId, clonedBlock);
+        affectedBlockIds.add(blockId);
         processedBlocks.add(blockId);
         continue;
       }
 
-      // Clone the block and resolve tokens
-      const clonedBlock = cloneBlockWithResolvedTokens(block, displayPageText, totalPagesStr);
-
-      // Store the updated block
-      updatedBlocks.set(blockId, clonedBlock);
-      affectedBlockIds.add(blockId);
-      processedBlocks.add(blockId);
+      // Body tables are intentionally NOT processed here.
+      //
+      // A body table can span multiple physical pages: the layout engine emits
+      // one `kind === 'table'` fragment per page, all sharing the same
+      // table.blockId, each with its own fromRow..toRow. Cloning the entire
+      // table once with a single page's displayPageText would resolve every
+      // PAGE field — including ones rendered on later pages — to the first
+      // fragment's number. The correct fix is per-fragment substitution
+      // (synthetic per-page block IDs + targeted row cloning), which is a
+      // larger layout-pipeline change. Defer until a body-table-with-PAGE
+      // fixture surfaces it.
+      //
+      // SD-1332 (the Linear ticket motivating this comment) is a footer-side
+      // bug. Headers/footers go through layout-bridge/resolveHeaderFooterTokens,
+      // which is page-local — each H/F page owns its own block clone — so
+      // recursing into table cells THERE is safe and correct (see
+      // forEachParagraphBlock in resolveHeaderFooterTokens.ts).
     }
   }
 

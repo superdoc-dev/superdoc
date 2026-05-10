@@ -11,6 +11,89 @@ const MCP_GENERATED_DIR = path.join(REPO_ROOT, 'apps/mcp/src/generated');
 // ---------------------------------------------------------------------------
 
 /**
+ * Merge two property schemas that share a name across multi-action intent
+ * tools. The merged schema must accept inputs valid under EITHER action so
+ * documented examples don't get rejected by tool-schema validation.
+ *
+ * Strategy:
+ * - Identical schemas → first wins.
+ * - Both have `enum` of the same scalar type → union the enum values.
+ * - One allows `null` (via top-level `type:'null'` or in a `oneOf` branch)
+ *   and the other doesn't → wrap the non-null one and add a null option.
+ * - One has a stricter `pattern` than the other → drop the pattern when
+ *   either side accepts a broader pattern (the per-op schema still
+ *   validates at execute time).
+ * - Otherwise → wrap both in a `oneOf`.
+ *
+ * Description and required hints are reattached by the caller; this fn only
+ * cares about the type/enum/pattern/oneOf shape.
+ */
+export function mergeMergedProperty(existing, incoming) {
+  if (!existing) return { ...incoming };
+  if (!incoming) return existing;
+
+  const a = existing;
+  const b = incoming;
+
+  // Identical → no-op.
+  if (sameShape(a, b)) return a;
+
+  const aDescription = a.description;
+  const aIsNullable = isNullableSchema(a);
+  const bIsNullable = isNullableSchema(b);
+
+  // Enum union: both have an enum of compatible types.
+  if (Array.isArray(a.enum) && Array.isArray(b.enum)) {
+    const merged = Array.from(new Set([...a.enum, ...b.enum]));
+    const result = { ...a, enum: merged };
+    if (a.type !== b.type && b.type) result.type = a.type === b.type ? a.type : 'string';
+    if (aDescription) result.description = aDescription;
+    return result;
+  }
+
+  // Nullable broadening: if one side allows null, ensure merged does too.
+  if (aIsNullable !== bIsNullable) {
+    const nonNull = bIsNullable ? a : b;
+    return {
+      oneOf: [stripNullable(nonNull), { type: 'null' }],
+      ...(aDescription ? { description: aDescription } : {}),
+    };
+  }
+
+  // Different types or shapes → wrap as oneOf so neither valid form is lost.
+  return {
+    oneOf: [a, b],
+    ...(aDescription ? { description: aDescription } : {}),
+  };
+}
+
+function sameShape(a, b) {
+  try {
+    return JSON.stringify(a) === JSON.stringify(b);
+  } catch {
+    return false;
+  }
+}
+
+function isNullableSchema(s) {
+  if (!s || typeof s !== 'object') return false;
+  if (s.type === 'null') return true;
+  if (Array.isArray(s.oneOf)) return s.oneOf.some((x) => x?.type === 'null');
+  if (Array.isArray(s.anyOf)) return s.anyOf.some((x) => x?.type === 'null');
+  return false;
+}
+
+function stripNullable(s) {
+  if (!s || typeof s !== 'object') return s;
+  if (Array.isArray(s.oneOf)) {
+    const nonNull = s.oneOf.filter((x) => x?.type !== 'null');
+    if (nonNull.length === 1) return nonNull[0];
+    return { ...s, oneOf: nonNull };
+  }
+  return s;
+}
+
+/**
  * Recursively fix bare `{ const: value }` nodes to include `type`.
  * Anthropic requires `const` to be accompanied by a `type` field.
  */
@@ -102,6 +185,40 @@ function sanitizeSchema(schema) {
 // Build input schema from CLI params (for CLI-only ops or as fallback)
 // ---------------------------------------------------------------------------
 
+/**
+ * Walk a contract input schema (which may be a plain object or a oneOf union)
+ * and collect property → schema mappings. When the same property appears in
+ * multiple oneOf branches with different schemas, broaden using the same
+ * merge logic as cross-action deduping (handles nullable / enum-union cases).
+ *
+ * Used so that {@link buildInputSchemaFromParams} can recover precise
+ * per-property schemas (with patterns, nullability, enum values) that the
+ * CLI param-extraction step strips.
+ */
+export function collectContractProperties(inputSchema) {
+  const result = new Map();
+  if (!inputSchema || typeof inputSchema !== 'object') return result;
+
+  // The top-level node may carry properties AND a oneOf at the same time
+  // (the oneOf typically expresses required-discriminators rather than full
+  // alternative shapes). Walk both — top-level first so its values appear
+  // before any branch-specific overrides.
+  const sources = [inputSchema];
+  if (Array.isArray(inputSchema.oneOf)) sources.push(...inputSchema.oneOf);
+
+  for (const source of sources) {
+    if (!source || typeof source !== 'object') continue;
+    const props = source.properties;
+    if (!props || typeof props !== 'object') continue;
+    for (const [name, schema] of Object.entries(props)) {
+      if (!schema || typeof schema !== 'object') continue;
+      const existing = result.get(name);
+      result.set(name, existing ? mergeMergedProperty(existing, schema) : { ...schema });
+    }
+  }
+  return result;
+}
+
 function buildInputSchemaFromParams(operation) {
   const properties = {};
   const required = [];
@@ -109,11 +226,20 @@ function buildInputSchemaFromParams(operation) {
   // Strip doc/sessionId — the document handle manages targeting.
   const params = stripBoundParams(operation.params);
 
+  // Authoritative per-property schemas live on operation.inputSchema (the
+  // contract). The CLI param shape is sometimes lossy — e.g. a nullable
+  // `oneOf: [{string,pattern}, {null}]` collapses to `oneOf: [{string},
+  // {json}]` after CLI extraction. Prefer the contract schema when available.
+  const contractProps = collectContractProperties(operation.inputSchema);
+
   for (const param of params) {
     if (param.agentVisible === false) continue;
 
     let schema;
-    if (param.type === 'string' && param.schema) schema = { type: 'string', ...param.schema };
+    const contractSchema = contractProps.get(param.name);
+    if (contractSchema) {
+      schema = contractSchema;
+    } else if (param.type === 'string' && param.schema) schema = { type: 'string', ...param.schema };
     else if (param.type === 'string') schema = { type: 'string' };
     else if (param.type === 'number') schema = { type: 'number' };
     else if (param.type === 'boolean') schema = { type: 'boolean' };
@@ -158,19 +284,28 @@ function extractRequiredConstraints(operation) {
   const cliParamNames = new Set(Object.keys(cliSchema.properties ?? {}));
   const contractSchema = operation.inputSchema;
 
-  // oneOf in contract schema — collect per-branch required arrays.
-  // (Verified: all oneOf operations use property names matching CLI params.)
+  // oneOf in contract schema — collect per-branch required arrays. Required
+  // keys can sit at three levels and ALL apply to every leaf:
+  //   1. Top-level `required` (e.g. `['color']` on setShading via objectSchema spread).
+  //   2. Outer branch `required` (e.g. setBorders' applyTo branch carries
+  //      `['mode', 'applyTo', 'border']` — these apply to every nested sub.
+  //   3. Inner sub-branch `required` (e.g. `['target']` vs `['nodeId']` discriminator).
+  // Merge all three into each leaf so the runtime validator sees the full
+  // requirement set. Earlier passes only merged 1+3, dropping 2 and letting
+  // tools like `set_borders` accept `{action, nodeId}` (no mode/border).
   if (contractSchema && Array.isArray(contractSchema.oneOf)) {
+    const baseRequired = Array.isArray(contractSchema.required) ? contractSchema.required : [];
     const branches = [];
     for (const branch of contractSchema.oneOf) {
+      const branchRequired = Array.isArray(branch.required) ? branch.required : [];
       if (Array.isArray(branch.oneOf)) {
         for (const sub of branch.oneOf) {
           if (Array.isArray(sub.required) && sub.required.length > 0) {
-            branches.push(sub.required);
+            branches.push([...new Set([...baseRequired, ...branchRequired, ...sub.required])]);
           }
         }
-      } else if (Array.isArray(branch.required) && branch.required.length > 0) {
-        branches.push(branch.required);
+      } else if (branchRequired.length > 0) {
+        branches.push([...new Set([...baseRequired, ...branchRequired])]);
       }
     }
     if (branches.length > 0) return { requiredOneOf: branches };
@@ -234,7 +369,7 @@ function buildIntentTools(contract) {
 
       tools.push({
         toolName: meta.toolName,
-        description: meta.description,
+        description: appendExamplesToDescription(meta.description, inputExamples),
         inputSchema,
         mutates,
         annotations,
@@ -275,6 +410,12 @@ function buildIntentTools(contract) {
 
           if (!allProperties[propName]) {
             allProperties[propName] = { ...propSchema };
+          } else {
+            // Same property appeared on a different action — broaden the
+            // merged schema so EVERY documented action shape validates.
+            // Without this, e.g. `position` ends up as the row enum and
+            // insert_column's `position:'last'` is rejected before dispatch.
+            allProperties[propName] = mergeMergedProperty(allProperties[propName], propSchema);
           }
 
           const entry = propPresence.get(propName) ?? { total: 0, requiredCount: 0, requiredBy: [] };
@@ -360,7 +501,7 @@ function buildIntentTools(contract) {
 
       tools.push({
         toolName: meta.toolName,
-        description: meta.description,
+        description: appendExamplesToDescription(meta.description, inputExamples),
         inputSchema,
         mutates,
         annotations,
@@ -375,6 +516,17 @@ function buildIntentTools(contract) {
   }
 
   return tools;
+}
+
+/**
+ * Append a compact EXAMPLES section to a tool description so LLM clients
+ * (MCP, Anthropic, OpenAI) see concrete invocations alongside the prose.
+ * Returns the original description unchanged when no examples are provided.
+ */
+function appendExamplesToDescription(description, examples) {
+  if (!Array.isArray(examples) || examples.length === 0) return description;
+  const lines = examples.map((ex, i) => `  ${i + 1}. ${JSON.stringify(ex)}`);
+  return `${description}\n\nEXAMPLES:\n${lines.join('\n')}`;
 }
 
 // ---------------------------------------------------------------------------

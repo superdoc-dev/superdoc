@@ -3189,9 +3189,8 @@ describe('toFlowBlocks', () => {
       const paragraph = blocks[0];
       expect(paragraph.kind).toBe('paragraph');
       expect(paragraph.attrs?.direction).toBe('rtl');
-      expect(paragraph.attrs?.rtl).toBe(true);
-      expect(paragraph.attrs?.indent?.left).toBe(24);
-      expect(paragraph.attrs?.indent?.right).toBe(12);
+      expect(paragraph.attrs?.indent?.left).toBe(12);
+      expect(paragraph.attrs?.indent?.right).toBe(24);
     });
 
     it('does not mark paragraphs as RTL when w:bidi is explicitly false', () => {
@@ -3216,7 +3215,67 @@ describe('toFlowBlocks', () => {
       const paragraph = blocks[0];
       expect(paragraph.kind).toBe('paragraph');
       expect(paragraph.attrs?.direction).toBe('ltr');
-      expect(paragraph.attrs?.rtl).toBe(false);
+    });
+
+    it('does NOT inherit paragraph inline direction from body sectPr w:bidi (§17.6.1)', () => {
+      // Per ECMA-376 §17.6.1, section bidi affects section chrome only and does
+      // not propagate to paragraph layout. Paragraph direction must come from
+      // paragraph w:bidi (or its style cascade including docDefaults), not section.
+      const pmDoc = {
+        type: 'doc',
+        attrs: {
+          bodySectPr: {
+            type: 'element',
+            name: 'w:sectPr',
+            elements: [{ type: 'element', name: 'w:bidi', attributes: {} }],
+          },
+        },
+        content: [
+          {
+            type: 'paragraph',
+            attrs: {
+              paragraphProperties: {},
+            },
+            content: [{ type: 'text', text: 'Latin paragraph in RTL section' }],
+          },
+        ],
+      };
+
+      const { blocks } = toFlowBlocks(pmDoc);
+      expect(blocks).toHaveLength(1);
+      const paragraph = blocks[0];
+      expect(paragraph.kind).toBe('paragraph');
+      // Paragraph inline direction stays undefined; the browser applies UBA via
+      // the missing dir attribute. Section pageDirection is preserved separately.
+      expect(paragraph.attrs?.direction).toBeUndefined();
+    });
+
+    it('section bidi=0 also does not affect paragraph inline direction', () => {
+      const pmDoc = {
+        type: 'doc',
+        attrs: {
+          bodySectPr: {
+            type: 'element',
+            name: 'w:sectPr',
+            elements: [{ type: 'element', name: 'w:bidi', attributes: { 'w:val': '0' } }],
+          },
+        },
+        content: [
+          {
+            type: 'paragraph',
+            attrs: {
+              paragraphProperties: {},
+            },
+            content: [{ type: 'text', text: 'Paragraph in LTR section' }],
+          },
+        ],
+      };
+
+      const { blocks } = toFlowBlocks(pmDoc);
+      expect(blocks).toHaveLength(1);
+      const paragraph = blocks[0];
+      expect(paragraph.kind).toBe('paragraph');
+      expect(paragraph.attrs?.direction).toBeUndefined();
     });
 
     it('handles multiple page breaks', () => {
@@ -4562,7 +4621,6 @@ describe('toFlowBlocks', () => {
 
       expect(blocks).toHaveLength(1);
       expect(blocks[0].attrs?.direction).toBe('rtl');
-      expect(blocks[0].attrs?.rtl).toBe(true);
       expect(blocks[0].attrs?.alignment).toBeUndefined();
     });
 
@@ -4592,7 +4650,6 @@ describe('toFlowBlocks', () => {
 
       expect(blocks).toHaveLength(1);
       expect(blocks[0].attrs?.direction).toBe('rtl');
-      expect(blocks[0].attrs?.rtl).toBe(true);
       expect(blocks[0].attrs).toMatchObject({
         alignment: 'center',
       });
@@ -4625,7 +4682,6 @@ describe('toFlowBlocks', () => {
 
       expect(blocks).toHaveLength(1);
       expect(blocks[0].attrs?.direction).toBe('rtl');
-      expect(blocks[0].attrs?.rtl).toBe(true);
       expect(blocks[0].attrs).toMatchObject({
         alignment: 'left',
       });

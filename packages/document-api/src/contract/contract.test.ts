@@ -295,13 +295,27 @@ describe('document-api contract catalog', () => {
       }>;
     };
 
-    expect(insertRowInput.oneOf).toHaveLength(3);
+    // 1–3: scoped variants. 4: SD-2540 append-at-end shorthand
+    // (table-level target with no rowIndex/position).
+    expect(insertRowInput.oneOf).toHaveLength(4);
     expect(insertRowInput.oneOf?.[0]?.properties?.target?.$ref).toBe('#/$defs/TableRowAddress');
     expect(insertRowInput.oneOf?.[0]?.required).toEqual(['target', 'position']);
     expect(insertRowInput.oneOf?.[1]?.properties?.target?.$ref).toBe('#/$defs/TableAddress');
     expect(insertRowInput.oneOf?.[1]?.required).toEqual(['target', 'rowIndex', 'position']);
     expect(insertRowInput.oneOf?.[2]?.properties?.rowIndex).toEqual({ type: 'integer', minimum: 0 });
     expect(insertRowInput.oneOf?.[2]?.required).toEqual(['nodeId', 'rowIndex', 'position']);
+    // Append-at-end variant: target OR nodeId, no rowIndex, no position.
+    // Uses an inner oneOf for target/nodeId and a `not` clause to forbid
+    // rowIndex/position; no top-level `required` array.
+    const appendVariant = insertRowInput.oneOf?.[3] as {
+      properties?: { target?: { $ref?: string }; nodeId?: { type?: string } };
+      oneOf?: Array<{ required?: string[] }>;
+      not?: { anyOf?: Array<{ required?: string[] }> };
+    };
+    expect(appendVariant?.properties?.target?.$ref).toBe('#/$defs/TableAddress');
+    expect(appendVariant?.properties?.nodeId?.type).toBe('string');
+    expect(appendVariant?.oneOf).toEqual([{ required: ['target'] }, { required: ['nodeId'] }]);
+    expect(appendVariant?.not?.anyOf).toEqual([{ required: ['rowIndex'] }, { required: ['position'] }]);
 
     expect(deleteRowInput.oneOf).toHaveLength(3);
     expect(deleteRowInput.oneOf?.[0]?.properties?.target?.$ref).toBe('#/$defs/TableRowAddress');

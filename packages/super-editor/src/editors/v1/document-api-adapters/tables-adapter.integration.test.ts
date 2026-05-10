@@ -4,7 +4,7 @@ import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { initTestEditor, loadTestDataForEditorTests } from '@tests/helpers/helpers.js';
 import DocxZipper from '@core/DocxZipper.js';
 import type { Editor } from '../core/Editor.js';
-import { createTableAdapter, tablesSplitAdapter } from './tables-adapter.js';
+import { createTableAdapter, tablesSplitAdapter, tablesSetCellTextAdapter } from './tables-adapter.js';
 import { insertStructuredWrapper } from './plan-engine/plan-wrappers.js';
 import { clearExecutorRegistry } from './plan-engine/executor-registry.js';
 import { registerBuiltInExecutors } from './plan-engine/register-executors.js';
@@ -121,6 +121,64 @@ describe('tables adapter DOCX integration', () => {
     expect(documentXml).toBeTruthy();
     expect(documentXml).not.toMatch(/<\/w:tbl>\s*<w:tbl>/);
     expect(documentXml).toMatch(/<\/w:tbl>\s*<w:p\b[^>]*(?:\/>|>[\s\S]*?<\/w:p>)\s*<w:tbl>/);
+  });
+
+  it('set_cell_text content survives DOCX export round-trip', async () => {
+    ({ editor } = initTestEditor({
+      content: docData.docx,
+      media: docData.media,
+      mediaFiles: docData.mediaFiles,
+      fonts: docData.fonts,
+      useImmediateSetTimeout: false,
+    }));
+
+    const createResult = createTableAdapter(
+      editor,
+      { rows: 2, columns: 2, at: { kind: 'documentEnd' } },
+      DIRECT_MUTATION_OPTIONS,
+    );
+    const tableId = resolveTableNodeId(createResult);
+
+    // Write distinct strings into each cell so we can spot truncation /
+    // mis-routing in the exported XML.
+    const cellText = [
+      ['Q1 Revenue', 'Q2 Revenue'],
+      ['$1,234.00', '$5,678.00'],
+    ];
+    for (let row = 0; row < 2; row++) {
+      for (let col = 0; col < 2; col++) {
+        const r = tablesSetCellTextAdapter(
+          editor,
+          { nodeId: tableId, rowIndex: row, columnIndex: col, text: cellText[row]![col]! },
+          DIRECT_MUTATION_OPTIONS,
+        );
+        expect(r.success).toBe(true);
+      }
+    }
+
+    const exportedFiles = await exportDocxFiles(editor);
+    const documentXml = exportedFiles['word/document.xml'];
+    expect(documentXml).toBeTruthy();
+
+    // Each cell value should appear exactly once in document.xml.
+    for (const row of cellText) {
+      for (const text of row) {
+        const matches =
+          documentXml.match(
+            new RegExp(
+              text.replace(/[$.,]/g, (m) => `\\${m}`),
+              'g',
+            ),
+          ) || [];
+        expect(matches.length).toBe(1);
+      }
+    }
+
+    // Cell structure preserved (still a 2x2 table with 4 cells).
+    const tableSection = documentXml.match(/<w:tbl\b[\s\S]*?<\/w:tbl>/);
+    expect(tableSection).toBeTruthy();
+    const cellOpens = (tableSection![0].match(/<w:tc\b/g) || []).length;
+    expect(cellOpens).toBe(4);
   });
 
   it('exports row paraIds without writing invalid table or cell w14 identity attrs', async () => {

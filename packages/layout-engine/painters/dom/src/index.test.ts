@@ -239,6 +239,48 @@ const createResolvedTestLine = (textLength: number, overrides: Partial<Line> = {
   ...overrides,
 });
 
+const withFallbackFragment = (
+  item: ResolvedLayout['pages'][number]['items'][number],
+): ResolvedLayout['pages'][number]['items'][number] => {
+  if (item.kind !== 'fragment' || item.fragment) {
+    return item;
+  }
+
+  const fromLine = 'fromLine' in item && typeof item.fromLine === 'number' ? item.fromLine : 0;
+  const toLine = 'toLine' in item && typeof item.toLine === 'number' ? item.toLine : fromLine + 1;
+
+  if (item.fragmentKind === 'list-item') {
+    return {
+      ...item,
+      fragment: {
+        kind: 'list-item',
+        blockId: item.blockId,
+        itemId: item.itemId,
+        markerText: item.markerText ?? '',
+        markerWidth: item.markerWidth ?? 0,
+        fromLine,
+        toLine,
+        x: item.x,
+        y: item.y,
+        width: item.width,
+      },
+    };
+  }
+
+  return {
+    ...item,
+    fragment: {
+      kind: 'para',
+      blockId: item.blockId,
+      fromLine,
+      toLine,
+      x: item.x,
+      y: item.y,
+      width: item.width,
+    },
+  };
+};
+
 const createSinglePageResolvedLayout = (item: ResolvedLayout['pages'][number]['items'][number]): ResolvedLayout => ({
   version: 1,
   flowMode: 'paginated',
@@ -250,7 +292,7 @@ const createSinglePageResolvedLayout = (item: ResolvedLayout['pages'][number]['i
       number: 1,
       width: 400,
       height: 500,
-      items: [item],
+      items: [withFallbackFragment(item)],
     },
   ],
 });
@@ -4965,7 +5007,6 @@ describe('DomPainter', () => {
         attrs: {
           alignment: 'center',
           direction: 'rtl',
-          rtl: true,
         },
       };
       const footerMeasure: Measure = {
@@ -6024,6 +6065,92 @@ describe('DomPainter', () => {
       expect(tabEl.style.fontSize).toBe('12px');
       expect(paragraphMark.textContent).toBe('¶');
       expect(paragraphMark.style.left).toBe('232px');
+    });
+
+    it('renders RTL resolved list first-line anchor on padding-right for nested numbered levels', () => {
+      const paragraphBlock: FlowBlock = {
+        kind: 'paragraph',
+        id: 'resolved-rtl-marker',
+        runs: [{ text: 'RTL nested item', fontFamily: 'Arial', fontSize: 12, pmStart: 1, pmEnd: 16 }],
+        attrs: { direction: 'rtl' as const },
+      };
+
+      const paragraphMeasure: Measure = {
+        kind: 'paragraph',
+        lines: [createResolvedTestLine(16)],
+        totalHeight: 20,
+      };
+
+      const paragraphLayout: Layout = {
+        pageSize: { w: 400, h: 500 },
+        pages: [
+          {
+            number: 1,
+            fragments: [
+              { kind: 'para', blockId: 'resolved-rtl-marker', fromLine: 0, toLine: 1, x: 30, y: 40, width: 300 },
+            ],
+          },
+        ],
+      };
+
+      const resolvedLayout = createSinglePageResolvedLayout({
+        kind: 'fragment',
+        id: 'para:resolved-rtl-marker:0:1',
+        pageIndex: 0,
+        x: 30,
+        y: 40,
+        width: 300,
+        height: 20,
+        fragmentKind: 'para',
+        blockId: 'resolved-rtl-marker',
+        fragmentIndex: 0,
+        block: paragraphBlock as import('@superdoc/contracts').ParagraphBlock,
+        measure: paragraphMeasure as import('@superdoc/contracts').ParagraphMeasure,
+        content: {
+          lines: [
+            {
+              line: createResolvedTestLine(16),
+              lineIndex: 0,
+              availableWidth: 300,
+              skipJustify: true,
+              paddingLeftPx: 0,
+              paddingRightPx: 0,
+              textIndentPx: 0,
+              isListFirstLine: true,
+              hasExplicitSegmentPositioning: false,
+              indentOffset: 0,
+            },
+          ],
+          marker: {
+            text: 'i.',
+            justification: 'right',
+            suffix: 'tab',
+            markerStartPx: 72,
+            suffixWidthPx: 24,
+            firstLinePaddingLeftPx: 72,
+            run: {
+              fontFamily: 'Arial',
+              fontSize: 12,
+            },
+          },
+        },
+      });
+
+      const painter = createTestPainter({
+        blocks: [paragraphBlock],
+        measures: [paragraphMeasure],
+      });
+
+      painter.setResolvedLayout(resolvedLayout);
+      painter.paint(paragraphLayout, mount);
+
+      const lineEl = mount.querySelector('.superdoc-line') as HTMLElement;
+      const markerEl = mount.querySelector('.superdoc-paragraph-marker') as HTMLElement;
+
+      expect(lineEl.getAttribute('dir')).toBe('rtl');
+      expect(lineEl.style.paddingRight).toBe('72px');
+      expect(lineEl.style.paddingLeft).toBe('');
+      expect(markerEl.textContent).toBe('i.');
     });
 
     it('renders a resolved drop cap without a legacy descriptor on the block', () => {
@@ -8409,7 +8536,7 @@ describe('DomPainter', () => {
       kind: 'paragraph',
       id: 'rtl-block',
       runs: [{ text: 'مرحبا', fontFamily: 'Arial', fontSize: 16 }],
-      attrs: { direction: 'rtl' as const, rtl: true, ...attrs },
+      attrs: { direction: 'rtl' as const, ...attrs },
     });
 
     const rtlMeasure: Measure = {
@@ -8464,7 +8591,7 @@ describe('DomPainter', () => {
           { kind: 'tab', width: 40, fontFamily: 'Arial', fontSize: 16 } as any,
           { text: 'عالم', fontFamily: 'Arial', fontSize: 16 },
         ],
-        attrs: { direction: 'rtl' as const, rtl: true },
+        attrs: { direction: 'rtl' as const },
       };
 
       const tabMeasure: Measure = {

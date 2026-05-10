@@ -2,8 +2,9 @@
  * @typedef {import('../v2/types/index.js').OpenXmlNode} OpenXmlNode
  */
 import { getInstructionPreProcessor } from './fld-preprocessors';
+import { resolveHyperlinkAttributes } from './fld-preprocessors/hyperlink-preprocessor.js';
 import { carbonCopy } from '@core/utilities/carbonCopy.js';
-import { isTrackChangeElement } from '../v2/importer/trackChangeElements.js';
+import { isTrackChangeElement, isConstructiveTrackChangeElement } from '../v2/importer/trackChangeElements.js';
 
 const SKIP_FIELD_PROCESSING_NODE_NAMES = new Set(['w:drawing', 'w:pict']);
 
@@ -61,6 +62,14 @@ export const preProcessNodesForFldChar = (nodes = [], docx) => {
           fieldRunRPr,
         );
         outputNodes = combinedResult.handled ? combinedResult.nodes : rawCollectedNodes;
+      } else if (currentField.preserveRawConstructive) {
+        // SD-2973: SD-2858's preserveRaw guarantees structural validity when a
+        // field crosses tracked-change wrappers but loses field interpretation.
+        // For constructive wrappers (w:ins / w:moveTo) the user keeps the
+        // visible content — drop the link-like interpretations and they'd see
+        // plain text. Run a per-field post-pass that re-applies the
+        // interpretation in-place without restructuring the tree.
+        applyConstructiveFieldInterpretation(outputNodes, currentField.instrText.trim(), docx);
       }
       if (collectedNodesStack.length === 0) {
         // We have completed a top-level field, add the combined nodes to the output.
@@ -215,6 +224,14 @@ export const preProcessNodesForFldChar = (nodes = [], docx) => {
           if (fieldInfo.preserveRaw || isTrackChangeElement(node)) {
             fieldInfo.preserveRaw = true;
           }
+          // SD-2973: track whether the wrapper that forced preserveRaw was a
+          // constructive tracked-change (w:ins / w:moveTo). Constructive
+          // wrappers keep the content on accept, so the user sees the visible
+          // text — and field interpretations like HYPERLINK need to survive
+          // even though we cannot collapse the structural tree.
+          if (isConstructiveTrackChangeElement(node)) {
+            fieldInfo.preserveRawConstructive = true;
+          }
           currentFieldStack.push(fieldInfo);
 
           // The current node should be added to the collected nodes
@@ -237,6 +254,12 @@ export const preProcessNodesForFldChar = (nodes = [], docx) => {
 
         if (shouldPreserveRaw) {
           currentFieldStack[currentFieldStack.length - 1].preserveRaw = true;
+        }
+        // SD-2973: an end fldChar wrapped in a constructive tracked change
+        // also flags the active field as constructive-preserved so the
+        // HYPERLINK post-pass runs.
+        if (isConstructiveTrackChangeElement(node)) {
+          currentFieldStack[currentFieldStack.length - 1].preserveRawConstructive = true;
         }
         collectedNodesStack[collectedNodesStack.length - 1].push(node);
         captureRawNodeForCurrentField(rawNode, capturedRawNodes, rawSourceToken);
@@ -304,6 +327,110 @@ const _processCombinedNodesForFldChar = (nodesToCombine = [], instrText, docx, i
     };
   }
   return { nodes: nodesToCombine, handled: false };
+};
+
+/**
+ * SD-2973: Apply field interpretation in-place for constructive tracked-change
+ * wrappers that triggered preserveRaw. Walks the raw nodes (paragraphs,
+ * tracked-change wrappers, runs) to find the visible runs between the
+ * field's `separate` and `end` fldChars, and wraps just those runs in the
+ * structural element the field type implies (today: `w:hyperlink` for
+ * HYPERLINK fields). Leaves the surrounding paragraph and tracked-change
+ * structure untouched so the SD-2858 round-trip guarantee still holds.
+ *
+ * @param {OpenXmlNode[]} rawNodes
+ * @param {string} instrText
+ * @param {ParsedDocx} docx
+ */
+const applyConstructiveFieldInterpretation = (rawNodes, instrText, docx) => {
+  const instructionType = instrText.split(' ')[0];
+  if (instructionType !== 'HYPERLINK') return;
+
+  const linkAttributes = resolveHyperlinkAttributes(instrText, docx);
+  if (!linkAttributes) return;
+
+  // State machine: visit every run; when we cross a `separate` fldChar
+  // turn collection on; when we cross an `end` fldChar turn it off. Runs
+  // collected while on are wrapped in <w:hyperlink> in their parent.
+  let visible = false;
+
+  /** @param {OpenXmlNode} parent */
+  const walk = (parent) => {
+    if (!parent || !Array.isArray(parent.elements)) return;
+    /** @type {OpenXmlNode[]} */
+    const next = [];
+    /** @type {OpenXmlNode[] | null} */
+    let pendingHyperlinkRuns = null;
+    const flushHyperlink = () => {
+      if (!pendingHyperlinkRuns || pendingHyperlinkRuns.length === 0) {
+        pendingHyperlinkRuns = null;
+        return;
+      }
+      next.push({
+        type: 'element',
+        name: 'w:hyperlink',
+        attributes: linkAttributes,
+        elements: pendingHyperlinkRuns,
+      });
+      pendingHyperlinkRuns = null;
+    };
+
+    for (const child of parent.elements) {
+      if (!child) continue;
+
+      // Recurse into block / wrapper containers.
+      if (child.name === 'w:p' || child.name === 'w:ins' || child.name === 'w:moveTo') {
+        flushHyperlink();
+        walk(child);
+        next.push(child);
+        continue;
+      }
+
+      if (child.name === 'w:r') {
+        const fldChar = child.elements?.find((el) => el?.name === 'w:fldChar');
+        const fldType = fldChar?.attributes?.['w:fldCharType'];
+        if (fldType === 'separate') {
+          flushHyperlink();
+          visible = true;
+          next.push(child);
+          continue;
+        }
+        if (fldType === 'end') {
+          flushHyperlink();
+          visible = false;
+          next.push(child);
+          continue;
+        }
+        if (fldType === 'begin') {
+          flushHyperlink();
+          next.push(child);
+          continue;
+        }
+        // Skip instruction-only runs from being wrapped (they're the
+        // HYPERLINK <w:instrText>, not visible content).
+        const hasInstrText = child.elements?.some((el) => el?.name === 'w:instrText');
+        if (hasInstrText) {
+          flushHyperlink();
+          next.push(child);
+          continue;
+        }
+        if (visible) {
+          if (!pendingHyperlinkRuns) pendingHyperlinkRuns = [];
+          pendingHyperlinkRuns.push(child);
+          continue;
+        }
+        next.push(child);
+        continue;
+      }
+
+      flushHyperlink();
+      next.push(child);
+    }
+    flushHyperlink();
+    parent.elements = next;
+  };
+
+  rawNodes.forEach(walk);
 };
 
 /**

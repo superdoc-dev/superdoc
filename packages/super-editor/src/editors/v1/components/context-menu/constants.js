@@ -13,6 +13,7 @@ import pasteIconSvg from '@superdoc/common/icons/paste-solid.svg?raw';
 import checkIconSvg from '@superdoc/common/icons/check-solid.svg?raw';
 import xMarkIconSvg from '@superdoc/common/icons/xmark-solid.svg?raw';
 import paintRollerIconSvg from '@superdoc/common/icons/paint-roller-solid.svg?raw';
+import rotateRightIconSvg from '@superdoc/common/icons/rotate-right-solid.svg?raw';
 import indentIconSvg from '@superdoc/common/icons/indent-solid.svg?raw';
 import outdentIconSvg from '@superdoc/common/icons/outdent-solid.svg?raw';
 import listOlIconSvg from '@superdoc/common/icons/list-ol-solid.svg?raw';
@@ -40,6 +41,7 @@ export const ICONS = {
   trackChangesAccept: checkIconSvg,
   trackChangesReject: xMarkIconSvg,
   cellBackground: paintRollerIconSvg,
+  updateTableOfContents: rotateRightIconSvg,
   listRestartNumbering: listOlIconSvg,
   listContinueNumbering: listOlIconSvg,
   listDecreaseIndent: outdentIconSvg,
@@ -72,6 +74,7 @@ export const TEXTS = {
   trackChangesAccept: 'Accept change',
   trackChangesReject: 'Reject change',
   cellBackground: 'Cell background',
+  updateTableOfContents: 'Update table of contents',
   listRestartNumbering: 'Restart numbering',
   listContinueNumbering: 'Continue numbering',
   listDecreaseIndent: 'Decrease indent',

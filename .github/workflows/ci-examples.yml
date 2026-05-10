@@ -140,7 +140,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        example: [selection-capture]
+        example: [selection-capture, configurable-toolbar]
     steps:
       - name: Restore workspace
         uses: actions/cache/restore@v4

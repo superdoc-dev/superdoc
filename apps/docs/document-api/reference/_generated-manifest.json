@@ -291,6 +291,7 @@
     "apps/docs/document-api/reference/lists/continue-previous.mdx",
     "apps/docs/document-api/reference/lists/convert-to-text.mdx",
     "apps/docs/document-api/reference/lists/create.mdx",
+    "apps/docs/document-api/reference/lists/delete.mdx",
     "apps/docs/document-api/reference/lists/detach.mdx",
     "apps/docs/document-api/reference/lists/get-style.mdx",
     "apps/docs/document-api/reference/lists/get.mdx",
@@ -365,6 +366,7 @@
     "apps/docs/document-api/reference/styles/paragraph/index.mdx",
     "apps/docs/document-api/reference/styles/paragraph/set-style.mdx",
     "apps/docs/document-api/reference/tables/apply-border-preset.mdx",
+    "apps/docs/document-api/reference/tables/apply-preset.mdx",
     "apps/docs/document-api/reference/tables/apply-style.mdx",
     "apps/docs/document-api/reference/tables/clear-border.mdx",
     "apps/docs/document-api/reference/tables/clear-cell-spacing.mdx",
@@ -396,6 +398,7 @@
     "apps/docs/document-api/reference/tables/set-cell-padding.mdx",
     "apps/docs/document-api/reference/tables/set-cell-properties.mdx",
     "apps/docs/document-api/reference/tables/set-cell-spacing.mdx",
+    "apps/docs/document-api/reference/tables/set-cell-text.mdx",
     "apps/docs/document-api/reference/tables/set-column-width.mdx",
     "apps/docs/document-api/reference/tables/set-default-style.mdx",
     "apps/docs/document-api/reference/tables/set-layout.mdx",
@@ -573,6 +576,7 @@
         "lists.create",
         "lists.attach",
         "lists.detach",
+        "lists.delete",
         "lists.indent",
         "lists.outdent",
         "lists.join",
@@ -697,6 +701,7 @@
         "tables.unmergeCells",
         "tables.splitCell",
         "tables.setCellProperties",
+        "tables.setCellText",
         "tables.sort",
         "tables.setAltText",
         "tables.setStyle",
@@ -714,6 +719,7 @@
         "tables.applyStyle",
         "tables.setBorders",
         "tables.setTableOptions",
+        "tables.applyPreset",
         "tables.get",
         "tables.getCells",
         "tables.getProperties",
@@ -1031,5 +1037,5 @@
     }
   ],
   "marker": "{/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}",
-  "sourceHash": "af052d54e8a9c6865036bd63d27bba6a68cfa748a96fed3682535771e99184d3"
+  "sourceHash": "7f5b6fd6bc20fd3fa19d21530275655158eefbbd59b111ff0107fe76e1dd9a1b"
 }

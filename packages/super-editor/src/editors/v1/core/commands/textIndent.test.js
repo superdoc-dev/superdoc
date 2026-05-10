@@ -143,5 +143,35 @@ describe('text indent commands', () => {
       const updated = nextState.doc.firstChild;
       expect(updated.attrs.paragraphProperties.indent.left).toBe(inheritedLeft + ptToTwips(36));
     });
+
+    it('decreaseTextIndent honors style-derived indent on cache miss', () => {
+      // Symmetric to the increase case. A paragraph inheriting 72pt should
+      // decrement to 36pt - not clear, which would happen if the fallback
+      // dropped the inherited baseline and reduced from 0.
+      const inheritedLeft = ptToTwips(72);
+      const state = createState({ paragraphProperties: {} });
+      getResolvedParagraphProperties.mockReturnValueOnce(undefined);
+      calculateResolvedParagraphProperties.mockReturnValueOnce({ indent: { left: inheritedLeft } });
+
+      const { dispatched, nextState } = runCommand(decreaseTextIndent(), state);
+
+      expect(dispatched).toBe(true);
+      const updated = nextState.doc.firstChild;
+      expect(updated.attrs.paragraphProperties.indent.left).toBe(inheritedLeft - ptToTwips(36));
+    });
+
+    it('cache hit short-circuits the compute-on-miss fallback', () => {
+      // Inverse of the set/unset opt-out test. Verifies the production
+      // `||` short-circuit: when the cache is populated, the fallback
+      // must not run. A future refactor that always computes (e.g. for
+      // freshness) would silently double the work and break this guard.
+      const state = createState({ paragraphProperties: {} });
+      getResolvedParagraphProperties.mockReturnValueOnce({ indent: { left: ptToTwips(36) } });
+
+      runCommand(increaseTextIndent(), state);
+
+      expect(getResolvedParagraphProperties).toHaveBeenCalledTimes(1);
+      expect(calculateResolvedParagraphProperties).not.toHaveBeenCalled();
+    });
   });
 });

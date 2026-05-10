@@ -200,7 +200,6 @@ describe('Relationships tests', () => {
       }
     });
 
-    // Underline only "abc" (first 3 chars), then setLink across the full word, then unsetLink.
     editor.commands.setTextSelection({ from: textStart, to: textStart + 3 });
     editor.commands.setUnderline();
     editor.commands.setTextSelection({ from: textStart, to: textStart + 6 });
@@ -214,11 +213,9 @@ describe('Relationships tests', () => {
       for (const ch of node.text || '') charUnderline[ch] = hasUnderline;
     });
 
-    // Originally underlined: keep underline.
     expect(charUnderline.a).toBe(true);
     expect(charUnderline.b).toBe(true);
     expect(charUnderline.c).toBe(true);
-    // Originally plain: no stuck underline after unsetLink.
     expect(charUnderline.d).toBe(false);
     expect(charUnderline.e).toBe(false);
     expect(charUnderline.f).toBe(false);
@@ -245,7 +242,6 @@ describe('Relationships tests', () => {
     const url = 'https://www.superdoc.dev';
     handlePlainTextUrlPaste(editor, editor.view, url, { href: url });
 
-    // Sanity: the URL is both linked and underlined right after paste.
     let linkedAndUnderlined = false;
     editor.state.doc.descendants((node) => {
       if (!node.isText) return;

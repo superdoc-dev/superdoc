@@ -1,0 +1,166 @@
+# Notifies the homepage repo when a stable SuperDoc release ships.
+#
+# Pattern mirrors promote-stable-docs.yml: workflow_run on 📦 Release superdoc,
+# gated on success + stable, with a tag-diff to filter out semantic-release
+# no-ops. Sends repository_dispatch to superdoc-dev/homepage with the new
+# version so a homepage workflow can open/update a single bump PR.
+#
+# Kept out of release-superdoc.yml on purpose — that job sits in the
+# release-stable concurrency group, and a homepage/token failure should not
+# mark a successful npm publish as failed.
+name: 📨 Notify homepage of SuperDoc release
+
+on:
+  workflow_run:
+    workflows:
+      - "📦 Release superdoc"
+    types:
+      - completed
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Stable SuperDoc version to notify homepage about (e.g. 1.30.0). Leave empty to use latest v* tag on origin/stable.'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: notify-homepage-superdoc-release
+  cancel-in-progress: false
+
+jobs:
+  notify:
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'stable')
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Generate token
+        id: generate_token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          # Two distinct token consumers share this App:
+          #   1. This notify workflow (sender) needs `contents: write` on
+          #      homepage to call POST /repos/.../dispatches.
+          #   2. The homepage workflow (receiver) needs `contents: write`
+          #      (branch push) and `pull-requests: write` (PR open/update)
+          #      on its own repo.
+          # The same App can satisfy both if installed on superdoc-dev/homepage
+          # with the union of those permissions.
+          owner: superdoc-dev
+          repositories: |
+            superdoc
+            homepage
+
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          token: ${{ steps.generate_token.outputs.token }}
+
+      # Auto path: detect a real SuperDoc release between the triggering
+      # run's head_sha and origin/stable. Same logic as promote-stable-docs.
+      - name: Detect SuperDoc release
+        if: github.event_name == 'workflow_run'
+        id: detect
+        env:
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          git fetch origin stable --tags --force
+
+          tags_at_stable=$(git tag --merged origin/stable --list 'v[0-9]*' | sort -u)
+          tags_at_head=$(git tag --merged "${HEAD_SHA}" --list 'v[0-9]*' | sort -u)
+          new_tags=$(comm -23 <(echo "${tags_at_stable}") <(echo "${tags_at_head}") || true)
+
+          if [ -z "${new_tags}" ]; then
+            echo "released=false" >> "${GITHUB_OUTPUT}"
+            echo "No new v* tag between ${HEAD_SHA} and origin/stable — release-superdoc was a no-op."
+            exit 0
+          fi
+
+          # Pick the highest semver among the new tags. Stable tags only
+          # (no -next.) since this workflow is gated on head_branch == stable.
+          # `|| true` keeps the assignment safe under pipefail when grep finds
+          # no stable-shaped tag — handled by the empty-check below.
+          latest_tag=$(echo "${new_tags}" | { grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' || true; } | sort -V | tail -n1)
+
+          if [ -z "${latest_tag}" ]; then
+            echo "released=false" >> "${GITHUB_OUTPUT}"
+            echo "New tags found but none match a stable v* pattern: ${new_tags}"
+            exit 0
+          fi
+
+          version="${latest_tag#v}"
+          echo "released=true" >> "${GITHUB_OUTPUT}"
+          echo "tag=${latest_tag}" >> "${GITHUB_OUTPUT}"
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+          echo "Detected stable SuperDoc release: ${latest_tag} (version ${version})"
+
+      - name: Resolve version (manual dispatch)
+        if: github.event_name == 'workflow_dispatch'
+        id: manual
+        env:
+          REQUESTED_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          git fetch origin stable --tags --force
+
+          if [ -n "${REQUESTED_VERSION}" ]; then
+            version="${REQUESTED_VERSION}"
+          else
+            latest_tag=$(git tag --merged origin/stable --list 'v[0-9]*' \
+              | { grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' || true; } \
+              | sort -V | tail -n1)
+            if [ -z "${latest_tag}" ]; then
+              echo "No stable v* tag found on origin/stable" >&2
+              exit 1
+            fi
+            version="${latest_tag#v}"
+          fi
+
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+          echo "tag=v${version}" >> "${GITHUB_OUTPUT}"
+          echo "Resolved version: ${version}"
+
+      - name: Dispatch to homepage
+        if: |
+          github.event_name == 'workflow_dispatch' ||
+          steps.detect.outputs.released == 'true'
+        env:
+          GH_TOKEN: ${{ steps.generate_token.outputs.token }}
+          VERSION: ${{ steps.detect.outputs.version || steps.manual.outputs.version }}
+          TAG: ${{ steps.detect.outputs.tag || steps.manual.outputs.tag }}
+          # Upstream release-superdoc run id when triggered by workflow_run;
+          # this notify run's own id when triggered manually.
+          SOURCE_RUN_ID: ${{ github.event.workflow_run.id || github.run_id }}
+          NOTIFY_RUN_ID: ${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          echo "Dispatching superdoc-stable-release to superdoc-dev/homepage: version=${VERSION} tag=${TAG} source_run_id=${SOURCE_RUN_ID}"
+          gh api -X POST repos/superdoc-dev/homepage/dispatches \
+            -f event_type=superdoc-stable-release \
+            -f "client_payload[package]=superdoc" \
+            -f "client_payload[version]=${VERSION}" \
+            -f "client_payload[tag]=${TAG}" \
+            -f "client_payload[source_run_id]=${SOURCE_RUN_ID}" \
+            -f "client_payload[notify_run_id]=${NOTIFY_RUN_ID}"
+
+      - name: Summary
+        if: always()
+        env:
+          RELEASED: ${{ steps.detect.outputs.released }}
+          VERSION: ${{ steps.detect.outputs.version || steps.manual.outputs.version }}
+        run: |
+          {
+            echo "### Notify homepage"
+            echo
+            echo "| Field | Value |"
+            echo "| --- | --- |"
+            echo "| Event | \`${{ github.event_name }}\` |"
+            echo "| Released | \`${RELEASED:-n/a}\` |"
+            echo "| Version | \`${VERSION:-n/a}\` |"
+          } >> "${GITHUB_STEP_SUMMARY}"

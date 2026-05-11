@@ -18,9 +18,14 @@ function handleFindKeydown(e) {
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault();
     props.findReplace.goNext();
+    // goNext synchronously focuses the ProseMirror view (search.js `goToSearchResult`).
+    // Restore focus here so repeated Enter keeps advancing through matches instead of
+    // dropping the keystrokes into the editor (SD-3045).
+    focusFindInput();
   } else if (e.key === 'Enter' && e.shiftKey) {
     e.preventDefault();
     props.findReplace.goPrev();
+    focusFindInput();
   }
 }
 

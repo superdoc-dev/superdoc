@@ -4539,11 +4539,7 @@ export class PresentationEditor extends EventEmitter {
       // Collaboration bootstrap can hydrate header/footer parts on this client
       // without emitting partChanged. Force a header/footer refresh pass so the
       // importer tab sees the same headers/footers immediately.
-      this.#headerFooterSession?.refreshStructure();
-      this.#flowBlockCache.setHasExternalChanges(true);
-      this.#pendingDocChange = true;
-      this.#selectionSync.onLayoutStart();
-      this.#scheduleRerender();
+      this.#refreshHeaderFooterStructureThenRerender();
       // Setup remote cursor rendering after collaboration is ready
       // Only setup if presence is enabled in layout options
       if (this.#options.collaborationProvider?.awareness && this.#layoutOptions.presence?.enabled !== false) {
@@ -4562,11 +4558,7 @@ export class PresentationEditor extends EventEmitter {
     // header/footer descriptors against the new converter and rerender so the
     // importer tab matches the collaborator tab without waiting for an edit.
     const handleDocumentReplaced = () => {
-      this.#headerFooterSession?.refreshStructure();
-      this.#flowBlockCache.setHasExternalChanges(true);
-      this.#pendingDocChange = true;
-      this.#selectionSync.onLayoutStart();
-      this.#scheduleRerender();
+      this.#refreshHeaderFooterStructureThenRerender({ purgeCachedEditors: true });
     };
     this.#editor.on('documentReplaced', handleDocumentReplaced);
     this.#editorListeners.push({
@@ -5907,6 +5899,20 @@ export class PresentationEditor extends EventEmitter {
     mode: 'char' | 'word' | 'para',
   ): { selAnchor: number; selHead: number } {
     return calculateExtendedSelection(this.#layoutState.blocks, anchor, head, mode);
+  }
+
+  /**
+   * Refreshes header/footer descriptors from the converter, invalidates cached
+   * layout input, and schedules a presentation rerender. Used when full-document
+   * hydration bypasses normal `partChanged` wiring (`collaborationReady`,
+   * `documentReplaced`).
+   */
+  #refreshHeaderFooterStructureThenRerender(options?: { purgeCachedEditors?: boolean }): void {
+    this.#headerFooterSession?.refreshStructure(options);
+    this.#flowBlockCache.setHasExternalChanges(true);
+    this.#pendingDocChange = true;
+    this.#selectionSync.onLayoutStart();
+    this.#scheduleRerender();
   }
 
   #scheduleRerender() {

@@ -48,11 +48,25 @@ describe('setParagraphDirection', () => {
     expect(nextState.doc.firstChild.attrs.paragraphProperties.rightToLeft).toBe(true);
   });
 
-  it('sets rightToLeft=false on ltr', () => {
+  it('removes rightToLeft on ltr (does not write false)', () => {
+    // Writing `rightToLeft: false` exports as `<w:bidi w:val="0"/>` — direct
+    // formatting that overrides any inherited style. LTR should delete the
+    // property so the paragraph matches its style cascade default again.
     const state = createState([{ paragraphProperties: { rightToLeft: true } }]);
     const { dispatched, nextState } = runCommand(setParagraphDirection({ direction: 'ltr' }), state);
     expect(dispatched).toBe(true);
-    expect(nextState.doc.firstChild.attrs.paragraphProperties.rightToLeft).toBe(false);
+    expect('rightToLeft' in nextState.doc.firstChild.attrs.paragraphProperties).toBe(false);
+  });
+
+  it('is a no-op when ltr is applied to a paragraph that has no direction set', () => {
+    // Before the LTR-deletes-property fix, this would dispatch a transaction
+    // that wrote `rightToLeft: false` onto every vanilla paragraph — silently
+    // injecting `<w:bidi w:val="0"/>` into the round-tripped DOCX even though
+    // nothing semantically changed.
+    const state = createState([{ paragraphProperties: {} }]);
+    const { dispatched, tr } = runCommand(setParagraphDirection({ direction: 'ltr' }), state);
+    expect(dispatched).toBe(false);
+    expect(tr).toBeNull();
   });
 
   describe('alignmentPolicy: matchDirection', () => {
@@ -114,9 +128,9 @@ describe('setParagraphDirection', () => {
     const { dispatched, nextState, tr } = runCommand(setParagraphDirection({ direction: 'rtl' }), state);
 
     expect(dispatched).toBe(true);
+    if (!tr) throw new Error('expected a dispatched transaction');
     // setNodeMarkup produces one step per paragraph but they all live in the
     // same Transaction — which is what "one undo step" rests on.
-    expect(tr).not.toBeNull();
     expect(tr.steps).toHaveLength(3);
     nextState.doc.forEach((node) => {
       expect(node.attrs.paragraphProperties.rightToLeft).toBe(true);

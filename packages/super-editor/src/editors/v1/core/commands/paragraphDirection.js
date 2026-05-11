@@ -16,7 +16,15 @@ export const setParagraphDirection = ({ direction, alignmentPolicy } = {}) => {
   // direction must be a no-op, not a silent LTR write.
   if (direction !== 'ltr' && direction !== 'rtl') return () => false;
   return walkParagraphs((pPr) => {
-    const next = { ...pPr, rightToLeft: direction === 'rtl' };
+    const next = { ...pPr };
+    // AIDEV-NOTE: LTR deletes the property rather than writing `false`.
+    // OOXML treats absent `<w:bidi/>` as LTR. Writing `rightToLeft: false`
+    // round-trips as `<w:bidi w:val="0"/>` on export — direct formatting
+    // that overrides any inherited style direction. Deleting keeps a
+    // vanilla paragraph indistinguishable from one that's been toggled
+    // RTL → LTR.
+    if (direction === 'rtl') next.rightToLeft = true;
+    else delete next.rightToLeft;
     if (alignmentPolicy === 'matchDirection') {
       const j = pPr.justification;
       if (j === 'left' && direction === 'rtl') next.justification = 'right';

@@ -81,6 +81,15 @@ describe('headerFooterUtils', () => {
     expect(getHeaderFooterType(1, identifier, { parityPageNumber: 2 })).toBe('even');
   });
 
+  it('treats negative odd display page numbers as odd', () => {
+    const identifier = extractIdentifierFromConverter({
+      headerIds: { default: 'rId1', even: 'rIdEven', odd: 'rIdOdd' },
+      pageStyles: { alternateHeaders: true },
+    });
+
+    expect(getHeaderFooterType(1, identifier, { parityPageNumber: -1 })).toBe('odd');
+  });
+
   it('uses default only for odd pages when alternating slots are missing', () => {
     const identifier = extractIdentifierFromConverter({
       headerIds: { default: 'rId1' },

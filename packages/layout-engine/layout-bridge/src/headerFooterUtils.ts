@@ -87,7 +87,7 @@ export const getHeaderFooterType = (
     if (parityPageNumber % 2 === 0 && hasEven) {
       return 'even';
     }
-    if (parityPageNumber % 2 === 1 && (hasOdd || hasDefault)) {
+    if (parityPageNumber % 2 !== 0 && (hasOdd || hasDefault)) {
       return hasOdd ? 'odd' : 'default';
     }
     return null;

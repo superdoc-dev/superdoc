@@ -7,11 +7,10 @@ import type {
   ImageBlock,
   ImageMeasure,
   Line,
-  ListBlock,
-  ListMeasure,
   Measure,
   PageBreakBlock,
   ParagraphMeasure,
+  SectionBreakBlock,
   TableBlock,
   TableMeasure,
 } from '@superdoc/contracts';
@@ -205,39 +204,45 @@ describe('Measuring to Layout ownership contracts', () => {
     expect(layout.pages[0].fragments[1].x).toBeGreaterThan(layout.pages[0].fragments[0].x);
   });
 
+  it('consumes section break measures as layout control flow without fragments', () => {
+    const firstSection: SectionBreakBlock = {
+      kind: 'sectionBreak',
+      id: 'sb-first',
+      attrs: { isFirstSection: true },
+      margins: { top: 50, right: 50, bottom: 50, left: 50 },
+    };
+    const nextPageSection: SectionBreakBlock = {
+      kind: 'sectionBreak',
+      id: 'sb-next',
+      type: 'nextPage',
+      margins: { top: 50, right: 50, bottom: 50, left: 50 },
+    };
+    const blocks: FlowBlock[] = [firstSection, paragraphBlock('p1'), nextPageSection, paragraphBlock('p2')];
+    const measures: Measure[] = [
+      { kind: 'sectionBreak' },
+      paragraphMeasure([20]),
+      { kind: 'sectionBreak' },
+      paragraphMeasure([20]),
+    ];
+
+    const layout = layoutDocument(blocks, measures, DEFAULT_OPTIONS);
+
+    expect(layout.pages.length).toBeGreaterThanOrEqual(2);
+    const allBlockIds = layout.pages.flatMap((p) => p.fragments.map((f) => f.blockId));
+    expect(allBlockIds).toEqual(['p1', 'p2']);
+    expect(allBlockIds).not.toContain('sb-first');
+    expect(allBlockIds).not.toContain('sb-next');
+    expect(layout.pages[0].fragments[0]).toMatchObject({ kind: 'para', blockId: 'p1' });
+    expect(layout.pages[1].fragments[0]).toMatchObject({ kind: 'para', blockId: 'p2' });
+  });
+
   it('fails fast for mismatched FlowBlock and Measure kinds', () => {
     expect(() =>
       layoutDocument([paragraphBlock('paragraph-contract')], [{ kind: 'pageBreak' }], DEFAULT_OPTIONS),
     ).toThrow(/expected paragraph measure/);
   });
 
-  it('documents the current ListBlock handoff gap until layout consumes ListMeasure', () => {
-    const block: ListBlock = {
-      kind: 'list',
-      id: 'list-contract',
-      listType: 'number',
-      items: [
-        {
-          id: 'list-item-1',
-          marker: { kind: 'number', text: '1.', level: 0, order: 1 },
-          paragraph: { kind: 'paragraph', id: 'list-item-1-paragraph', runs: [] },
-        },
-      ],
-    };
-    const measure: ListMeasure = {
-      kind: 'list',
-      items: [
-        {
-          itemId: 'list-item-1',
-          markerWidth: 20,
-          markerTextWidth: 10,
-          indentLeft: 24,
-          paragraph: paragraphMeasure([20]),
-        },
-      ],
-      totalHeight: 20,
-    };
-
-    expect(() => layoutDocument([block], [measure], DEFAULT_OPTIONS)).toThrow(/unsupported block kind/);
-  });
+  // Today layoutDocument throws for ListBlock; when list layout lands, implement real
+  // assertions (e.g. list-item fragments, marker metrics) and drop this todo.
+  it.todo('consumes ListBlock + ListMeasure in layoutDocument (list-item fragments, marker widths, pagination)');
 });

@@ -57,6 +57,10 @@ reads.
 | Change style resolution | `style-engine/` |
 | Change text measurement | `measuring-dom/` |
 
+## Measuring → Layout ownership (SD-2845)
+
+Boundary between measured geometry (`Measure[]`) and pagination/placement (`Layout`). **Full boundary contract and ownership matrix:** see `CLAUDE.md` in this package (section of the same name). Contract tests: `measuring/dom/src/measuring-layout-contracts.test.ts` (`FlowBlock` → `Measure`), `layout-engine/src/measuring-layout-ownership-contracts.test.ts` (`FlowBlock` + `Measure` → `Layout`). Tracked work: Linear (e.g. SD-2837, SD-2845).
+
 ## Style Engine (`style-engine/`)
 
 Single source of truth for OOXML style cascade resolution. All property resolution flows through here.

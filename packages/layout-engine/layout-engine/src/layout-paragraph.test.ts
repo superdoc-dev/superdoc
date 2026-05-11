@@ -61,6 +61,8 @@ const makePageState = (): PageState => ({
   lastParagraphStyleId: undefined,
   lastParagraphContextualSpacing: false,
   maxCursorY: 50,
+  pageFootnoteReserve: 0,
+  footnoteDemandThisPage: 0,
 });
 
 /**

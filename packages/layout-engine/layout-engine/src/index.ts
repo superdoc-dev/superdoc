@@ -476,10 +476,22 @@ export type LayoutOptions = {
    */
   footnoteReservedByPageIndex?: number[];
   /**
-   * Optional footnote metadata consumed by higher-level orchestration (e.g. layout-bridge).
-   * The core layout engine does not interpret this field directly.
+   * Footnote metadata. The core layout engine consumes only the fields below
+   * (SD-3049: ref positions + per-footnote body heights for block-aware breaks).
+   * Higher-level orchestration (layout-bridge) attaches additional fields
+   * (`blocksById`, separator dimensions, etc.) which the engine ignores.
    */
-  footnotes?: unknown;
+  footnotes?: {
+    refs?: Array<{ id: string; pos: number }>;
+    /**
+     * SD-3049: total measured body height per footnote id (sum of measured
+     * paragraph heights + per-paragraph spacingAfter + inter-footnote gap +
+     * separator overhead). Used by the body paginator to consult footnote
+     * demand at fragment-commit time so body packs tight to the demand.
+     */
+    bodyHeightById?: Map<string, number>;
+    [key: string]: unknown;
+  };
   /**
    * Actual measured header content heights per variant type.
    * When provided, the layout engine will ensure body content starts below
@@ -1190,6 +1202,98 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
 
   // Pending-to-active application moved to section-breaks.applyPendingToActive
 
+  /**
+   * SD-3049: per-block footnote demand lookup. Resolves each footnote ref's pos
+   * to the body block whose pm range contains it; sums those refs' measured
+   * body heights into a `Map<blockId, demandPx>`. The body paragraph layout
+   * consults this map at fragment-commit time to keep body packing tight to
+   * footnote demand instead of relying on the post-hoc page-level reserve.
+   *
+   * Builds once per layoutDocument call. Empty-map fallback when there are
+   * no footnotes — the consumer's lookup is a no-op in that case.
+   *
+   * Recurses into table cells so refs inside table-cell paragraphs are
+   * charged to the *containing table block* (the unit `layoutTableBlock` lays
+   * out and breaks at). This is a conservative approximation: demand from a
+   * cell ref is charged to the whole table even if the table spans pages, so
+   * the table may break one row earlier than strictly necessary. The existing
+   * `footnoteBandOverflow.test.ts` is the safety net guaranteeing the band
+   * never overflows the page bottom margin.
+   */
+  const footnoteDemandByBlockId: Map<string, number> = (() => {
+    const out = new Map<string, number>();
+    const refs = options.footnotes?.refs;
+    const bodyHeights = options.footnotes?.bodyHeightById;
+    if (!Array.isArray(refs) || refs.length === 0 || !bodyHeights) return out;
+
+    /**
+     * Resolve `(pmStart, pmEnd)` for a block. Falls back to scanning paragraph
+     * runs when `attrs.pmStart` is absent — the converter sometimes attaches
+     * positions only to runs rather than to block.attrs.
+     */
+    const resolveBlockPmRange = (block: FlowBlock): { pmStart: number; pmEnd: number } | null => {
+      const attrsRange = (block as { attrs?: { pmStart?: number; pmEnd?: number } }).attrs;
+      let pmStart = typeof attrsRange?.pmStart === 'number' ? attrsRange.pmStart : undefined;
+      let pmEnd = typeof attrsRange?.pmEnd === 'number' ? attrsRange.pmEnd : undefined;
+      if (pmStart == null && block.kind === 'paragraph') {
+        const runs = block.runs;
+        if (Array.isArray(runs)) {
+          for (const run of runs) {
+            const rs = (run as { pmStart?: number }).pmStart;
+            const re = (run as { pmEnd?: number }).pmEnd;
+            if (typeof rs === 'number') pmStart = pmStart == null ? rs : Math.min(pmStart, rs);
+            if (typeof re === 'number') pmEnd = pmEnd == null ? re : Math.max(pmEnd, re);
+          }
+        }
+      }
+      if (pmStart == null) return null;
+      return { pmStart, pmEnd: pmEnd ?? pmStart + 1 };
+    };
+
+    /**
+     * For each ref, walk the block tree to find the top-level FlowBlock whose
+     * pm range contains the ref. Tables: walks rows → cells → cell.blocks /
+     * cell.paragraph; demand is attributed to the *table* block, not the cell,
+     * because the table is the unit the body paginator places on a page.
+     */
+    const refByPos = new Map<number, string>();
+    for (const ref of refs) refByPos.set(ref.pos, ref.id);
+
+    const recordIfHit = (range: { pmStart: number; pmEnd: number }, topLevelId: string): void => {
+      for (const [pos, refId] of refByPos.entries()) {
+        if (pos < range.pmStart || pos > range.pmEnd) continue;
+        const height = bodyHeights.get(refId);
+        if (typeof height !== 'number' || !Number.isFinite(height) || height <= 0) continue;
+        out.set(topLevelId, (out.get(topLevelId) ?? 0) + height);
+        refByPos.delete(pos);
+      }
+    };
+
+    for (const block of blocks) {
+      if (refByPos.size === 0) break;
+      const range = resolveBlockPmRange(block);
+      if (range) recordIfHit(range, block.id);
+
+      if (block.kind === 'table') {
+        for (const row of block.rows ?? []) {
+          for (const cell of row.cells ?? []) {
+            const cellChildren: FlowBlock[] = cell.blocks
+              ? (cell.blocks as FlowBlock[])
+              : cell.paragraph
+                ? [cell.paragraph as FlowBlock]
+                : [];
+            for (const child of cellChildren) {
+              const childRange = resolveBlockPmRange(child);
+              if (childRange) recordIfHit(childRange, block.id);
+            }
+          }
+        }
+      }
+    }
+
+    return out;
+  })();
+
   // Paginator encapsulation for page/column helpers
   let pageCount = 0;
   // Page numbering state
@@ -1246,16 +1350,23 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
   // Map<sectionIndex, firstPageNumber>
   const sectionFirstPageNumbers = new Map<number, number>();
 
+  // SD-3049: read the page-level reserve via a single helper so the same
+  // value flows into both `getActiveBottomMargin` (existing behavior) and
+  // `getFootnoteReserveForPage` (new — for the block-aware break decision).
+  const readFootnoteReserveForPageIndex = (pageIndex: number): number => {
+    const reserves = options.footnoteReservedByPageIndex;
+    const reserve = Array.isArray(reserves) ? reserves[pageIndex] : 0;
+    return typeof reserve === 'number' && Number.isFinite(reserve) && reserve > 0 ? reserve : 0;
+  };
+
   const paginator = createPaginator({
     margins: paginatorMargins,
     getActiveTopMargin: () => activeTopMargin,
     getActiveBottomMargin: () => {
-      const reserves = options.footnoteReservedByPageIndex;
       const pageIndex = Math.max(0, pageCount - 1);
-      const reserve = Array.isArray(reserves) ? reserves[pageIndex] : 0;
-      const reservePx = typeof reserve === 'number' && Number.isFinite(reserve) && reserve > 0 ? reserve : 0;
-      return activeBottomMargin + reservePx;
+      return activeBottomMargin + readFootnoteReserveForPageIndex(pageIndex);
     },
+    getFootnoteReserveForPage: (pageIndex: number) => readFootnoteReserveForPageIndex(pageIndex),
     getActiveHeaderDistance: () => activeHeaderDistance,
     getActiveFooterDistance: () => activeFooterDistance,
     getActivePageSize: () => activePageSize,
@@ -2365,6 +2476,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
           floatManager,
           remeasureParagraph: options.remeasureParagraph,
           overrideSpacingAfter,
+          getFootnoteDemandForBlockId: (blockId: string) => footnoteDemandByBlockId.get(blockId) ?? 0,
         },
         anchorsForPara
           ? {

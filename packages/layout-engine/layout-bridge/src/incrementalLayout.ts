@@ -1815,10 +1815,36 @@ export async function incrementalLayout(
         return { columns, idsByColumn };
       };
 
+      // SD-3049: per-footnote total body height, refreshed after each
+      // `measureFootnoteBlocks` call. Drives block-aware breaks in the body
+      // paginator via `options.footnotes.bodyHeightById`.
+      let bodyHeightById = new Map<string, number>();
+      const refreshBodyHeights = (measures: Map<string, Measure>) => {
+        const map = new Map<string, number>();
+        footnotesInput.blocksById.forEach((blocks, footnoteId) => {
+          let total = 0;
+          for (const block of blocks) {
+            const measure = measures.get(block.id);
+            if (!measure) continue;
+            const measureH = (measure as { totalHeight?: number }).totalHeight;
+            if (typeof measureH === 'number' && Number.isFinite(measureH)) total += measureH;
+            // Add per-paragraph spacingAfter if present (matches what
+            // `computeFootnoteLayoutPlan` accounts for in `rangesHeight`).
+            const spacing = (block as { attrs?: { spacing?: { after?: number; lineSpaceAfter?: number } } }).attrs
+              ?.spacing;
+            const after = spacing?.after ?? spacing?.lineSpaceAfter;
+            if (typeof after === 'number' && Number.isFinite(after) && after > 0) total += after;
+          }
+          if (total > 0) map.set(footnoteId, total);
+        });
+        bodyHeightById = map;
+      };
+
       const relayout = (footnoteReservedByPageIndex: number[]) =>
         layoutDocument(currentBlocks, currentMeasures, {
           ...options,
           footnoteReservedByPageIndex,
+          footnotes: { ...footnotesInput, bodyHeightById },
           headerContentHeights,
           footerContentHeights,
           headerContentHeightsBySectionRef,
@@ -1829,9 +1855,17 @@ export async function incrementalLayout(
             remeasureParagraph(block as ParagraphBlock, maxWidth, firstLineIndent),
         });
 
-      // Pass 1: assign + reserve from current layout.
+      // SD-3049: every reachable footnote id, computed once. Used to keep
+      // `bodyHeightById` complete across convergence iterations even when refs
+      // migrate between pages — the assigned-by-column subset can drop ids
+      // mid-loop, which would zero their entries and cause oscillation.
+      const allFootnoteIds = new Set(footnotesInput.refs.map((ref) => ref.id));
+
+      // Pass 1: assign + reserve from current layout. Pre-measure ALL footnote
+      // bodies (the cache makes the assigned-only subset essentially free).
       let { columns: pageColumns, idsByColumn } = resolveFootnoteAssignments(layout);
-      let { measuresById } = await measureFootnoteBlocks(collectFootnoteIdsByColumn(idsByColumn));
+      let { measuresById } = await measureFootnoteBlocks(allFootnoteIds);
+      refreshBodyHeights(measuresById);
       let plan = computeFootnoteLayoutPlan(layout, idsByColumn, measuresById, [], pageColumns);
       let reserves = plan.reserves;
 
@@ -1843,7 +1877,11 @@ export async function incrementalLayout(
         for (let pass = 0; pass < MAX_FOOTNOTE_LAYOUT_PASSES; pass += 1) {
           layout = relayout(reserves);
           ({ columns: pageColumns, idsByColumn } = resolveFootnoteAssignments(layout));
-          ({ measuresById } = await measureFootnoteBlocks(collectFootnoteIdsByColumn(idsByColumn)));
+          // SD-3049: measure the full set each iteration so `bodyHeightById`
+          // stays complete; refs migrating between pages must not drop their
+          // measured demand from the per-block lookup.
+          ({ measuresById } = await measureFootnoteBlocks(allFootnoteIds));
+          refreshBodyHeights(measuresById);
           plan = computeFootnoteLayoutPlan(layout, idsByColumn, measuresById, reserves, pageColumns);
           const nextReserves = plan.reserves;
           const reservesStable =
@@ -1899,9 +1937,8 @@ export async function incrementalLayout(
           layout = relayout(target);
           reservesAppliedToLayout = target;
           ({ columns: finalPageColumns, idsByColumn: finalIdsByColumn } = resolveFootnoteAssignments(layout));
-          ({ blocks: finalBlocks, measuresById: finalMeasuresById } = await measureFootnoteBlocks(
-            collectFootnoteIdsByColumn(finalIdsByColumn),
-          ));
+          ({ blocks: finalBlocks, measuresById: finalMeasuresById } = await measureFootnoteBlocks(allFootnoteIds));
+          refreshBodyHeights(finalMeasuresById);
           finalPlan = computeFootnoteLayoutPlan(
             layout,
             finalIdsByColumn,

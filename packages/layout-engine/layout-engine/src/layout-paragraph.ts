@@ -293,6 +293,14 @@ export type ParagraphLayoutContext = {
    * When undefined, uses the value from block.attrs.spacing.after.
    */
   overrideSpacingAfter?: number;
+  /**
+   * SD-3049: returns the cumulative footnote body height of refs anchored
+   * inside this block. Returns 0 when the block contains no refs (or when
+   * the layout has no footnotes at all). Called once per block on the first
+   * fragment committed to a given page; the demand accumulates into
+   * `state.footnoteDemandThisPage`.
+   */
+  getFootnoteDemandForBlockId?: (blockId: string) => number;
 };
 
 export type AnchoredDrawingEntry = {
@@ -501,6 +509,13 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
   }
 
   let fromLine = 0;
+  // SD-3049: total measured footnote body height of all refs anchored in this
+  // block. Charged once to the page that receives this block's first fragment.
+  // Cross-page blocks (refs in lines that land on a later page) are handled
+  // conservatively here: full demand charged to the first landing page. SD-3050
+  // refines this with continuation-aware accounting.
+  const blockFootnoteDemand = ctx.getFootnoteDemandForBlockId?.(block.id) ?? 0;
+  let demandChargedPageNumber: number | null = null;
   const attrs = getParagraphAttrs(block);
   const spacing = attrs?.spacing ?? {};
   const spacingExplicit = attrs?.spacingExplicit;
@@ -818,17 +833,45 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
     } else {
       state.trailingSpacing = 0;
     }
-    if (state.cursorY >= state.contentBottom) {
+    // SD-3049: charge this block's footnote demand to the current page (once),
+    // so the break decisions below see the demand and pack body tighter. When
+    // `advanceColumn` lands us on a new page, `state.footnoteDemandThisPage`
+    // has been reset to 0 by the paginator and `demandChargedPageNumber` no
+    // longer matches — we re-charge so the new page also reflects the demand.
+    if (blockFootnoteDemand > 0 && demandChargedPageNumber !== state.page.number) {
+      state.footnoteDemandThisPage += blockFootnoteDemand;
+      demandChargedPageNumber = state.page.number;
+    }
+
+    // SD-3049: only the demand exceeding the page-level reserve already in
+    // `contentBottom` further constrains the body. Once the convergence loop
+    // has set the reserve, this is a no-op; on the first pass it provides
+    // the tight-packing signal that prevents post-hoc reserve relayouts from
+    // leaving visible blank space above the footnote separator.
+    //
+    // SD-3050: cap `additionalDemand` so the effective body region always
+    // fits at least one line of body content. Without this guard, a footnote
+    // larger than the page body area would push `effectiveBottom` below
+    // `cursorY + lineHeight` for every page, infinite-looping the paginator.
+    // The footnote will overflow safely (PR #2881's plan-side cap and
+    // continuation logic catches it); the paginator must not deadlock.
+    const rawAdditional = Math.max(0, state.footnoteDemandThisPage - state.pageFootnoteReserve);
+    const minBodyLineHeight = lines[fromLine]?.lineHeight ?? 0;
+    const maxAdditional = Math.max(0, state.contentBottom - state.topMargin - minBodyLineHeight);
+    const additionalDemand = Math.min(rawAdditional, maxAdditional);
+    const effectiveBottom = state.contentBottom - additionalDemand;
+
+    if (state.cursorY >= effectiveBottom) {
       state = advanceColumn(state);
     }
 
-    const availableHeight = state.contentBottom - state.cursorY;
+    const availableHeight = effectiveBottom - state.cursorY;
     if (availableHeight <= 0) {
       state = advanceColumn(state);
     }
 
     const nextLineHeight = lines[fromLine].lineHeight || 0;
-    const remainingHeight = state.contentBottom - state.cursorY;
+    const remainingHeight = effectiveBottom - state.cursorY;
     if (state.page.fragments.length > 0 && remainingHeight < nextLineHeight) {
       state = advanceColumn(state);
     }
@@ -843,8 +886,11 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
 
     // Reserve border expansion from available height so sliceLines doesn't accept
     // lines that would overflow the page once border space is added.
+    // SD-3049: use `effectiveBottom` (which already accounts for any
+    // additional footnote demand above the page-level reserve) so we don't
+    // greedily add a line that would push body content into the footnote area.
     const borderVertical = borderExpansion.top + borderExpansion.bottom;
-    const availableForSlice = Math.max(0, state.contentBottom - state.cursorY - borderVertical);
+    const availableForSlice = Math.max(0, effectiveBottom - state.cursorY - borderVertical);
     const slice = sliceLines(lines, fromLine, availableForSlice);
     const fragmentHeight = slice.height;
 

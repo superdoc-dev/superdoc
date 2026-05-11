@@ -88,8 +88,7 @@ function portableHash(input: string): string {
  * {@link findMatchingChange} for callers that cached the previously-published
  * ephemeral id within the same snapshot. Not part of the public API.
  *
- * AIDEV-NOTE: temporary - SD-3084 soft-fallback. Remove one release after
- * SD-3084 ships and consumers have migrated to the stable id.
+ * AIDEV-NOTE: temporary - remove when SD-3095 lands the fallback removal.
  */
 export function deriveTrackedChangeId(editor: Editor, change: Omit<GroupedTrackedChange, 'id'>): string {
   const type = resolveTrackedChangeType(change);
@@ -192,9 +191,8 @@ export function groupTrackedChanges(editor: Editor): GroupedTrackedChange[] {
   const grouped = Array.from(byRawId.values())
     .map((change) => ({
       ...change,
-      // Canonical id is the persistent mark rawId. This is the same value
-      // `comment.commentId` carries on `onCommentsUpdate`, and the value
-      // `trackChanges.decide` accepts. See SD-3084.
+      // Same value `comment.commentId` carries on `onCommentsUpdate`, and the
+      // value `trackChanges.decide` accepts. See SD-3084.
       id: change.rawId,
     }))
     .sort((a, b) => {
@@ -210,8 +208,14 @@ export function resolveTrackedChange(editor: Editor, id: string): GroupedTracked
   return findMatchingChange(editor, id);
 }
 
-export function toCanonicalTrackedChangeId(editor: Editor, rawId: string): string | null {
-  return findMatchingChange(editor, rawId)?.id ?? null;
+/**
+ * Resolves any known form of a tracked-change identifier to the canonical id.
+ * Accepts the stable id (equal to `rawId` after SD-3084) and, for one release,
+ * the previously-published ephemeral derived id; both return the canonical id.
+ * Returns `null` for unknown ids.
+ */
+export function toCanonicalTrackedChangeId(editor: Editor, id: string): string | null {
+  return findMatchingChange(editor, id)?.id ?? null;
 }
 
 export function buildTrackedChangeCanonicalIdMap(editor: Editor): Map<string, string> {
@@ -316,15 +320,14 @@ export function resolveTrackedChangeInStory(
  * Lookup helper that accepts the canonical id (equal to `rawId` after
  * SD-3084) and falls back to the previously-published ephemeral derived id
  * so cached old values still resolve within the same snapshot. The
- * derived-id branch is consulted only when the cheaper equality checks miss.
+ * derived-id branch is consulted only when the cheaper equality check misses.
  *
- * AIDEV-NOTE: temporary - SD-3084 soft-fallback. Remove the third branch one
- * release after SD-3084 ships and consumers have migrated.
+ * AIDEV-NOTE: temporary - remove the derived-id branch when SD-3095 lands.
  */
 function findMatchingChange(editor: Editor, id: string): GroupedTrackedChange | null {
   const grouped = groupTrackedChanges(editor);
   return (
-    grouped.find((item) => item.id === id || item.rawId === id) ??
+    grouped.find((item) => item.rawId === id) ??
     grouped.find((item) => deriveTrackedChangeId(editor, item) === id) ??
     null
   );

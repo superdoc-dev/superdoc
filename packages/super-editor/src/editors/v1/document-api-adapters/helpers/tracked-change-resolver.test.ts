@@ -302,9 +302,12 @@ describe('stable id contract (SD-3084)', () => {
 
     // Primary path: stable raw id resolves.
     expect(toCanonicalTrackedChangeId(editor, 'rev-9')).toBe('rev-9');
-    // Compat fallback: legacy derived id resolves to the same change.
+    // Compat fallback via resolveTrackedChange.
     const resolvedByLegacy = resolveTrackedChange(editor, legacyId);
     expect(resolvedByLegacy?.rawId).toBe('rev-9');
+    // Compat fallback via toCanonicalTrackedChangeId — locks the broadened
+    // "any known form, returns canonical" semantics documented on the helper.
+    expect(toCanonicalTrackedChangeId(editor, legacyId)).toBe('rev-9');
     // Bogus ids still return null.
     expect(toCanonicalTrackedChangeId(editor, 'not-a-real-id')).toBeNull();
   });

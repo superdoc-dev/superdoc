@@ -16,12 +16,12 @@
  *   These three share artifacts (SDK packages CLI native binaries; MCP
  *   imports SDK + engine code), so they must release in this order.
  *
- * Core chain (superdoc -> react):
- *   superdoc is the npm core; react consumes it. They release in order so
- *   react is never published against an older superdoc than what just
- *   shipped. docs-stable promotion is keyed off superdoc's v* tag and
- *   lives in this workflow as a result. vscode-ext still ships from its
- *   per-package stable workflow and joins the chain in a separate refactor.
+ * Core chain (superdoc -> react -> vscode-ext):
+ *   superdoc is the npm core; react consumes it; vscode-ext bundles the
+ *   editor and ships a .vsix to the VS Code Marketplace. They release in
+ *   order so downstream packages are never published against an older
+ *   superdoc than what just shipped. docs-stable promotion is keyed off
+ *   superdoc's v* tag and lives in this workflow as a result.
  *
  * Per-package adapters live on the descriptor (resumePublish,
  * preparePythonSnapshot). The recovery engine is generic; new packages
@@ -421,11 +421,14 @@ async function generateGitHubReleaseNotes({ tag, targetCommit, previousTag }) {
 }
 
 function getExpectedReleaseAssets(pkg, workspaceRoot) {
-  if (pkg.name !== 'vscode-ext') {
+  // Only vscode-ext currently has release assets (the .vsix). Other
+  // descriptors don't set vsCodeExtensionId, so they get an empty list and
+  // ensureGitHubReleaseAssets becomes a no-op.
+  if (!pkg.vsCodeExtensionId) {
     return [];
   }
 
-  const extensionDir = join(workspaceRoot, 'apps/vscode-ext');
+  const extensionDir = join(workspaceRoot, pkg.packageCwd);
   let assets = readdirSync(extensionDir)
     .filter((entry) => entry.endsWith('.vsix'))
     .map((entry) => join(extensionDir, entry));
@@ -477,7 +480,7 @@ function isGitHubReleaseComplete(pkg, release) {
     return false;
   }
 
-  if (pkg.name === 'vscode-ext') {
+  if (pkg.vsCodeExtensionId) {
     return Array.isArray(release.assets) && release.assets.some((asset) => asset.name.endsWith('.vsix'));
   }
 
@@ -506,7 +509,7 @@ async function ensureGitHubRelease(pkg, { tag, targetCommit, previousTag, worksp
     });
   }
 
-  if (pkg.name === 'vscode-ext') {
+  if (pkg.vsCodeExtensionId) {
     await ensureGitHubReleaseAssets(release, pkg, workspaceRoot);
     release = await getGitHubReleaseByTag(tag);
   }
@@ -678,6 +681,27 @@ function resumeMcpPublish(workspaceRoot, distTag, options = {}) {
 function prepareSdkPythonSnapshot(workspaceRoot, tag) {
   runInWorkspace(workspaceRoot, 'node', [join(workspaceRoot, 'packages/sdk/scripts/build-python-sdk.mjs')]);
   return copySdkPythonArtifacts(workspaceRoot, tag);
+}
+
+function resumeVscodeExtPublish(workspaceRoot, _distTag, options = {}) {
+  const { skipBuild = workspaceRoot === REPO_ROOT } = options;
+  // The vscode-ext webview imports `superdoc` and `superdoc/style.css`, both
+  // of which resolve to packages/superdoc/dist. In a tagged snapshot only
+  // `pnpm install` has run, so build superdoc first or esbuild's webview
+  // bundling fails to resolve those imports. In REPO_ROOT the workflow's
+  // `Build packages` step already produced the dist.
+  if (!skipBuild) {
+    runInWorkspace(workspaceRoot, 'pnpm', ['run', 'build:superdoc']);
+  }
+  // VS Code Marketplace publish needs the VSCE_PAT env var (passed in by the
+  // orchestrator workflow). `pnpm run package` recreates the .vsix from
+  // whatever is on disk and `vsce publish --skip-duplicate` is idempotent
+  // against the marketplace, so recovery and primary release use the same
+  // commands. The .vsix asset upload to the GitHub release is handled by
+  // ensureGitHubReleaseAssets earlier in recoverPackageRelease.
+  const extensionRoot = join(workspaceRoot, 'apps/vscode-ext');
+  runInWorkspace(extensionRoot, 'pnpm', ['run', 'package']);
+  runInWorkspace(extensionRoot, 'pnpm', ['run', 'publish:vsce']);
 }
 
 function resumeReactPublish(workspaceRoot, distTag, options = {}) {
@@ -900,6 +924,18 @@ const packages = [
     tagPattern: 'react-v*',
     npmPackages: ['@superdoc-dev/react'],
     resumePublish: resumeReactPublish,
+  },
+  {
+    name: 'vscode-ext',
+    chain: 'core',
+    packageCwd: 'apps/vscode-ext',
+    tagPrefix: 'vscode-v',
+    tagPattern: 'vscode-v*',
+    // VS Code Marketplace is the publish target instead of npm; the script's
+    // generic release-state inspection already special-cases vsCodeExtensionId
+    // for publishComplete and .vsix asset upload.
+    vsCodeExtensionId: 'superdoc-dev.superdoc-vscode-ext',
+    resumePublish: resumeVscodeExtPublish,
   },
 ];
 

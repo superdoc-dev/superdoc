@@ -114,6 +114,9 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           LINEAR_TOKEN: ${{ secrets.LINEAR_TOKEN }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          # vsce needs VSCE_PAT to authenticate to the VS Code Marketplace
+          # during the vscode-ext step of the core chain.
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
           GITHUB_REF_NAME: stable
         run: node scripts/release-local-stable.mjs
 

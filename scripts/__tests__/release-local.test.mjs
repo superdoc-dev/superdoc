@@ -176,11 +176,12 @@ test('stable orchestrator prunes before snapshot and reports would-release previ
   );
 });
 
-test('stable orchestrator releases tools chain (CLI, SDK, MCP) and core chain (superdoc, react) in order', async () => {
+test('stable orchestrator releases tools chain (CLI, SDK, MCP) and core chain (superdoc, react, vscode-ext) in order', async () => {
   const content = await readRepoFile('scripts/release-local-stable.mjs');
   assertOrder(content, "name: 'cli'", "name: 'sdk'", 'scripts/release-local-stable.mjs (cli before sdk)');
   assertOrder(content, "name: 'sdk'", "name: 'mcp'", 'scripts/release-local-stable.mjs (sdk before mcp)');
   assertOrder(content, "name: 'superdoc'", "name: 'react'", 'scripts/release-local-stable.mjs (superdoc before react)');
+  assertOrder(content, "name: 'react'", "name: 'vscode-ext'", 'scripts/release-local-stable.mjs (react before vscode-ext)');
   assert.ok(
     content.includes("name: 'superdoc'"),
     'scripts/release-local-stable.mjs: orchestrator must release superdoc so the v* tag drives docs-stable promotion in the same workflow',
@@ -189,10 +190,14 @@ test('stable orchestrator releases tools chain (CLI, SDK, MCP) and core chain (s
     content.includes("name: 'react'"),
     'scripts/release-local-stable.mjs: orchestrator must release react after superdoc so consumers see them ship together',
   );
+  assert.ok(
+    content.includes("name: 'vscode-ext'") && content.includes("vsCodeExtensionId: 'superdoc-dev.superdoc-vscode-ext'"),
+    'scripts/release-local-stable.mjs: orchestrator must release vscode-ext with its marketplace extension id so publishComplete checks the marketplace, not npm',
+  );
   assert.equal(
-    content.includes("name: 'esign'") || content.includes("name: 'template-builder'") || content.includes("name: 'vscode-ext'"),
+    content.includes("name: 'esign'") || content.includes("name: 'template-builder'"),
     false,
-    'scripts/release-local-stable.mjs: vscode-ext, esign, and template-builder are added in follow-up PRs',
+    'scripts/release-local-stable.mjs: esign and template-builder are not yet brought into the orchestrator',
   );
 });
 
@@ -263,13 +268,12 @@ test('stable release workflows serialize on the shared release-stable concurrenc
   );
 
   // Per-package workflows that still auto-fire on stable directly.
-  // superdoc and react are excluded because release-stable.yml drives
-  // their stable releases now. The remaining workflows have not yet been
-  // brought into the orchestrator.
+  // superdoc, react, and vscode-ext are excluded because release-stable.yml
+  // drives their stable releases now. The remaining workflows have not yet
+  // been brought into the orchestrator.
   const perPackageStableWorkflows = [
     '.github/workflows/release-esign.yml',
     '.github/workflows/release-template-builder.yml',
-    '.github/workflows/release-vscode-ext.yml',
   ];
   for (const file of perPackageStableWorkflows) {
     const content = await readRepoFile(file);
@@ -284,6 +288,7 @@ test('stable release workflows serialize on the shared release-stable concurrenc
   const orchestratorOnlyOnStable = [
     '.github/workflows/release-superdoc.yml',
     '.github/workflows/release-react.yml',
+    '.github/workflows/release-vscode-ext.yml',
   ];
   for (const file of orchestratorOnlyOnStable) {
     const content = await readRepoFile(file);

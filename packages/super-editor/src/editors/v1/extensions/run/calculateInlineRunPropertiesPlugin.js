@@ -28,6 +28,40 @@ const RUN_PROPERTIES_DERIVED_FROM_MARKS = new Set([
 
 export const TRANSIENT_HYPERLINK_STYLE_IDS = new Set(['Hyperlink', 'FollowedHyperlink']);
 
+// SD-2894: when the plugin overrides a run's fontFamily from mark-derived values, the
+// mark only carries the resolved CSS font name (`ascii: "Calibri Light"`) and forgets the
+// theme reference (`asciiTheme: "majorBidi"`) that came from the imported `<w:rFonts>`.
+// Without this merge we'd export concrete font names that defeat Word's per-script theme
+// resolution. The pairs match the four `<w:rFonts>` slots — note `cstheme` is lowercase
+// (OOXML inconsistency).
+const FONT_FAMILY_THEME_PAIRS = [
+  ['ascii', 'asciiTheme'],
+  ['hAnsi', 'hAnsiTheme'],
+  ['eastAsia', 'eastAsiaTheme'],
+  ['cs', 'cstheme'],
+];
+
+/**
+ * Merge mark-derived concrete fontFamily slots with theme references preserved on the
+ * existing run. For each slot where the existing fontFamily has a theme reference, keep
+ * the theme and drop the concrete value from marks; otherwise take the mark value.
+ *
+ * @param {Record<string, unknown>|null|undefined} fromMarks
+ * @param {Record<string, unknown>|null|undefined} existing
+ * @returns {Record<string, unknown>}
+ */
+function mergeFontFamilyPreservingThemeRefs(fromMarks, existing) {
+  const merged = { ...(fromMarks || {}) };
+  if (!existing || typeof existing !== 'object') return merged;
+  for (const [concreteKey, themeKey] of FONT_FAMILY_THEME_PAIRS) {
+    if (existing[themeKey] != null) {
+      merged[themeKey] = existing[themeKey];
+      delete merged[concreteKey];
+    }
+  }
+  return merged;
+}
+
 const RUN_PROPERTY_PRESERVE_META_KEY = 'sdPreserveRunPropertiesKeys';
 const COMPANION_INLINE_KEYS = {
   fontSizeCs: 'fontSize',
@@ -539,7 +573,7 @@ function getInlineRunProperties(
         const markFromStyles = encodeMarksFromRPr({ [key]: valueFromStyles }, editor.converter?.convertedXml ?? {})[0];
         const markFromMarks = encodeMarksFromRPr({ [key]: valueFromMarks }, editor.converter?.convertedXml ?? {})[0];
         if (JSON.stringify(markFromMarks?.attrs) !== JSON.stringify(markFromStyles?.attrs)) {
-          inlineRunProperties[key] = valueFromMarks;
+          inlineRunProperties[key] = mergeFontFamilyPreservingThemeRefs(valueFromMarks, existingRunProperties?.[key]);
         }
       } else {
         inlineRunProperties[key] = valueFromMarks;

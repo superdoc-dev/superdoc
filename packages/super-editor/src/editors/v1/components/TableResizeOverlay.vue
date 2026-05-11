@@ -381,6 +381,21 @@ function updateOverlayRect() {
  * - Inner boundaries (between columns)
  * - Right edge (resize last column)
  */
+const isRtlTable = computed(() => tableMetadata.value?.rtl === true);
+
+const tableContentWidth = computed(() => {
+  const columns = tableMetadata.value?.columns;
+  if (!columns || columns.length === 0) return 0;
+  const last = columns[columns.length - 1];
+  return last.x + last.w;
+});
+
+const tableContentLeft = computed(() => {
+  const columns = tableMetadata.value?.columns;
+  if (!columns || columns.length === 0) return 0;
+  return columns[0].x;
+});
+
 const resizableBoundaries = computed(() => {
   if (!tableMetadata.value?.columns) {
     return [];
@@ -394,20 +409,24 @@ const resizableBoundaries = computed(() => {
     const col = columns[i];
     const nextCol = columns[i + 1];
 
+    const logicalX = nextCol.x;
+    const visualX = isRtlTable.value ? tableContentLeft.value + tableContentWidth.value - logicalX : logicalX;
+
     boundaries.push({
       ...col,
       index: i,
-      x: nextCol.x,
+      x: visualX,
       type: 'inner',
     });
   }
 
   // Add handle for right edge of table (resize last column)
   const lastCol = columns[columns.length - 1];
+  const rtlRightEdgeX = tableContentWidth.value;
   boundaries.push({
     ...lastCol,
-    index: columns.length - 1,
-    x: lastCol.x + lastCol.w,
+    index: isRtlTable.value ? 0 : columns.length - 1,
+    x: isRtlTable.value ? rtlRightEdgeX : lastCol.x + lastCol.w,
     type: 'right-edge',
   });
 
@@ -727,7 +746,7 @@ function parseTableMetadata() {
         )
       : undefined;
 
-    tableMetadata.value = { columns: validatedColumns, segments, rows };
+    tableMetadata.value = { columns: validatedColumns, segments, rows, rtl: parsed.rtl === true };
   } catch (error) {
     tableMetadata.value = null;
     emit('resize-error', {
@@ -853,7 +872,8 @@ const mouseMoveThrottle = throttle((event) => {
   // Calculate raw delta in screen pixels, then convert to layout space
   // This ensures constraints (which are in layout space) can be compared correctly
   const screenDelta = event.clientX - dragState.value.initialX;
-  const delta = screenDelta / zoom;
+  const visualDelta = screenDelta / zoom;
+  const delta = isRtlTable.value && !dragState.value.isRightEdge ? -visualDelta : visualDelta;
 
   // Calculate constraints based on layout-computed minWidth (already in layout space)
   const minDelta = -(dragState.value.leftColumn.width - dragState.value.leftColumn.minWidth);
@@ -886,13 +906,15 @@ const mouseMoveThrottle = throttle((event) => {
 
   // Constrain delta
   const constrainedDelta = Math.max(minDelta, Math.min(maxDelta, delta));
+  const constrainedVisualDelta =
+    isRtlTable.value && !dragState.value.isRightEdge ? -constrainedDelta : constrainedDelta;
 
   // Update visual guideline only (no PM transaction yet)
-  dragState.value.constrainedDelta = constrainedDelta;
+  dragState.value.constrainedDelta = constrainedVisualDelta;
 
   emit('resize-move', {
     columnIndex: dragState.value.columnIndex,
-    delta: constrainedDelta,
+    delta: constrainedVisualDelta,
   });
 }, THROTTLE_INTERVAL_MS);
 
@@ -906,7 +928,8 @@ const onDocumentMouseMove = mouseMoveThrottle.throttled;
 function onDocumentMouseUp(event) {
   if (!dragState.value) return;
 
-  const finalDelta = dragState.value.constrainedDelta;
+  const visualFinalDelta = dragState.value.constrainedDelta;
+  const finalDelta = isRtlTable.value && !dragState.value.isRightEdge ? -visualFinalDelta : visualFinalDelta;
   const columnIndex = dragState.value.columnIndex;
   const initialWidths = dragState.value.initialWidths;
   const isRightEdge = dragState.value.isRightEdge;
@@ -939,7 +962,7 @@ function onDocumentMouseUp(event) {
   emit('resize-end', {
     columnIndex,
     finalWidths: newWidths,
-    delta: finalDelta,
+    delta: visualFinalDelta,
   });
 
   dragState.value = null;

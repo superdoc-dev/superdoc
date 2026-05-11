@@ -10,8 +10,12 @@
  * @example
  * editor.commands.setParagraphDirection({ direction: 'rtl', alignmentPolicy: 'matchDirection' })
  */
-export const setParagraphDirection = ({ direction, alignmentPolicy } = {}) =>
-  walkParagraphs((pPr) => {
+export const setParagraphDirection = ({ direction, alignmentPolicy } = {}) => {
+  // Guard against headless callers that invoke this through a generic
+  // "execute by command name" pathway without a payload — a missing
+  // direction must be a no-op, not a silent LTR write.
+  if (direction !== 'ltr' && direction !== 'rtl') return () => false;
+  return walkParagraphs((pPr) => {
     const next = { ...pPr, rightToLeft: direction === 'rtl' };
     if (alignmentPolicy === 'matchDirection') {
       const j = pPr.justification;
@@ -20,6 +24,7 @@ export const setParagraphDirection = ({ direction, alignmentPolicy } = {}) =>
     }
     return next;
   });
+};
 
 /**
  * Clear an explicit paragraph direction override on every paragraph in the

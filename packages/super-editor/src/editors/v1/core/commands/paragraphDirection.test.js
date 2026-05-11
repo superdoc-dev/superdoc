@@ -116,6 +116,7 @@ describe('setParagraphDirection', () => {
     expect(dispatched).toBe(true);
     // setNodeMarkup produces one step per paragraph but they all live in the
     // same Transaction — which is what "one undo step" rests on.
+    expect(tr).not.toBeNull();
     expect(tr.steps).toHaveLength(3);
     nextState.doc.forEach((node) => {
       expect(node.attrs.paragraphProperties.rightToLeft).toBe(true);
@@ -125,6 +126,18 @@ describe('setParagraphDirection', () => {
   it('returns false and does not dispatch when no paragraph would change', () => {
     const state = createState([{ paragraphProperties: { rightToLeft: true } }]);
     const { dispatched, tr } = runCommand(setParagraphDirection({ direction: 'rtl' }), state);
+    expect(dispatched).toBe(false);
+    expect(tr).toBeNull();
+  });
+
+  it('is a no-op when called without a direction (do not silently apply LTR)', () => {
+    // Headless callers that route by command name (`execute('setParagraphDirection')`)
+    // bottom out at a payload-less invocation. A missing direction must not write
+    // `rightToLeft: false` — that would silently apply LTR when the caller asked
+    // for nothing. Use the registry's typed direction-ltr / direction-rtl ids
+    // (or pass `{ direction }` explicitly).
+    const state = createState([{ paragraphProperties: { rightToLeft: true } }]);
+    const { dispatched, tr } = runCommand(setParagraphDirection(), state);
     expect(dispatched).toBe(false);
     expect(tr).toBeNull();
   });

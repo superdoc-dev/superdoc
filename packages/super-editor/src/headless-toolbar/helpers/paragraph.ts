@@ -33,6 +33,19 @@ export const createParagraphDirectionStateDeriver =
     };
   };
 
+// AIDEV-NOTE: The direction-ltr / direction-rtl registry entries must encode the
+// direction here rather than delegating to createDirectCommandExecute. Without it,
+// a no-payload invocation (`controller.execute('direction-rtl')`) bottoms out at
+// `editor.commands.setParagraphDirection()` — which silently falls through to LTR.
+export const createParagraphDirectionExecute =
+  (direction: 'ltr' | 'rtl') =>
+  ({ context }: { context: ToolbarContext | null }) => {
+    const editor = resolveStateEditor(context);
+    const command = editor?.commands.setParagraphDirection;
+    if (typeof command !== 'function') return false;
+    return Boolean(command({ direction, alignmentPolicy: 'matchDirection' }));
+  };
+
 export const createTextAlignStateDeriver =
   () =>
   ({ context }: { context: ToolbarContext | null }): ToolbarCommandState => {

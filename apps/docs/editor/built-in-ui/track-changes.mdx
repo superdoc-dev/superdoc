@@ -159,7 +159,7 @@ Every entry returned by `list()` and `get()` has this shape:
 <ResponseField name="TrackChangeInfo" type="Object">
   <Expandable title="Fields" defaultOpen>
     <ResponseField name="id" type="string">
-      SuperDoc's internal id for the revision. Stable across calls.
+      SuperDoc's tracked-change id for the loaded document instance. Stable across edits while the document is loaded.
     </ResponseField>
     <ResponseField name="address" type="Object">
       Entity address: `{ kind: 'entity', entityType: 'trackedChange', entityId: id }`.
@@ -196,31 +196,9 @@ Every entry returned by `list()` and `get()` has this shape:
 
 ## Tracked-change ids
 
-Every revision carries a SuperDoc tracked-change `id`. It's stable across edits for the loaded document instance, matches the id `onCommentsUpdate` emits for the same change, and is what `decide` and `get` accept. The same id appears on every track-changes surface:
+`TrackChangeInfo.id` is SuperDoc's tracked-change id for the loaded document instance. It matches `address.entityId`, `payload.changeId`, and tracked-change `payload.comment.commentId`, and is the id accepted by `trackChanges.get()` and `trackChanges.decide()`.
 
-- `items[i].id` from `editor.doc.trackChanges.list()` (also `address.entityId`)
-- `payload.changeId` (or `payload.comment.commentId`) on `onCommentsUpdate`
-- `target.id` accepted by `decide` and `get`
-
-Store the id when a change first appears. Edit around it, accept or reject other changes, hit undo. Pass the original id back into `decide` and it still resolves.
-
-The id is local to its story. The same id can appear in body and in a footnote. When listing across stories with `list({ in: 'all' })`, pair the id with `address.story`:
-
-```javascript
-const all = superdoc.activeEditor.doc.trackChanges.list({ in: "all" });
-const item = all.items[0];
-
-superdoc.activeEditor.doc.trackChanges.decide({
-  decision: "accept",
-  target: item.address.story
-    ? { id: item.id, story: item.address.story }
-    : { id: item.id },
-});
-```
-
-### Source-correlation: not the OOXML `w:id`
-
-The SuperDoc id is not the `w:id` attribute from the source DOCX. Opening the same file in a fresh editor produces fresh SuperDoc ids. If you need to correlate with the source document or an external review system, read `wordRevisionIds.insert` / `.delete` / `.format` on each `TrackChangeInfo`. Those carry the original OOXML `w:id` values when present.
+It is not the source DOCX `w:id`. For source-file correlation, use `wordRevisionIds.insert`, `.delete`, or `.format` when present. If you build a custom review panel, see [Custom UI > Track changes](/editor/custom-ui/track-changes) for story-scoped ids and cached-row patterns.
 
 ## Toggling tracked edits
 

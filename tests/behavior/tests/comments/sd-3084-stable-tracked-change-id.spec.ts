@@ -92,22 +92,58 @@ test.describe('SD-3084 stable tracked-change id contract', () => {
     }
   });
 
-  test('id is stable across a position-shifting edit', async ({ superdoc }) => {
+  test('id is stable when positions shift due to an insertion before the change', async ({ superdoc }) => {
     await assertDocumentApiReady(superdoc.page);
 
-    await createTrackedInsertion(superdoc.page, 'first tracked insertion');
+    // Seed an anchor word, then make a tracked replacement on it. This gives
+    // us a tracked change with definite positions. Pre-SD-3084 the id was a
+    // hash that included `from`/`to`, so shifting positions would have
+    // produced a different id.
+    await superdoc.type('anchor middle tail');
     await superdoc.waitForStable();
 
-    const before = (await listTrackChanges(superdoc.page)).changes.map((c: { id: string }) => c.id).sort();
+    const anchorTarget = await findFirstSelectionTarget(superdoc.page, 'anchor');
+    expect(anchorTarget, 'should find "anchor"').not.toBeNull();
+    const trackedReceipt = await replaceText(
+      superdoc.page,
+      { target: anchorTarget!, text: 'ANCHOR' },
+      { changeMode: 'tracked' },
+    );
+    expect(trackedReceipt.success).toBe(true);
+    await superdoc.waitForStable();
+
+    const before = (await listTrackChanges(superdoc.page)).changes;
     expect(before.length).toBeGreaterThan(0);
+    const targetId = before[0].id;
+    const beforeRange = before[0].address?.range as { start?: number; end?: number } | undefined;
 
-    await createTrackedInsertion(superdoc.page, ' more text after');
+    // Now shift the tracked change's positions by inserting non-tracked text
+    // BEFORE it. The change's `from`/`to` must move, which would have changed
+    // the pre-SD-3084 hashed id.
+    const tailTarget = await findFirstSelectionTarget(superdoc.page, 'tail');
+    expect(tailTarget, 'should find "tail"').not.toBeNull();
+    // Replace "tail" with a longer string positioned before "ANCHOR"? "tail"
+    // is after the anchor, so we need a target before the anchor. Use the
+    // raw insert helper at position 0 of the body via an explicit target.
+    await superdoc.page.keyboard.press('Home');
+    await superdoc.page.keyboard.press('Home');
+    // Insert non-tracked text at the start to shift everything that follows.
+    await insertText(superdoc.page, { value: 'PREFIX_THAT_SHIFTS_POSITIONS ' });
     await superdoc.waitForStable();
 
-    const after = (await listTrackChanges(superdoc.page)).changes.map((c: { id: string }) => c.id).sort();
+    const after = (await listTrackChanges(superdoc.page)).changes;
+    const survivor = after.find((c: { id: string }) => c.id === targetId);
+    expect(
+      survivor,
+      `tracked change ${targetId} should still resolve by the same id after positions shift`,
+    ).toBeDefined();
 
-    for (const id of before) {
-      expect(after, `id ${id} should survive a position-shifting edit`).toContain(id);
+    const afterRange = survivor?.address?.range as { start?: number; end?: number } | undefined;
+    if (beforeRange && afterRange && beforeRange.start != null && afterRange.start != null) {
+      expect(
+        afterRange.start,
+        'sanity: positions actually moved (proving this is a real position-shift test)',
+      ).toBeGreaterThan(beforeRange.start);
     }
   });
 

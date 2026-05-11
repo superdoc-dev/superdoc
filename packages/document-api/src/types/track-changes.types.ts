@@ -30,15 +30,21 @@ export interface TrackChangeWordRevisionIds {
 export interface TrackChangeInfo {
   address: TrackedChangeAddress;
   /**
-   * Stable identifier for the tracked change. Safe to store and use across
-   * document edits. Equal to `address.entityId` and to the `commentId`
-   * emitted by `onCommentsUpdate` for this change.
+   * SuperDoc tracked-change identifier. Stable across edits while the document
+   * is loaded, matches the `commentId` emitted by `onCommentsUpdate` for this
+   * change, and is what `get` and `decide` accept as `target.id`. Equal to
+   * `address.entityId`.
    *
-   * Note on story scope: the id is story-local. Two changes in different
-   * stories (body, header, footer, footnote, endnote) may share the same
-   * id. When listing across stories (`list({ in: 'all' })`), use
-   * `address.story` together with `id` for full identity, and pass
-   * `{ id, story }` as the `decide` target to disambiguate.
+   * This is NOT the OOXML `w:id` from the source DOCX. Opening the same file
+   * in a fresh editor produces fresh SuperDoc ids. For source correlation
+   * (mapping back to the original DOCX or an external review system), read
+   * {@link TrackChangeInfo.wordRevisionIds} instead.
+   *
+   * Story scope: the id is story-local. Two changes in different stories
+   * (body, header, footer, footnote, endnote) may share the same id. When
+   * listing across stories (`list({ in: 'all' })`), pair the id with
+   * `address.story` and pass `{ id, story }` as the `decide` target to
+   * disambiguate.
    */
   id: string;
   type: TrackChangeType;

@@ -196,7 +196,7 @@ Every entry returned by `list()` and `get()` has this shape:
 
 ## Tracked-change ids
 
-Every revision carries an `id` that survives across edits. The same id appears on every track-changes surface, so events, list entries, and decisions all refer to the same value:
+Every revision carries a SuperDoc tracked-change `id`. It's stable across edits for the loaded document instance, matches the id `onCommentsUpdate` emits for the same change, and is what `decide` and `get` accept. The same id appears on every track-changes surface:
 
 - `items[i].id` from `editor.doc.trackChanges.list()` (also `address.entityId`)
 - `payload.changeId` (or `payload.comment.commentId`) on `onCommentsUpdate`
@@ -217,6 +217,10 @@ superdoc.activeEditor.doc.trackChanges.decide({
     : { id: item.id },
 });
 ```
+
+### Source-correlation: not the OOXML `w:id`
+
+The SuperDoc id is not the `w:id` attribute from the source DOCX. Opening the same file in a fresh editor produces fresh SuperDoc ids. If you need to correlate with the source document or an external review system, read `wordRevisionIds.insert` / `.delete` / `.format` on each `TrackChangeInfo`. Those carry the original OOXML `w:id` values when present.
 
 ## Toggling tracked edits
 

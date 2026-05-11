@@ -164,6 +164,28 @@ describe('sd:totalPageNumber translator', () => {
       expect(result[3].elements[1].elements[0].text).toBe('12');
     });
 
+    it('formats fresh NUMPAGES cached text with preserved field switches', () => {
+      vi.mocked(processOutputMarks).mockReturnValue([]);
+
+      const result = config.decode({
+        node: {
+          type: 'total-page-number',
+          attrs: {
+            instruction: 'NUMPAGES \\# "00"',
+            pageNumberFormat: 'decimal',
+            pageNumberZeroPadding: 2,
+            importedCachedText: '05',
+          },
+        },
+        statFieldCacheMap: new Map([['NUMPAGES', 7]]),
+      });
+
+      expect(result[0].elements[1].attributes).toEqual({
+        'w:fldCharType': 'begin',
+      });
+      expect(result[3].elements[1].elements[0].text).toBe('07');
+    });
+
     it('falls back to resolvedText when cache map is absent', () => {
       vi.mocked(processOutputMarks).mockReturnValue([]);
 

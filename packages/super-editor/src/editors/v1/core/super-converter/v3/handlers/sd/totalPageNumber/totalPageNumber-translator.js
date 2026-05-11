@@ -3,6 +3,7 @@ import { NodeTranslator } from '@translator';
 import { processOutputMarks } from '../../../../exporter.js';
 import { parseMarks } from './../../../../v2/importer/markImporter.js';
 import { buildComplexFieldRuns } from '../build-complex-field-runs.js';
+import { formatPageNumberFieldValue } from '../../../../field-references/shared/page-number-field-switches.js';
 
 /** @type {import('@translator').XmlNodeName} */
 const XML_NODE_NAME = 'sd:totalPageNumber';
@@ -80,6 +81,10 @@ function getPageNumberFieldAttrs(node) {
 function resolveCachedPageCount(params, node) {
   const cacheMap = params.statFieldCacheMap;
   if (cacheMap?.has?.('NUMPAGES')) {
+    const pageCount = Number(cacheMap.get('NUMPAGES'));
+    if (node.attrs?.pageNumberFormat || node.attrs?.pageNumberZeroPadding) {
+      return formatPageNumberFieldValue(pageCount, node.attrs);
+    }
     return String(cacheMap.get('NUMPAGES'));
   }
 

@@ -194,6 +194,30 @@ Every entry returned by `list()` and `get()` has this shape:
 - [`trackChanges.get`](/document-api/reference/track-changes/get)
 - [`trackChanges.decide`](/document-api/reference/track-changes/decide)
 
+## Tracked-change ids
+
+Every revision carries an `id` that survives across edits. The same id appears on every track-changes surface, so events, list entries, and decisions all refer to the same value:
+
+- `items[i].id` from `editor.doc.trackChanges.list()` (also `address.entityId`)
+- `payload.changeId` (or `payload.comment.commentId`) on `onCommentsUpdate`
+- `target.id` accepted by `decide` and `get`
+
+Store the id when a change first appears. Edit around it, accept or reject other changes, hit undo. Pass the original id back into `decide` and it still resolves.
+
+The id is local to its story. The same id can appear in body and in a footnote. When listing across stories with `list({ in: 'all' })`, pair the id with `address.story`:
+
+```javascript
+const all = superdoc.activeEditor.doc.trackChanges.list({ in: "all" });
+const item = all.items[0];
+
+superdoc.activeEditor.doc.trackChanges.decide({
+  decision: "accept",
+  target: item.address.story
+    ? { id: item.id, story: item.address.story }
+    : { id: item.id },
+});
+```
+
 ## Toggling tracked edits
 
 Control recording via document mode:

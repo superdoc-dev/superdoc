@@ -33,6 +33,30 @@ export function ReviewPanel() {
 
 `items` mirrors `editor.doc.trackChanges.list()`. Each item carries `id` plus the full `change` record (type, author, excerpt, address).
 
+## Tracked-change ids
+
+Every item from `useSuperDocTrackChanges()` carries an `id` that survives across edits. The same id appears on every track-changes surface:
+
+- `editor.doc.trackChanges.list().items[i].id` and `address.entityId`
+- `payload.changeId` (or `payload.comment.commentId`) on `onCommentsUpdate`
+- `target.id` accepted by `decide` and `get`
+
+Store the id when a change first appears. Type around it, accept or reject other changes, hit undo. Pass the original id back into `decide` and it still resolves.
+
+The id is local to its story. The same id can appear in body and in a footnote. When listing across stories with `list({ in: 'all' })`, pair the id with `address.story`:
+
+```tsx
+const all = editor.doc.trackChanges.list({ in: 'all' });
+const item = all.items[0];
+
+editor.doc.trackChanges.decide({
+  decision: 'accept',
+  target: item.address.story
+    ? { id: item.id, story: item.address.story }
+    : { id: item.id },
+});
+```
+
 ## Accept and reject
 
 ```tsx

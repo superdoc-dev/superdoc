@@ -13,42 +13,30 @@ export const TRACK_CHANGES_IN_ALL = 'all' as const;
 export type TrackChangesInAll = typeof TRACK_CHANGES_IN_ALL;
 
 /**
- * Raw imported Word OOXML revision IDs (`w:id`) from the source document when available.
- *
- * This is provenance metadata, not the canonical SuperDoc tracked-change ID.
- * Replacements may include both `insert` and `delete` IDs.
+ * Source provenance: the original Word `w:id` values from the imported DOCX,
+ * keyed by `insert` / `delete` / `format`. Use to correlate a SuperDoc tracked
+ * change back to the source file or an external review system. Not present
+ * for tracked changes created in the current session.
  */
 export interface TrackChangeWordRevisionIds {
-  /** Raw imported Word OOXML revision ID (`w:id`) from a `<w:ins>` element when present. */
+  /** Original `w:id` from the source DOCX's `<w:ins>` element. */
   insert?: string;
-  /** Raw imported Word OOXML revision ID (`w:id`) from a `<w:del>` element when present. */
+  /** Original `w:id` from the source DOCX's `<w:del>` element. */
   delete?: string;
-  /** Raw imported Word OOXML revision ID (`w:id`) from a `<w:rPrChange>` element when present. */
+  /** Original `w:id` from the source DOCX's `<w:rPrChange>` element. */
   format?: string;
 }
 
 export interface TrackChangeInfo {
   address: TrackedChangeAddress;
   /**
-   * SuperDoc tracked-change identifier. Stable across edits while the document
-   * is loaded, matches the `commentId` emitted by `onCommentsUpdate` for this
-   * change, and is what `get` and `decide` accept as `target.id`. Equal to
-   * `address.entityId`.
-   *
-   * This is NOT the OOXML `w:id` from the source DOCX. Opening the same file
-   * in a fresh editor produces fresh SuperDoc ids. For source correlation
-   * (mapping back to the original DOCX or an external review system), read
-   * {@link TrackChangeInfo.wordRevisionIds} instead.
-   *
-   * Story scope: the id is story-local. Two changes in different stories
-   * (body, header, footer, footnote, endnote) may share the same id. When
-   * listing across stories (`list({ in: 'all' })`), pair the id with
-   * `address.story` and pass `{ id, story }` as the `decide` target to
-   * disambiguate.
+   * SuperDoc tracked-change id for the loaded document. Use this with `get()`,
+   * `decide()`, UI rows, and tracked-change events. For source DOCX correlation,
+   * use {@link TrackChangeInfo.wordRevisionIds}.
    */
   id: string;
   type: TrackChangeType;
-  /** Raw imported Word OOXML revision IDs (`w:id`) from the source document when available. */
+  /** Source provenance: original Word `w:id` values from the imported DOCX. See {@link TrackChangeWordRevisionIds}. */
   wordRevisionIds?: TrackChangeWordRevisionIds;
   author?: string;
   authorEmail?: string;

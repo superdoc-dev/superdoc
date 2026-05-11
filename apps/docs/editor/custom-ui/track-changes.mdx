@@ -33,17 +33,35 @@ export function ReviewPanel() {
 
 `items` mirrors `editor.doc.trackChanges.list()`. Each item carries `id` plus the full `change` record (type, author, excerpt, address).
 
-## Tracked-change ids
+## Which id do I use?
 
-Every item from `useSuperDocTrackChanges()` carries a SuperDoc tracked-change `id`. It's stable across edits for the loaded document instance, matches the id `onCommentsUpdate` emits for the same change, and is what `decide` and `get` accept. The same id appears on every track-changes surface:
+For nearly every workflow, `item.id` is the answer.
 
-- `editor.doc.trackChanges.list().items[i].id` and `address.entityId`
-- `payload.changeId` (or `payload.comment.commentId`) on `onCommentsUpdate`
-- `target.id` accepted by `decide` and `get`
+| Question | Answer |
+|---|---|
+| What do I pass to `decide()` or `get()`? | `item.id` |
+| What matches `onCommentsUpdate`? | `payload.changeId` / `payload.comment.commentId`, same value as `item.id` |
+| Can I cache it during async work (LLM, dialog, etc.)? | Yes, while the document is loaded |
+| Need to map back to the source DOCX revision? | `item.wordRevisionIds` |
+| Should I parse `handle.ref`? | No - treat it as opaque |
 
-Store the id when a change first appears. Type around it, accept or reject other changes, hit undo. Pass the original id back into `decide` and it still resolves.
+`item.id` is SuperDoc's tracked-change id for the loaded document. It's stable across edits, matches the id emitted by events, and is the value `decide()` and `get()` accept. Use it as your normal handle for everything UI- or API-related.
 
-The id is local to its story. The same id can appear in body and in a footnote. When listing across stories with `list({ in: 'all' })`, pair the id with `address.story`:
+```tsx
+const { items } = editor.doc.trackChanges.list();
+editor.doc.trackChanges.decide({
+  decision: 'accept',
+  target: { id: items[0].id },
+});
+```
+
+### Source correlation (advanced)
+
+`wordRevisionIds` is provenance, not another id. It carries the original Word `w:id` values from the imported DOCX, keyed by `insert` / `delete` / `format`. Only reach for it when you need to correlate a SuperDoc change with the source file or an external review system. It is not present for tracked changes created in the current session.
+
+### Story scope
+
+When listing across stories (`list({ in: 'all' })`), the same id can appear in body and a footnote. Pair the id with `address.story` and pass `{ id, story }` to `decide`:
 
 ```tsx
 const all = editor.doc.trackChanges.list({ in: 'all' });
@@ -56,10 +74,6 @@ editor.doc.trackChanges.decide({
     : { id: item.id },
 });
 ```
-
-### Source-correlation: not the OOXML `w:id`
-
-The SuperDoc id is not the `w:id` attribute from the source DOCX. Opening the same file in a fresh editor produces fresh SuperDoc ids. If you need to correlate with the source document or an external review system, read `wordRevisionIds.insert` / `.delete` / `.format` on each `TrackChangeInfo`. Those carry the original OOXML `w:id` values when present.
 
 ## Accept and reject
 

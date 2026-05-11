@@ -450,6 +450,8 @@ export function isResolvedDrawingItem(item: ResolvedPaintItem): item is Resolved
 /** A resolved header/footer page — mirrors HeaderFooterPage but with resolved items. */
 export type ResolvedHeaderFooterPage = {
   number: number;
+  /** Numeric page number after section numbering restart/offset. Used for OOXML odd/even parity. */
+  displayNumber?: number;
   numberText?: string;
   items: ResolvedPaintItem[];
 };

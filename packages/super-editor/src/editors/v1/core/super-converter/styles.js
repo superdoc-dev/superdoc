@@ -535,11 +535,14 @@ export function decodeRPrFromMarks(marks) {
       case 'italic':
       case 'bold':
         runProperties[type] = mark.attrs.value !== '0' && mark.attrs.value !== false;
-        if (type === 'bold') {
-          runProperties.boldCs = runProperties.bold;
-        } else if (type === 'italic') {
-          runProperties.italicCs = runProperties.italic;
-        }
+        // SD-2912: do NOT auto-propagate `boldCs` / `italicCs` from the latin
+        // bold/italic mark. The complex-script companion is an independent OOXML
+        // property (ECMA-376 §17.3.2). Auto-propagating it injects elements that
+        // weren't in the source rPr — every run gets a `<w:bCs/>` regardless of
+        // whether the original `<w:rPr>` contained one. When the source genuinely
+        // had `<w:bCs/>`, it round-trips via the run's stored runProperties
+        // (preserved by the plugin's existing-keys branch — see the matching
+        // SD-2912 change in `calculateInlineRunPropertiesPlugin.js`).
         break;
       case 'underline': {
         const { underlineType, underlineColor, underlineThemeColor, underlineThemeTint, underlineThemeShade } =
@@ -566,12 +569,14 @@ export function decodeRPrFromMarks(marks) {
         break;
       }
       case 'highlight':
-        if (mark.attrs.color) {
-          if (mark.attrs.color.toLowerCase() === 'transparent') {
-            runProperties.highlight = { 'w:val': 'none' };
-          } else {
-            runProperties.highlight = { 'w:val': mark.attrs.color };
-          }
+        if (mark.attrs.color && mark.attrs.color.toLowerCase() !== 'transparent') {
+          // SD-2912: the "transparent" highlight mark is synthesized from `<w:shd val="clear"
+          // fill="auto"/>` shading on import (see encodeMarksFromRPr's shading case). Emitting
+          // an explicit `<w:highlight w:val="none"/>` for it injects a new element on every
+          // run that wasn't in the source. The shading itself round-trips independently via
+          // its own `<w:shd>` element, so no information is lost by skipping the highlight
+          // emit for the transparent case.
+          runProperties.highlight = { 'w:val': mark.attrs.color };
         }
         break;
       case 'link':

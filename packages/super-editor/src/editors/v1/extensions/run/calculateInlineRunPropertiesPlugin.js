@@ -8,12 +8,17 @@ import {
 } from '@extensions/paragraph/resolvedPropertiesCache.js';
 import { collectChangedRangesThroughTransactions } from '@utils/rangeUtils.js';
 
+// SD-2912: `boldCs` / `italicCs` are NOT marks. The OOXML companions for complex-script
+// bold/italic are independent properties (ECMA-376 §17.3.2.1, §17.3.2.16) carried by the
+// run's stored runProperties. Listing them here caused the plugin to overwrite their
+// preserved value on every appendTransaction, which combined with the auto-propagation in
+// `decodeRPrFromMarks` injected a `<w:bCs/>` / `<w:iCs/>` element into every run on round-
+// trip even when the source rPr had none. Keeping them out of this set lets the existing-
+// runProperties branch in `getInlineRunProperties` preserve them verbatim.
 const RUN_PROPERTIES_DERIVED_FROM_MARKS = new Set([
   'strike',
   'italic',
-  'italicCs',
   'bold',
-  'boldCs',
   'underline',
   'highlight',
   'textTransform',

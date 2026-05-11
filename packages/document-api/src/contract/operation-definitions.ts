@@ -395,7 +395,7 @@ export const INTENT_GROUP_META: Record<string, IntentGroupMeta> = {
     toolName: 'superdoc_comment',
     description:
       'Manage document comment threads: create, read, update, and delete. ' +
-      'To create a comment, first use superdoc_search to find the target text, then pass action "create" with the comment text and a target: {kind:"text", blockId:"<blockId>", range:{start:<N>, end:<N>}} using the blockId and highlightRange from the search result. ' +
+      'To create a comment, first use superdoc_search to find the target text, then pass action "create" with the comment text and a target built from the search result: use result.items[0].context.textRanges[0] directly as the target — it is already a complete {kind:"text", blockId, range:{start,end}} block-relative address. Do NOT use result.highlightRange — it is offset relative to the snippet preview (up to 30 chars off) and will mis-anchor the comment or trigger TARGET_NOT_FOUND. ' +
       'For threaded replies, pass "parentId" with the parent comment ID. ' +
       'Action "list" returns all comments with optional pagination (limit, offset) and filtering (includeResolved:true to include resolved). ' +
       'Action "get" retrieves a single comment by ID. Action "update" changes status to "resolved" or marks as internal. Action "delete" removes a comment or reply by ID. ' +

@@ -61,6 +61,27 @@ describe('preProcessPageInstruction', () => {
     ]);
   });
 
+  it('should use fifth-argument fieldRunRPr from the generic field pipeline', () => {
+    const nodesToCombine = [];
+    const instruction = 'PAGE \\* roman';
+    const fieldRunRPr = {
+      name: 'w:rPr',
+      elements: [{ name: 'w:b' }],
+    };
+    const result = preProcessPageInstruction(nodesToCombine, instruction, mockDocx, [], fieldRunRPr);
+    expect(result).toEqual([
+      {
+        name: 'sd:autoPageNumber',
+        type: 'element',
+        attributes: {
+          instruction: 'PAGE \\* roman',
+          pageNumberFormat: 'lowerRoman',
+        },
+        elements: [fieldRunRPr],
+      },
+    ]);
+  });
+
   it('should prefer content node rPr over fieldRunRPr', () => {
     // Content between separate and end takes priority over field sequence styling
     const contentRPr = { name: 'w:rPr', elements: [{ name: 'w:i' }] };

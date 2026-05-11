@@ -44,6 +44,26 @@ describe('preProcessNumPagesInstruction', () => {
     expect(result[0].elements).toEqual([fieldRunRPr]);
   });
 
+  it('should use fifth-argument fieldRunRPr from the generic field pipeline', () => {
+    const nodesToCombine = [];
+    const instruction = 'NUMPAGES \\# "00"';
+    const fieldRunRPr = {
+      name: 'w:rPr',
+      elements: [{ name: 'w:b' }],
+    };
+    const result = preProcessNumPagesInstruction(nodesToCombine, instruction, mockDocx, [], fieldRunRPr);
+    expect(result[0]).toEqual({
+      name: 'sd:totalPageNumber',
+      type: 'element',
+      attributes: {
+        instruction: 'NUMPAGES \\# "00"',
+        pageNumberFormat: 'decimal',
+        pageNumberZeroPadding: 2,
+      },
+      elements: [fieldRunRPr],
+    });
+  });
+
   it('should prefer content node rPr over fieldRunRPr', () => {
     const contentRPr = { name: 'w:rPr', elements: [{ name: 'w:i' }] };
     const nodesToCombine = [

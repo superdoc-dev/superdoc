@@ -17,6 +17,22 @@ const getCurrentParagraphJustification = (context: ToolbarContext | null) => {
   return justification;
 };
 
+export const createParagraphDirectionStateDeriver =
+  (direction: 'ltr' | 'rtl') =>
+  ({ context }: { context: ToolbarContext | null }): ToolbarCommandState => {
+    const isDisabled = isCommandDisabled(context);
+    if (isDisabled) return { active: false, disabled: true, value: null };
+
+    const rightToLeft = getCurrentResolvedParagraphProperties(context)?.rightToLeft;
+    const current: 'ltr' | 'rtl' = rightToLeft ? 'rtl' : 'ltr';
+
+    return {
+      active: current === direction,
+      disabled: false,
+      value: current,
+    };
+  };
+
 export const createTextAlignStateDeriver =
   () =>
   ({ context }: { context: ToolbarContext | null }): ToolbarCommandState => {

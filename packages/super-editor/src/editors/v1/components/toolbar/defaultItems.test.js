@@ -32,7 +32,7 @@ function buildItems(availableWidth) {
 }
 
 describe('makeDefaultItems XL overflow boundary (SD-2328)', () => {
-  const XL_OVERFLOW_SAFETY_BUFFER = 20;
+  const XL_OVERFLOW_SAFETY_BUFFER = 84;
   const XL_CUTOFF = RESPONSIVE_BREAKPOINTS.xl + XL_OVERFLOW_SAFETY_BUFFER;
   const XL_ITEMS = ['linkedStyles', 'clearFormatting', 'copyFormat', 'ruler'];
 

@@ -39,6 +39,8 @@ export const BUILT_IN_COMMAND_IDS = [
   'numbered-list',
   'indent-increase',
   'indent-decrease',
+  'direction-ltr',
+  'direction-rtl',
   'undo',
   'redo',
   'ruler',
@@ -87,6 +89,8 @@ export type ToolbarPayloadMap = {
   'numbered-list': never;
   'indent-increase': never;
   'indent-decrease': never;
+  'direction-ltr': { direction: 'ltr' | 'rtl'; alignmentPolicy?: 'matchDirection' };
+  'direction-rtl': { direction: 'ltr' | 'rtl'; alignmentPolicy?: 'matchDirection' };
   undo: never;
   redo: never;
   ruler: never;
@@ -133,6 +137,8 @@ export type ToolbarValueMap = {
   'numbered-list': undefined;
   'indent-increase': undefined;
   'indent-decrease': undefined;
+  'direction-ltr': 'ltr' | 'rtl';
+  'direction-rtl': 'ltr' | 'rtl';
   undo: undefined;
   redo: undefined;
   ruler: undefined;

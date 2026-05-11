@@ -729,6 +729,36 @@ export const makeDefaultItems = ({
     },
   });
 
+  // direction LTR
+  const directionLtr = useToolbarItem({
+    type: 'button',
+    name: 'directionLtr',
+    command: 'setParagraphDirection',
+    argument: { direction: 'ltr', alignmentPolicy: 'matchDirection' },
+    icon: toolbarIcons.directionLtr,
+    active: false,
+    tooltip: toolbarTexts.directionLtr,
+    disabled: false,
+    attributes: {
+      ariaLabel: 'Left-to-right',
+    },
+  });
+
+  // direction RTL
+  const directionRtl = useToolbarItem({
+    type: 'button',
+    name: 'directionRtl',
+    command: 'setParagraphDirection',
+    argument: { direction: 'rtl', alignmentPolicy: 'matchDirection' },
+    icon: toolbarIcons.directionRtl,
+    active: false,
+    tooltip: toolbarTexts.directionRtl,
+    disabled: false,
+    attributes: {
+      ariaLabel: 'Right-to-left',
+    },
+  });
+
   // overflow
   const overflow = useToolbarItem({
     type: 'overflow',
@@ -1059,11 +1089,20 @@ export const makeDefaultItems = ({
   // - viewport/document width when `responsiveToContainer: false`
 
   // Extra headroom to prevent toolbar jitter at the XL edge.
-  const XL_OVERFLOW_SAFETY_BUFFER = 20;
+  // Includes ~32px each for `directionLtr` and `directionRtl` on top of the original 20px buffer.
+  const XL_OVERFLOW_SAFETY_BUFFER = 84;
   const stickyItemsWidth = 120;
   const toolbarPadding = 32;
 
-  const itemsToHideXL = ['linkedStyles', 'clearFormatting', 'copyFormat', 'ruler', 'formattingMarks'];
+  const itemsToHideXL = [
+    'linkedStyles',
+    'clearFormatting',
+    'copyFormat',
+    'ruler',
+    'formattingMarks',
+    'directionLtr',
+    'directionRtl',
+  ];
   const itemsToHideSM = ['zoom', 'fontFamily', 'fontSize', 'redo'];
   const shouldUseLgCompactStyles = availableWidth <= RESPONSIVE_BREAKPOINTS.lg;
 
@@ -1109,6 +1148,8 @@ export const makeDefaultItems = ({
     numberedList,
     indentLeft,
     indentRight,
+    directionLtr,
+    directionRtl,
     lineHeight,
     separator,
     linkedStyles,

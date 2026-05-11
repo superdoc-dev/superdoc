@@ -114,7 +114,11 @@ const handleToolbarButtonClick = (item, argument = null) => {
   }
 
   emit('item-clicked');
-  emit('command', { item, argument });
+  // Forward the item's static `argument` (set via `useToolbarItem({ argument })`)
+  // when no caller-provided argument exists. Lets buttons carry fixed args like
+  // `{ direction: 'rtl' }` without needing a dropdown.
+  const resolved = argument ?? item.argument?.value ?? null;
+  emit('command', { item, argument: resolved });
 };
 
 const handleToolbarButtonTextSubmit = (item, argument) => {

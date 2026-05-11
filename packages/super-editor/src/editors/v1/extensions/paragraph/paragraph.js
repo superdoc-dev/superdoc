@@ -242,6 +242,11 @@ export const Paragraph = OxmlNode.create({
       'Mod-Shift-8': () => {
         return this.editor.commands.toggleBulletList();
       },
+      // Mod-Shift-L/R is alignment; using Alt to avoid collision.
+      'Mod-Alt-Shift-l': () =>
+        this.editor.commands.setParagraphDirection({ direction: 'ltr', alignmentPolicy: 'matchDirection' }),
+      'Mod-Alt-Shift-r': () =>
+        this.editor.commands.setParagraphDirection({ direction: 'rtl', alignmentPolicy: 'matchDirection' }),
       Enter: (params) => {
         return removeNumberingProperties({ checkType: 'empty' })({
           ...params,

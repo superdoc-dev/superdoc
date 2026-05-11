@@ -583,7 +583,11 @@ function dispatchResizeTransaction(blockId, newWidth, newHeight) {
 
     tr.setNodeMarkup(imagePos, null, newAttrs);
 
-    // Dispatch transaction
+    // Word does not track image resizes as revisions; bypass tracking so the
+    // attribute change applies in place instead of being split into a tracked
+    // insert + delete (which would render as a duplicate image — SD-2974).
+    tr.setMeta('skipTrackChanges', true);
+
     dispatch(tr);
 
     // Invalidate the measure cache for this image to force re-measurement with new size

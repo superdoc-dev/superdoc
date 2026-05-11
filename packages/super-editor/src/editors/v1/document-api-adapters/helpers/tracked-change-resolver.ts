@@ -82,15 +82,16 @@ function portableHash(input: string): string {
 }
 
 /**
- * Derives a deterministic ID for a tracked change from the current document state.
+ * Derives a positional/content hash for a tracked change. Previously used as
+ * the canonical `id` on grouped changes; the canonical id is now
+ * `change.rawId` (the persistent mark id). Kept only as the fallback inside
+ * {@link findMatchingChange} for callers that cached the previously-published
+ * ephemeral id within the same snapshot. Not part of the public API.
  *
- * The ID is computed from the change type, ProseMirror positions, author,
- * date, and a text excerpt. It is stable for a given document state but will
- * change if the document is edited, since positions shift. These are NOT
- * persistent identifiers — they are ephemeral keys valid only for the
- * current transaction snapshot.
+ * AIDEV-NOTE: temporary - SD-3084 soft-fallback. Remove one release after
+ * SD-3084 ships and consumers have migrated to the stable id.
  */
-function deriveTrackedChangeId(editor: Editor, change: Omit<GroupedTrackedChange, 'id'>): string {
+export function deriveTrackedChangeId(editor: Editor, change: Omit<GroupedTrackedChange, 'id'>): string {
   const type = resolveTrackedChangeType(change);
   const excerpt = normalizeExcerpt(editor.state.doc.textBetween(change.from, change.to, ' ', '\ufffc')) ?? '';
   const author = toNonEmptyString(change.attrs.author) ?? '';
@@ -191,7 +192,10 @@ export function groupTrackedChanges(editor: Editor): GroupedTrackedChange[] {
   const grouped = Array.from(byRawId.values())
     .map((change) => ({
       ...change,
-      id: deriveTrackedChangeId(editor, change),
+      // Canonical id is the persistent mark rawId. This is the same value
+      // `comment.commentId` carries on `onCommentsUpdate`, and the value
+      // `trackChanges.decide` accepts. See SD-3084.
+      id: change.rawId,
     }))
     .sort((a, b) => {
       if (a.from !== b.from) return a.from - b.from;
@@ -203,13 +207,11 @@ export function groupTrackedChanges(editor: Editor): GroupedTrackedChange[] {
 }
 
 export function resolveTrackedChange(editor: Editor, id: string): GroupedTrackedChange | null {
-  const grouped = groupTrackedChanges(editor);
-  return grouped.find((item) => item.id === id) ?? null;
+  return findMatchingChange(editor, id);
 }
 
 export function toCanonicalTrackedChangeId(editor: Editor, rawId: string): string | null {
-  const grouped = groupTrackedChanges(editor);
-  return grouped.find((item) => item.rawId === rawId)?.id ?? null;
+  return findMatchingChange(editor, rawId)?.id ?? null;
 }
 
 export function buildTrackedChangeCanonicalIdMap(editor: Editor): Map<string, string> {
@@ -311,10 +313,19 @@ export function resolveTrackedChangeInStory(
 }
 
 /**
- * Lookup helper — accepts both the canonical id and the raw mark id to
- * tolerate callers that stored whichever was convenient at the time.
+ * Lookup helper that accepts the canonical id (equal to `rawId` after
+ * SD-3084) and falls back to the previously-published ephemeral derived id
+ * so cached old values still resolve within the same snapshot. The
+ * derived-id branch is consulted only when the cheaper equality checks miss.
+ *
+ * AIDEV-NOTE: temporary - SD-3084 soft-fallback. Remove the third branch one
+ * release after SD-3084 ships and consumers have migrated.
  */
 function findMatchingChange(editor: Editor, id: string): GroupedTrackedChange | null {
   const grouped = groupTrackedChanges(editor);
-  return grouped.find((item) => item.id === id || item.rawId === id) ?? null;
+  return (
+    grouped.find((item) => item.id === id || item.rawId === id) ??
+    grouped.find((item) => deriveTrackedChangeId(editor, item) === id) ??
+    null
+  );
 }

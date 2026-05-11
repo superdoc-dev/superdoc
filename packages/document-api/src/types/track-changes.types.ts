@@ -29,7 +29,17 @@ export interface TrackChangeWordRevisionIds {
 
 export interface TrackChangeInfo {
   address: TrackedChangeAddress;
-  /** Convenience alias for `address.entityId`. */
+  /**
+   * Stable identifier for the tracked change. Safe to store and use across
+   * document edits. Equal to `address.entityId` and to the `commentId`
+   * emitted by `onCommentsUpdate` for this change.
+   *
+   * Note on story scope: the id is story-local. Two changes in different
+   * stories (body, header, footer, footnote, endnote) may share the same
+   * id. When listing across stories (`list({ in: 'all' })`), use
+   * `address.story` together with `id` for full identity, and pass
+   * `{ id, story }` as the `decide` target to disambiguate.
+   */
   id: string;
   type: TrackChangeType;
   /** Raw imported Word OOXML revision IDs (`w:id`) from the source document when available. */

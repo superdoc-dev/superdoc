@@ -22,6 +22,7 @@ import type { EditorState, Transaction } from 'prosemirror-state';
 import type { Node as ProseMirrorNode } from 'prosemirror-model';
 import type { Mapping } from 'prosemirror-transform';
 import { Editor } from '../Editor.js';
+import { resolveEvenAndOddHeadersFromSettingsPart } from '../super-converter/v2/importer/docxImporter.js';
 import { EventEmitter } from '../EventEmitter.js';
 import type { ProseMirrorJSON } from '../types/EditorTypes.js';
 import { EpochPositionMapper } from './layout/EpochPositionMapper.js';
@@ -7228,38 +7229,15 @@ export class PresentationEditor extends EventEmitter {
   }
 
   #resolveAlternateHeadersFlag(): boolean {
-    type XmlLikeNode = {
-      name?: string;
-      attributes?: Record<string, unknown>;
-      elements?: XmlLikeNode[];
-    };
-
-    const toXmlNode = (value: unknown): XmlLikeNode | null =>
-      value && typeof value === 'object' ? (value as XmlLikeNode) : null;
-
     const converter = (this.#editor as EditorWithConverter | undefined)?.converter;
     if (!converter) {
       return false;
     }
 
-    const settingsPart = toXmlNode(
-      (converter as { convertedXml?: Record<string, unknown> }).convertedXml?.['word/settings.xml'],
-    );
-    if (!settingsPart) {
-      return converter.pageStyles?.alternateHeaders === true;
-    }
-
-    const settingsRoot =
-      settingsPart?.name === 'w:settings'
-        ? settingsPart
-        : settingsPart?.elements?.find((entry) => entry.name === 'w:settings');
-    const evenOddNode = settingsRoot?.elements?.find((entry) => entry?.name === 'w:evenAndOddHeaders');
-    if (evenOddNode) {
-      const rawVal = evenOddNode.attributes?.['w:val'];
-      if (rawVal == null) {
-        return true;
-      }
-      return ['1', 'true', 'on'].includes(String(rawVal).trim().toLowerCase());
+    const settingsPart = (converter as { convertedXml?: Record<string, unknown> }).convertedXml?.['word/settings.xml'];
+    const fromSettings = resolveEvenAndOddHeadersFromSettingsPart(settingsPart);
+    if (fromSettings !== null) {
+      return fromSettings;
     }
 
     return converter.pageStyles?.alternateHeaders === true;

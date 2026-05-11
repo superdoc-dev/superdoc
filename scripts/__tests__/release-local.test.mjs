@@ -176,19 +176,28 @@ test('stable orchestrator prunes before snapshot and reports would-release previ
   );
 });
 
-test('stable tooling bundle releases CLI, SDK, then MCP in order', async () => {
+test('stable orchestrator releases tools chain (CLI, SDK, MCP) and core chain (superdoc, react, vscode-ext) in order', async () => {
   const content = await readRepoFile('scripts/release-local-stable.mjs');
   assertOrder(content, "name: 'cli'", "name: 'sdk'", 'scripts/release-local-stable.mjs (cli before sdk)');
   assertOrder(content, "name: 'sdk'", "name: 'mcp'", 'scripts/release-local-stable.mjs (sdk before mcp)');
-  assert.equal(
+  assertOrder(content, "name: 'superdoc'", "name: 'react'", 'scripts/release-local-stable.mjs (superdoc before react)');
+  assertOrder(content, "name: 'react'", "name: 'vscode-ext'", 'scripts/release-local-stable.mjs (react before vscode-ext)');
+  assert.ok(
     content.includes("name: 'superdoc'"),
-    false,
-    'scripts/release-local-stable.mjs: superdoc has its own per-package stable workflow, not this bundle',
+    'scripts/release-local-stable.mjs: orchestrator must release superdoc so the v* tag drives docs-stable promotion in the same workflow',
+  );
+  assert.ok(
+    content.includes("name: 'react'"),
+    'scripts/release-local-stable.mjs: orchestrator must release react after superdoc so consumers see them ship together',
+  );
+  assert.ok(
+    content.includes("name: 'vscode-ext'") && content.includes("vsCodeExtensionId: 'superdoc-dev.superdoc-vscode-ext'"),
+    'scripts/release-local-stable.mjs: orchestrator must release vscode-ext with its marketplace extension id so publishComplete checks the marketplace, not npm',
   );
   assert.equal(
-    content.includes("name: 'esign'") || content.includes("name: 'react'") || content.includes("name: 'template-builder'") || content.includes("name: 'vscode-ext'"),
+    content.includes("name: 'esign'") || content.includes("name: 'template-builder'"),
     false,
-    'scripts/release-local-stable.mjs: only CLI/SDK/MCP belong in the tooling bundle',
+    'scripts/release-local-stable.mjs: esign and template-builder are not yet brought into the orchestrator',
   );
 });
 
@@ -258,18 +267,35 @@ test('stable release workflows serialize on the shared release-stable concurrenc
     '.github/workflows/release-stable.yml: skip-ci writeback runs must still no-op when they start',
   );
 
+  // Per-package workflows that still auto-fire on stable directly.
+  // superdoc, react, and vscode-ext are excluded because release-stable.yml
+  // drives their stable releases now. The remaining workflows have not yet
+  // been brought into the orchestrator.
   const perPackageStableWorkflows = [
-    '.github/workflows/release-superdoc.yml',
-    '.github/workflows/release-react.yml',
     '.github/workflows/release-esign.yml',
     '.github/workflows/release-template-builder.yml',
-    '.github/workflows/release-vscode-ext.yml',
   ];
   for (const file of perPackageStableWorkflows) {
     const content = await readRepoFile(file);
     assert.ok(
       /branches:\s*\n\s*-\s*main\s*\n\s*-\s*stable/.test(content),
       `${file}: must trigger on push to both main and stable`,
+    );
+  }
+
+  // Workflows that no longer auto-fire on stable - the orchestrator is
+  // their single stable release path.
+  const orchestratorOnlyOnStable = [
+    '.github/workflows/release-superdoc.yml',
+    '.github/workflows/release-react.yml',
+    '.github/workflows/release-vscode-ext.yml',
+  ];
+  for (const file of orchestratorOnlyOnStable) {
+    const content = await readRepoFile(file);
+    assert.equal(
+      /branches:\s*\n\s*-\s*main\s*\n\s*-\s*stable/.test(content),
+      false,
+      `${file}: stable releases are driven by release-stable.yml; this workflow only fires on main`,
     );
   }
 });
@@ -319,24 +345,27 @@ test('release-state probes wrap fetch in bounded retry to absorb transient blips
   );
 });
 
-test('docs promotion is keyed to SuperDoc only', async () => {
+test('docs promotion is keyed to a real superdoc tag from the orchestrator run', async () => {
   const promoteWorkflow = await readRepoFile('.github/workflows/promote-stable-docs.yml');
   assert.ok(
     promoteWorkflow.includes('workflow_run:'),
     '.github/workflows/promote-stable-docs.yml: must trigger on workflow_run completion',
   );
   assert.ok(
-    /workflows:\s*\n\s*-\s*"📦 Release superdoc"/.test(promoteWorkflow),
-    '.github/workflows/promote-stable-docs.yml: must trigger only on the SuperDoc release workflow',
+    /workflows:\s*\n\s*-\s*"📦 Release stable tooling \(CLI\/SDK\/MCP\)"/.test(promoteWorkflow),
+    '.github/workflows/promote-stable-docs.yml: must trigger off the stable orchestrator workflow',
   );
   assert.equal(
-    /Release CLI|Release SDK|Release MCP|Release react|Release esign|Release template-builder|Release vscode-ext/.test(promoteWorkflow),
+    /"📦 Release CLI"|"📦 Release SDK"|"📦 Release MCP"|"📦 Release react"|"📦 Release esign"|"📦 Release template-builder"|"📦 Release vscode-ext"/.test(promoteWorkflow),
     false,
-    '.github/workflows/promote-stable-docs.yml: docs-stable tracks SuperDoc only, not other packages',
+    '.github/workflows/promote-stable-docs.yml: must trigger only off the orchestrator, not per-package workflows',
   );
+  // Chain-independent failures (e.g. tools fail, superdoc releases) must
+  // still promote docs. The git-tag detection is the source of truth.
   assert.ok(
-    promoteWorkflow.includes("github.event.workflow_run.conclusion == 'success'"),
-    '.github/workflows/promote-stable-docs.yml: must only promote on successful SuperDoc runs',
+    promoteWorkflow.includes("github.event.workflow_run.conclusion == 'success'") &&
+      promoteWorkflow.includes("github.event.workflow_run.conclusion == 'failure'"),
+    '.github/workflows/promote-stable-docs.yml: must accept both success and failure conclusions so a tools-chain failure does not block superdoc-driven docs promotion',
   );
   assert.ok(
     promoteWorkflow.includes("github.event.workflow_run.head_branch == 'stable'"),
@@ -346,6 +375,14 @@ test('docs promotion is keyed to SuperDoc only', async () => {
     promoteWorkflow.includes("git tag --merged origin/stable --list 'v[0-9]*'") &&
       promoteWorkflow.includes('git tag --merged "${HEAD_SHA}" --list'),
     '.github/workflows/promote-stable-docs.yml: must detect a real SuperDoc release (not a no-op) before pushing docs-stable',
+  );
+  // semantic-release pushes the v* tag during prepare, before publish runs.
+  // A failed publish leaves the tag on origin without the npm tarball, so
+  // tag presence alone is not sufficient evidence that the release shipped.
+  assert.ok(
+    promoteWorkflow.includes('npm view "superdoc@${version}"') &&
+      promoteWorkflow.includes('npm view "@harbour-enterprises/superdoc@${version}"'),
+    '.github/workflows/promote-stable-docs.yml: must verify npm publish completed for both superdoc and @harbour-enterprises/superdoc before promoting docs-stable, otherwise a tag-without-publish failure would advance docs to an unshipped version',
   );
   assert.ok(
     promoteWorkflow.includes('refs/heads/docs-stable'),
@@ -434,11 +471,11 @@ test('stable orchestrator recovers incomplete merged tags and defers stale check
     'scripts/release-local-stable.mjs: SDK reruns must resume npm publish explicitly',
   );
   assert.ok(
-    content.includes("case 'mcp'") && content.includes('apps/mcp'),
+    content.includes('resumeMcpPublish') && content.includes('apps/mcp'),
     'scripts/release-local-stable.mjs: MCP reruns must have an explicit resume path',
   );
   assert.ok(
-    content.includes("case 'cli'") && content.includes('apps/cli/scripts/publish.js'),
+    content.includes('resumeCliPublish') && content.includes('apps/cli/scripts/publish.js'),
     'scripts/release-local-stable.mjs: CLI reruns must resume via its dedicated publish script',
   );
   assert.ok(

@@ -1,6 +1,8 @@
-# Auto-releases on push to main (@next) and stable (@latest).
-# docs-stable is advanced by promote-stable-docs.yml when this workflow
-# completes a real release on stable (not a no-op or PR preview).
+# Auto-releases on push to main (@next).
+# Stable releases are orchestrated centrally by release-stable.yml so that
+# every stable release shares one concurrency slot and one git push lane.
+# docs-stable is advanced by promote-stable-docs.yml when release-stable.yml
+# produces a real superdoc v* tag (no-op runs do not advance docs-stable).
 # Manual PR preview: dispatch with pr_number to publish @pr-<number>
 name: 📦 Release superdoc
 
@@ -8,7 +10,6 @@ on:
   push:
     branches:
       - main
-      - stable
     paths:
       - 'packages/superdoc/**'
       - 'packages/layout-engine/**'

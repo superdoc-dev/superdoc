@@ -40,6 +40,7 @@ import {
 import {
   collectTocSources,
   buildTocEntryParagraphs,
+  type BuildTocEntryOptions,
   type EntryParagraphJson,
   type TocSource,
 } from '../helpers/toc-entry-builder.js';
@@ -257,11 +258,87 @@ interface MaterializedToc {
   sources: TocSource[];
 }
 
-function materializeTocContent(doc: ProseMirrorNode, config: TocSwitchConfig, editor: Editor): MaterializedToc {
+type MaterializeTocOptions = BuildTocEntryOptions;
+
+function materializeTocContent(
+  doc: ProseMirrorNode,
+  config: TocSwitchConfig,
+  editor: Editor,
+  options: MaterializeTocOptions = {},
+): MaterializedToc {
   const sources = collectTocSources(doc, config);
-  const entryParagraphs = buildTocEntryParagraphs(sources, config);
+  const entryParagraphs = buildTocEntryParagraphs(sources, config, options);
   const content = entryParagraphs.length > 0 ? entryParagraphs : NO_ENTRIES_PLACEHOLDER;
   return { content: sanitizeTocContentForSchema(content, editor), sources };
+}
+
+/** Recognises TOC entry paragraph styles (TOC1, TOC2, … TOC9). */
+const TOC_ENTRY_STYLE_RE = /^TOC[1-9]$/;
+
+type TocParagraphProps = {
+  styleId?: string;
+  tabStops?: TabStopJson[];
+  runProperties?: Record<string, unknown>;
+};
+type TocParagraphAttrs = { paragraphProperties?: TocParagraphProps };
+type TabStopJson = { tab?: { pos?: number; tabType?: string; leader?: string } };
+
+/** First TOC1–TOC9 paragraph in the existing TOC node, or `undefined`. */
+function findFirstTocEntryParagraph(node: ProseMirrorNode): ProseMirrorNode | undefined {
+  let entry: ProseMirrorNode | undefined;
+  node.forEach((paragraph) => {
+    if (entry || paragraph.type.name !== 'paragraph') return;
+    const styleId = (paragraph.attrs as TocParagraphAttrs | undefined)?.paragraphProperties?.styleId;
+    if (styleId && TOC_ENTRY_STYLE_RE.test(styleId)) entry = paragraph;
+  });
+  return entry;
+}
+
+/** Right-tab stop position (twips) from the first existing TOC entry. */
+function readExistingTocTabPos(node: ProseMirrorNode): number | undefined {
+  const entry = findFirstTocEntryParagraph(node) ?? node.firstChild ?? undefined;
+  const tabStops = (entry?.attrs as TocParagraphAttrs | undefined)?.paragraphProperties?.tabStops;
+  const pos = tabStops?.find((t) => t?.tab?.tabType === 'right')?.tab?.pos;
+  return typeof pos === 'number' ? pos : undefined;
+}
+
+/**
+ * Word's TOC field always closes with a paragraph that holds the
+ * `<w:fldChar fldCharType="end"/>` — typically a Normal-styled empty
+ * paragraph after the entries. SuperDoc's importer preserves it as the last
+ * child of the `tableOfContents` node, and it renders as a blank line below
+ * the entries. If we replace **all** children with just the rebuilt entries,
+ * the TOC visually shrinks by that blank line and the gap to the text below
+ * shifts. Capture the original trailing non-entry paragraph (when present)
+ * as JSON so we can append it after the rebuilt entries to keep the visual
+ * end of the TOC stable.
+ *
+ * A real trailer only exists in TOCs that already have entries above it.
+ * When the TOC currently shows only the `NO_ENTRIES_PLACEHOLDER` (i.e.
+ * after a previous rebuild found no headings), the lastChild is the
+ * placeholder itself — preserving it as a trailer would re-inject the
+ * "No table of contents entries found." paragraph into the next rebuild.
+ */
+function readExistingTocTrailingParagraph(node: ProseMirrorNode): unknown | undefined {
+  const last = node.lastChild;
+  if (!last || last.type.name !== 'paragraph') return undefined;
+  const styleId = (last.attrs as TocParagraphAttrs | undefined)?.paragraphProperties?.styleId;
+  if (styleId && TOC_ENTRY_STYLE_RE.test(styleId)) return undefined; // it's an entry, not the trailer
+
+  // Only treat the last paragraph as a trailer when at least one real TOC
+  // entry precedes it. Without this guard, a TOC whose only child is the
+  // "no entries" placeholder would have that placeholder treated as the
+  // trailer and re-appended to every subsequent rebuild.
+  let hasPrecedingEntry = false;
+  node.forEach((child) => {
+    if (hasPrecedingEntry || child === last) return;
+    if (child.type.name !== 'paragraph') return;
+    const childStyleId = (child.attrs as TocParagraphAttrs | undefined)?.paragraphProperties?.styleId;
+    if (childStyleId && TOC_ENTRY_STYLE_RE.test(childStyleId)) hasPrecedingEntry = true;
+  });
+  if (!hasPrecedingEntry) return undefined;
+
+  return typeof last.toJSON === 'function' ? last.toJSON() : undefined;
 }
 
 // ---------------------------------------------------------------------------
@@ -289,11 +366,17 @@ export function tocConfigureWrapper(
   // Patch value takes priority; fall back to existing node attr.
   const effectiveRightAlign =
     input.patch.rightAlignPageNumbers ?? (resolved.node.attrs?.rightAlignPageNumbers as boolean | undefined);
-  const { content: nextContent, sources } = materializeTocContent(
+  const { content: rebuiltEntries, sources } = materializeTocContent(
     editor.state.doc,
     withRightAlign(patched, effectiveRightAlign),
     editor,
+    {
+      pageMap: getPageMap(editor) ?? undefined,
+      tabPos: readExistingTocTabPos(resolved.node),
+    },
   );
+  const trailing = readExistingTocTrailingParagraph(resolved.node);
+  const nextContent = trailing ? [...rebuiltEntries, trailing as EntryParagraphJson] : rebuiltEntries;
 
   if (areTocConfigsEqual(currentConfig, patched) && !rightAlignChanged) {
     return tocFailure('NO_OP', 'Configuration patch produced no change.');
@@ -378,7 +461,20 @@ function tocUpdateAll(editor: Editor, input: TocUpdateInput, options?: MutationO
   const resolved = resolveTocTarget(editor.state.doc, input.target);
   const config = parseTocInstruction(resolved.node.attrs?.instruction ?? '');
   const rightAlign = resolved.node.attrs?.rightAlignPageNumbers as boolean | undefined;
-  const { content, sources } = materializeTocContent(editor.state.doc, withRightAlign(config, rightAlign), editor);
+  const { content: rebuiltEntries, sources } = materializeTocContent(
+    editor.state.doc,
+    withRightAlign(config, rightAlign),
+    editor,
+    {
+      pageMap: getPageMap(editor) ?? undefined,
+      tabPos: readExistingTocTabPos(resolved.node),
+    },
+  );
+
+  // Preserve the trailer paragraph if the existing TOC ends with one — keeps
+  // the visual gap below the TOC stable across rebuilds.
+  const trailing = readExistingTocTrailingParagraph(resolved.node);
+  const content = trailing ? [...rebuiltEntries, trailing as EntryParagraphJson] : rebuiltEntries;
 
   // NO_OP detection: compare new content against existing before executing.
   // The PM command returns "found" (not "content changed"), so receipt-based
@@ -560,31 +656,40 @@ function buildPageNumberUpdatedContent(
 
     const tocSourceId = child.attrs?.tocSourceId as string | undefined;
     const childJson = child.toJSON() as EntryParagraphJson;
-    const content = childJson.content ?? [];
 
     let paragraphChanged = false;
 
-    const updatedContentArray = content.map((node: Record<string, unknown>) => {
+    // Walk recursively — the rebuilt paragraph wraps its runs in `run` nodes,
+    // so the tocPageNumber mark sits one level below the paragraph's direct
+    // children. A flat scan over `paragraph.content` would miss it and fall
+    // through to PAGE_NUMBERS_NOT_MATERIALIZED.
+    const visit = (node: Record<string, unknown>): Record<string, unknown> => {
       const marks = node.marks as Array<{ type: string }> | undefined;
       const hasTocPageNumberMark = marks?.some((m) => m.type === 'tocPageNumber');
 
-      if (!hasTocPageNumberMark) return node;
+      if (hasTocPageNumberMark) {
+        hasPageNumberMarks = true;
 
-      hasPageNumberMarks = true;
+        if (!tocSourceId) return node;
 
-      // Skip entries without tocSourceId — no anchor for page map lookup
-      if (!tocSourceId) return node;
+        const pageNumber = pageMap.get(tocSourceId);
+        const newText = pageNumber !== undefined ? String(pageNumber) : '??';
 
-      const pageNumber = pageMap.get(tocSourceId);
-      const newText = pageNumber !== undefined ? String(pageNumber) : '??';
-
-      if (node.text !== newText) {
-        paragraphChanged = true;
-        return { ...node, text: newText };
+        if (node.text !== newText) {
+          paragraphChanged = true;
+          return { ...node, text: newText };
+        }
+        return node;
       }
 
-      return node;
-    });
+      const nested = node.content as Array<Record<string, unknown>> | undefined;
+      if (!Array.isArray(nested) || nested.length === 0) return node;
+      const visited = nested.map(visit);
+      const replaced = visited.some((next, idx) => next !== nested[idx]);
+      return replaced ? { ...node, content: visited } : node;
+    };
+
+    const updatedContentArray = (childJson.content ?? []).map(visit);
 
     if (paragraphChanged) {
       anyChanged = true;

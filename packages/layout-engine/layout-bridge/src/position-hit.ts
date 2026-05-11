@@ -122,7 +122,20 @@ export const isRtlBlock = (block: FlowBlock): boolean => {
   if (block.kind !== 'paragraph') return false;
   const attrs = block.attrs as Record<string, unknown> | undefined;
   if (!attrs) return false;
-  const directionAttr = attrs.direction ?? attrs.dir ?? attrs.textDirection;
+  // AIDEV-NOTE: The typed directionContext.inlineDirection (SD-2776) is the source of
+  // truth for paragraph inline direction. Check the value, not the key — `inlineDirection`
+  // can be `undefined` per the resolver contract (no explicit w:bidi anywhere in the
+  // cascade), and we should fall through to the legacy field in that case.
+  // Do NOT consult attrs.textDirection here: that's writing-mode (ECMA §17.18.93,
+  // values lrTb/tbRl/btLr/lrTbV/tbRlV/tbLrV) which is a separate axis from inline RTL.
+  const directionContext = attrs.directionContext as { inlineDirection?: string } | undefined;
+  if (directionContext?.inlineDirection != null) {
+    return directionContext.inlineDirection === 'rtl';
+  }
+  // AIDEV-NOTE: compat-fallback — `attrs.direction` / `attrs.dir` are the legacy scalar
+  // duplicates of `directionContext.inlineDirection`. Retire once SD-2778 collapses
+  // them on `ParagraphAttrs`.
+  const directionAttr = attrs.direction ?? attrs.dir;
   if (typeof directionAttr === 'string' && directionAttr.toLowerCase() === 'rtl') {
     return true;
   }

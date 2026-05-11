@@ -11,9 +11,9 @@
  *
  * The CLI applies the inverse rename in extractInvokeInput()
  * (apps/cli/src/lib/invoke-input.ts PARAM_RENAMES). This module is the MCP
- * mirror — kept in lockstep by hand. Three operations are affected today
- * (comments.delete, comments.get, comments.patch, plus comments.create's
- * parentId and getNodeById's id), so duplication is small.
+ * mirror, kept in lockstep by hand. Five operations are affected today
+ * (comments.delete, comments.get, comments.patch, comments.create's
+ * parentId, and getNodeById's id), so duplication is small.
  *
  * Keys are bare operation IDs (no `doc.` prefix) to match the form
  * executeOperation passes to api.invoke().

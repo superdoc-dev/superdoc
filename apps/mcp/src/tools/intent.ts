@@ -122,6 +122,11 @@ function buildZodSchema(tool: CatalogTool): Record<string, z.ZodTypeAny> {
 function executeOperation(api: DocumentApi, operationId: string, input: Record<string, unknown>): unknown {
   // Generated dispatch uses 'doc.' prefix (e.g. 'doc.query.match'); strip it for DocumentApi.invoke()
   const opId = operationId.startsWith('doc.') ? operationId.slice(4) : operationId;
+  // AIDEV-NOTE: renames are applied on input only. The contract response uses
+  // canonical names (e.g. commentId), which is fine — agents can use either
+  // name on subsequent calls (canonical names pass through unchanged; short
+  // names are renamed here). Inverting on output would add complexity for no
+  // practical benefit.
   return api.invoke({ operationId: opId, input: applyParamRenames(opId, input) } as DynamicInvokeRequest);
 }
 

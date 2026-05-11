@@ -6,6 +6,13 @@ import { generateParagraphProperties } from './generate-paragraph-properties.js'
  * Comment range markers between tracked changes with the same ID are included
  * inside the merged wrapper, matching Word's OOXML structure.
  *
+ * AIDEV-NOTE: Comment markers (w:commentRangeStart/End and w:r→w:commentReference)
+ * are only absorbed into the wrapper when a same-id merge actually happens.
+ * If a tracked change has no matching successor, trailing comment markers are
+ * preserved as siblings so the import side can re-pair the comment range with
+ * the wrapped text. Otherwise w:commentRangeEnd ends up inside w:del while
+ * w:commentRangeStart is outside it, breaking the round-trip (SD-2528).
+ *
  * See SD-1519 for details on the ECMA-376 spec compliance.
  *
  * @param {Array} elements The translated paragraph elements
@@ -14,59 +21,55 @@ import { generateParagraphProperties } from './generate-paragraph-properties.js'
 function mergeConsecutiveTrackedChanges(elements) {
   if (!Array.isArray(elements) || elements.length === 0) return elements;
 
+  const isCommentMarker = (el) => {
+    if (!el) return false;
+    if (el.name === 'w:commentRangeStart' || el.name === 'w:commentRangeEnd') return true;
+    if (el.name === 'w:r' && el.elements?.length === 1 && el.elements[0]?.name === 'w:commentReference') return true;
+    return false;
+  };
+
   const result = [];
   let i = 0;
 
   while (i < elements.length) {
     const current = elements[i];
 
-    // Check if this is a tracked change wrapper (w:ins or w:del)
     if (current?.name === 'w:ins' || current?.name === 'w:del') {
       const tcId = current.attributes?.['w:id'];
       const tcName = current.name;
 
-      // Collect consecutive elements that belong to this tracked change
       const mergedElements = [...(current.elements || [])];
+      const pendingComments = [];
+      let didMerge = false;
       let j = i + 1;
 
       while (j < elements.length) {
         const next = elements[j];
 
-        // Include comment markers - they can sit inside tracked changes per ECMA-376
-        if (next?.name === 'w:commentRangeStart' || next?.name === 'w:commentRangeEnd') {
-          mergedElements.push(next);
+        if (isCommentMarker(next)) {
+          pendingComments.push(next);
           j++;
           continue;
         }
 
-        // Include comment references (w:r containing w:commentReference)
-        if (next?.name === 'w:r') {
-          const hasOnlyCommentRef = next.elements?.length === 1 && next.elements[0]?.name === 'w:commentReference';
-          if (hasOnlyCommentRef) {
-            mergedElements.push(next);
-            j++;
-            continue;
-          }
-        }
-
-        // Merge with next tracked change if same type and ID
         if (next?.name === tcName && next.attributes?.['w:id'] === tcId) {
-          mergedElements.push(...(next.elements || []));
+          mergedElements.push(...pendingComments, ...(next.elements || []));
+          pendingComments.length = 0;
+          didMerge = true;
           j++;
           continue;
         }
 
-        // Stop merging when we hit a different element
         break;
       }
 
-      // Create the merged wrapper
-      result.push({
-        name: tcName,
-        attributes: { ...current.attributes },
-        elements: mergedElements,
-      });
-
+      if (didMerge) {
+        result.push({ name: tcName, attributes: { ...current.attributes }, elements: mergedElements });
+        result.push(...pendingComments);
+      } else {
+        result.push(current);
+        result.push(...pendingComments);
+      }
       i = j;
     } else {
       result.push(current);

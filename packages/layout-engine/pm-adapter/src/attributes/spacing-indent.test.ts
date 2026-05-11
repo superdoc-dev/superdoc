@@ -114,9 +114,9 @@ describe('normalizeAlignment', () => {
     expect(normalizeAlignment('end', true)).toBe('left');
   });
 
-  it('does not flip explicit left/right/center/justify in RTL', () => {
-    expect(normalizeAlignment('left', true)).toBe('left');
-    expect(normalizeAlignment('right', true)).toBe('right');
+  it('maps explicit left/right to logical start/end in RTL', () => {
+    expect(normalizeAlignment('left', true)).toBe('right');
+    expect(normalizeAlignment('right', true)).toBe('left');
     expect(normalizeAlignment('center', true)).toBe('center');
     expect(normalizeAlignment('justify', true)).toBe('justify');
   });

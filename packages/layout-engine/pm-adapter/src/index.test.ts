@@ -4655,7 +4655,7 @@ describe('toFlowBlocks', () => {
       });
     });
 
-    it('preserves explicit left alignment on RTL paragraphs', () => {
+    it('maps explicit left alignment to right on RTL paragraphs', () => {
       const pmDoc = {
         type: 'doc',
         content: [
@@ -4666,6 +4666,37 @@ describe('toFlowBlocks', () => {
                 rightToLeft: true,
                 adjustRightInd: true,
                 justification: 'left',
+              },
+            },
+            content: [
+              {
+                type: 'text',
+                text: 'مرحبا بالعالم',
+              },
+            ],
+          },
+        ],
+      };
+
+      const { blocks } = toFlowBlocks(pmDoc);
+
+      expect(blocks).toHaveLength(1);
+      expect(blocks[0].attrs?.direction).toBe('rtl');
+      expect(blocks[0].attrs).toMatchObject({
+        alignment: 'right',
+      });
+    });
+
+    it('maps explicit right alignment to left on RTL paragraphs', () => {
+      const pmDoc = {
+        type: 'doc',
+        content: [
+          {
+            type: 'paragraph',
+            attrs: {
+              paragraphProperties: {
+                rightToLeft: true,
+                justification: 'right',
               },
             },
             content: [

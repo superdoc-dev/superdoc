@@ -71,6 +71,7 @@ tests/visual/        Visual regression tests (Playwright + R2 baselines)
 | CSS variable defaults | `packages/superdoc/src/assets/styles/helpers/variables.css` |
 | Preset themes | `packages/superdoc/src/assets/styles/helpers/themes.css` |
 | Consumer-facing agent guide | `packages/superdoc/AGENTS.md` (ships with npm package) |
+| Measuring → Layout ownership (SD-2845) | `packages/layout-engine/CLAUDE.md` and `packages/layout-engine/AGENTS.md` (same section and tables) |
 
 ## Style Resolution Boundary
 

@@ -54,6 +54,8 @@ export type ResolvedPage = {
   margins?: PageMargins;
   /** Extra bottom space reserved for footnotes (px). Used for footer space calculation. */
   footnoteReserved?: number;
+  /** Numeric page number after section numbering restart/offset. Used for OOXML odd/even parity. */
+  displayNumber?: number;
   /** Formatted page number text (e.g. "i", "ii" for Roman numeral sections). */
   numberText?: string;
   /** Vertical alignment of content within this page. */

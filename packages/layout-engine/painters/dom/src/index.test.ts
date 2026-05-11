@@ -5710,6 +5710,62 @@ describe('DomPainter', () => {
       expect(footerEl?.textContent).toBe('Footer: 3');
     });
 
+    it('renders footer page-number tokens with explicit field format metadata', () => {
+      const footerBlock: FlowBlock = {
+        kind: 'paragraph',
+        id: 'footer-formatted-page',
+        runs: [
+          {
+            text: '0',
+            fontFamily: 'Arial',
+            fontSize: 12,
+            token: 'pageNumber',
+            pageNumberFieldFormat: { format: 'numberInDash' },
+          },
+        ],
+      };
+      const footerMeasure: Measure = {
+        kind: 'paragraph',
+        lines: [
+          {
+            fromRun: 0,
+            fromChar: 0,
+            toRun: 0,
+            toChar: 1,
+            width: 40,
+            ascent: 10,
+            descent: 2,
+            lineHeight: 14,
+          },
+        ],
+        totalHeight: 14,
+      };
+      const footerFragment = {
+        kind: 'para' as const,
+        blockId: 'footer-formatted-page',
+        fromLine: 0,
+        toLine: 1,
+        x: 0,
+        y: 0,
+        width: 200,
+      };
+
+      const painter = createTestPainter({
+        blocks: [block, footerBlock],
+        measures: [measure, footerMeasure],
+        footerProvider: () => ({ fragments: [footerFragment], height: 14 }),
+      });
+
+      painter.paint(
+        { ...layout, pages: [{ ...layout.pages[0], number: 10, displayNumber: 4, numberText: 'iv' }] },
+        mount,
+      );
+
+      const footerEl = mount.querySelector('.superdoc-page-footer');
+      expect(footerEl).toBeTruthy();
+      expect(footerEl?.textContent).toBe('-4-');
+    });
+
     it('bottom-aligns footer content within the footer box', () => {
       const footerBlock: FlowBlock = {
         kind: 'paragraph',

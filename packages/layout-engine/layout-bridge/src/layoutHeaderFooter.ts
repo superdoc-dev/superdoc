@@ -24,6 +24,7 @@ export type HeaderFooterBatchResult = Partial<
  */
 export type PageResolver = (pageNumber: number) => {
   displayText: string;
+  displayNumber?: number;
   totalPages: number;
 };
 
@@ -285,6 +286,7 @@ export async function layoutHeaderFooterWithCache(
     // Create layouts for each page (or bucket representative)
     const pages: Array<{
       number: number;
+      displayNumber?: number;
       blocks: FlowBlock[];
       measures: Measure[];
       fragments: HeaderFooterLayout['pages'][0]['fragments'];
@@ -295,9 +297,9 @@ export async function layoutHeaderFooterWithCache(
       const clonedBlocks = cloneHeaderFooterBlocks(blocks);
 
       // Resolve page number tokens for this specific page
-      const { displayText, totalPages: totalPagesForPage } = pageResolver(pageNum);
+      const { displayText, displayNumber, totalPages: totalPagesForPage } = pageResolver(pageNum);
 
-      resolveHeaderFooterTokens(clonedBlocks, pageNum, totalPagesForPage, displayText);
+      resolveHeaderFooterTokens(clonedBlocks, pageNum, totalPagesForPage, displayText, displayNumber);
 
       // Measure and layout
       const measures = await cache.measureBlocks(clonedBlocks, constraints, measureBlock);
@@ -324,6 +326,7 @@ export async function layoutHeaderFooterWithCache(
       // Store page-specific data
       pages.push({
         number: pageNum,
+        displayNumber,
         blocks: clonedBlocks,
         measures,
         fragments: fragmentsWithLines,
@@ -343,6 +346,7 @@ export async function layoutHeaderFooterWithCache(
       renderHeight: firstPageLayout.renderHeight,
       pages: pages.map((p) => ({
         number: p.number,
+        displayNumber: p.displayNumber,
         fragments: p.fragments,
         blocks: p.blocks,
         measures: p.measures,

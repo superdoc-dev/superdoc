@@ -1,3 +1,5 @@
+import { parsePageNumberFieldSwitches } from '../shared/page-number-field-switches.js';
+
 /**
  * Processes a PAGE instruction and creates a `sd:autoPageNumber` node.
  *
@@ -7,10 +9,12 @@
  * @returns {import('../../v2/types/index.js').OpenXmlNode[]}
  * @see {@link https://ecma-international.org/publications-and-standards/standards/ecma-376/} "Fundamentals And Markup Language Reference", page 1234
  */
-export function preProcessPageInstruction(nodesToCombine, _instrText, fieldRunRPr = null) {
+export function preProcessPageInstruction(nodesToCombine, instrText = 'PAGE', fieldRunRPr = null) {
+  const fieldAttrs = parsePageNumberFieldSwitches(instrText, 'PAGE');
   const pageNumNode = {
     name: 'sd:autoPageNumber',
     type: 'element',
+    ...(Object.keys(fieldAttrs).length > 0 ? { attributes: fieldAttrs } : {}),
   };
 
   // First, try to get rPr from content nodes (between separate and end)

@@ -31,6 +31,7 @@ export function resolveHeaderFooterLayout(
       number: page.number,
       displayNumber: page.displayNumber,
       numberText: page.numberText,
+      displayNumber: page.displayNumber,
       items: page.fragments.map((fragment, fragmentIndex) =>
         resolveFragmentItem(fragment, fragmentIndex, page.number - 1, blockMap, blockVersionCache, story),
       ),

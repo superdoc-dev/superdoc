@@ -334,6 +334,11 @@ export const EMPTY_SDT_PLACEHOLDER_TEXT = 'Click or tap here to enter text';
 
 export type SdtVisualPlaceholder = 'emptyInlineSdt' | 'emptyBlockSdt';
 
+export type PageNumberFieldFormat = {
+  format?: 'decimal' | 'upperRoman' | 'lowerRoman' | 'upperLetter' | 'lowerLetter' | 'numberInDash';
+  zeroPadding?: number;
+};
+
 /**
  * Common formatting marks that can be applied to any run type.
  * Used by TextRun, TabRun, and other run types that support inline formatting.
@@ -391,6 +396,8 @@ export type TextRun = RunMarks & {
   link?: FlowRunLink;
   /** Token annotations for dynamic content (page numbers, etc.). */
   token?: 'pageNumber' | 'totalPageCount' | 'pageReference';
+  /** Explicit formatting requested by PAGE/NUMPAGES field switches. */
+  pageNumberFieldFormat?: PageNumberFieldFormat;
   /** Absolute ProseMirror position (inclusive) of first character in this run. */
   pmStart?: number;
   /** Absolute ProseMirror position (exclusive) after the last character. */

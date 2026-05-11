@@ -1,0 +1,49 @@
+const GENERAL_FORMATS = new Map([
+  ['Arabic', 'decimal'],
+  ['roman', 'lowerRoman'],
+  ['ROMAN', 'upperRoman'],
+  ['alphabetic', 'lowerLetter'],
+  ['ALPHABETIC', 'upperLetter'],
+  ['ArabicDash', 'numberInDash'],
+]);
+
+/**
+ * @param {string} instruction
+ * @param {'PAGE' | 'NUMPAGES'} fieldType
+ * @returns {{ instruction?: string, pageNumberFormat?: string, pageNumberZeroPadding?: number }}
+ */
+export function parsePageNumberFieldSwitches(instruction, fieldType) {
+  const normalizedInstruction = typeof instruction === 'string' ? instruction.trim().replace(/\s+/g, ' ') : fieldType;
+  const result = {};
+
+  if (normalizedInstruction && normalizedInstruction !== fieldType) {
+    result.instruction = normalizedInstruction;
+  }
+
+  for (const match of normalizedInstruction.matchAll(/\\\*\s+("[^"]+"|\S+)/g)) {
+    const rawValue = unquote(match[1]);
+    const mapped = GENERAL_FORMATS.get(rawValue);
+    if (mapped) {
+      result.pageNumberFormat = mapped;
+      break;
+    }
+  }
+
+  for (const match of normalizedInstruction.matchAll(/\\#\s+("[^"]+"|\S+)/g)) {
+    const picture = unquote(match[1]);
+    if (/^0+$/.test(picture)) {
+      result.pageNumberFormat ??= 'decimal';
+      result.pageNumberZeroPadding = picture.length;
+      break;
+    }
+  }
+
+  return result;
+}
+
+/**
+ * @param {string} value
+ */
+function unquote(value) {
+  return value.startsWith('"') && value.endsWith('"') ? value.slice(1, -1) : value;
+}

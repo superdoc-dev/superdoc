@@ -1,3 +1,5 @@
+import { parsePageNumberFieldSwitches } from '../shared/page-number-field-switches.js';
+
 /**
  * Processes a NUMPAGES instruction and creates a `sd:totalPageNumber` node.
  *
@@ -7,11 +9,12 @@
  * @returns {import('../../v2/types/index.js').OpenXmlNode[]}
  * @see {@link https://ecma-international.org/publications-and-standards/standards/ecma-376/} "Fundamentals And Markup Language Reference", page 1233
  */
-export function preProcessNumPagesInstruction(nodesToCombine, _instrText, fieldRunRPr = null) {
+export function preProcessNumPagesInstruction(nodesToCombine, instrText = 'NUMPAGES', fieldRunRPr = null) {
+  const fieldAttrs = parsePageNumberFieldSwitches(instrText, 'NUMPAGES');
   const totalPageNumNode = {
     name: 'sd:totalPageNumber',
     type: 'element',
-    attributes: {},
+    attributes: { ...fieldAttrs },
   };
 
   // Extract the cached display text from content nodes so the encoder can

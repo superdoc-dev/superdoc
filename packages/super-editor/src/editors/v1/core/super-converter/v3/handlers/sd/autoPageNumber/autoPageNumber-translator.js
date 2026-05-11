@@ -24,6 +24,7 @@ const encode = (params) => {
     type: 'page-number',
     attrs: {
       marksAsAttrs: marks,
+      ...getPageNumberFieldAttrs(node),
     },
   };
 
@@ -39,6 +40,7 @@ const decode = (params) => {
   const { node } = params;
 
   const outputMarks = processOutputMarks(node.attrs?.marksAsAttrs || []);
+  const instruction = node.attrs?.instruction || 'PAGE';
   const translated = [
     {
       name: 'w:r',
@@ -68,7 +70,7 @@ const decode = (params) => {
           elements: [
             {
               type: 'text',
-              text: ' PAGE',
+              text: ` ${instruction}`,
             },
           ],
         },
@@ -108,6 +110,16 @@ const decode = (params) => {
 
   return translated;
 };
+
+function getPageNumberFieldAttrs(node) {
+  const attrs = {};
+  if (node.attributes?.instruction) attrs.instruction = node.attributes.instruction;
+  if (node.attributes?.pageNumberFormat) attrs.pageNumberFormat = node.attributes.pageNumberFormat;
+  if (node.attributes?.pageNumberZeroPadding != null) {
+    attrs.pageNumberZeroPadding = Number(node.attributes.pageNumberZeroPadding);
+  }
+  return attrs;
+}
 
 /** @type {import('@translator').NodeTranslatorConfig} */
 export const config = {

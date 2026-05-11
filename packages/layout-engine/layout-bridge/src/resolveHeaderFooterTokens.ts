@@ -11,6 +11,7 @@
  */
 
 import type { FlowBlock, ParagraphBlock, TableBlock } from '@superdoc/contracts';
+import { formatPageNumberFieldValue } from '@superdoc/layout-engine';
 
 /**
  * Walk every paragraph block reachable through `blocks`, including those
@@ -72,6 +73,7 @@ export function resolveHeaderFooterTokens(
   pageNumber: number,
   totalPages: number,
   pageNumberText?: string,
+  displayPageNumber?: number,
 ): void {
   // Validate inputs
   if (!blocks || blocks.length === 0) {
@@ -90,6 +92,7 @@ export function resolveHeaderFooterTokens(
 
   const pageNumberStr = pageNumberText ?? String(pageNumber);
   const totalPagesStr = String(totalPages);
+  const displayNumber = displayPageNumber ?? pageNumber;
 
   // Process every paragraph block, including those nested in table cells
   // (SD-1332). The page-number field can live in `tableCell > paragraph >
@@ -104,11 +107,15 @@ export function resolveHeaderFooterTokens(
           // IMPORTANT: Do NOT delete run.token - the painter needs it to
           // re-resolve the correct page number at render time for each page.
           // The text here is for measurement purposes (digit width).
-          run.text = pageNumberStr;
+          run.text = run.pageNumberFieldFormat
+            ? formatPageNumberFieldValue(displayNumber, run.pageNumberFieldFormat)
+            : pageNumberStr;
         } else if (run.token === 'totalPageCount') {
           // Replace placeholder text with total page count for measurement.
           // IMPORTANT: Keep token for painter to re-resolve if needed.
-          run.text = totalPagesStr;
+          run.text = run.pageNumberFieldFormat
+            ? formatPageNumberFieldValue(totalPages, run.pageNumberFieldFormat)
+            : totalPagesStr;
         }
         // Note: pageReference tokens should not appear in headers/footers typically,
         // but if they do, they'll be handled by the PAGEREF resolution logic

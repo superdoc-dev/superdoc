@@ -13,7 +13,7 @@
  * - Handle continuous sections that inherit prior section's running count
  */
 
-import type { Page, SectionMetadata } from '@superdoc/contracts';
+import type { Page, PageNumberFieldFormat, SectionMetadata } from '@superdoc/contracts';
 
 /**
  * Page number format types supported by the layout engine.
@@ -193,6 +193,15 @@ export function formatPageNumber(pageNumber: number, format: PageNumberFormat): 
       // TypeScript exhaustiveness check - should never reach here
       return String(num);
   }
+}
+
+export function formatPageNumberFieldValue(pageNumber: number, fieldFormat?: PageNumberFieldFormat): string {
+  const format = fieldFormat?.format ?? 'decimal';
+  const formatted = formatPageNumber(pageNumber, format);
+  if (fieldFormat?.zeroPadding && format === 'decimal') {
+    return formatted.padStart(fieldFormat.zeroPadding, '0');
+  }
+  return formatted;
 }
 
 /**

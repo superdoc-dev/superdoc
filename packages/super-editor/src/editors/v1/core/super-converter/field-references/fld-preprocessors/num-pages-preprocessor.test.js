@@ -88,4 +88,13 @@ describe('preProcessNumPagesInstruction', () => {
     const result = preProcessNumPagesInstruction([], 'NUMPAGES', null);
     expect(result[0].attributes.importedCachedText).toBeUndefined();
   });
+
+  it('preserves NUMPAGES zero-padding switches as normalized attributes', () => {
+    const result = preProcessNumPagesInstruction([], 'NUMPAGES \\# "00"', null);
+    expect(result[0].attributes).toEqual({
+      instruction: 'NUMPAGES \\# "00"',
+      pageNumberFormat: 'decimal',
+      pageNumberZeroPadding: 2,
+    });
+  });
 });

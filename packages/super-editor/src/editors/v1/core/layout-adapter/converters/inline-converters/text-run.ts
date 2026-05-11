@@ -101,6 +101,10 @@ export function tokenNodeToRun(
     fontFamily: defaultFont,
     fontSize: defaultSize,
   };
+  const pageNumberFieldFormat = getPageNumberFieldFormat(node.attrs);
+  if (pageNumberFieldFormat) {
+    run.pageNumberFieldFormat = pageNumberFieldFormat;
+  }
 
   // Attach PM position tracking
   const pos = positions.get(node);
@@ -126,4 +130,20 @@ export function tokenNodeToRun(
     (run as TextRun & { _explicitFont?: boolean })._explicitFont = true;
   }
   return run;
+}
+
+function getPageNumberFieldFormat(
+  attrs: Record<string, unknown> | undefined,
+): TextRun['pageNumberFieldFormat'] | undefined {
+  if (!attrs) return undefined;
+  const format = typeof attrs.pageNumberFormat === 'string' ? attrs.pageNumberFormat : undefined;
+  const zeroPadding =
+    typeof attrs.pageNumberZeroPadding === 'number' && Number.isFinite(attrs.pageNumberZeroPadding)
+      ? attrs.pageNumberZeroPadding
+      : undefined;
+  if (!format && !zeroPadding) return undefined;
+  return {
+    ...(format ? { format: format as NonNullable<TextRun['pageNumberFieldFormat']>['format'] } : {}),
+    ...(zeroPadding ? { zeroPadding } : {}),
+  };
 }

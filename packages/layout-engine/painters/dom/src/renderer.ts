@@ -267,6 +267,7 @@ type PageDomState = {
  * @property {number} totalPages - Total number of pages in the document
  * @property {'body'|'header'|'footer'} section - Document section being rendered
  * @property {string} [pageNumberText] - Optional formatted page number text (e.g., "Page 1 of 10")
+ * @property {number} [displayPageNumber] - Section-aware numeric page value before formatting
  */
 export type FragmentRenderContext = {
   pageNumber: number;
@@ -274,6 +275,7 @@ export type FragmentRenderContext = {
   section: 'body' | 'header' | 'footer';
   story?: LayoutStoryLocator;
   pageNumberText?: string;
+  displayPageNumber?: number;
   pageIndex?: number;
 };
 
@@ -1714,6 +1716,7 @@ export class DomPainter {
       totalPages: this.totalPages,
       section: 'body',
       pageNumberText: page.numberText,
+      displayPageNumber: page.displayNumber,
       pageIndex,
     };
 
@@ -2068,6 +2071,7 @@ export class DomPainter {
       section: kind,
       story: resolveDecorationStory(kind, data),
       pageNumberText: page.numberText,
+      displayPageNumber: page.displayNumber,
       pageIndex,
     };
 
@@ -2271,6 +2275,7 @@ export class DomPainter {
       totalPages: this.totalPages,
       section: 'body',
       pageNumberText: page.numberText,
+      displayPageNumber: page.displayNumber,
       pageIndex,
     };
 
@@ -2431,6 +2436,7 @@ export class DomPainter {
       totalPages: this.totalPages,
       section: 'body',
       pageNumberText: page.numberText,
+      displayPageNumber: page.displayNumber,
       pageIndex,
     };
 

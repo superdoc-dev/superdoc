@@ -76,6 +76,29 @@ describe('sd:autoPageNumber translator', () => {
       expect(parseMarks).toHaveBeenCalledTimes(1);
       expect(parseMarks).toHaveBeenCalledWith({ elements: [] });
     });
+
+    it('preserves imported switched field attributes', () => {
+      vi.mocked(parseMarks).mockReturnValue([]);
+
+      const result = config.encode({
+        nodes: [
+          {
+            name: 'sd:autoPageNumber',
+            attributes: {
+              instruction: 'PAGE \\* roman',
+              pageNumberFormat: 'lowerRoman',
+            },
+            elements: [],
+          },
+        ],
+      });
+
+      expect(result.attrs).toEqual({
+        marksAsAttrs: [],
+        instruction: 'PAGE \\* roman',
+        pageNumberFormat: 'lowerRoman',
+      });
+    });
   });
 
   describe('decode', () => {
@@ -174,6 +197,19 @@ describe('sd:autoPageNumber translator', () => {
 
       expect(processOutputMarks).toHaveBeenCalledTimes(1);
       expect(processOutputMarks).toHaveBeenCalledWith([]);
+    });
+
+    it('exports the preserved switched PAGE instruction', () => {
+      vi.mocked(processOutputMarks).mockReturnValue([]);
+
+      const result = config.decode({
+        node: {
+          type: 'page-number',
+          attrs: { instruction: 'PAGE \\* ArabicDash' },
+        },
+      });
+
+      expect(result[1].elements[1].elements[0].text).toBe(' PAGE \\* ArabicDash');
     });
   });
 });

@@ -172,6 +172,24 @@ describe('tokenNodeToRun', () => {
     expect(result.text).toBe('0');
   });
 
+  it('forwards page-number field format metadata', () => {
+    const tokenNode: PMNode = {
+      type: 'page-number',
+      attrs: {
+        pageNumberFormat: 'numberInDash',
+        pageNumberZeroPadding: 2,
+      },
+    };
+    const positions: PositionMap = new WeakMap();
+
+    const result = tokenNodeToRun(tokenNode, positions, 'Arial', 16, [], 'pageNumber');
+
+    expect(result.pageNumberFieldFormat).toEqual({
+      format: 'numberInDash',
+      zeroPadding: 2,
+    });
+  });
+
   it('handles token with various token types', () => {
     const tokenTypes: Array<TextRun['token']> = ['pageNumber', 'totalPageCount'];
 

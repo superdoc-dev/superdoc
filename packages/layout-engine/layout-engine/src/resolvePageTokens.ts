@@ -15,7 +15,7 @@
  */
 
 import type { Layout, FlowBlock, ParagraphBlock, Measure } from '@superdoc/contracts';
-import type { DisplayPageInfo } from './pageNumbering';
+import { formatPageNumberFieldValue, type DisplayPageInfo } from './pageNumbering';
 
 /**
  * Numbering context for page token resolution.
@@ -118,8 +118,6 @@ export function resolvePageNumberTokens(
       continue;
     }
 
-    const displayPageText = displayPageInfo.displayText;
-
     for (const fragment of page.fragments) {
       // Paragraph fragments — original behaviour.
       if (fragment.kind === 'para') {
@@ -137,7 +135,12 @@ export function resolvePageNumberTokens(
           continue;
         }
 
-        const clonedBlock = cloneBlockWithResolvedTokens(block, displayPageText, totalPagesStr);
+        const clonedBlock = cloneBlockWithResolvedTokens(
+          block,
+          displayPageInfo,
+          totalPagesStr,
+          numberingCtx.totalPages,
+        );
         updatedBlocks.set(blockId, clonedBlock);
         affectedBlockIds.add(blockId);
         processedBlocks.add(blockId);
@@ -189,14 +192,15 @@ function hasPageTokens(block: ParagraphBlock): boolean {
  * or totalPageCount tokens by replacing the text and clearing the token metadata.
  *
  * @param block - Original paragraph block (will not be mutated)
- * @param displayPageText - Formatted display page number (e.g., "i", "III", "23")
+ * @param displayPageInfo - Section-aware page number data for this physical page
  * @param totalPagesStr - Total page count as string
  * @returns Cloned block with resolved tokens
  */
 function cloneBlockWithResolvedTokens(
   block: ParagraphBlock,
-  displayPageText: string,
+  displayPageInfo: DisplayPageInfo,
   totalPagesStr: string,
+  totalPages: number,
 ): ParagraphBlock {
   // Clone the runs array and resolve tokens
   const clonedRuns = block.runs.map((run) => {
@@ -207,14 +211,18 @@ function cloneBlockWithResolvedTokens(
         const { token: _token, ...runWithoutToken } = run;
         return {
           ...runWithoutToken,
-          text: displayPageText,
+          text: run.pageNumberFieldFormat
+            ? formatPageNumberFieldValue(displayPageInfo.displayNumber, run.pageNumberFieldFormat)
+            : displayPageInfo.displayText,
         };
       } else if (run.token === 'totalPageCount') {
         // Clone the run and resolve the token
         const { token: _token, ...runWithoutToken } = run;
         return {
           ...runWithoutToken,
-          text: totalPagesStr,
+          text: run.pageNumberFieldFormat
+            ? formatPageNumberFieldValue(totalPages, run.pageNumberFieldFormat)
+            : totalPagesStr,
         };
       }
     }

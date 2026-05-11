@@ -98,4 +98,20 @@ describe('preProcessPageInstruction', () => {
       },
     ]);
   });
+
+  it('preserves PAGE general format switches as normalized attributes', () => {
+    const result = preProcessPageInstruction([], 'PAGE \\* roman', null);
+    expect(result[0].attributes).toEqual({
+      instruction: 'PAGE \\* roman',
+      pageNumberFormat: 'lowerRoman',
+    });
+  });
+
+  it('preserves PAGE ArabicDash switches as normalized attributes', () => {
+    const result = preProcessPageInstruction([], 'PAGE \\* ArabicDash', null);
+    expect(result[0].attributes).toEqual({
+      instruction: 'PAGE \\* ArabicDash',
+      pageNumberFormat: 'numberInDash',
+    });
+  });
 });

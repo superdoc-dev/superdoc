@@ -31,6 +31,7 @@ const encode = (params) => {
     attrs: {
       marksAsAttrs: marks,
       importedCachedText,
+      ...getPageNumberFieldAttrs(node),
     },
   };
 
@@ -54,8 +55,18 @@ const decode = (params) => {
   const hasFreshPageCount = params.statFieldCacheMap?.has?.('NUMPAGES');
   const dirty = !hasFreshPageCount;
 
-  return buildComplexFieldRuns({ instruction: 'NUMPAGES', cachedText, outputMarks, dirty });
+  return buildComplexFieldRuns({ instruction: node.attrs?.instruction || 'NUMPAGES', cachedText, outputMarks, dirty });
 };
+
+function getPageNumberFieldAttrs(node) {
+  const attrs = {};
+  if (node.attributes?.instruction) attrs.instruction = node.attributes.instruction;
+  if (node.attributes?.pageNumberFormat) attrs.pageNumberFormat = node.attributes.pageNumberFormat;
+  if (node.attributes?.pageNumberZeroPadding != null) {
+    attrs.pageNumberZeroPadding = Number(node.attributes.pageNumberZeroPadding);
+  }
+  return attrs;
+}
 
 /**
  * Resolves the cached page count text for export.

@@ -82,6 +82,48 @@ describe('resolvePageNumberTokens', () => {
       expect((blocks[0] as ParagraphBlock).runs[1].token).toBe('pageNumber');
     });
 
+    it('should resolve explicit PAGE field format using section-aware display number', () => {
+      const blocks: FlowBlock[] = [
+        {
+          kind: 'paragraph',
+          id: 'para-format',
+          runs: [
+            {
+              text: '0',
+              token: 'pageNumber',
+              pageNumberFieldFormat: { format: 'lowerRoman' },
+              fontFamily: 'Arial',
+              fontSize: 12,
+            } as TextRun,
+          ],
+        } as ParagraphBlock,
+      ];
+      const measures: Measure[] = [{ kind: 'paragraph', lines: [], totalHeight: 0 }];
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [
+          {
+            number: 4,
+            fragments: [{ kind: 'para', blockId: 'para-format', fromLine: 0, toLine: 1, x: 0, y: 0, width: 100 }],
+          },
+        ],
+      };
+      const numberingCtx: NumberingContext = {
+        totalPages: 12,
+        displayPages: [
+          { physicalPage: 1, displayNumber: 1, displayText: '1', sectionIndex: 0 },
+          { physicalPage: 2, displayNumber: 2, displayText: '2', sectionIndex: 0 },
+          { physicalPage: 3, displayNumber: 3, displayText: '3', sectionIndex: 0 },
+          { physicalPage: 4, displayNumber: 5, displayText: '5', sectionIndex: 1 },
+        ],
+      };
+
+      const result = resolvePageNumberTokens(layout, blocks, measures, numberingCtx);
+
+      const updatedBlock = result.updatedBlocks.get('para-format') as ParagraphBlock;
+      expect(updatedBlock.runs[0].text).toBe('v');
+    });
+
     it('should resolve totalPageCount tokens', () => {
       const blocks: FlowBlock[] = [
         {

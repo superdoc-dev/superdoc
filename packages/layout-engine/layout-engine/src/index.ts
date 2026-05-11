@@ -3675,7 +3675,7 @@ const sumLineHeights = (measure: ParagraphMeasure, fromLine: number, toLine: num
 export { buildAnchorMap, resolvePageRefTokens, getTocBlocksForRemeasurement } from './resolvePageRefs.js';
 
 // Export page numbering utilities
-export { formatPageNumber, computeDisplayPageNumber } from './pageNumbering.js';
+export { formatPageNumber, formatPageNumberFieldValue, computeDisplayPageNumber } from './pageNumbering.js';
 export type { PageNumberFormat, DisplayPageInfo } from './pageNumbering.js';
 
 // Export page token resolution utilities

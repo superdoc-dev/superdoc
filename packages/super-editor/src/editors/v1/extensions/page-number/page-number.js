@@ -13,6 +13,9 @@ import { isHeadless } from '@utils/headless-helpers.js';
  * @typedef {Object} PageNumberAttributes
  * @category Attributes
  * @property {Array} [marksAsAttrs=null] @internal - Internal marks storage
+ * @property {string|null} [instruction=null] @internal - Original PAGE field instruction when switched
+ * @property {string|null} [pageNumberFormat=null] @internal - Normalized field switch format
+ * @property {number|null} [pageNumberZeroPadding=null] @internal - Zero-padding width from numeric picture switch
  */
 
 /**
@@ -45,6 +48,18 @@ export const PageNumber = Node.create({
   addAttributes() {
     return {
       marksAsAttrs: {
+        default: null,
+        rendered: false,
+      },
+      instruction: {
+        default: null,
+        rendered: false,
+      },
+      pageNumberFormat: {
+        default: null,
+        rendered: false,
+      },
+      pageNumberZeroPadding: {
         default: null,
         rendered: false,
       },
@@ -120,6 +135,9 @@ export const PageNumber = Node.create({
  * @typedef {Object} TotalPageCountAttributes
  * @category Attributes
  * @property {Array} [marksAsAttrs=null] @internal - Internal marks storage
+ * @property {string|null} [instruction=null] @internal - Original NUMPAGES field instruction when switched
+ * @property {string|null} [pageNumberFormat=null] @internal - Normalized field switch format
+ * @property {number|null} [pageNumberZeroPadding=null] @internal - Zero-padding width from numeric picture switch
  */
 
 /**
@@ -152,6 +170,18 @@ export const TotalPageCount = Node.create({
   addAttributes() {
     return {
       marksAsAttrs: {
+        default: null,
+        rendered: false,
+      },
+      instruction: {
+        default: null,
+        rendered: false,
+      },
+      pageNumberFormat: {
+        default: null,
+        rendered: false,
+      },
+      pageNumberZeroPadding: {
         default: null,
         rendered: false,
       },

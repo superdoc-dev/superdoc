@@ -83,7 +83,6 @@ export function findContainingBlockAncestor(element) {
  * Configuration options for ContextMenu
  * @typedef {Object} ContextMenuOptions
  * @property {boolean} [disabled] - Disable the context menu entirely (inherited from editor.options.disableContextMenu)
- * @property {number} [cooldownMs=5000] - Cooldown duration in milliseconds to prevent rapid re-opening
  * @category Options
  */
 
@@ -119,7 +118,6 @@ const MENU_OFFSET_X = 0; // Horizontal offset for slash trigger (aligned with cu
 const MENU_OFFSET_Y = 28; // Vertical offset for slash trigger
 const CONTEXT_MENU_OFFSET_X = 10; // Small offset for right-click
 const CONTEXT_MENU_OFFSET_Y = 10; // Small offset for right-click
-const SLASH_COOLDOWN_MS = 5000; // Cooldown period to prevent rapid re-opening
 
 /**
  * @module ContextMenu
@@ -145,10 +143,6 @@ export const ContextMenu = Extension.create({
     if (editor.options?.isHeadless) {
       return [];
     }
-
-    // Cooldown flag and timeout for slash trigger
-    let slashCooldown = false;
-    let slashCooldownTimeout = null;
 
     /**
      * Check if the context menu is disabled via editor options
@@ -365,11 +359,6 @@ export const ContextMenu = Extension.create({
           destroy() {
             window.removeEventListener('scroll', updatePosition, true);
             window.removeEventListener('resize', updatePosition);
-            // Clear cooldown timeout if exists
-            if (slashCooldownTimeout) {
-              clearTimeout(slashCooldownTimeout);
-              slashCooldownTimeout = null;
-            }
           },
         };
       },
@@ -390,11 +379,6 @@ export const ContextMenu = Extension.create({
           }
           const pluginState = this.getState(view.state);
 
-          // If cooldown is active and slash is pressed, allow default behavior
-          if (event.key === '/' && slashCooldown) {
-            return false; // Let browser handle it
-          }
-
           if (event.key === '/' && !pluginState.open) {
             const { $cursor } = view.state.selection;
             if (!$cursor) return false;
@@ -408,14 +392,6 @@ export const ContextMenu = Extension.create({
 
             event.preventDefault();
 
-            // Set cooldown
-            slashCooldown = true;
-            if (slashCooldownTimeout) clearTimeout(slashCooldownTimeout);
-            slashCooldownTimeout = setTimeout(() => {
-              slashCooldown = false;
-              slashCooldownTimeout = null;
-            }, SLASH_COOLDOWN_MS);
-
             // Only dispatch state update - event will be emitted in apply()
             view.dispatch(
               view.state.tr.setMeta(ContextMenuPluginKey, {
@@ -426,23 +402,32 @@ export const ContextMenu = Extension.create({
             return true;
           }
 
-          if (pluginState.open && (event.key === 'Escape' || event.key === 'ArrowLeft')) {
-            // Store current state before closing
+          if (!pluginState.open) {
+            return false;
+          }
+
+          // SD-2747: Backspace / Delete dismisses the menu without inserting any character.
+          // The user pressed `/` to open it; that `/` was preventDefault'd above and never
+          // entered the document, so there is nothing to remove on the doc side — just close.
+          if (event.key === 'Backspace' || event.key === 'Delete') {
+            event.preventDefault();
+            view.dispatch(view.state.tr.setMeta(ContextMenuPluginKey, { type: 'close' }));
+            return true;
+          }
+
+          // SD-2747: Escape (or ArrowLeft) closes the menu and inserts a literal `/` at the
+          // anchor position — matches Google Docs, where the slash stays visible when the
+          // user dismisses the menu without picking an item.
+          if (event.key === 'Escape' || event.key === 'ArrowLeft') {
             const { anchorPos } = pluginState;
+            event.preventDefault();
+            view.dispatch(view.state.tr.setMeta(ContextMenuPluginKey, { type: 'close' }));
 
-            // Close menu
-            view.dispatch(
-              view.state.tr.setMeta(ContextMenuPluginKey, {
-                type: 'close',
-              }),
-            );
-
-            // Restore cursor position and focus
             if (anchorPos !== null) {
-              const tr = view.state.tr.setSelection(
-                view.state.selection.constructor.near(view.state.doc.resolve(anchorPos)),
-              );
-              view.dispatch(tr);
+              const insertTr = view.state.tr.insertText('/', anchorPos);
+              const insertedAt = anchorPos + 1;
+              insertTr.setSelection(view.state.selection.constructor.near(insertTr.doc.resolve(insertedAt)));
+              view.dispatch(insertTr);
               view.focus();
             }
             return true;

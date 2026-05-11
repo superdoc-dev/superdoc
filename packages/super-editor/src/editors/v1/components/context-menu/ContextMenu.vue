@@ -223,11 +223,35 @@ const cleanupCustomItems = () => {
 };
 
 const handleGlobalKeyDown = (event) => {
-  // ESCAPE: always close popover or menu
+  // SD-2747: ESCAPE dismisses the menu and inserts a literal `/` at the original anchor —
+  // the slash was preventDefault'd when the menu opened, so we re-insert it here so the
+  // user's typed character is preserved when they decline to pick a command. Matches Google
+  // Docs' trigger-menu behavior.
   if (event.key === 'Escape' && isOpen.value) {
     event.preventDefault();
     event.stopPropagation();
-    closeMenu();
+    const pluginState = ContextMenuPluginKey.getState(props.editor?.state);
+    const anchorPos = pluginState?.anchorPos;
+    closeMenu({ restoreCursor: false });
+
+    if (props.editor && anchorPos !== null && anchorPos !== undefined) {
+      const tr = props.editor.state.tr.insertText('/', anchorPos);
+      const insertedAt = anchorPos + 1;
+      tr.setSelection(props.editor.state.selection.constructor.near(tr.doc.resolve(insertedAt)));
+      props.editor.dispatch(tr);
+    }
+    props.editor?.focus?.();
+    return;
+  }
+
+  // SD-2747: BACKSPACE / DELETE dismisses the menu without inserting the slash. Focus is on
+  // the hidden search input while the menu is open, so the PM plugin's handleKeyDown does
+  // not see these keys — we have to handle them here. Empty search means an explicit
+  // dismissal; with a typed filter we let the input handle the deletion normally.
+  if ((event.key === 'Backspace' || event.key === 'Delete') && isOpen.value && !searchQuery.value) {
+    event.preventDefault();
+    event.stopPropagation();
+    closeMenu({ restoreCursor: true });
     props.editor?.focus?.();
     return;
   }

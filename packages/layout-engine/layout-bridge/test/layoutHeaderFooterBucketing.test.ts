@@ -389,6 +389,31 @@ describe('layoutHeaderFooterWithCache - Digit Bucketing (Large Docs)', () => {
     expect(pageNumbers).toContain(500); // d3
     expect(pageNumbers).not.toContain(5000); // d4 not needed
   });
+
+  it('should not digit-bucket explicitly formatted page-number tokens', async () => {
+    const block = makePageTokenBlock('header-formatted-page');
+    const pageNumberRun = (block as ParagraphBlock).runs[1] as TextRun;
+    pageNumberRun.pageNumberFieldFormat = { format: 'lowerRoman' };
+
+    const pageResolver: PageResolver = (pageNum) => ({
+      displayText: String(pageNum),
+      displayNumber: pageNum,
+      totalPages: 150,
+    });
+
+    const measureBlock = vi.fn(async () => makeMeasure(20));
+    const result = await layoutHeaderFooterWithCache(
+      { default: [block] },
+      { width: 400, height: 80 },
+      measureBlock,
+      undefined,
+      undefined,
+      pageResolver,
+    );
+
+    expect(result.default?.layout.pages).toHaveLength(150);
+    expect(measureBlock).toHaveBeenCalledTimes(150);
+  });
 });
 
 describe('layoutHeaderFooterWithCache - Section-Aware Token Resolution', () => {

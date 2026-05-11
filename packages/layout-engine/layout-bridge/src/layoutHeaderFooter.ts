@@ -121,6 +121,15 @@ function paragraphHasPageToken(para: ParagraphBlock): boolean {
   return false;
 }
 
+function paragraphHasFormattedPageNumberToken(para: ParagraphBlock): boolean {
+  for (const run of para.runs) {
+    if ('token' in run && run.token === 'pageNumber' && run.pageNumberFieldFormat) {
+      return true;
+    }
+  }
+  return false;
+}
+
 function hasPageTokens(blocks: FlowBlock[]): boolean {
   for (const block of blocks) {
     if (block.kind === 'paragraph') {
@@ -139,6 +148,27 @@ function hasPageTokens(blocks: FlowBlock[]): boolean {
               ? [cell.paragraph]
               : [];
           if (hasPageTokens(cellBlocks)) return true;
+        }
+      }
+    }
+  }
+  return false;
+}
+
+function hasFormattedPageNumberTokens(blocks: FlowBlock[]): boolean {
+  for (const block of blocks) {
+    if (block.kind === 'paragraph') {
+      if (paragraphHasFormattedPageNumberToken(block as ParagraphBlock)) return true;
+    } else if (block.kind === 'table') {
+      const table = block as TableBlock;
+      for (const row of table.rows ?? []) {
+        for (const cell of row.cells ?? []) {
+          const cellBlocks: FlowBlock[] = cell.blocks
+            ? (cell.blocks as FlowBlock[])
+            : cell.paragraph
+              ? [cell.paragraph]
+              : [];
+          if (hasFormattedPageNumberTokens(cellBlocks)) return true;
         }
       }
     }
@@ -201,6 +231,7 @@ const sharedHeaderFooterCache = new HeaderFooterLayoutCache();
  * 2. If variant has no tokens: creates one layout reused across all pages (fast path)
  * 3. For small docs (<100 pages): creates per-page layouts
  * 4. For large docs (>=100 pages): uses digit bucketing (d1, d2, d3, d4)
+ *    unless PAGE tokens have explicit field formatting
  *
  * @param sections - Header/footer variants (default, first, even, odd)
  * @param constraints - Layout constraints (width, height, margins)
@@ -266,8 +297,10 @@ export async function layoutHeaderFooterWithCache(
     // Determine which pages to create layouts for
     let pagesToLayout: number[];
 
-    if (!useBucketing) {
-      // Small doc: create layout for every page
+    const useBucketingForVariant = useBucketing && !hasFormattedPageNumberTokens(blocks);
+
+    if (!useBucketingForVariant) {
+      // Per-page layout: small docs, disabled bucketing, or explicit PAGE formats.
       pagesToLayout = Array.from({ length: docTotalPages }, (_, i) => i + 1);
       HeaderFooterCacheLogger.logBucketingDecision(docTotalPages, false);
     } else {

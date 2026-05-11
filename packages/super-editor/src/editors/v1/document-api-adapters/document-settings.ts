@@ -99,6 +99,70 @@ export function removeDefaultTableStyle(settingsRoot: XmlElement): void {
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
+// w:footnotePr / w:endnotePr  — number format
+// (SD-2986/B1)
+// ──────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Reads the document-wide footnote number format from
+ * `w:settings/w:footnotePr/w:numFmt[@val]`. Returns the OOXML format
+ * string (e.g., "decimal", "upperRoman") or null if not present.
+ *
+ * Section-level overrides (`w:sectPr/w:footnotePr/w:numFmt`) are not yet
+ * honored — they require per-page numbering context which is tracked in
+ * SD-2986/B2.
+ */
+export function readFootnoteNumberFormat(settingsRoot: XmlElement): string | null {
+  return readNoteNumberFormat(settingsRoot, 'w:footnotePr');
+}
+
+/**
+ * Reads the document-wide endnote number format from
+ * `w:settings/w:endnotePr/w:numFmt[@val]`. Returns the OOXML format
+ * string or null if not present.
+ */
+export function readEndnoteNumberFormat(settingsRoot: XmlElement): string | null {
+  return readNoteNumberFormat(settingsRoot, 'w:endnotePr');
+}
+
+function readNoteNumberFormat(settingsRoot: XmlElement, containerName: 'w:footnotePr' | 'w:endnotePr'): string | null {
+  const container = settingsRoot.elements?.find((entry) => entry.name === containerName);
+  if (!container || !Array.isArray(container.elements)) return null;
+  const numFmt = container.elements.find((entry) => entry.name === 'w:numFmt');
+  if (!numFmt) return null;
+  const val = (numFmt.attributes as Record<string, unknown> | undefined)?.['w:val'];
+  return typeof val === 'string' && val.length > 0 ? val : null;
+}
+
+/**
+ * SD-2986/B2: Reads `w:settings/w:footnotePr/w:numStart[@val]`. Returns the
+ * starting cardinal (1-based) or null if not specified. Word's default is 1.
+ */
+export function readFootnoteNumberStart(settingsRoot: XmlElement): number | null {
+  return readNoteNumberStart(settingsRoot, 'w:footnotePr');
+}
+
+/**
+ * SD-2986/B2: Reads `w:settings/w:endnotePr/w:numStart[@val]`. Returns the
+ * starting cardinal or null. Word's endnote default is 1 (not the lowerRoman
+ * default that endnotes typically use for *format*).
+ */
+export function readEndnoteNumberStart(settingsRoot: XmlElement): number | null {
+  return readNoteNumberStart(settingsRoot, 'w:endnotePr');
+}
+
+function readNoteNumberStart(settingsRoot: XmlElement, containerName: 'w:footnotePr' | 'w:endnotePr'): number | null {
+  const container = settingsRoot.elements?.find((entry) => entry.name === containerName);
+  if (!container || !Array.isArray(container.elements)) return null;
+  const numStart = container.elements.find((entry) => entry.name === 'w:numStart');
+  if (!numStart) return null;
+  const val = (numStart.attributes as Record<string, unknown> | undefined)?.['w:val'];
+  if (typeof val !== 'string' && typeof val !== 'number') return null;
+  const n = Number(val);
+  return Number.isFinite(n) && n >= 1 ? Math.floor(n) : null;
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
 // w:evenAndOddHeaders
 // ──────────────────────────────────────────────────────────────────────────────
 

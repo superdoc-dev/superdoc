@@ -6,6 +6,10 @@ import {
   ensureSettingsRoot,
   readSettingsRoot,
   hasOddEvenHeadersFooters,
+  readFootnoteNumberFormat,
+  readEndnoteNumberFormat,
+  readFootnoteNumberStart,
+  readEndnoteNumberStart,
   type ConverterWithDocumentSettings,
 } from './document-settings.ts';
 
@@ -151,5 +155,131 @@ describe('defaultTableStyle roundtrip', () => {
     setDefaultTableStyle(root, 'TableGrid');
     removeDefaultTableStyle(root);
     expect(readDefaultTableStyle(root)).toBeNull();
+  });
+});
+
+// SD-2986/B1: footnote / endnote w:numFmt
+describe('readFootnoteNumberFormat', () => {
+  it('returns the numFmt value when present', () => {
+    const converter = makeConverter([
+      {
+        type: 'element',
+        name: 'w:footnotePr',
+        elements: [{ type: 'element', name: 'w:numFmt', attributes: { 'w:val': 'upperRoman' } }],
+      },
+    ]);
+    const root = readSettingsRoot(converter)!;
+    expect(readFootnoteNumberFormat(root)).toBe('upperRoman');
+  });
+
+  it('returns null when w:footnotePr is absent', () => {
+    const converter = makeConverter([]);
+    const root = readSettingsRoot(converter)!;
+    expect(readFootnoteNumberFormat(root)).toBeNull();
+  });
+
+  it('returns null when w:numFmt is missing inside w:footnotePr', () => {
+    const converter = makeConverter([{ type: 'element', name: 'w:footnotePr', elements: [] }]);
+    const root = readSettingsRoot(converter)!;
+    expect(readFootnoteNumberFormat(root)).toBeNull();
+  });
+
+  it('returns null when w:val is empty', () => {
+    const converter = makeConverter([
+      {
+        type: 'element',
+        name: 'w:footnotePr',
+        elements: [{ type: 'element', name: 'w:numFmt', attributes: { 'w:val': '' } }],
+      },
+    ]);
+    const root = readSettingsRoot(converter)!;
+    expect(readFootnoteNumberFormat(root)).toBeNull();
+  });
+});
+
+describe('readFootnoteNumberStart', () => {
+  it('returns the configured start value', () => {
+    const converter = makeConverter([
+      {
+        type: 'element',
+        name: 'w:footnotePr',
+        elements: [{ type: 'element', name: 'w:numStart', attributes: { 'w:val': '5' } }],
+      },
+    ]);
+    const root = readSettingsRoot(converter)!;
+    expect(readFootnoteNumberStart(root)).toBe(5);
+  });
+
+  it('returns null when w:numStart is absent', () => {
+    const converter = makeConverter([{ type: 'element', name: 'w:footnotePr', elements: [] }]);
+    const root = readSettingsRoot(converter)!;
+    expect(readFootnoteNumberStart(root)).toBeNull();
+  });
+
+  it('returns null for non-numeric or sub-1 values', () => {
+    const mk = (val: string) =>
+      makeConverter([
+        {
+          type: 'element',
+          name: 'w:footnotePr',
+          elements: [{ type: 'element', name: 'w:numStart', attributes: { 'w:val': val } }],
+        },
+      ]);
+    expect(readFootnoteNumberStart(readSettingsRoot(mk('abc'))!)).toBeNull();
+    expect(readFootnoteNumberStart(readSettingsRoot(mk('0'))!)).toBeNull();
+    expect(readFootnoteNumberStart(readSettingsRoot(mk('-3'))!)).toBeNull();
+  });
+
+  it('floors fractional values', () => {
+    const converter = makeConverter([
+      {
+        type: 'element',
+        name: 'w:footnotePr',
+        elements: [{ type: 'element', name: 'w:numStart', attributes: { 'w:val': '7.9' } }],
+      },
+    ]);
+    const root = readSettingsRoot(converter)!;
+    expect(readFootnoteNumberStart(root)).toBe(7);
+  });
+});
+
+describe('readEndnoteNumberStart', () => {
+  it('returns the configured start value', () => {
+    const converter = makeConverter([
+      {
+        type: 'element',
+        name: 'w:endnotePr',
+        elements: [{ type: 'element', name: 'w:numStart', attributes: { 'w:val': '10' } }],
+      },
+    ]);
+    const root = readSettingsRoot(converter)!;
+    expect(readEndnoteNumberStart(root)).toBe(10);
+  });
+});
+
+describe('readEndnoteNumberFormat', () => {
+  it('returns the numFmt value when present', () => {
+    const converter = makeConverter([
+      {
+        type: 'element',
+        name: 'w:endnotePr',
+        elements: [{ type: 'element', name: 'w:numFmt', attributes: { 'w:val': 'lowerRoman' } }],
+      },
+    ]);
+    const root = readSettingsRoot(converter)!;
+    expect(readEndnoteNumberFormat(root)).toBe('lowerRoman');
+  });
+
+  it('does not confuse footnotePr with endnotePr', () => {
+    const converter = makeConverter([
+      {
+        type: 'element',
+        name: 'w:footnotePr',
+        elements: [{ type: 'element', name: 'w:numFmt', attributes: { 'w:val': 'upperRoman' } }],
+      },
+    ]);
+    const root = readSettingsRoot(converter)!;
+    expect(readEndnoteNumberFormat(root)).toBeNull();
+    expect(readFootnoteNumberFormat(root)).toBe('upperRoman');
   });
 });

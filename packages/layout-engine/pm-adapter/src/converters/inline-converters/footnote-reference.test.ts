@@ -94,4 +94,103 @@ describe('footnoteReferenceToBlock', () => {
 
     expect(run.fontSize).toBe(16 * SUBSCRIPT_SUPERSCRIPT_SCALE);
   });
+
+  // SD-2986/B1: numFmt support
+  describe('numFmt formatting', () => {
+    it('formats with upperRoman when context specifies it', () => {
+      const node: PMNode = { type: 'footnoteReference', attrs: { id: '5' } };
+      const run = footnoteReferenceToBlock(
+        makeParams({
+          node,
+          converterContext: {
+            footnoteNumberById: { '5': 4 },
+            footnoteNumberFormat: 'upperRoman',
+          } as unknown as InlineConverterParams['converterContext'],
+        }),
+      );
+      expect(run.text).toBe('IV');
+    });
+
+    it('formats with lowerLetter when context specifies it', () => {
+      const node: PMNode = { type: 'footnoteReference', attrs: { id: '3' } };
+      const run = footnoteReferenceToBlock(
+        makeParams({
+          node,
+          converterContext: {
+            footnoteNumberById: { '3': 3 },
+            footnoteNumberFormat: 'lowerLetter',
+          } as unknown as InlineConverterParams['converterContext'],
+        }),
+      );
+      expect(run.text).toBe('c');
+    });
+
+    it('falls back to decimal when format is omitted', () => {
+      const node: PMNode = { type: 'footnoteReference', attrs: { id: '2' } };
+      const run = footnoteReferenceToBlock(
+        makeParams({
+          node,
+          converterContext: {
+            footnoteNumberById: { '2': 2 },
+          } as unknown as InlineConverterParams['converterContext'],
+        }),
+      );
+      expect(run.text).toBe('2');
+    });
+
+    // SD-2658: custom mark follows
+    it('emits empty marker text when customMarkFollows is "1"', () => {
+      const node: PMNode = {
+        type: 'footnoteReference',
+        attrs: { id: '1', customMarkFollows: '1' },
+      };
+      const run = footnoteReferenceToBlock(makeParams({ node }));
+      expect(run.text).toBe('');
+    });
+
+    it('emits empty marker text when customMarkFollows is true (boolean)', () => {
+      const node: PMNode = {
+        type: 'footnoteReference',
+        attrs: { id: '1', customMarkFollows: true },
+      };
+      const run = footnoteReferenceToBlock(makeParams({ node }));
+      expect(run.text).toBe('');
+    });
+
+    it('still emits the numbered marker when customMarkFollows is "0"', () => {
+      const node: PMNode = {
+        type: 'footnoteReference',
+        attrs: { id: '1', customMarkFollows: '0' },
+      };
+      const run = footnoteReferenceToBlock(makeParams({ node }));
+      expect(run.text).toBe('1');
+    });
+
+    it('preserves pmStart/pmEnd on the empty marker run (click + selection rely on this)', () => {
+      const node: PMNode = {
+        type: 'footnoteReference',
+        attrs: { id: '1', customMarkFollows: '1' },
+      };
+      const positions = new WeakMap();
+      positions.set(node, { start: 42, end: 43 });
+      const run = footnoteReferenceToBlock(makeParams({ node, positions }));
+      expect(run.text).toBe('');
+      expect(run.pmStart).toBe(42);
+      expect(run.pmEnd).toBe(43);
+    });
+
+    it('falls back to decimal when format is unrecognized', () => {
+      const node: PMNode = { type: 'footnoteReference', attrs: { id: '2' } };
+      const run = footnoteReferenceToBlock(
+        makeParams({
+          node,
+          converterContext: {
+            footnoteNumberById: { '2': 2 },
+            footnoteNumberFormat: 'chickenLetters',
+          } as unknown as InlineConverterParams['converterContext'],
+        }),
+      );
+      expect(run.text).toBe('2');
+    });
+  });
 });

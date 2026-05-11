@@ -23,6 +23,7 @@ import type { FlowBlock } from '@superdoc/contracts';
 import { toFlowBlocks } from '@superdoc/pm-adapter';
 import type { ConverterContext } from '@superdoc/pm-adapter/converter-context.js';
 import { SUBSCRIPT_SUPERSCRIPT_SCALE } from '@superdoc/pm-adapter/constants.js';
+import { formatFootnoteCardinal } from '@superdoc/pm-adapter/footnote-formatting.js';
 
 import type { ProseMirrorJSON } from '../../types/EditorTypes.js';
 import type { FootnoteReference, FootnotesLayoutInput } from '../types.js';
@@ -103,6 +104,7 @@ export function buildFootnotesInput(
   if (!editorState) return null;
 
   const footnoteNumberById = converterContext?.footnoteNumberById;
+  const footnoteNumberFormat = converterContext?.footnoteNumberFormat;
   const importedFootnotes = Array.isArray(converter?.footnotes) ? converter.footnotes : [];
 
   if (importedFootnotes.length === 0) return null;
@@ -142,7 +144,7 @@ export function buildFootnotesInput(
       });
 
       if (result?.blocks?.length) {
-        ensureFootnoteMarker(result.blocks, id, footnoteNumberById);
+        ensureFootnoteMarker(result.blocks, id, footnoteNumberById, footnoteNumberFormat);
         blocksById.set(id, result.blocks);
       }
     } catch (_) {
@@ -188,16 +190,6 @@ function resolveDisplayNumber(id: string, footnoteNumberById: Record<string, num
   const num = footnoteNumberById[id];
   if (typeof num === 'number' && Number.isFinite(num) && num > 0) return num;
   return 1;
-}
-
-/**
- * Converts a footnote display number into the marker text rendered in layout.
- *
- * Footnote markers use plain digits with superscript styling. This avoids the
- * inconsistent baseline and sizing behavior of Unicode superscript glyphs.
- */
-function resolveMarkerText(value: unknown): string {
-  return String(value ?? '');
 }
 
 function resolveMarkerFontFamily(firstTextRun: Run | undefined): string {
@@ -300,13 +292,16 @@ function ensureFootnoteMarker(
   blocks: FlowBlock[],
   id: string,
   footnoteNumberById: Record<string, number> | undefined,
+  footnoteNumberFormat: string | undefined,
 ): void {
   const firstParagraph = blocks.find((b) => b?.kind === 'paragraph') as ParagraphBlock | undefined;
   if (!firstParagraph) return;
 
   const runs: Run[] = Array.isArray(firstParagraph.runs) ? firstParagraph.runs : [];
   const displayNumber = resolveDisplayNumber(id, footnoteNumberById);
-  const markerText = resolveMarkerText(displayNumber);
+  // SD-2986/B1: format the cardinal per the document's w:numFmt so the
+  // leading marker matches the inline reference (single source of truth).
+  const markerText = formatFootnoteCardinal(displayNumber, footnoteNumberFormat);
   const firstTextRun = runs.find((run) => typeof run.text === 'string' && !isFootnoteMarker(run));
   const normalizedMarkerRun = buildMarkerRun(markerText, firstTextRun);
 

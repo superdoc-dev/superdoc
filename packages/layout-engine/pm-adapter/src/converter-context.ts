@@ -31,10 +31,24 @@ export type ConverterContext = {
    */
   footnoteNumberById?: Record<string, number>;
   /**
+   * SD-2986/B1: Document-wide footnote number format from
+   * `w:settings/w:footnotePr/w:numFmt[@val]`. Drives how the cardinal
+   * stored in `footnoteNumberById` is rendered (Roman, letter, decimal, …).
+   * When omitted or unrecognized, defaults to decimal.
+   */
+  footnoteNumberFormat?: string;
+  /**
    * Optional mapping from OOXML endnote id -> display number.
    * Same semantics as footnoteNumberById but for endnotes.
    */
   endnoteNumberById?: Record<string, number>;
+  /**
+   * SD-2986/B1: Document-wide endnote number format. Same semantics as
+   * `footnoteNumberFormat`. Endnote default is `lowerRoman` per OOXML spec
+   * but here we still default to `decimal` if absent — caller is responsible
+   * for providing the OOXML default when known.
+   */
+  endnoteNumberFormat?: string;
   /**
    * Paragraph properties inherited from the containing table's style.
    * Per OOXML spec, table styles can define pPr that applies to all

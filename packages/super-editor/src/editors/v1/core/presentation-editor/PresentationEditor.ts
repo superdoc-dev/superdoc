@@ -107,7 +107,14 @@ import { createStoryEditor } from '../story-editor-factory.js';
 import { buildEndnoteBlocks } from './layout/EndnotesBuilder.js';
 import { toFlowBlocks, FlowBlockCache } from '@superdoc/pm-adapter';
 import type { ConverterContext } from '@superdoc/pm-adapter/converter-context.js';
-import { readSettingsRoot, readDefaultTableStyle } from '../../document-api-adapters/document-settings.js';
+import {
+  readSettingsRoot,
+  readDefaultTableStyle,
+  readFootnoteNumberFormat,
+  readEndnoteNumberFormat,
+  readFootnoteNumberStart,
+  readEndnoteNumberStart,
+} from '../../document-api-adapters/document-settings.js';
 import {
   incrementalLayout,
   selectionToRects,
@@ -5967,13 +5974,32 @@ export class PresentationEditor extends EventEmitter {
       let converterContext: ConverterContext | undefined = undefined;
       try {
         const converter = (this.#editor as Editor & { converter?: Record<string, unknown> }).converter;
+
+        // SD-2986/B1+B2: read footnote/endnote w:numFmt + w:numStart up-front
+        // so the cardinal counters can begin at the configured value.
+        let defaultTableStyleId: string | undefined;
+        let footnoteNumberFormat: string | undefined;
+        let endnoteNumberFormat: string | undefined;
+        let footnoteNumberStart = 1;
+        let endnoteNumberStart = 1;
+        if (converter) {
+          const settingsRoot = readSettingsRoot(converter);
+          if (settingsRoot) {
+            defaultTableStyleId = readDefaultTableStyle(settingsRoot) ?? undefined;
+            footnoteNumberFormat = readFootnoteNumberFormat(settingsRoot) ?? undefined;
+            endnoteNumberFormat = readEndnoteNumberFormat(settingsRoot) ?? undefined;
+            footnoteNumberStart = readFootnoteNumberStart(settingsRoot) ?? 1;
+            endnoteNumberStart = readEndnoteNumberStart(settingsRoot) ?? 1;
+          }
+        }
+
         // Compute visible footnote numbering (1-based) by first appearance in the document.
         // This matches Word behavior even when OOXML ids are non-contiguous or start at 0.
         const footnoteNumberById: Record<string, number> = {};
         const footnoteOrder: string[] = [];
         try {
           const seen = new Set<string>();
-          let counter = 1;
+          let counter = footnoteNumberStart;
           this.#editor?.state?.doc?.descendants?.((node: any) => {
             if (node?.type?.name !== 'footnoteReference') return;
             const rawId = node?.attrs?.id;
@@ -6003,7 +6029,7 @@ export class PresentationEditor extends EventEmitter {
         const endnoteOrder: string[] = [];
         try {
           const seen = new Set<string>();
-          let counter = 1;
+          let counter = endnoteNumberStart;
           this.#editor?.state?.doc?.descendants?.((node: any) => {
             if (node?.type?.name !== 'endnoteReference') return;
             const rawId = node?.attrs?.id;
@@ -6034,19 +6060,13 @@ export class PresentationEditor extends EventEmitter {
           }
         } catch {}
 
-        let defaultTableStyleId: string | undefined;
-        if (converter) {
-          const settingsRoot = readSettingsRoot(converter);
-          if (settingsRoot) {
-            defaultTableStyleId = readDefaultTableStyle(settingsRoot) ?? undefined;
-          }
-        }
-
         converterContext = converter
           ? {
               docx: converter.convertedXml,
               ...(Object.keys(footnoteNumberById).length ? { footnoteNumberById } : {}),
               ...(Object.keys(endnoteNumberById).length ? { endnoteNumberById } : {}),
+              ...(footnoteNumberFormat ? { footnoteNumberFormat } : {}),
+              ...(endnoteNumberFormat ? { endnoteNumberFormat } : {}),
               translatedLinkedStyles: converter.translatedLinkedStyles,
               translatedNumbering: converter.translatedNumbering,
               ...(defaultTableStyleId ? { defaultTableStyleId } : {}),

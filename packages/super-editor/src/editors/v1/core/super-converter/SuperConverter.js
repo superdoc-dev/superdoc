@@ -34,11 +34,6 @@ import {
   syncBibliographyPartToPackage,
   getBibliographyPartExportPaths,
 } from './citation-sources.js';
-import {
-  collectReferencedNumIds,
-  filterOrphanedNumberingDefinitions,
-} from './export-helpers/strip-orphaned-numbering.js';
-
 const FONT_FAMILY_FALLBACKS = Object.freeze({
   swiss: 'Arial, sans-serif',
   roman: 'Times New Roman, serif',
@@ -1434,13 +1429,17 @@ class SuperConverter {
     if (!numberingXml) numberingXml = baseNumbering;
     const currentNumberingXml = numberingXml.elements[0];
 
-    // D7: Strip orphaned numbering definitions (entries not referenced by any
-    // paragraph in the exported document parts).
-    const referencedNumIds = collectReferencedNumIds(this.convertedXml);
-
+    // SD-2911: emit every abstractNum / num the importer captured. The previous
+    // implementation pruned definitions whose numId wasn't referenced from the
+    // exported document parts, but that couldn't distinguish "user just deleted a
+    // list in this session" from "definition was always unused in the source file"
+    // (Word's tentative numbering). Both arrived here with no referencing paragraph,
+    // and both were dropped — silently lossy on round-trip. Word tolerates unused
+    // definitions, so the safe default is to preserve.
     if (this.numbering?.definitions && this.numbering?.abstracts) {
-      const { liveAbstracts, liveDefinitions } = filterOrphanedNumberingDefinitions(this.numbering, referencedNumIds);
-      currentNumberingXml.elements = [...liveAbstracts, ...liveDefinitions];
+      const abstracts = Object.values(this.numbering.abstracts);
+      const definitions = Object.values(this.numbering.definitions);
+      currentNumberingXml.elements = [...abstracts, ...definitions];
     } else {
       currentNumberingXml.elements = [];
     }

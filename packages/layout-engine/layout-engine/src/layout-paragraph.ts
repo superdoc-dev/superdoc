@@ -9,6 +9,7 @@ import type {
   ImageMeasure,
   ImageFragment,
   ImageFragmentMetadata,
+  Fragment,
   DrawingBlock,
   DrawingMeasure,
   DrawingFragment,
@@ -29,6 +30,7 @@ import { getFragmentZIndex } from '@superdoc/contracts';
 const PX_PER_PT = 96 / 72;
 
 const spacingDebugEnabled = false;
+const PAGE_START_EPSILON = 0.0001;
 /**
  * Type definition for Word layout attributes attached to paragraph blocks.
  * This is a subset of the WordParagraphLayoutOutput from @superdoc/word-layout.
@@ -99,6 +101,18 @@ type ParagraphBlockAttrs = {
 
 const spacingDebugLog = (..._args: unknown[]): void => {
   if (!spacingDebugEnabled) return;
+};
+
+const hasFlowFragments = (fragments: Fragment[]): boolean => {
+  return fragments.some((fragment) => (fragment as { isAnchored?: boolean }).isAnchored !== true);
+};
+
+const isAtTopOfFreshPage = (state: PageState): boolean => {
+  return (
+    !hasFlowFragments(state.page.fragments) &&
+    state.columnIndex === 0 &&
+    Math.abs(state.cursorY - state.topMargin) <= PAGE_START_EPSILON
+  );
 };
 
 /**
@@ -293,6 +307,8 @@ export type ParagraphLayoutContext = {
    * When undefined, uses the value from block.attrs.spacing.after.
    */
   overrideSpacingAfter?: number;
+  /** Suppress spacing-before when this paragraph starts a fresh page after an explicit page break. */
+  suppressSpacingBeforeAtPageTop?: boolean;
 };
 
 export type AnchoredDrawingEntry = {
@@ -314,6 +330,8 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
 
   const blockAttrs = getParagraphAttrs(block);
   const frame = blockAttrs?.frame;
+  const suppressSpacingBeforeAtPageTop =
+    ctx.suppressSpacingBeforeAtPageTop === true && isAtTopOfFreshPage(ensurePage());
 
   if (anchors?.anchoredDrawings?.length) {
     for (const entry of anchors.anchoredDrawings) {
@@ -513,6 +531,9 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
     if (!spacingExplicit.before) spacingBefore = 0;
     if (!spacingExplicit.after) spacingAfter = 0;
   }
+  if (suppressSpacingBeforeAtPageTop) {
+    spacingBefore = 0;
+  }
   /** Original spacing before value, preserved for blank page calculations where no trailing collapse occurs. */
   const baseSpacingBefore = spacingBefore;
   let appliedSpacingBefore = spacingBefore === 0;
@@ -687,7 +708,6 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
         state.trailingSpacing = 0;
       }
     }
-
     /**
      * Keep Lines Together (OOXML w:keepLines)
      *

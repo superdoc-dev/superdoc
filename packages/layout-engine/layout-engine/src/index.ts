@@ -634,6 +634,70 @@ const shouldSkipRedundantPageBreakBefore = (block: PageBreakBlock, state: PageSt
   return isAtTopOfFreshPage;
 };
 
+const isManualPageBreak = (block: FlowBlock | undefined): block is PageBreakBlock => {
+  return block?.kind === 'pageBreak' && block.attrs?.source !== 'pageBreakBefore';
+};
+
+const sectionBreakForcesPageBoundary = (sectionBreak: SectionBreakBlock | null | undefined): boolean => {
+  const breakType = sectionBreak?.type ?? (sectionBreak?.attrs?.source === 'sectPr' ? 'nextPage' : undefined);
+  return (
+    sectionBreak != null &&
+    (breakType === 'nextPage' ||
+      breakType === 'evenPage' ||
+      breakType === 'oddPage' ||
+      sectionBreak.attrs?.requirePageBoundary === true)
+  );
+};
+
+const isEmptyParagraphBlock = (block: FlowBlock): block is ParagraphBlock => {
+  if (block.kind !== 'paragraph') return false;
+
+  const runs = block.runs ?? [];
+  return (
+    runs.length === 0 ||
+    (runs.length === 1 &&
+      (!runs[0].kind || runs[0].kind === 'text') &&
+      (!(runs[0] as { text?: string }).text || (runs[0] as { text?: string }).text === ''))
+  );
+};
+
+const shouldSkipParagraphInManualBreakScan = (blocks: FlowBlock[], index: number): boolean => {
+  const block = blocks[index];
+  if (!isEmptyParagraphBlock(block)) return false;
+
+  const isSectPrMarker = block.attrs?.sectPrMarker === true;
+  const prevBlock = index > 0 ? blocks[index - 1] : undefined;
+  const nextBlock = index < blocks.length - 1 ? blocks[index + 1] : undefined;
+  const nextSectionBreak = nextBlock?.kind === 'sectionBreak' ? (nextBlock as SectionBreakBlock) : undefined;
+
+  return (
+    (isSectPrMarker && sectionBreakForcesPageBoundary(nextSectionBreak)) ||
+    (prevBlock?.kind === 'pageBreak' && nextSectionBreak != null)
+  );
+};
+
+const hasManualPageBreakBeforeParagraph = (
+  blocks: FlowBlock[],
+  paragraphIndex: number,
+  anchorsForPara?: { block: ImageBlock | DrawingBlock }[],
+): boolean => {
+  if (isManualPageBreak(blocks[paragraphIndex - 1])) return true;
+
+  const anchorIds = new Set(anchorsForPara?.map((entry) => entry.block.id) ?? []);
+  for (let index = paragraphIndex - 1; index >= 0; index -= 1) {
+    const block = blocks[index];
+    if ((block.kind === 'image' || block.kind === 'drawing') && anchorIds.has(block.id)) {
+      continue;
+    }
+    if (block.kind === 'sectionBreak' || shouldSkipParagraphInManualBreakScan(blocks, index)) {
+      continue;
+    }
+    return isManualPageBreak(block);
+  }
+
+  return false;
+};
+
 const hasOnlySectionBreakBlocks = (blocks: readonly FlowBlock[]): boolean => {
   return blocks.length > 0 && blocks.every((block) => block.kind === 'sectionBreak');
 };
@@ -2161,12 +2225,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
       // Skip empty paragraphs that appear between a pageBreak and a sectionBreak
       // (Word sectPr marker paragraphs should not create visible content)
       const paraBlock = block as ParagraphBlock;
-      const isEmpty =
-        !paraBlock.runs ||
-        paraBlock.runs.length === 0 ||
-        (paraBlock.runs.length === 1 &&
-          (!paraBlock.runs[0].kind || paraBlock.runs[0].kind === 'text') &&
-          (!(paraBlock.runs[0] as { text?: string }).text || (paraBlock.runs[0] as { text?: string }).text === ''));
+      const isEmpty = isEmptyParagraphBlock(paraBlock);
 
       if (isEmpty) {
         const isSectPrMarker = paraBlock.attrs?.sectPrMarker === true;
@@ -2175,14 +2234,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
         const nextBlock = index < blocks.length - 1 ? blocks[index + 1] : null;
 
         const nextSectionBreak = nextBlock?.kind === 'sectionBreak' ? (nextBlock as SectionBreakBlock) : null;
-        const nextBreakType =
-          nextSectionBreak?.type ?? (nextSectionBreak?.attrs?.source === 'sectPr' ? 'nextPage' : undefined);
-        const nextBreakForcesPage =
-          nextSectionBreak &&
-          (nextBreakType === 'nextPage' ||
-            nextBreakType === 'evenPage' ||
-            nextBreakType === 'oddPage' ||
-            nextSectionBreak.attrs?.requirePageBoundary === true);
+        const nextBreakForcesPage = sectionBreakForcesPageBoundary(nextSectionBreak);
 
         if (isSectPrMarker && nextBreakForcesPage) {
           continue;
@@ -2365,6 +2417,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
           floatManager,
           remeasureParagraph: options.remeasureParagraph,
           overrideSpacingAfter,
+          suppressSpacingBeforeAtPageTop: hasManualPageBreakBeforeParagraph(blocks, index, anchorsForPara),
         },
         anchorsForPara
           ? {

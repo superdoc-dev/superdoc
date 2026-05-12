@@ -472,6 +472,37 @@ describe('layoutDocument', () => {
     expect(layout.pages.length).toBe(1);
   });
 
+  it('suppresses spacingBefore for a paragraph after an explicit page break', () => {
+    const introBlock: FlowBlock = {
+      kind: 'paragraph',
+      id: 'intro-on-page-one',
+      runs: [],
+    };
+    const pageBreak: FlowBlock = {
+      kind: 'pageBreak',
+      id: 'manual-page-break',
+    } as PageBreakBlock;
+    const headingBlock: FlowBlock = {
+      kind: 'paragraph',
+      id: 'heading-at-page-start',
+      runs: [],
+      attrs: {
+        spacing: { before: 24, after: 8 },
+      },
+    };
+
+    const layout = layoutDocument(
+      [introBlock, pageBreak, headingBlock],
+      [makeMeasure([20]), { kind: 'pageBreak' }, makeMeasure([20])],
+      DEFAULT_OPTIONS,
+    );
+
+    expect(layout.pages).toHaveLength(2);
+    expect(layout.pages[0].fragments).toHaveLength(1);
+    expect(layout.pages[1].fragments).toHaveLength(1);
+    expect(layout.pages[1].fragments[0].y).toBe(DEFAULT_OPTIONS.margins!.top);
+  });
+
   it('handles spacingBefore equal to content area height (boundary condition)', () => {
     // Edge case: spacingBefore exactly equals the content area height.
     // This triggers the infinite loop guard after advancing to a new page.
@@ -2258,7 +2289,7 @@ describe('layoutDocument', () => {
         { kind: 'paragraph', id: 'p1', runs: [] },
         { kind: 'sectionBreak', id: 'sb-next', type: 'nextPage', margins: {} } as SectionBreakBlock,
         { kind: 'pageBreak', id: 'pb-before-exhibit', attrs: { source: 'pageBreakBefore' } } as PageBreakBlock,
-        { kind: 'paragraph', id: 'p2', runs: [] },
+        { kind: 'paragraph', id: 'p2', runs: [], attrs: { spacing: { before: 24 } } },
       ];
 
       const measures: Measure[] = [
@@ -2273,6 +2304,135 @@ describe('layoutDocument', () => {
       expect(layout.pages).toHaveLength(2);
       expect(pageContainsBlock(layout.pages[1], 'p2')).toBe(true);
       expect(layout.pages[1].fragments).toHaveLength(1);
+      expect(layout.pages[1].fragments[0].y).toBe(pageBreakBoundaryOptions.margins!.top + 24);
+    });
+
+    it('preserves spacingBefore after pageBreakBefore', () => {
+      const blocks: FlowBlock[] = [
+        { kind: 'paragraph', id: 'p1', runs: [] },
+        { kind: 'pageBreak', id: 'pb-before-exhibit', attrs: { source: 'pageBreakBefore' } } as PageBreakBlock,
+        { kind: 'paragraph', id: 'p2', runs: [], attrs: { spacing: { before: 24 } } },
+      ];
+
+      const measures: Measure[] = [makeMeasure([40]), { kind: 'pageBreak' }, makeMeasure([40])];
+
+      const layout = layoutDocument(blocks, measures, pageBreakBoundaryOptions);
+
+      expect(layout.pages).toHaveLength(2);
+      expect(pageContainsBlock(layout.pages[1], 'p2')).toBe(true);
+      expect(layout.pages[1].fragments[0].y).toBe(pageBreakBoundaryOptions.margins!.top + 24);
+    });
+
+    it('suppresses spacingBefore after a manual page break when a section break precedes the paragraph', () => {
+      const blocks: FlowBlock[] = [
+        { kind: 'paragraph', id: 'p1', runs: [] },
+        { kind: 'pageBreak', id: 'pb-manual', attrs: { lineBreakType: 'page' } } as PageBreakBlock,
+        { kind: 'paragraph', id: 'p-sectpr-marker', runs: [], attrs: { sectPrMarker: true } },
+        { kind: 'sectionBreak', id: 'sb-continuous', type: 'continuous', margins: {} } as SectionBreakBlock,
+        { kind: 'paragraph', id: 'p2', runs: [], attrs: { spacing: { before: 24 } } },
+      ];
+
+      const measures: Measure[] = [
+        makeMeasure([40]),
+        { kind: 'pageBreak' },
+        makeMeasure([]),
+        { kind: 'sectionBreak' },
+        makeMeasure([40]),
+      ];
+
+      const layout = layoutDocument(blocks, measures, pageBreakBoundaryOptions);
+      const para = layout.pages[1].fragments.find((fragment) => fragment.blockId === 'p2') as ParaFragment;
+
+      expect(para).toBeTruthy();
+      expect(para.y).toBe(pageBreakBoundaryOptions.margins!.top);
+    });
+
+    it('suppresses spacingBefore after a manual page break when an anchored image precedes the paragraph', () => {
+      const anchoredImage: ImageBlock = {
+        kind: 'image',
+        id: 'anchored-image',
+        src: 'data:image/png;base64,xxx',
+        anchor: {
+          isAnchored: true,
+          hRelativeFrom: 'column',
+          vRelativeFrom: 'paragraph',
+          offsetH: 0,
+          offsetV: 0,
+        },
+        wrap: {
+          type: 'Square',
+          wrapText: 'right',
+        },
+        attrs: {
+          anchorParagraphId: 'p2',
+        },
+      };
+      const imageMeasure: ImageMeasure = {
+        kind: 'image',
+        width: 40,
+        height: 40,
+      };
+      const blocks: FlowBlock[] = [
+        { kind: 'paragraph', id: 'p1', runs: [] },
+        { kind: 'pageBreak', id: 'pb-manual', attrs: { lineBreakType: 'page' } } as PageBreakBlock,
+        anchoredImage,
+        { kind: 'paragraph', id: 'p2', runs: [], attrs: { spacing: { before: 24 } } },
+      ];
+
+      const measures: Measure[] = [makeMeasure([40]), { kind: 'pageBreak' }, imageMeasure, makeMeasure([40])];
+
+      const layout = layoutDocument(blocks, measures, pageBreakBoundaryOptions);
+      const para = layout.pages[1].fragments.find((fragment) => fragment.blockId === 'p2') as ParaFragment;
+
+      expect(para).toBeTruthy();
+      expect(para.y).toBe(pageBreakBoundaryOptions.margins!.top);
+    });
+
+    it('suppresses spacingBefore after a manual page break when an anchored drawing precedes the paragraph', () => {
+      const anchoredDrawing: FlowBlock = {
+        kind: 'drawing',
+        id: 'anchored-drawing',
+        drawingKind: 'vectorShape',
+        geometry: { width: 40, height: 40, rotation: 0 },
+        anchor: {
+          isAnchored: true,
+          hRelativeFrom: 'column',
+          vRelativeFrom: 'paragraph',
+          offsetH: 0,
+          offsetV: 0,
+        },
+        wrap: {
+          type: 'Square',
+          wrapText: 'right',
+        },
+        attrs: {
+          anchorParagraphId: 'p2',
+        },
+      };
+      const drawingMeasure: DrawingMeasure = {
+        kind: 'drawing',
+        drawingKind: 'vectorShape',
+        width: 40,
+        height: 40,
+        scale: 1,
+        naturalWidth: 40,
+        naturalHeight: 40,
+        geometry: { width: 40, height: 40, rotation: 0, flipH: false, flipV: false },
+      };
+      const blocks: FlowBlock[] = [
+        { kind: 'paragraph', id: 'p1', runs: [] },
+        { kind: 'pageBreak', id: 'pb-manual', attrs: { lineBreakType: 'page' } } as PageBreakBlock,
+        anchoredDrawing,
+        { kind: 'paragraph', id: 'p2', runs: [], attrs: { spacing: { before: 24 } } },
+      ];
+
+      const measures: Measure[] = [makeMeasure([40]), { kind: 'pageBreak' }, drawingMeasure, makeMeasure([40])];
+
+      const layout = layoutDocument(blocks, measures, pageBreakBoundaryOptions);
+      const para = layout.pages[1].fragments.find((fragment) => fragment.blockId === 'p2') as ParaFragment;
+
+      expect(para).toBeTruthy();
+      expect(para.y).toBe(pageBreakBoundaryOptions.margins!.top);
     });
 
     it('still honors manual page breaks after a fresh page boundary', () => {

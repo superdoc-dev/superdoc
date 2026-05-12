@@ -1,5 +1,5 @@
 import { describe, expect, it, mock } from 'bun:test';
-import type { ParagraphBlock, ParagraphMeasure, Line } from '@superdoc/contracts';
+import type { ImageBlock, ImageMeasure, ParagraphBlock, ParagraphMeasure, Line } from '@superdoc/contracts';
 import { layoutParagraphBlock, type ParagraphLayoutContext } from './layout-paragraph.js';
 import type { PageState } from './paginator.js';
 import type { FloatingObjectManager } from './floating-objects.js';
@@ -549,6 +549,133 @@ describe('layoutParagraphBlock - remeasurement with list markers', () => {
       layoutParagraphBlock(ctx);
 
       expect(remeasureParagraph).toHaveBeenCalledWith(block, 120, 24);
+    });
+
+    it('suppresses manual page-break top spacing before float remeasurement', () => {
+      const pageState = makePageState();
+      const ensurePage = mock(() => pageState);
+      const remeasureParagraph = mock((block, maxWidth, firstLineIndent) => {
+        if (maxWidth === 120) {
+          expect(firstLineIndent).toBe(0);
+        }
+        return makeMeasure([{ width: 100, lineHeight: 20, maxWidth }]);
+      });
+
+      const scannedLineYs: number[] = [];
+      const floatManager = makeFloatManager();
+      floatManager.computeAvailableWidth = mock((lineY, lineHeight, columnWidth) => {
+        scannedLineYs.push(lineY);
+        if (lineY === pageState.topMargin) {
+          return { width: 120, offsetX: 10 };
+        }
+        return { width: columnWidth, offsetX: 0 };
+      });
+
+      const block: ParagraphBlock = {
+        kind: 'paragraph',
+        id: 'test-block',
+        runs: [{ text: 'Test', fontFamily: 'Arial', fontSize: 12 }],
+        attrs: {
+          spacing: {
+            before: 30,
+          },
+        },
+      };
+
+      const measure = makeMeasure([{ width: 100, lineHeight: 20, maxWidth: 150 }]);
+
+      const ctx: ParagraphLayoutContext = {
+        block,
+        measure,
+        columnWidth: 150,
+        ensurePage,
+        advanceColumn: mock((state) => state),
+        columnX: mock(() => 50),
+        floatManager,
+        remeasureParagraph,
+        suppressSpacingBeforeAtPageTop: true,
+      };
+
+      layoutParagraphBlock(ctx);
+
+      expect(scannedLineYs[0]).toBe(pageState.topMargin);
+      expect(remeasureParagraph).toHaveBeenCalledWith(block, 120, 0);
+    });
+
+    it('keeps manual page-break top spacing suppressed when placing an anchored image first', () => {
+      const pageState = makePageState();
+      const ensurePage = mock(() => pageState);
+      const remeasureParagraph = mock((block, maxWidth, firstLineIndent) => {
+        if (maxWidth === 120) {
+          expect(firstLineIndent).toBe(0);
+        }
+        return makeMeasure([{ width: 100, lineHeight: 20, maxWidth }]);
+      });
+
+      const scannedLineYs: number[] = [];
+      const floatManager = makeFloatManager();
+      floatManager.computeAvailableWidth = mock((lineY, lineHeight, columnWidth) => {
+        scannedLineYs.push(lineY);
+        if (lineY === pageState.topMargin) {
+          return { width: 120, offsetX: 10 };
+        }
+        return { width: columnWidth, offsetX: 0 };
+      });
+
+      const block: ParagraphBlock = {
+        kind: 'paragraph',
+        id: 'test-block',
+        runs: [{ text: 'Test', fontFamily: 'Arial', fontSize: 12 }],
+        attrs: {
+          spacing: {
+            before: 30,
+          },
+        },
+      };
+      const anchoredImage: ImageBlock = {
+        kind: 'image',
+        id: 'anchored-image',
+        src: 'data:image/png;base64,xxx',
+        anchor: {
+          isAnchored: true,
+          hRelativeFrom: 'column',
+          vRelativeFrom: 'paragraph',
+          offsetH: 0,
+          offsetV: 0,
+        },
+        wrap: {
+          type: 'Square',
+          wrapText: 'right',
+        },
+      };
+      const imageMeasure: ImageMeasure = {
+        kind: 'image',
+        width: 40,
+        height: 40,
+      };
+
+      const ctx: ParagraphLayoutContext = {
+        block,
+        measure: makeMeasure([{ width: 100, lineHeight: 20, maxWidth: 150 }]),
+        columnWidth: 150,
+        ensurePage,
+        advanceColumn: mock((state) => state),
+        columnX: mock(() => 50),
+        floatManager,
+        remeasureParagraph,
+        suppressSpacingBeforeAtPageTop: true,
+      };
+
+      layoutParagraphBlock(ctx, {
+        anchoredDrawings: [{ block: anchoredImage, measure: imageMeasure }],
+        pageWidth: 300,
+        pageMargins: { top: 50, right: 50, bottom: 50, left: 50 },
+        columns: { width: 150, gap: 0, count: 1 },
+        placedAnchoredIds: new Set(),
+      });
+
+      expect(scannedLineYs[0]).toBe(pageState.topMargin);
+      expect(remeasureParagraph).toHaveBeenCalledWith(block, 120, 0);
     });
   });
 });

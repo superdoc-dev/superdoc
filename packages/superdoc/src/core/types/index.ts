@@ -80,19 +80,28 @@ export interface User {
 /**
  * One entry in the `states` array delivered to
  * {@link Config.onAwarenessUpdate}. SuperDoc emits an entry per remote
- * client, derived from the underlying Yjs awareness states. The fields
- * below match what SuperDoc populates by default; consumers using a
- * custom provider may attach additional fields, which surface through
- * the index signature as `unknown` (consumers narrow before use).
+ * client, derived from the underlying Yjs awareness states.
+ *
+ * The runtime helper `awarenessStatesToArray` spreads each remote user
+ * onto the top of the entry (`{ clientId, ...value.user, color }`), so
+ * `User` fields like `name`, `email`, `image` appear at the top level
+ * (not nested under a `user` property). Consumers should read
+ * `state.name` / `state.email`, not `state.user.name`.
+ *
+ * Application-specific fields attached to the awareness state by the
+ * provider surface through the `[key: string]: unknown` index
+ * signature; consumers narrow before use.
  */
-export interface AwarenessState {
-  /** The remote user, when one is associated with this awareness entry. */
-  user?: User;
+export interface AwarenessState extends User {
   /** Yjs client identifier for the remote peer. */
   clientId?: number;
-  /** Color assigned to the remote user by SuperDoc's presence system. */
+  /**
+   * Color assigned by SuperDoc's presence system. Overrides
+   * {@link User.color} when the presence system computes a stable
+   * palette assignment for the remote peer.
+   */
   color?: string;
-  /** Additional fields populated by application code via the awareness provider. */
+  /** Application-specific fields spread from the awareness provider. */
   [key: string]: unknown;
 }
 

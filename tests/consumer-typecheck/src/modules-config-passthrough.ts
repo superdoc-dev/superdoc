@@ -122,17 +122,22 @@ const config: Config = {
   },
 
   // Awareness handler reads concrete fields off each state. SD-2834
-  // promoted `states` from `any[]` to a public `AwarenessState` type so
-  // consumers get IntelliSense on the documented fields (`user`,
-  // `clientId`, `color`) without giving up the pass-through index
-  // signature for application-specific keys.
+  // promoted `states` from `any[]` to a public `AwarenessState` type
+  // (which extends `User`, since the runtime helper
+  // `awarenessStatesToArray` spreads user fields at the top level via
+  // `{ clientId, ...value.user, color }`). Consumers get IntelliSense
+  // on the flattened fields (`name`, `email`, `clientId`, `color`)
+  // without giving up the pass-through index signature for
+  // application-specific keys.
   onAwarenessUpdate: ({ states }: { states: AwarenessState[] }) => {
     for (const state of states) {
-      const userName = state.user?.name;
+      const userName = state.name;
+      const userEmail = state.email;
       const clientId = state.clientId;
       const userColor = state.color;
       const customField = state['customField']; // index signature still works
       void userName;
+      void userEmail;
       void clientId;
       void userColor;
       void customField;

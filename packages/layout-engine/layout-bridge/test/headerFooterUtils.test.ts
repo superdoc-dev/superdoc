@@ -1193,5 +1193,6 @@ describe('headerFooterUtils', () => {
 
       expect(getHeaderFooterIdForPage(page, identifier, { kind: 'header', sectionPageNumber: 3 })).toBe('h0-default');
     });
+
   });
 });

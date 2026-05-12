@@ -59,12 +59,6 @@ export function resolveInheritedHeaderFooterRefWithType({
     return null;
   }
 
-  const hasSectionAwareRefs =
-    sectionMap != null && (sectionMap.has(sectionIndex) || (identifier.sectionCount ?? 0) > sectionIndex);
-  if (hasSectionAwareRefs) {
-    return null;
-  }
-
   return resolveVariantRef(legacyIds, variantType);
 }
 

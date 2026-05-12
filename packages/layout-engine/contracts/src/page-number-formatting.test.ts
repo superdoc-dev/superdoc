@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatPageNumber, formatPageNumberFieldValue } from './index.js';
+import { formatPageNumber, formatPageNumberFieldValue } from './page-number-formatting.js';
 
 describe('page number formatting', () => {
   it('formats the supported Word page number formats', () => {

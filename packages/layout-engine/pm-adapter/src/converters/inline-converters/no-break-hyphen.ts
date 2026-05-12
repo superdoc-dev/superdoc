@@ -24,6 +24,7 @@ export function noBreakHyphenNodeToRun({
   themeColors,
   enableComments,
   runProperties,
+  inlineRunProperties,
   converterContext,
 }: InlineConverterParams): TextRun {
   let run: TextRun = {
@@ -52,7 +53,7 @@ export function noBreakHyphenNodeToRun({
     run.sdt = sdtMetadata;
   }
 
-  run = applyInlineRunProperties(run, runProperties, converterContext);
+  run = applyInlineRunProperties(run, runProperties, converterContext, inlineRunProperties);
 
   return run;
 }

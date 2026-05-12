@@ -3892,6 +3892,13 @@ export class Editor extends EventEmitter<EditorEventMap> {
     if (!this.options.ydoc) {
       this.#initComments();
     }
+
+    // AIDEV-NOTE: In collaboration mode, parts are seeded into Y.Doc directly
+    // (not through `mutateParts`), so no `partChanged` fires on this client.
+    // Remote tabs refresh via the consumer → `mutateParts` → `partChanged` path,
+    // but the importer relies on this signal to rebuild header/footer state
+    // bound to the previous document (SD-2643).
+    this.emit('documentReplaced', { editor: this });
   }
 
   /**

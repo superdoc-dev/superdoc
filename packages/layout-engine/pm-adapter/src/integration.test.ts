@@ -982,4 +982,132 @@ describe('page break integration tests', () => {
     expect(exhibitPageIndex).toBe(1);
     expect(layout.pages[1].fragments.length).toBeGreaterThan(0);
   });
+
+  // SD-2781: end-to-end check that runs the unmocked applyInlineRunProperties
+  // pipeline. The unit tests in common.test.ts mock computeRunAttrs, so they
+  // can't catch type-shape regressions in the contracts package. This test
+  // exercises the full PM -> FlowBlock conversion with raw runProperties on
+  // a real run-wrapper node, mirroring how the importer emits them.
+  it('preserves run-level rtl, cs, and lang on TextRun.bidi / TextRun.script', () => {
+    const pmDoc = {
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [
+            {
+              type: 'run',
+              attrs: {
+                runProperties: {
+                  rtl: true,
+                  cs: true,
+                  lang: { val: 'en-US', bidi: 'ar-SA', eastAsia: 'ja-JP' },
+                },
+              },
+              content: [{ type: 'text', text: 'mixed-script run' }],
+            },
+          ],
+        },
+      ],
+    };
+
+    const { blocks } = toFlowBlocks(pmDoc);
+    const paragraph = blocks.find((block) => block.kind === 'paragraph');
+    expect(paragraph).toBeDefined();
+    if (paragraph?.kind !== 'paragraph') return;
+
+    const textRun = paragraph.runs.find((run) => 'text' in run && run.text === 'mixed-script run');
+    expect(textRun).toBeDefined();
+    expect(textRun?.bidi).toEqual({ rtl: true });
+    expect(textRun?.script).toEqual({
+      complexScript: true,
+      language: { default: 'en-US', complexScript: 'ar-SA', eastAsian: 'ja-JP' },
+    });
+  });
+
+  it('omits bidi and script on TextRun when no signals are set (no bloat)', () => {
+    const pmDoc = {
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [{ type: 'text', text: 'plain Latin text' }],
+        },
+      ],
+    };
+
+    const { blocks } = toFlowBlocks(pmDoc);
+    const paragraph = blocks.find((block) => block.kind === 'paragraph');
+    if (paragraph?.kind !== 'paragraph') return;
+    const textRun = paragraph.runs.find((run) => 'text' in run && run.text === 'plain Latin text');
+    expect(textRun?.bidi).toBeUndefined();
+    expect(textRun?.script).toBeUndefined();
+  });
+
+  // SD-2781 round 2 (codex finding): generic-token.ts:64 calls
+  // applyInlineRunProperties without reassigning the return value, so token
+  // runs (page numbers, total page counts) lose run-level bidi/script metadata
+  // even when wrapped in a run that explicitly sets rtl/cs/lang.
+  it('preserves bidi/script on page-number token TextRuns inside an rtl run', () => {
+    const pmDoc = {
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [
+            {
+              type: 'run',
+              attrs: { runProperties: { rtl: true, cs: true } },
+              content: [{ type: 'page-number' }],
+            },
+          ],
+        },
+      ],
+    };
+
+    const { blocks } = toFlowBlocks(pmDoc);
+    const paragraph = blocks.find((block) => block.kind === 'paragraph');
+    if (paragraph?.kind !== 'paragraph') return;
+    const tokenRun = paragraph.runs.find(
+      (run) => 'token' in run && (run.token === 'pageNumber' || run.token === 'totalPageCount'),
+    );
+    expect(tokenRun, 'token run should be present').toBeDefined();
+    expect(tokenRun?.bidi).toEqual({ rtl: true });
+    expect(tokenRun?.script).toEqual({ complexScript: true });
+  });
+
+  // SD-2781: nested inline converters (bookmark-start, structuredContent,
+  // page-reference) must forward activeInlineRunProperties when calling
+  // visitNode - otherwise children inside an SDT/bookmark wrapper lose
+  // run-level bidi/script. These tests pin the pass-through.
+  it('preserves bidi/script on text inside a structuredContent wrapper', () => {
+    const pmDoc = {
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [
+            {
+              type: 'run',
+              attrs: { runProperties: { rtl: true, cs: true } },
+              content: [
+                {
+                  type: 'structuredContent',
+                  content: [{ type: 'text', text: 'sdt-wrapped rtl text' }],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    const { blocks } = toFlowBlocks(pmDoc);
+    const paragraph = blocks.find((block) => block.kind === 'paragraph');
+    if (paragraph?.kind !== 'paragraph') return;
+    const textRun = paragraph.runs.find((run) => 'text' in run && run.text === 'sdt-wrapped rtl text');
+    expect(textRun, 'text run inside SDT should be present').toBeDefined();
+    expect(textRun?.bidi).toEqual({ rtl: true });
+    expect(textRun?.script).toEqual({ complexScript: true });
+  });
 });

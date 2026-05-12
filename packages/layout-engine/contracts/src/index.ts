@@ -16,7 +16,7 @@ export type {
   RunBidiContext,
   RunScriptContext,
 } from './direction-context.js';
-import type { ParagraphDirectionContext } from './direction-context.js';
+import type { ParagraphDirectionContext, RunBidiContext, RunScriptContext } from './direction-context.js';
 
 // Export table contracts
 export {
@@ -315,6 +315,19 @@ export type TextRun = RunMarks & {
   };
   /** Tracked-change metadata from ProseMirror marks. */
   trackedChange?: TrackedChangeMeta;
+  /**
+   * Run-level bidi signals preserved from the source DOCX (run rtl flag,
+   * embedding/override directions). Direction-only - script formatting lives
+   * on `script`. Populated by pm-adapter from raw run properties; not yet
+   * rendered (Wave 1c consumes embedding/override).
+   */
+  bidi?: RunBidiContext;
+  /**
+   * Run-level script context preserved from the source DOCX (complex-script
+   * flag, per-script language metadata). Wave 1b uses `complexScript` to gate
+   * the formatting-stack selection (Latin variants vs CS variants).
+   */
+  script?: RunScriptContext;
 };
 
 export type TabRun = RunMarks & {

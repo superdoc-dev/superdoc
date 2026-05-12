@@ -744,6 +744,7 @@ export function paragraphToFlowBlocks({
     activeSdt?: SdtMetadata,
     activeRunProperties?: RunProperties,
     activeHidden = false,
+    activeInlineRunProperties?: RunProperties,
   ) => {
     if (activeHidden && node.type !== 'run') {
       suppressedByVanish = true;
@@ -765,6 +766,7 @@ export function paragraphToFlowBlocks({
       themeColors,
       enableComments,
       runProperties: activeRunProperties,
+      inlineRunProperties: activeInlineRunProperties,
       paragraphProperties: resolvedParagraphProperties,
       converterContext,
       visitNode,

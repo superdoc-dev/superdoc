@@ -221,11 +221,53 @@ function withRightAlign(config: TocSwitchConfig, rightAlignPageNumbers: boolean 
 }
 
 /**
+ * Strips `tocPageNumber` marks anywhere in a node subtree. Returns the
+ * possibly-rewritten node and whether anything changed. Required because
+ * buildTocEntryParagraphs wraps the page-number text in a `run`, so the
+ * mark lives one level below the paragraph's direct children.
+ */
+function stripTocPageNumberFromNode<T>(node: T): { node: T; changed: boolean } {
+  if (!node || typeof node !== 'object') return { node, changed: false };
+
+  const typedNode = node as { marks?: Array<{ type?: string }>; content?: unknown[] };
+  let changed = false;
+  let next: typeof typedNode = typedNode;
+
+  if (Array.isArray(typedNode.marks)) {
+    const filtered = typedNode.marks.filter((mark) => mark?.type !== 'tocPageNumber');
+    if (filtered.length !== typedNode.marks.length) {
+      changed = true;
+      if (filtered.length === 0) {
+        const { marks: _removed, ...rest } = next;
+        next = rest as typeof typedNode;
+      } else {
+        next = { ...next, marks: filtered };
+      }
+    }
+  }
+
+  if (Array.isArray(typedNode.content)) {
+    let childChanged = false;
+    const nextChildren = typedNode.content.map((child) => {
+      const result = stripTocPageNumberFromNode(child);
+      if (result.changed) childChanged = true;
+      return result.node;
+    });
+    if (childChanged) {
+      changed = true;
+      next = { ...next, content: nextChildren };
+    }
+  }
+
+  return { node: next as unknown as T, changed };
+}
+
+/**
  * Removes tocPageNumber marks when the active schema doesn't define that mark.
  * Some headless/test schemas omit TOC-specific marks, and nodeFromJSON fails if
  * unknown marks are present in generated TOC paragraph content.
  */
-function sanitizeTocContentForSchema(content: EntryParagraphJson[], editor: Editor): EntryParagraphJson[] {
+export function sanitizeTocContentForSchema(content: EntryParagraphJson[], editor: Editor): EntryParagraphJson[] {
   if (editor.state.schema?.marks?.tocPageNumber) return content;
 
   return content.map((paragraph) => {
@@ -234,19 +276,9 @@ function sanitizeTocContentForSchema(content: EntryParagraphJson[], editor: Edit
 
     let changed = false;
     const sanitizedContent = paragraphContent.map((node) => {
-      if (!node || typeof node !== 'object') return node;
-      const typedNode = node as { marks?: Array<{ type?: string }> };
-      const marks = typedNode.marks;
-      if (!Array.isArray(marks)) return node;
-      const filteredMarks = marks.filter((mark) => mark?.type !== 'tocPageNumber');
-      if (filteredMarks.length === marks.length) return node;
-
-      changed = true;
-      if (filteredMarks.length === 0) {
-        const { marks: _removed, ...rest } = typedNode;
-        return rest as typeof node;
-      }
-      return { ...typedNode, marks: filteredMarks } as typeof node;
+      const result = stripTocPageNumberFromNode(node);
+      if (result.changed) changed = true;
+      return result.node;
     });
 
     return changed ? ({ ...paragraph, content: sanitizedContent } as EntryParagraphJson) : paragraph;

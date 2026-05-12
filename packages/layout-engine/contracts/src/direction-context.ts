@@ -134,8 +134,25 @@ export type RunBidiContext = {
  * with the CS or Latin stack).
  */
 export type RunScriptContext = {
-  /** w:rPr/w:cs. Forces complex-script formatting regardless of Unicode. */
-  complexScript: boolean;
-  /** w:rPr/w:lang/@bidi. Complex-script language metadata (spellcheck). */
-  language?: string;
+  /**
+   * w:rPr/w:cs (§17.3.2.7). Forces complex-script formatting regardless of Unicode.
+   * Per the spec, absence != false: when omitted, the value inherits from the style
+   * hierarchy and ultimately falls back to Unicode-based script detection. Only set
+   * this field when the source explicitly carries w:cs - leave undefined otherwise so
+   * downstream consumers can distinguish "not set" from "explicitly off".
+   */
+  complexScript?: boolean;
+  /**
+   * Per-script language metadata, kept on separate fields per ECMA §17.3.2.20
+   * because each maps to a different formatting stack (Latin / CS / East Asian).
+   * Wave 1b consumes these to gate spellcheck and font-stack selection.
+   */
+  language?: {
+    /** w:rPr/w:lang/@val. Default (Latin) language tag. */
+    default?: string;
+    /** w:rPr/w:lang/@bidi. Complex-script language tag. */
+    complexScript?: string;
+    /** w:rPr/w:lang/@eastAsia. East Asian language tag. */
+    eastAsian?: string;
+  };
 };

@@ -132,6 +132,21 @@ jobs:
           cd tests/consumer-typecheck
           node typecheck-matrix.mjs
 
+      - name: Deep public-type audit (report-only)
+        # Recursive walk of every type reachable from superdoc's public
+        # exports in the installed tarball. Reports inventory by tier and
+        # top files. Always exits 0 in default mode; the `--strict` flag
+        # turns it into a hard gate but is not used in CI yet because the
+        # current public surface is the accidental declaration graph, not
+        # a deliberate facade. SD-2966 will define that facade; once it
+        # lands, this step gets `--strict` added and an allowlist file is
+        # seeded against the facade-scoped findings. Until then, the step
+        # provides visibility without the maintenance burden of a giant
+        # public allowlist.
+        run: |
+          cd tests/consumer-typecheck
+          node deep-type-audit.mjs
+
   unit-tests:
     needs: build
     runs-on: ubuntu-latest

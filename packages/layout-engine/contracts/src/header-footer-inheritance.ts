@@ -44,7 +44,9 @@ export function resolveInheritedHeaderFooterRef({
   if (fromSection) return fromSection;
 
   const hasSectionAwareRefs =
-    sectionMap != null && (sectionMap.has(sectionIndex) || (identifier.sectionCount ?? 0) > sectionIndex);
+    sectionMap != null &&
+    sectionMap.size > 0 &&
+    (sectionMap.has(sectionIndex) || (identifier.sectionCount ?? 0) > sectionIndex);
   if (hasSectionAwareRefs) {
     for (let index = sectionIndex - 1; index >= 0; index -= 1) {
       const inherited = resolveVariantRef(sectionMap.get(index), variantType);

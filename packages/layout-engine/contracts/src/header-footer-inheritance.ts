@@ -1,4 +1,4 @@
-type HeaderFooterType = 'default' | 'first' | 'even' | 'odd';
+import type { HeaderFooterType } from './index.js';
 
 export type HeaderFooterRefMap = Partial<Record<HeaderFooterType, string | null | undefined>>;
 
@@ -51,17 +51,7 @@ export function resolveInheritedHeaderFooterRefWithType({
   const fromSection = resolveVariantRef(sectionIds, variantType);
   if (fromSection) return fromSection;
 
-  let hasPriorSectionRefs = false;
   if (sectionMap) {
-    for (const index of sectionMap.keys()) {
-      if (index < sectionIndex) {
-        hasPriorSectionRefs = true;
-        break;
-      }
-    }
-  }
-  const hasSectionAwareRefs = sectionMap != null && (sectionMap.has(sectionIndex) || hasPriorSectionRefs);
-  if (hasSectionAwareRefs) {
     for (let index = sectionIndex - 1; index >= 0; index -= 1) {
       const inherited = resolveVariantRef(sectionMap.get(index), variantType);
       if (inherited) return inherited;

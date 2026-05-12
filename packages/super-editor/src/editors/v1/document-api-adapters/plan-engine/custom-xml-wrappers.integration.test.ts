@@ -1,15 +1,21 @@
 /* @vitest-environment jsdom */
 
 /**
- * customXml.parts.* read-side smoke tests against a real editor.
+ * customXml.parts.* integration tests against a real editor.
  *
- * - Empty document: list returns no parts; get returns null.
- * - Manually injecting a custom XML part into the converter package:
- *   list discovers it, get returns its content, filters work.
+ * Read side:
+ *   - Empty document: list returns no parts; get returns null.
+ *   - Manually injected custom XML parts: list discovers them, get
+ *     returns content, filters work.
+ *   - Foreign producer cases: partName-only targeting, OPC rels-based
+ *     props pairing (including `./` and `../customXml/` Target forms),
+ *     and non-customXml partName targets are rejected.
  *
- * Write side (`create` / `patch` / `remove`) is implemented behind a
- * `CAPABILITY_UNAVAILABLE` stub for now; tests exist only for the
- * lookup-shaped failures, not for actual write behavior.
+ * Write side:
+ *   - create / patch / remove round-trip through export and reimport.
+ *   - Tombstone semantics for parts that originated in the imported zip.
+ *   - Remove → create index recycling.
+ *   - Bibliography part cache invalidation.
  */
 
 import { describe, expect, it } from 'vitest';
@@ -190,6 +196,74 @@ describe('customXml.parts read-side (integration)', () => {
     const remove = editor.doc.customXml.parts.remove({ target: { partName: 'word/document.xml' } });
     expect(remove.success).toBe(false);
     if (!remove.success) expect(remove.failure.code).toBe('TARGET_NOT_FOUND');
+    editor.destroy();
+  });
+
+  it('resolves rels Target with ./ prefix (valid OPC relative path)', async () => {
+    const editor = await createEditorWithEmptyPackage();
+    const converted = (editor as unknown as { converter: { convertedXml: Record<string, unknown> } }).converter
+      .convertedXml;
+    converted[PART_NAME] = makeStorageDoc();
+    converted['customXml/itemPropsFOREIGN.xml'] = makePropsDoc(ITEM_ID, [NAMESPACE]);
+    converted['customXml/_rels/item1.xml.rels'] = {
+      declaration: { attributes: { version: '1.0', encoding: 'UTF-8' } },
+      elements: [
+        {
+          type: 'element',
+          name: 'Relationships',
+          attributes: { xmlns: 'http://schemas.openxmlformats.org/package/2006/relationships' },
+          elements: [
+            {
+              type: 'element',
+              name: 'Relationship',
+              attributes: {
+                Id: 'rId1',
+                Type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/customXmlProps',
+                // VALID OPC: "./itemPropsFOREIGN.xml" is sibling relative.
+                Target: './itemPropsFOREIGN.xml',
+              },
+            },
+          ],
+        },
+      ],
+    };
+    const list = editor.doc.customXml.parts.list();
+    expect(list.items.length).toBe(1);
+    expect(list.items[0]!.propsPartName).toBe('customXml/itemPropsFOREIGN.xml');
+    editor.destroy();
+  });
+
+  it('resolves rels Target with ../customXml/ prefix (valid OPC relative path)', async () => {
+    const editor = await createEditorWithEmptyPackage();
+    const converted = (editor as unknown as { converter: { convertedXml: Record<string, unknown> } }).converter
+      .convertedXml;
+    converted[PART_NAME] = makeStorageDoc();
+    converted['customXml/itemPropsFOREIGN.xml'] = makePropsDoc(ITEM_ID, [NAMESPACE]);
+    converted['customXml/_rels/item1.xml.rels'] = {
+      declaration: { attributes: { version: '1.0', encoding: 'UTF-8' } },
+      elements: [
+        {
+          type: 'element',
+          name: 'Relationships',
+          attributes: { xmlns: 'http://schemas.openxmlformats.org/package/2006/relationships' },
+          elements: [
+            {
+              type: 'element',
+              name: 'Relationship',
+              attributes: {
+                Id: 'rId1',
+                Type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/customXmlProps',
+                // VALID OPC: "../customXml/itemPropsFOREIGN.xml" is also acceptable.
+                Target: '../customXml/itemPropsFOREIGN.xml',
+              },
+            },
+          ],
+        },
+      ],
+    };
+    const list = editor.doc.customXml.parts.list();
+    expect(list.items.length).toBe(1);
+    expect(list.items[0]!.propsPartName).toBe('customXml/itemPropsFOREIGN.xml');
     editor.destroy();
   });
 
@@ -459,6 +533,63 @@ describe('customXml.parts write-side', () => {
     expect(finalGet!.content).not.toContain('<old');
 
     reloaded.destroy();
+  });
+
+  it('removing the bibliography part does not resurrect it via syncBibliographyPartToPackage on export', async () => {
+    // Seed: simulate a doc with a bibliography custom XML part already
+    // loaded. The converter's bibliographyPart cache will hold sources.
+    const editor = await createEditorWithEmptyPackage();
+    const converter = (editor as unknown as { converter: { convertedXml: Record<string, unknown>; bibliographyPart?: unknown } })
+      .converter;
+    // Fake a populated bibliographyPart cache pointing at customXml/item1.xml.
+    converter.bibliographyPart = {
+      sources: [
+        {
+          tag: 'src1',
+          type: 'book',
+          fields: { title: 'A Book' },
+        },
+      ],
+      partPath: 'customXml/item1.xml',
+      itemPropsPath: 'customXml/itemProps1.xml',
+      itemRelsPath: 'customXml/_rels/item1.xml.rels',
+      selectedStyle: '/APA.XSL',
+      styleName: 'APA',
+      version: '6',
+    };
+    // Pretend the part also exists in convertedXml (it was loaded from a real doc).
+    converter.convertedXml['customXml/item1.xml'] = {
+      declaration: { attributes: { version: '1.0', encoding: 'UTF-8' } },
+      elements: [
+        {
+          type: 'element',
+          name: 'b:Sources',
+          attributes: {
+            xmlns: 'http://schemas.openxmlformats.org/officeDocument/2006/bibliography',
+            'xmlns:b': 'http://schemas.openxmlformats.org/officeDocument/2006/bibliography',
+          },
+          elements: [],
+        },
+      ],
+    };
+
+    // Locate the part by partName and remove it.
+    const removed = editor.doc.customXml.parts.remove({
+      target: { partName: 'customXml/item1.xml' },
+    });
+    expect(removed.success).toBe(true);
+
+    // Without a fix, syncBibliographyPartToPackage will re-create the part
+    // when exportDocx runs, because bibliographyPart.sources still has the
+    // cached entries.
+    await editor.exportDocx();
+
+    // After export, convertedXml should NOT have the part again (or, if
+    // it does, that's the staleness bug).
+    const partResurrectedInConvertedXml = converter.convertedXml['customXml/item1.xml'] !== undefined;
+    expect(partResurrectedInConvertedXml, 'syncBibliographyPartToPackage re-added the removed part to convertedXml').toBe(false);
+
+    editor.destroy();
   });
 
   it('round-trip: create → export → reimport preserves id, content, schemaRefs', async () => {

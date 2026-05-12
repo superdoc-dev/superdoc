@@ -113,12 +113,12 @@ export function findPropsPartFor(convertedXml, partName) {
       if (rel?.attributes?.Type !== CUSTOM_XML_PROPS_RELATIONSHIP_TYPE) continue;
       const target = rel?.attributes?.Target;
       if (typeof target !== 'string' || target.length === 0) continue;
-      // Targets in customXml/_rels/itemN.xml.rels are relative to the
-      // rels file's base, i.e. `customXml/`. So `itemPropsN.xml` →
-      // `customXml/itemPropsN.xml`. Absolute or otherwise-prefixed
-      // targets are accepted as-is when they already point at a key.
-      const candidate = target.includes('/') ? target.replace(/^\.?\//, '') : `customXml/${target}`;
-      if (convertedXml[candidate]) return candidate;
+      // OPC resolution: Target is relative to the source part's directory
+      // (`customXml/` for a rels file at `customXml/_rels/itemN.xml.rels`).
+      // resolveOpcTargetPath handles bare names, `./`, `../`, and absolute
+      // forms per RFC 3986 §5.2.4.
+      const candidate = resolveOpcTargetPath(target, 'customXml');
+      if (candidate && convertedXml[candidate]) return candidate;
     }
   }
 
@@ -465,12 +465,17 @@ export function createCustomXmlPart(convertedXml, { content, schemaRefs }, conve
  * Replaces the content and/or schemaRefs of an existing part. Preserves
  * the existing itemID and package part names.
  *
+ * When `converter` is provided and the patched part is the cached
+ * bibliography part, the bibliographyPart cache is invalidated so the
+ * exporter's `syncBibliographyPartToPackage` doesn't overwrite the
+ * patched content with stale sources.
+ *
  * Returns `{ partName }` of the part that was patched, or `null` when
  * the target couldn't be resolved.
  *
  * @throws {Error} when content is provided but not well-formed.
  */
-export function patchCustomXmlPart(convertedXml, target, { content, schemaRefs }) {
+export function patchCustomXmlPart(convertedXml, target, { content, schemaRefs }, converter) {
   const partName = resolveTargetPartName(convertedXml, target);
   if (!partName) return null;
 
@@ -500,6 +505,10 @@ export function patchCustomXmlPart(convertedXml, target, { content, schemaRefs }
     const existingDecl = convertedXml[propsPartName]?.declaration;
     convertedXml[propsPartName] = createXmlDocument(buildItemPropsRoot(itemId, schemaRefs), existingDecl);
   }
+
+  // If we just patched the bibliography part, invalidate the cache so
+  // the exporter doesn't overwrite our content from converter.bibliographyPart.
+  if (converter) invalidateConverterCachesForPath(converter, partName);
 
   return { partName };
 }
@@ -554,7 +563,29 @@ export function removeCustomXmlPart(convertedXml, target, converter) {
       converter.removedCustomXmlPaths = new Set();
     }
     for (const path of removedPaths) converter.removedCustomXmlPaths.add(path);
+
+    // Invalidate the bibliographyPart cache if its part was removed.
+    // Without this, syncBibliographyPartToPackage on the next export
+    // would resurrect the deleted part from the stale cache. The
+    // `customXml.parts.remove` contract promises full cleanup.
+    invalidateConverterCachesForPath(converter, partName);
   }
 
   return true;
+}
+
+function invalidateConverterCachesForPath(converter, partName) {
+  if (!converter || typeof partName !== 'string') return;
+  const biblio = converter.bibliographyPart;
+  if (biblio && biblio.partPath === partName) {
+    converter.bibliographyPart = {
+      sources: [],
+      partPath: null,
+      itemPropsPath: null,
+      itemRelsPath: null,
+      selectedStyle: null,
+      styleName: null,
+      version: null,
+    };
+  }
 }

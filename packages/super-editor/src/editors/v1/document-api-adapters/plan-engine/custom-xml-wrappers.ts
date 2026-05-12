@@ -216,10 +216,12 @@ export function customXmlPartsPatchWrapper(
       const partName = resolveTargetPartName(getConvertedXml(editor), input.target);
       if (!partName) return { changed: false, payload: targetNotFound() };
       const probe = safeValidate(() =>
-        patchCustomXmlPart(getConvertedXml(editor), input.target, {
-          content: input.content,
-          schemaRefs: input.schemaRefs,
-        }),
+        patchCustomXmlPart(
+          getConvertedXml(editor),
+          input.target,
+          { content: input.content, schemaRefs: input.schemaRefs },
+          getConverter(editor),
+        ),
       );
       if (!probe.ok) return { changed: false, payload: probe };
       if (!probe.payload) return { changed: false, payload: targetNotFound() };

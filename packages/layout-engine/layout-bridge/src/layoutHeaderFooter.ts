@@ -121,9 +121,18 @@ function paragraphHasPageToken(para: ParagraphBlock): boolean {
   return false;
 }
 
-function paragraphHasFormattedPageNumberToken(para: ParagraphBlock): boolean {
+function isDigitBucketCompatiblePageNumberFormat(format?: string): boolean {
+  return !format || format === 'decimal' || format === 'numberInDash';
+}
+
+function paragraphRequiresPerPageLayout(para: ParagraphBlock): boolean {
   for (const run of para.runs) {
-    if ('token' in run && run.token === 'pageNumber' && run.pageNumberFieldFormat) {
+    if (
+      'token' in run &&
+      run.token === 'pageNumber' &&
+      run.pageNumberFieldFormat &&
+      !isDigitBucketCompatiblePageNumberFormat(run.pageNumberFieldFormat.format)
+    ) {
       return true;
     }
   }
@@ -155,10 +164,10 @@ function hasPageTokens(blocks: FlowBlock[]): boolean {
   return false;
 }
 
-function hasFormattedPageNumberTokens(blocks: FlowBlock[]): boolean {
+function hasPageNumberTokensRequiringPerPageLayout(blocks: FlowBlock[]): boolean {
   for (const block of blocks) {
     if (block.kind === 'paragraph') {
-      if (paragraphHasFormattedPageNumberToken(block as ParagraphBlock)) return true;
+      if (paragraphRequiresPerPageLayout(block as ParagraphBlock)) return true;
     } else if (block.kind === 'table') {
       const table = block as TableBlock;
       for (const row of table.rows ?? []) {
@@ -168,7 +177,7 @@ function hasFormattedPageNumberTokens(blocks: FlowBlock[]): boolean {
             : cell.paragraph
               ? [cell.paragraph]
               : [];
-          if (hasFormattedPageNumberTokens(cellBlocks)) return true;
+          if (hasPageNumberTokensRequiringPerPageLayout(cellBlocks)) return true;
         }
       }
     }
@@ -231,7 +240,7 @@ const sharedHeaderFooterCache = new HeaderFooterLayoutCache();
  * 2. If variant has no tokens: creates one layout reused across all pages (fast path)
  * 3. For small docs (<100 pages): creates per-page layouts
  * 4. For large docs (>=100 pages): uses digit bucketing (d1, d2, d3, d4)
- *    unless PAGE tokens have explicit field formatting
+ *    unless PAGE tokens use non-decimal field formatting
  *
  * @param sections - Header/footer variants (default, first, even, odd)
  * @param constraints - Layout constraints (width, height, margins)
@@ -297,10 +306,10 @@ export async function layoutHeaderFooterWithCache(
     // Determine which pages to create layouts for
     let pagesToLayout: number[];
 
-    const useBucketingForVariant = useBucketing && !hasFormattedPageNumberTokens(blocks);
+    const useBucketingForVariant = useBucketing && !hasPageNumberTokensRequiringPerPageLayout(blocks);
 
     if (!useBucketingForVariant) {
-      // Per-page layout: small docs, disabled bucketing, or explicit PAGE formats.
+      // Per-page layout: small docs, disabled bucketing, or non-digit-bucket-compatible PAGE formats.
       pagesToLayout = Array.from({ length: docTotalPages }, (_, i) => i + 1);
       HeaderFooterCacheLogger.logBucketingDecision(docTotalPages, false);
     } else {

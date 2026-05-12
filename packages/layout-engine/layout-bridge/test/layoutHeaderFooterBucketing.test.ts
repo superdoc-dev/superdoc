@@ -414,6 +414,32 @@ describe('layoutHeaderFooterWithCache - Digit Bucketing (Large Docs)', () => {
     expect(result.default?.layout.pages).toHaveLength(150);
     expect(measureBlock).toHaveBeenCalledTimes(150);
   });
+
+  it('should digit-bucket zero-padded decimal page-number tokens', async () => {
+    const block = makePageTokenBlock('header-zero-padded-page');
+    const pageNumberRun = (block as ParagraphBlock).runs[1] as TextRun;
+    pageNumberRun.pageNumberFieldFormat = { format: 'decimal', zeroPadding: 3 };
+
+    const pageResolver: PageResolver = (pageNum) => ({
+      displayText: String(pageNum),
+      displayNumber: pageNum,
+      totalPages: 150,
+    });
+
+    const measureBlock = vi.fn(async () => makeMeasure(20));
+    const result = await layoutHeaderFooterWithCache(
+      { default: [block] },
+      { width: 400, height: 80 },
+      measureBlock,
+      undefined,
+      undefined,
+      pageResolver,
+    );
+
+    expect(result.default?.layout.pages).toHaveLength(3);
+    expect(measureBlock).toHaveBeenCalledTimes(3);
+    expect((result.default?.layout.pages[0].blocks?.[0] as ParagraphBlock).runs[1].text).toBe('005');
+  });
 });
 
 describe('layoutHeaderFooterWithCache - Section-Aware Token Resolution', () => {

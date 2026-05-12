@@ -8,7 +8,6 @@ import { preProcessDocumentStatInstruction } from './fld-preprocessors/document-
 const SKIP_FIELD_PROCESSING_NODE_NAMES = new Set(['w:drawing', 'w:pict']);
 
 const shouldSkipFieldProcessing = (node) => SKIP_FIELD_PROCESSING_NODE_NAMES.has(node?.name);
-const isPageNumberFieldType = (fieldType) => fieldType === 'PAGE' || fieldType === 'NUMPAGES';
 
 /**
  * Pre-processes nodes to convert PAGE and NUMPAGES field codes for header/footer rendering.
@@ -63,9 +62,7 @@ export const preProcessPageFieldsOnly = (nodes = [], depth = 0) => {
           }
         }
 
-        const processedField = isPageNumberFieldType(fieldType)
-          ? fldSimplePreprocessor(contentNodes, instrAttr.trim(), { fieldRunRPr })
-          : fldSimplePreprocessor(contentNodes, instrAttr.trim(), fieldRunRPr);
+        const processedField = fldSimplePreprocessor(contentNodes, instrAttr.trim(), { fieldRunRPr });
         processedNodes.push(...processedField);
         i++;
         continue;
@@ -101,9 +98,9 @@ export const preProcessPageFieldsOnly = (nodes = [], depth = 0) => {
         // Also pass the captured rPr from field sequence nodes (begin, instrText, separate)
         // which is where Word stores the styling for page number fields
         const contentNodes = fieldInfo.contentNodes;
-        const processedField = isPageNumberFieldType(fieldInfo.fieldType)
-          ? preprocessor(contentNodes, fieldInfo.instrText, { fieldRunRPr: fieldInfo.fieldRunRPr })
-          : preprocessor(contentNodes, fieldInfo.instrText, fieldInfo.fieldRunRPr);
+        const processedField = preprocessor(contentNodes, fieldInfo.instrText, {
+          fieldRunRPr: fieldInfo.fieldRunRPr,
+        });
         processedNodes.push(...processedField);
 
         // Skip past the entire field sequence

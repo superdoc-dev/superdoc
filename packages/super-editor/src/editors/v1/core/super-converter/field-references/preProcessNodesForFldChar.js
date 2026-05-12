@@ -9,7 +9,6 @@ import { isTrackChangeElement, isConstructiveTrackChangeElement } from '../v2/im
 const SKIP_FIELD_PROCESSING_NODE_NAMES = new Set(['w:drawing', 'w:pict']);
 
 const shouldSkipFieldProcessing = (node) => SKIP_FIELD_PROCESSING_NODE_NAMES.has(node?.name);
-const isPageNumberFieldInstruction = (instructionType) => instructionType === 'PAGE' || instructionType === 'NUMPAGES';
 /**
  * @typedef {object} FldCharProcessResult
  * @property {OpenXmlNode[]} processedNodes - The list of nodes after processing.
@@ -142,9 +141,7 @@ export const preProcessNodesForFldChar = (nodes = [], docx) => {
         const instructionType = instr.trim().split(' ')[0];
         const instructionPreProcessor = getInstructionPreProcessor(instructionType);
         if (instructionPreProcessor) {
-          const processed = isPageNumberFieldInstruction(instructionType)
-            ? instructionPreProcessor(node.elements ?? [], instr, { docx })
-            : instructionPreProcessor(node.elements ?? [], instr, docx, null);
+          const processed = instructionPreProcessor(node.elements ?? [], instr, { docx });
           if (collecting) {
             collectedNodesStack[collectedNodesStack.length - 1].push(...processed);
             rawCollectedNodesStack[rawCollectedNodesStack.length - 1].push(...processed);
@@ -331,9 +328,7 @@ const _processCombinedNodesForFldChar = (nodesToCombine = [], instrText, docx, i
   const instructionPreProcessor = getInstructionPreProcessor(instructionType);
   if (instructionPreProcessor) {
     return {
-      nodes: isPageNumberFieldInstruction(instructionType)
-        ? instructionPreProcessor(nodesToCombine, instrText, { docx, instructionTokens, fieldRunRPr })
-        : instructionPreProcessor(nodesToCombine, instrText, docx, instructionTokens, fieldRunRPr),
+      nodes: instructionPreProcessor(nodesToCombine, instrText, { docx, instructionTokens, fieldRunRPr }),
       handled: true,
     };
   }

@@ -17,10 +17,17 @@ import { preProcessToaInstruction } from './toa-preprocessor.js';
 import { preProcessDocumentStatInstruction } from './document-stat-preprocessor.js';
 
 /**
+ * @typedef {object} FieldPreprocessorOptions
+ * @property {import('../../v2/docxHelper').ParsedDocx} [docx] The docx object.
+ * @property {Array<{type: string, text?: string}> | null} [instructionTokens] Raw instruction tokens.
+ * @property {import('../../v2/types/index.js').OpenXmlNode | null} [fieldRunRPr] The w:rPr node captured from field sequence nodes.
+ */
+
+/**
  * @callback InstructionPreProcessor
  * @param {import('../../v2/types/index.js').OpenXmlNode[]} nodesToCombine
  * @param {string} instruction
- * @param {import('../../v2/docxHelper').ParsedDocx} [docx] - The docx object.
+ * @param {FieldPreprocessorOptions} [options]
  * @returns {import('../../v2/types/index.js').OpenXmlNode[]}
  */
 

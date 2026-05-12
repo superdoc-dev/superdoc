@@ -2583,6 +2583,30 @@ const bookmarkAddressSchema: JsonSchema = objectSchema(
 
 const bookmarkMutation = refMutationSchemas({ bookmark: bookmarkAddressSchema }, ['bookmark']);
 
+// --- Custom XML part schemas ---
+const customXmlPartTargetSchema: JsonSchema = {
+  oneOf: [
+    objectSchema({ id: { type: 'string' } }, ['id']),
+    objectSchema({ partName: { type: 'string' } }, ['partName']),
+  ],
+};
+
+const customXmlPartMutation = refMutationSchemas(
+  {
+    target: customXmlPartTargetSchema,
+  },
+  ['target'],
+);
+
+const customXmlPartCreateMutation = refMutationSchemas(
+  {
+    id: { type: 'string' },
+    partName: { type: 'string' },
+    propsPartName: { type: 'string' },
+  },
+  ['id', 'partName', 'propsPartName'],
+);
+
 // --- Footnote schemas ---
 const footnoteAddressSchema: JsonSchema = objectSchema(
   { kind: { const: 'entity' }, entityType: { const: 'footnote' }, noteId: { type: 'string' } },
@@ -7627,6 +7651,45 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     output: { type: 'object' },
     success: { type: 'object' },
     failure: { type: 'object' },
+  },
+
+  // --- customXml.parts.* ---
+  'customXml.parts.list': {
+    input: objectSchema({
+      ...refListQueryProperties,
+      rootNamespace: { type: 'string' },
+      schemaRef: { type: 'string' },
+    }),
+    output: discoveryOutputSchema,
+  },
+  'customXml.parts.get': {
+    input: objectSchema({ target: customXmlPartTargetSchema }, ['target']),
+    output: { type: 'object' },
+  },
+  'customXml.parts.create': {
+    input: objectSchema(
+      {
+        content: { type: 'string' },
+        schemaRefs: { type: 'array', items: { type: 'string' } },
+      },
+      ['content'],
+    ),
+    ...customXmlPartCreateMutation,
+  },
+  'customXml.parts.patch': {
+    input: objectSchema(
+      {
+        target: customXmlPartTargetSchema,
+        content: { type: 'string' },
+        schemaRefs: { type: 'array', items: { type: 'string' } },
+      },
+      ['target'],
+    ),
+    ...customXmlPartMutation,
+  },
+  'customXml.parts.remove': {
+    input: objectSchema({ target: customXmlPartTargetSchema }, ['target']),
+    ...customXmlPartMutation,
   },
 };
 

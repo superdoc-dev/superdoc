@@ -256,6 +256,7 @@ import {
   bookmarksRenameWrapper,
   bookmarksRemoveWrapper,
 } from './plan-engine/bookmark-wrappers.js';
+import { createCustomXmlPartsAdapter } from './plan-engine/custom-xml-wrappers.js';
 import {
   protectionGetAdapter,
   protectionSetEditingRestrictionAdapter,
@@ -644,6 +645,9 @@ export function assembleDocumentApiAdapters(editor: Editor): DocumentApiAdapters
       insert: (input, options) => bookmarksInsertWrapper(editor, input, options),
       rename: (input, options) => bookmarksRenameWrapper(editor, input, options),
       remove: (input, options) => bookmarksRemoveWrapper(editor, input, options),
+    },
+    customXml: {
+      parts: createCustomXmlPartsAdapter(editor),
     },
     footnotes: {
       list: (query) => footnotesListWrapper(editor, query),

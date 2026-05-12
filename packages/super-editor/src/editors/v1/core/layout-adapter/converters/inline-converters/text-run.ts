@@ -12,6 +12,7 @@ import type { PMNode, PMMark, PositionMap, HyperlinkConfig, ThemeColorPalette } 
 import { applyMarksToRun } from '../../marks/index.js';
 import { DEFAULT_HYPERLINK_CONFIG } from '../../constants.js';
 import { applyInlineRunProperties, type InlineConverterParams } from './common.js';
+import { getPageNumberFieldFormat } from './page-number-field-format.js';
 
 /**
  * Converts a text PM node to a TextRun.
@@ -130,20 +131,4 @@ export function tokenNodeToRun(
     (run as TextRun & { _explicitFont?: boolean })._explicitFont = true;
   }
   return run;
-}
-
-function getPageNumberFieldFormat(
-  attrs: Record<string, unknown> | undefined,
-): TextRun['pageNumberFieldFormat'] | undefined {
-  if (!attrs) return undefined;
-  const format = typeof attrs.pageNumberFormat === 'string' ? attrs.pageNumberFormat : undefined;
-  const zeroPadding =
-    typeof attrs.pageNumberZeroPadding === 'number' && Number.isFinite(attrs.pageNumberZeroPadding)
-      ? attrs.pageNumberZeroPadding
-      : undefined;
-  if (!format && !zeroPadding) return undefined;
-  return {
-    ...(format ? { format: format as NonNullable<TextRun['pageNumberFieldFormat']>['format'] } : {}),
-    ...(zeroPadding ? { zeroPadding } : {}),
-  };
 }

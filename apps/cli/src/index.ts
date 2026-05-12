@@ -66,6 +66,9 @@ type ParsedInvocation = {
   rest: string[];
 };
 
+type ConsoleMethod = 'debug' | 'info' | 'log' | 'warn' | 'error';
+type ConsoleSnapshot = Pick<typeof console, ConsoleMethod>;
+
 /** The result of a programmatic CLI invocation via {@link invokeCommand}. */
 export type InvokeCommandResult = {
   globals: GlobalOptions;
@@ -172,6 +175,39 @@ function applyDiagnosticPolicy(io: CliIO, globals: GlobalOptions): CliIO {
     ...io,
     warn() {},
   };
+}
+
+async function withConsoleDiagnosticPolicy<T>(globals: GlobalOptions, operation: () => Promise<T>): Promise<T> {
+  if (globals.output === 'pretty' && !globals.quiet) {
+    return operation();
+  }
+
+  const original: ConsoleSnapshot = {
+    debug: console.debug,
+    info: console.info,
+    log: console.log,
+    warn: console.warn,
+    error: console.error,
+  };
+  const suppress = (..._values: unknown[]) => {
+    return;
+  };
+
+  console.debug = suppress;
+  console.info = suppress;
+  console.log = suppress;
+  console.warn = suppress;
+  console.error = suppress;
+
+  try {
+    return await operation();
+  } finally {
+    console.debug = original.debug;
+    console.info = original.info;
+    console.log = original.log;
+    console.warn = original.warn;
+    console.error = original.error;
+  }
 }
 
 function parseCommand(rest: string[]): { key: string; args: string[] } {
@@ -312,13 +348,15 @@ export async function invokeCommand(argv: string[], options: InvokeCommandOption
   const startedAt = io.now();
   const { parsed, output } = await withStateDirOverride(options.stateDir, async () => {
     const parsedInvocation = parseInvocation(argv);
-    const runtimeIo = applyDiagnosticPolicy(io, parsedInvocation.globals);
-    const commandOutput = await executeParsedInvocation(
-      parsedInvocation,
-      runtimeIo,
-      options.executionMode ?? 'oneshot',
-      options.sessionPool,
-    );
+    const commandOutput = await withConsoleDiagnosticPolicy(parsedInvocation.globals, async () => {
+      const runtimeIo = applyDiagnosticPolicy(io, parsedInvocation.globals);
+      return executeParsedInvocation(
+        parsedInvocation,
+        runtimeIo,
+        options.executionMode ?? 'oneshot',
+        options.sessionPool,
+      );
+    });
     return { parsed: parsedInvocation, output: commandOutput };
   });
 
@@ -355,61 +393,72 @@ export async function run(
   let outputMode: OutputMode = 'json';
 
   return withStateDirOverride(options.stateDir, async () => {
+    let parsedGlobals: GlobalOptions | null = null;
     try {
       const parsed = parseInvocation(argv);
+      parsedGlobals = parsed.globals;
       outputMode = parsed.globals.output;
-      const runtimeIo = applyDiagnosticPolicy(io, parsed.globals);
 
-      if (parsed.globals.version && !parsed.globals.help) {
-        io.stdout(`${resolveCliPackageVersion()}\n`);
-        return 0;
-      }
+      return await withConsoleDiagnosticPolicy(parsed.globals, async () => {
+        const runtimeIo = applyDiagnosticPolicy(io, parsed.globals);
 
-      if (parsed.rest[0] === 'host') {
-        const hostTokens = parsed.rest.slice(1);
-        if (parsed.globals.help) hostTokens.push('--help');
-        return await runHostCommand(hostTokens, io);
-      }
-
-      if (parsed.rest[0] === 'install' && !parsed.globals.help) {
-        return await runInstall(parsed.rest.slice(1), io);
-      }
-
-      if (parsed.rest[0] === 'uninstall' && !parsed.globals.help) {
-        return await runUninstall(parsed.rest.slice(1), io);
-      }
-
-      if (parsed.rest[0] === 'call' && outputMode !== 'json') {
-        throw new CliError('INVALID_ARGUMENT', 'call: only --output json is supported.');
-      }
-
-      if (!parsed.globals.help) {
-        const legacyCompat = await tryRunLegacyCompatCommand(argv, parsed.rest, io);
-        if (legacyCompat.handled) {
-          return legacyCompat.exitCode;
+        if (parsed.globals.version && !parsed.globals.help) {
+          io.stdout(`${resolveCliPackageVersion()}\n`);
+          return 0;
         }
-      }
 
-      const output = await executeParsedInvocation(parsed, runtimeIo, 'oneshot');
-      if (output.helpText) {
-        io.stdout(output.helpText);
-        return 0;
-      }
-      if (output.versionText) {
-        io.stdout(`${output.versionText}\n`);
-        return 0;
-      }
-      if (!output.execution) {
-        throw new CliError('COMMAND_FAILED', 'Command produced no execution result, help text, or version text.');
-      }
+        if (parsed.rest[0] === 'host') {
+          const hostTokens = parsed.rest.slice(1);
+          if (parsed.globals.help) hostTokens.push('--help');
+          return await runHostCommand(hostTokens, io);
+        }
 
-      const elapsedMs = io.now() - startedAt;
-      writeSuccess(io, outputMode, output.execution, elapsedMs);
-      return 0;
+        if (parsed.rest[0] === 'install' && !parsed.globals.help) {
+          return await runInstall(parsed.rest.slice(1), io);
+        }
+
+        if (parsed.rest[0] === 'uninstall' && !parsed.globals.help) {
+          return await runUninstall(parsed.rest.slice(1), io);
+        }
+
+        if (parsed.rest[0] === 'call' && outputMode !== 'json') {
+          throw new CliError('INVALID_ARGUMENT', 'call: only --output json is supported.');
+        }
+
+        if (!parsed.globals.help) {
+          const legacyCompat = await tryRunLegacyCompatCommand(argv, parsed.rest, io);
+          if (legacyCompat.handled) {
+            return legacyCompat.exitCode;
+          }
+        }
+
+        const output = await executeParsedInvocation(parsed, runtimeIo, 'oneshot');
+        if (output.helpText) {
+          io.stdout(output.helpText);
+          return 0;
+        }
+        if (output.versionText) {
+          io.stdout(`${output.versionText}\n`);
+          return 0;
+        }
+        if (!output.execution) {
+          throw new CliError('COMMAND_FAILED', 'Command produced no execution result, help text, or version text.');
+        }
+
+        const elapsedMs = io.now() - startedAt;
+        writeSuccess(io, outputMode, output.execution, elapsedMs);
+        return 0;
+      });
     } catch (error) {
       const cliError = toCliError(error);
       const elapsedMs = io.now() - startedAt;
-      writeFailure(io, outputMode, cliError, elapsedMs);
+      if (parsedGlobals) {
+        await withConsoleDiagnosticPolicy(parsedGlobals, async () => {
+          writeFailure(io, outputMode, cliError, elapsedMs);
+        });
+      } else {
+        writeFailure(io, outputMode, cliError, elapsedMs);
+      }
       return cliError.exitCode;
     }
   });

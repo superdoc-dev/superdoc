@@ -107,6 +107,31 @@ async function runCli(args: string[], stdinBytes?: Uint8Array): Promise<RunResul
   return { code, stdout, stderr };
 }
 
+async function runCliSubprocess(args: string[]): Promise<RunResult> {
+  try {
+    const { stdout, stderr } = await execFileAsync(
+      process.execPath,
+      ['run', join(REPO_ROOT, 'apps/cli/src/index.ts'), ...args],
+      {
+        env: {
+          ...process.env,
+          NODE_ENV: '',
+        },
+        maxBuffer: ZIP_MAX_BUFFER_BYTES,
+      },
+    );
+
+    return { code: 0, stdout, stderr };
+  } catch (error) {
+    const failed = error as { code?: number; stdout?: string; stderr?: string };
+    return {
+      code: typeof failed.code === 'number' ? failed.code : 1,
+      stdout: failed.stdout ?? '',
+      stderr: failed.stderr ?? '',
+    };
+  }
+}
+
 function parseJsonOutput<T>(result: RunResult): T {
   const source = result.stdout.trim() || result.stderr.trim();
   if (!source) {
@@ -298,6 +323,22 @@ describe('superdoc CLI', () => {
     expect(envelope.data.counts.paragraphs).toBeGreaterThan(0);
     expect(envelope.data.capabilities.canFind).toBe(true);
     expect(envelope.meta.elapsedMs).toBeGreaterThanOrEqual(0);
+  });
+
+  test('json output is parseable from the CLI process when NODE_ENV is not test', async () => {
+    const result = await runCliSubprocess(['info', SAMPLE_DOC, '--json']);
+    expect(result.code).toBe(0);
+    expect(result.stderr).toBe('');
+    expect(result.stdout.trimStart().startsWith('{')).toBe(true);
+    expect(result.stdout).not.toContain('[super-editor] Telemetry: enabled');
+
+    const envelope = JSON.parse(result.stdout) as SuccessEnvelope<{
+      counts: { words: number; paragraphs: number };
+    }>;
+    expect(envelope.ok).toBe(true);
+    expect(envelope.command).toBe('info');
+    expect(envelope.data.counts.words).toBeGreaterThan(0);
+    expect(envelope.data.counts.paragraphs).toBeGreaterThan(0);
   });
 
   test('info pretty includes revision summary and outline section when available', async () => {

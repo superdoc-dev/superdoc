@@ -18,21 +18,29 @@ export type ResolveInheritedHeaderFooterRefInput = {
   pageRefs?: HeaderFooterRefMap;
 };
 
-function resolveVariantRef(refs: HeaderFooterRefMap | undefined, variantType: HeaderFooterType): string | null {
+export type ResolvedInheritedHeaderFooterRef = {
+  ref: string;
+  variantType: HeaderFooterType;
+};
+
+function resolveVariantRef(
+  refs: HeaderFooterRefMap | undefined,
+  variantType: HeaderFooterType,
+): ResolvedInheritedHeaderFooterRef | null {
   if (!refs) return null;
   const direct = refs[variantType];
-  if (direct) return direct;
-  if (variantType === 'odd' && refs.default) return refs.default;
+  if (direct) return { ref: direct, variantType };
+  if (variantType === 'odd' && refs.default) return { ref: refs.default, variantType: 'default' };
   return null;
 }
 
-export function resolveInheritedHeaderFooterRef({
+export function resolveInheritedHeaderFooterRefWithType({
   identifier,
   sectionIndex,
   kind,
   variantType,
   pageRefs,
-}: ResolveInheritedHeaderFooterRefInput): string | null {
+}: ResolveInheritedHeaderFooterRefInput): ResolvedInheritedHeaderFooterRef | null {
   const fromPage = resolveVariantRef(pageRefs, variantType);
   if (fromPage) return fromPage;
 
@@ -56,4 +64,8 @@ export function resolveInheritedHeaderFooterRef({
   }
 
   return resolveVariantRef(legacyIds, variantType);
+}
+
+export function resolveInheritedHeaderFooterRef(input: ResolveInheritedHeaderFooterRefInput): string | null {
+  return resolveInheritedHeaderFooterRefWithType(input)?.ref ?? null;
 }

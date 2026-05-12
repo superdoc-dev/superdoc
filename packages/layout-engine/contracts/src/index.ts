@@ -119,8 +119,10 @@ export {
 } from './sdt-container.js';
 export {
   resolveInheritedHeaderFooterRef,
+  resolveInheritedHeaderFooterRefWithType,
   type HeaderFooterRefIdentifier,
   type HeaderFooterRefMap,
+  type ResolvedInheritedHeaderFooterRef,
   type ResolveInheritedHeaderFooterRefInput,
 } from './header-footer-inheritance.js';
 export {

@@ -34,7 +34,7 @@ import {
   buildLayoutSourceIdentityForFragment,
   getFragmentZIndex,
   normalizeColumnLayout,
-  resolveInheritedHeaderFooterRef,
+  resolveInheritedHeaderFooterRefWithType,
 } from '@superdoc/contracts';
 import { createFloatingObjectManager, computeAnchorX } from './floating-objects.js';
 import { computeNextSectionPropsAtBreak } from './section-props';
@@ -1661,26 +1661,34 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
           alternateHeaders,
         });
 
-        const headerRef =
-          resolveInheritedHeaderFooterRef({
-            identifier: headerFooterRefIdentifier,
-            sectionIndex: activeSectionIndex,
-            kind: 'header',
-            variantType,
-            pageRefs: activeSectionRefs?.headerRefs,
-          }) ?? undefined;
-        const footerRef =
-          resolveInheritedHeaderFooterRef({
-            identifier: headerFooterRefIdentifier,
-            sectionIndex: activeSectionIndex,
-            kind: 'footer',
-            variantType,
-            pageRefs: activeSectionRefs?.footerRefs,
-          }) ?? undefined;
+        const headerResolution = resolveInheritedHeaderFooterRefWithType({
+          identifier: headerFooterRefIdentifier,
+          sectionIndex: activeSectionIndex,
+          kind: 'header',
+          variantType,
+          pageRefs: activeSectionRefs?.headerRefs,
+        });
+        const footerResolution = resolveInheritedHeaderFooterRefWithType({
+          identifier: headerFooterRefIdentifier,
+          sectionIndex: activeSectionIndex,
+          kind: 'footer',
+          variantType,
+          pageRefs: activeSectionRefs?.footerRefs,
+        });
+        const headerRef = headerResolution?.ref;
+        const footerRef = footerResolution?.ref;
 
         // Calculate the actual header/footer heights for this page's variant
-        const headerHeight = getHeaderHeightForPage(variantType, headerRef, activeSectionIndex);
-        const footerHeight = getFooterHeightForPage(variantType, footerRef, activeSectionIndex);
+        const headerHeight = getHeaderHeightForPage(
+          headerResolution?.variantType ?? variantType,
+          headerRef,
+          activeSectionIndex,
+        );
+        const footerHeight = getFooterHeightForPage(
+          footerResolution?.variantType ?? variantType,
+          footerRef,
+          activeSectionIndex,
+        );
 
         // Adjust margins based on the actual header/footer for this page.
         // Always recalculate to ensure pages without headers reset to base margin

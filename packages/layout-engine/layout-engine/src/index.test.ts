@@ -6090,6 +6090,27 @@ describe('alternateHeaders (odd/even header differentiation)', () => {
     expect(p2Fragment!.y).toBeCloseTo(70, 0);
   });
 
+  it('uses default header height when odd pages resolve through the default ref', () => {
+    const options: LayoutOptions = {
+      pageSize: { w: 600, h: 800 },
+      margins: { top: 50, right: 50, bottom: 50, left: 50, header: 30 },
+      alternateHeaders: true,
+      sectionMetadata: [{ sectionIndex: 0, headerRefs: { default: 'rIdDefault' } }],
+      headerContentHeights: {
+        default: 80,
+      },
+    };
+
+    const layout = layoutDocument([tallBlock('p1')], [tallMeasure], options);
+
+    expect(layout.pages).toHaveLength(1);
+
+    const p1Fragment = layout.pages[0].fragments.find((f) => f.blockId === 'p1');
+    expect(p1Fragment).toBeDefined();
+    expect(p1Fragment!.y).toBeCloseTo(110, 0);
+    expect(layout.pages[0].margins.top).toBeCloseTo(110, 0);
+  });
+
   it('uses section page-numbering start for odd/even header parity', () => {
     const options: LayoutOptions = {
       pageSize: { w: 600, h: 800 },

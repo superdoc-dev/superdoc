@@ -1177,5 +1177,70 @@ describe('HeaderFooterSessionManager', () => {
       expect(manager.headerRegions.get(0)!.sectionType).toBe('even');
       expect(manager.footerRegions.get(0)!.sectionType).toBe('even');
     });
+
+    it('uses section titlePg state when inferring fallback region variants', () => {
+      manager = new HeaderFooterSessionManager({
+        painterHost,
+        visibleHost,
+        selectionOverlay,
+        editor: {
+          ...createMainEditorStub(),
+          converter: {
+            headerIds: { titlePg: true },
+            footerIds: { titlePg: true },
+            pageStyles: { alternateHeaders: false },
+          },
+        } as unknown as Editor,
+        defaultPageSize: { w: 612, h: 792 },
+        defaultMargins: { top: 72, right: 72, bottom: 72, left: 72, header: 36, footer: 36 },
+      });
+      manager.setDependencies({
+        getLayoutOptions: vi.fn(() => ({})),
+        getPageElement: vi.fn(() => null),
+        scrollPageIntoView: vi.fn(),
+        waitForPageMount: vi.fn(async () => true),
+        convertPageLocalToOverlayCoords: vi.fn(() => ({ x: 0, y: 0 })),
+        isViewLocked: vi.fn(() => false),
+        getBodyPageHeight: vi.fn(() => 800),
+        notifyInputBridgeTargetChanged: vi.fn(),
+        scheduleRerender: vi.fn(),
+        setPendingDocChange: vi.fn(),
+        getBodyPageCount: vi.fn(() => 2),
+      });
+      manager.setMultiSectionIdentifier(
+        buildMultiSectionIdentifier(
+          [
+            {
+              sectionIndex: 0,
+              titlePg: true,
+              headerRefs: { first: 'rId-section0-first', default: 'rId-section0-default' },
+              footerRefs: { first: 'rId-section0-first-footer', default: 'rId-section0-default-footer' },
+            },
+            {
+              sectionIndex: 1,
+              titlePg: false,
+              headerRefs: { first: 'rId-section1-first', default: 'rId-section1-default' },
+              footerRefs: { first: 'rId-section1-first-footer', default: 'rId-section1-default-footer' },
+            },
+          ],
+          { alternateHeaders: false },
+        ),
+      );
+
+      manager.rebuildRegions({
+        version: 1,
+        flowMode: 'paginated',
+        pageGap: 0,
+        pages: [
+          makePage({ number: 1, height: 792, sectionIndex: 0 }),
+          makePage({ number: 2, height: 792, sectionIndex: 1 }),
+        ],
+      });
+
+      expect(manager.headerRegions.get(0)!.sectionType).toBe('first');
+      expect(manager.footerRegions.get(0)!.sectionType).toBe('first');
+      expect(manager.headerRegions.get(1)!.sectionType).toBe('default');
+      expect(manager.footerRegions.get(1)!.sectionType).toBe('default');
+    });
   });
 });

@@ -1736,7 +1736,10 @@ export class HeaderFooterSessionManager {
     // Without titlePg, even the first page of a section uses 'default'.
     const headerIds = converter?.headerIds as { titlePg?: boolean } | undefined;
     const footerIds = converter?.footerIds as { titlePg?: boolean } | undefined;
-    const titlePgEnabled = headerIds?.titlePg === true || footerIds?.titlePg === true;
+    let titlePgEnabled = headerIds?.titlePg === true || footerIds?.titlePg === true;
+    if (this.#multiSectionIdentifier?.sectionTitlePg.has(sectionIndex)) {
+      titlePgEnabled = this.#multiSectionIdentifier.sectionTitlePg.get(sectionIndex) === true;
+    }
 
     if (isFirstPageOfSection && titlePgEnabled) {
       return 'first';

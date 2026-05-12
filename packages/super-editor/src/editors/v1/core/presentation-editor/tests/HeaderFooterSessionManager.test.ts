@@ -298,6 +298,29 @@ describe('HeaderFooterSessionManager', () => {
     expect(context?.measures).toEqual([{ id: 'blank-header-measure' }]);
   });
 
+  it('preserves display page numbers in active per-rId layout contexts', async () => {
+    await setupWithZoom(1);
+
+    manager.headerLayoutResults = null;
+    manager.headerLayoutsByRId.set('rId-header-default', {
+      kind: 'header',
+      type: 'default',
+      layout: {
+        height: 47,
+        pages: [{ number: 10, numberText: '1', displayNumber: 1, fragments: [] }],
+      },
+      blocks: [],
+      measures: [],
+    });
+
+    const context = manager.getContext();
+    expect(context?.layout.pages[0]).toMatchObject({
+      number: 10,
+      numberText: '1',
+      displayNumber: 1,
+    });
+  });
+
   it('falls back to zoom=1 when zoom is negative', async () => {
     await setupWithZoom(-1);
 

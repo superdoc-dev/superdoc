@@ -51,10 +51,16 @@ export function resolveInheritedHeaderFooterRefWithType({
   const fromSection = resolveVariantRef(sectionIds, variantType);
   if (fromSection) return fromSection;
 
-  const hasSectionAwareRefs =
-    sectionMap != null &&
-    sectionMap.size > 0 &&
-    (sectionMap.has(sectionIndex) || (identifier.sectionCount ?? 0) > sectionIndex);
+  let hasPriorSectionRefs = false;
+  if (sectionMap) {
+    for (const index of sectionMap.keys()) {
+      if (index < sectionIndex) {
+        hasPriorSectionRefs = true;
+        break;
+      }
+    }
+  }
+  const hasSectionAwareRefs = sectionMap != null && (sectionMap.has(sectionIndex) || hasPriorSectionRefs);
   if (hasSectionAwareRefs) {
     for (let index = sectionIndex - 1; index >= 0; index -= 1) {
       const inherited = resolveVariantRef(sectionMap.get(index), variantType);

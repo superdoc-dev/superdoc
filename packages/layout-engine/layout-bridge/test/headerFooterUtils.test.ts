@@ -977,5 +977,25 @@ describe('headerFooterUtils', () => {
       expect(resolved?.type).toBe('default');
       expect(resolved?.contentId).toBe('converter-default');
     });
+
+    it('uses converter fallback refs when only later sections define refs', () => {
+      const identifier = buildMultiSectionIdentifier(
+        [{ sectionIndex: 0 }, { sectionIndex: 1, headerRefs: { default: 'section-1-default' } }],
+        undefined,
+        { headerIds: { default: 'converter-default' } },
+      );
+      const layout: Layout = {
+        pageSize: { w: 600, h: 800 },
+        pages: [{ number: 1, fragments: [], sectionIndex: 0 }],
+        headerFooter: {
+          default: { pages: [{ number: 1, fragments: [] }] },
+        },
+      };
+
+      const resolved = resolveHeaderFooterForPageAndSection(layout, 0, identifier, { kind: 'header' });
+
+      expect(resolved?.type).toBe('default');
+      expect(resolved?.contentId).toBe('converter-default');
+    });
   });
 });

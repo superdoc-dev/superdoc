@@ -1027,5 +1027,28 @@ describe('headerFooterUtils', () => {
       expect(resolved?.type).toBe('default');
       expect(resolved?.contentId).toBe('converter-default');
     });
+
+    it('inherits converter fallback refs into later sections with partial refs', () => {
+      const identifier = buildMultiSectionIdentifier(
+        [{ sectionIndex: 0 }, { sectionIndex: 1, headerRefs: { even: 'section-1-even' } }],
+        undefined,
+        { headerIds: { default: 'converter-default' } },
+      );
+      const layout: Layout = {
+        pageSize: { w: 600, h: 800 },
+        pages: [
+          { number: 1, fragments: [], sectionIndex: 0 },
+          { number: 2, fragments: [], sectionIndex: 1, sectionRefs: { headerRefs: { even: 'section-1-even' } } },
+        ],
+        headerFooter: {
+          default: { pages: [{ number: 2, fragments: [] }] },
+        },
+      };
+
+      const resolved = resolveHeaderFooterForPageAndSection(layout, 1, identifier, { kind: 'header' });
+
+      expect(resolved?.type).toBe('default');
+      expect(resolved?.contentId).toBe('converter-default');
+    });
   });
 });

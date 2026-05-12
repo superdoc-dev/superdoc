@@ -5567,7 +5567,10 @@ export class DomPainter {
     const isActiveLink = !!(linkData && !linkData.blocked && linkData.href);
     const elem = isActiveLink ? this.doc.createElement('a') : this.doc.createElement('span');
     const text = resolveRunText(run, context);
-    this.setTextContentWithFormattingSpaceMarks(elem, text);
+    const textRun = run as TextRun;
+    const effectiveText =
+      textRun.bidi?.rtl === true && typeof text === 'string' ? normalizeRtlDateTokenForWordParity(text) : text;
+    this.setTextContentWithFormattingSpaceMarks(elem, effectiveText);
 
     if (linkData?.dataset) {
       applyLinkDataset(elem, linkData.dataset);
@@ -5593,7 +5596,13 @@ export class DomPainter {
 
     // Pass isLink flag to skip applying inline color/decoration styles for links
     applyRunStyles(elem as HTMLElement, run, isActiveLink);
-    const textRun = run as TextRun;
+    // SD-3098 Word-parity: rtl-tagged runs get dir="rtl" so per-run bidi is isolated;
+    // non-rtl date-like runs in RTL context get dir="ltr" to prevent separator drift.
+    if (textRun.bidi?.rtl === true) {
+      elem.setAttribute('dir', 'rtl');
+    } else if (typeof textRun.text === 'string' && RTL_DATE_LIKE_TOKEN_RE.test(textRun.text)) {
+      elem.setAttribute('dir', 'ltr');
+    }
     const commentAnnotations = textRun.comments;
     const hasAnyComment = !!commentAnnotations?.length;
     // Comment highlight styles are applied post-paint by CommentHighlightDecorator (super-editor).
@@ -6352,6 +6361,7 @@ export class DomPainter {
           link: run.link ?? null,
           comments: run.comments ?? null,
           dataAttrs: stableDataAttrs(run.dataAttrs) ?? null,
+          bidi: run.bidi ?? null,
         });
 
       const isWhitespaceOnly = (text: string): boolean => {
@@ -8265,4 +8275,19 @@ const resolveRunText = (run: Run, context: FragmentRenderContext): string => {
     return context.totalPages ? String(context.totalPages) : (run.text ?? '');
   }
   return run.text ?? '';
+};
+
+const RTL_DATE_LIKE_TOKEN_RE = /^-?\d+(?:[./-]\d+)+$/;
+const RLM = '\u200F';
+
+// AIDEV-NOTE: SD-3098 Word-parity workaround for RTL date-like tokens. We inject
+// RLM around separators at paint time only (DOM text), never into PM/model/export.
+// Word reorders numerics inside RTL date strings via internal RLM treatment; the
+// browser's UBA does not. This is intentionally narrow - only matches date-like
+// numeric patterns - so non-date numeric content is unaffected.
+const normalizeRtlDateTokenForWordParity = (text: string): string => {
+  if (!RTL_DATE_LIKE_TOKEN_RE.test(text)) {
+    return text;
+  }
+  return text.replace(/[./-]/g, (separator) => `${RLM}${separator}${RLM}`);
 };

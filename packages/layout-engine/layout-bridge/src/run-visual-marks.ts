@@ -20,6 +20,11 @@ export const hashRunVisualMarks = (run: Run): string => {
   const fontFamily = 'fontFamily' in run ? run.fontFamily : undefined;
   const highlight = 'highlight' in run ? run.highlight : undefined;
   const link = 'link' in run ? run.link : undefined;
+  // SD-3098: DomPainter now reads `bidi.rtl` to apply dir="rtl"/dir="ltr" and the
+  // RLM separator injection for date-like tokens. Include it here so dirty-run
+  // detection picks up rtl-only changes; otherwise an edit that flips just
+  // <w:rtl/> could reuse stale measure/DOM.
+  const bidi = 'bidi' in run ? run.bidi : undefined;
 
   return [
     bold ? 'b' : '',
@@ -31,5 +36,6 @@ export const hashRunVisualMarks = (run: Run): string => {
     fontFamily ? `ff:${fontFamily}` : '',
     highlight ? `hl:${highlight}` : '',
     link ? `ln:${JSON.stringify(link)}` : '',
+    bidi ? `bd:${JSON.stringify(bidi)}` : '',
   ].join('');
 };

@@ -271,6 +271,8 @@ export const deriveBlockVersion = (block: FlowBlock): string => {
           textRun.token ?? '',
           textRun.trackedChange ? 1 : 0,
           textRun.comments?.length ?? 0,
+          // SD-3098: DomPainter reads run.bidi to apply dir + RLM injection; signature must include it.
+          textRun.bidi ? JSON.stringify(textRun.bidi) : '',
         ].join(',');
       })
       .join('|');
@@ -459,6 +461,9 @@ export const deriveBlockVersion = (block: FlowBlock): string => {
               hash = hashString(hash, getRunBooleanProp(run, 'strike') ? '1' : '');
               hash = hashString(hash, getRunStringProp(run, 'vertAlign'));
               hash = hashNumber(hash, getRunNumberProp(run, 'baselineShift'));
+              // SD-3098: include run.bidi so rtl-only changes invalidate the cached block hash.
+              const bidi = (run as { bidi?: unknown }).bidi;
+              hash = hashString(hash, bidi ? JSON.stringify(bidi) : '');
             }
           }
         }

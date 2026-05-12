@@ -530,5 +530,12 @@ export function buildDispatchTable(api: DocumentApi): TypedDispatchTable {
     'permissionRanges.create': (input, options) => api.permissionRanges.create(input, options),
     'permissionRanges.remove': (input, options) => api.permissionRanges.remove(input, options),
     'permissionRanges.updatePrincipal': (input, options) => api.permissionRanges.updatePrincipal(input, options),
+
+    // --- customXml.parts.* ---
+    'customXml.parts.list': (input) => api.customXml.parts.list(input),
+    'customXml.parts.get': (input) => api.customXml.parts.get(input),
+    'customXml.parts.create': (input, options) => api.customXml.parts.create(input, options),
+    'customXml.parts.patch': (input, options) => api.customXml.parts.patch(input, options),
+    'customXml.parts.remove': (input, options) => api.customXml.parts.remove(input, options),
   };
 }

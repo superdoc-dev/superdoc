@@ -13,6 +13,7 @@
 
 import type { Doc as YDoc } from 'yjs';
 import type { HocuspocusProvider, HocuspocusProviderWebsocket } from '@hocuspocus/provider';
+import type { Transaction } from 'prosemirror-state';
 import type { Ref, ComputedRef } from 'vue';
 
 import type {
@@ -74,6 +75,25 @@ export interface User {
    * hash of the user's identity so the assignment is stable across reloads.
    */
   color?: string;
+}
+
+/**
+ * One entry in the `states` array delivered to
+ * {@link Config.onAwarenessUpdate}. SuperDoc emits an entry per remote
+ * client, derived from the underlying Yjs awareness states. The fields
+ * below match what SuperDoc populates by default; consumers using a
+ * custom provider may attach additional fields, which surface through
+ * the index signature as `unknown` (consumers narrow before use).
+ */
+export interface AwarenessState {
+  /** The remote user, when one is associated with this awareness entry. */
+  user?: User;
+  /** Yjs client identifier for the remote peer. */
+  clientId?: number;
+  /** Color assigned to the remote user by SuperDoc's presence system. */
+  color?: string;
+  /** Additional fields populated by application code via the awareness provider. */
+  [key: string]: unknown;
 }
 
 export interface Document {
@@ -1191,8 +1211,8 @@ export interface EditorTransactionEvent {
   editor: Editor;
   /** The editor instance that emitted the transaction. For body edits, this matches `editor`. */
   sourceEditor: Editor;
-  /** The ProseMirror transaction or transaction-like payload emitted by the source editor. */
-  transaction: any;
+  /** The ProseMirror transaction emitted by the source editor. */
+  transaction: Transaction;
   /** Time spent applying the transaction, in milliseconds. */
   duration?: number;
   /** The surface where the transaction originated. */
@@ -1334,8 +1354,7 @@ export interface Config {
   /** Callback when comments are updated. */
   onCommentsUpdate?: (params: { type: string; data: object }) => void;
   /** Callback when awareness is updated. */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  onAwarenessUpdate?: (params: { context: SuperDoc; states: any[] }) => void;
+  onAwarenessUpdate?: (params: { context: SuperDoc; states: AwarenessState[] }) => void;
   /** Callback when the SuperDoc is locked. */
   onLocked?: (params: { isLocked: boolean; lockedBy: User }) => void;
   /** Callback when the PDF document is ready. */
@@ -1491,7 +1510,12 @@ export interface ProofingError {
   kind: 'provider-error' | 'validation-error' | 'timeout';
   message: string;
   segmentIds?: string[];
-  cause?: any;
+  /**
+   * Underlying error (genuinely opaque: whatever the proofing provider
+   * threw). Use `unknown` per Error-cause convention; consumers narrow
+   * with `instanceof` or shape checks before reading fields.
+   */
+  cause?: unknown;
 }
 
 export interface ProofingConfig {

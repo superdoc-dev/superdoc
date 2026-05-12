@@ -211,6 +211,19 @@ describe('toc wrappers', () => {
     expect(commands.insertTableOfContentsAt.mock.calls[0]?.[0]).toMatchObject({ pos: 13 });
   });
 
+  it('validates create.tableOfContents targets during dryRun', () => {
+    const { editor, commands } = makeTocEditor();
+
+    expect(() =>
+      createTableOfContentsWrapper(
+        editor,
+        { at: { kind: 'after', target: { kind: 'block', nodeType: 'paragraph', nodeId: 'missing' } } },
+        { dryRun: true },
+      ),
+    ).toThrow();
+    expect(commands.insertTableOfContentsAt).not.toHaveBeenCalled();
+  });
+
   it('rejects tracked mode for TOC mutation wrappers', () => {
     const { editor } = makeTocEditor();
     const tocTarget = { kind: 'block', nodeType: 'tableOfContents', nodeId: 'toc-1' } as const;

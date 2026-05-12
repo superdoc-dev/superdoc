@@ -722,6 +722,33 @@ export class SuperToolbar extends EventEmitter {
       item.resetDisabled();
       this.#applyHeadlessState(item);
     });
+
+    this.#syncTableOfContentsToolbarAvailability();
+  }
+
+  /**
+   * TOC toolbar control calls `create.tableOfContents`; mirror capability gating
+   * (tracked mode, missing commands, etc.) so the button matches the document API.
+   * @returns {void}
+   */
+  #syncTableOfContentsToolbarAvailability() {
+    const tocItem = this.toolbarItems.find((item) => item.name.value === 'tableOfContents');
+    if (!tocItem) return;
+
+    if (!this.activeEditor) {
+      tocItem.setDisabled(true);
+      return;
+    }
+
+    let available = false;
+    try {
+      const cap = this.activeEditor.doc.capabilities();
+      available = Boolean(cap.operations['create.tableOfContents']?.available);
+    } catch {
+      available = false;
+    }
+
+    tocItem.setDisabled(!available);
   }
 
   /**

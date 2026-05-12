@@ -404,6 +404,19 @@ export const makeDefaultItems = ({
     },
   });
 
+  const tableOfContents = useToolbarItem({
+    type: 'button',
+    name: 'tableOfContents',
+    command: 'insertTableOfContentsFromToolbar',
+    icon: toolbarIcons.tableOfContents,
+    active: false,
+    tooltip: toolbarTexts.tableOfContents,
+    disabled: false,
+    attributes: {
+      ariaLabel: 'Table of contents',
+    },
+  });
+
   // table
   const tableItem = useToolbarItem({
     type: 'dropdown',
@@ -1102,6 +1115,7 @@ export const makeDefaultItems = ({
     separator,
     link,
     image,
+    tableOfContents,
     tableItem,
     tableActionsItem,
     separator,

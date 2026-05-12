@@ -347,6 +347,55 @@ describe('computeParagraphAttrs', () => {
     const { paragraphAttrs } = computeParagraphAttrs(paragraph as never, converterContext as never);
     expect(paragraphAttrs.direction).toBeUndefined();
   });
+
+  it('inherits writing mode from body section context (§17.3.1.41)', () => {
+    // When the paragraph omits w:textDirection, it should pick up writing-mode
+    // from the section. This test feeds a pre-resolved sectionDirectionContext
+    // (the production wiring populates this from the body sectPr).
+    const paragraph: PMNode = {
+      type: { name: 'paragraph' },
+      attrs: {
+        paragraphProperties: {},
+      },
+    };
+
+    const converterContext = {
+      sectionDirectionContext: {
+        pageDirection: 'ltr',
+        writingMode: 'vertical-rl',
+        rtlGutter: false,
+      },
+      translatedNumbering: {},
+      translatedLinkedStyles: { docDefaults: {}, styles: {} },
+      tableInfo: null,
+    };
+
+    const { paragraphAttrs } = computeParagraphAttrs(paragraph as never, converterContext as never);
+    expect(paragraphAttrs.directionContext?.writingMode).toBe('vertical-rl');
+  });
+
+  it('paragraph w:textDirection wins over section writing-mode (§17.3.1.41 explicit override)', () => {
+    const paragraph: PMNode = {
+      type: { name: 'paragraph' },
+      attrs: {
+        paragraphProperties: { textDirection: 'lrTb' },
+      },
+    };
+
+    const converterContext = {
+      sectionDirectionContext: {
+        pageDirection: 'ltr',
+        writingMode: 'vertical-rl',
+        rtlGutter: false,
+      },
+      translatedNumbering: {},
+      translatedLinkedStyles: { docDefaults: {}, styles: {} },
+      tableInfo: null,
+    };
+
+    const { paragraphAttrs } = computeParagraphAttrs(paragraph as never, converterContext as never);
+    expect(paragraphAttrs.directionContext?.writingMode).toBe('horizontal-tb');
+  });
 });
 
 /*

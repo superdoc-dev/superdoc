@@ -103,7 +103,10 @@ const SuperDocTemplateBuilder = forwardRef<Types.SuperDocTemplateBuilderHandle, 
     const trigger = menu.trigger || '{{';
 
     const availableFields = fieldsRef.current.available || [];
-    const toolbarSettings = useMemo(() => resolveToolbar(toolbar), [toolbar]);
+    // Serialize so structurally-equal toolbar objects compare as equal across
+    // renders — otherwise a fresh inline `toolbar={{...}}` literal would
+    // recreate the SuperDoc instance every parent render.
+    const toolbarSettings = useMemo(() => resolveToolbar(toolbar), [JSON.stringify(toolbar)]);
     const stableTelemetry = useMemo(
       () => ({
         enabled: telemetry?.enabled ?? true,

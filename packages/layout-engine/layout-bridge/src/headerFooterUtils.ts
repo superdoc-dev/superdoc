@@ -6,6 +6,7 @@ import type {
   HeaderFooterResolutionSection,
 } from '@superdoc/contracts';
 import { resolveEffectiveHeaderFooterRef, selectHeaderFooterVariantForPage } from '@superdoc/contracts';
+export { resolveInheritedHeaderFooterRef, type HeaderFooterRefIdentifier } from '@superdoc/contracts';
 
 export type HeaderFooterIdentifier = {
   headerIds: Record<'default' | 'first' | 'even' | 'odd', string | null>;

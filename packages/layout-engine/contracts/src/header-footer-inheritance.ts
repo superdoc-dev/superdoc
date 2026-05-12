@@ -51,11 +51,18 @@ export function resolveInheritedHeaderFooterRefWithType({
   const fromSection = resolveVariantRef(sectionIds, variantType);
   if (fromSection) return fromSection;
 
-  if (sectionMap) {
+  if (sectionMap && sectionMap.size > 0) {
     for (let index = sectionIndex - 1; index >= 0; index -= 1) {
       const inherited = resolveVariantRef(sectionMap.get(index), variantType);
       if (inherited) return inherited;
     }
+    return null;
+  }
+
+  const hasSectionAwareRefs =
+    sectionMap != null && (sectionMap.has(sectionIndex) || (identifier.sectionCount ?? 0) > sectionIndex);
+  if (hasSectionAwareRefs) {
+    return null;
   }
 
   return resolveVariantRef(legacyIds, variantType);

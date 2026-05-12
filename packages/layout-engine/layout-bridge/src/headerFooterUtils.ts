@@ -400,6 +400,17 @@ export function getHeaderFooterTypeForSection(
     return 'default';
   }
 
+  if (
+    resolveInheritedHeaderFooterRef({
+      identifier,
+      sectionIndex,
+      kind,
+      variantType: 'default',
+    })
+  ) {
+    return 'default';
+  }
+
   return null;
 }
 

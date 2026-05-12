@@ -940,7 +940,7 @@ describe('headerFooterUtils', () => {
       expect(evenPageType).toBe('even');
     });
 
-    it('returns null when a later section has no explicit default ref', () => {
+    it('returns default when a later section inherits a default ref', () => {
       const sectionMetadata: SectionMetadata[] = [
         {
           sectionIndex: 0,
@@ -957,7 +957,37 @@ describe('headerFooterUtils', () => {
         kind: 'header',
         sectionPageNumber: 1,
       });
-      expect(inheritedDefaultType).toBeNull();
+      expect(inheritedDefaultType).toBe('default');
+    });
+
+    it('uses inherited default refs when alternate headers are disabled', () => {
+      const sectionMetadata: SectionMetadata[] = [
+        {
+          sectionIndex: 0,
+          headerRefs: { default: 'h0-default' },
+        },
+        {
+          sectionIndex: 1,
+          headerRefs: { even: 'h1-even' },
+        },
+      ];
+
+      const identifier = buildMultiSectionIdentifier(sectionMetadata);
+      const layout: Layout = {
+        pageSize: { w: 600, h: 800 },
+        pages: [
+          { number: 1, fragments: [], sectionIndex: 0 },
+          { number: 2, fragments: [], sectionIndex: 1, sectionRefs: { headerRefs: { even: 'h1-even' } } },
+        ],
+        headerFooter: {
+          default: { pages: [{ number: 2, fragments: [] }] },
+        },
+      };
+
+      const resolved = resolveHeaderFooterForPageAndSection(layout, 1, identifier, { kind: 'header' });
+
+      expect(resolved?.type).toBe('default');
+      expect(resolved?.contentId).toBe('h0-default');
     });
 
     it('uses converter fallback refs when section metadata has no explicit refs', () => {

@@ -853,7 +853,9 @@ export function paragraphToFlowBlocks({
   flushParagraph();
 
   const hasParagraphBlock = blocks.some((block) => block.kind === 'paragraph');
-  if (!hasParagraphBlock && !suppressedByVanish && !paragraphProps.runProperties?.vanish) {
+  const hasOnlyBreakBlocks =
+    blocks.length > 0 && blocks.every((block) => block.kind === 'pageBreak' || block.kind === 'columnBreak');
+  if (!hasParagraphBlock && !hasOnlyBreakBlocks && !suppressedByVanish && !paragraphProps.runProperties?.vanish) {
     blocks.push({
       kind: 'paragraph',
       id: baseBlockId,

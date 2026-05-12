@@ -3404,6 +3404,39 @@ describe('toFlowBlocks', () => {
 
       const pageBreakBlocks = blocks.filter((b) => b.kind === 'pageBreak');
       expect(pageBreakBlocks).toHaveLength(1);
+      expect(blocks.filter((b) => b.kind === 'paragraph' && b.runs.length === 1 && b.runs[0].text === '')).toHaveLength(
+        1,
+      );
+      expect(blocks.findIndex((b) => b.kind === 'pageBreak')).toBeLessThan(
+        blocks.findIndex((b) => b.kind === 'paragraph' && b.runs[0].text === 'Page 2'),
+      );
+    });
+
+    it('does not synthesize an empty paragraph for a page-break-only paragraph', () => {
+      const pmDoc = {
+        type: 'doc',
+        content: [
+          {
+            type: 'paragraph',
+            content: [{ type: 'text', text: 'Page 1' }],
+          },
+          {
+            type: 'paragraph',
+            content: [{ type: 'hardBreak', attrs: { pageBreakType: 'page' } }],
+          },
+          {
+            type: 'paragraph',
+            content: [{ type: 'text', text: 'Page 2' }],
+          },
+        ],
+      };
+
+      const { blocks } = toFlowBlocks(pmDoc);
+
+      expect(blocks.filter((b) => b.kind === 'pageBreak')).toHaveLength(1);
+      expect(blocks.filter((b) => b.kind === 'paragraph')).toHaveLength(2);
+      expect(blocks.findIndex((b) => b.kind === 'pageBreak')).toBe(1);
+      expect((blocks[2] as ParagraphBlock).runs[0].text).toBe('Page 2');
     });
 
     it('handles hardBreak with marks and formatting', () => {

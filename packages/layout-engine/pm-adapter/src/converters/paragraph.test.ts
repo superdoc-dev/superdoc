@@ -2668,7 +2668,8 @@ describe('paragraph converters', () => {
 
         const blocks = paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16);
 
-        expect(blocks.some((b) => b.kind === 'columnBreak')).toBe(true);
+        expect(blocks).toHaveLength(1);
+        expect(blocks[0]).toMatchObject({ kind: 'columnBreak' });
       });
 
       it('should ignore lineBreak without column break type', () => {
@@ -3098,9 +3099,7 @@ describe('paragraph converters', () => {
     });
 
     describe('Edge cases', () => {
-      it('should create empty paragraph when all content is block nodes', () => {
-        // hardBreak without pageBreakType defaults to line break (inline)
-        // so we use pageBreakType: 'page' to make it a block node
+      it('does not create an empty paragraph when content is only a page break', () => {
         const para: PMNode = {
           type: 'paragraph',
           content: [{ type: 'hardBreak', attrs: { pageBreakType: 'page' } }],
@@ -3108,10 +3107,8 @@ describe('paragraph converters', () => {
 
         const blocks = paragraphToFlowBlocks(para, nextBlockId, positions, 'Arial', 16);
 
-        expect(blocks.some((b) => b.kind === 'paragraph')).toBe(true);
-        const paraBlock = blocks.find((b) => b.kind === 'paragraph') as ParagraphBlock;
-        expect(paraBlock.runs).toHaveLength(1);
-        expect(paraBlock.runs[0].text).toBe('');
+        expect(blocks).toHaveLength(1);
+        expect(blocks[0]).toMatchObject({ kind: 'pageBreak' });
       });
 
       it('should handle mixed inline and block content', () => {

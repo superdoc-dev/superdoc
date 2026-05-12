@@ -36,7 +36,6 @@ import {
   scheduleSectionBreak as scheduleSectionBreakExport,
   type SectionState,
   applyPendingToActive,
-  SINGLE_COLUMN_DEFAULT,
 } from './section-breaks.js';
 import { layoutParagraphBlock } from './layout-paragraph.js';
 import { layoutImageBlock } from './layout-image.js';
@@ -632,6 +631,32 @@ const shouldSkipRedundantPageBreakBefore = (block: PageBreakBlock, state: PageSt
     Math.abs(state.cursorY - state.topMargin) <= PAGE_START_EPSILON;
 
   return isAtTopOfFreshPage;
+};
+
+const isManualPageBreak = (block: FlowBlock | undefined): block is PageBreakBlock => {
+  return block?.kind === 'pageBreak' && block.attrs?.source !== 'pageBreakBefore';
+};
+
+const hasManualPageBreakBeforeParagraph = (
+  blocks: FlowBlock[],
+  paragraphIndex: number,
+  anchorsForPara?: { block: ImageBlock | DrawingBlock }[],
+): boolean => {
+  if (isManualPageBreak(blocks[paragraphIndex - 1])) return true;
+
+  const anchorIds = new Set(anchorsForPara?.map((entry) => entry.block.id) ?? []);
+  for (let index = paragraphIndex - 1; index >= 0; index -= 1) {
+    const block = blocks[index];
+    if (
+      (block.kind === 'image' || block.kind === 'drawing') &&
+      (anchorIds.has(block.id) || (block.anchor?.isAnchored === true && isPageRelativeAnchor(block)))
+    ) {
+      continue;
+    }
+    return isManualPageBreak(block);
+  }
+
+  return false;
 };
 
 const hasOnlySectionBreakBlocks = (blocks: readonly FlowBlock[]): boolean => {
@@ -1718,7 +1743,10 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
 
   // Map to store pre-computed positions for page-relative anchors (for fragment creation later).
   // Page placement is resolved at encounter time so anchors follow pagination (e.g., after page breaks).
-  const preRegisteredPositions = new Map<string, { anchorX: number; anchorY: number }>();
+  const preRegisteredPositions = new Map<
+    string,
+    { anchorX: number; anchorY: number; columnIndex: number; pageNumber: number }
+  >();
 
   const resolveParagraphlessAnchoredTableY = (block: TableBlock, measure: TableMeasure, state: PageState): number => {
     const contentTop = state.topMargin;
@@ -1823,7 +1851,12 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
     floatManager.registerDrawing(entry.block, entry.measure, anchorY, state.columnIndex, state.page.number);
 
     // Store pre-computed position for later use when creating the fragment.
-    preRegisteredPositions.set(entry.block.id, { anchorX, anchorY });
+    preRegisteredPositions.set(entry.block.id, {
+      anchorX,
+      anchorY,
+      columnIndex: state.columnIndex,
+      pageNumber: state.page.number,
+    });
   }
 
   // Pre-compute keepNext chains for correct pagination grouping.
@@ -2365,6 +2398,7 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
           floatManager,
           remeasureParagraph: options.remeasureParagraph,
           overrideSpacingAfter,
+          suppressSpacingBeforeAtPageTop: hasManualPageBreakBeforeParagraph(blocks, index, anchorsForPara),
         },
         anchorsForPara
           ? {
@@ -2433,6 +2467,9 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
         const state = paginator.ensurePage();
         const imgBlock = block as ImageBlock;
         const imgMeasure = measure as ImageMeasure;
+        if (preRegPos.pageNumber !== state.page.number || preRegPos.columnIndex !== state.columnIndex) {
+          floatManager.registerDrawing(imgBlock, imgMeasure, preRegPos.anchorY, state.columnIndex, state.page.number);
+        }
 
         const pageContentHeight = Math.max(0, state.contentBottom - state.topMargin);
         const relativeFrom = imgBlock.anchor?.hRelativeFrom ?? 'column';
@@ -2505,6 +2542,9 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
         const state = paginator.ensurePage();
         const drawBlock = block as DrawingBlock;
         const drawMeasure = measure as DrawingMeasure;
+        if (preRegPos.pageNumber !== state.page.number || preRegPos.columnIndex !== state.columnIndex) {
+          floatManager.registerDrawing(drawBlock, drawMeasure, preRegPos.anchorY, state.columnIndex, state.page.number);
+        }
 
         const fragment: DrawingFragment = {
           kind: 'drawing',

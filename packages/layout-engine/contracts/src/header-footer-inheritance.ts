@@ -66,7 +66,6 @@ export function resolveInheritedHeaderFooterRefWithType({
       const inherited = resolveVariantRef(sectionMap.get(index), variantType);
       if (inherited) return inherited;
     }
-    return null;
   }
 
   return resolveVariantRef(legacyIds, variantType);

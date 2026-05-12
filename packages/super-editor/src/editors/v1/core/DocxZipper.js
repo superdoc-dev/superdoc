@@ -21,6 +21,66 @@ const FONT_CONTENT_TYPES = {
   otf: 'application/vnd.ms-opentype',
 };
 
+const OFFICE_DOCUMENT_RELATIONSHIP_TYPE =
+  'http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument';
+
+const normalizePackagePath = (path) => {
+  if (typeof path !== 'string') return null;
+  return path.replace(/^\/+/, '').replace(/^\.\//, '');
+};
+
+const getRelationshipElements = (relationshipsXml) => {
+  if (!relationshipsXml) return [];
+
+  try {
+    const parsed = xmljs.xml2js(relationshipsXml, { compact: false });
+    const relationships = parsed.elements?.find((el) => el.name === 'Relationships');
+    return relationships?.elements ?? [];
+  } catch {
+    return [];
+  }
+};
+
+const getMainDocumentPath = async (zip) => {
+  const packageRels = zip.file('_rels/.rels');
+  if (!packageRels) return null;
+
+  const relsXml = ensureXmlString(await packageRels.async('uint8array'));
+  const officeDocumentRel = getRelationshipElements(relsXml).find((rel) => {
+    const attrs = rel?.attributes ?? {};
+    return attrs.Type === OFFICE_DOCUMENT_RELATIONSHIP_TYPE && attrs.TargetMode !== 'External';
+  });
+
+  return normalizePackagePath(officeDocumentRel?.attributes?.Target);
+};
+
+const isRootLevelMainDocumentPackage = (mainDocumentPath) => {
+  return Boolean(mainDocumentPath) && !mainDocumentPath.includes('/');
+};
+
+const normalizeRootLevelWordPartPath = (name, mainDocumentPath) => {
+  if (!isRootLevelMainDocumentPackage(mainDocumentPath)) return name;
+  if (name === '[Content_Types].xml' || name === '_rels/.rels') return name;
+  if (name.startsWith('word/')) return name;
+
+  const mainDocumentRelsPath = `_rels/${mainDocumentPath}.rels`;
+  if (name === mainDocumentRelsPath) return 'word/_rels/document.xml.rels';
+
+  if (name.startsWith('_rels/') && name.endsWith('.rels')) {
+    return `word/${name}`;
+  }
+
+  if (!name.includes('/') && name.endsWith('.xml')) {
+    return `word/${name}`;
+  }
+
+  if (name.startsWith('images/')) {
+    return `word/${name}`;
+  }
+
+  return name;
+};
+
 /**
  * Class to handle unzipping and zipping of docx files
  */
@@ -111,10 +171,11 @@ class DocxZipper {
     // If caller supplied a password but the file isn't encrypted, ignore it.
 
     const extractedFiles = await this.unzip(fileData);
+    const mainDocumentPath = await getMainDocumentPath(extractedFiles);
     const files = Object.entries(extractedFiles.files);
 
     for (const [, zipEntry] of files) {
-      const name = zipEntry.name;
+      const name = normalizeRootLevelWordPartPath(zipEntry.name, mainDocumentPath);
 
       if (isXmlLike(name)) {
         // Read raw bytes and decode (handles UTF-8 & UTF-16)
@@ -123,7 +184,9 @@ class DocxZipper {
         this.files.push({ name, content });
       } else if (
         (name.startsWith('word/media') && name !== 'word/media/') ||
+        (name.startsWith('word/images') && name !== 'word/images/') ||
         (zipEntry.name.startsWith('media') && zipEntry.name !== 'media/') ||
+        (zipEntry.name.startsWith('images') && zipEntry.name !== 'images/') ||
         (name.startsWith('media') && name !== 'media/') ||
         (name.startsWith('word/embeddings') && name !== 'word/embeddings/')
       ) {

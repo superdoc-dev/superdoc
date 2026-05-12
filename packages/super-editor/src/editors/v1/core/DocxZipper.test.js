@@ -48,6 +48,63 @@ describe('DocxZipper - file extraction', () => {
     const documentXml = unzippedXml.find((file) => file.name === 'word/document.xml');
     expect(documentXml).toBeTruthy();
   });
+
+  it('normalizes root-level WordprocessingML parts to canonical word paths', async () => {
+    const zip = new JSZip();
+    const contentTypes = `<?xml version="1.0" encoding="UTF-8"?>
+      <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+        <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+        <Default Extension="xml" ContentType="application/xml"/>
+        <Override PartName="/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+        <Override PartName="/settings.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml"/>
+        <Override PartName="/header1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/>
+      </Types>`;
+    zip.file('[Content_Types].xml', contentTypes);
+    zip.file(
+      '_rels/.rels',
+      `<?xml version="1.0" encoding="UTF-8"?>
+        <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+          <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="document.xml"/>
+        </Relationships>`,
+    );
+    zip.file(
+      '_rels/document.xml.rels',
+      `<?xml version="1.0" encoding="UTF-8"?>
+        <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+          <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings" Target="settings.xml"/>
+          <Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header1.xml"/>
+          <Relationship Id="rId4" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="images/1.png"/>
+        </Relationships>`,
+    );
+    zip.file(
+      'document.xml',
+      `<?xml version="1.0" encoding="UTF-8"?>
+        <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+          <w:body><w:p><w:r><w:t>Hello from root</w:t></w:r></w:p></w:body>
+        </w:document>`,
+    );
+    zip.file(
+      'settings.xml',
+      '<?xml version="1.0" encoding="UTF-8"?><w:settings xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"/>',
+    );
+    zip.file(
+      'header1.xml',
+      '<?xml version="1.0" encoding="UTF-8"?><w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"/>',
+    );
+    zip.file('images/1.png', Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+
+    const buf = await zip.generateAsync({ type: 'nodebuffer' });
+    const files = await zipper.getDocxData(buf, true);
+    const names = files.map((file) => file.name);
+
+    expect(names).toContain('word/document.xml');
+    expect(names).toContain('word/settings.xml');
+    expect(names).toContain('word/header1.xml');
+    expect(names).toContain('word/_rels/document.xml.rels');
+    expect(names).not.toContain('document.xml');
+    expect(names).not.toContain('_rels/document.xml.rels');
+    expect(zipper.mediaFiles['word/images/1.png']).toBeTruthy();
+  });
 });
 
 // Helper to build a UTF-16LE Buffer with BOM

@@ -4757,6 +4757,29 @@ describe('toFlowBlocks', () => {
       expect(blocksStart[0].attrs?.alignment).toBe('right');
       expect(blocksEnd[0].attrs?.alignment).toBe('left');
     });
+
+    // SD-3093: justify-family values must collapse to 'justify' without flipping
+    // in RTL. Regression guard against accidentally extending the mirror logic.
+    it('maps both/distribute/numTab/thaiDistribute to justify on RTL paragraphs', () => {
+      const makeDoc = (jc: string) => ({
+        type: 'doc',
+        content: [
+          {
+            type: 'paragraph',
+            attrs: {
+              paragraphProperties: { rightToLeft: true, justification: jc },
+            },
+            content: [{ type: 'text', text: 'مرحبا' }],
+          },
+        ],
+      });
+
+      for (const jc of ['both', 'distribute', 'numTab', 'thaiDistribute']) {
+        const { blocks } = toFlowBlocks(makeDoc(jc));
+        expect(blocks[0].attrs?.direction).toBe('rtl');
+        expect(blocks[0].attrs).toMatchObject({ alignment: 'justify' });
+      }
+    });
   });
 
   describe('documentSection SDT metadata propagation', () => {

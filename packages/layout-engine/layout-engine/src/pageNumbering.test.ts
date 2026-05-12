@@ -27,6 +27,10 @@ describe('formatPageNumber', () => {
       expect(formatPageNumber(-1, 'decimal')).toBe('1');
       expect(formatPageNumber(-100, 'decimal')).toBe('1');
     });
+
+    it('should truncate fractional numbers before formatting', () => {
+      expect(formatPageNumber(4.9, 'decimal')).toBe('4');
+    });
   });
 
   describe('numberInDash format', () => {

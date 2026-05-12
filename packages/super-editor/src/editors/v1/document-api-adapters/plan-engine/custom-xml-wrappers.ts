@@ -16,9 +16,13 @@ import type {
 import { buildDiscoveryItem, buildDiscoveryResult, buildResolvedHandle } from '@superdoc/document-api';
 import { paginate } from '../helpers/adapter-utils.js';
 import { getRevision } from './revision-tracker.js';
+import { rejectTrackedMode } from '../helpers/mutation-helpers.js';
 import {
   listCustomXmlParts,
   readCustomXmlPart,
+  createCustomXmlPart,
+  patchCustomXmlPart,
+  removeCustomXmlPart,
 } from '../../core/super-converter/custom-xml-parts.js';
 
 // ---------------------------------------------------------------------------
@@ -106,47 +110,64 @@ export function customXmlPartsGetWrapper(
 }
 
 // ---------------------------------------------------------------------------
-// Write operations (placeholder until SD-3105 Phase B)
+// Write operations
 // ---------------------------------------------------------------------------
 
-function notImplemented(op: string): CustomXmlPartsMutationResult {
-  return {
-    success: false,
-    failure: {
-      code: 'CAPABILITY_UNAVAILABLE',
-      message: `${op} is not yet implemented on this adapter.`,
-    },
-  };
+function failure(code: string, message: string): { success: false; failure: { code: string; message: string } } {
+  return { success: false, failure: { code, message } };
 }
 
 export function customXmlPartsCreateWrapper(
-  _editor: Editor,
-  _input: CustomXmlPartsCreateInput,
-  _options?: MutationOptions,
+  editor: Editor,
+  input: CustomXmlPartsCreateInput,
+  options?: MutationOptions,
 ): CustomXmlPartsCreateResult {
-  return {
-    success: false,
-    failure: {
-      code: 'CAPABILITY_UNAVAILABLE',
-      message: 'customXml.parts.create is not yet implemented on this adapter.',
-    },
-  };
+  rejectTrackedMode('customXml.parts.create', options);
+  try {
+    const result = createCustomXmlPart(getConvertedXml(editor), {
+      content: input.content,
+      schemaRefs: input.schemaRefs,
+    });
+    return {
+      success: true,
+      id: result.id,
+      partName: result.partName,
+      propsPartName: result.propsPartName,
+    };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return failure('INVALID_INPUT', `customXml.parts.create failed: ${msg}`);
+  }
 }
 
 export function customXmlPartsPatchWrapper(
-  _editor: Editor,
-  _input: CustomXmlPartsPatchInput,
-  _options?: MutationOptions,
+  editor: Editor,
+  input: CustomXmlPartsPatchInput,
+  options?: MutationOptions,
 ): CustomXmlPartsMutationResult {
-  return notImplemented('customXml.parts.patch');
+  rejectTrackedMode('customXml.parts.patch', options);
+  try {
+    const result = patchCustomXmlPart(getConvertedXml(editor), input.target, {
+      content: input.content,
+      schemaRefs: input.schemaRefs,
+    });
+    if (!result) return failure('TARGET_NOT_FOUND', 'No custom XML part matched the supplied target.');
+    return { success: true, target: input.target };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return failure('INVALID_INPUT', `customXml.parts.patch failed: ${msg}`);
+  }
 }
 
 export function customXmlPartsRemoveWrapper(
-  _editor: Editor,
-  _input: CustomXmlPartsRemoveInput,
-  _options?: MutationOptions,
+  editor: Editor,
+  input: CustomXmlPartsRemoveInput,
+  options?: MutationOptions,
 ): CustomXmlPartsMutationResult {
-  return notImplemented('customXml.parts.remove');
+  rejectTrackedMode('customXml.parts.remove', options);
+  const ok = removeCustomXmlPart(getConvertedXml(editor), input.target);
+  if (!ok) return failure('TARGET_NOT_FOUND', 'No custom XML part matched the supplied target.');
+  return { success: true, target: input.target };
 }
 
 // ---------------------------------------------------------------------------

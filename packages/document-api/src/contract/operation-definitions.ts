@@ -6295,7 +6295,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'non-idempotent',
-      supportsDryRun: true,
+      supportsDryRun: false,
       supportsTrackedMode: false,
       possibleFailureCodes: NONE_FAILURES,
       throws: T_REF_INSERT,
@@ -6310,7 +6310,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'idempotent',
-      supportsDryRun: true,
+      supportsDryRun: false,
       supportsTrackedMode: false,
       possibleFailureCodes: NONE_FAILURES,
       throws: T_REF_MUTATION,
@@ -6325,7 +6325,7 @@ export const OPERATION_DEFINITIONS = {
     requiresDocumentContext: true,
     metadata: mutationOperation({
       idempotency: 'non-idempotent',
-      supportsDryRun: true,
+      supportsDryRun: false,
       supportsTrackedMode: false,
       possibleFailureCodes: NONE_FAILURES,
       throws: T_REF_MUTATION_REMOVE,

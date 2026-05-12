@@ -14,6 +14,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { initTestEditor, loadTestDataForEditorTests } from '@tests/helpers/helpers.js';
+import { Editor } from '../../core/Editor.js';
 
 const NAMESPACE = 'urn:test:1';
 const PART_NAME = 'customXml/item1.xml';
@@ -175,34 +176,201 @@ describe('customXml.parts read-side (integration)', () => {
   });
 });
 
-describe('customXml.parts write-side (stubs)', () => {
-  it('create returns CAPABILITY_UNAVAILABLE until Phase B lands', async () => {
+describe('customXml.parts write-side', () => {
+  it('create makes a part discoverable via list and get', async () => {
     const editor = await createEditorWithEmptyPackage();
-    const result = editor.doc.customXml.parts.create({ content: '<a/>' });
+
+    const created = editor.doc.customXml.parts.create({
+      content: '<refs xmlns="urn:test:1"><ref id="x"/></refs>',
+      schemaRefs: ['urn:test:1'],
+    });
+    expect(created.success).toBe(true);
+    if (!created.success) return;
+    expect(created.id).toMatch(/^\{[0-9A-F-]+\}$/);
+    expect(created.partName).toBe('customXml/item1.xml');
+    expect(created.propsPartName).toBe('customXml/itemProps1.xml');
+
+    const list = editor.doc.customXml.parts.list();
+    expect(list.items.length).toBe(1);
+    const summary = list.items[0]!;
+    expect(summary.id).toBe(created.id);
+    expect(summary.rootNamespace).toBe('urn:test:1');
+    expect(summary.schemaRefs).toEqual(['urn:test:1']);
+
+    const info = editor.doc.customXml.parts.get({ target: { id: created.id } });
+    expect(info).not.toBeNull();
+    expect(info!.content).toContain('<refs');
+    expect(info!.content).toContain('xmlns="urn:test:1"');
+
+    editor.destroy();
+  });
+
+  it('create allocates non-colliding indexes when called multiple times', async () => {
+    const editor = await createEditorWithEmptyPackage();
+    const a = editor.doc.customXml.parts.create({ content: '<a xmlns="urn:a"/>' });
+    const b = editor.doc.customXml.parts.create({ content: '<b xmlns="urn:b"/>' });
+    expect(a.success && b.success).toBe(true);
+    if (!a.success || !b.success) return;
+    expect(a.partName).toBe('customXml/item1.xml');
+    expect(b.partName).toBe('customXml/item2.xml');
+    expect(a.id).not.toBe(b.id);
+    expect(editor.doc.customXml.parts.list().items.length).toBe(2);
+    editor.destroy();
+  });
+
+  it('create wires up the document-level relationship', async () => {
+    const editor = await createEditorWithEmptyPackage();
+    const created = editor.doc.customXml.parts.create({ content: '<a xmlns="urn:a"/>' });
+    expect(created.success).toBe(true);
+
+    const converted = (editor as unknown as { converter: { convertedXml: Record<string, unknown> } }).converter
+      .convertedXml;
+    const relsDoc = converted['word/_rels/document.xml.rels'] as { elements?: Array<{ elements?: Array<{ attributes?: Record<string, string> }> }> } | undefined;
+    const relsRoot = relsDoc?.elements?.[0];
+    const customXmlRels = (relsRoot?.elements ?? []).filter(
+      (rel) =>
+        rel?.attributes?.Type ===
+        'http://schemas.openxmlformats.org/officeDocument/2006/relationships/customXml',
+    );
+    expect(customXmlRels.length).toBe(1);
+    expect(customXmlRels[0]!.attributes?.Target).toBe('../customXml/item1.xml');
+
+    editor.destroy();
+  });
+
+  it('patch updates content while preserving itemID', async () => {
+    const editor = await createEditorWithEmptyPackage();
+    const created = editor.doc.customXml.parts.create({
+      content: '<a xmlns="urn:a">one</a>',
+      schemaRefs: ['urn:a'],
+    });
+    expect(created.success).toBe(true);
+    if (!created.success) return;
+
+    const patched = editor.doc.customXml.parts.patch({
+      target: { id: created.id },
+      content: '<a xmlns="urn:a">two</a>',
+    });
+    expect(patched.success).toBe(true);
+
+    const info = editor.doc.customXml.parts.get({ target: { id: created.id } });
+    expect(info!.id).toBe(created.id);
+    expect(info!.content).toContain('>two<');
+    expect(info!.content).not.toContain('>one<');
+    expect(info!.schemaRefs).toEqual(['urn:a']); // preserved
+    editor.destroy();
+  });
+
+  it('patch can update schemaRefs alone', async () => {
+    const editor = await createEditorWithEmptyPackage();
+    const created = editor.doc.customXml.parts.create({
+      content: '<a xmlns="urn:a"/>',
+      schemaRefs: ['urn:a'],
+    });
+    if (!created.success) return;
+
+    const patched = editor.doc.customXml.parts.patch({
+      target: { id: created.id },
+      schemaRefs: ['urn:a', 'urn:b'],
+    });
+    expect(patched.success).toBe(true);
+
+    const info = editor.doc.customXml.parts.get({ target: { id: created.id } });
+    expect(info!.schemaRefs).toEqual(['urn:a', 'urn:b']);
+    editor.destroy();
+  });
+
+  it('patch returns TARGET_NOT_FOUND for unknown id', async () => {
+    const editor = await createEditorWithEmptyPackage();
+    const result = editor.doc.customXml.parts.patch({
+      target: { id: '{NOPE}' },
+      content: '<a xmlns="urn:a"/>',
+    });
     expect(result.success).toBe(false);
     if (!result.success) {
-      expect(result.failure.code).toBe('CAPABILITY_UNAVAILABLE');
+      expect(result.failure.code).toBe('TARGET_NOT_FOUND');
     }
     editor.destroy();
   });
 
-  it('patch returns CAPABILITY_UNAVAILABLE', async () => {
+  it('remove deletes the part and its linked package files', async () => {
     const editor = await createEditorWithEmptyPackage();
-    const result = editor.doc.customXml.parts.patch({ target: { id: '{X}' }, content: '<a/>' });
+    const created = editor.doc.customXml.parts.create({ content: '<a xmlns="urn:a"/>' });
+    if (!created.success) return;
+
+    const removed = editor.doc.customXml.parts.remove({ target: { id: created.id } });
+    expect(removed.success).toBe(true);
+
+    expect(editor.doc.customXml.parts.list().items).toEqual([]);
+
+    const converted = (editor as unknown as { converter: { convertedXml: Record<string, unknown> } }).converter
+      .convertedXml;
+    expect(converted['customXml/item1.xml']).toBeUndefined();
+    expect(converted['customXml/itemProps1.xml']).toBeUndefined();
+    expect(converted['customXml/_rels/item1.xml.rels']).toBeUndefined();
+
+    const relsDoc = converted['word/_rels/document.xml.rels'] as { elements?: Array<{ elements?: Array<{ attributes?: Record<string, string> }> }> } | undefined;
+    const relsRoot = relsDoc?.elements?.[0];
+    const lingering = (relsRoot?.elements ?? []).filter(
+      (rel) =>
+        rel?.attributes?.Type ===
+        'http://schemas.openxmlformats.org/officeDocument/2006/relationships/customXml',
+    );
+    expect(lingering).toEqual([]);
+
+    editor.destroy();
+  });
+
+  it('remove returns TARGET_NOT_FOUND for unknown id', async () => {
+    const editor = await createEditorWithEmptyPackage();
+    const result = editor.doc.customXml.parts.remove({ target: { id: '{NOPE}' } });
     expect(result.success).toBe(false);
     if (!result.success) {
-      expect(result.failure.code).toBe('CAPABILITY_UNAVAILABLE');
+      expect(result.failure.code).toBe('TARGET_NOT_FOUND');
     }
     editor.destroy();
   });
 
-  it('remove returns CAPABILITY_UNAVAILABLE', async () => {
+  it('round-trip: create → export → reimport preserves id, content, schemaRefs', async () => {
     const editor = await createEditorWithEmptyPackage();
-    const result = editor.doc.customXml.parts.remove({ target: { id: '{X}' } });
-    expect(result.success).toBe(false);
-    if (!result.success) {
-      expect(result.failure.code).toBe('CAPABILITY_UNAVAILABLE');
-    }
+    const created = editor.doc.customXml.parts.create({
+      content: '<refs xmlns="urn:round-trip:1"><ref id="a"/><ref id="b"/></refs>',
+      schemaRefs: ['urn:round-trip:1', 'urn:round-trip:audit'],
+    });
+    if (!created.success) return;
+    const originalId = created.id;
+
+    const buf = (await editor.exportDocx()) as Buffer | Uint8Array;
+    const bytes = buf instanceof Uint8Array ? buf : new Uint8Array(buf);
     editor.destroy();
+
+    // Reimport from the exported bytes through the canonical loader.
+    const [reloadedDocx, reloadedMedia, reloadedMediaFiles, reloadedFonts] = await Editor.loadXmlData(
+      bytes,
+      true,
+    );
+    const { editor: reloaded } = initTestEditor({
+      content: reloadedDocx,
+      media: reloadedMedia,
+      mediaFiles: reloadedMediaFiles,
+      fonts: reloadedFonts,
+      useImmediateSetTimeout: false,
+      isHeadless: true,
+      user: { name: 'Test', email: 'test@example.com' },
+    });
+
+    const list = reloaded.doc.customXml.parts.list();
+    expect(list.items.length).toBe(1);
+    const summary = list.items[0]!;
+    expect(summary.id).toBe(originalId);
+    expect(summary.rootNamespace).toBe('urn:round-trip:1');
+    expect(summary.schemaRefs).toEqual(['urn:round-trip:1', 'urn:round-trip:audit']);
+
+    const info = reloaded.doc.customXml.parts.get({ target: { id: originalId } });
+    expect(info!.content).toContain('<ref');
+    expect(info!.content).toContain('id="a"');
+    expect(info!.content).toContain('id="b"');
+
+    reloaded.destroy();
   });
 });

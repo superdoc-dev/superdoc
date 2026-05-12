@@ -8,6 +8,9 @@
  */
 
 import * as xmljs from 'xml-js';
+import { v4 as uuidv4 } from 'uuid';
+import { resolveOpcTargetPath } from './helpers.js';
+import { DEFAULT_XML_DECLARATION } from './constants.js';
 
 export const CUSTOM_XML_DATA_RELATIONSHIP_TYPE =
   'http://schemas.openxmlformats.org/officeDocument/2006/relationships/customXml';
@@ -226,4 +229,258 @@ export function nextCustomXmlItemIndex(convertedXml) {
   let candidate = 1;
   while (used.has(candidate)) candidate += 1;
   return candidate;
+}
+
+// ---------------------------------------------------------------------------
+// Write helpers (package coordination)
+// ---------------------------------------------------------------------------
+
+function createXmlDocument(rootElement, declaration) {
+  const nextDeclaration = declaration ?? DEFAULT_XML_DECLARATION;
+  return {
+    declaration: {
+      ...nextDeclaration,
+      attributes: { ...nextDeclaration.attributes },
+    },
+    elements: [rootElement],
+  };
+}
+
+function parseContentToRootElement(content) {
+  const parsed = xmljs.xml2js(content, { compact: false });
+  const root = (parsed.elements ?? []).find((el) => el?.type === 'element');
+  if (!root) {
+    throw new Error('Custom XML content is missing a root element.');
+  }
+  return { root, declaration: parsed.declaration ?? null };
+}
+
+function ensureDocumentRelationshipsRoot(convertedXml) {
+  if (!convertedXml['word/_rels/document.xml.rels']) {
+    convertedXml['word/_rels/document.xml.rels'] = createXmlDocument({
+      type: 'element',
+      name: 'Relationships',
+      attributes: {
+        xmlns: 'http://schemas.openxmlformats.org/package/2006/relationships',
+      },
+      elements: [],
+    });
+  }
+  const relsData = convertedXml['word/_rels/document.xml.rels'];
+  relsData.elements ??= [];
+  let relsRoot = relsData.elements.find((el) => getLocalName(el?.name) === 'Relationships');
+  if (!relsRoot) {
+    relsRoot = {
+      type: 'element',
+      name: 'Relationships',
+      attributes: {
+        xmlns: 'http://schemas.openxmlformats.org/package/2006/relationships',
+      },
+      elements: [],
+    };
+    relsData.elements.push(relsRoot);
+  }
+  relsRoot.elements ??= [];
+  return relsRoot;
+}
+
+function getNextRelationshipId(relsRoot) {
+  const used = (relsRoot?.elements ?? [])
+    .map((rel) => {
+      const id = rel?.attributes?.Id;
+      const m = typeof id === 'string' ? /^rId(\d+)$/.exec(id) : null;
+      return m ? Number.parseInt(m[1], 10) : NaN;
+    })
+    .filter((n) => Number.isFinite(n));
+  const max = used.length > 0 ? Math.max(...used) : 0;
+  return `rId${max + 1}`;
+}
+
+function buildDocumentRelTarget(partName) {
+  return partName.startsWith('customXml/') ? `../${partName}` : partName;
+}
+
+function buildItemPropsRoot(itemId, schemaRefs) {
+  const schemaRefElements = (schemaRefs ?? []).map((uri) => ({
+    type: 'element',
+    name: 'ds:schemaRef',
+    attributes: { 'ds:uri': uri },
+  }));
+  return {
+    type: 'element',
+    name: 'ds:datastoreItem',
+    attributes: {
+      'ds:itemID': itemId,
+      'xmlns:ds': CUSTOM_XML_DATASTORE_NAMESPACE,
+    },
+    elements: [
+      {
+        type: 'element',
+        name: 'ds:schemaRefs',
+        elements: schemaRefElements,
+      },
+    ],
+  };
+}
+
+function buildItemRelsRoot(propsPartFileName) {
+  return {
+    type: 'element',
+    name: 'Relationships',
+    attributes: {
+      xmlns: 'http://schemas.openxmlformats.org/package/2006/relationships',
+    },
+    elements: [
+      {
+        type: 'element',
+        name: 'Relationship',
+        attributes: {
+          Id: 'rId1',
+          Type: CUSTOM_XML_PROPS_RELATIONSHIP_TYPE,
+          Target: propsPartFileName,
+        },
+      },
+    ],
+  };
+}
+
+/**
+ * Locates the package part name for a given target. Returns null when the
+ * target can't be resolved (unknown id, unknown partName).
+ */
+export function resolveTargetPartName(convertedXml, target) {
+  if (!target) return null;
+  if (typeof target.partName === 'string' && target.partName.length > 0) {
+    return convertedXml[target.partName] ? target.partName : null;
+  }
+  if (typeof target.id === 'string' && target.id.length > 0) {
+    for (const partName of listCustomXmlStoragePartNames(convertedXml)) {
+      const propsName = findPropsPartFor(convertedXml, partName);
+      if (!propsName) continue;
+      const parsed = parsePropsPart(convertedXml[propsName]);
+      if (parsed?.itemId === target.id) return partName;
+    }
+  }
+  return null;
+}
+
+/**
+ * Creates a new Custom XML Data Storage Part + its Properties Part, with
+ * the document-level relationship and the item rels file. Returns the
+ * generated itemID GUID and the package part names.
+ *
+ * @throws {Error} when `content` is not well-formed XML.
+ */
+export function createCustomXmlPart(convertedXml, { content, schemaRefs }) {
+  const { root, declaration } = parseContentToRootElement(content);
+  const index = nextCustomXmlItemIndex(convertedXml);
+  const partName = partNameFromIndex(index);
+  const propsPartName = propsPartNameFromIndex(index);
+  const itemRelsPath = `customXml/_rels/item${index}.xml.rels`;
+  const itemId = `{${uuidv4().toUpperCase()}}`;
+
+  // Storage Part — wrap the customer's content in a fresh document envelope.
+  convertedXml[partName] = createXmlDocument(root, declaration);
+
+  // Properties Part — datastoreItem with itemID + optional schemaRefs.
+  convertedXml[propsPartName] = createXmlDocument(buildItemPropsRoot(itemId, schemaRefs ?? []));
+
+  // Item rels — link Storage Part → Properties Part.
+  convertedXml[itemRelsPath] = createXmlDocument(buildItemRelsRoot(`itemProps${index}.xml`));
+
+  // Document rel — link main document → Storage Part.
+  const relsRoot = ensureDocumentRelationshipsRoot(convertedXml);
+  relsRoot.elements.push({
+    type: 'element',
+    name: 'Relationship',
+    attributes: {
+      Id: getNextRelationshipId(relsRoot),
+      Type: CUSTOM_XML_DATA_RELATIONSHIP_TYPE,
+      Target: buildDocumentRelTarget(partName),
+    },
+  });
+
+  return { id: itemId, partName, propsPartName };
+}
+
+/**
+ * Replaces the content and/or schemaRefs of an existing part. Preserves
+ * the existing itemID and package part names.
+ *
+ * Returns `{ partName }` of the part that was patched, or `null` when
+ * the target couldn't be resolved.
+ *
+ * @throws {Error} when content is provided but not well-formed.
+ */
+export function patchCustomXmlPart(convertedXml, target, { content, schemaRefs }) {
+  const partName = resolveTargetPartName(convertedXml, target);
+  if (!partName) return null;
+
+  if (content !== undefined) {
+    const { root, declaration } = parseContentToRootElement(content);
+    const existingDecl = convertedXml[partName]?.declaration ?? declaration;
+    convertedXml[partName] = createXmlDocument(root, existingDecl);
+  }
+
+  if (schemaRefs !== undefined) {
+    let propsPartName = findPropsPartFor(convertedXml, partName);
+    let itemId = null;
+    if (propsPartName) {
+      itemId = parsePropsPart(convertedXml[propsPartName])?.itemId ?? null;
+    }
+    if (!propsPartName) {
+      // Foreign part had no Properties Part; create one now so the
+      // schemaRefs we're writing actually land somewhere.
+      const idx = indexFromPartName(partName);
+      if (idx == null) return null;
+      propsPartName = propsPartNameFromIndex(idx);
+      const itemRelsPath = `customXml/_rels/item${idx}.xml.rels`;
+      itemId = `{${uuidv4().toUpperCase()}}`;
+      convertedXml[itemRelsPath] = createXmlDocument(buildItemRelsRoot(`itemProps${idx}.xml`));
+    }
+    if (!itemId) itemId = `{${uuidv4().toUpperCase()}}`;
+    const existingDecl = convertedXml[propsPartName]?.declaration;
+    convertedXml[propsPartName] = createXmlDocument(buildItemPropsRoot(itemId, schemaRefs), existingDecl);
+  }
+
+  return { partName };
+}
+
+/**
+ * Removes a Custom XML Part and cleans up every linked package file:
+ *   - the Storage Part
+ *   - the Properties Part (if present)
+ *   - the item rels file (if present)
+ *   - the document-level relationship pointing at this part
+ *
+ * Returns `true` when the part existed and was removed, `false` when the
+ * target couldn't be resolved.
+ */
+export function removeCustomXmlPart(convertedXml, target) {
+  const partName = resolveTargetPartName(convertedXml, target);
+  if (!partName) return false;
+  const index = indexFromPartName(partName);
+
+  delete convertedXml[partName];
+
+  if (index != null) {
+    const propsPartName = propsPartNameFromIndex(index);
+    if (convertedXml[propsPartName]) delete convertedXml[propsPartName];
+    const itemRelsPath = `customXml/_rels/item${index}.xml.rels`;
+    if (convertedXml[itemRelsPath]) delete convertedXml[itemRelsPath];
+  }
+
+  // Strip the document-level relationship pointing at this part.
+  const relsRoot = convertedXml['word/_rels/document.xml.rels']?.elements?.find(
+    (el) => getLocalName(el?.name) === 'Relationships',
+  );
+  if (relsRoot?.elements?.length) {
+    relsRoot.elements = relsRoot.elements.filter((rel) => {
+      if (rel?.attributes?.Type !== CUSTOM_XML_DATA_RELATIONSHIP_TYPE) return true;
+      const resolved = resolveOpcTargetPath(rel?.attributes?.Target, 'word');
+      return resolved !== partName;
+    });
+  }
+
+  return true;
 }

@@ -196,6 +196,11 @@ import {
   bookmarksRenameWrapper,
   bookmarksRemoveWrapper,
 } from '../plan-engine/bookmark-wrappers.js';
+import {
+  customXmlPartsCreateWrapper,
+  customXmlPartsPatchWrapper,
+  customXmlPartsRemoveWrapper,
+} from '../plan-engine/custom-xml-wrappers.js';
 
 import {
   footnotesInsertWrapper,
@@ -4041,6 +4046,66 @@ const refNamespaceMutationVectors: Partial<Record<OperationId, MutationVector>> 
           },
           { changeMode: 'direct' },
         ),
+      );
+    },
+  },
+
+  // ---- Custom XML Parts ----
+  'customXml.parts.create': {
+    throwCase: () =>
+      customXmlPartsCreateWrapper(
+        makeRefEditor({ converter: { convertedXml: {} } }),
+        { content: '<a xmlns="urn:a"/>' },
+        { changeMode: 'tracked' },
+      ),
+    applyCase: () =>
+      customXmlPartsCreateWrapper(
+        makeRefEditor({ converter: { convertedXml: {} } }),
+        { content: '<a xmlns="urn:a"/>' },
+        { changeMode: 'direct' },
+      ),
+  },
+  'customXml.parts.patch': {
+    throwCase: () =>
+      customXmlPartsPatchWrapper(
+        makeRefEditor({ converter: { convertedXml: {} } }),
+        { target: { partName: 'customXml/item1.xml' }, content: '<a xmlns="urn:a"/>' },
+        { changeMode: 'tracked' },
+      ),
+    applyCase: () => {
+      const editor = makeRefEditor({ converter: { convertedXml: {} } });
+      // Seed a part so the patch resolves.
+      customXmlPartsCreateWrapper(
+        editor,
+        { content: '<a xmlns="urn:a"/>' },
+        { changeMode: 'direct' },
+      );
+      return customXmlPartsPatchWrapper(
+        editor,
+        { target: { partName: 'customXml/item1.xml' }, content: '<a xmlns="urn:a">v2</a>' },
+        { changeMode: 'direct' },
+      );
+    },
+  },
+  'customXml.parts.remove': {
+    throwCase: () =>
+      customXmlPartsRemoveWrapper(
+        makeRefEditor({ converter: { convertedXml: {} } }),
+        { target: { partName: 'customXml/item1.xml' } },
+        { changeMode: 'tracked' },
+      ),
+    applyCase: () => {
+      const editor = makeRefEditor({ converter: { convertedXml: {} } });
+      // Seed a part so the remove resolves.
+      customXmlPartsCreateWrapper(
+        editor,
+        { content: '<a xmlns="urn:a"/>' },
+        { changeMode: 'direct' },
+      );
+      return customXmlPartsRemoveWrapper(
+        editor,
+        { target: { partName: 'customXml/item1.xml' } },
+        { changeMode: 'direct' },
       );
     },
   },

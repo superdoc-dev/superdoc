@@ -171,6 +171,7 @@ Special thanks to these community members who have contributed code to SuperDoc:
 <a href="https://github.com/kiluazen"><img src="https://github.com/kiluazen.png" width="50" height="50" alt="kiluazen" title="Kushal" /></a>
 <a href="https://github.com/kendaller"><img src="https://github.com/kendaller.png" width="50" height="50" alt="kendaller" title="Kendall Ernst" /></a>
 <a href="https://github.com/christos8333"><img src="https://github.com/christos8333.png" width="50" height="50" alt="christos8333" title="Christos Kokosias" /></a>
+<a href="https://github.com/bjohas"><img src="https://github.com/bjohas.png" width="50" height="50" alt="bjohas" title="Bjoern" /></a>
 
 Want to see your avatar here? Check the [Contributing Guide](CONTRIBUTING.md) to get started.
 

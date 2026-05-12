@@ -861,6 +861,66 @@ describe('HeaderFooterSessionManager', () => {
       expect(payload!.items![0]!.blockId).toBe('default-block');
     });
 
+    it('does not render default headers on even pages when alternate headers are enabled', () => {
+      const deps: SessionManagerDependencies = {
+        getLayoutOptions: vi.fn(() => ({})),
+        getPageElement: vi.fn(() => null),
+        scrollPageIntoView: vi.fn(),
+        waitForPageMount: vi.fn(async () => true),
+        convertPageLocalToOverlayCoords: vi.fn(() => ({ x: 0, y: 0 })),
+        isViewLocked: vi.fn(() => false),
+        getBodyPageHeight: vi.fn(() => 800),
+        notifyInputBridgeTargetChanged: vi.fn(),
+        scheduleRerender: vi.fn(),
+        setPendingDocChange: vi.fn(),
+        getBodyPageCount: vi.fn(() => 2),
+      };
+
+      manager = new HeaderFooterSessionManager({
+        painterHost,
+        visibleHost,
+        selectionOverlay,
+        editor: createMainEditorStub(),
+        defaultPageSize: { w: 612, h: 792 },
+        defaultMargins: { top: 72, right: 72, bottom: 72, left: 72, header: 36, footer: 36 },
+      });
+      manager.setDependencies(deps);
+      manager.setMultiSectionIdentifier(
+        buildMultiSectionIdentifier([{ sectionIndex: 0, headerRefs: { default: 'rId-header-default' } }], {
+          alternateHeaders: true,
+        }),
+      );
+      manager.setLayoutResults([buildHeaderResult({ type: 'even', blockId: 'even-block', pageNumber: 2 })], null);
+
+      const layout: Layout = {
+        version: 1,
+        flowMode: 'paginated',
+        pageGap: 0,
+        pageSize: { w: 612, h: 792 },
+        pages: [
+          {
+            number: 1,
+            sectionIndex: 0,
+            margins: { top: 72, right: 72, bottom: 72, left: 72, header: 36, footer: 36 },
+          },
+          {
+            number: 2,
+            sectionIndex: 0,
+            margins: { top: 72, right: 72, bottom: 72, left: 72, header: 36, footer: 36 },
+            sectionRefs: {
+              headerRefs: { default: 'rId-header-default' },
+              footerRefs: {},
+            },
+          },
+        ] as never,
+      } as unknown as Layout;
+
+      const provider = manager.createDecorationProvider('header', layout as unknown as ResolvedLayout);
+      const payload = provider!(2, layout.pages[1]!.margins, layout.pages[1] as unknown as ResolvedPage);
+
+      expect(payload).toBeNull();
+    });
+
     it('normalizes resolved items when per-rId layout minY is negative', async () => {
       mockLayoutPerRIdHeaderFooters.mockImplementation(
         async (

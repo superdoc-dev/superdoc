@@ -855,7 +855,7 @@ describe('headerFooterUtils', () => {
       expect(evenPageHeader?.contentId).toBe('h0-even');
     });
 
-    it('does not use section default content id for even pages when alternate header even ref is missing', () => {
+    it('does not resolve a header for even pages when alternate header even ref is missing', () => {
       const sectionMetadata: SectionMetadata[] = [
         {
           sectionIndex: 0,
@@ -881,11 +881,10 @@ describe('headerFooterUtils', () => {
       };
 
       const evenPageHeader = resolveHeaderFooterForPageAndSection(layout, 1, identifier, { kind: 'header' });
-      expect(evenPageHeader?.type).toBe('even');
-      expect(evenPageHeader?.contentId).toBeNull();
+      expect(evenPageHeader).toBeNull();
     });
 
-    it('keeps parity variant but does not infer default content id for missing alternate refs', () => {
+    it('does not resolve a footer for even pages when alternate footer even ref is missing', () => {
       const sectionMetadata: SectionMetadata[] = [
         {
           sectionIndex: 0,
@@ -915,8 +914,7 @@ describe('headerFooterUtils', () => {
       };
 
       const evenPageFooterId = resolveHeaderFooterForPageAndSection(layout, 1, identifier, { kind: 'footer' });
-      expect(evenPageFooterId?.type).toBe('even');
-      expect(evenPageFooterId?.contentId).toBeNull();
+      expect(evenPageFooterId).toBeNull();
     });
 
     it('keeps inherited parity selection when the current section has no explicit refs', () => {

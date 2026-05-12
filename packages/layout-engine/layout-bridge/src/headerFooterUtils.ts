@@ -388,10 +388,16 @@ export function getHeaderFooterTypeForSection(
   }
 
   if (identifier.alternateHeaders) {
-    // Keep parity-based variant selection even when this section doesn't
-    // explicitly define that variant. Resolution/inheritance happens later.
     if (!hasAny) return null;
-    return parityPageNumber % 2 === 0 ? 'even' : 'odd';
+    const parityVariant = parityPageNumber % 2 === 0 ? 'even' : 'odd';
+    return resolveInheritedHeaderFooterRef({
+      identifier,
+      sectionIndex,
+      kind,
+      variantType: parityVariant,
+    })
+      ? parityVariant
+      : null;
   }
 
   if (hasDefault) {

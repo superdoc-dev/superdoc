@@ -6334,6 +6334,65 @@ describe('alternateHeaders (odd/even header differentiation)', () => {
     expect(layout.pages[0].margins?.top).toBeCloseTo(130, 0);
   });
 
+  it('uses inherited first-page header height through intermediate sections that omit first refs', () => {
+    const sb1: SectionBreakBlock = {
+      kind: 'sectionBreak',
+      id: 'sb1',
+      attrs: { isFirstSection: true, source: 'sectPr', sectionIndex: 0 },
+      pageSize: { w: 600, h: 800 },
+      margins: { top: 50, right: 50, bottom: 50, left: 50, header: 30 },
+    };
+    const sb2: SectionBreakBlock = {
+      kind: 'sectionBreak',
+      id: 'sb2',
+      type: 'nextPage',
+      attrs: { source: 'sectPr', sectionIndex: 1 },
+      pageSize: { w: 600, h: 800 },
+      margins: { top: 50, right: 50, bottom: 50, left: 50, header: 30 },
+    };
+    const sb3: SectionBreakBlock = {
+      kind: 'sectionBreak',
+      id: 'sb3',
+      type: 'nextPage',
+      attrs: { source: 'sectPr', sectionIndex: 2 },
+      pageSize: { w: 600, h: 800 },
+      margins: { top: 50, right: 50, bottom: 50, left: 50, header: 30 },
+    };
+    const options: LayoutOptions = {
+      pageSize: { w: 600, h: 800 },
+      margins: { top: 50, right: 50, bottom: 50, left: 50, header: 30 },
+      sectionMetadata: [
+        { sectionIndex: 0, titlePg: true, headerRefs: { first: 'rIdS0First', default: 'rIdS0Default' } },
+        { sectionIndex: 1, titlePg: true, headerRefs: { default: 'rIdS1Default' } },
+        { sectionIndex: 2, titlePg: true, headerRefs: { default: 'rIdS2Default' } },
+      ],
+      headerContentHeightsByRId: new Map([
+        ['rIdS0First', 100],
+        ['rIdS2Default', 10],
+      ]),
+    };
+
+    const layout = layoutDocument(
+      [sb1, tallBlock('p1'), sb2, tallBlock('p2'), sb3, tallBlock('p3')],
+      [
+        { kind: 'sectionBreak' },
+        tallMeasure,
+        { kind: 'sectionBreak' },
+        tallMeasure,
+        { kind: 'sectionBreak' },
+        tallMeasure,
+      ],
+      options,
+    );
+
+    expect(layout.pages.length).toBeGreaterThanOrEqual(3);
+
+    const p3Fragment = layout.pages[2]?.fragments.find((fragment) => fragment.blockId === 'p3');
+    expect(p3Fragment).toBeDefined();
+    expect(p3Fragment!.y).toBeCloseTo(130, 0);
+    expect(layout.pages[2]?.margins?.top).toBeCloseTo(130, 0);
+  });
+
   it('multi-section + titlePg + alternateHeaders: first page of section 2 lands on an even doc-page', () => {
     // Most realistic mixed case. Section 1 has 3 pages (display numbers 1-3). Section 2
     // has titlePg=true and starts with display number 4.

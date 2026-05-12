@@ -587,11 +587,12 @@ describe('HeaderFooterSessionManager', () => {
   });
 
   describe('createDecorationProvider — resolved items', () => {
-    function buildHeaderResult(options?: { y?: number; minY?: number }): HeaderFooterLayoutResult {
+    function buildHeaderResult(options?: { y?: number; minY?: number; blockId?: string }): HeaderFooterLayoutResult {
       const y = options?.y ?? 10;
+      const blockId = options?.blockId ?? 'p1';
       const paraFragment: ParaFragment = {
         kind: 'para',
-        blockId: 'p1',
+        blockId,
         fromLine: 0,
         toLine: 1,
         x: 72,
@@ -603,7 +604,7 @@ describe('HeaderFooterSessionManager', () => {
         ...(options?.minY != null ? { minY: options.minY } : {}),
         pages: [{ number: 1, fragments: [paraFragment] }],
       };
-      const blocks: FlowBlock[] = [{ kind: 'paragraph', id: 'p1', runs: [] }];
+      const blocks: FlowBlock[] = [{ kind: 'paragraph', id: blockId, runs: [] }];
       const measures: Measure[] = [
         {
           kind: 'paragraph',
@@ -1035,6 +1036,79 @@ describe('HeaderFooterSessionManager', () => {
       expect(payload!.sectionType).toBe('even');
       expect(payload!.headerFooterRefId).toBe('rId-even');
       expect(payload!.fragments[0]!.blockId).toBe('even-header');
+    });
+
+    it('inherits first-page header refs through intermediate sections that omit first refs', () => {
+      const deps: SessionManagerDependencies = {
+        getLayoutOptions: vi.fn(() => ({})),
+        getPageElement: vi.fn(() => null),
+        scrollPageIntoView: vi.fn(),
+        waitForPageMount: vi.fn(async () => true),
+        convertPageLocalToOverlayCoords: vi.fn(() => ({ x: 0, y: 0 })),
+        isViewLocked: vi.fn(() => false),
+        getBodyPageHeight: vi.fn(() => 800),
+        notifyInputBridgeTargetChanged: vi.fn(),
+        scheduleRerender: vi.fn(),
+        setPendingDocChange: vi.fn(),
+        getBodyPageCount: vi.fn(() => 3),
+      };
+
+      manager = new HeaderFooterSessionManager({
+        painterHost,
+        visibleHost,
+        selectionOverlay,
+        editor: createMainEditorStub(),
+        defaultPageSize: { w: 612, h: 792 },
+        defaultMargins: { top: 72, right: 72, bottom: 72, left: 72, header: 36, footer: 36 },
+      });
+      manager.setDependencies(deps);
+      manager.setMultiSectionIdentifier(
+        buildMultiSectionIdentifier([
+          { sectionIndex: 0, titlePg: true, headerRefs: { first: 'rId-s0-first', default: 'rId-s0-default' } },
+          { sectionIndex: 1, titlePg: true, headerRefs: { default: 'rId-s1-default' } },
+          { sectionIndex: 2, titlePg: true, headerRefs: { default: 'rId-s2-default' } },
+        ]),
+      );
+      manager.headerLayoutsByRId.set('rId-s0-first', buildHeaderResult({ blockId: 's0-first-header' }));
+      manager.headerLayoutsByRId.set('rId-s2-default', buildHeaderResult({ blockId: 's2-default-header' }));
+
+      const layout: ResolvedLayout = {
+        version: 1,
+        flowMode: 'paginated',
+        pageGap: 0,
+        pages: [
+          {
+            number: 1,
+            sectionIndex: 0,
+            height: 792,
+            margins: { top: 72, right: 72, bottom: 72, left: 72, header: 36, footer: 36 },
+            sectionRefs: { headerRefs: { first: 'rId-s0-first', default: 'rId-s0-default' }, footerRefs: {} },
+          } as unknown as ResolvedPage,
+          {
+            number: 2,
+            sectionIndex: 1,
+            height: 792,
+            margins: { top: 72, right: 72, bottom: 72, left: 72, header: 36, footer: 36 },
+            sectionRefs: { headerRefs: { default: 'rId-s1-default' }, footerRefs: {} },
+          } as unknown as ResolvedPage,
+          {
+            number: 3,
+            sectionIndex: 2,
+            height: 792,
+            margins: { top: 72, right: 72, bottom: 72, left: 72, header: 36, footer: 36 },
+            sectionRefs: { headerRefs: { default: 'rId-s2-default' }, footerRefs: {} },
+          } as unknown as ResolvedPage,
+        ],
+      };
+
+      const provider = manager.createDecorationProvider('header', layout);
+      const page = layout.pages[2]!;
+      const payload = provider!(page.number, page.margins, page);
+
+      expect(payload).not.toBeNull();
+      expect(payload!.sectionType).toBe('first');
+      expect(payload!.headerFooterRefId).toBe('rId-s0-first');
+      expect(payload!.fragments[0]!.blockId).toBe('s0-first-header');
     });
   });
 

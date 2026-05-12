@@ -118,6 +118,12 @@ export {
   isSdtContainerMetadata,
 } from './sdt-container.js';
 export {
+  resolveInheritedHeaderFooterRef,
+  type HeaderFooterRefIdentifier,
+  type HeaderFooterRefMap,
+  type ResolveInheritedHeaderFooterRefInput,
+} from './header-footer-inheritance.js';
+export {
   formatPageNumber,
   formatPageNumberFieldValue,
   type PageNumberFieldFormat,

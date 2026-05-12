@@ -647,6 +647,86 @@ describe('headerFooterUtils', () => {
       expect(section1FirstPage).toBe('first');
     });
 
+    it('resolves first-page header refs through intermediate sections that omit first refs', () => {
+      const sectionMetadata: SectionMetadata[] = [
+        {
+          sectionIndex: 0,
+          headerRefs: { default: 'h0-default', first: 'h0-first' },
+          titlePg: true,
+        },
+        {
+          sectionIndex: 1,
+          headerRefs: { default: 'h1-default' },
+          titlePg: true,
+        },
+        {
+          sectionIndex: 2,
+          headerRefs: { default: 'h2-default' },
+          titlePg: true,
+        },
+      ];
+
+      const identifier = buildMultiSectionIdentifier(sectionMetadata);
+      const layout: Layout = {
+        pageSize: { w: 600, h: 800 },
+        pages: [
+          { number: 1, fragments: [], sectionIndex: 0 },
+          { number: 2, fragments: [], sectionIndex: 1 },
+          {
+            number: 3,
+            fragments: [],
+            sectionIndex: 2,
+            sectionRefs: { headerRefs: { default: 'h2-default' } },
+          },
+        ],
+        headerFooter: {
+          first: { pages: [{ number: 1, fragments: [] }] },
+        },
+      };
+
+      const resolved = resolveHeaderFooterForPageAndSection(layout, 2, identifier, { kind: 'header' });
+
+      expect(resolved?.type).toBe('first');
+      expect(resolved?.contentId).toBe('h0-first');
+    });
+
+    it('inherits from the nearest prior section when the current section has no explicit refs map', () => {
+      const sectionMetadata: SectionMetadata[] = [
+        {
+          sectionIndex: 0,
+          headerRefs: { default: 'h0-default', first: 'h0-first' },
+          titlePg: true,
+        },
+        {
+          sectionIndex: 1,
+          headerRefs: { default: 'h1-default', first: 'h1-first' },
+          titlePg: true,
+        },
+        {
+          sectionIndex: 2,
+          titlePg: true,
+        },
+      ];
+
+      const identifier = buildMultiSectionIdentifier(sectionMetadata);
+      const layout: Layout = {
+        pageSize: { w: 600, h: 800 },
+        pages: [
+          { number: 1, fragments: [], sectionIndex: 0 },
+          { number: 2, fragments: [], sectionIndex: 1 },
+          { number: 3, fragments: [], sectionIndex: 2 },
+        ],
+        headerFooter: {
+          first: { pages: [{ number: 1, fragments: [] }] },
+        },
+      };
+
+      const resolved = resolveHeaderFooterForPageAndSection(layout, 2, identifier, { kind: 'header' });
+
+      expect(resolved?.type).toBe('first');
+      expect(resolved?.contentId).toBe('h1-first');
+    });
+
     it('returns even/odd variants for alternate headers even when section defines only default', () => {
       const sectionMetadata: SectionMetadata[] = [
         {

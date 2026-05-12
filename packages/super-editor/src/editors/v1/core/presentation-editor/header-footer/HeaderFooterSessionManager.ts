@@ -24,7 +24,7 @@ import type {
   ResolvedPage,
   LayoutStoryLocator,
 } from '@superdoc/contracts';
-import { namedStoryLocator } from '@superdoc/contracts';
+import { namedStoryLocator, resolveInheritedHeaderFooterRef } from '@superdoc/contracts';
 import type { PageDecorationProvider } from '@superdoc/painter-dom';
 import { resolveHeaderFooterLayout } from '@superdoc/layout-resolved';
 import type { HeaderFooterPartStoryLocator } from '@superdoc/document-api';
@@ -2389,39 +2389,19 @@ export class HeaderFooterSessionManager {
           })
         : getHeaderFooterType(pageNumber, legacyIdentifier, { kind, parityPageNumber });
 
-      // Resolve section-specific rId using Word's OOXML inheritance model
-      let sectionRId: string | undefined;
-      if (page?.sectionRefs && kind === 'header') {
-        sectionRId = page.sectionRefs.headerRefs?.[headerFooterType as keyof typeof page.sectionRefs.headerRefs];
-        if (!sectionRId && headerFooterType && headerFooterType !== 'default' && sectionIndex > 0 && multiSectionId) {
-          const prevSectionIds = multiSectionId.sectionHeaderIds.get(sectionIndex - 1);
-          sectionRId = prevSectionIds?.[headerFooterType as keyof typeof prevSectionIds] ?? undefined;
-        }
-        const shouldUseDefaultHeaderRef =
-          headerFooterType !== 'default' &&
-          page.sectionRefs.headerRefs?.default &&
-          (!multiSectionId?.alternateHeaders || headerFooterType === 'odd');
-        if (!sectionRId && shouldUseDefaultHeaderRef) {
-          sectionRId = page.sectionRefs.headerRefs?.default;
-        }
-      } else if (page?.sectionRefs && kind === 'footer') {
-        sectionRId = page.sectionRefs.footerRefs?.[headerFooterType as keyof typeof page.sectionRefs.footerRefs];
-        if (!sectionRId && headerFooterType && headerFooterType !== 'default' && sectionIndex > 0 && multiSectionId) {
-          const prevSectionIds = multiSectionId.sectionFooterIds.get(sectionIndex - 1);
-          sectionRId = prevSectionIds?.[headerFooterType as keyof typeof prevSectionIds] ?? undefined;
-        }
-        const shouldUseDefaultFooterRef =
-          headerFooterType !== 'default' &&
-          page.sectionRefs.footerRefs?.default &&
-          (!multiSectionId?.alternateHeaders || headerFooterType === 'odd');
-        if (!sectionRId && shouldUseDefaultFooterRef) {
-          sectionRId = page.sectionRefs.footerRefs?.default;
-        }
-      }
-
       if (!headerFooterType) {
         return null;
       }
+
+      const pageRefs = kind === 'header' ? page?.sectionRefs?.headerRefs : page?.sectionRefs?.footerRefs;
+      const sectionRId =
+        resolveInheritedHeaderFooterRef({
+          identifier: multiSectionId ?? legacyIdentifier,
+          sectionIndex,
+          kind,
+          variantType: headerFooterType,
+          pageRefs,
+        }) ?? undefined;
 
       // PRIORITY 1: Try per-rId layout (composite key first for per-section margins, then plain rId)
       const compositeKey = sectionRId ? `${sectionRId}::s${sectionIndex}` : undefined;

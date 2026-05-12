@@ -28,8 +28,14 @@ import type {
   SectionNumbering,
   FlowMode,
   NormalizedColumnLayout,
+  HeaderFooterRefIdentifier,
 } from '@superdoc/contracts';
-import { buildLayoutSourceIdentityForFragment, normalizeColumnLayout, getFragmentZIndex } from '@superdoc/contracts';
+import {
+  buildLayoutSourceIdentityForFragment,
+  getFragmentZIndex,
+  normalizeColumnLayout,
+  resolveInheritedHeaderFooterRef,
+} from '@superdoc/contracts';
 import { createFloatingObjectManager, computeAnchorX } from './floating-objects.js';
 import { computeNextSectionPropsAtBreak } from './section-props';
 import {
@@ -1458,6 +1464,19 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
     };
   };
   const sectionMetadataList = options.sectionMetadata ?? [];
+  const headerFooterRefIdentifier: HeaderFooterRefIdentifier = {
+    sectionCount: sectionMetadataList.length,
+    sectionHeaderIds: new Map(),
+    sectionFooterIds: new Map(),
+  };
+  for (const metadata of sectionMetadataList) {
+    if (metadata.headerRefs) {
+      headerFooterRefIdentifier.sectionHeaderIds?.set(metadata.sectionIndex, metadata.headerRefs);
+    }
+    if (metadata.footerRefs) {
+      headerFooterRefIdentifier.sectionFooterIds?.set(metadata.sectionIndex, metadata.footerRefs);
+    }
+  }
   const initialSectionMetadata = sectionMetadataList[0];
   if (initialSectionMetadata?.numbering?.format) {
     activeNumberFormat = initialSectionMetadata.numbering.format;
@@ -1642,65 +1661,26 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
           alternateHeaders,
         });
 
-        // Resolve header/footer refs for margin calculation using OOXML inheritance model.
-        // This must match the rendering logic in PresentationEditor to ensure margins
-        // are calculated based on the same header/footer content that will be rendered.
-        //
-        // Resolution order:
-        //   1. Current section's variant ref (e.g., 'first' for first page with titlePg)
-        //   2. Previous section's same variant ref (inheritance)
-        //   3. Current section's 'default' ref (final fallback)
-        let headerRef = activeSectionRefs?.headerRefs?.[variantType];
-        let footerRef = activeSectionRefs?.footerRefs?.[variantType];
-        let effectiveVariantType = variantType;
-
-        // Step 2: Inherit from previous section if variant not found
-        if (!headerRef && variantType !== 'default' && activeSectionIndex > 0) {
-          const prevSectionMetadata = sectionMetadataList[activeSectionIndex - 1];
-          if (prevSectionMetadata?.headerRefs?.[variantType]) {
-            headerRef = prevSectionMetadata.headerRefs[variantType];
-            layoutLog(
-              `[Layout] Page ${newPageNumber}: Inheriting header '${variantType}' from section ${activeSectionIndex - 1}: ${headerRef}`,
-            );
-          }
-        }
-        if (!footerRef && variantType !== 'default' && activeSectionIndex > 0) {
-          const prevSectionMetadata = sectionMetadataList[activeSectionIndex - 1];
-          if (prevSectionMetadata?.footerRefs?.[variantType]) {
-            footerRef = prevSectionMetadata.footerRefs[variantType];
-            layoutLog(
-              `[Layout] Page ${newPageNumber}: Inheriting footer '${variantType}' from section ${activeSectionIndex - 1}: ${footerRef}`,
-            );
-          }
-        }
-
-        // Step 3: Fall back to current section's default only when that ref is
-        // the selected OOXML slot. With even/odd headers enabled, `default`
-        // represents the odd-page header, not a replacement for a missing even
-        // header.
-        const defaultHeaderRef = activeSectionRefs?.headerRefs?.default;
-        const defaultFooterRef = activeSectionRefs?.footerRefs?.default;
-        const shouldUseDefaultHeaderRef =
-          variantType !== 'default' && defaultHeaderRef && (!alternateHeaders || variantType === 'odd');
-        const shouldUseDefaultFooterRef =
-          variantType !== 'default' && defaultFooterRef && (!alternateHeaders || variantType === 'odd');
-
-        if (!headerRef && shouldUseDefaultHeaderRef) {
-          headerRef = defaultHeaderRef;
-          effectiveVariantType = 'default';
-        }
-        if (!footerRef && shouldUseDefaultFooterRef) {
-          footerRef = defaultFooterRef;
-        }
+        const headerRef =
+          resolveInheritedHeaderFooterRef({
+            identifier: headerFooterRefIdentifier,
+            sectionIndex: activeSectionIndex,
+            kind: 'header',
+            variantType,
+            pageRefs: activeSectionRefs?.headerRefs,
+          }) ?? undefined;
+        const footerRef =
+          resolveInheritedHeaderFooterRef({
+            identifier: headerFooterRefIdentifier,
+            sectionIndex: activeSectionIndex,
+            kind: 'footer',
+            variantType,
+            pageRefs: activeSectionRefs?.footerRefs,
+          }) ?? undefined;
 
         // Calculate the actual header/footer heights for this page's variant
-        // Use effectiveVariantType for header height lookup to match the fallback
-        const headerHeight = getHeaderHeightForPage(effectiveVariantType, headerRef, activeSectionIndex);
-        const footerHeight = getFooterHeightForPage(
-          variantType !== 'default' && !activeSectionRefs?.footerRefs?.[variantType] ? 'default' : variantType,
-          footerRef,
-          activeSectionIndex,
-        );
+        const headerHeight = getHeaderHeightForPage(variantType, headerRef, activeSectionIndex);
+        const footerHeight = getFooterHeightForPage(variantType, footerRef, activeSectionIndex);
 
         // Adjust margins based on the actual header/footer for this page.
         // Always recalculate to ensure pages without headers reset to base margin

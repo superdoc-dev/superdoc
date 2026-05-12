@@ -1,7 +1,7 @@
 import { Selection } from 'prosemirror-state';
 
-function isSdtWrapperLocked(node) {
-  return node.attrs.lockMode === 'sdtLocked' || node.attrs.lockMode === 'sdtContentLocked';
+function isSdtContentFullyLocked(node) {
+  return node.attrs.lockMode === 'sdtContentLocked';
 }
 
 function findAncestorDepth($pos, predicate) {
@@ -33,7 +33,12 @@ export const deleteBlockSdtAtTextBlockStart =
     if ($from.before(textblockDepth) !== $from.start(sdtDepth)) return false;
 
     const sdtNode = $from.node(sdtDepth);
-    if (isSdtWrapperLocked(sdtNode)) return true;
+    const lockMode = sdtNode.attrs.lockMode;
+    // Wrapper deletion is blocked for sdtLocked / sdtContentLocked (see createStructuredContentLockPlugin).
+    // For sdtLocked, content edits must still work — returning true here consumed Delete without
+    // dispatching, so the first character of the first paragraph was undeletable at this caret.
+    if (lockMode === 'sdtLocked') return false;
+    if (isSdtContentFullyLocked(sdtNode)) return true;
 
     if (dispatch) {
       const from = $from.before(sdtDepth);

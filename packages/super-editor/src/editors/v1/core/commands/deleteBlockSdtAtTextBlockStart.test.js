@@ -80,9 +80,21 @@ describe('deleteBlockSdtAtTextBlockStart', () => {
     expect(dispatched.doc.textContent).toBe('BeforeAfter');
   });
 
-  it.each(['sdtLocked', 'sdtContentLocked'])('consumes %s block SDT deletion without dispatching', (lockMode) => {
+  it('returns false for sdtLocked so Delete can fall through for in-SDT content edits', () => {
     const schema = makeSchema();
-    const doc = makeDoc(schema, lockMode);
+    const doc = makeDoc(schema, 'sdtLocked');
+    const state = EditorState.create({ schema, doc, selection: TextSelection.create(doc, paragraphStartInSdt(doc)) });
+    const dispatch = vi.fn();
+
+    const ok = deleteBlockSdtAtTextBlockStart()({ state, dispatch });
+
+    expect(ok).toBe(false);
+    expect(dispatch).not.toHaveBeenCalled();
+  });
+
+  it('consumes sdtContentLocked block SDT wrapper delete without dispatching', () => {
+    const schema = makeSchema();
+    const doc = makeDoc(schema, 'sdtContentLocked');
     const state = EditorState.create({ schema, doc, selection: TextSelection.create(doc, paragraphStartInSdt(doc)) });
     const dispatch = vi.fn();
 

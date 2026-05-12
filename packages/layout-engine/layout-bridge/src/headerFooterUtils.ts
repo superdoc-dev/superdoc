@@ -1,12 +1,10 @@
 import {
   resolveInheritedHeaderFooterRef,
-  type HeaderFooterRefIdentifier,
   type HeaderFooterType,
   type Layout,
   type SectionMetadata,
   type Page,
 } from '@superdoc/contracts';
-export { resolveInheritedHeaderFooterRef, type HeaderFooterRefIdentifier } from '@superdoc/contracts';
 
 export type HeaderFooterIdentifier = {
   headerIds: Record<'default' | 'first' | 'even' | 'odd', string | null>;

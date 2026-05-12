@@ -2240,7 +2240,6 @@ export class HeaderFooterSessionManager {
         number: page.number,
         displayNumber: page.displayNumber,
         numberText: page.numberText,
-        displayNumber: page.displayNumber,
         fragments: page.fragments,
       })),
     };

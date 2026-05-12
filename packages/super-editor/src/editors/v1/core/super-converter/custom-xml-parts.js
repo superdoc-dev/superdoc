@@ -256,12 +256,17 @@ export function listCustomXmlParts(convertedXml) {
 // Index allocation (write side helper, also useful for tests)
 // ---------------------------------------------------------------------------
 
-export function nextCustomXmlItemIndex(convertedXml) {
+export function nextCustomXmlItemIndex(convertedXml, converter) {
   const used = new Set();
   for (const path of Object.keys(convertedXml ?? {})) {
     const idx = indexFromPartName(path) ?? indexFromPropsPartName(path);
     if (idx != null) used.add(idx);
   }
+  // Reusing an index that was tombstoned for export is safe because the
+  // tombstone is cleared when the new part is written (see
+  // createCustomXmlPart). Listing them here would be unnecessarily
+  // conservative and force ever-growing indexes.
+  void converter;
   let candidate = 1;
   while (used.has(candidate)) candidate += 1;
   return candidate;
@@ -409,11 +414,15 @@ export function resolveTargetPartName(convertedXml, target) {
  * the document-level relationship and the item rels file. Returns the
  * generated itemID GUID and the package part names.
  *
+ * When `converter` is provided and the chosen part path was previously
+ * tombstoned (via removeCustomXmlPart), the tombstone is cleared — the
+ * exporter would otherwise null the new part on save.
+ *
  * @throws {Error} when `content` is not well-formed XML.
  */
-export function createCustomXmlPart(convertedXml, { content, schemaRefs }) {
+export function createCustomXmlPart(convertedXml, { content, schemaRefs }, converter) {
   const { root, declaration } = parseContentToRootElement(content);
-  const index = nextCustomXmlItemIndex(convertedXml);
+  const index = nextCustomXmlItemIndex(convertedXml, converter);
   const partName = partNameFromIndex(index);
   const propsPartName = propsPartNameFromIndex(index);
   const itemRelsPath = `customXml/_rels/item${index}.xml.rels`;
@@ -439,6 +448,15 @@ export function createCustomXmlPart(convertedXml, { content, schemaRefs }) {
       Target: buildDocumentRelTarget(partName),
     },
   });
+
+  // Clear any tombstones that match the paths we just wrote. Without this,
+  // a sequence `remove → create` that recycles an index (`item1.xml`)
+  // would let the exporter null the brand-new part on save.
+  if (converter?.removedCustomXmlPaths instanceof Set) {
+    converter.removedCustomXmlPaths.delete(partName);
+    converter.removedCustomXmlPaths.delete(propsPartName);
+    converter.removedCustomXmlPaths.delete(itemRelsPath);
+  }
 
   return { id: itemId, partName, propsPartName };
 }

@@ -134,50 +134,62 @@ function targetNotFound(): WriteOutcome<never> {
   return { ok: false, code: 'TARGET_NOT_FOUND', message: 'No custom XML part matched the supplied target.' };
 }
 
+/**
+ * Wraps a synchronous block that can throw on well-formedness / parsing.
+ * Lifecycle errors (REVISION_MISMATCH from checkRevision, PlanError) MUST
+ * NOT pass through this — that's why the catch is scoped to just the
+ * content-validation block, not the whole executeOutOfBandMutation call.
+ */
+function safeValidate<T>(fn: () => T): WriteOutcome<T> {
+  try {
+    return { ok: true, payload: fn() };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { ok: false, code: 'INVALID_INPUT', message: msg };
+  }
+}
+
 export function customXmlPartsCreateWrapper(
   editor: Editor,
   input: CustomXmlPartsCreateInput,
   options?: MutationOptions,
 ): CustomXmlPartsCreateResult {
   rejectTrackedMode('customXml.parts.create', options);
-  try {
-    const outcome = executeOutOfBandMutation<
-      WriteOutcome<{ id: string; partName: string; propsPartName: string }>
-    >(
-      editor,
-      (dryRun) => {
-        if (dryRun) {
-          // Read-only preview: validate well-formedness without writing.
-          try {
-            createCustomXmlPart({}, { content: input.content, schemaRefs: input.schemaRefs });
-          } catch (e) {
-            const msg = e instanceof Error ? e.message : String(e);
-            return { changed: false, payload: { ok: false, code: 'INVALID_INPUT', message: msg } };
-          }
-          return {
-            changed: false,
-            payload: { ok: true, payload: { id: '{DRY-RUN}', partName: '', propsPartName: '' } },
-          };
-        }
-        const created = createCustomXmlPart(getConvertedXml(editor), {
-          content: input.content,
-          schemaRefs: input.schemaRefs,
-        });
-        return { changed: true, payload: { ok: true, payload: created } };
-      },
-      { dryRun: options?.dryRun === true, expectedRevision: options?.expectedRevision },
-    );
-    if (!outcome.ok) return failure(outcome.code, outcome.message);
-    return {
-      success: true,
-      id: outcome.payload.id,
-      partName: outcome.payload.partName,
-      propsPartName: outcome.payload.propsPartName,
-    };
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    return failure('INVALID_INPUT', `customXml.parts.create failed: ${msg}`);
-  }
+  const outcome = executeOutOfBandMutation<
+    WriteOutcome<{ id: string; partName: string; propsPartName: string }>
+  >(
+    editor,
+    (dryRun) => {
+      if (dryRun) {
+        // Read-only preview: validate well-formedness without writing.
+        const probe = safeValidate(() =>
+          createCustomXmlPart({}, { content: input.content, schemaRefs: input.schemaRefs }),
+        );
+        if (!probe.ok) return { changed: false, payload: probe };
+        return {
+          changed: false,
+          payload: { ok: true, payload: { id: '{DRY-RUN}', partName: '', propsPartName: '' } },
+        };
+      }
+      const probe = safeValidate(() =>
+        createCustomXmlPart(
+          getConvertedXml(editor),
+          { content: input.content, schemaRefs: input.schemaRefs },
+          getConverter(editor),
+        ),
+      );
+      if (!probe.ok) return { changed: false, payload: probe };
+      return { changed: true, payload: { ok: true, payload: probe.payload } };
+    },
+    { dryRun: options?.dryRun === true, expectedRevision: options?.expectedRevision },
+  );
+  if (!outcome.ok) return failure(outcome.code, outcome.message);
+  return {
+    success: true,
+    id: outcome.payload.id,
+    partName: outcome.payload.partName,
+    propsPartName: outcome.payload.propsPartName,
+  };
 }
 
 export function customXmlPartsPatchWrapper(
@@ -186,38 +198,37 @@ export function customXmlPartsPatchWrapper(
   options?: MutationOptions,
 ): CustomXmlPartsMutationResult {
   rejectTrackedMode('customXml.parts.patch', options);
-  try {
-    const outcome = executeOutOfBandMutation<WriteOutcome<true>>(
-      editor,
-      (dryRun) => {
-        if (dryRun) {
-          const partName = resolveTargetPartName(getConvertedXml(editor), input.target);
-          if (!partName) return { changed: false, payload: targetNotFound() };
-          if (input.content !== undefined) {
-            try {
-              createCustomXmlPart({}, { content: input.content, schemaRefs: undefined });
-            } catch (e) {
-              const msg = e instanceof Error ? e.message : String(e);
-              return { changed: false, payload: { ok: false, code: 'INVALID_INPUT', message: msg } };
-            }
-          }
-          return { changed: false, payload: { ok: true, payload: true } };
+  const outcome = executeOutOfBandMutation<WriteOutcome<true>>(
+    editor,
+    (dryRun) => {
+      if (dryRun) {
+        const partName = resolveTargetPartName(getConvertedXml(editor), input.target);
+        if (!partName) return { changed: false, payload: targetNotFound() };
+        if (input.content !== undefined) {
+          const probe = safeValidate(() =>
+            createCustomXmlPart({}, { content: input.content, schemaRefs: undefined }),
+          );
+          if (!probe.ok) return { changed: false, payload: probe };
         }
-        const patched = patchCustomXmlPart(getConvertedXml(editor), input.target, {
+        return { changed: false, payload: { ok: true, payload: true } };
+      }
+      // Resolve first so a missing target doesn't get reported as INVALID_INPUT.
+      const partName = resolveTargetPartName(getConvertedXml(editor), input.target);
+      if (!partName) return { changed: false, payload: targetNotFound() };
+      const probe = safeValidate(() =>
+        patchCustomXmlPart(getConvertedXml(editor), input.target, {
           content: input.content,
           schemaRefs: input.schemaRefs,
-        });
-        if (!patched) return { changed: false, payload: targetNotFound() };
-        return { changed: true, payload: { ok: true, payload: true } };
-      },
-      { dryRun: options?.dryRun === true, expectedRevision: options?.expectedRevision },
-    );
-    if (!outcome.ok) return failure(outcome.code, outcome.message);
-    return { success: true, target: input.target };
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    return failure('INVALID_INPUT', `customXml.parts.patch failed: ${msg}`);
-  }
+        }),
+      );
+      if (!probe.ok) return { changed: false, payload: probe };
+      if (!probe.payload) return { changed: false, payload: targetNotFound() };
+      return { changed: true, payload: { ok: true, payload: true } };
+    },
+    { dryRun: options?.dryRun === true, expectedRevision: options?.expectedRevision },
+  );
+  if (!outcome.ok) return failure(outcome.code, outcome.message);
+  return { success: true, target: input.target };
 }
 
 export function customXmlPartsRemoveWrapper(

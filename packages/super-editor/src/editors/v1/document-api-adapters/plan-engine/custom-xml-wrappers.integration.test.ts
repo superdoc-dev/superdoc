@@ -390,6 +390,77 @@ describe('customXml.parts write-side', () => {
     editor.destroy();
   });
 
+  it('remove → create on the same index does not tombstone the new part on export', async () => {
+    // Reproduces the collision: a foreign DOCX has item1.xml, the
+    // customer removes it (which records a tombstone), then creates a
+    // fresh part. nextCustomXmlItemIndex returns 1 (recycling), and
+    // without the tombstone-clear the exporter would null the new
+    // part. With the clear, the new part survives export+reimport.
+
+    // Seed: simulate a foreign DOCX with item1.xml already present
+    // by creating and round-tripping through export+reimport.
+    let editor = await createEditorWithEmptyPackage();
+    const seeded = editor.doc.customXml.parts.create({
+      content: '<old xmlns="urn:original"/>',
+    });
+    expect(seeded.success).toBe(true);
+
+    const seededBytes = (await editor.exportDocx()) as Buffer | Uint8Array;
+    const seededBuf = seededBytes instanceof Uint8Array ? seededBytes : new Uint8Array(seededBytes);
+    editor.destroy();
+
+    const [docx0, media0, mf0, fonts0] = await Editor.loadXmlData(seededBuf, true);
+    ({ editor } = initTestEditor({
+      content: docx0,
+      media: media0,
+      mediaFiles: mf0,
+      fonts: fonts0,
+      useImmediateSetTimeout: false,
+      isHeadless: true,
+      user: { name: 'Test', email: 'test@example.com' },
+    }));
+
+    // Confirm the seed survived.
+    const beforeRemoveList = editor.doc.customXml.parts.list();
+    expect(beforeRemoveList.items.length).toBe(1);
+    const originalId = beforeRemoveList.items[0]!.id!;
+
+    // Remove the original, then create a new part. Without the
+    // tombstone-clear, the new part lands on customXml/item1.xml and the
+    // exporter nulls it out.
+    const removed = editor.doc.customXml.parts.remove({ target: { id: originalId } });
+    expect(removed.success).toBe(true);
+    const created = editor.doc.customXml.parts.create({ content: '<fresh xmlns="urn:fresh"/>' });
+    expect(created.success).toBe(true);
+    if (!created.success) return;
+    expect(created.partName).toBe('customXml/item1.xml');
+
+    // Export + reimport. The new part must survive.
+    const finalBytes = (await editor.exportDocx()) as Buffer | Uint8Array;
+    const finalBuf = finalBytes instanceof Uint8Array ? finalBytes : new Uint8Array(finalBytes);
+    editor.destroy();
+
+    const [docx1, media1, mf1, fonts1] = await Editor.loadXmlData(finalBuf, true);
+    const { editor: reloaded } = initTestEditor({
+      content: docx1,
+      media: media1,
+      mediaFiles: mf1,
+      fonts: fonts1,
+      useImmediateSetTimeout: false,
+      isHeadless: true,
+      user: { name: 'Test', email: 'test@example.com' },
+    });
+
+    const finalList = reloaded.doc.customXml.parts.list();
+    expect(finalList.items.length).toBe(1);
+    expect(finalList.items[0]!.id).toBe(created.id);
+    const finalGet = reloaded.doc.customXml.parts.get({ target: { id: created.id } });
+    expect(finalGet!.content).toContain('<fresh');
+    expect(finalGet!.content).not.toContain('<old');
+
+    reloaded.destroy();
+  });
+
   it('round-trip: create → export → reimport preserves id, content, schemaRefs', async () => {
     const editor = await createEditorWithEmptyPackage();
     const created = editor.doc.customXml.parts.create({

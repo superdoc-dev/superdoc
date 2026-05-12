@@ -8,7 +8,7 @@ describe('preProcessPageInstruction', () => {
   it('should create a sd:autoPageNumber node', () => {
     const nodesToCombine = [];
     const instruction = 'PAGE';
-    const result = preProcessPageInstruction(nodesToCombine, instruction, mockDocx);
+    const result = preProcessPageInstruction(nodesToCombine, instruction, { docx: mockDocx });
     expect(result).toEqual([
       {
         name: 'sd:autoPageNumber',
@@ -28,7 +28,7 @@ describe('preProcessPageInstruction', () => {
       },
     ];
     const instruction = 'PAGE';
-    const result = preProcessPageInstruction(nodesToCombine, instruction, mockDocx);
+    const result = preProcessPageInstruction(nodesToCombine, instruction, { docx: mockDocx });
     expect(result).toEqual([
       {
         name: 'sd:autoPageNumber',
@@ -51,7 +51,7 @@ describe('preProcessPageInstruction', () => {
         { name: 'w:b' },
       ],
     };
-    const result = preProcessPageInstruction(nodesToCombine, instruction, fieldRunRPr);
+    const result = preProcessPageInstruction(nodesToCombine, instruction, { fieldRunRPr });
     expect(result).toEqual([
       {
         name: 'sd:autoPageNumber',
@@ -61,14 +61,18 @@ describe('preProcessPageInstruction', () => {
     ]);
   });
 
-  it('should use fifth-argument fieldRunRPr from the generic field pipeline', () => {
+  it('should use fieldRunRPr from the generic field pipeline options', () => {
     const nodesToCombine = [];
     const instruction = 'PAGE \\* roman';
     const fieldRunRPr = {
       name: 'w:rPr',
       elements: [{ name: 'w:b' }],
     };
-    const result = preProcessPageInstruction(nodesToCombine, instruction, mockDocx, [], fieldRunRPr);
+    const result = preProcessPageInstruction(nodesToCombine, instruction, {
+      docx: mockDocx,
+      instructionTokens: [],
+      fieldRunRPr,
+    });
     expect(result).toEqual([
       {
         name: 'sd:autoPageNumber',
@@ -80,6 +84,21 @@ describe('preProcessPageInstruction', () => {
         elements: [fieldRunRPr],
       },
     ]);
+  });
+
+  it('should use options-object fieldRunRPr without inspecting docx shape', () => {
+    const nodesToCombine = [];
+    const instruction = 'PAGE \\* roman';
+    const fieldRunRPr = {
+      name: 'w:rPr',
+      elements: [{ name: 'w:b' }],
+    };
+    const docxWithName = { name: 'w:rPr' };
+    const result = preProcessPageInstruction(nodesToCombine, instruction, {
+      docx: docxWithName,
+      fieldRunRPr,
+    });
+    expect(result[0].elements).toEqual([fieldRunRPr]);
   });
 
   it('should prefer content node rPr over fieldRunRPr', () => {
@@ -96,7 +115,7 @@ describe('preProcessPageInstruction', () => {
       name: 'w:rPr',
       elements: [{ name: 'w:b' }],
     };
-    const result = preProcessPageInstruction(nodesToCombine, instruction, fieldRunRPr);
+    const result = preProcessPageInstruction(nodesToCombine, instruction, { fieldRunRPr });
     expect(result).toEqual([
       {
         name: 'sd:autoPageNumber',
@@ -111,7 +130,7 @@ describe('preProcessPageInstruction', () => {
     const instruction = 'PAGE';
     // Pass something that's not a w:rPr node
     const invalidRPr = { name: 'w:r', elements: [] };
-    const result = preProcessPageInstruction(nodesToCombine, instruction, invalidRPr);
+    const result = preProcessPageInstruction(nodesToCombine, instruction, { fieldRunRPr: invalidRPr });
     expect(result).toEqual([
       {
         name: 'sd:autoPageNumber',
@@ -121,7 +140,7 @@ describe('preProcessPageInstruction', () => {
   });
 
   it('preserves PAGE general format switches as normalized attributes', () => {
-    const result = preProcessPageInstruction([], 'PAGE \\* roman', null);
+    const result = preProcessPageInstruction([], 'PAGE \\* roman');
     expect(result[0].attributes).toEqual({
       instruction: 'PAGE \\* roman',
       pageNumberFormat: 'lowerRoman',
@@ -129,7 +148,7 @@ describe('preProcessPageInstruction', () => {
   });
 
   it('preserves PAGE ArabicDash switches as normalized attributes', () => {
-    const result = preProcessPageInstruction([], 'PAGE \\* ArabicDash', null);
+    const result = preProcessPageInstruction([], 'PAGE \\* ArabicDash');
     expect(result[0].attributes).toEqual({
       instruction: 'PAGE \\* ArabicDash',
       pageNumberFormat: 'numberInDash',

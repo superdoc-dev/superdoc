@@ -8,7 +8,7 @@ describe('preProcessNumPagesInstruction', () => {
   it('should create a sd:totalPageNumber node', () => {
     const nodesToCombine = [];
     const instruction = 'NUMPAGES';
-    const result = preProcessNumPagesInstruction(nodesToCombine, instruction, mockDocx);
+    const result = preProcessNumPagesInstruction(nodesToCombine, instruction, { docx: mockDocx });
     expect(result).toHaveLength(1);
     expect(result[0].name).toBe('sd:totalPageNumber');
     expect(result[0].type).toBe('element');
@@ -25,7 +25,7 @@ describe('preProcessNumPagesInstruction', () => {
       },
     ];
     const instruction = 'NUMPAGES';
-    const result = preProcessNumPagesInstruction(nodesToCombine, instruction, mockDocx);
+    const result = preProcessNumPagesInstruction(nodesToCombine, instruction, { docx: mockDocx });
     expect(result[0].elements).toEqual([{ name: 'w:rPr', elements: [{ name: 'w:b' }] }]);
   });
 
@@ -40,18 +40,22 @@ describe('preProcessNumPagesInstruction', () => {
         { name: 'w:b' },
       ],
     };
-    const result = preProcessNumPagesInstruction(nodesToCombine, instruction, fieldRunRPr);
+    const result = preProcessNumPagesInstruction(nodesToCombine, instruction, { fieldRunRPr });
     expect(result[0].elements).toEqual([fieldRunRPr]);
   });
 
-  it('should use fifth-argument fieldRunRPr from the generic field pipeline', () => {
+  it('should use fieldRunRPr from the generic field pipeline options', () => {
     const nodesToCombine = [];
     const instruction = 'NUMPAGES \\# "00"';
     const fieldRunRPr = {
       name: 'w:rPr',
       elements: [{ name: 'w:b' }],
     };
-    const result = preProcessNumPagesInstruction(nodesToCombine, instruction, mockDocx, [], fieldRunRPr);
+    const result = preProcessNumPagesInstruction(nodesToCombine, instruction, {
+      docx: mockDocx,
+      instructionTokens: [],
+      fieldRunRPr,
+    });
     expect(result[0]).toEqual({
       name: 'sd:totalPageNumber',
       type: 'element',
@@ -62,6 +66,21 @@ describe('preProcessNumPagesInstruction', () => {
       },
       elements: [fieldRunRPr],
     });
+  });
+
+  it('should use options-object fieldRunRPr without inspecting docx shape', () => {
+    const nodesToCombine = [];
+    const instruction = 'NUMPAGES \\# "00"';
+    const fieldRunRPr = {
+      name: 'w:rPr',
+      elements: [{ name: 'w:b' }],
+    };
+    const docxWithName = { name: 'w:rPr' };
+    const result = preProcessNumPagesInstruction(nodesToCombine, instruction, {
+      docx: docxWithName,
+      fieldRunRPr,
+    });
+    expect(result[0].elements).toEqual([fieldRunRPr]);
   });
 
   it('should prefer content node rPr over fieldRunRPr', () => {
@@ -77,7 +96,7 @@ describe('preProcessNumPagesInstruction', () => {
       name: 'w:rPr',
       elements: [{ name: 'w:b' }],
     };
-    const result = preProcessNumPagesInstruction(nodesToCombine, instruction, fieldRunRPr);
+    const result = preProcessNumPagesInstruction(nodesToCombine, instruction, { fieldRunRPr });
     expect(result[0].elements).toEqual([contentRPr]);
   });
 
@@ -85,7 +104,7 @@ describe('preProcessNumPagesInstruction', () => {
     const nodesToCombine = [];
     const instruction = 'NUMPAGES';
     const invalidRPr = { name: 'w:r', elements: [] };
-    const result = preProcessNumPagesInstruction(nodesToCombine, instruction, invalidRPr);
+    const result = preProcessNumPagesInstruction(nodesToCombine, instruction, { fieldRunRPr: invalidRPr });
     expect(result[0].elements).toBeUndefined();
   });
 
@@ -100,17 +119,17 @@ describe('preProcessNumPagesInstruction', () => {
       },
     ];
     const instruction = 'NUMPAGES';
-    const result = preProcessNumPagesInstruction(nodesToCombine, instruction, null);
+    const result = preProcessNumPagesInstruction(nodesToCombine, instruction);
     expect(result[0].attributes.importedCachedText).toBe('3');
   });
 
   it('should not set importedCachedText when no content text exists', () => {
-    const result = preProcessNumPagesInstruction([], 'NUMPAGES', null);
+    const result = preProcessNumPagesInstruction([], 'NUMPAGES');
     expect(result[0].attributes.importedCachedText).toBeUndefined();
   });
 
   it('preserves NUMPAGES zero-padding switches as normalized attributes', () => {
-    const result = preProcessNumPagesInstruction([], 'NUMPAGES \\# "00"', null);
+    const result = preProcessNumPagesInstruction([], 'NUMPAGES \\# "00"');
     expect(result[0].attributes).toEqual({
       instruction: 'NUMPAGES \\# "00"',
       pageNumberFormat: 'decimal',

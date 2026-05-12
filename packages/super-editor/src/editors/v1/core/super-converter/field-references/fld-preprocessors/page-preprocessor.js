@@ -5,23 +5,12 @@ import { parsePageNumberFieldSwitches } from '../shared/page-number-field-switch
  *
  * @param {import('../../v2/types/index.js').OpenXmlNode[]} nodesToCombine The nodes between separate and end.
  * @param {string} [_instrText] The instruction text (unused for PAGE).
- * @param {import('../../v2/docxHelper').ParsedDocx | import('../../v2/types/index.js').OpenXmlNode | null} [_docxOrFieldRunRPr=null] The generic body pipeline passes docx here; standalone field processing passes the captured w:rPr.
- * @param {Array<{type: string, text?: string}> | import('../../v2/types/index.js').OpenXmlNode | null} [instructionTokensOrFieldRunRPr=null] Raw instruction tokens in the body pipeline, or a legacy w:rPr position in alternate callers.
- * @param {import('../../v2/types/index.js').OpenXmlNode | null} [fieldRunRPr=null] The w:rPr node captured from field sequence nodes.
+ * @param {{ docx?: import('../../v2/docxHelper').ParsedDocx, instructionTokens?: Array<{type: string, text?: string}> | null, fieldRunRPr?: import('../../v2/types/index.js').OpenXmlNode | null }} [options]
  * @returns {import('../../v2/types/index.js').OpenXmlNode[]}
  * @see {@link https://ecma-international.org/publications-and-standards/standards/ecma-376/} "Fundamentals And Markup Language Reference", page 1234
  */
-export function preProcessPageInstruction(
-  nodesToCombine,
-  instrText = 'PAGE',
-  _docxOrFieldRunRPr = null,
-  instructionTokensOrFieldRunRPr = null,
-  fieldRunRPr = null,
-) {
-  const effectiveFieldRunRPr =
-    fieldRunRPr ??
-    (instructionTokensOrFieldRunRPr?.name === 'w:rPr' ? instructionTokensOrFieldRunRPr : null) ??
-    (_docxOrFieldRunRPr?.name === 'w:rPr' ? _docxOrFieldRunRPr : null);
+export function preProcessPageInstruction(nodesToCombine, instrText = 'PAGE', options = {}) {
+  const fieldRunRPr = options.fieldRunRPr ?? null;
   const fieldAttrs = parsePageNumberFieldSwitches(instrText, 'PAGE');
   const pageNumNode = {
     name: 'sd:autoPageNumber',
@@ -42,8 +31,8 @@ export function preProcessPageInstruction(
 
   // If no rPr was found in content nodes, use the rPr captured from the field sequence
   // (begin, instrText, or separate nodes) where Word stores the styling for page numbers.
-  if (!foundContentRPr && effectiveFieldRunRPr && effectiveFieldRunRPr.name === 'w:rPr') {
-    pageNumNode.elements = [effectiveFieldRunRPr];
+  if (!foundContentRPr && fieldRunRPr && fieldRunRPr.name === 'w:rPr') {
+    pageNumNode.elements = [fieldRunRPr];
   }
 
   return [pageNumNode];

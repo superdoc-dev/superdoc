@@ -1075,4 +1075,39 @@ describe('page break integration tests', () => {
     expect(tokenRun?.bidi).toEqual({ rtl: true });
     expect(tokenRun?.script).toEqual({ complexScript: true });
   });
+
+  // SD-2781 round-3 (codex finding): nested inline converters (bookmark-start,
+  // structuredContent, page-reference) used to drop the activeInlineRunProperties
+  // arg when forwarding to visitNode, so children inside an SDT/bookmark wrapper
+  // lost run-level bidi/script. These tests pin the pass-through.
+  it('preserves bidi/script on text inside a structuredContent wrapper', () => {
+    const pmDoc = {
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [
+            {
+              type: 'run',
+              attrs: { runProperties: { rtl: true, cs: true } },
+              content: [
+                {
+                  type: 'structuredContent',
+                  content: [{ type: 'text', text: 'sdt-wrapped rtl text' }],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    const { blocks } = toFlowBlocks(pmDoc);
+    const paragraph = blocks.find((block) => block.kind === 'paragraph');
+    if (paragraph?.kind !== 'paragraph') return;
+    const textRun = paragraph.runs.find((run) => 'text' in run && run.text === 'sdt-wrapped rtl text');
+    expect(textRun, 'text run inside SDT should be present').toBeDefined();
+    expect(textRun?.bidi).toEqual({ rtl: true });
+    expect(textRun?.script).toEqual({ complexScript: true });
+  });
 });

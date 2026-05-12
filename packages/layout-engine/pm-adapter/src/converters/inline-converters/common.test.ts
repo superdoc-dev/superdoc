@@ -159,6 +159,22 @@ describe('applyInlineRunProperties', () => {
       expect(result.script?.language).toEqual({ complexScript: 'he-IL' });
     });
 
+    // Per ECMA §17.3.2.7, w:cs absent != false. Absence inherits from the style
+    // hierarchy and ultimately falls back to Unicode-based detection. Only set
+    // complexScript when the source explicitly carries w:cs.
+    it('omits complexScript when only lang is set (no explicit w:cs)', () => {
+      const lang = { bidi: 'he-IL' };
+      const result = applyInlineRunProperties(baseRun, { lang }, undefined, { lang });
+      expect(result.script).toBeDefined();
+      expect(result.script).not.toHaveProperty('complexScript');
+      expect(result.script?.language).toEqual({ complexScript: 'he-IL' });
+    });
+
+    it('preserves explicit cs=false (a meaningful toggle-off of inherited cs)', () => {
+      const result = applyInlineRunProperties(baseRun, { cs: false }, undefined, { cs: false });
+      expect(result.script).toEqual({ complexScript: false });
+    });
+
     it('keeps rtl and cs on separate axes (axis non-collapse)', () => {
       const props = { rtl: true, cs: true };
       const result = applyInlineRunProperties(baseRun, props, undefined, props);

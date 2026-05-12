@@ -109,7 +109,12 @@ const buildScriptContext = (runProperties: RunProperties): RunScriptContext | un
   const hasLang = lang != null && (lang.val != null || lang.bidi != null || lang.eastAsia != null);
   if (cs == null && !hasLang) return undefined;
 
-  const ctx: RunScriptContext = { complexScript: cs === true };
+  // Per ECMA §17.3.2.7, cs absent != false. Only set complexScript when the source
+  // explicitly carries w:cs (true OR false - both are meaningful toggle states per
+  // §17.17.4). Leaving undefined lets consumers distinguish "not set" from "explicitly
+  // off" and fall back to Unicode-based script detection.
+  const ctx: RunScriptContext = {};
+  if (cs != null) ctx.complexScript = cs === true;
   if (hasLang) {
     const language: NonNullable<RunScriptContext['language']> = {};
     if (lang.val != null) language.default = lang.val;

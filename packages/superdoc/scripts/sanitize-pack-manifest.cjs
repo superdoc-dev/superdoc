@@ -27,12 +27,41 @@ function stripSourceConditions(value) {
   return next;
 }
 
+function hasAnySourceKey(value) {
+  if (Array.isArray(value)) return value.some(hasAnySourceKey);
+  if (!value || typeof value !== 'object') return false;
+  if (Object.prototype.hasOwnProperty.call(value, 'source')) return true;
+  return Object.values(value).some(hasAnySourceKey);
+}
+
+function isSanitized(packageJson) {
+  if (Object.prototype.hasOwnProperty.call(packageJson, 'unpkg')) return false;
+  if (Object.prototype.hasOwnProperty.call(packageJson, 'jsdelivr')) return false;
+  return !hasAnySourceKey(packageJson.exports);
+}
+
 function prepare() {
+  const packageJson = readJson(packageJsonPath);
   if (fs.existsSync(backupPath)) {
-    throw new Error(`Refusing to prepare pack manifest while backup exists: ${backupPath}`);
+    // pnpm wraps prepack/postpack lifecycle around scripts named exactly
+    // `pack`. The user `pack` script runs `pnpm pack` internally, which
+    // triggers a second prepack. Treat that as re-entrant when the
+    // current manifest already looks sanitized (outer prepack ran, we
+    // are the inner) and no-op so the inner postpack can restore
+    // cleanly. Treat backup-without-sanitized-manifest as an
+    // inconsistent workspace state (e.g. someone restored manually but
+    // left the backup) and fail loudly so the developer can clean up.
+    if (isSanitized(packageJson)) {
+      console.log('[sanitize-pack-manifest] backup present and manifest already sanitized; nothing to do');
+      return;
+    }
+    throw new Error(
+      `Backup exists at ${backupPath} but package.json is not sanitized. ` +
+        `The workspace is in an inconsistent state from a previous failed pack. ` +
+        `Inspect both files and remove the backup once the source manifest is correct.`,
+    );
   }
 
-  const packageJson = readJson(packageJsonPath);
   fs.copyFileSync(packageJsonPath, backupPath);
 
   const sanitized = {

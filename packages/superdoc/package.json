@@ -139,7 +139,7 @@
     "clean": "rm -rf dist",
     "prepack": "node ./scripts/sanitize-pack-manifest.cjs prepare",
     "postpack": "node ./scripts/sanitize-pack-manifest.cjs restore",
-    "pack:local": "pnpm run pack",
+    "pack:local": "pnpm run pack:es",
     "pack": "pnpm run build:es && pnpm pack && mv $(ls superdoc-*.tgz) ./superdoc.tgz",
     "pack:es": "pnpm run build:es && pnpm pack && mv $(ls superdoc-*.tgz) ./superdoc.tgz",
     "test": "vitest"

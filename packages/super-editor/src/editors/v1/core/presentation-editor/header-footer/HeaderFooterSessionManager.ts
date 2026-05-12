@@ -1737,7 +1737,7 @@ export class HeaderFooterSessionManager {
     const headerIds = converter?.headerIds as { titlePg?: boolean } | undefined;
     const footerIds = converter?.footerIds as { titlePg?: boolean } | undefined;
     let titlePgEnabled = headerIds?.titlePg === true || footerIds?.titlePg === true;
-    if (this.#multiSectionIdentifier?.sectionTitlePg.has(sectionIndex)) {
+    if (this.#multiSectionIdentifier?.sectionTitlePg?.has(sectionIndex)) {
       titlePgEnabled = this.#multiSectionIdentifier.sectionTitlePg.get(sectionIndex) === true;
     }
 

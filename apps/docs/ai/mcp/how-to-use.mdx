@@ -23,7 +23,7 @@ superdoc_open → superdoc_get_content / superdoc_search → intent tools → su
 
 ### Create multiple sections at once
 
-Use `superdoc_edit` with `type: "markdown"` to insert structured content in a single call. It parses markdown into proper document nodes — headings, paragraphs, bold, italic, and lists.
+Use `superdoc_edit` with `type: "markdown"` to insert structured content in a single call. It parses markdown into proper document nodes: headings, paragraphs, bold, italic, and lists.
 
 ```
 superdoc_edit({
@@ -57,7 +57,7 @@ superdoc_mutations({session_id, action: "apply", atomic: true, changeMode: "dire
 ```
 
 <Warning>
-Format targets must exist before the batch runs. Node selectors resolve at step execution time using the current document state. If a required target is missing, the step fails and — with `atomic: true` — the entire batch rolls back.
+Format targets must exist before the batch runs. Node selectors resolve at step execution time using the current document state. If a required target is missing, the step fails and: with `atomic: true`: the entire batch rolls back.
 </Warning>
 
 ### When to use which tool
@@ -156,6 +156,6 @@ superdoc_track_changes({session_id, action: "decide", decision: "accept", target
 
 ## Related
 
-- [MCP overview](/ai/mcp/overview) — setup and tool reference
-- [Debugging](/ai/mcp/debugging) — inspect and troubleshoot MCP tool calls
-- [Best practices](/ai/agents/best-practices) — general AI agent patterns
+- [MCP overview](/ai/mcp/overview): setup and tool reference
+- [Debugging](/ai/mcp/debugging): inspect and troubleshoot MCP tool calls
+- [Best practices](/ai/agents/best-practices): general AI agent patterns

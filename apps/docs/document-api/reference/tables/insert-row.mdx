@@ -1,14 +1,14 @@
 ---
 title: tables.insertRow
 sidebarTitle: tables.insertRow
-description: Insert a new row into the target table.
+description: Insert a new row into the target table. The new row is cloned from an adjacent row, so it inherits the existing cell shading, borders, alignment, and padding. No follow-up styling call is needed unless the new row should look different from the rest of the table.
 ---
 
 {/* GENERATED FILE: DO NOT EDIT. Regenerate via `pnpm run docapi:sync`. */}
 
 ## Summary
 
-Insert a new row into the target table.
+Insert a new row into the target table. The new row is cloned from an adjacent row, so it inherits the existing cell shading, borders, alignment, and padding. No follow-up styling call is needed unless the new row should look different from the rest of the table.
 
 - Operation ID: `tables.insertRow`
 - API member path: `editor.doc.tables.insertRow(...)`
@@ -55,6 +55,23 @@ Returns a TableMutationResult receipt confirming a row was inserted.
 | `nodeId` | string | yes |  |
 | `position` | enum | yes | `"above"`, `"below"` |
 | `rowIndex` | integer | yes |  |
+
+### Variant 4.1 (target.nodeType="table")
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `count` | integer | no |  |
+| `target` | TableAddress | yes | TableAddress |
+| `target.kind` | `"block"` | yes | Constant: `"block"` |
+| `target.nodeId` | string | yes |  |
+| `target.nodeType` | `"table"` | yes | Constant: `"table"` |
+
+### Variant 4.2 (required: nodeId)
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `count` | integer | no |  |
+| `nodeId` | string | yes |  |
 
 ### Example request
 
@@ -211,6 +228,48 @@ When present, `result.table` is the follow-up address to reuse after this call. 
         "rowIndex",
         "position"
       ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "not": {
+        "anyOf": [
+          {
+            "required": [
+              "rowIndex"
+            ]
+          },
+          {
+            "required": [
+              "position"
+            ]
+          }
+        ]
+      },
+      "oneOf": [
+        {
+          "required": [
+            "target"
+          ]
+        },
+        {
+          "required": [
+            "nodeId"
+          ]
+        }
+      ],
+      "properties": {
+        "count": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "nodeId": {
+          "type": "string"
+        },
+        "target": {
+          "$ref": "#/$defs/TableAddress"
+        }
+      },
       "type": "object"
     }
   ]

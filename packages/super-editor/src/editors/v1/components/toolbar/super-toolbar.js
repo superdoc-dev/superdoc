@@ -20,6 +20,7 @@ import { useToolbarItem } from '@components/toolbar/use-toolbar-item';
 import { calculateResolvedParagraphProperties } from '@extensions/paragraph/resolvedPropertiesCache.js';
 import { parseSizeUnit } from '@core/utilities';
 import { findElementBySelector, getParagraphFontFamilyFromProperties } from './helpers/general.js';
+import { markerTextToBulletStyle } from '@helpers/list-numbering-helpers.js';
 
 /**
  * @typedef {function(CommandItem): void} CommandCallback
@@ -133,6 +134,7 @@ import { findElementBySelector, getParagraphFontFamilyFromProperties } from './h
  * @typedef {Object} CommandItem
  * @property {ToolbarItem} item - The toolbar item
  * @property {*} [argument] - The argument to pass to the command
+ * @property {*} [option] - The selected nested option for option-style commands
  */
 
 /**
@@ -630,6 +632,24 @@ export class SuperToolbar extends EventEmitter {
         if (commandState?.value != null) item.activate({ styleId: commandState.value });
         else item.label.value = this.config.texts?.formatText || 'Format text';
       },
+      list: () => {
+        if (commandState?.active) {
+          item.activate();
+          item.selectedValue.value = markerTextToBulletStyle(commandState.value);
+        } else {
+          item.deactivate();
+          item.selectedValue.value = null;
+        }
+      },
+      numberedlist: () => {
+        if (commandState?.active) {
+          item.activate();
+          item.selectedValue.value = commandState.value;
+        } else {
+          item.deactivate();
+          item.selectedValue.value = null;
+        }
+      },
       default: () => {
         if (commandState?.active) item.activate();
         else item.deactivate();
@@ -680,6 +700,9 @@ export class SuperToolbar extends EventEmitter {
 
     if (!this.activeEditor || currentMode === 'viewing') {
       this.#deactivateAll();
+      this.toolbarItems.forEach((item) => {
+        if (item.allowWithoutEditor?.value) this.#applyHeadlessState(item);
+      });
       return;
     }
 

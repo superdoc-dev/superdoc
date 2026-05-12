@@ -20,7 +20,7 @@ vi.mock('@extensions/paragraph/resolvedPropertiesCache.js', () => ({
   calculateResolvedParagraphProperties: vi.fn((_, node, __) => node.attrs.paragraphProperties || {}),
 }));
 
-import { changeListLevel } from './changeListLevel.js';
+import { changeListLevel, updateNumberingProperties } from './changeListLevel.js';
 import { findParentNode } from '@helpers/index.js';
 import { ListHelpers } from '@helpers/list-numbering-helpers.js';
 
@@ -265,5 +265,60 @@ describe('changeListLevel', () => {
     expect(result).toBe(true);
     expect(tr.setNodeMarkup).toHaveBeenCalledTimes(3);
     expect(tr.setNodeMarkup.mock.calls.map(([pos]) => pos)).toEqual([0, 30, 60]);
+  });
+});
+
+describe('updateNumberingProperties', () => {
+  /** @type {{ setNodeMarkup: ReturnType<typeof vi.fn> }} */
+  let tr;
+
+  beforeEach(() => {
+    tr = { setNodeMarkup: vi.fn() };
+  });
+
+  // Word's `ListParagraph` style carries `<w:contextualSpacing/>`, which collapses
+  // the inter-paragraph gap between consecutive list items. If we drop the styleId
+  // on a style swap, that suppression stops applying and a vertical gap appears
+  // between item 1 and item 2 — which is exactly what SD-2527 was reporting.
+  it('preserves the ListParagraph styleId when migrating to a new numId', () => {
+    const node = {
+      type: { name: 'paragraph' },
+      attrs: {
+        paragraphProperties: {
+          styleId: 'ListParagraph',
+          numberingProperties: { numId: 1, ilvl: 0 },
+        },
+        numberingProperties: { numId: 1, ilvl: 0 },
+        listRendering: {},
+      },
+    };
+
+    updateNumberingProperties({ numId: 2, ilvl: 0 }, node, 12, /* editor */ {}, tr);
+
+    expect(tr.setNodeMarkup).toHaveBeenCalledTimes(1);
+    const [, , newAttrs] = tr.setNodeMarkup.mock.calls[0];
+    expect(newAttrs.paragraphProperties.styleId).toBe('ListParagraph');
+    expect(newAttrs.paragraphProperties.numberingProperties).toEqual({ numId: 2, ilvl: 0 });
+  });
+
+  it('strips the ListParagraph styleId when removing list formatting', () => {
+    const node = {
+      type: { name: 'paragraph' },
+      attrs: {
+        paragraphProperties: {
+          styleId: 'ListParagraph',
+          numberingProperties: { numId: 1, ilvl: 0 },
+        },
+        numberingProperties: { numId: 1, ilvl: 0 },
+        listRendering: {},
+      },
+    };
+
+    updateNumberingProperties(null, node, 12, /* editor */ {}, tr);
+
+    const [, , newAttrs] = tr.setNodeMarkup.mock.calls[0];
+    expect(newAttrs.paragraphProperties.styleId).toBeNull();
+    expect(newAttrs.paragraphProperties.numberingProperties).toBeNull();
+    expect(newAttrs.listRendering).toBeNull();
   });
 });

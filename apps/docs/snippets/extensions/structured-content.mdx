@@ -2,10 +2,10 @@ Native Word SDT (w:sdt) fields for documents. Supports inline and block structur
 
 ## Use case
 
-- Form templates — Create fillable documents with inline text fields and block content areas
-- Contract generation — Dynamic clauses and terms that map to Word content controls
-- Document automation — Programmatically update specific sections while preserving structure
-- Protected fields — Lock modes control which fields users can edit or delete (ECMA-376 `w:lock`)
+- Form templates: Create fillable documents with inline text fields and block content areas
+- Contract generation: Dynamic clauses and terms that map to Word content controls
+- Document automation: Programmatically update specific sections while preserving structure
+- Protected fields: Lock modes control which fields users can edit or delete (ECMA-376 `w:lock`)
 
 import { SuperDocEditor } from '/snippets/components/superdoc-editor.jsx'
 
@@ -84,7 +84,7 @@ import { SuperDocEditor } from '/snippets/components/superdoc-editor.jsx'
 ## Quick start
 
 ```javascript
-// Insert inline field with sdtLocked — users can edit content but not delete the field
+// Insert inline field with sdtLocked: users can edit content but not delete the field
 editor.commands.insertStructuredContentInline({
   attrs: {
     id: '1',
@@ -99,12 +99,12 @@ editor.commands.insertStructuredContentInline({
   attrs: {
     id: '3',
     alias: 'Account ID',
-    lockMode: 'sdtContentLocked', // fully protected — no edits, no deletion
+    lockMode: 'sdtContentLocked', // fully protected: no edits, no deletion
   },
   text: 'ACC-00042'
 });
 
-// Insert block field with sdtLocked — content is editable, wrapper is protected
+// Insert block field with sdtLocked: content is editable, wrapper is protected
 editor.commands.insertStructuredContentBlock({
   attrs: {
     id: '2',

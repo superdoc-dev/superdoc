@@ -35,7 +35,7 @@ export function annotateFragmentDomWithClipboardData(container, fragment, editor
  *
  * @param {HTMLElement} container cloned selection HTML
  * @param {import('prosemirror-view').EditorView} view
- * @param {import('../Editor').Editor} editor
+ * @param {import('../Editor').Editor} [editor] optional editor instance — function bails out when missing
  */
 export function mergeSerializedClipboardMetadataIntoDomContainer(container, view, editor) {
   if (!editor || !view || typeof document === 'undefined') return;

@@ -26,8 +26,12 @@ export type {
   RangeBlockPreview,
   RangePreview,
   RangeResolverAdapter,
+  ScrollIntoViewInput,
+  ScrollIntoViewOutput,
 } from './ranges/index.js';
 export { executeResolveRange } from './ranges/index.js';
+export type { SelectionApi, SelectionAdapter, SelectionCurrentInput, SelectionInfo } from './selection/selection.js';
+export { executeSelectionCurrent } from './selection/selection.js';
 export type { HeaderFootersAdapter, HeaderFootersApi } from './header-footers/header-footers.js';
 export * from './header-footers/header-footers.types.js';
 export type { ClearContentAdapter, ClearContentInput } from './clear-content/clear-content.js';
@@ -126,6 +130,8 @@ import type { InsertInput } from './insert/insert.js';
 import { executeDelete } from './delete/delete.js';
 import { executeResolveRange } from './ranges/resolve.js';
 import type { RangeResolverAdapter, ResolveRangeInput, ResolveRangeOutput } from './ranges/ranges.types.js';
+import { executeSelectionCurrent } from './selection/selection.js';
+import type { SelectionApi, SelectionAdapter, SelectionCurrentInput, SelectionInfo } from './selection/selection.js';
 import { executeInsert } from './insert/insert.js';
 import type { ListsAdapter, ListsApi } from './lists/lists.js';
 import type {
@@ -142,12 +148,18 @@ import type {
   ListsAttachInput,
   ListsDetachInput,
   ListsDetachResult,
+  ListsDeleteInput,
+  ListsDeleteResult,
   ListsJoinInput,
   ListsJoinResult,
   ListsCanJoinInput,
   ListsCanJoinResult,
   ListsSeparateInput,
   ListsSeparateResult,
+  ListsMergeInput,
+  ListsMergeResult,
+  ListsSplitInput,
+  ListsSplitResult,
   ListsSetLevelInput,
   ListsSetValueInput,
   ListsContinuePreviousInput,
@@ -187,9 +199,12 @@ import {
   executeListsCreate,
   executeListsAttach,
   executeListsDetach,
+  executeListsDelete,
   executeListsJoin,
   executeListsCanJoin,
   executeListsSeparate,
+  executeListsMerge,
+  executeListsSplit,
   executeListsSetLevel,
   executeListsSetValue,
   executeListsContinuePrevious,
@@ -261,6 +276,7 @@ import type {
   TablesUnmergeCellsInput,
   TablesSplitCellInput,
   TablesSetCellPropertiesInput,
+  TablesSetCellTextInput,
   TablesSortInput,
   TablesSetAltTextInput,
   TablesSetStyleInput,
@@ -278,6 +294,7 @@ import type {
   TablesApplyStyleInput,
   TablesSetBordersInput,
   TablesSetTableOptionsInput,
+  TablesApplyPresetInput,
   TablesGetInput,
   TablesGetOutput,
   TablesGetCellsInput,
@@ -1264,6 +1281,8 @@ export type {
   ListsCreateResult,
   ListsDetachInput,
   ListsDetachResult,
+  ListsDeleteInput,
+  ListsDeleteResult,
   ListsFailureCode,
   ListsGetInput,
   ListsInsertResult,
@@ -1274,6 +1293,10 @@ export type {
   ListsMutateItemResult,
   ListsSeparateInput,
   ListsSeparateResult,
+  ListsMergeInput,
+  ListsMergeResult,
+  ListsSplitInput,
+  ListsSplitResult,
   ListsSetLevelInput,
   ListsSetLevelRestartInput,
   ListsSetValueInput,
@@ -1374,12 +1397,13 @@ export type {
   CommentsDeleteInput,
   CommentsAdapter,
   GetCommentInput,
-  // Legacy input types — exported for internal adapter use, not part of the contract.
+  // Legacy input types: exported for internal adapter use, not part of the contract.
   AddCommentInput,
   EditCommentInput,
   ReplyToCommentInput,
   MoveCommentInput,
   ResolveCommentInput,
+  ReopenCommentInput,
   RemoveCommentInput,
   SetCommentInternalInput,
   GoToCommentInput,
@@ -1420,6 +1444,7 @@ export interface TablesApi {
   unmergeCells(input: TablesUnmergeCellsInput, options?: MutationOptions): TableMutationResult;
   splitCell(input: TablesSplitCellInput, options?: MutationOptions): TableMutationResult;
   setCellProperties(input: TablesSetCellPropertiesInput, options?: MutationOptions): TableMutationResult;
+  setCellText(input: TablesSetCellTextInput, options?: MutationOptions): TableMutationResult;
   sort(input: TablesSortInput, options?: MutationOptions): TableMutationResult;
   setAltText(input: TablesSetAltTextInput, options?: MutationOptions): TableMutationResult;
   setStyle(input: TablesSetStyleInput, options?: MutationOptions): TableMutationResult;
@@ -1437,6 +1462,7 @@ export interface TablesApi {
   applyStyle(input: TablesApplyStyleInput, options?: MutationOptions): TableMutationResult;
   setBorders(input: TablesSetBordersInput, options?: MutationOptions): TableMutationResult;
   setTableOptions(input: TablesSetTableOptionsInput, options?: MutationOptions): TableMutationResult;
+  applyPreset(input: TablesApplyPresetInput, options?: MutationOptions): TableMutationResult;
   get(input: TablesGetInput): TablesGetOutput;
   getCells(input: TablesGetCellsInput): TablesGetCellsOutput;
   getProperties(input: TablesGetPropertiesInput): TablesGetPropertiesOutput;
@@ -1653,7 +1679,12 @@ export interface DocumentApi {
    */
   ranges: RangesApi;
   /**
-   * Mutation plan engine — preview and apply atomic mutation plans.
+   * Read the editor's current selection as a portable SelectionInfo.
+   * Primitive for custom UIs (toolbars, sidebars, popovers).
+   */
+  selection: SelectionApi;
+  /**
+   * Mutation plan engine: preview and apply atomic mutation plans.
    */
   mutations: MutationsApi;
   /**
@@ -1662,7 +1693,7 @@ export interface DocumentApi {
   diff: DiffApi;
   /**
    * History operations (undo/redo) scoped to the active editor instance.
-   * Session-scoped — reflects the runtime undo/redo stack, not persistent state.
+   * Session-scoped: reflects the runtime undo/redo stack, not persistent state.
    */
   history: HistoryApi;
   /**
@@ -1732,6 +1763,13 @@ export interface DocumentApiAdapters {
   citations?: CitationsAdapter;
   authorities?: AuthoritiesAdapter;
   ranges: RangesAdapter;
+  /**
+   * Optional: when omitted, `editor.doc.selection.*` throws
+   * `SELECTION_ADAPTER_UNAVAILABLE`. All first-party engines register one;
+   * external consumers constructing an adapter bag manually should only
+   * need this if they invoke selection operations.
+   */
+  selection?: SelectionAdapter;
   query: QueryAdapter;
   mutations: MutationsAdapter;
   diff: DiffAdapter;
@@ -1763,7 +1801,7 @@ export interface DocumentApiAdapters {
  * ```
  */
 /**
- * Validates and normalizes query.match input — accepts canonical QueryMatchInput
+ * Validates and normalizes query.match input: accepts canonical QueryMatchInput
  * or a flat TextSelector/NodeSelector shorthand.
  */
 function executeQueryMatch(
@@ -1859,7 +1897,7 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
   const rawCapFn = () => executeCapabilities(adapters.capabilities);
   const capFn = (): DocumentApiCapabilities => {
     const caps = rawCapFn();
-    // Gate operations on adapter presence — mark unavailable when namespace adapter is missing.
+    // Gate operations on adapter presence: mark unavailable when namespace adapter is missing.
     for (const ns of ADAPTER_GATED_PREFIXES) {
       if (adapters[ns]) continue;
       const prefix = `${ns}.`;
@@ -2171,6 +2209,9 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
       detach(input: ListsDetachInput, options?: MutationOptions): ListsDetachResult {
         return executeListsDetach(adapters.lists, input, options);
       },
+      delete(input: ListsDeleteInput, options?: MutationOptions): ListsDeleteResult {
+        return executeListsDelete(adapters.lists, input, options);
+      },
       indent(input: ListTargetInput, options?: MutationOptions): ListsMutateItemResult {
         return executeListsIndent(adapters.lists, input, options);
       },
@@ -2185,6 +2226,12 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
       },
       separate(input: ListsSeparateInput, options?: MutationOptions): ListsSeparateResult {
         return executeListsSeparate(adapters.lists, input, options);
+      },
+      merge(input: ListsMergeInput, options?: MutationOptions): ListsMergeResult {
+        return executeListsMerge(adapters.lists, input, options);
+      },
+      split(input: ListsSplitInput, options?: MutationOptions): ListsSplitResult {
+        return executeListsSplit(adapters.lists, input, options);
       },
       setLevel(input: ListsSetLevelInput, options?: MutationOptions): ListsMutateItemResult {
         return executeListsSetLevel(adapters.lists, input, options);
@@ -2376,7 +2423,13 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
         );
       },
       insertRow(input, options?) {
-        return executeRowLocatorOp('tables.insertRow', adapters.tables.insertRow.bind(adapters.tables), input, options);
+        return executeRowLocatorOp(
+          'tables.insertRow',
+          adapters.tables.insertRow.bind(adapters.tables),
+          input,
+          options,
+          { allowAppendShorthand: true },
+        );
       },
       deleteRow(input, options?) {
         return executeRowLocatorOp('tables.deleteRow', adapters.tables.deleteRow.bind(adapters.tables), input, options);
@@ -2481,6 +2534,14 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
         return executeTableLocatorOp(
           'tables.setCellProperties',
           adapters.tables.setCellProperties.bind(adapters.tables),
+          input,
+          options,
+        );
+      },
+      setCellText(input, options?) {
+        return executeCellOrTableScopedCellLocatorOp(
+          'tables.setCellText',
+          adapters.tables.setCellText.bind(adapters.tables),
           input,
           options,
         );
@@ -2607,6 +2668,14 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
         return executeTablesSetTableOptions(
           'tables.setTableOptions',
           adapters.tables.setTableOptions.bind(adapters.tables),
+          input,
+          options,
+        );
+      },
+      applyPreset(input, options?) {
+        return executeTableLocatorOp(
+          'tables.applyPreset',
+          adapters.tables.applyPreset.bind(adapters.tables),
           input,
           options,
         );
@@ -3119,6 +3188,18 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
     ranges: {
       resolve(input: ResolveRangeInput): ResolveRangeOutput {
         return executeResolveRange(adapters.ranges, input);
+      },
+    },
+    selection: {
+      current(input?: SelectionCurrentInput): SelectionInfo {
+        const adapter = adapters.selection;
+        if (!adapter) {
+          throw new DocumentApiValidationError(
+            'SELECTION_ADAPTER_UNAVAILABLE',
+            'No selection adapter was registered. Pass `selection` in DocumentApiAdapters to call selection.current().',
+          );
+        }
+        return executeSelectionCurrent(adapter, input);
       },
     },
     mutations: {

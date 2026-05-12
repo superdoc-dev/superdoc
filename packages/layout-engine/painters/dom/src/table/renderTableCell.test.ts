@@ -87,6 +87,45 @@ describe('renderTableCell', () => {
     },
   });
 
+  it('uses an end-of-cell mark for the final paragraph in a table cell', () => {
+    const secondParagraphBlock: ParagraphBlock = {
+      kind: 'paragraph',
+      id: 'para-2',
+      runs: [{ text: '2', fontFamily: 'Arial', fontSize: 16 }],
+    };
+    const secondParagraphMeasure: ParagraphMeasure = {
+      ...paragraphMeasure,
+      totalHeight: 20,
+    };
+
+    const { cellElement } = renderTableCell({
+      ...createBaseDeps(),
+      cellMeasure: {
+        ...baseCellMeasure,
+        blocks: [paragraphMeasure, secondParagraphMeasure],
+      },
+      cell: {
+        ...baseCell,
+        blocks: [paragraphBlock, secondParagraphBlock],
+      },
+      renderLine: () => {
+        const line = doc.createElement('div');
+        const mark = doc.createElement('span');
+        mark.classList.add('superdoc-formatting-paragraph-mark');
+        mark.textContent = '¶';
+        line.appendChild(mark);
+        return line;
+      },
+    });
+
+    const marks = cellElement.querySelectorAll<HTMLElement>('.superdoc-formatting-paragraph-mark');
+    expect(marks).toHaveLength(2);
+    expect(marks[0].textContent).toBe('¶');
+    expect(marks[0].classList.contains('superdoc-formatting-cell-mark')).toBe(false);
+    expect(marks[1].textContent).toBe('¤');
+    expect(marks[1].classList.contains('superdoc-formatting-cell-mark')).toBe(true);
+  });
+
   it('centers content when verticalAlign is center', () => {
     const { cellElement } = renderTableCell({
       ...createBaseDeps(),
@@ -1380,6 +1419,10 @@ describe('renderTableCell', () => {
       // Left-justified markers stay inline (position: relative on container span)
       const markerContainer = markerEl.parentElement as HTMLElement;
       expect(markerContainer.style.position).toBe('relative');
+
+      const tabEl = lineEl.querySelector('.superdoc-tab') as HTMLElement;
+      expect(tabEl.classList.contains('superdoc-marker-suffix-tab')).toBe(true);
+      expect(tabEl.style.fontSize).toBe('14px');
     });
 
     it('should render numbered list marker with correct text', () => {

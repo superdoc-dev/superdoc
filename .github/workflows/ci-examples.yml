@@ -11,7 +11,6 @@ on:
       - 'packages/sdk/**'
       - 'packages/layout-engine/**'
       - 'shared/**'
-  merge_group:
   workflow_dispatch:
 
 jobs:
@@ -105,7 +104,7 @@ jobs:
           key: examples-workspace-${{ github.sha }}
 
       - name: Create .env for cloud providers
-        working-directory: examples/collaboration/${{ matrix.example }}
+        working-directory: examples/editor/collaboration/providers/${{ matrix.example }}
         run: |
           if [ "${{ matrix.example }}" = "liveblocks" ]; then
             echo "VITE_LIVEBLOCKS_PUBLIC_KEY=${{ secrets.VITE_LIVEBLOCKS_PUBLIC_KEY }}" > .env
@@ -113,15 +112,15 @@ jobs:
 
       - name: Run smoke test
         working-directory: examples/__tests__
-        run: EXAMPLE=collaboration/${{ matrix.example }} npx playwright test
+        run: EXAMPLE=editor/collaboration/providers/${{ matrix.example }} npx playwright test
 
-  features:
+  built-in-ui:
     needs: build
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        example: [track-changes, ai-redlining, comments, custom-toolbar]
+        example: [track-changes, comments, toolbar]
     steps:
       - name: Restore workspace
         uses: actions/cache/restore@v4
@@ -133,7 +132,55 @@ jobs:
 
       - name: Run smoke test
         working-directory: examples/__tests__
-        run: EXAMPLE=features/${{ matrix.example }} npx playwright test
+        run: EXAMPLE=editor/built-in-ui/${{ matrix.example }} npx playwright test
+
+  custom-ui:
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        example: [selection-capture, configurable-toolbar]
+    steps:
+      - name: Restore workspace
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            .
+            ~/.cache/ms-playwright
+          key: examples-workspace-${{ github.sha }}
+
+      - uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Run smoke test
+        working-directory: examples/__tests__
+        run: EXAMPLE=editor/custom-ui/${{ matrix.example }} npx playwright test
+
+  ai:
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        example: [redlining]
+    steps:
+      - name: Restore workspace
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            .
+            ~/.cache/ms-playwright
+          key: examples-workspace-${{ github.sha }}
+
+      - name: Run smoke test
+        working-directory: examples/__tests__
+        run: EXAMPLE=ai/${{ matrix.example }} npx playwright test
 
   advanced-headless-toolbar:
     needs: build
@@ -155,7 +202,27 @@ jobs:
         working-directory: examples/__tests__
         run: EXAMPLE=advanced/headless-toolbar/${{ matrix.example }} npx playwright test
 
-  headless:
+  advanced-extensions:
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        example: [custom-mark, custom-node]
+    steps:
+      - name: Restore workspace
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            .
+            ~/.cache/ms-playwright
+          key: examples-workspace-${{ github.sha }}
+
+      - name: Run smoke test
+        working-directory: examples/__tests__
+        run: EXAMPLE=advanced/extensions/${{ matrix.example }} npx playwright test
+
+  document-engine:
     needs: build
     runs-on: ubuntu-latest
     steps:
@@ -167,17 +234,19 @@ jobs:
             ~/.cache/ms-playwright
           key: examples-workspace-${{ github.sha }}
 
-      - name: Run headless tests
-        working-directory: examples/headless/ai-redlining
+      - name: Run AI redlining (server-side) tests
+        working-directory: examples/document-engine/ai-redlining
         run: npx tsx src/index.test.ts
 
   validate:
+    name: CI Examples / validate
     if: always()
-    needs: [getting-started, collaboration, features, advanced-headless-toolbar, headless]
+    needs: [getting-started, collaboration, built-in-ui, custom-ui, ai, advanced-headless-toolbar, advanced-extensions, document-engine]
     runs-on: ubuntu-latest
     steps:
       - name: Check results
         run: |
-          if [[ "${{ contains(needs.*.result, 'failure') }}" == "true" ]]; then
+          if [[ "${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped') }}" == "true" ]]; then
+            echo "One or more required jobs did not succeed."
             exit 1
           fi

@@ -91,6 +91,79 @@ export function measureVisibleTextOffset(root: HTMLElement, boundaryNode: Node, 
   return total;
 }
 
+export function measureVisibleTextOffsetInContainers(
+  containers: readonly HTMLElement[],
+  boundaryNode: Node,
+  boundaryOffset: number,
+): number | null {
+  const root = containers[0];
+  if (!root || !boundaryNode) {
+    return null;
+  }
+
+  const boundaryInsideContainers = containers.some(
+    (container) => boundaryNode === container || container.contains(boundaryNode),
+  );
+  if (!boundaryInsideContainers) {
+    return null;
+  }
+
+  const doc = root.ownerDocument ?? document;
+  const boundary = doc.createRange();
+
+  try {
+    boundary.setStart(boundaryNode, boundaryOffset);
+    boundary.setEnd(boundaryNode, boundaryOffset);
+  } catch {
+    return null;
+  }
+
+  const model = collectVisibleTextModel(containers);
+  for (const segment of model.segments) {
+    const textNode = segment.node;
+    const textLength = textNode.textContent?.length ?? 0;
+    if (textLength === 0) {
+      continue;
+    }
+
+    const textRange = doc.createRange();
+    textRange.selectNodeContents(textNode);
+
+    if (textRange.compareBoundaryPoints(Range.END_TO_END, boundary) <= 0) {
+      continue;
+    }
+
+    if (textNode === boundaryNode) {
+      return segment.startOffset + Math.max(0, Math.min(boundaryOffset, textLength));
+    }
+
+    if (textRange.compareBoundaryPoints(Range.START_TO_START, boundary) >= 0) {
+      return segment.startOffset;
+    }
+
+    return segment.startOffset;
+  }
+
+  return model.totalLength;
+}
+
+export function resolveVisibleTextBoundary(
+  containers: readonly HTMLElement[],
+  textOffset: number,
+  affinity: 'forward' | 'backward' = 'forward',
+): { node: Text; offset: number } | null {
+  const model = collectVisibleTextModel(containers);
+  const point = resolveTextPoint(model, textOffset, affinity);
+  if (!point) {
+    return null;
+  }
+
+  return {
+    node: point.node,
+    offset: point.offset,
+  };
+}
+
 export function computeCaretRectFromVisibleTextOffset(
   options: VisibleTextOffsetGeometryOptions,
   textOffset: number,

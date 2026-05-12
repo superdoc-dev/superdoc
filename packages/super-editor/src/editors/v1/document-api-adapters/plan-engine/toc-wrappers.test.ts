@@ -25,6 +25,7 @@ vi.mock('./plan-wrappers.js', () => ({
 
 import {
   createTableOfContentsWrapper,
+  sanitizeTocContentForSchema,
   tocConfigureWrapper,
   tocListWrapper,
   tocRemoveWrapper,
@@ -442,5 +443,112 @@ describe('toc wrappers', () => {
         expect(result.failure.code).toBe('CAPABILITY_UNAVAILABLE');
       }
     });
+  });
+});
+
+describe('sanitizeTocContentForSchema', () => {
+  // buildTocEntryParagraphs wraps the page-number text inside a `run` node,
+  // so the `tocPageNumber` mark lives one level below the paragraph's direct
+  // children. The sanitizer exists to support headless/test schemas that
+  // omit `tocPageNumber`; if it doesn't recurse, the unknown mark survives
+  // and ProseMirror's nodeFromJSON throws when rebuilding the TOC entry.
+  function makeEditorWithoutTocMark(): Editor {
+    return {
+      state: { schema: { marks: {} } },
+      schema: { marks: {} },
+    } as unknown as Editor;
+  }
+
+  function makeEditorWithTocMark(): Editor {
+    return {
+      state: { schema: { marks: { tocPageNumber: {} } } },
+      schema: { marks: { tocPageNumber: {} } },
+    } as unknown as Editor;
+  }
+
+  it('strips tocPageNumber marks nested inside a run when the schema omits the mark', () => {
+    const paragraph = {
+      type: 'paragraph',
+      content: [
+        { type: 'run', content: [{ type: 'text', text: 'Heading 1' }] },
+        { type: 'run', content: [{ type: 'tab' }] },
+        {
+          type: 'run',
+          content: [{ type: 'text', text: '0', marks: [{ type: 'tocPageNumber' }] }],
+        },
+      ],
+    };
+
+    const [sanitized] = sanitizeTocContentForSchema(
+      [paragraph] as unknown as Parameters<typeof sanitizeTocContentForSchema>[0],
+      makeEditorWithoutTocMark(),
+    );
+
+    const sanitizedJson = sanitized as unknown as { content: Array<{ content: Array<{ marks?: unknown }> }> };
+    const pageNumberRun = sanitizedJson.content[2];
+    const pageNumberText = pageNumberRun.content[0];
+    expect(pageNumberText.marks).toBeUndefined();
+  });
+
+  it('leaves coexisting non-tocPageNumber marks intact when stripping', () => {
+    const paragraph = {
+      type: 'paragraph',
+      content: [
+        {
+          type: 'run',
+          content: [
+            {
+              type: 'text',
+              text: '0',
+              marks: [{ type: 'bold' }, { type: 'tocPageNumber' }],
+            },
+          ],
+        },
+      ],
+    };
+
+    const [sanitized] = sanitizeTocContentForSchema(
+      [paragraph] as unknown as Parameters<typeof sanitizeTocContentForSchema>[0],
+      makeEditorWithoutTocMark(),
+    );
+
+    const sanitizedJson = sanitized as unknown as {
+      content: Array<{ content: Array<{ marks?: Array<{ type: string }> }> }>;
+    };
+    expect(sanitizedJson.content[0].content[0].marks).toEqual([{ type: 'bold' }]);
+  });
+
+  it('returns content unchanged when the schema defines tocPageNumber', () => {
+    const paragraph = {
+      type: 'paragraph',
+      content: [
+        {
+          type: 'run',
+          content: [{ type: 'text', text: '0', marks: [{ type: 'tocPageNumber' }] }],
+        },
+      ],
+    };
+
+    const result = sanitizeTocContentForSchema(
+      [paragraph] as unknown as Parameters<typeof sanitizeTocContentForSchema>[0],
+      makeEditorWithTocMark(),
+    );
+
+    // Same reference: no rewrite when the mark is supported.
+    expect(result[0]).toBe(paragraph);
+  });
+
+  it('returns paragraph unchanged when no tocPageNumber marks are present anywhere', () => {
+    const paragraph = {
+      type: 'paragraph',
+      content: [{ type: 'run', content: [{ type: 'text', text: 'Plain entry' }] }],
+    };
+
+    const [sanitized] = sanitizeTocContentForSchema(
+      [paragraph] as unknown as Parameters<typeof sanitizeTocContentForSchema>[0],
+      makeEditorWithoutTocMark(),
+    );
+
+    expect(sanitized).toBe(paragraph);
   });
 });

@@ -137,7 +137,7 @@ export interface ListItemDomain {
 export type ListsListResult = DiscoveryOutput<ListItemDomain>;
 
 // ---------------------------------------------------------------------------
-// Input types — kept operations
+// Input types: kept operations
 // ---------------------------------------------------------------------------
 
 export interface ListInsertInput {
@@ -151,14 +151,14 @@ export interface ListTargetInput {
 }
 
 // ---------------------------------------------------------------------------
-// Input types — new SD-1272 operations
+// Input types: new SD-1272 operations
 // ---------------------------------------------------------------------------
 
 /**
  * Create a new list from existing paragraphs.
  *
  * When `sequence.mode` is `'continuePrevious'`, `preset` and `style` are
- * not allowed — the new items inherit formatting from the previous sequence.
+ * not allowed: the new items inherit formatting from the previous sequence.
  */
 export type ListsCreateInput =
   | {
@@ -208,6 +208,16 @@ export interface ListsDetachInput {
   target: ListItemAddress;
 }
 
+/**
+ * Delete the entire list that contains the targeted list item — removes ALL
+ * sibling list items (same numbered sequence) from the document, including
+ * their text content. The target can be ANY item in the list; the list is
+ * resolved by walking adjacent list items that share the same numbering.
+ */
+export interface ListsDeleteInput {
+  target: ListItemAddress;
+}
+
 export interface ListsJoinInput {
   target: ListItemAddress;
   direction: JoinDirection;
@@ -221,6 +231,16 @@ export interface ListsCanJoinInput {
 export interface ListsSeparateInput {
   target: ListItemAddress;
   copyOverrides?: boolean;
+}
+
+export interface ListsMergeInput {
+  target: ListItemAddress;
+  direction: JoinDirection;
+}
+
+export interface ListsSplitInput {
+  target: ListItemAddress;
+  restartNumbering?: boolean;
 }
 
 export interface ListsSetLevelInput {
@@ -285,10 +305,10 @@ export interface ListTemplate {
 // SD-2025 user-facing style aliases and new types
 // ---------------------------------------------------------------------------
 
-/** Reusable list style object — alias of ListTemplate for user-facing naming. */
+/** Reusable list style object: alias of ListTemplate for user-facing naming. */
 export type ListStyle = ListTemplate;
 
-/** Reusable level style — alias of ListLevelTemplate for user-facing naming. */
+/** Reusable level style: alias of ListLevelTemplate for user-facing naming. */
 export type ListLevelStyle = ListLevelTemplate;
 
 /**
@@ -309,7 +329,7 @@ export interface ListLevelLayout {
 }
 
 // ---------------------------------------------------------------------------
-// Input types — SD-1973 formatting operations
+// Input types: SD-1973 formatting operations
 // ---------------------------------------------------------------------------
 
 export interface ListsApplyTemplateInput {
@@ -390,7 +410,7 @@ export interface ListsClearLevelOverridesInput {
 }
 
 // ---------------------------------------------------------------------------
-// Input types — SD-2025 user-facing operations
+// Input types: SD-2025 user-facing operations
 // ---------------------------------------------------------------------------
 
 export interface ListsGetStyleInput {
@@ -434,7 +454,7 @@ export interface ListsSetLevelLayoutInput {
 }
 
 // ---------------------------------------------------------------------------
-// Result types — SD-2025
+// Result types: SD-2025
 // ---------------------------------------------------------------------------
 
 export interface ListsGetStyleSuccessResult {
@@ -445,7 +465,7 @@ export interface ListsGetStyleSuccessResult {
 export type ListsGetStyleResult = ListsGetStyleSuccessResult | ListsFailureResult;
 
 // ---------------------------------------------------------------------------
-// Result types — SD-1973
+// Result types: SD-1973
 // ---------------------------------------------------------------------------
 
 export interface ListsCaptureTemplateSuccessResult {
@@ -488,6 +508,20 @@ export interface ListsSeparateSuccessResult {
   numId: number;
 }
 
+export interface ListsMergeSuccessResult {
+  success: true;
+  listId: string;
+  absorbedCount: number;
+  removedEmptyBlocks: number;
+}
+
+export interface ListsSplitSuccessResult {
+  success: true;
+  listId: string;
+  numId: number;
+  restartedAt: number | null;
+}
+
 export interface ListsDetachSuccessResult {
   success: true;
   paragraph: {
@@ -528,5 +562,15 @@ export type ListsMutateItemResult = ListsMutateItemSuccessResult | ListsFailureR
 export type ListsCreateResult = ListsCreateSuccessResult | ListsFailureResult;
 export type ListsJoinResult = ListsJoinSuccessResult | ListsFailureResult;
 export type ListsSeparateResult = ListsSeparateSuccessResult | ListsFailureResult;
+export type ListsMergeResult = ListsMergeSuccessResult | ListsFailureResult;
+export type ListsSplitResult = ListsSplitSuccessResult | ListsFailureResult;
 export type ListsDetachResult = ListsDetachSuccessResult | ListsFailureResult;
 export type ListsConvertToTextResult = ListsConvertToTextSuccessResult | ListsFailureResult;
+
+export interface ListsDeleteSuccessResult {
+  success: true;
+  /** Number of list items removed. */
+  deletedCount: number;
+}
+
+export type ListsDeleteResult = ListsDeleteSuccessResult | ListsFailureResult;

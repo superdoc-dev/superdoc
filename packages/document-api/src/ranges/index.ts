@@ -8,5 +8,7 @@ export type {
   RangeBlockPreview,
   RangePreview,
   RangeResolverAdapter,
+  ScrollIntoViewInput,
+  ScrollIntoViewOutput,
 } from './ranges.types.js';
 export { executeResolveRange } from './resolve.js';

@@ -520,7 +520,7 @@ export function resolvePostMutationTableAddress(
  * Returns a table-mutation failure result matching {@link TableMutationFailure}.
  */
 export function toTableFailure(
-  code: 'NO_OP' | 'INVALID_TARGET' | 'TARGET_NOT_FOUND' | 'CAPABILITY_UNAVAILABLE',
+  code: 'NO_OP' | 'INVALID_TARGET' | 'TARGET_NOT_FOUND' | 'CAPABILITY_UNAVAILABLE' | 'INVALID_INPUT',
   message: string,
   details?: unknown,
 ): { success: false; failure: { code: typeof code; message: string; details?: unknown } } {

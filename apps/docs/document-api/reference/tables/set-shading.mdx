@@ -28,7 +28,7 @@ Returns a TableMutationResult receipt; reports NO_OP if shading already matches.
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `color` | string | yes |  |
+| `color` | string \\| null | yes | One of: string, null |
 | `target` | TableOrCellAddress | yes | TableOrCellAddress |
 | `target.kind` | `"block"` | yes | Constant: `"block"` |
 | `target.nodeId` | string | yes |  |
@@ -38,7 +38,7 @@ Returns a TableMutationResult receipt; reports NO_OP if shading already matches.
 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
-| `color` | string | yes |  |
+| `color` | string \\| null | yes | One of: string, null |
 | `nodeId` | string | yes |  |
 
 ### Example request
@@ -132,8 +132,15 @@ When present, `result.table` is the follow-up address to reuse after this call. 
   ],
   "properties": {
     "color": {
-      "pattern": "^([0-9A-Fa-f]{6}|auto)$",
-      "type": "string"
+      "oneOf": [
+        {
+          "pattern": "^(#?([0-9A-Fa-f]{6}|[0-9A-Fa-f]{3})|auto)$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
     },
     "nodeId": {
       "type": "string"

@@ -106,9 +106,46 @@ const getCommentMarkSegmentsById = (commentId, doc, importedId) => {
 };
 
 /**
- * Convert raw mark segments into merged contiguous ranges.
- * A single commentId can appear in multiple disjoint ranges (e.g. if content is split),
- * so this returns both the raw segments and the merged ranges.
+ * Collapse raw mark segments for a single comment id into anchor ranges.
+ *
+ * Per ECMA-376 §17.13.4.3 / §17.13.4.4 / §17.13.4.5, `w:id` is the
+ * unique identifier for an annotation, and the start / end / reference
+ * triplet appears exactly once per id. A multi-paragraph comment is
+ * still ONE annotation: PM splits it into multiple text-node mark
+ * segments because the paragraph close + open structural delta sits
+ * between them, but the OOXML emission must collapse them back into
+ * a single `(commentRangeStart, commentRangeEnd)` pair covering the
+ * full extent.
+ *
+ * Verified against Word: a comment that crosses a paragraph break
+ * produces one `<w:commentRangeStart w:id="…"/>` at the first
+ * commented position and one `<w:commentRangeEnd w:id="…"/>` after
+ * the last commented position, with the paragraph break sitting
+ * inside the range.
+ *
+ * Two flavors of "multiple segments" need to be told apart:
+ *
+ *   1. Paragraph-crossing: segments separated only by a structural
+ *      boundary (paragraph close + open). No uncommented text
+ *      between them. Logical extent is one contiguous range; merge.
+ *
+ *   2. Truly disjoint: segments separated by uncommented text. Most
+ *      common cause: a user copy-pasted commented content into a new
+ *      location; PM preserves the `commentMark` attrs (the mark has
+ *      no clipboard hook), so the same `commentId` ends up on
+ *      anchored regions that have unrelated content between them.
+ *      The two regions are logically two annotations that happen to
+ *      share an id; merging them into one envelope would expand the
+ *      comment's scope to cover the unrelated content. Keep them as
+ *      separate ranges instead — the resulting OOXML still has a
+ *      duplicate id (which a follow-up should remap to fresh ids),
+ *      but the per-range scope is preserved correctly.
+ *
+ * The previous adjacency-based merge (`seg.from <= active.to`)
+ * conflated paragraph-crossing with disjoint and produced N pairs
+ * for an N-paragraph contiguous comment. The fix walks the doc
+ * between consecutive segments and merges only when the gap carries
+ * no text content.
  *
  * @param {string} commentId The comment ID to match
  * @param {string} [importedId] The imported comment ID to match
@@ -119,33 +156,48 @@ const getCommentMarkRangesById = (commentId, doc, importedId) => {
   const segments = getCommentMarkSegmentsById(commentId, doc, importedId);
   if (!segments.length) return { segments, ranges: [] };
 
+  // Walk segments in document order, merging adjacent ones whenever
+  // the gap between them carries no text content. PM's `textBetween`
+  // walks every text leaf in the range and concatenates the text
+  // (block separators omitted by passing empty strings), so a
+  // paragraph close + open contributes nothing and a paragraph of
+  // uncommented text contributes its full content.
+  const sorted = [...segments].sort((a, b) => a.from - b.from);
   const ranges = [];
-  let active = null;
-
-  segments.forEach((seg) => {
-    if (!active) {
-      active = {
-        from: seg.from,
-        to: seg.to,
-        internal: !!seg.attrs?.internal,
-      };
-      return;
-    }
-
+  let active = {
+    from: sorted[0].from,
+    to: sorted[0].to,
+    internal: !!sorted[0].attrs?.internal,
+  };
+  for (let i = 1; i < sorted.length; i += 1) {
+    const seg = sorted[i];
     if (seg.from <= active.to) {
-      active.to = Math.max(active.to, seg.to);
-      return;
+      // Adjacent or overlapping in PM positions: definitely the
+      // same logical region (e.g. two text nodes split by an inline
+      // mark boundary).
+      if (seg.to > active.to) active.to = seg.to;
+      continue;
     }
-
+    const gapHasText = doc.textBetween(active.to, seg.from, '', '').length > 0;
+    if (!gapHasText) {
+      // Structural boundary only (paragraph break, inline node
+      // boundary). Same logical annotation across a paragraph
+      // crossing — merge.
+      active.to = seg.to;
+      continue;
+    }
+    // Real gap of uncommented content. Two logically distinct
+    // anchored regions sharing an id (paste-preserved, etc.). Keep
+    // them as separate ranges so the resolved range doesn't expand
+    // over unrelated content.
     ranges.push(active);
     active = {
       from: seg.from,
       to: seg.to,
       internal: !!seg.attrs?.internal,
     };
-  });
-
-  if (active) ranges.push(active);
+  }
+  ranges.push(active);
   return { segments, ranges };
 };
 
@@ -185,6 +237,136 @@ export const resolveCommentById = ({ commentId, importedId, state, tr, dispatch 
         tr.insert(from, startType.create({ 'w:id': commentId, internal }));
       });
   }
+
+  dispatch(tr);
+  return true;
+};
+
+/**
+ * Collect all `commentRangeStart` / `commentRangeEnd` anchor nodes for a
+ * given comment id and pair them up into ranges in document order.
+ *
+ * Handles split / multi-segment anchors the same way `resolveCommentById`
+ * inserts them: starts and ends are matched by document order so a
+ * comment that originally spanned multiple disjoint inline ranges
+ * round-trips as a sequence of `(start, end)` pairs. Mismatched counts
+ * (extra start with no matching end, or vice versa) are dropped to
+ * avoid leaving the doc in a partially-anchored state — the caller
+ * receives the well-formed pairs only.
+ *
+ * @param {string} commentId The canonical comment ID (matches `w:id` attr)
+ * @param {string} [importedId] Optional imported alias to also match
+ * @param {import('prosemirror-model').Node} doc The ProseMirror document
+ * @returns {{ pairs: Array<{ from: number; to: number; internal: boolean }>, anchorNodePositions: number[] }}
+ */
+const getCommentRangeAnchorsById = (commentId, doc, importedId) => {
+  /** @type {Array<{ pos: number; type: 'start' | 'end'; internal: boolean }>} */
+  const anchors = [];
+
+  doc.descendants((node, pos) => {
+    const typeName = node.type?.name;
+    if (typeName !== 'commentRangeStart' && typeName !== 'commentRangeEnd') return;
+    const wid = node.attrs?.['w:id'];
+    if (wid !== commentId && (!importedId || wid !== importedId)) return;
+    anchors.push({
+      pos,
+      type: typeName === 'commentRangeStart' ? 'start' : 'end',
+      internal: !!node.attrs?.internal,
+    });
+  });
+
+  /** @type {Array<{ from: number; to: number; internal: boolean }>} */
+  const pairs = [];
+  /** @type {Array<{ pos: number; internal: boolean }>} */
+  const stack = [];
+  for (const anchor of anchors) {
+    if (anchor.type === 'start') {
+      stack.push({ pos: anchor.pos, internal: anchor.internal });
+      continue;
+    }
+    const opener = stack.shift();
+    if (!opener) continue;
+    pairs.push({ from: opener.pos, to: anchor.pos, internal: opener.internal });
+  }
+
+  return {
+    pairs,
+    anchorNodePositions: anchors.map((a) => a.pos),
+  };
+};
+
+/**
+ * Reopen a previously-resolved comment by removing its
+ * `commentRangeStart` / `commentRangeEnd` anchor nodes and re-inserting
+ * a live `comment` mark across the same range(s). Symmetric inverse of
+ * {@link resolveCommentById}.
+ *
+ * The mark is re-inserted with the original `(commentId, importedId,
+ * internal)` attrs so subsequent export, search, and entity-store
+ * lookups see the same shape as a never-resolved comment. The caller
+ * supplies `importedId` and `internal` because they aren't fully
+ * recoverable from the doc alone (`commentRangeStart` keeps `internal`
+ * but `importedId` lives in the entity store, and the public `comments.patch`
+ * input doesn't take it).
+ *
+ * Idempotent on the no-op path: if no matching anchor nodes exist,
+ * returns `false` without dispatching.
+ *
+ * @param {Object} param0
+ * @param {string} param0.commentId The canonical comment ID
+ * @param {string} [param0.importedId] The imported alias (matched against `w:id` for legacy docs)
+ * @param {boolean} [param0.internal] Override for the restored mark's `internal` flag — falls back to the value stamped on `commentRangeStart` so import-resolved comments keep their flag
+ * @param {import('prosemirror-state').EditorState} param0.state Current editor state
+ * @param {import('prosemirror-state').Transaction} param0.tr Current transaction
+ * @param {Function} param0.dispatch The dispatch function
+ * @returns {boolean} True when the anchor nodes existed and the mark was restored
+ */
+export const reopenCommentById = ({ commentId, importedId, internal, state, tr, dispatch }) => {
+  const { schema } = state;
+  const markType = schema.marks?.[CommentMarkName];
+  if (!markType) return false;
+
+  const { pairs, anchorNodePositions } = getCommentRangeAnchorsById(commentId, state.doc, importedId);
+  if (!pairs.length) return false;
+
+  // Re-add the comment mark first, working in *original* document
+  // coordinates. Because subsequent deletes will shift positions, we
+  // map the inserts forward through `tr.mapping` after each step. The
+  // pairs array is already in document order; restoring the mark from
+  // first to last keeps mappings monotonic.
+  pairs.forEach(({ from, to, internal: anchorInternal }) => {
+    const mappedFrom = tr.mapping.map(from);
+    const mappedTo = tr.mapping.map(to);
+    if (mappedTo <= mappedFrom) return;
+    const attrs = {
+      commentId,
+      importedId,
+      internal: typeof internal === 'boolean' ? internal : anchorInternal,
+    };
+    // The mark must cover the inline content *between* the anchor
+    // nodes, not the anchor nodes themselves. `commentRangeStart` sits
+    // at `from` (one node-size wide) and `commentRangeEnd` sits at
+    // `to`. Adding the mark from `from + 1` to `to` covers exactly the
+    // text that was originally marked before resolve.
+    tr.addMark(mappedFrom + 1, mappedTo, markType.create(attrs));
+  });
+
+  // Delete the anchor nodes in descending order so earlier deletes
+  // don't shift later positions. `getCommentRangeAnchorsById` returns
+  // raw doc-positions; map each through `tr.mapping` so previous
+  // mark insertions are accounted for, then sort the *mapped*
+  // positions descending.
+  const mappedAnchorPositions = anchorNodePositions.map((pos) => tr.mapping.map(pos)).sort((a, b) => b - a);
+  mappedAnchorPositions.forEach((pos) => {
+    // Each anchor node is one node-size wide. Recompute the node size
+    // defensively in case mapping collapsed the range to zero width
+    // (e.g. concurrent delete elsewhere).
+    const node = tr.doc.nodeAt(pos);
+    if (!node) return;
+    const typeName = node.type?.name;
+    if (typeName !== 'commentRangeStart' && typeName !== 'commentRangeEnd') return;
+    tr.delete(pos, pos + node.nodeSize);
+  });
 
   dispatch(tr);
   return true;

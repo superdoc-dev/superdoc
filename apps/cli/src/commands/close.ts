@@ -42,9 +42,12 @@ export async function runClose(tokens: string[], context: CommandContext): Promi
         );
       }
 
-      // Only read/clear the project-global active-session pointer in oneshot
-      // (CLI) mode. Host mode must never touch this file — it causes
-      // cross-document contamination between SDK clients.
+      // AIDEV-NOTE: the project-global active-session pointer may
+      // only be read or cleared in oneshot (CLI) mode. Host mode must
+      // never touch this file: multiple SDK clients can share one
+      // project root, and any read/clear here cross-contaminates their
+      // sessions. Mirror the same guard in open.ts when changing this
+      // rule.
       let wasDefaultSession = false;
       if (context.executionMode !== 'host') {
         const activeSessionId = await getActiveSessionId();

@@ -1,0 +1,132 @@
+# Advances docs-stable to the current stable HEAD (or a chosen SHA).
+#
+# Auto path (workflow_run): release-stable.yml is the orchestrator that
+# releases superdoc on stable, so we trigger off its completion and gate on
+# whether a real v* tag appeared between the triggering run's head_sha and
+# origin/stable. Tools-only runs (CLI/SDK/MCP without a superdoc release)
+# leave docs-stable unchanged - no new v* tag, no push.
+#
+# We accept conclusion: failure as well as success because the orchestrator
+# runs chains independently. A tools-chain failure that follows a successful
+# superdoc release should still promote docs - the v* tag is the source of
+# truth, not the workflow's overall conclusion. Cancelled and skipped runs
+# are excluded since they may not have reached semantic-release at all.
+#
+# Manual path (workflow_dispatch): for cases the auto path cannot cover,
+# e.g. a docs-only refresh between SuperDoc versions, or recovering from
+# a missed promotion. Defaults to pushing the current origin/stable head;
+# an optional `sha` input promotes a specific commit instead.
+name: 🚀 Promote stable docs
+
+on:
+  workflow_run:
+    workflows:
+      - "📦 Release stable tooling (CLI/SDK/MCP)"
+    types:
+      - completed
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: 'Commit SHA to promote to docs-stable. Leave empty to promote the current origin/stable head.'
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: promote-stable-docs
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (
+        github.event.workflow_run.head_branch == 'stable' &&
+        (github.event.workflow_run.conclusion == 'success' || github.event.workflow_run.conclusion == 'failure')
+      )
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Generate token
+        id: generate_token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          token: ${{ steps.generate_token.outputs.token }}
+
+      # Auto path: gate on a real SuperDoc release between the triggering
+      # run's head_sha and origin/stable. A no-op semantic-release run must
+      # not advance docs-stable.
+      #
+      # The tag alone is not sufficient. @semantic-release/git pushes the v*
+      # tag during its prepare phase, before publish-superdoc.cjs runs. If
+      # publish fails and the orchestrator's recovery does not republish, the
+      # tag exists on origin without corresponding npm tarballs. In that case
+      # docs-stable would point at code that consumers cannot install. Verify
+      # both unscoped (`superdoc`) and scoped (`@harbour-enterprises/superdoc`)
+      # publishes are present at the released version before promoting.
+      - name: Detect SuperDoc release
+        if: github.event_name == 'workflow_run'
+        id: detect
+        env:
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          git fetch origin stable --tags --force
+
+          tags_at_stable=$(git tag --merged origin/stable --list 'v[0-9]*' | sort -u)
+          tags_at_head=$(git tag --merged "${HEAD_SHA}" --list 'v[0-9]*' | sort -u)
+          new_tags=$(comm -23 <(echo "${tags_at_stable}") <(echo "${tags_at_head}"))
+
+          if [ -z "${new_tags}" ]; then
+            echo "released=false" >> "${GITHUB_OUTPUT}"
+            echo "No new v* tag between ${HEAD_SHA} and origin/stable — release-superdoc was a no-op."
+          else
+            for tag in ${new_tags}; do
+              version="${tag#v}"
+              if ! npm view "superdoc@${version}" version >/dev/null 2>&1; then
+                echo "released=false" >> "${GITHUB_OUTPUT}"
+                echo "Tag ${tag} exists but superdoc@${version} is not on npm — orchestrator publish did not complete; docs-stable will not advance."
+                exit 0
+              fi
+              if ! npm view "@harbour-enterprises/superdoc@${version}" version >/dev/null 2>&1; then
+                echo "released=false" >> "${GITHUB_OUTPUT}"
+                echo "Tag ${tag} exists but @harbour-enterprises/superdoc@${version} is not on npm — orchestrator publish did not complete; docs-stable will not advance."
+                exit 0
+              fi
+            done
+
+            echo "released=true" >> "${GITHUB_OUTPUT}"
+            echo "New SuperDoc tag(s) verified on npm: $(echo "${new_tags}" | tr '\n' ' ')"
+          fi
+
+      - name: Push docs-stable (auto)
+        if: github.event_name == 'workflow_run' && steps.detect.outputs.released == 'true'
+        run: git push origin "refs/remotes/origin/stable:refs/heads/docs-stable"
+
+      # Manual path: trust the operator. Promote either the requested SHA
+      # or the current origin/stable head. The push is rejected by GitHub
+      # if it isn't a fast-forward, so this stays safe even on operator
+      # error - no `--force`.
+      - name: Push docs-stable (manual)
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          REQUESTED_SHA: ${{ inputs.sha }}
+        run: |
+          set -euo pipefail
+          git fetch origin stable --tags --force
+
+          if [ -n "${REQUESTED_SHA}" ]; then
+            target="${REQUESTED_SHA}"
+          else
+            target=$(git rev-parse origin/stable)
+          fi
+
+          echo "Promoting ${target} to docs-stable."
+          git push origin "${target}:refs/heads/docs-stable"

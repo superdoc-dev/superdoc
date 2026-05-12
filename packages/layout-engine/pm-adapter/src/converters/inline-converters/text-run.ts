@@ -37,6 +37,7 @@ export function textNodeToRun({
   themeColors,
   enableComments,
   runProperties,
+  inlineRunProperties,
   converterContext,
 }: InlineConverterParams): TextRun {
   let run: TextRun = {
@@ -65,7 +66,7 @@ export function textNodeToRun({
   if (sdtMetadata) {
     run.sdt = sdtMetadata;
   }
-  run = applyInlineRunProperties(run, runProperties, converterContext);
+  run = applyInlineRunProperties(run, runProperties, converterContext, inlineRunProperties);
 
   return run;
 }

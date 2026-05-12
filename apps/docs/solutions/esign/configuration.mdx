@@ -281,7 +281,7 @@ Zoom works with both `print` and `web` layout modes. In `print` mode, zoom is ap
 
 ## PDF support
 
-Render PDF documents in eSign by passing the `pdf` prop. This forwards the PDF module config to SuperDoc internally. The component handles format detection automatically — when `pdf` is provided with a URL source, it tells SuperDoc to use the PDF renderer.
+Render PDF documents in eSign by passing the `pdf` prop. This forwards the PDF module config to SuperDoc internally. The component handles format detection automatically: when `pdf` is provided with a URL source, it tells SuperDoc to use the PDF renderer.
 
 ```jsx
 import * as pdfjsLib from 'pdfjs-dist/build/pdf.mjs';
@@ -317,7 +317,7 @@ const pdfWorkerUrl = new URL(
   }}
   download={{ label: "Download PDF" }}
   onDownload={async (data) => {
-    // Browser-side download — no server needed
+    // Browser-side download: no server needed
     const response = await fetch(data.documentSource);
     const blob = await response.blob();
     const url = URL.createObjectURL(blob);
@@ -339,7 +339,7 @@ const pdfWorkerUrl = new URL(
 | `workerSrc` | `string` | PDF.js worker source URL (falls back to CDN when omitted) |
 | `setWorker` | `boolean` | Whether to auto-configure the pdf.js worker |
 | `textLayer` | `boolean` | Enable text layer for text selection (default: `false`) |
-| `outputScale` | `number` | Canvas render scale — higher values produce sharper output |
+| `outputScale` | `number` | Canvas render scale: higher values produce sharper output |
 
 ### How it works
 

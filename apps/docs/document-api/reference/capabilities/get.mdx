@@ -1610,6 +1610,11 @@ _No fields._
 | `operations.lists.create.dryRun` | boolean | yes |  |
 | `operations.lists.create.reasons` | enum[] | no |  |
 | `operations.lists.create.tracked` | boolean | yes |  |
+| `operations.lists.delete` | object | yes |  |
+| `operations.lists.delete.available` | boolean | yes |  |
+| `operations.lists.delete.dryRun` | boolean | yes |  |
+| `operations.lists.delete.reasons` | enum[] | no |  |
+| `operations.lists.delete.tracked` | boolean | yes |  |
 | `operations.lists.detach` | object | yes |  |
 | `operations.lists.detach.available` | boolean | yes |  |
 | `operations.lists.detach.dryRun` | boolean | yes |  |
@@ -1645,6 +1650,11 @@ _No fields._
 | `operations.lists.list.dryRun` | boolean | yes |  |
 | `operations.lists.list.reasons` | enum[] | no |  |
 | `operations.lists.list.tracked` | boolean | yes |  |
+| `operations.lists.merge` | object | yes |  |
+| `operations.lists.merge.available` | boolean | yes |  |
+| `operations.lists.merge.dryRun` | boolean | yes |  |
+| `operations.lists.merge.reasons` | enum[] | no |  |
+| `operations.lists.merge.tracked` | boolean | yes |  |
 | `operations.lists.outdent` | object | yes |  |
 | `operations.lists.outdent.available` | boolean | yes |  |
 | `operations.lists.outdent.dryRun` | boolean | yes |  |
@@ -1735,6 +1745,11 @@ _No fields._
 | `operations.lists.setValue.dryRun` | boolean | yes |  |
 | `operations.lists.setValue.reasons` | enum[] | no |  |
 | `operations.lists.setValue.tracked` | boolean | yes |  |
+| `operations.lists.split` | object | yes |  |
+| `operations.lists.split.available` | boolean | yes |  |
+| `operations.lists.split.dryRun` | boolean | yes |  |
+| `operations.lists.split.reasons` | enum[] | no |  |
+| `operations.lists.split.tracked` | boolean | yes |  |
 | `operations.markdownToFragment` | object | yes |  |
 | `operations.markdownToFragment.available` | boolean | yes |  |
 | `operations.markdownToFragment.dryRun` | boolean | yes |  |
@@ -1895,6 +1910,11 @@ _No fields._
 | `operations.sections.setVerticalAlign.dryRun` | boolean | yes |  |
 | `operations.sections.setVerticalAlign.reasons` | enum[] | no |  |
 | `operations.sections.setVerticalAlign.tracked` | boolean | yes |  |
+| `operations.selection.current` | object | yes |  |
+| `operations.selection.current.available` | boolean | yes |  |
+| `operations.selection.current.dryRun` | boolean | yes |  |
+| `operations.selection.current.reasons` | enum[] | no |  |
+| `operations.selection.current.tracked` | boolean | yes |  |
 | `operations.styles.apply` | object | yes |  |
 | `operations.styles.apply.available` | boolean | yes |  |
 | `operations.styles.apply.dryRun` | boolean | yes |  |
@@ -1915,6 +1935,11 @@ _No fields._
 | `operations.tables.applyBorderPreset.dryRun` | boolean | yes |  |
 | `operations.tables.applyBorderPreset.reasons` | enum[] | no |  |
 | `operations.tables.applyBorderPreset.tracked` | boolean | yes |  |
+| `operations.tables.applyPreset` | object | yes |  |
+| `operations.tables.applyPreset.available` | boolean | yes |  |
+| `operations.tables.applyPreset.dryRun` | boolean | yes |  |
+| `operations.tables.applyPreset.reasons` | enum[] | no |  |
+| `operations.tables.applyPreset.tracked` | boolean | yes |  |
 | `operations.tables.applyStyle` | object | yes |  |
 | `operations.tables.applyStyle.available` | boolean | yes |  |
 | `operations.tables.applyStyle.dryRun` | boolean | yes |  |
@@ -2065,6 +2090,11 @@ _No fields._
 | `operations.tables.setCellSpacing.dryRun` | boolean | yes |  |
 | `operations.tables.setCellSpacing.reasons` | enum[] | no |  |
 | `operations.tables.setCellSpacing.tracked` | boolean | yes |  |
+| `operations.tables.setCellText` | object | yes |  |
+| `operations.tables.setCellText.available` | boolean | yes |  |
+| `operations.tables.setCellText.dryRun` | boolean | yes |  |
+| `operations.tables.setCellText.reasons` | enum[] | no |  |
+| `operations.tables.setCellText.tracked` | boolean | yes |  |
 | `operations.tables.setColumnWidth` | object | yes |  |
 | `operations.tables.setColumnWidth.available` | boolean | yes |  |
 | `operations.tables.setColumnWidth.dryRun` | boolean | yes |  |
@@ -3831,6 +3861,11 @@ _No fields._
       "dryRun": true,
       "tracked": false
     },
+    "lists.delete": {
+      "available": true,
+      "dryRun": true,
+      "tracked": false
+    },
     "lists.detach": {
       "available": true,
       "dryRun": true,
@@ -3864,6 +3899,11 @@ _No fields._
     "lists.list": {
       "available": true,
       "dryRun": false,
+      "tracked": false
+    },
+    "lists.merge": {
+      "available": true,
+      "dryRun": true,
       "tracked": false
     },
     "lists.outdent": {
@@ -3952,6 +3992,11 @@ _No fields._
       "tracked": false
     },
     "lists.setValue": {
+      "available": true,
+      "dryRun": true,
+      "tracked": false
+    },
+    "lists.split": {
       "available": true,
       "dryRun": true,
       "tracked": false
@@ -4116,6 +4161,11 @@ _No fields._
       "dryRun": true,
       "tracked": false
     },
+    "selection.current": {
+      "available": true,
+      "dryRun": false,
+      "tracked": false
+    },
     "styles.apply": {
       "available": true,
       "dryRun": true,
@@ -4132,6 +4182,11 @@ _No fields._
       "tracked": false
     },
     "tables.applyBorderPreset": {
+      "available": true,
+      "dryRun": true,
+      "tracked": false
+    },
+    "tables.applyPreset": {
       "available": true,
       "dryRun": true,
       "tracked": false
@@ -4282,6 +4337,11 @@ _No fields._
       "tracked": false
     },
     "tables.setCellSpacing": {
+      "available": true,
+      "dryRun": true,
+      "tracked": false
+    },
+    "tables.setCellText": {
       "available": true,
       "dryRun": true,
       "tracked": false
@@ -15474,6 +15534,41 @@ _No fields._
           ],
           "type": "object"
         },
+        "lists.delete": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
         "lists.detach": {
           "additionalProperties": false,
           "properties": {
@@ -15685,6 +15780,41 @@ _No fields._
           "type": "object"
         },
         "lists.list": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "lists.merge": {
           "additionalProperties": false,
           "properties": {
             "available": {
@@ -16315,6 +16445,41 @@ _No fields._
           "type": "object"
         },
         "lists.setValue": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "lists.split": {
           "additionalProperties": false,
           "properties": {
             "available": {
@@ -17469,6 +17634,41 @@ _No fields._
           ],
           "type": "object"
         },
+        "selection.current": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
         "styles.apply": {
           "additionalProperties": false,
           "properties": {
@@ -17575,6 +17775,41 @@ _No fields._
           "type": "object"
         },
         "tables.applyBorderPreset": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "tables.applyPreset": {
           "additionalProperties": false,
           "properties": {
             "available": {
@@ -18625,6 +18860,41 @@ _No fields._
           "type": "object"
         },
         "tables.setCellSpacing": {
+          "additionalProperties": false,
+          "properties": {
+            "available": {
+              "type": "boolean"
+            },
+            "dryRun": {
+              "type": "boolean"
+            },
+            "reasons": {
+              "items": {
+                "enum": [
+                  "COMMAND_UNAVAILABLE",
+                  "HELPER_UNAVAILABLE",
+                  "OPERATION_UNAVAILABLE",
+                  "TRACKED_MODE_UNAVAILABLE",
+                  "DRY_RUN_UNAVAILABLE",
+                  "NAMESPACE_UNAVAILABLE",
+                  "STYLES_PART_MISSING",
+                  "COLLABORATION_ACTIVE"
+                ]
+              },
+              "type": "array"
+            },
+            "tracked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "available",
+            "tracked",
+            "dryRun"
+          ],
+          "type": "object"
+        },
+        "tables.setCellText": {
           "additionalProperties": false,
           "properties": {
             "available": {
@@ -19716,11 +19986,14 @@ _No fields._
         "lists.create",
         "lists.attach",
         "lists.detach",
+        "lists.delete",
         "lists.indent",
         "lists.outdent",
         "lists.join",
         "lists.canJoin",
         "lists.separate",
+        "lists.merge",
+        "lists.split",
         "lists.setLevel",
         "lists.setValue",
         "lists.continuePrevious",
@@ -19756,6 +20029,7 @@ _No fields._
         "trackChanges.decide",
         "query.match",
         "ranges.resolve",
+        "selection.current",
         "mutations.preview",
         "mutations.apply",
         "capabilities.get",
@@ -19782,6 +20056,7 @@ _No fields._
         "tables.unmergeCells",
         "tables.splitCell",
         "tables.setCellProperties",
+        "tables.setCellText",
         "tables.sort",
         "tables.setAltText",
         "tables.setStyle",
@@ -19799,6 +20074,7 @@ _No fields._
         "tables.applyStyle",
         "tables.setBorders",
         "tables.setTableOptions",
+        "tables.applyPreset",
         "tables.get",
         "tables.getCells",
         "tables.getProperties",

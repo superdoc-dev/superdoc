@@ -1,130 +1,59 @@
 ---
-title: Theming
+title: Theme SuperDoc
 sidebarTitle: Theming
-keywords: "theming, css variables, custom theme, dark mode, design tokens, branding, css customization, createTheme, styling"
+keywords: "theming, css variables, custom theme, dark mode, design tokens, branding, createTheme"
 ---
 
-Set your brand colors in JavaScript and every SuperDoc component updates — toolbar, comments, dropdowns, everything.
+SuperDoc's UI is styled with CSS variables. `createTheme()` generates a class name that sets those variables; you apply the class to `<html>` and every SuperDoc surface picks it up: toolbar, comments, dropdowns, context menu, popovers.
+
+## The fast path
 
 ```javascript
-import { createTheme } from 'superdoc';
+import { SuperDoc, createTheme } from 'superdoc';
 
 const theme = createTheme({
-  colors: { action: '#6366f1', bg: '#ffffff', text: '#1e293b', border: '#e2e8f0' },
+  colors: {
+    action: '#1355FF', // buttons, links, active states
+    bg: '#ffffff',
+    text: '#1f2937',
+    border: '#d1d5db',
+  },
   font: 'Inter, sans-serif',
+  radius: '6px',
 });
 
 document.documentElement.classList.add(theme);
+
+new SuperDoc({ selector: '#editor', document: 'contract.docx' });
 ```
 
-Five properties theme the entire UI.
+`theme` is a className string. Apply it to `<html>` (not the editor container) so popovers, dropdowns, and the comments sidebar all pick up the same tokens. Some of those surfaces render outside the editor element.
 
-## `createTheme()`
+## What themes affect
 
-Pass a config object, get back a CSS class name. Apply it to `<html>`.
+Toolbar buttons, comments sidebar, dropdowns, context menu, search bar, dialog surfaces. Any chrome SuperDoc renders. The document content itself (paragraphs, headings, tables) renders with its own styles from the DOCX.
+
+## When to drop to CSS variables
+
+`createTheme()` covers the common case. For component-level overrides, use the `vars` option or set raw `--sd-*` variables in your stylesheet:
 
 ```javascript
-import { createTheme } from 'superdoc';
-
 const theme = createTheme({
-  name: 'my-brand',               // optional — generates sd-theme-my-brand
-  font: 'Inter, sans-serif',
-  radius: '8px',
-  colors: {
-    action: '#6366f1',             // buttons, links, active states
-    actionHover: '#4f46e5',
-    bg: '#ffffff',                 // panels, cards, dropdowns
-    text: '#1e293b',               // primary text
-    textMuted: '#64748b',          // secondary text
-    border: '#e2e8f0',             // all borders
-  },
-  // Escape hatch — any CSS variable
+  colors: { action: '#1355FF', bg: '#ffffff', text: '#1f2937', border: '#d1d5db' },
   vars: {
     '--sd-ui-toolbar-bg': '#f8fafc',
-    '--sd-ui-comments-card-bg': '#f0f0ff',
+    '--sd-comments-resolved-bg': '#ecfdf5',
   },
 });
-
-document.documentElement.classList.add(theme);
 ```
 
-`colors` controls the semantic tier — every component inherits from it. The `vars` escape hatch lets you set any `--sd-*` CSS variable directly for fine-grained control.
+## Common pitfalls
 
-## SSR support
+- **Theme class on the wrong element.** Add it to `document.documentElement` (the `<html>` tag), not the editor's container. Popovers render at the body level and won't pick up the theme otherwise.
+- **CSP environments.** `createTheme()` injects a `<style>` tag. If you serve with a strict CSP, use `buildTheme()` instead: it returns `{ className, css }` so you can inject the CSS yourself with the right nonce.
 
-Use `buildTheme()` to get the raw CSS string for server-side rendering:
+## Where to next
 
-```javascript
-import { buildTheme } from 'superdoc';
-
-const { className, css } = buildTheme({
-  colors: { action: '#6366f1', bg: '#ffffff', text: '#1e293b' },
-});
-
-const html = `
-  <html class="${className}">
-    <head><style>${css}</style></head>
-    <body><div id="editor"></div></body>
-  </html>
-`;
-```
-
-## Preset themes
-
-Three presets ship out of the box. Add the class to `<html>` — some SuperDoc elements (popovers, dropdowns) are appended to `<body>`, so they need to inherit from `<html>`.
-
-<CardGroup cols={3}>
-  <Card title="Docs" icon="google">
-    Google Docs aesthetic. Clean blues, compact toolbar, subtle shadows.
-    ```html
-    <html class="sd-theme-docs">
-    ```
-  </Card>
-  <Card title="Word" icon="microsoft">
-    Microsoft Word aesthetic. Fluent-style borders and surfaces.
-    ```html
-    <html class="sd-theme-word">
-    ```
-  </Card>
-  <Card title="Blueprint" icon="compass-drafting">
-    High-contrast technical preset. Teal accents, structured layout.
-    ```html
-    <html class="sd-theme-blueprint">
-    ```
-  </Card>
-</CardGroup>
-
-## CSS variables (advanced)
-
-`createTheme()` generates CSS variables under the hood. You can also set them directly:
-
-```css
-:root {
-  --sd-ui-action: #6366f1;
-  --sd-ui-bg: #ffffff;
-  --sd-ui-text: #1e293b;
-  --sd-ui-border: #e2e8f0;
-  --sd-ui-font-family: Inter, sans-serif;
-}
-```
-
-See the [full variable reference](/guides/general/custom-themes#variable-reference) for every token.
-
-## Next steps
-
-<CardGroup cols={2}>
-  <Card
-    title="Custom themes guide"
-    icon="palette"
-    href="/guides/general/custom-themes"
-  >
-    Full API reference, dark theme starter, all CSS variables by component.
-  </Card>
-  <Card
-    title="Migration guide"
-    icon="arrow-right-arrow-left"
-    href="/guides/migration/css-variables"
-  >
-    Old-to-new variable name mapping. Backward compatibility details.
-  </Card>
-</CardGroup>
+- [Editor > Theming > Overview](/editor/theming/overview): the full theming guide
+- [Editor > Theming > Custom themes](/editor/theming/custom-themes): every `createTheme()` option and CSS variable
+- [Editor > Theming > CSS variable migration](/editor/theming/css-variable-migration): old → new token mapping for v1

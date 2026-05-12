@@ -2,7 +2,7 @@
 
 Agentic document editing using the Bedrock Converse API.
 
-**Docs:** [Integrations](https://docs.superdoc.dev/document-engine/ai-agents/integrations)
+**Docs:** [Integrations](https://docs.superdoc.dev/ai/agents/integrations)
 
 ## Prerequisites
 

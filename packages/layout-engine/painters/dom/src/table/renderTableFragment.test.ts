@@ -103,6 +103,38 @@ describe('renderTableFragment', () => {
     };
   });
 
+  it('writes PM range attributes on the table fragment wrapper', () => {
+    const fragment = {
+      ...createTestTableFragment(),
+      pmStart: 12,
+      pmEnd: 34,
+    };
+    const measure = createTestTableMeasure();
+
+    const element = renderTableFragment({
+      doc,
+      fragment,
+      context,
+      block: createTestTableBlock(),
+      measure,
+      cellSpacingPx: 0,
+      effectiveColumnWidths: measure.columnWidths,
+      renderLine: () => doc.createElement('div'),
+      applyFragmentFrame: () => {
+        // The table renderer owns PM range metadata for table wrappers.
+      },
+      applySdtDataset: () => {
+        // Not relevant to this metadata test.
+      },
+      applyStyles: () => {
+        // Not relevant to this metadata test.
+      },
+    });
+
+    expect(element.dataset.pmStart).toBe('12');
+    expect(element.dataset.pmEnd).toBe('34');
+  });
+
   describe('merged-cell border ownership', () => {
     it('renders the outer right border for a merged header cell in collapsed mode', () => {
       const block: TableBlock = {

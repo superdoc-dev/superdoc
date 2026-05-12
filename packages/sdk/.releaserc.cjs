@@ -1,5 +1,9 @@
 /* eslint-env node */
 const path = require('path');
+const {
+  createCommitAnalyzer,
+  createReleaseNotesGenerator,
+} = require('../../scripts/semantic-release/strict-breaking-parser.cjs');
 
 /*
  * Commit filter: SDK depends on CLI, document-api, and all engine packages.
@@ -13,7 +17,6 @@ require('../../scripts/semantic-release/patch-commit-filter.cjs')([
   'packages/superdoc',
   'packages/super-editor',
   'packages/layout-engine',
-  'packages/ai',
   'packages/word-layout',
   'packages/preset-geometry',
   'shared',
@@ -28,20 +31,16 @@ const branches = [
   { name: 'main', prerelease: 'next', channel: 'next' },
 ];
 
-const isPrerelease = branches.some(
-  (b) => typeof b === 'object' && b.name === branch && b.prerelease,
-);
+const isPrerelease = branches.some((b) => typeof b === 'object' && b.name === branch && b.prerelease);
 
 // Use AI-powered notes for stable releases, conventional generator for prereleases
-const notesPlugin = isPrerelease
-  ? '@semantic-release/release-notes-generator'
-  : ['semantic-release-ai-notes', { style: 'concise' }];
+const notesPlugin = isPrerelease ? createReleaseNotesGenerator() : ['semantic-release-ai-notes', { style: 'concise' }];
 
 const config = {
   branches,
   tagFormat: 'sdk-v${version}',
   plugins: [
-    '@semantic-release/commit-analyzer',
+    createCommitAnalyzer(),
     notesPlugin,
     // Version bump only — actual publishing is handled by exec
     ['@semantic-release/npm', { npmPublish: false }],
@@ -66,15 +65,11 @@ const config = {
 
 // In CI (main/stable), PyPI is handled by the workflow via OIDC — keep --npm-only.
 // For local stable releases, sdk-release-publish.mjs uploads to PyPI via twine.
-const execPlugin = config.plugins.find(
-  (p) => Array.isArray(p) && p[0] === '@semantic-release/exec',
-);
+const execPlugin = config.plugins.find((p) => Array.isArray(p) && p[0] === '@semantic-release/exec');
 if (isCiRelease || isPrerelease) {
-  execPlugin[1].publishCmd =
-    'node scripts/sdk-release-publish.mjs --tag ${nextRelease.channel || "latest"} --npm-only';
+  execPlugin[1].publishCmd = 'node scripts/sdk-release-publish.mjs --tag ${nextRelease.channel || "latest"} --npm-only';
 } else {
-  execPlugin[1].publishCmd =
-    'node scripts/sdk-release-publish.mjs --tag ${nextRelease.channel || "latest"}';
+  execPlugin[1].publishCmd = 'node scripts/sdk-release-publish.mjs --tag ${nextRelease.channel || "latest"}';
 }
 
 if (!isPrerelease) {

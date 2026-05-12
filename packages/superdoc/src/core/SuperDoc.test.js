@@ -314,6 +314,99 @@ describe('SuperDoc core', () => {
     expect(instance.scrollToComment('nonexistent-id')).toBe(false);
   });
 
+  it('forwards navigateTo to the first presentation editor', async () => {
+    const { superdocStore } = createAppHarness();
+    const navigateTo = vi.fn(async () => true);
+
+    superdocStore.documents = [
+      {
+        getPresentationEditor: vi.fn(() => ({ navigateTo })),
+      },
+    ];
+
+    const instance = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: {}, toolbar: {} },
+      onException: vi.fn(),
+    });
+    await flushMicrotasks();
+
+    const target = {
+      kind: 'entity',
+      entityType: 'bookmark',
+      name: 'bookmark-1',
+      story: { kind: 'story', storyType: 'body' },
+    };
+
+    await expect(instance.navigateTo(target)).resolves.toBe(true);
+    expect(navigateTo).toHaveBeenCalledWith(target);
+  });
+
+  it('returns false from navigateTo when presentation navigation is unavailable', async () => {
+    const { superdocStore } = createAppHarness();
+    superdocStore.documents = [
+      {
+        getPresentationEditor: vi.fn(() => null),
+      },
+    ];
+
+    const instance = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: {}, toolbar: {} },
+      onException: vi.fn(),
+    });
+    await flushMicrotasks();
+
+    await expect(instance.navigateTo({ kind: 'block', nodeId: 'node-1' })).resolves.toBe(false);
+  });
+
+  it('forwards scrollToElement to the first presentation editor', async () => {
+    const { superdocStore } = createAppHarness();
+    const scrollToElement = vi.fn(async () => true);
+
+    superdocStore.documents = [
+      {
+        getPresentationEditor: vi.fn(() => ({ scrollToElement })),
+      },
+    ];
+
+    const instance = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: {}, toolbar: {} },
+      onException: vi.fn(),
+    });
+    await flushMicrotasks();
+
+    await expect(instance.scrollToElement('element-1')).resolves.toBe(true);
+    expect(scrollToElement).toHaveBeenCalledWith('element-1');
+  });
+
+  it('returns false from scrollToElement when presentation navigation is unavailable', async () => {
+    const { superdocStore } = createAppHarness();
+    superdocStore.documents = [
+      {
+        getPresentationEditor: vi.fn(() => null),
+      },
+    ];
+
+    const instance = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: {}, toolbar: {} },
+      onException: vi.fn(),
+    });
+    await flushMicrotasks();
+
+    await expect(instance.scrollToElement('element-1')).resolves.toBe(false);
+  });
+
   it('warns when both document object and documents list provided', async () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     createAppHarness();
@@ -407,6 +500,30 @@ describe('SuperDoc core', () => {
 
     instance.broadcastEditorCreate(editor);
     expect(readySpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses visible search model in SuperDoc.search()', async () => {
+    createAppHarness();
+
+    const instance = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: {}, toolbar: {} },
+      colors: ['red'],
+      user: { name: 'Jane', email: 'jane@example.com' },
+      onException: vi.fn(),
+    });
+    await flushMicrotasks();
+
+    const searchResult = [{ from: 1, to: 4 }];
+    const searchMock = vi.fn(() => searchResult);
+    instance.activeEditor = { commands: { search: searchMock } };
+
+    const result = instance.search('test');
+
+    expect(searchMock).toHaveBeenCalledWith('test', { searchModel: 'visible' });
+    expect(result).toBe(searchResult);
   });
 
   it('locks superdoc via ydoc metadata and emits event', async () => {
@@ -508,6 +625,189 @@ describe('SuperDoc core', () => {
     expect(results).toEqual([originalBlob]);
   });
 
+  it('passes comments: undefined when the UI store is unhydrated (modules.comments: false)', async () => {
+    // Regression for the Custom UI story. With the built-in comments
+    // module disabled, the UI store never holds the imported
+    // comments, so the export must hand off `undefined` and let
+    // `Editor.exportDocx`'s `comments ?? this.converter.comments`
+    // fallback fire. Passing `[]` here would silently drop every
+    // imported comment from the round-trip.
+    createAppHarness();
+    const instance = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: false, toolbar: {} },
+      colors: [],
+      user: { name: 'Jane', email: 'jane@example.com' },
+      onException: vi.fn(),
+    });
+    await flushMicrotasks();
+
+    const exportDocxMock = vi.fn().mockResolvedValue(new Blob(['out']));
+    instance.superdocStore.documents = [
+      { id: 'doc-1', type: DOCX, data: null, getEditor: () => ({ exportDocx: exportDocxMock }) },
+    ];
+
+    await instance.exportEditorsToDOCX();
+
+    expect(exportDocxMock).toHaveBeenCalledTimes(1);
+    const passed = exportDocxMock.mock.calls[0][0];
+    expect(passed.comments).toBeUndefined();
+  });
+
+  it('passes comments: [] when the UI store IS hydrated and the user deleted every comment', async () => {
+    // Regression for the deletion-resurrection bug a reviewer
+    // spotted on the first patch. When `modules.comments` is
+    // enabled (default), the UI store IS the source of truth: an
+    // authoritative-empty array means "user deleted everything,"
+    // not "store is unhydrated." Passing `undefined` here would
+    // route through `Editor.exportDocx`'s `converter.comments`
+    // fallback and resurrect every imported comment that the user
+    // had explicitly deleted via the built-in UI.
+    createAppHarness();
+    const instance = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: {}, toolbar: {} },
+      colors: [],
+      user: { name: 'Jane', email: 'jane@example.com' },
+      onException: vi.fn(),
+    });
+    await flushMicrotasks();
+
+    instance.commentsStore.translateCommentsForExport = vi.fn(() => []);
+    const exportDocxMock = vi.fn().mockResolvedValue(new Blob(['out']));
+    instance.superdocStore.documents = [
+      { id: 'doc-1', type: DOCX, data: null, getEditor: () => ({ exportDocx: exportDocxMock }) },
+    ];
+
+    await instance.exportEditorsToDOCX();
+
+    expect(exportDocxMock).toHaveBeenCalledTimes(1);
+    const passed = exportDocxMock.mock.calls[0][0];
+    expect(passed.comments).toEqual([]);
+  });
+
+  it('passes comments: [] when commentsType is "clean" so the engine emits no comments', async () => {
+    createAppHarness();
+    const instance = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: {}, toolbar: {} },
+      colors: [],
+      user: { name: 'Jane', email: 'jane@example.com' },
+      onException: vi.fn(),
+    });
+    await flushMicrotasks();
+
+    // Even when the UI store would yield comments, `'clean'` is the
+    // explicit "strip all comments" signal and must override.
+    instance.commentsStore.translateCommentsForExport = vi.fn(() => [
+      { commentId: 'c1', creatorEmail: 'x@y.z', elements: [] },
+    ]);
+    const exportDocxMock = vi.fn().mockResolvedValue(new Blob(['out']));
+    instance.superdocStore.documents = [
+      { id: 'doc-1', type: DOCX, data: null, getEditor: () => ({ exportDocx: exportDocxMock }) },
+    ];
+
+    await instance.exportEditorsToDOCX({ commentsType: 'clean' });
+
+    expect(exportDocxMock).toHaveBeenCalledTimes(1);
+    const passed = exportDocxMock.mock.calls[0][0];
+    expect(passed.comments).toEqual([]);
+  });
+
+  it("commentsType: 'clean' wins even when modules.comments is disabled", async () => {
+    // 'clean' is the explicit "strip all comments" signal. When the
+    // UI store is unhydrated AND the consumer asks for clean, the
+    // engine fallback to `converter.comments` must NOT fire; that
+    // would silently re-include imported comments the consumer
+    // explicitly asked to drop. This branch is the one place where
+    // module-disabled + clean must pass `[]` instead of `undefined`.
+    createAppHarness();
+    const instance = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: false, toolbar: {} },
+      colors: [],
+      user: { name: 'Jane', email: 'jane@example.com' },
+      onException: vi.fn(),
+    });
+    await flushMicrotasks();
+
+    const exportDocxMock = vi.fn().mockResolvedValue(new Blob(['out']));
+    instance.superdocStore.documents = [
+      { id: 'doc-1', type: DOCX, data: null, getEditor: () => ({ exportDocx: exportDocxMock }) },
+    ];
+
+    await instance.exportEditorsToDOCX({ commentsType: 'clean' });
+
+    expect(exportDocxMock).toHaveBeenCalledTimes(1);
+    expect(exportDocxMock.mock.calls[0][0].comments).toEqual([]);
+  });
+
+  it('falls back to undefined when commentsStore is missing entirely (no race throw)', async () => {
+    // Defensive: during certain init phases or in test stubs, the
+    // commentsStore may be absent. The export must not throw and must
+    // route to the engine fallback (undefined). The original code
+    // already guarded with `this.commentsStore && typeof ...`; this
+    // test pins that the guard survives the rewrite.
+    createAppHarness();
+    const instance = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: {}, toolbar: {} },
+      colors: [],
+      user: { name: 'Jane', email: 'jane@example.com' },
+      onException: vi.fn(),
+    });
+    await flushMicrotasks();
+
+    // Simulate a missing commentsStore (the Pinia store was never
+    // attached, e.g., a partial init path).
+    instance.commentsStore = null;
+    const exportDocxMock = vi.fn().mockResolvedValue(new Blob(['out']));
+    instance.superdocStore.documents = [
+      { id: 'doc-1', type: DOCX, data: null, getEditor: () => ({ exportDocx: exportDocxMock }) },
+    ];
+
+    await expect(instance.exportEditorsToDOCX()).resolves.toBeDefined();
+    expect(exportDocxMock).toHaveBeenCalledTimes(1);
+    expect(exportDocxMock.mock.calls[0][0].comments).toBeUndefined();
+  });
+
+  it('passes UI-store comments when the store has them', async () => {
+    createAppHarness();
+    const instance = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: {}, toolbar: {} },
+      colors: [],
+      user: { name: 'Jane', email: 'jane@example.com' },
+      onException: vi.fn(),
+    });
+    await flushMicrotasks();
+
+    const fromStore = [{ commentId: 'c1', creatorEmail: 'a@b.c', elements: [] }];
+    instance.commentsStore.translateCommentsForExport = vi.fn(() => fromStore);
+    const exportDocxMock = vi.fn().mockResolvedValue(new Blob(['out']));
+    instance.superdocStore.documents = [
+      { id: 'doc-1', type: DOCX, data: null, getEditor: () => ({ exportDocx: exportDocxMock }) },
+    ];
+
+    await instance.exportEditorsToDOCX();
+
+    expect(exportDocxMock).toHaveBeenCalledTimes(1);
+    const passed = exportDocxMock.mock.calls[0][0];
+    expect(passed.comments).toEqual(fromStore);
+  });
+
   it('skips non-DOCX documents when exporting editors to DOCX', async () => {
     createAppHarness();
 
@@ -578,6 +878,49 @@ describe('SuperDoc core', () => {
     expect(app.unmount).toHaveBeenCalled();
     expect(instance.app.config.globalProperties.$config).toBeUndefined();
     expect(instance.listenerCount('ready')).toBe(0);
+  });
+
+  it('destroy() does not throw when providers omit optional disconnect/destroy methods', async () => {
+    createAppHarness();
+
+    // SD-2828: `CollaborationProvider` has optional `disconnect` and `destroy`.
+    // Liveblocks-style adapters legally satisfy the type with just on/off, so
+    // cleanup must guard the method, not just the provider.
+    const minimalSuperdocProvider = { on: vi.fn(), off: vi.fn() };
+    const minimalDocProvider = { on: vi.fn(), off: vi.fn() };
+
+    initSuperdocYdocMock.mockImplementationOnce(() => ({
+      ydoc: { destroy: vi.fn() },
+      provider: minimalSuperdocProvider,
+    }));
+    makeDocumentsCollaborativeMock.mockImplementationOnce((superdoc) =>
+      superdoc.config.documents.map((doc, index) => {
+        Object.assign(doc, {
+          id: doc.id || `doc-${index}`,
+          provider: minimalDocProvider,
+          ydoc: { destroyed: false, destroy: vi.fn() },
+          socket: superdoc.config.socket,
+        });
+        return doc;
+      }),
+    );
+
+    const instance = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: {
+        comments: {},
+        toolbar: {},
+        collaboration: { providerType: 'hocuspocus', url: 'wss://example.com' },
+      },
+      colors: ['red'],
+      user: { name: 'Jane', email: 'jane@example.com' },
+      onException: vi.fn(),
+    });
+    await flushMicrotasks();
+
+    expect(() => instance.destroy()).not.toThrow();
   });
 
   it('mounts Vue on a wrapper element inside the user container', async () => {
@@ -910,6 +1253,42 @@ describe('SuperDoc core', () => {
     // Non-boolean values go through Boolean().
     instance.setShowBookmarks(null);
     expect(setShowBookmarks).toHaveBeenLastCalledWith(false);
+  });
+
+  it('propagates setShowFormattingMarks to presentation editors and skips no-op toggles', async () => {
+    const { superdocStore } = createAppHarness();
+    const setShowFormattingMarks = vi.fn();
+    const docStub = {
+      getPresentationEditor: vi.fn(() => ({ setShowFormattingMarks })),
+    };
+
+    const instance = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: {}, toolbar: {} },
+      colors: ['red'],
+      role: 'editor',
+      user: { name: 'Jane', email: 'jane@example.com' },
+      onException: vi.fn(),
+    });
+    await flushMicrotasks();
+
+    superdocStore.documents = [docStub];
+
+    instance.setShowFormattingMarks(true);
+    expect(instance.config.layoutEngineOptions.showFormattingMarks).toBe(true);
+    expect(setShowFormattingMarks).toHaveBeenCalledWith(true);
+
+    instance.setShowFormattingMarks(true);
+    expect(setShowFormattingMarks).toHaveBeenCalledTimes(1);
+
+    instance.setShowFormattingMarks(false);
+    expect(instance.config.layoutEngineOptions.showFormattingMarks).toBe(false);
+    expect(setShowFormattingMarks).toHaveBeenLastCalledWith(false);
+
+    instance.toggleFormattingMarks();
+    expect(setShowFormattingMarks).toHaveBeenLastCalledWith(true);
   });
 
   it('skips rendering comments list when role is viewer', async () => {
@@ -1626,6 +2005,175 @@ describe('SuperDoc core', () => {
 
       const outcome = await handle.result;
       expect(outcome.status).toBe('destroyed');
+    });
+  });
+
+  describe('canPerformPermission', () => {
+    it('returns false when no permission is passed', async () => {
+      createAppHarness();
+
+      const instance = new SuperDoc({
+        selector: '#host',
+        document: 'https://example.com/doc.docx',
+      });
+      await flushMicrotasks();
+
+      expect(instance.canPerformPermission()).toBe(false);
+      expect(instance.canPerformPermission({})).toBe(false);
+      expect(instance.canPerformPermission({ permission: '' })).toBe(false);
+    });
+
+    it('uses config.role and config.isInternal as defaults when caller omits them', async () => {
+      createAppHarness();
+
+      const instance = new SuperDoc({
+        selector: '#host',
+        document: 'https://example.com/doc.docx',
+        role: 'editor',
+        isInternal: true,
+      });
+      await flushMicrotasks();
+
+      // RESOLVE_OWN is granted to editor on internal documents per the matrix.
+      expect(instance.canPerformPermission({ permission: 'RESOLVE_OWN' })).toBe(true);
+    });
+
+    it('returns false when a viewer asks for an editor-only permission', async () => {
+      createAppHarness();
+
+      const instance = new SuperDoc({
+        selector: '#host',
+        document: 'https://example.com/doc.docx',
+        role: 'viewer',
+        isInternal: true,
+      });
+      await flushMicrotasks();
+
+      expect(instance.canPerformPermission({ permission: 'RESOLVE_OWN' })).toBe(false);
+    });
+
+    it('honors a per-call role override regardless of config.role', async () => {
+      createAppHarness();
+
+      const instance = new SuperDoc({
+        selector: '#host',
+        document: 'https://example.com/doc.docx',
+        role: 'viewer',
+        isInternal: true,
+      });
+      await flushMicrotasks();
+
+      expect(instance.canPerformPermission({ permission: 'RESOLVE_OWN', role: 'editor' })).toBe(true);
+    });
+
+    it('lets a config.permissionResolver override the default decision', async () => {
+      createAppHarness();
+
+      const resolver = vi.fn(() => false);
+      const instance = new SuperDoc({
+        selector: '#host',
+        document: 'https://example.com/doc.docx',
+        role: 'editor',
+        isInternal: true,
+        permissionResolver: resolver,
+      });
+      await flushMicrotasks();
+
+      // Editor would normally be granted; the resolver overrides to false.
+      expect(instance.canPerformPermission({ permission: 'RESOLVE_OWN' })).toBe(false);
+      expect(resolver).toHaveBeenCalledWith(
+        expect.objectContaining({
+          permission: 'RESOLVE_OWN',
+          role: 'editor',
+          isInternal: true,
+          defaultDecision: true,
+        }),
+      );
+    });
+
+    it('falls back to the default decision when resolver returns a non-boolean', async () => {
+      createAppHarness();
+
+      const instance = new SuperDoc({
+        selector: '#host',
+        document: 'https://example.com/doc.docx',
+        role: 'viewer',
+        isInternal: true,
+        permissionResolver: () => undefined,
+      });
+      await flushMicrotasks();
+
+      // viewer is denied RESOLVE_OWN by default; resolver returning undefined
+      // must not flip that to true.
+      expect(instance.canPerformPermission({ permission: 'RESOLVE_OWN' })).toBe(false);
+    });
+
+    it('forwards comment and trackedChange payloads to the resolver', async () => {
+      createAppHarness();
+
+      const resolver = vi.fn(() => true);
+      const instance = new SuperDoc({
+        selector: '#host',
+        document: 'https://example.com/doc.docx',
+        role: 'editor',
+        isInternal: true,
+        permissionResolver: resolver,
+      });
+      await flushMicrotasks();
+
+      const comment = { id: 'c-1', body: 'note' };
+      const trackedChange = { id: 'tc-1', type: 'insert', commentId: 'c-1' };
+
+      instance.canPerformPermission({ permission: 'RESOLVE_OWN', comment, trackedChange });
+
+      expect(resolver).toHaveBeenCalledWith(expect.objectContaining({ comment, trackedChange }));
+    });
+
+    it('resolves comment from commentsStore.getComment when trackedChange supplies only an id', async () => {
+      const { commentsStore } = createAppHarness();
+      const stored = { id: 'c-7', body: 'looked up' };
+      commentsStore.getComment = vi.fn(() => stored);
+
+      const resolver = vi.fn(() => true);
+      const instance = new SuperDoc({
+        selector: '#host',
+        document: 'https://example.com/doc.docx',
+        role: 'editor',
+        isInternal: true,
+        permissionResolver: resolver,
+      });
+      await flushMicrotasks();
+
+      // No `comment` passed; trackedChange only carries the id. The method
+      // must fall through to `commentsStore.getComment(commentId)`.
+      const trackedChange = { commentId: 'c-7', type: 'insert' };
+      instance.canPerformPermission({ permission: 'RESOLVE_OWN', trackedChange });
+
+      expect(commentsStore.getComment).toHaveBeenCalledWith('c-7');
+      expect(resolver).toHaveBeenCalledWith(expect.objectContaining({ comment: stored, trackedChange }));
+    });
+
+    it('unwraps a stored comment via getValues() when present', async () => {
+      const { commentsStore } = createAppHarness();
+      const unwrapped = { id: 'c-9', body: 'unwrapped' };
+      commentsStore.getComment = vi.fn(() => ({ getValues: () => unwrapped }));
+
+      const resolver = vi.fn(() => true);
+      const instance = new SuperDoc({
+        selector: '#host',
+        document: 'https://example.com/doc.docx',
+        role: 'editor',
+        isInternal: true,
+        permissionResolver: resolver,
+      });
+      await flushMicrotasks();
+
+      const trackedChange = { id: 'tc-9', type: 'delete' };
+      instance.canPerformPermission({ permission: 'RESOLVE_OWN', trackedChange });
+
+      // The store returned a wrapper with `getValues()`; the method must
+      // unwrap it before forwarding to the resolver.
+      expect(resolver).toHaveBeenCalledWith(expect.objectContaining({ comment: unwrapped }));
     });
   });
 });

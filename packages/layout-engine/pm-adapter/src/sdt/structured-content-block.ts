@@ -35,7 +35,12 @@ export function handleStructuredContentBlockNode(node: PMNode, context: NodeHand
   const structuredContentMetadata = resolveNodeSdtMetadata(node, 'structuredContentBlock');
   const paragraphToFlowBlocks = converters.paragraphToFlowBlocks;
 
-  node.content.forEach((child) => {
+  // SD-1333: a documentPartObject is a transparent SDT wrapper. When it sits
+  // as a direct child of a structuredContentBlock (e.g. a Signature SDT
+  // wrapping a PAGE field), treat its inner paragraph/table children as if
+  // they were direct children of the structuredContentBlock and apply the
+  // outer SDT metadata to them.
+  const visitChild = (child: PMNode): void => {
     if (child.type === 'paragraph') {
       const paragraphBlocks = paragraphToFlowBlocks({
         para: child,
@@ -57,7 +62,9 @@ export function handleStructuredContentBlockNode(node: PMNode, context: NodeHand
         blocks.push(block);
         recordBlockKind?.(block.kind);
       });
-    } else if (child.type === 'table') {
+      return;
+    }
+    if (child.type === 'table') {
       const tableNodeToBlock = converters?.tableNodeToBlock;
       if (tableNodeToBlock) {
         const tableBlock = tableNodeToBlock(child, {
@@ -77,6 +84,12 @@ export function handleStructuredContentBlockNode(node: PMNode, context: NodeHand
           recordBlockKind?.(tableBlock.kind);
         }
       }
+      return;
     }
-  });
+    if (child.type === 'documentPartObject' && Array.isArray(child.content)) {
+      child.content.forEach(visitChild);
+    }
+  };
+
+  node.content.forEach(visitChild);
 }

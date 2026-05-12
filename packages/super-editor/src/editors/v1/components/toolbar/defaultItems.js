@@ -5,6 +5,8 @@ import { normalizeFontOption } from './helpers/font-options.js';
 import { useToolbarItem } from './use-toolbar-item';
 import AIWriter from './AIWriter.vue';
 import AlignmentButtons from './AlignmentButtons.vue';
+import StyleButtonsList from './StyleButtonsList.vue';
+import { bulletStyleButtons, numberedStyleButtons } from './list-style-buttons.js';
 import DocumentMode from './DocumentMode.vue';
 import LinkedStyle from './LinkedStyle.vue';
 import LinkInput from './LinkInput.vue';
@@ -323,7 +325,7 @@ export const makeDefaultItems = ({
 
   const renderSearchDropdown = () => {
     const handleSubmit = ({ value }) => {
-      superToolbar.activeEditor.commands.search(value);
+      superToolbar.activeEditor.commands.search(value, { searchModel: 'visible' });
     };
 
     return h('div', {}, [
@@ -631,30 +633,72 @@ export const makeDefaultItems = ({
 
   // bullet list
   const bulletedList = useToolbarItem({
-    type: 'button',
+    type: 'dropdown',
     name: 'list',
-    command: 'toggleBulletList',
+    command: 'toggleBulletListStyle',
+    splitButton: true,
+    splitButtonCommand: 'toggleBulletList',
     icon: toolbarIcons.bulletList,
-    active: false,
+    hasCaret: true,
     tooltip: toolbarTexts.bulletList,
     restoreEditorFocus: true,
     attributes: {
       ariaLabel: 'Bullet list',
     },
+    options: [
+      {
+        type: 'render',
+        key: 'bullet-style-buttons',
+        render: () => {
+          const handleSelect = (style) => {
+            closeDropdown(bulletedList);
+            const item = { ...bulletedList, command: 'toggleBulletListStyle' };
+            superToolbar.emitCommand({ item, argument: style });
+          };
+          return h(StyleButtonsList, {
+            buttons: bulletStyleButtons,
+            iconSize: 25,
+            selectedStyle: bulletedList.selectedValue.value,
+            onSelect: handleSelect,
+          });
+        },
+      },
+    ],
   });
 
   // number list
   const numberedList = useToolbarItem({
-    type: 'button',
+    type: 'dropdown',
     name: 'numberedlist',
-    command: 'toggleOrderedList',
+    command: 'toggleOrderedListStyle',
+    splitButton: true,
+    splitButtonCommand: 'toggleOrderedList',
     icon: toolbarIcons.numberedList,
-    active: false,
+    hasCaret: true,
     tooltip: toolbarTexts.numberedList,
     restoreEditorFocus: true,
     attributes: {
       ariaLabel: 'Numbered list',
     },
+    options: [
+      {
+        type: 'render',
+        key: 'numbered-style-buttons',
+        render: () => {
+          const handleSelect = (style) => {
+            closeDropdown(numberedList);
+            const item = { ...numberedList, command: 'toggleOrderedListStyle' };
+            superToolbar.emitCommand({ item, argument: style });
+          };
+          return h(StyleButtonsList, {
+            buttons: numberedStyleButtons,
+            iconSize: 30,
+            selectedStyle: numberedList.selectedValue.value,
+            onSelect: handleSelect,
+          });
+        },
+      },
+    ],
   });
 
   // indent left
@@ -909,6 +953,19 @@ export const makeDefaultItems = ({
     },
   });
 
+  const formattingMarks = useToolbarItem({
+    type: 'button',
+    name: 'formattingMarks',
+    command: 'toggleFormattingMarks',
+    allowWithoutEditor: true,
+    icon: toolbarIcons.formattingMarks,
+    active: false,
+    tooltip: toolbarTexts.formattingMarks,
+    attributes: {
+      ariaLabel: 'Formatting marks',
+    },
+  });
+
   const selectedLinkedStyle = ref(null);
   const linkedStyles = useToolbarItem({
     type: 'dropdown',
@@ -1006,7 +1063,7 @@ export const makeDefaultItems = ({
   const stickyItemsWidth = 120;
   const toolbarPadding = 32;
 
-  const itemsToHideXL = ['linkedStyles', 'clearFormatting', 'copyFormat', 'ruler'];
+  const itemsToHideXL = ['linkedStyles', 'clearFormatting', 'copyFormat', 'ruler', 'formattingMarks'];
   const itemsToHideSM = ['zoom', 'fontFamily', 'fontSize', 'redo'];
   const shouldUseLgCompactStyles = availableWidth <= RESPONSIVE_BREAKPOINTS.lg;
 
@@ -1057,6 +1114,7 @@ export const makeDefaultItems = ({
     linkedStyles,
     separator,
     ruler,
+    formattingMarks,
     copyFormat,
     clearFormatting,
     aiButton,
@@ -1078,7 +1136,7 @@ export const makeDefaultItems = ({
     const getLinkedStylesIndex = toolbarItems.findIndex((item) => item.name.value === 'linkedStyles');
     toolbarItems.splice(getLinkedStylesIndex - 1, 2);
 
-    const filterItems = ['ruler', 'zoom', 'undo', 'redo'];
+    const filterItems = ['ruler', 'formattingMarks', 'zoom', 'undo', 'redo'];
     toolbarItems = toolbarItems.filter((item) => !filterItems.includes(item.name.value));
   }
 

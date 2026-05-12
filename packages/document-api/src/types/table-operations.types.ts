@@ -115,7 +115,7 @@ export type TableCreateLocation =
  *
  * For non-destructive table-targeted mutations, `table` is the canonical
  * post-mutation table reference. Use `table.nodeId` to target the same table
- * in subsequent operations — no intermediate `find()` needed.
+ * in subsequent operations: no intermediate `find()` needed.
  *
  * `table` is `undefined` for destructive operations (delete, convertToText)
  * and in rare cases where post-mutation re-resolution fails.
@@ -230,7 +230,10 @@ type DirectRowTargetLocator = { target: TableRowAddress; nodeId?: never };
 
 export type TablesInsertRowInput =
   | (TableScopedRowLocator & { position: RowInsertPosition; count?: number })
-  | (DirectRowTargetLocator & { position: RowInsertPosition; count?: number });
+  | (DirectRowTargetLocator & { position: RowInsertPosition; count?: number })
+  // Table-level locator with no rowIndex/position: appends `count` rows at the
+  // end of the table (equivalent to `rowIndex: lastIndex, position: 'below'`).
+  | (TableLocator & { rowIndex?: never; position?: never; count?: number });
 
 export type TablesDeleteRowInput = DirectRowTargetLocator | TableScopedRowLocator;
 
@@ -249,12 +252,20 @@ export type TablesSetRowOptionsInput =
 // Column operations
 // ---------------------------------------------------------------------------
 
-export type ColumnInsertPosition = 'left' | 'right';
+/**
+ * Column insertion position.
+ * - `left` / `right` insert relative to `columnIndex`.
+ * - `first` / `last` are shortcuts: insert at column 0 or after the last column.
+ * - When `columnIndex` is omitted with `left` / `right`, behavior matches
+ *   `first` / `last` (LLM-friendly: "right" without a target column means
+ *   "rightmost").
+ */
+export type ColumnInsertPosition = 'left' | 'right' | 'first' | 'last';
 
-export interface TablesInsertColumnInput extends TableScopedColumnLocator {
-  position: ColumnInsertPosition;
-  count?: number;
-}
+export type TablesInsertColumnInput =
+  | (TableScopedColumnLocator & { position: 'left' | 'right'; count?: number })
+  // Shorthand: any position with table-level locator and no columnIndex.
+  | (TableLocator & { position: ColumnInsertPosition; columnIndex?: never; count?: number });
 
 export type TablesDeleteColumnInput = TableScopedColumnLocator;
 
@@ -297,6 +308,14 @@ export interface TablesSetCellPropertiesInput extends CellLocator {
   fitText?: boolean;
 }
 
+/**
+ * Replace the text content of a single cell with a single paragraph holding
+ * `text` (plain text only). Accepts either a direct cell locator or a
+ * table-scoped locator (table + rowIndex + columnIndex). Cell properties
+ * (vAlign, shading, borders, colspan/rowspan) are preserved.
+ */
+export type TablesSetCellTextInput = (CellLocator & { text: string }) | (TableScopedCellLocator & { text: string });
+
 // ---------------------------------------------------------------------------
 // Data & accessibility
 // ---------------------------------------------------------------------------
@@ -332,7 +351,7 @@ export type TablesClearStyleInput = TableLocator;
 export type TableStyleOptionFlag =
   | 'headerRow'
   | 'lastRow'
-  | 'totalRow' // deprecated alias for 'lastRow' — will be removed in a future release
+  | 'totalRow' // deprecated alias for 'lastRow': will be removed in a future release
   | 'firstColumn'
   | 'lastColumn'
   | 'bandedRows'
@@ -486,6 +505,27 @@ export interface TablesSetTableOptionsInput extends TableLocator {
   cellSpacingPt?: number | null;
 }
 
+/**
+ * Named visual presets for tables. Each preset composes borders, shading,
+ * and conditional-format flags into a polished look.
+ *
+ * - `grid` — 0.5pt black borders all around, no shading.
+ * - `minimal` — no outer borders, hairline grey separators between rows.
+ * - `striped` — banded rows on, 0.5pt grey borders all around.
+ * - `accent` — header row filled with `accentColor` (default `1F3864`),
+ *   thick accent bottom under the header.
+ */
+export type TablePresetName = 'grid' | 'minimal' | 'striped' | 'accent';
+
+export interface TablesApplyPresetInput extends TableLocator {
+  preset: TablePresetName;
+  /**
+   * Optional accent color (hex; same format as `setShading.color`).
+   * Used by presets that need an accent (`accent`). Ignored otherwise.
+   */
+  accentColor?: string;
+}
+
 // ---------------------------------------------------------------------------
 // Styling: borders
 // ---------------------------------------------------------------------------
@@ -520,7 +560,8 @@ export interface TablesApplyBorderPresetInput extends TableLocator {
 export interface TablesSetShadingInput {
   target?: TableOrCellAddress;
   nodeId?: string;
-  color: string;
+  /** Hex color (no `#`), `'auto'`, or `null` to clear (delegates to clearShading). */
+  color: string | null;
 }
 
 export interface TablesClearShadingInput {
@@ -556,7 +597,7 @@ export type TablesClearCellSpacingInput = TableLocator;
 // Document-level style queries & mutations
 // ---------------------------------------------------------------------------
 
-/** Input for `tables.getStyles` — document-level query, no locator needed. */
+/** Input for `tables.getStyles`: document-level query, no locator needed. */
 export type TablesGetStylesInput = Record<string, never>;
 
 /** Per-style metadata returned by `tables.getStyles`. */
@@ -592,10 +633,10 @@ export type TablesClearDefaultStyleInput = Record<string, never>;
 // Read operations (B4: ref handoff)
 // ---------------------------------------------------------------------------
 
-/** Input for `tables.get` — locates a single table. */
+/** Input for `tables.get`: locates a single table. */
 export type TablesGetInput = TableLocator;
 
-/** Output for `tables.get` — table structure with stable refs. */
+/** Output for `tables.get`: table structure with stable refs. */
 export interface TablesGetOutput {
   nodeId: string;
   address: TableAddress;
@@ -603,7 +644,7 @@ export interface TablesGetOutput {
   columns: number;
 }
 
-/** Input for `tables.getCells` — locates a table and optionally filters cells. */
+/** Input for `tables.getCells`: locates a table and optionally filters cells. */
 export interface TablesGetCellsInput extends TableLocator {
   /** Optional row filter. */
   rowIndex?: number;
@@ -613,9 +654,9 @@ export interface TablesGetCellsInput extends TableLocator {
 
 /** Per-cell info with stable ref for write handoff. */
 export interface TableCellInfo {
-  /** Shorthand cell identifier — convenient for logging, Map keys, and display. */
+  /** Shorthand cell identifier: convenient for logging, Map keys, and display. */
   nodeId: string;
-  /** Mutation-ready address — pass directly as `target` in follow-up cell operations. */
+  /** Mutation-ready address: pass directly as `target` in follow-up cell operations. */
   address: TableCellAddress;
   rowIndex: number;
   columnIndex: number;
@@ -630,14 +671,14 @@ export interface TablesGetCellsOutput {
   cells: TableCellInfo[];
 }
 
-/** Input for `tables.getProperties` — locates a single table. */
+/** Input for `tables.getProperties`: locates a single table. */
 export type TablesGetPropertiesInput = TableLocator;
 
 /**
- * Output for `tables.getProperties` — table layout/style metadata.
+ * Output for `tables.getProperties`: table layout/style metadata.
  *
  * All fields reflect **direct formatting only**. Properties inherited from
- * the table style are not included — use `styleId` and `styleOptions` to
+ * the table style are not included: use `styleId` and `styleOptions` to
  * determine which style is active.
  */
 export interface TablesGetPropertiesOutput {

@@ -5,11 +5,11 @@ description: Give AI agents direct access to .docx files through the Model Conte
 keywords: "mcp, model context protocol, ai agents, claude, cursor, windsurf, document automation, llm docx"
 ---
 
-The SuperDoc MCP server lets AI agents open, read, edit, and save `.docx` files. It exposes the same operations as the [Document API](/document-api/overview) through the [Model Context Protocol](https://modelcontextprotocol.io) — the open standard for connecting AI tools to agents.
+The SuperDoc MCP server lets AI agents open, read, edit, and save `.docx` files. It exposes the same operations as the [Document API](/document-api/overview) through the [Model Context Protocol](https://modelcontextprotocol.io): the open standard for connecting AI tools to agents.
 
 ## How it works
 
-The MCP server runs as a local subprocess, communicating over stdio. It manages document sessions in memory — each `superdoc_open` creates an Editor instance, and all subsequent operations run against that in-memory state until you `superdoc_save`.
+The MCP server runs as a local subprocess, communicating over stdio. It manages document sessions in memory: each `superdoc_open` creates an Editor instance, and all subsequent operations run against that in-memory state until you `superdoc_save`.
 
 ```
 AI Agent (Claude, Cursor, Windsurf)
@@ -24,7 +24,7 @@ SuperDoc Editor (in-memory)
 .docx file on disk
 ```
 
-The MCP server runs locally — SuperDoc never uploads your files. The AI agent you connect still sends content to its own provider.
+The MCP server runs locally: SuperDoc never uploads your files. The AI agent you connect still sends content to its own provider.
 
 ## Setup
 
@@ -115,7 +115,7 @@ Multi-action tools use an `action` argument to select the underlying operation. 
 
 ## Related
 
-- [How to use](/ai/mcp/how-to-use) — workflow patterns, targeting, and common operations
-- [Debugging](/ai/mcp/debugging) — inspect and troubleshoot MCP tool calls
-- [LLM Tools](/ai/agents/llm-tools) — build custom LLM integrations with the SDK
-- [CLI](/document-engine/cli) — edit documents from the terminal
+- [How to use](/ai/mcp/how-to-use): workflow patterns, targeting, and common operations
+- [Debugging](/ai/mcp/debugging): inspect and troubleshoot MCP tool calls
+- [LLM Tools](/ai/agents/llm-tools): build custom LLM integrations with the SDK
+- [CLI](/document-engine/cli): edit documents from the terminal

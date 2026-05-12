@@ -9,11 +9,13 @@ const subscribeToSuperdocEvents = (
 
   superdoc.on('editorCreate', onChange);
   superdoc.on('document-mode-change', onChange);
+  superdoc.on('formatting-marks-change', onChange);
   superdoc.on('zoomChange', onChange);
 
   return () => {
     superdoc.off?.('editorCreate', onChange);
     superdoc.off?.('document-mode-change', onChange);
+    superdoc.off?.('formatting-marks-change', onChange);
     superdoc.off?.('zoomChange', onChange);
   };
 };
@@ -44,11 +46,18 @@ const subscribeToPresentationEvents = (
   presentationEditor.on('headerFooterEditingContext', onChange);
   presentationEditor.on('headerFooterUpdate', onChange);
   presentationEditor.on('headerFooterTransaction', onChange);
+  presentationEditor.on('activeSurfaceChange', onChange);
+  // Document-wide history availability (emitted by the unified-history
+  // coordinator). Selection/formatting state still flows through the
+  // transaction events above — this event is specifically for history UI.
+  presentationEditor.on('historyStateChange', onChange);
 
   return () => {
     presentationEditor.off?.('headerFooterEditingContext', onChange);
     presentationEditor.off?.('headerFooterUpdate', onChange);
     presentationEditor.off?.('headerFooterTransaction', onChange);
+    presentationEditor.off?.('activeSurfaceChange', onChange);
+    presentationEditor.off?.('historyStateChange', onChange);
   };
 };
 

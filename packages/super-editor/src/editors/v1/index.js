@@ -18,6 +18,7 @@ import {
   headlessToolbarConstants,
   headlessToolbarHelpers,
 } from '../../headless-toolbar/index.js';
+import { createSuperDocUI, shallowEqual } from '../../ui/index.js';
 import { SuperToolbar } from './components/toolbar/super-toolbar.js';
 import { DocxEncryptionError, DocxEncryptionErrorCode, DocxZipper, helpers } from './core/index.js';
 import { Editor } from './core/Editor.js';
@@ -32,7 +33,6 @@ import { Mark } from '@core/Mark.js';
 import ContextMenu from './components/context-menu/ContextMenu.vue';
 /** @deprecated Use ContextMenu instead */
 const SlashMenu = ContextMenu;
-import BasicUpload from '@superdoc/common/components/BasicUpload.vue';
 
 import SuperEditor from './components/SuperEditor.vue';
 import Toolbar from './components/toolbar/Toolbar.vue';
@@ -99,8 +99,6 @@ export {
   SuperEditor,
   /** @internal */
   SuperInput,
-  /** @internal */
-  BasicUpload,
   Toolbar,
   AIWriter,
   ContextMenu,
@@ -120,6 +118,8 @@ export {
   createHeadlessToolbar,
   headlessToolbarConstants,
   headlessToolbarHelpers,
+  createSuperDocUI,
+  shallowEqual,
   getStarterExtensions,
   /** @internal */
   getRichTextExtensions,

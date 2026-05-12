@@ -22,6 +22,7 @@ function parseCssLength(value) {
 export function parseAttrs(node) {
   const numberingProperties = {};
   let indent, spacing, justification;
+  let rightToLeft;
   let sectionProperties = null;
   let pageBreakSource = null;
   const { styleid: styleId, ...extraAttrs } = Array.from(node.attributes).reduce((acc, attr) => {
@@ -62,6 +63,9 @@ export function parseAttrs(node) {
       }
     } else if (attr.name === 'data-sd-page-break-source') {
       pageBreakSource = attr.value || null;
+    } else if (attr.name === 'dir') {
+      if (attr.value === 'rtl') rightToLeft = true;
+      else if (attr.value === 'ltr') rightToLeft = false;
     } else {
       acc[attr.name] = attr.value;
     }
@@ -105,6 +109,10 @@ export function parseAttrs(node) {
 
     const ml = parseCssLength(node.style.marginLeft);
     if (ml && ml.unit !== '%' && ml.points >= 0) cssIndent.left = Math.round(ml.points * 20);
+    const mis = parseCssLength(node.style.marginInlineStart);
+    if (mis && mis.unit !== '%' && mis.points >= 0) cssIndent.start = Math.round(mis.points * 20);
+    const mie = parseCssLength(node.style.marginInlineEnd);
+    if (mie && mie.unit !== '%' && mie.points >= 0) cssIndent.end = Math.round(mie.points * 20);
 
     const ti = parseCssLength(node.style.textIndent);
     if (ti && ti.unit !== '%') {
@@ -130,6 +138,11 @@ export function parseAttrs(node) {
     }
   }
 
+  if (rightToLeft == null && node.style) {
+    if (node.style.direction === 'rtl') rightToLeft = true;
+    else if (node.style.direction === 'ltr') rightToLeft = false;
+  }
+
   let attrs = {
     paragraphProperties: {
       styleId: styleId || null,
@@ -147,6 +160,10 @@ export function parseAttrs(node) {
 
   if (justification) {
     attrs.paragraphProperties.justification = justification;
+  }
+
+  if (rightToLeft != null) {
+    attrs.paragraphProperties.rightToLeft = rightToLeft;
   }
 
   if (Object.keys(numberingProperties).length > 0) {

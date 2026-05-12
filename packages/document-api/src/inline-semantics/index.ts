@@ -1,5 +1,5 @@
 /**
- * Inline semantics — shared semantic layer (PM-independent).
+ * Inline semantics: shared semantic layer (PM-independent).
  *
  * This is the single source of truth for inline property definitions,
  * token acceptance sets, strict token parsers, error types, and directive

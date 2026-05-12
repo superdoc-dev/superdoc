@@ -903,4 +903,74 @@ describe('resolvePageNumberTokens', () => {
       expect(updatedBlock.runs[0].text).toBe('100'); // Three digits
     });
   });
+
+  // SD-1332: pin the body resolver's intentional limitation. Body tables can
+  // span multiple physical pages (one TableBlock, multiple table fragments,
+  // each with its own fromRow..toRow). Substituting the whole table once
+  // would resolve every PAGE field to the first fragment's page number.
+  // Per-fragment substitution is the correct fix and is deferred until a
+  // body-table-with-PAGE fixture motivates it (see the comment in
+  // resolvePageTokens.ts). For SD-1332 itself the substitution happens in
+  // layout-bridge/resolveHeaderFooterTokens.ts (page-local).
+  describe('SD-1332: body tables intentionally not processed', () => {
+    it('returns no affected blocks when the only token sits inside a body table', () => {
+      const blocks: FlowBlock[] = [
+        {
+          kind: 'table',
+          id: 'tbl-1',
+          rows: [
+            {
+              cells: [
+                {
+                  id: 'cell-1',
+                  paragraph: {
+                    kind: 'paragraph',
+                    id: 'cell-para-1',
+                    runs: [{ text: '0', token: 'pageNumber', fontFamily: 'Arial', fontSize: 12 } as TextRun],
+                  } as ParagraphBlock,
+                },
+              ],
+            },
+          ],
+        } as unknown as FlowBlock,
+      ];
+      const measures: Measure[] = [
+        { kind: 'table' as const, rows: [], columnWidths: [], totalHeight: 0 } as unknown as Measure,
+      ];
+      const layout: Layout = {
+        pageSize: { w: 612, h: 792 },
+        pages: [
+          {
+            number: 1,
+            fragments: [
+              {
+                kind: 'table',
+                blockId: 'tbl-1',
+                fromRow: 0,
+                toRow: 1,
+                x: 0,
+                y: 0,
+                width: 612,
+                height: 20,
+              } as unknown as Layout['pages'][number]['fragments'][number],
+            ],
+          },
+        ],
+      };
+      const numberingCtx: NumberingContext = {
+        totalPages: 1,
+        displayPages: [{ physicalPage: 1, displayNumber: 1, displayText: '1', sectionIndex: 0 }],
+      };
+
+      const result = resolvePageNumberTokens(layout, blocks, measures, numberingCtx);
+
+      // Body resolver does not recurse into tables — the table block must NOT
+      // be reported as affected and the original tree must stay untouched.
+      expect(result.affectedBlockIds.has('tbl-1')).toBe(false);
+      expect(result.updatedBlocks.has('tbl-1')).toBe(false);
+      const originalTable = blocks[0] as unknown as { rows: { cells: { paragraph: ParagraphBlock }[] }[] };
+      expect(originalTable.rows[0].cells[0].paragraph.runs[0].text).toBe('0');
+      expect(originalTable.rows[0].cells[0].paragraph.runs[0].token).toBe('pageNumber');
+    });
+  });
 });

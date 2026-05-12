@@ -2,6 +2,7 @@ import { test, expect } from '../../fixtures/superdoc.js';
 import { rightClickAtDocPos } from '../../helpers/editor-interactions.js';
 
 test.use({ config: { toolbar: 'full' } });
+test.describe.configure({ mode: 'serial' });
 
 // WebKit blocks clipboard API reads even on localhost — skip it.
 test.skip(({ browserName }) => browserName === 'webkit', 'WebKit does not support clipboard API in tests');
@@ -15,6 +16,23 @@ async function writeToClipboard(page: import('@playwright/test').Page, text: str
     // Firefox/WebKit don't support these permission names — that's fine.
   }
   await page.evaluate((t) => navigator.clipboard.writeText(t), text);
+}
+
+async function readClipboardHtml(page: import('@playwright/test').Page) {
+  try {
+    await page.context().grantPermissions(['clipboard-read']);
+  } catch {
+    // Firefox/WebKit don't support this permission name.
+  }
+  return page.evaluate(async () => {
+    const items = await navigator.clipboard.read();
+    for (const item of items) {
+      if (item.types.includes('text/html')) {
+        return (await item.getType('text/html')).text();
+      }
+    }
+    return '';
+  });
 }
 
 test('right-click opens context menu and paste inserts clipboard text', async ({ superdoc }) => {
@@ -46,6 +64,54 @@ test('right-click opens context menu and paste inserts clipboard text', async ({
 
   // Assert the clipboard text was pasted into the document
   await superdoc.assertTextContains('Pasted content');
+});
+
+test('context-menu paste uses embedded SuperDoc slice instead of hidden copy data (SD-2934)', async ({
+  superdoc,
+  browserName,
+}) => {
+  test.skip(browserName !== 'chromium', 'Rich HTML clipboard reads are only reliable in Chromium behavior tests');
+
+  const copiedText = 'Copied from SuperDoc';
+  await superdoc.type(copiedText);
+  await superdoc.newLine();
+  await superdoc.waitForStable();
+
+  const copiedPos = await superdoc.findTextPos(copiedText);
+  await superdoc.setTextSelection(copiedPos, copiedPos + copiedText.length);
+  await superdoc.waitForStable();
+
+  await rightClickAtDocPos(superdoc.page, copiedPos + 1);
+  await superdoc.waitForStable();
+
+  const menu = superdoc.page.locator('.context-menu');
+  await expect(menu).toBeVisible();
+  const copyItem = menu.locator('.context-menu-item').filter({ hasText: 'Copy' });
+  await expect(copyItem).toBeVisible();
+  await copyItem.click();
+  await superdoc.waitForStable();
+
+  const clipboardHtml = await readClipboardHtml(superdoc.page);
+  expect(clipboardHtml).toContain('data-superdoc-slice');
+
+  await superdoc.clickOnLine(1);
+  await superdoc.waitForStable();
+
+  const line = superdoc.page.locator('.superdoc-line').nth(1);
+  const box = await line.boundingBox();
+  if (!box) throw new Error('Line 1 not visible');
+  await superdoc.page.mouse.click(box.x + 20, box.y + box.height / 2, { button: 'right' });
+  await superdoc.waitForStable();
+
+  await expect(menu).toBeVisible();
+  const pasteItem = menu.locator('.context-menu-item').filter({ hasText: 'Paste' });
+  await expect(pasteItem).toBeVisible();
+  await pasteItem.click();
+  await superdoc.waitForStable();
+
+  const text = await superdoc.getTextContent();
+  expect(text.match(new RegExp(copiedText, 'g')) ?? []).toHaveLength(2);
+  expect(text).not.toMatch(/eyJ[A-Za-z0-9+/=]{20,}/);
 });
 
 // FIXME: PM strips trailing/leading whitespace when pasting into run-wrapped content.

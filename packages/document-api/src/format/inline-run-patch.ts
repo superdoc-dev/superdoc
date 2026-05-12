@@ -315,7 +315,7 @@ export const INLINE_PROPERTY_REGISTRY = [
   runAttribute('rtl', 'boolean', 'w:rtl', schemaBooleanOrNull()),
   runAttribute('cs', 'boolean', 'w:cs', schemaBooleanOrNull()),
   runAttribute('bCs', 'boolean', 'w:bCs', schemaBooleanOrNull(), 'boldCs'),
-  runAttribute('iCs', 'boolean', 'w:iCs', schemaBooleanOrNull()),
+  runAttribute('iCs', 'boolean', 'w:iCs', schemaBooleanOrNull(), 'italicCs'),
   runAttribute(
     'eastAsianLayout',
     'object',

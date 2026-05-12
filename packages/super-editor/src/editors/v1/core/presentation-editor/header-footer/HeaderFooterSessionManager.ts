@@ -20,6 +20,8 @@ import type {
   Fragment,
   ResolvedHeaderFooterLayout,
   ResolvedPaintItem,
+  ResolvedLayout,
+  ResolvedPage,
 } from '@superdoc/contracts';
 import type { PageDecorationProvider } from '@superdoc/painter-dom';
 import { resolveHeaderFooterLayout } from '@superdoc/layout-resolved';
@@ -59,10 +61,8 @@ import { selectionToRects } from '@superdoc/layout-bridge';
 import { deduplicateOverlappingRects } from '../../../dom-observer/DomSelectionGeometry.js';
 import { resolveSectionProjections } from '../../../document-api-adapters/helpers/sections-resolver.js';
 import { computeCaretLayoutRectGeometry as computeCaretLayoutRectGeometryFromHelper } from '../selection/CaretGeometry.js';
-import {
-  ensureExplicitHeaderFooterSlot,
-  normalizeVariant,
-} from '../../../document-api-adapters/helpers/header-footer-slot-materialization.js';
+import { ensureExplicitHeaderFooterSlot } from '../../../document-api-adapters/helpers/header-footer-slot-materialization.js';
+import { normalizeVariant } from './header-footer-variant.js';
 
 // =============================================================================
 // Types
@@ -386,11 +386,8 @@ function normalizeDecorationFragments(fragments: Fragment[], layoutMinY: number)
   return fragments.map((fragment) => ({ ...fragment, y: fragment.y + yOffset }));
 }
 
-function normalizeDecorationItems(
-  items: ResolvedPaintItem[] | undefined,
-  layoutMinY: number,
-): ResolvedPaintItem[] | undefined {
-  if (!items || layoutMinY >= 0) {
+function normalizeDecorationItems(items: ResolvedPaintItem[], layoutMinY: number): ResolvedPaintItem[] {
+  if (layoutMinY >= 0) {
     return items;
   }
 
@@ -527,9 +524,13 @@ export class HeaderFooterSessionManager {
    * interactive header/footer UI, for example through document-api commands.
    * We refresh the descriptor registry and clear all derived FlowBlock caches
    * so the next layout pass sees the new structure immediately.
+   *
+   * Pass `purgeCachedEditors: true` after a full document file replace: cached
+   * sub-editors keyed by relationship id must not outlive the new converter
+   * snapshot when ids are reused.
    */
-  refreshStructure(): void {
-    this.#headerFooterManager?.refresh();
+  refreshStructure(options?: { purgeCachedEditors?: boolean }): void {
+    this.#headerFooterManager?.refresh(options?.purgeCachedEditors ? { purgeCachedEditors: true } : undefined);
     this.#headerFooterAdapter?.invalidateAll();
   }
 
@@ -735,19 +736,20 @@ export class HeaderFooterSessionManager {
   // ===========================================================================
 
   /**
-   * Rebuild header/footer regions from layout.
+   * Rebuild header/footer regions from the resolved layout.
    */
-  rebuildRegions(layout: Layout): void {
+  rebuildRegions(resolvedLayout: ResolvedLayout): void {
     this.#headerRegions.clear();
     this.#footerRegions.clear();
 
     const layoutOptions = this.#deps?.getLayoutOptions() ?? {};
-    const pageHeight = layout.pageSize?.h ?? layoutOptions.pageSize?.h ?? this.#options.defaultPageSize.h;
-    if (pageHeight <= 0) return;
+    const fallbackPageHeight =
+      resolvedLayout.pages[0]?.height ?? layoutOptions.pageSize?.h ?? this.#options.defaultPageSize.h;
+    if (fallbackPageHeight <= 0) return;
 
     // Build section first page numbers map
     const sectionFirstPageNumbers = new Map<number, number>();
-    for (const p of layout.pages) {
+    for (const p of resolvedLayout.pages) {
       const idx = p.sectionIndex ?? 0;
       if (!sectionFirstPageNumbers.has(idx)) {
         sectionFirstPageNumbers.set(idx, p.number);
@@ -759,9 +761,9 @@ export class HeaderFooterSessionManager {
 
     const defaultMargins = this.#options.defaultMargins;
 
-    layout.pages.forEach((page, pageIndex) => {
+    resolvedLayout.pages.forEach((page, pageIndex) => {
       const margins = page.margins ?? layoutOptions.margins ?? defaultMargins;
-      const actualPageHeight = page.size?.h ?? pageHeight;
+      const actualPageHeight = page.height ?? fallbackPageHeight;
       const sectionIndex = page.sectionIndex ?? 0;
       const sectionId = sectionIdBySectionIndex.get(sectionIndex) ?? `section-${sectionIndex}`;
 
@@ -1687,7 +1689,7 @@ export class HeaderFooterSessionManager {
 
   #computeExpectedSectionType(
     kind: 'header' | 'footer',
-    page: Page,
+    page: ResolvedPage,
     sectionFirstPageNumbers: Map<number, number>,
   ): string {
     const pageNumber = page.number;
@@ -1716,10 +1718,10 @@ export class HeaderFooterSessionManager {
 
   #stripFootnoteReserveFromBottomMargin(
     margins: HeaderFooterLayoutOptions['margins'],
-    page: Page,
+    page: ResolvedPage | null,
   ): HeaderFooterLayoutOptions['margins'] {
     // Note: property is 'footnoteReserved' (with 'd') as defined in @superdoc/contracts
-    const footnoteReserved = page.footnoteReserved ?? 0;
+    const footnoteReserved = page?.footnoteReserved ?? 0;
     if (footnoteReserved <= 0) return margins;
 
     const currentBottom = margins?.bottom ?? this.#options.defaultMargins.bottom ?? 0;
@@ -2264,16 +2266,51 @@ export class HeaderFooterSessionManager {
    * Update decoration providers for header and footer.
    * Creates new providers based on layout results and sets them on this manager.
    */
-  updateDecorationProviders(layout: Layout): void {
-    this.#headerDecorationProvider = this.createDecorationProvider('header', layout);
-    this.#footerDecorationProvider = this.createDecorationProvider('footer', layout);
-    this.rebuildRegions(layout);
+  updateDecorationProviders(resolvedLayout: ResolvedLayout): void {
+    this.#headerDecorationProvider = this.createDecorationProvider('header', resolvedLayout);
+    this.#footerDecorationProvider = this.createDecorationProvider('footer', resolvedLayout);
+    this.rebuildRegions(resolvedLayout);
+  }
+
+  private resolveAlignedDecorationItems(
+    fragments: Fragment[],
+    slotPageNumber: number,
+    result: HeaderFooterLayoutResult,
+    cachedResolvedLayout: ResolvedHeaderFooterLayout | undefined,
+    contextLabel: string,
+  ): ResolvedPaintItem[] | undefined {
+    const cachedPage = cachedResolvedLayout?.pages.find((page) => page.number === slotPageNumber);
+    const cachedItems = cachedPage?.items;
+    if (cachedItems && cachedItems.length === fragments.length) {
+      return cachedItems;
+    }
+    if (cachedItems) {
+      console.warn(
+        `[HeaderFooterSessionManager] Resolved items length (${cachedItems.length}) does not match fragments length (${fragments.length}) for ${contextLabel}. Recomputing items.`,
+      );
+    }
+
+    const freshResolvedLayout = resolveHeaderFooterLayout(result.layout, result.blocks, result.measures);
+    const freshPage = freshResolvedLayout.pages.find((page) => page.number === slotPageNumber);
+    const freshItems = freshPage?.items;
+    if (freshItems && freshItems.length === fragments.length) {
+      return freshItems;
+    }
+    if (freshItems) {
+      console.warn(
+        `[HeaderFooterSessionManager] Fresh resolved items length (${freshItems.length}) does not match fragments length (${fragments.length}) for ${contextLabel}. Dropping items.`,
+      );
+    }
+    return undefined;
   }
 
   /**
    * Create a decoration provider for header or footer rendering.
    */
-  createDecorationProvider(kind: 'header' | 'footer', layout: Layout): PageDecorationProvider | undefined {
+  createDecorationProvider(
+    kind: 'header' | 'footer',
+    resolvedLayout: ResolvedLayout,
+  ): PageDecorationProvider | undefined {
     const results = kind === 'header' ? this.#headerLayoutResults : this.#footerLayoutResults;
     const layoutsByRId = kind === 'header' ? this.#headerLayoutsByRId : this.#footerLayoutsByRId;
     const resolvedResults = kind === 'header' ? this.#resolvedHeaderLayouts : this.#resolvedFooterLayouts;
@@ -2294,7 +2331,7 @@ export class HeaderFooterSessionManager {
 
     // Build section first page map
     const sectionFirstPageNumbers = new Map<number, number>();
-    for (const p of layout.pages) {
+    for (const p of resolvedLayout.pages) {
       const idx = p.sectionIndex ?? 0;
       if (!sectionFirstPageNumbers.has(idx)) {
         sectionFirstPageNumbers.set(idx, p.number);
@@ -2318,7 +2355,11 @@ export class HeaderFooterSessionManager {
           const prevSectionIds = multiSectionId.sectionHeaderIds.get(sectionIndex - 1);
           sectionRId = prevSectionIds?.[headerFooterType as keyof typeof prevSectionIds] ?? undefined;
         }
-        if (!sectionRId && headerFooterType !== 'default') {
+        const shouldUseDefaultHeaderRef =
+          headerFooterType !== 'default' &&
+          page.sectionRefs.headerRefs?.default &&
+          (!multiSectionId?.alternateHeaders || headerFooterType === 'odd');
+        if (!sectionRId && shouldUseDefaultHeaderRef) {
           sectionRId = page.sectionRefs.headerRefs?.default;
         }
       } else if (page?.sectionRefs && kind === 'footer') {
@@ -2327,7 +2368,11 @@ export class HeaderFooterSessionManager {
           const prevSectionIds = multiSectionId.sectionFooterIds.get(sectionIndex - 1);
           sectionRId = prevSectionIds?.[headerFooterType as keyof typeof prevSectionIds] ?? undefined;
         }
-        if (!sectionRId && headerFooterType !== 'default') {
+        const shouldUseDefaultFooterRef =
+          headerFooterType !== 'default' &&
+          page.sectionRefs.footerRefs?.default &&
+          (!multiSectionId?.alternateHeaders || headerFooterType === 'odd');
+        if (!sectionRId && shouldUseDefaultFooterRef) {
           sectionRId = page.sectionRefs.footerRefs?.default;
         }
       }
@@ -2352,17 +2397,20 @@ export class HeaderFooterSessionManager {
           const slotPage = this.#findPageForNumber(rIdLayout.layout.pages, pageNumber);
           if (slotPage) {
             const fragments = slotPage.fragments ?? [];
-            const resolvedLayout = resolvedByRId.get(rIdLayoutKey);
-            const resolvedSlotPage = resolvedLayout?.pages.find((p) => p.number === slotPage.number);
-            const resolvedItems = resolvedSlotPage?.items;
-            if (resolvedItems && resolvedItems.length !== fragments.length) {
-              console.warn(
-                `[HeaderFooterSessionManager] Resolved items length (${resolvedItems.length}) does not match fragments length (${fragments.length}) for rId '${rIdLayoutKey}' page ${pageNumber}. Dropping items.`,
-              );
+            const rIdResolvedLayout = resolvedByRId.get(rIdLayoutKey);
+            const alignedItems = this.resolveAlignedDecorationItems(
+              fragments,
+              slotPage.number,
+              rIdLayout,
+              rIdResolvedLayout,
+              `rId '${rIdLayoutKey}' page ${pageNumber}`,
+            );
+            if (!alignedItems) {
+              return null;
             }
-            const alignedItems = resolvedItems && resolvedItems.length === fragments.length ? resolvedItems : undefined;
-            const pageHeight = page?.size?.h ?? layout.pageSize?.h ?? layoutOptions.pageSize?.h ?? defaultPageSize.h;
-            const margins = pageMargins ?? layout.pages[0]?.margins ?? layoutOptions.margins ?? defaultMargins;
+            const pageHeight =
+              page?.height ?? resolvedLayout.pages[0]?.height ?? layoutOptions.pageSize?.h ?? defaultPageSize.h;
+            const margins = pageMargins ?? resolvedLayout.pages[0]?.margins ?? layoutOptions.margins ?? defaultMargins;
             const decorationMargins =
               kind === 'footer' ? this.#stripFootnoteReserveFromBottomMargin(margins, page ?? null) : margins;
             const box = this.#computeDecorationBox(kind, decorationMargins, pageHeight);
@@ -2414,18 +2462,20 @@ export class HeaderFooterSessionManager {
       const fragments = slotPage.fragments ?? [];
 
       const resolvedVariant = resolvedResults?.[variantIndex];
-      const resolvedVariantPage = resolvedVariant?.pages.find((p) => p.number === slotPage.number);
-      const resolvedVariantItems = resolvedVariantPage?.items;
-      if (resolvedVariantItems && resolvedVariantItems.length !== fragments.length) {
-        console.warn(
-          `[HeaderFooterSessionManager] Resolved items length (${resolvedVariantItems.length}) does not match fragments length (${fragments.length}) for variant '${headerFooterType}' page ${pageNumber}. Dropping items.`,
-        );
+      const alignedVariantItems = this.resolveAlignedDecorationItems(
+        fragments,
+        slotPage.number,
+        variant,
+        resolvedVariant,
+        `variant '${headerFooterType}' page ${pageNumber}`,
+      );
+      if (!alignedVariantItems) {
+        return null;
       }
-      const alignedVariantItems =
-        resolvedVariantItems && resolvedVariantItems.length === fragments.length ? resolvedVariantItems : undefined;
 
-      const pageHeight = page?.size?.h ?? layout.pageSize?.h ?? layoutOptions.pageSize?.h ?? defaultPageSize.h;
-      const margins = pageMargins ?? layout.pages[0]?.margins ?? layoutOptions.margins ?? defaultMargins;
+      const pageHeight =
+        page?.height ?? resolvedLayout.pages[0]?.height ?? layoutOptions.pageSize?.h ?? defaultPageSize.h;
+      const margins = pageMargins ?? resolvedLayout.pages[0]?.margins ?? layoutOptions.margins ?? defaultMargins;
       const decorationMargins =
         kind === 'footer' ? this.#stripFootnoteReserveFromBottomMargin(margins, page ?? null) : margins;
       const box = this.#computeDecorationBox(kind, decorationMargins, pageHeight);

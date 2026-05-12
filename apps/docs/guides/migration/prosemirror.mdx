@@ -70,7 +70,7 @@ For backend and AI workflows, use the [Node SDK](/document-engine/sdks), [Python
 Previously, you could access the underlying ProseMirror instances directly:
 
 ```javascript
-// Deprecated — will be removed
+// Deprecated: will be removed
 superdoc.on("editorCreate", ({ editor }) => {
   const view = editor.view;
   const state = editor.state;
@@ -89,13 +89,13 @@ superdoc.on("editorCreate", ({ editor }) => {
 
 - **No custom plugins**: SuperDoc modules aren't ProseMirror plugins
 - **Fixed schema**: Can't modify the document schema
-- **Use the Document API**: For programmatic operations, use `editor.doc` — not raw ProseMirror transactions
+- **Use the Document API**: For programmatic operations, use `editor.doc`: not raw ProseMirror transactions
 
 ### Custom functionality
 
 If you need features SuperDoc doesn't provide:
 
-- Check the [Document API reference](/document-api/overview) — 300+ operations
+- Check the [Document API reference](/document-api/overview): 300+ operations
 - Use the [SDK](/document-engine/sdks) or [CLI](/document-engine/cli) for backend workflows
 - Request features via [GitHub issues](https://github.com/superdoc-dev/superdoc/issues)
 

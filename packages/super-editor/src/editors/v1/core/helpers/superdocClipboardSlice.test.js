@@ -5,9 +5,11 @@ import {
   applySuperdocClipboardMedia,
   embedSliceInHtml,
   extractSliceFromHtml,
+  extractMediaFromHtml,
   stripSliceFromHtml,
   extractBodySectPrFromHtml,
   bodySectPrShouldEmbed,
+  SUPERDOC_MEDIA_ATTR,
   SUPERDOC_MEDIA_MIME,
 } from './superdocClipboardSlice.js';
 
@@ -138,6 +140,69 @@ describe('superdocClipboardSlice image media', () => {
     expect(JSON.parse(outSlice).content[0].content[0].attrs.src).toBe('word/media/image1.png');
   });
 
+  it('applySuperdocClipboardMedia prefers clipboardData MIME over embedded media JSON when both are present', () => {
+    const editor = {
+      storage: {
+        image: {
+          media: { 'word/media/image1.png': 'data:image/png;base64,OLD' },
+        },
+      },
+    };
+    const sliceJson = JSON.stringify({
+      content: [
+        {
+          type: 'paragraph',
+          content: [{ type: 'image', attrs: { src: 'word/media/image1.png' } }],
+        },
+      ],
+      openStart: 0,
+      openEnd: 0,
+    });
+    const clipboardData = {
+      getData: (mime) =>
+        mime === SUPERDOC_MEDIA_MIME
+          ? JSON.stringify({ 'word/media/image1.png': 'data:image/png;base64,FROM_MIME' })
+          : '',
+    };
+    const embeddedMediaJson = JSON.stringify({
+      'word/media/image1.png': 'data:image/png;base64,FROM_EMBED',
+    });
+
+    const outSlice = applySuperdocClipboardMedia(editor, clipboardData, sliceJson, embeddedMediaJson);
+
+    const newKey = JSON.parse(outSlice).content[0].content[0].attrs.src;
+    expect(newKey).not.toBe('word/media/image1.png');
+    expect(editor.storage.image.media[newKey]).toBe('data:image/png;base64,FROM_MIME');
+  });
+
+  it('applySuperdocClipboardMedia accepts embedded media JSON when custom MIME data is unavailable', () => {
+    const editor = {
+      storage: {
+        image: {
+          media: { 'word/media/image1.png': 'data:image/png;base64,OLD' },
+        },
+      },
+    };
+    const sliceJson = JSON.stringify({
+      content: [
+        {
+          type: 'paragraph',
+          content: [{ type: 'image', attrs: { src: 'word/media/image1.png' } }],
+        },
+      ],
+      openStart: 0,
+      openEnd: 0,
+    });
+    const mediaJson = JSON.stringify({ 'word/media/image1.png': 'data:image/png;base64,NEW' });
+
+    const outSlice = applySuperdocClipboardMedia(editor, null, sliceJson, mediaJson);
+
+    const img = JSON.parse(outSlice).content[0].content[0];
+    expect(img.attrs.src).not.toBe('word/media/image1.png');
+    expect(editor.storage.image.media['word/media/image1.png']).toBe('data:image/png;base64,OLD');
+    expect(editor.storage.image.media[img.attrs.src]).toBe('data:image/png;base64,NEW');
+  });
+
   it('applySuperdocClipboardMedia rewrites shapeGroup nested image src on collision', () => {
     const editor = {
       storage: {
@@ -183,12 +248,23 @@ describe('HTML slice embed/extract round-trip', () => {
     expect(extracted).toBe(sampleSlice);
   });
 
+  it('extractMediaFromHtml recovers embedded media JSON', () => {
+    const mediaJson = JSON.stringify({ 'word/media/image1.png': 'data:image/png;base64,AAA' });
+    const embedded = embedSliceInHtml(sampleHtml, sampleSlice, '', mediaJson);
+
+    expect(embedded).toContain(SUPERDOC_MEDIA_ATTR);
+    expect(extractMediaFromHtml(embedded)).toBe(mediaJson);
+  });
+
   it('stripSliceFromHtml removes embedded divs and preserves the original HTML', () => {
-    const embedded = embedSliceInHtml(sampleHtml, sampleSlice);
+    const mediaJson = JSON.stringify({ 'word/media/image1.png': 'data:image/png;base64,AAA' });
+    const embedded = embedSliceInHtml(sampleHtml, sampleSlice, '', mediaJson);
     expect(embedded).toContain('data-superdoc-slice');
+    expect(embedded).toContain(SUPERDOC_MEDIA_ATTR);
     const stripped = stripSliceFromHtml(embedded);
     expect(stripped).toBe(sampleHtml);
     expect(stripped).not.toContain('data-superdoc-slice');
+    expect(stripped).not.toContain(SUPERDOC_MEDIA_ATTR);
   });
 
   it('round-trips Unicode content (CJK, emoji)', () => {

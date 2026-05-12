@@ -166,6 +166,16 @@ describe('handleImageNode', () => {
     };
   };
 
+  const renameDrawingMlPrefix = (node, prefix) => {
+    if (!node || typeof node !== 'object') return;
+    if (typeof node.name === 'string' && node.name.startsWith('a:')) {
+      node.name = `${prefix}:${node.name.slice(2)}`;
+    }
+    if (Array.isArray(node.elements)) {
+      node.elements.forEach((child) => renameDrawingMlPrefix(child, prefix));
+    }
+  };
+
   it('returns null if picture is missing', () => {
     const node = makeNode();
     node.elements[1].elements[0].elements = [];
@@ -528,6 +538,87 @@ describe('handleImageNode', () => {
     expect(extractFillColor).toHaveBeenCalled();
     expect(extractStrokeColor).toHaveBeenCalled();
     expect(extractStrokeWidth).toHaveBeenCalled();
+  });
+
+  it('handles DrawingML nodes with non-a prefixes', () => {
+    const node = makeShapeNode({ prst: 'rect' });
+    renameDrawingMlPrefix(node, 'ns6');
+
+    const result = handleImageNode(node, makeParams(), false);
+    expect(result.type).toBe('vectorShape');
+    expect(result.attrs.kind).toBe('rect');
+  });
+
+  describe('decorative flag (adec/a16/re-prefixed namespaces)', () => {
+    const buildNodeWithDecorative = ({
+      extLstName = 'a:extLst',
+      extName = 'a:ext',
+      decorativeName = 'adec:decorative',
+      val = '1',
+    } = {}) => {
+      const node = makeNode();
+      const docPr = node.elements.find((el) => el.name === 'wp:docPr');
+      docPr.elements = [
+        {
+          name: extLstName,
+          elements: [
+            {
+              name: extName,
+              attributes: { uri: '{C183D7F6-B498-43B3-948B-1728B52AA6E4}' },
+              elements: [{ name: decorativeName, attributes: { val } }],
+            },
+          ],
+        },
+      ];
+      return node;
+    };
+
+    it('detects decorative=1 emitted with the canonical adec: prefix (Word default)', () => {
+      const node = buildNodeWithDecorative({ decorativeName: 'adec:decorative' });
+      const result = handleImageNode(node, makeParams(), false);
+      expect(result.attrs.decorative).toBe(true);
+    });
+
+    it('detects decorative=1 emitted with the legacy a16: prefix', () => {
+      const node = buildNodeWithDecorative({ decorativeName: 'a16:decorative' });
+      const result = handleImageNode(node, makeParams(), false);
+      expect(result.attrs.decorative).toBe(true);
+    });
+
+    it('detects decorative=1 when the namespace prefix has been re-aliased (e.g. ns7:)', () => {
+      const node = buildNodeWithDecorative({
+        extLstName: 'ns6:extLst',
+        extName: 'ns6:ext',
+        decorativeName: 'ns7:decorative',
+      });
+      const result = handleImageNode(node, makeParams(), false);
+      expect(result.attrs.decorative).toBe(true);
+    });
+
+    it('leaves decorative=false when the val attribute is missing or zero', () => {
+      const node = buildNodeWithDecorative({ val: '0' });
+      const result = handleImageNode(node, makeParams(), false);
+      expect(result.attrs.decorative).toBe(false);
+    });
+
+    it('leaves decorative=false when extLst has no decorative descendant', () => {
+      const node = makeNode();
+      const docPr = node.elements.find((el) => el.name === 'wp:docPr');
+      docPr.elements = [
+        {
+          name: 'a:extLst',
+          elements: [
+            {
+              name: 'a:ext',
+              attributes: { uri: '{ANY}' },
+              elements: [{ name: 'a14:useLocalDpi', attributes: { val: '0' } }],
+            },
+          ],
+        },
+      ];
+      const result = handleImageNode(node, makeParams(), false);
+      expect(result.attrs.decorative).toBe(false);
+    });
   });
 
   it('renders textbox shapes as vectorShapes with text content', () => {
@@ -1930,6 +2021,121 @@ describe('getVectorShape', () => {
 
       // But src should still be different
       expect(result1.attrs.src).not.toBe(result2.attrs.src);
+    });
+  });
+
+  // SD-2804: ECMA-376 §20.4.2.38 — a textbox (CT_TxbxContent) can hold rich
+  // body-level content, including paragraphs whose runs carry inline images
+  // via w:drawing > wp:inline > pic:pic. The text-only extractor used to
+  // silently skip those drawings, leaving the textbox visually empty even
+  // though export round-tripped the image. The fix surfaces the image as a
+  // textContent part with kind='image' so the shape painter can render it.
+  describe('SD-2804: image inside textbox content', () => {
+    const docxFixture = {
+      'word/_rels/header1.xml.rels': {
+        elements: [
+          {
+            name: 'Relationships',
+            elements: [
+              {
+                name: 'Relationship',
+                attributes: { Id: 'rId1', Target: 'media/image1.png' },
+              },
+            ],
+          },
+        ],
+      },
+    };
+
+    const makeShape = () => ({
+      elements: [
+        {
+          name: 'wps:wsp',
+          elements: [
+            { name: 'wps:cNvSpPr', attributes: { txBox: '1' } },
+            {
+              name: 'wps:spPr',
+              elements: [
+                { name: 'a:prstGeom', attributes: { prst: 'rect' } },
+                { name: 'a:xfrm', elements: [{ name: 'a:ext', attributes: { cx: '4745620', cy: '520860' } }] },
+              ],
+            },
+            {
+              name: 'wps:txbx',
+              elements: [
+                {
+                  name: 'w:txbxContent',
+                  elements: [
+                    {
+                      name: 'w:p',
+                      elements: [
+                        {
+                          name: 'w:r',
+                          elements: [
+                            { name: 'w:rPr', elements: [{ name: 'w:noProof' }] },
+                            {
+                              name: 'w:drawing',
+                              elements: [
+                                {
+                                  name: 'wp:inline',
+                                  elements: [
+                                    { name: 'wp:extent', attributes: { cx: '481330', cy: '422910' } },
+                                    { name: 'wp:docPr', attributes: { id: '1', name: 'Picture 2' } },
+                                    {
+                                      name: 'a:graphic',
+                                      elements: [
+                                        {
+                                          name: 'a:graphicData',
+                                          attributes: {
+                                            uri: 'http://schemas.openxmlformats.org/drawingml/2006/picture',
+                                          },
+                                          elements: [
+                                            {
+                                              name: 'pic:pic',
+                                              elements: [
+                                                {
+                                                  name: 'pic:blipFill',
+                                                  elements: [{ name: 'a:blip', attributes: { 'r:embed': 'rId1' } }],
+                                                },
+                                              ],
+                                            },
+                                          ],
+                                        },
+                                      ],
+                                    },
+                                  ],
+                                },
+                              ],
+                            },
+                          ],
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+            { name: 'wps:bodyPr', attributes: {} },
+          ],
+        },
+      ],
+    });
+
+    it('emits an image part in textContent for an inline w:drawing inside the textbox', () => {
+      const graphicData = makeShape();
+      const result = getVectorShape({
+        params: { nodes: [{ name: 'w:drawing', elements: [] }], docx: docxFixture, filename: 'header1.xml' },
+        node: { name: 'wp:anchor', elements: [] },
+        graphicData,
+        size: { width: 374, height: 41 },
+      });
+
+      expect(result?.type).toBe('vectorShape');
+      const parts = result?.attrs?.textContent?.parts || [];
+      const imagePart = parts.find((p) => p.kind === 'image');
+      expect(imagePart).toBeTruthy();
+      expect(typeof imagePart?.src).toBe('string');
+      expect(imagePart?.src.length).toBeGreaterThan(0);
     });
   });
 });

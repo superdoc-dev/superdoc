@@ -15,7 +15,7 @@ Document API gives you a consistent way to read and edit documents without relyi
 
 ## Node addressing
 
-Every block in a document has a `nodeId` — a string that uniquely identifies it.
+Every block in a document has a `nodeId`: a string that uniquely identifies it.
 
 For mutation targeting and `getNode(...)`, use `NodeAddress`:
 
@@ -73,7 +73,7 @@ For nodes created at runtime (not imported from DOCX), `nodeId` is still best-ef
 | Runtime-derived ID | No guarantee (often session-scoped; some table addresses use deterministic fallbacks) | Nodes created programmatically before first export |
 
 <Tip>
-If you need to reference blocks across separate editor sessions, use `editor.doc.query.match()` (or persist `nodeId` and reconstruct a `NodeAddress`) — don't read `node.attrs.sdBlockId` directly. The Document API resolves `paraId` first for DOCX-imported content and may derive safer public IDs for some runtime structures such as tables.
+If you need to reference blocks across separate editor sessions, use `editor.doc.query.match()` (or persist `nodeId` and reconstruct a `NodeAddress`): don't read `node.attrs.sdBlockId` directly. The Document API resolves `paraId` first for DOCX-imported content and may derive safer public IDs for some runtime structures such as tables.
 </Tip>
 
 <Warning>

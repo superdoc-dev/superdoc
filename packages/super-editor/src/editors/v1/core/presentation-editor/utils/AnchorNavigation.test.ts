@@ -183,6 +183,18 @@ describe('goToAnchor', () => {
     });
   });
 
+  it('should fall back to resolveAnchorPosition when the precomputed bookmark map misses the anchor', async () => {
+    const deps = makeDeps({
+      bookmarks: new Map(),
+      resolveAnchorPosition: vi.fn(() => 50),
+    });
+
+    const result = await goToAnchor(deps);
+
+    expect(result).toBe(true);
+    expect(deps.resolveAnchorPosition).toHaveBeenCalledWith('heading1');
+  });
+
   it('should not use rect.y for fragmentY (coordinate space mismatch)', async () => {
     // Even when selectionToRects returns a rect, we should NOT use rect.y
     // because it's document-absolute, not page-relative like fragment.y

@@ -19,20 +19,28 @@ import type {
 import { buildDiscoveryResult } from '@superdoc/document-api';
 import {
   findAllBookmarks,
+  findAllBookmarkMarkersInDocument,
+  findAllBookmarksInDocument,
   resolveBookmarkTarget,
   extractBookmarkInfo,
   buildBookmarkDiscoveryItem,
+  buildBookmarkAddress,
+  type DocumentBookmarkEntry,
 } from '../helpers/bookmark-resolver.js';
 import { paginate, resolveInlineInsertPosition } from '../helpers/adapter-utils.js';
-import { getRevision } from './revision-tracker.js';
-import { executeDomainCommand } from './plan-wrappers.js';
+import { getRevision, checkRevision } from './revision-tracker.js';
+import { disposeEphemeralWriteRuntime, executeDomainCommand, resolveWriteStoryRuntime } from './plan-wrappers.js';
 import { rejectTrackedMode } from '../helpers/mutation-helpers.js';
 import { clearIndexCache } from '../helpers/index-cache.js';
 import { DocumentApiAdapterError } from '../errors.js';
+import { resolveStoryRuntime } from '../story-runtime/resolve-story-runtime.js';
+import { parseStoryKey, BODY_STORY_KEY } from '../story-runtime/story-key.js';
 
 // ---------------------------------------------------------------------------
 // Result helpers
 // ---------------------------------------------------------------------------
+
+export const BOOKMARK_SCAN_REVISION_PREFIX = 'bookmark-scan:';
 
 function bookmarkSuccess(address: BookmarkAddress): BookmarkMutationResult {
   return { success: true, bookmark: address };
@@ -54,15 +62,121 @@ function parseBookmarkId(raw: unknown): number | null {
   return Number.isInteger(parsed) && parsed >= 0 ? parsed : null;
 }
 
-function allocateBookmarkId(doc: import('prosemirror-model').Node): string {
+function allocateBookmarkId(editor: Editor): string {
+  const entries = findAllBookmarkMarkersInDocument(editor);
   let maxId = -1;
-  doc.descendants((node) => {
-    if (node.type.name !== 'bookmarkStart' && node.type.name !== 'bookmarkEnd') return true;
-    const id = parseBookmarkId(node.attrs?.id);
+  for (const entry of entries) {
+    const id = parseBookmarkId(entry.bookmarkId);
     if (id !== null && id > maxId) maxId = id;
-    return true;
-  });
+  }
   return String(maxId + 1);
+}
+
+function bookmarkExistsAnywhere(
+  editor: Editor,
+  name: string,
+  exclude?: { storyKey: string; bookmarkId: string },
+  preCollected?: DocumentBookmarkEntry[],
+): boolean {
+  const entries = preCollected ?? findAllBookmarksInDocument(editor);
+  return entries.some((bookmark) => {
+    if (bookmark.name !== name) return false;
+    if (!exclude) return true;
+    return !(bookmark.storyKey === exclude.storyKey && bookmark.bookmarkId === exclude.bookmarkId);
+  });
+}
+
+type BookmarkStorySnapshot = {
+  storyKey: string;
+  runtime: ReturnType<typeof resolveStoryRuntime>;
+  revision: string;
+};
+
+function collectBookmarkStorySnapshots(editor: Editor, entries: DocumentBookmarkEntry[]): BookmarkStorySnapshot[] {
+  const storyKeys = [...new Set(entries.map((entry) => entry.storyKey))];
+
+  return storyKeys.flatMap((storyKey) => {
+    const locator = storyKey === BODY_STORY_KEY ? undefined : parseStoryKey(storyKey);
+
+    try {
+      const runtime = resolveStoryRuntime(editor, locator);
+      return [{ storyKey, runtime, revision: getRevision(runtime.editor) }];
+    } catch (error) {
+      if (error instanceof DocumentApiAdapterError && error.code === 'STORY_NOT_FOUND') {
+        return [];
+      }
+      throw error;
+    }
+  });
+}
+
+function buildDocumentBookmarkRevision(hostRevision: string, snapshots: BookmarkStorySnapshot[]): string {
+  if (snapshots.length === 0) {
+    return hostRevision;
+  }
+
+  if (snapshots.length === 1 && snapshots[0]?.storyKey === BODY_STORY_KEY) {
+    return hostRevision;
+  }
+
+  const parts = [...snapshots]
+    .sort((left, right) => left.storyKey.localeCompare(right.storyKey))
+    .map((snapshot) => `${snapshot.storyKey}@${snapshot.revision}`);
+
+  return `${BOOKMARK_SCAN_REVISION_PREFIX}${parts.join('|')}`;
+}
+
+function getDocumentBookmarkRevision(editor: Editor, preCollected?: DocumentBookmarkEntry[]): string {
+  const hostRevision = getRevision(editor);
+  const entries = preCollected ?? findAllBookmarksInDocument(editor);
+  const snapshots = collectBookmarkStorySnapshots(editor, entries);
+  return buildDocumentBookmarkRevision(hostRevision, snapshots);
+}
+
+function expectedRevisionMatchesStory(storyEditor: Editor, expectedRevision: string): boolean {
+  return expectedRevision === getRevision(storyEditor);
+}
+
+function expectedRevisionMatchesDocumentScan(hostEditor: Editor, expectedRevision: string): boolean {
+  return (
+    expectedRevision.startsWith(BOOKMARK_SCAN_REVISION_PREFIX) &&
+    expectedRevision === getDocumentBookmarkRevision(hostEditor)
+  );
+}
+
+function checkBookmarkRevision(hostEditor: Editor, storyEditor: Editor, expectedRevision: string | undefined): void {
+  if (expectedRevision === undefined) return;
+
+  if (expectedRevisionMatchesStory(storyEditor, expectedRevision)) {
+    return;
+  }
+
+  if (expectedRevisionMatchesDocumentScan(hostEditor, expectedRevision)) {
+    return;
+  }
+
+  checkRevision(storyEditor, expectedRevision);
+}
+
+function resolveBookmarkMutationStory(editor: Editor, target: BookmarkAddress): BookmarkAddress['story'] | undefined {
+  if (target.story) {
+    return target.story;
+  }
+
+  const matches = findAllBookmarksInDocument(editor).filter((bookmark) => bookmark.name === target.name);
+  if (matches.length > 1) {
+    throw new DocumentApiAdapterError(
+      'INVALID_INPUT',
+      `Bookmark name "${target.name}" exists in multiple stories. Pass target.story to disambiguate the mutation.`,
+    );
+  }
+
+  const entry = matches[0];
+  if (!entry) {
+    throw new DocumentApiAdapterError('TARGET_NOT_FOUND', `Bookmark with name "${target.name}" not found.`);
+  }
+
+  return entry.storyKey === BODY_STORY_KEY ? undefined : parseStoryKey(entry.storyKey);
 }
 
 // ---------------------------------------------------------------------------
@@ -70,11 +184,43 @@ function allocateBookmarkId(doc: import('prosemirror-model').Node): string {
 // ---------------------------------------------------------------------------
 
 export function bookmarksListWrapper(editor: Editor, query?: BookmarkListInput): BookmarksListResult {
-  const doc = editor.state.doc;
-  const revision = getRevision(editor);
+  if (query?.in) {
+    return listBookmarksFromStory(editor, query.in, query);
+  }
+
+  const entries = findAllBookmarksInDocument(editor);
+  const hostRevision = getRevision(editor);
+  const snapshots = collectBookmarkStorySnapshots(editor, entries);
+
+  const allItems = snapshots.flatMap(({ storyKey, runtime, revision }) => {
+    const doc = runtime.editor.state.doc;
+    const bookmarks = findAllBookmarks(doc);
+    return bookmarks.map((bookmark) => buildBookmarkDiscoveryItem(doc, bookmark, revision, runtime.locator, storyKey));
+  });
+
+  const { total, items: paged } = paginate(allItems, query?.offset, query?.limit);
+  const effectiveLimit = query?.limit ?? total;
+
+  return buildDiscoveryResult({
+    evaluatedRevision: buildDocumentBookmarkRevision(hostRevision, snapshots),
+    total,
+    items: paged,
+    page: { limit: effectiveLimit, offset: query?.offset ?? 0, returned: paged.length },
+  });
+}
+
+function listBookmarksFromStory(
+  editor: Editor,
+  storyLocator: BookmarkListInput['in'],
+  query?: BookmarkListInput,
+): BookmarksListResult {
+  const runtime = resolveStoryRuntime(editor, storyLocator);
+  const storyEditor = runtime.editor;
+  const doc = storyEditor.state.doc;
+  const revision = getRevision(storyEditor);
   const bookmarks = findAllBookmarks(doc);
 
-  const allItems = bookmarks.map((b) => buildBookmarkDiscoveryItem(doc, b, revision));
+  const allItems = bookmarks.map((bookmark) => buildBookmarkDiscoveryItem(doc, bookmark, revision, runtime.locator));
   const { total, items: paged } = paginate(allItems, query?.offset, query?.limit);
   const effectiveLimit = query?.limit ?? total;
 
@@ -87,8 +233,21 @@ export function bookmarksListWrapper(editor: Editor, query?: BookmarkListInput):
 }
 
 export function bookmarksGetWrapper(editor: Editor, input: BookmarkGetInput): BookmarkInfo {
-  const resolved = resolveBookmarkTarget(editor.state.doc, input.target);
-  return extractBookmarkInfo(editor.state.doc, resolved);
+  if (input.target.story) {
+    const runtime = resolveStoryRuntime(editor, input.target.story);
+    const resolved = resolveBookmarkTarget(runtime.editor.state.doc, input.target);
+    return extractBookmarkInfo(runtime.editor.state.doc, resolved, runtime.locator);
+  }
+
+  const entry = findAllBookmarksInDocument(editor).find((bookmark) => bookmark.name === input.target.name);
+  if (!entry) {
+    throw new DocumentApiAdapterError('TARGET_NOT_FOUND', `Bookmark with name "${input.target.name}" not found.`);
+  }
+
+  const locator = entry.storyKey === BODY_STORY_KEY ? undefined : parseStoryKey(entry.storyKey);
+  const runtime = resolveStoryRuntime(editor, locator);
+  const resolved = resolveBookmarkTarget(runtime.editor.state.doc, input.target);
+  return extractBookmarkInfo(runtime.editor.state.doc, resolved, runtime.locator);
 }
 
 // ---------------------------------------------------------------------------
@@ -101,34 +260,35 @@ export function bookmarksInsertWrapper(
   options?: MutationOptions,
 ): BookmarkMutationResult {
   rejectTrackedMode('bookmarks.insert', options);
+  const runtime = resolveWriteStoryRuntime(editor, input.at.story);
+  const storyEditor = runtime.editor;
+  const address: BookmarkAddress = buildBookmarkAddress(input.name, runtime.locator);
 
-  // Check for duplicate name
-  const existing = findAllBookmarks(editor.state.doc);
-  if (existing.some((b) => b.name === input.name)) {
-    return bookmarkFailure('NO_OP', `Bookmark with name "${input.name}" already exists.`);
-  }
+  try {
+    checkBookmarkRevision(editor, storyEditor, options?.expectedRevision);
+    const allBookmarks = findAllBookmarksInDocument(editor);
 
-  const address: BookmarkAddress = { kind: 'entity', entityType: 'bookmark', name: input.name };
+    if (bookmarkExistsAnywhere(editor, input.name, undefined, allBookmarks)) {
+      return bookmarkFailure('NO_OP', `Bookmark with name "${input.name}" already exists.`);
+    }
 
-  if (options?.dryRun) {
-    return bookmarkSuccess(address);
-  }
+    if (options?.dryRun) {
+      return bookmarkSuccess(address);
+    }
 
-  const bookmarkStartType = editor.schema.nodes.bookmarkStart;
-  const bookmarkEndType = editor.schema.nodes.bookmarkEnd;
-  if (!bookmarkStartType || !bookmarkEndType) {
-    throw new DocumentApiAdapterError(
-      'CAPABILITY_UNAVAILABLE',
-      'bookmarks.insert requires bookmarkStart and bookmarkEnd node types in the schema.',
-    );
-  }
+    const bookmarkStartType = storyEditor.schema.nodes.bookmarkStart;
+    const bookmarkEndType = storyEditor.schema.nodes.bookmarkEnd;
+    if (!bookmarkStartType || !bookmarkEndType) {
+      throw new DocumentApiAdapterError(
+        'CAPABILITY_UNAVAILABLE',
+        'bookmarks.insert requires bookmarkStart and bookmarkEnd node types in the schema.',
+      );
+    }
 
-  const resolved = resolveInlineInsertPosition(editor, input.at, 'bookmarks.insert');
+    const resolved = resolveInlineInsertPosition(storyEditor, input.at, 'bookmarks.insert');
 
-  const receipt = executeDomainCommand(
-    editor,
-    () => {
-      const bookmarkId = allocateBookmarkId(editor.state.doc);
+    const receipt = executeDomainCommand(storyEditor, () => {
+      const bookmarkId = allocateBookmarkId(editor);
       const startAttrs: Record<string, unknown> = {
         name: input.name,
         id: bookmarkId,
@@ -141,22 +301,23 @@ export function bookmarksInsertWrapper(
       const startNode = bookmarkStartType.create(startAttrs);
       const endNode = bookmarkEndType.create({ id: bookmarkId });
 
-      // Insert end first so range bookmarks survive index shifts.
-      const { tr } = editor.state;
+      const { tr } = storyEditor.state;
       tr.insert(resolved.to, endNode);
       tr.insert(resolved.from, startNode);
-      editor.dispatch(tr);
-      clearIndexCache(editor);
+      storyEditor.dispatch(tr);
+      clearIndexCache(storyEditor);
       return true;
-    },
-    { expectedRevision: options?.expectedRevision },
-  );
+    });
 
-  if (!receiptApplied(receipt)) {
-    return bookmarkFailure('NO_OP', 'Insert operation produced no change.');
+    if (!receiptApplied(receipt)) {
+      return bookmarkFailure('NO_OP', 'Insert operation produced no change.');
+    }
+
+    if (runtime.commit) runtime.commit(editor);
+    return bookmarkSuccess(address);
+  } finally {
+    disposeEphemeralWriteRuntime(runtime);
   }
-
-  return bookmarkSuccess(address);
 }
 
 export function bookmarksRenameWrapper(
@@ -165,48 +326,52 @@ export function bookmarksRenameWrapper(
   options?: MutationOptions,
 ): BookmarkMutationResult {
   rejectTrackedMode('bookmarks.rename', options);
+  const runtime = resolveWriteStoryRuntime(editor, resolveBookmarkMutationStory(editor, input.target));
+  const storyEditor = runtime.editor;
 
-  const resolved = resolveBookmarkTarget(editor.state.doc, input.target);
+  try {
+    checkBookmarkRevision(editor, storyEditor, options?.expectedRevision);
+    const resolved = resolveBookmarkTarget(storyEditor.state.doc, input.target);
 
-  if (resolved.name === input.newName) {
-    return bookmarkFailure('NO_OP', 'New name is identical to current name.');
-  }
+    if (resolved.name === input.newName) {
+      return bookmarkFailure('NO_OP', 'New name is identical to current name.');
+    }
 
-  // Check that the new name is not already taken
-  const all = findAllBookmarks(editor.state.doc);
-  if (all.some((b) => b.name === input.newName)) {
-    throw new DocumentApiAdapterError(
-      'INVALID_INPUT',
-      `bookmarks.rename: a bookmark with name "${input.newName}" already exists.`,
-    );
-  }
+    if (
+      bookmarkExistsAnywhere(editor, input.newName, { storyKey: runtime.storyKey, bookmarkId: resolved.bookmarkId })
+    ) {
+      throw new DocumentApiAdapterError(
+        'INVALID_INPUT',
+        `bookmarks.rename: a bookmark with name "${input.newName}" already exists.`,
+      );
+    }
 
-  const newAddress: BookmarkAddress = { kind: 'entity', entityType: 'bookmark', name: input.newName };
+    const newAddress: BookmarkAddress = buildBookmarkAddress(input.newName, runtime.locator);
 
-  if (options?.dryRun) {
-    return bookmarkSuccess(newAddress);
-  }
+    if (options?.dryRun) {
+      return bookmarkSuccess(newAddress);
+    }
 
-  const receipt = executeDomainCommand(
-    editor,
-    () => {
-      const { tr } = editor.state;
+    const receipt = executeDomainCommand(storyEditor, () => {
+      const { tr } = storyEditor.state;
       tr.setNodeMarkup(resolved.pos, undefined, {
         ...resolved.node.attrs,
         name: input.newName,
       });
-      editor.dispatch(tr);
-      clearIndexCache(editor);
+      storyEditor.dispatch(tr);
+      clearIndexCache(storyEditor);
       return true;
-    },
-    { expectedRevision: options?.expectedRevision },
-  );
+    });
 
-  if (!receiptApplied(receipt)) {
-    return bookmarkFailure('NO_OP', 'Rename operation produced no change.');
+    if (!receiptApplied(receipt)) {
+      return bookmarkFailure('NO_OP', 'Rename operation produced no change.');
+    }
+
+    if (runtime.commit) runtime.commit(editor);
+    return bookmarkSuccess(newAddress);
+  } finally {
+    disposeEphemeralWriteRuntime(runtime);
   }
-
-  return bookmarkSuccess(newAddress);
 }
 
 export function bookmarksRemoveWrapper(
@@ -215,20 +380,21 @@ export function bookmarksRemoveWrapper(
   options?: MutationOptions,
 ): BookmarkMutationResult {
   rejectTrackedMode('bookmarks.remove', options);
+  const runtime = resolveWriteStoryRuntime(editor, resolveBookmarkMutationStory(editor, input.target));
+  const storyEditor = runtime.editor;
 
-  const resolved = resolveBookmarkTarget(editor.state.doc, input.target);
-  const address: BookmarkAddress = { kind: 'entity', entityType: 'bookmark', name: resolved.name };
+  try {
+    checkBookmarkRevision(editor, storyEditor, options?.expectedRevision);
+    const resolved = resolveBookmarkTarget(storyEditor.state.doc, input.target);
+    const address: BookmarkAddress = buildBookmarkAddress(resolved.name, runtime.locator);
 
-  if (options?.dryRun) {
-    return bookmarkSuccess(address);
-  }
+    if (options?.dryRun) {
+      return bookmarkSuccess(address);
+    }
 
-  const receipt = executeDomainCommand(
-    editor,
-    () => {
-      const { tr } = editor.state;
+    const receipt = executeDomainCommand(storyEditor, () => {
+      const { tr } = storyEditor.state;
 
-      // Delete bookmarkEnd first (if it exists and is after start) to avoid position shifts
       if (resolved.endPos !== null && resolved.endPos > resolved.pos) {
         const endNode = tr.doc.nodeAt(resolved.endPos);
         if (endNode) {
@@ -236,22 +402,23 @@ export function bookmarksRemoveWrapper(
         }
       }
 
-      // Delete bookmarkStart
       const startNode = tr.doc.nodeAt(resolved.pos);
       if (startNode) {
         tr.delete(resolved.pos, resolved.pos + startNode.nodeSize);
       }
 
-      editor.dispatch(tr);
-      clearIndexCache(editor);
+      storyEditor.dispatch(tr);
+      clearIndexCache(storyEditor);
       return true;
-    },
-    { expectedRevision: options?.expectedRevision },
-  );
+    });
 
-  if (!receiptApplied(receipt)) {
-    return bookmarkFailure('NO_OP', 'Remove operation produced no change.');
+    if (!receiptApplied(receipt)) {
+      return bookmarkFailure('NO_OP', 'Remove operation produced no change.');
+    }
+
+    if (runtime.commit) runtime.commit(editor);
+    return bookmarkSuccess(address);
+  } finally {
+    disposeEphemeralWriteRuntime(runtime);
   }
-
-  return bookmarkSuccess(address);
 }

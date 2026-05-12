@@ -1,7 +1,7 @@
 /**
  * Register intent-based tools from the generated catalog.
  *
- * Reads catalog.json and registers each intent tool with the MCP server.
+ * Registers each intent tool from the MCP-local generated catalog.
  * Tool dispatch is handled by the generated dispatchIntentTool function,
  * routing through DocumentApi.invoke().
  */
@@ -10,7 +10,9 @@ import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { SessionManager } from '../session-manager.js';
 import type { DocumentApi, DynamicInvokeRequest } from '@superdoc/document-api';
-import { dispatchIntentTool, getToolCatalog } from '@superdoc-dev/sdk';
+import { MCP_TOOL_CATALOG } from '../generated/catalog.js';
+import { dispatchIntentTool } from '../generated/intent-dispatch.generated.js';
+import { applyParamRenames } from './param-renames.js';
 
 // ---------------------------------------------------------------------------
 // Types for the generated catalog
@@ -38,7 +40,7 @@ interface Catalog {
 // JSON Schema → Zod conversion (minimal, for MCP tool registration)
 // ---------------------------------------------------------------------------
 
-function jsonSchemaPropertyToZod(prop: Record<string, unknown>): z.ZodTypeAny {
+export function jsonSchemaPropertyToZod(prop: Record<string, unknown>): z.ZodTypeAny {
   const desc = prop.description as string | undefined;
   const type = prop.type as string | undefined;
 
@@ -49,9 +51,17 @@ function jsonSchemaPropertyToZod(prop: Record<string, unknown>): z.ZodTypeAny {
     }
   }
 
-  // Complex schemas (oneOf, anyOf, allOf) — pass through as opaque;
-  // DocumentApi validates the actual payload at dispatch time.
-  if (prop.oneOf || prop.anyOf || prop.allOf) {
+  // AIDEV-NOTE: oneOf/anyOf/allOf must gate on "every variant is type:object".
+  // looseObject({}) emits type:"object" (so MCP clients send objects, not strings)
+  // but rejects non-object payloads at the zod layer. For mixed unions like
+  // superdoc_edit.content (object|array), fall back to z.unknown() so the array
+  // form survives. DocumentApi validates the actual shape at dispatch time.
+  const variants = (prop.oneOf ?? prop.anyOf ?? prop.allOf) as Array<Record<string, unknown>> | undefined;
+  if (variants) {
+    const allObjectVariants = variants.every((v) => v?.type === 'object');
+    if (allObjectVariants) {
+      return desc ? z.looseObject({}).describe(desc) : z.looseObject({});
+    }
     return desc ? z.unknown().describe(desc) : z.unknown();
   }
 
@@ -68,9 +78,12 @@ function jsonSchemaPropertyToZod(prop: Record<string, unknown>): z.ZodTypeAny {
       // z4-mini toJSONSchema cannot convert z.record() from zod v4 classic.
       return desc ? z.array(z.unknown()).describe(desc) : z.array(z.unknown());
     case 'object':
-      // Use z.unknown() instead of z.record() to avoid MCP SDK Zod v4 classic/mini
-      // incompatibility. DocumentApi validates the actual shape at dispatch time.
-      return desc ? z.unknown().describe(desc) : z.unknown();
+      // Use z.looseObject({}) so the emitted JSON Schema carries
+      // `type: "object"`. z.unknown() drops the type (clients treat it
+      // as a string); z.record() can't be converted by the MCP SDK's
+      // z4-mini toJSONSchema. DocumentApi validates the actual shape
+      // at dispatch time.
+      return desc ? z.looseObject({}).describe(desc) : z.looseObject({});
     default:
       return desc ? z.unknown().describe(desc) : z.unknown();
   }
@@ -109,15 +122,22 @@ function buildZodSchema(tool: CatalogTool): Record<string, z.ZodTypeAny> {
 function executeOperation(api: DocumentApi, operationId: string, input: Record<string, unknown>): unknown {
   // Generated dispatch uses 'doc.' prefix (e.g. 'doc.query.match'); strip it for DocumentApi.invoke()
   const opId = operationId.startsWith('doc.') ? operationId.slice(4) : operationId;
-  return api.invoke({ operationId: opId, input } as DynamicInvokeRequest);
+  // AIDEV-NOTE: renames are applied on input only — output is not inverted.
+  // This is incidental rather than deliberate: the fix only needed to address
+  // the input path. The asymmetry is harmless: the contract response uses
+  // canonical names (e.g. commentId), and agents can use either name on
+  // subsequent calls (canonical names pass through PARAM_RENAMES unchanged;
+  // short names are renamed here). A follow-up could invert on output for
+  // symmetry, but it is not load-bearing.
+  return api.invoke({ operationId: opId, input: applyParamRenames(opId, input) } as DynamicInvokeRequest);
 }
 
 // ---------------------------------------------------------------------------
 // Register all intent tools
 // ---------------------------------------------------------------------------
 
-export async function registerIntentTools(server: McpServer, sessions: SessionManager): Promise<void> {
-  const catalog = (await getToolCatalog()) as unknown as Catalog;
+export function registerIntentTools(server: McpServer, sessions: SessionManager): void {
+  const catalog = MCP_TOOL_CATALOG as unknown as Catalog;
 
   for (const tool of catalog.tools) {
     const zodSchema = buildZodSchema(tool);

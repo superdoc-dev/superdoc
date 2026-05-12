@@ -1,5 +1,5 @@
 /**
- * Canonical inline property identifiers — single source of truth.
+ * Canonical inline property identifiers: single source of truth.
  *
  * All layers (contract, error schemas, SDK, CLI, registry, tests) must use
  * these constants. No synonyms (e.g., "strikethrough") in contract-facing surfaces.

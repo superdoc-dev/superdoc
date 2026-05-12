@@ -319,6 +319,11 @@ describe('extraction', () => {
     });
 
     it('should default type to "nextPage" when sectPr exists but w:type is missing', () => {
+      // type still defaults to 'nextPage' (preserves the established
+      // pipeline behavior). The added `typeIsExplicit: false` flag tells
+      // the column-balancing gate the type was defaulted, not authored —
+      // critical for distinguishing sd-1655 (Word does NOT balance) from
+      // sd-1480 (explicit continuous → Word balances).
       const para: PMNode = {
         type: 'paragraph',
         attrs: {
@@ -341,6 +346,7 @@ describe('extraction', () => {
 
       expect(result).not.toBeNull();
       expect(result?.type).toBe('nextPage');
+      expect(result?.typeIsExplicit).toBe(false);
       expect(result?.vAlign).toBe('bottom');
     });
   });

@@ -81,21 +81,25 @@ main (next) → stable (latest) → X.x (maintenance)
 - If the merge conflicts, commits the conflicted merge to the branch so a human can resolve it there
 - Merging that PR triggers the automatic stable release workflow
 
-#### 4. Release Qualification Dispatch (`release-qualification-dispatch.yml`)
+#### 4. Labs PR Build and Stable Promotion Checks (`pr-renderer-build.yml`)
 
-**Trigger**: Pull requests targeting `stable` (`opened`, `reopened`, `synchronize`, `ready_for_review`)
+**Trigger**: Pull requests targeting `main` or `stable` (`opened`, `reopened`, `synchronize`, `ready_for_review`, `closed`)
 
 **Actions**:
 
-- Sends the PR head SHA and branch metadata to the Labs release-orchestrator service
-- Polls Labs for the terminal release-qualification state
-- Uses the GitHub Actions job itself as the required public status check
-- Re-triggers automatically when new commits are pushed to the PR branch
+- Builds a `superdoc.tgz` tarball for the PR head SHA
+- Uploads the package artifact to Labs
+- Registers the PR renderer build in Labs
+- For PRs targeting `stable`, runs `Labs: Stable promotion checks` after the PR renderer build is registered
+- Polls Labs for the terminal stable-promotion state
+- Cleans up registered Labs artifacts when a same-repository PR is merged
 
 Only same-repository PRs dispatch to Labs. Forked PRs are intentionally skipped so private Labs credentials are never exposed to untrusted branches.
 
 **Required configuration**:
 
+- variable: `LABS_API_URL`
+- secret: `LABS_PR_BUILD_TOKEN` (falls back to `LABS_RELEASE_QUALIFICATION_TOKEN`)
 - variable: `LABS_RELEASE_QUALIFICATION_URL`
 - secret: `LABS_RELEASE_QUALIFICATION_TOKEN`
 
@@ -197,12 +201,12 @@ The workflow is `.github/workflows/release-cli.yml`. It analyzes commits across 
 
 | Command | What it does |
 |---------|-------------|
-| `pnpm run release:local` | Releases **superdoc → CLI → SDK** in sequence on `stable` |
+| `pnpm run release:local` | Releases **CLI → SDK → MCP** in sequence on `stable` (matches CI's tooling bundle) |
 | `pnpm run release:local:superdoc` | Releases superdoc only |
 | `pnpm run release:local:cli` | Releases CLI only |
 | `pnpm run release:local:sdk` | Releases SDK only |
 
-All accept `-- --dry-run` to preview without publishing. The combined orchestrator (`release:local`) enforces a `stable` branch guard (override with `--branch=<name>`).
+All accept `-- --dry-run` to preview without publishing. The combined orchestrator (`release:local`) enforces a `stable` branch guard (override with `--branch=<name>`). On stable, this matches what CI's tooling bundle workflow does (`.github/workflows/release-stable.yml`); per-package workflows handle superdoc, react, esign, template-builder, and vscode-ext independently.
 
 `@semantic-release/git` automatically pushes version commits and tags when releasing on the `stable` branch. This is existing behavior for superdoc, CLI, and SDK.
 
@@ -229,9 +233,9 @@ These skip semantic-release entirely — useful for re-publishing a failed platf
 
 1. Run "Promote to Stable" workflow
 2. Review the generated PR from the candidate branch into `stable`
-3. Labs receives the PR head SHA, records the qualification run, and the workflow job polls Labs for the terminal result
+3. Labs receives the PR package artifact, registers a PR renderer build, and then runs stable promotion checks for that exact PR head SHA
 4. If needed, resolve merge conflicts on the candidate branch and push fixes
-5. Re-run or wait for qualification on the new PR head SHA
+5. Re-run or wait for the stable promotion checks on the new PR head SHA
 6. Merge the PR into `stable`
 7. Automatically publishes `1.1.0` as @latest
 8. Syncs back to main with version bump

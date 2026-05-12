@@ -10,7 +10,6 @@ on:
       - 'apps/docs/document-api/**'
       - 'package.json'
       - '.github/workflows/ci-document-api.yml'
-  merge_group:
   workflow_dispatch:
 
 concurrency:
@@ -19,6 +18,7 @@ concurrency:
 
 jobs:
   validate:
+    name: CI Document API / validate
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

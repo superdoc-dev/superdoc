@@ -28,7 +28,7 @@ Returns a Receipt confirming the comment was updated; reports NO_OP if no fields
 | --- | --- | --- | --- |
 | `commentId` | string | yes |  |
 | `isInternal` | boolean | no |  |
-| `status` | enum | no | `"resolved"` |
+| `status` | enum | no | `"resolved"`, `"active"` |
 | `target` | TextAddress | no | TextAddress |
 | `target.blockId` | string | no |  |
 | `target.kind` | `"text"` | no | Constant: `"text"` |
@@ -124,9 +124,10 @@ Returns a Receipt confirming the comment was updated; reports NO_OP if no fields
       "type": "boolean"
     },
     "status": {
-      "description": "Set comment status. Use 'resolved' to mark as resolved.",
+      "description": "Set comment status. Use 'resolved' to resolve a comment, or 'active' to reopen a previously resolved comment (lifecycle inverse).",
       "enum": [
-        "resolved"
+        "resolved",
+        "active"
       ]
     },
     "target": {

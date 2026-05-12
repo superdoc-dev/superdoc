@@ -110,7 +110,7 @@ export interface RepeatingSectionControlProperties {
 }
 
 // ---------------------------------------------------------------------------
-// ContentControlProperties — the typed property bag
+// ContentControlProperties: the typed property bag
 // ---------------------------------------------------------------------------
 
 export interface ContentControlProperties {
@@ -138,7 +138,7 @@ export interface ContentControlProperties {
 }
 
 // ---------------------------------------------------------------------------
-// ContentControlInfo — the canonical read shape
+// ContentControlInfo: the canonical read shape
 // ---------------------------------------------------------------------------
 
 export interface ContentControlTarget {
@@ -200,7 +200,7 @@ export interface ContentControlsPaginationOptions {
 }
 
 // ---------------------------------------------------------------------------
-// A. Core CRUD + Discovery — Input types
+// A. Core CRUD + Discovery: Input types
 // ---------------------------------------------------------------------------
 
 export interface CreateContentControlInput {
@@ -341,7 +341,7 @@ export interface ContentControlsInsertAfterInput {
 }
 
 // ---------------------------------------------------------------------------
-// B. Data Binding + Raw/Compatibility — Input types
+// B. Data Binding + Raw/Compatibility: Input types
 // ---------------------------------------------------------------------------
 
 export interface ContentControlsGetBindingInput {
@@ -402,7 +402,7 @@ export interface ContentControlsNormalizeTagPayloadInput {
 }
 
 // ---------------------------------------------------------------------------
-// C. Typed Controls — Input types
+// C. Typed Controls: Input types
 // ---------------------------------------------------------------------------
 
 // Text
@@ -495,7 +495,7 @@ export interface ContentControlsChoiceListSetSelectedInput {
 }
 
 // ---------------------------------------------------------------------------
-// D. Repeating Section + Group — Input types
+// D. Repeating Section + Group: Input types
 // ---------------------------------------------------------------------------
 
 export interface ContentControlsRepeatingSectionListItemsInput {

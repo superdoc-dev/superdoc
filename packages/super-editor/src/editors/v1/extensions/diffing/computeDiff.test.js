@@ -247,7 +247,7 @@ describe('Diff', () => {
     // When user adds bold (diff_after7), hasNewInlineProps triggers mark key addition.
     expect(formattingRunAttrsDiff.modified?.runPropertiesInlineKeys).toEqual({
       from: [],
-      to: ['bold', 'boldCs', 'fontFamily', 'fontSize'],
+      to: ['bold', 'boldCs', 'fontFamily', 'fontSize', 'fontSizeCs'],
     });
     expect(formattingRunAttrsDiff.modified?.rsidRPr).toMatchObject({
       from: null,

@@ -37,10 +37,12 @@ export function resolveTableItem(
     zIndex: undefined, // tables don't have zIndex at fragment level
     blockId: fragment.blockId,
     fragmentIndex,
+    fragment,
     block,
     measure,
     cellSpacingPx: measure.cellSpacingPx ?? getCellSpacingPx(block.attrs?.cellSpacing),
     effectiveColumnWidths: fragment.columnWidths ?? measure.columnWidths,
+    sourceAnchor: fragment.sourceAnchor ?? block.sourceAnchor,
   };
   if (fragment.pmStart != null) item.pmStart = fragment.pmStart;
   if (fragment.pmEnd != null) item.pmEnd = fragment.pmEnd;

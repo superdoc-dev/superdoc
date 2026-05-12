@@ -17,10 +17,10 @@ export type HyperlinkTarget = InlineNodeAddress & { nodeType: 'hyperlink' };
 /**
  * Canonical hyperlink destination specification for write operations.
  *
- * Destination mode rules (enforced on write — wrap/insert/patch):
+ * Destination mode rules (enforced on write: wrap/insert/patch):
  * - External mode: `href` is set and non-empty
  * - Internal mode: `anchor` is set and non-empty
- * - Mixed mode: both `href` and `anchor` may be set (OOXML allows this —
+ * - Mixed mode: both `href` and `anchor` may be set (OOXML allows this -
  *   anchor is used when href target is the same document, href is fallback)
  * - Invalid: neither `href` nor `anchor` is set
  *
@@ -52,7 +52,7 @@ export interface HyperlinkSpec {
 }
 
 /**
- * Patch payload for hyperlinks.patch — metadata only, no text mutation.
+ * Patch payload for hyperlinks.patch: metadata only, no text mutation.
  *
  * Set a field to `null` to explicitly clear it.
  * Omit a field to leave it unchanged.
@@ -70,7 +70,7 @@ export interface HyperlinkPatch {
 // Read types
 // ---------------------------------------------------------------------------
 
-/** All readable hyperlink properties — faithfully reports document state. */
+/** All readable hyperlink properties: faithfully reports document state. */
 export interface HyperlinkReadProperties {
   href?: string;
   anchor?: string;

@@ -1,12 +1,12 @@
 import { shallowRef } from 'vue';
 
-/** @typedef {import('./types').SurfaceMode} SurfaceMode */
-/** @typedef {import('./types').SurfaceRequest} SurfaceRequest */
-/** @typedef {import('./types').SurfaceResolution} SurfaceResolution */
-/** @typedef {import('./types').SurfaceHandle} SurfaceHandle */
-/** @typedef {import('./types').SurfaceOutcome} SurfaceOutcome */
-/** @typedef {import('./types').SurfacesModuleConfig} SurfacesModuleConfig */
-/** @typedef {import('./types').ExternalSurfaceRenderContext} ExternalSurfaceRenderContext */
+/** @typedef {import('./types/index.js').SurfaceMode} SurfaceMode */
+/** @typedef {import('./types/index.js').SurfaceRequest} SurfaceRequest */
+/** @typedef {import('./types/index.js').SurfaceResolution} SurfaceResolution */
+/** @typedef {import('./types/index.js').SurfaceHandle} SurfaceHandle */
+/** @typedef {import('./types/index.js').SurfaceOutcome} SurfaceOutcome */
+/** @typedef {import('./types/index.js').SurfacesModuleConfig} SurfacesModuleConfig */
+/** @typedef {import('./types/index.js').ExternalSurfaceRenderContext} ExternalSurfaceRenderContext */
 
 /**
  * @typedef {Object} ActiveSurface

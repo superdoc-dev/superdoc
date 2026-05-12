@@ -1,7 +1,109 @@
 ---
 title: AI
+sidebarTitle: AI
+description: "Use AI with SuperDoc: in coding agents, in your product, or in a visible editor."
+keywords: "ai, mcp, claude, cursor, llm tools, ai agents, document automation, ai sdk, claude code, cursor mcp"
 ---
 
-Loading <a href="/ai/overview">AI overview</a>...
+SuperDoc does not bundle an AI model or send documents to an AI provider. It gives AI systems structured access to real `.docx` files (read, edit, comment, redline, save) through the same Document API the browser editor uses.
 
-{(() => { window.location.href = '/ai/overview'; })()}
+## Pick your path
+
+| If you want to... | Use | Start here |
+|---|---|---|
+| Let Claude Code, Cursor, or Windsurf edit `.docx` files | MCP server | [/ai/mcp/overview](/ai/mcp/overview) |
+| Build AI document editing into your app | LLM tools + SDK | [/ai/agents/llm-tools](/ai/agents/llm-tools) |
+| Add AI actions to a visible editor | SuperDoc editor + Document API | [/ai/agents/integrations](/ai/agents/integrations) |
+
+## What AI can control
+
+AI workflows can use SuperDoc to:
+
+- Read document text, Markdown, HTML, and structure
+- Search for clauses, paragraphs, comments, and tracked changes
+- Insert, replace, and delete content
+- Apply formatting
+- Add and resolve comments
+- Accept or reject tracked changes
+- Save the result as a real `.docx`
+
+The model never edits raw XML. It calls structured tools. SuperDoc applies the changes through the same document engine used by the editor.
+
+## I want my coding agent to edit DOCX files
+
+Use the MCP server. Fastest path for Claude Code, Cursor, Windsurf, and other MCP clients.
+
+```bash
+claude mcp add superdoc -- npx @superdoc-dev/mcp
+```
+
+Then ask your agent to open a `.docx` file, inspect it, and make an edit.
+
+[MCP setup guide →](/ai/mcp/overview)
+
+## I want AI features inside my product
+
+Use the SDK tool definitions. They work with OpenAI, Anthropic, Vercel AI SDK, and generic tool-calling loops.
+
+```bash
+npm install @superdoc-dev/sdk
+```
+
+```javascript
+import { createSuperDocClient, chooseTools, dispatchSuperDocTool } from '@superdoc-dev/sdk';
+
+const client = createSuperDocClient();
+await client.connect();
+
+const doc = await client.open({ doc: './contract.docx' });
+const { tools } = await chooseTools({ provider: 'openai' });
+
+// Pass `tools` to your model.
+// Dispatch tool calls with dispatchSuperDocTool(doc, name, args).
+```
+
+[LLM tools guide →](/ai/agents/llm-tools)
+
+## I want AI output in a visible editor
+
+Render the document in the browser editor for selection and visual feedback. Generate content with your model, then insert or replace it through the Document API.
+
+```javascript
+const html = await callYourLLM(prompt);
+editor.doc.insert({ target: cursor, value: html, type: 'html' });
+```
+
+[Streaming editor pattern →](/ai/agents/integrations)
+
+## Data boundary
+
+SuperDoc runs on your infrastructure. The editor, SDK, CLI, and MCP server do not send documents to SuperDoc Cloud.
+
+If you connect an AI provider, your app or agent decides what document content to send. For sensitive documents, send the smallest useful excerpt instead of the full file.
+
+## Common patterns
+
+| Pattern | Recommended path |
+|---|---|
+| Draft a clause and insert it into the editor | Visible editor + `editor.doc.insert` |
+| Review a contract and return redlines | SDK or MCP with tracked changes |
+| Ask questions about a long document | Extract/search with Document API, send selected context to the model |
+| Add comments instead of changing text | Comments tools (`superdoc_comment` or `editor.doc.comments.*`) |
+| Build a review assistant inside your app | SDK LLM tools + your model provider |
+| Let a coding agent fix a DOCX file locally | MCP server |
+
+## What SuperDoc does not do
+
+- It does not include an LLM.
+- It does not automatically upload documents to an AI provider.
+- It does not require a hosted SuperDoc service.
+- It does not ask the model to rewrite raw DOCX XML.
+
+SuperDoc gives the model safe document operations. Your app controls the model, prompts, permissions, and data flow.
+
+## Where to next
+
+- [AI Overview](/ai/overview): the full AI section
+- [AI > MCP](/ai/mcp/overview): Model Context Protocol setup
+- [AI > Agents > LLM tools](/ai/agents/llm-tools): typed tool catalogs and integration patterns
+- [Document API](/document-api/overview): the operations all AI integrations share

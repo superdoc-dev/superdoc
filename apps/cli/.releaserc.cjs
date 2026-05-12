@@ -1,4 +1,9 @@
 /* eslint-env node */
+const {
+  createCommitAnalyzer,
+  createReleaseNotesGenerator,
+} = require('../../scripts/semantic-release/strict-breaking-parser.cjs');
+
 /*
  * Commit filter: CLI bundles multiple sub-packages, so git log must include
  * commits touching any of them. This shared helper patches git-log-parser to
@@ -13,7 +18,6 @@ require('../../scripts/semantic-release/patch-commit-filter.cjs')([
   'packages/superdoc',
   'packages/super-editor',
   'packages/layout-engine',
-  'packages/ai',
   'packages/word-layout',
   'packages/preset-geometry',
   'shared',
@@ -27,20 +31,16 @@ const branches = [
   { name: 'main', prerelease: 'next', channel: 'next' },
 ];
 
-const isPrerelease = branches.some(
-  (b) => typeof b === 'object' && b.name === branch && b.prerelease,
-);
+const isPrerelease = branches.some((b) => typeof b === 'object' && b.name === branch && b.prerelease);
 
 // Use AI-powered notes for stable releases, conventional generator for prereleases
-const notesPlugin = isPrerelease
-  ? '@semantic-release/release-notes-generator'
-  : ['semantic-release-ai-notes', { style: 'concise' }];
+const notesPlugin = isPrerelease ? createReleaseNotesGenerator() : ['semantic-release-ai-notes', { style: 'concise' }];
 
 const config = {
   branches,
   tagFormat: 'cli-v${version}',
   plugins: [
-    '@semantic-release/commit-analyzer',
+    createCommitAnalyzer(),
     notesPlugin,
     ['@semantic-release/npm', { npmPublish: false }],
     [

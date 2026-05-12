@@ -18,6 +18,8 @@ export function dispatchIntentTool(
           return execute('doc.getHtml', rest);
         case 'info':
           return execute('doc.info', rest);
+        case 'extract':
+          return execute('doc.extract', rest);
         case 'blocks':
           return execute('doc.blocks.list', rest);
         default:
@@ -82,14 +84,26 @@ export function dispatchIntentTool(
           return execute('doc.lists.insert', rest);
         case 'create':
           return execute('doc.lists.create', rest);
+        case 'attach':
+          return execute('doc.lists.attach', rest);
         case 'detach':
           return execute('doc.lists.detach', rest);
+        case 'delete':
+          return execute('doc.lists.delete', rest);
         case 'indent':
           return execute('doc.lists.indent', rest);
         case 'outdent':
           return execute('doc.lists.outdent', rest);
+        case 'merge':
+          return execute('doc.lists.merge', rest);
+        case 'split':
+          return execute('doc.lists.split', rest);
         case 'set_level':
           return execute('doc.lists.setLevel', rest);
+        case 'set_value':
+          return execute('doc.lists.setValue', rest);
+        case 'continue_previous':
+          return execute('doc.lists.continuePrevious', rest);
         case 'set_type':
           return execute('doc.lists.setType', rest);
         default:
@@ -135,6 +149,47 @@ export function dispatchIntentTool(
           return execute('doc.mutations.apply', rest);
         default:
           throw new Error(`Unknown action for superdoc_mutations: ${action}`);
+      }
+    }
+    case 'superdoc_table': {
+      const { action, ...rest } = args;
+      switch (action) {
+        case 'delete':
+          return execute('doc.tables.delete', rest);
+        case 'set_layout':
+          return execute('doc.tables.setLayout', rest);
+        case 'insert_row':
+          return execute('doc.tables.insertRow', rest);
+        case 'delete_row':
+          return execute('doc.tables.deleteRow', rest);
+        case 'set_row':
+          return execute('doc.tables.setRowHeight', rest);
+        case 'set_row_options':
+          return execute('doc.tables.setRowOptions', rest);
+        case 'insert_column':
+          return execute('doc.tables.insertColumn', rest);
+        case 'delete_column':
+          return execute('doc.tables.deleteColumn', rest);
+        case 'set_column':
+          return execute('doc.tables.setColumnWidth', rest);
+        case 'merge_cells':
+          return execute('doc.tables.mergeCells', rest);
+        case 'unmerge_cells':
+          return execute('doc.tables.unmergeCells', rest);
+        case 'set_cell':
+          return execute('doc.tables.setCellProperties', rest);
+        case 'set_cell_text':
+          return execute('doc.tables.setCellText', rest);
+        case 'set_shading':
+          return execute('doc.tables.setShading', rest);
+        case 'set_style_options':
+          return execute('doc.tables.applyStyle', rest);
+        case 'set_borders':
+          return execute('doc.tables.setBorders', rest);
+        case 'set_options':
+          return execute('doc.tables.setTableOptions', rest);
+        default:
+          throw new Error(`Unknown action for superdoc_table: ${action}`);
       }
     }
     default:

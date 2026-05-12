@@ -449,6 +449,100 @@ describe('HeaderFooterEditorManager', () => {
     expect(editor1Final).not.toBe(editor1); // New instance created
   });
 
+  it('pin() prevents eviction while the editor still has reachable history', async () => {
+    const editor = createMockEditor({
+      headers: {
+        rId1: { type: 'doc', content: [{ type: 'paragraph' }] },
+        rId2: { type: 'doc', content: [{ type: 'paragraph' }] },
+        rId3: { type: 'doc', content: [{ type: 'paragraph' }] },
+      },
+      headerIds: {
+        default: 'rId1',
+        first: 'rId2',
+        even: 'rId3',
+        odd: null,
+        ids: ['rId1', 'rId2', 'rId3'],
+      },
+    });
+    const manager = new HeaderFooterEditorManager(editor);
+    manager.setMaxCachedEditors(1);
+
+    const desc1 = { id: 'rId1', kind: 'header' } as const;
+    const desc2 = { id: 'rId2', kind: 'header' } as const;
+    const desc3 = { id: 'rId3', kind: 'header' } as const;
+
+    const editor1 = await manager.ensureEditor(desc1);
+    manager.pin('rId1');
+
+    // Even at cap=1, creating a second and third editor must not evict the pinned one.
+    await manager.ensureEditor(desc2);
+    await manager.ensureEditor(desc3);
+
+    // Re-access rId1; if it had been evicted the factory would run again.
+    const creationsBefore = mockCreateHeaderFooterEditor.mock.calls.length;
+    const sameEditor = await manager.ensureEditor(desc1);
+    expect(sameEditor).toBe(editor1);
+    expect(mockCreateHeaderFooterEditor.mock.calls.length).toBe(creationsBefore);
+
+    // Unpinning should restore eviction eligibility for the next overflow.
+    manager.unpin('rId1');
+    expect(manager.isPinned('rId1')).toBe(false);
+  });
+
+  it('re-applies the cache limit immediately when an editor is unpinned', async () => {
+    const editor = createMockEditor({
+      headers: {
+        rId1: { type: 'doc', content: [{ type: 'paragraph' }] },
+        rId2: { type: 'doc', content: [{ type: 'paragraph' }] },
+      },
+      headerIds: {
+        default: 'rId1',
+        first: 'rId2',
+        even: null,
+        odd: null,
+        ids: ['rId1', 'rId2'],
+      },
+    });
+    const manager = new HeaderFooterEditorManager(editor);
+    manager.setMaxCachedEditors(1);
+
+    const desc1 = { id: 'rId1', kind: 'header' } as const;
+    const desc2 = { id: 'rId2', kind: 'header' } as const;
+
+    const firstEditor = await manager.ensureEditor(desc1);
+    manager.pin('rId1');
+    await manager.ensureEditor(desc2);
+
+    manager.unpin('rId1');
+
+    const recreated = await manager.ensureEditor(desc1);
+    expect(recreated).not.toBe(firstEditor);
+  });
+
+  it('emits editorCreated + editorDisposed lifecycle events', async () => {
+    const editor = createMockEditor();
+    const manager = new HeaderFooterEditorManager(editor);
+    const created = vi.fn();
+    const disposed = vi.fn();
+    manager.on('editorCreated', created);
+    manager.on('editorDisposed', disposed);
+
+    await manager.ensureEditor({ id: 'rId-header-default', kind: 'header' });
+    expect(created).toHaveBeenCalledWith(
+      expect.objectContaining({
+        descriptor: expect.objectContaining({ id: 'rId-header-default', kind: 'header' }),
+        editor: expect.anything(),
+      }),
+    );
+
+    manager.destroy();
+    expect(disposed).toHaveBeenCalledWith(
+      expect.objectContaining({
+        descriptor: expect.objectContaining({ id: 'rId-header-default' }),
+      }),
+    );
+  });
+
   it('handles sync errors and emits syncError event', async () => {
     const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {
       // Intentionally empty - suppressing console errors in test
@@ -704,6 +798,28 @@ describe('HeaderFooterEditorManager error scenarios', () => {
 
     // Should not throw and should complete successfully
     expect(manager.getDescriptors()).toHaveLength(3); // 2 headers + 1 footer
+  });
+
+  it('refresh({ purgeCachedEditors: true }) drops live editors so getDocumentJson reads the new converter snapshot', async () => {
+    const editor = createMockEditor();
+    const manager = new HeaderFooterEditorManager(editor);
+    const descriptor = { id: 'rId-header-default', kind: 'header' } as const;
+
+    await manager.ensureEditor(descriptor);
+    const created = createdEditors[createdEditors.length - 1]?.editor;
+    expect(created).toBeDefined();
+    const staleDoc = { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'stale' }] }] };
+    created!.getJSON = vi.fn(() => staleDoc);
+
+    const freshDoc = { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'fresh' }] }] };
+    editor.converter.headers!['rId-header-default'] = freshDoc;
+
+    expect(manager.getDocumentJson(descriptor)).toEqual(staleDoc);
+
+    manager.refresh({ purgeCachedEditors: true });
+
+    expect(manager.getDocumentJson(descriptor)).toEqual(freshDoc);
+    expect(created!.destroy).toHaveBeenCalled();
   });
 
   it('cleans up pending creations on destroy', async () => {

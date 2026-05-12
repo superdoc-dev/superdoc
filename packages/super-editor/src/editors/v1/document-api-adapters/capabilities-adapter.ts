@@ -38,6 +38,7 @@ const REQUIRED_COMMANDS: Partial<Record<OperationId, readonly EditorCommandName[
   'lists.create': [],
   'lists.attach': [],
   'lists.detach': [],
+  'lists.delete': [],
   'lists.join': [],
   'lists.separate': [],
   'lists.setLevel': [],
@@ -59,7 +60,7 @@ const REQUIRED_COMMANDS: Partial<Record<OperationId, readonly EditorCommandName[
   'lists.clearLevelOverrides': [],
   'blocks.delete': ['deleteBlockNodeById'],
   'comments.create': ['addComment', 'setTextSelection', 'addCommentReply'],
-  'comments.patch': ['editComment', 'moveComment', 'resolveComment', 'setCommentInternal'],
+  'comments.patch': ['editComment', 'moveComment', 'resolveComment', 'reopenComment', 'setCommentInternal'],
   'comments.delete': ['removeComment'],
   'trackChanges.decide': [
     'acceptTrackedChangeById',

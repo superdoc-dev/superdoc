@@ -59,8 +59,9 @@ describe('parseTocInstruction', () => {
   it('handles empty instruction', () => {
     const config = parseTocInstruction('TOC');
     expect(config.source).toEqual({});
-    // Convenience projections are derived even for bare TOC instructions
-    expect(config.display).toEqual({ includePageNumbers: true, tabLeader: 'none' });
+    // No \p in the instruction means "use Word's default tab leader" (dots),
+    // not an explicit opt-out, so tabLeader should be undefined here.
+    expect(config.display).toEqual({ includePageNumbers: true });
     expect(config.preserved).toEqual({});
   });
 });
@@ -164,11 +165,13 @@ describe('applyTocPatch', () => {
     expect(patched.display.separator).toBe('.');
   });
 
-  it('tabLeader: none removes separator', () => {
+  it('tabLeader: none records an explicit empty separator (\\p "") so the choice round-trips', () => {
     const existing = parseTocInstruction('TOC \\o "1-3" \\p "."');
     const patched = applyTocPatch(existing, { tabLeader: 'none' });
     expect(patched.display.tabLeader).toBe('none');
-    expect(patched.display.separator).toBeUndefined();
+    // Empty string == explicit "no leader" (\p ""); deleting the separator
+    // would collapse to "absent \p" which Word treats as the dot default.
+    expect(patched.display.separator).toBe('');
   });
 
   it('throws on tabLeader + separator conflict', () => {

@@ -2,7 +2,9 @@
  * @typedef {import('../v2/types/index.js').OpenXmlNode} OpenXmlNode
  */
 import { getInstructionPreProcessor } from './fld-preprocessors';
+import { resolveHyperlinkAttributes } from './fld-preprocessors/hyperlink-preprocessor.js';
 import { carbonCopy } from '@core/utilities/carbonCopy.js';
+import { isTrackChangeElement, isConstructiveTrackChangeElement } from '../v2/importer/trackChangeElements.js';
 
 const SKIP_FIELD_PROCESSING_NODE_NAMES = new Set(['w:drawing', 'w:pict']);
 
@@ -10,8 +12,9 @@ const shouldSkipFieldProcessing = (node) => SKIP_FIELD_PROCESSING_NODE_NAMES.has
 /**
  * @typedef {object} FldCharProcessResult
  * @property {OpenXmlNode[]} processedNodes - The list of nodes after processing.
- * @property {Array<{nodes: OpenXmlNode[], fieldInfo: {instrText: string, instructionTokens?: Array<{type: string, text?: string}>}}>| null} unpairedBegin - If a field 'begin' was found without a matching 'end'. Contains the current field data.
+ * @property {Array<{nodes: OpenXmlNode[], fieldInfo: {instrText: string, instructionTokens?: Array<{type: string, text?: string}>, afterSeparate?: boolean, preserveRaw?: boolean}}>| null} unpairedBegin - If a field 'begin' was found without a matching 'end'. Contains the current field data.
  * @property {boolean | null} unpairedEnd - If a field 'end' was found without a matching 'begin'.
+ * @property {boolean | null} unpairedEndPreserveRaw - If an unpaired field 'end' bubbled through a tracked-change wrapper.
  */
 
 /**
@@ -35,6 +38,7 @@ export const preProcessNodesForFldChar = (nodes = [], docx) => {
   let fieldRunRPrStack = [];
   let currentFieldStack = [];
   let unpairedEnd = null;
+  let unpairedEndPreserveRaw = null;
   let collecting = false;
   const rawNodeSourceTokens = new WeakMap();
 
@@ -48,14 +52,25 @@ export const preProcessNodesForFldChar = (nodes = [], docx) => {
       const rawCollectedNodes = rawCollectedNodesStack.pop().filter((n) => n !== null);
       const fieldRunRPr = fieldRunRPrStack.pop() ?? null;
       const currentField = currentFieldStack.pop();
-      const combinedResult = _processCombinedNodesForFldChar(
-        collectedNodes,
-        currentField.instrText.trim(),
-        docx,
-        currentField.instructionTokens,
-        fieldRunRPr,
-      );
-      const outputNodes = combinedResult.handled ? combinedResult.nodes : rawCollectedNodes;
+      let outputNodes = rawCollectedNodes;
+      if (!currentField.preserveRaw) {
+        const combinedResult = _processCombinedNodesForFldChar(
+          collectedNodes,
+          currentField.instrText.trim(),
+          docx,
+          currentField.instructionTokens,
+          fieldRunRPr,
+        );
+        outputNodes = combinedResult.handled ? combinedResult.nodes : rawCollectedNodes;
+      } else if (currentField.preserveRawConstructive) {
+        // SD-2973: SD-2858's preserveRaw guarantees structural validity when a
+        // field crosses tracked-change wrappers but loses field interpretation.
+        // For constructive wrappers (w:ins / w:moveTo) the user keeps the
+        // visible content — drop the link-like interpretations and they'd see
+        // plain text. Run a per-field post-pass that re-applies the
+        // interpretation in-place without restructuring the tree.
+        applyConstructiveFieldInterpretation(outputNodes, currentField.instrText.trim(), docx);
+      }
       if (collectedNodesStack.length === 0) {
         // We have completed a top-level field, add the combined nodes to the output.
         processedNodes.push(...outputNodes);
@@ -205,7 +220,19 @@ export const preProcessNodesForFldChar = (nodes = [], docx) => {
       if (childResult.unpairedBegin) {
         // A field started in the children, so this node is part of that field.
         childResult.unpairedBegin.forEach((pendingField) => {
-          currentFieldStack.push(pendingField.fieldInfo);
+          const fieldInfo = { ...pendingField.fieldInfo };
+          if (fieldInfo.preserveRaw || isTrackChangeElement(node)) {
+            fieldInfo.preserveRaw = true;
+          }
+          // SD-2973: track whether the wrapper that forced preserveRaw was a
+          // constructive tracked-change (w:ins / w:moveTo). Constructive
+          // wrappers keep the content on accept, so the user sees the visible
+          // text — and field interpretations like HYPERLINK need to survive
+          // even though we cannot collapse the structural tree.
+          if (isConstructiveTrackChangeElement(node)) {
+            fieldInfo.preserveRawConstructive = true;
+          }
+          currentFieldStack.push(fieldInfo);
 
           // The current node should be added to the collected nodes
           collectedNodesStack.push([node]);
@@ -216,6 +243,24 @@ export const preProcessNodesForFldChar = (nodes = [], docx) => {
         });
       } else if (childResult.unpairedEnd) {
         // A field from this level or higher ended in the children.
+        const shouldPreserveRaw = childResult.unpairedEndPreserveRaw || isTrackChangeElement(node);
+        if (collectedNodesStack.length === 0) {
+          // Track-change wrappers need the original field boundary; ordinary wrappers can keep processed children.
+          processedNodes.push(shouldPreserveRaw ? rawNode : node);
+          unpairedEnd = true;
+          if (shouldPreserveRaw) unpairedEndPreserveRaw = true;
+          return;
+        }
+
+        if (shouldPreserveRaw) {
+          currentFieldStack[currentFieldStack.length - 1].preserveRaw = true;
+        }
+        // SD-2973: an end fldChar wrapped in a constructive tracked change
+        // also flags the active field as constructive-preserved so the
+        // HYPERLINK post-pass runs.
+        if (isConstructiveTrackChangeElement(node)) {
+          currentFieldStack[currentFieldStack.length - 1].preserveRawConstructive = true;
+        }
         collectedNodesStack[collectedNodesStack.length - 1].push(node);
         captureRawNodeForCurrentField(rawNode, capturedRawNodes, rawSourceToken);
         finalizeField();
@@ -259,7 +304,7 @@ export const preProcessNodesForFldChar = (nodes = [], docx) => {
     }
   }
 
-  return { processedNodes, unpairedBegin, unpairedEnd };
+  return { processedNodes, unpairedBegin, unpairedEnd, unpairedEndPreserveRaw };
 };
 
 /**
@@ -282,6 +327,110 @@ const _processCombinedNodesForFldChar = (nodesToCombine = [], instrText, docx, i
     };
   }
   return { nodes: nodesToCombine, handled: false };
+};
+
+/**
+ * SD-2973: Apply field interpretation in-place for constructive tracked-change
+ * wrappers that triggered preserveRaw. Walks the raw nodes (paragraphs,
+ * tracked-change wrappers, runs) to find the visible runs between the
+ * field's `separate` and `end` fldChars, and wraps just those runs in the
+ * structural element the field type implies (today: `w:hyperlink` for
+ * HYPERLINK fields). Leaves the surrounding paragraph and tracked-change
+ * structure untouched so the SD-2858 round-trip guarantee still holds.
+ *
+ * @param {OpenXmlNode[]} rawNodes
+ * @param {string} instrText
+ * @param {ParsedDocx} docx
+ */
+const applyConstructiveFieldInterpretation = (rawNodes, instrText, docx) => {
+  const instructionType = instrText.split(' ')[0];
+  if (instructionType !== 'HYPERLINK') return;
+
+  const linkAttributes = resolveHyperlinkAttributes(instrText, docx);
+  if (!linkAttributes) return;
+
+  // State machine: visit every run; when we cross a `separate` fldChar
+  // turn collection on; when we cross an `end` fldChar turn it off. Runs
+  // collected while on are wrapped in <w:hyperlink> in their parent.
+  let visible = false;
+
+  /** @param {OpenXmlNode} parent */
+  const walk = (parent) => {
+    if (!parent || !Array.isArray(parent.elements)) return;
+    /** @type {OpenXmlNode[]} */
+    const next = [];
+    /** @type {OpenXmlNode[] | null} */
+    let pendingHyperlinkRuns = null;
+    const flushHyperlink = () => {
+      if (!pendingHyperlinkRuns || pendingHyperlinkRuns.length === 0) {
+        pendingHyperlinkRuns = null;
+        return;
+      }
+      next.push({
+        type: 'element',
+        name: 'w:hyperlink',
+        attributes: linkAttributes,
+        elements: pendingHyperlinkRuns,
+      });
+      pendingHyperlinkRuns = null;
+    };
+
+    for (const child of parent.elements) {
+      if (!child) continue;
+
+      // Recurse into block / wrapper containers.
+      if (child.name === 'w:p' || child.name === 'w:ins' || child.name === 'w:moveTo') {
+        flushHyperlink();
+        walk(child);
+        next.push(child);
+        continue;
+      }
+
+      if (child.name === 'w:r') {
+        const fldChar = child.elements?.find((el) => el?.name === 'w:fldChar');
+        const fldType = fldChar?.attributes?.['w:fldCharType'];
+        if (fldType === 'separate') {
+          flushHyperlink();
+          visible = true;
+          next.push(child);
+          continue;
+        }
+        if (fldType === 'end') {
+          flushHyperlink();
+          visible = false;
+          next.push(child);
+          continue;
+        }
+        if (fldType === 'begin') {
+          flushHyperlink();
+          next.push(child);
+          continue;
+        }
+        // Skip instruction-only runs from being wrapped (they're the
+        // HYPERLINK <w:instrText>, not visible content).
+        const hasInstrText = child.elements?.some((el) => el?.name === 'w:instrText');
+        if (hasInstrText) {
+          flushHyperlink();
+          next.push(child);
+          continue;
+        }
+        if (visible) {
+          if (!pendingHyperlinkRuns) pendingHyperlinkRuns = [];
+          pendingHyperlinkRuns.push(child);
+          continue;
+        }
+        next.push(child);
+        continue;
+      }
+
+      flushHyperlink();
+      next.push(child);
+    }
+    flushHyperlink();
+    parent.elements = next;
+  };
+
+  rawNodes.forEach(walk);
 };
 
 /**

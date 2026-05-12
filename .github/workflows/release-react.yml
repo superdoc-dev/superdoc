@@ -1,5 +1,6 @@
 # Auto-releases on push to main (@next).
-# Stable releases are orchestrated centrally by release-stable.yml.
+# Stable releases are orchestrated centrally by release-stable.yml so that
+# every stable release shares one concurrency slot and one git push lane.
 name: 📦 Release react
 
 on:
@@ -7,11 +8,14 @@ on:
     branches:
       - main
     paths:
+      # React declares `superdoc` in dependencies (not peerDependencies), so
+      # existing consumers with lockfiles won't pick up a new core version
+      # until react republishes. Keep release broad until the peer-dep
+      # migration lands (tracked separately). See .github/package-impact-map.md.
       - 'packages/react/**'
       - 'packages/superdoc/**'
       - 'packages/layout-engine/**'
       - 'packages/super-editor/**'
-      - 'packages/ai/**'
       - 'packages/word-layout/**'
       - 'packages/preset-geometry/**'
       - 'shared/**'
@@ -24,6 +28,9 @@ permissions:
   packages: write
 
 concurrency:
+  # Stable releases share the `release-stable` group so @semantic-release/git
+  # pushes to `stable` serialize across workflows; per-workflow groups would
+  # let releases race on `git push origin stable`.
   group: ${{ github.ref_name == 'stable' && 'release-stable' || format('{0}-{1}', github.workflow, github.ref) }}
   cancel-in-progress: ${{ github.ref_name != 'stable' }}
 

@@ -1,0 +1,75 @@
+# Fires repository_dispatch to superdoc-dev/homepage when a stable SuperDoc
+# release ships, so the homepage can auto-bump its superdoc dependency.
+#
+# Trigger matches promote-stable-docs.yml: stable superdoc releases now run
+# through the orchestrator (release-stable.yml), not release-superdoc.yml.
+# Accept both success and failure conclusions because the orchestrator runs
+# chains independently - a tools-chain failure that follows a successful
+# superdoc release should still notify. The npm verification is the source
+# of truth for whether the release actually shipped.
+name: 📨 Notify homepage of SuperDoc release
+
+on:
+  workflow_run:
+    workflows: ["📦 Release stable tooling (CLI/SDK/MCP)"]
+    types: [completed]
+
+jobs:
+  notify:
+    if: |
+      github.event.workflow_run.head_branch == 'stable' &&
+      (github.event.workflow_run.conclusion == 'success' || github.event.workflow_run.conclusion == 'failure')
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - uses: actions/create-github-app-token@v2
+        id: token
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          owner: superdoc-dev
+          repositories: homepage
+
+      - name: Detect release and dispatch
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          SOURCE_RUN_ID: ${{ github.event.workflow_run.id }}
+        run: |
+          set -euo pipefail
+          git fetch origin stable --tags --force
+
+          new_tag=$(comm -23 \
+            <(git tag --merged origin/stable --list 'v[0-9]*' | sort -u) \
+            <(git tag --merged "$HEAD_SHA" --list 'v[0-9]*' | sort -u) \
+            | { grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' || true; } \
+            | sort -V | tail -n1)
+
+          if [ -z "$new_tag" ]; then
+            echo "No new stable v* tag — orchestrator superdoc step was a no-op."
+            exit 0
+          fi
+
+          # Tag alone is not sufficient. @semantic-release/git pushes the v*
+          # tag during prepare, before publish-superdoc.cjs runs. If publish
+          # failed and recovery did not republish, the tag exists without
+          # corresponding npm tarballs. Verify both unscoped and scoped
+          # publishes match what promote-stable-docs.yml verifies.
+          version="${new_tag#v}"
+          if ! npm view "superdoc@${version}" version >/dev/null 2>&1; then
+            echo "Tag ${new_tag} exists but superdoc@${version} is not on npm — orchestrator publish did not complete; not notifying homepage."
+            exit 0
+          fi
+          if ! npm view "@harbour-enterprises/superdoc@${version}" version >/dev/null 2>&1; then
+            echo "Tag ${new_tag} exists but @harbour-enterprises/superdoc@${version} is not on npm — orchestrator publish did not complete; not notifying homepage."
+            exit 0
+          fi
+
+          echo "Dispatching superdoc@$version to superdoc-dev/homepage"
+          gh api -X POST repos/superdoc-dev/homepage/dispatches \
+            -f event_type=superdoc-stable-release \
+            -f "client_payload[version]=$version" \
+            -f "client_payload[source_run_id]=$SOURCE_RUN_ID"

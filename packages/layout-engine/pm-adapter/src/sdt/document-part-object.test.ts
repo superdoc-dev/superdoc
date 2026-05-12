@@ -438,6 +438,116 @@ describe('document-part-object', () => {
       });
     });
 
+    // ==================== Table Children Tests ====================
+    describe('Table children', () => {
+      it('should process tableOfContents children for non-"Table of Contents" gallery types (e.g. "Custom Table of Contents")', () => {
+        const tocNode: PMNode = {
+          type: 'tableOfContents',
+          content: [{ type: 'paragraph', content: [] }],
+          attrs: { instruction: 'TOC \\o "1-3"' },
+        };
+        const node: PMNode = {
+          type: 'documentPartObject',
+          content: [tocNode],
+          attrs: { docPartGallery: 'Custom Table of Contents' },
+        };
+
+        vi.mocked(metadataModule.getDocPartGallery).mockReturnValue('Custom Table of Contents');
+        vi.mocked(metadataModule.getDocPartObjectId).mockReturnValue('toc-1');
+        vi.mocked(metadataModule.getNodeInstruction).mockReturnValue(undefined);
+        vi.mocked(metadataModule.resolveNodeSdtMetadata).mockReturnValue(undefined as never);
+
+        handleDocumentPartObjectNode(node, mockContext);
+
+        expect(tocModule.processTocChildren).toHaveBeenCalledOnce();
+        const callArgs = vi.mocked(tocModule.processTocChildren).mock.calls[0];
+        expect(callArgs[0]).toEqual(tocNode.content);
+        expect(callArgs[1]).toMatchObject({ docPartGallery: 'Custom Table of Contents' });
+      });
+
+      it('should prefer the child tableOfContents instruction over the wrapper SDT instruction', () => {
+        // In real "Custom Table of Contents" docs, Word stores the TOC field codes on
+        // the child node, not the wrapper SDT. The new branch must read from the child
+        // first, otherwise per-TOC options like '\\o "1-3"' are silently dropped.
+        const childInstruction = 'TOC \\o "1-1" \\h \\z \\u';
+        const tocNode: PMNode = {
+          type: 'tableOfContents',
+          content: [{ type: 'paragraph', content: [] }],
+          attrs: { instruction: childInstruction },
+        };
+        const node: PMNode = {
+          type: 'documentPartObject',
+          content: [tocNode],
+          attrs: { docPartGallery: 'Custom Table of Contents' },
+        };
+
+        vi.mocked(metadataModule.getDocPartGallery).mockReturnValue('Custom Table of Contents');
+        vi.mocked(metadataModule.getDocPartObjectId).mockReturnValue('toc-1');
+        // Wrapper SDT has no instruction; child carries the TOC field codes
+        vi.mocked(metadataModule.getNodeInstruction).mockImplementation((n: PMNode) =>
+          n.type === 'tableOfContents' ? childInstruction : undefined,
+        );
+        vi.mocked(metadataModule.resolveNodeSdtMetadata).mockReturnValue(undefined as never);
+
+        handleDocumentPartObjectNode(node, mockContext);
+
+        expect(tocModule.processTocChildren).toHaveBeenCalledOnce();
+        const callArgs = vi.mocked(tocModule.processTocChildren).mock.calls[0];
+        expect(callArgs[1]).toMatchObject({ tocInstruction: childInstruction });
+      });
+
+      it('should fall back to the wrapper SDT instruction when the child tableOfContents has none', () => {
+        const wrapperInstruction = 'TOC \\o "1-3"';
+        const tocNode: PMNode = {
+          type: 'tableOfContents',
+          content: [{ type: 'paragraph', content: [] }],
+        };
+        const node: PMNode = {
+          type: 'documentPartObject',
+          content: [tocNode],
+          attrs: { docPartGallery: 'Custom Table of Contents' },
+        };
+
+        vi.mocked(metadataModule.getDocPartGallery).mockReturnValue('Custom Table of Contents');
+        vi.mocked(metadataModule.getDocPartObjectId).mockReturnValue('toc-1');
+        // Only the wrapper SDT carries an instruction; the child doesn't
+        vi.mocked(metadataModule.getNodeInstruction).mockImplementation((n: PMNode) =>
+          n.type === 'documentPartObject' ? wrapperInstruction : undefined,
+        );
+        vi.mocked(metadataModule.resolveNodeSdtMetadata).mockReturnValue(undefined as never);
+
+        handleDocumentPartObjectNode(node, mockContext);
+
+        expect(tocModule.processTocChildren).toHaveBeenCalledOnce();
+        const callArgs = vi.mocked(tocModule.processTocChildren).mock.calls[0];
+        expect(callArgs[1]).toMatchObject({ tocInstruction: wrapperInstruction });
+      });
+
+      it('should not call processTocChildren when the tableOfContents child has no content array', () => {
+        // Guards against the Array.isArray check that the new branch added; without
+        // it, processTocChildren would be invoked with a non-array and crash.
+        const tocNode: PMNode = {
+          type: 'tableOfContents',
+          // no content
+          attrs: { instruction: 'TOC \\o "1-3"' },
+        };
+        const node: PMNode = {
+          type: 'documentPartObject',
+          content: [tocNode],
+          attrs: { docPartGallery: 'Custom Table of Contents' },
+        };
+
+        vi.mocked(metadataModule.getDocPartGallery).mockReturnValue('Custom Table of Contents');
+        vi.mocked(metadataModule.getDocPartObjectId).mockReturnValue('toc-1');
+        vi.mocked(metadataModule.getNodeInstruction).mockReturnValue(undefined);
+        vi.mocked(metadataModule.resolveNodeSdtMetadata).mockReturnValue(undefined as never);
+
+        handleDocumentPartObjectNode(node, mockContext);
+
+        expect(tocModule.processTocChildren).not.toHaveBeenCalled();
+      });
+    });
+
     // ==================== Edge Cases ====================
     describe('Edge cases', () => {
       it('should handle docPartGallery with different case sensitivity', () => {

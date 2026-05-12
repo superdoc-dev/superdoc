@@ -26,7 +26,7 @@ const RUN_PROPERTIES_DERIVED_FROM_MARKS = new Set([
   'position',
 ]);
 
-const TRANSIENT_HYPERLINK_STYLE_IDS = new Set(['Hyperlink', 'FollowedHyperlink']);
+export const TRANSIENT_HYPERLINK_STYLE_IDS = new Set(['Hyperlink', 'FollowedHyperlink']);
 
 const RUN_PROPERTY_PRESERVE_META_KEY = 'sdPreserveRunPropertiesKeys';
 const COMPANION_INLINE_KEYS = {

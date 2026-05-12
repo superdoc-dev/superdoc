@@ -1,23 +1,31 @@
 #!/usr/bin/env node
 
 /**
- * Stable tooling bundle: CLI -> SDK -> MCP, in order.
+ * Stable release orchestrator. Runs every package release that ships from
+ * stable in one workflow run, so the per-package workflows aren't all
+ * fighting for the same `release-stable` concurrency slot.
  *
  * Used both in CI (release-stable.yml) and locally (`pnpm release:local`).
- * Releasing these three together solves three GitHub Actions semantics
- * problems that per-workflow chains hit: shared concurrency cancellation,
- * `id-token: write` permission propagation for PyPI OIDC, and double-fire
- * from overlapping path filters. One workflow, one queue slot, one
- * permission context.
  *
- * Order rationale:
- * - CLI ships native binaries used by SDK.
- * - SDK packages those CLI binaries into Node + Python distributions.
- * - MCP imports SDK + engine code and ships against pinned SDK versions.
+ * Packages are grouped into chains. Within a chain, fail-stop applies (a
+ * failure upstream skips downstream). Across chains, packages are
+ * independent - a tools failure does not block the core release and
+ * vice versa.
  *
- * superdoc, react, esign, template-builder, and vscode-ext release
- * independently via their own per-package stable workflows. SuperDoc
- * promotion of docs-stable is keyed to the SuperDoc workflow specifically.
+ * Tools chain (CLI -> SDK -> MCP):
+ *   These three share artifacts (SDK packages CLI native binaries; MCP
+ *   imports SDK + engine code), so they must release in this order.
+ *
+ * Core chain (superdoc -> react -> vscode-ext):
+ *   superdoc is the npm core; react consumes it; vscode-ext bundles the
+ *   editor and ships a .vsix to the VS Code Marketplace. They release in
+ *   order so downstream packages are never published against an older
+ *   superdoc than what just shipped. docs-stable promotion is keyed off
+ *   superdoc's v* tag and lives in this workflow as a result.
+ *
+ * Per-package adapters live on the descriptor (resumePublish,
+ * preparePythonSnapshot). The recovery engine is generic; new packages
+ * only add their descriptor and adapter.
  *
  * Usage:
  *   pnpm run release:local [-- --dry-run]
@@ -65,6 +73,12 @@ const SDK_PYTHON_PACKAGES = [
   'superdoc-sdk-cli-windows-x64',
   'superdoc-sdk',
 ];
+
+// superdoc ships under two npm names: `superdoc` (unscoped) and a
+// `@harbour-enterprises/superdoc` mirror published from the same tarball.
+// Both must be present at the released version for the publish to count
+// as complete - see scripts/publish-superdoc.cjs.
+const SUPERDOC_NPM_PACKAGES = ['superdoc', '@harbour-enterprises/superdoc'];
 
 function runInWorkspace(workspaceRoot, command, args, options = {}) {
   const { capture = false, env = process.env } = options;
@@ -407,11 +421,14 @@ async function generateGitHubReleaseNotes({ tag, targetCommit, previousTag }) {
 }
 
 function getExpectedReleaseAssets(pkg, workspaceRoot) {
-  if (pkg.name !== 'vscode-ext') {
+  // Only vscode-ext currently has release assets (the .vsix). Other
+  // descriptors don't set vsCodeExtensionId, so they get an empty list and
+  // ensureGitHubReleaseAssets becomes a no-op.
+  if (!pkg.vsCodeExtensionId) {
     return [];
   }
 
-  const extensionDir = join(workspaceRoot, 'apps/vscode-ext');
+  const extensionDir = join(workspaceRoot, pkg.packageCwd);
   let assets = readdirSync(extensionDir)
     .filter((entry) => entry.endsWith('.vsix'))
     .map((entry) => join(extensionDir, entry));
@@ -463,7 +480,7 @@ function isGitHubReleaseComplete(pkg, release) {
     return false;
   }
 
-  if (pkg.name === 'vscode-ext') {
+  if (pkg.vsCodeExtensionId) {
     return Array.isArray(release.assets) && release.assets.some((asset) => asset.name.endsWith('.vsix'));
   }
 
@@ -492,7 +509,7 @@ async function ensureGitHubRelease(pkg, { tag, targetCommit, previousTag, worksp
     });
   }
 
-  if (pkg.name === 'vscode-ext') {
+  if (pkg.vsCodeExtensionId) {
     await ensureGitHubReleaseAssets(release, pkg, workspaceRoot);
     release = await getGitHubReleaseByTag(tag);
   }
@@ -580,18 +597,18 @@ async function inspectPackageReleaseState(pkg, { tag, version, workspaceRoot = R
   const release = hasGitHubReleaseContext() ? await getGitHubReleaseByTag(tag) : null;
   const githubComplete = isGitHubReleaseComplete(pkg, release);
 
-  let sdkPythonPublished = true;
+  let pythonPublished = true;
   if (pkg.pythonPackages) {
     const publishedFlags = await Promise.all(
       pkg.pythonPackages.map((packageName) => isPyPiVersionPublished(packageName, version)),
     );
-    sdkPythonPublished = publishedFlags.every(Boolean);
+    pythonPublished = publishedFlags.every(Boolean);
   }
 
   return {
     publishComplete,
     githubComplete,
-    sdkPythonPublished,
+    pythonPublished,
     release,
   };
 }
@@ -617,48 +634,106 @@ function ensureBranchHeadCurrent(branchName) {
   }
 }
 
-function resumePackagePublish(pkg, distTag, options = {}) {
-  const { workspaceRoot = REPO_ROOT, skipBuild = workspaceRoot === REPO_ROOT } = options;
+// Per-package publish-resume adapters. Each runs after a tagged snapshot is
+// checked out (or in-place when the tag is at HEAD), and is responsible for
+// republishing whatever the original release attempt left missing on npm.
+// PyPI publishing for the SDK lives in the workflow, not here - see
+// preparePythonSnapshot for the snapshot artifact handoff.
 
-  switch (pkg.name) {
-    case 'cli':
-      runInWorkspace(workspaceRoot, 'pnpm', ['--prefix', join(workspaceRoot, 'apps/cli'), 'run', 'build:prepublish']);
-      runInWorkspace(workspaceRoot, 'node', [join(workspaceRoot, 'apps/cli/scripts/publish.js'), '--tag', distTag]);
-      break;
-    case 'sdk':
-      runInWorkspace(workspaceRoot, 'node', [
-        join(workspaceRoot, 'packages/sdk/scripts/sdk-release-publish.mjs'),
-        '--tag',
-        distTag,
-        '--npm-only',
-      ]);
-      break;
-    case 'mcp': {
-      // MCP recovery snapshots only run `pnpm install`, so MCP's build output
-      // isn't on disk. Rebuild before publishing so the `dist/` tarball
-      // declared in apps/mcp/package.json files actually ships.
-      if (!skipBuild) {
-        runInWorkspace(workspaceRoot, 'pnpm', ['run', 'generate:all']);
-        runInWorkspace(workspaceRoot, 'pnpm', ['run', 'build:superdoc']);
-        runInWorkspace(workspaceRoot, 'pnpm', ['--prefix', join(workspaceRoot, 'packages/sdk/langs/node'), 'run', 'build']);
-      }
-      const mcpRoot = join(workspaceRoot, 'apps/mcp');
-      runInWorkspace(mcpRoot, 'pnpm', ['run', 'build']);
-      // `pnpm publish` does not honor `--prefix` (passes through to npm and
-      // errors with EUSAGE); it must run with cwd at the package root.
-      runInWorkspace(mcpRoot, 'pnpm', [
-        'publish',
-        '--no-git-checks',
-        '--access',
-        'public',
-        '--tag',
-        distTag,
-      ]);
-      break;
-    }
-    default:
-      throw new Error(`No resume command configured for ${pkg.name}`);
+function resumeCliPublish(workspaceRoot, distTag) {
+  runInWorkspace(workspaceRoot, 'pnpm', ['--prefix', join(workspaceRoot, 'apps/cli'), 'run', 'build:prepublish']);
+  runInWorkspace(workspaceRoot, 'node', [join(workspaceRoot, 'apps/cli/scripts/publish.js'), '--tag', distTag]);
+}
+
+function resumeSdkPublish(workspaceRoot, distTag) {
+  runInWorkspace(workspaceRoot, 'node', [
+    join(workspaceRoot, 'packages/sdk/scripts/sdk-release-publish.mjs'),
+    '--tag',
+    distTag,
+    '--npm-only',
+  ]);
+}
+
+function resumeMcpPublish(workspaceRoot, distTag, options = {}) {
+  const { skipBuild = workspaceRoot === REPO_ROOT } = options;
+  // MCP recovery snapshots only run `pnpm install`, so MCP's build output
+  // isn't on disk. Rebuild before publishing so the `dist/` tarball
+  // declared in apps/mcp/package.json files actually ships.
+  if (!skipBuild) {
+    runInWorkspace(workspaceRoot, 'pnpm', ['run', 'generate:all']);
+    runInWorkspace(workspaceRoot, 'pnpm', ['run', 'build:superdoc']);
+    runInWorkspace(workspaceRoot, 'pnpm', ['--prefix', join(workspaceRoot, 'packages/sdk/langs/node'), 'run', 'build']);
   }
+  const mcpRoot = join(workspaceRoot, 'apps/mcp');
+  runInWorkspace(mcpRoot, 'pnpm', ['run', 'build']);
+  // `pnpm publish` does not honor `--prefix` (passes through to npm and
+  // errors with EUSAGE); it must run with cwd at the package root.
+  runInWorkspace(mcpRoot, 'pnpm', [
+    'publish',
+    '--no-git-checks',
+    '--access',
+    'public',
+    '--tag',
+    distTag,
+  ]);
+}
+
+function prepareSdkPythonSnapshot(workspaceRoot, tag) {
+  runInWorkspace(workspaceRoot, 'node', [join(workspaceRoot, 'packages/sdk/scripts/build-python-sdk.mjs')]);
+  return copySdkPythonArtifacts(workspaceRoot, tag);
+}
+
+function resumeVscodeExtPublish(workspaceRoot, _distTag, options = {}) {
+  const { skipBuild = workspaceRoot === REPO_ROOT } = options;
+  // The vscode-ext webview imports `superdoc` and `superdoc/style.css`, both
+  // of which resolve to packages/superdoc/dist. In a tagged snapshot only
+  // `pnpm install` has run, so build superdoc first or esbuild's webview
+  // bundling fails to resolve those imports. In REPO_ROOT the workflow's
+  // `Build packages` step already produced the dist.
+  if (!skipBuild) {
+    runInWorkspace(workspaceRoot, 'pnpm', ['run', 'build:superdoc']);
+  }
+  // VS Code Marketplace publish needs the VSCE_PAT env var (passed in by the
+  // orchestrator workflow). `pnpm run package` recreates the .vsix from
+  // whatever is on disk and `vsce publish --skip-duplicate` is idempotent
+  // against the marketplace, so recovery and primary release use the same
+  // commands. The .vsix asset upload to the GitHub release is handled by
+  // ensureGitHubReleaseAssets earlier in recoverPackageRelease.
+  const extensionRoot = join(workspaceRoot, 'apps/vscode-ext');
+  runInWorkspace(extensionRoot, 'pnpm', ['run', 'package']);
+  runInWorkspace(extensionRoot, 'pnpm', ['run', 'publish:vsce']);
+}
+
+function resumeReactPublish(workspaceRoot, distTag, options = {}) {
+  const { skipBuild = workspaceRoot === REPO_ROOT } = options;
+  // react's `prepublishOnly` runs `vite build`, whose `dts` plugin rolls up
+  // types imported from `superdoc`. That import resolves through
+  // packages/superdoc/dist via the workspace symlink. The snapshot only ran
+  // `pnpm install`, so build superdoc first; in REPO_ROOT it is already on
+  // disk from the workflow's `Build packages` step.
+  if (!skipBuild) {
+    runInWorkspace(workspaceRoot, 'pnpm', ['run', 'build:superdoc']);
+  }
+  runInWorkspace(workspaceRoot, 'node', [
+    join(workspaceRoot, 'scripts/npm-publish-package.cjs'),
+    '--package-dir',
+    'packages/react',
+    '--tag',
+    distTag,
+  ]);
+}
+
+function resumeSuperdocPublish(workspaceRoot, distTag, options = {}) {
+  const { skipBuild = workspaceRoot === REPO_ROOT } = options;
+  const args = [join(workspaceRoot, 'scripts/publish-superdoc.cjs'), '--dist-tag', distTag];
+  // In a tagged worktree we just ran `pnpm install` and have no build output;
+  // let the script run its own build. In REPO_ROOT the build already ran
+  // (release:local does it before invoking the orchestrator, and CI runs
+  // `Build packages` ahead of this script), so skip the duplicate.
+  if (skipBuild) {
+    args.push('--skip-build');
+  }
+  runInWorkspace(workspaceRoot, 'node', args);
 }
 
 async function recoverPackageRelease(pkg, { tag, version, distTag, branchRef, initialState = null }) {
@@ -671,22 +746,21 @@ async function recoverPackageRelease(pkg, { tag, version, distTag, branchRef, in
     }
 
     let state = initialState ?? (await inspectPackageReleaseState(pkg, { tag, version, workspaceRoot }));
-    const needsSnapshotPython = pkg.name === 'sdk' && !state.sdkPythonPublished && snapshot;
+    const needsSnapshotPython = Boolean(pkg.pythonPackages) && !state.pythonPublished && snapshot;
     const needsPublishResume = !state.publishComplete || needsSnapshotPython;
 
     if (needsPublishResume) {
       console.log(
         `${pkg.name} release ${tag} is incomplete; resuming publish (${distTag})${snapshot ? ' from tagged snapshot' : ''}.`,
       );
-      resumePackagePublish(pkg, distTag, { workspaceRoot, skipBuild: !snapshot });
+      pkg.resumePublish(workspaceRoot, distTag, { skipBuild: !snapshot });
       state = await inspectPackageReleaseState(pkg, { tag, version, workspaceRoot });
     }
 
-    let sdkPythonSnapshot = null;
-    if (pkg.name === 'sdk' && !state.sdkPythonPublished && snapshot) {
-      console.log(`Preparing Python SDK artifacts for recovered ${tag} snapshot.`);
-      runInWorkspace(workspaceRoot, 'node', [join(workspaceRoot, 'packages/sdk/scripts/build-python-sdk.mjs')]);
-      sdkPythonSnapshot = copySdkPythonArtifacts(workspaceRoot, tag);
+    let pythonSnapshot = null;
+    if (pkg.preparePythonSnapshot && !state.pythonPublished && snapshot) {
+      console.log(`Preparing Python artifacts for recovered ${tag} snapshot.`);
+      pythonSnapshot = pkg.preparePythonSnapshot(workspaceRoot, tag);
     }
 
     const previousTag = getPreviousMergedReleaseTag(pkg.tagPattern, tag, branchRef);
@@ -698,7 +772,7 @@ async function recoverPackageRelease(pkg, { tag, version, distTag, branchRef, in
     });
 
     const finalState = await inspectPackageReleaseState(pkg, { tag, version, workspaceRoot });
-    const readyForWorkflowPython = pkg.name !== 'sdk' || finalState.sdkPythonPublished || sdkPythonSnapshot || tagAtHead;
+    const readyForWorkflowPython = !pkg.pythonPackages || finalState.pythonPublished || pythonSnapshot || tagAtHead;
     const missingParts = [
       finalState.publishComplete ? '' : 'package publish',
       finalState.githubComplete ? '' : 'GitHub release',
@@ -709,7 +783,7 @@ async function recoverPackageRelease(pkg, { tag, version, distTag, branchRef, in
       throw new Error(`Recovery for ${pkg.name} ${tag} is still incomplete: ${missingParts.join(', ')}`);
     }
 
-    return { tag, version, distTag, sdkPythonSnapshot };
+    return { tag, version, distTag, pythonSnapshot };
   };
 
   if (tagAtHead) {
@@ -738,7 +812,7 @@ async function maybeRecoverIncompleteRelease(pkg, branchRef) {
     version,
   });
 
-  const needsSnapshotPython = pkg.name === 'sdk' && !state.sdkPythonPublished && !isTagAtHead(latestTag);
+  const needsSnapshotPython = Boolean(pkg.pythonPackages) && !state.pythonPublished && !isTagAtHead(latestTag);
   const needsRecovery = !state.publishComplete || !state.githubComplete || needsSnapshotPython;
   if (!needsRecovery) {
     return null;
@@ -754,7 +828,7 @@ async function maybeRecoverIncompleteRelease(pkg, branchRef) {
     branchRef,
     initialState: state,
   });
-  recordSdkPythonSnapshot(recovery.sdkPythonSnapshot);
+  recordSdkPythonSnapshot(recovery.pythonSnapshot);
   return recovery;
 }
 
@@ -799,32 +873,69 @@ const branchRef = `origin/${expectedBranch}`;
 // Release pipeline
 // ---------------------------------------------------------------------------
 
-// Stable bundle: CLI -> SDK -> MCP. These three share artifacts (SDK packages
-// CLI native binaries; MCP imports SDK + engine code), so they must release
-// together in this order. superdoc, react, esign, template-builder, and
-// vscode-ext release independently via their own per-package stable workflows.
+// Packages are grouped by `chain`. Within a chain, fail-stop applies: a
+// failed package skips downstream packages in the same chain. Across
+// chains, packages run independently - a tools failure does not block
+// the core release and vice versa.
 const packages = [
   {
     name: 'cli',
+    chain: 'tools',
     packageCwd: 'apps/cli',
     tagPrefix: 'cli-v',
     tagPattern: 'cli-v*',
     npmPackages: CLI_NPM_PACKAGES,
+    resumePublish: resumeCliPublish,
   },
   {
     name: 'sdk',
+    chain: 'tools',
     packageCwd: 'packages/sdk',
     tagPrefix: 'sdk-v',
     tagPattern: 'sdk-v*',
     npmPackages: SDK_NODE_NPM_PACKAGES,
     pythonPackages: SDK_PYTHON_PACKAGES,
+    resumePublish: resumeSdkPublish,
+    preparePythonSnapshot: prepareSdkPythonSnapshot,
   },
   {
     name: 'mcp',
+    chain: 'tools',
     packageCwd: 'apps/mcp',
     tagPrefix: 'mcp-v',
     tagPattern: 'mcp-v*',
     npmPackages: ['@superdoc-dev/mcp'],
+    resumePublish: resumeMcpPublish,
+  },
+  {
+    name: 'superdoc',
+    chain: 'core',
+    packageCwd: 'packages/superdoc',
+    tagPrefix: 'v',
+    tagPattern: 'v[0-9]*',
+    npmPackages: SUPERDOC_NPM_PACKAGES,
+    resumePublish: resumeSuperdocPublish,
+  },
+  {
+    name: 'react',
+    chain: 'core',
+    packageCwd: 'packages/react',
+    tagPrefix: 'react-v',
+    tagPattern: 'react-v*',
+    npmPackages: ['@superdoc-dev/react'],
+    resumePublish: resumeReactPublish,
+  },
+  {
+    name: 'vscode-ext',
+    chain: 'core',
+    packageCwd: 'apps/vscode-ext',
+    tagPrefix: 'vscode-v',
+    tagPattern: 'vscode-v*',
+    // VS Code Marketplace is the publish target instead of npm; the script's
+    // generic release-state inspection already special-cases vsCodeExtensionId
+    // for publishComplete and .vsix asset upload.
+    vsCodeExtensionId: 'superdoc-dev.superdoc-vscode-ext',
+    resumePublish: resumeVscodeExtPublish,
   },
 ];
 
@@ -839,6 +950,7 @@ const results = new Map();
 
 let hasFailed = false;
 let deferredReason = '';
+const failedChains = new Set();
 
 function markRemainingSkipped(startIndex) {
   for (let index = startIndex; index < packages.length; index += 1) {
@@ -849,7 +961,7 @@ function markRemainingSkipped(startIndex) {
 for (let index = 0; index < packages.length; index += 1) {
   const pkg = packages[index];
 
-  if (hasFailed) {
+  if (failedChains.has(pkg.chain)) {
     results.set(pkg.name, { status: 'skipped', newTags: [] });
     continue;
   }
@@ -864,6 +976,7 @@ for (let index = 0; index < packages.length; index += 1) {
       console.error(`\n${pkg.name} recovery failed:\n${error.message || error}`);
       results.set(pkg.name, { status: 'FAILED', newTags: [] });
       hasFailed = true;
+      failedChains.add(pkg.chain);
       continue;
     }
   }
@@ -943,7 +1056,7 @@ for (let index = 0; index < packages.length; index += 1) {
           distTag: recoveryDistTag,
           branchRef,
         });
-        recordSdkPythonSnapshot(recovery.sdkPythonSnapshot);
+        recordSdkPythonSnapshot(recovery.pythonSnapshot);
         results.set(pkg.name, { status: 'released', newTags });
         continue;
       } catch (recoveryError) {
@@ -954,6 +1067,7 @@ for (let index = 0; index < packages.length; index += 1) {
     const status = newTags.length > 0 ? 'FAILED (partial)' : 'FAILED';
     results.set(pkg.name, { status, newTags });
     hasFailed = true;
+    failedChains.add(pkg.chain);
   }
 }
 

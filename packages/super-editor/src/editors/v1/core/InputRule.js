@@ -480,7 +480,12 @@ export function handleHtmlPaste(html, editor, source) {
   // Check if the pasted content is a single paragraph
   const isSingleParagraph = doc.childCount === 1 && doc.firstChild.type.name === 'paragraph';
 
-  if (isInParagraph && isSingleParagraph) {
+  // Heading paragraphs must keep their wrapper so the styleId survives —
+  // unwrapping silently strips the heading style and TOC rebuilds miss it.
+  const sourceStyleId = isSingleParagraph ? (doc.firstChild.attrs?.paragraphProperties?.styleId ?? null) : null;
+  const sourceIsHeading = typeof sourceStyleId === 'string' && /^Heading[1-9]$/i.test(sourceStyleId);
+
+  if (isInParagraph && isSingleParagraph && !sourceIsHeading) {
     // Extract the contents of the paragraph and paste only those
     const paragraphContent = doc.firstChild.content;
     const tr = state.tr.replaceSelectionWith(paragraphContent, false);

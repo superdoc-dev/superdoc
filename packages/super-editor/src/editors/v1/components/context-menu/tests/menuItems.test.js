@@ -31,6 +31,7 @@ vi.mock('../constants.js', () => ({
     trackChangesAccept: 'Accept Tracked Changes',
     trackChangesReject: 'Reject Tracked Changes',
     cellBackground: 'Cell background',
+    updateTableOfContents: 'Update table of contents',
   },
   ICONS: {
     ai: '<svg>ai-icon</svg>',
@@ -42,6 +43,7 @@ vi.mock('../constants.js', () => ({
     copy: '<svg>copy-icon</svg>',
     paste: '<svg>paste-icon</svg>',
     cellBackground: '<svg>cell-background-icon</svg>',
+    updateTableOfContents: '<svg>rotate-right-icon</svg>',
   },
   TRIGGERS: {
     slash: 'slash',
@@ -1057,6 +1059,68 @@ describe('menuItems.js', () => {
 
       // Selection must be restored BEFORE handleClipboardPaste is called
       expect(callOrder).toEqual(['setSelection', 'handleClipboardPaste']);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // SD-2664 — "Update table of contents" item
+  // ---------------------------------------------------------------------------
+
+  describe('update-table-of-contents item', () => {
+    const findItem = (sections) => {
+      for (const section of sections) {
+        const item = section.items.find((it) => it.id === 'update-table-of-contents');
+        if (item) return item;
+      }
+      return undefined;
+    };
+
+    it('appears when right-clicking inside a TOC (tocAncestor.sdBlockId set, click trigger)', () => {
+      mockContext = createMockContext({
+        editor: mockEditor,
+        trigger: TRIGGERS.click,
+        tocAncestor: { node: {}, pos: 5, sdBlockId: 'toc-1' },
+      });
+      const sections = getItems(mockContext);
+      expect(findItem(sections)).toBeDefined();
+    });
+
+    it('is hidden when no tocAncestor is present', () => {
+      mockContext = createMockContext({
+        editor: mockEditor,
+        trigger: TRIGGERS.click,
+        tocAncestor: null,
+      });
+      const sections = getItems(mockContext);
+      expect(findItem(sections)).toBeUndefined();
+    });
+
+    it('is hidden on the slash trigger even when inside a TOC', () => {
+      mockContext = createMockContext({
+        editor: mockEditor,
+        trigger: TRIGGERS.slash,
+        tocAncestor: { node: {}, pos: 5, sdBlockId: 'toc-1' },
+      });
+      const sections = getItems(mockContext);
+      expect(findItem(sections)).toBeUndefined();
+    });
+
+    it('action invokes editor.doc.toc.update with the resolved sdBlockId and mode "all"', () => {
+      const update = vi.fn();
+      const ed = { ...mockEditor, doc: { toc: { update } } };
+      mockContext = createMockContext({
+        editor: ed,
+        trigger: TRIGGERS.click,
+        tocAncestor: { node: {}, pos: 5, sdBlockId: 'toc-42' },
+      });
+      const sections = getItems(mockContext);
+      const item = findItem(sections);
+      expect(item).toBeDefined();
+      item.action(ed, mockContext);
+      expect(update).toHaveBeenCalledWith({
+        target: { kind: 'block', nodeType: 'tableOfContents', nodeId: 'toc-42' },
+        mode: 'all',
+      });
     });
   });
 });

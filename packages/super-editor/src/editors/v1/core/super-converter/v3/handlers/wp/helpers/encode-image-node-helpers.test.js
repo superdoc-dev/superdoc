@@ -2023,4 +2023,119 @@ describe('getVectorShape', () => {
       expect(result1.attrs.src).not.toBe(result2.attrs.src);
     });
   });
+
+  // SD-2804: ECMA-376 §20.4.2.38 — a textbox (CT_TxbxContent) can hold rich
+  // body-level content, including paragraphs whose runs carry inline images
+  // via w:drawing > wp:inline > pic:pic. The text-only extractor used to
+  // silently skip those drawings, leaving the textbox visually empty even
+  // though export round-tripped the image. The fix surfaces the image as a
+  // textContent part with kind='image' so the shape painter can render it.
+  describe('SD-2804: image inside textbox content', () => {
+    const docxFixture = {
+      'word/_rels/header1.xml.rels': {
+        elements: [
+          {
+            name: 'Relationships',
+            elements: [
+              {
+                name: 'Relationship',
+                attributes: { Id: 'rId1', Target: 'media/image1.png' },
+              },
+            ],
+          },
+        ],
+      },
+    };
+
+    const makeShape = () => ({
+      elements: [
+        {
+          name: 'wps:wsp',
+          elements: [
+            { name: 'wps:cNvSpPr', attributes: { txBox: '1' } },
+            {
+              name: 'wps:spPr',
+              elements: [
+                { name: 'a:prstGeom', attributes: { prst: 'rect' } },
+                { name: 'a:xfrm', elements: [{ name: 'a:ext', attributes: { cx: '4745620', cy: '520860' } }] },
+              ],
+            },
+            {
+              name: 'wps:txbx',
+              elements: [
+                {
+                  name: 'w:txbxContent',
+                  elements: [
+                    {
+                      name: 'w:p',
+                      elements: [
+                        {
+                          name: 'w:r',
+                          elements: [
+                            { name: 'w:rPr', elements: [{ name: 'w:noProof' }] },
+                            {
+                              name: 'w:drawing',
+                              elements: [
+                                {
+                                  name: 'wp:inline',
+                                  elements: [
+                                    { name: 'wp:extent', attributes: { cx: '481330', cy: '422910' } },
+                                    { name: 'wp:docPr', attributes: { id: '1', name: 'Picture 2' } },
+                                    {
+                                      name: 'a:graphic',
+                                      elements: [
+                                        {
+                                          name: 'a:graphicData',
+                                          attributes: {
+                                            uri: 'http://schemas.openxmlformats.org/drawingml/2006/picture',
+                                          },
+                                          elements: [
+                                            {
+                                              name: 'pic:pic',
+                                              elements: [
+                                                {
+                                                  name: 'pic:blipFill',
+                                                  elements: [{ name: 'a:blip', attributes: { 'r:embed': 'rId1' } }],
+                                                },
+                                              ],
+                                            },
+                                          ],
+                                        },
+                                      ],
+                                    },
+                                  ],
+                                },
+                              ],
+                            },
+                          ],
+                        },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+            { name: 'wps:bodyPr', attributes: {} },
+          ],
+        },
+      ],
+    });
+
+    it('emits an image part in textContent for an inline w:drawing inside the textbox', () => {
+      const graphicData = makeShape();
+      const result = getVectorShape({
+        params: { nodes: [{ name: 'w:drawing', elements: [] }], docx: docxFixture, filename: 'header1.xml' },
+        node: { name: 'wp:anchor', elements: [] },
+        graphicData,
+        size: { width: 374, height: 41 },
+      });
+
+      expect(result?.type).toBe('vectorShape');
+      const parts = result?.attrs?.textContent?.parts || [];
+      const imagePart = parts.find((p) => p.kind === 'image');
+      expect(imagePart).toBeTruthy();
+      expect(typeof imagePart?.src).toBe('string');
+      expect(imagePart?.src.length).toBeGreaterThan(0);
+    });
+  });
 });

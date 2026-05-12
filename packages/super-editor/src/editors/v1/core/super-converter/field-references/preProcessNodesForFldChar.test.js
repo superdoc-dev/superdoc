@@ -428,6 +428,118 @@ describe('preProcessNodesForFldChar', () => {
     expect(result.unpairedEnd).toBeNull();
   });
 
+  // SD-2973: when a HYPERLINK field is wrapped in a constructive tracked
+  // change (w:ins / w:moveTo) and crosses paragraphs, SD-2858's preserveRaw
+  // path used to drop the link interpretation entirely — the inserted text
+  // rendered with insertion styling but no clickable link, while Word shows
+  // both treatments. The fix keeps the raw <w:p> structure intact (so the
+  // tracked-change wrappers round-trip) but wraps the visible text run
+  // (between separate and end fldChars) in <w:hyperlink> in-place so the
+  // downstream importer applies the link mark.
+  it('wraps the visible run in w:hyperlink when an inserted HYPERLINK is split across paragraphs', () => {
+    const docx = {
+      'word/_rels/document.xml.rels': {
+        elements: [{ name: 'Relationships', elements: [] }],
+      },
+    };
+    const nodes = [
+      {
+        name: 'w:p',
+        elements: [
+          { name: 'w:r', elements: [{ name: 'w:t', elements: [{ type: 'text', text: 'Before: ' }] }] },
+          {
+            name: 'w:ins',
+            attributes: { 'w:id': '1', 'w:author': 'Repro', 'w:date': '2026-04-30T00:00:00Z' },
+            elements: [
+              { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'begin' } }] },
+              {
+                name: 'w:r',
+                elements: [
+                  {
+                    name: 'w:instrText',
+                    attributes: { 'xml:space': 'preserve' },
+                    elements: [{ type: 'text', text: ' HYPERLINK "http://example.com" ' }],
+                  },
+                ],
+              },
+              { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'separate' } }] },
+              {
+                name: 'w:r',
+                elements: [
+                  {
+                    name: 'w:t',
+                    attributes: { 'xml:space': 'preserve' },
+                    elements: [{ type: 'text', text: 'inserted link text' }],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+      {
+        name: 'w:p',
+        elements: [
+          {
+            name: 'w:ins',
+            attributes: { 'w:id': '2', 'w:author': 'Repro', 'w:date': '2026-04-30T00:00:00Z' },
+            elements: [
+              { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'end' } }] },
+              {
+                name: 'w:r',
+                elements: [
+                  {
+                    name: 'w:t',
+                    attributes: { 'xml:space': 'preserve' },
+                    elements: [{ type: 'text', text: 'inserted text after field end' }],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ];
+
+    const result = preProcessNodesForFldChar(nodes, docx);
+
+    // Two paragraphs preserved (the structural raw-preservation guarantee
+    // from SD-2858 still holds — we are not collapsing the tree).
+    expect(result.processedNodes).toHaveLength(2);
+    expect(result.processedNodes[0].name).toBe('w:p');
+    expect(result.processedNodes[1].name).toBe('w:p');
+
+    // Walk the first paragraph; it must contain a w:hyperlink wrapping the
+    // visible text run "inserted link text". The hyperlink sits inside the
+    // existing <w:ins> wrapper so insertion track-change styling layers on
+    // top of the link styling — matching Word's rendering.
+    const findFirst = (node, predicate) => {
+      if (!node) return null;
+      if (predicate(node)) return node;
+      for (const child of node.elements || []) {
+        const hit = findFirst(child, predicate);
+        if (hit) return hit;
+      }
+      return null;
+    };
+
+    const hyperlink = findFirst(result.processedNodes[0], (n) => n.name === 'w:hyperlink');
+    expect(hyperlink).toBeTruthy();
+    expect(hyperlink.attributes?.['r:id']).toMatch(/^rId/);
+
+    const visibleText = findFirst(hyperlink, (n) => n.elements?.some((c) => c?.type === 'text'));
+    expect(visibleText?.elements?.[0]?.text).toBe('inserted link text');
+
+    // Relationship must have been added pointing at the URL extracted from
+    // the field's instrText.
+    const relationships = docx['word/_rels/document.xml.rels'].elements.find((el) => el.name === 'Relationships');
+    const newRel = relationships.elements.find((el) => el.name === 'Relationship');
+    expect(newRel?.attributes?.Target).toBe('http://example.com');
+    expect(newRel?.attributes?.Type).toBe(
+      'http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink',
+    );
+  });
+
   it('preserves raw field nodes when an active field ends inside a tracked deletion wrapper', () => {
     const expectedNodes = [
       { name: 'w:r', elements: [{ name: 'w:fldChar', attributes: { 'w:fldCharType': 'begin' } }] },

@@ -3,12 +3,18 @@ import { findInlineNodes } from './documentHelpers.js';
 
 /**
  * Get track changes marks.
- * @param {import('prosemirror-state').EditorState} state
- * @param {string} id
+ *
+ * Tolerates a missing or partially-initialized state and returns an empty array
+ * instead of throwing. Comment-import bootstrap can call this through a
+ * setTimeout(0) before the editor's PM state is attached (SD-2641).
+ *
+ * @param {import('prosemirror-state').EditorState | null | undefined} state
+ * @param {string} [id]
  * @returns {Array} Array with track changes marks.
  */
 export const getTrackChanges = (state, id = null) => {
   const trackedChanges = [];
+  if (!state?.doc) return trackedChanges;
   const allInlineNodes = findInlineNodes(state.doc);
 
   if (!allInlineNodes.length) {

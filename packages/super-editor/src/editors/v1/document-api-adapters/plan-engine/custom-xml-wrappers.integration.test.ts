@@ -174,6 +174,65 @@ describe('customXml.parts read-side (integration)', () => {
     expect(info).toBeNull();
     editor.destroy();
   });
+
+  it('rejects partName targets that point at non-storage-part files', async () => {
+    const editor = await createEditorWithEmptyPackage();
+    // get returns null (not the document content).
+    expect(editor.doc.customXml.parts.get({ target: { partName: 'word/document.xml' } })).toBeNull();
+    expect(editor.doc.customXml.parts.get({ target: { partName: '[Content_Types].xml' } })).toBeNull();
+    // patch and remove return TARGET_NOT_FOUND, not a successful mutation.
+    const patch = editor.doc.customXml.parts.patch({
+      target: { partName: 'word/document.xml' },
+      content: '<a/>',
+    });
+    expect(patch.success).toBe(false);
+    if (!patch.success) expect(patch.failure.code).toBe('TARGET_NOT_FOUND');
+    const remove = editor.doc.customXml.parts.remove({ target: { partName: 'word/document.xml' } });
+    expect(remove.success).toBe(false);
+    if (!remove.success) expect(remove.failure.code).toBe('TARGET_NOT_FOUND');
+    editor.destroy();
+  });
+
+  it('pairs storage and props parts via the item rels file, not by filename', async () => {
+    // Foreign doc shape: item1.xml is linked to itemPropsFOREIGN.xml via
+    // customXml/_rels/item1.xml.rels. The index-match heuristic would
+    // miss the props; the rels-based pairing must find it.
+    const editor = await createEditorWithEmptyPackage();
+    const converted = (editor as unknown as { converter: { convertedXml: Record<string, unknown> } }).converter
+      .convertedXml;
+    converted[PART_NAME] = makeStorageDoc();
+    converted['customXml/itemPropsFOREIGN.xml'] = makePropsDoc(ITEM_ID, [NAMESPACE]);
+    converted['customXml/_rels/item1.xml.rels'] = {
+      declaration: { attributes: { version: '1.0', encoding: 'UTF-8' } },
+      elements: [
+        {
+          type: 'element',
+          name: 'Relationships',
+          attributes: { xmlns: 'http://schemas.openxmlformats.org/package/2006/relationships' },
+          elements: [
+            {
+              type: 'element',
+              name: 'Relationship',
+              attributes: {
+                Id: 'rId1',
+                Type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/customXmlProps',
+                Target: 'itemPropsFOREIGN.xml',
+              },
+            },
+          ],
+        },
+      ],
+    };
+
+    const list = editor.doc.customXml.parts.list();
+    expect(list.items.length).toBe(1);
+    const item = list.items[0]!;
+    expect(item.id).toBe(ITEM_ID);
+    expect(item.propsPartName).toBe('customXml/itemPropsFOREIGN.xml');
+    expect(item.schemaRefs).toEqual([NAMESPACE]);
+
+    editor.destroy();
+  });
 });
 
 describe('customXml.parts write-side', () => {

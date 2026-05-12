@@ -7664,27 +7664,32 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
   },
   'customXml.parts.get': {
     input: objectSchema({ target: customXmlPartTargetSchema }, ['target']),
-    output: { type: 'object' },
+    output: { oneOf: [{ type: 'object' }, { type: 'null' }] },
   },
   'customXml.parts.create': {
     input: objectSchema(
       {
-        content: { type: 'string' },
-        schemaRefs: { type: 'array', items: { type: 'string' } },
+        content: { type: 'string', minLength: 1 },
+        schemaRefs: { type: 'array', items: { type: 'string', minLength: 1 } },
       },
       ['content'],
     ),
     ...customXmlPartCreateMutation,
   },
   'customXml.parts.patch': {
-    input: objectSchema(
-      {
+    // `target` is required; `content` and `schemaRefs` are both optional
+    // but at least one MUST be present. Encoded via JSON Schema's `anyOf`.
+    input: {
+      type: 'object',
+      properties: {
         target: customXmlPartTargetSchema,
-        content: { type: 'string' },
-        schemaRefs: { type: 'array', items: { type: 'string' } },
+        content: { type: 'string', minLength: 1 },
+        schemaRefs: { type: 'array', items: { type: 'string', minLength: 1 } },
       },
-      ['target'],
-    ),
+      required: ['target'],
+      anyOf: [{ required: ['content'] }, { required: ['schemaRefs'] }],
+      additionalProperties: false,
+    },
     ...customXmlPartMutation,
   },
   'customXml.parts.remove': {

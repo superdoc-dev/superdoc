@@ -4064,6 +4064,13 @@ const refNamespaceMutationVectors: Partial<Record<OperationId, MutationVector>> 
         { content: '<a xmlns="urn:a"/>' },
         { changeMode: 'direct' },
       ),
+    failureCase: () =>
+      customXmlPartsCreateWrapper(
+        makeRefEditor({ converter: { convertedXml: {} } }),
+        // Malformed XML — adapter rejects with INVALID_INPUT.
+        { content: '<not-closed' },
+        { changeMode: 'direct' },
+      ),
   },
   'customXml.parts.patch': {
     throwCase: () =>
@@ -4086,6 +4093,13 @@ const refNamespaceMutationVectors: Partial<Record<OperationId, MutationVector>> 
         { changeMode: 'direct' },
       );
     },
+    failureCase: () =>
+      customXmlPartsPatchWrapper(
+        // Empty convertedXml — target can't resolve.
+        makeRefEditor({ converter: { convertedXml: {} } }),
+        { target: { partName: 'customXml/item999.xml' }, content: '<a xmlns="urn:a"/>' },
+        { changeMode: 'direct' },
+      ),
   },
   'customXml.parts.remove': {
     throwCase: () =>
@@ -4108,6 +4122,12 @@ const refNamespaceMutationVectors: Partial<Record<OperationId, MutationVector>> 
         { changeMode: 'direct' },
       );
     },
+    failureCase: () =>
+      customXmlPartsRemoveWrapper(
+        makeRefEditor({ converter: { convertedXml: {} } }),
+        { target: { partName: 'customXml/item999.xml' } },
+        { changeMode: 'direct' },
+      ),
   },
 };
 
@@ -11230,6 +11250,32 @@ const dryRunVectors: Partial<Record<OperationId, () => unknown>> = {
           anchor: { start: { blockId: 'p1', offset: 0 }, end: { blockId: 'p1', offset: 1 } },
         },
       },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+
+  // ---- Custom XML Parts ----
+  'customXml.parts.create': () =>
+    customXmlPartsCreateWrapper(
+      makeRefEditor({ converter: { convertedXml: {} } }),
+      { content: '<a xmlns="urn:a"/>' },
+      { changeMode: 'direct', dryRun: true },
+    ),
+  'customXml.parts.patch': () => {
+    const editor = makeRefEditor({ converter: { convertedXml: {} } });
+    customXmlPartsCreateWrapper(editor, { content: '<a xmlns="urn:a"/>' }, { changeMode: 'direct' });
+    return customXmlPartsPatchWrapper(
+      editor,
+      { target: { partName: 'customXml/item1.xml' }, content: '<a xmlns="urn:a">v2</a>' },
+      { changeMode: 'direct', dryRun: true },
+    );
+  },
+  'customXml.parts.remove': () => {
+    const editor = makeRefEditor({ converter: { convertedXml: {} } });
+    customXmlPartsCreateWrapper(editor, { content: '<a xmlns="urn:a"/>' }, { changeMode: 'direct' });
+    return customXmlPartsRemoveWrapper(
+      editor,
+      { target: { partName: 'customXml/item1.xml' } },
       { changeMode: 'direct', dryRun: true },
     );
   },

@@ -17,12 +17,14 @@ import { buildDiscoveryItem, buildDiscoveryResult, buildResolvedHandle } from '@
 import { paginate } from '../helpers/adapter-utils.js';
 import { getRevision } from './revision-tracker.js';
 import { rejectTrackedMode } from '../helpers/mutation-helpers.js';
+import { executeOutOfBandMutation } from '../out-of-band-mutation.js';
 import {
   listCustomXmlParts,
   readCustomXmlPart,
   createCustomXmlPart,
   patchCustomXmlPart,
   removeCustomXmlPart,
+  resolveTargetPartName,
 } from '../../core/super-converter/custom-xml-parts.js';
 
 // ---------------------------------------------------------------------------
@@ -31,11 +33,15 @@ import {
 
 type ConverterWithConvertedXml = {
   convertedXml?: Record<string, unknown>;
+  removedCustomXmlPaths?: Set<string>;
 };
 
+function getConverter(editor: Editor): ConverterWithConvertedXml | null {
+  return (editor as unknown as { converter?: ConverterWithConvertedXml }).converter ?? null;
+}
+
 function getConvertedXml(editor: Editor): Record<string, unknown> {
-  const converter = (editor as unknown as { converter?: ConverterWithConvertedXml }).converter;
-  return converter?.convertedXml ?? {};
+  return getConverter(editor)?.convertedXml ?? {};
 }
 
 // ---------------------------------------------------------------------------
@@ -113,8 +119,19 @@ export function customXmlPartsGetWrapper(
 // Write operations
 // ---------------------------------------------------------------------------
 
-function failure(code: string, message: string): { success: false; failure: { code: string; message: string } } {
+type FailureCode = 'INVALID_INPUT' | 'TARGET_NOT_FOUND';
+
+function failure(
+  code: FailureCode,
+  message: string,
+): { success: false; failure: { code: FailureCode; message: string } } {
   return { success: false, failure: { code, message } };
+}
+
+type WriteOutcome<T> = { ok: true; payload: T } | { ok: false; code: FailureCode; message: string };
+
+function targetNotFound(): WriteOutcome<never> {
+  return { ok: false, code: 'TARGET_NOT_FOUND', message: 'No custom XML part matched the supplied target.' };
 }
 
 export function customXmlPartsCreateWrapper(
@@ -124,15 +141,38 @@ export function customXmlPartsCreateWrapper(
 ): CustomXmlPartsCreateResult {
   rejectTrackedMode('customXml.parts.create', options);
   try {
-    const result = createCustomXmlPart(getConvertedXml(editor), {
-      content: input.content,
-      schemaRefs: input.schemaRefs,
-    });
+    const outcome = executeOutOfBandMutation<
+      WriteOutcome<{ id: string; partName: string; propsPartName: string }>
+    >(
+      editor,
+      (dryRun) => {
+        if (dryRun) {
+          // Read-only preview: validate well-formedness without writing.
+          try {
+            createCustomXmlPart({}, { content: input.content, schemaRefs: input.schemaRefs });
+          } catch (e) {
+            const msg = e instanceof Error ? e.message : String(e);
+            return { changed: false, payload: { ok: false, code: 'INVALID_INPUT', message: msg } };
+          }
+          return {
+            changed: false,
+            payload: { ok: true, payload: { id: '{DRY-RUN}', partName: '', propsPartName: '' } },
+          };
+        }
+        const created = createCustomXmlPart(getConvertedXml(editor), {
+          content: input.content,
+          schemaRefs: input.schemaRefs,
+        });
+        return { changed: true, payload: { ok: true, payload: created } };
+      },
+      { dryRun: options?.dryRun === true, expectedRevision: options?.expectedRevision },
+    );
+    if (!outcome.ok) return failure(outcome.code, outcome.message);
     return {
       success: true,
-      id: result.id,
-      partName: result.partName,
-      propsPartName: result.propsPartName,
+      id: outcome.payload.id,
+      partName: outcome.payload.partName,
+      propsPartName: outcome.payload.propsPartName,
     };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
@@ -147,11 +187,32 @@ export function customXmlPartsPatchWrapper(
 ): CustomXmlPartsMutationResult {
   rejectTrackedMode('customXml.parts.patch', options);
   try {
-    const result = patchCustomXmlPart(getConvertedXml(editor), input.target, {
-      content: input.content,
-      schemaRefs: input.schemaRefs,
-    });
-    if (!result) return failure('TARGET_NOT_FOUND', 'No custom XML part matched the supplied target.');
+    const outcome = executeOutOfBandMutation<WriteOutcome<true>>(
+      editor,
+      (dryRun) => {
+        if (dryRun) {
+          const partName = resolveTargetPartName(getConvertedXml(editor), input.target);
+          if (!partName) return { changed: false, payload: targetNotFound() };
+          if (input.content !== undefined) {
+            try {
+              createCustomXmlPart({}, { content: input.content, schemaRefs: undefined });
+            } catch (e) {
+              const msg = e instanceof Error ? e.message : String(e);
+              return { changed: false, payload: { ok: false, code: 'INVALID_INPUT', message: msg } };
+            }
+          }
+          return { changed: false, payload: { ok: true, payload: true } };
+        }
+        const patched = patchCustomXmlPart(getConvertedXml(editor), input.target, {
+          content: input.content,
+          schemaRefs: input.schemaRefs,
+        });
+        if (!patched) return { changed: false, payload: targetNotFound() };
+        return { changed: true, payload: { ok: true, payload: true } };
+      },
+      { dryRun: options?.dryRun === true, expectedRevision: options?.expectedRevision },
+    );
+    if (!outcome.ok) return failure(outcome.code, outcome.message);
     return { success: true, target: input.target };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
@@ -165,8 +226,22 @@ export function customXmlPartsRemoveWrapper(
   options?: MutationOptions,
 ): CustomXmlPartsMutationResult {
   rejectTrackedMode('customXml.parts.remove', options);
-  const ok = removeCustomXmlPart(getConvertedXml(editor), input.target);
-  if (!ok) return failure('TARGET_NOT_FOUND', 'No custom XML part matched the supplied target.');
+  const outcome = executeOutOfBandMutation<WriteOutcome<true>>(
+    editor,
+    (dryRun) => {
+      if (dryRun) {
+        const partName = resolveTargetPartName(getConvertedXml(editor), input.target);
+        return partName
+          ? { changed: false, payload: { ok: true, payload: true } }
+          : { changed: false, payload: targetNotFound() };
+      }
+      const ok = removeCustomXmlPart(getConvertedXml(editor), input.target, getConverter(editor));
+      if (!ok) return { changed: false, payload: targetNotFound() };
+      return { changed: true, payload: { ok: true, payload: true } };
+    },
+    { dryRun: options?.dryRun === true, expectedRevision: options?.expectedRevision },
+  );
+  if (!outcome.ok) return failure(outcome.code, outcome.message);
   return { success: true, target: input.target };
 }
 

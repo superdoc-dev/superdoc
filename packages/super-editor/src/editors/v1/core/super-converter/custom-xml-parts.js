@@ -59,6 +59,15 @@ function indexFromPropsPartName(propsPartName) {
   return m ? Number.parseInt(m[1], 10) : null;
 }
 
+/**
+ * Returns true when `partName` is the path of a Custom XML Data Storage Part.
+ * Used to reject `target.partName` values that point at unrelated package
+ * files (e.g. `word/document.xml`, `word/styles.xml`, `[Content_Types].xml`).
+ */
+export function isCustomXmlStoragePartName(partName) {
+  return indexFromPartName(partName) != null;
+}
+
 // ---------------------------------------------------------------------------
 // Discovery
 // ---------------------------------------------------------------------------
@@ -83,14 +92,39 @@ export function listCustomXmlStoragePartNames(convertedXml) {
 }
 
 /**
- * Returns the Properties Part name paired with `partName`, if present.
- * Pairs by matching numeric index (item1 ↔ itemProps1).
+ * Returns the Properties Part name paired with `partName` via the OOXML
+ * relationship file `customXml/_rels/itemN.xml.rels`. Falls back to the
+ * index-match heuristic (`itemN.xml → itemPropsN.xml`) when no rels file
+ * is present.
+ *
+ * Pairing via the rels file is required by ECMA-376 §15.2.6 — foreign
+ * docs are not obligated to name their props parts to match.
  */
 export function findPropsPartFor(convertedXml, partName) {
+  if (!convertedXml) return null;
   const idx = indexFromPartName(partName);
   if (idx == null) return null;
-  const candidate = propsPartNameFromIndex(idx);
-  return convertedXml?.[candidate] ? candidate : null;
+
+  const relsPath = `customXml/_rels/item${idx}.xml.rels`;
+  const relsDoc = convertedXml[relsPath];
+  const relsRoot = relsDoc?.elements?.find((el) => getLocalName(el?.name) === 'Relationships');
+  if (relsRoot?.elements?.length) {
+    for (const rel of relsRoot.elements) {
+      if (rel?.attributes?.Type !== CUSTOM_XML_PROPS_RELATIONSHIP_TYPE) continue;
+      const target = rel?.attributes?.Target;
+      if (typeof target !== 'string' || target.length === 0) continue;
+      // Targets in customXml/_rels/itemN.xml.rels are relative to the
+      // rels file's base, i.e. `customXml/`. So `itemPropsN.xml` →
+      // `customXml/itemPropsN.xml`. Absolute or otherwise-prefixed
+      // targets are accepted as-is when they already point at a key.
+      const candidate = target.includes('/') ? target.replace(/^\.?\//, '') : `customXml/${target}`;
+      if (convertedXml[candidate]) return candidate;
+    }
+  }
+
+  // Fallback: index-name heuristic for parts without a rels file.
+  const indexCandidate = propsPartNameFromIndex(idx);
+  return convertedXml[indexCandidate] ? indexCandidate : null;
 }
 
 // ---------------------------------------------------------------------------
@@ -168,6 +202,8 @@ export function readCustomXmlPart(convertedXml, target) {
   let partName = null;
   let itemId = null;
   if (typeof target.partName === 'string' && target.partName.length > 0) {
+    // Reject non-storage-part paths. See note on resolveTargetPartName.
+    if (!isCustomXmlStoragePartName(target.partName)) return null;
     partName = target.partName;
   } else if (typeof target.id === 'string' && target.id.length > 0) {
     itemId = target.id;
@@ -351,6 +387,10 @@ function buildItemRelsRoot(propsPartFileName) {
 export function resolveTargetPartName(convertedXml, target) {
   if (!target) return null;
   if (typeof target.partName === 'string' && target.partName.length > 0) {
+    // Restrict targeting by partName to actual Storage Parts. Without this
+    // gate, `customXml.parts.get/patch/remove({ partName })` could read or
+    // mutate unrelated package files like `word/document.xml`.
+    if (!isCustomXmlStoragePartName(target.partName)) return null;
     return convertedXml[target.partName] ? target.partName : null;
   }
   if (typeof target.id === 'string' && target.id.length > 0) {
@@ -449,25 +489,31 @@ export function patchCustomXmlPart(convertedXml, target, { content, schemaRefs }
 /**
  * Removes a Custom XML Part and cleans up every linked package file:
  *   - the Storage Part
- *   - the Properties Part (if present)
- *   - the item rels file (if present)
+ *   - the Properties Part (resolved via the item rels file)
+ *   - the item rels file
  *   - the document-level relationship pointing at this part
+ *
+ * Paths of removed parts are tracked on `converter.removedCustomXmlPaths`
+ * so the exporter can emit ZIP tombstones (`updatedDocs[path] = null`) for
+ * parts that originated in the imported DOCX — otherwise the original
+ * entries would survive in the exported zip and the part would reappear
+ * on the next import.
  *
  * Returns `true` when the part existed and was removed, `false` when the
  * target couldn't be resolved.
  */
-export function removeCustomXmlPart(convertedXml, target) {
+export function removeCustomXmlPart(convertedXml, target, converter) {
   const partName = resolveTargetPartName(convertedXml, target);
   if (!partName) return false;
   const index = indexFromPartName(partName);
+  const propsPartName = findPropsPartFor(convertedXml, partName);
+  const itemRelsPath = index == null ? null : `customXml/_rels/item${index}.xml.rels`;
+  const removedPaths = [partName, propsPartName, itemRelsPath].filter(
+    (path) => typeof path === 'string' && path.length > 0,
+  );
 
-  delete convertedXml[partName];
-
-  if (index != null) {
-    const propsPartName = propsPartNameFromIndex(index);
-    if (convertedXml[propsPartName]) delete convertedXml[propsPartName];
-    const itemRelsPath = `customXml/_rels/item${index}.xml.rels`;
-    if (convertedXml[itemRelsPath]) delete convertedXml[itemRelsPath];
+  for (const path of removedPaths) {
+    delete convertedXml[path];
   }
 
   // Strip the document-level relationship pointing at this part.
@@ -480,6 +526,16 @@ export function removeCustomXmlPart(convertedXml, target) {
       const resolved = resolveOpcTargetPath(rel?.attributes?.Target, 'word');
       return resolved !== partName;
     });
+  }
+
+  // Mark the paths as removed so the exporter emits null tombstones for
+  // them. Without this, an existing DOCX with these parts in the original
+  // zip would still ship them on export.
+  if (converter) {
+    if (!(converter.removedCustomXmlPaths instanceof Set)) {
+      converter.removedCustomXmlPaths = new Set();
+    }
+    for (const path of removedPaths) converter.removedCustomXmlPaths.add(path);
   }
 
   return true;

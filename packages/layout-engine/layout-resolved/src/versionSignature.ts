@@ -1,21 +1,22 @@
-import type {
-  DrawingBlock,
-  FieldAnnotationRun,
-  FlowBlock,
-  Fragment,
-  ImageBlock,
-  ImageDrawing,
-  ImageRun,
-  ParagraphAttrs,
-  ParagraphBlock,
-  SdtMetadata,
-  ShapeGroupDrawing,
-  SourceAnchor,
-  TableAttrs,
-  TableBlock,
-  TableCellAttrs,
-  TextRun,
-  VectorShapeDrawing,
+import {
+  getParagraphInlineDirection,
+  type DrawingBlock,
+  type FieldAnnotationRun,
+  type FlowBlock,
+  type Fragment,
+  type ImageBlock,
+  type ImageDrawing,
+  type ImageRun,
+  type ParagraphAttrs,
+  type ParagraphBlock,
+  type SdtMetadata,
+  type ShapeGroupDrawing,
+  type SourceAnchor,
+  type TableAttrs,
+  type TableBlock,
+  type TableCellAttrs,
+  type TextRun,
+  type VectorShapeDrawing,
 } from '@superdoc/contracts';
 import { hashParagraphBorders } from './paragraphBorderHash.js';
 import {
@@ -293,7 +294,7 @@ export const deriveBlockVersion = (block: FlowBlock): string => {
           attrs.borders ? hashParagraphBorders(attrs.borders) : '',
           attrs.shading?.fill ?? '',
           attrs.shading?.color ?? '',
-          attrs.direction ?? '',
+          getParagraphInlineDirection(attrs) ?? '',
           attrs.tabs?.length ? JSON.stringify(attrs.tabs) : '',
         ].join(':')
       : '';
@@ -437,7 +438,7 @@ export const deriveBlockVersion = (block: FlowBlock): string => {
               hash = hashNumber(hash, attrs.indent?.hanging ?? 0);
               hash = hashString(hash, attrs.shading?.fill ?? '');
               hash = hashString(hash, attrs.shading?.color ?? '');
-              hash = hashString(hash, attrs.direction ?? '');
+              hash = hashString(hash, getParagraphInlineDirection(attrs) ?? '');
               if (attrs.borders) {
                 hash = hashString(hash, hashParagraphBorders(attrs.borders));
               }

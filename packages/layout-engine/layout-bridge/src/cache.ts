@@ -1,16 +1,17 @@
-import type {
-  DrawingBlock,
-  FlowBlock,
-  ImageBlock,
-  ImageRun,
-  ListBlock,
-  TableBlock,
-  ParagraphBlock,
-  ParagraphAttrs,
-  ParagraphFrame,
-  TableAttrs,
-  TableCellAttrs,
-  Run,
+import {
+  getParagraphInlineDirection,
+  type DrawingBlock,
+  type FlowBlock,
+  type ImageBlock,
+  type ImageRun,
+  type ListBlock,
+  type TableBlock,
+  type ParagraphBlock,
+  type ParagraphAttrs,
+  type ParagraphFrame,
+  type TableAttrs,
+  type TableCellAttrs,
+  type Run,
 } from '@superdoc/contracts';
 import { fieldAnnotationKey } from './field-annotation-key.js';
 import { hasTrackedChange, resolveTrackedChangesEnabled } from './tracked-changes-utils.js';
@@ -391,8 +392,9 @@ const hashRuns = (block: FlowBlock): string => {
               if (sh.color) parts.push(`shc:${sh.color}`);
             }
 
-            // Direction
-            if (attrs.direction) parts.push(`dir:${attrs.direction}`);
+            // Direction (reads directionContext first; legacy attrs.direction as fallback)
+            const cellDir = getParagraphInlineDirection(attrs);
+            if (cellDir) parts.push(`dir:${cellDir}`);
 
             if (parts.length > 0) {
               cellHashes.push(`pa:${parts.join(':')}`);
@@ -546,8 +548,9 @@ const hashRuns = (block: FlowBlock): string => {
       parts.push(`tb:${tabsHash}`);
     }
 
-    // Direction
-    if (attrs.direction) parts.push(`dir:${attrs.direction}`);
+    // Direction (reads directionContext first; legacy attrs.direction as fallback)
+    const dir = getParagraphInlineDirection(attrs);
+    if (dir) parts.push(`dir:${dir}`);
 
     // Pagination properties
     if (attrs.keepNext) parts.push('kn');

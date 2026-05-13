@@ -44,6 +44,20 @@ export const TRANSIENT_HYPERLINK_STYLE_IDS = new Set(['Hyperlink', 'FollowedHype
  * Without this merge we'd export concrete font names that defeat Word's per-script theme
  * resolution.
  *
+ * AIDEV-NOTE: The gate + merge pair operate at the fontFamily-key level (whole rPr
+ * fontFamily object), not at the per-slot level. A user action that mutates only a
+ * per-script mark attr (`eastAsiaFontFamily` or `csFontFamily`) without changing the
+ * primary `fontFamily` will pass the gate, and this merge will silently restore the
+ * stale theme on that slot. We accept this trade-off because (a) the toolbar's
+ * setFontFamily writes all four slots to the same family, so a real user override
+ * always changes the primary; (b) no current API or paste path produces per-script-only
+ * mark changes against an imported theme run; (c) a per-slot model adds intricate
+ * encoder probes that risk regressing the SD-2894 customer fixture again (see commit
+ * bec7e63ed for the prior per-script regression we just fixed). If a real customer
+ * reproduction surfaces — e.g. a paste-from-Word flow with per-script fonts being
+ * silently reverted — file a follow-up ticket with that fixture and rework this helper
+ * into a per-slot decision then. Codex flagged this on the PR-3225 review.
+ *
  * @param {Record<string, unknown>|null|undefined} fromMarks
  * @param {Record<string, unknown>|null|undefined} existing
  * @returns {Record<string, unknown>}

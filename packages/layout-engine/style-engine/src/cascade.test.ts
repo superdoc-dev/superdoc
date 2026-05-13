@@ -152,6 +152,109 @@ describe('cascade - combineRunProperties', () => {
       bold: true,
     });
   });
+
+  // SD-2894: each `<w:rFonts>` script slot has both a concrete form (`w:ascii`,
+  // `w:hAnsi`, `w:eastAsia`, `w:cs`) and a theme form (`w:asciiTheme`,
+  // `w:hAnsiTheme`, `w:eastAsiaTheme`, `w:cstheme` — note `cstheme` lowercase).
+  // When a higher-priority source supplies one form for a slot, the cascade must
+  // drop the other form from lower-priority sources, or Word resolves the concrete
+  // name as an override and defeats per-script theme resolution.
+  //
+  // The original SD-2894 bug was that only the (ascii, asciiTheme) pair was
+  // dropping correctly; hAnsi/eastAsia/cs leaked through. These tests pin the
+  // full 4-slot dedup so the bug cannot regress for any single slot.
+  describe('SD-2894 four-slot theme/concrete dedup', () => {
+    it('drops concrete `ascii` from lower when higher supplies `asciiTheme`', () => {
+      const result = combineRunProperties([
+        { fontFamily: { ascii: 'Calibri' } },
+        { fontFamily: { asciiTheme: 'majorBidi' } },
+      ]);
+      expect(result.fontFamily).toEqual({ asciiTheme: 'majorBidi' });
+    });
+
+    it('drops concrete `hAnsi` from lower when higher supplies `hAnsiTheme`', () => {
+      const result = combineRunProperties([
+        { fontFamily: { hAnsi: 'Calibri' } },
+        { fontFamily: { hAnsiTheme: 'majorHAnsi' } },
+      ]);
+      expect(result.fontFamily).toEqual({ hAnsiTheme: 'majorHAnsi' });
+    });
+
+    it('drops concrete `eastAsia` from lower when higher supplies `eastAsiaTheme`', () => {
+      const result = combineRunProperties([
+        { fontFamily: { eastAsia: 'SimSun' } },
+        { fontFamily: { eastAsiaTheme: 'majorEastAsia' } },
+      ]);
+      expect(result.fontFamily).toEqual({ eastAsiaTheme: 'majorEastAsia' });
+    });
+
+    it('drops concrete `cs` from lower when higher supplies `cstheme` (lowercase)', () => {
+      const result = combineRunProperties([
+        { fontFamily: { cs: 'Arial' } },
+        { fontFamily: { cstheme: 'majorBidi' } },
+      ]);
+      expect(result.fontFamily).toEqual({ cstheme: 'majorBidi' });
+    });
+
+    it('drops theme `asciiTheme` from lower when higher supplies concrete `ascii`', () => {
+      const result = combineRunProperties([
+        { fontFamily: { asciiTheme: 'majorBidi' } },
+        { fontFamily: { ascii: 'Arial' } },
+      ]);
+      expect(result.fontFamily).toEqual({ ascii: 'Arial' });
+    });
+
+    it('drops theme `hAnsiTheme` from lower when higher supplies concrete `hAnsi`', () => {
+      const result = combineRunProperties([
+        { fontFamily: { hAnsiTheme: 'majorHAnsi' } },
+        { fontFamily: { hAnsi: 'Arial' } },
+      ]);
+      expect(result.fontFamily).toEqual({ hAnsi: 'Arial' });
+    });
+
+    it('drops theme `eastAsiaTheme` from lower when higher supplies concrete `eastAsia`', () => {
+      const result = combineRunProperties([
+        { fontFamily: { eastAsiaTheme: 'majorEastAsia' } },
+        { fontFamily: { eastAsia: 'Arial' } },
+      ]);
+      expect(result.fontFamily).toEqual({ eastAsia: 'Arial' });
+    });
+
+    it('drops theme `cstheme` from lower when higher supplies concrete `cs`', () => {
+      const result = combineRunProperties([
+        { fontFamily: { cstheme: 'majorBidi' } },
+        { fontFamily: { cs: 'Arial' } },
+      ]);
+      expect(result.fontFamily).toEqual({ cs: 'Arial' });
+    });
+
+    it('Athenaintelligence customer shape: all 4 concretes from defaults dropped by inline themes', () => {
+      // Mirrors the customer fixture: docDefaults supply concrete fonts (Arial),
+      // inline rPr supplies theme refs on ascii/hAnsi/cs (no eastAsiaTheme). The
+      // cascade must keep only the theme refs on those three slots; eastAsia
+      // concrete from defaults is independent.
+      const result = combineRunProperties([
+        { fontFamily: { ascii: 'Arial', hAnsi: 'Arial', cs: 'Arial', eastAsia: 'Arial' } },
+        { fontFamily: { asciiTheme: 'majorBidi', hAnsiTheme: 'majorBidi', cstheme: 'majorBidi' } },
+      ]);
+      expect(result.fontFamily).toEqual({
+        asciiTheme: 'majorBidi',
+        hAnsiTheme: 'majorBidi',
+        cstheme: 'majorBidi',
+        eastAsia: 'Arial',
+      });
+    });
+
+    it('exports FONT_SLOT_THEME_PAIRS so callers (super-editor plugin) can stay in sync', async () => {
+      const { FONT_SLOT_THEME_PAIRS } = await import('./cascade.js');
+      expect(FONT_SLOT_THEME_PAIRS).toEqual([
+        ['ascii', 'asciiTheme'],
+        ['hAnsi', 'hAnsiTheme'],
+        ['eastAsia', 'eastAsiaTheme'],
+        ['cs', 'cstheme'],
+      ]);
+    });
+  });
 });
 
 describe('cascade - combineIndentProperties', () => {

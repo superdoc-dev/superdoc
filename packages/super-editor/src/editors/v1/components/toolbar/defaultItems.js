@@ -1077,7 +1077,7 @@ export const makeDefaultItems = ({
   const toolbarPadding = 32;
 
   const itemsToHideXL = ['linkedStyles', 'clearFormatting', 'copyFormat', 'ruler', 'formattingMarks'];
-  const itemsToHideSM = ['zoom', 'fontFamily', 'fontSize', 'redo'];
+  const itemsToHideSM = ['zoom', 'fontFamily', 'fontSize', 'redo', 'tableOfContents'];
   const shouldUseLgCompactStyles = availableWidth <= RESPONSIVE_BREAKPOINTS.lg;
   const shouldIncludeFormattingMarks = superToolbar.config?.showFormattingMarksButton === true;
 

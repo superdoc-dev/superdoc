@@ -1,6 +1,14 @@
 import { test, expect, type SuperDocFixture } from '../../fixtures/superdoc.js';
 
-test.use({ config: { toolbar: 'full', showSelection: true } });
+// Direction buttons are in `itemsToHideXL` (defaultItems.js); below the XL
+// cutoff (~1494px container width) they collapse into the overflow popup.
+// Playwright's `devices['Desktop Chrome']` defaults the viewport to 1280, so
+// pin a wider viewport here to exercise the direct-toolbar click path. The
+// narrow-viewport test below opts back into a smaller width to cover overflow.
+test.use({
+  config: { toolbar: 'full', showSelection: true },
+  viewport: { width: 1600, height: 1200 },
+});
 
 // PR #3226: end-to-end coverage for the LTR/RTL toolbar buttons. Each test
 // clicks the actual button users see, then reads the ProseMirror doc to
@@ -93,10 +101,12 @@ test('multi-paragraph selection: Right-to-left applies to every selected paragra
   await superdoc.type('Third paragraph');
   await superdoc.waitForStable();
 
-  // Select from start of first paragraph through end of third.
-  const firstPos = await superdoc.findTextPos('First paragraph');
-  const thirdPos = await superdoc.findTextPos('Third paragraph');
-  await superdoc.setTextSelection({ from: firstPos.from, to: thirdPos.to });
+  // Select from start of the first paragraph's text through end of the third.
+  // findTextPos returns a single number (the start position); end = start + length.
+  const firstStart = await superdoc.findTextPos('First paragraph');
+  const thirdStart = await superdoc.findTextPos('Third paragraph');
+  const thirdEnd = thirdStart + 'Third paragraph'.length;
+  await superdoc.setTextSelection(firstStart, thirdEnd);
   await superdoc.waitForStable();
 
   await clickDirectionButton(superdoc, 'directionRtl');
@@ -108,26 +118,20 @@ test('multi-paragraph selection: Right-to-left applies to every selected paragra
   }
 });
 
-test('direction buttons render in overflow at narrow viewport widths', async ({ superdoc }) => {
+test('direction buttons reachable via overflow popup at narrow widths', async ({ superdoc }) => {
   await superdoc.type('Narrow viewport test');
   await superdoc.waitForStable();
 
-  // Resize the viewport below the XL breakpoint so direction items move to overflow.
+  // Below XL cutoff (~1494): direction items move into the overflow popup.
   await superdoc.page.setViewportSize({ width: 900, height: 800 });
   await superdoc.waitForStable();
 
-  // The overflow menu button should be visible; the direction buttons should
-  // be reachable via the overflow popup. Open overflow.
-  const overflow = superdoc.page.locator('[data-item^="btn-overflowItems"]').first();
-  if (await overflow.isVisible().catch(() => false)) {
-    await overflow.click();
-    await superdoc.waitForStable();
-  }
-
-  // Click RTL (whether visible directly or via overflow popup, this locator
-  // matches both code paths since data-item is the same).
   const pos = await superdoc.findTextPos('Narrow viewport test');
   await superdoc.setTextSelection(pos);
+  await superdoc.waitForStable();
+
+  // Open the overflow popup, then click RTL from inside it.
+  await superdoc.page.locator('[data-item="btn-overflow"]').first().click();
   await superdoc.waitForStable();
   await superdoc.page.locator('[data-item="btn-directionRtl"]').first().click();
   await superdoc.waitForStable();

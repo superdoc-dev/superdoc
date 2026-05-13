@@ -1,4 +1,5 @@
 import { Plugin, TextSelection } from 'prosemirror-state';
+import { getParagraphInlineDirection } from '@superdoc/contracts';
 
 function isListParagraph(node) {
   return (
@@ -9,11 +10,7 @@ function isListParagraph(node) {
 }
 
 function isRtlParagraph(node) {
-  return (
-    node?.attrs?.paragraphProperties?.rightToLeft === true ||
-    node?.attrs?.direction === 'rtl' ||
-    node?.attrs?.rtl === true
-  );
+  return getParagraphInlineDirection(node?.attrs) === 'rtl';
 }
 
 function getParagraphContext($pos) {

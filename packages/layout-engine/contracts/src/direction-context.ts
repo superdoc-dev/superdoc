@@ -156,3 +156,40 @@ export type RunScriptContext = {
     eastAsian?: string;
   };
 };
+
+/**
+ * Read a paragraph's inline base direction from its attributes.
+ *
+ * Prefers the resolved {@link ParagraphDirectionContext} (SD-2776) when
+ * present, then falls back to the legacy scalar fields (`direction`,
+ * `dir`, `rtl`, `paragraphProperties.rightToLeft`) for compatibility
+ * until SD-2778 collapses the duplicates.
+ *
+ * Consumers should call this instead of inspecting attrs ad hoc so the
+ * direction source check stays in one place.
+ */
+export function getParagraphInlineDirection(
+  attrs:
+    | {
+        directionContext?: { inlineDirection?: BaseDirection | null } | null;
+        direction?: string | null;
+        dir?: string | null;
+        rtl?: boolean | null;
+        paragraphProperties?: { rightToLeft?: boolean | null } | null;
+      }
+    | null
+    | undefined,
+): BaseDirection | undefined {
+  const fromContext = attrs?.directionContext?.inlineDirection;
+  if (fromContext != null) return fromContext;
+  // AIDEV-NOTE: compat-fallback - used when ParagraphAttrs.directionContext.inlineDirection is absent.
+  // Retire once SD-2778 collapses the duplicate scalar fields onto directionContext.
+  const ppRtl = attrs?.paragraphProperties?.rightToLeft;
+  if (attrs?.direction === 'rtl' || attrs?.dir === 'rtl' || attrs?.rtl === true || ppRtl === true) {
+    return 'rtl';
+  }
+  if (attrs?.direction === 'ltr' || attrs?.dir === 'ltr' || attrs?.rtl === false || ppRtl === false) {
+    return 'ltr';
+  }
+  return undefined;
+}

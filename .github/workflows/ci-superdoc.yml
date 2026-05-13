@@ -147,6 +147,13 @@ jobs:
           cd tests/consumer-typecheck
           node deep-type-audit.mjs
 
+      - name: Package shape gates
+        # External package-shape linters (publint + attw) running against
+        # the packed tarball. Catches manifest issues that the in-repo
+        # consumer matrix does not see: condition ordering, masquerading
+        # ESM, missing CDN files, unpublished `source` paths.
+        run: node tests/consumer-typecheck/package-shape-gate.mjs
+
   unit-tests:
     needs: build
     runs-on: ubuntu-latest

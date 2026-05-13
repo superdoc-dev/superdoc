@@ -39,7 +39,7 @@ import type {
 } from './executor-registry.types.js';
 import { getStepExecutor } from './executor-registry.js';
 import { planError } from './errors.js';
-import { ALIGNMENT_TO_JUSTIFICATION } from './paragraphs-wrappers.js';
+import { mapAlignmentToJustificationForParagraph } from './paragraphs-wrappers.js';
 import { closeHistory } from 'prosemirror-history';
 import { yUndoPluginKey } from 'y-prosemirror';
 import { checkRevision, getRevision } from './revision-tracker.js';
@@ -53,6 +53,7 @@ import { mapBlockNodeType } from '../helpers/node-address-resolver.js';
 import { resolveWithinScope, scopeByRange } from '../helpers/adapter-utils.js';
 import { normalizeReplacementText } from './replacement-normalizer.js';
 import { getWordChanges } from './word-diff.js';
+import { calculateResolvedParagraphProperties } from '../../extensions/paragraph/resolvedPropertiesCache.js';
 import { Fragment, Slice } from 'prosemirror-model';
 import type { Mark as ProseMirrorMark, MarkType, Node as ProseMirrorNode, NodeType } from 'prosemirror-model';
 import type { Transaction } from 'prosemirror-state';
@@ -1067,16 +1068,19 @@ export function executeTextDelete(
   return { changed: true };
 }
 
-// ALIGNMENT_TO_JUSTIFICATION imported from paragraphs-wrappers.js
-
 /**
  * Applies alignment to the paragraph node(s) that contain the given range.
  * Uses the same mechanism as paragraphsSetAlignmentWrapper: updates
  * paragraphProperties.justification via tr.setNodeMarkup.
  */
-function applyAlignmentToRange(tr: Transaction, absFrom: number, absTo: number, alignment: string): boolean {
-  const justification = ALIGNMENT_TO_JUSTIFICATION[alignment as keyof typeof ALIGNMENT_TO_JUSTIFICATION];
-  if (!justification) return false;
+function applyAlignmentToRange(
+  editor: Editor,
+  tr: Transaction,
+  absFrom: number,
+  absTo: number,
+  alignment: string,
+): boolean {
+  if (!alignment) return false;
 
   let changed = false;
   const doc = tr.doc;
@@ -1086,6 +1090,9 @@ function applyAlignmentToRange(tr: Transaction, absFrom: number, absTo: number, 
     if (!node.isTextblock) return;
 
     const existing = (node.attrs as Record<string, unknown>).paragraphProperties as Record<string, unknown> | undefined;
+    const paragraphPos = typeof tr.doc.resolve === 'function' ? tr.doc.resolve(pos) : null;
+    const resolved = calculateResolvedParagraphProperties(editor, node, paragraphPos as any);
+    const justification = mapAlignmentToJustificationForParagraph(alignment as any, resolved?.rightToLeft === true);
     const currentJustification = existing?.justification;
 
     if (currentJustification === justification) return;
@@ -1145,7 +1152,7 @@ export function executeStyleApply(
   }
 
   if (step.args.alignment) {
-    changed = applyAlignmentToRange(tr, absFrom, absTo, step.args.alignment) || changed;
+    changed = applyAlignmentToRange(editor, tr, absFrom, absTo, step.args.alignment) || changed;
   }
 
   return { changed };
@@ -1305,7 +1312,7 @@ export function executeSpanStyleApply(
   }
 
   if (step.args.alignment) {
-    changed = applyAlignmentToRange(tr, absFrom, absTo, step.args.alignment) || changed;
+    changed = applyAlignmentToRange(editor, tr, absFrom, absTo, step.args.alignment) || changed;
   }
 
   return { changed };

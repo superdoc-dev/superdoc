@@ -118,7 +118,7 @@ jobs:
       - name: Build packages
         run: pnpm run build
 
-      # Public-type contract gate: same gates as PR CI (ci-superdoc.yml).
+      # Public-type contract gates: same gates as PR CI (ci-superdoc.yml).
       # Runs before publishing so a release cannot ship a regression that
       # bypassed PR CI (manual republish, hotfix branch, recovery flow).
       - name: Consumer typecheck (matrix)
@@ -133,6 +133,11 @@ jobs:
         run: |
           cd tests/consumer-typecheck
           node deep-type-audit.mjs
+
+      - name: Package shape gates
+        # External package-shape linters (publint + attw) running against
+        # the packed tarball. Same step as PR CI.
+        run: node tests/consumer-typecheck/package-shape-gate.mjs
 
       # PR preview: publish with pr-<number> dist-tag
       - name: Publish PR preview

@@ -43,10 +43,12 @@ const AUTO_SPACING_LINE_DEFAULT = 240; // Default OOXML auto line spacing in twi
 export const normalizeAlignment = (value: unknown, isRtl = false): ParagraphAttrs['alignment'] => {
   switch (value) {
     case 'center':
-    case 'right':
     case 'justify':
-    case 'left':
       return value;
+    case 'left':
+      return isRtl ? 'right' : 'left';
+    case 'right':
+      return isRtl ? 'left' : 'right';
     case 'both':
     case 'distribute':
     case 'numTab':

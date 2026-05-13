@@ -6,7 +6,7 @@ This is a demo: it composes multiple content-control patterns into a product wor
 
 ## What this shows
 
-The starting document is a **Word-authored Mutual NDA** at `public/nda-template.docx` with eleven plain-text content controls already in place (five inline smart fields and six block clauses, each with a `w:tag` carrying a JSON payload). On boot, SuperDoc imports the DOCX, parses the SDTs, and the demo reads field values and clause versions straight from the parsed controls.
+The starting document is a Mutual NDA at `public/nda-template.docx` with eleven plain-text content controls already in place (five inline smart fields and six block clauses, each with a `w:tag` carrying a JSON payload). On boot, SuperDoc imports the DOCX, parses the SDTs, and the demo reads field values and clause versions straight from the parsed controls.
 
 Three flows of the same primitive, composed into one app:
 
@@ -32,7 +32,7 @@ If you need a **ready-made React component for authoring templates** with conten
 ## Honest limits
 
 - All content controls in the fixture are `unlocked`. Locked controls (`sdtLocked`, `sdtContentLocked`) are not driven programmatically here.
-- Field values are updated through `contentControls.replaceContent` rather than `text.setValue`. The typed `text.setValue` op requires `controlType === 'text'`, and Word-authored plain-text SDTs currently come through with `controlType: 'unknown'`. `replaceContent` works for both Word-authored and runtime-created controls.
+- Field values are updated through `contentControls.replaceContent` rather than `text.setValue`. `replaceContent` works regardless of how the control's type is detected on import.
 - Clause bodies are plain text. Rich-content clauses (formatting, tables, lists) need a different path: use `doc.insert` with the fragment, then `create.contentControl({ at: range })` to wrap the inserted range with a tag.
 
 ## See also

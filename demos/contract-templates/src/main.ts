@@ -1,7 +1,7 @@
 /**
  * Contract templates: a runtime workflow on Word content controls.
  *
- * The document is a Word-authored Mutual NDA (`public/nda-template.docx`)
+ * The document is a Mutual NDA (`public/nda-template.docx`)
  * with content controls already in place:
  *   - Five inline plain-text SDTs in the header (disclosing party,
  *     receiving party, effective date, purpose, term length).

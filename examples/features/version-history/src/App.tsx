@@ -273,7 +273,7 @@ export default function App() {
         <div>
           <h1 style={styles.title}>Version History Demo</h1>
           <p style={styles.subtitle}>
-            Editing as <strong>{currentUser.name}</strong> | Tracked changes are active but hidden
+            Editing as <strong>{currentUser.name}</strong>
           </p>
         </div>
         <div style={styles.headerActions}>

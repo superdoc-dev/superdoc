@@ -348,6 +348,37 @@ describe('computeParagraphAttrs', () => {
     expect(paragraphAttrs.direction).toBeUndefined();
   });
 
+  // SD-2777 invariant: pm-adapter must keep `direction` and
+  // `directionContext.inlineDirection` aligned (or both absent). This is the
+  // load-bearing property that lets `getParagraphInlineDirection` produce a
+  // hash byte-identical to the legacy `attrs.direction` read across the
+  // entire R2 corpus. If this breaks, the helper-based hash sites in
+  // layout-bridge / layout-resolved / painter-dom will drift from the
+  // pre-migration output.
+  describe('SD-2777: direction and directionContext.inlineDirection are paired', () => {
+    const cases: Array<{ name: string; rightToLeft: boolean | undefined; expected: 'rtl' | 'ltr' | undefined }> = [
+      { name: 'rightToLeft=true', rightToLeft: true, expected: 'rtl' },
+      { name: 'rightToLeft=false', rightToLeft: false, expected: 'ltr' },
+      { name: 'rightToLeft=undefined', rightToLeft: undefined, expected: undefined },
+    ];
+
+    for (const { name, rightToLeft, expected } of cases) {
+      it(`${name}: attrs.direction === directionContext.inlineDirection (${String(expected)})`, () => {
+        const paragraph: PMNode = {
+          type: { name: 'paragraph' },
+          attrs: {
+            paragraphProperties: rightToLeft === undefined ? {} : { rightToLeft },
+          },
+        };
+
+        const { paragraphAttrs } = computeParagraphAttrs(paragraph as never);
+
+        expect(paragraphAttrs.direction).toBe(expected);
+        expect(paragraphAttrs.directionContext?.inlineDirection).toBe(expected);
+      });
+    }
+  });
+
   it('inherits writing mode from body section context (§17.3.1.41)', () => {
     // When the paragraph omits w:textDirection, it should pick up writing-mode
     // from the section. This test feeds a pre-resolved sectionDirectionContext

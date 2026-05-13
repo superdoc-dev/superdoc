@@ -3,8 +3,10 @@
  *
  * The document is a Mutual NDA (`public/nda-template.docx`)
  * with content controls already in place:
- *   - Five inline plain-text SDTs in the header (disclosing party,
- *     receiving party, effective date, purpose, term length).
+ *   - Seven inline plain-text SDTs across five field keys (disclosing
+ *     party, receiving party, effective date, purpose, term length).
+ *     Receiving party and Purpose each appear twice: once in the header
+ *     sentence and once nested inside the Permitted Use block clause.
  *   - Six block plain-text SDTs (Preamble, Confidentiality, Permitted Use,
  *     Term and Termination, Governing Law, Limitation of Liability). Each
  *     block carries `{ kind: 'reusableSection', sectionId, version }` in
@@ -14,11 +16,12 @@
  *   1. Loads the fixture as its starting document.
  *   2. Reads each field's text and each clause's version from the parsed SDTs.
  *   3. Compares clause versions against the local library and surfaces a
- *      per-clause "Update to vN" CTA on every clause that has a newer
- *      version available.
- *   4. On Apply, pushes field values via `selectByTag` + `replaceContent`.
- *   5. On Update, swaps clause body via `replaceContent` and bumps the
- *      version in the tag via `patch`.
+ *      Review CTA on every stale clause with a one-line summary of the change.
+ *   4. Field inputs are reactive: typing in a value debounces by ~250ms and
+ *      fans the new text to every occurrence via `selectByTag` + `replaceContent`.
+ *   5. Review expands a card showing the in-document clause alongside the
+ *      library version. Replace with library clause swaps body via
+ *      `replaceContent` and bumps the tag version via `patch`.
  *   6. On Export, produces a `.docx` blob with content controls preserved.
  *
  * Every mutation goes through `editor.doc.*`. The same operation set runs
@@ -232,19 +235,17 @@ function readStateFromDocument(): void {
 // Mutations: smart fields, clause updates, export
 // ---------------------------------------------------------------------------
 
-async function applyAllFields(): Promise<void> {
-  const doc = getDoc();
-  for (const field of FIELDS) {
-    const value = state.values[field.key];
-    if (value == null) continue;
-    const { items } = doc.contentControls.selectByTag({ tag: fieldTag(field.key) });
-    for (const ctrl of items) {
-      assertMutation(
-        doc.contentControls.replaceContent({ target: ctrl.target, content: value, format: 'text' }),
-        `Could not update ${field.label}`,
-        true,
-      );
-    }
+/** Push a single field's value to every occurrence in the document. */
+function applyField(key: FieldKey, value: string): void {
+  if (!state.editor?.doc) return;
+  state.values[key] = value;
+  const { items } = state.editor.doc.contentControls.selectByTag({ tag: fieldTag(key) });
+  for (const ctrl of items) {
+    state.editor.doc.contentControls.replaceContent({
+      target: ctrl.target,
+      content: value,
+      format: 'text',
+    });
   }
 }
 
@@ -299,19 +300,19 @@ function renderFieldsPanel(): void {
       <input data-field="${field.key}" value="${escapeAttr(state.values[field.key] ?? '')}" />
     `;
     fieldsPanelEl.appendChild(row);
+    const input = row.querySelector<HTMLInputElement>('input');
+    if (!input) continue;
+    // Reactive: each keystroke debounces ~250ms and fans the value to every
+    // occurrence of this field's tag. Bypasses the `run()` wrapper so the
+    // status bar doesn't flash on every keystroke.
+    let timer: number | null = null;
+    input.addEventListener('input', () => {
+      if (timer != null) window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        applyField(field.key, input.value);
+      }, 250);
+    });
   }
-  const apply = document.createElement('button');
-  apply.type = 'button';
-  apply.className = 'btn primary';
-  apply.textContent = 'Apply fields';
-  apply.addEventListener('click', () => {
-    for (const field of FIELDS) {
-      const input = fieldsPanelEl.querySelector<HTMLInputElement>(`input[data-field="${field.key}"]`);
-      if (input) state.values[field.key] = input.value;
-    }
-    void run('Fields applied', applyAllFields);
-  });
-  fieldsPanelEl.appendChild(apply);
 }
 
 function renderClausesPanel(): void {

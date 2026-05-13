@@ -10,8 +10,8 @@ The starting document is a Mutual NDA at `public/nda-template.docx` with thirtee
 
 Three flows of the same primitive, composed into one app:
 
-1. **Smart fields.** Five inline content controls share a `tag` shape (`{ kind: 'smartField', key: 'disclosingParty' }`) per occurrence. Edit one input, click Apply, every match updates in one pass via `selectByTag` + `replaceContent`.
-2. **Versioned reusable clauses.** Six block content controls carry `{ kind: 'reusableSection', sectionId, version }` in their tags. The app reads each live version from `contentControls.list`, compares against the clause library, and surfaces a per-clause Update CTA when they diverge. Updating is `replaceContent` + `patch`.
+1. **Smart fields.** Seven inline content controls across five field keys share a `tag` shape (`{ kind: 'smartField', key: 'disclosingParty' }`) per occurrence. Edit a value in the Fields tab; every occurrence of that field updates live via `selectByTag` + `replaceContent`. Receiving party and Purpose appear twice (header sentence and nested inside the Permitted Use clause), so a single edit fans across both locations.
+2. **Versioned reusable clauses.** Six block content controls carry `{ kind: 'reusableSection', sectionId, version }` in their tags. The app reads each live version from `contentControls.list`, compares against the clause library, and surfaces a Review CTA when they diverge. Review expands a card with the current clause text alongside the library clause text plus a Replace with library clause action that calls `replaceContent` + `patch`.
 3. **Export.** `superdoc.export({ exportedName, isFinalDoc, triggerDownload })` produces a `.docx` blob with content controls preserved.
 
 Every mutation goes through `editor.doc.*`. The same operation set runs headless via the Node SDK and CLI.
@@ -23,7 +23,7 @@ pnpm install
 pnpm dev
 ```
 
-The seeded NDA ships with three clauses behind their latest versions (Confidentiality, Governing Law, Limitation of Liability). The Clauses tab shows an Update CTA on each. Apply them, watch the document text swap. Edit a value in the Fields tab and click Apply to fan it to every occurrence. Click Export to download the resulting `.docx`.
+The seeded NDA ships with three clauses behind their latest versions (Confidentiality, Governing Law, Limitation of Liability). The Clauses tab shows a Review CTA on each; expanding a card lets you compare the in-document clause with the library version and replace it in place. Edit a value in the Fields tab and watch it fan to every occurrence in the document (header and nested locations). Click Export to download the resulting `.docx`.
 
 ## Related work
 

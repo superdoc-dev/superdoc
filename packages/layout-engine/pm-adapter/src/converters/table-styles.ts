@@ -35,7 +35,6 @@ export const hydrateTableStyleAttrs = (
 ): TableStyleHydration | null => {
   const hydration: TableStyleHydration = {};
   const tableProps = (tableNode.attrs?.tableProperties ?? null) as Record<string, unknown> | null;
-  const isRtlTable = tableProps?.rightToLeft === true;
 
   // Collect inline values first, then merge with style-resolved values below.
   let inlineBorders: HydratedTableBorders | undefined;
@@ -43,7 +42,7 @@ export const hydrateTableStyleAttrs = (
 
   // 1. Inline properties (highest priority)
   if (tableProps) {
-    const padding = convertCellMarginsToPx(tableProps.cellMargins as Record<string, unknown>, isRtlTable);
+    const padding = convertCellMarginsToPx(tableProps.cellMargins as Record<string, unknown>);
     if (padding) inlinePadding = normalizeCellPaddingTopBottom(padding);
 
     if (tableProps.borders && typeof tableProps.borders === 'object') {
@@ -99,10 +98,7 @@ export const hydrateTableStyleAttrs = (
     }
 
     if (resolved.cellMargins) {
-      const stylePadding = convertCellMarginsToPx(
-        resolved.cellMargins as unknown as Record<string, unknown>,
-        isRtlTable,
-      );
+      const stylePadding = convertCellMarginsToPx(resolved.cellMargins as unknown as Record<string, unknown>);
       if (stylePadding) {
         const normalizedStylePadding = normalizeCellPaddingTopBottom(stylePadding);
         hydration.cellPadding = inlinePadding
@@ -163,11 +159,12 @@ const adjustBorderSize = (border: Record<string, unknown>): Record<string, unkno
   return size != null ? { ...border, size } : border;
 };
 
-const convertCellMarginsToPx = (margins: Record<string, unknown>, isRtlTable = false): BoxSpacing | undefined => {
+const convertCellMarginsToPx = (margins: Record<string, unknown>): BoxSpacing | undefined => {
   if (!margins || typeof margins !== 'object') return undefined;
   const spacing: BoxSpacing = {};
-  const startSide: keyof BoxSpacing = isRtlTable ? 'right' : 'left';
-  const endSide: keyof BoxSpacing = isRtlTable ? 'left' : 'right';
+  // LTR-default mapping. pm-adapter stores logical start/end as physical
+  // left/right; DomPainter is the single owner of the visual RTL mirror.
+  // SD-3134: pre-mirroring here was double-swapping for bidiVisual tables.
   const keyMap: Record<string, keyof BoxSpacing> = {
     top: 'top',
     bottom: 'bottom',
@@ -177,8 +174,8 @@ const convertCellMarginsToPx = (margins: Record<string, unknown>, isRtlTable = f
     marginBottom: 'bottom',
     marginLeft: 'left',
     marginRight: 'right',
-    marginStart: startSide,
-    marginEnd: endSide,
+    marginStart: 'left',
+    marginEnd: 'right',
   };
 
   Object.entries(margins).forEach(([key, value]) => {

@@ -287,7 +287,7 @@ const markTableCellAsVMergeConsumed = (node) => {
  */
 const getTableCellMargins = (inlineMargins, referencedStyles) => {
   const { cellMargins = {} } = referencedStyles;
-  return ['left', 'right', 'top', 'bottom'].reduce((acc, direction) => {
+  const result = ['left', 'right', 'top', 'bottom'].reduce((acc, direction) => {
     const key = `margin${direction.charAt(0).toUpperCase() + direction.slice(1)}`;
     const inlineValue = inlineMargins ? inlineMargins?.[key]?.value : null;
     const styleValue = cellMargins ? cellMargins[key] : null;
@@ -302,4 +302,19 @@ const getTableCellMargins = (inlineMargins, referencedStyles) => {
     }
     return acc;
   }, {});
+
+  // Logical start/end (LTR-default semantic): preserve OOXML names so
+  // pm-adapter's extractCellPadding can map start->left / end->right and
+  // DomPainter performs the single visual RTL mirror. SD-3134.
+  for (const logicalKey of ['marginStart', 'marginEnd']) {
+    const inlineValue = inlineMargins ? inlineMargins?.[logicalKey]?.value : null;
+    const styleValue = cellMargins ? cellMargins[logicalKey] : null;
+    if (inlineValue != null) {
+      result[logicalKey] = twipsToPixels(inlineValue);
+    } else if (styleValue != null) {
+      result[logicalKey] = typeof styleValue === 'object' ? twipsToPixels(styleValue.value) : twipsToPixels(styleValue);
+    }
+  }
+
+  return result;
 };

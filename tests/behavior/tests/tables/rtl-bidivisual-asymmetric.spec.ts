@@ -97,46 +97,40 @@ test('RTL bidiVisual table with asymmetric tblBorders renders start on visual ri
 // tcMar start/end asymmetric (§17.4.68 + cell-padding mirror)
 // ----------------------------------------------------------------------------
 
-// AIDEV-NOTE: temporary - test.fixme until SD-2771 lands the style-engine
-// projection for tableCellProperties.cellMargins.marginStart/marginEnd to
-// top-level cellMargins. Today only top/bottom project to top-level (as px
-// numbers), so extractCellPadding misses the asymmetric start/end values
-// and the painter defaults both sides to ~4px. Fix lives in style-engine
-// or the projection step (pm-adapter and painter handle the correct shape
-// once they get it).
-test.fixme(
-  'RTL bidiVisual cell with asymmetric tcMar renders larger start padding on visual right',
-  async ({ superdoc }) => {
-    await superdoc.loadDocument(path.resolve(__dirname, 'fixtures/rtl-bidivisual-tcmar-asymmetric.docx'));
-    await superdoc.waitForStable();
+// Regression for SD-3134: the importer now projects marginStart/marginEnd
+// through getTableCellMargins, and convertCellMarginsToPx no longer
+// pre-swaps for RTL. With those two fixes the painter remains the single
+// owner of the visual mirror and asymmetric tcMar renders Word-equivalent.
+test('RTL bidiVisual cell with asymmetric tcMar renders larger start padding on visual right', async ({ superdoc }) => {
+  await superdoc.loadDocument(path.resolve(__dirname, 'fixtures/rtl-bidivisual-tcmar-asymmetric.docx'));
+  await superdoc.waitForStable();
 
-    // Fixture: first cell tcMar/start=480 twips (large, ~24px) end=60 twips (small, ~3px).
-    // tcMar (§17.4.68) start/end follow table direction (same governance as
-    // tblBorders/start/end per §17.4.33/12 and the leading-edge rule in
-    // §17.4.15: left for LTR tables, right for RTL tables). In a bidiVisual
-    // table, start lands on visual right, so paddingRight > paddingLeft.
-    const padding = await superdoc.page.evaluate(() => {
-      const fragment = document.querySelector('.superdoc-table-fragment');
-      if (!fragment) return null;
-      const cells = Array.from(fragment.children).filter((el) => (el as HTMLElement).style?.position === 'absolute');
-      const target = cells.find((cell) => cell.textContent?.includes('start-padding-large'));
-      if (!target) return null;
-      const cs = window.getComputedStyle(target);
-      return {
-        paddingLeft: parseFloat(cs.paddingLeft),
-        paddingRight: parseFloat(cs.paddingRight),
-      };
-    });
+  // Fixture: first cell tcMar/start=480 twips (large, ~24px) end=60 twips (small, ~3px).
+  // tcMar (§17.4.68) start/end follow table direction (same governance as
+  // tblBorders/start/end per §17.4.33/12 and the leading-edge rule in
+  // §17.4.15: left for LTR tables, right for RTL tables). In a bidiVisual
+  // table, start lands on visual right, so paddingRight > paddingLeft.
+  const padding = await superdoc.page.evaluate(() => {
+    const fragment = document.querySelector('.superdoc-table-fragment');
+    if (!fragment) return null;
+    const cells = Array.from(fragment.children).filter((el) => (el as HTMLElement).style?.position === 'absolute');
+    const target = cells.find((cell) => cell.textContent?.includes('start-padding-large'));
+    if (!target) return null;
+    const cs = window.getComputedStyle(target);
+    return {
+      paddingLeft: parseFloat(cs.paddingLeft),
+      paddingRight: parseFloat(cs.paddingRight),
+    };
+  });
 
-    expect(padding).not.toBeNull();
-    if (!padding) return;
+  expect(padding).not.toBeNull();
+  if (!padding) return;
 
-    // Larger padding should be on the visual right (where start renders in RTL).
-    expect(padding.paddingRight).toBeGreaterThan(padding.paddingLeft);
-    // And the difference should be substantial (~21px between 480 twips and 60 twips).
-    expect(padding.paddingRight - padding.paddingLeft).toBeGreaterThan(10);
-  },
-);
+  // Larger padding should be on the visual right (where start renders in RTL).
+  expect(padding.paddingRight).toBeGreaterThan(padding.paddingLeft);
+  // And the difference should be substantial (~21px between 480 twips and 60 twips).
+  expect(padding.paddingRight - padding.paddingLeft).toBeGreaterThan(10);
+});
 
 // ----------------------------------------------------------------------------
 // gridBefore / gridAfter (§17.4.14 + §17.4.15)

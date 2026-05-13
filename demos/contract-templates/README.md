@@ -6,7 +6,7 @@ A runtime workflow that uses Word content controls to manage smart fields and ve
 
 Two flows of the same primitive, composed into one app:
 
-1. **Smart fields.** Inline content controls share a `tag` value (`{ kind: 'smartField', key: 'customerName' }`) across every occurrence. Push one value with `contentControls.selectByTag` + `contentControls.text.setValue` and every match updates in one transaction.
+1. **Smart fields.** Inline content controls share a `tag` value (`{ kind: 'smartField', key: 'customerName' }`) across every occurrence. Select by tag, then push the same value to each matching control with `contentControls.text.setValue`.
 2. **Versioned reusable sections.** A block content control carries `{ kind: 'reusableSection', sectionId, version }` in its `tag`. The app reads the live version from `contentControls.list` after every change. When the section in the document falls behind the section library, an "update available" CTA appears. Updating is `replaceContent` + `patch`.
 
 Every mutation goes through `editor.doc.*`. The same operation set runs headless via the Node SDK and CLI.

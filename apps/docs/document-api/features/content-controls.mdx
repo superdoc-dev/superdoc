@@ -13,7 +13,7 @@ In OOXML they are `w:sdt` elements (structured document tags). SuperDoc exposes 
 
 ### Smart fields: one value, every occurrence
 
-Wrap every occurrence of a template variable in an inline text content control sharing the same `tag`. Push one value, every match updates in a single transaction.
+Wrap every occurrence of a template variable in an inline text content control sharing the same `tag`. Select by tag, then push the same value to each matching control.
 
 ```ts
 // Wrap once, at template-authoring time.
@@ -33,7 +33,7 @@ for (const { target } of items) {
 }
 ```
 
-Full example: [`examples/document-api/content-controls/smart-fields`](https://github.com/superdoc-dev/superdoc/tree/main/examples/document-api/content-controls/smart-fields).
+Smallest copy-pasteable form: [`examples/document-api/content-controls/tagged-inline-text`](https://github.com/superdoc-dev/superdoc/tree/main/examples/document-api/content-controls/tagged-inline-text).
 
 ### Reusable sections: tagged blocks that know their version
 
@@ -66,7 +66,7 @@ for (const control of items) {
 }
 ```
 
-Full example: [`examples/document-api/content-controls/reusable-section`](https://github.com/superdoc-dev/superdoc/tree/main/examples/document-api/content-controls/reusable-section). Composed runtime: [`demos/contract-templates`](https://github.com/superdoc-dev/superdoc/tree/main/demos/contract-templates).
+Composed runtime: [`demos/contract-templates`](https://github.com/superdoc-dev/superdoc/tree/main/demos/contract-templates).
 
 ## Why `tag`, not `nodeId`
 
@@ -145,11 +145,8 @@ OOXML `<w:dataBinding>` (XPath against custom XML parts) is preserved through DO
 ## Next steps
 
 <CardGroup cols={2}>
-  <Card title="Smart fields example" icon="text-cursor-input" href="https://github.com/superdoc-dev/superdoc/tree/main/examples/document-api/content-controls/smart-fields">
-    Inline text controls sharing a tag. `selectByTag` + `text.setValue`.
-  </Card>
-  <Card title="Reusable section example" icon="layers" href="https://github.com/superdoc-dev/superdoc/tree/main/examples/document-api/content-controls/reusable-section">
-    Block control with structured tag. Detect drift and swap.
+  <Card title="Tagged inline text example" icon="text-cursor-input" href="https://github.com/superdoc-dev/superdoc/tree/main/examples/document-api/content-controls/tagged-inline-text">
+    The smallest content-control workflow. `create.contentControl` + `selectByTag` + `text.setValue`.
   </Card>
   <Card title="Contract templates demo" icon="file-text" href="https://github.com/superdoc-dev/superdoc/tree/main/demos/contract-templates">
     Smart fields and versioned sections composed into one runtime app.

@@ -5,17 +5,16 @@
  *
  * 1. Smart fields. Inline content controls share a `tag` value
  *    ("customer-name", "jurisdiction", ...) across every occurrence.
- *    Push a value with `selectByTag` + `text.setValue` and every match
- *    updates in one transaction.
+ *    Push a value with `selectByTag` + `text.setValue` across every match.
  *
  * 2. Reusable sections. A block content control carries
  *    `{ sectionId, version }` in its `tag`. The app reads the live
  *    version from `contentControls.list` after every change and
  *    offers an "update available" CTA when the document's version
  *    falls behind the section library. Updating is `replaceContent`
- *    + `patch`, wrapped in unlock / relock.
+ *    + `patch`.
  *
- * Every operation is on `editor.doc.*`. The example never reaches
+ * Every operation is on `editor.doc.*`. The demo never reaches
  * into the editor extensions or the converter directly.
  *
  * The `findBlock(text)` lookup at seed time is for the example only.

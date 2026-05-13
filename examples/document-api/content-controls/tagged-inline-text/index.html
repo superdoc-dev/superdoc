@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>SuperDoc: smart fields</title>
+    <title>SuperDoc: tagged inline text</title>
   </head>
   <body>
     <div class="app">
@@ -12,11 +12,11 @@
       </section>
       <aside class="sidebar">
         <section class="panel">
-          <h2>Smart fields</h2>
-          <p class="hint">Every occurrence of <code>customer</code> in the document is wrapped in an inline content control with the same <code>tag</code>. Set one value, every match updates.</p>
+          <h2>Tagged inline text</h2>
+          <p class="hint">One inline content control wraps the word <code>Acme</code> in the paragraph. The tag is <code>customer</code>. Edit the value and apply.</p>
           <label>
             <span>Customer</span>
-            <input id="field-customer" />
+            <input id="value" />
           </label>
           <button class="btn primary" id="apply" type="button">Apply</button>
         </section>

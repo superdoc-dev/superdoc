@@ -70,8 +70,7 @@ The operation contract for reading and editing documents. Same shape in the brow
 
 | Example | Pattern |
 |---------|---------|
-| [content-controls/smart-fields](./document-api/content-controls/smart-fields) | One value, every occurrence. Inline text controls sharing a tag. |
-| [content-controls/reusable-section](./document-api/content-controls/reusable-section) | Versioned block. Tag carries `{sectionId, version}`. Detect drift and swap in place. |
+| [content-controls/tagged-inline-text](./document-api/content-controls/tagged-inline-text) | The smallest content-control workflow: wrap a word, find by tag, update value. |
 
 ## Document Engine
 

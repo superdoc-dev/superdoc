@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, cleanup, waitFor } from '@testing-library/react';
-import { createRef, StrictMode } from 'react';
+import { render, cleanup, waitFor } from '@solidjs/testing-library';
 import { SuperDocEditor } from './SuperDocEditor';
 import type { SuperDocRef } from './types';
 
@@ -15,7 +14,7 @@ describe('SuperDocEditor', () => {
 
   describe('mounting and unmounting', () => {
     it('should render container elements', () => {
-      const { container } = render(<SuperDocEditor />);
+      const { container } = render(() => <SuperDocEditor />);
 
       expect(container.querySelector('.superdoc-wrapper')).toBeTruthy();
       expect(container.querySelector('.superdoc-editor-container')).toBeTruthy();

@@ -1,8 +1,8 @@
-import type { CSSProperties, ReactNode } from 'react';
+import type { JSX, Ref } from 'solid-js';
 import type { SuperDoc, Editor } from 'superdoc';
 
 /**
- * Types for @superdoc-dev/react
+ * Types for @superdoc-dev/solid
  *
  * Core types are extracted from the SuperDoc constructor parameter type,
  * ensuring they stay in sync with the superdoc package.
@@ -101,20 +101,20 @@ export interface SuperDocExceptionEvent {
 }
 
 // =============================================================================
-// React Component Types
+// Solid Component Types
 // =============================================================================
 
 /**
- * Props managed internally by the React component (not exposed to users).
+ * Props managed internally by the Solid component (not exposed to users).
  * - selector: managed by component (creates internal container)
  */
 type InternalProps = 'selector';
 
 /**
- * Props that are required in core but should be optional in React.
+ * Props that are required in core but should be optional in Solid.
  * - documentMode: defaults to 'editing' if not provided
  */
-type OptionalInReact = 'documentMode';
+type OptionalInSolid = 'documentMode';
 
 /**
  * Callback props that are explicitly typed in CallbackProps.
@@ -157,14 +157,17 @@ export interface CallbackProps {
 }
 
 /**
- * React-specific props added on top of SuperDocConfig.
+ * Solid-specific props added on top of SuperDocConfig.
  */
-interface ReactProps {
+interface SolidProps {
   /** Optional ID for the editor container. Auto-generated if not provided. */
   id?: string;
 
+  /** Ref to the SuperDoc instance */
+  ref?: Ref<SuperDocRef>;
+
   /** Render function for loading state */
-  renderLoading?: () => ReactNode;
+  renderLoading?: () => JSX.Element;
 
   /** Hide the toolbar container. When true, no toolbar is rendered. @default false */
   hideToolbar?: boolean;
@@ -174,25 +177,25 @@ interface ReactProps {
   contained?: boolean;
 
   /** Additional CSS class name for the wrapper element */
-  className?: string;
+  class?: string;
 
   /** Additional inline styles for the wrapper element */
-  style?: CSSProperties;
+  style?: JSX.CSSProperties;
 }
 
 /**
  * Props for SuperDocEditor component.
  *
- * Extends SuperDocConfig (minus internal props) with React-specific additions.
+ * Extends SuperDocConfig (minus internal props) with Solid-specific additions.
  * When new props are added to SuperDoc core, they're automatically available here.
  *
  * Callback props are explicitly typed to ensure proper TypeScript inference.
  */
 export interface SuperDocEditorProps
-  extends Omit<SuperDocConfig, InternalProps | OptionalInReact | ExplicitCallbackProps>,
-    Partial<Pick<SuperDocConfig, OptionalInReact>>,
+  extends Omit<SuperDocConfig, InternalProps | OptionalInSolid | ExplicitCallbackProps>,
+    Partial<Pick<SuperDocConfig, OptionalInSolid>>,
     CallbackProps,
-    ReactProps {}
+    SolidProps {}
 
 /**
  * Ref interface for SuperDocEditor component

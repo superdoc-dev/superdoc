@@ -13,14 +13,14 @@
     "jsxImportSource": "solid-js",
     "target": "ESNext",
 
-    // Modules (From SolidJS template)
+    // Modules
     "allowSyntheticDefaultImports": true,
     "esModuleInterop": true,
     "isolatedModules": true,
     "module": "ESNext",
     "moduleResolution": "bundler",
 
-    // Type Checking & Safety ()
+    // Type Checking & Safety
     "strict": true,
     "types": ["vite/client", "vitest"]
   },

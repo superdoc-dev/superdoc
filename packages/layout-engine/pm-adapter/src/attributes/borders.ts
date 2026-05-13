@@ -303,17 +303,38 @@ export function extractTableBorders(
  * // { top: { style: 'single', width: 8, color: '#000000' }, bottom: { style: 'double', width: 16, color: '#000000' } }
  * ```
  */
-export function extractCellBorders(cellAttrs: Record<string, unknown>): CellBorders | undefined {
+type CellBorderExtractionOptions = {
+  isRtl?: boolean;
+};
+
+export function extractCellBorders(
+  cellAttrs: Record<string, unknown>,
+  options?: CellBorderExtractionOptions,
+): CellBorders | undefined {
   if (!cellAttrs?.borders) return undefined;
 
   const bordersData = cellAttrs.borders as Record<string, unknown>;
   const borders: CellBorders = {};
+  const isRtl = options?.isRtl === true;
 
+  // Physical sides first (higher precedence).
   for (const side of ['top', 'right', 'bottom', 'left'] as const) {
     const spec = convertBorderSpec(bordersData[side]);
     if (spec) {
       borders[side] = spec;
     }
+  }
+
+  // Logical sides fallback when physical counterpart is missing.
+  const startTarget: keyof CellBorders = isRtl ? 'right' : 'left';
+  const endTarget: keyof CellBorders = isRtl ? 'left' : 'right';
+  if (borders[startTarget] == null) {
+    const spec = convertBorderSpec(bordersData.start);
+    if (spec) borders[startTarget] = spec;
+  }
+  if (borders[endTarget] == null) {
+    const spec = convertBorderSpec(bordersData.end);
+    if (spec) borders[endTarget] = spec;
   }
 
   return Object.keys(borders).length > 0 ? borders : undefined;

@@ -489,6 +489,44 @@ describe('extractCellBorders', () => {
       expect(result?.top).toBeDefined();
       expect(result?.bottom).toEqual({ style: 'none', width: 0 });
     });
+
+    it('maps start/end to left/right in LTR when physical sides are missing', () => {
+      const input = {
+        borders: {
+          start: { val: 'single', size: 2, color: 'FF0000' },
+          end: { val: 'single', size: 3, color: '0000FF' },
+        },
+      };
+      const result = extractCellBorders(input, { isRtl: false });
+      expect(result?.left).toMatchObject({ style: 'single', width: 2, color: '#FF0000' });
+      expect(result?.right).toMatchObject({ style: 'single', width: 3, color: '#0000FF' });
+    });
+
+    it('maps start/end to right/left in RTL when physical sides are missing', () => {
+      const input = {
+        borders: {
+          start: { val: 'single', size: 2, color: 'FF0000' },
+          end: { val: 'single', size: 3, color: '0000FF' },
+        },
+      };
+      const result = extractCellBorders(input, { isRtl: true });
+      expect(result?.right).toMatchObject({ style: 'single', width: 2, color: '#FF0000' });
+      expect(result?.left).toMatchObject({ style: 'single', width: 3, color: '#0000FF' });
+    });
+
+    it('keeps explicit physical left/right over logical start/end', () => {
+      const input = {
+        borders: {
+          left: { val: 'single', size: 7, color: '00FF00' },
+          right: { val: 'single', size: 8, color: 'FFFF00' },
+          start: { val: 'single', size: 2, color: 'FF0000' },
+          end: { val: 'single', size: 3, color: '0000FF' },
+        },
+      };
+      const result = extractCellBorders(input, { isRtl: true });
+      expect(result?.left).toMatchObject({ style: 'single', width: 7, color: '#00FF00' });
+      expect(result?.right).toMatchObject({ style: 'single', width: 8, color: '#FFFF00' });
+    });
   });
 
   describe('invalid inputs', () => {

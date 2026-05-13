@@ -6,7 +6,6 @@
 
 import type {
   BorderSpec,
-  BorderStyle,
   BoxSpacing,
   CellBorders,
   CellSpacing,
@@ -38,6 +37,7 @@ import type {
 } from '../types.js';
 import {
   extractTableBorders,
+  extractCellBorders,
   extractCellPadding,
   convertBorderSpec,
   normalizeShadingColor,
@@ -83,36 +83,6 @@ function sourceAnchorFromNode(node: PMNode): SourceAnchor | undefined {
   return sourceAnchor && typeof sourceAnchor === 'object' && !Array.isArray(sourceAnchor)
     ? (sourceAnchor as SourceAnchor)
     : undefined;
-}
-
-function normalizeLegacyBorderStyle(value: string | undefined): BorderStyle {
-  switch ((value ?? '').trim().toLowerCase()) {
-    case 'none':
-    case 'nil':
-      return 'none';
-    case 'double':
-      return 'double';
-    case 'dashed':
-      return 'dashed';
-    case 'dotted':
-    case 'dot':
-      return 'dotted';
-    case 'thick':
-      return 'thick';
-    case 'triple':
-      return 'triple';
-    case 'dotdash':
-      return 'dotDash';
-    case 'dotdotdash':
-      return 'dotDotDash';
-    case 'wave':
-      return 'wave';
-    case 'doublewave':
-      return 'doubleWave';
-    case 'single':
-    default:
-      return 'single';
-  }
 }
 
 type TableParserDependencies = {
@@ -551,10 +521,22 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
   // Inline tableCellProperties.borders are already folded into resolvedTcProps
   // by resolveTableCellProperties (inline wins over style cascade).
   if (resolvedTcProps?.borders && typeof resolvedTcProps.borders === 'object') {
+    const resolvedBordersData = resolvedTcProps.borders as Record<string, unknown>;
     const resolvedBorders: CellBorders = {};
+    const isRtlTable = tableProperties?.rightToLeft === true;
     for (const side of ['top', 'right', 'bottom', 'left'] as const) {
-      const spec = convertResolvedCellBorder((resolvedTcProps.borders as Record<string, unknown>)[side]);
+      const spec = convertResolvedCellBorder(resolvedBordersData[side]);
       if (spec) resolvedBorders[side] = spec;
+    }
+    const startTarget: keyof CellBorders = isRtlTable ? 'right' : 'left';
+    const endTarget: keyof CellBorders = isRtlTable ? 'left' : 'right';
+    if (resolvedBorders[startTarget] == null) {
+      const spec = convertResolvedCellBorder(resolvedBordersData.start);
+      if (spec) resolvedBorders[startTarget] = spec;
+    }
+    if (resolvedBorders[endTarget] == null) {
+      const spec = convertResolvedCellBorder(resolvedBordersData.end);
+      if (spec) resolvedBorders[endTarget] = spec;
     }
     if (Object.keys(resolvedBorders).length > 0) {
       cellAttrs.borders = resolvedBorders;
@@ -570,15 +552,18 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
   // resolves those from the table style cascade).
   if (!cellAttrs.borders && cellNode.attrs?.borders && typeof cellNode.attrs.borders === 'object') {
     const legacy = cellNode.attrs.borders as Record<string, { size?: number; color?: string; val?: string }>;
-    const fallback: CellBorders = {};
-    for (const side of ['top', 'right', 'bottom', 'left'] as const) {
+    const filteredLegacyBorders: Record<string, unknown> = {};
+    for (const side of ['top', 'right', 'bottom', 'left', 'start', 'end'] as const) {
       const b = legacy[side];
       if (b && b.val && typeof b.size === 'number' && b.size > 0) {
-        const color = b.color ? (b.color.startsWith('#') ? b.color : `#${b.color}`) : '#000000';
-        fallback[side] = { style: normalizeLegacyBorderStyle(b.val), width: b.size, color };
+        filteredLegacyBorders[side] = b;
       }
     }
-    if (Object.keys(fallback).length > 0) {
+    const fallback = extractCellBorders(
+      { borders: filteredLegacyBorders },
+      { isRtl: tableProperties?.rightToLeft === true },
+    );
+    if (fallback) {
       cellAttrs.borders = fallback;
     }
   }

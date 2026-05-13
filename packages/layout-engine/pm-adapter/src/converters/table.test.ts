@@ -973,6 +973,112 @@ describe('table converter', () => {
       expect(result.rows[0].cells[0].attrs?.borders).toBeUndefined();
     });
 
+    it('maps legacy cell border start/end to physical sides in RTL tables', () => {
+      const node: PMNode = {
+        type: 'table',
+        attrs: {
+          tableProperties: {
+            rightToLeft: true,
+          },
+        },
+        content: [
+          {
+            type: 'tableRow',
+            content: [
+              {
+                type: 'tableCell',
+                attrs: {
+                  borders: {
+                    start: { val: 'single', size: 2, color: 'FF0000' },
+                    end: { val: 'single', size: 3, color: '0000FF' },
+                  },
+                },
+                content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Cell' }] }],
+              },
+            ],
+          },
+        ],
+      };
+
+      const result = tableNodeToBlock(
+        node,
+        mockBlockIdGenerator,
+        mockPositionMap,
+        'Arial',
+        16,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        mockParagraphConverter,
+      ) as TableBlock;
+
+      expect(result.rows[0].cells[0].attrs?.borders?.right).toMatchObject({
+        style: 'single',
+        width: 2,
+        color: '#FF0000',
+      });
+      expect(result.rows[0].cells[0].attrs?.borders?.left).toMatchObject({
+        style: 'single',
+        width: 3,
+        color: '#0000FF',
+      });
+    });
+
+    it('maps resolved tableCellProperties borders start/end to physical sides in RTL tables', () => {
+      const node: PMNode = {
+        type: 'table',
+        attrs: {
+          tableProperties: {
+            rightToLeft: true,
+          },
+        },
+        content: [
+          {
+            type: 'tableRow',
+            content: [
+              {
+                type: 'tableCell',
+                attrs: {
+                  tableCellProperties: {
+                    borders: {
+                      start: { val: 'single', size: 8, color: 'FF0000' },
+                      end: { val: 'single', size: 8, color: '0000FF' },
+                    },
+                  },
+                },
+                content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Cell' }] }],
+              },
+            ],
+          },
+        ],
+      };
+
+      const result = tableNodeToBlock(
+        node,
+        mockBlockIdGenerator,
+        mockPositionMap,
+        'Arial',
+        16,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        mockParagraphConverter,
+      ) as TableBlock;
+
+      expect(result.rows[0].cells[0].attrs?.borders?.right).toMatchObject({
+        style: 'single',
+        width: expect.any(Number),
+        color: '#FF0000',
+      });
+      expect(result.rows[0].cells[0].attrs?.borders?.left).toMatchObject({
+        style: 'single',
+        width: expect.any(Number),
+        color: '#0000FF',
+      });
+    });
+
     it('extracts cell padding when present', () => {
       const node: PMNode = {
         type: 'table',

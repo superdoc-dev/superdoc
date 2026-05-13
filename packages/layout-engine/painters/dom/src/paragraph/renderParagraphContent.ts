@@ -381,6 +381,9 @@ const renderMeasuredLines = (
     }
 
     if (isListFirstLine && markerLayout && markerMeasure) {
+      if (paraIndentRight > 0) {
+        lineEl.style.paddingRight = `${paraIndentRight}px`;
+      }
       renderLegacyListMarker({
         doc,
         lineEl,

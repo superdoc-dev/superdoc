@@ -89,4 +89,55 @@ describe('renderParagraphContent', () => {
       { lineIndex: 1, isLastLine: true, skipJustify: true },
     ]);
   });
+
+  it('preserves paragraph right indent on list marker lines', () => {
+    const doc = document.implementation.createHTMLDocument('paragraph-content');
+    const frameEl = doc.createElement('div');
+    const block: ParagraphBlock = {
+      kind: 'paragraph',
+      id: 'list-paragraph',
+      attrs: {
+        indent: { left: 24, hanging: 12, right: 18 },
+        wordLayout: {
+          marker: {
+            markerText: '1.',
+            suffix: 'space',
+            run: { fontFamily: 'Arial', fontSize: 16 },
+          },
+        },
+      },
+      runs: [{ text: 'abc', fontFamily: 'Arial', fontSize: 16 }],
+    };
+    const measure: ParagraphMeasure = {
+      kind: 'paragraph',
+      lines: [line(0)],
+      marker: {
+        markerWidth: 10,
+        markerTextWidth: 8,
+      },
+      totalHeight: 20,
+    };
+    let lineEl: HTMLElement | undefined;
+
+    renderParagraphContent({
+      doc,
+      frameEl,
+      block,
+      measure,
+      containerKind: 'body-fragment',
+      width: 200,
+      localStartLine: 0,
+      localEndLine: 1,
+      contextSection: 'body',
+      markerWidth: 10,
+      markerTextWidth: 8,
+      applySdtDataset: () => {},
+      renderLine: () => {
+        lineEl = doc.createElement('div');
+        return lineEl;
+      },
+    });
+
+    expect(lineEl?.style.cssText).toContain('padding-right: 18px');
+  });
 });

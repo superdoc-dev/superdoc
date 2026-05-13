@@ -54,6 +54,45 @@ test('RTL bidiVisual table with gridSpan=2 cell renders the merged cell on the v
   expect(cellCenter).toBeGreaterThan(fragCenter);
 });
 
+test('clicking the visually-rightmost gridSpan=2 cell lands the cursor inside that cell', async ({ superdoc }) => {
+  await superdoc.loadDocument(path.resolve(__dirname, 'fixtures/rtl-table-gridspan.docx'));
+  await superdoc.waitForStable();
+
+  // Click the center of the merged cell (visually rightmost in a bidiVisual
+  // table). Then read the editor selection and verify the resolved paragraph
+  // text contains "gridSpan=2". Pin click-target -> selection mapping so a
+  // regression in cell hit-testing for RTL doesn't silently route the cursor
+  // to the wrong logical cell.
+  const clickPoint = await superdoc.page.evaluate(() => {
+    const lines = Array.from(document.querySelectorAll('.superdoc-table-fragment .superdoc-line'));
+    const merged = lines.find((line) => line.textContent?.includes('gridSpan=2'));
+    if (!merged) return null;
+    const r = (merged as HTMLElement).getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  });
+
+  expect(clickPoint).not.toBeNull();
+  if (!clickPoint) return;
+
+  await superdoc.page.mouse.click(clickPoint.x, clickPoint.y);
+  await superdoc.waitForStable();
+
+  const selectionText = await superdoc.page.evaluate(() => {
+    const editor = (window as any).editor;
+    const $from = editor?.state?.selection?.$from;
+    if (!$from) return null;
+    // Walk up the resolved position to find the enclosing paragraph and
+    // return its text content - confirms the cursor landed inside the merged cell.
+    for (let d = $from.depth; d >= 0; d--) {
+      const n = $from.node(d);
+      if (n?.type?.name === 'paragraph') return n.textContent;
+    }
+    return null;
+  });
+
+  expect(selectionText).toContain('gridSpan=2');
+});
+
 // ----------------------------------------------------------------------------
 // F2: §17.4.84 vMerge + bidiVisual
 // ----------------------------------------------------------------------------
@@ -140,45 +179,46 @@ test('RTL bidiVisual table with tblInd indents from the right edge of the page',
 // F6: §17.4.66 tcBorders w/ logical start/end + bidiVisual
 // ----------------------------------------------------------------------------
 
-// TODO: cell-level tcBorders may be painted on a different DOM element than
-// the .superdoc-table-cell wrapper (e.g., on a child painter overlay or via
-// CSS variables). The current locator reads getComputedStyle on the cell
-// wrapper but border colors come back as default (rgb(0,0,0)) or absent.
-// Skipping until the painter's cell-border DOM target is mapped. The fixture
-// is still useful as a visual-regression substrate.
-test.fixme(
-  'RTL bidiVisual table cell with w:tcBorders start/end maps start to visual right and end to visual left',
-  async ({ superdoc }) => {
-    await superdoc.loadDocument(path.resolve(__dirname, 'fixtures/rtl-table-tcborders-startend.docx'));
-    await superdoc.waitForStable();
+// Per §17.4.33 "start (Table Cell Leading Edge Border) ... left for LTR tables,
+// right for RTL tables" and §17.4.12 "end (Trailing Edge) ... right for LTR,
+// left for RTL", the visual mapping is governed by table direction. Cell
+// borders are painted as inline border-color on the absolutely-positioned cell
+// wrapper inside .superdoc-table-fragment (no separate `.superdoc-table-cell`
+// class). The painter does the L<->R swap once via swapCellBordersLR; pm-adapter
+// keeps start/end as LTR-default to avoid double-mirror.
+test('RTL bidiVisual table cell with w:tcBorders start/end maps start to visual right and end to visual left', async ({
+  superdoc,
+}) => {
+  await superdoc.loadDocument(path.resolve(__dirname, 'fixtures/rtl-table-tcborders-startend.docx'));
+  await superdoc.waitForStable();
 
-    // Per §17.4.13 wording on `end`: "right for LTR tables, left for RTL
-    // tables". So start (leading) = visual right in RTL; end (trailing) =
-    // visual left. Fixture: start=RED (#FF0000), end=BLUE (#0000FF).
-    // The cell's computed CSS should have border-right-color ≈ red and
-    // border-left-color ≈ blue (or equivalents via separate border styles).
-    const borders = await superdoc.page.evaluate(() => {
-      const lines = Array.from(document.querySelectorAll('.superdoc-table-fragment .superdoc-line'));
-      const targetLine = lines.find((line) => line.textContent?.includes('start=RED'));
-      if (!targetLine) return null;
-      const cell = targetLine.closest('.superdoc-table-cell') ?? targetLine.parentElement;
-      if (!cell) return null;
-      const cs = window.getComputedStyle(cell);
-      return {
-        borderLeftColor: cs.borderLeftColor,
-        borderRightColor: cs.borderRightColor,
-        borderLeftWidth: cs.borderLeftWidth,
-        borderRightWidth: cs.borderRightWidth,
-      };
-    });
+  // Fixture: start=RED (#FF0000), end=BLUE (#0000FF). The cell with the
+  // explicit borders contains text "start=RED". Walk from that text up to
+  // the absolutely-positioned cell wrapper (direct child of the fragment).
+  const borders = await superdoc.page.evaluate(() => {
+    const fragment = document.querySelector('.superdoc-table-fragment');
+    if (!fragment) return null;
+    const cells = Array.from(fragment.children).filter((el) => (el as HTMLElement).style?.position === 'absolute');
+    const target = cells.find((cell) => cell.textContent?.includes('start=RED'));
+    if (!target) return null;
+    const cs = window.getComputedStyle(target);
+    return {
+      borderLeftColor: cs.borderLeftColor,
+      borderRightColor: cs.borderRightColor,
+      borderLeftWidth: parseFloat(cs.borderLeftWidth),
+      borderRightWidth: parseFloat(cs.borderRightWidth),
+    };
+  });
 
-    expect(borders).not.toBeNull();
-    if (!borders) return;
+  expect(borders).not.toBeNull();
+  if (!borders) return;
 
-    // Normalize the rgb() strings. Looking for red on right, blue on left.
-    const isRed = (c: string) => /rgb\(\s*255\s*,\s*0\s*,\s*0\s*\)/.test(c);
-    const isBlue = (c: string) => /rgb\(\s*0\s*,\s*0\s*,\s*255\s*\)/.test(c);
-    expect(isRed(borders.borderRightColor)).toBe(true);
-    expect(isBlue(borders.borderLeftColor)).toBe(true);
-  },
-);
+  // Per §17.4.33/12: in RTL, start (RED) lands on visual right of cell,
+  // end (BLUE) on visual left.
+  const isRed = (c: string) => /rgb\(\s*255\s*,\s*0\s*,\s*0\s*\)/.test(c);
+  const isBlue = (c: string) => /rgb\(\s*0\s*,\s*0\s*,\s*255\s*\)/.test(c);
+  expect(isRed(borders.borderRightColor)).toBe(true);
+  expect(isBlue(borders.borderLeftColor)).toBe(true);
+  expect(borders.borderLeftWidth).toBeGreaterThan(0);
+  expect(borders.borderRightWidth).toBeGreaterThan(0);
+});

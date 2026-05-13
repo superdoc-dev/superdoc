@@ -50,4 +50,14 @@ test('rtl tcBorders start/end render horizontal side borders on target cell', as
 
   expect(borders.borderRightWidth).toBeGreaterThan(0);
   expect(borders.borderLeftWidth).toBeGreaterThan(0);
+
+  // Per §17.4.33/12: in an RTL bidiVisual table, the start (leading) border
+  // sits on the visual right of the cell and end (trailing) on visual left.
+  // Fixture: start=RED (#FF0000), end=BLUE (#0000FF). Check the color side
+  // mapping, not just the existence of widths, so a regression that puts
+  // start on the wrong visual edge fails here instead of silently passing.
+  const isRed = (c: string) => /rgb\(\s*255\s*,\s*0\s*,\s*0\s*\)/.test(c);
+  const isBlue = (c: string) => /rgb\(\s*0\s*,\s*0\s*,\s*255\s*\)/.test(c);
+  expect(isRed(borders.borderRightColor)).toBe(true);
+  expect(isBlue(borders.borderLeftColor)).toBe(true);
 });

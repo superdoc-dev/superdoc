@@ -99,7 +99,7 @@ describe('translateParagraphNode', () => {
       elements: [{ name: 'w:r', elements: [{ name: 'w:delText', elements: [{ type: 'text', text: innerText }] }] }],
     });
 
-    it('keeps trailing comment markers as siblings when no same-id wrapper follows (SD-2528)', () => {
+    it('folds a leading commentRangeStart into the following tracked-change wrapper (SD-2528)', () => {
       const params = baseParams();
       generateParagraphProperties.mockReturnValue(null);
       translateChildNodes.mockReturnValue([
@@ -114,13 +114,37 @@ describe('translateParagraphNode', () => {
       const result = translateParagraphNode(params);
       const names = result.elements.map((e) => e.name);
 
-      expect(names).toEqual(['w:r', 'w:commentRangeStart', 'w:del', 'w:commentRangeEnd', 'w:r', 'w:r']);
+      expect(names).toEqual(['w:r', 'w:del', 'w:commentRangeEnd', 'w:r', 'w:r']);
 
       const delNode = result.elements.find((e) => e.name === 'w:del');
-      expect(delNode.elements.some((e) => e.name === 'w:commentRangeEnd')).toBe(false);
-      expect(delNode.elements.some((e) => e.name === 'w:commentReference')).toBe(false);
-      // The inner commentReference run check: delNode's children should be the original delText run only
-      expect(delNode.elements).toHaveLength(1);
+      expect(delNode.elements.map((e) => e.name)).toEqual(['w:commentRangeStart', 'w:r']);
+      expect(delNode.elements[0].attributes['w:id']).toBe('0');
+    });
+
+    it('folds multiple consecutive commentRangeStart siblings into the following wrapper', () => {
+      const params = baseParams();
+      generateParagraphProperties.mockReturnValue(null);
+      const startA = { name: 'w:commentRangeStart', attributes: { 'w:id': '0' } };
+      const startB = { name: 'w:commentRangeStart', attributes: { 'w:id': '1' } };
+      translateChildNodes.mockReturnValue([startA, startB, buildDelWrapper('7', 'x')]);
+
+      const result = translateParagraphNode(params);
+
+      expect(result.elements).toHaveLength(1);
+      const delNode = result.elements[0];
+      expect(delNode.elements.map((e) => e.name)).toEqual(['w:commentRangeStart', 'w:commentRangeStart', 'w:r']);
+      expect(delNode.elements.map((e) => e.attributes?.['w:id']).slice(0, 2)).toEqual(['0', '1']);
+    });
+
+    it('leaves a commentRangeStart as a sibling when it is not followed by a tracked-change wrapper', () => {
+      const params = baseParams();
+      generateParagraphProperties.mockReturnValue(null);
+      translateChildNodes.mockReturnValue([helloRun, commentRangeStart, restRun, commentRangeEnd, commentReferenceRun]);
+
+      const result = translateParagraphNode(params);
+      const names = result.elements.map((e) => e.name);
+
+      expect(names).toEqual(['w:r', 'w:commentRangeStart', 'w:r', 'w:commentRangeEnd', 'w:r']);
     });
 
     it('merges two consecutive same-id tracked changes and absorbs comment markers between them (SD-1519)', () => {

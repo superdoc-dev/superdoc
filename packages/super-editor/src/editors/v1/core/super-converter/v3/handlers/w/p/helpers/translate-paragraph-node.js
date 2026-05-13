@@ -1,19 +1,52 @@
 import { translateChildNodes } from '@converter/v2/exporter/helpers/index.js';
 import { generateParagraphProperties } from './generate-paragraph-properties.js';
 
+const isTrackedChangeWrapper = (el) => el?.name === 'w:ins' || el?.name === 'w:del';
+
+const isCommentMarker = (el) => {
+  if (!el) return false;
+  if (el.name === 'w:commentRangeStart' || el.name === 'w:commentRangeEnd') return true;
+  if (el.name === 'w:r' && el.elements?.length === 1 && el.elements[0]?.name === 'w:commentReference') return true;
+  return false;
+};
+
+// AIDEV-NOTE: SD-2528. The importer associates a comment with a tracked change
+// by walking document.xml and noting commentRangeStart elements that appear
+// inside a w:ins/w:del wrapper (see documentCommentsImporter.js'
+// extractCommentRangesFromDocument). Word always emits commentRangeStart inside
+// the wrapper; emitting it as a sibling silently loses the comment ↔ TC link
+// on re-import.
+function foldLeadingCommentStartsIntoTrackedChanges(elements) {
+  const result = [];
+  let i = 0;
+  while (i < elements.length) {
+    if (elements[i]?.name !== 'w:commentRangeStart') {
+      result.push(elements[i]);
+      i++;
+      continue;
+    }
+    const leadingStarts = [];
+    while (i < elements.length && elements[i]?.name === 'w:commentRangeStart') {
+      leadingStarts.push(elements[i]);
+      i++;
+    }
+    const next = elements[i];
+    if (isTrackedChangeWrapper(next)) {
+      result.push({ ...next, elements: [...leadingStarts, ...(next.elements || [])] });
+      i++;
+    } else {
+      result.push(...leadingStarts);
+    }
+  }
+  return result;
+}
+
 /**
- * Merge consecutive tracked change elements (w:ins/w:del) with the same ID.
- * Comment range markers between tracked changes with the same ID are included
- * inside the merged wrapper, matching Word's OOXML structure.
- *
- * AIDEV-NOTE: Comment markers (w:commentRangeStart/End and w:r→w:commentReference)
- * are only absorbed into the wrapper when a same-id merge actually happens.
- * If a tracked change has no matching successor, trailing comment markers are
- * preserved as siblings so the import side can re-pair the comment range with
- * the wrapped text. Otherwise w:commentRangeEnd ends up inside w:del while
- * w:commentRangeStart is outside it, breaking the round-trip (SD-2528).
- *
- * See SD-1519 for details on the ECMA-376 spec compliance.
+ * Merge consecutive tracked change elements (w:ins/w:del) with the same ID,
+ * and fold any commentRangeStart that immediately precedes a tracked-change
+ * wrapper INTO the wrapper as its first child(ren). Trailing commentRangeEnd
+ * and w:r→w:commentReference stay as siblings and are only absorbed when a
+ * same-id successor wrapper triggers an SD-1519 merge.
  *
  * @param {Array} elements The translated paragraph elements
  * @returns {Array} Elements with consecutive tracked changes merged
@@ -21,12 +54,7 @@ import { generateParagraphProperties } from './generate-paragraph-properties.js'
 function mergeConsecutiveTrackedChanges(elements) {
   if (!Array.isArray(elements) || elements.length === 0) return elements;
 
-  const isCommentMarker = (el) => {
-    if (!el) return false;
-    if (el.name === 'w:commentRangeStart' || el.name === 'w:commentRangeEnd') return true;
-    if (el.name === 'w:r' && el.elements?.length === 1 && el.elements[0]?.name === 'w:commentReference') return true;
-    return false;
-  };
+  elements = foldLeadingCommentStartsIntoTrackedChanges(elements);
 
   const result = [];
   let i = 0;
@@ -34,7 +62,7 @@ function mergeConsecutiveTrackedChanges(elements) {
   while (i < elements.length) {
     const current = elements[i];
 
-    if (current?.name === 'w:ins' || current?.name === 'w:del') {
+    if (isTrackedChangeWrapper(current)) {
       const tcId = current.attributes?.['w:id'];
       const tcName = current.name;
 

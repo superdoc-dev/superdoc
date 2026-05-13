@@ -13,7 +13,7 @@ import {
   expandRunsForInlineNewlines,
   getParagraphInlineDirection,
 } from '@superdoc/contracts';
-import { resolveMarkerIndent } from '@superdoc/common/list-marker-utils';
+import { resolveMarkerIndent, type MinimalWordLayout } from '@superdoc/common/list-marker-utils';
 import { resolvePainterListTextStartPx } from '../utils/marker-helpers.js';
 import { applySdtContainerStyling, type SdtBoundaryOptions } from '../utils/sdt-helpers.js';
 import {
@@ -26,7 +26,7 @@ import {
   hasExplicitSegmentPositioning,
   resolveAvailableWidthForLine,
 } from './indentation.js';
-import { renderLegacyListMarker, renderResolvedListMarker, type MinimalWordLayout } from './list-marker.js';
+import { renderLegacyListMarker, renderResolvedListMarker } from './list-marker.js';
 import { applyParagraphBlockStyles, clearParagraphFrameIndentStyles } from './styles.js';
 
 export type RenderedParagraphLineInfo = {

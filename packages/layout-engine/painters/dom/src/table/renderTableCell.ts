@@ -17,6 +17,7 @@ import type {
   WrapTextMode,
 } from '@superdoc/contracts';
 import { rescaleColumnWidths, normalizeZIndex, getCellSpacingPx } from '@superdoc/contracts';
+import type { MinimalWordLayout } from '@superdoc/common/list-marker-utils';
 import type { FragmentRenderContext, RenderedLineInfo } from '../renderer.js';
 import { applySquareWrapExclusionsToLines } from '../utils/anchor-helpers';
 import { applyImageClipPath } from '../utils/image-clip-path.js';
@@ -24,7 +25,6 @@ import { getSdtContainerConfig, getSdtContainerKey, type SdtBoundaryOptions } fr
 import { applyCellBorders } from './border-utils.js';
 import { renderTableFragment as renderTableFragmentElement } from './renderTableFragment.js';
 import { renderParagraphContent } from '../paragraph/renderParagraphContent.js';
-import type { MinimalWordLayout } from '../paragraph/list-marker.js';
 
 type TableRowMeasure = TableMeasure['rows'][number];
 type TableCellMeasure = TableRowMeasure['cells'][number];

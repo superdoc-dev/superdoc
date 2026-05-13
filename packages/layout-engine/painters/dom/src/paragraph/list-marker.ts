@@ -1,38 +1,12 @@
 import type { ParagraphMeasure, ResolvedListMarkerItem, SourceAnchor } from '@superdoc/contracts';
+import type { MinimalMarker, MinimalWordLayout } from '@superdoc/common/list-marker-utils';
 import { createListMarkerElement, computeTabWidth, resolvePainterListMarkerGeometry } from '../utils/marker-helpers.js';
-
-export type WordLayoutMarker = {
-  markerText?: string;
-  justification?: 'left' | 'right' | 'center';
-  gutterWidthPx?: number;
-  markerBoxWidthPx?: number;
-  suffix?: 'tab' | 'space' | 'nothing';
-  markerX?: number;
-  textStartX?: number;
-  run: {
-    fontFamily?: string;
-    fontSize?: number;
-    bold?: boolean;
-    italic?: boolean;
-    color?: string;
-    letterSpacing?: number;
-    vanish?: boolean;
-  };
-};
-
-export type MinimalWordLayout = {
-  marker?: WordLayoutMarker;
-  indentLeftPx?: number;
-  firstLineIndentMode?: boolean;
-  textStartPx?: number;
-  tabsPx?: number[];
-};
 
 export const renderLegacyListMarker = (params: {
   doc: Document;
   lineEl: HTMLElement;
   wordLayout?: MinimalWordLayout;
-  markerLayout: WordLayoutMarker;
+  markerLayout: MinimalMarker;
   markerMeasure: ParagraphMeasure['marker'];
   markerTextWidthPx?: number;
   indentLeftPx: number;

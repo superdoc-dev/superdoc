@@ -108,7 +108,10 @@ import {
 import { applyAlphaToSVG, applyGradientToSVG, validateHexColor } from './svg-utils.js';
 import { renderTableFragment as renderTableFragmentElement } from './table/renderTableFragment.js';
 import { applyImageClipPath } from './utils/image-clip-path.js';
-import { isMinimalWordLayout as isMinimalWordLayoutShared } from '@superdoc/common/list-marker-utils';
+import {
+  isMinimalWordLayout as isMinimalWordLayoutShared,
+  type MinimalWordLayout,
+} from '@superdoc/common/list-marker-utils';
 import { applySdtContainerStyling, shouldRebuildForSdtBoundary, type SdtBoundaryOptions } from './utils/sdt-helpers.js';
 import { computeBetweenBorderFlags, type BetweenBorderInfo } from './features/paragraph-borders/index.js';
 import {
@@ -119,61 +122,6 @@ import {
 } from './features/inline-direction/index.js';
 import { convertOmmlToMathml } from './features/math/index.js';
 import { renderParagraphContent } from './paragraph/renderParagraphContent.js';
-
-/**
- * Minimal type for WordParagraphLayoutOutput marker data used in rendering.
- * Extracted to avoid dependency on @superdoc/word-layout package.
- */
-type WordLayoutMarker = {
-  markerText?: string;
-  justification?: 'left' | 'right' | 'center';
-  gutterWidthPx?: number;
-  markerBoxWidthPx?: number;
-  suffix?: 'tab' | 'space' | 'nothing';
-  /** Pre-calculated X position where the marker should be placed (used in firstLineIndentMode). */
-  markerX?: number;
-  /** Pre-calculated X position where paragraph text should begin after the marker (used in firstLineIndentMode). */
-  textStartX?: number;
-  run: {
-    fontFamily: string;
-    fontSize: number;
-    bold?: boolean;
-    italic?: boolean;
-    color?: string;
-    letterSpacing?: number;
-    vanish?: boolean;
-  };
-};
-
-/**
- * Minimal type for wordLayout property used in this renderer.
- *
- * This is a subset of the full WordParagraphLayoutOutput type from @superdoc/word-layout.
- * We extract only the fields needed for rendering to avoid a direct dependency on the
- * word-layout package from the renderer. This allows the renderer to work with any object
- * that provides these properties, maintaining loose coupling between packages.
- *
- * The wordLayout property is attached to ParagraphBlock.attrs during block processing
- * and contains layout metadata needed for proper list marker and indent rendering.
- *
- * @property marker - Optional list marker layout containing text, styling, and positioning info
- * @property indentLeftPx - Left indent in pixels (used for marker positioning calculations)
- * @property firstLineIndentMode - When true, indicates the paragraph uses firstLine indent
- *   pattern (marker at left+firstLine) instead of standard hanging indent (marker at left-hanging).
- *   This flag changes how markers are positioned and how tab spacing is calculated.
- * @property textStartPx - X position where paragraph text should begin (used for tab width calculation)
- * @property tabsPx - Array of explicit tab stop positions in pixels
- */
-type MinimalWordLayout = {
-  marker?: WordLayoutMarker;
-  indentLeftPx?: number;
-  /** True for firstLine indent pattern (marker at left+firstLine vs left-hanging). */
-  firstLineIndentMode?: boolean;
-  /** X position where paragraph text should begin. */
-  textStartPx?: number;
-  /** Array of explicit tab stop positions in pixels. */
-  tabsPx?: number[];
-};
 
 type LineEnd = {
   type?: string;
@@ -199,7 +147,7 @@ type VectorShapeDrawingWithEffects = VectorShapeDrawing & {
 };
 
 /**
- * Type guard narrowing to the renderer-local MinimalWordLayout type.
+ * Type guard narrowing to the shared word layout contract type.
  * Delegates structural validation to the shared isMinimalWordLayout guard.
  */
 function isMinimalWordLayout(value: unknown): value is MinimalWordLayout {

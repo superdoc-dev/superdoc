@@ -49,4 +49,44 @@ describe('renderParagraphContent', () => {
     expect(result.totalHeight).toBe(20);
     expect(frameEl.style.height).toBe('20px');
   });
+
+  it('marks the final remeasured override line as the paragraph final line', () => {
+    const doc = document.implementation.createHTMLDocument('paragraph-content');
+    const frameEl = doc.createElement('div');
+    const block: ParagraphBlock = {
+      kind: 'paragraph',
+      id: 'remeasured-paragraph',
+      runs: [{ text: 'abc', fontFamily: 'Arial', fontSize: 16 }],
+    };
+    const measure: ParagraphMeasure = {
+      kind: 'paragraph',
+      lines: [line(0)],
+      totalHeight: 20,
+    };
+    const renderedLines: Array<{ lineIndex: number; isLastLine: boolean; skipJustify?: boolean }> = [];
+
+    renderParagraphContent({
+      doc,
+      frameEl,
+      block,
+      measure,
+      containerKind: 'body-fragment',
+      width: 200,
+      localStartLine: 0,
+      localEndLine: 2,
+      lineIndexOffset: 0,
+      linesOverride: [line(0), line(1)],
+      contextSection: 'body',
+      applySdtDataset: () => {},
+      renderLine: ({ lineIndex, isLastLine, skipJustify }) => {
+        renderedLines.push({ lineIndex, isLastLine, skipJustify });
+        return doc.createElement('div');
+      },
+    });
+
+    expect(renderedLines).toEqual([
+      { lineIndex: 0, isLastLine: false, skipJustify: false },
+      { lineIndex: 1, isLastLine: true, skipJustify: true },
+    ]);
+  });
 });

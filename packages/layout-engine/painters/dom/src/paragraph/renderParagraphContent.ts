@@ -334,6 +334,7 @@ const renderMeasuredLines = (
 
   let renderedHeight = 0;
   const renderedLines: RenderedParagraphLineInfo[] = [];
+  const renderedLocalEndLine = Math.min(localEndLine, lines.length);
 
   for (let lineIdx = localStartLine; lineIdx < localEndLine && lineIdx < lines.length; lineIdx++) {
     const line = lines[lineIdx];
@@ -343,7 +344,10 @@ const renderMeasuredLines = (
     const shouldUseResolvedListTextStart =
       isListFirstLine && explicitSegmentPositioning && listFirstLineTextStartPx != null;
     const globalLineIndex = lineIndexOffset + lineIdx;
-    const isLastLineOfParagraph = globalLineIndex === (measure.lines?.length ?? lines.length) - 1 && !continuesOnNext;
+    const isLastLineOfParagraph =
+      (linesOverride
+        ? lineIdx === renderedLocalEndLine - 1
+        : globalLineIndex === (measure.lines?.length ?? lines.length) - 1) && !continuesOnNext;
     const shouldSkipJustifyForLastLine = isLastLineOfParagraph && !paragraphEndsWithLineBreak;
     const availableWidth =
       containerKind === 'body-fragment'

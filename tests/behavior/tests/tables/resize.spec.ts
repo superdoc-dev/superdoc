@@ -169,6 +169,96 @@ test('row handles are hidden during column resize drag (SD-2094)', async ({ supe
   await superdoc.waitForStable();
 });
 
+// SD-2810 follow-up: in an RTL table the right-edge handle maps to logical
+// column 0 (the visually-rightmost column). The resize transaction must only
+// touch column 0 cells. Pre-fix, `affectedColumns = [columnIndex, columnIndex + 1]`
+// also rewrote column 1's per-cell `cellWidth` (OOXML w:tcW) with the grid
+// value, destroying any divergent authored tcW on merged or width-overridden
+// cells in column 1. LTR is unaffected because `columnIndex + 1` is past the
+// last column for an LTR right-edge drag.
+test('rtl right-edge drag does not touch column 1 cell widths', async ({ superdoc }) => {
+  await superdoc.loadDocument(RTL_DOC);
+  await superdoc.waitForStable();
+
+  // Capture the colwidth / cellWidth attrs of each column 1 cell BEFORE the drag.
+  // We snapshot the raw attrs object so any mutation by the transaction is visible.
+  const before = await superdoc.page.evaluate(() => {
+    const doc = (window as any).editor.state.doc;
+    const col1: any[] = [];
+    doc.descendants((node: any) => {
+      if (node.type.name !== 'table') return true;
+      let row = 0;
+      node.descendants((inner: any) => {
+        if (inner.type.name === 'tableRow') {
+          row++;
+          let col = 0;
+          inner.descendants((cell: any) => {
+            if (cell.type.name === 'tableCell' || cell.type.name === 'tableHeader') {
+              if (col === 1) {
+                col1.push({
+                  row,
+                  colwidth: cell.attrs.colwidth ? [...cell.attrs.colwidth] : null,
+                  cellWidth: cell.attrs.tableCellProperties?.cellWidth ?? null,
+                });
+              }
+              col += cell.attrs.colspan ?? 1;
+            }
+            return false;
+          });
+        }
+        return true;
+      });
+      return false;
+    });
+    return col1;
+  });
+
+  expect(before.length).toBeGreaterThan(0);
+
+  // Drag the visual right edge outward.
+  await hoverColumnBoundary(superdoc.page, 'right-edge');
+  await superdoc.waitForStable();
+  const handle = superdoc.page.locator('.resize-handle[data-boundary-type="right-edge"]').first();
+  await expect(handle).toBeAttached({ timeout: 5000 });
+  await dragHandle(superdoc.page, handle, 40);
+  await superdoc.waitForStable();
+
+  // Re-read column 1 cells AFTER the drag.
+  const after = await superdoc.page.evaluate(() => {
+    const doc = (window as any).editor.state.doc;
+    const col1: any[] = [];
+    doc.descendants((node: any) => {
+      if (node.type.name !== 'table') return true;
+      let row = 0;
+      node.descendants((inner: any) => {
+        if (inner.type.name === 'tableRow') {
+          row++;
+          let col = 0;
+          inner.descendants((cell: any) => {
+            if (cell.type.name === 'tableCell' || cell.type.name === 'tableHeader') {
+              if (col === 1) {
+                col1.push({
+                  row,
+                  colwidth: cell.attrs.colwidth ? [...cell.attrs.colwidth] : null,
+                  cellWidth: cell.attrs.tableCellProperties?.cellWidth ?? null,
+                });
+              }
+              col += cell.attrs.colspan ?? 1;
+            }
+            return false;
+          });
+        }
+        return true;
+      });
+      return false;
+    });
+    return col1;
+  });
+
+  // Column 1 attrs must be byte-identical pre/post drag.
+  expect(after).toEqual(before);
+});
+
 test('rtl table shows resize indicator again after drag on same boundary', async ({ superdoc }) => {
   await superdoc.loadDocument(RTL_DOC);
   await superdoc.waitForStable();

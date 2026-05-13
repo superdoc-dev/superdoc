@@ -968,7 +968,7 @@ function onDocumentMouseUp(event) {
 
   // Only dispatch transaction if not a forced cleanup and delta is significant
   if (!forcedCleanup.value && Math.abs(finalDelta) > MIN_RESIZE_DELTA_PX) {
-    dispatchResizeTransaction(columnIndex, newWidths);
+    dispatchResizeTransaction(columnIndex, newWidths, isRightEdge);
   }
 
   // Always emit resize-end so the parent can clear its dragging flag.
@@ -990,8 +990,18 @@ function onDocumentMouseUp(event) {
  *
  * @param {number} columnIndex - Index of the resized column
  * @param {number[]} newWidths - New column widths in pixels
+ * @param {boolean} isRightEdge - True if the resize originated from the
+ *   table's outer right-edge handle. Only the originating column's cells
+ *   should be rewritten; passing `[columnIndex, columnIndex + 1]` for
+ *   right-edge drags would unconditionally overwrite the next column's
+ *   per-cell `cellWidth` (OOXML w:tcW) with the grid value, destroying
+ *   any authored divergent tcW on merged or width-overridden cells.
+ *   In LTR `columnIndex + 1` is past the end and updateCellColwidths
+ *   no-ops, masking the issue; in RTL the right-edge handle maps to
+ *   column 0 (see resizableBoundaries) so column 1 cells are real
+ *   targets and the destructive write would occur.
  */
-function dispatchResizeTransaction(columnIndex, newWidths) {
+function dispatchResizeTransaction(columnIndex, newWidths, isRightEdge = false) {
   if (!props.editor?.view || !props.tableElement) {
     return;
   }
@@ -1034,8 +1044,11 @@ function dispatchResizeTransaction(columnIndex, newWidths) {
 
     tr.setNodeMarkup(tablePos, null, newAttrs);
 
-    // Update affected cell colwidth attributes
-    const affectedColumns = [columnIndex, columnIndex + 1];
+    // Update affected cell colwidth attributes. Right-edge drags only resize
+    // the originating column (no adjacent column shrinks to compensate); see
+    // mouseUp's `if (!isRightEdge) { newWidths[columnIndex + 1] -= finalDelta; }`
+    // for the matching `newWidths` shape.
+    const affectedColumns = isRightEdge ? [columnIndex] : [columnIndex, columnIndex + 1];
     updateCellColwidths(tr, tableNode, tablePos, affectedColumns, newWidths);
 
     // Dispatch transaction

@@ -49,6 +49,12 @@ button { cursor: pointer; }
   font-size: var(--sd-font-size-300, 13px);
   color: var(--demo-text-muted);
 }
+.toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
 
 .sidebar {
   background: var(--demo-bg);

@@ -10,7 +10,10 @@
       <section class="editor-area">
         <header class="toolbar">
           <span class="summary" id="summary">Loading</span>
-          <button class="btn primary" id="export" type="button">Export .docx</button>
+          <div class="toolbar-actions">
+            <button class="btn" id="export-raw" type="button">Export raw DOCX</button>
+            <button class="btn primary" id="export-clean" type="button">Export clean DOCX</button>
+          </div>
         </header>
         <div id="editor"></div>
       </section>

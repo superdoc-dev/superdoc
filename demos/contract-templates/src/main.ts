@@ -22,7 +22,8 @@
  *   5. Review expands a card showing the in-document clause alongside the
  *      library version. Replace with library clause swaps body via
  *      `replaceContent` and bumps the tag version via `patch`.
- *   6. On Export, produces a `.docx` blob with content controls preserved.
+ *   6. Export has two paths: raw DOCX keeps content controls for future
+ *      template/library updates; clean DOCX flattens controls to final values.
  *
  * Every mutation goes through `editor.doc.*`. The same operation set runs
  * headless via the Node SDK and CLI.
@@ -225,7 +226,14 @@ document.querySelectorAll<HTMLButtonElement>('.tab').forEach((tab) => {
 // Top toolbar
 // ---------------------------------------------------------------------------
 
-qs<HTMLButtonElement>('#export').addEventListener('click', () => void run('Exported Mutual NDA.docx', exportDocument));
+qs<HTMLButtonElement>('#export-raw').addEventListener(
+  'click',
+  () => void run('Exported raw Mutual NDA.docx', () => exportDocument('raw')),
+);
+qs<HTMLButtonElement>('#export-clean').addEventListener(
+  'click',
+  () => void run('Exported clean Mutual NDA.docx', () => exportDocument('clean')),
+);
 
 // ---------------------------------------------------------------------------
 // Initialize
@@ -304,8 +312,12 @@ async function applyClauseVersion(clauseId: ClauseId, toVersion: string, body: s
   state.versions[clauseId] = toVersion;
 }
 
-async function exportDocument(): Promise<void> {
-  await superdoc.export({ exportedName: 'Mutual NDA', isFinalDoc: true, triggerDownload: true });
+async function exportDocument(mode: 'raw' | 'clean'): Promise<void> {
+  await superdoc.export({
+    exportedName: mode === 'raw' ? 'Mutual NDA - raw' : 'Mutual NDA - clean',
+    isFinalDoc: mode === 'clean',
+    triggerDownload: true,
+  });
 }
 
 // ---------------------------------------------------------------------------

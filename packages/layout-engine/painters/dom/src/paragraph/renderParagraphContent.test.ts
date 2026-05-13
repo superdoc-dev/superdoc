@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { renderParagraphContent } from './renderParagraphContent.js';
-import type { Line, ParagraphBlock, ParagraphMeasure } from '@superdoc/contracts';
+import type { Line, ParagraphBlock, ParagraphMeasure, ResolvedParagraphContent } from '@superdoc/contracts';
 
 describe('renderParagraphContent', () => {
   const line = (index: number): Line => ({
@@ -139,5 +139,114 @@ describe('renderParagraphContent', () => {
     });
 
     expect(lineEl?.style.cssText).toContain('padding-right: 18px');
+  });
+
+  it('renders resolved RTL list markers on the right side', () => {
+    const doc = document.implementation.createHTMLDocument('paragraph-content');
+    const frameEl = doc.createElement('div');
+    const block: ParagraphBlock = {
+      kind: 'paragraph',
+      id: 'resolved-list-paragraph',
+      attrs: { direction: 'rtl' },
+      runs: [{ text: 'abc', fontFamily: 'Arial', fontSize: 16 }],
+    };
+    const resolvedContent: ResolvedParagraphContent = {
+      lines: [
+        {
+          line: line(0),
+          lineIndex: 0,
+          availableWidth: 160,
+          skipJustify: true,
+          paddingLeftPx: 0,
+          paddingRightPx: 0,
+          textIndentPx: 0,
+          isListFirstLine: true,
+          hasExplicitSegmentPositioning: false,
+          indentOffset: 30,
+        },
+      ],
+      marker: {
+        text: '1.',
+        justification: 'right',
+        suffix: 'space',
+        markerStartPx: 6,
+        suffixWidthPx: 4,
+        firstLinePaddingLeftPx: 30,
+        run: { fontFamily: 'Arial', fontSize: 16 },
+      },
+    };
+
+    renderParagraphContent({
+      doc,
+      frameEl,
+      block,
+      measure: { kind: 'paragraph', lines: [line(0)], totalHeight: 20 },
+      containerKind: 'body-fragment',
+      width: 200,
+      localStartLine: 0,
+      localEndLine: 1,
+      contextSection: 'body',
+      resolvedContent,
+      applySdtDataset: () => {},
+      renderLine: () => doc.createElement('div'),
+    });
+
+    const lineEl = frameEl.lastElementChild as HTMLElement;
+    const markerEl = lineEl.querySelector<HTMLElement>('.superdoc-list-marker');
+    expect(lineEl.style.paddingRight).toBe('30px');
+    expect(markerEl?.style.right).toBe('6px');
+  });
+
+  it('converts the final paragraph mark for resolved content', () => {
+    const doc = document.implementation.createHTMLDocument('paragraph-content');
+    const frameEl = doc.createElement('div');
+    const block: ParagraphBlock = {
+      kind: 'paragraph',
+      id: 'resolved-cell-paragraph',
+      runs: [{ text: 'abc', fontFamily: 'Arial', fontSize: 16 }],
+    };
+    const resolvedContent: ResolvedParagraphContent = {
+      lines: [
+        {
+          line: line(0),
+          lineIndex: 0,
+          availableWidth: 160,
+          skipJustify: true,
+          paddingLeftPx: 0,
+          paddingRightPx: 0,
+          textIndentPx: 0,
+          isListFirstLine: false,
+          hasExplicitSegmentPositioning: false,
+          indentOffset: 0,
+        },
+      ],
+    };
+
+    renderParagraphContent({
+      doc,
+      frameEl,
+      block,
+      measure: { kind: 'paragraph', lines: [line(0)], totalHeight: 20 },
+      containerKind: 'table-cell',
+      width: 200,
+      localStartLine: 0,
+      localEndLine: 1,
+      contextSection: 'body',
+      resolvedContent,
+      convertFinalParagraphMark: true,
+      applySdtDataset: () => {},
+      renderLine: () => {
+        const lineEl = doc.createElement('div');
+        const mark = doc.createElement('span');
+        mark.classList.add('superdoc-formatting-paragraph-mark');
+        mark.textContent = '¶';
+        lineEl.appendChild(mark);
+        return lineEl;
+      },
+    });
+
+    const mark = frameEl.querySelector<HTMLElement>('.superdoc-formatting-paragraph-mark');
+    expect(mark?.classList.contains('superdoc-formatting-cell-mark')).toBe(true);
+    expect(mark?.textContent).toBe('¤');
   });
 });

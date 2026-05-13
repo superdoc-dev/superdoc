@@ -97,10 +97,12 @@ test('RTL bidiVisual table with asymmetric tblBorders renders start on visual ri
 // tcMar start/end asymmetric (§17.4.68 + cell-padding mirror)
 // ----------------------------------------------------------------------------
 
-// Regression for SD-3134: the importer now projects marginStart/marginEnd
-// through getTableCellMargins, and convertCellMarginsToPx no longer
-// pre-swaps for RTL. With those two fixes the painter remains the single
-// owner of the visual mirror and asymmetric tcMar renders Word-equivalent.
+// Regression for SD-3134: getTableCellMargins resolves cell-level
+// w:tcMar/start/end against table-level defaults inside the importer
+// and outputs LTR-default physical sides. convertCellMarginsToPx no
+// longer pre-swaps for RTL. With those two fixes the painter is the
+// single owner of the visual mirror and asymmetric tcMar renders
+// Word-equivalent.
 test('RTL bidiVisual cell with asymmetric tcMar renders larger start padding on visual right', async ({ superdoc }) => {
   await superdoc.loadDocument(path.resolve(__dirname, 'fixtures/rtl-bidivisual-tcmar-asymmetric.docx'));
   await superdoc.waitForStable();

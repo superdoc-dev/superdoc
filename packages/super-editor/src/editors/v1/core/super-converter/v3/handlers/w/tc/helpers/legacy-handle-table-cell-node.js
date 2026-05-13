@@ -295,11 +295,6 @@ const getTableCellMargins = (inlineMargins, referencedStyles) => {
     if (v == null) return null;
     if (typeof v === 'number') return v;
     if (typeof v === 'object' && typeof v.value === 'number') return v.value;
-    if (typeof v === 'object' && typeof v?.value === 'object') {
-      // Defensive: nested { value, type } shape some translators emit.
-      const inner = v.value;
-      return typeof inner?.value === 'number' ? inner.value : null;
-    }
     return null;
   };
 

@@ -128,19 +128,26 @@ Typed sub-APIs exist for `text.*`, `date.*`, `checkbox.*`, `choiceList.*` (combo
 
 ## Lock modes
 
-Per OOXML, `w:lock` carries one of four values: `unlocked`, `sdtLocked` (wrapper protected), `contentLocked` (content protected), `sdtContentLocked` (both).
+Set `lockMode` when you create a control to govern which changes are allowed.
 
-<Warning>
-The current adapter routes content and attribute mutations through a legacy command that rewrites the whole SDT including the wrapper. The lock plugin reads that as wrapper damage and silently filters the transaction for `sdtLocked` and `sdtContentLocked` controls. Programmatic `text.setValue`, `replaceContent`, `patch`, and `setLockMode` report success but do not persist on locked controls. Tracked as an engine fix. Until it lands, set `lockMode: 'unlocked'` if you need programmatic updates.
-</Warning>
+| Mode | Behavior |
+|---|---|
+| `unlocked` | Content and properties can be updated through the Document API. |
+| `sdtLocked` | The wrapper is preserved through user edits. |
+| `contentLocked` | The content can't be modified through the editor surface. |
+| `sdtContentLocked` | Both wrapper and content are preserved. |
+
+For controls your app drives with `text.setValue`, `replaceContent`, or `patch`, use `lockMode: 'unlocked'`.
 
 ## Data binding
 
-OOXML `<w:dataBinding>` (XPath against custom XML parts) is preserved through DOCX round-trips and reachable via `contentControls.getBinding` / `setBinding` / `clearBinding`. SuperDoc does **not** yet evaluate the XPath against `customXml/` parts to refresh SDT content at runtime. The metadata channel works; the live binding engine does not. Treat data binding as a Word interop concern, not a SuperDoc-driven sync primitive.
+Content controls can carry an OOXML `<w:dataBinding>` link to a custom XML data part. Read and write the binding metadata with `contentControls.getBinding`, `setBinding`, and `clearBinding`. The binding survives DOCX round-trips.
 
-## Rich content replacement
+For runtime synchronization with backing data, drive the control directly with `text.setValue` or `replaceContent`.
 
-`replaceContent` is plain-text in the current adapter. Rich-content swap (paragraphs with formatting, tables, lists) is not first-class today. For rich fragments, the closest path is `doc.insert` with a fragment + `contentControls.wrap`. Track this as a known limit when designing your section library.
+## Replacing content
+
+`contentControls.replaceContent` accepts plain text. For richer fragments (paragraphs with formatting, tables, lists), use `doc.insert` to place the content and `contentControls.wrap` to attach a tag.
 
 ## Next steps
 

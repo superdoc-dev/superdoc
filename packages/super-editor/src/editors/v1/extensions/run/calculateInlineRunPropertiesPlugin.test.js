@@ -1016,4 +1016,248 @@ describe('calculateInlineRunPropertiesPlugin', () => {
       expect(ff?.cstheme).toBeUndefined();
     });
   });
+
+  // Mutation matrix — exhaustively walks the (existing.fontFamily shape, mark-decoded
+  // shape) cross-product to catch any regression on round-trip integrity. Each row pins
+  // the expected runProperties.fontFamily shape after the plugin's appendTransaction.
+  describe('SD-2894 mutation matrix — fontFamily round-trip integrity', () => {
+    // Theme → CSS map mirrors what `resolveDocxFontFamily` would produce against a
+    // real theme1.xml. Per-script extras (`eastAsiaFontFamily`, `csFontFamily`) are
+    // emitted only when the concrete slot value differs from the primary fontFamily —
+    // matches the real encoder in super-converter/styles.js.
+    const THEME_TO_CSS = {
+      majorBidi: 'Calibri Light',
+      minorBidi: 'Calibri',
+      majorHAnsi: 'Cambria',
+      minorHAnsi: 'Calibri',
+      majorEastAsia: 'SimSun',
+      minorEastAsia: 'SimSun',
+    };
+    const universalEncoder = (runProperties) => {
+      const ff = runProperties?.fontFamily;
+      if (!ff || typeof ff !== 'object') return [];
+      const attrs = {};
+      // Mirror resolveDocxFontFamily: any theme ref wins for the primary slot, then fall
+      // back to concrete ascii/hAnsi/eastAsia/cs. The real resolver also defaults to the
+      // 'major' theme when nothing else is present, but tests pin explicit shapes.
+      const themeRef = ff.asciiTheme ?? ff.hAnsiTheme ?? ff.eastAsiaTheme ?? ff.cstheme;
+      if (themeRef && THEME_TO_CSS[themeRef]) {
+        attrs.fontFamily = THEME_TO_CSS[themeRef];
+      } else if (typeof ff.ascii === 'string') {
+        attrs.fontFamily = ff.ascii;
+      } else if (typeof ff.hAnsi === 'string') {
+        attrs.fontFamily = ff.hAnsi;
+      } else if (typeof ff.eastAsia === 'string') {
+        attrs.fontFamily = ff.eastAsia;
+      } else if (typeof ff.cs === 'string') {
+        attrs.fontFamily = ff.cs;
+      }
+      if (typeof ff.eastAsia === 'string' && ff.eastAsia !== attrs.fontFamily) {
+        attrs.eastAsiaFontFamily = ff.eastAsia;
+      }
+      if (typeof ff.cs === 'string' && ff.cs !== attrs.fontFamily) {
+        attrs.csFontFamily = ff.cs;
+      }
+      return Object.keys(attrs).length ? [{ type: 'textStyle', attrs }] : [];
+    };
+
+    const scenarios = [
+      // ── Group A: theme preservation (marks re-encode the imported value) ──
+      {
+        name: 'A1: all-4-slot theme refs preserved when marks match',
+        existing: {
+          asciiTheme: 'majorBidi',
+          hAnsiTheme: 'majorHAnsi',
+          eastAsiaTheme: 'majorEastAsia',
+          cstheme: 'majorBidi',
+        },
+        marksFontFamily: {
+          ascii: 'Calibri Light',
+          hAnsi: 'Cambria',
+          eastAsia: 'SimSun',
+          cs: 'Calibri Light',
+        },
+        expected: {
+          asciiTheme: 'majorBidi',
+          hAnsiTheme: 'majorHAnsi',
+          eastAsiaTheme: 'majorEastAsia',
+          cstheme: 'majorBidi',
+        },
+      },
+      {
+        name: 'A2: SD-2894 customer shape (3 theme slots, no eastAsia) preserved',
+        existing: { asciiTheme: 'majorBidi', hAnsiTheme: 'majorBidi', cstheme: 'majorBidi' },
+        marksFontFamily: { ascii: 'Calibri Light', hAnsi: 'Calibri Light', cs: 'Calibri Light' },
+        expected: { asciiTheme: 'majorBidi', hAnsiTheme: 'majorBidi', cstheme: 'majorBidi' },
+      },
+      {
+        name: 'A3: themes on 3 slots + concrete eastAsia preserved (regression case)',
+        existing: {
+          asciiTheme: 'majorBidi',
+          hAnsiTheme: 'majorBidi',
+          cstheme: 'majorBidi',
+          eastAsia: 'Arial',
+        },
+        marksFontFamily: {
+          ascii: 'Calibri Light',
+          hAnsi: 'Calibri Light',
+          eastAsia: 'Arial',
+          cs: 'Calibri Light',
+        },
+        expected: {
+          asciiTheme: 'majorBidi',
+          hAnsiTheme: 'majorBidi',
+          cstheme: 'majorBidi',
+          eastAsia: 'Arial',
+        },
+      },
+      {
+        name: 'A4: ascii-only theme preserved',
+        existing: { asciiTheme: 'majorBidi' },
+        marksFontFamily: { ascii: 'Calibri Light', hAnsi: 'Calibri Light', eastAsia: 'Calibri Light', cs: 'Calibri Light' },
+        // hAnsi/eastAsia/cs are mark-derived concrete; only asciiTheme had a theme to preserve.
+        expected: {
+          asciiTheme: 'majorBidi',
+          hAnsi: 'Calibri Light',
+          eastAsia: 'Calibri Light',
+          cs: 'Calibri Light',
+        },
+      },
+      {
+        name: 'A5: hAnsi-only theme preserved',
+        existing: { hAnsiTheme: 'majorHAnsi' },
+        marksFontFamily: { ascii: 'Cambria', hAnsi: 'Cambria', eastAsia: 'Cambria', cs: 'Cambria' },
+        expected: {
+          ascii: 'Cambria',
+          hAnsiTheme: 'majorHAnsi',
+          eastAsia: 'Cambria',
+          cs: 'Cambria',
+        },
+      },
+      {
+        name: 'A6: cs-only theme preserved (lowercase `cstheme` OOXML quirk)',
+        existing: { cstheme: 'majorBidi' },
+        marksFontFamily: { ascii: 'Calibri Light', hAnsi: 'Calibri Light', eastAsia: 'Calibri Light', cs: 'Calibri Light' },
+        expected: {
+          ascii: 'Calibri Light',
+          hAnsi: 'Calibri Light',
+          eastAsia: 'Calibri Light',
+          cstheme: 'majorBidi',
+        },
+      },
+      {
+        name: 'A7: eastAsia-only theme preserved',
+        existing: { eastAsiaTheme: 'majorEastAsia' },
+        marksFontFamily: { ascii: 'SimSun', hAnsi: 'SimSun', eastAsia: 'SimSun', cs: 'SimSun' },
+        expected: {
+          ascii: 'SimSun',
+          hAnsi: 'SimSun',
+          eastAsiaTheme: 'majorEastAsia',
+          cs: 'SimSun',
+        },
+      },
+      // ── Group B: user override (marks diverge from existing) ──
+      {
+        name: 'B1: all-4-slot theme + user picks Arial → drop all themes',
+        existing: {
+          asciiTheme: 'majorBidi',
+          hAnsiTheme: 'majorHAnsi',
+          eastAsiaTheme: 'majorEastAsia',
+          cstheme: 'majorBidi',
+        },
+        marksFontFamily: { ascii: 'Arial', hAnsi: 'Arial', eastAsia: 'Arial', cs: 'Arial' },
+        expected: { ascii: 'Arial', hAnsi: 'Arial', eastAsia: 'Arial', cs: 'Arial' },
+      },
+      {
+        name: 'B2: customer shape + user picks Arial → drop themes (Luccas case)',
+        existing: { asciiTheme: 'majorBidi', hAnsiTheme: 'majorBidi', cstheme: 'majorBidi' },
+        marksFontFamily: { ascii: 'Arial', hAnsi: 'Arial', eastAsia: 'Arial', cs: 'Arial' },
+        expected: { ascii: 'Arial', hAnsi: 'Arial', eastAsia: 'Arial', cs: 'Arial' },
+      },
+      {
+        name: 'B3: mixed theme + concrete eastAsia, user picks Arial → drop everything stale',
+        existing: {
+          asciiTheme: 'majorBidi',
+          hAnsiTheme: 'majorBidi',
+          cstheme: 'majorBidi',
+          eastAsia: 'Arial',
+        },
+        marksFontFamily: { ascii: 'Arial', hAnsi: 'Arial', eastAsia: 'Arial', cs: 'Arial' },
+        expected: { ascii: 'Arial', hAnsi: 'Arial', eastAsia: 'Arial', cs: 'Arial' },
+      },
+      // ── Group C: no-theme baselines (regression sanity) ──
+      {
+        name: 'C1: pure concrete unchanged → output stays concrete',
+        existing: { ascii: 'Arial', hAnsi: 'Arial', eastAsia: 'Arial', cs: 'Arial' },
+        marksFontFamily: { ascii: 'Arial', hAnsi: 'Arial', eastAsia: 'Arial', cs: 'Arial' },
+        expected: { ascii: 'Arial', hAnsi: 'Arial', eastAsia: 'Arial', cs: 'Arial' },
+      },
+      {
+        name: 'C2: pure concrete + user picks Helvetica → output is new concrete',
+        existing: { ascii: 'Arial', hAnsi: 'Arial', eastAsia: 'Arial', cs: 'Arial' },
+        marksFontFamily: { ascii: 'Helvetica', hAnsi: 'Helvetica', eastAsia: 'Helvetica', cs: 'Helvetica' },
+        expected: { ascii: 'Helvetica', hAnsi: 'Helvetica', eastAsia: 'Helvetica', cs: 'Helvetica' },
+      },
+    ];
+
+    it.each(scenarios)('$name', ({ existing, marksFontFamily, expected }) => {
+      decodeRPrFromMarksMock.mockImplementation((marks) => ({
+        bold: marks.some((mark) => mark.type.name === 'bold'),
+        fontFamily: marksFontFamily,
+      }));
+      encodeMarksFromRPrMock.mockImplementation(universalEncoder);
+      resolveRunPropertiesMock.mockImplementation(() => ({}));
+
+      const schema = makeSchema();
+      const doc = paragraphDoc(
+        schema,
+        {
+          runProperties: { fontFamily: existing },
+          runPropertiesInlineKeys: ['fontFamily'],
+        },
+        [],
+        'Latin',
+      );
+      const state = createState(schema, doc);
+      const { from, to } = runTextRange(state.doc, 0, 5);
+
+      const tr = state.tr.addMark(from, to, schema.marks.bold.create());
+      const { state: nextState } = state.applyTransaction(tr);
+
+      const runNode = nextState.doc.nodeAt(runPos(nextState.doc) ?? 0);
+      expect(runNode?.attrs.runProperties?.fontFamily).toEqual(expected);
+    });
+
+    // Special baseline: empty existing (run has no prior fontFamily metadata). marks
+    // become authoritative; nothing to preserve from existing.
+    it('C3: empty existing + marks have concrete → marks become the source of truth', () => {
+      decodeRPrFromMarksMock.mockImplementation((marks) => ({
+        bold: marks.some((mark) => mark.type.name === 'bold'),
+        fontFamily: { ascii: 'Arial', hAnsi: 'Arial', eastAsia: 'Arial', cs: 'Arial' },
+      }));
+      encodeMarksFromRPrMock.mockImplementation(universalEncoder);
+      resolveRunPropertiesMock.mockImplementation(() => ({}));
+
+      const schema = makeSchema();
+      const doc = paragraphDoc(
+        schema,
+        { runProperties: null, runPropertiesInlineKeys: null },
+        [],
+        'Latin',
+      );
+      const state = createState(schema, doc);
+      const { from, to } = runTextRange(state.doc, 0, 5);
+
+      const tr = state.tr.addMark(from, to, schema.marks.bold.create());
+      const { state: nextState } = state.applyTransaction(tr);
+
+      const runNode = nextState.doc.nodeAt(runPos(nextState.doc) ?? 0);
+      expect(runNode?.attrs.runProperties?.fontFamily).toEqual({
+        ascii: 'Arial',
+        hAnsi: 'Arial',
+        eastAsia: 'Arial',
+        cs: 'Arial',
+      });
+    });
+  });
 });

@@ -35,6 +35,18 @@ describe('renderTableCell', () => {
     expect([normalizedHex, rgb]).toContain(normalizedActual);
   };
 
+  const getParagraphBorderLayer = (paraWrapper: HTMLElement): HTMLElement => {
+    const layer = paraWrapper.querySelector<HTMLElement>('.superdoc-paragraph-border');
+    expect(layer).toBeTruthy();
+    return layer!;
+  };
+
+  const getParagraphShadingLayer = (paraWrapper: HTMLElement): HTMLElement => {
+    const layer = paraWrapper.querySelector<HTMLElement>('.superdoc-paragraph-shading');
+    expect(layer).toBeTruthy();
+    return layer!;
+  };
+
   const paragraphBlock: ParagraphBlock = {
     kind: 'paragraph',
     id: 'para-1',
@@ -1840,21 +1852,21 @@ describe('renderTableCell', () => {
 
       const contentElement = cellElement.firstElementChild as HTMLElement;
       const paraWrapper = contentElement.firstElementChild as HTMLElement;
+      const borderLayer = getParagraphBorderLayer(paraWrapper);
 
-      // Verify borders are applied
-      expect(paraWrapper.style.boxSizing).toBe('border-box');
-      expect(paraWrapper.style.borderTopWidth).toBe('2px');
-      expect(paraWrapper.style.borderTopStyle).toBe('solid');
-      expectCssColor(paraWrapper.style.borderTopColor, '#ff0000');
-      expect(paraWrapper.style.borderBottomWidth).toBe('1px');
-      expect(paraWrapper.style.borderBottomStyle).toBe('dashed');
-      expectCssColor(paraWrapper.style.borderBottomColor, '#0000ff');
-      expect(paraWrapper.style.borderLeftWidth).toBe('3px');
-      expect(paraWrapper.style.borderLeftStyle).toBe('dotted');
-      expectCssColor(paraWrapper.style.borderLeftColor, '#00ff00');
-      expect(paraWrapper.style.borderRightWidth).toBe('1px');
-      expect(paraWrapper.style.borderRightStyle).toBe('solid');
-      expectCssColor(paraWrapper.style.borderRightColor, '#000000');
+      expect(borderLayer.style.boxSizing).toBe('border-box');
+      expect(borderLayer.style.borderTopWidth).toBe('2px');
+      expect(borderLayer.style.borderTopStyle).toBe('solid');
+      expectCssColor(borderLayer.style.borderTopColor, '#ff0000');
+      expect(borderLayer.style.borderBottomWidth).toBe('1px');
+      expect(borderLayer.style.borderBottomStyle).toBe('dashed');
+      expectCssColor(borderLayer.style.borderBottomColor, '#0000ff');
+      expect(borderLayer.style.borderLeftWidth).toBe('3px');
+      expect(borderLayer.style.borderLeftStyle).toBe('dotted');
+      expectCssColor(borderLayer.style.borderLeftColor, '#00ff00');
+      expect(borderLayer.style.borderRightWidth).toBe('1px');
+      expect(borderLayer.style.borderRightStyle).toBe('solid');
+      expectCssColor(borderLayer.style.borderRightColor, '#000000');
     });
 
     it('should apply paragraph shading (background) to paraWrapper', () => {
@@ -1909,9 +1921,9 @@ describe('renderTableCell', () => {
 
       const contentElement = cellElement.firstElementChild as HTMLElement;
       const paraWrapper = contentElement.firstElementChild as HTMLElement;
+      const shadingLayer = getParagraphShadingLayer(paraWrapper);
 
-      // Verify shading is applied
-      expectCssColor(paraWrapper.style.backgroundColor, '#ffff00');
+      expectCssColor(shadingLayer.style.backgroundColor, '#ffff00');
     });
 
     it('should apply both borders and shading to the same paragraph', () => {
@@ -1970,11 +1982,12 @@ describe('renderTableCell', () => {
 
       const contentElement = cellElement.firstElementChild as HTMLElement;
       const paraWrapper = contentElement.firstElementChild as HTMLElement;
+      const borderLayer = getParagraphBorderLayer(paraWrapper);
+      const shadingLayer = getParagraphShadingLayer(paraWrapper);
 
-      // Verify both borders and shading are applied
-      expect(paraWrapper.style.borderTopWidth).toBe('1px');
-      expect(paraWrapper.style.borderBottomWidth).toBe('1px');
-      expectCssColor(paraWrapper.style.backgroundColor, '#e0e0e0');
+      expect(borderLayer.style.borderTopWidth).toBe('1px');
+      expect(borderLayer.style.borderBottomWidth).toBe('1px');
+      expectCssColor(shadingLayer.style.backgroundColor, '#e0e0e0');
     });
 
     it('should handle multiple paragraphs with different borders in same cell', () => {
@@ -2043,14 +2056,16 @@ describe('renderTableCell', () => {
 
       // First paragraph has bottom border
       const wrapper1 = paraWrappers[0] as HTMLElement;
-      expect(wrapper1.style.borderBottomWidth).toBe('2px');
-      expectCssColor(wrapper1.style.borderBottomColor, '#ff0000');
+      const borderLayer1 = getParagraphBorderLayer(wrapper1);
+      expect(borderLayer1.style.borderBottomWidth).toBe('2px');
+      expectCssColor(borderLayer1.style.borderBottomColor, '#ff0000');
 
       // Second paragraph has top border
       const wrapper2 = paraWrappers[1] as HTMLElement;
-      expect(wrapper2.style.borderTopWidth).toBe('1px');
-      expect(wrapper2.style.borderTopStyle).toBe('dashed');
-      expectCssColor(wrapper2.style.borderTopColor, '#0000ff');
+      const borderLayer2 = getParagraphBorderLayer(wrapper2);
+      expect(borderLayer2.style.borderTopWidth).toBe('1px');
+      expect(borderLayer2.style.borderTopStyle).toBe('dashed');
+      expectCssColor(borderLayer2.style.borderTopColor, '#0000ff');
     });
 
     it('should not apply borders when paragraph has no borders attribute', () => {
@@ -2161,10 +2176,10 @@ describe('renderTableCell', () => {
 
       const contentElement = cellElement.firstElementChild as HTMLElement;
       const paraWrapper = contentElement.firstElementChild as HTMLElement;
+      const borderLayer = getParagraphBorderLayer(paraWrapper);
 
-      // Border style 'none' should result in no visible border
-      expect(paraWrapper.style.borderTopStyle).toBe('none');
-      expect(paraWrapper.style.borderTopWidth).toBe('0px');
+      expect(borderLayer.style.borderTopStyle).toBe('none');
+      expect(borderLayer.style.borderTopWidth).toBe('0px');
     });
 
     it('should handle zero width borders (width: 0)', () => {
@@ -2219,11 +2234,11 @@ describe('renderTableCell', () => {
 
       const contentElement = cellElement.firstElementChild as HTMLElement;
       const paraWrapper = contentElement.firstElementChild as HTMLElement;
+      const borderLayer = getParagraphBorderLayer(paraWrapper);
 
-      // Zero width should render as '0px'
-      expect(paraWrapper.style.borderTopWidth).toBe('0px');
-      expect(paraWrapper.style.borderTopStyle).toBe('solid');
-      expectCssColor(paraWrapper.style.borderTopColor, '#ff0000');
+      expect(borderLayer.style.borderTopWidth).toBe('0px');
+      expect(borderLayer.style.borderTopStyle).toBe('solid');
+      expectCssColor(borderLayer.style.borderTopColor, '#ff0000');
     });
 
     it('should clamp negative width borders to 0px', () => {
@@ -2278,11 +2293,11 @@ describe('renderTableCell', () => {
 
       const contentElement = cellElement.firstElementChild as HTMLElement;
       const paraWrapper = contentElement.firstElementChild as HTMLElement;
+      const borderLayer = getParagraphBorderLayer(paraWrapper);
 
-      // Negative width should be clamped to '0px'
-      expect(paraWrapper.style.borderLeftWidth).toBe('0px');
-      expect(paraWrapper.style.borderLeftStyle).toBe('solid');
-      expectCssColor(paraWrapper.style.borderLeftColor, '#0000ff');
+      expect(borderLayer.style.borderLeftWidth).toBe('0px');
+      expect(borderLayer.style.borderLeftStyle).toBe('solid');
+      expectCssColor(borderLayer.style.borderLeftColor, '#0000ff');
     });
 
     it('should default to 1px when width is undefined', () => {
@@ -2337,11 +2352,11 @@ describe('renderTableCell', () => {
 
       const contentElement = cellElement.firstElementChild as HTMLElement;
       const paraWrapper = contentElement.firstElementChild as HTMLElement;
+      const borderLayer = getParagraphBorderLayer(paraWrapper);
 
-      // Undefined width should default to '1px'
-      expect(paraWrapper.style.borderBottomWidth).toBe('1px');
-      expect(paraWrapper.style.borderBottomStyle).toBe('dashed');
-      expectCssColor(paraWrapper.style.borderBottomColor, '#00ff00');
+      expect(borderLayer.style.borderBottomWidth).toBe('1px');
+      expect(borderLayer.style.borderBottomStyle).toBe('dashed');
+      expectCssColor(borderLayer.style.borderBottomColor, '#00ff00');
     });
 
     it('should only apply border to specified sides (e.g., only top)', () => {
@@ -2396,16 +2411,16 @@ describe('renderTableCell', () => {
 
       const contentElement = cellElement.firstElementChild as HTMLElement;
       const paraWrapper = contentElement.firstElementChild as HTMLElement;
+      const borderLayer = getParagraphBorderLayer(paraWrapper);
 
-      // Only top border should be set
-      expect(paraWrapper.style.borderTopWidth).toBe('3px');
-      expect(paraWrapper.style.borderTopStyle).toBe('solid');
-      expectCssColor(paraWrapper.style.borderTopColor, '#ff00ff');
+      expect(borderLayer.style.borderTopWidth).toBe('3px');
+      expect(borderLayer.style.borderTopStyle).toBe('solid');
+      expectCssColor(borderLayer.style.borderTopColor, '#ff00ff');
 
       // Left, right, and bottom borders should remain unset
-      expect(paraWrapper.style.borderLeftWidth).toBe('');
-      expect(paraWrapper.style.borderRightWidth).toBe('');
-      expect(paraWrapper.style.borderBottomWidth).toBe('');
+      expect(borderLayer.style.borderLeftWidth).toBe('');
+      expect(borderLayer.style.borderRightWidth).toBe('');
+      expect(borderLayer.style.borderBottomWidth).toBe('');
     });
 
     it('should handle empty shading object (shading: {})', () => {

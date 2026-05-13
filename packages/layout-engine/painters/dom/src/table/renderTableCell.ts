@@ -7,7 +7,6 @@ import type {
   ImageMeasure,
   Line,
   ParagraphBlock,
-  ParagraphIndent,
   ParagraphMeasure,
   PartialRowInfo,
   SdtMetadata,
@@ -17,77 +16,15 @@ import type {
   WrapExclusion,
   WrapTextMode,
 } from '@superdoc/contracts';
-import { effectiveTableCellSpacing, rescaleColumnWidths, normalizeZIndex, getCellSpacingPx } from '@superdoc/contracts';
-import {
-  createListMarkerElement,
-  computeTabWidth,
-  resolvePainterListMarkerGeometry,
-  resolvePainterListTextStartPx,
-} from '../utils/marker-helpers.js';
+import { rescaleColumnWidths, normalizeZIndex, getCellSpacingPx } from '@superdoc/contracts';
 import type { FragmentRenderContext, RenderedLineInfo } from '../renderer.js';
-import { applyParagraphBorderStyles, applyParagraphShadingStyles } from '../features/paragraph-borders/index.js';
 import { applySquareWrapExclusionsToLines } from '../utils/anchor-helpers';
 import { applyImageClipPath } from '../utils/image-clip-path.js';
-import {
-  applySdtContainerStyling,
-  getSdtContainerConfig,
-  getSdtContainerKey,
-  type SdtBoundaryOptions,
-} from '../utils/sdt-helpers.js';
+import { getSdtContainerConfig, getSdtContainerKey, type SdtBoundaryOptions } from '../utils/sdt-helpers.js';
 import { applyCellBorders } from './border-utils.js';
 import { renderTableFragment as renderTableFragmentElement } from './renderTableFragment.js';
-
-/**
- * Word layout information for paragraph list markers.
- * Contains positioning, styling, and rendering details for list markers (bullets/numbers).
- */
-type WordLayoutMarker = {
-  /** Text content of the marker (e.g., "1.", "a)", "•") */
-  markerText?: string;
-  /** Width of the marker box in pixels */
-  markerBoxWidthPx?: number;
-  /** Width of the gutter (space between marker and text) in pixels */
-  gutterWidthPx?: number;
-  /** Horizontal justification of marker within its box */
-  justification?: 'left' | 'center' | 'right';
-  /** Absolute x position of the marker start */
-  markerX?: number;
-  /** Run properties for marker styling */
-  run: {
-    /** Font family for the marker */
-    fontFamily?: string;
-    /** Font size in pixels */
-    fontSize?: number;
-    /** Whether marker is bold */
-    bold?: boolean;
-    /** Whether marker is italic */
-    italic?: boolean;
-    /** Text color as hex string */
-    color?: string;
-    /** Letter spacing in pixels */
-    letterSpacing?: number;
-    /** Hidden text flag */
-    vanish?: boolean;
-  };
-  /** Separator between marker and text: tab (default), space, or nothing */
-  suffix?: 'tab' | 'space' | 'nothing';
-};
-
-/**
- * Word layout information for a paragraph.
- * Computed by the word-layout engine to provide accurate list marker positioning
- * and indent calculations matching Microsoft Word's behavior.
- */
-type WordLayoutInfo = {
-  /** Marker layout information if this is a list paragraph */
-  marker?: WordLayoutMarker;
-  /** Left indent in pixels */
-  indentLeftPx?: number;
-  /** Whether first-line indent mode is enabled */
-  firstLineIndentMode?: boolean;
-  /** Array of explicit tab stop positions in pixels */
-  tabsPx?: number[];
-};
+import { renderParagraphContent } from '../paragraph/renderParagraphContent.js';
+import type { MinimalWordLayout } from '../paragraph/list-marker.js';
 
 type TableRowMeasure = TableMeasure['rows'][number];
 type TableCellMeasure = TableRowMeasure['cells'][number];
@@ -225,265 +162,6 @@ function computeCellVisibleHeight(cell: TableCellMeasure, cellFrom: number, cell
 }
 
 /**
- * Parameters for rendering a list marker element.
- */
-type MarkerRenderParams = {
-  /** Document object for creating DOM elements */
-  doc: Document;
-  /** Line element to which the marker will be attached */
-  lineEl: HTMLElement;
-  /** Full word-layout information for this paragraph */
-  wordLayout?: WordLayoutInfo;
-  /** Marker layout information from word-layout engine */
-  markerLayout: WordLayoutMarker;
-  /** Marker measurement data from measurement stage */
-  markerMeasure: ParagraphMeasure['marker'];
-  /** Left indent in pixels */
-  indentLeftPx: number;
-  /** Hanging indent in pixels */
-  hangingIndentPx: number;
-  /** First line indent in pixels */
-  firstLineIndentPx: number;
-  /** Array of explicit tab stop positions in pixels. */
-  tabsPx?: number[];
-};
-
-/**
- * Parameters for applying paragraph indentation within a table cell line.
- */
-type TableCellIndentParams = {
-  /** Line element to apply indentation styles to */
-  lineEl: HTMLElement;
-  /** Line measurement data */
-  line: Line;
-  /** Paragraph indentation values */
-  indent?: ParagraphIndent;
-  /** List text indent in pixels (when list marker layout is present) */
-  indentLeftPx: number;
-  /** Whether this paragraph has list marker layout */
-  hasListMarkerLayout: boolean;
-  /** Zero-based index of the line within the paragraph */
-  lineIndex: number;
-  /** Local start line for partial rendering */
-  localStartLine: number;
-  /** Whether first-line indent should be suppressed */
-  suppressFirstLineIndent: boolean;
-};
-
-/**
- * Renders a list marker (bullet or number) for a paragraph line inside a table cell.
- *
- * Mirrors the top-level renderer approach: the marker and suffix separator are prepended
- * inside `lineEl`, and `lineEl.paddingLeft` controls the text start position. This keeps
- * table cell list markers aligned with the top-level paragraph renderer.
- *
- * @param params - Marker rendering parameters
- */
-function renderListMarker(params: MarkerRenderParams): void {
-  const {
-    doc,
-    lineEl,
-    wordLayout,
-    markerLayout,
-    markerMeasure,
-    indentLeftPx,
-    hangingIndentPx,
-    firstLineIndentPx,
-    tabsPx,
-  } = params;
-
-  const shouldUseSharedInlinePrefixGeometry =
-    markerLayout?.justification === 'left' &&
-    wordLayout?.firstLineIndentMode !== true &&
-    typeof markerMeasure?.markerTextWidth === 'number' &&
-    Number.isFinite(markerMeasure.markerTextWidth) &&
-    markerMeasure.markerTextWidth >= 0;
-  const markerGeometry = shouldUseSharedInlinePrefixGeometry
-    ? resolvePainterListMarkerGeometry({
-        wordLayout,
-        indentLeftPx,
-        hangingIndentPx,
-        firstLineIndentPx,
-        markerTextWidthPx: markerMeasure?.markerTextWidth,
-      })
-    : undefined;
-
-  const anchorPoint = indentLeftPx - hangingIndentPx + firstLineIndentPx;
-
-  const markerJustification = markerLayout?.justification ?? 'left';
-  const markerTextWidth = markerMeasure?.markerTextWidth ?? 0;
-
-  let markerStartPos: number, currentPos: number;
-  if (markerJustification === 'left') {
-    markerStartPos = anchorPoint;
-    currentPos = markerStartPos + markerTextWidth;
-  } else if (markerJustification === 'right') {
-    markerStartPos = anchorPoint - markerTextWidth;
-    currentPos = anchorPoint;
-  } else {
-    markerStartPos = anchorPoint - markerTextWidth / 2;
-    currentPos = markerStartPos + markerTextWidth;
-  }
-
-  const suffix = markerLayout?.suffix ?? 'tab';
-  let listTabWidth = 0;
-  if (markerGeometry && (suffix === 'tab' || suffix === 'space')) {
-    listTabWidth = markerGeometry.suffixWidthPx;
-  } else if (suffix === 'tab') {
-    listTabWidth = computeTabWidth(
-      currentPos,
-      markerJustification,
-      tabsPx,
-      hangingIndentPx,
-      firstLineIndentPx,
-      indentLeftPx,
-    );
-  } else if (suffix === 'space') {
-    listTabWidth = 4;
-  }
-
-  // Set line padding to the anchor point — this is where the inline marker flow starts.
-  // Matches renderer.ts: lineEl.style.paddingLeft = anchorPoint
-  lineEl.style.paddingLeft = `${anchorPoint}px`;
-
-  if (markerLayout?.run?.vanish) {
-    // Hidden marker — preserve list indentation but don't render marker text
-    return;
-  }
-
-  const markerContainer = createListMarkerElement(doc, markerLayout?.markerText ?? '', markerLayout?.run ?? {});
-
-  // Left-justified markers stay inline (position: relative) within the text flow.
-  // Right/center-justified markers are absolutely positioned.
-  markerContainer.style.position = 'relative';
-  if (markerJustification === 'right') {
-    markerContainer.style.position = 'absolute';
-    markerContainer.style.left = `${markerStartPos}px`;
-  } else if (markerJustification === 'center') {
-    markerContainer.style.position = 'absolute';
-    // Match renderer.ts center positioning
-    markerContainer.style.left = `${markerStartPos - markerTextWidth / 2}px`;
-    lineEl.style.paddingLeft = parseFloat(lineEl.style.paddingLeft) + markerTextWidth / 2 + 'px';
-  }
-
-  // Add suffix separator after marker, before text content
-  const suffixType = markerLayout?.suffix ?? 'tab';
-  if (suffixType === 'tab') {
-    const tabEl = doc.createElement('span');
-    tabEl.classList.add('superdoc-tab', 'superdoc-marker-suffix-tab');
-    tabEl.innerHTML = '&nbsp;';
-    tabEl.style.display = 'inline-block';
-    if (markerLayout?.run?.fontSize != null) {
-      tabEl.style.fontSize = `${markerLayout.run.fontSize}px`;
-    }
-    tabEl.style.wordSpacing = '0px';
-    tabEl.style.width = `${listTabWidth}px`;
-    lineEl.prepend(tabEl);
-  } else if (suffixType === 'space') {
-    const spaceEl = doc.createElement('span');
-    spaceEl.classList.add('superdoc-marker-suffix-space');
-    if (markerLayout?.run?.fontSize != null) {
-      spaceEl.style.fontSize = `${markerLayout.run.fontSize}px`;
-    }
-    spaceEl.style.wordSpacing = '0px';
-    spaceEl.textContent = '\u00A0';
-    lineEl.prepend(spaceEl);
-  }
-
-  lineEl.prepend(markerContainer);
-}
-
-/**
- * Applies paragraph indentation to a rendered line inside a table cell.
- *
- * **SD-1472 Fix:** When segments have explicit x positions (from tab stops), the content
- * is already absolutely positioned. Applying padding/textIndent would double-shift the text,
- * causing the first character to be lost. This function detects explicit positioning via
- * `segment.x !== undefined` and adjusts the indent strategy accordingly.
- *
- * **Mathematical Model (SD-1295):**
- * The hanging indent effect is achieved through a combination of paddingLeft and textIndent:
- * - `firstLineOffset = firstLine - hanging`
- * - This offset can be positive (indent first line further right) or negative (outdent to left)
- *
- * **CSS Application Pattern:**
- * - **First line (no explicit positioning):**
- *   - `paddingLeft = left` (base left indent)
- *   - `textIndent = firstLineOffset` (additional first-line adjustment)
- *   - Combined effect: text starts at `left + firstLineOffset` pixels from cell edge
- *
- * - **First line (with explicit positioning):**
- *   - `paddingLeft = max(0, left) + firstLineOffset` (only if positive)
- *   - `textIndent = 0` (reset to prevent double-shift)
- *
- * - **Body lines (continuation lines):**
- *   - `paddingLeft = hanging` (when hanging > 0 and no explicit positioning)
- *   - Creates the "hanging" visual effect where body lines are indented further right
- *
- * **Edge Cases:**
- * - Negative hanging: Ignored for body lines (no effect, body uses left indent only)
- * - Negative left indent: Clamped to 0 (browsers don't support negative padding)
- * - suppressFirstLineIndent: When true, firstLineOffset is forced to 0
- * - Explicit segment positioning: Skips padding to avoid double-application
- *
- * @param params - Configuration for indent application within a table cell line.
- */
-function applyTableCellLineIndentation(params: TableCellIndentParams): void {
-  const {
-    lineEl,
-    line,
-    indent,
-    indentLeftPx,
-    hasListMarkerLayout,
-    lineIndex,
-    localStartLine,
-    suppressFirstLineIndent,
-  } = params;
-  const paraIndentLeft = indent?.left ?? 0;
-  const paraIndentRight = indent?.right ?? 0;
-  const firstLineOffset = suppressFirstLineIndent ? 0 : (indent?.firstLine ?? 0) - (indent?.hanging ?? 0);
-  const isFirstLine = lineIndex === 0 && localStartLine === 0;
-  const hasExplicitSegmentPositioning = line.segments?.some((seg) => seg.x !== undefined) ?? false;
-
-  if (hasListMarkerLayout && indentLeftPx) {
-    // List continuation lines should use the list text indent unless tabs handle explicit positioning.
-    if (!hasExplicitSegmentPositioning) {
-      lineEl.style.paddingLeft = `${indentLeftPx}px`;
-    }
-  } else {
-    // Preserve non-list paragraph indentation that was cleared above.
-    if (hasExplicitSegmentPositioning) {
-      if (isFirstLine && firstLineOffset !== 0) {
-        const effectiveLeftIndent = paraIndentLeft < 0 ? 0 : paraIndentLeft;
-        const adjustedPadding = effectiveLeftIndent + firstLineOffset;
-        if (adjustedPadding > 0) {
-          lineEl.style.paddingLeft = `${adjustedPadding}px`;
-        }
-      }
-    } else if (paraIndentLeft && paraIndentLeft > 0) {
-      lineEl.style.paddingLeft = `${paraIndentLeft}px`;
-    } else if (
-      !isFirstLine &&
-      indent?.hanging &&
-      indent.hanging > 0 &&
-      (paraIndentLeft == null || paraIndentLeft >= 0)
-    ) {
-      lineEl.style.paddingLeft = `${indent.hanging}px`;
-    }
-  }
-
-  if (paraIndentRight && paraIndentRight > 0) {
-    lineEl.style.paddingRight = `${paraIndentRight}px`;
-  }
-  if (isFirstLine && firstLineOffset && !hasExplicitSegmentPositioning) {
-    lineEl.style.textIndent = `${firstLineOffset}px`;
-  } else if (firstLineOffset && hasExplicitSegmentPositioning) {
-    // Reset textIndent when segments have explicit positioning to prevent double-shift
-    lineEl.style.textIndent = '0px';
-  }
-}
-
-/**
  * Applies inline CSS styles to an element, filtering out null/undefined/empty values.
  *
  * Only applies styles where the key exists in the element's style object and
@@ -499,14 +177,6 @@ const applyInlineStyles = (el: HTMLElement, styles: Partial<CSSStyleDeclaration>
       (el.style as unknown as Record<string, string>)[key] = String(value);
     }
   });
-};
-
-const convertParagraphMarkToCellMark = (lineEl: HTMLElement): void => {
-  const mark = lineEl.querySelector<HTMLElement>('.superdoc-formatting-paragraph-mark');
-  if (!mark) return;
-
-  mark.classList.add('superdoc-formatting-cell-mark');
-  mark.textContent = '¤';
 };
 
 /**
@@ -782,50 +452,6 @@ function renderPartialEmbeddedTable(params: {
   tableWrapper.appendChild(tableEl);
 
   return { element: tableWrapper, height: visibleHeight, nextCumulativeLineCount };
-}
-
-/**
- * Apply paragraph-level visual styling such as borders and shading.
- * Borders are set per side with sensible defaults and clamping.
- */
-function applyParagraphBordersAndShading(paraWrapper: HTMLElement, block: ParagraphBlock): void {
-  const borders = block.attrs?.borders;
-
-  if (borders) {
-    paraWrapper.style.boxSizing = 'border-box';
-
-    const sideStyles: Record<'top' | 'bottom' | 'left' | 'right', { width: string; style: string; color: string }> = {
-      top: { width: 'border-top-width', style: 'border-top-style', color: 'border-top-color' },
-      bottom: { width: 'border-bottom-width', style: 'border-bottom-style', color: 'border-bottom-color' },
-      left: { width: 'border-left-width', style: 'border-left-style', color: 'border-left-color' },
-      right: { width: 'border-right-width', style: 'border-right-style', color: 'border-right-color' },
-    };
-
-    (['top', 'bottom', 'left', 'right'] as const).forEach((side) => {
-      const border = borders[side];
-      if (!border) return;
-
-      const styleValue = border.style ?? 'solid';
-      let widthValue = typeof border.width === 'number' ? Math.max(0, border.width) : 1; // default width when undefined
-
-      // Border style none should render as zero width
-      if (styleValue === 'none') {
-        widthValue = 0;
-      }
-
-      const cssKeys = sideStyles[side];
-      paraWrapper.style.setProperty(cssKeys.style, styleValue);
-      paraWrapper.style.setProperty(cssKeys.width, `${widthValue}px`);
-      if (border.color) {
-        paraWrapper.style.setProperty(cssKeys.color, border.color);
-      }
-    });
-  }
-
-  const shadingFill = block.attrs?.shading?.fill;
-  if (shadingFill) {
-    paraWrapper.style.backgroundColor = shadingFill;
-  }
 }
 
 /**
@@ -1289,45 +915,7 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
         const lines = paragraphMeasure.lines;
         const blockLineCount = lines?.length || 0;
         const isLastBlockInCell = i === Math.min(blockMeasures.length, cellBlocks.length) - 1;
-
-        /**
-         * Extract Word layout information from paragraph attributes.
-         * This contains computed marker positioning and indent details from the word-layout engine.
-         * The wordLayout is pre-computed during paragraph attribute processing and provides
-         * accurate positioning for list markers matching Microsoft Word's behavior.
-         */
-        const wordLayout = (block.attrs?.wordLayout ?? null) as WordLayoutInfo | null;
-
-        /**
-         * Marker layout contains the rendering details for list markers (bullets/numbers).
-         * This includes the marker text, positioning, justification, and styling.
-         */
-        const markerLayout = wordLayout?.marker;
-
-        /**
-         * Marker measurement data from the measurement stage.
-         * Contains computed dimensions (width, gutter) for the marker.
-         */
-        const markerMeasure = paragraphMeasure.marker;
-        const indentLeftPx =
-          markerMeasure?.indentLeft ??
-          wordLayout?.indentLeftPx ??
-          (block.attrs?.indent && typeof block.attrs.indent.left === 'number' ? block.attrs.indent.left : 0);
-        const hangingIndentPx =
-          block.attrs?.indent && typeof block.attrs.indent.hanging === 'number' ? block.attrs.indent.hanging : 0;
-        const firstLineIndentPx =
-          block.attrs?.indent && typeof block.attrs.indent.firstLine === 'number' ? block.attrs.indent.firstLine : 0;
-        const suppressFirstLineIndent = block.attrs?.suppressFirstLineIndent === true;
-        const listFirstLineTextStartPx =
-          markerLayout && markerMeasure
-            ? resolvePainterListTextStartPx({
-                wordLayout: wordLayout ?? undefined,
-                indentLeftPx,
-                hangingIndentPx,
-                firstLineIndentPx,
-                markerTextWidthPx: markerMeasure.markerTextWidth,
-              })
-            : undefined;
+        const wordLayout = (block.attrs?.wordLayout ?? null) as MinimalWordLayout | null;
 
         // Calculate the global line indices for this block
         const blockStartGlobal = cumulativeLineCount;
@@ -1353,138 +941,37 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
         paraWrapper.style.position = 'relative';
         paraWrapper.style.left = '0';
         paraWrapper.style.width = '100%';
-        applySdtDataset(paraWrapper, block.attrs?.sdt);
         const sdtBoundary = sdtBoundaries[i];
         const blockKey = sdtContainerKeys[i] ?? null;
-        if (shouldApplySdtContainerStyling(block.attrs?.sdt, block.attrs?.containerSdt, blockKey)) {
-          applySdtContainerStyling(doc, paraWrapper, block.attrs?.sdt, block.attrs?.containerSdt, sdtBoundary);
-        }
-        applyParagraphBordersAndShading(paraWrapper, block as ParagraphBlock);
-
-        // Apply paragraph-level border and shading styles (SD-1296)
-        // These were previously missing, causing paragraph borders to not render in table cells
-        applyParagraphBorderStyles(paraWrapper, block.attrs?.borders);
-        applyParagraphShadingStyles(paraWrapper, block.attrs?.shading);
-
-        // Apply paragraph spacing.before when rendering from the top of the paragraph.
-        // Word absorbs first paragraph's spacing.before into cell paddingTop (effectiveTableCellSpacing).
-        const spacingBefore = (block as ParagraphBlock).attrs?.spacing?.before;
-        if (localStartLine === 0) {
-          const effectiveBefore = effectiveTableCellSpacing(spacingBefore, i === 0, paddingTop);
-          if (effectiveBefore > 0) {
-            paraWrapper.style.marginTop = `${effectiveBefore}px`;
-            flowCursorY += effectiveBefore;
-          }
-        }
-
-        // Calculate height of rendered content for proper block accumulation
-        let renderedHeight = 0;
-
-        /**
-         * Render lines for this paragraph block.
-         * Lines are rendered within the local range (localStartLine to localEndLine).
-         * List markers are only rendered on the first line if we're rendering from the start.
-         */
-        for (let lineIdx = localStartLine; lineIdx < localEndLine && lineIdx < lines.length; lineIdx++) {
-          const line = lines[lineIdx];
-          const isLastLine = lineIdx === lines.length - 1;
-          const lineTop = flowCursorY + renderedHeight;
-
-          /**
-           * Render line without extra paragraph padding to enable explicit marker/text offset control.
-           * This mirrors the main renderer behavior where list markers clear padding/textIndent.
-           */
-          const lineEl = renderLine(
-            block as ParagraphBlock,
-            line,
-            { ...context, section: 'body' },
-            lineIdx,
-            isLastLine,
-            lineIdx === 0 && localStartLine === 0 ? listFirstLineTextStartPx : undefined,
-          );
-          if (isLastBlockInCell && isLastLine) {
-            convertParagraphMarkToCellMark(lineEl);
-          }
-          lineEl.style.paddingLeft = '';
-          lineEl.style.paddingRight = '';
-          lineEl.style.textIndent = '';
-
-          /**
-           * Determine if we should render a list marker for this line.
-           * Markers are only rendered on the first line of a paragraph, and only if:
-           * - We have marker layout information from word-layout engine
-           * - We have marker measurement data
-           * - This is the first line (lineIdx === 0)
-           * - We're rendering from the start of the paragraph (localStartLine === 0)
-           * - The marker has a non-zero width
-           * Note: vanish markers are handled inside renderListMarker (sets correct
-           * indentation but skips marker text rendering).
-           */
-          const shouldRenderMarker =
-            markerLayout && markerMeasure && lineIdx === 0 && localStartLine === 0 && markerMeasure.markerWidth > 0;
-
-          if (shouldRenderMarker) {
-            // Prepend marker + suffix inside lineEl (mirrors renderer.ts approach)
-            renderListMarker({
-              doc,
-              lineEl,
-              wordLayout: wordLayout ?? undefined,
-              markerLayout,
-              markerMeasure,
-              indentLeftPx,
-              hangingIndentPx,
-              firstLineIndentPx,
-              tabsPx: wordLayout?.tabsPx,
-            });
-            renderedLines.push({ el: lineEl, top: lineTop, height: line.lineHeight });
-            paraWrapper.appendChild(lineEl);
-          } else {
-            /**
-             * For lines without markers, apply appropriate indentation:
-             * - For list paragraphs: apply indent padding for continuation lines
-             * - For non-list paragraphs: preserve the paragraph's own indent styling
-             */
-            applyTableCellLineIndentation({
-              lineEl,
-              line,
-              indent: block.attrs?.indent,
-              indentLeftPx,
-              hasListMarkerLayout: Boolean(markerLayout),
-              lineIndex: lineIdx,
-              localStartLine,
-              suppressFirstLineIndent,
-            });
-            renderedLines.push({ el: lineEl, top: lineTop, height: line.lineHeight });
-            paraWrapper.appendChild(lineEl);
-          }
-
-          renderedHeight += line.lineHeight;
-        }
-
-        // If we rendered the entire paragraph, use measured totalHeight to keep layout aligned with measurement
-        const renderedEntireBlock = localStartLine === 0 && localEndLine >= blockLineCount;
-        if (renderedEntireBlock && blockMeasure.totalHeight && blockMeasure.totalHeight > renderedHeight) {
-          renderedHeight = blockMeasure.totalHeight;
-        }
 
         content.appendChild(paraWrapper);
-
-        if (renderedHeight > 0) {
-          paraWrapper.style.height = `${renderedHeight}px`;
-        }
-
-        flowCursorY += renderedHeight;
-
-        // Apply paragraph spacing.after as margin-bottom for non-last paragraphs.
-        // In Word, the last paragraph's spacing.after is absorbed by the cell's bottom padding.
-        const isLastBlock = i === Math.min(blockMeasures.length, cellBlocks.length) - 1;
-        if (renderedEntireBlock && !isLastBlock) {
-          const spacingAfter = (block as ParagraphBlock).attrs?.spacing?.after;
-          if (typeof spacingAfter === 'number' && spacingAfter > 0) {
-            paraWrapper.style.marginBottom = `${spacingAfter}px`;
-            flowCursorY += spacingAfter;
-          }
-        }
+        const result = renderParagraphContent({
+          doc,
+          frameEl: paraWrapper,
+          block: block as ParagraphBlock,
+          measure: paragraphMeasure,
+          containerKind: 'table-cell',
+          width: contentWidthPx,
+          localStartLine,
+          localEndLine,
+          contextSection: 'body',
+          wordLayout: wordLayout ?? undefined,
+          spacingPolicy: {
+            isFirstBlock: i === 0,
+            isLastBlock: isLastBlockInCell,
+            paddingTop,
+          },
+          sdtBoundary,
+          shouldApplySdtContainerStyling: (sdt, containerSdt) =>
+            shouldApplySdtContainerStyling(sdt, containerSdt, blockKey),
+          applySdtDataset,
+          renderLine: ({ block, line, lineIndex, isLastLine, resolvedListTextStartPx }) =>
+            renderLine(block, line, { ...context, section: 'body' }, lineIndex, isLastLine, resolvedListTextStartPx),
+          convertFinalParagraphMark: isLastBlockInCell,
+          lineTopOffset: flowCursorY,
+        });
+        renderedLines.push(...result.renderedLines);
+        flowCursorY += result.totalHeight;
 
         cumulativeLineCount += blockLineCount;
       }

@@ -50,13 +50,11 @@ import type {
   ResolvedTableItem,
   ResolvedImageItem,
   ResolvedDrawingItem,
-  ResolvedListMarkerItem,
   LayoutSourceIdentity,
   LayoutStoryLocator,
 } from '@superdoc/contracts';
 import {
   LAYOUT_BOUNDARY_SCHEMA,
-  adjustAvailableWidthForTextIndent,
   buildLayoutSourceIdentityForFragment,
   calculateJustifySpacing,
   computeLinePmRange,
@@ -110,23 +108,9 @@ import {
 import { applyAlphaToSVG, applyGradientToSVG, validateHexColor } from './svg-utils.js';
 import { renderTableFragment as renderTableFragmentElement } from './table/renderTableFragment.js';
 import { applyImageClipPath } from './utils/image-clip-path.js';
-import {
-  isMinimalWordLayout as isMinimalWordLayoutShared,
-  resolveMarkerIndent,
-} from '@superdoc/common/list-marker-utils';
-import {
-  computeTabWidth,
-  createListMarkerElement,
-  resolvePainterListMarkerGeometry,
-  resolvePainterListTextStartPx,
-} from './utils/marker-helpers.js';
+import { isMinimalWordLayout as isMinimalWordLayoutShared } from '@superdoc/common/list-marker-utils';
 import { applySdtContainerStyling, shouldRebuildForSdtBoundary, type SdtBoundaryOptions } from './utils/sdt-helpers.js';
-import {
-  computeBetweenBorderFlags,
-  createParagraphDecorationLayers,
-  stampBetweenBorderDataset,
-  type BetweenBorderInfo,
-} from './features/paragraph-borders/index.js';
+import { computeBetweenBorderFlags, type BetweenBorderInfo } from './features/paragraph-borders/index.js';
 import {
   applyRtlStyles,
   shouldUseSegmentPositioning,
@@ -134,6 +118,7 @@ import {
   normalizeRtlDateTokenForWordParity,
 } from './features/inline-direction/index.js';
 import { convertOmmlToMathml } from './features/math/index.js';
+import { renderParagraphContent } from './paragraph/renderParagraphContent.js';
 
 /**
  * Minimal type for WordParagraphLayoutOutput marker data used in rendering.
@@ -3191,413 +3176,63 @@ export class DomPainter {
         fragmentEl.dataset.continuesOnNext = 'true';
       }
 
-      // Use fragment.lines if available (set when paragraph was remeasured for narrower column).
-      // Otherwise, fall back to slicing from the original measure.
       const lines = fragment.lines ?? measure.lines.slice(fragment.fromLine, fragment.toLine);
-      applyParagraphBlockStyles(fragmentEl, block.attrs);
-      const { shadingLayer, borderLayer } = createParagraphDecorationLayers(
-        this.doc,
-        fragment.width,
-        block.attrs,
+      renderParagraphContent({
+        doc: this.doc,
+        frameEl: fragmentEl,
+        block,
+        measure,
+        containerKind: 'body-fragment',
+        width: fragment.width,
+        localStartLine: 0,
+        localEndLine: lines.length,
+        lineIndexOffset: fragment.fromLine,
+        linesOverride: lines,
+        contextSection: context.section,
+        continuesFromPrev: paraContinuesFromPrev,
+        continuesOnNext: paraContinuesOnNext,
+        markerWidth: paraMarkerWidth,
+        markerTextWidth: fragment.markerTextWidth,
+        wordLayout,
+        resolvedContent: content,
         betweenInfo,
-      );
-      if (shadingLayer) {
-        fragmentEl.appendChild(shadingLayer);
-      }
-      if (borderLayer) {
-        fragmentEl.appendChild(borderLayer);
-      }
-      stampBetweenBorderDataset(fragmentEl, betweenInfo);
-      if (block.attrs?.styleId) {
-        fragmentEl.dataset.styleId = block.attrs.styleId;
-        fragmentEl.setAttribute('styleid', block.attrs.styleId);
-      }
-      this.applySdtDataset(fragmentEl, block.attrs?.sdt);
-      this.applyContainerSdtDataset(fragmentEl, block.attrs?.containerSdt);
-
-      // Apply SDT container styling (document sections, structured content blocks)
-      applySdtContainerStyling(this.doc, fragmentEl, block.attrs?.sdt, block.attrs?.containerSdt, sdtBoundary);
-
-      // Render drop cap if present (only on the first fragment, not continuation)
-      if (content?.dropCap) {
-        const dc = content.dropCap;
-        const dropCapEl = this.renderDropCap(
-          {
-            mode: dc.mode,
-            run: {
-              text: dc.text,
-              fontFamily: dc.fontFamily,
-              fontSize: dc.fontSize,
-              bold: dc.bold,
-              italic: dc.italic,
-              color: dc.color,
-              position: dc.position,
-            },
-            lines: 0,
-          },
-          dc.width != null && dc.height != null
-            ? { width: dc.width, height: dc.height, lines: 0, mode: dc.mode }
-            : undefined,
-        );
-        fragmentEl.appendChild(dropCapEl);
-      } else {
-        const dropCapDescriptor = block.attrs?.dropCapDescriptor;
-        const dropCapMeasure = measure.dropCap;
-        if (dropCapDescriptor && dropCapMeasure && !paraContinuesFromPrev) {
-          const dropCapEl = this.renderDropCap(dropCapDescriptor, dropCapMeasure);
-          fragmentEl.appendChild(dropCapEl);
-        }
-      }
-
-      // Remove fragment-level indent so line-level indent handling doesn't double-apply.
-      // Include margin properties for negative indents (which use margin instead of padding).
-      if (fragmentEl.style.paddingLeft) fragmentEl.style.removeProperty('padding-left');
-      if (fragmentEl.style.paddingRight) fragmentEl.style.removeProperty('padding-right');
-      if (fragmentEl.style.marginLeft) fragmentEl.style.removeProperty('margin-left');
-      if (fragmentEl.style.marginRight) fragmentEl.style.removeProperty('margin-right');
-      if (fragmentEl.style.textIndent) fragmentEl.style.removeProperty('text-indent');
-
-      if (content) {
-        // ── Resolved path: read pre-computed values from ResolvedParagraphContent ──
-        const resolvedMarker = content.marker;
-        const expandedRunsForBlock = expandRunsForInlineNewlines(block.runs);
-
-        content.lines.forEach((resolvedLine) => {
-          const paragraphMarkLeftOffset = this.resolveResolvedListParagraphMarkOffset(
-            resolvedLine.isListFirstLine ? resolvedMarker : undefined,
-            fragment.markerTextWidth,
-            resolvedLine.indentOffset,
-          );
-          const isRtl = getParagraphInlineDirection(block.attrs) === 'rtl';
-          const lineEl = this.renderLine(
-            block,
-            resolvedLine.line,
-            context,
-            resolvedLine.availableWidth,
-            resolvedLine.lineIndex,
-            resolvedLine.skipJustify,
-            expandedRunsForBlock,
-            resolvedLine.resolvedListTextStartPx,
-            resolvedLine.indentOffset,
-            paragraphMarkLeftOffset,
-          );
-
-          // Apply pre-computed indent values
-          if (!resolvedLine.isListFirstLine) {
-            if (resolvedLine.paddingLeftPx > 0) {
-              lineEl.style.paddingLeft = `${resolvedLine.paddingLeftPx}px`;
-            }
-            if (resolvedLine.textIndentPx !== 0) {
-              lineEl.style.textIndent = `${resolvedLine.textIndentPx}px`;
-            } else if (resolvedLine.lineIndex > 0 || content.continuesFromPrev) {
-              // Body lines: reset textIndent to 0 if firstLineOffset would have been set
-              // (mirrors the legacy `else if (firstLineOffset && !isListFirstLine)` branch)
-              const paraIndent = block.attrs?.indent;
-              const suppressFLI = (block.attrs as Record<string, unknown>)?.suppressFirstLineIndent === true;
-              const flo = suppressFLI ? 0 : (paraIndent?.firstLine ?? 0) - (paraIndent?.hanging ?? 0);
-              if (flo && !resolvedLine.isListFirstLine) {
-                lineEl.style.textIndent = '0px';
-              }
-            }
-          }
-          if (resolvedLine.paddingRightPx > 0) {
-            lineEl.style.paddingRight = `${resolvedLine.paddingRightPx}px`;
-          }
-
-          // Render marker on list first line
-          if (resolvedLine.isListFirstLine && resolvedMarker) {
-            if (isRtl) {
-              lineEl.style.paddingRight = `${resolvedMarker.firstLinePaddingLeftPx}px`;
-            } else {
-              lineEl.style.paddingLeft = `${resolvedMarker.firstLinePaddingLeftPx}px`;
-            }
-
-            if (!resolvedMarker.vanish) {
-              const markerContainer = createListMarkerElement(
-                this.doc!,
-                resolvedMarker.text,
-                resolvedMarker.run,
-                resolvedMarker.sourceAnchor ?? resolvedItem?.sourceAnchor,
-              );
-
-              markerContainer.style.position = 'relative';
-              if (resolvedMarker.justification === 'right') {
-                markerContainer.style.position = 'absolute';
-                if (isRtl) {
-                  markerContainer.style.right = `${resolvedMarker.markerStartPx}px`;
-                } else {
-                  markerContainer.style.left = `${resolvedMarker.markerStartPx}px`;
-                }
-              } else if (resolvedMarker.justification === 'center') {
-                markerContainer.style.position = 'absolute';
-                if (isRtl) {
-                  markerContainer.style.right = `${resolvedMarker.markerStartPx - (resolvedMarker.centerPaddingAdjustPx ?? 0)}px`;
-                  lineEl.style.paddingRight =
-                    (
-                      parseFloat(lineEl.style.paddingRight || '0') + (resolvedMarker.centerPaddingAdjustPx ?? 0)
-                    ).toString() + 'px';
-                } else {
-                  markerContainer.style.left = `${resolvedMarker.markerStartPx - (resolvedMarker.centerPaddingAdjustPx ?? 0)}px`;
-                  lineEl.style.paddingLeft =
-                    parseFloat(lineEl.style.paddingLeft) + (resolvedMarker.centerPaddingAdjustPx ?? 0) + 'px';
-                }
-              }
-
-              if (resolvedMarker.suffix === 'tab') {
-                const tabEl = this.doc!.createElement('span');
-                tabEl.classList.add('superdoc-tab', 'superdoc-marker-suffix-tab');
-                tabEl.innerHTML = '&nbsp;';
-                tabEl.style.display = 'inline-block';
-                tabEl.style.fontSize = `${resolvedMarker.run.fontSize}px`;
-                tabEl.style.wordSpacing = '0px';
-                tabEl.style.width = `${resolvedMarker.suffixWidthPx}px`;
-                lineEl.prepend(tabEl);
-              } else if (resolvedMarker.suffix === 'space') {
-                const spaceEl = this.doc!.createElement('span');
-                spaceEl.classList.add('superdoc-marker-suffix-space');
-                spaceEl.style.fontSize = `${resolvedMarker.run.fontSize}px`;
-                spaceEl.style.wordSpacing = '0px';
-                spaceEl.textContent = '\u00A0';
-                lineEl.prepend(spaceEl);
-              }
-              lineEl.prepend(markerContainer);
-            }
-          }
-          this.capturePaintSnapshotLine(lineEl, context, {
-            inTableFragment: false,
-            inTableParagraph: false,
-            wrapperEl: fragmentEl,
-            sourceAnchor: resolvedItem?.sourceAnchor,
-          });
-          fragmentEl.appendChild(lineEl);
-        });
-      } else {
-        // ── Legacy path: compute everything from block attrs and measure ──
-        const paraIndent = block.attrs?.indent;
-        const paraIndentLeft = paraIndent?.left ?? 0;
-        const paraIndentRight = paraIndent?.right ?? 0;
-        const isRtl = getParagraphInlineDirection(block.attrs) === 'rtl';
-        const {
-          anchorIndentPx: paraMarkerAnchorIndent,
-          firstLinePx: markerFirstLine,
-          hangingPx: markerHanging,
-        } = resolveMarkerIndent(paraIndent, isRtl);
-        const suppressFirstLineIndent = (block.attrs as Record<string, unknown>)?.suppressFirstLineIndent === true;
-        const firstLineOffset = suppressFirstLineIndent ? 0 : (paraIndent?.firstLine ?? 0) - (paraIndent?.hanging ?? 0);
-
-        const expandedRunsForBlock = expandRunsForInlineNewlines(block.runs);
-        const lastRun = block.runs.length > 0 ? block.runs[block.runs.length - 1] : null;
-        const paragraphEndsWithLineBreak = lastRun?.kind === 'lineBreak';
-
-        const listFirstLineTextStartPx =
-          !paraContinuesFromPrev && paraMarkerWidth && wordLayout?.marker
-            ? resolvePainterListTextStartPx({
-                wordLayout,
-                indentLeftPx: paraMarkerAnchorIndent,
-                hangingIndentPx: markerHanging,
-                firstLineIndentPx: markerFirstLine,
-                markerTextWidthPx: fragment.markerTextWidth,
-              })
-            : undefined;
-
-        const shouldUseSharedInlinePrefixGeometry =
-          !paraContinuesFromPrev &&
-          paraMarkerWidth &&
-          wordLayout?.marker?.justification === 'left' &&
-          wordLayout.firstLineIndentMode !== true &&
-          typeof fragment.markerTextWidth === 'number' &&
-          Number.isFinite(fragment.markerTextWidth) &&
-          fragment.markerTextWidth >= 0;
-        const listFirstLineMarkerGeometry = shouldUseSharedInlinePrefixGeometry
-          ? resolvePainterListMarkerGeometry({
-              wordLayout,
-              indentLeftPx: paraMarkerAnchorIndent,
-              hangingIndentPx: markerHanging,
-              firstLineIndentPx: markerFirstLine,
-              markerTextWidthPx: fragment.markerTextWidth,
-            })
-          : undefined;
-
-        let listTabWidth = 0;
-        let markerStartPos = 0;
-        if (!paraContinuesFromPrev && paraMarkerWidth && wordLayout?.marker) {
-          const markerTextWidth = fragment.markerTextWidth!;
-          const anchorPoint = paraMarkerAnchorIndent - markerHanging + markerFirstLine;
-          const markerJustification = wordLayout.marker.justification ?? 'left';
-          let currentPos: number;
-          if (markerJustification === 'left') {
-            markerStartPos = anchorPoint;
-            currentPos = markerStartPos + markerTextWidth;
-          } else if (markerJustification === 'right') {
-            markerStartPos = anchorPoint - markerTextWidth;
-            currentPos = anchorPoint;
-          } else {
-            markerStartPos = anchorPoint - markerTextWidth / 2;
-            currentPos = markerStartPos + markerTextWidth;
-          }
-
-          const suffix = wordLayout.marker.suffix ?? 'tab';
-          if (listFirstLineMarkerGeometry && (suffix === 'tab' || suffix === 'space')) {
-            listTabWidth = listFirstLineMarkerGeometry.suffixWidthPx;
-          } else if (suffix === 'tab') {
-            listTabWidth = computeTabWidth(
-              currentPos,
-              markerJustification,
-              wordLayout.tabsPx,
-              markerHanging,
-              markerFirstLine,
-              paraMarkerAnchorIndent,
-            );
-          } else if (suffix === 'space') {
-            listTabWidth = 4;
-          }
-        }
-
-        lines.forEach((line, index) => {
-          const hasExplicitSegmentPositioning = line.segments?.some((segment) => segment.x !== undefined) === true;
-          const hasListFirstLineMarker = index === 0 && !paraContinuesFromPrev && paraMarkerWidth && wordLayout?.marker;
-          const shouldUseResolvedListTextStart =
-            hasListFirstLineMarker && hasExplicitSegmentPositioning && listFirstLineTextStartPx != null;
-
-          const positiveIndentReduction = Math.max(0, paraIndentLeft) + Math.max(0, paraIndentRight);
-          const fallbackAvailableWidth = Math.max(0, fragment.width - positiveIndentReduction);
-          let availableWidthOverride =
-            line.maxWidth != null ? Math.min(line.maxWidth, fallbackAvailableWidth) : fallbackAvailableWidth;
-
-          if (shouldUseResolvedListTextStart) {
-            availableWidthOverride = fragment.width - listFirstLineTextStartPx - Math.max(0, paraIndentRight);
-          }
-
-          // Adjust availableWidth for first-line text indent (hanging indent).
-          const isFirstLine = index === 0 && !paraContinuesFromPrev;
-          const isListFirstLine = Boolean(hasListFirstLineMarker && fragment.markerTextWidth);
-          if (isFirstLine && !isListFirstLine && line.hasExplicitTabStops !== true) {
-            availableWidthOverride = adjustAvailableWidthForTextIndent(
-              availableWidthOverride,
-              firstLineOffset,
-              line.maxWidth,
-            );
-          }
-
-          const isLastLineOfFragment = index === lines.length - 1;
-          const isLastLineOfParagraph = isLastLineOfFragment && !paraContinuesOnNext;
-          const shouldSkipJustifyForLastLine = isLastLineOfParagraph && !paragraphEndsWithLineBreak;
-
-          const lineEl = this.renderLine(
+        sdtBoundary,
+        applySdtDataset: this.applySdtDataset.bind(this),
+        applyContainerSdtDataset: this.applyContainerSdtDataset.bind(this),
+        renderDropCap: this.renderDropCap.bind(this),
+        renderLine: ({
+          block,
+          line,
+          availableWidth,
+          lineIndex,
+          skipJustify,
+          preExpandedRuns,
+          resolvedListTextStartPx,
+          indentOffsetOverride,
+          paragraphMarkLeftOffsetOverride,
+        }) =>
+          this.renderLine(
             block,
             line,
             context,
-            availableWidthOverride,
-            fragment.fromLine + index,
-            shouldSkipJustifyForLastLine,
-            expandedRunsForBlock,
-            shouldUseResolvedListTextStart ? listFirstLineTextStartPx : undefined,
-          );
-
-          if (!isListFirstLine) {
-            if (hasExplicitSegmentPositioning) {
-              if (isFirstLine && firstLineOffset !== 0) {
-                const effectiveLeftIndent = paraIndentLeft < 0 ? 0 : paraIndentLeft;
-                const adjustedPadding = effectiveLeftIndent + firstLineOffset;
-                if (adjustedPadding > 0) {
-                  lineEl.style.paddingLeft = `${adjustedPadding}px`;
-                }
-              }
-            } else if (paraIndentLeft && paraIndentLeft > 0) {
-              lineEl.style.paddingLeft = `${paraIndentLeft}px`;
-            } else if (
-              !isFirstLine &&
-              paraIndent?.hanging &&
-              paraIndent.hanging > 0 &&
-              !(paraIndentLeft != null && paraIndentLeft < 0)
-            ) {
-              lineEl.style.paddingLeft = `${paraIndent.hanging}px`;
-            }
-          }
-          if (paraIndentRight && paraIndentRight > 0) {
-            lineEl.style.paddingRight = `${paraIndentRight}px`;
-          }
-          if (!paraContinuesFromPrev && index === 0 && firstLineOffset && !isListFirstLine) {
-            if (!hasExplicitSegmentPositioning) {
-              lineEl.style.textIndent = `${firstLineOffset}px`;
-            }
-          } else if (firstLineOffset && !isListFirstLine) {
-            lineEl.style.textIndent = '0px';
-          }
-
-          if (isListFirstLine) {
-            const marker = wordLayout?.marker;
-            if (!marker) {
-              return;
-            }
-            const firstLineIndent = paraMarkerAnchorIndent - markerHanging + markerFirstLine;
-            if (isRtl) {
-              lineEl.style.paddingRight = `${firstLineIndent}px`;
-            } else {
-              lineEl.style.paddingLeft = `${firstLineIndent}px`;
-            }
-
-            if (!marker.run.vanish) {
-              const markerContainer = createListMarkerElement(
-                this.doc!,
-                marker.markerText ?? '',
-                marker.run,
-                block.sourceAnchor ?? resolvedItem?.sourceAnchor,
-              );
-
-              const markerJustification = marker.justification ?? 'left';
-
-              markerContainer.style.position = 'relative';
-              if (markerJustification === 'right') {
-                markerContainer.style.position = 'absolute';
-                if (isRtl) {
-                  markerContainer.style.right = `${markerStartPos}px`;
-                } else {
-                  markerContainer.style.left = `${markerStartPos}px`;
-                }
-              } else if (markerJustification === 'center') {
-                markerContainer.style.position = 'absolute';
-                if (isRtl) {
-                  markerContainer.style.right = `${markerStartPos - fragment.markerTextWidth! / 2}px`;
-                  lineEl.style.paddingRight =
-                    (parseFloat(lineEl.style.paddingRight || '0') + fragment.markerTextWidth! / 2).toString() + 'px';
-                } else {
-                  markerContainer.style.left = `${markerStartPos - fragment.markerTextWidth! / 2}px`;
-                  lineEl.style.paddingLeft =
-                    parseFloat(lineEl.style.paddingLeft) + fragment.markerTextWidth! / 2 + 'px';
-                }
-              }
-
-              const suffix = marker.suffix ?? 'tab';
-              if (suffix === 'tab') {
-                const tabEl = this.doc!.createElement('span');
-                tabEl.classList.add('superdoc-tab', 'superdoc-marker-suffix-tab');
-                tabEl.innerHTML = '&nbsp;';
-                tabEl.style.display = 'inline-block';
-                tabEl.style.fontSize = `${marker.run.fontSize}px`;
-                tabEl.style.wordSpacing = '0px';
-                tabEl.style.width = `${listTabWidth}px`;
-                lineEl.prepend(tabEl);
-              } else if (suffix === 'space') {
-                const spaceEl = this.doc!.createElement('span');
-                spaceEl.classList.add('superdoc-marker-suffix-space');
-                spaceEl.style.fontSize = `${marker.run.fontSize}px`;
-                spaceEl.style.wordSpacing = '0px';
-                spaceEl.textContent = '\u00A0';
-                lineEl.prepend(spaceEl);
-              }
-              lineEl.prepend(markerContainer);
-            }
-          }
+            availableWidth,
+            lineIndex,
+            skipJustify,
+            preExpandedRuns,
+            resolvedListTextStartPx,
+            indentOffsetOverride,
+            paragraphMarkLeftOffsetOverride,
+          ),
+        captureLineSnapshot: (lineEl, options) => {
           this.capturePaintSnapshotLine(lineEl, context, {
             inTableFragment: false,
             inTableParagraph: false,
             wrapperEl: fragmentEl,
-            sourceAnchor: resolvedItem?.sourceAnchor,
+            sourceAnchor: options?.sourceAnchor,
           });
-          fragmentEl.appendChild(lineEl);
-        });
-      }
+        },
+        sourceAnchor: resolvedItem?.sourceAnchor,
+      });
 
       return fragmentEl;
     } catch (error) {
@@ -5427,36 +5062,6 @@ export class DomPainter {
     const visualTextEndOffset = isRtl ? alignmentOffset : alignmentOffset + lineWidth;
     mark.style.left = `${Math.max(0, leftOffsetPx + visualTextEndOffset)}px`;
     lineEl.appendChild(mark);
-  }
-
-  private resolveResolvedListParagraphMarkOffset(
-    marker: ResolvedListMarkerItem | undefined,
-    markerTextWidth: number | undefined,
-    fallbackOffset: number | undefined,
-  ): number | undefined {
-    if (typeof fallbackOffset === 'number' && Number.isFinite(fallbackOffset) && fallbackOffset > 0) {
-      return fallbackOffset;
-    }
-    if (!marker || marker.vanish) {
-      return fallbackOffset;
-    }
-
-    const paddingLeft = Number.isFinite(marker.firstLinePaddingLeftPx) ? marker.firstLinePaddingLeftPx : 0;
-    const suffixWidth = marker.suffix !== 'nothing' && Number.isFinite(marker.suffixWidthPx) ? marker.suffixWidthPx : 0;
-
-    if (marker.justification === 'left') {
-      const markerWidth =
-        typeof markerTextWidth === 'number' && Number.isFinite(markerTextWidth) && markerTextWidth > 0
-          ? markerTextWidth
-          : 0;
-      return paddingLeft + markerWidth + suffixWidth;
-    }
-
-    const centerPadding =
-      marker.justification === 'center' && Number.isFinite(marker.centerPaddingAdjustPx)
-        ? (marker.centerPaddingAdjustPx ?? 0)
-        : 0;
-    return paddingLeft + centerPadding + suffixWidth;
   }
 
   private renderRun(
@@ -8125,42 +7730,6 @@ export const applyRunDataAttributes = (element: HTMLElement, dataAttrs?: Record<
     }
   });
 };
-
-const applyParagraphBlockStyles = (element: HTMLElement, attrs?: ParagraphAttrs): void => {
-  if (!attrs) return;
-  if (attrs.styleId) {
-    element.setAttribute('styleid', attrs.styleId);
-  }
-  applyRtlStyles(element, attrs);
-  if ((attrs as Record<string, unknown>).dropCap) {
-    element.classList.add('sd-editor-dropcap');
-  }
-  const indent = attrs.indent;
-  if (indent) {
-    // Only apply positive indents as padding.
-    // Negative indents are handled by fragment positioning in the layout engine.
-    if (indent.left && indent.left > 0) {
-      element.style.paddingLeft = `${indent.left}px`;
-    }
-    if (indent.right && indent.right > 0) {
-      element.style.paddingRight = `${indent.right}px`;
-    }
-    // Skip textIndent when left indent is negative - fragment positioning handles the indent,
-    // and per-line paddingLeft handles the hanging indent for body lines.
-    const hasNegativeLeftIndent = indent.left != null && indent.left < 0;
-    if (!hasNegativeLeftIndent) {
-      const textIndent = (indent.firstLine ?? 0) - (indent.hanging ?? 0);
-      if (textIndent) {
-        element.style.textIndent = `${textIndent}px`;
-      }
-    }
-  }
-};
-
-// getParagraphBorderBox, createParagraphDecorationLayers, applyParagraphBorderStyles,
-// setBorderSideStyle, applyParagraphShadingStyles — moved to features/paragraph-borders/
-
-// applyParagraphShadingStyles — moved to features/paragraph-borders/border-layer.ts
 
 const applyStyles = (el: HTMLElement, styles: Partial<CSSStyleDeclaration>): void => {
   Object.entries(styles).forEach(([key, value]) => {

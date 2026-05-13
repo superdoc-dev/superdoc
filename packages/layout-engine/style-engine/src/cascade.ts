@@ -114,7 +114,9 @@ function isObject(item: unknown): item is PropertyObject {
 //
 // Pair `<slot>` with `<slot>Theme`, except for the cs slot whose theme attribute is the
 // lowercase `cstheme` (OOXML inconsistency, not a typo).
-const FONT_SLOT_THEME_PAIRS: Array<[keyof RunFontFamilyProperties, keyof RunFontFamilyProperties]> = [
+// Exported so super-editor's calculateInlineRunPropertiesPlugin can consume the same
+// list instead of duplicating it (SD-2894 follow-up).
+export const FONT_SLOT_THEME_PAIRS: Array<[keyof RunFontFamilyProperties, keyof RunFontFamilyProperties]> = [
   ['ascii', 'asciiTheme'],
   ['hAnsi', 'hAnsiTheme'],
   ['eastAsia', 'eastAsiaTheme'],

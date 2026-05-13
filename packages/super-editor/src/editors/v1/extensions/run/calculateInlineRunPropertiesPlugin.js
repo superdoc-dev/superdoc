@@ -2,6 +2,7 @@ import { Plugin, TextSelection } from 'prosemirror-state';
 import { Fragment } from 'prosemirror-model';
 import { TableMap } from 'prosemirror-tables';
 import { decodeRPrFromMarks, encodeMarksFromRPr, resolveRunProperties } from '@converter/styles.js';
+import { FONT_SLOT_THEME_PAIRS } from '@superdoc/style-engine/ooxml';
 import {
   calculateResolvedParagraphProperties,
   getResolvedParagraphProperties,
@@ -28,23 +29,20 @@ const RUN_PROPERTIES_DERIVED_FROM_MARKS = new Set([
 
 export const TRANSIENT_HYPERLINK_STYLE_IDS = new Set(['Hyperlink', 'FollowedHyperlink']);
 
-// SD-2894: when the plugin overrides a run's fontFamily from mark-derived values, the
-// mark only carries the resolved CSS font name (`ascii: "Calibri Light"`) and forgets the
-// theme reference (`asciiTheme: "majorBidi"`) that came from the imported `<w:rFonts>`.
-// Without this merge we'd export concrete font names that defeat Word's per-script theme
-// resolution. The pairs match the four `<w:rFonts>` slots — note `cstheme` is lowercase
-// (OOXML inconsistency).
-const FONT_FAMILY_THEME_PAIRS = [
-  ['ascii', 'asciiTheme'],
-  ['hAnsi', 'hAnsiTheme'],
-  ['eastAsia', 'eastAsiaTheme'],
-  ['cs', 'cstheme'],
-];
-
 /**
  * Merge mark-derived concrete fontFamily slots with theme references preserved on the
  * existing run. For each slot where the existing fontFamily has a theme reference, keep
  * the theme and drop the concrete value from marks; otherwise take the mark value.
+ *
+ * Only safe to call when the caller has already verified that marks are a re-derivation
+ * of `existing` rather than a user override — otherwise this silently reverts user font
+ * changes. See `marksMatchExistingFontFamily` for the gate.
+ *
+ * SD-2894: when the plugin overrides a run's fontFamily from mark-derived values, the
+ * mark only carries the resolved CSS font name (`ascii: "Calibri Light"`) and forgets the
+ * theme reference (`asciiTheme: "majorBidi"`) that came from the imported `<w:rFonts>`.
+ * Without this merge we'd export concrete font names that defeat Word's per-script theme
+ * resolution.
  *
  * @param {Record<string, unknown>|null|undefined} fromMarks
  * @param {Record<string, unknown>|null|undefined} existing
@@ -53,13 +51,39 @@ const FONT_FAMILY_THEME_PAIRS = [
 function mergeFontFamilyPreservingThemeRefs(fromMarks, existing) {
   const merged = { ...(fromMarks || {}) };
   if (!existing || typeof existing !== 'object') return merged;
-  for (const [concreteKey, themeKey] of FONT_FAMILY_THEME_PAIRS) {
+  for (const [concreteKey, themeKey] of FONT_SLOT_THEME_PAIRS) {
     if (existing[themeKey] != null) {
       merged[themeKey] = existing[themeKey];
       delete merged[concreteKey];
     }
   }
   return merged;
+}
+
+/**
+ * True when the mark-derived fontFamily value encodes to the same OOXML mark as the
+ * run's existing (imported) fontFamily — i.e., marks are a faithful re-derivation, not a
+ * user override.
+ *
+ * The encoder resolves theme references to their CSS font name. So:
+ *   - import case: existing = { asciiTheme: 'majorBidi' }, marks = { ascii: 'Calibri Light' }
+ *     → both encode to { fontFamily: 'Calibri Light' } → match → preserve theme.
+ *   - user-edit case: existing = { asciiTheme: 'majorBidi' }, marks = { ascii: 'Arial' }
+ *     → existing encodes to 'Calibri Light', marks encode to 'Arial' → mismatch → user
+ *       has overridden, drop the theme and respect the new value.
+ *
+ * @param {{ attrs?: Record<string, unknown> } | null | undefined} markFromMarks
+ * @param {Record<string, unknown>|null|undefined} existingFontFamily
+ * @param {(props: Record<string, unknown>, docx: Record<string, unknown>) => Array<{ attrs?: Record<string, unknown> }>} encode
+ * @param {Record<string, unknown>} docx
+ * @returns {boolean}
+ */
+function marksMatchExistingFontFamily(markFromMarks, existingFontFamily, encode, docx) {
+  if (!existingFontFamily || typeof existingFontFamily !== 'object') return false;
+  if (!markFromMarks?.attrs) return false;
+  const markFromExisting = encode({ fontFamily: existingFontFamily }, docx)?.[0];
+  if (!markFromExisting?.attrs) return false;
+  return JSON.stringify(markFromMarks.attrs) === JSON.stringify(markFromExisting.attrs);
 }
 
 const RUN_PROPERTY_PRESERVE_META_KEY = 'sdPreserveRunPropertiesKeys';
@@ -570,10 +594,23 @@ function getInlineRunProperties(
     const valueFromStyles = runPropertiesFromStyles[key];
     if (JSON.stringify(valueFromMarks) !== JSON.stringify(valueFromStyles)) {
       if (key === 'fontFamily') {
-        const markFromStyles = encodeMarksFromRPr({ [key]: valueFromStyles }, editor.converter?.convertedXml ?? {})[0];
-        const markFromMarks = encodeMarksFromRPr({ [key]: valueFromMarks }, editor.converter?.convertedXml ?? {})[0];
+        const docx = editor.converter?.convertedXml ?? {};
+        const markFromStyles = encodeMarksFromRPr({ [key]: valueFromStyles }, docx)[0];
+        const markFromMarks = encodeMarksFromRPr({ [key]: valueFromMarks }, docx)[0];
         if (JSON.stringify(markFromMarks?.attrs) !== JSON.stringify(markFromStyles?.attrs)) {
-          inlineRunProperties[key] = mergeFontFamilyPreservingThemeRefs(valueFromMarks, existingRunProperties?.[key]);
+          // SD-2894 follow-up (PR #3225 review): only preserve theme refs from `existing`
+          // when the marks are a faithful re-derivation of the imported value. If marks
+          // diverge from existing (user picked a new font), respect the user's choice
+          // and drop the stale theme reference.
+          const existingFontFamily = existingRunProperties?.[key];
+          inlineRunProperties[key] = marksMatchExistingFontFamily(
+            markFromMarks,
+            existingFontFamily,
+            encodeMarksFromRPr,
+            docx,
+          )
+            ? mergeFontFamilyPreservingThemeRefs(valueFromMarks, existingFontFamily)
+            : valueFromMarks;
         }
       } else {
         inlineRunProperties[key] = valueFromMarks;

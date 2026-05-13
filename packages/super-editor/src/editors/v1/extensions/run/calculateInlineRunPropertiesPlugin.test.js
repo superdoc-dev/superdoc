@@ -857,4 +857,99 @@ describe('calculateInlineRunPropertiesPlugin', () => {
       }
     });
   });
+
+  // SD-2894 follow-up: the theme-rFonts preservation must NOT silently swallow user font
+  // changes. The two branches below pin both directions of the contract:
+  //   (A) marks just re-encode the imported theme → preserve the theme reference;
+  //   (B) marks diverge from the imported theme → user has overridden, drop the theme.
+  // This is exactly the case Luccas reproduced in the PR review.
+  describe('SD-2894: theme rFonts vs explicit user font change', () => {
+    const fontFamilyEncoder = (runProperties) => {
+      const ff = runProperties?.fontFamily;
+      if (!ff || typeof ff !== 'object') return [];
+      // Theme reference encodes to the CSS resolution of that theme. The customer fixture
+      // had majorBidi → Calibri Light; we use the same here to mirror the bug.
+      if (ff.asciiTheme === 'majorBidi') {
+        return [{ type: 'textStyle', attrs: { fontFamily: 'Calibri Light' } }];
+      }
+      if (typeof ff.ascii === 'string') {
+        return [{ type: 'textStyle', attrs: { fontFamily: ff.ascii } }];
+      }
+      return [];
+    };
+
+    beforeEach(() => {
+      // Style cascade has no fontFamily for this run — the only sources are the run's
+      // existing runProperties and the mark-derived value.
+      resolveRunPropertiesMock.mockImplementation(() => ({}));
+      encodeMarksFromRPrMock.mockImplementation(fontFamilyEncoder);
+    });
+
+    it('preserves theme reference when marks re-encode the imported theme value', () => {
+      // Marks decode to the concrete CSS name that the theme resolves to — the import path.
+      decodeRPrFromMarksMock.mockImplementation((marks) => ({
+        bold: marks.some((mark) => mark.type.name === 'bold'),
+        fontFamily: { ascii: 'Calibri Light', hAnsi: 'Calibri Light', cs: 'Calibri Light' },
+      }));
+
+      const schema = makeSchema();
+      const doc = paragraphDoc(
+        schema,
+        {
+          runProperties: {
+            fontFamily: { asciiTheme: 'majorBidi', hAnsiTheme: 'majorBidi', cstheme: 'majorBidi' },
+          },
+          runPropertiesInlineKeys: ['fontFamily'],
+        },
+        [],
+        'Latin',
+      );
+      const state = createState(schema, doc);
+      const { from, to } = runTextRange(state.doc, 0, 5);
+
+      // Trigger plugin re-evaluation with any benign mark change.
+      const tr = state.tr.addMark(from, to, schema.marks.bold.create());
+      const { state: nextState } = state.applyTransaction(tr);
+
+      const runNode = nextState.doc.nodeAt(runPos(nextState.doc) ?? 0);
+      expect(runNode?.attrs.runProperties?.fontFamily).toEqual({
+        asciiTheme: 'majorBidi',
+        hAnsiTheme: 'majorBidi',
+        cstheme: 'majorBidi',
+      });
+    });
+
+    it('drops theme references when the user explicitly sets a different font', () => {
+      // Marks decode to a CSS name the theme would NOT resolve to — the user-override path.
+      decodeRPrFromMarksMock.mockImplementation((marks) => ({
+        bold: marks.some((mark) => mark.type.name === 'bold'),
+        fontFamily: { ascii: 'Arial', hAnsi: 'Arial', cs: 'Arial' },
+      }));
+
+      const schema = makeSchema();
+      const doc = paragraphDoc(
+        schema,
+        {
+          runProperties: {
+            fontFamily: { asciiTheme: 'majorBidi', hAnsiTheme: 'majorBidi', cstheme: 'majorBidi' },
+          },
+          runPropertiesInlineKeys: ['fontFamily'],
+        },
+        [],
+        'Latin',
+      );
+      const state = createState(schema, doc);
+      const { from, to } = runTextRange(state.doc, 0, 5);
+
+      const tr = state.tr.addMark(from, to, schema.marks.bold.create());
+      const { state: nextState } = state.applyTransaction(tr);
+
+      const runNode = nextState.doc.nodeAt(runPos(nextState.doc) ?? 0);
+      const ff = runNode?.attrs.runProperties?.fontFamily;
+      expect(ff?.ascii).toBe('Arial');
+      expect(ff?.asciiTheme).toBeUndefined();
+      expect(ff?.hAnsiTheme).toBeUndefined();
+      expect(ff?.cstheme).toBeUndefined();
+    });
+  });
 });

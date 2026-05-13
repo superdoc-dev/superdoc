@@ -584,7 +584,9 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
   }
 
   const padding =
-    extractCellPadding(cellNode.attrs ?? {}) ?? (defaultCellPadding ? { ...defaultCellPadding } : undefined);
+    extractCellPadding(cellNode.attrs ?? {}, {
+      isRtl: tableProperties?.rightToLeft === true,
+    }) ?? (defaultCellPadding ? { ...defaultCellPadding } : undefined);
   if (padding) cellAttrs.padding = padding;
 
   const verticalAlign = cellNode.attrs?.verticalAlign;

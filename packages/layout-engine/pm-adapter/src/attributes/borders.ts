@@ -337,7 +337,14 @@ export function extractCellBorders(cellAttrs: Record<string, unknown>): CellBord
  * // { top: 8, left: 12, right: 12, bottom: 8 }
  * ```
  */
-export function extractCellPadding(cellAttrs: Record<string, unknown>): BoxSpacing | undefined {
+type CellPaddingExtractionOptions = {
+  isRtl?: boolean;
+};
+
+export function extractCellPadding(
+  cellAttrs: Record<string, unknown>,
+  options?: CellPaddingExtractionOptions,
+): BoxSpacing | undefined {
   const cellMargins = cellAttrs?.cellMargins;
   if (!cellMargins || typeof cellMargins !== 'object') return undefined;
 
@@ -345,11 +352,24 @@ export function extractCellPadding(cellAttrs: Record<string, unknown>): BoxSpaci
   // For now, we'll use them as-is assuming they're already converted to pixels
   const padding: BoxSpacing = {};
   const margins = cellMargins as Record<string, unknown>;
+  const isRtl = options?.isRtl === true;
 
   if (typeof margins.top === 'number') padding.top = margins.top;
   if (typeof margins.right === 'number') padding.right = margins.right;
   if (typeof margins.bottom === 'number') padding.bottom = margins.bottom;
   if (typeof margins.left === 'number') padding.left = margins.left;
+
+  // Logical margins are fallback-only: explicit physical sides win.
+  const marginStart = margins.marginStart;
+  const marginEnd = margins.marginEnd;
+  const startTarget: keyof BoxSpacing = isRtl ? 'right' : 'left';
+  const endTarget: keyof BoxSpacing = isRtl ? 'left' : 'right';
+  if (typeof marginStart === 'number' && padding[startTarget] == null) {
+    padding[startTarget] = marginStart;
+  }
+  if (typeof marginEnd === 'number' && padding[endTarget] == null) {
+    padding[endTarget] = marginEnd;
+  }
 
   if (Object.keys(padding).length === 0) return undefined;
   return normalizeCellPaddingTopBottom(padding);

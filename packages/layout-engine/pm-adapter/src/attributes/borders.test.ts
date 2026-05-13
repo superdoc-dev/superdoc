@@ -573,6 +573,50 @@ describe('extractCellPadding', () => {
         left: 12.75,
       });
     });
+
+    it('maps marginStart/marginEnd to left/right in LTR when physical sides are missing', () => {
+      const input = {
+        cellMargins: {
+          marginStart: 11,
+          marginEnd: 22,
+        },
+      };
+      const result = extractCellPadding(input, { isRtl: false });
+      expect(result).toEqual({
+        left: 11,
+        right: 22,
+      });
+    });
+
+    it('maps marginStart/marginEnd to right/left in RTL when physical sides are missing', () => {
+      const input = {
+        cellMargins: {
+          marginStart: 11,
+          marginEnd: 22,
+        },
+      };
+      const result = extractCellPadding(input, { isRtl: true });
+      expect(result).toEqual({
+        right: 11,
+        left: 22,
+      });
+    });
+
+    it('keeps explicit physical left/right over logical marginStart/marginEnd', () => {
+      const input = {
+        cellMargins: {
+          left: 33,
+          right: 44,
+          marginStart: 11,
+          marginEnd: 22,
+        },
+      };
+      const result = extractCellPadding(input, { isRtl: true });
+      expect(result).toEqual({
+        left: 33,
+        right: 44,
+      });
+    });
   });
 
   describe('invalid inputs', () => {

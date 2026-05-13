@@ -1065,4 +1065,91 @@ describe('createToolbarRegistry', () => {
       expect(state).toEqual({ active: false, disabled: false, value: null });
     });
   });
+
+  // SD-2810/PR #3226: the headless direction-ltr / direction-rtl ids must encode
+  // their direction in the closure (not in a payload). Public payload type is
+  // `never` because the runtime ignores any payload arg. These tests pin that
+  // contract: no-payload invocation maps to the expected setParagraphDirection
+  // call with alignmentPolicy='matchDirection'.
+  describe('direction-ltr / direction-rtl execute contract', () => {
+    const createExecuteContext = (commandSpy: ReturnType<typeof vi.fn>): ToolbarContext => ({
+      target: {
+        commands: {
+          setParagraphDirection: commandSpy,
+        },
+      },
+      surface: 'body',
+      isEditable: true,
+      selectionEmpty: false,
+      editor: {
+        commands: {
+          setParagraphDirection: commandSpy,
+        },
+      } as any,
+    });
+
+    it("controller.execute('direction-ltr') calls setParagraphDirection({direction:'ltr', alignmentPolicy:'matchDirection'})", () => {
+      const commandSpy = vi.fn(() => true);
+      const registry = createToolbarRegistry();
+      const result = registry['direction-ltr']?.execute?.({
+        context: createExecuteContext(commandSpy),
+        superdoc: {},
+      });
+
+      expect(result).toBe(true);
+      expect(commandSpy).toHaveBeenCalledExactlyOnceWith({
+        direction: 'ltr',
+        alignmentPolicy: 'matchDirection',
+      });
+    });
+
+    it("controller.execute('direction-rtl') calls setParagraphDirection({direction:'rtl', alignmentPolicy:'matchDirection'})", () => {
+      const commandSpy = vi.fn(() => true);
+      const registry = createToolbarRegistry();
+      const result = registry['direction-rtl']?.execute?.({
+        context: createExecuteContext(commandSpy),
+        superdoc: {},
+      });
+
+      expect(result).toBe(true);
+      expect(commandSpy).toHaveBeenCalledExactlyOnceWith({
+        direction: 'rtl',
+        alignmentPolicy: 'matchDirection',
+      });
+    });
+
+    it('execute ignores any payload arg (direction comes from the command id)', () => {
+      const commandSpy = vi.fn(() => true);
+      const registry = createToolbarRegistry();
+      // The headless ToolbarPayloadMap declares both direction ids as `never`,
+      // so callers can't pass a payload through the typed surface. This test
+      // pins the runtime side of that contract: even if someone bypasses TS
+      // and passes a payload, it's ignored.
+      const result = registry['direction-ltr']?.execute?.({
+        context: createExecuteContext(commandSpy),
+        superdoc: {},
+        payload: { direction: 'rtl', alignmentPolicy: undefined } as never,
+      });
+
+      expect(result).toBe(true);
+      // Still called with LTR, not the contradictory payload.
+      expect(commandSpy).toHaveBeenCalledExactlyOnceWith({
+        direction: 'ltr',
+        alignmentPolicy: 'matchDirection',
+      });
+    });
+
+    it('returns false when editor command is unavailable', () => {
+      const registry = createToolbarRegistry();
+      const result = registry['direction-ltr']?.execute?.({
+        context: {
+          ...createContext(),
+          editor: { commands: {} } as any,
+        },
+        superdoc: {},
+      });
+
+      expect(result).toBe(false);
+    });
+  });
 });

@@ -16,7 +16,7 @@
  *   3. Compares clause versions against the local library and surfaces a
  *      per-clause "Update to vN" CTA on every clause that has a newer
  *      version available.
- *   4. On Apply, pushes field values via `selectByTag` + `text.setValue`.
+ *   4. On Apply, pushes field values via `selectByTag` + `replaceContent`.
  *   5. On Update, swaps clause body via `replaceContent` and bumps the
  *      version in the tag via `patch`.
  *   6. On Export, produces a `.docx` blob with content controls preserved.

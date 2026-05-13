@@ -202,7 +202,7 @@ export const hashParagraphAttrs = (attrs: ParagraphAttrs | undefined): string =>
     if (sh.color) parts.push(`shc:${sh.color}`);
   }
 
-  // Direction (reads directionContext first; legacy attrs.direction as fallback)
+  // Direction
   const dir = getParagraphInlineDirection(attrs);
   if (dir) parts.push(`dir:${dir}`);
 

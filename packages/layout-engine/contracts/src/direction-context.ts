@@ -182,7 +182,8 @@ export function getParagraphInlineDirection(
 ): BaseDirection | undefined {
   const fromContext = attrs?.directionContext?.inlineDirection;
   if (fromContext != null) return fromContext;
-  // compat-fallback: legacy duplicates of inlineDirection. SD-2778 collapses these.
+  // AIDEV-NOTE: compat-fallback - used when ParagraphAttrs.directionContext.inlineDirection is absent.
+  // Retire once SD-2778 collapses the duplicate scalar fields onto directionContext.
   const ppRtl = attrs?.paragraphProperties?.rightToLeft;
   if (attrs?.direction === 'rtl' || attrs?.dir === 'rtl' || attrs?.rtl === true || ppRtl === true) {
     return 'rtl';

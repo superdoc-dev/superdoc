@@ -392,7 +392,7 @@ const hashRuns = (block: FlowBlock): string => {
               if (sh.color) parts.push(`shc:${sh.color}`);
             }
 
-            // Direction (reads directionContext first; legacy attrs.direction as fallback)
+            // Direction
             const cellDir = getParagraphInlineDirection(attrs);
             if (cellDir) parts.push(`dir:${cellDir}`);
 
@@ -548,7 +548,7 @@ const hashRuns = (block: FlowBlock): string => {
       parts.push(`tb:${tabsHash}`);
     }
 
-    // Direction (reads directionContext first; legacy attrs.direction as fallback)
+    // Direction
     const dir = getParagraphInlineDirection(attrs);
     if (dir) parts.push(`dir:${dir}`);
 

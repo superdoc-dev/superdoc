@@ -34,6 +34,7 @@ const mockedDeps = vi.hoisted(() => ({
   applyDirectMutationMeta: vi.fn(),
   applyTrackedMutationMeta: vi.fn(),
   mapBlockNodeType: vi.fn(),
+  calculateResolvedParagraphProperties: vi.fn((_editor: Editor, node: any) => node?.attrs?.paragraphProperties ?? {}),
 }));
 
 vi.mock('../helpers/index-cache.js', () => ({
@@ -71,6 +72,10 @@ vi.mock('../helpers/node-address-resolver.js', () => ({
     candidate.nodeType === 'tableCell',
 }));
 
+vi.mock('../../extensions/paragraph/resolvedPropertiesCache.js', () => ({
+  calculateResolvedParagraphProperties: mockedDeps.calculateResolvedParagraphProperties,
+}));
+
 // Register built-in executors once
 beforeAll(() => {
   registerBuiltInExecutors();
@@ -81,6 +86,9 @@ beforeEach(() => {
   mockedDeps.getRevision.mockReturnValue('0');
   mockedDeps.incrementRevision.mockReturnValue('1');
   mockedDeps.mapBlockNodeType.mockReturnValue(undefined);
+  mockedDeps.calculateResolvedParagraphProperties.mockImplementation((_editor: Editor, node: any) => {
+    return node?.attrs?.paragraphProperties ?? {};
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -3014,6 +3022,107 @@ describe('executeStyleApply: collapsed-range no-op guard', () => {
 
     expect(result).toEqual({ changed: false });
     expect(tr.addMark).not.toHaveBeenCalled();
+  });
+
+  it('mirrors left/right alignment for RTL paragraphs when applying format.alignment', () => {
+    const tr = {
+      setNodeMarkup: vi.fn(),
+      doc: {
+        nodesBetween: vi.fn((from: number, to: number, callback: (node: any, pos: number) => void) => {
+          callback(
+            {
+              isTextblock: true,
+              attrs: {
+                paragraphProperties: {
+                  rightToLeft: true,
+                  justification: 'left',
+                },
+              },
+              nodeSize: 8,
+            },
+            5,
+          );
+        }),
+      },
+    } as any;
+
+    const editor = {} as Editor;
+    const target = makeTarget({
+      op: 'style.apply' as any,
+      absFrom: 6,
+      absTo: 10,
+    }) as any;
+    const step: StyleApplyStep = {
+      op: 'style.apply',
+      id: 'step-rtl-align',
+      ref: 'test-ref',
+      args: { alignment: 'left' as any },
+    };
+
+    const result = executeStyleApply(editor, tr, target, step, { map: (pos: number) => pos } as any);
+
+    expect(result).toEqual({ changed: true });
+    expect(tr.setNodeMarkup).toHaveBeenCalledWith(
+      5,
+      undefined,
+      expect.objectContaining({
+        paragraphProperties: expect.objectContaining({
+          rightToLeft: true,
+          justification: 'right',
+        }),
+      }),
+    );
+  });
+
+  it('uses resolved RTL from style cascade when applying format.alignment', () => {
+    mockedDeps.calculateResolvedParagraphProperties.mockReturnValueOnce({ rightToLeft: true });
+    const tr = {
+      setNodeMarkup: vi.fn(),
+      doc: {
+        resolve: vi.fn((pos: number) => ({ pos })),
+        nodesBetween: vi.fn((from: number, to: number, callback: (node: any, pos: number) => void) => {
+          callback(
+            {
+              isTextblock: true,
+              attrs: {
+                paragraphProperties: {
+                  rightToLeft: false,
+                  justification: 'left',
+                },
+              },
+              nodeSize: 8,
+            },
+            5,
+          );
+        }),
+      },
+    } as any;
+
+    const editor = {} as Editor;
+    const target = makeTarget({
+      op: 'style.apply' as any,
+      absFrom: 6,
+      absTo: 10,
+    }) as any;
+    const step: StyleApplyStep = {
+      op: 'style.apply',
+      id: 'step-rtl-align-resolved',
+      ref: 'test-ref',
+      args: { alignment: 'left' as any },
+    };
+
+    const result = executeStyleApply(editor, tr, target, step, { map: (pos: number) => pos } as any);
+
+    expect(result).toEqual({ changed: true });
+    expect(tr.setNodeMarkup).toHaveBeenCalledWith(
+      5,
+      undefined,
+      expect.objectContaining({
+        paragraphProperties: expect.objectContaining({
+          justification: 'right',
+        }),
+      }),
+    );
   });
 });
 

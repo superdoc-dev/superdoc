@@ -17,6 +17,7 @@ import { DocumentApiAdapterError } from '../errors.js';
 import { BODY_STORY_KEY, buildStoryKey } from '../story-runtime/story-key.js';
 import { resolveLiveStorySessionRuntime } from '../story-runtime/live-story-session-runtime-registry.js';
 import { enumerateEffectiveNoteEntries } from './note-entry-lookup.js';
+import { pmPositionToTextOffset } from './text-offset-resolver.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -371,7 +372,12 @@ function nodePositionToPosition(doc: ProseMirrorNode, pos: number): Position {
     const node = resolved.node(depth);
     const blockId = node.attrs?.sdBlockId as string | undefined;
     if (blockId) {
-      return { blockId, offset: pos - resolved.start(depth) };
+      // AIDEV-NOTE: Read-side offsets must match the write-side model
+      // owned by `pmPositionToTextOffset` (text-offset-resolver.ts).
+      // Raw PM arithmetic (`pos - resolved.start(depth)`) counts run
+      // and other inline wrapper tokens that the flattened model skips.
+      const blockPos = resolved.start(depth) - 1;
+      return { blockId, offset: pmPositionToTextOffset(node, blockPos, pos) };
     }
   }
   return { blockId: '', offset: pos };

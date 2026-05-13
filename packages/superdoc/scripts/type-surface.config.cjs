@@ -44,9 +44,12 @@
 
 const requiredEntryPoints = [
   'superdoc/src/index.d.ts',
+  'superdoc/src/index.d.cts',
   'superdoc/src/super-editor.d.ts',
+  'superdoc/src/super-editor.d.cts',
   'super-editor/src/index.d.ts',
   'super-editor/src/types.d.ts',
+  'super-editor/src/types.d.cts',
 ];
 
 /**

@@ -1,0 +1,167 @@
+---
+title: Content controls
+sidebarTitle: Content controls
+description: Attach stable, Word-compatible identity to regions of a document and update them programmatically.
+keywords: "content controls, SDT, structured document tags, smart fields, reusable sections, template fields, document automation"
+---
+
+Content controls are Word's native primitive for **stable, identity-bearing regions** inside a document. They survive Word round-trips, carry app-defined metadata in a `tag` string, and can be discovered, updated, locked, or replaced from any surface that drives SuperDoc: the browser editor, the Node SDK, the CLI, an MCP tool, an AI agent.
+
+In OOXML they are `w:sdt` elements (structured document tags). SuperDoc exposes the full surface under `editor.doc.contentControls.*` and `editor.doc.create.contentControl`.
+
+## Two patterns to start
+
+### Smart fields: one value, every occurrence
+
+Wrap every occurrence of a template variable in an inline text content control sharing the same `tag`. Select by tag, then push the same value to each matching control.
+
+```ts
+// Wrap once, at template-authoring time.
+editor.doc.create.contentControl({
+  kind: 'inline',
+  controlType: 'text',
+  at: range,
+  tag: 'customer',
+  alias: 'Customer',
+  lockMode: 'unlocked',
+});
+
+// Push a new value. Every occurrence with tag === 'customer' updates.
+const { items } = editor.doc.contentControls.selectByTag({ tag: 'customer' });
+for (const { target } of items) {
+  editor.doc.contentControls.text.setValue({ target, value: 'Acme Therapeutics' });
+}
+```
+
+Smallest copy-pasteable form: [`examples/document-api/content-controls/tagged-inline-text`](https://github.com/superdoc-dev/superdoc/tree/main/examples/document-api/content-controls/tagged-inline-text).
+
+### Reusable sections: tagged blocks that know their version
+
+Encode `{ sectionId, version }` in the `tag` of a block content control. The app reads the live version from `contentControls.list` and offers an in-place update when the document falls behind the section library.
+
+```ts
+// Wrap a section paragraph as a block content control with a structured tag.
+editor.doc.create.contentControl({
+  kind: 'block',
+  controlType: 'text',
+  at: range,
+  tag: JSON.stringify({ kind: 'reusableSection', sectionId: 'limitation-liability', version: 'v1' }),
+  alias: 'Limitation of liability (v1)',
+  lockMode: 'unlocked',
+});
+
+// On reopen: list sections, parse their tags, compare versions.
+const { items } = editor.doc.contentControls.list({});
+for (const control of items) {
+  const meta = parseTag(control.properties?.tag); // your helper
+  if (meta?.kind === 'reusableSection' && meta.version !== latestVersionFromLibrary(meta.sectionId)) {
+    // Swap content, bump version in tag.
+    editor.doc.contentControls.replaceContent({ target: control.target, content: newBody, format: 'text' });
+    editor.doc.contentControls.patch({
+      target: control.target,
+      tag: JSON.stringify({ ...meta, version: 'v2' }),
+      alias: 'Limitation of liability (v2)',
+    });
+  }
+}
+```
+
+Composed runtime: [`demos/contract-templates`](https://github.com/superdoc-dev/superdoc/tree/main/demos/contract-templates).
+
+## Why `tag`, not `nodeId`
+
+Two channels of identity exist on a content control:
+
+| Channel | Source | Stable across loads | Stable through Word edits |
+|---|---|---|---|
+| `nodeId` | SuperDoc-assigned at parse time | Best-effort | No |
+| `tag` | App-defined, written to OOXML `<w:tag w:val="...">` | Yes | Yes (Word preserves the SDT and its tag) |
+
+Use `nodeId` for in-session targeting. Use `tag` for durable identity that survives DOCX round-trips, including documents edited in Word and reopened. JSON-encode the `tag` when you need to carry structured metadata (kind, version, owner, group).
+
+## Cross-surface: same operations everywhere
+
+Document API content controls are not editor-specific. The same operation IDs are available on every surface that drives SuperDoc.
+
+| Surface | Binding |
+|---|---|
+| Browser editor | `editor.doc.contentControls.*` |
+| Node SDK | bound document handle methods |
+| CLI | `superdoc` commands |
+| MCP / AI tools | tool wrappers around the same operation IDs |
+
+A field updated by your backend job, a clause swapped by an agent, and a value typed by a user in the editor all hit the same engine.
+
+## When to use Template Builder vs Document API
+
+Two valid paths. Both build on Word content controls.
+
+| Use [Template Builder](/solutions/template-builder/introduction) when | Use Document API content controls when |
+|---|---|
+| You're building in React and want a packaged authoring component | You're on vanilla JS, Vue, Angular, or any non-React stack |
+| You want the `{{` trigger menu, field sidebar, linked field groups, and DOCX export wired up out of the box | You need a custom UX (your own field menu, your own sidebar) |
+| Owner/signer field types and inline custom field creation match your workflow | You're operating headless: server-side jobs, AI agents, CLI scripts |
+| You want a shorter path to a working template authoring UI | You need runtime updates against existing tagged regions (smart fields, version-aware section swaps) |
+
+The two paths are not mutually exclusive. A common pattern is Template Builder for authoring, Document API for runtime updates on the authored document.
+
+## Operation reference at a glance
+
+| Concept | Operation |
+|---|---|
+| Create a control around a range | `editor.doc.create.contentControl` |
+| Wrap an existing range | `editor.doc.contentControls.wrap` |
+| Find by tag | `editor.doc.contentControls.selectByTag` |
+| Find by alias | `editor.doc.contentControls.selectByTitle` |
+| List all controls | `editor.doc.contentControls.list` |
+| Inspect one | `editor.doc.contentControls.get` |
+| Update text value | `editor.doc.contentControls.text.setValue` |
+| Replace whole content | `editor.doc.contentControls.replaceContent` |
+| Patch metadata (tag, alias, appearance) | `editor.doc.contentControls.patch` |
+| Set lock mode | `editor.doc.contentControls.setLockMode` |
+| Delete (with content) | `editor.doc.contentControls.delete` |
+| Unwrap (keep content) | `editor.doc.contentControls.unwrap` |
+| Read `sdtPr` directly | `editor.doc.contentControls.getRawProperties` |
+| Edit `sdtPr` directly | `editor.doc.contentControls.patchRawProperties` |
+
+Typed sub-APIs exist for `text.*`, `date.*`, `checkbox.*`, `choiceList.*` (combo/dropdown), `repeatingSection.*`, and `group.*`. See the [reference index](/document-api/reference/content-controls/index) for the full catalog.
+
+## Lock modes
+
+Set `lockMode` when you create a control to govern which changes are allowed.
+
+| Mode | Behavior |
+|---|---|
+| `unlocked` | Content and properties can be updated through the Document API. |
+| `sdtLocked` | The wrapper is preserved through user edits. |
+| `contentLocked` | The content can't be modified through the editor surface. |
+| `sdtContentLocked` | Both wrapper and content are preserved. |
+
+For controls your app drives with `text.setValue`, `replaceContent`, or `patch`, use `lockMode: 'unlocked'`.
+
+## Data binding
+
+Content controls can carry an OOXML `<w:dataBinding>` link to a custom XML data part. Read and write the binding metadata with `contentControls.getBinding`, `setBinding`, and `clearBinding`. The binding survives DOCX round-trips.
+
+For runtime synchronization with backing data, drive the control directly with `text.setValue` or `replaceContent`.
+
+## Replacing content
+
+`contentControls.replaceContent` accepts plain text. For richer fragments (paragraphs with formatting, tables, lists), use `doc.insert` to place the content, then `create.contentControl({ at: range, ... })` to wrap the inserted range with a tag.
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Tagged inline text example" icon="text-cursor-input" href="https://github.com/superdoc-dev/superdoc/tree/main/examples/document-api/content-controls/tagged-inline-text">
+    The smallest content-control workflow. `create.contentControl` + `selectByTag` + `text.setValue`.
+  </Card>
+  <Card title="Contract templates demo" icon="file-text" href="https://github.com/superdoc-dev/superdoc/tree/main/demos/contract-templates">
+    Smart fields and versioned sections composed into one runtime app.
+  </Card>
+  <Card title="Template Builder" icon="layout-template" href="/solutions/template-builder/introduction">
+    Ready-made React authoring component for content-control templates.
+  </Card>
+  <Card title="Reference: all operations" icon="code" href="/document-api/reference/content-controls/index">
+    Every `contentControls.*` operation with input, output, and failure codes.
+  </Card>
+</CardGroup>

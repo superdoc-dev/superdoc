@@ -51,9 +51,16 @@ const decode = (params) => {
   let commentSchema = getCommentSchema(type, commentIndex);
 
   if (type === 'commentRangeEnd') {
+    // SD-2910: Word marks comment-anchor runs with w:rStyle="CommentReference" so the
+    // marker renders with the expected appearance. The importer drops the source w:rPr
+    // (commentReference is consumed by the comments-list import), so we synthesize the
+    // canonical rStyle here on every round-trip.
     const commentReference = {
       name: 'w:r',
-      elements: [{ name: 'w:commentReference', attributes: { 'w:id': String(commentIndex) } }],
+      elements: [
+        { name: 'w:rPr', elements: [{ name: 'w:rStyle', attributes: { 'w:val': 'CommentReference' } }] },
+        { name: 'w:commentReference', attributes: { 'w:id': String(commentIndex) } },
+      ],
     };
     commentSchema = [commentSchema, commentReference];
   }

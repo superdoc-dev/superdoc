@@ -130,6 +130,16 @@
     "ci": true
   },
   {
+    "id": "document-api-content-controls-tagged-inline-text",
+    "title": "Content controls: tagged inline text",
+    "category": "Document API",
+    "surface": "Content controls",
+    "sourceRepo": "superdoc-dev/superdoc",
+    "sourcePath": "examples/document-api/content-controls/tagged-inline-text",
+    "docs": "https://docs.superdoc.dev/document-api/features/content-controls",
+    "ci": false
+  },
+  {
     "id": "editor-theming",
     "title": "Theming",
     "category": "Editor",

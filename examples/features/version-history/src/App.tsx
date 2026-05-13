@@ -86,10 +86,13 @@ export default function App() {
   const [versions, setVersions] = useState<Version[]>([]);
   const [selectedVersion, setSelectedVersion] = useState<Version | null>(null);
   const [isReady, setIsReady] = useState(false);
-  const [currentUser] = useState<CollaboratorUser>(() => ({
-    name: generateUserId(),
-    email: 'user@example.com',
-  }));
+  const [currentUser] = useState<CollaboratorUser>(() => {
+    const name = generateUserId();
+    return {
+      name,
+      email: `${name.toLowerCase().replace(/\s+/g, '')}@example.com`,
+    };
+  });
 
   // ---------------------------------------------------------------------------
   // Initialization
@@ -528,6 +531,5 @@ const styles: Record<string, React.CSSProperties> = {
   },
   previewEditor: {
     minHeight: '400px',
-    pointerEvents: 'none',
   },
 };

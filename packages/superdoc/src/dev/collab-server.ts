@@ -9,7 +9,7 @@ import {
 } from '@superdoc-dev/superdoc-yjs-collaboration';
 import { Doc as YDoc, encodeStateAsUpdate } from 'yjs';
 
-const PORT = 8081;
+const PORT = 8082;
 const BASE_PATH = '/v1/collaboration';
 
 const collaboration = new CollaborationBuilder()

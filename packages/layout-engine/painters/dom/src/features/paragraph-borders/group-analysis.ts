@@ -8,7 +8,7 @@
  * @ooxml w:pPr/w:pBdr/w:between — between border for grouped paragraphs
  * @spec  ECMA-376 §17.3.1.24 (pBdr)
  */
-import type { ListItemFragment, ResolvedPaintItem, ResolvedFragmentItem } from '@superdoc/contracts';
+import type { ResolvedPaintItem, ResolvedFragmentItem } from '@superdoc/contracts';
 import { hashParagraphBorders } from '../../paragraph-hash-utils.js';
 
 /**
@@ -34,8 +34,8 @@ const isBetweenBorderNone = (borders: ResolvedFragmentItem['paragraphBorders']):
 };
 
 /**
- * Helper: check whether a resolved item is a ResolvedFragmentItem (para/list-item)
- * with pre-computed paragraph border data.
+ * Helper: check whether a resolved item is a ResolvedFragmentItem with
+ * pre-computed paragraph border data.
  */
 function isResolvedFragmentWithBorders(
   item: ResolvedPaintItem | undefined,
@@ -49,7 +49,7 @@ function isResolvedFragmentWithBorders(
  * Pre-computes per-fragment between-border rendering info for a page.
  *
  * Two fragments (i, i+1) form a border group pair when:
- * 1. Both are para or list-item (not table/image/drawing)
+ * 1. Both are para fragments (not table/image/drawing)
  * 2. Neither is a page-split continuation
  * 3. They represent different logical paragraphs
  * 4. Both have border definitions
@@ -79,7 +79,7 @@ export const computeBetweenBorderFlags = (
     const resolvedCur = resolvedItems[i];
     if (resolvedCur.kind !== 'fragment') continue;
     const frag = resolvedCur.fragment;
-    if (frag.kind !== 'para' && frag.kind !== 'list-item') continue;
+    if (frag.kind !== 'para') continue;
     if (frag.continuesOnNext) continue;
 
     if (!isResolvedFragmentWithBorders(resolvedCur)) continue;
@@ -88,16 +88,9 @@ export const computeBetweenBorderFlags = (
     const resolvedNext = resolvedItems[i + 1];
     if (resolvedNext.kind !== 'fragment') continue;
     const next = resolvedNext.fragment;
-    if (next.kind !== 'para' && next.kind !== 'list-item') continue;
+    if (next.kind !== 'para') continue;
     if (next.continuesFromPrev) continue;
-    if (next.blockId === frag.blockId && next.kind === 'para') continue;
-    if (
-      next.blockId === frag.blockId &&
-      next.kind === 'list-item' &&
-      frag.kind === 'list-item' &&
-      (next as ListItemFragment).itemId === (frag as ListItemFragment).itemId
-    )
-      continue;
+    if (next.blockId === frag.blockId) continue;
 
     if (!isResolvedFragmentWithBorders(resolvedNext)) continue;
     const nextBorders = resolvedNext.paragraphBorders;

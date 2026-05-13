@@ -19,9 +19,6 @@ import type {
   ImageRun,
   Line,
   LineSegment,
-  ListBlock,
-  ListItemFragment,
-  ListMeasure,
   PageMargins,
   ParaFragment,
   ParagraphAttrs,
@@ -890,7 +887,6 @@ function collectLineTabsForSnapshot(lineEl: HTMLElement): PaintSnapshotTabStyle[
   return tabs;
 }
 
-const LIST_MARKER_GAP = 8;
 /**
  * Default page height in pixels (11 inches at 96 DPI).
  * Used as a fallback when page size information is not available for ruler rendering.
@@ -3108,15 +3104,6 @@ export class DomPainter {
         resolvedItem as ResolvedFragmentItem | undefined,
       );
     }
-    if (fragment.kind === 'list-item') {
-      return this.renderListItemFragment(
-        fragment,
-        context,
-        sdtBoundary,
-        betweenInfo,
-        resolvedItem as ResolvedFragmentItem | undefined,
-      );
-    }
     if (fragment.kind === 'image') {
       return this.renderImageFragment(fragment, context, resolvedItem as ResolvedImageItem | undefined);
     }
@@ -3705,167 +3692,6 @@ export class DomPainter {
     }
 
     return dropCapEl;
-  }
-
-  private renderListItemFragment(
-    fragment: ListItemFragment,
-    context: FragmentRenderContext,
-    sdtBoundary?: SdtBoundaryOptions,
-    betweenInfo?: BetweenBorderInfo,
-    resolvedItem?: ResolvedFragmentItem,
-  ): HTMLElement {
-    try {
-      if (!this.doc) {
-        throw new Error('DomPainter: document is not available');
-      }
-
-      // Pre-extracted block/measure from the resolved item.
-      if (resolvedItem?.block?.kind !== 'list' || resolvedItem?.measure?.kind !== 'list') {
-        throw new Error(`DomPainter: missing resolved list block/measure for fragment ${fragment.blockId}`);
-      }
-      const block = resolvedItem.block as ListBlock;
-      const measure = resolvedItem.measure as ListMeasure;
-      const item = block.items.find((entry) => entry.id === fragment.itemId);
-      const itemMeasure = measure.items.find((entry) => entry.itemId === fragment.itemId);
-      if (!item || !itemMeasure) {
-        throw new Error(`DomPainter: missing list item ${fragment.itemId}`);
-      }
-
-      // Prefer resolved item metadata over legacy fragment reads
-      const listContinuesFromPrev = resolvedItem?.continuesFromPrev;
-      const listContinuesOnNext = resolvedItem?.continuesOnNext;
-      // Default to 0 (no marker gutter) when absent — used directly in Math.max below.
-      const listMarkerWidth = resolvedItem?.markerWidth ?? 0;
-
-      const fragmentEl = this.doc.createElement('div');
-      fragmentEl.classList.add(CLASS_NAMES.fragment, `${CLASS_NAMES.fragment}-list-item`);
-      applyStyles(fragmentEl, fragmentStyles);
-      if (resolvedItem) {
-        this.applyResolvedListItemWrapperFrame(fragmentEl, fragment, resolvedItem, context.section, context.story);
-      } else {
-        fragmentEl.style.left = `${fragment.x - fragment.markerWidth}px`;
-        fragmentEl.style.top = `${fragment.y}px`;
-        fragmentEl.style.width = `${fragment.markerWidth + fragment.width}px`;
-        fragmentEl.dataset.blockId = fragment.blockId;
-        applySourceAnchorDataset(fragmentEl, fragment.sourceAnchor);
-        applyLayoutIdentityDataset(fragmentEl, resolveOrBuildFragmentIdentity(fragment, context.story));
-      }
-      fragmentEl.dataset.itemId = fragment.itemId;
-
-      const paragraphMetadata = item.paragraph.attrs?.sdt;
-      this.applySdtDataset(fragmentEl, paragraphMetadata);
-
-      // Apply SDT container styling (document sections, structured content blocks)
-      applySdtContainerStyling(
-        this.doc,
-        fragmentEl,
-        paragraphMetadata,
-        item.paragraph.attrs?.containerSdt,
-        sdtBoundary,
-      );
-
-      if (listContinuesFromPrev) {
-        fragmentEl.dataset.continuesFromPrev = 'true';
-      }
-      if (listContinuesOnNext) {
-        fragmentEl.dataset.continuesOnNext = 'true';
-      }
-
-      const markerEl = this.doc.createElement('span');
-      markerEl.classList.add(DOM_CLASS_NAMES.LIST_MARKER);
-      applySourceAnchorDataset(markerEl, item.marker.sourceAnchor ?? item.sourceAnchor ?? resolvedItem?.sourceAnchor);
-
-      // Track B: Use marker styling from wordLayout if available
-      const wordLayout: MinimalWordLayout | undefined = item.paragraph.attrs?.wordLayout as
-        | MinimalWordLayout
-        | undefined;
-      const marker = wordLayout?.marker;
-      if (marker) {
-        markerEl.textContent = marker.markerText ?? null;
-        markerEl.style.display = 'inline-block';
-        markerEl.style.width = `${Math.max(0, listMarkerWidth - LIST_MARKER_GAP)}px`;
-        markerEl.style.paddingRight = `${LIST_MARKER_GAP}px`;
-        markerEl.style.textAlign = marker.justification ?? 'left';
-
-        // Apply marker run styling with font fallback chain
-        markerEl.style.fontFamily = toCssFontFamily(marker.run.fontFamily) ?? marker.run.fontFamily;
-        markerEl.style.fontSize = `${marker.run.fontSize}px`;
-        if (marker.run.bold) markerEl.style.fontWeight = 'bold';
-        if (marker.run.italic) markerEl.style.fontStyle = 'italic';
-        if (marker.run.color) markerEl.style.color = marker.run.color;
-        if (marker.run.letterSpacing) markerEl.style.letterSpacing = `${marker.run.letterSpacing}px`;
-      } else {
-        // Fallback: legacy behavior
-        markerEl.textContent = item.marker.text;
-        markerEl.style.display = 'inline-block';
-        markerEl.style.width = `${Math.max(0, listMarkerWidth - LIST_MARKER_GAP)}px`;
-        markerEl.style.paddingRight = `${LIST_MARKER_GAP}px`;
-        if (item.marker.align) {
-          markerEl.style.textAlign = item.marker.align;
-        }
-      }
-      fragmentEl.appendChild(markerEl);
-
-      const contentEl = this.doc.createElement('div');
-      contentEl.classList.add('superdoc-list-content');
-      this.applySdtDataset(contentEl, paragraphMetadata);
-      contentEl.style.display = 'inline-block';
-      contentEl.style.position = 'relative';
-      contentEl.style.width = `${fragment.width}px`;
-      const lines = itemMeasure.paragraph.lines.slice(fragment.fromLine, fragment.toLine);
-      // Track B: preserve indent for wordLayout-based lists to show hierarchy
-      const contentAttrs = wordLayout ? item.paragraph.attrs : stripListIndent(item.paragraph.attrs);
-      applyParagraphBlockStyles(contentEl, contentAttrs);
-      const { shadingLayer, borderLayer } = createParagraphDecorationLayers(
-        this.doc,
-        fragment.width,
-        contentAttrs,
-        betweenInfo,
-      );
-      if (shadingLayer) {
-        contentEl.appendChild(shadingLayer);
-      }
-      if (borderLayer) {
-        contentEl.appendChild(borderLayer);
-      }
-      stampBetweenBorderDataset(fragmentEl, betweenInfo);
-      // INTENTIONAL DIVERGENCE: Force list content to left alignment
-      // Microsoft Word DOES justify list paragraphs when alignment is 'justify',
-      // but we intentionally keep lists left-aligned to match user expectations
-      // and current behavior. This is a documented design decision, not a bug.
-      // Applied AFTER applyParagraphBlockStyles (which may set justify from paragraph properties).
-      contentEl.style.textAlign = 'left';
-      // Override alignment to left for list content rendering
-      const paraForList: ParagraphBlock = {
-        ...item.paragraph,
-        attrs: { ...(item.paragraph.attrs || {}), alignment: 'left' },
-      };
-      const expandedRunsForList = expandRunsForInlineNewlines(paraForList.runs);
-      lines.forEach((line, idx) => {
-        const lineEl = this.renderLine(
-          paraForList,
-          line,
-          context,
-          fragment.width,
-          fragment.fromLine + idx,
-          true,
-          expandedRunsForList,
-        );
-        this.capturePaintSnapshotLine(lineEl, context, {
-          inTableFragment: false,
-          inTableParagraph: false,
-          wrapperEl: fragmentEl,
-          sourceAnchor: resolvedItem?.sourceAnchor,
-        });
-        contentEl.appendChild(lineEl);
-      });
-      fragmentEl.appendChild(contentEl);
-
-      return fragmentEl;
-    } catch (error) {
-      console.error('[DomPainter] List item fragment rendering failed:', { fragment, error });
-      return this.createErrorPlaceholder(fragment.blockId, error);
-    }
   }
 
   private renderImageFragment(
@@ -7119,11 +6945,6 @@ export class DomPainter {
     const fragmentItem = resolvedItem?.kind === 'fragment' ? resolvedItem : undefined;
     const story = resolveSectionStory(section);
 
-    if (fragment.kind === 'list-item' && fragmentItem) {
-      this.applyResolvedListItemWrapperFrame(el, fragment, fragmentItem as ResolvedFragmentItem, section, story);
-      return;
-    }
-
     if (fragmentItem) {
       this.applyResolvedFragmentFrame(el, fragmentItem, fragment, section, story);
     } else {
@@ -7338,33 +7159,11 @@ export class DomPainter {
   }
 
   /**
-   * Applies the resolved wrapper frame for a list-item fragment.
-   *
-   * List-item wrappers intentionally extend into the marker gutter. The resolved
-   * fragment item stores the paragraph content box, so the marker-width expansion
-   * must be applied consistently on both initial render and incremental updates.
-   */
-  private applyResolvedListItemWrapperFrame(
-    el: HTMLElement,
-    fragment: ListItemFragment,
-    item: ResolvedFragmentItem,
-    section?: 'body' | 'header' | 'footer',
-    story?: LayoutStoryLocator,
-  ): void {
-    this.applyResolvedFragmentFrame(el, item, fragment, section, story);
-    // Default to 0 (no marker gutter expansion) when markerWidth is absent — the resolve
-    // stage populates this for list items that have a measured marker (SD-2957).
-    const mw = item.markerWidth ?? 0;
-    el.style.left = `${item.x - mw}px`;
-    el.style.width = `${item.width + mw}px`;
-  }
-
-  /**
    * Estimates the height of a fragment when explicit height is not available.
    *
    * This method provides fallback height calculations for footer bottom-alignment
-   * by consulting measure data for paragraphs and list items, or using the
-   * fragment's height property for tables, images, and drawings.
+   * from resolved layout data, or using the fragment's height property for
+   * tables, images, and drawings.
    *
    * @param fragment - The fragment to estimate height for
    * @returns Estimated height in pixels, or 0 if height cannot be determined
@@ -7655,29 +7454,28 @@ const computeSdtBoundaries = (
 // computeBetweenBorderFlags — moved to features/paragraph-borders/
 
 const fragmentKey = (fragment: Fragment): string => {
-  if (fragment.kind === 'para') {
-    return `para:${fragment.blockId}:${fragment.fromLine}:${fragment.toLine}`;
+  switch (fragment.kind) {
+    case 'para':
+      return `para:${fragment.blockId}:${fragment.fromLine}:${fragment.toLine}`;
+    case 'list-item':
+      throw new Error(`DomPainter: unsupported fragment kind ${fragment.kind}`);
+    case 'image':
+      return `image:${fragment.blockId}:${fragment.x}:${fragment.y}`;
+    case 'drawing':
+      return `drawing:${fragment.blockId}:${fragment.x}:${fragment.y}`;
+    case 'table': {
+      // Include row range and partial row info to uniquely identify table fragments
+      // This is critical for mid-row splitting where multiple fragments can exist for the same table
+      const partialKey = fragment.partialRow
+        ? `:${fragment.partialRow.fromLineByCell.join(',')}-${fragment.partialRow.toLineByCell.join(',')}`
+        : '';
+      return `table:${fragment.blockId}:${fragment.fromRow}:${fragment.toRow}${partialKey}`;
+    }
+    default: {
+      const _exhaustiveCheck: never = fragment;
+      return _exhaustiveCheck;
+    }
   }
-  if (fragment.kind === 'list-item') {
-    return `list-item:${fragment.blockId}:${fragment.itemId}:${fragment.fromLine}:${fragment.toLine}`;
-  }
-  if (fragment.kind === 'image') {
-    return `image:${fragment.blockId}:${fragment.x}:${fragment.y}`;
-  }
-  if (fragment.kind === 'drawing') {
-    return `drawing:${fragment.blockId}:${fragment.x}:${fragment.y}`;
-  }
-  if (fragment.kind === 'table') {
-    // Include row range and partial row info to uniquely identify table fragments
-    // This is critical for mid-row splitting where multiple fragments can exist for the same table
-    const partialKey = fragment.partialRow
-      ? `:${fragment.partialRow.fromLineByCell.join(',')}-${fragment.partialRow.toLineByCell.join(',')}`
-      : '';
-    return `table:${fragment.blockId}:${fragment.fromRow}:${fragment.toRow}${partialKey}`;
-  }
-  // Exhaustive check - all fragment kinds should be handled above
-  const _exhaustiveCheck: never = fragment;
-  return _exhaustiveCheck;
 };
 
 const hasFragmentGeometryChanged = (previous: Fragment, next: Fragment): boolean =>
@@ -7932,10 +7730,6 @@ const deriveBlockVersion = (block: FlowBlock): string => {
     // Combine marker version, runs version, paragraph attrs version, and SDT version
     const parts = [markerVersion, runsVersion, paragraphAttrsVersion, sdtVersion].filter(Boolean);
     return parts.join('|');
-  }
-
-  if (block.kind === 'list') {
-    return block.items.map((item) => `${item.id}:${item.marker.text}:${deriveBlockVersion(item.paragraph)}`).join('|');
   }
 
   if (block.kind === 'image') {
@@ -8365,19 +8159,6 @@ const applyParagraphBlockStyles = (element: HTMLElement, attrs?: ParagraphAttrs)
 
 // getParagraphBorderBox, createParagraphDecorationLayers, applyParagraphBorderStyles,
 // setBorderSideStyle, applyParagraphShadingStyles — moved to features/paragraph-borders/
-
-const stripListIndent = (attrs?: ParagraphAttrs): ParagraphAttrs | undefined => {
-  if (!attrs?.indent || attrs.indent.left == null) {
-    return attrs;
-  }
-  const nextIndent = { ...attrs.indent };
-  delete nextIndent.left;
-
-  return {
-    ...attrs,
-    indent: Object.keys(nextIndent).length > 0 ? nextIndent : undefined,
-  };
-};
 
 // applyParagraphShadingStyles — moved to features/paragraph-borders/border-layer.ts
 

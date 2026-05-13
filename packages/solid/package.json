@@ -1,0 +1,77 @@
+{
+  "name": "@superdoc-dev/solid",
+  "version": "1.3.0",
+  "description": "Official Solid wrapper for the SuperDoc document editor",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "require": "./dist/index.cjs",
+      "import": "./dist/index.js"
+    },
+    "./style.css": {
+      "import": "./style.css",
+      "require": "./style.css"
+    }
+  },
+  "scripts": {
+    "build": "vite build",
+    "dev": "vite build --watch",
+    "test": "vitest run",
+    "pretype-check": "node ../../apps/cli/scripts/ensure-superdoc-build.js --types",
+    "type-check": "tsc --noEmit",
+    "lint": "eslint src --ext .ts,.tsx",
+    "prepublishOnly": "pnpm run build"
+  },
+  "keywords": [
+    "superdoc",
+    "solid",
+    "solidjs",
+    "solid-js",
+    "document",
+    "editor",
+    "docx",
+    "word"
+  ],
+  "license": "AGPL-3.0",
+  "dependencies": {
+    "superdoc": ">=1.0.0"
+  },
+  "peerDependencies": {
+    "solid-js": ">=1.8.0"
+  },
+  "devDependencies": {
+    "@solidjs/testing-library": "catalog:",
+    "@types/node": "catalog:",
+    "@typescript-eslint/eslint-plugin": "catalog:",
+    "@typescript-eslint/parser": "catalog:",
+    "eslint": "catalog:",
+    "happy-dom": "catalog:",
+    "solid-js": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vite-plugin-dts": "catalog:",
+    "vite-plugin-solid": "catalog:",
+    "vitest": "catalog:"
+  },
+  "files": [
+    "dist",
+    "style.css",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/superdoc-dev/superdoc.git",
+    "directory": "packages/solid"
+  },
+  "bugs": {
+    "url": "https://github.com/superdoc-dev/superdoc/issues"
+  },
+  "homepage": "https://github.com/superdoc-dev/superdoc/tree/main/packages/solid#readme"
+}

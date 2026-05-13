@@ -32,6 +32,7 @@ catalog:
   '@semantic-release/changelog': ^6.0.3
   '@semantic-release/exec': ^6.0.3
   '@semantic-release/git': ^10.0.1
+  '@solidjs/testing-library': ^0.8.10
   '@testing-library/jest-dom': ^6.9.1
   '@testing-library/react': ^16.3.0
   '@testing-library/user-event': ^14.6.1
@@ -111,6 +112,7 @@ catalog:
   semantic-release-commit-filter: ^1.0.2
   semantic-release-linear-app: ^0.7.1
   sirv: ^3.0.2
+  solid-js: 1.9.12
   tippy.js: ^6.3.7
   tsup: ^8.5.1
   tsx: ^4.20.6
@@ -123,6 +125,7 @@ catalog:
   vite: ^7.2.7
   vite-plugin-dts: ~4.5.4
   vite-plugin-node-polyfills: ^0.25.0
+  vite-plugin-solid: 2.11.9
   vitest: ^3.2.4
   vue: 3.5.32
   xml-js: 1.6.11

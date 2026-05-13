@@ -1,8 +1,15 @@
 // @ts-check
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { Schema } from 'prosemirror-model';
 import { EditorState, TextSelection } from 'prosemirror-state';
 import { setParagraphDirection, clearParagraphDirection } from './paragraphDirection.js';
+import { resolveHypotheticalParagraphProperties } from '@extensions/paragraph/resolvedPropertiesCache.js';
+
+vi.mock('@extensions/paragraph/resolvedPropertiesCache.js', () => ({
+  // Default: style cascade has no RTL, so the resolver returns the inline
+  // props unchanged. Individual tests override for style-cascade RTL cases.
+  resolveHypotheticalParagraphProperties: vi.fn((_editor, _$pos, inline) => inline),
+}));
 
 const schema = new Schema({
   nodes: {
@@ -29,10 +36,12 @@ const createState = (paragraphAttrsList) => {
 };
 
 const runCommand = (command, state) => {
+  /** @type {import('prosemirror-state').Transaction | null} */
   let dispatchedTr = null;
   const dispatched = command({
+    editor: {},
     state,
-    dispatch: (tr) => {
+    dispatch: (/** @type {import('prosemirror-state').Transaction} */ tr) => {
       dispatchedTr = tr;
     },
   });
@@ -67,6 +76,18 @@ describe('setParagraphDirection', () => {
     const { dispatched, tr } = runCommand(setParagraphDirection({ direction: 'ltr' }), state);
     expect(dispatched).toBe(false);
     expect(tr).toBeNull();
+  });
+
+  it('writes rightToLeft=false on ltr when the style cascade still resolves rtl', () => {
+    // Style sets rightToLeft, paragraph has no inline override. Just deleting
+    // the (non-existent) inline prop would leave the resolved direction as RTL —
+    // clicking LTR would be a silent no-op. Explicit `false` is required to
+    // override the inherited style direction.
+    resolveHypotheticalParagraphProperties.mockReturnValueOnce({ rightToLeft: true });
+    const state = createState([{ paragraphProperties: {} }]);
+    const { dispatched, nextState } = runCommand(setParagraphDirection({ direction: 'ltr' }), state);
+    expect(dispatched).toBe(true);
+    expect(nextState.doc.firstChild.attrs.paragraphProperties.rightToLeft).toBe(false);
   });
 
   describe('alignmentPolicy: matchDirection', () => {

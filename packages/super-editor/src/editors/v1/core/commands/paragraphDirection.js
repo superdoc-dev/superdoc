@@ -1,3 +1,5 @@
+import { resolveHypotheticalParagraphProperties } from '@extensions/paragraph/resolvedPropertiesCache.js';
+
 /**
  * Set paragraph direction (LTR/RTL) on every paragraph in the current selection.
  * @category Command
@@ -15,16 +17,24 @@ export const setParagraphDirection = ({ direction, alignmentPolicy } = {}) => {
   // "execute by command name" pathway without a payload — a missing
   // direction must be a no-op, not a silent LTR write.
   if (direction !== 'ltr' && direction !== 'rtl') return () => false;
-  return walkParagraphs((pPr) => {
+  return walkParagraphs((pPr, { editor, $pos }) => {
     const next = { ...pPr };
-    // AIDEV-NOTE: LTR deletes the property rather than writing `false`.
-    // OOXML treats absent `<w:bidi/>` as LTR. Writing `rightToLeft: false`
-    // round-trips as `<w:bidi w:val="0"/>` on export — direct formatting
-    // that overrides any inherited style direction. Deleting keeps a
-    // vanilla paragraph indistinguishable from one that's been toggled
-    // RTL → LTR.
-    if (direction === 'rtl') next.rightToLeft = true;
-    else delete next.rightToLeft;
+    if (direction === 'rtl') {
+      next.rightToLeft = true;
+    } else {
+      // AIDEV-NOTE: LTR first tries to delete the inline override (so a
+      // vanilla paragraph round-trips without `<w:bidi w:val="0"/>`). But
+      // if the paragraph inherits `rightToLeft: true` from its style (or
+      // any other level of the OOXML cascade), deleting alone leaves the
+      // resolved direction as RTL — clicking LTR would be a silent no-op.
+      // Re-resolve the cascade against the would-be inline state; if RTL
+      // still wins, force an explicit `false` to override the style.
+      delete next.rightToLeft;
+      const resolved = resolveHypotheticalParagraphProperties(editor, $pos, next);
+      if (resolved?.rightToLeft === true) {
+        next.rightToLeft = false;
+      }
+    }
     if (alignmentPolicy === 'matchDirection') {
       const j = pPr.justification;
       if (j === 'left' && direction === 'rtl') next.justification = 'right';
@@ -50,7 +60,7 @@ export const clearParagraphDirection = () =>
   });
 
 function walkParagraphs(transform) {
-  return ({ state, dispatch }) => {
+  return ({ editor, state, dispatch }) => {
     const { from, to } = state.selection;
     const tr = state.tr;
     let touched = false;
@@ -59,7 +69,7 @@ function walkParagraphs(transform) {
       if (node.type.name !== 'paragraph') return true;
 
       const existing = node.attrs.paragraphProperties || {};
-      const updated = transform(existing);
+      const updated = transform(existing, { editor, node, $pos: state.doc.resolve(pos) });
 
       if (shallowEqual(existing, updated)) return false;
 

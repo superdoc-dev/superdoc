@@ -6,7 +6,7 @@ This is a demo: it composes multiple content-control patterns into a product wor
 
 ## What this shows
 
-The starting document is a Mutual NDA at `public/nda-template.docx` with eleven plain-text content controls already in place (five inline smart fields and six block clauses, each with a `w:tag` carrying a JSON payload). On boot, SuperDoc imports the DOCX, parses the SDTs, and the demo reads field values and clause versions straight from the parsed controls.
+The starting document is a Mutual NDA at `public/nda-template.docx` with thirteen plain-text content controls already in place: seven inline smart fields across five field keys (Receiving party and Purpose each appear twice — once in the header sentence and once nested inside the Permitted Use clause) plus six block clauses, each with a `w:tag` carrying a JSON payload. On boot, SuperDoc imports the DOCX, parses the SDTs, and the demo reads field values and clause versions straight from the parsed controls.
 
 Three flows of the same primitive, composed into one app:
 

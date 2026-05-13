@@ -1,0 +1,10 @@
+{
+  "name": "superdoc-collab-server",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "@hocuspocus/server": "^2.13.6"
+  }
+}

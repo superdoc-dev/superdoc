@@ -59,8 +59,8 @@ describe('ButtonGroup dropdownOptions selected class', () => {
 
 // PR #3226: ButtonGroup forwards a button item's static `argument` (set via
 // useToolbarItem({argument})) on click when no caller arg is passed. This is
-// how direction buttons get their {direction, alignmentPolicy} payload into
-// emit('command'). If this breaks, the buttons become silent no-ops.
+// how custom buttons carry fixed args like {direction, alignmentPolicy} into
+// emit('command'). If this breaks, such buttons become silent no-ops.
 describe('ButtonGroup button argument forwarding', () => {
   // `type` and `command` are plain (not refs) in useToolbarItem; the rest are refs.
   const createButtonItem = (argument) => ({

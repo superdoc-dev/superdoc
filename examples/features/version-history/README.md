@@ -1,76 +1,45 @@
 # Version History Demo
 
-A Google Docs-style version history demo using SuperDoc's tracked changes infrastructure.
+A proof-of-concept for Google Docs-style version history using SuperDoc's tracked changes.
 
-## Features
+## What This Demo Shows
 
-- **Real-time collaboration** - Multiple users can edit simultaneously via Yjs/Hocuspocus
-- **Hidden tracked changes** - Edits are tracked but not visually displayed during editing
-- **Manual version snapshots** - Click "Save Version" to capture the current state
-- **Version history sidebar** - Browse all saved versions with timestamps and contributors
-- **Version preview** - Click a version to view it with tracked changes visible as a diff
-- **Per-change attribution** - See who made each change in the version
+- **Real-time collaboration** - Multiple users edit simultaneously via Yjs/Hocuspocus
+- **Hidden tracked changes** - Edits are tracked but hidden in the main editor
+- **Manual version snapshots** - Click "Save Version" to capture the current state as DOCX
+- **Version preview** - View saved versions with tracked changes visible
+- **Revert to version** - Restore any previous version (syncs to all collaborators)
+
+## Current Limitations
+
+- **Client-side only** - Versions stored in memory, not persisted to backend
+- **Manual saves** - No automatic versioning
+- **TC-based history** - Shows tracked changes within a version, not a computed diff between versions
 
 ## How It Works
 
-1. **Editing**: Users edit in "suggesting" mode (tracked changes enabled) but changes are hidden via `enableTrackChangesShowFinal()`
-2. **Saving**: When "Save Version" is clicked:
-   - Current document state is captured (including tracked change marks)
-   - Tracked changes are extracted with author attribution
-   - All tracked changes are accepted (creating a clean baseline)
-   - A new version record is stored
-3. **Viewing**: Click a version in the sidebar to see it with tracked changes visible
+1. **Editing**: Users edit in "suggesting" mode with TC hidden (`mode: 'final'`)
+2. **Saving**: "Save Version" exports the document as DOCX (preserving TC marks), then accepts all changes
+3. **Viewing**: Click a version to preview it with TC marks visible
+4. **Reverting**: "Revert" parses the DOCX and replaces editor content (broadcasts via Yjs)
 
-## Running the Demo
+## Running Locally
 
 ```bash
-# From the example directory
 cd examples/features/version-history
-
-# Install dependencies
 pnpm install
-
-# Start both server and client
 pnpm dev
 ```
 
-This starts:
-- Hocuspocus collaboration server on `ws://localhost:1234`
+Starts:
+- Hocuspocus server on `ws://localhost:1234`
 - Vite dev server on `http://localhost:3000`
 
-## Architecture
+## Production Deployment
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    Version History Flow                      │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  User Edits (TC hidden)                                     │
-│         │                                                   │
-│         ▼                                                   │
-│  ┌─────────────┐     ┌──────────────────┐                   │
-│  │ "Save       │────▶│ Extract TCs with │                   │
-│  │  Version"   │     │ author info      │                   │
-│  └─────────────┘     └────────┬─────────┘                   │
-│                               │                             │
-│                               ▼                             │
-│  ┌─────────────────────────────────────────┐                │
-│  │ Store: { docJson, trackedChanges,       │                │
-│  │          timestamp, contributors }       │                │
-│  └────────────────────┬────────────────────┘                │
-│                       │                                     │
-│                       ▼                                     │
-│  ┌─────────────────────────────────────────┐                │
-│  │ Accept all TCs → Clean baseline         │                │
-│  └─────────────────────────────────────────┘                │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
-```
+See the deployed demo: https://superdoc-version-history.pages.dev
 
-## Future Enhancements
-
-- [ ] Automatic timed versioning (save every N minutes)
-- [ ] Backend persistence (store versions on server)
-- [ ] Version restore functionality
-- [ ] Compare arbitrary versions (not just adjacent)
-- [ ] Diff visualization between non-adjacent versions
+For production use, you would:
+- Deploy the Hocuspocus server (e.g., Railway)
+- Store versions on a backend (S3, database, etc.)
+- Add automatic versioning triggers

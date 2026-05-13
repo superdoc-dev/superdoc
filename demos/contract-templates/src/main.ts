@@ -15,13 +15,16 @@
  * The app:
  *   1. Loads the fixture as its starting document.
  *   2. Reads each field's text and each clause's version from the parsed SDTs.
- *   3. Compares clause versions against the local library and surfaces a
- *      Review CTA on every stale clause with a one-line summary of the change.
+ *   3. Compares clause versions against the local library and surfaces
+ *      "Library update available" on every stale clause with a one-line
+ *      summary of the change.
  *   4. Field inputs are reactive: typing in a value debounces by ~250ms and
  *      fans the new text to every occurrence via `selectByTag` + `replaceContent`.
- *   5. Review expands a card showing the in-document clause alongside the
- *      library version. Replace with library clause swaps body via
- *      `replaceContent` and bumps the tag version via `patch`.
+ *   5. "Suggest library update" runs `doc.replace` with `changeMode: 'tracked'`
+ *      against the clause body (located by `query.match`). The SDT tag stays
+ *      at v1; the document shows redlines. Accept calls `trackChanges.decide`
+ *      then patches the tag via `contentControls.patch`. Reject reverts the
+ *      body and leaves the tag at v1. Tag flips only after acceptance.
  *   6. On Export, produces a `.docx` blob with content controls preserved.
  *
  * Every mutation goes through `editor.doc.*`. The same operation set runs
@@ -51,12 +54,32 @@ type MutationResult =
   | { success: true; contentControl: ContentControlTarget }
   | { success: false; failure: { code: string; message: string } };
 
+type SelectionTarget =
+  | { kind: 'selection'; start: Record<string, unknown>; end: Record<string, unknown> }
+  | { kind: 'text'; blockId: string; range: { start: number; end: number } };
+
+type TrackedChange = { entityId: string; type: string };
+
 type DocumentApi = {
   contentControls: {
     list(input?: Record<string, unknown>): { items: ContentControlInfo[]; total: number };
     selectByTag(input: { tag: string }): { items: ContentControlInfo[]; total: number };
     patch(input: { target: ContentControlTarget; tag?: string; alias?: string }): MutationResult;
     replaceContent(input: { target: ContentControlTarget; content: string; format?: 'text' }): MutationResult;
+  };
+  query: {
+    match(input: { select: { type: 'text'; pattern: string }; require?: 'first' | 'any' }): {
+      items: Array<{ target: SelectionTarget }>;
+      total: number;
+    };
+  };
+  replace(input: { target: SelectionTarget; text: string }, options?: { changeMode?: 'direct' | 'tracked' }): {
+    success: boolean;
+    failure?: { code: string; message: string };
+  };
+  extract(input: Record<string, never>): { blocks: Array<{ nodeId: string; type: string; text: string }>; trackedChanges: TrackedChange[] };
+  trackChanges: {
+    decide(input: { target: { id: string } | { scope: 'all' }; decision: 'accept' | 'reject' }): { success: boolean; failure?: { code: string; message: string } };
   };
 };
 
@@ -156,11 +179,13 @@ const parseTag = (tag: string | undefined): TagPayload | null => {
 // State and DOM
 // ---------------------------------------------------------------------------
 
+type PendingReview = { toVersion: string; entityIds: string[] };
+
 const state = {
   editor: null as DemoEditor | null,
   values: {} as Record<FieldKey, string>,
   versions: {} as Record<ClauseId, string>,
-  expandedClause: null as ClauseId | null,
+  pending: {} as Partial<Record<ClauseId, PendingReview>>,
 };
 
 const statusEl = qs<HTMLElement>('#status');
@@ -249,32 +274,83 @@ function applyField(key: FieldKey, value: string): void {
   }
 }
 
-async function applyClauseVersion(clauseId: ClauseId, toVersion: string, body: string): Promise<void> {
+/**
+ * Suggest a library update as a tracked change inside the clause SDT.
+ * The SDT tag stays at v1 until the reviewer accepts; if they reject, the
+ * document body reverts and the tag is unchanged. No lying documents.
+ */
+async function suggestClauseUpdate(clauseId: ClauseId, toVersion: string, body: string): Promise<void> {
   const doc = getDoc();
-  const clause = CLAUSE_LIBRARY.find((c) => c.id === clauseId);
-  if (!clause) return;
+  const ctrl = findClauseControl(clauseId);
+  if (!ctrl?.text) throw new Error(`Clause ${clauseId} not in document`);
+
+  // Locate the clause body via text match. Acceptable because the demo's fixture
+  // text is controlled. In production, prefer a Document API "inner content of
+  // this content control" target once one exists.
+  const match = doc.query.match({ select: { type: 'text', pattern: ctrl.text }, require: 'first' });
+  const target = match.items?.[0]?.target;
+  if (!target) throw new Error(`Could not locate clause body for ${clauseId}`);
+
+  const before = new Set(doc.extract({}).trackedChanges.map((c) => c.entityId));
+
+  const replaceResult = doc.replace({ target, text: body }, { changeMode: 'tracked' });
+  if (!replaceResult.success) {
+    throw new Error(replaceResult.failure?.message ?? 'Tracked replace failed');
+  }
+
+  const newEntityIds = doc
+    .extract({})
+    .trackedChanges.filter((c) => !before.has(c.entityId))
+    .map((c) => c.entityId);
+
+  state.pending[clauseId] = { toVersion, entityIds: newEntityIds };
+}
+
+/** Accept the pending tracked change and patch the SDT tag. */
+async function acceptClauseUpdate(clauseId: ClauseId): Promise<void> {
+  const doc = getDoc();
+  const pending = state.pending[clauseId];
+  if (!pending) return;
+
+  // Decide each entity. Paired replacement may collapse after accepting one,
+  // so a subsequent "not found" is expected and benign.
+  for (const id of pending.entityIds) {
+    try {
+      doc.trackChanges.decide({ target: { id }, decision: 'accept' });
+    } catch {
+      /* paired entity already resolved */
+    }
+  }
 
   const ctrl = findClauseControl(clauseId);
-  if (!ctrl) throw new Error(`Clause ${clauseId} not in document`);
-
-  assertMutation(
-    doc.contentControls.replaceContent({ target: ctrl.target, content: body, format: 'text' }),
-    `Could not update ${clause.label}`,
-    true,
-  );
-
-  const refreshed = findClauseControl(clauseId) ?? ctrl;
-  assertMutation(
+  const clause = CLAUSE_LIBRARY.find((c) => c.id === clauseId);
+  if (ctrl && clause) {
     doc.contentControls.patch({
-      target: refreshed.target,
-      tag: clauseTag(clauseId, toVersion),
-      alias: `${clause.label} (${toVersion})`,
-    }),
-    `Could not patch clause tag for ${clause.label}`,
-    true,
-  );
+      target: ctrl.target,
+      tag: clauseTag(clauseId, pending.toVersion),
+      alias: `${clause.label} (${pending.toVersion})`,
+    });
+    state.versions[clauseId] = pending.toVersion;
+  }
 
-  state.versions[clauseId] = toVersion;
+  delete state.pending[clauseId];
+}
+
+/** Reject the pending tracked change. Body reverts; SDT tag stays at v1. */
+async function rejectClauseUpdate(clauseId: ClauseId): Promise<void> {
+  const doc = getDoc();
+  const pending = state.pending[clauseId];
+  if (!pending) return;
+
+  for (const id of pending.entityIds) {
+    try {
+      doc.trackChanges.decide({ target: { id }, decision: 'reject' });
+    } catch {
+      /* paired entity already resolved */
+    }
+  }
+
+  delete state.pending[clauseId];
 }
 
 async function exportDocument(): Promise<void> {
@@ -320,48 +396,50 @@ function renderClausesPanel(): void {
   for (const clause of CLAUSE_LIBRARY) {
     const inDoc = state.versions[clause.id] ?? clause.latestVersion;
     const stale = clause.upgrade != null && inDoc !== clause.latestVersion;
-    const expanded = stale && state.expandedClause === clause.id;
+    const pending = state.pending[clause.id];
 
     const card = document.createElement('article');
-    card.className = 'clause' + (stale ? ' stale' : ' current') + (expanded ? ' expanded' : '');
+    const cls = pending ? 'pending' : stale ? 'stale' : 'current';
+    card.className = `clause ${cls}`;
 
-    if (stale && clause.upgrade) {
-      const upgrade = clause.upgrade;
-      const currentText = findClauseControl(clause.id)?.text ?? '';
+    if (pending && clause.upgrade) {
+      // Reviewer is deciding. Tag stays v1; document shows tracked redlines.
       card.innerHTML = `
         <header class="clause-header">
           <h3 class="clause-label">${escapeHtml(clause.label)}</h3>
-          <span class="clause-status">Update available</span>
+          <span class="clause-status pending">Pending review</span>
+        </header>
+        <p class="clause-summary">${escapeHtml(clause.upgrade.summary)}</p>
+        <p class="clause-meta">Document ${escapeHtml(inDoc)} \u00b7 Library ${escapeHtml(pending.toVersion)}</p>
+        <div class="clause-actions">
+          <button class="btn clause-reject" type="button">Reject</button>
+          <button class="btn primary clause-accept" type="button">Accept library clause</button>
+        </div>
+      `;
+      card.querySelector<HTMLButtonElement>('.clause-accept')?.addEventListener('click', () => {
+        void run(`${clause.label}: accepted`, async () => {
+          await acceptClauseUpdate(clause.id);
+        });
+      });
+      card.querySelector<HTMLButtonElement>('.clause-reject')?.addEventListener('click', () => {
+        void run(`${clause.label}: rejected`, async () => {
+          await rejectClauseUpdate(clause.id);
+        });
+      });
+    } else if (stale && clause.upgrade) {
+      const upgrade = clause.upgrade;
+      card.innerHTML = `
+        <header class="clause-header">
+          <h3 class="clause-label">${escapeHtml(clause.label)}</h3>
+          <span class="clause-status">Library update available</span>
         </header>
         <p class="clause-summary">${escapeHtml(upgrade.summary)}</p>
         <p class="clause-meta">Document ${escapeHtml(inDoc)} \u00b7 Library ${escapeHtml(upgrade.version)}</p>
-        <button class="btn clause-review" type="button">${expanded ? 'Hide' : 'Review'}</button>
-        ${
-          expanded
-            ? `
-          <div class="clause-review-panel">
-            <div class="review-section">
-              <div class="review-label">In your document</div>
-              <p class="review-text">${escapeHtml(currentText)}</p>
-            </div>
-            <div class="review-section">
-              <div class="review-label">From the library</div>
-              <p class="review-text">${escapeHtml(upgrade.body)}</p>
-            </div>
-            <button class="btn primary clause-replace" type="button">Replace with library clause</button>
-          </div>
-        `
-            : ''
-        }
+        <button class="btn primary clause-suggest" type="button">Suggest library update</button>
       `;
-      card.querySelector<HTMLButtonElement>('.clause-review')?.addEventListener('click', () => {
-        state.expandedClause = expanded ? null : clause.id;
-        renderClausesPanel();
-      });
-      card.querySelector<HTMLButtonElement>('.clause-replace')?.addEventListener('click', () => {
-        void run(`${clause.label}: replaced with library clause`, async () => {
-          await applyClauseVersion(clause.id, upgrade.version, upgrade.body);
-          state.expandedClause = null;
+      card.querySelector<HTMLButtonElement>('.clause-suggest')?.addEventListener('click', () => {
+        void run(`${clause.label}: suggested as tracked change`, async () => {
+          await suggestClauseUpdate(clause.id, upgrade.version, upgrade.body);
         });
       });
     } else {
@@ -380,10 +458,14 @@ function renderClausesPanel(): void {
 
 function refreshSummary(): void {
   const stale = CLAUSE_LIBRARY.filter(
-    (c) => c.upgrade != null && (state.versions[c.id] ?? c.latestVersion) !== c.latestVersion,
+    (c) => c.upgrade != null && !state.pending[c.id] && (state.versions[c.id] ?? c.latestVersion) !== c.latestVersion,
   ).length;
-  const updateText = stale === 0 ? 'all clauses current' : `${stale} update${stale === 1 ? '' : 's'} available`;
-  summaryEl.textContent = `${FIELDS.length} fields \u00b7 ${CLAUSE_LIBRARY.length} clauses \u00b7 ${updateText}`;
+  const pending = Object.keys(state.pending).length;
+  const parts = [`${FIELDS.length} fields`, `${CLAUSE_LIBRARY.length} clauses`];
+  if (pending > 0) parts.push(`${pending} pending review`);
+  if (stale > 0) parts.push(`${stale} update${stale === 1 ? '' : 's'} available`);
+  if (pending === 0 && stale === 0) parts.push('all clauses current');
+  summaryEl.textContent = parts.join(' \u00b7 ');
 }
 
 // ---------------------------------------------------------------------------

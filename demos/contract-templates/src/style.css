@@ -148,6 +148,10 @@ input:focus {
   background: var(--demo-stale-soft);
   border-color: var(--demo-accent);
 }
+.clause.pending {
+  background: color-mix(in srgb, #d97706 8%, transparent);
+  border-color: #d97706;
+}
 .clause-header {
   display: flex;
   align-items: baseline;
@@ -169,6 +173,9 @@ input:focus {
   color: var(--demo-accent);
 }
 .clause-status.muted { color: var(--demo-text-muted); }
+.clause-status.pending { color: #d97706; }
+.clause-actions { display: flex; gap: 8px; }
+.clause-actions .btn { flex: 1; }
 .clause-summary {
   margin: 0 0 6px;
   font-size: var(--sd-font-size-300, 13px);

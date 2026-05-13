@@ -158,8 +158,16 @@ export const createDocumentJson = (docx, converter, editor) => {
     const trackedChangeIdMapOptions = {
       replacements: converter.trackedChangesOptions?.replacements ?? 'paired',
     };
-    converter.trackedChangeIdMap = buildTrackedChangeIdMap(docx, trackedChangeIdMapOptions);
+    // AIDEV-NOTE: SD-2528. The per-part map and the global map MUST share UUIDs
+    // for the same w:id, otherwise documentCommentsImporter (uses the global)
+    // and the ins/del translators (use the per-part) end up with two different
+    // UUIDs for the same tracked change — the comment's trackedChangeParentId
+    // never matches the tracked-change mark's id, breaking accept/reject
+    // cascading.
     converter.trackedChangeIdMapsByPart = buildTrackedChangeIdMapsByPart(docx, trackedChangeIdMapOptions);
+    converter.trackedChangeIdMap =
+      converter.trackedChangeIdMapsByPart.get('word/document.xml') ??
+      buildTrackedChangeIdMap(docx, trackedChangeIdMapOptions);
     const comments = importCommentData({ docx, nodeListHandler, converter, editor });
     const footnotes = importFootnoteData({ docx, nodeListHandler, converter, editor, numbering });
     const endnotes = importEndnoteData({ docx, nodeListHandler, converter, editor, numbering });

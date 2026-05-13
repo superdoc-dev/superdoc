@@ -674,15 +674,42 @@ export const useCommentsStore = defineStore('comments', () => {
       emitTrackedChangeEvent(emitData);
     } else if (event === 'resolve') {
       const existingTrackedChange = findTrackedChangeById();
-      if (!existingTrackedChange || existingTrackedChange.resolvedTime) return;
-
-      // Selection/toolbar reject emits tracked-change resolve events. Use the same
-      // resolution path as the comment dialog so one method owns state + sync + emit.
-      existingTrackedChange.resolveComment({
+      const resolveArgs = {
         email: params.resolvedByEmail ?? superdoc?.user?.email ?? null,
         name: params.resolvedByName ?? superdoc?.user?.name ?? null,
         superdoc,
-      });
+      };
+
+      if (existingTrackedChange && !existingTrackedChange.resolvedTime) {
+        // Selection/toolbar reject emits tracked-change resolve events. Use the same
+        // resolution path as the comment dialog so one method owns state + sync + emit.
+        existingTrackedChange.resolveComment(resolveArgs);
+      }
+
+      // AIDEV-NOTE: SD-2528. User-attached comments on a tracked change carry
+      // trackedChangeParentId === <tracked-change id>. When the TC is accepted
+      // or rejected, those comment bubbles must also resolve — otherwise the
+      // comment lingers after the redline it referred to is gone. Defer to a
+      // microtask so the cascading resolveComment doesn't dispatch into a
+      // still-running acceptTrackedChangeById/rejectTrackedChangeById loop and
+      // collide with its mutable `tr`.
+      if (normalizedChangeId) {
+        const linkedToResolve = commentsList.value.filter((linkedComment) => {
+          if (!linkedComment || linkedComment === existingTrackedChange) return false;
+          if (linkedComment.resolvedTime) return false;
+          const linkedParentId =
+            linkedComment.trackedChangeParentId != null ? String(linkedComment.trackedChangeParentId) : null;
+          return linkedParentId === normalizedChangeId;
+        });
+        if (linkedToResolve.length) {
+          Promise.resolve().then(() => {
+            linkedToResolve.forEach((linkedComment) => {
+              if (linkedComment.resolvedTime) return;
+              linkedComment.resolveComment(resolveArgs);
+            });
+          });
+        }
+      }
     }
   };
 

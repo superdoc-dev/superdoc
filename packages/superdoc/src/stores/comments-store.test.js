@@ -649,6 +649,91 @@ describe('comments-store', () => {
     );
   });
 
+  it('cascades resolve to user comments anchored to the same tracked change (SD-2528)', async () => {
+    const superdoc = {
+      emit: vi.fn(),
+      user: { email: 'reviewer@example.com', name: 'Reviewer' },
+    };
+
+    const trackedChangeComment = {
+      commentId: 'tc-1',
+      trackedChange: true,
+      resolvedTime: null,
+      getValues: vi.fn(() => ({ commentId: 'tc-1' })),
+      resolveComment: vi.fn(function () {
+        this.resolvedTime = Date.now();
+      }),
+    };
+
+    const linkedUserComment = {
+      commentId: 'user-comment-1',
+      trackedChange: false,
+      trackedChangeParentId: 'tc-1',
+      resolvedTime: null,
+      getValues: vi.fn(() => ({ commentId: 'user-comment-1' })),
+      resolveComment: vi.fn(function () {
+        this.resolvedTime = Date.now();
+      }),
+    };
+
+    const unrelatedUserComment = {
+      commentId: 'user-comment-2',
+      trackedChange: false,
+      trackedChangeParentId: 'tc-99',
+      resolvedTime: null,
+      getValues: vi.fn(() => ({ commentId: 'user-comment-2' })),
+      resolveComment: vi.fn(),
+    };
+
+    store.commentsList = [trackedChangeComment, linkedUserComment, unrelatedUserComment];
+
+    store.handleTrackedChangeUpdate({
+      superdoc,
+      params: { event: 'resolve', changeId: 'tc-1' },
+    });
+
+    expect(trackedChangeComment.resolveComment).toHaveBeenCalledTimes(1);
+    // Cascading runs in a microtask so we wait one turn before asserting.
+    await Promise.resolve();
+    expect(linkedUserComment.resolveComment).toHaveBeenCalledTimes(1);
+    expect(linkedUserComment.resolveComment).toHaveBeenCalledWith({
+      email: 'reviewer@example.com',
+      name: 'Reviewer',
+      superdoc,
+    });
+    expect(unrelatedUserComment.resolveComment).not.toHaveBeenCalled();
+  });
+
+  it('does not re-resolve already-resolved linked user comments', async () => {
+    const superdoc = { emit: vi.fn(), user: { email: 'a@a', name: 'A' } };
+
+    const trackedChangeComment = {
+      commentId: 'tc-2',
+      trackedChange: true,
+      resolvedTime: null,
+      getValues: vi.fn(() => ({})),
+      resolveComment: vi.fn(function () {
+        this.resolvedTime = Date.now();
+      }),
+    };
+
+    const alreadyResolvedLinked = {
+      commentId: 'user-2',
+      trackedChange: false,
+      trackedChangeParentId: 'tc-2',
+      resolvedTime: 1234,
+      getValues: vi.fn(() => ({})),
+      resolveComment: vi.fn(),
+    };
+
+    store.commentsList = [trackedChangeComment, alreadyResolvedLinked];
+
+    store.handleTrackedChangeUpdate({ superdoc, params: { event: 'resolve', changeId: 'tc-2' } });
+
+    await Promise.resolve();
+    expect(alreadyResolvedLinked.resolveComment).not.toHaveBeenCalled();
+  });
+
   it('syncs and emits an update when add event dedupes an existing tracked change', () => {
     const superdoc = {
       emit: vi.fn(),

@@ -56,6 +56,27 @@ describe('SD-2528: tracked-change + comment round-trip', () => {
       const originalTcComments = editor.converter.comments.filter((c) => !!c.trackedChangeParentId);
       expect(originalTcComments.length).toBeGreaterThan(0);
 
+      // The id space the comments importer uses (trackedChangeIdMap) must match
+      // the id space the ins/del translators use (trackedChangeIdMapsByPart).
+      // Otherwise the user comment's trackedChangeParentId never matches the
+      // tracked-change mark id in the PM doc and accept/reject can't cascade.
+      const bodyMap = editor.converter.trackedChangeIdMapsByPart?.get('word/document.xml');
+      const globalMap = editor.converter.trackedChangeIdMap;
+      expect(bodyMap).toBeDefined();
+      expect(globalMap).toBeDefined();
+      expect([...globalMap.entries()]).toEqual([...bodyMap.entries()]);
+
+      const tcMarkIds = new Set();
+      editor.state.doc.descendants((node) => {
+        if (!node.isInline) return;
+        for (const m of node.marks || []) {
+          if (m.type.name === 'trackInsert' || m.type.name === 'trackDelete') tcMarkIds.add(m.attrs?.id);
+        }
+      });
+      originalTcComments.forEach((comment) => {
+        expect(tcMarkIds.has(comment.trackedChangeParentId)).toBe(true);
+      });
+
       const commentsForExport = editor.converter.comments.map((comment) => ({
         ...comment,
         commentJSON: getCommentJSONNodes(comment),

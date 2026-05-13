@@ -8,7 +8,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // SD-2810 Wave 3 substrate. Three Word-native fixtures targeting OOXML
 // properties whose visual side flips with table direction per ECMA-376:
 //   - w:tblBorders/start/end (§17.4.38, §17.4.33/12)
-//   - w:tcMar/start/end (§17.4.41)
+//   - w:tcMar/start/end (§17.4.68) - single-cell margins under w:tcPr
 //   - w:gridBefore / w:gridAfter (§17.4.14, §17.4.15) - per §17.4.15:
 //     "leading edge (left for LTR tables, right for RTL tables)"
 //
@@ -94,7 +94,7 @@ test('RTL bidiVisual table with asymmetric tblBorders renders start on visual ri
 });
 
 // ----------------------------------------------------------------------------
-// tcMar start/end asymmetric (§17.4.41 + cell-padding mirror)
+// tcMar start/end asymmetric (§17.4.68 + cell-padding mirror)
 // ----------------------------------------------------------------------------
 
 // TODO: surfaces a real importer gap discovered building this fixture.
@@ -115,11 +115,10 @@ test.fixme(
     await superdoc.waitForStable();
 
     // Fixture: first cell tcMar/start=480 twips (large, ~24px) end=60 twips (small, ~3px).
-    // Per §17.4.41 + cell-direction mirror, the larger start padding should
-    // land on the visual RIGHT of the cell (since the cell is in a bidiVisual
-    // table, the cell paragraph direction follows the cascade; but the
-    // critical assertion is paddingRight > paddingLeft on the rendered cell
-    // - that's the spec-correct mapping in either reading).
+    // tcMar (§17.4.68) start/end follow table direction (same governance as
+    // tblBorders/start/end per §17.4.33/12 and the leading-edge rule in
+    // §17.4.15: left for LTR tables, right for RTL tables). In a bidiVisual
+    // table, start lands on visual right, so paddingRight > paddingLeft.
     const padding = await superdoc.page.evaluate(() => {
       const fragment = document.querySelector('.superdoc-table-fragment');
       if (!fragment) return null;

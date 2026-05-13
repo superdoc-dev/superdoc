@@ -56,6 +56,7 @@ jobs:
       fail-fast: false
       matrix:
         demo:
+          - contract-templates
           - custom-ui
           - docx-from-html
           - docxtemplater

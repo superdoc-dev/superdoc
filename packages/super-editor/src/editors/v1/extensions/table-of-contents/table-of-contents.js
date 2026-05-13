@@ -54,6 +54,21 @@ export const TableOfContents = Node.create({
       );
     };
 
+    const canInsertTableOfContentsAfter = (candidate, editor) => {
+      const tocType = editor.schema.nodes.tableOfContents;
+      const doc = editor.state.doc;
+      if (!tocType || typeof doc?.resolve !== 'function') return true;
+
+      const pos = candidate.end ?? candidate.pos + candidate.node.nodeSize;
+      try {
+        const $pos = doc.resolve(pos);
+        if (typeof $pos.parent?.canReplaceWith !== 'function') return true;
+        return $pos.parent.canReplaceWith($pos.index(), $pos.index(), tocType);
+      } catch {
+        return false;
+      }
+    };
+
     /**
      * Insert a tableOfContents node at the given document position.
      * @param {{ pos: number, instruction?: string, sdBlockId?: string, content?: object[], rightAlignPageNumbers?: boolean }} options
@@ -98,9 +113,13 @@ export const TableOfContents = Node.create({
         const { editor } = props;
         const pos = editor.state.selection.from;
         const index = getBlockIndex(editor);
-        const containing = index.candidates.filter((c) => pos >= c.pos && pos < c.pos + c.node.nodeSize);
+        const containing = index.candidates.filter((c) => pos >= c.pos && pos < (c.end ?? c.pos + c.node.nodeSize));
         const anchor =
-          containing.length > 0 ? containing.reduce((a, b) => (a.node.nodeSize < b.node.nodeSize ? a : b)) : null;
+          containing.length > 0
+            ? [...containing]
+                .sort((a, b) => a.node.nodeSize - b.node.nodeSize)
+                .find((candidate) => canInsertTableOfContentsAfter(candidate, editor))
+            : null;
 
         const at = anchor ? { kind: 'after', target: toBlockAddress(anchor) } : { kind: 'documentEnd' };
 

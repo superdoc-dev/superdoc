@@ -182,6 +182,46 @@ describe('insertTableOfContentsFromToolbar', () => {
     expect(insert).toHaveBeenCalledWith(99, tocNode);
   });
 
+  it('promotes a TOC entry paragraph anchor to the enclosing insertable TOC block', () => {
+    const { commands, schema, tocNode } = createCommandContext();
+    mockPrepare.mockReturnValue({
+      pos: 32,
+      instruction: 'TOC',
+      sdBlockId: 'x',
+      content: [],
+      sources: [],
+    });
+    const tocType = schema.nodes.tableOfContents;
+    const doc = {
+      resolve: vi.fn((pos) => ({
+        index: () => 0,
+        parent: {
+          canReplaceWith: vi.fn((_from, _to, type) => pos === 30 && type === tocType),
+        },
+      })),
+    };
+    const editor = { schema, state: { selection: { from: 15 }, doc } };
+    mockGetBlockIndex.mockReturnValue({
+      candidates: [
+        { pos: 0, end: 30, node: { nodeSize: 30 }, nodeType: 'tableOfContents', nodeId: 'toc-1' },
+        { pos: 10, end: 20, node: { nodeSize: 10 }, nodeType: 'paragraph', nodeId: 'toc-entry-p1' },
+      ],
+    });
+
+    const insert = vi.fn();
+    const tr = { insert };
+    const dispatch = () => {};
+    const state = { schema };
+
+    expect(commands.insertTableOfContentsFromToolbar()({ editor, tr, dispatch, state })).toBe(true);
+    expect(doc.resolve).toHaveBeenNthCalledWith(1, 20);
+    expect(doc.resolve).toHaveBeenNthCalledWith(2, 30);
+    expect(mockPrepare).toHaveBeenCalledWith(editor, {
+      at: { kind: 'after', target: { kind: 'block', nodeType: 'tableOfContents', nodeId: 'toc-1' } },
+    });
+    expect(insert).toHaveBeenCalledWith(32, tocNode);
+  });
+
   it('returns false when prepare throws (e.g. tracked mode)', () => {
     const { commands, schema } = createCommandContext();
     mockPrepare.mockImplementation(() => {

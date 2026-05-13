@@ -1,6 +1,5 @@
-import type { BoxSpacing, TableBorders } from '@superdoc/contracts';
+import type { BoxSpacing } from '@superdoc/contracts';
 import { resolveTableProperties } from '@superdoc/style-engine/ooxml';
-import type { TableProperties, TableCellMargins } from '@superdoc/style-engine/ooxml';
 import type { PMNode } from '../types.js';
 import type { ConverterContext } from '../converter-context.js';
 import { twipsToPx, normalizeCellPaddingTopBottom } from '../utilities.js';
@@ -15,6 +14,10 @@ export type TableStyleHydration = {
   tableWidth?: { width?: number; type?: string };
   tableCellSpacing?: { value?: number; type?: string };
 };
+
+type HydratedTableBorders = Partial<
+  Record<'top' | 'bottom' | 'left' | 'right' | 'insideH' | 'insideV' | 'start' | 'end', unknown>
+>;
 
 /**
  * Hydrates table-level attributes from inline properties and the style-engine.
@@ -32,14 +35,15 @@ export const hydrateTableStyleAttrs = (
 ): TableStyleHydration | null => {
   const hydration: TableStyleHydration = {};
   const tableProps = (tableNode.attrs?.tableProperties ?? null) as Record<string, unknown> | null;
+  const isRtlTable = tableProps?.rightToLeft === true;
 
   // Collect inline values first, then merge with style-resolved values below.
-  let inlineBorders: TableBorders | undefined;
+  let inlineBorders: HydratedTableBorders | undefined;
   let inlinePadding: BoxSpacing | undefined;
 
   // 1. Inline properties (highest priority)
   if (tableProps) {
-    const padding = convertCellMarginsToPx(tableProps.cellMargins as Record<string, unknown>);
+    const padding = convertCellMarginsToPx(tableProps.cellMargins as Record<string, unknown>, isRtlTable);
     if (padding) inlinePadding = normalizeCellPaddingTopBottom(padding);
 
     if (tableProps.borders && typeof tableProps.borders === 'object') {
@@ -95,7 +99,10 @@ export const hydrateTableStyleAttrs = (
     }
 
     if (resolved.cellMargins) {
-      const stylePadding = convertCellMarginsToPx(resolved.cellMargins as unknown as Record<string, unknown>);
+      const stylePadding = convertCellMarginsToPx(
+        resolved.cellMargins as unknown as Record<string, unknown>,
+        isRtlTable,
+      );
       if (stylePadding) {
         const normalizedStylePadding = normalizeCellPaddingTopBottom(stylePadding);
         hydration.cellPadding = inlinePadding
@@ -135,11 +142,11 @@ export const hydrateTableStyleAttrs = (
   return Object.keys(hydration).length > 0 ? hydration : null;
 };
 
-const normalizeTableBorders = (value?: Record<string, unknown>): TableBorders | undefined => {
+const normalizeTableBorders = (value?: Record<string, unknown>): HydratedTableBorders | undefined => {
   if (!value) return undefined;
 
-  const sides = ['top', 'bottom', 'left', 'right', 'insideH', 'insideV'] as const;
-  const result: TableBorders = {};
+  const sides = ['top', 'bottom', 'left', 'right', 'insideH', 'insideV', 'start', 'end'] as const;
+  const result: Record<string, unknown> = {};
 
   for (const side of sides) {
     const border = value[side];
@@ -156,9 +163,11 @@ const adjustBorderSize = (border: Record<string, unknown>): Record<string, unkno
   return size != null ? { ...border, size } : border;
 };
 
-const convertCellMarginsToPx = (margins: Record<string, unknown>): BoxSpacing | undefined => {
+const convertCellMarginsToPx = (margins: Record<string, unknown>, isRtlTable = false): BoxSpacing | undefined => {
   if (!margins || typeof margins !== 'object') return undefined;
   const spacing: BoxSpacing = {};
+  const startSide: keyof BoxSpacing = isRtlTable ? 'right' : 'left';
+  const endSide: keyof BoxSpacing = isRtlTable ? 'left' : 'right';
   const keyMap: Record<string, keyof BoxSpacing> = {
     top: 'top',
     bottom: 'bottom',
@@ -168,8 +177,8 @@ const convertCellMarginsToPx = (margins: Record<string, unknown>): BoxSpacing | 
     marginBottom: 'bottom',
     marginLeft: 'left',
     marginRight: 'right',
-    marginStart: 'left',
-    marginEnd: 'right',
+    marginStart: startSide,
+    marginEnd: endSide,
   };
 
   Object.entries(margins).forEach(([key, value]) => {

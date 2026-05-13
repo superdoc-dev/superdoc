@@ -248,6 +248,25 @@ describe('HTML slice embed/extract round-trip', () => {
     expect(extracted).toBe(sampleSlice);
   });
 
+  it('stores embedded payloads in attributes instead of hidden text nodes', () => {
+    const mediaJson = JSON.stringify({ 'word/media/image1.png': 'data:image/png;base64,AAA' });
+    const embedded = embedSliceInHtml(sampleHtml, sampleSlice, '', mediaJson);
+
+    expect(embedded).toMatch(/<div data-superdoc-slice="[^"]+" style="display:none"><\/div>/);
+    expect(embedded).toMatch(/<div data-sd-superdoc-media="[^"]+" style="display:none"><\/div>/);
+    expect(embedded).not.toMatch(/<div[^>]*data-superdoc-slice[^>]*>[^<]+<\/div>/);
+    expect(embedded).not.toMatch(/<div[^>]*data-sd-superdoc-media[^>]*>[^<]+<\/div>/);
+  });
+
+  it('extractSliceFromHtml still supports older hidden text payloads', () => {
+    const embedded = embedSliceInHtml(sampleHtml, sampleSlice);
+    const payload = embedded.match(/data-superdoc-slice="([^"]+)"/)?.[1];
+    expect(payload).toBeTruthy();
+
+    const oldFormatHtml = `<div data-superdoc-slice style="display:none">${payload}</div>${sampleHtml}`;
+    expect(extractSliceFromHtml(oldFormatHtml)).toBe(sampleSlice);
+  });
+
   it('extractMediaFromHtml recovers embedded media JSON', () => {
     const mediaJson = JSON.stringify({ 'word/media/image1.png': 'data:image/png;base64,AAA' });
     const embedded = embedSliceInHtml(sampleHtml, sampleSlice, '', mediaJson);

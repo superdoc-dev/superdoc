@@ -1,5 +1,18 @@
 [
   {
+    "id": "contract-templates",
+    "title": "Contract templates",
+    "description": "Smart fields and versioned reusable clauses driven by Word content controls. Detect stale sections and apply updates in place.",
+    "category": "Editor",
+    "sourceRepo": "superdoc-dev/superdoc",
+    "sourcePath": "demos/contract-templates",
+    "docs": "https://docs.superdoc.dev/document-api/features/content-controls",
+    "thumbnail": null,
+    "liveUrl": null,
+    "homepage": false,
+    "stackblitz": false
+  },
+  {
     "id": "custom-ui",
     "title": "Custom UI",
     "description": "A full editor workspace with a custom toolbar, activity panel, comments, tracked changes, custom commands, import, and export.",

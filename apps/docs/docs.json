@@ -165,8 +165,12 @@
                 "group": "Document API",
                 "pages": [
                   "document-api/overview",
-                  "document-api/reference/index",
                   "document-api/common-workflows",
+                  {
+                    "group": "Features",
+                    "pages": ["document-api/features/content-controls"]
+                  },
+                  "document-api/reference/index",
                   "document-api/available-operations",
                   "document-api/migration"
                 ]
@@ -292,6 +296,10 @@
     "dismissible": true
   },
   "redirects": [
+    {
+      "source": "/document-api/content-controls",
+      "destination": "/document-api/features/content-controls"
+    },
     {
       "source": "/editor/proofing/overview",
       "destination": "/editor/spell-check/overview"

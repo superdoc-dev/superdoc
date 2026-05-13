@@ -457,6 +457,14 @@ const isNearColumnBoundary = (event, tableElement) => {
   try {
     const metadata = JSON.parse(boundariesAttr);
     if (!metadata.columns || !Array.isArray(metadata.columns)) return false;
+    const isRtl = metadata.rtl === true;
+    const firstColumn = metadata.columns[0];
+    const lastColumn = metadata.columns[metadata.columns.length - 1];
+    const tableContentLeft = firstColumn && typeof firstColumn.x === 'number' ? firstColumn.x : 0;
+    const tableContentWidth =
+      lastColumn && typeof lastColumn.x === 'number' && typeof lastColumn.w === 'number'
+        ? lastColumn.x + lastColumn.w
+        : 0;
 
     // Get zoom factor to properly compare screen coordinates with layout coordinates
     const zoom = getEditorZoom();
@@ -486,7 +494,9 @@ const isNearColumnBoundary = (event, tableElement) => {
 
       // The boundary x position is at (col.x + col.w) - the right edge of the column
       // This is in layout coordinates, so multiply by zoom to convert to screen space
-      const boundaryXScreen = (col.x + col.w) * zoom;
+      const logicalBoundaryX = col.x + col.w;
+      const visualBoundaryX = isRtl ? tableContentLeft + tableContentWidth - logicalBoundaryX : logicalBoundaryX;
+      const boundaryXScreen = visualBoundaryX * zoom;
 
       // Check if mouse is horizontally near this boundary (both in screen space now)
       if (Math.abs(mouseXScreen - boundaryXScreen) <= TABLE_RESIZE_HOVER_THRESHOLD) {
@@ -514,8 +524,12 @@ const isNearColumnBoundary = (event, tableElement) => {
       }
     }
 
-    // Also check left edge of table (x = 0)
-    if (Math.abs(mouseXScreen) <= TABLE_RESIZE_HOVER_THRESHOLD) {
+    // Also check table outer edges.
+    const tableWidthScreen = tableRect.width;
+    if (
+      Math.abs(mouseXScreen) <= TABLE_RESIZE_HOVER_THRESHOLD ||
+      Math.abs(mouseXScreen - tableWidthScreen) <= TABLE_RESIZE_HOVER_THRESHOLD
+    ) {
       return true;
     }
 

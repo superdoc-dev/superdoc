@@ -306,6 +306,7 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
         min: boundary.minWidth,
         r: boundary.resizable ? 1 : 0,
       })),
+      rtl: isRtl,
       // Add segments for each column boundary (segments where resize handle should appear)
       segments: boundarySegments.map((segs, colIndex) =>
         segs.map((seg) => ({
@@ -337,7 +338,7 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
   }
 
   const borderCollapse = block.attrs?.borderCollapse ?? (block.attrs?.cellSpacing != null ? 'separate' : 'collapse');
-  if (borderCollapse === 'separate' && block.attrs?.cellSpacing && tableBorders) {
+  if (borderCollapse === 'separate' && tableBorders) {
     applyBorder(container, 'Top', borderValueToSpec(tableBorders.top));
     applyBorder(container, 'Right', borderValueToSpec(isRtl ? tableBorders.left : tableBorders.right));
     applyBorder(container, 'Bottom', borderValueToSpec(tableBorders.bottom));

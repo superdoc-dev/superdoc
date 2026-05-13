@@ -206,9 +206,17 @@ export class HeaderFooterEditorManager extends EventEmitter {
    * - Rebuilds the descriptor map
    * - Tears down editors for sections that no longer exist
    *
+   * When `purgeCachedEditors` is true, all cached header/footer sub-editors are
+   * disposed first. Use after a full document replace: the same relationship id
+   * can point at new OOXML while `getDocumentJson` would otherwise keep serving
+   * the old live editor's PM JSON.
+   *
    * @throws Never throws - errors during editor teardown are caught and logged
    */
-  refresh(): void {
+  refresh(options?: { purgeCachedEditors?: boolean }): void {
+    if (options?.purgeCachedEditors) {
+      this.#teardownEditors();
+    }
     this.#collections = this.#extractCollections();
     const nextDescriptors = this.#collectDescriptors(this.#collections);
     this.#teardownMissingEditors(nextDescriptors);

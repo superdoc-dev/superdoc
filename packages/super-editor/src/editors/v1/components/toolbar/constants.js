@@ -88,6 +88,8 @@ export const HEADLESS_ITEM_MAP = {
   linkedStyles: 'linked-style',
   indentleft: 'indent-decrease',
   indentright: 'indent-increase',
+  directionLtr: 'direction-ltr',
+  directionRtl: 'direction-rtl',
   clearFormatting: 'clear-formatting',
   copyFormat: 'copy-format',
 };

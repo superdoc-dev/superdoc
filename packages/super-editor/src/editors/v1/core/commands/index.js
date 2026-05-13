@@ -44,6 +44,7 @@ export * from './insertSectionBreakAtSelection.js';
 // Paragraph
 export * from './textIndent.js';
 export * from './lineHeight.js';
+export * from './paragraphDirection.js';
 
 // Run
 export * from './backspaceEmptyRunParagraph.js';

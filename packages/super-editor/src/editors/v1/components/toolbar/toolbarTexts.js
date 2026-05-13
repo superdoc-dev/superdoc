@@ -29,6 +29,8 @@ export const toolbarTexts = {
   numberedList: 'Numbered list',
   indentLeft: 'Left indent',
   indentRight: 'Right indent',
+  directionLtr: 'Left-to-right',
+  directionRtl: 'Right-to-left',
   zoom: 'Zoom',
   undo: 'Undo',
   redo: 'Redo',

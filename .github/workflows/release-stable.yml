@@ -106,6 +106,24 @@ jobs:
       - name: Build packages
         run: pnpm run build
 
+      # Public-type contract gates: same gates as PR CI and
+      # release-superdoc.yml. The stable orchestrator publishes the npm
+      # `latest` tag, so a regression that bypassed PR CI would otherwise
+      # ship to every consumer pinned to `^1` or `latest`. Run identical
+      # checks here so the stable lane cannot silently relax the gate.
+      - name: Consumer typecheck (matrix)
+        run: |
+          cd tests/consumer-typecheck
+          node typecheck-matrix.mjs
+
+      - name: Deep public-type audit (report-only)
+        run: |
+          cd tests/consumer-typecheck
+          node deep-type-audit.mjs
+
+      - name: Package shape gates
+        run: node tests/consumer-typecheck/package-shape-gate.mjs
+
       - name: Release stable packages (orchestrator)
         id: stable_release
         env:

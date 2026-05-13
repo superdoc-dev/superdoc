@@ -524,9 +524,13 @@ export class HeaderFooterSessionManager {
    * interactive header/footer UI, for example through document-api commands.
    * We refresh the descriptor registry and clear all derived FlowBlock caches
    * so the next layout pass sees the new structure immediately.
+   *
+   * Pass `purgeCachedEditors: true` after a full document file replace: cached
+   * sub-editors keyed by relationship id must not outlive the new converter
+   * snapshot when ids are reused.
    */
-  refreshStructure(): void {
-    this.#headerFooterManager?.refresh();
+  refreshStructure(options?: { purgeCachedEditors?: boolean }): void {
+    this.#headerFooterManager?.refresh(options?.purgeCachedEditors ? { purgeCachedEditors: true } : undefined);
     this.#headerFooterAdapter?.invalidateAll();
   }
 

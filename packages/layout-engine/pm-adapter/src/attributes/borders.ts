@@ -25,6 +25,7 @@ const MAX_BORDER_SIZE_PX = 100; // Reasonable maximum
 type BorderConversionUnit = 'px' | 'eighthPoints';
 type BorderConversionOptions = {
   unit?: BorderConversionUnit;
+  isRtl?: boolean;
 };
 
 /**
@@ -247,23 +248,34 @@ export function extractTableBorders(
     return undefined;
   }
 
-  const sides = ['top', 'right', 'bottom', 'left', 'insideH', 'insideV'] as const;
   const borders: TableBorders = {};
-
-  for (const side of sides) {
-    const raw = bordersInput[side];
-    if (raw == null) continue;
-
-    // Already valid? Use as-is
+  const assignConverted = (side: keyof TableBorders, raw: unknown): void => {
+    if (raw == null) return;
     if (isTableBorderValue(raw)) {
       borders[side] = raw;
-    } else {
-      // Convert from OOXML
-      const converted = convertTableBorderValue(raw, options);
-      if (converted !== undefined) {
-        borders[side] = converted;
-      }
+      return;
     }
+    const converted = convertTableBorderValue(raw, options);
+    if (converted !== undefined) {
+      borders[side] = converted;
+    }
+  };
+
+  // Physical sides first (higher precedence).
+  for (const side of ['top', 'right', 'bottom', 'left', 'insideH', 'insideV'] as const) {
+    assignConverted(side, bordersInput[side]);
+  }
+
+  // Logical start/end fallback when physical counterpart is missing. Map as
+  // LTR-default (start->left, end->right). The DOM painter handles the RTL
+  // visual mirror once via swapTableBordersLR / swapCellBordersLR keyed off
+  // the table's bidiVisual flag (§17.4.12 + §17.4.33). Pre-swapping here
+  // would double-mirror.
+  if (borders.left == null) {
+    assignConverted('left', bordersInput.start);
+  }
+  if (borders.right == null) {
+    assignConverted('right', bordersInput.end);
   }
 
   return Object.keys(borders).length > 0 ? borders : undefined;
@@ -292,17 +304,39 @@ export function extractTableBorders(
  * // { top: { style: 'single', width: 8, color: '#000000' }, bottom: { style: 'double', width: 16, color: '#000000' } }
  * ```
  */
-export function extractCellBorders(cellAttrs: Record<string, unknown>): CellBorders | undefined {
+type CellBorderExtractionOptions = {
+  isRtl?: boolean;
+};
+
+export function extractCellBorders(
+  cellAttrs: Record<string, unknown>,
+  // options retained for backwards-compatible call sites; no longer reads isRtl
+  // since pm-adapter maps start/end as LTR-default and the painter's
+  // swapCellBordersLR handles the RTL mirror (§17.4.12 + §17.4.33).
+  _options?: CellBorderExtractionOptions,
+): CellBorders | undefined {
   if (!cellAttrs?.borders) return undefined;
 
   const bordersData = cellAttrs.borders as Record<string, unknown>;
   const borders: CellBorders = {};
 
+  // Physical sides first (higher precedence).
   for (const side of ['top', 'right', 'bottom', 'left'] as const) {
     const spec = convertBorderSpec(bordersData[side]);
     if (spec) {
       borders[side] = spec;
     }
+  }
+
+  // Logical start/end fallback (LTR-default: start->left, end->right).
+  // Painter's swapCellBordersLR mirrors for RTL.
+  if (borders.left == null) {
+    const spec = convertBorderSpec(bordersData.start);
+    if (spec) borders.left = spec;
+  }
+  if (borders.right == null) {
+    const spec = convertBorderSpec(bordersData.end);
+    if (spec) borders.right = spec;
   }
 
   return Object.keys(borders).length > 0 ? borders : undefined;
@@ -326,7 +360,17 @@ export function extractCellBorders(cellAttrs: Record<string, unknown>): CellBord
  * // { top: 8, left: 12, right: 12, bottom: 8 }
  * ```
  */
-export function extractCellPadding(cellAttrs: Record<string, unknown>): BoxSpacing | undefined {
+type CellPaddingExtractionOptions = {
+  isRtl?: boolean;
+};
+
+export function extractCellPadding(
+  cellAttrs: Record<string, unknown>,
+  // options retained for backwards-compat; no longer reads isRtl. pm-adapter
+  // maps marginStart/End as LTR-default; renderTableCell mirrors paddingLeft
+  // <-> paddingRight for RTL tables (§17.4.42 + §17.4.13 on cell margins).
+  _options?: CellPaddingExtractionOptions,
+): BoxSpacing | undefined {
   const cellMargins = cellAttrs?.cellMargins;
   if (!cellMargins || typeof cellMargins !== 'object') return undefined;
 
@@ -339,6 +383,17 @@ export function extractCellPadding(cellAttrs: Record<string, unknown>): BoxSpaci
   if (typeof margins.right === 'number') padding.right = margins.right;
   if (typeof margins.bottom === 'number') padding.bottom = margins.bottom;
   if (typeof margins.left === 'number') padding.left = margins.left;
+
+  // Logical margins fallback (LTR-default: start->left, end->right).
+  // Painter mirrors for RTL.
+  const marginStart = margins.marginStart;
+  const marginEnd = margins.marginEnd;
+  if (typeof marginStart === 'number' && padding.left == null) {
+    padding.left = marginStart;
+  }
+  if (typeof marginEnd === 'number' && padding.right == null) {
+    padding.right = marginEnd;
+  }
 
   if (Object.keys(padding).length === 0) return undefined;
   return normalizeCellPaddingTopBottom(padding);

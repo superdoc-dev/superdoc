@@ -22,5 +22,10 @@ export function runNodeChildrenToRuns({
     false,
     false,
   );
-  node.content?.forEach((child) => visitNode(child, mergedMarks, sdtMetadata, resolvedRunProperties, false));
+  // Pass the RAW inline runProperties alongside the resolved cascade. SD-2781's
+  // bidi/script preservation must read from inline only - cascade-resolved
+  // values would tag every style-inherited run with metadata it didn't have.
+  node.content?.forEach((child) =>
+    visitNode(child, mergedMarks, sdtMetadata, resolvedRunProperties, false, runProperties),
+  );
 }

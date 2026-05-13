@@ -7,7 +7,16 @@ import { buildFlowRunLink } from '../../marks/links.js';
 import { type RunProperties, resolveRunProperties } from '@superdoc/style-engine/ooxml';
 
 export function pageReferenceNodeToBlock(params: InlineConverterParams): TextRun | void {
-  const { node, inheritedMarks, visitNode, sdtMetadata, positions, converterContext, paragraphProperties } = params;
+  const {
+    node,
+    inheritedMarks,
+    visitNode,
+    sdtMetadata,
+    positions,
+    converterContext,
+    paragraphProperties,
+    inlineRunProperties: parentInlineRunProperties,
+  } = params;
   // Create pageReference token run for dynamic resolution
   const instruction = getNodeInstruction(node) || '';
   const nodeAttrs =
@@ -57,6 +66,10 @@ export function pageReferenceNodeToBlock(params: InlineConverterParams): TextRun
       node: { type: 'text', text: fallbackText } as PMNode,
       inheritedMarks: mergedMarks,
       runProperties: resolvedRunProperties,
+      // SD-2781: pass the raw inline runProperties scanned from the <run> child
+      // above (not the cascade-resolved version) so the token run preserves
+      // bidi/script only when the source explicitly carried those signals.
+      inlineRunProperties: runProperties,
     });
 
     // Copy PM positions from parent pageReference node
@@ -83,7 +96,12 @@ export function pageReferenceNodeToBlock(params: InlineConverterParams): TextRun
     }
     return tokenRun;
   } else if (Array.isArray(node.content)) {
-    // No bookmark found, fall back to treating as transparent container
-    node.content.forEach((child) => visitNode(child, mergedMarks, sdtMetadata, runProperties));
+    // No bookmark found, fall back to treating as transparent container.
+    // SD-2781: forward the parent's inlineRunProperties (this node didn't introduce
+    // a new run boundary), and pass the locally-collected runProperties as the
+    // resolved/active properties for children.
+    node.content.forEach((child) =>
+      visitNode(child, mergedMarks, sdtMetadata, runProperties, false, parentInlineRunProperties),
+    );
   }
 }

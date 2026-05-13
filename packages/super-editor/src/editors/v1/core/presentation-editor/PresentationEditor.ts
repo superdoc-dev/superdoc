@@ -22,6 +22,7 @@ import type { EditorState, Transaction } from 'prosemirror-state';
 import type { Node as ProseMirrorNode } from 'prosemirror-model';
 import type { Mapping } from 'prosemirror-transform';
 import { Editor } from '../Editor.js';
+import { resolveEvenAndOddHeadersFromSettingsPart } from '../super-converter/v2/importer/docxImporter.js';
 import { EventEmitter } from '../EventEmitter.js';
 import type { ProseMirrorJSON } from '../types/EditorTypes.js';
 import { EpochPositionMapper } from './layout/EpochPositionMapper.js';
@@ -4536,6 +4537,10 @@ export class PresentationEditor extends EventEmitter {
 
     const handleCollaborationReady = (payload: unknown) => {
       this.emit('collaborationReady', payload);
+      // Collaboration bootstrap can hydrate header/footer parts on this client
+      // without emitting partChanged. Force a header/footer refresh pass so the
+      // importer tab sees the same headers/footers immediately.
+      this.#refreshHeaderFooterStructureThenRerender();
       // Setup remote cursor rendering after collaboration is ready
       // Only setup if presence is enabled in layout options
       if (this.#options.collaborationProvider?.awareness && this.#layoutOptions.presence?.enabled !== false) {
@@ -4546,6 +4551,20 @@ export class PresentationEditor extends EventEmitter {
     this.#editorListeners.push({
       event: 'collaborationReady',
       handler: handleCollaborationReady as (...args: unknown[]) => void,
+    });
+
+    // `Editor.replaceFile()` swaps the converter and (in collaboration mode)
+    // seeds parts straight into the Y.Doc, so no `partChanged` fires on the
+    // importing client. Treat the signal like a structural rels change: rebuild
+    // header/footer descriptors against the new converter and rerender so the
+    // importer tab matches the collaborator tab without waiting for an edit.
+    const handleDocumentReplaced = () => {
+      this.#refreshHeaderFooterStructureThenRerender({ purgeCachedEditors: true });
+    };
+    this.#editor.on('documentReplaced', handleDocumentReplaced);
+    this.#editorListeners.push({
+      event: 'documentReplaced',
+      handler: handleDocumentReplaced as (...args: unknown[]) => void,
     });
     // Listen for comment selection changes and re-run the inline style layering
     // pipeline on the existing DOM. This avoids a full layout → paint cycle
@@ -5883,6 +5902,20 @@ export class PresentationEditor extends EventEmitter {
     return calculateExtendedSelection(this.#layoutState.blocks, anchor, head, mode);
   }
 
+  /**
+   * Refreshes header/footer descriptors from the converter, invalidates cached
+   * layout input, and schedules a presentation rerender. Used when full-document
+   * hydration bypasses normal `partChanged` wiring (`collaborationReady`,
+   * `documentReplaced`).
+   */
+  #refreshHeaderFooterStructureThenRerender(options?: { purgeCachedEditors?: boolean }): void {
+    this.#headerFooterSession?.refreshStructure(options);
+    this.#flowBlockCache.setHasExternalChanges(true);
+    this.#pendingDocChange = true;
+    this.#selectionSync.onLayoutStart();
+    this.#scheduleRerender();
+  }
+
   #scheduleRerender() {
     if (this.#renderScheduled) {
       return;
@@ -6209,13 +6242,19 @@ export class PresentationEditor extends EventEmitter {
       }
 
       this.#sectionMetadata = sectionMetadata;
-      // Build multi-section identifier from section metadata for section-aware header/footer selection
-      // Pass converter's headerIds/footerIds as fallbacks for dynamically created headers/footers
+      // Build multi-section identifier from section metadata for section-aware header/footer selection.
+      // Derive odd/even mode from current settings.xml-aware resolution (not only converter.pageStyles),
+      // because collaborator sessions can have stale converter.pageStyles during remote hydration.
+      // Pass converter's headerIds/footerIds as fallbacks for dynamically created headers/footers.
       const converter = (this.#editor as EditorWithConverter).converter;
-      const multiSectionId = buildMultiSectionIdentifier(sectionMetadata, converter?.pageStyles, {
-        headerIds: converter?.headerIds,
-        footerIds: converter?.footerIds,
-      });
+      const multiSectionId = buildMultiSectionIdentifier(
+        sectionMetadata,
+        { alternateHeaders: this.#resolveAlternateHeadersFlag() },
+        {
+          headerIds: converter?.headerIds,
+          footerIds: converter?.footerIds,
+        },
+      );
       if (this.#headerFooterSession) {
         this.#headerFooterSession.multiSectionIdentifier = multiSectionId;
       }
@@ -7189,6 +7228,21 @@ export class PresentationEditor extends EventEmitter {
     overlay.appendChild(fragment);
   }
 
+  #resolveAlternateHeadersFlag(): boolean {
+    const converter = (this.#editor as EditorWithConverter | undefined)?.converter;
+    if (!converter) {
+      return false;
+    }
+
+    const settingsPart = (converter as { convertedXml?: Record<string, unknown> }).convertedXml?.['word/settings.xml'];
+    const fromSettings = resolveEvenAndOddHeadersFromSettingsPart(settingsPart);
+    if (fromSettings !== null) {
+      return fromSettings;
+    }
+
+    return converter.pageStyles?.alternateHeaders === true;
+  }
+
   #resolveLayoutOptions(blocks: FlowBlock[] | undefined, sectionMetadata: SectionMetadata[]): ResolvedLayoutOptions {
     const defaults = this.#computeDefaultLayoutDefaults();
     const firstSection = blocks?.find(
@@ -7266,9 +7320,7 @@ export class PresentationEditor extends EventEmitter {
 
     this.#hiddenHost.style.width = `${pageSize.w}px`;
 
-    const alternateHeaders = Boolean(
-      (this.#editor as EditorWithConverter | undefined)?.converter?.pageStyles?.alternateHeaders,
-    );
+    const alternateHeaders = this.#resolveAlternateHeadersFlag();
 
     return {
       flowMode: 'paginated',

@@ -919,6 +919,70 @@ describe('calculateInlineRunPropertiesPlugin', () => {
       });
     });
 
+    // Customer fixture had 3 runs with existing = { asciiTheme, hAnsiTheme, cstheme, eastAsia: 'Arial' }.
+    // The marks re-decode to a full concrete shape including a `cs:` slot, so the encoder adds
+    // `csFontFamily` to markFromMarks.attrs but not to markFromExisting.attrs. A full-attrs JSON
+    // compare flagged these as user overrides and dropped the theme — manifesting as 65 → 62
+    // theme attrs on round-trip. The gate must compare only the primary `fontFamily` slot.
+    it('preserves theme refs when existing mixes themes with a concrete per-script slot', () => {
+      decodeRPrFromMarksMock.mockImplementation((marks) => ({
+        bold: marks.some((mark) => mark.type.name === 'bold'),
+        fontFamily: {
+          ascii: 'Calibri Light',
+          hAnsi: 'Calibri Light',
+          eastAsia: 'Arial',
+          cs: 'Calibri Light',
+        },
+      }));
+      // Encoder mirrors the real encoder: theme resolves to primary 'Calibri Light';
+      // a concrete `cs` slot adds `csFontFamily` to mark attrs.
+      encodeMarksFromRPrMock.mockImplementation((runProperties) => {
+        const ff = runProperties?.fontFamily;
+        if (!ff || typeof ff !== 'object') return [];
+        const attrs = {};
+        if (ff.asciiTheme === 'majorBidi' || ff.ascii === 'Calibri Light') {
+          attrs.fontFamily = 'Calibri Light';
+        } else if (typeof ff.ascii === 'string') {
+          attrs.fontFamily = ff.ascii;
+        }
+        if (ff.eastAsia) attrs.eastAsiaFontFamily = ff.eastAsia;
+        if (ff.cs && ff.cs !== ff.asciiTheme) attrs.csFontFamily = ff.cs;
+        return [{ type: 'textStyle', attrs }];
+      });
+
+      const schema = makeSchema();
+      const doc = paragraphDoc(
+        schema,
+        {
+          runProperties: {
+            fontFamily: {
+              asciiTheme: 'majorBidi',
+              hAnsiTheme: 'majorBidi',
+              cstheme: 'majorBidi',
+              eastAsia: 'Arial',
+            },
+          },
+          runPropertiesInlineKeys: ['fontFamily'],
+        },
+        [],
+        'Latin',
+      );
+      const state = createState(schema, doc);
+      const { from, to } = runTextRange(state.doc, 0, 5);
+
+      const tr = state.tr.addMark(from, to, schema.marks.bold.create());
+      const { state: nextState } = state.applyTransaction(tr);
+
+      const runNode = nextState.doc.nodeAt(runPos(nextState.doc) ?? 0);
+      const ff = runNode?.attrs.runProperties?.fontFamily;
+      expect(ff?.asciiTheme).toBe('majorBidi');
+      expect(ff?.hAnsiTheme).toBe('majorBidi');
+      expect(ff?.cstheme).toBe('majorBidi');
+      expect(ff?.ascii).toBeUndefined();
+      expect(ff?.hAnsi).toBeUndefined();
+      expect(ff?.cs).toBeUndefined();
+    });
+
     it('drops theme references when the user explicitly sets a different font', () => {
       // Marks decode to a CSS name the theme would NOT resolve to — the user-override path.
       decodeRPrFromMarksMock.mockImplementation((marks) => ({

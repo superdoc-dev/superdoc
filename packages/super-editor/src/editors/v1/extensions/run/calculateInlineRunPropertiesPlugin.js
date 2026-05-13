@@ -61,16 +61,24 @@ function mergeFontFamilyPreservingThemeRefs(fromMarks, existing) {
 }
 
 /**
- * True when the mark-derived fontFamily value encodes to the same OOXML mark as the
- * run's existing (imported) fontFamily — i.e., marks are a faithful re-derivation, not a
- * user override.
+ * True when the mark-derived fontFamily value encodes to the same primary ASCII font as
+ * the run's existing (imported) fontFamily — i.e., marks are a faithful re-derivation,
+ * not a user override.
  *
  * The encoder resolves theme references to their CSS font name. So:
  *   - import case: existing = { asciiTheme: 'majorBidi' }, marks = { ascii: 'Calibri Light' }
- *     → both encode to { fontFamily: 'Calibri Light' } → match → preserve theme.
+ *     → both encode to fontFamily: 'Calibri Light' → match → preserve theme.
  *   - user-edit case: existing = { asciiTheme: 'majorBidi' }, marks = { ascii: 'Arial' }
  *     → existing encodes to 'Calibri Light', marks encode to 'Arial' → mismatch → user
  *       has overridden, drop the theme and respect the new value.
+ *
+ * Compare ONLY the primary `fontFamily` attr, not the full mark attrs object. Per-script
+ * extras (`csFontFamily`, `eastAsiaFontFamily`) on the mark are derived only when the
+ * input has a *concrete* per-script slot. Existing run-props can carry mixed shapes
+ * (e.g. `{ asciiTheme, hAnsiTheme, cstheme, eastAsia: 'Arial' }`) that encode without
+ * `csFontFamily` while the mark re-decode adds a concrete `cs` and therefore does
+ * include it. A full-attrs JSON compare would falsely flag this as user override and
+ * drop the theme — the regression caught on the SD-2894 customer fixture round-trip.
  *
  * @param {{ attrs?: Record<string, unknown> } | null | undefined} markFromMarks
  * @param {Record<string, unknown>|null|undefined} existingFontFamily
@@ -83,7 +91,7 @@ function marksMatchExistingFontFamily(markFromMarks, existingFontFamily, encode,
   if (!markFromMarks?.attrs) return false;
   const markFromExisting = encode({ fontFamily: existingFontFamily }, docx)?.[0];
   if (!markFromExisting?.attrs) return false;
-  return JSON.stringify(markFromMarks.attrs) === JSON.stringify(markFromExisting.attrs);
+  return markFromMarks.attrs.fontFamily === markFromExisting.attrs.fontFamily;
 }
 
 const RUN_PROPERTY_PRESERVE_META_KEY = 'sdPreserveRunPropertiesKeys';

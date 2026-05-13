@@ -195,7 +195,7 @@ document.querySelectorAll<HTMLButtonElement>('.tab').forEach((tab) => {
 // Top toolbar
 // ---------------------------------------------------------------------------
 
-qs<HTMLButtonElement>('#export').addEventListener('click', () => void run('Exported', exportDocument));
+qs<HTMLButtonElement>('#export').addEventListener('click', () => void run('Exported Mutual NDA.docx', exportDocument));
 
 // ---------------------------------------------------------------------------
 // Initialize

@@ -563,7 +563,7 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
     }
     // Logical start/end fallback (LTR-default). The painter's
     // swapCellBordersLR is the single source of the RTL visual mirror
-    // (§17.4.12 + §17.4.33). Pre-swapping here would double-mirror.
+    // for cell borders (§17.4.33/12). Pre-swapping here would double-mirror.
     if (resolvedBorders.left == null) {
       const spec = convertResolvedCellBorder(resolvedBordersData.start);
       if (spec) resolvedBorders.left = spec;
@@ -597,19 +597,14 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
         filteredLegacyBorders[side] = { ...b, val: normalizeLegacyBorderStyle(b.val) };
       }
     }
-    const fallback = extractCellBorders(
-      { borders: filteredLegacyBorders },
-      { isRtl: tableProperties?.rightToLeft === true },
-    );
+    const fallback = extractCellBorders({ borders: filteredLegacyBorders });
     if (fallback) {
       cellAttrs.borders = fallback;
     }
   }
 
   const padding =
-    extractCellPadding(cellNode.attrs ?? {}, {
-      isRtl: tableProperties?.rightToLeft === true,
-    }) ?? (defaultCellPadding ? { ...defaultCellPadding } : undefined);
+    extractCellPadding(cellNode.attrs ?? {}) ?? (defaultCellPadding ? { ...defaultCellPadding } : undefined);
   if (padding) cellAttrs.padding = padding;
 
   const verticalAlign = cellNode.attrs?.verticalAlign;
@@ -972,9 +967,8 @@ export function tableNodeToBlock(
   };
 
   const borderSource = getBorderSource();
-  const isRtlTable = tablePropertiesForCascade?.rightToLeft === true;
   const tableBorders: TableBorders | undefined = borderSource
-    ? extractTableBorders(borderSource.borders, { unit: borderSource.unit, isRtl: isRtlTable })
+    ? extractTableBorders(borderSource.borders, { unit: borderSource.unit })
     : undefined;
   if (tableBorders) tableAttrs.borders = tableBorders;
 

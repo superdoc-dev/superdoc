@@ -26,7 +26,7 @@ interface CollaboratorUser {
 // =============================================================================
 
 const WS_URL = (import.meta.env.VITE_HOCUSPOCUS_URL as string) || 'ws://localhost:1234';
-const ROOM_ID = (import.meta.env.VITE_ROOM_ID as string) || 'version-history-demo';
+const ROOM_ID = (import.meta.env.VITE_ROOM_ID as string) || 'version-history-v3';
 
 // =============================================================================
 // Helpers
@@ -103,11 +103,12 @@ export default function App() {
           // Provider-agnostic mode: we manage our own Yjs doc and provider
           // (using Hocuspocus here for convenience)
           collaboration: { ydoc, provider },
-          trackChanges: { visible: false },
+          trackChanges: { enabled: true, visible: false },
         },
         onReady: () => {
           setIsReady(true);
-          superdocRef.current?.setTrackedChangesPreferences?.({ mode: 'final', enabled: true });
+          // Show document in "final" mode (hides TC marks) while still tracking changes
+          superdocRef.current?.setTrackedChangesPreferences?.({ mode: 'final' });
         },
         onAwarenessUpdate: ({ states }: any) => {
           setUsers(states.filter((s: any) => s.user));

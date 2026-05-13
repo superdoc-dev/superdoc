@@ -72,7 +72,6 @@ export type RenderParagraphContentParams = {
   width: number;
   localStartLine: number;
   localEndLine: number;
-  contextSection: 'body' | 'header' | 'footer' | string;
   linesOverride?: Line[];
   lineIndexOffset?: number;
   continuesFromPrev?: boolean;
@@ -111,15 +110,12 @@ export const renderParagraphContent = (params: RenderParagraphContentParams): Re
     block,
     measure,
     linesOverride,
-    containerKind,
     width,
     localStartLine,
     localEndLine,
+    lineIndexOffset = 0,
     continuesFromPrev,
     continuesOnNext,
-    markerWidth,
-    markerTextWidth,
-    wordLayout,
     resolvedContent,
     betweenInfo,
     sdtBoundary,
@@ -127,12 +123,8 @@ export const renderParagraphContent = (params: RenderParagraphContentParams): Re
     shouldApplySdtContainerStyling,
     applySdtDataset,
     applyContainerSdtDataset,
-    renderLine,
     renderDropCap,
-    captureLineSnapshot,
-    convertFinalParagraphMark,
     lineTopOffset = 0,
-    sourceAnchor,
   } = params;
 
   applyParagraphBlockStyles(frameEl, block.attrs);
@@ -186,8 +178,11 @@ export const renderParagraphContent = (params: RenderParagraphContentParams): Re
         });
 
   let renderedHeight = renderResult.renderedHeight;
+  const originalLineCount = measure.lines?.length ?? linesOverride?.length ?? 0;
+  const renderedStartLine = lineIndexOffset + localStartLine;
+  const renderedEndLine = lineIndexOffset + localEndLine;
   const renderedEntireBlock =
-    localStartLine === 0 && localEndLine >= (linesOverride?.length ?? measure.lines?.length ?? 0);
+    !continuesFromPrev && !continuesOnNext && renderedStartLine === 0 && renderedEndLine >= originalLineCount;
   if (renderedEntireBlock && measure.totalHeight && measure.totalHeight > renderedHeight) {
     renderedHeight = measure.totalHeight;
   }

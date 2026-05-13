@@ -3188,7 +3188,6 @@ export class DomPainter {
         localEndLine: lines.length,
         lineIndexOffset: fragment.fromLine,
         linesOverride: lines,
-        contextSection: context.section,
         continuesFromPrev: paraContinuesFromPrev,
         continuesOnNext: paraContinuesOnNext,
         markerWidth: paraMarkerWidth,

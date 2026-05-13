@@ -954,7 +954,6 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
           width: contentWidthPx,
           localStartLine,
           localEndLine,
-          contextSection: 'body',
           wordLayout: wordLayout ?? undefined,
           spacingPolicy: {
             isFirstBlock: i === 0,

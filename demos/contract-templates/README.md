@@ -2,6 +2,8 @@
 
 A runtime workflow that uses Word content controls to manage smart fields and versioned clauses inside a document. Single-page, no backend, no framework.
 
+This is a demo: it shows a composed contract-template workflow. For the smallest copy-pasteable content-control primitive, see the [tagged inline text example](../../examples/document-api/content-controls/tagged-inline-text).
+
 ## What this shows
 
 Two flows of the same primitive, composed into one app:
@@ -32,6 +34,7 @@ If you need a **ready-made React component for authoring templates** with conten
 
 ## See also
 
+- [Tagged inline text example](../../examples/document-api/content-controls/tagged-inline-text)
 - [Document API > Content controls](https://docs.superdoc.dev/document-api/features/content-controls)
 - [Document API > Reference > Content controls](https://docs.superdoc.dev/document-api/reference/content-controls/index)
 - [Solutions > Template Builder](https://docs.superdoc.dev/solutions/template-builder/introduction)

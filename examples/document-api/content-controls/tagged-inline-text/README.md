@@ -14,6 +14,8 @@ The smallest content-control workflow: wrap one word in an inline text content c
 
 Every operation goes through `editor.doc.*`. The same operation set runs headless via the Node SDK and CLI.
 
+This example uses `lockMode: 'unlocked'` deliberately. Locked content-control mutation is a known engine follow-up, so lock behavior is left out of this minimal path.
+
 ## Run
 
 ```bash

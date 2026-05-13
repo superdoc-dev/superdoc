@@ -97,17 +97,13 @@ test('RTL bidiVisual table with asymmetric tblBorders renders start on visual ri
 // tcMar start/end asymmetric (§17.4.68 + cell-padding mirror)
 // ----------------------------------------------------------------------------
 
-// TODO: surfaces a real importer gap discovered building this fixture.
-// `tableCellProperties.cellMargins.marginStart/marginEnd` are preserved on
-// the PM node attrs (as { value, type } shapes), but the style-engine
-// projection that writes top-level `cellMargins.{top,bottom}` (as px
-// numbers) does NOT project marginStart/marginEnd to top-level. So
-// `extractCellPadding` only sees top/bottom and the asymmetric start/end
-// values fall on the floor. The painter then defaults both sides to ~4px.
-//
-// Fix lives in style-engine or the projection step (not pm-adapter or the
-// painter, both of which handle the correct shape once they get it). File
-// under SD-2771 Wave 3.
+// AIDEV-NOTE: temporary - test.fixme until SD-2771 lands the style-engine
+// projection for tableCellProperties.cellMargins.marginStart/marginEnd to
+// top-level cellMargins. Today only top/bottom project to top-level (as px
+// numbers), so extractCellPadding misses the asymmetric start/end values
+// and the painter defaults both sides to ~4px. Fix lives in style-engine
+// or the projection step (pm-adapter and painter handle the correct shape
+// once they get it).
 test.fixme(
   'RTL bidiVisual cell with asymmetric tcMar renders larger start padding on visual right',
   async ({ superdoc }) => {

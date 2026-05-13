@@ -133,15 +133,6 @@ input:focus {
    Clauses panel
    ----------------------------------------------------------------------- */
 
-.group { margin-bottom: 16px; }
-.group h3 {
-  margin: 0 0 8px;
-  font-size: var(--sd-font-size-200, 12px);
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--demo-text-muted);
-}
 .clause {
   border: 1px solid var(--demo-border);
   border-radius: var(--sd-radius-100, 6px);
@@ -149,17 +140,77 @@ input:focus {
   margin-bottom: 8px;
   background: var(--demo-bg);
 }
-.clause.stale { background: var(--demo-stale-soft); border-color: var(--demo-accent); }
-.clause-label { font-weight: 600; margin-bottom: 4px; }
-.clause-meta {
+.clause.current {
+  background: transparent;
+  border-color: var(--demo-border);
+}
+.clause.stale {
+  background: var(--demo-stale-soft);
+  border-color: var(--demo-accent);
+}
+.clause-header {
   display: flex;
+  align-items: baseline;
   justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.clause-label {
+  margin: 0;
+  font-size: var(--sd-font-size-300, 13px);
+  font-weight: 600;
+  color: var(--demo-text);
+}
+.clause-status {
+  font-size: var(--sd-font-size-200, 11px);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--demo-accent);
+}
+.clause-status.muted { color: var(--demo-text-muted); }
+.clause-summary {
+  margin: 0 0 6px;
+  font-size: var(--sd-font-size-300, 13px);
+  color: var(--demo-text);
+  line-height: 1.4;
+}
+.clause-meta {
+  margin: 0 0 8px;
   font-size: var(--sd-font-size-200, 12px);
   color: var(--demo-text-muted);
-  margin-bottom: 8px;
 }
-.clause-meta strong { color: var(--demo-text); font-weight: 600; }
 .clause .btn { width: 100%; }
+.clause-review-panel {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--demo-accent);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.review-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.review-label {
+  font-size: var(--sd-font-size-200, 11px);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--demo-text-muted);
+}
+.review-text {
+  margin: 0;
+  padding: 8px 10px;
+  background: var(--demo-bg);
+  border: 1px solid var(--demo-border);
+  border-radius: var(--sd-radius-50, 4px);
+  font-size: var(--sd-font-size-300, 13px);
+  line-height: 1.45;
+  color: var(--demo-text);
+}
 
 .status {
   margin: 0;

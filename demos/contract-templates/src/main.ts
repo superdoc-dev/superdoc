@@ -84,44 +84,43 @@ type ClauseId =
 
 type LibraryClause = {
   id: ClauseId;
-  category: string;
   label: string;
   latestVersion: string;
   /** Upgrade prose. Only defined when `latestVersion` differs from v1. */
-  upgrade?: { version: string; body: string };
+  upgrade?: { version: string; summary: string; body: string };
 };
 
 const CLAUSE_LIBRARY: LibraryClause[] = [
-  { id: 'preamble', category: 'Preamble', label: 'Preamble', latestVersion: 'v1' },
+  { id: 'preamble', label: 'Preamble', latestVersion: 'v1' },
   {
     id: 'confidentiality',
-    category: 'Confidentiality',
     label: 'Confidentiality Obligations',
     latestVersion: 'v2',
     upgrade: {
       version: 'v2',
+      summary: 'Extends survival period from 2 years to 5 years.',
       body: 'Each party will treat the other party\u2019s Confidential Information as confidential and will protect it with at least the same care it uses for its own confidential information. These obligations survive disclosure for five (5) years.',
     },
   },
-  { id: 'permittedUse', category: 'Permitted Use', label: 'Permitted Use', latestVersion: 'v1' },
-  { id: 'termination', category: 'Termination', label: 'Term and Termination', latestVersion: 'v1' },
+  { id: 'permittedUse', label: 'Permitted Use', latestVersion: 'v1' },
+  { id: 'termination', label: 'Term and Termination', latestVersion: 'v1' },
   {
     id: 'governingLaw',
-    category: 'Governing Law',
     label: 'Governing Law',
     latestVersion: 'v2',
     upgrade: {
       version: 'v2',
+      summary: 'Changes governing law from California to New York.',
       body: 'This Agreement is governed by the laws of the State of New York, without regard to its conflicts of law provisions.',
     },
   },
   {
     id: 'limitationOfLiability',
-    category: 'Liability',
     label: 'Limitation of Liability',
     latestVersion: 'v2',
     upgrade: {
       version: 'v2',
+      summary: 'Extends liability cap from 12 to 24 months and excludes confidentiality and indemnity obligations.',
       body: 'Each party\u2019s aggregate liability under this Agreement is limited to fees paid in the twenty-four (24) months preceding the claim. Confidentiality breaches and indemnity obligations are excluded from this cap.',
     },
   },
@@ -158,6 +157,7 @@ const state = {
   editor: null as DemoEditor | null,
   values: {} as Record<FieldKey, string>,
   versions: {} as Record<ClauseId, string>,
+  expandedClause: null as ClauseId | null,
 };
 
 const statusEl = qs<HTMLElement>('#status');
@@ -316,42 +316,64 @@ function renderFieldsPanel(): void {
 
 function renderClausesPanel(): void {
   clausesPanelEl.innerHTML = '';
-  const grouped = new Map<string, LibraryClause[]>();
-  for (const c of CLAUSE_LIBRARY) {
-    const arr = grouped.get(c.category) ?? [];
-    arr.push(c);
-    grouped.set(c.category, arr);
-  }
-  for (const [category, clauses] of grouped) {
-    const group = document.createElement('div');
-    group.className = 'group';
-    group.innerHTML = `<h3>${escapeHtml(category)}</h3>`;
-    for (const clause of clauses) {
-      const inDoc = state.versions[clause.id] ?? clause.latestVersion;
-      const latest = clause.latestVersion;
-      const stale = inDoc !== latest && clause.upgrade != null;
-      const row = document.createElement('div');
-      row.className = 'clause' + (stale ? ' stale' : '');
-      row.innerHTML = `
-        <div class="clause-label">${escapeHtml(clause.label)}</div>
-        <div class="clause-meta">
-          <span>In document: <strong>${inDoc}</strong></span>
-          <span>Library: <strong>${latest}</strong></span>
-        </div>
-        ${stale ? `<button class="btn primary clause-update">Update to ${latest}</button>` : ''}
+  for (const clause of CLAUSE_LIBRARY) {
+    const inDoc = state.versions[clause.id] ?? clause.latestVersion;
+    const stale = clause.upgrade != null && inDoc !== clause.latestVersion;
+    const expanded = stale && state.expandedClause === clause.id;
+
+    const card = document.createElement('article');
+    card.className = 'clause' + (stale ? ' stale' : ' current') + (expanded ? ' expanded' : '');
+
+    if (stale && clause.upgrade) {
+      const upgrade = clause.upgrade;
+      const currentText = findClauseControl(clause.id)?.text ?? '';
+      card.innerHTML = `
+        <header class="clause-header">
+          <h3 class="clause-label">${escapeHtml(clause.label)}</h3>
+          <span class="clause-status">Update available</span>
+        </header>
+        <p class="clause-summary">${escapeHtml(upgrade.summary)}</p>
+        <p class="clause-meta">Document ${escapeHtml(inDoc)} \u00b7 Library ${escapeHtml(upgrade.version)}</p>
+        <button class="btn clause-review" type="button">${expanded ? 'Hide' : 'Review'}</button>
+        ${
+          expanded
+            ? `
+          <div class="clause-review-panel">
+            <div class="review-section">
+              <div class="review-label">In your document</div>
+              <p class="review-text">${escapeHtml(currentText)}</p>
+            </div>
+            <div class="review-section">
+              <div class="review-label">From the library</div>
+              <p class="review-text">${escapeHtml(upgrade.body)}</p>
+            </div>
+            <button class="btn primary clause-replace" type="button">Replace with library clause</button>
+          </div>
+        `
+            : ''
+        }
       `;
-      const btn = row.querySelector<HTMLButtonElement>('button.clause-update');
-      if (btn && clause.upgrade) {
-        const upgrade = clause.upgrade;
-        btn.addEventListener('click', () => {
-          void run(`${clause.label} updated to ${upgrade.version}`, async () => {
-            await applyClauseVersion(clause.id, upgrade.version, upgrade.body);
-          });
+      card.querySelector<HTMLButtonElement>('.clause-review')?.addEventListener('click', () => {
+        state.expandedClause = expanded ? null : clause.id;
+        renderClausesPanel();
+      });
+      card.querySelector<HTMLButtonElement>('.clause-replace')?.addEventListener('click', () => {
+        void run(`${clause.label}: replaced with library clause`, async () => {
+          await applyClauseVersion(clause.id, upgrade.version, upgrade.body);
+          state.expandedClause = null;
         });
-      }
-      group.appendChild(row);
+      });
+    } else {
+      card.innerHTML = `
+        <header class="clause-header">
+          <h3 class="clause-label">${escapeHtml(clause.label)}</h3>
+          <span class="clause-status muted">Current</span>
+        </header>
+        <p class="clause-meta">Document ${escapeHtml(inDoc)}</p>
+      `;
     }
-    clausesPanelEl.appendChild(group);
+
+    clausesPanelEl.appendChild(card);
   }
 }
 

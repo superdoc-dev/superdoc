@@ -129,7 +129,11 @@ test('RTL bidiVisual table with tblInd indents from the right edge of the page',
   expect(geometry).not.toBeNull();
   if (!geometry) return;
 
+  // Magnitude check: the fixture's tblInd is 1440 twips (1 inch ~= 96px). The
+  // gap difference should be substantial, not just "rightGap < leftGap" which
+  // is true for any right-anchored table regardless of whether tblInd was honored.
   expect(geometry.rightGap).toBeLessThan(geometry.leftGap);
+  expect(geometry.leftGap - geometry.rightGap).toBeGreaterThan(40);
 });
 
 // ----------------------------------------------------------------------------

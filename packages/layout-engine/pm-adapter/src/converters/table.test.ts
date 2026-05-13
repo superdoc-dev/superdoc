@@ -1025,6 +1025,61 @@ describe('table converter', () => {
       });
     });
 
+    it('normalizes legacy cell border style aliases (dotdash, doublewave, etc.) to canonical BorderStyle', () => {
+      // Pre-migration persisted docs sometimes store border `val` as lowercase
+      // or alias forms (`dot`, `dotdash`, `dotdotdash`, `doublewave`). The
+      // canonical BorderStyle enum is camelCase. Pin that the legacy fallback
+      // path normalizes - otherwise the painter receives a non-canonical
+      // string and the border style doesn't render correctly.
+      const cases: Array<{ input: string; expected: string }> = [
+        { input: 'dot', expected: 'dotted' },
+        { input: 'dotdash', expected: 'dotDash' },
+        { input: 'dotdotdash', expected: 'dotDotDash' },
+        { input: 'doublewave', expected: 'doubleWave' },
+        { input: 'NIL', expected: 'none' },
+        { input: ' Single ', expected: 'single' },
+      ];
+
+      for (const { input, expected } of cases) {
+        const node: PMNode = {
+          type: 'table',
+          attrs: {},
+          content: [
+            {
+              type: 'tableRow',
+              content: [
+                {
+                  type: 'tableCell',
+                  attrs: {
+                    borders: {
+                      top: { val: input, size: 2, color: '000000' },
+                    },
+                  },
+                  content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Cell' }] }],
+                },
+              ],
+            },
+          ],
+        };
+
+        const result = tableNodeToBlock(
+          node,
+          mockBlockIdGenerator,
+          mockPositionMap,
+          'Arial',
+          16,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          mockParagraphConverter,
+        ) as TableBlock;
+
+        const topBorder = result.rows[0].cells[0].attrs?.borders?.top;
+        expect(topBorder?.style).toBe(expected);
+      }
+    });
+
     it('maps resolved tableCellProperties borders start/end to physical sides in RTL tables', () => {
       const node: PMNode = {
         type: 'table',

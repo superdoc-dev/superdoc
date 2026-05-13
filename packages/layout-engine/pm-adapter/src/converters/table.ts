@@ -133,6 +133,40 @@ const isTableSkipPlaceholderCell = (node: PMNode): boolean => {
   return placeholder === 'gridBefore' || placeholder === 'gridAfter';
 };
 
+// Legacy persisted-cell borders sometimes use lowercase or alias forms
+// (`dot`, `dotdash`, `doublewave`) instead of the canonical camelCase
+// BorderStyle enum. convertBorderSpec passes `val` through unchanged, so
+// the legacy fallback path normalizes here before handoff.
+function normalizeLegacyBorderStyle(value: string | undefined): string {
+  switch ((value ?? '').trim().toLowerCase()) {
+    case 'none':
+    case 'nil':
+      return 'none';
+    case 'double':
+      return 'double';
+    case 'dashed':
+      return 'dashed';
+    case 'dotted':
+    case 'dot':
+      return 'dotted';
+    case 'thick':
+      return 'thick';
+    case 'triple':
+      return 'triple';
+    case 'dotdash':
+      return 'dotDash';
+    case 'dotdotdash':
+      return 'dotDotDash';
+    case 'wave':
+      return 'wave';
+    case 'doublewave':
+      return 'doubleWave';
+    case 'single':
+    default:
+      return 'single';
+  }
+}
+
 const convertResolvedCellBorder = (value: unknown): BorderSpec | undefined => {
   if (!value || typeof value !== 'object') return undefined;
 
@@ -556,7 +590,11 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
     for (const side of ['top', 'right', 'bottom', 'left', 'start', 'end'] as const) {
       const b = legacy[side];
       if (b && b.val && typeof b.size === 'number' && b.size > 0) {
-        filteredLegacyBorders[side] = b;
+        // Legacy persisted docs may store lowercase or alias forms (`dot`,
+        // `dotdash`, `doublewave`) instead of the camelCase BorderStyle enum.
+        // Normalize before handing to extractCellBorders so convertBorderSpec
+        // doesn't pass a non-canonical string through to the painter.
+        filteredLegacyBorders[side] = { ...b, val: normalizeLegacyBorderStyle(b.val) };
       }
     }
     const fallback = extractCellBorders(

@@ -89,8 +89,11 @@ export type ToolbarPayloadMap = {
   'numbered-list': never;
   'indent-increase': never;
   'indent-decrease': never;
-  'direction-ltr': { direction: 'ltr' | 'rtl'; alignmentPolicy?: 'matchDirection' };
-  'direction-rtl': { direction: 'ltr' | 'rtl'; alignmentPolicy?: 'matchDirection' };
+  // Direction + alignmentPolicy are baked into createParagraphDirectionExecute
+  // (see headless-toolbar/helpers/paragraph.ts). Headless callers can't
+  // override either — payload is `never` so TS catches misuse at the call site.
+  'direction-ltr': never;
+  'direction-rtl': never;
   undo: never;
   redo: never;
   ruler: never;

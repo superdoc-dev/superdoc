@@ -26,7 +26,8 @@ interface CollaboratorUser {
 // =============================================================================
 
 const WS_URL = (import.meta.env.VITE_HOCUSPOCUS_URL as string) || 'ws://localhost:1234';
-const ROOM_ID = (import.meta.env.VITE_ROOM_ID as string) || 'version-history-v3';
+const ROOM_ID = (import.meta.env.VITE_ROOM_ID as string) || 'version-history-v5';
+const BLANK_DOC_URL = '/blank.docx';
 
 // =============================================================================
 // Helpers
@@ -50,6 +51,17 @@ async function docxToJson(blob: Blob, editor: any): Promise<object> {
   const documentJson = converter.getSchema(editor);
   if (!documentJson) throw new Error('Failed to convert DOCX');
   return documentJson;
+}
+
+/**
+ * Replace the entire editor content with a DOCX blob.
+ * Broadcasts via Yjs to all collaborators.
+ */
+async function replaceEditorContent(editor: any, blob: Blob): Promise<void> {
+  const documentJson = await docxToJson(blob, editor);
+  editor.commands.selectAll();
+  editor.commands.insertContent(documentJson, { contentType: 'schema' });
+  setTimeout(() => editor.commands.acceptAllTrackedChanges?.(), 100);
 }
 
 const generateUserId = () => `User ${Math.floor(Math.random() * 1000)}`;
@@ -93,10 +105,26 @@ export default function App() {
     });
     providerRef.current = provider;
 
-    provider.on('synced', () => {
+    provider.on('synced', async () => {
+      // Check if this is a fresh room (no content yet)
+      const xmlFragment = ydoc.getXmlFragment('prosemirror');
+      const isEmpty = xmlFragment.length === 0;
+
+      // Always fetch blank.docx to seed empty rooms with valid structure
+      let initialDoc: Blob | undefined;
+      if (isEmpty) {
+        try {
+          const response = await fetch(BLANK_DOC_URL);
+          initialDoc = await response.blob();
+        } catch (e) {
+          console.warn('Could not load blank document:', e);
+        }
+      }
+
       superdocRef.current = new SuperDoc({
         selector: '#superdoc-editor',
         documentMode: 'suggesting',
+        document: initialDoc,
         user: currentUser,
         comments: { visible: false },
         modules: {
@@ -126,20 +154,6 @@ export default function App() {
       ydocRef.current = null;
     };
   }, [currentUser]);
-
-  // ---------------------------------------------------------------------------
-  // New Document
-  // ---------------------------------------------------------------------------
-  const newDocument = useCallback(() => {
-    const editor = superdocRef.current?.activeEditor;
-    if (editor) {
-      editor.commands.selectAll();
-      editor.commands.deleteSelection();
-      editor.commands.acceptAllTrackedChanges?.();
-    }
-    setVersions([]);
-    setSelectedVersion(null);
-  }, []);
 
   // ---------------------------------------------------------------------------
   // Save Version
@@ -223,14 +237,8 @@ export default function App() {
     if (!editor) return;
 
     try {
-      const documentJson = await docxToJson(version.documentBlob, editor);
-
       // Replace content (broadcasts via Yjs to all collaborators)
-      editor.commands.selectAll();
-      editor.commands.insertContent(documentJson, { contentType: 'schema' });
-
-      // Accept tracked changes after content settles
-      setTimeout(() => editor.commands.acceptAllTrackedChanges?.(), 100);
+      await replaceEditorContent(editor, version.documentBlob);
 
       // Trim version history
       setVersions((prev) => {
@@ -276,9 +284,6 @@ export default function App() {
               </span>
             ))}
           </div>
-          <button onClick={newDocument} style={styles.secondaryButton}>
-            New Document
-          </button>
           <button
             onClick={saveVersion}
             disabled={!isReady}

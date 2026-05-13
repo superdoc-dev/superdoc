@@ -133,6 +133,54 @@ test('RTL bidiVisual cell with asymmetric tcMar renders larger start padding on 
 });
 
 // ----------------------------------------------------------------------------
+// tcMar overrides table-level cellMargins per §17.4.68
+// ----------------------------------------------------------------------------
+
+// Regression for SD-3134 round-2: when a table has tblCellMar with physical
+// left/right defaults AND a cell has inline tcMar with logical start/end,
+// the cell-level exception must override the table-level default per
+// §17.4.68 ("This setting, if present, shall override the table cell margins
+// from the table-level cell margins"). Earlier the importer kept both shapes
+// in cellMargins and extractCellPadding gave physical left/right precedence,
+// so the inline start/end values were silently dropped.
+test('LTR table with table-level marginLeft/Right defaults + cell-level tcMar/start/end uses the cell-level values', async ({
+  superdoc,
+}) => {
+  await superdoc.loadDocument(path.resolve(__dirname, 'fixtures/ltr-tcmar-overrides-table-default.docx'));
+  await superdoc.waitForStable();
+
+  // Fixture:
+  //  - Table tblPr/tblCellMar w:left=40 dxa and w:right=40 dxa (~2.7px each)
+  //  - Cell 1 tcPr/tcMar w:start=480 dxa (~32px) and w:end=60 dxa (~4px)
+  //  - Cell 2 has no inline tcMar (inherits the table defaults)
+  const padding = await superdoc.page.evaluate(() => {
+    const fragment = document.querySelector('.superdoc-table-fragment');
+    if (!fragment) return null;
+    const cells = Array.from(fragment.children).filter((el) => (el as HTMLElement).style?.position === 'absolute');
+    const exception = cells.find((c) => c.textContent?.includes('inline tcMar exception cell'));
+    const defaulted = cells.find((c) => c.textContent?.includes('table default cell'));
+    if (!exception || !defaulted) return null;
+    const csE = window.getComputedStyle(exception);
+    const csD = window.getComputedStyle(defaulted);
+    return {
+      exception: { paddingLeft: parseFloat(csE.paddingLeft), paddingRight: parseFloat(csE.paddingRight) },
+      defaulted: { paddingLeft: parseFloat(csD.paddingLeft), paddingRight: parseFloat(csD.paddingRight) },
+    };
+  });
+
+  expect(padding).not.toBeNull();
+  if (!padding) return;
+
+  // Cell with inline tcMar uses its own asymmetric exception values.
+  expect(padding.exception.paddingLeft).toBeGreaterThan(20);
+  expect(padding.exception.paddingRight).toBeLessThan(10);
+  expect(padding.exception.paddingLeft - padding.exception.paddingRight).toBeGreaterThan(20);
+  // Cell without inline tcMar inherits the table-level defaults (~2.7px).
+  expect(padding.defaulted.paddingLeft).toBeLessThan(5);
+  expect(padding.defaulted.paddingRight).toBeLessThan(5);
+});
+
+// ----------------------------------------------------------------------------
 // gridBefore / gridAfter (§17.4.14 + §17.4.15)
 // ----------------------------------------------------------------------------
 

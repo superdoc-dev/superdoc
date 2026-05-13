@@ -208,9 +208,6 @@ const generateCommentsWithExtendedData = ({ docx, comments, converter, threading
       }
     }
 
-    // Track the tracked change association but don't use it as parentCommentId
-    // This keeps comments and tracked changes as separate bubbles in the UI
-    // while preserving the relationship for export and visual purposes
     const trackedChangeParentId = isInsideTrackedChange ? trackedChangeParent.trackedChangeId : undefined;
 
     // Only use range-based parenting as fallback when:
@@ -223,6 +220,21 @@ const generateCommentsWithExtendedData = ({ docx, comments, converter, threading
       if (threadingProfile?.defaultStyle === 'commentsExtended') {
         threadingStyleOverride = 'range-based';
       }
+    }
+
+    // AIDEV-NOTE: SD-2528. A reply that user typed under a tracked-change bubble
+    // is exported with its commentRange wrapping the TC's text but no
+    // paraIdParent (the parent is a synthetic TC entity, filtered from
+    // comments.xml). On re-import the only signal we have is
+    // trackedChangeParentId. We promote that to parentCommentId so the comments
+    // sidebar collapses the reply back into the TC bubble — matching the live
+    // pre-export state. The CommentDialog already threads via direct
+    // parentCommentId === trackedChangeId on line 321, so this is the cheapest
+    // restore path. Round-trip stable: re-export filters TC parents but
+    // re-emits the commentRange inside the wrapper, which gets re-detected on
+    // the next import.
+    if (!parentCommentId && trackedChangeParentId) {
+      parentCommentId = trackedChangeParentId;
     }
 
     return {

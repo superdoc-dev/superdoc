@@ -420,7 +420,15 @@ const resizableBoundaries = computed(() => {
     });
   }
 
-  // Add handle for right edge of table (resize last column)
+  // Add handle for right edge of table (resize last column).
+  // SD-2810 RTL note: the right-edge handle ALWAYS sits on the visual right
+  // side of the table. In an LTR table that means the trailing edge of the
+  // last logical column (`columns.length - 1`); in a `bidiVisual` RTL table
+  // the visually-rightmost column is the FIRST logical column (`0`) because
+  // cells are stored logically and rendered right-to-left. Downstream
+  // consumers that need "is this the table's outer edge?" should key off
+  // `type === 'right-edge'`, NOT `columnIndex === columns.length - 1`,
+  // because that index equality is LTR-only.
   const lastCol = columns[columns.length - 1];
   const rtlRightEdgeX = tableContentWidth.value;
   boundaries.push({
@@ -909,12 +917,17 @@ const mouseMoveThrottle = throttle((event) => {
   const constrainedVisualDelta =
     isRtlTable.value && !dragState.value.isRightEdge ? -constrainedDelta : constrainedDelta;
 
-  // Update visual guideline only (no PM transaction yet)
+  // Update visual guideline only (no PM transaction yet).
+  // `constrainedDelta` on dragState stays in VISUAL coordinates so the preview
+  // guideline at line 591 (`initialBoundary.x + dragState.value.constrainedDelta`)
+  // tracks the cursor. The emitted `delta` below is LOGICAL: it matches the
+  // value applied to `newWidths` and preserves the pre-PR contract for
+  // external listeners (logging, analytics, undo metadata).
   dragState.value.constrainedDelta = constrainedVisualDelta;
 
   emit('resize-move', {
     columnIndex: dragState.value.columnIndex,
-    delta: constrainedVisualDelta,
+    delta: constrainedDelta,
   });
 }, THROTTLE_INTERVAL_MS);
 
@@ -958,11 +971,14 @@ function onDocumentMouseUp(event) {
     dispatchResizeTransaction(columnIndex, newWidths);
   }
 
-  // Always emit resize-end so the parent can clear its dragging flag
+  // Always emit resize-end so the parent can clear its dragging flag.
+  // `delta` is the LOGICAL change applied to `newWidths`, matching the
+  // pre-PR contract. In LTR this equals `visualFinalDelta`; in RTL inner
+  // boundaries it is the sign-flipped value.
   emit('resize-end', {
     columnIndex,
     finalWidths: newWidths,
-    delta: visualFinalDelta,
+    delta: finalDelta,
   });
 
   dragState.value = null;

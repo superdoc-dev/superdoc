@@ -1152,4 +1152,73 @@ describe('createToolbarRegistry', () => {
       expect(result).toBe(false);
     });
   });
+
+  // PR #3226: state-deriver tests for direction-ltr/direction-rtl. The deriver
+  // reads paragraphProperties.rightToLeft via getCurrentResolvedParagraphProperties
+  // and returns `{ active: current === closureDirection, disabled, value: current }`.
+  describe('direction-ltr / direction-rtl state deriver', () => {
+    const makeDirectionContext = (rightToLeft: boolean | undefined): ToolbarContext => ({
+      ...createContext(),
+      editor: {
+        // Leaving `converter` undefined makes calculateResolvedParagraphProperties
+        // return node.attrs.paragraphProperties directly, no cascade.
+        state: {
+          doc: { resolve: vi.fn(() => '$resolved-pos') },
+          selection: {
+            $from: {
+              depth: 1,
+              node: vi.fn((depth) =>
+                depth === 1
+                  ? {
+                      type: { name: 'paragraph' },
+                      attrs: {
+                        paragraphProperties: rightToLeft === undefined ? {} : { rightToLeft },
+                      },
+                    }
+                  : null,
+              ),
+              before: vi.fn(() => 5),
+              start: vi.fn(() => 6),
+            },
+          },
+        },
+      } as any,
+    });
+
+    it('direction-rtl is active when paragraph resolves RTL', () => {
+      const registry = createToolbarRegistry();
+      const state = registry['direction-rtl']?.state({ context: makeDirectionContext(true), superdoc: {} });
+
+      expect(state).toEqual({ active: true, disabled: false, value: 'rtl' });
+    });
+
+    it('direction-rtl is inactive when paragraph resolves LTR', () => {
+      const registry = createToolbarRegistry();
+      const state = registry['direction-rtl']?.state({ context: makeDirectionContext(false), superdoc: {} });
+
+      expect(state).toEqual({ active: false, disabled: false, value: 'ltr' });
+    });
+
+    it('direction-rtl is inactive when paragraph has no explicit direction', () => {
+      const registry = createToolbarRegistry();
+      const state = registry['direction-rtl']?.state({ context: makeDirectionContext(undefined), superdoc: {} });
+
+      // Falsy rightToLeft -> current = 'ltr', so direction-rtl is inactive.
+      expect(state).toEqual({ active: false, disabled: false, value: 'ltr' });
+    });
+
+    it('direction-ltr is active when paragraph resolves LTR', () => {
+      const registry = createToolbarRegistry();
+      const state = registry['direction-ltr']?.state({ context: makeDirectionContext(false), superdoc: {} });
+
+      expect(state).toEqual({ active: true, disabled: false, value: 'ltr' });
+    });
+
+    it('direction-ltr is inactive when paragraph resolves RTL', () => {
+      const registry = createToolbarRegistry();
+      const state = registry['direction-ltr']?.state({ context: makeDirectionContext(true), superdoc: {} });
+
+      expect(state).toEqual({ active: false, disabled: false, value: 'rtl' });
+    });
+  });
 });

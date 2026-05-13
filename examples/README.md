@@ -64,6 +64,15 @@ Realtime providers and backend setups for Yjs-based collaboration.
 | [backends/node-sdk](./editor/collaboration/backends/node-sdk) | Server-side document operations alongside the realtime layer |
 | [backends/fastapi](./editor/collaboration/backends/fastapi) | Python FastAPI backend |
 
+## Document API
+
+The operation contract for reading and editing documents. Same shape in the browser, in Node SDKs, in the CLI, and behind AI tool wrappers.
+
+| Example | Pattern |
+|---------|---------|
+| [content-controls/smart-fields](./document-api/content-controls/smart-fields) | One value, every occurrence. Inline text controls sharing a tag. |
+| [content-controls/reusable-section](./document-api/content-controls/reusable-section) | Versioned block. Tag carries `{sectionId, version}`. Detect drift and swap in place. |
+
 ## Document Engine
 
 Programmatic editing without a visible editor.

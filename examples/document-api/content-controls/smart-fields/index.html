@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SuperDoc: smart fields</title>
+  </head>
+  <body>
+    <div class="app">
+      <section class="editor-area">
+        <div id="editor"></div>
+      </section>
+      <aside class="sidebar">
+        <section class="panel">
+          <h2>Smart fields</h2>
+          <p class="hint">Every occurrence of <code>customer</code> in the document is wrapped in an inline content control with the same <code>tag</code>. Set one value, every match updates.</p>
+          <label>
+            <span>Customer</span>
+            <input id="field-customer" />
+          </label>
+          <button class="btn primary" id="apply" type="button">Apply</button>
+        </section>
+        <p class="status" id="status">Loading</p>
+      </aside>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

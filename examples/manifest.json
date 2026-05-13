@@ -130,6 +130,26 @@
     "ci": true
   },
   {
+    "id": "document-api-content-controls-smart-fields",
+    "title": "Content controls: smart fields",
+    "category": "Document API",
+    "surface": "Content controls",
+    "sourceRepo": "superdoc-dev/superdoc",
+    "sourcePath": "examples/document-api/content-controls/smart-fields",
+    "docs": "https://docs.superdoc.dev/document-api/features/content-controls",
+    "ci": false
+  },
+  {
+    "id": "document-api-content-controls-reusable-section",
+    "title": "Content controls: reusable section",
+    "category": "Document API",
+    "surface": "Content controls",
+    "sourceRepo": "superdoc-dev/superdoc",
+    "sourcePath": "examples/document-api/content-controls/reusable-section",
+    "docs": "https://docs.superdoc.dev/document-api/features/content-controls",
+    "ci": false
+  },
+  {
     "id": "editor-theming",
     "title": "Theming",
     "category": "Editor",

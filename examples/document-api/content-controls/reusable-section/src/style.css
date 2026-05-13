@@ -1,0 +1,102 @@
+:root {
+  --bg: #fff;
+  --bg-muted: #f7f7f8;
+  --border: #e4e4e7;
+  --text: #18181b;
+  --text-muted: #71717a;
+  --accent: #1355ff;
+  --accent-hover: #0f44cc;
+  --accent-soft: #eef3ff;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 14px;
+  color: var(--text);
+  background: var(--bg-muted);
+}
+
+code {
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+  font-size: 0.9em;
+}
+
+button, input { font: inherit; }
+button { cursor: pointer; }
+
+.app { display: grid; grid-template-columns: 1fr 320px; height: 100vh; }
+.editor-area { overflow: auto; padding: 12px; }
+.sidebar {
+  background: var(--bg);
+  border-left: 1px solid var(--border);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.panel { padding: 14px 16px; border-bottom: 1px solid var(--border); }
+.panel h2 {
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  margin: 0 0 8px;
+}
+.panel .hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin: 0 0 12px;
+  line-height: 1.5;
+}
+
+.meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 4px 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.meta strong { color: var(--text); font-weight: 600; }
+
+.banner {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--accent);
+  background: var(--accent-soft);
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.banner-text { font-size: 12px; color: var(--text); }
+
+.btn {
+  height: 30px;
+  padding: 0 14px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  width: 100%;
+}
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn.primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+  color: #fff;
+}
+.btn:disabled { color: var(--text-muted); cursor: not-allowed; opacity: 0.5; }
+
+.status {
+  margin: 0;
+  padding: 12px 16px;
+  font-size: 12px;
+  color: var(--text-muted);
+  border-top: 1px solid var(--border);
+  margin-top: auto;
+}

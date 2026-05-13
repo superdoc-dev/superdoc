@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SuperDoc: reusable section</title>
+  </head>
+  <body>
+    <div class="app">
+      <section class="editor-area">
+        <div id="editor"></div>
+      </section>
+      <aside class="sidebar">
+        <section class="panel">
+          <h2>Reusable section</h2>
+          <p class="hint">The section is wrapped in a block content control whose <code>tag</code> carries <code>{sectionId, version}</code>. The app reads the live version, compares against the library, and offers an update when they diverge.</p>
+          <div class="meta">
+            <span>In document</span>
+            <strong id="version">v1</strong>
+          </div>
+          <div class="meta">
+            <span>Library</span>
+            <strong>v2</strong>
+          </div>
+          <div class="banner" id="banner" hidden>
+            <span class="banner-text">Update available.</span>
+            <button class="btn primary" id="apply" type="button">Apply v2</button>
+          </div>
+        </section>
+        <p class="status" id="status">Loading</p>
+      </aside>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

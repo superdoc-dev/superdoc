@@ -399,6 +399,43 @@ describe('SD-2343 - no double conversion for pre-converted px widths', () => {
     const result = convertBorderSpec({ val: 'single', size: 8 }, { unit: 'eighthPoints' });
     expect(result?.width).toBeCloseTo(1.3333, 4);
   });
+
+  it('maps logical start/end to left/right in LTR when physical sides are missing', () => {
+    const input = {
+      start: { val: 'single', size: 2, color: 'FF0000' },
+      end: { val: 'double', size: 3, color: '0000FF' },
+    };
+
+    const result = extractTableBorders(input, { isRtl: false });
+    expect(result?.left?.style).toBe('single');
+    expect((result?.left as { color?: string })?.color).toBe('#FF0000');
+    expect(result?.right?.style).toBe('double');
+    expect((result?.right as { color?: string })?.color).toBe('#0000FF');
+  });
+
+  it('maps logical start/end to right/left in RTL when physical sides are missing', () => {
+    const input = {
+      start: { val: 'single', size: 2, color: 'FF0000' },
+      end: { val: 'double', size: 3, color: '0000FF' },
+    };
+
+    const result = extractTableBorders(input, { isRtl: true });
+    expect(result?.right?.style).toBe('single');
+    expect((result?.right as { color?: string })?.color).toBe('#FF0000');
+    expect(result?.left?.style).toBe('double');
+    expect((result?.left as { color?: string })?.color).toBe('#0000FF');
+  });
+
+  it('keeps explicit physical sides over logical start/end', () => {
+    const input = {
+      left: { val: 'single', size: 1, color: '00AA00' },
+      start: { val: 'double', size: 5, color: 'FF0000' },
+    };
+
+    const result = extractTableBorders(input, { isRtl: false });
+    expect(result?.left?.style).toBe('single');
+    expect((result?.left as { color?: string })?.color).toBe('#00AA00');
+  });
 });
 
 describe('extractCellBorders', () => {

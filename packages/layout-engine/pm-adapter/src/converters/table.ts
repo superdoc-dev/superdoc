@@ -947,8 +947,9 @@ export function tableNodeToBlock(
   };
 
   const borderSource = getBorderSource();
+  const isRtlTable = tablePropertiesForCascade?.rightToLeft === true;
   const tableBorders: TableBorders | undefined = borderSource
-    ? extractTableBorders(borderSource.borders, { unit: borderSource.unit })
+    ? extractTableBorders(borderSource.borders, { unit: borderSource.unit, isRtl: isRtlTable })
     : undefined;
   if (tableBorders) tableAttrs.borders = tableBorders;
 

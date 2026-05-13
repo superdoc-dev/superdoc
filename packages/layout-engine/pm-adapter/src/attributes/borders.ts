@@ -25,6 +25,7 @@ const MAX_BORDER_SIZE_PX = 100; // Reasonable maximum
 type BorderConversionUnit = 'px' | 'eighthPoints';
 type BorderConversionOptions = {
   unit?: BorderConversionUnit;
+  isRtl?: boolean;
 };
 
 /**
@@ -247,23 +248,33 @@ export function extractTableBorders(
     return undefined;
   }
 
-  const sides = ['top', 'right', 'bottom', 'left', 'insideH', 'insideV'] as const;
   const borders: TableBorders = {};
-
-  for (const side of sides) {
-    const raw = bordersInput[side];
-    if (raw == null) continue;
-
-    // Already valid? Use as-is
+  const isRtl = options?.isRtl === true;
+  const assignConverted = (side: keyof TableBorders, raw: unknown): void => {
+    if (raw == null) return;
     if (isTableBorderValue(raw)) {
       borders[side] = raw;
-    } else {
-      // Convert from OOXML
-      const converted = convertTableBorderValue(raw, options);
-      if (converted !== undefined) {
-        borders[side] = converted;
-      }
+      return;
     }
+    const converted = convertTableBorderValue(raw, options);
+    if (converted !== undefined) {
+      borders[side] = converted;
+    }
+  };
+
+  // Physical sides first (higher precedence).
+  for (const side of ['top', 'right', 'bottom', 'left', 'insideH', 'insideV'] as const) {
+    assignConverted(side, bordersInput[side]);
+  }
+
+  // Logical sides fallback when physical counterpart is missing.
+  const startTarget: keyof TableBorders = isRtl ? 'right' : 'left';
+  const endTarget: keyof TableBorders = isRtl ? 'left' : 'right';
+  if (borders[startTarget] == null) {
+    assignConverted(startTarget, bordersInput.start);
+  }
+  if (borders[endTarget] == null) {
+    assignConverted(endTarget, bordersInput.end);
   }
 
   return Object.keys(borders).length > 0 ? borders : undefined;

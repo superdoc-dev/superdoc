@@ -138,8 +138,8 @@ export const hydrateTableStyleAttrs = (
 const normalizeTableBorders = (value?: Record<string, unknown>): TableBorders | undefined => {
   if (!value) return undefined;
 
-  const sides = ['top', 'bottom', 'left', 'right', 'insideH', 'insideV'] as const;
-  const result: TableBorders = {};
+  const sides = ['top', 'bottom', 'left', 'right', 'insideH', 'insideV', 'start', 'end'] as const;
+  const result: Record<string, unknown> = {};
 
   for (const side of sides) {
     const border = value[side];
@@ -148,7 +148,7 @@ const normalizeTableBorders = (value?: Record<string, unknown>): TableBorders | 
     if (converted) result[side] = converted;
   }
 
-  return Object.keys(result).length > 0 ? result : undefined;
+  return Object.keys(result).length > 0 ? (result as TableBorders) : undefined;
 };
 
 const adjustBorderSize = (border: Record<string, unknown>): Record<string, unknown> => {

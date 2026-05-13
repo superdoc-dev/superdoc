@@ -75,7 +75,7 @@ test('clicking Left-to-right on a vanilla paragraph deletes the rightToLeft key'
   expect(afterLtr[0].rightToLeft).toBe('<absent>');
 });
 
-test('Right-to-left then Left-to-right is one undo step (atomic transaction)', async ({ superdoc }) => {
+test('Right-to-left click is one undo step (atomic transaction)', async ({ superdoc }) => {
   await superdoc.type('Undo me');
   await superdoc.waitForStable();
 
@@ -91,6 +91,87 @@ test('Right-to-left then Left-to-right is one undo step (atomic transaction)', a
   await superdoc.waitForStable();
 
   expect((await readParagraphProperties(superdoc))[0].rightToLeft).toBe('<absent>');
+});
+
+test('clicking Right-to-left flips left-aligned justification to right (alignmentPolicy:matchDirection)', async ({
+  superdoc,
+}) => {
+  await superdoc.type('Alignment should mirror');
+  await superdoc.waitForStable();
+
+  const pos = await superdoc.findTextPos('Alignment should mirror');
+  await superdoc.setTextSelection(pos);
+  await superdoc.waitForStable();
+
+  // Set explicit left alignment via the editor command (matches what the
+  // alignment toolbar button writes - `justification: 'left'` on pPr).
+  await superdoc.page.evaluate(() => {
+    (window as any).editor.commands.updateAttributes('paragraph', {
+      'paragraphProperties.justification': 'left',
+    });
+  });
+  await superdoc.waitForStable();
+
+  await clickDirectionButton(superdoc, 'directionRtl');
+
+  // The click should have written rightToLeft=true AND, because the toolbar
+  // item bakes alignmentPolicy:'matchDirection', flipped 'left' to 'right'.
+  // This proves the full UI -> command path forwards alignmentPolicy, not
+  // just the unit-test-level command logic.
+  const after = await superdoc.page.evaluate(() => {
+    const editor = (window as any).editor;
+    let out: { rightToLeft: any; justification: any } = { rightToLeft: null, justification: null };
+    editor.state.doc.descendants((node: any) => {
+      if (node.type.name !== 'paragraph') return true;
+      out = {
+        rightToLeft: node.attrs?.paragraphProperties?.rightToLeft ?? null,
+        justification: node.attrs?.paragraphProperties?.justification ?? null,
+      };
+      return false;
+    });
+    return out;
+  });
+
+  expect(after.rightToLeft).toBe(true);
+  expect(after.justification).toBe('right');
+});
+
+test('active-state highlight applies to direction buttons inside overflow popup (151cff8d regression)', async ({
+  superdoc,
+}) => {
+  await superdoc.type('Overflow active highlight');
+  await superdoc.waitForStable();
+
+  // Narrow viewport so direction items live in overflow.
+  await superdoc.page.setViewportSize({ width: 900, height: 800 });
+  await superdoc.waitForStable();
+
+  const pos = await superdoc.findTextPos('Overflow active highlight');
+  await superdoc.setTextSelection(pos);
+  await superdoc.waitForStable();
+
+  // Open overflow, click RTL inside it, then close overflow.
+  await superdoc.page.locator('[data-item="btn-overflow"]').first().click();
+  await superdoc.waitForStable();
+  await superdoc.page.locator('[data-item="btn-directionRtl"]').first().click();
+  await superdoc.waitForStable();
+  // Click somewhere neutral to dismiss the popup.
+  await superdoc.page.keyboard.press('Escape');
+  await superdoc.waitForStable();
+
+  // Re-open overflow and assert that the RTL button reflects the active state.
+  // 151cff8d added the active-state loop over overflowItems; pre-fix this would
+  // show no `.active` class on the overflow button.
+  await superdoc.page.locator('[data-item="btn-overflow"]').first().click();
+  await superdoc.waitForStable();
+
+  // data-item lives ON the .toolbar-button div, not on a parent wrapper.
+  const rtlButton = superdoc.page.locator('[data-item="btn-directionRtl"]').first();
+  await expect(rtlButton).toHaveClass(/active/);
+
+  // And the LTR button is not active.
+  const ltrButton = superdoc.page.locator('[data-item="btn-directionLtr"]').first();
+  await expect(ltrButton).not.toHaveClass(/active/);
 });
 
 test('multi-paragraph selection: Right-to-left applies to every selected paragraph', async ({ superdoc }) => {

@@ -510,5 +510,24 @@ describe('tableBoundaryNavigation', () => {
       expect(nextSelection).not.toBeNull();
       expect(nextSelection.from).toBe(herePosRtl);
     });
+
+    it('does not exit table on Shift+ArrowRight from RTL edge cell when no adjacent cell exists', () => {
+      rtlEditor.view.dispatch(rtlEditor.state.tr.setSelection(TextSelection.create(rtlDoc, herePosRtl)));
+      const before = rtlEditor.state.selection.from;
+
+      const plugin = createTableBoundaryNavigationPlugin();
+      const handled = plugin.props.handleKeyDown(rtlEditor.view, {
+        key: 'ArrowRight',
+        defaultPrevented: false,
+        shiftKey: true,
+        altKey: false,
+        ctrlKey: false,
+        metaKey: false,
+        preventDefault: vi.fn(),
+      });
+
+      expect(handled).toBe(false);
+      expect(rtlEditor.state.selection.from).toBe(before);
+    });
   });
 });

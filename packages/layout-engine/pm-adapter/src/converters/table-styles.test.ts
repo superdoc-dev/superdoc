@@ -329,4 +329,33 @@ describe('hydrateTableStyleAttrs', () => {
     expect(result?.cellPadding?.left).toBeCloseTo((100 / 1440) * 96);
     expect(result?.cellPadding?.right).toBeCloseTo((200 / 1440) * 96);
   });
+
+  it('maps style marginStart/marginEnd to physical sides for RTL tables', () => {
+    const styles: StylesDocumentProperties = {
+      ...emptyStyles,
+      styles: {
+        TableGrid: {
+          type: 'table',
+          tableProperties: {
+            cellMargins: {
+              marginStart: { value: 100, type: 'dxa' },
+              marginEnd: { value: 200, type: 'dxa' },
+            },
+          },
+        },
+      },
+    };
+
+    const table = {
+      attrs: {
+        tableStyleId: 'TableGrid',
+        tableProperties: { rightToLeft: true },
+      },
+    } as unknown as PMNode;
+
+    const result = hydrateTableStyleAttrs(table, buildContext(styles));
+    // In RTL, start => right, end => left
+    expect(result?.cellPadding?.right).toBeCloseTo((100 / 1440) * 96);
+    expect(result?.cellPadding?.left).toBeCloseTo((200 / 1440) * 96);
+  });
 });

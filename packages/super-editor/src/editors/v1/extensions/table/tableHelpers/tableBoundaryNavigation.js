@@ -1,6 +1,6 @@
 // @ts-check
 import { Plugin, PluginKey, Selection, TextSelection } from 'prosemirror-state';
-import { CellSelection, TableMap  } from 'prosemirror-tables';
+import { CellSelection, TableMap } from 'prosemirror-tables';
 
 const TABLE_CELL_ROLES = new Set(['cell', 'header_cell']);
 
@@ -488,9 +488,14 @@ export function createTableBoundaryNavigationPlugin() {
         const context = getTableContext(view.state.selection.$head);
         const allowShiftInRtlTable = Boolean(event.shiftKey && context && isRtlTable(context.table));
         if (event.shiftKey && !allowShiftInRtlTable) return false;
-
-        const nextSelection =
-          getIntraTableArrowSelection(view.state, /** @type {-1 | 1} */ (dir), event.shiftKey) ??
+        let nextSelection = getIntraTableArrowSelection(view.state, /** @type {-1 | 1} */ (dir), event.shiftKey);
+        if (!nextSelection && event.shiftKey) {
+          // For Shift+Arrow in RTL tables, avoid collapsing outside table bounds.
+          // Let native behavior continue when we cannot extend to an adjacent cell.
+          return false;
+        }
+        nextSelection =
+          nextSelection ??
           getTableBoundaryExitSelection(view.state, /** @type {-1 | 1} */ (dir)) ??
           getAdjacentTableEntrySelection(view.state, /** @type {-1 | 1} */ (dir));
         if (!nextSelection) return false;

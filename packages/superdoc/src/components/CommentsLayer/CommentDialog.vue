@@ -319,10 +319,14 @@ const collectTrackedChangeThread = (parentComment, allComments) => {
   allComments.forEach((comment) => {
     if (comment.commentId === trackedChangeId) return;
     const isDirectChild = comment.parentCommentId === trackedChangeId;
-    const isRangeBasedTrackedChangeComment =
-      comment.trackedChangeParentId === trackedChangeId && isRangeThreadedComment(comment);
+    // SD-2528: a comment anchored on the tracked change must thread under it
+    // regardless of file origin. The previous `&& isRangeThreadedComment` guard
+    // only let Google-Docs-style files (no commentsExtended.xml) thread, so
+    // SuperDoc-exported docs lost the linkage even when the importer set
+    // trackedChangeParentId correctly.
+    const isTrackedChangeAnchoredComment = comment.trackedChangeParentId === trackedChangeId;
 
-    if (isDirectChild || isRangeBasedTrackedChangeComment) {
+    if (isDirectChild || isTrackedChangeAnchoredComment) {
       threadIds.add(comment.commentId);
       queue.push(comment.commentId);
     }

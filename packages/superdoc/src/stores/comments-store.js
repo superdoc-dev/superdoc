@@ -116,18 +116,11 @@ export const useCommentsStore = defineStore('comments', () => {
     return getComment(comment.parentCommentId);
   };
 
-  const isRangeThreadedComment = (comment) => {
-    if (!comment) return false;
-    return (
-      comment.threadingStyleOverride === 'range-based' ||
-      comment.threadingMethod === 'range-based' ||
-      comment.originalXmlStructure?.hasCommentsExtended === false
-    );
-  };
-
+  // SD-2528: a comment anchored on a tracked change must thread under that TC
+  // regardless of file origin. The previous range-threaded-only guard was
+  // Google-Docs-only and broke SuperDoc-exported documents on re-import.
   const shouldThreadWithTrackedChange = (comment) => {
     if (!comment?.trackedChangeParentId) return false;
-    if (!isRangeThreadedComment(comment)) return false;
     const trackedChange = getComment(comment.trackedChangeParentId);
     return Boolean(trackedChange?.trackedChange);
   };

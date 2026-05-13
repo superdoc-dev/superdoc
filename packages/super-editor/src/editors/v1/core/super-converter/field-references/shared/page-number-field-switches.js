@@ -3,10 +3,16 @@ import { formatPageNumberFieldValue as formatSharedPageNumberFieldValue } from '
 const GENERAL_FORMATS = new Map([
   ['Arabic', 'decimal'],
   ['roman', 'lowerRoman'],
+  ['Roman', 'upperRoman'],
   ['ROMAN', 'upperRoman'],
   ['alphabetic', 'lowerLetter'],
   ['ALPHABETIC', 'upperLetter'],
   ['ArabicDash', 'numberInDash'],
+]);
+
+const CASE_INSENSITIVE_GENERAL_FORMATS = new Map([
+  ['arabic', 'decimal'],
+  ['arabicdash', 'numberInDash'],
 ]);
 
 /**
@@ -24,7 +30,7 @@ export function parsePageNumberFieldSwitches(instruction, fieldType) {
 
   for (const match of normalizedInstruction.matchAll(/\\\*\s+("[^"]+"|\S+)/g)) {
     const rawValue = unquote(match[1]);
-    const mapped = GENERAL_FORMATS.get(rawValue);
+    const mapped = GENERAL_FORMATS.get(rawValue) ?? CASE_INSENSITIVE_GENERAL_FORMATS.get(rawValue.toLowerCase());
     if (mapped) {
       result.pageNumberFormat = mapped;
       break;

@@ -249,7 +249,6 @@ export function extractTableBorders(
   }
 
   const borders: TableBorders = {};
-  const isRtl = options?.isRtl === true;
   const assignConverted = (side: keyof TableBorders, raw: unknown): void => {
     if (raw == null) return;
     if (isTableBorderValue(raw)) {
@@ -267,14 +266,16 @@ export function extractTableBorders(
     assignConverted(side, bordersInput[side]);
   }
 
-  // Logical sides fallback when physical counterpart is missing.
-  const startTarget: keyof TableBorders = isRtl ? 'right' : 'left';
-  const endTarget: keyof TableBorders = isRtl ? 'left' : 'right';
-  if (borders[startTarget] == null) {
-    assignConverted(startTarget, bordersInput.start);
+  // Logical start/end fallback when physical counterpart is missing. Map as
+  // LTR-default (start->left, end->right). The DOM painter handles the RTL
+  // visual mirror once via swapTableBordersLR / swapCellBordersLR keyed off
+  // the table's bidiVisual flag (§17.4.12 + §17.4.33). Pre-swapping here
+  // would double-mirror.
+  if (borders.left == null) {
+    assignConverted('left', bordersInput.start);
   }
-  if (borders[endTarget] == null) {
-    assignConverted(endTarget, bordersInput.end);
+  if (borders.right == null) {
+    assignConverted('right', bordersInput.end);
   }
 
   return Object.keys(borders).length > 0 ? borders : undefined;
@@ -309,13 +310,15 @@ type CellBorderExtractionOptions = {
 
 export function extractCellBorders(
   cellAttrs: Record<string, unknown>,
-  options?: CellBorderExtractionOptions,
+  // options retained for backwards-compatible call sites; no longer reads isRtl
+  // since pm-adapter maps start/end as LTR-default and the painter's
+  // swapCellBordersLR handles the RTL mirror (§17.4.12 + §17.4.33).
+  _options?: CellBorderExtractionOptions,
 ): CellBorders | undefined {
   if (!cellAttrs?.borders) return undefined;
 
   const bordersData = cellAttrs.borders as Record<string, unknown>;
   const borders: CellBorders = {};
-  const isRtl = options?.isRtl === true;
 
   // Physical sides first (higher precedence).
   for (const side of ['top', 'right', 'bottom', 'left'] as const) {
@@ -325,16 +328,15 @@ export function extractCellBorders(
     }
   }
 
-  // Logical sides fallback when physical counterpart is missing.
-  const startTarget: keyof CellBorders = isRtl ? 'right' : 'left';
-  const endTarget: keyof CellBorders = isRtl ? 'left' : 'right';
-  if (borders[startTarget] == null) {
+  // Logical start/end fallback (LTR-default: start->left, end->right).
+  // Painter's swapCellBordersLR mirrors for RTL.
+  if (borders.left == null) {
     const spec = convertBorderSpec(bordersData.start);
-    if (spec) borders[startTarget] = spec;
+    if (spec) borders.left = spec;
   }
-  if (borders[endTarget] == null) {
+  if (borders.right == null) {
     const spec = convertBorderSpec(bordersData.end);
-    if (spec) borders[endTarget] = spec;
+    if (spec) borders.right = spec;
   }
 
   return Object.keys(borders).length > 0 ? borders : undefined;
@@ -364,7 +366,10 @@ type CellPaddingExtractionOptions = {
 
 export function extractCellPadding(
   cellAttrs: Record<string, unknown>,
-  options?: CellPaddingExtractionOptions,
+  // options retained for backwards-compat; no longer reads isRtl. pm-adapter
+  // maps marginStart/End as LTR-default; renderTableCell mirrors paddingLeft
+  // <-> paddingRight for RTL tables (§17.4.42 + §17.4.13 on cell margins).
+  _options?: CellPaddingExtractionOptions,
 ): BoxSpacing | undefined {
   const cellMargins = cellAttrs?.cellMargins;
   if (!cellMargins || typeof cellMargins !== 'object') return undefined;
@@ -373,23 +378,21 @@ export function extractCellPadding(
   // For now, we'll use them as-is assuming they're already converted to pixels
   const padding: BoxSpacing = {};
   const margins = cellMargins as Record<string, unknown>;
-  const isRtl = options?.isRtl === true;
 
   if (typeof margins.top === 'number') padding.top = margins.top;
   if (typeof margins.right === 'number') padding.right = margins.right;
   if (typeof margins.bottom === 'number') padding.bottom = margins.bottom;
   if (typeof margins.left === 'number') padding.left = margins.left;
 
-  // Logical margins are fallback-only: explicit physical sides win.
+  // Logical margins fallback (LTR-default: start->left, end->right).
+  // Painter mirrors for RTL.
   const marginStart = margins.marginStart;
   const marginEnd = margins.marginEnd;
-  const startTarget: keyof BoxSpacing = isRtl ? 'right' : 'left';
-  const endTarget: keyof BoxSpacing = isRtl ? 'left' : 'right';
-  if (typeof marginStart === 'number' && padding[startTarget] == null) {
-    padding[startTarget] = marginStart;
+  if (typeof marginStart === 'number' && padding.left == null) {
+    padding.left = marginStart;
   }
-  if (typeof marginEnd === 'number' && padding[endTarget] == null) {
-    padding[endTarget] = marginEnd;
+  if (typeof marginEnd === 'number' && padding.right == null) {
+    padding.right = marginEnd;
   }
 
   if (Object.keys(padding).length === 0) return undefined;

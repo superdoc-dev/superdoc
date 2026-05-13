@@ -973,7 +973,7 @@ describe('table converter', () => {
       expect(result.rows[0].cells[0].attrs?.borders).toBeUndefined();
     });
 
-    it('maps legacy cell border start/end to physical sides in RTL tables', () => {
+    it('maps legacy cell border start/end as LTR-default regardless of table direction (painter mirrors for RTL)', () => {
       const node: PMNode = {
         type: 'table',
         attrs: {
@@ -1013,12 +1013,15 @@ describe('table converter', () => {
         mockParagraphConverter,
       ) as TableBlock;
 
-      expect(result.rows[0].cells[0].attrs?.borders?.right).toMatchObject({
+      // Per §17.4.12/33, start/end visual side flips with table direction,
+      // but renderTableRow.swapCellBordersLR is the single source of that
+      // mirror. pm-adapter pre-swapping here would double-mirror.
+      expect(result.rows[0].cells[0].attrs?.borders?.left).toMatchObject({
         style: 'single',
         width: 2,
         color: '#FF0000',
       });
-      expect(result.rows[0].cells[0].attrs?.borders?.left).toMatchObject({
+      expect(result.rows[0].cells[0].attrs?.borders?.right).toMatchObject({
         style: 'single',
         width: 3,
         color: '#0000FF',
@@ -1080,7 +1083,7 @@ describe('table converter', () => {
       }
     });
 
-    it('maps resolved tableCellProperties borders start/end to physical sides in RTL tables', () => {
+    it('maps resolved tableCellProperties borders start/end as LTR-default regardless of table direction (painter mirrors for RTL)', () => {
       const node: PMNode = {
         type: 'table',
         attrs: {
@@ -1122,12 +1125,13 @@ describe('table converter', () => {
         mockParagraphConverter,
       ) as TableBlock;
 
-      expect(result.rows[0].cells[0].attrs?.borders?.right).toMatchObject({
+      // pm-adapter keeps start/end as LTR-default. Painter swaps for RTL.
+      expect(result.rows[0].cells[0].attrs?.borders?.left).toMatchObject({
         style: 'single',
         width: expect.any(Number),
         color: '#FF0000',
       });
-      expect(result.rows[0].cells[0].attrs?.borders?.left).toMatchObject({
+      expect(result.rows[0].cells[0].attrs?.borders?.right).toMatchObject({
         style: 'single',
         width: expect.any(Number),
         color: '#0000FF',

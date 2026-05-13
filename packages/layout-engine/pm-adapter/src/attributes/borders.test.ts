@@ -413,17 +413,20 @@ describe('SD-2343 - no double conversion for pre-converted px widths', () => {
     expect((result?.right as { color?: string })?.color).toBe('#0000FF');
   });
 
-  it('maps logical start/end to right/left in RTL when physical sides are missing', () => {
+  it('maps logical start/end as LTR-default regardless of isRtl flag (painter handles RTL mirror)', () => {
     const input = {
       start: { val: 'single', size: 2, color: 'FF0000' },
       end: { val: 'double', size: 3, color: '0000FF' },
     };
 
+    // Per §17.4.12 + §17.4.33 the visual side flips with table direction,
+    // but the painter's swapTableBordersLR does that mirror once. pm-adapter
+    // pre-swapping would double-mirror, so isRtl is no longer read here.
     const result = extractTableBorders(input, { isRtl: true });
-    expect(result?.right?.style).toBe('single');
-    expect((result?.right as { color?: string })?.color).toBe('#FF0000');
-    expect(result?.left?.style).toBe('double');
-    expect((result?.left as { color?: string })?.color).toBe('#0000FF');
+    expect(result?.left?.style).toBe('single');
+    expect((result?.left as { color?: string })?.color).toBe('#FF0000');
+    expect(result?.right?.style).toBe('double');
+    expect((result?.right as { color?: string })?.color).toBe('#0000FF');
   });
 
   it('keeps explicit physical sides over logical start/end', () => {
@@ -502,16 +505,19 @@ describe('extractCellBorders', () => {
       expect(result?.right).toMatchObject({ style: 'single', width: 3, color: '#0000FF' });
     });
 
-    it('maps start/end to right/left in RTL when physical sides are missing', () => {
+    it('maps start/end as LTR-default regardless of isRtl flag (painter handles RTL mirror)', () => {
       const input = {
         borders: {
           start: { val: 'single', size: 2, color: 'FF0000' },
           end: { val: 'single', size: 3, color: '0000FF' },
         },
       };
+      // Per §17.4.12/33, end/start visual side flips with table direction, but
+      // the painter's swapCellBordersLR is the single source of that mirror.
+      // pm-adapter pre-swapping would double-mirror.
       const result = extractCellBorders(input, { isRtl: true });
-      expect(result?.right).toMatchObject({ style: 'single', width: 2, color: '#FF0000' });
-      expect(result?.left).toMatchObject({ style: 'single', width: 3, color: '#0000FF' });
+      expect(result?.left).toMatchObject({ style: 'single', width: 2, color: '#FF0000' });
+      expect(result?.right).toMatchObject({ style: 'single', width: 3, color: '#0000FF' });
     });
 
     it('keeps explicit physical left/right over logical start/end', () => {
@@ -626,17 +632,21 @@ describe('extractCellPadding', () => {
       });
     });
 
-    it('maps marginStart/marginEnd to right/left in RTL when physical sides are missing', () => {
+    it('maps marginStart/marginEnd as LTR-default regardless of isRtl flag (painter handles RTL mirror)', () => {
       const input = {
         cellMargins: {
           marginStart: 11,
           marginEnd: 22,
         },
       };
+      // renderTableCell.ts mirrors paddingLeft <-> paddingRight when the
+      // table is bidiVisual. pm-adapter must therefore keep marginStart/End
+      // mapped to LTR-default (start->left, end->right) - otherwise the
+      // painter double-mirrors and start padding lands on the visual left.
       const result = extractCellPadding(input, { isRtl: true });
       expect(result).toEqual({
-        right: 11,
-        left: 22,
+        left: 11,
+        right: 22,
       });
     });
 

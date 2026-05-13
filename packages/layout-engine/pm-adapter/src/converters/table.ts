@@ -557,20 +557,20 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
   if (resolvedTcProps?.borders && typeof resolvedTcProps.borders === 'object') {
     const resolvedBordersData = resolvedTcProps.borders as Record<string, unknown>;
     const resolvedBorders: CellBorders = {};
-    const isRtlTable = tableProperties?.rightToLeft === true;
     for (const side of ['top', 'right', 'bottom', 'left'] as const) {
       const spec = convertResolvedCellBorder(resolvedBordersData[side]);
       if (spec) resolvedBorders[side] = spec;
     }
-    const startTarget: keyof CellBorders = isRtlTable ? 'right' : 'left';
-    const endTarget: keyof CellBorders = isRtlTable ? 'left' : 'right';
-    if (resolvedBorders[startTarget] == null) {
+    // Logical start/end fallback (LTR-default). The painter's
+    // swapCellBordersLR is the single source of the RTL visual mirror
+    // (§17.4.12 + §17.4.33). Pre-swapping here would double-mirror.
+    if (resolvedBorders.left == null) {
       const spec = convertResolvedCellBorder(resolvedBordersData.start);
-      if (spec) resolvedBorders[startTarget] = spec;
+      if (spec) resolvedBorders.left = spec;
     }
-    if (resolvedBorders[endTarget] == null) {
+    if (resolvedBorders.right == null) {
       const spec = convertResolvedCellBorder(resolvedBordersData.end);
-      if (spec) resolvedBorders[endTarget] = spec;
+      if (spec) resolvedBorders.right = spec;
     }
     if (Object.keys(resolvedBorders).length > 0) {
       cellAttrs.borders = resolvedBorders;

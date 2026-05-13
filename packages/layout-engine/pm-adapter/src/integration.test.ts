@@ -6,8 +6,8 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { toFlowBlocks as baseToFlowBlocks } from './index.js';
-import type { PMNode, AdapterOptions } from './index.js';
+import { toFlowBlocks as baseToFlowBlocks, toFlowBlocksMap } from './index.js';
+import type { PMNode, AdapterOptions, PMDocumentMap } from './index.js';
 import { measureBlock } from '@superdoc/measuring-dom';
 import { layoutDocument } from '@superdoc/layout-engine';
 import { createDomPainter } from '@superdoc/painter-dom';
@@ -981,5 +981,186 @@ describe('page break integration tests', () => {
 
     expect(exhibitPageIndex).toBe(1);
     expect(layout.pages[1].fragments.length).toBeGreaterThan(0);
+  });
+
+  // SD-2781: end-to-end check that runs the unmocked applyInlineRunProperties
+  // pipeline. The unit tests in common.test.ts mock computeRunAttrs, so they
+  // can't catch type-shape regressions in the contracts package. This test
+  // exercises the full PM -> FlowBlock conversion with raw runProperties on
+  // a real run-wrapper node, mirroring how the importer emits them.
+  it('preserves run-level rtl, cs, and lang on TextRun.bidi / TextRun.script', () => {
+    const pmDoc = {
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [
+            {
+              type: 'run',
+              attrs: {
+                runProperties: {
+                  rtl: true,
+                  cs: true,
+                  lang: { val: 'en-US', bidi: 'ar-SA', eastAsia: 'ja-JP' },
+                },
+              },
+              content: [{ type: 'text', text: 'mixed-script run' }],
+            },
+          ],
+        },
+      ],
+    };
+
+    const { blocks } = toFlowBlocks(pmDoc);
+    const paragraph = blocks.find((block) => block.kind === 'paragraph');
+    expect(paragraph).toBeDefined();
+    if (paragraph?.kind !== 'paragraph') return;
+
+    const textRun = paragraph.runs.find((run) => 'text' in run && run.text === 'mixed-script run');
+    expect(textRun).toBeDefined();
+    expect(textRun?.bidi).toEqual({ rtl: true });
+    expect(textRun?.script).toEqual({
+      complexScript: true,
+      language: { default: 'en-US', complexScript: 'ar-SA', eastAsian: 'ja-JP' },
+    });
+  });
+
+  it('omits bidi and script on TextRun when no signals are set (no bloat)', () => {
+    const pmDoc = {
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [{ type: 'text', text: 'plain Latin text' }],
+        },
+      ],
+    };
+
+    const { blocks } = toFlowBlocks(pmDoc);
+    const paragraph = blocks.find((block) => block.kind === 'paragraph');
+    if (paragraph?.kind !== 'paragraph') return;
+    const textRun = paragraph.runs.find((run) => 'text' in run && run.text === 'plain Latin text');
+    expect(textRun?.bidi).toBeUndefined();
+    expect(textRun?.script).toBeUndefined();
+  });
+
+  // SD-2781 round 2 (codex finding): generic-token.ts:64 calls
+  // applyInlineRunProperties without reassigning the return value, so token
+  // runs (page numbers, total page counts) lose run-level bidi/script metadata
+  // even when wrapped in a run that explicitly sets rtl/cs/lang.
+  it('preserves bidi/script on page-number token TextRuns inside an rtl run', () => {
+    const pmDoc = {
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [
+            {
+              type: 'run',
+              attrs: { runProperties: { rtl: true, cs: true } },
+              content: [{ type: 'page-number' }],
+            },
+          ],
+        },
+      ],
+    };
+
+    const { blocks } = toFlowBlocks(pmDoc);
+    const paragraph = blocks.find((block) => block.kind === 'paragraph');
+    if (paragraph?.kind !== 'paragraph') return;
+    const tokenRun = paragraph.runs.find(
+      (run) => 'token' in run && (run.token === 'pageNumber' || run.token === 'totalPageCount'),
+    );
+    expect(tokenRun, 'token run should be present').toBeDefined();
+    expect(tokenRun?.bidi).toEqual({ rtl: true });
+    expect(tokenRun?.script).toEqual({ complexScript: true });
+  });
+
+  // SD-2781: nested inline converters (bookmark-start, structuredContent,
+  // page-reference) must forward activeInlineRunProperties when calling
+  // visitNode - otherwise children inside an SDT/bookmark wrapper lose
+  // run-level bidi/script. These tests pin the pass-through.
+  it('preserves bidi/script on text inside a structuredContent wrapper', () => {
+    const pmDoc = {
+      type: 'doc',
+      content: [
+        {
+          type: 'paragraph',
+          content: [
+            {
+              type: 'run',
+              attrs: { runProperties: { rtl: true, cs: true } },
+              content: [
+                {
+                  type: 'structuredContent',
+                  content: [{ type: 'text', text: 'sdt-wrapped rtl text' }],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    const { blocks } = toFlowBlocks(pmDoc);
+    const paragraph = blocks.find((block) => block.kind === 'paragraph');
+    if (paragraph?.kind !== 'paragraph') return;
+    const textRun = paragraph.runs.find((run) => 'text' in run && run.text === 'sdt-wrapped rtl text');
+    expect(textRun, 'text run inside SDT should be present').toBeDefined();
+    expect(textRun?.bidi).toEqual({ rtl: true });
+    expect(textRun?.script).toEqual({ complexScript: true });
+  });
+
+  // SD-2768: when toFlowBlocksMap reuses one ConverterContext across documents,
+  // the body-level sectionDirectionContext must be recomputed per document. The
+  // original `??` cache let the first doc's context stick, so a vertical doc 1
+  // followed by a horizontal doc 2 would have doc 2's paragraphs inherit doc 1's
+  // writing-mode.
+  it('recomputes body sectionDirectionContext per document in toFlowBlocksMap', () => {
+    const docs: PMDocumentMap = {
+      'doc-vertical': {
+        type: 'doc',
+        attrs: {
+          bodySectPr: {
+            type: 'element',
+            name: 'w:sectPr',
+            attributes: {},
+            elements: [{ type: 'element', name: 'w:textDirection', attributes: { 'w:val': 'tbRl' } }],
+          },
+        },
+        content: [{ type: 'paragraph', content: [{ type: 'text', text: 'vertical text' }] }],
+      },
+      'doc-horizontal': {
+        type: 'doc',
+        attrs: {
+          bodySectPr: {
+            type: 'element',
+            name: 'w:sectPr',
+            attributes: {},
+            elements: [{ type: 'element', name: 'w:textDirection', attributes: { 'w:val': 'lrTb' } }],
+          },
+        },
+        content: [{ type: 'paragraph', content: [{ type: 'text', text: 'horizontal text' }] }],
+      },
+    };
+
+    // Reuse a single converterContext across both calls (the toFlowBlocksMap
+    // pattern). With the bug, doc-horizontal's writingMode would still be
+    // 'vertical-rl' because the cached field from doc-vertical wins.
+    const sharedContext = {
+      ...DEFAULT_CONVERTER_CONTEXT,
+    };
+
+    const results = toFlowBlocksMap(docs, { converterContext: sharedContext });
+
+    const verticalParagraph = results['doc-vertical']?.find((b) => b.kind === 'paragraph');
+    const horizontalParagraph = results['doc-horizontal']?.find((b) => b.kind === 'paragraph');
+
+    expect(verticalParagraph?.kind).toBe('paragraph');
+    expect(horizontalParagraph?.kind).toBe('paragraph');
+    if (verticalParagraph?.kind !== 'paragraph' || horizontalParagraph?.kind !== 'paragraph') return;
+
+    expect(verticalParagraph.attrs?.directionContext?.writingMode).toBe('vertical-rl');
+    expect(horizontalParagraph.attrs?.directionContext?.writingMode).toBe('horizontal-tb');
   });
 });

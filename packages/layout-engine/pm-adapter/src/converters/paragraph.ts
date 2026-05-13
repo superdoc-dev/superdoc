@@ -170,6 +170,20 @@ export const commentsCompatible = (a: TextRun, b: TextRun): boolean => {
 };
 
 /**
+ * SD-3098: Two adjacent text runs can only merge when their RunBidiContext matches.
+ * A `<w:rtl/>` run merged with a plain run would lose the rtl flag (and with it the
+ * DomPainter `dir="rtl"` + RLM injection paint-time fix). The merge result keeps the
+ * first run's fields, so we must reject the merge when bidi differs.
+ */
+const bidiCompatible = (a: TextRun, b: TextRun): boolean => {
+  const aBidi = a.bidi;
+  const bBidi = b.bidi;
+  if (!aBidi && !bBidi) return true;
+  if (!aBidi || !bBidi) return false;
+  return aBidi.rtl === bBidi.rtl && aBidi.embedding === bBidi.embedding && aBidi.override === bBidi.override;
+};
+
+/**
  * Merges adjacent text runs with continuous PM positions and compatible styling.
  * Optimization to reduce run fragmentation after PM operations.
  *
@@ -211,7 +225,8 @@ export function mergeAdjacentRuns(runs: Run[]): Run[] {
       (current.letterSpacing ?? 0) === (next.letterSpacing ?? 0) &&
       trackedChangesCompatible(current, next) &&
       dataAttrsCompatible(current, next) &&
-      commentsCompatible(current, next);
+      commentsCompatible(current, next) &&
+      bidiCompatible(current, next);
 
     if (canMerge) {
       // Merge next into current
@@ -744,6 +759,7 @@ export function paragraphToFlowBlocks({
     activeSdt?: SdtMetadata,
     activeRunProperties?: RunProperties,
     activeHidden = false,
+    activeInlineRunProperties?: RunProperties,
   ) => {
     if (activeHidden && node.type !== 'run') {
       suppressedByVanish = true;
@@ -765,6 +781,7 @@ export function paragraphToFlowBlocks({
       themeColors,
       enableComments,
       runProperties: activeRunProperties,
+      inlineRunProperties: activeInlineRunProperties,
       paragraphProperties: resolvedParagraphProperties,
       converterContext,
       visitNode,

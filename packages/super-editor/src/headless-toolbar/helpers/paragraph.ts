@@ -3,18 +3,16 @@ import { numberingInfoToOrderedStyle } from '../../editors/v1/core/helpers/list-
 import type { OrderedListStyle } from '../../editors/v1/extensions/types/paragraph-commands.js';
 import { twipsToLines } from '../../editors/v1/core/super-converter/helpers.js';
 import { getQuickFormatList } from '../../editors/v1/extensions/linked-styles/index.js';
+import { mapStoredJustificationToDisplayAlignment } from '../../editors/v1/core/helpers/paragraph-alignment.js';
 import { getCurrentParagraphParent, getCurrentResolvedParagraphProperties, resolveStateEditor } from './context.js';
 import { createDirectCommandExecute, isCommandDisabled } from './general.js';
 import type { ToolbarCommandState, ToolbarContext } from '../types.js';
 
 const getCurrentParagraphJustification = (context: ToolbarContext | null) => {
-  const justification = getCurrentResolvedParagraphProperties(context)?.justification ?? null;
-
-  if (justification === 'both') {
-    return 'justify';
-  }
-
-  return justification;
+  const paragraphProperties = getCurrentResolvedParagraphProperties(context);
+  const justification = paragraphProperties?.justification ?? null;
+  const isRtl = paragraphProperties?.rightToLeft === true;
+  return mapStoredJustificationToDisplayAlignment(justification, isRtl);
 };
 
 export const createTextAlignStateDeriver =

@@ -376,6 +376,137 @@ describe('createToolbarRegistry', () => {
     });
   });
 
+  it('derives mirrored text-align for RTL paragraph with explicit right justification', () => {
+    const registry = createToolbarRegistry();
+    const state = registry['text-align']?.state({
+      context: {
+        ...createContext(),
+        editor: {
+          state: {
+            doc: {
+              resolve: vi.fn(() => '$resolved-pos'),
+            },
+            selection: {
+              $from: {
+                depth: 1,
+                node: vi.fn((depth) =>
+                  depth === 1
+                    ? {
+                        type: { name: 'paragraph' },
+                        attrs: {
+                          paragraphProperties: {
+                            rightToLeft: true,
+                            justification: 'right',
+                          },
+                        },
+                      }
+                    : null,
+                ),
+                before: vi.fn(() => 5),
+                start: vi.fn(() => 6),
+              },
+            },
+          },
+          converter: null,
+        } as any,
+      },
+      superdoc: {},
+    });
+
+    expect(state).toEqual({
+      active: true,
+      disabled: false,
+      value: 'left',
+    });
+  });
+
+  it('derives mirrored text-align for RTL paragraph with explicit left justification', () => {
+    const registry = createToolbarRegistry();
+    const state = registry['text-align']?.state({
+      context: {
+        ...createContext(),
+        editor: {
+          state: {
+            doc: {
+              resolve: vi.fn(() => '$resolved-pos'),
+            },
+            selection: {
+              $from: {
+                depth: 1,
+                node: vi.fn((depth) =>
+                  depth === 1
+                    ? {
+                        type: { name: 'paragraph' },
+                        attrs: {
+                          paragraphProperties: {
+                            rightToLeft: true,
+                            justification: 'left',
+                          },
+                        },
+                      }
+                    : null,
+                ),
+                before: vi.fn(() => 5),
+                start: vi.fn(() => 6),
+              },
+            },
+          },
+          converter: null,
+        } as any,
+      },
+      superdoc: {},
+    });
+
+    expect(state).toEqual({
+      active: true,
+      disabled: false,
+      value: 'right',
+    });
+  });
+
+  it('defaults text-align to right for RTL paragraph when justification is missing', () => {
+    const registry = createToolbarRegistry();
+    const state = registry['text-align']?.state({
+      context: {
+        ...createContext(),
+        editor: {
+          state: {
+            doc: {
+              resolve: vi.fn(() => '$resolved-pos'),
+            },
+            selection: {
+              $from: {
+                depth: 1,
+                node: vi.fn((depth) =>
+                  depth === 1
+                    ? {
+                        type: { name: 'paragraph' },
+                        attrs: {
+                          paragraphProperties: {
+                            rightToLeft: true,
+                          },
+                        },
+                      }
+                    : null,
+                ),
+                before: vi.fn(() => 5),
+                start: vi.fn(() => 6),
+              },
+            },
+          },
+          converter: null,
+        } as any,
+      },
+      superdoc: {},
+    });
+
+    expect(state).toEqual({
+      active: true,
+      disabled: false,
+      value: 'right',
+    });
+  });
+
   it('derives line-height value from paragraph spacing', () => {
     const registry = createToolbarRegistry();
     const state = registry['line-height']?.state({

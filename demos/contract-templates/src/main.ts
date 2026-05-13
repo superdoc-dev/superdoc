@@ -85,12 +85,20 @@ type ClauseId =
   | 'governingLaw'
   | 'limitationOfLiability';
 
+type PreviewSegment = { kind: 'same' | 'insert' | 'delete'; text: string };
+
 type LibraryClause = {
   id: ClauseId;
   label: string;
   latestVersion: string;
   /** Upgrade prose. Only defined when `latestVersion` differs from v1. */
-  upgrade?: { version: string; summary: string; body: string };
+  upgrade?: {
+    version: string;
+    summary: string;
+    body: string;
+    /** Hand-authored proposed-change view shown in the review panel. */
+    preview: PreviewSegment[];
+  };
 };
 
 const CLAUSE_LIBRARY: LibraryClause[] = [
@@ -103,6 +111,12 @@ const CLAUSE_LIBRARY: LibraryClause[] = [
       version: 'v2',
       summary: 'Extends survival period from 2 years to 5 years.',
       body: 'Each party will treat the other party\u2019s Confidential Information as confidential and will protect it with at least the same care it uses for its own confidential information. These obligations survive disclosure for five (5) years.',
+      preview: [
+        { kind: 'same', text: 'Each party will treat the other party\u2019s Confidential Information as confidential and will protect it with at least the same care it uses for its own confidential information. These obligations survive disclosure for ' },
+        { kind: 'delete', text: 'two (2) years' },
+        { kind: 'insert', text: 'five (5) years' },
+        { kind: 'same', text: '.' },
+      ],
     },
   },
   { id: 'permittedUse', label: 'Permitted Use', latestVersion: 'v1' },
@@ -115,6 +129,12 @@ const CLAUSE_LIBRARY: LibraryClause[] = [
       version: 'v2',
       summary: 'Changes governing law from California to New York.',
       body: 'This Agreement is governed by the laws of the State of New York, without regard to its conflicts of law provisions.',
+      preview: [
+        { kind: 'same', text: 'This Agreement is governed by the laws of the State of ' },
+        { kind: 'delete', text: 'California' },
+        { kind: 'insert', text: 'New York' },
+        { kind: 'same', text: ', without regard to its conflicts of law provisions.' },
+      ],
     },
   },
   {
@@ -125,6 +145,13 @@ const CLAUSE_LIBRARY: LibraryClause[] = [
       version: 'v2',
       summary: 'Extends liability cap from 12 to 24 months and excludes confidentiality and indemnity obligations.',
       body: 'Each party\u2019s aggregate liability under this Agreement is limited to fees paid in the twenty-four (24) months preceding the claim. Confidentiality breaches and indemnity obligations are excluded from this cap.',
+      preview: [
+        { kind: 'same', text: 'Each party\u2019s aggregate liability under this Agreement is limited to fees paid in the ' },
+        { kind: 'delete', text: 'twelve (12)' },
+        { kind: 'insert', text: 'twenty-four (24)' },
+        { kind: 'same', text: ' months preceding the claim.' },
+        { kind: 'insert', text: ' Confidentiality breaches and indemnity obligations are excluded from this cap.' },
+      ],
     },
   },
 ];
@@ -327,7 +354,7 @@ function renderClausesPanel(): void {
 
     if (stale && clause.upgrade) {
       const upgrade = clause.upgrade;
-      const currentText = findClauseControl(clause.id)?.text ?? '';
+      const previewHtml = upgrade.preview.map(renderSegment).join('');
       card.innerHTML = `
         <header class="clause-header">
           <h3 class="clause-label">${escapeHtml(clause.label)}</h3>
@@ -340,14 +367,8 @@ function renderClausesPanel(): void {
           expanded
             ? `
           <div class="clause-review-panel">
-            <div class="review-section">
-              <div class="review-label">In your document</div>
-              <p class="review-text">${escapeHtml(currentText)}</p>
-            </div>
-            <div class="review-section">
-              <div class="review-label">From the library</div>
-              <p class="review-text">${escapeHtml(upgrade.body)}</p>
-            </div>
+            <div class="review-label">Proposed change</div>
+            <p class="clause-preview">${previewHtml}</p>
             <button class="btn primary clause-replace" type="button">Replace with library clause</button>
           </div>
         `
@@ -442,6 +463,13 @@ function qs<T extends Element>(selector: string): T {
 
 function escapeHtml(s: string): string {
   return s.replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[ch]!);
+}
+
+function renderSegment(seg: PreviewSegment): string {
+  const text = escapeHtml(seg.text);
+  if (seg.kind === 'insert') return `<ins>${text}</ins>`;
+  if (seg.kind === 'delete') return `<del>${text}</del>`;
+  return text;
 }
 
 function escapeAttr(s: string): string {

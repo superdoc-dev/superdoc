@@ -189,11 +189,6 @@ input:focus {
   flex-direction: column;
   gap: 10px;
 }
-.review-section {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
 .review-label {
   font-size: var(--sd-font-size-200, 11px);
   font-weight: 600;
@@ -201,15 +196,30 @@ input:focus {
   letter-spacing: 0.05em;
   color: var(--demo-text-muted);
 }
-.review-text {
+.clause-preview {
   margin: 0;
-  padding: 8px 10px;
+  padding: 10px 12px;
   background: var(--demo-bg);
   border: 1px solid var(--demo-border);
   border-radius: var(--sd-radius-50, 4px);
   font-size: var(--sd-font-size-300, 13px);
-  line-height: 1.45;
+  line-height: 1.5;
   color: var(--demo-text);
+}
+.clause-preview ins {
+  background: color-mix(in srgb, #15803d 18%, transparent);
+  color: var(--demo-text);
+  text-decoration: none;
+  padding: 0 2px;
+  border-radius: 2px;
+}
+.clause-preview del {
+  color: var(--demo-text-muted);
+  text-decoration: line-through;
+  text-decoration-color: #d92e2e;
+  background: color-mix(in srgb, #d92e2e 12%, transparent);
+  padding: 0 2px;
+  border-radius: 2px;
 }
 
 .status {

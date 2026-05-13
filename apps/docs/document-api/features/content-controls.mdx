@@ -147,7 +147,7 @@ For runtime synchronization with backing data, drive the control directly with `
 
 ## Replacing content
 
-`contentControls.replaceContent` accepts plain text. For richer fragments (paragraphs with formatting, tables, lists), use `doc.insert` to place the content and `contentControls.wrap` to attach a tag.
+`contentControls.replaceContent` accepts plain text. For richer fragments (paragraphs with formatting, tables, lists), use `doc.insert` to place the content, then `create.contentControl({ at: range, ... })` to wrap the inserted range with a tag.
 
 ## Next steps
 

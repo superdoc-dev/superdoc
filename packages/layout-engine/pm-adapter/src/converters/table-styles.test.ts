@@ -330,7 +330,7 @@ describe('hydrateTableStyleAttrs', () => {
     expect(result?.cellPadding?.right).toBeCloseTo((200 / 1440) * 96);
   });
 
-  it('maps style marginStart/marginEnd to physical sides for RTL tables', () => {
+  it('keeps marginStart/marginEnd LTR-default for RTL tables (painter mirrors at paint)', () => {
     const styles: StylesDocumentProperties = {
       ...emptyStyles,
       styles: {
@@ -354,8 +354,11 @@ describe('hydrateTableStyleAttrs', () => {
     } as unknown as PMNode;
 
     const result = hydrateTableStyleAttrs(table, buildContext(styles));
-    // In RTL, start => right, end => left
-    expect(result?.cellPadding?.right).toBeCloseTo((100 / 1440) * 96);
-    expect(result?.cellPadding?.left).toBeCloseTo((200 / 1440) * 96);
+    // pm-adapter stores logical start/end LTR-default (start => left,
+    // end => right). DomPainter performs the single visual RTL mirror at
+    // paint time; pre-mirroring here would double-swap for bidiVisual
+    // tables. SD-3134.
+    expect(result?.cellPadding?.left).toBeCloseTo((100 / 1440) * 96);
+    expect(result?.cellPadding?.right).toBeCloseTo((200 / 1440) * 96);
   });
 });

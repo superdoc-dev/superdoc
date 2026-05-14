@@ -7,10 +7,12 @@ import { parseAnnotationMarks } from './handle-annotation-node';
  * @returns {string|null}
  */
 function detectControlType(sdtPr) {
-  if (!sdtPr?.elements) return null;
+  // ECMA-376 §17.5.2.26: an sdtPr with no type child shall be of type richText.
+  if (!sdtPr?.elements) return 'richText';
   const names = sdtPr.elements.map((el) => el.name);
 
   if (names.includes('w:text')) return 'text';
+  if (names.includes('w:richText')) return 'richText';
   if (names.includes('w:date')) return 'date';
   if (names.includes('w14:checkbox') || names.includes('w:checkbox')) return 'checkbox';
   if (names.includes('w:comboBox')) return 'comboBox';
@@ -19,7 +21,16 @@ function detectControlType(sdtPr) {
   if (names.includes('w15:repeatingSectionItem') || names.includes('w:repeatingSectionItem'))
     return 'repeatingSectionItem';
   if (names.includes('w:group')) return 'group';
-  return null;
+
+  // Type-marker children that we don't (yet) model — equation, picture, citation,
+  // bibliography, docPartList. Fall through so resolveControlType yields 'unknown'.
+  const TYPE_CHILD_NAMES = new Set(['w:equation', 'w:picture', 'w:citation', 'w:bibliography', 'w:docPartList']);
+  if (names.some((n) => TYPE_CHILD_NAMES.has(n))) return null;
+
+  // No recognized type child and no unrecognized type child either — sdtPr has
+  // only property children (alias/tag/id/lock/placeholder/...). Per the spec,
+  // that's a richText SDT.
+  return 'richText';
 }
 
 /**

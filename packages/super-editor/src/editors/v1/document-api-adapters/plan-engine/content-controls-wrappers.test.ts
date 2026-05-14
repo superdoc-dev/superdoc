@@ -1095,6 +1095,52 @@ describe('create.contentControl default sdtPr seeding', () => {
     expect(dateEl?.elements?.some((el) => el.name === 'w:storeMappedDataAs')).toBe(true);
     expect(dateEl?.elements?.some((el) => el.name === 'w:calendar')).toBe(true);
   });
+
+  it('defaults newly-created controls without controlType to richText', () => {
+    const editor = makeSdtEditor();
+    const adapter = createContentControlsAdapter(editor);
+
+    const result = adapter.create({ kind: 'inline' }, { changeMode: 'direct' });
+    expect(result.success).toBe(true);
+
+    const insertInline = editor.commands!.insertStructuredContentInline as ReturnType<typeof vi.fn>;
+    const attrs = insertInline.mock.calls[0][0].attrs as Record<string, unknown>;
+    expect(attrs.controlType).toBe('richText');
+    expect(attrs.type).toBe('richText');
+    const sdtPr = attrs.sdtPr as { elements?: Array<{ name: string }> };
+    expect(sdtPr.elements?.some((el) => el.name === 'w:richText')).toBe(true);
+  });
+
+  it('seeds explicit richText controls with w:richText in sdtPr', () => {
+    const editor = makeSdtEditor();
+    const adapter = createContentControlsAdapter(editor);
+
+    const result = adapter.create({ kind: 'inline', controlType: 'richText' }, { changeMode: 'direct' });
+    expect(result.success).toBe(true);
+
+    const insertInline = editor.commands!.insertStructuredContentInline as ReturnType<typeof vi.fn>;
+    const attrs = insertInline.mock.calls[0][0].attrs as Record<string, unknown>;
+    expect(attrs.controlType).toBe('richText');
+    const sdtPr = attrs.sdtPr as { elements?: Array<{ name: string }> };
+    expect(sdtPr.elements?.some((el) => el.name === 'w:richText')).toBe(true);
+  });
+});
+
+describe('contentControls.wrap default classification', () => {
+  it('sets wrapper controlType to richText and seeds w:richText in sdtPr', () => {
+    const editor = makeSdtEditor();
+    const adapter = createContentControlsAdapter(editor);
+
+    adapter.wrap({ target: SDT_TARGET, kind: 'block' }, { changeMode: 'direct' });
+
+    const createFn = editor.schema.nodes.structuredContentBlock.create as ReturnType<typeof vi.fn>;
+    expect(createFn).toHaveBeenCalledTimes(1);
+    const [attrs] = createFn.mock.calls[0];
+    expect(attrs.controlType).toBe('richText');
+    expect(attrs.type).toBe('richText');
+    const sdtPr = attrs.sdtPr as { elements?: Array<{ name: string }> };
+    expect(sdtPr.elements?.some((el) => el.name === 'w:richText')).toBe(true);
+  });
 });
 
 describe('contentControls.setType default sdtPr seeding', () => {

@@ -1,6 +1,7 @@
 // @ts-check
 import { Plugin, PluginKey, Selection, TextSelection } from 'prosemirror-state';
 import { CellSelection, TableMap } from 'prosemirror-tables';
+import { getTableVisualDirection } from '@superdoc/contracts';
 
 const TABLE_CELL_ROLES = new Set(['cell', 'header_cell']);
 
@@ -168,8 +169,7 @@ function getTableContext($head) {
  * @returns {boolean}
  */
 function isRtlTable(table) {
-  const tableProperties = table?.attrs?.tableProperties;
-  return tableProperties?.rightToLeft === true;
+  return getTableVisualDirection(table?.attrs) === 'rtl';
 }
 
 /**

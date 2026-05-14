@@ -16,7 +16,7 @@ export type {
   RunBidiContext,
   RunScriptContext,
 } from './direction-context.js';
-export { getParagraphInlineDirection } from './direction-context.js';
+export { getParagraphInlineDirection, getTableVisualDirection } from './direction-context.js';
 import type { ParagraphDirectionContext, RunBidiContext, RunScriptContext } from './direction-context.js';
 
 // Export table contracts

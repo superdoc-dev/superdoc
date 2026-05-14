@@ -78,6 +78,8 @@ jobs:
             ~/.cache/ms-playwright
           key: demos-workspace-${{ github.sha }}
 
+      - uses: pnpm/action-setup@v4
+
       - name: Run smoke test
         working-directory: demos/__tests__
         run: DEMO=${{ matrix.demo }} npx playwright test

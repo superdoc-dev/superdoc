@@ -108,8 +108,8 @@ export function shouldRenderSdtContainerChrome(
     containerKey?: string | null;
   },
 ): boolean {
-  const config = getSdtContainerConfig(sdt) ?? getSdtContainerConfig(containerSdt);
-  if (!config) return false;
+  const metadata = getSdtContainerMetadata(sdt, containerSdt);
+  if (!metadata) return false;
 
   const containerKey = options?.containerKey ?? getSdtContainerKey(sdt, containerSdt);
   if (containerKey && options?.ancestorContainerKey && containerKey === options.ancestorContainerKey) {
@@ -117,7 +117,7 @@ export function shouldRenderSdtContainerChrome(
   }
 
   const ancestorContainerSdt = options?.ancestorContainerSdt;
-  if (ancestorContainerSdt && (sdt === ancestorContainerSdt || containerSdt === ancestorContainerSdt)) {
+  if (ancestorContainerSdt && metadata === ancestorContainerSdt) {
     return false;
   }
 

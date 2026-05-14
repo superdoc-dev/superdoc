@@ -98,6 +98,25 @@ describe('SDT container chrome', () => {
     expect(el.classList.contains('superdoc-structured-content-block')).toBe(false);
   });
 
+  it('does not suppress distinct primary chrome when fallback container metadata matches ancestor', () => {
+    const ancestorSdt: SdtMetadata = {
+      type: 'structuredContent',
+      scope: 'block',
+      alias: 'Ancestor',
+    };
+    const childSdt: SdtMetadata = {
+      type: 'structuredContent',
+      scope: 'block',
+      alias: 'Child',
+    };
+
+    expect(
+      shouldRenderSdtContainerChrome(childSdt, ancestorSdt, {
+        ancestorContainerSdt: ancestorSdt,
+      }),
+    ).toBe(true);
+  });
+
   it('computes stable sibling start and end boundaries', () => {
     expect(getSdtSiblingBoundaries(['a', 'a', 'b', null, 'b'])).toEqual([
       { isStart: true, isEnd: false },

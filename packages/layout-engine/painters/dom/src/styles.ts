@@ -667,13 +667,13 @@ const SDT_CONTAINER_STYLES = `
  * Inline SDTs use :hover (single element, no coordination needed).
  * Hover is suppressed when the node is selected (SD-1584).
  *
- * Inline SDTs with appearance=hidden are excluded: this selector has
- * higher specificity than the hidden-appearance rule above (its
- * :not(.ProseMirror-selectednode) adds a class to the specificity tuple),
- * so without the exclusion it would re-introduce the lock-hover blue
- * background on hover and contradict the "visually transparent" intent. */
+ * Inline SDTs with appearance=hidden are excluded via the same :not()
+ * that handles selection. Both predicates live in one :not(a, b) so the
+ * selector keeps (0,4,0) specificity. A second chained :not() would push
+ * it to (0,5,0) and beat the viewing-mode suppression rule below, which
+ * also sits at (0,4,0). */
 .superdoc-structured-content-block[data-lock-mode].sdt-group-hover:not(.ProseMirror-selectednode),
-.superdoc-structured-content-inline[data-lock-mode]:hover:not(.ProseMirror-selectednode):not([data-appearance='hidden']) {
+.superdoc-structured-content-inline[data-lock-mode]:hover:not(.ProseMirror-selectednode, [data-appearance='hidden']) {
   background-color: var(--sd-content-controls-lock-hover-bg, rgba(98, 155, 231, 0.08));
   z-index: 9999999;
 }

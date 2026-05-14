@@ -73,16 +73,22 @@ Patterns for the browser editor surface.
 
 ### Collaboration
 
-Realtime providers and backend setups for Yjs-based collaboration.
+Realtime provider examples for the browser editor.
 
 | Example | Description |
 |---------|-------------|
-| [backends/fastapi/yjs-hub](./editor/collaboration/backends/fastapi/yjs-hub) | YHub server (advanced Yjs backend for attribution and revision-history workflows; beta) |
-| [providers/hocuspocus](./editor/collaboration/providers/hocuspocus) | Hocuspocus provider (mature self-hosted Yjs server) |
-| [providers/liveblocks](./editor/collaboration/providers/liveblocks) | Liveblocks managed service |
+| [providers/yhub](./editor/collaboration/providers/yhub) | SuperDoc + YHub client (advanced attribution and revision-history workflows; beta) |
+| [providers/liveblocks](./editor/collaboration/providers/liveblocks) | SuperDoc + Liveblocks managed service |
+| [providers/hocuspocus](./editor/collaboration/providers/hocuspocus) | SuperDoc + Hocuspocus self-hosted Yjs server |
 | [providers/superdoc-yjs](./editor/collaboration/providers/superdoc-yjs) | SuperDoc Yjs minimal reference server (not production infrastructure) |
-| [backends/node-sdk](./editor/collaboration/backends/node-sdk) | Server-side document operations alongside the realtime layer |
-| [backends/fastapi](./editor/collaboration/backends/fastapi) | Python FastAPI backend |
+
+Backend automation and local infrastructure.
+
+| Example | Description |
+|---------|-------------|
+| [backends/node-sdk](./editor/collaboration/backends/node-sdk) | Node backend that joins and mutates a live collaboration room |
+| [backends/fastapi](./editor/collaboration/backends/fastapi) | FastAPI backend that joins and mutates a live collaboration room |
+| [backends/fastapi/yjs-hub](./editor/collaboration/backends/fastapi/yjs-hub) | Local YHub server used by the YHub and backend examples |
 
 ## Document API
 

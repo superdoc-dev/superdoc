@@ -133,8 +133,9 @@
                     "group": "Guides",
                     "pages": [
                       "guides/collaboration/liveblocks",
-                      "guides/collaboration/superdoc-yjs",
-                      "guides/collaboration/hocuspocus"
+                      "guides/collaboration/yhub",
+                      "guides/collaboration/hocuspocus",
+                      "guides/collaboration/superdoc-yjs"
                     ]
                   }
                 ]

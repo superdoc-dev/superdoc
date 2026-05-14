@@ -353,12 +353,17 @@ class DocxZipper {
     // (tombstoned via updatedDocs[path] = null, e.g. by `customXml.parts.remove`).
     // Without this, [Content_Types].xml retains an Override pointing at a
     // missing part, which is spec-malformed.
+    //
+    // Identify by ContentType, not by filename — OOXML does not require
+    // the props part to be named itemPropsN.xml. Foreign producers can
+    // use arbitrary names, linked via customXml/_rels/itemN.xml.rels.
+    const CUSTOM_XML_PROPS_CT = 'application/vnd.openxmlformats-officedocument.customXmlProperties+xml';
     if (types?.elements?.length) {
       for (const el of types.elements) {
         if (el?.name !== 'Override') continue;
+        if (el?.attributes?.ContentType !== CUSTOM_XML_PROPS_CT) continue;
         const partName = el?.attributes?.PartName;
-        if (typeof partName !== 'string') continue;
-        if (!/^\/customXml\/itemProps\d+\.xml$/i.test(partName)) continue;
+        if (typeof partName !== 'string' || !partName.startsWith('/')) continue;
         const filename = partName.slice(1); // strip leading /
         if (!hasFile(filename)) staleOverridePartNames.push(partName);
       }

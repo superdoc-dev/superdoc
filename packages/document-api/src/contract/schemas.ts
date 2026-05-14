@@ -2586,8 +2586,11 @@ const bookmarkMutation = refMutationSchemas({ bookmark: bookmarkAddressSchema },
 // --- Custom XML part schemas ---
 const customXmlPartTargetSchema: JsonSchema = {
   oneOf: [
-    objectSchema({ id: { type: 'string' } }, ['id']),
-    objectSchema({ partName: { type: 'string' } }, ['partName']),
+    // Empty strings are runtime-rejected (target validator requires
+    // non-zero length); reflect that in the contract so generated SDKs
+    // and tool callers see the same constraint.
+    objectSchema({ id: { type: 'string', minLength: 1 } }, ['id']),
+    objectSchema({ partName: { type: 'string', minLength: 1 } }, ['partName']),
   ],
 };
 

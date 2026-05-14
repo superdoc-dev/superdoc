@@ -73,11 +73,19 @@ export function isCustomXmlStoragePartName(partName) {
 // ---------------------------------------------------------------------------
 
 /**
- * Enumerates every custom XML Storage Part in the package by scanning
- * convertedXml keys (not the relationships file, because foreign producers
- * sometimes leave orphan parts that aren't referenced from word/document.xml).
+ * Enumerates every Custom XML Data Storage Part in the package.
  *
- * Returns part names sorted by their numeric index. Pair-matching with
+ * AIDEV-NOTE: v1 scope is Word-style filenames (`customXml/itemN.xml`).
+ * ECMA-376 §15.2.5 allows arbitrary filenames identified by relationship
+ * + content type, but every real producer (Word, Google Docs, LibreOffice,
+ * pandoc) uses the Word convention. Supporting truly foreign-named
+ * storage parts is intentionally deferred — it requires broadening the
+ * partName safety filter (currently `isCustomXmlStoragePartName`) and
+ * the rels-path computation in `findPropsPartFor` to be path-agnostic.
+ * Foreign-named *Properties Parts* paired via rels ARE supported (see
+ * `findPropsPartFor`); only the Storage Part filename is constrained.
+ *
+ * Returns part names sorted by numeric index. Pair-matching with
  * Properties Parts is left to the caller.
  */
 export function listCustomXmlStoragePartNames(convertedXml) {

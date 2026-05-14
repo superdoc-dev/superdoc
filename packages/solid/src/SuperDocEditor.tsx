@@ -24,6 +24,7 @@ import type {
   SuperDocReadyEvent,
   SuperDocTransactionEvent,
 } from './types';
+import { shallowJsonEqual } from './utils';
 
 /**
  * SuperDocEditor - Solid wrapper component for SuperDoc
@@ -64,8 +65,8 @@ export function SuperDocEditor(props: SuperDocEditorProps) {
   // trigger a rebuild. `modules` stays on reference identity — it can
   // carry functions and live objects (e.g. `collaboration.provider`)
   // that a consumer may intentionally swap. See SD-2635.
-  const user = createMemo(() => rebuildTriggeringProps.user);
-  const users = createMemo(() => rebuildTriggeringProps.users);
+  const user = createMemo(() => rebuildTriggeringProps.user, undefined, { equals: shallowJsonEqual });
+  const users = createMemo(() => rebuildTriggeringProps.users, undefined, { equals: shallowJsonEqual });
 
   let instanceRef: SuperDocInstance | null = null;
   let toolbarContainerRef: HTMLDivElement | undefined;

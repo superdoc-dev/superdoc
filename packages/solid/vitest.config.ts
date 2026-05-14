@@ -1,6 +1,8 @@
 import { defineConfig } from 'vitest/config';
+import solidPlugin from 'vite-plugin-solid';
 
 export default defineConfig({
+  plugins: [solidPlugin()],
   test: {
     globals: true,
     environment: 'happy-dom',
@@ -11,8 +13,5 @@ export default defineConfig({
       include: ['src/**/*.{ts,tsx}'],
       exclude: ['src/**/*.d.ts', 'src/**/*.test.{ts,tsx}'],
     },
-  },
-  esbuild: {
-    jsx: 'preserve',
   },
 });

@@ -14,19 +14,14 @@ import {
   getParagraphInlineDirection,
 } from '@superdoc/contracts';
 import { resolveMarkerIndent, type MinimalWordLayout } from '@superdoc/common/list-marker-utils';
-import { resolvePainterListTextStartPx } from '../utils/marker-helpers.js';
 import { applySdtContainerStyling, type SdtBoundaryOptions } from '../utils/sdt-helpers.js';
-import {
-  createParagraphDecorationLayers,
-  stampBetweenBorderDataset,
-  type BetweenBorderInfo,
-} from '../features/paragraph-borders/index.js';
+import { createParagraphDecorationLayers, stampBetweenBorderDataset, type BetweenBorderInfo } from './borders/index.js';
 import {
   applyParagraphLineIndentation,
   hasExplicitSegmentPositioning,
   resolveAvailableWidthForLine,
 } from './indentation.js';
-import { renderLegacyListMarker, renderResolvedListMarker } from './list-marker.js';
+import { renderLegacyListMarker, renderResolvedListMarker, resolvePainterListTextStartPx } from './list-marker.js';
 import { applyParagraphBlockStyles, clearParagraphFrameIndentStyles } from './styles.js';
 
 export type RenderedParagraphLineInfo = {
@@ -307,9 +302,10 @@ const renderMeasuredLines = (
     firstLinePx: markerFirstLine,
     hangingPx: markerHanging,
   } = resolveMarkerIndent(paraIndent, isRtl);
+  const wordLayoutIndentLeft = (wordLayout as { indentLeftPx?: number } | undefined)?.indentLeftPx;
   const tableMarkerIndentLeft =
     measure.marker?.indentLeft ??
-    wordLayout?.indentLeftPx ??
+    wordLayoutIndentLeft ??
     (typeof paraIndent?.left === 'number' ? paraIndent.left : 0);
   const suppressFirstLineIndent = block.attrs?.suppressFirstLineIndent === true;
   const firstLineOffset = suppressFirstLineIndent ? 0 : (paraIndent?.firstLine ?? 0) - (paraIndent?.hanging ?? 0);

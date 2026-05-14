@@ -1,6 +1,119 @@
+import { DOM_CLASS_NAMES } from '@superdoc/dom-contract';
+import { toCssFontFamily } from '@superdoc/font-utils';
 import type { ParagraphMeasure, ResolvedListMarkerItem, SourceAnchor } from '@superdoc/contracts';
-import type { MinimalMarker, MinimalWordLayout } from '@superdoc/common/list-marker-utils';
-import { createListMarkerElement, computeTabWidth, resolvePainterListMarkerGeometry } from '../utils/marker-helpers.js';
+import {
+  computeTabWidth,
+  resolveListMarkerGeometry,
+  resolveListTextStartPx,
+  type MinimalMarker,
+  type MinimalWordLayout,
+  type ResolvedListMarkerGeometry,
+} from '@superdoc/common/list-marker-utils';
+import { applySourceAnchorDataset } from '../renderer.js';
+
+type PainterListTextStartParams = {
+  wordLayout: MinimalWordLayout | undefined;
+  indentLeftPx: number;
+  hangingIndentPx: number;
+  firstLineIndentPx: number;
+  markerTextWidthPx?: number;
+};
+
+const getFiniteNonNegativeNumber = (value: unknown): number | undefined => {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
+    return undefined;
+  }
+  return value;
+};
+
+const resolvePainterMarkerTextWidth = (
+  markerTextWidthPx: number | undefined,
+  marker: { glyphWidthPx?: number; markerBoxWidthPx?: number },
+): number =>
+  getFiniteNonNegativeNumber(markerTextWidthPx) ??
+  getFiniteNonNegativeNumber(marker.glyphWidthPx) ??
+  getFiniteNonNegativeNumber(marker.markerBoxWidthPx) ??
+  0;
+
+export const resolvePainterListMarkerGeometry = ({
+  wordLayout,
+  indentLeftPx,
+  hangingIndentPx,
+  firstLineIndentPx,
+  markerTextWidthPx,
+}: PainterListTextStartParams): ResolvedListMarkerGeometry | undefined =>
+  resolveListMarkerGeometry(
+    wordLayout,
+    indentLeftPx,
+    firstLineIndentPx,
+    hangingIndentPx,
+    (_markerText: string, marker: MinimalMarker) => resolvePainterMarkerTextWidth(markerTextWidthPx, marker),
+  );
+
+export const resolvePainterListTextStartPx = ({
+  wordLayout,
+  indentLeftPx,
+  hangingIndentPx,
+  firstLineIndentPx,
+  markerTextWidthPx,
+}: PainterListTextStartParams): number | undefined =>
+  resolveListTextStartPx(
+    wordLayout,
+    indentLeftPx,
+    firstLineIndentPx,
+    hangingIndentPx,
+    (_markerText: string, marker: MinimalMarker) => resolvePainterMarkerTextWidth(markerTextWidthPx, marker),
+  );
+
+type MarkerRunStyle = {
+  fontFamily?: string | null;
+  fontSize?: number | null;
+  bold?: boolean | null;
+  italic?: boolean | null;
+  color?: string | null;
+  letterSpacing?: number | null;
+  vanish?: boolean | null;
+};
+
+const isMarkerSuffix = (suffix: unknown): suffix is 'tab' | 'space' | 'nothing' =>
+  suffix === 'tab' || suffix === 'space' || suffix === 'nothing';
+
+export const createListMarkerElement = (
+  doc: Document,
+  markerText: string,
+  run: MarkerRunStyle,
+  sourceAnchor?: SourceAnchor,
+): HTMLElement => {
+  const markerContainer = doc.createElement('span');
+  markerContainer.classList.add(DOM_CLASS_NAMES.LIST_MARKER);
+  markerContainer.style.display = 'inline-block';
+  markerContainer.style.wordSpacing = '0px';
+
+  const markerEl = doc.createElement('span');
+  markerEl.classList.add('superdoc-paragraph-marker');
+  markerEl.textContent = markerText;
+  markerEl.style.pointerEvents = 'none';
+  markerEl.style.fontFamily = toCssFontFamily(run.fontFamily) ?? run.fontFamily ?? '';
+
+  if (run.fontSize != null) {
+    markerEl.style.fontSize = `${run.fontSize}px`;
+  }
+  markerEl.style.fontWeight = run.bold ? 'bold' : '';
+  markerEl.style.fontStyle = run.italic ? 'italic' : '';
+
+  if (run.color) {
+    markerEl.style.color = run.color;
+  }
+  if (run.letterSpacing != null) {
+    markerEl.style.letterSpacing = `${run.letterSpacing}px`;
+  }
+
+  markerContainer.appendChild(markerEl);
+  if (sourceAnchor) {
+    applySourceAnchorDataset(markerEl, sourceAnchor);
+  }
+  return markerContainer;
+};
 
 export const renderLegacyListMarker = (params: {
   doc: Document;
@@ -83,7 +196,7 @@ export const renderLegacyListMarker = (params: {
     lineEl.style.paddingLeft = `${anchorPoint}px`;
   }
 
-  if (markerLayout?.run?.vanish) {
+  if ((markerLayout?.run as MarkerRunStyle | undefined)?.vanish) {
     return;
   }
 
@@ -112,7 +225,7 @@ export const renderLegacyListMarker = (params: {
     }
   }
 
-  prependMarkerSuffix(doc, lineEl, suffix, suffixWidthPx, markerLayout?.run?.fontSize);
+  prependMarkerSuffix(doc, lineEl, isMarkerSuffix(suffix) ? suffix : undefined, suffixWidthPx, markerLayout?.run?.fontSize);
   lineEl.prepend(markerContainer);
 };
 

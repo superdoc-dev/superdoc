@@ -147,7 +147,7 @@ describe('renderParagraphContent', () => {
     const block: ParagraphBlock = {
       kind: 'paragraph',
       id: 'resolved-list-paragraph',
-      attrs: { direction: 'rtl' },
+      attrs: { directionContext: { inlineDirection: 'rtl', writingMode: 'horizontal-tb' } },
       runs: [{ text: 'abc', fontFamily: 'Arial', fontSize: 16 }],
     };
     const resolvedContent: ResolvedParagraphContent = {

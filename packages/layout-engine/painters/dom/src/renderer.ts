@@ -113,7 +113,7 @@ import {
   type MinimalWordLayout,
 } from '@superdoc/common/list-marker-utils';
 import { applySdtContainerStyling, shouldRebuildForSdtBoundary, type SdtBoundaryOptions } from './utils/sdt-helpers.js';
-import { computeBetweenBorderFlags, type BetweenBorderInfo } from './features/paragraph-borders/index.js';
+import { computeBetweenBorderFlags, type BetweenBorderInfo } from './paragraph/borders/index.js';
 import {
   applyRtlStyles,
   shouldUseSegmentPositioning,
@@ -7002,8 +7002,6 @@ const computeSdtBoundaries = (
 
   return boundaries;
 };
-
-// computeBetweenBorderFlags — moved to features/paragraph-borders/
 
 const fragmentKey = (fragment: Fragment): string => {
   switch (fragment.kind) {

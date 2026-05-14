@@ -440,7 +440,7 @@ describe('CaretGeometry', () => {
         kind: 'paragraph',
         id: 'rtl-para',
         runs: [{ text: 'אבגדה', fontFamily: 'Arial', fontSize: 14, pmStart: 1, pmEnd: 6 }],
-        attrs: { direction: 'rtl' },
+        attrs: { directionContext: { inlineDirection: 'rtl', writingMode: 'horizontal-tb' } },
       };
       const line: Line = {
         fromRun: 0,
@@ -476,7 +476,7 @@ describe('CaretGeometry', () => {
         kind: 'paragraph',
         id: 'rtl-empty',
         runs: [{ text: '', fontFamily: 'Arial', fontSize: 14, pmStart: 1, pmEnd: 1 }],
-        attrs: { direction: 'rtl' },
+        attrs: { directionContext: { inlineDirection: 'rtl', writingMode: 'horizontal-tb' } },
       };
       const line: Line = {
         fromRun: 0,
@@ -512,7 +512,7 @@ describe('CaretGeometry', () => {
         kind: 'paragraph',
         id: 'rtl-line-end',
         runs: [{ text: 'אבגדה', fontFamily: 'Arial', fontSize: 14, pmStart: 1, pmEnd: 6 }],
-        attrs: { direction: 'rtl' },
+        attrs: { directionContext: { inlineDirection: 'rtl', writingMode: 'horizontal-tb' } },
       };
       const line: Line = {
         fromRun: 0,
@@ -546,7 +546,7 @@ describe('CaretGeometry', () => {
     it('computes decreasing X across mid-line positions for RTL paragraphs without DOM fallback', () => {
       const block: FlowBlock = {
         ...createMockParagraphBlock('rtl-midline', 1, 12),
-        attrs: { direction: 'rtl' },
+        attrs: { directionContext: { inlineDirection: 'rtl', writingMode: 'horizontal-tb' } },
       };
       const line = createMockLine(1, 12, 16);
       const measure = createMockParagraphMeasure([line]);

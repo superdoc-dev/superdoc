@@ -21,6 +21,7 @@ import { rejectTrackedMode } from './helpers/mutation-helpers.js';
 import { getRevision } from './plan-engine/revision-tracker.js';
 import { paginate } from './helpers/adapter-utils.js';
 import { resolveSelectionTarget } from './helpers/selection-target-resolver.js';
+import { pmPositionToTextOffset } from './helpers/text-offset-resolver.js';
 import { PERMISSION_MUTATION_META } from '../extensions/permission-ranges/permission-ranges.js';
 
 // ---------------------------------------------------------------------------
@@ -51,7 +52,12 @@ function pmPosToPosition(doc: ProseMirrorNode, pos: number): Position {
     const node = resolved.node(depth);
     const blockId = node.attrs?.sdBlockId as string | undefined;
     if (blockId) {
-      return { blockId, offset: pos - resolved.start(depth) };
+      // AIDEV-NOTE: Read-side offsets must match the write-side model
+      // owned by `pmPositionToTextOffset` (text-offset-resolver.ts).
+      // Raw PM arithmetic (`pos - resolved.start(depth)`) counts run
+      // and other inline wrapper tokens that the flattened model skips.
+      const blockPos = resolved.start(depth) - 1;
+      return { blockId, offset: pmPositionToTextOffset(node, blockPos, pos) };
     }
   }
   return { blockId: '', offset: pos };

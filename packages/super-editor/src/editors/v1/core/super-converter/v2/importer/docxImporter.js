@@ -158,8 +158,16 @@ export const createDocumentJson = (docx, converter, editor) => {
     const trackedChangeIdMapOptions = {
       replacements: converter.trackedChangesOptions?.replacements ?? 'paired',
     };
-    converter.trackedChangeIdMap = buildTrackedChangeIdMap(docx, trackedChangeIdMapOptions);
+    // AIDEV-NOTE: SD-2528. The per-part map and the global map MUST share UUIDs
+    // for the same w:id, otherwise documentCommentsImporter (uses the global)
+    // and the ins/del translators (use the per-part) end up with two different
+    // UUIDs for the same tracked change — the comment's trackedChangeParentId
+    // never matches the tracked-change mark's id, breaking accept/reject
+    // cascading.
     converter.trackedChangeIdMapsByPart = buildTrackedChangeIdMapsByPart(docx, trackedChangeIdMapOptions);
+    converter.trackedChangeIdMap =
+      converter.trackedChangeIdMapsByPart.get('word/document.xml') ??
+      buildTrackedChangeIdMap(docx, trackedChangeIdMapOptions);
     const comments = importCommentData({ docx, nodeListHandler, converter, editor });
     const footnotes = importFootnoteData({ docx, nodeListHandler, converter, editor, numbering });
     const endnotes = importEndnoteData({ docx, nodeListHandler, converter, editor, numbering });
@@ -1260,11 +1268,37 @@ const isStOnOffEnabled = (element) => {
   return ST_ON_OFF_TRUE_VALUES.has(String(rawValue).trim().toLowerCase());
 };
 
+/**
+ * Reads `w:evenAndOddHeaders` from a parsed `word/settings.xml` node (the same
+ * shape as `convertedXml['word/settings.xml']` after import).
+ *
+ * @param {unknown} settingsPart Parsed settings part root (may be `w:settings`,
+ *   a wrapper with `w:settings` among `elements`, or the file node whose first
+ *   child is `w:settings`).
+ * @returns {boolean | null} `true`/`false` when the element is present; `null`
+ *   when it is absent or the part is unreadable (callers may fall back to e.g.
+ *   `pageStyles.alternateHeaders`).
+ */
+export const resolveEvenAndOddHeadersFromSettingsPart = (settingsPart) => {
+  if (!settingsPart || typeof settingsPart !== 'object') return null;
+
+  const part =
+    /** @type {{ name?: string; elements?: { name?: string; elements?: unknown[]; attributes?: Record<string, unknown> }[] }} */ (
+      settingsPart
+    );
+  const settingsRoot = part.name === 'w:settings' ? part : part.elements?.find((entry) => entry?.name === 'w:settings');
+  if (!settingsRoot?.elements?.length) return null;
+
+  const evenOdd = settingsRoot.elements.find((el) => el?.name === 'w:evenAndOddHeaders');
+  if (!evenOdd) return null;
+
+  return isStOnOffEnabled(evenOdd);
+};
+
 export const isAlternatingHeadersOddEven = (docx) => {
   const settings = docx['word/settings.xml'];
-  if (!settings || !settings.elements?.length) return false;
+  if (!settings) return false;
 
-  const { elements = [] } = settings.elements[0];
-  const evenOdd = elements.find((el) => el.name === 'w:evenAndOddHeaders');
-  return isStOnOffEnabled(evenOdd);
+  const resolved = resolveEvenAndOddHeadersFromSettingsPart(settings);
+  return resolved ?? false;
 };

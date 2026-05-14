@@ -2,18 +2,24 @@ import { Plugin, TextSelection } from 'prosemirror-state';
 import { Fragment } from 'prosemirror-model';
 import { TableMap } from 'prosemirror-tables';
 import { decodeRPrFromMarks, encodeMarksFromRPr, resolveRunProperties } from '@converter/styles.js';
+import { FONT_SLOT_THEME_PAIRS } from '@superdoc/style-engine/ooxml';
 import {
   calculateResolvedParagraphProperties,
   getResolvedParagraphProperties,
 } from '@extensions/paragraph/resolvedPropertiesCache.js';
 import { collectChangedRangesThroughTransactions } from '@utils/rangeUtils.js';
 
+// SD-2912: `boldCs` / `italicCs` are NOT marks. The OOXML companions for complex-script
+// bold/italic are independent properties (ECMA-376 §17.3.2.1, §17.3.2.16) carried by the
+// run's stored runProperties. Listing them here caused the plugin to overwrite their
+// preserved value on every appendTransaction, which combined with the auto-propagation in
+// `decodeRPrFromMarks` injected a `<w:bCs/>` / `<w:iCs/>` element into every run on round-
+// trip even when the source rPr had none. Keeping them out of this set lets the existing-
+// runProperties branch in `getInlineRunProperties` preserve them verbatim.
 const RUN_PROPERTIES_DERIVED_FROM_MARKS = new Set([
   'strike',
   'italic',
-  'italicCs',
   'bold',
-  'boldCs',
   'underline',
   'highlight',
   'textTransform',
@@ -26,7 +32,86 @@ const RUN_PROPERTIES_DERIVED_FROM_MARKS = new Set([
   'position',
 ]);
 
-const TRANSIENT_HYPERLINK_STYLE_IDS = new Set(['Hyperlink', 'FollowedHyperlink']);
+export const TRANSIENT_HYPERLINK_STYLE_IDS = new Set(['Hyperlink', 'FollowedHyperlink']);
+
+/**
+ * Merge mark-derived concrete fontFamily slots with theme references preserved on the
+ * existing run. For each slot where the existing fontFamily has a theme reference, keep
+ * the theme and drop the concrete value from marks; otherwise take the mark value.
+ *
+ * Only safe to call when the caller has already verified that marks are a re-derivation
+ * of `existing` rather than a user override — otherwise this silently reverts user font
+ * changes. See `marksMatchExistingFontFamily` for the gate.
+ *
+ * SD-2894: when the plugin overrides a run's fontFamily from mark-derived values, the
+ * mark only carries the resolved CSS font name (`ascii: "Calibri Light"`) and forgets the
+ * theme reference (`asciiTheme: "majorBidi"`) that came from the imported `<w:rFonts>`.
+ * Without this merge we'd export concrete font names that defeat Word's per-script theme
+ * resolution.
+ *
+ * AIDEV-NOTE: The gate + merge pair operate at the fontFamily-key level (whole rPr
+ * fontFamily object), not at the per-slot level. A user action that mutates only a
+ * per-script mark attr (`eastAsiaFontFamily` or `csFontFamily`) without changing the
+ * primary `fontFamily` will pass the gate, and this merge will silently restore the
+ * stale theme on that slot. We accept this trade-off because (a) the toolbar's
+ * setFontFamily writes all four slots to the same family, so a real user override
+ * always changes the primary; (b) no current API or paste path produces per-script-only
+ * mark changes against an imported theme run; (c) a per-slot model adds intricate
+ * encoder probes that risk regressing the SD-2894 customer fixture again (see commit
+ * bec7e63ed for the prior per-script regression we just fixed). If a real customer
+ * reproduction surfaces — e.g. a paste-from-Word flow with per-script fonts being
+ * silently reverted — file a follow-up ticket with that fixture and rework this helper
+ * into a per-slot decision then. Codex flagged this on the PR-3225 review.
+ *
+ * @param {Record<string, unknown>|null|undefined} fromMarks
+ * @param {Record<string, unknown>|null|undefined} existing
+ * @returns {Record<string, unknown>}
+ */
+function mergeFontFamilyPreservingThemeRefs(fromMarks, existing) {
+  const merged = { ...(fromMarks || {}) };
+  if (!existing || typeof existing !== 'object') return merged;
+  for (const [concreteKey, themeKey] of FONT_SLOT_THEME_PAIRS) {
+    if (existing[themeKey] != null) {
+      merged[themeKey] = existing[themeKey];
+      delete merged[concreteKey];
+    }
+  }
+  return merged;
+}
+
+/**
+ * True when the mark-derived fontFamily value encodes to the same primary ASCII font as
+ * the run's existing (imported) fontFamily — i.e., marks are a faithful re-derivation,
+ * not a user override.
+ *
+ * The encoder resolves theme references to their CSS font name. So:
+ *   - import case: existing = { asciiTheme: 'majorBidi' }, marks = { ascii: 'Calibri Light' }
+ *     → both encode to fontFamily: 'Calibri Light' → match → preserve theme.
+ *   - user-edit case: existing = { asciiTheme: 'majorBidi' }, marks = { ascii: 'Arial' }
+ *     → existing encodes to 'Calibri Light', marks encode to 'Arial' → mismatch → user
+ *       has overridden, drop the theme and respect the new value.
+ *
+ * Compare ONLY the primary `fontFamily` attr, not the full mark attrs object. Per-script
+ * extras (`csFontFamily`, `eastAsiaFontFamily`) on the mark are derived only when the
+ * input has a *concrete* per-script slot. Existing run-props can carry mixed shapes
+ * (e.g. `{ asciiTheme, hAnsiTheme, cstheme, eastAsia: 'Arial' }`) that encode without
+ * `csFontFamily` while the mark re-decode adds a concrete `cs` and therefore does
+ * include it. A full-attrs JSON compare would falsely flag this as user override and
+ * drop the theme — the regression caught on the SD-2894 customer fixture round-trip.
+ *
+ * @param {{ attrs?: Record<string, unknown> } | null | undefined} markFromMarks
+ * @param {Record<string, unknown>|null|undefined} existingFontFamily
+ * @param {(props: Record<string, unknown>, docx: Record<string, unknown>) => Array<{ attrs?: Record<string, unknown> }>} encode
+ * @param {Record<string, unknown>} docx
+ * @returns {boolean}
+ */
+function marksMatchExistingFontFamily(markFromMarks, existingFontFamily, encode, docx) {
+  if (!existingFontFamily || typeof existingFontFamily !== 'object') return false;
+  if (!markFromMarks?.attrs) return false;
+  const markFromExisting = encode({ fontFamily: existingFontFamily }, docx)?.[0];
+  if (!markFromExisting?.attrs) return false;
+  return markFromMarks.attrs.fontFamily === markFromExisting.attrs.fontFamily;
+}
 
 const RUN_PROPERTY_PRESERVE_META_KEY = 'sdPreserveRunPropertiesKeys';
 const COMPANION_INLINE_KEYS = {
@@ -123,6 +208,7 @@ export const calculateInlineRunPropertiesPlugin = (editor) =>
           tableInfo,
           $pos,
           editor,
+          removedKeys,
           preservedDerivedKeys,
           preferExistingKeys,
         );
@@ -240,6 +326,8 @@ export const calculateInlineRunPropertiesPlugin = (editor) =>
               if (!runProperties) runProperties = {};
               lostKeys.forEach((k) => {
                 if (removedKeys.has(k)) return;
+                const baseKey = COMPANION_INLINE_KEYS[k];
+                if (baseKey && removedKeys.has(baseKey)) return;
                 if (runNode.attrs?.runProperties?.[k] !== undefined) {
                   runProperties[k] = runNode.attrs.runProperties[k];
                 }
@@ -395,6 +483,7 @@ function segmentRunByInlineProps(
   tableInfo,
   $pos,
   editor,
+  removedKeys,
   preservedDerivedKeys,
   preferExistingKeys,
 ) {
@@ -411,6 +500,7 @@ function segmentRunByInlineProps(
         tableInfo,
         $pos,
         editor,
+        removedKeys,
         preservedDerivedKeys,
         preferExistingKeys,
       );
@@ -458,6 +548,7 @@ function computeInlineRunProps(
   tableInfo,
   $pos,
   editor,
+  removedKeys,
   preservedDerivedKeys,
   preferExistingKeys,
 ) {
@@ -481,6 +572,7 @@ function computeInlineRunProps(
     runPropertiesFromStyles,
     existingRunProperties,
     editor,
+    removedKeys,
     preservedDerivedKeys,
     preferExistingKeys,
   );
@@ -503,6 +595,7 @@ function getInlineRunProperties(
   runPropertiesFromStyles,
   existingRunProperties,
   editor,
+  removedKeys = new Set(),
   preservedDerivedKeys = new Set(),
   preferExistingKeys = new Set(),
 ) {
@@ -536,10 +629,23 @@ function getInlineRunProperties(
     const valueFromStyles = runPropertiesFromStyles[key];
     if (JSON.stringify(valueFromMarks) !== JSON.stringify(valueFromStyles)) {
       if (key === 'fontFamily') {
-        const markFromStyles = encodeMarksFromRPr({ [key]: valueFromStyles }, editor.converter?.convertedXml ?? {})[0];
-        const markFromMarks = encodeMarksFromRPr({ [key]: valueFromMarks }, editor.converter?.convertedXml ?? {})[0];
+        const docx = editor.converter?.convertedXml ?? {};
+        const markFromStyles = encodeMarksFromRPr({ [key]: valueFromStyles }, docx)[0];
+        const markFromMarks = encodeMarksFromRPr({ [key]: valueFromMarks }, docx)[0];
         if (JSON.stringify(markFromMarks?.attrs) !== JSON.stringify(markFromStyles?.attrs)) {
-          inlineRunProperties[key] = valueFromMarks;
+          // SD-2894 follow-up (PR #3225 review): only preserve theme refs from `existing`
+          // when the marks are a faithful re-derivation of the imported value. If marks
+          // diverge from existing (user picked a new font), respect the user's choice
+          // and drop the stale theme reference.
+          const existingFontFamily = existingRunProperties?.[key];
+          inlineRunProperties[key] = marksMatchExistingFontFamily(
+            markFromMarks,
+            existingFontFamily,
+            encodeMarksFromRPr,
+            docx,
+          )
+            ? mergeFontFamilyPreservingThemeRefs(valueFromMarks, existingFontFamily)
+            : valueFromMarks;
         }
       } else {
         inlineRunProperties[key] = valueFromMarks;
@@ -550,6 +656,8 @@ function getInlineRunProperties(
   if (existingRunProperties != null) {
     Object.keys(existingRunProperties).forEach((key) => {
       if (RUN_PROPERTIES_DERIVED_FROM_MARKS.has(key) && !preservedDerivedKeys.has(key)) return;
+      const baseKey = COMPANION_INLINE_KEYS[key];
+      if (baseKey && removedKeys.has(baseKey)) return;
       if (
         key === 'styleId' &&
         TRANSIENT_HYPERLINK_STYLE_IDS.has(existingRunProperties[key]) &&

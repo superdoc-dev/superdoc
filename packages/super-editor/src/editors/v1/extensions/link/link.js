@@ -4,6 +4,7 @@ import { Attribute } from '@core/Attribute.js';
 import { getMarkRange } from '@core/helpers/getMarkRange.js';
 import { findOrCreateRelationship } from '@core/parts/adapters/relationships-mutation.js';
 import { sanitizeHref, encodeTooltip, UrlValidationConstants } from '@superdoc/url-validation';
+import { TRANSIENT_HYPERLINK_STYLE_IDS } from '@extensions/run/calculateInlineRunPropertiesPlugin.js';
 
 /**
  * Target frame options
@@ -227,9 +228,25 @@ export const Link = Mark.create({
           }
 
           if (linkMarkType) tr = tr.removeMark(from, to, linkMarkType);
-          if (underlineMarkType) tr = tr.removeMark(from, to, underlineMarkType);
 
-          if (underlineMarkType) tr = tr.addMark(from, to, underlineMarkType.create());
+          if (underlineMarkType) {
+            const rangesMissingUnderline = [];
+            tr.doc.nodesBetween(from, to, (node, pos) => {
+              if (!node.isText || node.nodeSize <= 0) return;
+              const hasUnderline = node.marks.some((mark) => mark.type === underlineMarkType);
+              if (hasUnderline) return;
+
+              // Only apply while overlapping with current selection/link range
+              const rangeFrom = Math.max(pos, from);
+              const rangeTo = Math.min(pos + node.nodeSize, to);
+              if (rangeFrom >= rangeTo) return;
+              rangesMissingUnderline.push({ from: rangeFrom, to: rangeTo });
+            });
+
+            rangesMissingUnderline.forEach((range) => {
+              tr = tr.addMark(range.from, range.to, underlineMarkType.create({ autoAdded: true }));
+            });
+          }
 
           let rId = null;
           if (editor.options.mode === 'docx') {
@@ -258,11 +275,78 @@ export const Link = Mark.create({
        */
       unsetLink:
         () =>
-        ({ chain }) => {
-          return chain()
-            .unsetMark('underline', { extendEmptyMarkRange: true })
+        ({ chain, state, editor }) => {
+          const { selection } = state;
+          const linkMarkType = editor.schema.marks.link;
+          const underlineMarkType = editor.schema.marks.underline;
+
+          let { from, to } = selection;
+
+          if (selection.empty && linkMarkType) {
+            const range = getMarkRange(selection.$from, linkMarkType);
+            if (range) {
+              from = range.from;
+              to = range.to;
+            }
+          }
+
+          const commandChain = chain();
+
+          return commandChain
             .unsetColor()
             .unsetMark('link', { extendEmptyMarkRange: true })
+            .command(({ tr }) => {
+              if (underlineMarkType) {
+                tr.doc.nodesBetween(from, to, (node, pos) => {
+                  if (!node.isText) return;
+                  node.marks.forEach((mark) => {
+                    if (mark.type !== underlineMarkType) return;
+                    if (mark.attrs?.autoAdded !== true) return;
+                    tr.removeMark(pos, pos + node.nodeSize, mark);
+                  });
+                });
+              }
+
+              const textStyleMarkType = tr.doc.type.schema.marks.textStyle;
+              if (textStyleMarkType) {
+                tr.doc.nodesBetween(from, to, (node, pos) => {
+                  if (!node.isText) return;
+
+                  node.marks.forEach((mark) => {
+                    if (mark.type !== textStyleMarkType) return;
+                    if (!TRANSIENT_HYPERLINK_STYLE_IDS.has(mark.attrs?.styleId)) return;
+
+                    const clearedAttrs = { ...mark.attrs, styleId: null };
+                    tr.removeMark(pos, pos + node.nodeSize, mark);
+                    tr.addMark(pos, pos + node.nodeSize, textStyleMarkType.create(clearedAttrs));
+                  });
+                });
+              }
+
+              const runNodesToUpdate = [];
+              tr.doc.nodesBetween(from, to, (node, pos) => {
+                if (node.type.name !== 'run') return;
+                if (!TRANSIENT_HYPERLINK_STYLE_IDS.has(node.attrs?.runProperties?.styleId)) return;
+                runNodesToUpdate.push({ node, pos });
+              });
+
+              runNodesToUpdate
+                .sort((a, b) => b.pos - a.pos)
+                .forEach(({ node, pos }) => {
+                  const mappedPos = tr.mapping.map(pos);
+                  tr.setNodeMarkup(
+                    mappedPos,
+                    node.type,
+                    {
+                      ...node.attrs,
+                      runProperties: { ...node.attrs.runProperties, styleId: null },
+                    },
+                    node.marks,
+                  );
+                });
+
+              return true;
+            })
             .run();
         },
 

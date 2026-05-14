@@ -6,7 +6,6 @@
 
 import type {
   BorderSpec,
-  BorderStyle,
   BoxSpacing,
   CellBorders,
   CellSpacing,
@@ -38,6 +37,7 @@ import type {
 } from '../types.js';
 import {
   extractTableBorders,
+  extractCellBorders,
   extractCellPadding,
   convertBorderSpec,
   normalizeShadingColor,
@@ -55,10 +55,12 @@ import {
 import {
   TableProperties,
   resolveTableCellProperties,
+  resolveTableProperties,
   resolveExistingTableEffectiveStyleId,
   type TableInfo,
 } from '@superdoc/style-engine/ooxml';
 import { resolveThemeColorValue } from '../marks/theme-color.js';
+import { resolveTableDirection, resolveSectionDirection } from '../direction/index.js';
 
 /**
  * Normalizes tableCellSpacing from PM node to CellSpacing object format.
@@ -83,36 +85,6 @@ function sourceAnchorFromNode(node: PMNode): SourceAnchor | undefined {
   return sourceAnchor && typeof sourceAnchor === 'object' && !Array.isArray(sourceAnchor)
     ? (sourceAnchor as SourceAnchor)
     : undefined;
-}
-
-function normalizeLegacyBorderStyle(value: string | undefined): BorderStyle {
-  switch ((value ?? '').trim().toLowerCase()) {
-    case 'none':
-    case 'nil':
-      return 'none';
-    case 'double':
-      return 'double';
-    case 'dashed':
-      return 'dashed';
-    case 'dotted':
-    case 'dot':
-      return 'dotted';
-    case 'thick':
-      return 'thick';
-    case 'triple':
-      return 'triple';
-    case 'dotdash':
-      return 'dotDash';
-    case 'dotdotdash':
-      return 'dotDotDash';
-    case 'wave':
-      return 'wave';
-    case 'doublewave':
-      return 'doubleWave';
-    case 'single':
-    default:
-      return 'single';
-  }
 }
 
 type TableParserDependencies = {
@@ -162,6 +134,40 @@ const isTableSkipPlaceholderCell = (node: PMNode): boolean => {
   const placeholder = node.attrs?.__placeholder;
   return placeholder === 'gridBefore' || placeholder === 'gridAfter';
 };
+
+// Legacy persisted-cell borders sometimes use lowercase or alias forms
+// (`dot`, `dotdash`, `doublewave`) instead of the canonical camelCase
+// BorderStyle enum. convertBorderSpec passes `val` through unchanged, so
+// the legacy fallback path normalizes here before handoff.
+function normalizeLegacyBorderStyle(value: string | undefined): string {
+  switch ((value ?? '').trim().toLowerCase()) {
+    case 'none':
+    case 'nil':
+      return 'none';
+    case 'double':
+      return 'double';
+    case 'dashed':
+      return 'dashed';
+    case 'dotted':
+    case 'dot':
+      return 'dotted';
+    case 'thick':
+      return 'thick';
+    case 'triple':
+      return 'triple';
+    case 'dotdash':
+      return 'dotDash';
+    case 'dotdotdash':
+      return 'dotDotDash';
+    case 'wave':
+      return 'wave';
+    case 'doublewave':
+      return 'doubleWave';
+    case 'single':
+    default:
+      return 'single';
+  }
+}
 
 const convertResolvedCellBorder = (value: unknown): BorderSpec | undefined => {
   if (!value || typeof value !== 'object') return undefined;
@@ -551,10 +557,22 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
   // Inline tableCellProperties.borders are already folded into resolvedTcProps
   // by resolveTableCellProperties (inline wins over style cascade).
   if (resolvedTcProps?.borders && typeof resolvedTcProps.borders === 'object') {
+    const resolvedBordersData = resolvedTcProps.borders as Record<string, unknown>;
     const resolvedBorders: CellBorders = {};
     for (const side of ['top', 'right', 'bottom', 'left'] as const) {
-      const spec = convertResolvedCellBorder((resolvedTcProps.borders as Record<string, unknown>)[side]);
+      const spec = convertResolvedCellBorder(resolvedBordersData[side]);
       if (spec) resolvedBorders[side] = spec;
+    }
+    // Logical start/end fallback (LTR-default). The painter's
+    // swapCellBordersLR is the single source of the RTL visual mirror
+    // for cell borders (§17.4.33/12). Pre-swapping here would double-mirror.
+    if (resolvedBorders.left == null) {
+      const spec = convertResolvedCellBorder(resolvedBordersData.start);
+      if (spec) resolvedBorders.left = spec;
+    }
+    if (resolvedBorders.right == null) {
+      const spec = convertResolvedCellBorder(resolvedBordersData.end);
+      if (spec) resolvedBorders.right = spec;
     }
     if (Object.keys(resolvedBorders).length > 0) {
       cellAttrs.borders = resolvedBorders;
@@ -570,15 +588,19 @@ const parseTableCell = (args: ParseTableCellArgs): TableCell | null => {
   // resolves those from the table style cascade).
   if (!cellAttrs.borders && cellNode.attrs?.borders && typeof cellNode.attrs.borders === 'object') {
     const legacy = cellNode.attrs.borders as Record<string, { size?: number; color?: string; val?: string }>;
-    const fallback: CellBorders = {};
-    for (const side of ['top', 'right', 'bottom', 'left'] as const) {
+    const filteredLegacyBorders: Record<string, unknown> = {};
+    for (const side of ['top', 'right', 'bottom', 'left', 'start', 'end'] as const) {
       const b = legacy[side];
       if (b && b.val && typeof b.size === 'number' && b.size > 0) {
-        const color = b.color ? (b.color.startsWith('#') ? b.color : `#${b.color}`) : '#000000';
-        fallback[side] = { style: normalizeLegacyBorderStyle(b.val), width: b.size, color };
+        // Legacy persisted docs may store lowercase or alias forms (`dot`,
+        // `dotdash`, `doublewave`) instead of the camelCase BorderStyle enum.
+        // Normalize before handing to extractCellBorders so convertBorderSpec
+        // doesn't pass a non-canonical string through to the painter.
+        filteredLegacyBorders[side] = { ...b, val: normalizeLegacyBorderStyle(b.val) };
       }
     }
-    if (Object.keys(fallback).length > 0) {
+    const fallback = extractCellBorders({ borders: filteredLegacyBorders });
+    if (fallback) {
       cellAttrs.borders = fallback;
     }
   }
@@ -1000,6 +1022,34 @@ export function tableNodeToBlock(
   if (tableProperties && typeof tableProperties === 'object') {
     tableAttrs.tableProperties = tableProperties as Record<string, unknown>;
   }
+
+  // SD-3138 Phase 1B: resolve the table direction context from cascade-resolved
+  // table properties so downstream consumers (painter, layout-engine, editor
+  // navigation) read a typed `TableDirectionContext` instead of inspecting raw
+  // tableProperties.rightToLeft. Inline `w:bidiVisual` wins over the style
+  // cascade; explicit `false` overrides a cascade `true` per §17.4.1 + §17.17.4
+  // (the resolver handles the explicit-false case via SD-3141).
+  const styleResolvedTableProps =
+    effectiveStyleId && converterContext?.translatedLinkedStyles
+      ? resolveTableProperties(effectiveStyleId, converterContext.translatedLinkedStyles)
+      : undefined;
+  // Normalize the rightToLeft / bidiVisual aliases to a single signal PER LAYER
+  // before layering inline over style. Otherwise an inline `bidiVisual: false`
+  // paired with a style `rightToLeft: true` would resolve RTL because the two
+  // aliases get layered independently (inline-false on bidiVisual loses to
+  // style-true on rightToLeft). The importer normalizes w:bidiVisual to
+  // `rightToLeft` so this matters most when style-engine emits raw OOXML keys.
+  const inlineProps = rawTableProperties as { rightToLeft?: boolean; bidiVisual?: boolean } | undefined;
+  const styleProps = styleResolvedTableProps as { rightToLeft?: boolean; bidiVisual?: boolean } | undefined;
+  const inlineVisual = inlineProps?.rightToLeft ?? inlineProps?.bidiVisual;
+  const styleVisual = styleProps?.rightToLeft ?? styleProps?.bidiVisual;
+  // `??` treats null/undefined as missing but preserves an explicit `false`,
+  // so an inline `<w:bidiVisual w:val="0"/>` correctly overrides a style true.
+  const effectiveForDirection = {
+    rightToLeft: inlineVisual ?? styleVisual,
+  };
+  const sectionContext = converterContext?.sectionDirectionContext ?? resolveSectionDirection(undefined);
+  tableAttrs.tableDirectionContext = resolveTableDirection(effectiveForDirection, sectionContext);
 
   let columnWidths: number[] | undefined = undefined;
 

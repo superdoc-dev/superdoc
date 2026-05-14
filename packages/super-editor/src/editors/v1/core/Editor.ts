@@ -3248,7 +3248,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
       });
 
       const numberingData = this.converter.convertedXml['word/numbering.xml'];
-      const numbering = this.converter.schemaToXml(numberingData.elements[0]);
+      const numbering = numberingData?.elements?.[0] ? this.converter.schemaToXml(numberingData.elements[0]) : null;
 
       const appXmlData = this.converter.convertedXml['docProps/app.xml'];
       const appXml = appXmlData?.elements?.[0] ? this.converter.schemaToXml(appXmlData.elements[0]) : null;
@@ -3262,7 +3262,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
         'word/document.xml': String(documentXml),
         'docProps/custom.xml': String(customXml),
         'word/_rels/document.xml.rels': String(rels),
-        'word/numbering.xml': String(numbering),
+        ...(numbering ? { 'word/numbering.xml': String(numbering) } : {}),
         'word/styles.xml': String(styles),
         ...updatedHeadersFooters,
         ...(appXml ? { 'docProps/app.xml': String(appXml) } : {}),
@@ -3328,6 +3328,24 @@ export class Editor extends EventEmitter<EditorEventMap> {
         const partData = this.converter.convertedXml[path] as { elements?: unknown[] } | undefined;
         if (partData?.elements?.[0]) {
           updatedDocs[path] = String(this.converter.schemaToXml(partData.elements[0]));
+        }
+      }
+
+      // Emit ZIP tombstones for custom XML parts that were removed via the
+      // Document API but originated in the imported DOCX. Without this,
+      // the exporter would copy the original zip entry through, and the
+      // removed part would reappear on the next import.
+      // AIDEV-NOTE: `removedCustomXmlPaths` is set by `removeCustomXmlPart`
+      // (super-converter/custom-xml-parts.js) on the converter instance.
+      // Typed via cast rather than on SuperConverter.d.ts because adding
+      // an explicit field there triggers weak-type errors against
+      // ConverterWithDocumentSettings / ConverterLike structural types in
+      // sibling files that don't reference this field.
+      const removedCustomXmlPaths = (this.converter as unknown as { removedCustomXmlPaths?: Set<string> })
+        .removedCustomXmlPaths;
+      if (removedCustomXmlPaths instanceof Set) {
+        for (const path of removedCustomXmlPaths) {
+          updatedDocs[path] = null;
         }
       }
 
@@ -3892,6 +3910,13 @@ export class Editor extends EventEmitter<EditorEventMap> {
     if (!this.options.ydoc) {
       this.#initComments();
     }
+
+    // AIDEV-NOTE: In collaboration mode, parts are seeded into Y.Doc directly
+    // (not through `mutateParts`), so no `partChanged` fires on this client.
+    // Remote tabs refresh via the consumer → `mutateParts` → `partChanged` path,
+    // but the importer relies on this signal to rebuild header/footer state
+    // bound to the previous document (SD-2643).
+    this.emit('documentReplaced', { editor: this });
   }
 
   /**

@@ -20,8 +20,17 @@ import { type InlineConverterParams } from './common.js';
  * into any content inside the bookmark span but emits no visual output.
  */
 export function bookmarkStartNodeToBlocks(params: InlineConverterParams): TextRun | void {
-  const { node, positions, bookmarks, visitNode, inheritedMarks, sdtMetadata, runProperties, converterContext } =
-    params;
+  const {
+    node,
+    positions,
+    bookmarks,
+    visitNode,
+    inheritedMarks,
+    sdtMetadata,
+    runProperties,
+    inlineRunProperties,
+    converterContext,
+  } = params;
   const nodeAttrs =
     typeof node.attrs === 'object' && node.attrs !== null ? (node.attrs as Record<string, unknown>) : {};
   const bookmarkName = typeof nodeAttrs.name === 'string' ? nodeAttrs.name : undefined;
@@ -61,7 +70,11 @@ export function bookmarkStartNodeToBlocks(params: InlineConverterParams): TextRu
   }
 
   if (Array.isArray(node.content)) {
-    node.content.forEach((child) => visitNode(child, inheritedMarks, sdtMetadata, runProperties));
+    // SD-2781: forward inlineRunProperties so text inside the bookmark span
+    // preserves run-level bidi/script metadata from the enclosing run wrapper.
+    node.content.forEach((child) =>
+      visitNode(child, inheritedMarks, sdtMetadata, runProperties, false, inlineRunProperties),
+    );
   }
 
   return run;

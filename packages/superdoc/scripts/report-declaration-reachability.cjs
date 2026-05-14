@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 /**
- * SD-2952 step 3: report how many emitted `.d.ts` files in the published
+ * SD-2952 step 3: report how many emitted declaration files in the published
  * dist are actually reachable from a public consumer's type graph.
  *
  * Walks every `exports[*].types` target in `package.json` and follows
- * relative-import / self-package edges through the emitted `.d.ts`
+ * relative-import / self-package edges through the emitted declaration
  * forest, counting how many files a consumer's TypeScript would
  * actually parse vs how many are shipped. The output is data for the
  * SD-2952 trim-emitted-types slice (step 4).
@@ -19,7 +19,7 @@
  *
  * Walker semantics:
  *   - Resolves relative `from '../foo.js'` and `import('../foo.js')`
- *     specifiers to dist `.d.ts` siblings.
+ *     specifiers to dist declaration siblings.
  *   - Resolves self-package `from 'superdoc/<subpath>'` through the
  *     package's own `exports` map.
  *   - Ignores external package specifiers (vue, prosemirror-*,
@@ -52,27 +52,34 @@ try {
 const packageName = packageJson.name;
 const exportsMap = packageJson.exports || {};
 
+function collectTypesTargets(value) {
+  if (typeof value !== 'object' || value === null) return [];
+  if (typeof value.types === 'string') return [value.types];
+  if (typeof value.types !== 'object' || value.types === null) return [];
+  return Object.values(value.types).filter((target) => typeof target === 'string');
+}
+
 // Build a self-package resolver: subpath like `./super-editor` → absolute
-// path of the `types` target in dist. Used when an emitted .d.ts contains
+// path of the `types` target in dist. Used when an emitted declaration contains
 // `from 'superdoc/super-editor'` (rare but legal).
 const selfPackageTypeMap = new Map();
 for (const [subpath, value] of Object.entries(exportsMap)) {
-  if (typeof value !== 'object' || value === null) continue;
-  if (typeof value.types !== 'string') continue;
-  selfPackageTypeMap.set(subpath, path.resolve(packageRoot, value.types));
+  const [target] = collectTypesTargets(value);
+  if (!target) continue;
+  selfPackageTypeMap.set(subpath, path.resolve(packageRoot, target));
 }
 
 // Build the seed set: every typed exports entry, resolved to a dist path.
 const typedExports = [];
 for (const [subpath, value] of Object.entries(exportsMap)) {
-  if (typeof value !== 'object' || value === null) continue;
-  if (typeof value.types !== 'string') continue;
-  const target = path.resolve(packageRoot, value.types);
-  if (!fs.existsSync(target)) {
-    console.error(`[report-declaration-reachability] exports['${subpath}'].types target missing: ${value.types}`);
-    process.exit(1);
+  for (const targetPath of collectTypesTargets(value)) {
+    const target = path.resolve(packageRoot, targetPath);
+    if (!fs.existsSync(target)) {
+      console.error(`[report-declaration-reachability] exports['${subpath}'].types target missing: ${targetPath}`);
+      process.exit(1);
+    }
+    typedExports.push({ subpath, target });
   }
-  typedExports.push({ subpath, target });
 }
 
 if (typedExports.length === 0) {
@@ -80,12 +87,12 @@ if (typedExports.length === 0) {
   process.exit(1);
 }
 
-// Collect every .d.ts shipped in dist.
+// Collect every declaration file shipped in dist.
 function findDtsFiles(dir, acc = []) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, entry.name);
     if (entry.isDirectory()) findDtsFiles(full, acc);
-    else if (entry.name.endsWith('.d.ts')) acc.push(full);
+    else if (entry.name.endsWith('.d.ts') || entry.name.endsWith('.d.cts')) acc.push(full);
   }
   return acc;
 }
@@ -98,21 +105,25 @@ const SPECIFIER_RE = /(?:from\s+|import\(\s*)['"]([^'"]+)['"]/g;
 
 // Per-extension fallbacks the resolver tries when a relative specifier
 // has no extension. TypeScript itself accepts a wider set; keep these
-// minimal because the dist files we emit are all `.d.ts` (or directories
+// minimal because the dist files we emit are declaration files (or directories
 // containing `index.d.ts`).
 function resolveRelative(spec, fromFile) {
   const base = path.resolve(path.dirname(fromFile), spec);
-  // Spec already points at .d.ts? unusual but support it.
-  if (base.endsWith('.d.ts') && fs.existsSync(base)) return base;
-  // `.js` specifier → swap to `.d.ts`.
+  // Spec already points at a declaration? unusual but support it.
+  if ((base.endsWith('.d.ts') || base.endsWith('.d.cts')) && fs.existsSync(base)) return base;
+  // `.js` specifier → swap to `.d.ts` / `.d.cts`.
   if (base.endsWith('.js')) {
-    const cand = base.slice(0, -3) + '.d.ts';
-    if (fs.existsSync(cand)) return cand;
+    for (const ext of ['.d.ts', '.d.cts']) {
+      const cand = base.slice(0, -3) + ext;
+      if (fs.existsSync(cand)) return cand;
+    }
   }
-  // `.ts` specifier (rare in emitted dist after ensure-types) → `.d.ts`.
+  // `.ts` specifier (rare in emitted dist after ensure-types) → declaration.
   if (base.endsWith('.ts')) {
-    const cand = base.slice(0, -3) + '.d.ts';
-    if (fs.existsSync(cand)) return cand;
+    for (const ext of ['.d.ts', '.d.cts']) {
+      const cand = base.slice(0, -3) + ext;
+      if (fs.existsSync(cand)) return cand;
+    }
   }
   // Bare directory → look for `<dir>/index.d.ts`.
   const indexCand = path.join(base, 'index.d.ts');

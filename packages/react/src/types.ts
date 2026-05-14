@@ -1,5 +1,5 @@
 import type { CSSProperties, ReactNode } from 'react';
-import type { SuperDoc, Editor } from 'superdoc';
+import type { SuperDoc, Editor, Transaction } from 'superdoc';
 
 /**
  * Types for @superdoc-dev/react
@@ -73,8 +73,8 @@ export interface SuperDocTransactionEvent {
   editor: Editor;
   /** The editor instance that emitted the transaction. For body edits, this matches `editor`. */
   sourceEditor: Editor;
-  /** The ProseMirror transaction or transaction-like payload emitted by the source editor. */
-  transaction: any;
+  /** The ProseMirror transaction emitted by the source editor. */
+  transaction: Transaction;
   /** Time spent applying the transaction, in milliseconds. */
   duration?: number;
   /** The surface where the transaction originated. */

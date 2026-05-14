@@ -27,6 +27,7 @@ export function tokenNodeToRun({
   themeColors,
   sdtMetadata,
   runProperties,
+  inlineRunProperties,
   converterContext,
 }: InlineConverterParams): TextRun | null {
   const token = TOKEN_INLINE_TYPES.get(node.type);
@@ -35,7 +36,7 @@ export function tokenNodeToRun({
   }
 
   // Tokens carry a placeholder character so measurers reserve width; painters will replace it with the real value.
-  const run: TextRun = {
+  let run: TextRun = {
     text: '0',
     token,
     fontFamily: defaultFont,
@@ -61,7 +62,10 @@ export function tokenNodeToRun({
   const marks = [...effectiveMarks, ...(inheritedMarks ?? [])];
   applyMarksToRun(run, marks, hyperlinkConfig, themeColors, undefined, true, storyKey);
 
-  applyInlineRunProperties(run, runProperties, converterContext);
+  // Reassign the return value: applyInlineRunProperties returns a new object
+  // via spread, so the merged fields (including SD-2781 bidi/script metadata)
+  // are dropped if we don't capture them here.
+  run = applyInlineRunProperties(run, runProperties, converterContext, inlineRunProperties);
 
   // If marksAsAttrs carried font styling, mark the run so downstream defaults don't overwrite it.
   if (marksAsAttrs.length > 0) {

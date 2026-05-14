@@ -61,6 +61,7 @@ import {
   computeLinePmRange,
   expandRunsForInlineNewlines,
   getCellSpacingPx,
+  getParagraphInlineDirection,
   normalizeColumnLayout,
   normalizeBaselineShift,
   resolveBaseFontSizeForVerticalText,
@@ -3178,7 +3179,7 @@ export class DomPainter {
             fragment.markerTextWidth,
             resolvedLine.indentOffset,
           );
-          const isRtl = block.attrs?.direction === 'rtl';
+          const isRtl = getParagraphInlineDirection(block.attrs) === 'rtl';
           const lineEl = this.renderLine(
             block,
             resolvedLine.line,
@@ -3285,7 +3286,7 @@ export class DomPainter {
         const paraIndent = block.attrs?.indent;
         const paraIndentLeft = paraIndent?.left ?? 0;
         const paraIndentRight = paraIndent?.right ?? 0;
-        const isRtl = block.attrs?.direction === 'rtl';
+        const isRtl = getParagraphInlineDirection(block.attrs) === 'rtl';
         const {
           anchorIndentPx: paraMarkerAnchorIndent,
           firstLinePx: markerFirstLine,
@@ -4458,6 +4459,21 @@ export class DomPainter {
         if (part.isEmptyParagraph) {
           currentParagraph.style.minHeight = '1em';
         }
+      } else if (part.kind === 'image' && part.src) {
+        // SD-2804: image part produced by the textbox importer for an
+        // inline w:drawing inside a textbox run. Render as <img> alongside
+        // sibling text spans so layout matches Word's inline flow. Match
+        // body inline images' baseline default (`vertical-align: bottom`)
+        // so an image and adjacent text line up the same way inside a
+        // textbox as outside.
+        const img = this.doc!.createElement('img');
+        img.src = part.src;
+        img.alt = part.alt ?? '';
+        if (typeof part.width === 'number') img.style.width = `${part.width}px`;
+        if (typeof part.height === 'number') img.style.height = `${part.height}px`;
+        img.style.display = 'inline-block';
+        img.style.verticalAlign = 'bottom';
+        currentParagraph.appendChild(img);
       } else {
         const span = this.doc!.createElement('span');
         span.textContent = this.resolveShapeTextPartText(part, context);
@@ -5552,7 +5568,10 @@ export class DomPainter {
     const isActiveLink = !!(linkData && !linkData.blocked && linkData.href);
     const elem = isActiveLink ? this.doc.createElement('a') : this.doc.createElement('span');
     const text = resolveRunText(run, context);
-    this.setTextContentWithFormattingSpaceMarks(elem, text);
+    const textRun = run as TextRun;
+    const effectiveText =
+      textRun.bidi?.rtl === true && typeof text === 'string' ? normalizeRtlDateTokenForWordParity(text) : text;
+    this.setTextContentWithFormattingSpaceMarks(elem, effectiveText);
 
     if (linkData?.dataset) {
       applyLinkDataset(elem, linkData.dataset);
@@ -5578,7 +5597,13 @@ export class DomPainter {
 
     // Pass isLink flag to skip applying inline color/decoration styles for links
     applyRunStyles(elem as HTMLElement, run, isActiveLink);
-    const textRun = run as TextRun;
+    // SD-3098 Word-parity: rtl-tagged runs get dir="rtl" so per-run bidi is isolated;
+    // non-rtl date-like runs in RTL context get dir="ltr" to prevent separator drift.
+    if (textRun.bidi?.rtl === true) {
+      elem.setAttribute('dir', 'rtl');
+    } else if (typeof textRun.text === 'string' && RTL_DATE_LIKE_TOKEN_RE.test(textRun.text)) {
+      elem.setAttribute('dir', 'ltr');
+    }
     const commentAnnotations = textRun.comments;
     const hasAnyComment = !!commentAnnotations?.length;
     // Comment highlight styles are applied post-paint by CommentHighlightDecorator (super-editor).
@@ -6337,6 +6362,7 @@ export class DomPainter {
           link: run.link ?? null,
           comments: run.comments ?? null,
           dataAttrs: stableDataAttrs(run.dataAttrs) ?? null,
+          bidi: run.bidi ?? null,
         });
 
       const isWhitespaceOnly = (text: string): boolean => {
@@ -7749,7 +7775,7 @@ const deriveBlockVersion = (block: FlowBlock): string => {
           attrs.borders ? hashParagraphBorders(attrs.borders) : '',
           attrs.shading?.fill ?? '',
           attrs.shading?.color ?? '',
-          attrs.direction ?? '',
+          getParagraphInlineDirection(attrs) ?? '',
           attrs.tabs?.length ? JSON.stringify(attrs.tabs) : '',
         ].join(':')
       : '';
@@ -7935,7 +7961,7 @@ const deriveBlockVersion = (block: FlowBlock): string => {
               hash = hashNumber(hash, attrs.indent?.hanging ?? 0);
               hash = hashString(hash, attrs.shading?.fill ?? '');
               hash = hashString(hash, attrs.shading?.color ?? '');
-              hash = hashString(hash, attrs.direction ?? '');
+              hash = hashString(hash, getParagraphInlineDirection(attrs) ?? '');
               if (attrs.borders) {
                 hash = hashString(hash, hashParagraphBorders(attrs.borders));
               }
@@ -8250,4 +8276,19 @@ const resolveRunText = (run: Run, context: FragmentRenderContext): string => {
     return context.totalPages ? String(context.totalPages) : (run.text ?? '');
   }
   return run.text ?? '';
+};
+
+const RTL_DATE_LIKE_TOKEN_RE = /^-?\d+(?:[./-]\d+)+$/;
+const RLM = '\u200F';
+
+// AIDEV-NOTE: SD-3098 Word-parity workaround for RTL date-like tokens. We inject
+// RLM around separators at paint time only (DOM text), never into PM/model/export.
+// Word reorders numerics inside RTL date strings via internal RLM treatment; the
+// browser's UBA does not. This is intentionally narrow - only matches date-like
+// numeric patterns - so non-date numeric content is unaffected.
+const normalizeRtlDateTokenForWordParity = (text: string): string => {
+  if (!RTL_DATE_LIKE_TOKEN_RE.test(text)) {
+    return text;
+  }
+  return text.replace(/[./-]/g, (separator) => `${RLM}${separator}${RLM}`);
 };

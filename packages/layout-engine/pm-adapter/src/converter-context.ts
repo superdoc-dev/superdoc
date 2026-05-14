@@ -8,7 +8,7 @@
  * should always guard for undefined fields and degrade gracefully.
  */
 
-import type { ParagraphSpacing } from '@superdoc/contracts';
+import type { ParagraphSpacing, SectionDirectionContext } from '@superdoc/contracts';
 import type { NumberingProperties, StylesDocumentProperties, TableInfo } from '@superdoc/style-engine/ooxml';
 
 /**
@@ -21,6 +21,16 @@ export type TableStyleParagraphProps = {
 
 export type ConverterContext = {
   sectionDirection?: 'ltr' | 'rtl';
+  /**
+   * Resolved direction context for the body section (page direction, writing mode,
+   * gutter). Computed once from the body's `w:sectPr` and used by the paragraph
+   * resolver chain so paragraph writing-mode can inherit from the section per
+   * ECMA §17.3.1.41. Per-paragraph-section variation and table cell direction
+   * context are not yet plumbed through; paragraphs in vertical sections covered
+   * by paragraph-level `w:sectPr` and paragraphs in vertical table cells will
+   * still see `writingMode: 'horizontal-tb'` until SD-2777 lands.
+   */
+  sectionDirectionContext?: SectionDirectionContext;
   docx?: Record<string, unknown>;
   translatedNumbering: NumberingProperties;
   translatedLinkedStyles: StylesDocumentProperties;

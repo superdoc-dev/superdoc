@@ -14,6 +14,7 @@ import {
 import InternalDropdown from './InternalDropdown.vue';
 import CommentHeader from './CommentHeader.vue';
 import CommentInput from './CommentInput.vue';
+import { collectTrackedChangeThread } from './collect-tracked-change-thread.js';
 import Avatar from '@superdoc/components/general/Avatar.vue';
 
 const emit = defineEmits(['click-outside', 'ready', 'dialog-exit', 'resize']);
@@ -300,45 +301,6 @@ const startReply = () => {
     commentInput.value?.focus?.();
     emit('resize');
   });
-};
-
-const isRangeThreadedComment = (comment) => {
-  if (!comment) return false;
-  return (
-    comment.threadingStyleOverride === 'range-based' ||
-    comment.threadingMethod === 'range-based' ||
-    comment.originalXmlStructure?.hasCommentsExtended === false
-  );
-};
-
-const collectTrackedChangeThread = (parentComment, allComments) => {
-  const trackedChangeId = parentComment.commentId;
-  const threadIds = new Set([trackedChangeId]);
-  const queue = [];
-
-  allComments.forEach((comment) => {
-    if (comment.commentId === trackedChangeId) return;
-    const isDirectChild = comment.parentCommentId === trackedChangeId;
-    const isRangeBasedTrackedChangeComment =
-      comment.trackedChangeParentId === trackedChangeId && isRangeThreadedComment(comment);
-
-    if (isDirectChild || isRangeBasedTrackedChangeComment) {
-      threadIds.add(comment.commentId);
-      queue.push(comment.commentId);
-    }
-  });
-
-  for (let i = 0; i < queue.length; i += 1) {
-    const parentId = queue[i];
-    allComments.forEach((comment) => {
-      if (comment.parentCommentId === parentId && !threadIds.has(comment.commentId)) {
-        threadIds.add(comment.commentId);
-        queue.push(comment.commentId);
-      }
-    });
-  }
-
-  return allComments.filter((comment) => threadIds.has(comment.commentId));
 };
 
 const comments = computed(() => {

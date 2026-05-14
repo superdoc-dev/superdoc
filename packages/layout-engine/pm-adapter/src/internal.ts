@@ -11,6 +11,7 @@
  */
 
 import type { FlowBlock, ParagraphBlock } from '@superdoc/contracts';
+import { resolveSectionDirection } from './direction/resolveSectionDirection.js';
 import { isValidTrackedMode } from './tracked-changes.js';
 import {
   analyzeSectionRanges,
@@ -193,9 +194,17 @@ export function toFlowBlocks(pmDoc: PMNode | object, options?: AdapterOptions): 
   // Range-aware section analysis (matches toFlowBlocks semantics)
   const bodySectionProps = doc.attrs?.bodySectPr ?? doc.attrs?.sectPr;
   const sectionRanges = options?.emitSectionBreaks ? analyzeSectionRanges(doc, bodySectionProps) : [];
+  const firstSectPr = sectionRanges[0]?.sectPr ?? bodySectionProps;
   converterContext.sectionDirection =
-    converterContext.sectionDirection ??
-    resolveSectionDirectionFromSectPr(sectionRanges[0]?.sectPr ?? bodySectionProps);
+    converterContext.sectionDirection ?? resolveSectionDirectionFromSectPr(firstSectPr);
+  // Body-level section direction context: writing-mode inherits to paragraphs that
+  // omit their own w:textDirection, per ECMA §17.3.1.41. Multi-section docs (each
+  // section with its own sectPr) and table-cell direction context are not yet
+  // plumbed through - SD-2777 closes that gap.
+  // Always recompute per call: when callers reuse the same ConverterContext
+  // across documents (toFlowBlocksMap is the obvious case), the prior `??`
+  // cache let the first document's writing-mode survive into later documents.
+  converterContext.sectionDirectionContext = resolveSectionDirection(firstSectPr);
   publishSectionMetadata(sectionRanges, options);
 
   // Emit first section break before content to set initial properties.

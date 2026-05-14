@@ -800,6 +800,28 @@ describe('HeaderFooterEditorManager error scenarios', () => {
     expect(manager.getDescriptors()).toHaveLength(3); // 2 headers + 1 footer
   });
 
+  it('refresh({ purgeCachedEditors: true }) drops live editors so getDocumentJson reads the new converter snapshot', async () => {
+    const editor = createMockEditor();
+    const manager = new HeaderFooterEditorManager(editor);
+    const descriptor = { id: 'rId-header-default', kind: 'header' } as const;
+
+    await manager.ensureEditor(descriptor);
+    const created = createdEditors[createdEditors.length - 1]?.editor;
+    expect(created).toBeDefined();
+    const staleDoc = { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'stale' }] }] };
+    created!.getJSON = vi.fn(() => staleDoc);
+
+    const freshDoc = { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'fresh' }] }] };
+    editor.converter.headers!['rId-header-default'] = freshDoc;
+
+    expect(manager.getDocumentJson(descriptor)).toEqual(staleDoc);
+
+    manager.refresh({ purgeCachedEditors: true });
+
+    expect(manager.getDocumentJson(descriptor)).toEqual(freshDoc);
+    expect(created!.destroy).toHaveBeenCalled();
+  });
+
   it('cleans up pending creations on destroy', async () => {
     const editor = createMockEditor();
     const manager = new HeaderFooterEditorManager(editor);

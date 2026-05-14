@@ -9,7 +9,7 @@ import type {
   ResolvedDropCapItem,
   ResolvedListMarkerItem,
 } from '@superdoc/contracts';
-import { adjustAvailableWidthForTextIndent } from '@superdoc/contracts';
+import { adjustAvailableWidthForTextIndent, getParagraphInlineDirection } from '@superdoc/contracts';
 import {
   isMinimalWordLayout,
   resolveListMarkerGeometry,
@@ -93,7 +93,7 @@ export function resolveParagraphContent(
   const paraIndent = (block.attrs as ParagraphAttrs | undefined)?.indent;
   const paraIndentLeft = paraIndent?.left ?? 0;
   const paraIndentRight = paraIndent?.right ?? 0;
-  const isRtl = (block.attrs as ParagraphAttrs | undefined)?.direction === 'rtl';
+  const isRtl = getParagraphInlineDirection(block.attrs) === 'rtl';
   const {
     anchorIndentPx: paraMarkerAnchorIndent,
     firstLinePx: markerFirstLine,

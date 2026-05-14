@@ -1,11 +1,14 @@
-# Auto-releases on push to main (@next) and stable (@latest).
+# Auto-releases on push to main (@next).
+# Stable releases are orchestrated centrally by release-stable.yml so that
+# every stable release shares one concurrency slot and one git push lane.
+# Note: VS Code Marketplace doesn't support semver prerelease versions, so
+# main pushes only build a .vsix and attach it to the GitHub release.
 name: 📦 Release vscode-ext
 
 on:
   push:
     branches:
       - main
-      - stable
     paths:
       - 'apps/vscode-ext/**'
       - 'packages/superdoc/**'

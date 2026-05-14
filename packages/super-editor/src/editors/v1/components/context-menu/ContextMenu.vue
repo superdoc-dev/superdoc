@@ -223,11 +223,44 @@ const cleanupCustomItems = () => {
 };
 
 const handleGlobalKeyDown = (event) => {
-  // ESCAPE: always close popover or menu
-  if (event.key === 'Escape' && isOpen.value) {
+  // SD-2747: ESCAPE / ArrowLeft dismiss the menu. When the menu was opened by the
+  // slash hotkey the original `/` was preventDefault'd, so we reinsert it at the
+  // anchor — matches Google Docs' trigger-menu behavior. When the menu was
+  // opened by right-click no keystroke was suppressed and dismissal must NOT
+  // mutate the document.
+  //
+  // AIDEV-NOTE: SD-2747 P2. The gate is `pluginState.trigger === 'slash'`; without
+  // this, pressing Escape on a right-click context menu inserts an unwanted `/`
+  // at the click position. ArrowLeft is included here because the hidden search
+  // input owns focus while the menu is open, so the PM plugin's matching branch
+  // never fires in practice — every dismissal in the live flow comes through
+  // this handler.
+  if ((event.key === 'Escape' || event.key === 'ArrowLeft') && isOpen.value) {
     event.preventDefault();
     event.stopPropagation();
-    closeMenu();
+    const pluginState = ContextMenuPluginKey.getState(props.editor?.state);
+    const anchorPos = pluginState?.anchorPos;
+    const trigger = pluginState?.trigger;
+    closeMenu({ restoreCursor: false });
+
+    if (trigger === 'slash' && props.editor && anchorPos !== null && anchorPos !== undefined) {
+      const tr = props.editor.state.tr.insertText('/', anchorPos);
+      const insertedAt = anchorPos + 1;
+      tr.setSelection(props.editor.state.selection.constructor.near(tr.doc.resolve(insertedAt)));
+      props.editor.dispatch(tr);
+    }
+    props.editor?.focus?.();
+    return;
+  }
+
+  // SD-2747: BACKSPACE / DELETE dismisses the menu without inserting the slash. Focus is on
+  // the hidden search input while the menu is open, so the PM plugin's handleKeyDown does
+  // not see these keys — we have to handle them here. Empty search means an explicit
+  // dismissal; with a typed filter we let the input handle the deletion normally.
+  if ((event.key === 'Backspace' || event.key === 'Delete') && isOpen.value && !searchQuery.value) {
+    event.preventDefault();
+    event.stopPropagation();
+    closeMenu({ restoreCursor: true });
     props.editor?.focus?.();
     return;
   }
@@ -590,6 +623,16 @@ onBeforeUnmount(() => {
       @keydown.stop
     />
 
+    <!-- SD-2747: When the user types after `/`, the hidden input captures keystrokes and the
+         menu filters silently. Without a visible echo of the search term the user only sees
+         the menu shrink or vanish, with no signal that their typing is being interpreted as
+         a filter. This header mirrors what the user is searching for so the interaction is
+         visible. -->
+    <div v-if="searchQuery" class="context-menu-search-header">
+      <span class="context-menu-search-header-label">Searching:</span>
+      <span class="context-menu-search-header-value">/{{ searchQuery }}</span>
+    </div>
+
     <div class="context-menu-items">
       <template v-for="(section, sectionIndex) in filteredSections" :key="section.id">
         <!-- Render divider before section (except for first section) -->
@@ -613,6 +656,10 @@ onBeforeUnmount(() => {
           </div>
         </template>
       </template>
+
+      <!-- SD-2747: Empty state. Without this the menu collapses to an invisible 0-height box
+           when nothing matches the filter, so the user sees no feedback at all. -->
+      <div v-if="searchQuery && filteredItems.length === 0" class="context-menu-empty">No matching commands</div>
     </div>
   </div>
 </template>
@@ -646,6 +693,39 @@ onBeforeUnmount(() => {
 .context-menu-items {
   max-height: 300px;
   overflow-y: auto;
+}
+
+.context-menu-search-header {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--sd-ui-menu-border, #eee);
+  background: var(--sd-ui-menu-header-bg, #fafafa);
+  font-size: 11px;
+  color: var(--sd-ui-menu-text-muted, #888);
+}
+
+.context-menu-search-header-label {
+  flex-shrink: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 10px;
+}
+
+.context-menu-search-header-value {
+  font-family: var(--sd-ui-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  color: var(--sd-ui-menu-text, #47484a);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.context-menu-empty {
+  padding: 10px 10px;
+  color: var(--sd-ui-menu-text-muted, #888);
+  font-style: italic;
+  text-align: center;
 }
 
 .context-menu-search {

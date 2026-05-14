@@ -1,22 +1,27 @@
 # Advances docs-stable to the current stable HEAD (or a chosen SHA).
 #
-# Auto path (workflow_run): only release-superdoc.yml triggers a promotion,
-# and only when a real v* tag actually appeared on stable. The CLI/SDK/MCP
-# tooling bundle and the React/esign/template-builder/vscode-ext wrappers do
-# not advance docs-stable - docs-stable represents the documentation for
-# the stable SuperDoc release.
+# Auto path (workflow_run): release-stable.yml is the orchestrator that
+# releases superdoc on stable, so we trigger off its completion and gate on
+# whether a real v* tag appeared between the triggering run's head_sha and
+# origin/stable. Tools-only runs (CLI/SDK/MCP without a superdoc release)
+# leave docs-stable unchanged - no new v* tag, no push.
+#
+# We accept conclusion: failure as well as success because the orchestrator
+# runs chains independently. A tools-chain failure that follows a successful
+# superdoc release should still promote docs - the v* tag is the source of
+# truth, not the workflow's overall conclusion. Cancelled and skipped runs
+# are excluded since they may not have reached semantic-release at all.
 #
 # Manual path (workflow_dispatch): for cases the auto path cannot cover,
-# e.g. the first stable bundle run that ships CLI/SDK/MCP without a SuperDoc
-# release, or a docs-only refresh between SuperDoc versions. Defaults to
-# pushing the current origin/stable head; an optional `sha` input promotes
-# a specific commit instead.
+# e.g. a docs-only refresh between SuperDoc versions, or recovering from
+# a missed promotion. Defaults to pushing the current origin/stable head;
+# an optional `sha` input promotes a specific commit instead.
 name: 🚀 Promote stable docs
 
 on:
   workflow_run:
     workflows:
-      - "📦 Release superdoc"
+      - "📦 Release stable tooling (CLI/SDK/MCP)"
     types:
       - completed
   workflow_dispatch:
@@ -37,7 +42,10 @@ jobs:
   promote:
     if: |
       github.event_name == 'workflow_dispatch' ||
-      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'stable')
+      (
+        github.event.workflow_run.head_branch == 'stable' &&
+        (github.event.workflow_run.conclusion == 'success' || github.event.workflow_run.conclusion == 'failure')
+      )
     runs-on: ubuntu-24.04
     steps:
       - name: Generate token
@@ -55,6 +63,14 @@ jobs:
       # Auto path: gate on a real SuperDoc release between the triggering
       # run's head_sha and origin/stable. A no-op semantic-release run must
       # not advance docs-stable.
+      #
+      # The tag alone is not sufficient. @semantic-release/git pushes the v*
+      # tag during its prepare phase, before publish-superdoc.cjs runs. If
+      # publish fails and the orchestrator's recovery does not republish, the
+      # tag exists on origin without corresponding npm tarballs. In that case
+      # docs-stable would point at code that consumers cannot install. Verify
+      # both unscoped (`superdoc`) and scoped (`@harbour-enterprises/superdoc`)
+      # publishes are present at the released version before promoting.
       - name: Detect SuperDoc release
         if: github.event_name == 'workflow_run'
         id: detect
@@ -72,8 +88,22 @@ jobs:
             echo "released=false" >> "${GITHUB_OUTPUT}"
             echo "No new v* tag between ${HEAD_SHA} and origin/stable — release-superdoc was a no-op."
           else
+            for tag in ${new_tags}; do
+              version="${tag#v}"
+              if ! npm view "superdoc@${version}" version >/dev/null 2>&1; then
+                echo "released=false" >> "${GITHUB_OUTPUT}"
+                echo "Tag ${tag} exists but superdoc@${version} is not on npm — orchestrator publish did not complete; docs-stable will not advance."
+                exit 0
+              fi
+              if ! npm view "@harbour-enterprises/superdoc@${version}" version >/dev/null 2>&1; then
+                echo "released=false" >> "${GITHUB_OUTPUT}"
+                echo "Tag ${tag} exists but @harbour-enterprises/superdoc@${version} is not on npm — orchestrator publish did not complete; docs-stable will not advance."
+                exit 0
+              fi
+            done
+
             echo "released=true" >> "${GITHUB_OUTPUT}"
-            echo "New SuperDoc tag(s) detected: $(echo "${new_tags}" | tr '\n' ' ')"
+            echo "New SuperDoc tag(s) verified on npm: $(echo "${new_tags}" | tr '\n' ' ')"
           fi
 
       - name: Push docs-stable (auto)

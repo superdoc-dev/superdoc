@@ -250,24 +250,32 @@ export function bodySectPrShouldEmbed(bodySectPr) {
   return !!(cols?.count && cols.count > 1);
 }
 
-/** Embeds PM slice, media, and optional body sectPr as hidden base64 payloads. */
+function hiddenClipboardPayload(attr, base64) {
+  return `<div ${attr}="${base64}" style="display:none"></div>`;
+}
+
+function readClipboardPayload(el, attr) {
+  return el.getAttribute(attr)?.trim() || el.textContent?.trim() || '';
+}
+
+/** Embeds PM slice, media, and optional body sectPr as hidden base64 payload attributes. */
 export function embedSliceInHtml(html, sliceJson, bodySectPrJson = '', mediaJson = '') {
   let out = html;
   if (bodySectPrJson) {
     const body64 = encodeUtf8Base64(bodySectPrJson);
-    out = `<div ${SUPERDOC_BODY_SECT_PR_ATTR} style="display:none">${body64}</div>${out}`;
+    out = `${hiddenClipboardPayload(SUPERDOC_BODY_SECT_PR_ATTR, body64)}${out}`;
   }
   if (mediaJson) {
     const media64 = encodeUtf8Base64(mediaJson);
-    out = `<div ${SUPERDOC_MEDIA_ATTR} style="display:none">${media64}</div>${out}`;
+    out = `${hiddenClipboardPayload(SUPERDOC_MEDIA_ATTR, media64)}${out}`;
   }
   if (!sliceJson) return out;
   const base64 = encodeUtf8Base64(sliceJson);
-  return `<div ${SUPERDOC_SLICE_ATTR} style="display:none">${base64}</div>${out}`;
+  return `${hiddenClipboardPayload(SUPERDOC_SLICE_ATTR, base64)}${out}`;
 }
 
 /**
- * Reads slice JSON from HTML produced by {@link embedSliceInHtml} (hidden div + base64 text).
+ * Reads slice JSON from HTML produced by {@link embedSliceInHtml}.
  */
 export function extractSliceFromHtml(html) {
   if (!html || !html.includes(SUPERDOC_SLICE_ATTR)) return null;
@@ -278,10 +286,7 @@ export function extractSliceFromHtml(html) {
     const el = doc.querySelector(`[${SUPERDOC_SLICE_ATTR}]`);
     if (!el) return null;
 
-    let b64 = el.textContent?.trim() ?? '';
-    if (!b64) {
-      b64 = el.getAttribute(SUPERDOC_SLICE_ATTR)?.trim() ?? '';
-    }
+    const b64 = readClipboardPayload(el, SUPERDOC_SLICE_ATTR);
     if (!b64) return null;
 
     const decoded = decodeUtf8Base64(b64);
@@ -314,7 +319,7 @@ export function extractMediaFromHtml(html) {
     const doc = new DOMParser().parseFromString(html, 'text/html');
     const el = doc.querySelector(`[${SUPERDOC_MEDIA_ATTR}]`);
     if (!el) return null;
-    const b64 = el.textContent?.trim() ?? '';
+    const b64 = readClipboardPayload(el, SUPERDOC_MEDIA_ATTR);
     if (!b64) return null;
     const decoded = decodeUtf8Base64(b64);
     return decoded || null;
@@ -331,7 +336,7 @@ export function extractBodySectPrFromHtml(html) {
     const doc = new DOMParser().parseFromString(html, 'text/html');
     const el = doc.querySelector(`[${SUPERDOC_BODY_SECT_PR_ATTR}]`);
     if (!el) return null;
-    const b64 = el.textContent?.trim() ?? '';
+    const b64 = readClipboardPayload(el, SUPERDOC_BODY_SECT_PR_ATTR);
     if (!b64) return null;
     return JSON.parse(decodeUtf8Base64(b64));
   } catch {

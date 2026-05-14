@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { sourceAnchorSignature } from './versionSignature.js';
-import type { SourceAnchor } from '@superdoc/contracts';
+import { deriveBlockVersion, sourceAnchorSignature } from './versionSignature.js';
+import type { FlowBlock, SourceAnchor, TextRun } from '@superdoc/contracts';
 
 describe('sourceAnchorSignature', () => {
   it('is stable for equivalent source anchors with different object key order', () => {
@@ -26,5 +26,43 @@ describe('sourceAnchorSignature', () => {
     };
 
     expect(sourceAnchorSignature(anchorA)).toBe(sourceAnchorSignature(anchorB));
+  });
+});
+
+describe('deriveBlockVersion - bidi', () => {
+  const makeParagraph = (bidi?: TextRun['bidi']): FlowBlock => ({
+    kind: 'paragraph',
+    id: 'p1',
+    attrs: { direction: 'rtl' },
+    runs: [
+      {
+        text: '23.03.2026',
+        fontFamily: 'David, sans-serif',
+        fontSize: 16,
+        pmStart: 1,
+        pmEnd: 11,
+        ...(bidi ? { bidi } : {}),
+      } as TextRun,
+    ],
+  });
+
+  // SD-3098: flipping only run.bidi must invalidate the cached block hash,
+  // otherwise an edit that toggles <w:rtl/> reuses stale DOM in DomPainter.
+  it('produces a different version when bidi.rtl is added', () => {
+    const versionPlain = deriveBlockVersion(makeParagraph());
+    const versionRtl = deriveBlockVersion(makeParagraph({ rtl: true }));
+    expect(versionRtl).not.toBe(versionPlain);
+  });
+
+  it('produces a different version for bidi.rtl=true vs bidi.rtl=false', () => {
+    const versionTrue = deriveBlockVersion(makeParagraph({ rtl: true }));
+    const versionFalse = deriveBlockVersion(makeParagraph({ rtl: false }));
+    expect(versionTrue).not.toBe(versionFalse);
+  });
+
+  it('is stable when bidi is identical', () => {
+    const a = deriveBlockVersion(makeParagraph({ rtl: true }));
+    const b = deriveBlockVersion(makeParagraph({ rtl: true }));
+    expect(a).toBe(b);
   });
 });

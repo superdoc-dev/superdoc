@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { Editor } from '../../core/Editor.js';
+import { calculateResolvedParagraphProperties } from '../../extensions/paragraph/resolvedPropertiesCache.js';
 
 vi.mock('./plan-wrappers.js', () => ({
   executeDomainCommand: vi.fn((_editor: Editor, handler: () => boolean) => {
@@ -21,7 +22,15 @@ vi.mock('./plan-wrappers.js', () => ({
   }),
 }));
 
-import { paragraphsSetIndentationWrapper, paragraphsSetStyleWrapper } from './paragraphs-wrappers.js';
+vi.mock('../../extensions/paragraph/resolvedPropertiesCache.js', () => ({
+  calculateResolvedParagraphProperties: vi.fn((_editor, node) => node?.attrs?.paragraphProperties ?? {}),
+}));
+
+import {
+  paragraphsSetIndentationWrapper,
+  paragraphsSetStyleWrapper,
+  paragraphsSetAlignmentWrapper,
+} from './paragraphs-wrappers.js';
 
 type MockNode = {
   type: { name: 'paragraph' | 'text' };
@@ -216,5 +225,34 @@ describe('paragraphsSetStyleWrapper', () => {
     });
     expect(removeMark).not.toHaveBeenCalled();
     expect(dispatch).not.toHaveBeenCalled();
+  });
+});
+
+describe('paragraphsSetAlignmentWrapper', () => {
+  it('mirrors left/right alignment for RTL paragraphs when writing justification', () => {
+    const { editor, setNodeMarkup } = makeEditor({
+      rightToLeft: true,
+    });
+
+    paragraphsSetAlignmentWrapper(editor, {
+      target: { kind: 'block', nodeType: 'paragraph', nodeId: 'p1' },
+      alignment: 'left',
+    });
+
+    const nextAttrs = setNodeMarkup.mock.calls[0]?.[2] as { paragraphProperties: Record<string, unknown> };
+    expect(nextAttrs.paragraphProperties.justification).toBe('right');
+  });
+
+  it('uses resolved RTL from style cascade when raw paragraph attrs are LTR/empty', () => {
+    vi.mocked(calculateResolvedParagraphProperties).mockReturnValueOnce({ rightToLeft: true });
+    const { editor, setNodeMarkup } = makeEditor({});
+
+    paragraphsSetAlignmentWrapper(editor, {
+      target: { kind: 'block', nodeType: 'paragraph', nodeId: 'p1' },
+      alignment: 'left',
+    });
+
+    const nextAttrs = setNodeMarkup.mock.calls[0]?.[2] as { paragraphProperties: Record<string, unknown> };
+    expect(nextAttrs.paragraphProperties.justification).toBe('right');
   });
 });

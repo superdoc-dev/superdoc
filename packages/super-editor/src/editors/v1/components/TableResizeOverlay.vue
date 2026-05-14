@@ -381,6 +381,21 @@ function updateOverlayRect() {
  * - Inner boundaries (between columns)
  * - Right edge (resize last column)
  */
+const isRtlTable = computed(() => tableMetadata.value?.rtl === true);
+
+const tableContentWidth = computed(() => {
+  const columns = tableMetadata.value?.columns;
+  if (!columns || columns.length === 0) return 0;
+  const last = columns[columns.length - 1];
+  return last.x + last.w;
+});
+
+const tableContentLeft = computed(() => {
+  const columns = tableMetadata.value?.columns;
+  if (!columns || columns.length === 0) return 0;
+  return columns[0].x;
+});
+
 const resizableBoundaries = computed(() => {
   if (!tableMetadata.value?.columns) {
     return [];
@@ -394,20 +409,32 @@ const resizableBoundaries = computed(() => {
     const col = columns[i];
     const nextCol = columns[i + 1];
 
+    const logicalX = nextCol.x;
+    const visualX = isRtlTable.value ? tableContentLeft.value + tableContentWidth.value - logicalX : logicalX;
+
     boundaries.push({
       ...col,
       index: i,
-      x: nextCol.x,
+      x: visualX,
       type: 'inner',
     });
   }
 
-  // Add handle for right edge of table (resize last column)
+  // Add handle for right edge of table (resize last column).
+  // SD-2810 RTL note: the right-edge handle ALWAYS sits on the visual right
+  // side of the table. In an LTR table that means the trailing edge of the
+  // last logical column (`columns.length - 1`); in a `bidiVisual` RTL table
+  // the visually-rightmost column is the FIRST logical column (`0`) because
+  // cells are stored logically and rendered right-to-left. Downstream
+  // consumers that need "is this the table's outer edge?" should key off
+  // `type === 'right-edge'`, NOT `columnIndex === columns.length - 1`,
+  // because that index equality is LTR-only.
   const lastCol = columns[columns.length - 1];
+  const rtlRightEdgeX = tableContentWidth.value;
   boundaries.push({
     ...lastCol,
-    index: columns.length - 1,
-    x: lastCol.x + lastCol.w,
+    index: isRtlTable.value ? 0 : columns.length - 1,
+    x: isRtlTable.value ? rtlRightEdgeX : lastCol.x + lastCol.w,
     type: 'right-edge',
   });
 
@@ -727,7 +754,7 @@ function parseTableMetadata() {
         )
       : undefined;
 
-    tableMetadata.value = { columns: validatedColumns, segments, rows };
+    tableMetadata.value = { columns: validatedColumns, segments, rows, rtl: parsed.rtl === true };
   } catch (error) {
     tableMetadata.value = null;
     emit('resize-error', {
@@ -853,7 +880,8 @@ const mouseMoveThrottle = throttle((event) => {
   // Calculate raw delta in screen pixels, then convert to layout space
   // This ensures constraints (which are in layout space) can be compared correctly
   const screenDelta = event.clientX - dragState.value.initialX;
-  const delta = screenDelta / zoom;
+  const visualDelta = screenDelta / zoom;
+  const delta = isRtlTable.value && !dragState.value.isRightEdge ? -visualDelta : visualDelta;
 
   // Calculate constraints based on layout-computed minWidth (already in layout space)
   const minDelta = -(dragState.value.leftColumn.width - dragState.value.leftColumn.minWidth);
@@ -886,9 +914,16 @@ const mouseMoveThrottle = throttle((event) => {
 
   // Constrain delta
   const constrainedDelta = Math.max(minDelta, Math.min(maxDelta, delta));
+  const constrainedVisualDelta =
+    isRtlTable.value && !dragState.value.isRightEdge ? -constrainedDelta : constrainedDelta;
 
-  // Update visual guideline only (no PM transaction yet)
-  dragState.value.constrainedDelta = constrainedDelta;
+  // Update visual guideline only (no PM transaction yet).
+  // `constrainedDelta` on dragState stays in VISUAL coordinates so the preview
+  // guideline at line 591 (`initialBoundary.x + dragState.value.constrainedDelta`)
+  // tracks the cursor. The emitted `delta` below is LOGICAL: it matches the
+  // value applied to `newWidths` and preserves the pre-PR contract for
+  // external listeners (logging, analytics, undo metadata).
+  dragState.value.constrainedDelta = constrainedVisualDelta;
 
   emit('resize-move', {
     columnIndex: dragState.value.columnIndex,
@@ -906,7 +941,8 @@ const onDocumentMouseMove = mouseMoveThrottle.throttled;
 function onDocumentMouseUp(event) {
   if (!dragState.value) return;
 
-  const finalDelta = dragState.value.constrainedDelta;
+  const visualFinalDelta = dragState.value.constrainedDelta;
+  const finalDelta = isRtlTable.value && !dragState.value.isRightEdge ? -visualFinalDelta : visualFinalDelta;
   const columnIndex = dragState.value.columnIndex;
   const initialWidths = dragState.value.initialWidths;
   const isRightEdge = dragState.value.isRightEdge;
@@ -932,10 +968,13 @@ function onDocumentMouseUp(event) {
 
   // Only dispatch transaction if not a forced cleanup and delta is significant
   if (!forcedCleanup.value && Math.abs(finalDelta) > MIN_RESIZE_DELTA_PX) {
-    dispatchResizeTransaction(columnIndex, newWidths);
+    dispatchResizeTransaction(columnIndex, newWidths, isRightEdge);
   }
 
-  // Always emit resize-end so the parent can clear its dragging flag
+  // Always emit resize-end so the parent can clear its dragging flag.
+  // `delta` is the LOGICAL change applied to `newWidths`, matching the
+  // pre-PR contract. In LTR this equals `visualFinalDelta`; in RTL inner
+  // boundaries it is the sign-flipped value.
   emit('resize-end', {
     columnIndex,
     finalWidths: newWidths,
@@ -951,8 +990,18 @@ function onDocumentMouseUp(event) {
  *
  * @param {number} columnIndex - Index of the resized column
  * @param {number[]} newWidths - New column widths in pixels
+ * @param {boolean} isRightEdge - True if the resize originated from the
+ *   table's outer right-edge handle. Only the originating column's cells
+ *   should be rewritten; passing `[columnIndex, columnIndex + 1]` for
+ *   right-edge drags would unconditionally overwrite the next column's
+ *   per-cell `cellWidth` (OOXML w:tcW) with the grid value, destroying
+ *   any authored divergent tcW on merged or width-overridden cells.
+ *   In LTR `columnIndex + 1` is past the end and updateCellColwidths
+ *   no-ops, masking the issue; in RTL the right-edge handle maps to
+ *   column 0 (see resizableBoundaries) so column 1 cells are real
+ *   targets and the destructive write would occur.
  */
-function dispatchResizeTransaction(columnIndex, newWidths) {
+function dispatchResizeTransaction(columnIndex, newWidths, isRightEdge = false) {
   if (!props.editor?.view || !props.tableElement) {
     return;
   }
@@ -995,8 +1044,11 @@ function dispatchResizeTransaction(columnIndex, newWidths) {
 
     tr.setNodeMarkup(tablePos, null, newAttrs);
 
-    // Update affected cell colwidth attributes
-    const affectedColumns = [columnIndex, columnIndex + 1];
+    // Update affected cell colwidth attributes. Right-edge drags only resize
+    // the originating column (no adjacent column shrinks to compensate); see
+    // mouseUp's `if (!isRightEdge) { newWidths[columnIndex + 1] -= finalDelta; }`
+    // for the matching `newWidths` shape.
+    const affectedColumns = isRightEdge ? [columnIndex] : [columnIndex, columnIndex + 1];
     updateCellColwidths(tr, tableNode, tablePos, affectedColumns, newWidths);
 
     // Dispatch transaction

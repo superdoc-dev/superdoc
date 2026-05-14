@@ -100,7 +100,7 @@ describe('w:commentRangeStart and w:commentRangeEnd', () => {
   });
 
   describe('decode:commentRangeEndTranslator', () => {
-    test('returns comment schema', () => {
+    test('returns comment schema with CommentReference rStyle on the synthesized anchor run (SD-2910)', () => {
       expect(
         commentRangeEndTranslator.decode({
           node: { type: 'commentRangeEnd', attrs: { 'w:id': 'id1' } },
@@ -111,15 +111,14 @@ describe('w:commentRangeStart and w:commentRangeEnd', () => {
       ).toStrictEqual([
         { attributes: { 'w:id': '0' }, name: 'w:commentRangeEnd' },
         {
+          name: 'w:r',
           elements: [
             {
-              attributes: {
-                'w:id': '0',
-              },
-              name: 'w:commentReference',
+              name: 'w:rPr',
+              elements: [{ name: 'w:rStyle', attributes: { 'w:val': 'CommentReference' } }],
             },
+            { name: 'w:commentReference', attributes: { 'w:id': '0' } },
           ],
-          name: 'w:r',
         },
       ]);
     });
@@ -180,12 +179,19 @@ describe('w:commentRangeStart and w:commentRangeEnd', () => {
         commentsExportType: 'external',
       });
 
-      // Should return bare comment markers, not wrapped in w:del
+      // Should return bare comment markers, not wrapped in w:del.
+      // The synthesized anchor run must carry the CommentReference rStyle (SD-2910).
       expect(result).toStrictEqual([
         { name: 'w:commentRangeEnd', attributes: { 'w:id': '0' } },
         {
           name: 'w:r',
-          elements: [{ name: 'w:commentReference', attributes: { 'w:id': '0' } }],
+          elements: [
+            {
+              name: 'w:rPr',
+              elements: [{ name: 'w:rStyle', attributes: { 'w:val': 'CommentReference' } }],
+            },
+            { name: 'w:commentReference', attributes: { 'w:id': '0' } },
+          ],
         },
       ]);
     });

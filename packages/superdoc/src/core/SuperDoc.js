@@ -1477,7 +1477,11 @@ export class SuperDoc extends EventEmitter {
    *
    * @param {number} level    1..6
    * @param {number} [ordinal=1]  1-based index among headings of that level
-   * @param {{ behavior?: ScrollBehavior, block?: ScrollLogicalPosition }} [options]
+   * @param {{ behavior?: ScrollBehavior, block?: ScrollLogicalPosition, timeoutMs?: number }} [options]
+   *        Pass `timeoutMs` to override the default 2 s page-mount wait
+   *        in paginated layout. Useful when jumping far from the current
+   *        viewport on long docs where the painter takes longer to
+   *        mount the target page.
    * @returns {Promise<boolean>} Whether a matching heading was found and scrolled to
    *
    * @example
@@ -1563,6 +1567,9 @@ export class SuperDoc extends EventEmitter {
       const ok = await presentationEditor.scrollToPositionAsync(foundPos, {
         behavior: options.behavior ?? 'auto',
         block: options.block ?? 'center',
+        // Pass-through so callers can extend the page-mount wait on
+        // long docs without reaching into PresentationEditor directly.
+        ...(Number.isFinite(options.timeoutMs) ? { timeoutMs: options.timeoutMs } : {}),
       });
       if (ok) return true;
       // Fall through to body-editor path on layout-state miss.

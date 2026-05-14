@@ -3712,7 +3712,20 @@ export class PresentationEditor extends EventEmitter {
    */
   async scrollToPositionAsync(
     pos: number,
-    options: { block?: 'start' | 'center' | 'end' | 'nearest'; behavior?: ScrollBehavior } = {},
+    options: {
+      block?: 'start' | 'center' | 'end' | 'nearest';
+      behavior?: ScrollBehavior;
+      /**
+       * Maximum time (ms) to wait for the painter to mount the target
+       * virtualised page before giving up. Defaults to
+       * `ANCHOR_NAV_TIMEOUT_MS` (2000 ms). Callers navigating across
+       * long documents — where the painter may need longer than 2 s to
+       * settle when jumping far from the current viewport — can extend
+       * this. The function still returns `false` on timeout, but the
+       * extension reduces false-negative anchor navigations.
+       */
+      timeoutMs?: number;
+    } = {},
   ): Promise<boolean> {
     // Fast path: try sync scroll first (works if page already mounted)
     if (this.scrollToPosition(pos, options)) {
@@ -3747,11 +3760,15 @@ export class PresentationEditor extends EventEmitter {
     this.#scrollPageIntoView(pageIndex);
 
     // Wait for page to mount in the DOM
-    const mounted = await this.#waitForPageMount(pageIndex, {
-      timeout: PresentationEditor.ANCHOR_NAV_TIMEOUT_MS,
-    });
+    const timeout =
+      Number.isFinite(options.timeoutMs) && options.timeoutMs! > 0
+        ? options.timeoutMs!
+        : PresentationEditor.ANCHOR_NAV_TIMEOUT_MS;
+    const mounted = await this.#waitForPageMount(pageIndex, { timeout });
     if (!mounted) {
-      console.warn(`[PresentationEditor] scrollToPositionAsync: Page ${pageIndex} failed to mount within timeout`);
+      console.warn(
+        `[PresentationEditor] scrollToPositionAsync: Page ${pageIndex} failed to mount within ${timeout} ms`,
+      );
       return false;
     }
 

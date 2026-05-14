@@ -667,7 +667,34 @@ describe('PresentationEditor - scrollToPosition', () => {
 
       // The page never mounted, so it should fail
       expect(result).toBe(false);
-      expect(consoleWarnSpy).toHaveBeenCalledWith(expect.stringContaining('failed to mount within timeout'));
+      expect(consoleWarnSpy).toHaveBeenCalledWith(expect.stringContaining('failed to mount within'));
+
+      consoleWarnSpy.mockRestore();
+    });
+
+    it('honours a caller-supplied timeoutMs and surfaces the value in the warn message', async () => {
+      const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'test-doc',
+      });
+
+      await vi.waitFor(() => expect(mockIncrementalLayout).toHaveBeenCalled());
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // 100 ms ceiling — the page never mounts, so it should bail
+      // much faster than the 2 s default.
+      const t0 = Date.now();
+      const result = await editor.scrollToPositionAsync(150, { timeoutMs: 100 });
+      const elapsed = Date.now() - t0;
+
+      expect(result).toBe(false);
+      // The warning should mention the supplied timeout (100 ms), not
+      // the static default.
+      expect(consoleWarnSpy).toHaveBeenCalledWith(expect.stringContaining('100 ms'));
+      // And we should have bailed well under the 2 s default.
+      expect(elapsed).toBeLessThan(1500);
 
       consoleWarnSpy.mockRestore();
     });

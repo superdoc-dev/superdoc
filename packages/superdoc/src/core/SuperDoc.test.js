@@ -518,6 +518,73 @@ describe('SuperDoc core', () => {
     expect(scrollToPositionAsync).toHaveBeenCalledWith(51, expect.any(Object));
   });
 
+  it('scrollToHeading forwards an explicit timeoutMs to scrollToPositionAsync', async () => {
+    const { superdocStore } = createAppHarness();
+    const headings = [{ pos: 10, text: 'only', styleId: 'Heading1' }];
+    const makeNode = (h) => ({
+      type: { name: 'paragraph' },
+      attrs: { paragraphProperties: { styleId: h.styleId } },
+      content: { size: 5 },
+      descendants: (cb) => cb({ isText: true, text: h.text }, 0),
+    });
+    const descendants = (cb) => {
+      for (const h of headings) {
+        if (cb(makeNode(h), h.pos) === false) return;
+      }
+    };
+    const scrollToPositionAsync = vi.fn(async () => true);
+    superdocStore.documents = [{ getPresentationEditor: vi.fn(() => ({ scrollToPositionAsync })) }];
+    const instance = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: {}, toolbar: {} },
+      onException: vi.fn(),
+    });
+    await flushMicrotasks();
+    Object.defineProperty(instance, 'activeEditor', {
+      configurable: true,
+      get: () => ({ state: { doc: { descendants, content: { size: 1000 } } } }),
+    });
+
+    await expect(instance.scrollToHeading(1, 1, { timeoutMs: 10000 })).resolves.toBe(true);
+    expect(scrollToPositionAsync).toHaveBeenCalledWith(11, expect.objectContaining({ timeoutMs: 10000 }));
+  });
+
+  it('scrollToHeading omits timeoutMs when not given so the default applies', async () => {
+    const { superdocStore } = createAppHarness();
+    const headings = [{ pos: 10, text: 'only', styleId: 'Heading1' }];
+    const makeNode = (h) => ({
+      type: { name: 'paragraph' },
+      attrs: { paragraphProperties: { styleId: h.styleId } },
+      content: { size: 5 },
+      descendants: (cb) => cb({ isText: true, text: h.text }, 0),
+    });
+    const descendants = (cb) => {
+      for (const h of headings) {
+        if (cb(makeNode(h), h.pos) === false) return;
+      }
+    };
+    const scrollToPositionAsync = vi.fn(async () => true);
+    superdocStore.documents = [{ getPresentationEditor: vi.fn(() => ({ scrollToPositionAsync })) }];
+    const instance = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: {}, toolbar: {} },
+      onException: vi.fn(),
+    });
+    await flushMicrotasks();
+    Object.defineProperty(instance, 'activeEditor', {
+      configurable: true,
+      get: () => ({ state: { doc: { descendants, content: { size: 1000 } } } }),
+    });
+
+    await expect(instance.scrollToHeading(1, 1)).resolves.toBe(true);
+    const opts = scrollToPositionAsync.mock.calls[0][1];
+    expect(opts.timeoutMs).toBeUndefined();
+  });
+
   it('scrollToHeading rejects out-of-range levels and non-positive ordinals', async () => {
     createAppHarness();
     const instance = new SuperDoc({

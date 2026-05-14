@@ -12,14 +12,18 @@ See `evals/README.md` for the full quickstart, env-var matrix, and per-level wal
 
 ## Quick Start
 
+Eval scripts live in `evals/package.json`, not the root, so invoke them with `--filter` (works from any cwd in the workspace):
+
 ```bash
 pnpm install
-cp evals/.env.example evals/.env   # add API keys
-pnpm run eval              # Level 1: tool selection
-pnpm run eval:e2e          # Level 2: execution
-pnpm run eval:benchmark    # Level 3: agent benchmark
-pnpm run view              # open Promptfoo results UI
+cp evals/.env.example evals/.env
+pnpm --filter @superdoc-testing/evals run eval        # Level 1: tool selection
+pnpm --filter @superdoc-testing/evals run eval:e2e    # Level 2: execution
+pnpm --filter @superdoc-testing/evals run eval:benchmark   # Level 3: agent benchmark
+pnpm --filter @superdoc-testing/evals run view        # open Promptfoo results UI
 ```
+
+Inside `evals/`, the same scripts are reachable as bare `pnpm run eval`, `pnpm run view`, etc.
 
 ## Environment Variables
 
@@ -47,14 +51,14 @@ Tasks: reading + editing across the categories in `suites/benchmark/tests/`.
 Metrics per task: correctness, collateral, steps, latency, tokens, path (which DOCX approach was used).
 
 ```bash
-pnpm run eval:benchmark           # full matrix
-pnpm run eval:benchmark:claude    # CC-* providers only
-pnpm run eval:benchmark:codex     # Codex-* providers only
-pnpm run eval:benchmark:report    # markdown + CSV report
+pnpm --filter @superdoc-testing/evals run eval:benchmark           # full matrix
+pnpm --filter @superdoc-testing/evals run eval:benchmark:claude    # CC-* providers only
+pnpm --filter @superdoc-testing/evals run eval:benchmark:codex     # Codex-* providers only
+pnpm --filter @superdoc-testing/evals run eval:benchmark:report    # markdown + CSV report
 ```
 
 Prerequisites for Level 3: MCP server built (`pnpm --filter @superdoc-dev/mcp run build`) and CLI built (`apps/cli/dist/index.js`). The `prebuild:benchmark-deps` script handles both.
 
 ## Baselines
 
-`pnpm run baseline:save` snapshots the latest results under a label. `pnpm run baseline:compare` diffs two snapshots. Useful before/after a behavior change to confirm no regression.
+`pnpm --filter @superdoc-testing/evals run baseline:save` snapshots the latest results under a label. `pnpm --filter @superdoc-testing/evals run baseline:compare` diffs two snapshots. Useful before/after a behavior change to confirm no regression.

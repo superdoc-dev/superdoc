@@ -49,11 +49,12 @@
  *       primary signal regardless of exit code.
  */
 
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { readFile, writeFile, mkdtemp, access } from 'node:fs/promises';
+import { statSync, readdirSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve, basename } from 'node:path';
-import { Editor } from 'superdoc/super-editor';
+import { join, resolve, basename, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const WORD_API_PATH = process.env.SUPERDOC_WORD_API_PATH;
 if (!WORD_API_PATH) {
@@ -64,6 +65,98 @@ if (!WORD_API_PATH) {
 }
 
 const TOOL_PROJECT = join(WORD_API_PATH, 'tools', 'ooxml-fixture');
+
+// ---------------------------------------------------------------------------
+// Stale-dist precondition
+// ---------------------------------------------------------------------------
+// The harness imports `superdoc/super-editor`, which resolves to
+// packages/superdoc/dist/super-editor.es.js. That dist is gitignored, so a
+// branch can carry fresh source but a developer running the harness locally
+// hits stale built code from a previous session. That false-positives bug
+// reports against already-fixed source — exactly the SD-3158 trap.
+//
+// Fail fast with a clear message when the bundle is older than the converter
+// or editor source. Opt into a rebuild with --auto-build.
+const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const SUPERDOC_BUNDLE = join(REPO_ROOT, 'packages/superdoc/dist/super-editor.es.js');
+const SOURCE_ROOTS = [
+  join(REPO_ROOT, 'packages/super-editor/src'),
+  join(REPO_ROOT, 'packages/superdoc/src'),
+];
+const SOURCE_EXTS = new Set(['.js', '.ts', '.vue', '.mjs', '.cjs']);
+const SKIP_DIR_NAMES = new Set(['__tests__', '__mocks__', 'node_modules', 'dist']);
+
+function newestSourceMtime(root) {
+  if (!existsSync(root)) return 0;
+  let newest = 0;
+  const stack = [root];
+  while (stack.length) {
+    const dir = stack.pop();
+    let entries;
+    try { entries = readdirSync(dir, { withFileTypes: true }); } catch { continue; }
+    for (const ent of entries) {
+      if (ent.isDirectory()) {
+        if (SKIP_DIR_NAMES.has(ent.name)) continue;
+        stack.push(join(dir, ent.name));
+        continue;
+      }
+      if (!ent.isFile()) continue;
+      const name = ent.name;
+      // Exclude test/spec files — they edit independently of the bundle and
+      // would false-flag the staleness gate.
+      if (/\.(test|spec)\.[mc]?[jt]s$/.test(name)) continue;
+      const dot = name.lastIndexOf('.');
+      if (dot < 0 || !SOURCE_EXTS.has(name.slice(dot))) continue;
+      try {
+        const m = statSync(join(dir, name)).mtimeMs;
+        if (m > newest) newest = m;
+      } catch {
+        // ignore unreadable file
+      }
+    }
+  }
+  return newest;
+}
+
+function preflightDistStaleness({ autoBuild }) {
+  if (!existsSync(SUPERDOC_BUNDLE)) {
+    if (autoBuild) {
+      console.error('fixture-feedback: packages/superdoc/dist is missing. Running pnpm build:superdoc...');
+      const r = spawnSync('pnpm', ['build:superdoc'], { stdio: 'inherit', cwd: REPO_ROOT });
+      if (r.status !== 0) { console.error('fixture-feedback: pnpm build:superdoc failed.'); process.exit(2); }
+      return;
+    }
+    console.error('fixture-feedback: packages/superdoc/dist is missing.');
+    console.error('  Run: pnpm build:superdoc');
+    console.error('  Or pass --auto-build.');
+    process.exit(2);
+  }
+  const bundleMtime = statSync(SUPERDOC_BUNDLE).mtimeMs;
+  let newestSource = 0;
+  for (const root of SOURCE_ROOTS) {
+    newestSource = Math.max(newestSource, newestSourceMtime(root));
+  }
+  if (newestSource > bundleMtime) {
+    if (autoBuild) {
+      console.error('fixture-feedback: packages/superdoc/dist is stale. Running pnpm build:superdoc...');
+      const r = spawnSync('pnpm', ['build:superdoc'], { stdio: 'inherit', cwd: REPO_ROOT });
+      if (r.status !== 0) { console.error('fixture-feedback: pnpm build:superdoc failed.'); process.exit(2); }
+      return;
+    }
+    console.error('fixture-feedback: packages/superdoc/dist is stale.');
+    console.error(`  Bundle mtime:        ${new Date(bundleMtime).toISOString()}`);
+    console.error(`  Newest source mtime: ${new Date(newestSource).toISOString()}`);
+    console.error('  Run: pnpm build:superdoc');
+    console.error('  Or pass --auto-build.');
+    process.exit(2);
+  }
+}
+
+// Run the preflight before importing Editor — the import itself reads the
+// dist, so the staleness check must happen first.
+preflightDistStaleness({ autoBuild: process.argv.includes('--auto-build') });
+
+const { Editor } = await import('superdoc/super-editor');
 
 // ---------------------------------------------------------------------------
 // CLI parsing
@@ -77,6 +170,7 @@ function parseArgs(argv) {
       case '--build-via':      args.buildVia = argv[++i]; break;
       case '--type':           args.type = argv[++i]; break;
       case '--spec':           args.spec = argv[++i]; break;
+      case '--auto-build':     /* consumed by preflightDistStaleness */ break;
       case '--help': case '-h': printHelp(); process.exit(0);
       default:
         console.error(`unknown flag: ${argv[i]}`);
@@ -89,8 +183,11 @@ function parseArgs(argv) {
 
 function printHelp() {
   console.error(`usage:
-  fixture-feedback --docx <path>
-  fixture-feedback --build-via ooxml-fixture --type <name> --spec <spec.json>`);
+  fixture-feedback --docx <path> [--auto-build]
+  fixture-feedback --build-via ooxml-fixture --type <name> --spec <spec.json> [--auto-build]
+
+  --auto-build   run pnpm build:superdoc when packages/superdoc/dist is stale
+                 instead of exiting with a stale-dist precondition error.`);
 }
 
 // ---------------------------------------------------------------------------

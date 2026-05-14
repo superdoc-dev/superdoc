@@ -7,35 +7,22 @@ describe('getParagraphInlineDirection', () => {
     expect(getParagraphInlineDirection(null)).toBeUndefined();
   });
 
-  it('prefers directionContext.inlineDirection over legacy fields', () => {
+  it('prefers directionContext.inlineDirection over paragraphProperties.rightToLeft', () => {
     const attrs = {
       directionContext: { inlineDirection: 'rtl' as const },
-      direction: 'ltr',
-      rtl: false,
+      paragraphProperties: { rightToLeft: false },
     };
     expect(getParagraphInlineDirection(attrs)).toBe('rtl');
   });
 
   it('falls back past directionContext when inlineDirection is null', () => {
     // Per resolver semantics, inlineDirection=null/undefined means "no explicit
-    // w:bidi"; the legacy `direction` field is the next fallback in the chain.
-    const attrs = { directionContext: { inlineDirection: null }, direction: 'rtl' };
+    // w:bidi"; paragraphProperties.rightToLeft is the PM-node/editor fallback.
+    const attrs = {
+      directionContext: { inlineDirection: null },
+      paragraphProperties: { rightToLeft: true },
+    };
     expect(getParagraphInlineDirection(attrs)).toBe('rtl');
-  });
-
-  it('falls back to attrs.direction', () => {
-    expect(getParagraphInlineDirection({ direction: 'rtl' })).toBe('rtl');
-    expect(getParagraphInlineDirection({ direction: 'ltr' })).toBe('ltr');
-  });
-
-  it('falls back to attrs.dir', () => {
-    expect(getParagraphInlineDirection({ dir: 'rtl' })).toBe('rtl');
-    expect(getParagraphInlineDirection({ dir: 'ltr' })).toBe('ltr');
-  });
-
-  it('falls back to attrs.rtl boolean', () => {
-    expect(getParagraphInlineDirection({ rtl: true })).toBe('rtl');
-    expect(getParagraphInlineDirection({ rtl: false })).toBe('ltr');
   });
 
   it('falls back to paragraphProperties.rightToLeft', () => {

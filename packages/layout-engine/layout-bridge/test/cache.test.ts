@@ -2024,8 +2024,12 @@ describe('MeasureCache', () => {
 
     describe('other paragraph attribute changes', () => {
       it('invalidates cache when direction changes', () => {
-        const block1 = paragraphWithAttrs('p1', 'Hello', { direction: 'ltr' });
-        const block2 = paragraphWithAttrs('p1', 'Hello', { direction: 'rtl' });
+        const block1 = paragraphWithAttrs('p1', 'Hello', {
+          directionContext: { inlineDirection: 'ltr', writingMode: 'horizontal-tb' },
+        });
+        const block2 = paragraphWithAttrs('p1', 'Hello', {
+          directionContext: { inlineDirection: 'rtl', writingMode: 'horizontal-tb' },
+        });
 
         cache.set(block1, 400, 600, { totalHeight: 20 });
         expect(cache.get(block2, 400, 600)).toBeUndefined();

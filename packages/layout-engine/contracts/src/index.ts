@@ -1534,17 +1534,12 @@ export type ParagraphAttrs = {
   /** Marks an empty paragraph that only exists to carry section properties. */
   sectPrMarker?: boolean;
   /**
-   * Resolved paragraph inline base direction. Populated from `directionContext.inlineDirection`
-   * during pm-adapter conversion; left undefined when no explicit bidi is set so the browser
-   * can apply UBA via missing `dir` attribute.
-   *
-   * Prefer reading `directionContext` (typed, complete) over this scalar field. The scalar
-   * remains for backwards compatibility with consumers that only need inline direction.
-   */
-  direction?: 'ltr' | 'rtl';
-  /**
    * Resolved direction context for the paragraph (inline direction + writing mode).
    * Single source of truth for paragraph direction-aware rendering decisions.
+   *
+   * Read via `getParagraphInlineDirection(attrs)` rather than inspecting this
+   * field directly so the helper can normalize `null` vs `undefined` and fall
+   * back to `paragraphProperties.rightToLeft` for PM-node / editor paths.
    *
    * See `@superdoc/contracts/direction-context` for axis semantics.
    */

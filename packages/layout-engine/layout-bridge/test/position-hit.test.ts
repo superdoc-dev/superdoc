@@ -23,19 +23,15 @@ describe('isRtlBlock', () => {
     ).toBe(true);
   });
 
-  it('keeps legacy paragraph direction as a fallback', () => {
-    expect(isRtlBlock(paragraph({ direction: 'rtl' }))).toBe(true);
-  });
-
   it('does not treat writing mode as inline RTL direction', () => {
     expect(isRtlBlock(paragraph({ textDirection: 'tbRl' }))).toBe(false);
   });
 
-  it('lets resolved direction context override legacy scalar direction', () => {
+  it('lets resolved direction context override paragraphProperties.rightToLeft', () => {
     expect(
       isRtlBlock(
         paragraph({
-          direction: 'rtl',
+          paragraphProperties: { rightToLeft: true },
           directionContext: {
             inlineDirection: 'ltr',
             writingMode: 'horizontal-tb',
@@ -45,14 +41,14 @@ describe('isRtlBlock', () => {
     ).toBe(false);
   });
 
-  it('falls through to legacy direction when directionContext.inlineDirection is undefined', () => {
+  it('falls through to paragraphProperties.rightToLeft when directionContext.inlineDirection is undefined', () => {
     // The resolver may produce inlineDirection: undefined when no paragraph w:bidi is set
     // anywhere in the cascade. In that case the typed context carries no inline-direction
-    // signal, and the legacy `direction` / `dir` field (if any) should still be honored.
+    // signal, and the PM-node paragraphProperties.rightToLeft fallback still applies.
     expect(
       isRtlBlock(
         paragraph({
-          direction: 'rtl',
+          paragraphProperties: { rightToLeft: true },
           directionContext: {
             inlineDirection: undefined,
             writingMode: 'horizontal-tb',

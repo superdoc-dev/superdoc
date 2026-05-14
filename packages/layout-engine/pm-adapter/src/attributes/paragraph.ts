@@ -388,7 +388,6 @@ export const computeParagraphAttrs = (
     keepLines: resolvedParagraphProperties.keepLines,
     floatAlignment: floatAlignment,
     pageBreakBefore: resolvedParagraphProperties.pageBreakBefore,
-    ...(normalizedDirection ? { direction: normalizedDirection } : {}),
     directionContext,
   };
 

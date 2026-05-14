@@ -22,6 +22,7 @@ import type { FragmentRenderContext, RenderedLineInfo } from '../renderer.js';
 import { applySquareWrapExclusionsToLines } from '../utils/anchor-helpers';
 import { applyImageClipPath } from '../utils/image-clip-path.js';
 import {
+  getSdtContainerMetadata,
   getSdtContainerKeyForBlock,
   getSdtSiblingBoundaries,
   shouldRenderSdtContainerChrome,
@@ -683,20 +684,79 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
     sdt?: SdtMetadata | null,
     containerSdt?: SdtMetadata | null,
     blockKey?: string | null,
+    ancestorContainerKey?: string | null,
+    ancestorContainerSdt?: SdtMetadata | null,
   ): boolean => {
+    const effectiveAncestorKey = ancestorContainerKey === undefined ? ancestorTableSdtKey : ancestorContainerKey;
+    const effectiveAncestorSdt = ancestorContainerSdt === undefined ? ancestorTableSdt : ancestorContainerSdt;
     return shouldRenderSdtContainerChrome(sdt, containerSdt, {
-      ancestorContainerKey: ancestorTableSdtKey,
-      ancestorContainerSdt: ancestorTableSdt,
+      ancestorContainerKey: effectiveAncestorKey,
+      ancestorContainerSdt: effectiveAncestorSdt,
       containerKey: blockKey,
     });
   };
 
-  // Check if any block in the cell has SDT container styling
-  const hasSdtContainer = cellBlocks.some((block, index) => {
+  const hasRenderedSdtContainer = (
+    block: (typeof cellBlocks)[number] | undefined,
+    measure: (typeof blockMeasures)[number] | undefined,
+    ancestorContainerKey?: string | null,
+    ancestorContainerSdt?: SdtMetadata | null,
+  ): boolean => {
+    if (!block) return false;
+
     const attrs = (block as { attrs?: { sdt?: SdtMetadata; containerSdt?: SdtMetadata } }).attrs;
-    const blockKey = sdtContainerKeys[index] ?? null;
-    return shouldApplySdtContainerStyling(attrs?.sdt, attrs?.containerSdt, blockKey);
-  });
+    const blockKey = getSdtContainerKeyForBlock(block);
+    if (
+      shouldApplySdtContainerStyling(
+        attrs?.sdt,
+        attrs?.containerSdt,
+        blockKey,
+        ancestorContainerKey,
+        ancestorContainerSdt,
+      )
+    ) {
+      return true;
+    }
+
+    if (block.kind !== 'table' || measure?.kind !== 'table') {
+      return false;
+    }
+
+    const tableContainerSdt = getSdtContainerMetadata(attrs?.sdt, attrs?.containerSdt);
+    const nextAncestorKey = tableContainerSdt ? blockKey : ancestorContainerKey;
+    const nextAncestorSdt = tableContainerSdt ?? ancestorContainerSdt;
+
+    for (let rowIndex = 0; rowIndex < block.rows.length; rowIndex += 1) {
+      const row = block.rows[rowIndex];
+      const rowMeasure = measure.rows[rowIndex];
+      if (!rowMeasure) continue;
+
+      for (let cellIndex = 0; cellIndex < row.cells.length; cellIndex += 1) {
+        const nestedCell = row.cells[cellIndex];
+        const nestedMeasure = rowMeasure.cells[cellIndex];
+        const nestedBlocks = nestedCell.blocks ?? (nestedCell.paragraph ? [nestedCell.paragraph] : []);
+        const nestedMeasures = nestedMeasure?.blocks ?? (nestedMeasure?.paragraph ? [nestedMeasure.paragraph] : []);
+        for (let blockIndex = 0; blockIndex < nestedBlocks.length; blockIndex += 1) {
+          if (
+            hasRenderedSdtContainer(
+              nestedBlocks[blockIndex],
+              nestedMeasures[blockIndex],
+              nextAncestorKey,
+              nextAncestorSdt,
+            )
+          ) {
+            return true;
+          }
+        }
+      }
+    }
+
+    return false;
+  };
+
+  const hasSdtContainer = cellBlocks.some((block, index) =>
+    hasRenderedSdtContainer(block, blockMeasures[index], ancestorTableSdtKey, ancestorTableSdt),
+  );
 
   // SDT containers display labels that extend above the content boundary.
   // Change overflow to 'visible' so these labels aren't clipped by the cell.

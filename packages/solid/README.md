@@ -41,7 +41,7 @@ Then run your package manager install command again.
 ## Quick Start
 
 ```tsx
-import { SuperDocEditor } from '@superdoc-dev/Solid';
+import { SuperDocEditor } from '@superdoc-dev/solid';
 import '@superdoc-dev/solid/style.css';
 
 function App() {

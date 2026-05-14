@@ -2065,7 +2065,7 @@ describe('MeasureCache', () => {
             { val: 'end', pos: 8640, leader: 'dot' },
           ],
           keepNext: true,
-          direction: 'ltr',
+          directionContext: { inlineDirection: 'ltr', writingMode: 'horizontal-tb' },
         };
 
         const block1 = paragraphWithAttrs('p1', 'Hello', complexAttrs);

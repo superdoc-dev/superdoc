@@ -930,6 +930,25 @@ describe('SD-3123: sdtLocked controls mutate through AttrSteps and content-range
     assertInnerRange(from, to, pos, nodeSize);
     expect(editor.commands!.updateStructuredContentById).not.toHaveBeenCalled();
   });
+
+  it('clearContent on an sdtLocked block control replaces the inner range (pos+1, pos+nodeSize-1)', () => {
+    // clearContent flows through the same replaceSdtTextContent path with an
+    // empty body; on block controls the inner range is replaced with an empty
+    // paragraph. Without the SD-3123 inner-range fix this would dispatch a
+    // full-wrapper replaceWith and the lock plugin would filter it.
+    const editor = makeSdtEditor({ lockMode: 'sdtLocked' });
+    const adapter = createContentControlsAdapter(editor);
+    const { pos, nodeSize } = findSdtPos(editor, 'structuredContentBlock');
+
+    const result = adapter.clearContent({ target: SDT_TARGET }, { changeMode: 'direct' });
+
+    expect(result.success).toBe(true);
+    const replaceWith = (editor.state.tr as any).replaceWith as ReturnType<typeof vi.fn>;
+    expect(replaceWith).toHaveBeenCalledTimes(1);
+    const [from, to] = replaceWith.mock.calls[0];
+    assertInnerRange(from, to, pos, nodeSize);
+    expect(editor.commands!.updateStructuredContentById).not.toHaveBeenCalled();
+  });
 });
 
 describe('buildContentControlInfoFromNode sdtPr element-form resolution', () => {

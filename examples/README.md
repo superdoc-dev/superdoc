@@ -78,6 +78,7 @@ Realtime providers and backend setups for Yjs-based collaboration.
 | Example | Description |
 |---------|-------------|
 | [backends/fastapi/yjs-hub](./editor/collaboration/backends/fastapi/yjs-hub) | YHub server (advanced Yjs backend for attribution and revision-history workflows; beta) |
+| [providers/yhub](./editor/collaboration/providers/yhub) | SuperDoc + YHub client (advanced attribution and revision-history workflows; beta) |
 | [providers/hocuspocus](./editor/collaboration/providers/hocuspocus) | Hocuspocus provider (mature self-hosted Yjs server) |
 | [providers/liveblocks](./editor/collaboration/providers/liveblocks) | Liveblocks managed service |
 | [providers/superdoc-yjs](./editor/collaboration/providers/superdoc-yjs) | SuperDoc Yjs minimal reference server (not production infrastructure) |

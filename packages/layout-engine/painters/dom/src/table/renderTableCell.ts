@@ -518,6 +518,8 @@ type TableCellRenderDependencies = {
   applySdtDataset: (el: HTMLElement | null, metadata?: SdtMetadata | null) => void;
   /** Table-level SDT container key for suppressing duplicate container styling in cells */
   ancestorTableSdtKey?: string | null;
+  /** Table-level SDT metadata for suppressing duplicate container styling in cells */
+  ancestorTableSdt?: SdtMetadata | null;
   /** Table indent in pixels (applied to table fragment positioning) */
   tableIndent?: number;
   /** Whether the table is visually right-to-left (w:bidiVisual, ECMA-376 §17.4.1) */
@@ -609,6 +611,7 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
     context,
     applySdtDataset,
     ancestorTableSdtKey,
+    ancestorTableSdt,
     tableIndent,
     isRtl,
     cellWidth,
@@ -661,6 +664,7 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
   ): boolean => {
     return shouldRenderSdtContainerChrome(sdt, containerSdt, {
       ancestorContainerKey: ancestorTableSdtKey,
+      ancestorContainerSdt: ancestorTableSdt,
       containerKey: blockKey,
     });
   };

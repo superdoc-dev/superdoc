@@ -3760,6 +3760,59 @@ describe('renderTableCell', () => {
       expect(cellElement.querySelector('.superdoc-structured-content-block')).toBeFalsy();
     });
 
+    it('should not apply SDT container styling when id-less block SDT matches ancestor table SDT metadata', () => {
+      const sharedSdt: SdtMetadata = {
+        type: 'structuredContent' as const,
+        scope: 'block' as const,
+        alias: 'Table Container',
+      };
+      const para: ParagraphBlock = {
+        kind: 'paragraph',
+        id: 'para-same-idless-sdt',
+        runs: [{ text: 'Content in id-less table SDT', fontFamily: 'Arial', fontSize: 16 }],
+        attrs: {
+          sdt: sharedSdt,
+        },
+      };
+      const measure: ParagraphMeasure = {
+        kind: 'paragraph',
+        lines: [
+          {
+            fromRun: 0,
+            fromChar: 0,
+            toRun: 0,
+            toChar: 28,
+            width: 100,
+            ascent: 12,
+            descent: 4,
+            lineHeight: 20,
+          },
+        ],
+        totalHeight: 20,
+      };
+
+      const { cellElement } = renderTableCell({
+        ...createBaseDeps(),
+        cellMeasure: {
+          blocks: [measure],
+          width: 120,
+          height: 40,
+          gridColumnStart: 0,
+          colSpan: 1,
+          rowSpan: 1,
+        },
+        cell: {
+          id: 'cell-table-idless-sdt',
+          blocks: [para],
+          attrs: {},
+        },
+        ancestorTableSdt: sharedSdt,
+      });
+
+      expect(cellElement.style.overflow).toBe('hidden');
+      expect(cellElement.querySelector('.superdoc-structured-content-block')).toBeFalsy();
+    });
+
     it('should keep overflow:hidden for inline scope structuredContent (not a block container)', () => {
       const para: ParagraphBlock = {
         kind: 'paragraph',

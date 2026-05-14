@@ -386,6 +386,7 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
         renderDrawingContent,
         applySdtDataset,
         ancestorTableSdtKey: getSdtContainerKey(block.attrs?.sdt, block.attrs?.containerSdt),
+        ancestorTableSdt: block.attrs?.sdt ?? null,
         // Headers are always rendered as-is (no border suppression)
         continuesFromPrev: false,
         continuesOnNext: false,
@@ -548,6 +549,7 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
       renderDrawingContent,
       applySdtDataset,
       ancestorTableSdtKey: getSdtContainerKey(block.attrs?.sdt, block.attrs?.containerSdt),
+      ancestorTableSdt: block.attrs?.sdt ?? null,
       // Draw top border if table continues from previous fragment (MS Word behavior)
       continuesFromPrev: isFirstRenderedBodyRow && fragment.continuesFromPrev === true,
       // Draw bottom border if table continues on next fragment (MS Word behavior)

@@ -104,6 +104,7 @@ export function shouldRenderSdtContainerChrome(
   containerSdt?: SdtMetadata | null,
   options?: {
     ancestorContainerKey?: string | null;
+    ancestorContainerSdt?: SdtMetadata | null;
     containerKey?: string | null;
   },
 ): boolean {
@@ -111,7 +112,16 @@ export function shouldRenderSdtContainerChrome(
   if (!config) return false;
 
   const containerKey = options?.containerKey ?? getSdtContainerKey(sdt, containerSdt);
-  return !(containerKey && options?.ancestorContainerKey && containerKey === options.ancestorContainerKey);
+  if (containerKey && options?.ancestorContainerKey && containerKey === options.ancestorContainerKey) {
+    return false;
+  }
+
+  const ancestorContainerSdt = options?.ancestorContainerSdt;
+  if (ancestorContainerSdt && (sdt === ancestorContainerSdt || containerSdt === ancestorContainerSdt)) {
+    return false;
+  }
+
+  return true;
 }
 
 export function getSdtSiblingBoundaries(
@@ -131,7 +141,11 @@ export function applySdtContainerChrome(
   sdt: SdtMetadata | null | undefined,
   containerSdt?: SdtMetadata | null | undefined,
   boundaryOptions?: SdtBoundaryOptions,
-  options?: { ancestorContainerKey?: string | null; containerKey?: string | null },
+  options?: {
+    ancestorContainerKey?: string | null;
+    ancestorContainerSdt?: SdtMetadata | null;
+    containerKey?: string | null;
+  },
 ): void {
   if (!shouldRenderSdtContainerChrome(sdt, containerSdt, options)) return;
 

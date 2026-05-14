@@ -175,6 +175,8 @@ type TableRowRenderDependencies = {
   applySdtDataset: (el: HTMLElement | null, metadata?: SdtMetadata | null) => void;
   /** Table-level SDT container key for suppressing duplicate container styling in cells */
   ancestorTableSdtKey?: string | null;
+  /** Table-level SDT metadata for suppressing duplicate container styling in cells */
+  ancestorTableSdt?: SdtMetadata | null;
   /**
    * If true, this row is the first body row of a continuation fragment.
    * MS Word draws borders at split points to visually close the table on each page,
@@ -255,6 +257,7 @@ export const renderTableRow = (deps: TableRowRenderDependencies): void => {
     renderDrawingContent,
     applySdtDataset,
     ancestorTableSdtKey,
+    ancestorTableSdt,
     continuesFromPrev,
     continuesOnNext,
     partialRow,
@@ -427,6 +430,7 @@ export const renderTableRow = (deps: TableRowRenderDependencies): void => {
       context,
       applySdtDataset,
       ancestorTableSdtKey,
+      ancestorTableSdt,
       fromLine,
       toLine,
       tableIndent,

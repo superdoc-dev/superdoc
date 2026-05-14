@@ -77,10 +77,10 @@ Realtime providers and backend setups for Yjs-based collaboration.
 
 | Example | Description |
 |---------|-------------|
-| [providers/hocuspocus](./editor/collaboration/providers/hocuspocus) | Hocuspocus provider (recommended self-hosted default) |
+| [backends/fastapi/yjs-hub](./editor/collaboration/backends/fastapi/yjs-hub) | YHub server (advanced Yjs backend for attribution and revision-history workflows; beta) |
+| [providers/hocuspocus](./editor/collaboration/providers/hocuspocus) | Hocuspocus provider (mature self-hosted Yjs server) |
 | [providers/liveblocks](./editor/collaboration/providers/liveblocks) | Liveblocks managed service |
 | [providers/superdoc-yjs](./editor/collaboration/providers/superdoc-yjs) | SuperDoc Yjs minimal reference server (not production infrastructure) |
-| [backends/fastapi/yjs-hub](./editor/collaboration/backends/fastapi/yjs-hub) | YHub server with attribution and activity stream (beta) |
 | [backends/node-sdk](./editor/collaboration/backends/node-sdk) | Server-side document operations alongside the realtime layer |
 | [backends/fastapi](./editor/collaboration/backends/fastapi) | Python FastAPI backend |
 

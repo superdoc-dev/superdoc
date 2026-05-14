@@ -36,53 +36,41 @@ flowchart TB
 
 ## Choose your approach
 
-SuperDoc's collaboration is provider-agnostic: pass `{ ydoc, provider }` to `modules.collaboration` and the server choice is yours. We recommend established Yjs infrastructure for production deployments.
+SuperDoc's integration contract is provider-agnostic: pass `{ ydoc, provider }` to `modules.collaboration` and the server choice is yours. Any Yjs-compatible server works.
 
-| Option | Best For | Setup Time |
-|--------|----------|------------|
-| [Hocuspocus](/guides/collaboration/hocuspocus) | Production self-hosted default. Mature, MIT-licensed, with documented auth, persistence, and Redis scaling. | 30 mins |
-| [YHub](https://github.com/superdoc-dev/superdoc/tree/main/examples/editor/collaboration/backends/fastapi/yjs-hub) | Advanced self-hosted. YHub supports attribution, activity, revision history, and Redis+Postgres scaling. Beta, Node 22+, AGPL or proprietary licensing. | 1+ hour |
-| [SuperDoc Yjs](/guides/collaboration/superdoc-yjs) | Minimal reference server for prototypes and local dev. Not production infrastructure. | 30 mins |
+| Option | Notes | Setup Time |
+|--------|-------|------------|
+| [YHub](https://github.com/superdoc-dev/superdoc/tree/main/examples/editor/collaboration/backends/fastapi/yjs-hub) | Advanced Yjs backend for attribution, activity, and revision-history workflows. Beta; validate licensing and infrastructure requirements. | 1+ hour |
+| [Hocuspocus](/guides/collaboration/hocuspocus) | Mature self-hosted Yjs server with auth, persistence, and scaling hooks. | 30 mins |
+| [SuperDoc Yjs](/guides/collaboration/superdoc-yjs) | Minimal reference server for prototypes and local development. Not production infrastructure. | 30 mins |
 
-## Quick comparison
+## At a glance
 
 <Tabs>
-  <Tab title="Hocuspocus">
-    **Production self-hosted default**
+  <Tab title="YHub">
+    Advanced Yjs backend for attribution, activity, and revision-history workflows. Redis + Postgres backing. Beta; validate licensing and infrastructure requirements.
 
-    - Mature, MIT-licensed
-    - Documented auth, persistence, Redis scaling
-    - Rich extension ecosystem
+    [See the example](https://github.com/superdoc-dev/superdoc/tree/main/examples/editor/collaboration/backends/fastapi/yjs-hub)
+  </Tab>
+
+  <Tab title="Hocuspocus">
+    Mature self-hosted Yjs server with auth, persistence, and scaling hooks.
 
     ```bash
     npm install @hocuspocus/server @hocuspocus/provider
     ```
 
-    [Get Started](/guides/collaboration/hocuspocus)
-  </Tab>
-
-  <Tab title="YHub">
-    **Advanced: attribution and revision history**
-
-    - Built-in attribution, activity stream, changesets, rollback
-    - Redis + Postgres backing
-    - Beta, Node 22+, AGPL or proprietary
-
-    Reach for YHub when revision history and identity attribution are central to your product. Validate license and beta status before committing.
-
-    [See the example](https://github.com/superdoc-dev/superdoc/tree/main/examples/editor/collaboration/backends/fastapi/yjs-hub)
+    [Setup guide](/guides/collaboration/hocuspocus)
   </Tab>
 
   <Tab title="SuperDoc Yjs">
-    **Minimal reference server**
-
-    A small Yjs WebSocket server we ship for prototypes and local development. Not production infrastructure: no built-in auth, persistence, scaling, or observability. For production, use Hocuspocus or YHub.
+    A small Yjs WebSocket server we ship for prototypes and local development. Not production infrastructure: no built-in auth, persistence, scaling, or observability.
 
     ```bash
     npm install @superdoc-dev/superdoc-yjs-collaboration
     ```
 
-    [See the reference](/guides/collaboration/superdoc-yjs)
+    [Reference](/guides/collaboration/superdoc-yjs)
   </Tab>
 
   </Tabs>
@@ -150,27 +138,27 @@ new SuperDoc({
 
 <CardGroup cols={2}>
   <Card
-    title="Hocuspocus"
-    icon="server"
-    href="/guides/collaboration/hocuspocus"
-  >
-    Production self-hosted default
-  </Card>
-
-  <Card
     title="YHub example"
     icon="layers"
     href="https://github.com/superdoc-dev/superdoc/tree/main/examples/editor/collaboration/backends/fastapi/yjs-hub"
   >
-    Advanced: attribution and revision history (beta)
+    Attribution and revision-history workflows (beta)
   </Card>
 
   <Card
-    title="SuperDoc Yjs"
+    title="Hocuspocus setup"
+    icon="server"
+    href="/guides/collaboration/hocuspocus"
+  >
+    Mature self-hosted Yjs server
+  </Card>
+
+  <Card
+    title="SuperDoc Yjs reference"
     icon="flask-conical"
     href="/guides/collaboration/superdoc-yjs"
   >
-    Minimal reference server for dev and prototypes
+    Minimal server for prototypes and local development
   </Card>
 
   <Card

@@ -272,6 +272,54 @@ describe('calculateInlineRunPropertiesPlugin', () => {
     expect(runNode?.attrs.runProperties).toBeNull();
   });
 
+  it('drops complex-script bold companion when the bold mark is removed', () => {
+    decodeRPrFromMarksMock.mockImplementation(() => ({ bold: false }));
+    resolveRunPropertiesMock.mockImplementation(() => ({ bold: false }));
+
+    const schema = makeSchema();
+    const boldMark = schema.marks.bold.create();
+    const doc = paragraphDoc(
+      schema,
+      {
+        runProperties: { bold: true, boldCs: true },
+        runPropertiesInlineKeys: ['bold', 'boldCs'],
+      },
+      [boldMark],
+    );
+    const state = createState(schema, doc);
+    const { from, to } = runTextRange(state.doc, 0, doc.textContent.length);
+
+    const tr = state.tr.removeMark(from, to, schema.marks.bold);
+    const { state: nextState } = state.applyTransaction(tr);
+
+    const runNode = nextState.doc.nodeAt(runPos(nextState.doc) ?? 0);
+    expect(runNode?.attrs.runProperties).toBeNull();
+  });
+
+  it('drops complex-script italic companion when the italic mark is removed', () => {
+    decodeRPrFromMarksMock.mockImplementation(() => ({ italic: false }));
+    resolveRunPropertiesMock.mockImplementation(() => ({ italic: false }));
+
+    const schema = makeSchema();
+    const italicMark = schema.marks.italic.create();
+    const doc = paragraphDoc(
+      schema,
+      {
+        runProperties: { italic: true, italicCs: true },
+        runPropertiesInlineKeys: ['italic', 'italicCs'],
+      },
+      [italicMark],
+    );
+    const state = createState(schema, doc);
+    const { from, to } = runTextRange(state.doc, 0, doc.textContent.length);
+
+    const tr = state.tr.removeMark(from, to, schema.marks.italic);
+    const { state: nextState } = state.applyTransaction(tr);
+
+    const runNode = nextState.doc.nodeAt(runPos(nextState.doc) ?? 0);
+    expect(runNode?.attrs.runProperties).toBeNull();
+  });
+
   it('uses cached paragraph properties when available', () => {
     getResolvedParagraphPropertiesMock.mockReturnValue({ cached: true });
     calculateResolvedParagraphPropertiesMock.mockImplementation(() => {

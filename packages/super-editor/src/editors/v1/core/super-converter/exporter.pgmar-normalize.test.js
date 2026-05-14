@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { normalizePgMarTwipsInTree } from './exporter.js';
+import { normalizePgMarTwipsInTree, processOutputMarks } from './exporter.js';
 
 // SD-2912: <w:pgMar> attributes must be integer twips per ECMA-376 §17.6.11
 // (ST_TwipsMeasure). Some documents carry float-valued twips like
@@ -136,5 +136,21 @@ describe('normalizePgMarTwipsInTree', () => {
     normalizePgMarTwipsInTree(tree);
     expect(tree.elements[0].attributes).toEqual({ 'w:w': '12240.5', 'w:h': '15840.7' });
     expect(tree.elements[1].attributes['w:top']).toBe('169');
+  });
+});
+
+describe('processOutputMarks highlight clear export', () => {
+  it('does not emit highlight XML for plain transparent highlight marks', () => {
+    const outputMarks = processOutputMarks([{ type: 'highlight', attrs: { color: 'transparent' } }]);
+
+    expect(outputMarks).toEqual([{}]);
+  });
+
+  it('emits highlight none only for imported explicit highlight clears', () => {
+    const outputMarks = processOutputMarks([
+      { type: 'highlight', attrs: { color: 'transparent', ooxmlHighlightClear: true } },
+    ]);
+
+    expect(outputMarks).toEqual([{ name: 'w:highlight', attributes: { 'w:val': 'none' } }]);
   });
 });

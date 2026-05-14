@@ -128,6 +128,7 @@ export const calculateInlineRunPropertiesPlugin = (editor) =>
           tableInfo,
           $pos,
           editor,
+          removedKeys,
           preservedDerivedKeys,
           preferExistingKeys,
         );
@@ -245,6 +246,8 @@ export const calculateInlineRunPropertiesPlugin = (editor) =>
               if (!runProperties) runProperties = {};
               lostKeys.forEach((k) => {
                 if (removedKeys.has(k)) return;
+                const baseKey = COMPANION_INLINE_KEYS[k];
+                if (baseKey && removedKeys.has(baseKey)) return;
                 if (runNode.attrs?.runProperties?.[k] !== undefined) {
                   runProperties[k] = runNode.attrs.runProperties[k];
                 }
@@ -400,6 +403,7 @@ function segmentRunByInlineProps(
   tableInfo,
   $pos,
   editor,
+  removedKeys,
   preservedDerivedKeys,
   preferExistingKeys,
 ) {
@@ -416,6 +420,7 @@ function segmentRunByInlineProps(
         tableInfo,
         $pos,
         editor,
+        removedKeys,
         preservedDerivedKeys,
         preferExistingKeys,
       );
@@ -463,6 +468,7 @@ function computeInlineRunProps(
   tableInfo,
   $pos,
   editor,
+  removedKeys,
   preservedDerivedKeys,
   preferExistingKeys,
 ) {
@@ -486,6 +492,7 @@ function computeInlineRunProps(
     runPropertiesFromStyles,
     existingRunProperties,
     editor,
+    removedKeys,
     preservedDerivedKeys,
     preferExistingKeys,
   );
@@ -508,6 +515,7 @@ function getInlineRunProperties(
   runPropertiesFromStyles,
   existingRunProperties,
   editor,
+  removedKeys = new Set(),
   preservedDerivedKeys = new Set(),
   preferExistingKeys = new Set(),
 ) {
@@ -555,6 +563,8 @@ function getInlineRunProperties(
   if (existingRunProperties != null) {
     Object.keys(existingRunProperties).forEach((key) => {
       if (RUN_PROPERTIES_DERIVED_FROM_MARKS.has(key) && !preservedDerivedKeys.has(key)) return;
+      const baseKey = COMPANION_INLINE_KEYS[key];
+      if (baseKey && removedKeys.has(baseKey)) return;
       if (
         key === 'styleId' &&
         TRANSIENT_HYPERLINK_STYLE_IDS.has(existingRunProperties[key]) &&

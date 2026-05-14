@@ -612,6 +612,9 @@ function translateMark(mark) {
       break;
     case 'highlight': {
       const highlightValue = attrs.color ?? attrs.highlight ?? null;
+      if (String(highlightValue).trim().toLowerCase() === 'transparent' && !attrs.ooxmlHighlightClear) {
+        return {};
+      }
       const translated = wHighlightTranslator.decode({ node: { attrs: { highlight: highlightValue } } });
       return translated || {};
     }

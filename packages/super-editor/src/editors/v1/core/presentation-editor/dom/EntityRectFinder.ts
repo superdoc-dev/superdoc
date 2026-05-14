@@ -112,7 +112,10 @@ export function findRenderedContentControlElements(
   escapeAttrValue: (value: string) => string,
   // `storyKey` is accepted for signature parity with comment / tracked
   // change finders so a future cross-story filter slots in without an
-  // API change. Currently unused — see the docblock above.
+  // API change. Currently unused: SDT wrappers don't stamp
+  // `data-story-key` yet. Follow-up tracked under SD-3155 (umbrella);
+  // file a dedicated sub-issue when a customer needs strict header /
+  // footer routing for content controls.
   _storyKey?: string,
 ): HTMLElement[] {
   if (!host || !entityId) return [];

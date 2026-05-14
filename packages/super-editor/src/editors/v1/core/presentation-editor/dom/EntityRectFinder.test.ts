@@ -8,6 +8,7 @@ import {
   findRenderedContentControlElements,
   findRenderedTrackedChangeElementsStrict,
 } from './EntityRectFinder.js';
+import { DOM_CLASS_NAMES } from '@superdoc/dom-contract';
 
 const BODY_STORY_KEY = 'body';
 
@@ -234,11 +235,14 @@ function paintSdtWrapper(
   // Tests that intentionally exercise the "wrapper missing class"
   // path can pass className: null to skip this.
   if (opts.className !== null) {
+    // Drive the helper from the shared dom-contract constants so a
+    // future rename of INLINE_SDT_WRAPPER / BLOCK_SDT can't silently
+    // de-sync the test from production. (Mixed convention elsewhere
+    // in the painter tests: see painters/dom/src/index.test.ts which
+    // hardcodes these strings. Prefer the constant here.)
     wrapper.className =
       opts.className ??
-      (opts.scope === 'block'
-        ? 'superdoc-structured-content-block'
-        : 'superdoc-structured-content-inline');
+      (opts.scope === 'block' ? DOM_CLASS_NAMES.BLOCK_SDT : DOM_CLASS_NAMES.INLINE_SDT_WRAPPER);
   }
   wrapper.dataset.sdtId = id;
   wrapper.dataset.sdtType = opts.type ?? 'structuredContent';
@@ -299,6 +303,52 @@ describe('findRenderedContentControlElements', () => {
     paintSdtWrapper(host, 'sdt-classless', { scope: 'inline', className: null });
 
     expect(findRenderedContentControlElements(host, 'sdt-classless', escapeAttr)).toEqual([]);
+  });
+
+  it('matches across stories when the same id is painted in body and header (v1 deferred behavior)', () => {
+    // Codifies the documented v1 limitation: SDT wrappers don't stamp
+    // `data-story-key` today, so a content control with the same id
+    // painted in both body and header will surface as two matches even
+    // when the caller passes a body-only storyKey. The fix (strict
+    // story filtering for content controls) lands when the painter
+    // adds `data-story-key` to SDT wrappers — see the JSDoc on
+    // `findRenderedContentControlElements`. This test exists so a
+    // future change can't silently *narrow* the helper (e.g. by adding
+    // a strict story filter that breaks consumers who relied on the
+    // cross-story match) without a deliberate test update.
+    const host = makeHost();
+    // Two pages: one in body, one whose ancestor declares
+    // data-story-key="story:headerFooterPart:rId1". Body wrapper has
+    // no story marker (legacy / default).
+    const bodyWrapper = paintSdtWrapper(host, 'sdt-shared', { scope: 'inline', pageIndex: 0 });
+    const headerArea = document.createElement('div');
+    headerArea.dataset.storyKey = 'story:headerFooterPart:rId1';
+    const headerPage = document.createElement('div');
+    headerPage.className = 'superdoc-page';
+    headerPage.dataset.pageIndex = '1';
+    const headerWrapper = document.createElement('span');
+    headerWrapper.className = DOM_CLASS_NAMES.INLINE_SDT_WRAPPER;
+    headerWrapper.dataset.sdtId = 'sdt-shared';
+    headerWrapper.dataset.sdtType = 'structuredContent';
+    headerWrapper.dataset.sdtScope = 'inline';
+    headerPage.appendChild(headerWrapper);
+    headerArea.appendChild(headerPage);
+    host.appendChild(headerArea);
+
+    // No storyKey → both match (the only mode the helper supports today).
+    const allMatches = findRenderedContentControlElements(host, 'sdt-shared', escapeAttr);
+    expect(allMatches).toHaveLength(2);
+    expect(allMatches).toContain(bodyWrapper);
+    expect(allMatches).toContain(headerWrapper);
+
+    // storyKey supplied → ignored, both still match. This is the
+    // deferred behavior: signature parity with comment / tracked-change
+    // finders, but the filter is a no-op until the painter stamps
+    // `data-story-key`.
+    const bodyOnly = findRenderedContentControlElements(host, 'sdt-shared', escapeAttr, BODY_STORY_KEY);
+    expect(bodyOnly).toHaveLength(2);
+    expect(bodyOnly).toContain(bodyWrapper);
+    expect(bodyOnly).toContain(headerWrapper);
   });
 
   it('returns only the wrapper when child runs also carry the SDT metadata attrs', () => {

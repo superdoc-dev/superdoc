@@ -350,26 +350,38 @@ function buildDocumentRelTarget(partName) {
 }
 
 function buildItemPropsRoot(itemId, schemaRefs) {
-  const schemaRefElements = (schemaRefs ?? []).map((uri) => ({
-    type: 'element',
-    name: 'ds:schemaRef',
-    attributes: { 'ds:uri': uri },
-  }));
-  return {
-    type: 'element',
-    name: 'ds:datastoreItem',
-    attributes: {
-      'ds:itemID': itemId,
-      'xmlns:ds': CUSTOM_XML_DATASTORE_NAMESPACE,
-    },
-    elements: [
-      {
-        type: 'element',
-        name: 'ds:schemaRefs',
-        elements: schemaRefElements,
+  // ECMA-376 §22.5.2.3 distinguishes three cases:
+  //   - `<schemaRefs>` omitted        → app may infer schemas
+  //   - `<schemaRefs/>` present empty → explicit "no schemas"
+  //   - `<schemaRefs>` with children  → these schemas validate the part
+  //
+  // We map `schemaRefs === undefined` → omit (caller didn't specify),
+  // `schemaRefs === []` → present-empty (caller explicitly cleared),
+  // anything else → present with children.
+  const elements = [
+    {
+      type: 'element',
+      name: 'ds:datastoreItem',
+      attributes: {
+        'ds:itemID': itemId,
+        'xmlns:ds': CUSTOM_XML_DATASTORE_NAMESPACE,
       },
-    ],
-  };
+      elements: schemaRefs === undefined
+        ? []
+        : [
+            {
+              type: 'element',
+              name: 'ds:schemaRefs',
+              elements: schemaRefs.map((uri) => ({
+                type: 'element',
+                name: 'ds:schemaRef',
+                attributes: { 'ds:uri': uri },
+              })),
+            },
+          ],
+    },
+  ];
+  return elements[0];
 }
 
 function buildItemRelsRoot(propsPartFileName) {
@@ -439,8 +451,11 @@ export function createCustomXmlPart(convertedXml, { content, schemaRefs }, conve
   // Storage Part — wrap the customer's content in a fresh document envelope.
   convertedXml[partName] = createXmlDocument(root, declaration);
 
-  // Properties Part — datastoreItem with itemID + optional schemaRefs.
-  convertedXml[propsPartName] = createXmlDocument(buildItemPropsRoot(itemId, schemaRefs ?? []));
+  // Properties Part — datastoreItem with itemID. `schemaRefs` is passed
+  // through verbatim so `undefined` (omit element, app may infer) and
+  // `[]` (present-empty, explicit "no schemas") stay distinct per
+  // ECMA-376 §22.5.2.3.
+  convertedXml[propsPartName] = createXmlDocument(buildItemPropsRoot(itemId, schemaRefs));
 
   // Item rels — link Storage Part → Properties Part.
   convertedXml[itemRelsPath] = createXmlDocument(buildItemRelsRoot(`itemProps${index}.xml`));

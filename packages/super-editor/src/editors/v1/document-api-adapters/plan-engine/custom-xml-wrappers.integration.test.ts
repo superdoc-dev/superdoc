@@ -535,6 +535,44 @@ describe('customXml.parts write-side', () => {
     reloaded.destroy();
   });
 
+  it('omits <ds:schemaRefs> when create is called without schemaRefs (ECMA-376 §22.5.2.3)', async () => {
+    // Per spec: schemaRefs omitted = app may infer schemas; schemaRefs
+    // present + empty = explicit "no schemas". These are different.
+    const editor = await createEditorWithEmptyPackage();
+    const created = editor.doc.customXml.parts.create({ content: '<a xmlns="urn:a"/>' });
+    if (!created.success) return;
+
+    const converted = (editor as unknown as { converter: { convertedXml: Record<string, unknown> } }).converter
+      .convertedXml;
+    const propsDoc = converted[created.propsPartName] as
+      | { elements?: Array<{ name: string; elements?: Array<{ name: string }> }> }
+      | undefined;
+    const root = propsDoc?.elements?.[0];
+    const schemaRefsEl = (root?.elements ?? []).find((el) => el?.name === 'ds:schemaRefs');
+    expect(schemaRefsEl, 'omitted schemaRefs should not produce a <ds:schemaRefs/> element').toBeUndefined();
+    editor.destroy();
+  });
+
+  it('emits an empty <ds:schemaRefs/> when create is called with schemaRefs: []', async () => {
+    const editor = await createEditorWithEmptyPackage();
+    const created = editor.doc.customXml.parts.create({
+      content: '<a xmlns="urn:a"/>',
+      schemaRefs: [],
+    });
+    if (!created.success) return;
+
+    const converted = (editor as unknown as { converter: { convertedXml: Record<string, unknown> } }).converter
+      .convertedXml;
+    const propsDoc = converted[created.propsPartName] as
+      | { elements?: Array<{ name: string; elements?: Array<{ name: string }> }> }
+      | undefined;
+    const root = propsDoc?.elements?.[0];
+    const schemaRefsEl = (root?.elements ?? []).find((el) => el?.name === 'ds:schemaRefs');
+    expect(schemaRefsEl, 'empty array should produce an explicit <ds:schemaRefs/> element').toBeDefined();
+    expect(schemaRefsEl?.elements ?? []).toEqual([]);
+    editor.destroy();
+  });
+
   it('removing the bibliography part does not resurrect it via syncBibliographyPartToPackage on export', async () => {
     // Seed: simulate a doc with a bibliography custom XML part already
     // loaded. The converter's bibliographyPart cache will hold sources.

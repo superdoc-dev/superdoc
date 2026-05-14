@@ -276,8 +276,15 @@ describe('SuperDoc core', () => {
     expect(instance.user).toEqual(expect.objectContaining({ name: 'Default SuperDoc user', email: null }));
   });
 
-  it('scrolls to a comment and sets it active', async () => {
-    const { commentsStore } = createAppHarness();
+  it('delegates scrollToComment to scrollToElement and marks the thread active', async () => {
+    const { superdocStore, commentsStore } = createAppHarness();
+    const scrollToElement = vi.fn(async () => true);
+    superdocStore.documents = [
+      {
+        getPresentationEditor: vi.fn(() => ({ scrollToElement })),
+      },
+    ];
+
     const instance = new SuperDoc({
       selector: '#host',
       document: 'https://example.com/doc.docx',
@@ -289,19 +296,21 @@ describe('SuperDoc core', () => {
     });
     await flushMicrotasks();
 
-    const target = document.createElement('div');
-    target.setAttribute('data-comment-ids', 'comment-1');
-    target.scrollIntoView = vi.fn();
-    document.querySelector('#host').appendChild(target);
-
-    const result = instance.scrollToComment('comment-1');
-    expect(result).toBe(true);
-    expect(target.scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'start' });
+    await expect(instance.scrollToComment('comment-1')).resolves.toBe(true);
+    expect(scrollToElement).toHaveBeenCalledWith('comment-1');
     expect(commentsStore.setActiveComment).toHaveBeenCalledWith(instance, 'comment-1');
   });
 
-  it('returns false when comment element is not found', async () => {
-    createAppHarness();
+  it('scrollToComment resolves false when neither presentation nor body editor can locate the id', async () => {
+    const { superdocStore } = createAppHarness();
+    superdocStore.documents = [
+      {
+        // Presentation editor present but returns false (e.g. mark on an unmounted page,
+        // or no such id in the doc).
+        getPresentationEditor: vi.fn(() => ({ scrollToElement: vi.fn(async () => false) })),
+      },
+    ];
+
     const instance = new SuperDoc({
       selector: '#host',
       document: 'https://example.com/doc.docx',
@@ -311,7 +320,23 @@ describe('SuperDoc core', () => {
     });
     await flushMicrotasks();
 
-    expect(instance.scrollToComment('nonexistent-id')).toBe(false);
+    // No activeEditor on the instance → body-editor fallback also returns false.
+    await expect(instance.scrollToComment('nonexistent-id')).resolves.toBe(false);
+  });
+
+  it('scrollToComment returns false when comments module is disabled', async () => {
+    createAppHarness();
+    const instance = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      // no `modules.comments`
+      modules: { toolbar: {} },
+      onException: vi.fn(),
+    });
+    await flushMicrotasks();
+
+    await expect(instance.scrollToComment('any-id')).resolves.toBe(false);
   });
 
   it('forwards navigateTo to the first presentation editor', async () => {
@@ -405,6 +430,109 @@ describe('SuperDoc core', () => {
     await flushMicrotasks();
 
     await expect(instance.scrollToElement('element-1')).resolves.toBe(false);
+  });
+
+  it('scrollToElement falls back to body editor when presentation returns false', async () => {
+    const { superdocStore } = createAppHarness();
+    superdocStore.documents = [
+      {
+        // Presentation editor is present but cannot scroll (e.g. flow layout).
+        getPresentationEditor: vi.fn(() => ({ scrollToElement: vi.fn(async () => false) })),
+      },
+    ];
+
+    const scrollIntoView = vi.fn();
+    const targetEl = { scrollIntoView };
+    const setCursorById = vi.fn(() => true);
+
+    const instance = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: {}, toolbar: {} },
+      onException: vi.fn(),
+    });
+    await flushMicrotasks();
+
+    // Inject a minimal activeEditor stub. The body-editor fallback uses
+    // `setCursorById` to resolve the id and `getElementAtPos` to find the DOM.
+    Object.defineProperty(instance, 'activeEditor', {
+      configurable: true,
+      get: () => ({
+        state: {
+          doc: { content: { size: 100 }, descendants: vi.fn() },
+          selection: { from: 42 },
+        },
+        commands: { setCursorById },
+        getElementAtPos: vi.fn(() => targetEl),
+      }),
+    });
+
+    await expect(instance.scrollToElement('comment-1')).resolves.toBe(true);
+    expect(setCursorById).toHaveBeenCalledWith('comment-1', { preferredActiveThreadId: 'comment-1' });
+    expect(scrollIntoView).toHaveBeenCalledWith(
+      expect.objectContaining({ block: expect.any(String), inline: 'nearest' }),
+    );
+  });
+
+  it('scrollToHeading walks for the Nth heading at the given level and scrolls', async () => {
+    const { superdocStore } = createAppHarness();
+    // Mock doc with three Heading1 paragraphs at known positions.
+    const headings = [
+      { pos: 10, text: 'first', styleId: 'Heading1' },
+      { pos: 50, text: 'second', styleId: 'Heading1' },
+      { pos: 200, text: 'third', styleId: 'Heading1' },
+    ];
+    const makeNode = (h) => ({
+      type: { name: 'paragraph' },
+      attrs: { paragraphProperties: { styleId: h.styleId } },
+      content: { size: 5 },
+      descendants: (cb) => cb({ isText: true, text: h.text }, 0),
+    });
+    const descendants = (cb) => {
+      for (const h of headings) {
+        if (cb(makeNode(h), h.pos) === false) return;
+      }
+    };
+
+    const scrollToPositionAsync = vi.fn(async () => true);
+    superdocStore.documents = [{ getPresentationEditor: vi.fn(() => ({ scrollToPositionAsync })) }];
+
+    const instance = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: {}, toolbar: {} },
+      onException: vi.fn(),
+    });
+    await flushMicrotasks();
+
+    Object.defineProperty(instance, 'activeEditor', {
+      configurable: true,
+      get: () => ({ state: { doc: { descendants, content: { size: 1000 } } } }),
+    });
+
+    await expect(instance.scrollToHeading(1, 2)).resolves.toBe(true);
+    // The 2nd Heading1 starts at pos=50; the text-inside-content fix should
+    // shift the target one position into the paragraph's content.
+    expect(scrollToPositionAsync).toHaveBeenCalledWith(51, expect.any(Object));
+  });
+
+  it('scrollToHeading rejects out-of-range levels and non-positive ordinals', async () => {
+    createAppHarness();
+    const instance = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: {}, toolbar: {} },
+      onException: vi.fn(),
+    });
+    await flushMicrotasks();
+
+    await expect(instance.scrollToHeading(0, 1)).resolves.toBe(false);
+    await expect(instance.scrollToHeading(7, 1)).resolves.toBe(false);
+    await expect(instance.scrollToHeading(1, 0)).resolves.toBe(false);
+    await expect(instance.scrollToHeading(1.5, 1)).resolves.toBe(false);
   });
 
   it('warns when both document object and documents list provided', async () => {

@@ -1,34 +1,27 @@
-# Direction Resolver
+# Direction Model
 
-The shared direction model for SuperDoc. Computes a typed
-`ParagraphDirectionContext` once per paragraph during pm-adapter
-conversion. Downstream consumers (DomPainter, layout-bridge, hit
-testing) read from the resolved context — they do not re-derive
-direction from raw attributes.
+This module computes typed direction contexts during pm-adapter conversion.
 
-## The core principle: orthogonal axes, no auto-inheritance
+Consumers read the resolved context from layout attrs. They do not re-derive
+direction from raw OOXML attributes.
 
-OOXML expresses direction along several independent axes. Most do
-NOT propagate to paragraph inline direction.
+## Core Rule: Keep Direction Axes Separate
 
-Per ECMA-376:
+OOXML has several direction-related properties. They are not interchangeable.
 
-1. **Section `w:bidi` (§17.6.1)** affects section chrome only —
-   page numbers, columns, gutters. It does NOT make paragraphs RTL.
-2. **Paragraph `w:bidi` (§17.3.1.6)** affects paragraph-level
-   properties only — indent, justification, tab stops, text
-   direction. It does NOT reorder text within the paragraph.
-3. **Table `w:bidiVisual` (§17.4.1)** affects cell ordering and
-   table-level properties only. It does NOT make cell paragraphs
-   RTL.
-4. **Writing mode `w:textDirection` (§17.3.1.41)** is the one
-   direction property that DOES inherit across containers — a
-   paragraph inherits its cell's writing mode, then the section's,
-   then horizontal-tb default.
+- Section `w:bidi` (§17.6.1) affects section chrome: page numbers, columns,
+  and gutters. It does not make paragraphs RTL.
+- Paragraph `w:bidi` (§17.3.1.6) affects paragraph-level properties: indent,
+  justification, tab stops, and text direction. It does not reorder text
+  inside the paragraph.
+- Table `w:bidiVisual` (§17.4.1) affects table visual order and table-level
+  properties. It does not make cell paragraphs RTL.
+- Writing mode `w:textDirection` (§17.3.1.41, §17.4.72) controls text flow.
+  It can inherit across containers. A paragraph inherits its cell writing mode,
+  then its section writing mode, then the `horizontal-tb` default.
 
-The resolver chain enforces these rules by construction. A
-contributor cannot accidentally make a downstream consumer infer
-paragraph direction from section bidi.
+The resolver chain keeps those axes separate. A paragraph direction consumer
+should not infer inline direction from section RTL or table visual RTL.
 
 ## Public API
 
@@ -44,7 +37,7 @@ import {
 } from '@superdoc/pm-adapter/direction';
 ```
 
-Each resolver consumes its parent's context and returns its own:
+Each resolver consumes its parent context and returns its own:
 
 ```ts
 const sectionContext = resolveSectionDirection(sectPr);
@@ -59,20 +52,22 @@ const paragraphContext = resolveParagraphDirection(
 
 The resolved `paragraphContext` carries:
 
-- `inlineDirection: 'ltr' | 'rtl' | undefined` — paragraph inline
-  base direction. Undefined when no explicit `w:bidi` is set in
-  the paragraph or its style cascade. Consumers should omit the
-  `dir` attribute when undefined and let the browser apply the
-  Unicode Bidi Algorithm.
-- `writingMode: 'horizontal-tb' | 'vertical-rl' | 'vertical-lr'` —
-  text flow direction, inherited from the cell, then the section,
-  then default.
+- `inlineDirection: 'ltr' | 'rtl' | undefined`
 
-## How downstream consumers read the context
+  Paragraph inline base direction. It is undefined when no explicit `w:bidi`
+  is set in the paragraph or its style cascade. Consumers should omit `dir`
+  when this is undefined and let the browser apply the Unicode Bidi Algorithm.
 
-The resolved context is written onto `ParagraphAttrs.directionContext`
-during pm-adapter conversion. Downstream code reads it without
-importing from pm-adapter (which would violate the package boundary):
+- `writingMode: 'horizontal-tb' | 'vertical-rl' | 'vertical-lr'`
+
+  Text flow direction. It inherits from the cell, then the section, then the
+  default.
+
+## Reading the Context
+
+pm-adapter writes the resolved context to `ParagraphAttrs.directionContext`.
+Downstream code reads that value from attrs. It should not import pm-adapter
+direction resolvers directly.
 
 ```ts
 // in layout-bridge or DomPainter
@@ -80,15 +75,17 @@ const inline = block.attrs.directionContext?.inlineDirection;
 const writingMode = block.attrs.directionContext?.writingMode;
 ```
 
-For convenience, the legacy `ParagraphAttrs.direction` scalar
-(inline direction only) is also populated for consumers that only
-need that one field.
+Consumers that only need the inline-direction scalar should call
+`getParagraphInlineDirection(attrs)` from `@superdoc/contracts`. The helper
+prefers `directionContext.inlineDirection` and falls back to
+`paragraphProperties.rightToLeft` for PM-node / editor paths.
 
-## Logical-to-physical helpers
+## Logical-to-Physical Helpers
 
-OOXML uses logical sides (`start`, `end`) that flip based on
-direction. CSS uses physical sides (`left`, `right`). Don't ask
-"is this RTL?" and map inline — use the helpers:
+OOXML uses logical sides such as `start` and `end`. CSS uses physical sides
+such as `left` and `right`.
+
+Use the helpers instead of mapping sides inline:
 
 ```ts
 import { resolveLogicalAlignment, resolveLogicalIndent } from
@@ -104,35 +101,102 @@ const physicalIndent = resolveLogicalIndent(
 );
 ```
 
-## What this module does NOT do
+## Out of Scope
 
-- It does NOT infer paragraph base direction from run content.
-  Per UAX #9 P2/P3, paragraph base direction without explicit
-  `w:bidi` comes from the first strong character — and the
-  browser already implements that natively when `dir` is
-  omitted. SuperDoc does not need a server-side classifier.
-- It does NOT resolve complex-script formatting selection
-  (`bCs`/`iCs`/`szCs`/`rFonts/@cs`). That's `RunScriptContext`
-  and is implemented in Wave 1b.
-- It does NOT handle bidi controls (`w:bdo`/`w:dir`). That's
-  Wave 1c.
-- It does NOT render vertical text. Wave 4 expands the writing
-  mode enum and adds layout for vertical line boxes.
+This module does not infer paragraph base direction from run content. When
+`w:bidi` is absent, UAX #9 P2/P3 derives base direction from the first strong
+character. Browsers already do this when `dir` is omitted.
 
-## Why the resolver chain matters
+This module also does not resolve:
 
-Before this module, several files each computed direction from
-raw attributes:
+- Complex-script formatting selection (`bCs`, `iCs`, `szCs`, `rFonts/@cs`).
+  That belongs to `RunScriptContext`.
+- Bidi controls (`w:bdo` §17.3.2.3 and `w:dir` §17.3.2.8).
+- Vertical text layout. The writing-mode enum carries the data; layout support
+  is separate work.
 
-- `pm-adapter/src/attributes/paragraph.ts` —
-  `resolveEffectiveParagraphDirection` had a fallback cascade
-  through `sectionDirection` (ECMA §17.6.1 violation) and a
-  majority-of-runs heuristic (UAX #9 disagreement).
-- `layout-bridge/src/position-hit.ts` — conflated `textDirection`
-  (writing mode) with `direction` (inline direction).
-- DomPainter, table-cell mirroring, and other sites each had their
-  own ad-hoc direction detection, sometimes disagreeing.
+## Table Visual Mirror
 
-Centralizing the model fixes the violations by construction and
-gives future RTL features (complex-script typography, visual RTL
-tables, vertical text, bidi controls) a single source of truth.
+`w:bidiVisual` is separate from paragraph direction. It controls how table
+geometry and table-scoped sides appear visually.
+
+For `w:bidiVisual`, upstream layers keep logical sides in LTR-default form:
+
+- `start -> left`
+- `end -> right`
+
+DomPainter applies the visual RTL mirror once at paint time.
+
+Do not pre-mirror these values in the importer, style-engine, or pm-adapter.
+If an upstream layer chooses `left` or `right` based on table RTL, DomPainter
+will mirror the value again.
+
+The rule applies when all three are true:
+
+1. The OOXML property is table-scoped or cell-scoped. Examples: `w:tbl`,
+   `w:tblPr`, `w:tblPrEx`, `w:tr`, `w:trPr`, `w:tc`, or `w:tcPr`.
+2. The property uses logical side language: `start`, `end`,
+   leading/trailing, or table cell order.
+3. DomPainter already applies the `w:bidiVisual` visual mirror for that
+   property.
+
+### Covered
+
+- `w:tblBorders/start`, `w:tblBorders/end` (§17.4.38, §17.4.36/13)
+- `w:tcBorders/start`, `w:tcBorders/end` (§17.4.66, §17.4.33/12)
+- `w:tblCellMar/start`, `w:tblCellMar/end` (§17.4.42, §17.4.41;
+  start/end children at §17.4.34/11 and §17.4.35/10)
+- `w:tcMar/start`, `w:tcMar/end` (§17.4.68, §17.4.35/10)
+- Table cell visual order under `w:bidiVisual` (§17.4.1)
+- `w:gridBefore` and `w:gridAfter` placement (§17.4.15, §17.4.14)
+
+### Not Covered
+
+- Paragraph `w:bidi` (§17.3.1.6). Paragraph alignment and indent follow
+  paragraph inline direction, not table direction.
+- Run `w:rtl` (§17.3.2.30), `w:dir` (§17.3.2.8), and `w:bdo` (§17.3.2.3).
+  These are inline bidi controls, not table visual mirroring.
+- `w:textDirection` (§17.3.1.41, §17.4.72). This is writing mode, not a
+  mirror.
+- Numeric `w:start` values in numbering (§17.9.25) or page numbering
+  (§17.6.12). These are starting values, not sides.
+- Editing-side visual-to-logical mapping: table resize, cursor navigation, and
+  hit testing. Those paths need RTL awareness as an inverse mapping from visual
+  coordinates to logical structure.
+
+## Why This Exists
+
+Several older paths computed direction from raw attributes independently. They
+did not always agree.
+
+- `pm-adapter/src/attributes/paragraph.ts` used section direction as a fallback
+  for paragraph direction. That violates §17.6.1.
+- `layout-bridge/src/position-hit.ts` conflated writing mode with inline
+  direction.
+- Table border and margin paths pre-mirrored `w:bidiVisual` sides before
+  DomPainter mirrored them again.
+
+Centralizing the direction model keeps consumers on one set of rules. It also
+gives future RTL work a clear place to plug in without adding another local
+direction heuristic.
+
+## Quick Checks
+
+Use these searches before adding a new direction-aware path:
+
+```bash
+# Suspicious: upstream table-side pre-mirroring.
+rg "rightToLeft.*\\?.*'(left|right)'|rightToLeft.*\\?.*\\\"(left|right)\\\"" \
+  packages/layout-engine/pm-adapter/src packages/super-editor/src/editors/v1/core/super-converter
+
+# Review: downstream consumers reading raw direction fields.
+rg "sectionDirection|rightToLeft" \
+  packages/layout-engine/layout-bridge/src packages/layout-engine/painters/dom/src
+
+# Suspicious: painter importing direction logic from upstream packages.
+rg "@superdoc/(pm-adapter|style-engine)" packages/layout-engine/painters/dom/src
+```
+
+Resolver files under `pm-adapter/src/direction/` are expected to read raw
+direction fields. The checks above are for new local direction decisions
+outside the resolver.

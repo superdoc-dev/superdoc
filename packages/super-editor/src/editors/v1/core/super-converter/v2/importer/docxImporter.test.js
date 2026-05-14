@@ -5,6 +5,7 @@ import {
   filterOutRootInlineNodes,
   isAlternatingHeadersOddEven,
   normalizeTableBookmarksInContent,
+  resolveEvenAndOddHeadersFromSettingsPart,
 } from './docxImporter.js';
 
 const n = (type, attrs = {}) => ({ type, attrs, marks: [] });
@@ -530,5 +531,46 @@ describe('isAlternatingHeadersOddEven', () => {
   it('returns false when settings has no elements', () => {
     expect(isAlternatingHeadersOddEven({ 'word/settings.xml': { elements: [] } })).toBe(false);
     expect(isAlternatingHeadersOddEven({ 'word/settings.xml': {} })).toBe(false);
+  });
+
+  it('returns true when w:settings is nested under a wrapper (convertedXml-style)', () => {
+    const docx = {
+      'word/settings.xml': {
+        type: 'element',
+        name: 'document',
+        elements: [
+          {
+            type: 'element',
+            name: 'w:settings',
+            elements: [{ type: 'element', name: 'w:evenAndOddHeaders' }],
+          },
+        ],
+      },
+    };
+    expect(resolveEvenAndOddHeadersFromSettingsPart(docx['word/settings.xml'])).toBe(true);
+    expect(isAlternatingHeadersOddEven(docx)).toBe(true);
+  });
+});
+
+describe('resolveEvenAndOddHeadersFromSettingsPart', () => {
+  it('returns null for missing or invalid parts', () => {
+    expect(resolveEvenAndOddHeadersFromSettingsPart(undefined)).toBe(null);
+    expect(resolveEvenAndOddHeadersFromSettingsPart(null)).toBe(null);
+    expect(resolveEvenAndOddHeadersFromSettingsPart('x')).toBe(null);
+  });
+
+  it('returns null when w:evenAndOddHeaders is absent', () => {
+    const part = {
+      elements: [{ name: 'w:settings', elements: [{ name: 'w:zoom', attributes: { 'w:percent': '100' } }] }],
+    };
+    expect(resolveEvenAndOddHeadersFromSettingsPart(part)).toBe(null);
+  });
+
+  it('reads w:settings when it is the part root', () => {
+    const part = {
+      name: 'w:settings',
+      elements: [{ type: 'element', name: 'w:evenAndOddHeaders', attributes: { 'w:val': '0' } }],
+    };
+    expect(resolveEvenAndOddHeadersFromSettingsPart(part)).toBe(false);
   });
 });

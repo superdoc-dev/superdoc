@@ -37,6 +37,7 @@ export const handleBackspace = (editor) => {
       tr.setMeta('inputType', 'deleteContentBackward');
       return false;
     },
+    () => commands.deleteBlockSdtAtTextBlockStart(),
     () => commands.backspaceEmptyRunParagraph(),
     () => commands.backspaceSkipEmptyRun(),
     () => commands.backspaceAtomBefore(),
@@ -55,6 +56,7 @@ export const handleDelete = (editor) => {
   dispatchHistoryBoundary(view);
 
   return editor.commands.first(({ commands }) => [
+    () => commands.deleteBlockSdtAtTextBlockStart(),
     () => commands.deleteSkipEmptyRun(),
     () => commands.deleteAtomAfter(),
     () => commands.deleteNextToRun(),

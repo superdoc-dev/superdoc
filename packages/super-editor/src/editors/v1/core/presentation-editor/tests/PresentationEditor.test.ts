@@ -4,6 +4,7 @@ import { PresentationEditor } from '../PresentationEditor.js';
 import type { Editor as EditorInstance } from '../../Editor.js';
 import { Editor } from '../../Editor.js';
 import { HeaderFooterEditorManager, HeaderFooterLayoutAdapter } from '../../header-footer/HeaderFooterRegistry.js';
+import { buildMultiSectionIdentifier } from '@superdoc/layout-bridge';
 
 type MockedEditor = Mock<(...args: unknown[]) => EditorInstance> & {
   mock: {
@@ -907,6 +908,41 @@ describe('PresentationEditor', () => {
       };
       expect(layoutOptions.flowMode).toBe('paginated');
       expect(layoutOptions.alternateHeaders).toBe(false);
+    });
+
+    it('derives alternateHeaders from word/settings.xml when pageStyles is stale or missing', async () => {
+      mockEditorConverterStore.current.pageStyles = { alternateHeaders: false };
+      mockEditorConverterStore.current.convertedXml = {
+        ...(mockEditorConverterStore.current.convertedXml ?? {}),
+        'word/settings.xml': {
+          type: 'element',
+          name: 'document',
+          elements: [
+            {
+              type: 'element',
+              name: 'w:settings',
+              elements: [{ type: 'element', name: 'w:evenAndOddHeaders' }],
+            },
+          ],
+        },
+      };
+
+      editor = new PresentationEditor({
+        element: container,
+        documentId: 'alt-headers-settings-doc',
+        mode: 'docx',
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      const layoutOptions = mockIncrementalLayout.mock.calls[mockIncrementalLayout.mock.calls.length - 1]?.[3] as {
+        alternateHeaders?: boolean;
+      };
+      expect(layoutOptions.alternateHeaders).toBe(true);
+      const sectionIdCall = (buildMultiSectionIdentifier as unknown as Mock).mock.calls.at(-1) as
+        | [unknown, { alternateHeaders?: boolean }]
+        | undefined;
+      expect(sectionIdCall?.[1]?.alternateHeaders).toBe(true);
     });
 
     it('coerces falsy but non-boolean pageStyles.alternateHeaders values to false', async () => {

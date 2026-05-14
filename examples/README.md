@@ -1,10 +1,29 @@
 # SuperDoc examples
 
-Minimal, copy-pasteable examples organized to mirror the [docs](https://docs.superdoc.dev): Editor, Document Engine, AI.
+Minimal, copy-pasteable examples organized to mirror the [docs](https://docs.superdoc.dev): Getting Started, Editor, Document API, Document Engine, AI, and Advanced.
 
-Examples teach one concept in the smallest useful amount of code. If you want a composed app or product workflow, see [`demos/`](../demos/) instead.
+Examples answer: "How do I use this one SuperDoc primitive or integration pattern?"
+
+If you want a composed app, a product workflow, or something polished enough to record as a customer scenario, use [`demos/`](../demos/) instead.
 
 The machine-readable index lives in [`manifest.json`](./manifest.json).
+
+## Examples vs demos
+
+Use `examples/` when the code should be small enough to copy into a new project and adapt. A good example has one lesson, neutral UI, a short README, a manifest entry, and a local build command.
+
+Use `demos/` when the value comes from multiple SuperDoc features working together. Demos can include realistic panels, fake backend data, library state, gallery metadata, and product-specific copy.
+
+Examples may overlap with demos. That is expected when the example is the smallest readable form of a primitive that a demo composes into a larger workflow. The example should still stand on its own as a focused reference.
+
+## Adding an example
+
+- Teach one concept or one integration pattern.
+- Keep UI and state management only as large as the lesson requires.
+- Name folders by API or pattern, not by a customer scenario, when possible.
+- Add a README with what it teaches, how to run it, and related demos or docs.
+- Add an entry to [`manifest.json`](./manifest.json) and this README.
+- Run the package build for the touched workspace.
 
 ## Getting started
 
@@ -54,19 +73,36 @@ Patterns for the browser editor surface.
 
 ### Collaboration
 
-Realtime providers and backend setups for Yjs-based collaboration.
+Realtime provider examples for the browser editor.
 
 | Example | Description |
 |---------|-------------|
-| [providers/superdoc-yjs](./editor/collaboration/providers/superdoc-yjs) | Self-hosted Yjs server (recommended) |
-| [providers/hocuspocus](./editor/collaboration/providers/hocuspocus) | Hocuspocus provider setup |
-| [providers/liveblocks](./editor/collaboration/providers/liveblocks) | Liveblocks managed service |
-| [backends/node-sdk](./editor/collaboration/backends/node-sdk) | Server-side document operations alongside the realtime layer |
-| [backends/fastapi](./editor/collaboration/backends/fastapi) | Python FastAPI backend |
+| [providers/yhub](./editor/collaboration/providers/yhub) | SuperDoc + YHub client (advanced attribution and revision-history workflows; beta) |
+| [providers/liveblocks](./editor/collaboration/providers/liveblocks) | SuperDoc + Liveblocks managed service |
+| [providers/hocuspocus](./editor/collaboration/providers/hocuspocus) | SuperDoc + Hocuspocus self-hosted Yjs server |
+| [providers/superdoc-yjs](./editor/collaboration/providers/superdoc-yjs) | SuperDoc Yjs minimal reference server (not production infrastructure) |
+
+Backend automation and local infrastructure.
+
+| Example | Description |
+|---------|-------------|
+| [backends/node-sdk](./editor/collaboration/backends/node-sdk) | Node backend that joins and mutates a live collaboration room |
+| [backends/fastapi](./editor/collaboration/backends/fastapi) | FastAPI backend that joins and mutates a live collaboration room |
+| [backends/fastapi/yjs-hub](./editor/collaboration/backends/fastapi/yjs-hub) | Local YHub server used by the YHub and backend examples |
+
+## Document API
+
+The operation contract for reading and editing documents. Same shape in the browser, in Node SDKs, in the CLI, and behind AI tool wrappers.
+
+Put operation-level examples here even when the browser editor hosts the example through `editor.doc.*`. Document API is not editor-only and should not be nested under Document Engine just because an operation can run headless.
+
+| Example | Pattern |
+|---------|---------|
+| [content-controls/tagged-inline-text](./document-api/content-controls/tagged-inline-text) | The smallest content-control workflow: wrap a word, find by tag, update value. |
 
 ## Document Engine
 
-Programmatic editing without a visible editor.
+Engine-level workflows that are not a single Document API operation primitive. Keep new Document API examples in `document-api/`; use this folder for workflows such as diffing and engine-driven redlining.
 
 | Example | Docs |
 |---------|------|

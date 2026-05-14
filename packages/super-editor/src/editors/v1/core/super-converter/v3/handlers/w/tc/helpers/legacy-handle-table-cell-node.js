@@ -287,19 +287,52 @@ const markTableCellAsVMergeConsumed = (node) => {
  */
 const getTableCellMargins = (inlineMargins, referencedStyles) => {
   const { cellMargins = {} } = referencedStyles;
-  return ['left', 'right', 'top', 'bottom'].reduce((acc, direction) => {
-    const key = `margin${direction.charAt(0).toUpperCase() + direction.slice(1)}`;
-    const inlineValue = inlineMargins ? inlineMargins?.[key]?.value : null;
-    const styleValue = cellMargins ? cellMargins[key] : null;
-    if (inlineValue != null) {
-      acc[direction] = twipsToPixels(inlineValue);
-    } else if (styleValue == null) {
-      acc[direction] = undefined;
-    } else if (typeof styleValue === 'object') {
-      acc[direction] = twipsToPixels(styleValue.value);
-    } else {
-      acc[direction] = twipsToPixels(styleValue);
+  // Read a margin value as twips. Accepts numeric or { value, type } shape.
+  // Returns null when the source key is missing or unreadable.
+  const readMargin = (source, key) => {
+    if (!source) return null;
+    const v = source[key];
+    if (v == null) return null;
+    if (typeof v === 'number') return v;
+    if (typeof v === 'object' && typeof v.value === 'number') return v.value;
+    return null;
+  };
+
+  // Per OOXML §17.4.68 (tcMar) + §17.4.42/41 (tblCellMar): cell-level inline
+  // overrides table-level defaults. SD-3134: resolve precedence here so
+  // downstream sees a single physical-shaped output regardless of whether
+  // the source used physical (w:left/w:right) or logical (w:start/w:end)
+  // names. LTR-default semantic - DomPainter mirrors for RTL.
+  const sides = [
+    { physical: 'top', physicalKey: 'marginTop', logicalKey: null },
+    { physical: 'bottom', physicalKey: 'marginBottom', logicalKey: null },
+    { physical: 'left', physicalKey: 'marginLeft', logicalKey: 'marginStart' },
+    { physical: 'right', physicalKey: 'marginRight', logicalKey: 'marginEnd' },
+  ];
+  const result = {};
+  for (const { physical, physicalKey, logicalKey } of sides) {
+    // Cell-level inline values win as a unit over any table-level default
+    // (physical OR logical inline beats physical OR logical style).
+    const inlinePhysical = readMargin(inlineMargins, physicalKey);
+    const inlineLogical = logicalKey ? readMargin(inlineMargins, logicalKey) : null;
+    if (inlinePhysical != null) {
+      result[physical] = twipsToPixels(inlinePhysical);
+      continue;
     }
-    return acc;
-  }, {});
+    if (inlineLogical != null) {
+      result[physical] = twipsToPixels(inlineLogical);
+      continue;
+    }
+    const stylePhysical = readMargin(cellMargins, physicalKey);
+    const styleLogical = logicalKey ? readMargin(cellMargins, logicalKey) : null;
+    if (stylePhysical != null) {
+      result[physical] = twipsToPixels(stylePhysical);
+    } else if (styleLogical != null) {
+      result[physical] = twipsToPixels(styleLogical);
+    } else {
+      result[physical] = undefined;
+    }
+  }
+
+  return result;
 };

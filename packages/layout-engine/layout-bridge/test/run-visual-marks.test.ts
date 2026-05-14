@@ -103,4 +103,39 @@ describe('hashRunVisualMarks', () => {
 
     expect(hashRunVisualMarks(a)).toBe(hashRunVisualMarks(b));
   });
+
+  // SD-3098: DomPainter applies dir="rtl" + RLM injection based on run.bidi.rtl,
+  // so the dirty-run hash must change when bidi changes, otherwise an edit that
+  // flips just <w:rtl/> reuses the stale measure/DOM.
+  describe('bidi (SD-3098)', () => {
+    const base = {
+      text: '23.03.2026',
+      fontFamily: 'David, sans-serif',
+      fontSize: 16,
+    } as Run;
+
+    it('produces a different hash when bidi.rtl is set vs absent', () => {
+      const hashPlain = hashRunVisualMarks(base);
+      const hashRtl = hashRunVisualMarks({ ...base, bidi: { rtl: true } } as Run);
+      expect(hashRtl).not.toBe(hashPlain);
+    });
+
+    it('produces a different hash for bidi.rtl=true vs bidi.rtl=false', () => {
+      const hashTrue = hashRunVisualMarks({ ...base, bidi: { rtl: true } } as Run);
+      const hashFalse = hashRunVisualMarks({ ...base, bidi: { rtl: false } } as Run);
+      expect(hashTrue).not.toBe(hashFalse);
+    });
+
+    it('produces a different hash when only bidi.embedding changes', () => {
+      const hashLtr = hashRunVisualMarks({ ...base, bidi: { rtl: false, embedding: 'ltr' } } as Run);
+      const hashRtlEmbed = hashRunVisualMarks({ ...base, bidi: { rtl: false, embedding: 'rtl' } } as Run);
+      expect(hashRtlEmbed).not.toBe(hashLtr);
+    });
+
+    it('is stable for identical bidi shapes', () => {
+      const a = hashRunVisualMarks({ ...base, bidi: { rtl: true } } as Run);
+      const b = hashRunVisualMarks({ ...base, bidi: { rtl: true } } as Run);
+      expect(a).toBe(b);
+    });
+  });
 });

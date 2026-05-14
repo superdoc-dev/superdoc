@@ -91,6 +91,7 @@ import type {
   LinkPopoverContext,
   LinkPopoverResolution,
   LinkPopoverResolver,
+  AwarenessState,
   ListDefinitionsPayload,
   Measure,
   Modules,
@@ -258,6 +259,7 @@ const _real_LayoutUpdatePayload: AssertNotAny<LayoutUpdatePayload> = true;
 const _real_LinkPopoverContext: AssertNotAny<LinkPopoverContext> = true;
 const _real_LinkPopoverResolution: AssertNotAny<LinkPopoverResolution> = true;
 const _real_LinkPopoverResolver: AssertNotAny<LinkPopoverResolver> = true;
+const _real_AwarenessState: AssertNotAny<AwarenessState> = true;
 const _real_ListDefinitionsPayload: AssertNotAny<ListDefinitionsPayload> = true;
 const _real_Measure: AssertNotAny<Measure> = true;
 const _real_Modules: AssertNotAny<Modules> = true;

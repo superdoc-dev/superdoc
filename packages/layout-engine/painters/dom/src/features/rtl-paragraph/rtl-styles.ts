@@ -7,12 +7,13 @@
  * @ooxml w:pPr/w:bidi — paragraph bidirectional flag
  * @spec  ECMA-376 §17.3.1.1 (bidi)
  */
-import type { ParagraphAttrs } from '@superdoc/contracts';
+import { getParagraphInlineDirection, type ParagraphAttrs } from '@superdoc/contracts';
 
 /**
  * Returns true when the paragraph attributes indicate right-to-left direction.
  */
-export const isRtlParagraph = (attrs: ParagraphAttrs | undefined): boolean => attrs?.direction === 'rtl';
+export const isRtlParagraph = (attrs: ParagraphAttrs | undefined): boolean =>
+  getParagraphInlineDirection(attrs) === 'rtl';
 
 /**
  * Compute the effective CSS text-align for a paragraph.

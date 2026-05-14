@@ -9,6 +9,7 @@ import {
   upsertMarkSnapshotByType,
   isTrackFormatNoOp,
   getTypeName,
+  createMarkSnapshot,
 } from './markSnapshotHelpers.js';
 import { getLiveInlineMarksInRange } from './getLiveInlineMarksInRange.js';
 
@@ -78,7 +79,7 @@ export const addMarkStep = ({ state, step, newTr, doc, user, date }) => {
           before = [...beforeSnapshots];
           after = upsertMarkSnapshotByType(afterSnapshots, {
             type: step.mark.type.name,
-            attrs: { ...step.mark.attrs },
+            attrs: step.mark.attrs,
           });
         }
       } else {
@@ -88,15 +89,10 @@ export const addMarkStep = ({ state, step, newTr, doc, user, date }) => {
             ![TrackDeleteMarkName, TrackFormatMarkName].includes(mark.type.name),
         );
         before = existingMarkOfSameType
-          ? [{ type: existingMarkOfSameType.type.name, attrs: { ...existingMarkOfSameType.attrs } }]
+          ? [createMarkSnapshot(existingMarkOfSameType.type.name, existingMarkOfSameType.attrs)]
           : [];
 
-        after = [
-          {
-            type: step.mark.type.name,
-            attrs: { ...step.mark.attrs },
-          },
-        ];
+        after = [createMarkSnapshot(step.mark.type.name, step.mark.attrs)];
       }
 
       // Check if the format change is effectively a no-op (e.g., reverting

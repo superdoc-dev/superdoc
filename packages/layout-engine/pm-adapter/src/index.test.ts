@@ -3188,7 +3188,7 @@ describe('toFlowBlocks', () => {
       expect(blocks).toHaveLength(1);
       const paragraph = blocks[0];
       expect(paragraph.kind).toBe('paragraph');
-      expect(paragraph.attrs?.direction).toBe('rtl');
+      expect(paragraph.attrs?.directionContext?.inlineDirection).toBe('rtl');
       expect(paragraph.attrs?.indent?.left).toBe(12);
       expect(paragraph.attrs?.indent?.right).toBe(24);
     });
@@ -3214,7 +3214,7 @@ describe('toFlowBlocks', () => {
       expect(blocks).toHaveLength(1);
       const paragraph = blocks[0];
       expect(paragraph.kind).toBe('paragraph');
-      expect(paragraph.attrs?.direction).toBe('ltr');
+      expect(paragraph.attrs?.directionContext?.inlineDirection).toBe('ltr');
     });
 
     it('does NOT inherit paragraph inline direction from body sectPr w:bidi (§17.6.1)', () => {
@@ -3247,7 +3247,7 @@ describe('toFlowBlocks', () => {
       expect(paragraph.kind).toBe('paragraph');
       // Paragraph inline direction stays undefined; the browser applies UBA via
       // the missing dir attribute. Section pageDirection is preserved separately.
-      expect(paragraph.attrs?.direction).toBeUndefined();
+      expect(paragraph.attrs?.directionContext?.inlineDirection).toBeUndefined();
     });
 
     it('section bidi=0 also does not affect paragraph inline direction', () => {
@@ -3275,7 +3275,7 @@ describe('toFlowBlocks', () => {
       expect(blocks).toHaveLength(1);
       const paragraph = blocks[0];
       expect(paragraph.kind).toBe('paragraph');
-      expect(paragraph.attrs?.direction).toBeUndefined();
+      expect(paragraph.attrs?.directionContext?.inlineDirection).toBeUndefined();
     });
 
     it('handles multiple page breaks', () => {
@@ -4620,7 +4620,7 @@ describe('toFlowBlocks', () => {
       const { blocks } = toFlowBlocks(pmDoc);
 
       expect(blocks).toHaveLength(1);
-      expect(blocks[0].attrs?.direction).toBe('rtl');
+      expect(blocks[0].attrs?.directionContext?.inlineDirection).toBe('rtl');
       expect(blocks[0].attrs?.alignment).toBeUndefined();
     });
 
@@ -4649,13 +4649,13 @@ describe('toFlowBlocks', () => {
       const { blocks } = toFlowBlocks(pmDoc);
 
       expect(blocks).toHaveLength(1);
-      expect(blocks[0].attrs?.direction).toBe('rtl');
+      expect(blocks[0].attrs?.directionContext?.inlineDirection).toBe('rtl');
       expect(blocks[0].attrs).toMatchObject({
         alignment: 'center',
       });
     });
 
-    it('preserves explicit left alignment on RTL paragraphs', () => {
+    it('maps explicit left alignment to right on RTL paragraphs', () => {
       const pmDoc = {
         type: 'doc',
         content: [
@@ -4681,7 +4681,38 @@ describe('toFlowBlocks', () => {
       const { blocks } = toFlowBlocks(pmDoc);
 
       expect(blocks).toHaveLength(1);
-      expect(blocks[0].attrs?.direction).toBe('rtl');
+      expect(blocks[0].attrs?.directionContext?.inlineDirection).toBe('rtl');
+      expect(blocks[0].attrs).toMatchObject({
+        alignment: 'right',
+      });
+    });
+
+    it('maps explicit right alignment to left on RTL paragraphs', () => {
+      const pmDoc = {
+        type: 'doc',
+        content: [
+          {
+            type: 'paragraph',
+            attrs: {
+              paragraphProperties: {
+                rightToLeft: true,
+                justification: 'right',
+              },
+            },
+            content: [
+              {
+                type: 'text',
+                text: 'مرحبا بالعالم',
+              },
+            ],
+          },
+        ],
+      };
+
+      const { blocks } = toFlowBlocks(pmDoc);
+
+      expect(blocks).toHaveLength(1);
+      expect(blocks[0].attrs?.directionContext?.inlineDirection).toBe('rtl');
       expect(blocks[0].attrs).toMatchObject({
         alignment: 'left',
       });
@@ -4725,6 +4756,29 @@ describe('toFlowBlocks', () => {
 
       expect(blocksStart[0].attrs?.alignment).toBe('right');
       expect(blocksEnd[0].attrs?.alignment).toBe('left');
+    });
+
+    // SD-3093: justify-family values must collapse to 'justify' without flipping
+    // in RTL. Regression guard against accidentally extending the mirror logic.
+    it('maps both/distribute/numTab/thaiDistribute to justify on RTL paragraphs', () => {
+      const makeDoc = (jc: string) => ({
+        type: 'doc',
+        content: [
+          {
+            type: 'paragraph',
+            attrs: {
+              paragraphProperties: { rightToLeft: true, justification: jc },
+            },
+            content: [{ type: 'text', text: 'مرحبا' }],
+          },
+        ],
+      });
+
+      for (const jc of ['both', 'distribute', 'numTab', 'thaiDistribute']) {
+        const { blocks } = toFlowBlocks(makeDoc(jc));
+        expect(blocks[0].attrs?.directionContext?.inlineDirection).toBe('rtl');
+        expect(blocks[0].attrs).toMatchObject({ alignment: 'justify' });
+      }
     });
   });
 

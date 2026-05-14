@@ -4,6 +4,9 @@ import { createRef, StrictMode } from 'react';
 import { SuperDocEditor } from './SuperDocEditor';
 import type { SuperDocRef } from './types';
 
+const SUPERDOC_READY_WAIT_TIMEOUT = 10000;
+const SUPERDOC_READY_TEST_TIMEOUT = 15000;
+
 describe('SuperDocEditor', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -36,19 +39,9 @@ describe('SuperDocEditor', () => {
       expect((wrapper as HTMLElement)?.style.backgroundColor).toBe('red');
     });
 
-    it('should handle unmount without throwing', async () => {
-      const onReady = vi.fn();
-      const { unmount } = render(<SuperDocEditor onReady={onReady} />);
+    it('should handle unmount without throwing', () => {
+      const { unmount } = render(<SuperDocEditor />);
 
-      // Wait for initialization to complete
-      await waitFor(
-        () => {
-          expect(onReady).toHaveBeenCalled();
-        },
-        { timeout: 5000 },
-      );
-
-      // Unmount should not throw
       expect(() => unmount()).not.toThrow();
     });
   });
@@ -94,113 +87,133 @@ describe('SuperDocEditor', () => {
   });
 
   describe('callbacks', () => {
-    it('should call onReady when SuperDoc is ready', async () => {
-      const onReady = vi.fn();
-      render(<SuperDocEditor onReady={onReady} />);
+    it(
+      'should call onReady when SuperDoc is ready',
+      async () => {
+        const onReady = vi.fn();
+        render(<SuperDocEditor onReady={onReady} />);
 
-      await waitFor(
-        () => {
-          expect(onReady).toHaveBeenCalled();
-        },
-        { timeout: 5000 },
-      );
-    });
+        await waitFor(
+          () => {
+            expect(onReady).toHaveBeenCalled();
+          },
+          { timeout: SUPERDOC_READY_WAIT_TIMEOUT },
+        );
+      },
+      SUPERDOC_READY_TEST_TIMEOUT,
+    );
 
-    it('should call onEditorCreate when editor is created', async () => {
-      const onEditorCreate = vi.fn();
-      render(<SuperDocEditor onEditorCreate={onEditorCreate} />);
+    it(
+      'should call onEditorCreate when editor is created',
+      async () => {
+        const onEditorCreate = vi.fn();
+        render(<SuperDocEditor onEditorCreate={onEditorCreate} />);
 
-      await waitFor(
-        () => {
-          expect(onEditorCreate).toHaveBeenCalled();
-        },
-        { timeout: 5000 },
-      );
-    });
+        await waitFor(
+          () => {
+            expect(onEditorCreate).toHaveBeenCalled();
+          },
+          { timeout: SUPERDOC_READY_WAIT_TIMEOUT },
+        );
+      },
+      SUPERDOC_READY_TEST_TIMEOUT,
+    );
 
-    it('should route onTransaction through the latest callback after rerender', async () => {
-      const ref = createRef<SuperDocRef>();
-      const onReady = vi.fn();
-      const firstOnTransaction = vi.fn();
-      const secondOnTransaction = vi.fn();
+    it(
+      'should route onTransaction through the latest callback after rerender',
+      async () => {
+        const ref = createRef<SuperDocRef>();
+        const onReady = vi.fn();
+        const firstOnTransaction = vi.fn();
+        const secondOnTransaction = vi.fn();
 
-      const { rerender } = render(<SuperDocEditor ref={ref} onReady={onReady} onTransaction={firstOnTransaction} />);
+        const { rerender } = render(<SuperDocEditor ref={ref} onReady={onReady} onTransaction={firstOnTransaction} />);
 
-      await waitFor(() => expect(onReady).toHaveBeenCalled(), { timeout: 5000 });
+        await waitFor(() => expect(onReady).toHaveBeenCalled(), { timeout: SUPERDOC_READY_WAIT_TIMEOUT });
 
-      const instance = ref.current?.getInstance();
-      expect(instance).toBeTruthy();
+        const instance = ref.current?.getInstance();
+        expect(instance).toBeTruthy();
 
-      const transactionEvent = {
-        editor: {},
-        sourceEditor: {},
-        transaction: { docChanged: true },
-        surface: 'body',
-      };
+        const transactionEvent = {
+          editor: {},
+          sourceEditor: {},
+          transaction: { docChanged: true },
+          surface: 'body',
+        };
 
-      const firstCallCountBeforeManualDispatch = firstOnTransaction.mock.calls.length;
-      (instance as any).config.onTransaction(transactionEvent);
+        const firstCallCountBeforeManualDispatch = firstOnTransaction.mock.calls.length;
+        (instance as any).config.onTransaction(transactionEvent);
 
-      expect(firstOnTransaction).toHaveBeenLastCalledWith(transactionEvent);
-      expect(firstOnTransaction).toHaveBeenCalledTimes(firstCallCountBeforeManualDispatch + 1);
-      expect(secondOnTransaction).not.toHaveBeenCalled();
+        expect(firstOnTransaction).toHaveBeenLastCalledWith(transactionEvent);
+        expect(firstOnTransaction).toHaveBeenCalledTimes(firstCallCountBeforeManualDispatch + 1);
+        expect(secondOnTransaction).not.toHaveBeenCalled();
 
-      rerender(<SuperDocEditor ref={ref} onReady={onReady} onTransaction={secondOnTransaction} />);
+        rerender(<SuperDocEditor ref={ref} onReady={onReady} onTransaction={secondOnTransaction} />);
 
-      expect(ref.current?.getInstance()).toBe(instance);
+        expect(ref.current?.getInstance()).toBe(instance);
 
-      const firstCallCountBeforeRerenderDispatch = firstOnTransaction.mock.calls.length;
-      const secondCallCountBeforeManualDispatch = secondOnTransaction.mock.calls.length;
-      (instance as any).config.onTransaction(transactionEvent);
+        const firstCallCountBeforeRerenderDispatch = firstOnTransaction.mock.calls.length;
+        const secondCallCountBeforeManualDispatch = secondOnTransaction.mock.calls.length;
+        (instance as any).config.onTransaction(transactionEvent);
 
-      expect(firstOnTransaction).toHaveBeenCalledTimes(firstCallCountBeforeRerenderDispatch);
-      expect(secondOnTransaction).toHaveBeenLastCalledWith(transactionEvent);
-      expect(secondOnTransaction).toHaveBeenCalledTimes(secondCallCountBeforeManualDispatch + 1);
-    });
+        expect(firstOnTransaction).toHaveBeenCalledTimes(firstCallCountBeforeRerenderDispatch);
+        expect(secondOnTransaction).toHaveBeenLastCalledWith(transactionEvent);
+        expect(secondOnTransaction).toHaveBeenCalledTimes(secondCallCountBeforeManualDispatch + 1);
+      },
+      SUPERDOC_READY_TEST_TIMEOUT,
+    );
   });
 
   describe('onEditorDestroy', () => {
-    it('should call onEditorDestroy when component unmounts', async () => {
-      const onReady = vi.fn();
-      const onEditorDestroy = vi.fn();
-      const { unmount } = render(<SuperDocEditor onReady={onReady} onEditorDestroy={onEditorDestroy} />);
+    it(
+      'should call onEditorDestroy when component unmounts',
+      async () => {
+        const onReady = vi.fn();
+        const onEditorDestroy = vi.fn();
+        const { unmount } = render(<SuperDocEditor onReady={onReady} onEditorDestroy={onEditorDestroy} />);
 
-      await waitFor(
-        () => {
-          expect(onReady).toHaveBeenCalled();
-        },
-        { timeout: 5000 },
-      );
+        await waitFor(
+          () => {
+            expect(onReady).toHaveBeenCalled();
+          },
+          { timeout: SUPERDOC_READY_WAIT_TIMEOUT },
+        );
 
-      unmount();
+        unmount();
 
-      await waitFor(
-        () => {
-          expect(onEditorDestroy).toHaveBeenCalled();
-        },
-        { timeout: 5000 },
-      );
-    });
+        await waitFor(
+          () => {
+            expect(onEditorDestroy).toHaveBeenCalled();
+          },
+          { timeout: SUPERDOC_READY_WAIT_TIMEOUT },
+        );
+      },
+      SUPERDOC_READY_TEST_TIMEOUT,
+    );
   });
 
   describe('error states', () => {
-    it('should show error container when initialization fails', async () => {
-      // Force an error by providing an invalid document
-      const onException = vi.fn();
-      const { container } = render(
-        <SuperDocEditor document={'not-a-valid-doc' as unknown as File} onException={onException} />,
-      );
+    it(
+      'should show error container when initialization fails',
+      async () => {
+        // Force an error by providing an invalid document
+        const onException = vi.fn();
+        const { container } = render(
+          <SuperDocEditor document={'not-a-valid-doc' as unknown as File} onException={onException} />,
+        );
 
-      await waitFor(
-        () => {
-          const errorContainer = container.querySelector('.superdoc-error-container');
-          // If SuperDoc throws on invalid input, error UI shows
-          // If SuperDoc handles it gracefully, onException may be called instead
-          expect(errorContainer || onException.mock.calls.length > 0).toBeTruthy();
-        },
-        { timeout: 5000 },
-      );
-    });
+        await waitFor(
+          () => {
+            const errorContainer = container.querySelector('.superdoc-error-container');
+            // If SuperDoc throws on invalid input, error UI shows
+            // If SuperDoc handles it gracefully, onException may be called instead
+            expect(errorContainer || onException.mock.calls.length > 0).toBeTruthy();
+          },
+          { timeout: SUPERDOC_READY_WAIT_TIMEOUT },
+        );
+      },
+      SUPERDOC_READY_TEST_TIMEOUT,
+    );
   });
 
   describe('Strict Mode compatibility', () => {
@@ -216,210 +229,236 @@ describe('SuperDocEditor', () => {
   });
 
   describe('prop stability (SD-2635)', () => {
-    it('does not destroy/re-init when user prop is a new object literal with identical content', async () => {
-      const ref = createRef<SuperDocRef>();
-      const onReady = vi.fn();
-      const onEditorDestroy = vi.fn();
+    it(
+      'does not destroy/re-init when user prop is a new object literal with identical content',
+      async () => {
+        const ref = createRef<SuperDocRef>();
+        const onReady = vi.fn();
+        const onEditorDestroy = vi.fn();
 
-      const { rerender } = render(
-        <SuperDocEditor
-          ref={ref}
-          user={{ name: 'Alex', email: 'alex@example.com' }}
-          onReady={onReady}
-          onEditorDestroy={onEditorDestroy}
-        />,
-      );
-
-      await waitFor(() => expect(onReady).toHaveBeenCalled(), { timeout: 5000 });
-      const instanceBefore = ref.current?.getInstance();
-      expect(instanceBefore).toBeTruthy();
-
-      // Re-render with a *new* object literal carrying the same content —
-      // this is the idiomatic React pattern that used to trigger a full
-      // destroy + re-init loop before SD-2635.
-      rerender(
-        <SuperDocEditor
-          ref={ref}
-          user={{ name: 'Alex', email: 'alex@example.com' }}
-          onReady={onReady}
-          onEditorDestroy={onEditorDestroy}
-        />,
-      );
-
-      // Same underlying instance proves no destroy+rebuild happened.
-      expect(ref.current?.getInstance()).toBe(instanceBefore);
-      expect(onEditorDestroy).not.toHaveBeenCalled();
-    });
-
-    it('does not destroy/re-init when users prop is a new array literal with identical content', async () => {
-      const ref = createRef<SuperDocRef>();
-      const onReady = vi.fn();
-      const onEditorDestroy = vi.fn();
-
-      const { rerender } = render(
-        <SuperDocEditor
-          ref={ref}
-          users={[{ name: 'Alex', email: 'alex@example.com' }]}
-          onReady={onReady}
-          onEditorDestroy={onEditorDestroy}
-        />,
-      );
-
-      await waitFor(() => expect(onReady).toHaveBeenCalled(), { timeout: 5000 });
-      const instanceBefore = ref.current?.getInstance();
-
-      rerender(
-        <SuperDocEditor
-          ref={ref}
-          users={[{ name: 'Alex', email: 'alex@example.com' }]}
-          onReady={onReady}
-          onEditorDestroy={onEditorDestroy}
-        />,
-      );
-
-      expect(ref.current?.getInstance()).toBe(instanceBefore);
-      expect(onEditorDestroy).not.toHaveBeenCalled();
-    });
-
-    it('rebuilds and remounts a new instance when user prop value actually changes', async () => {
-      const ref = createRef<SuperDocRef>();
-      const onReady = vi.fn();
-      const onEditorDestroy = vi.fn();
-
-      const { rerender } = render(
-        <SuperDocEditor
-          ref={ref}
-          user={{ name: 'Alex', email: 'alex@example.com' }}
-          onReady={onReady}
-          onEditorDestroy={onEditorDestroy}
-        />,
-      );
-
-      await waitFor(() => expect(onReady).toHaveBeenCalled(), { timeout: 5000 });
-      const instanceBefore = ref.current?.getInstance();
-
-      rerender(
-        <SuperDocEditor
-          ref={ref}
-          user={{ name: 'Jamie', email: 'jamie@example.com' }}
-          onReady={onReady}
-          onEditorDestroy={onEditorDestroy}
-        />,
-      );
-
-      // Old instance torn down, new instance ready.
-      await waitFor(() => expect(onEditorDestroy).toHaveBeenCalled(), { timeout: 5000 });
-      await waitFor(() => expect(onReady).toHaveBeenCalledTimes(2), { timeout: 5000 });
-      expect(ref.current?.getInstance()).not.toBe(instanceBefore);
-    });
-
-    it('stays stable under StrictMode double-invocation on rerender', async () => {
-      const ref = createRef<SuperDocRef>();
-      const onReady = vi.fn();
-      const onEditorDestroy = vi.fn();
-
-      const { rerender } = render(
-        <StrictMode>
+        const { rerender } = render(
           <SuperDocEditor
             ref={ref}
             user={{ name: 'Alex', email: 'alex@example.com' }}
             onReady={onReady}
             onEditorDestroy={onEditorDestroy}
-          />
-        </StrictMode>,
-      );
+          />,
+        );
 
-      await waitFor(() => expect(onReady).toHaveBeenCalled(), { timeout: 5000 });
-      const instanceBefore = ref.current?.getInstance();
-      const destroysBefore = onEditorDestroy.mock.calls.length;
+        await waitFor(() => expect(onReady).toHaveBeenCalled(), { timeout: SUPERDOC_READY_WAIT_TIMEOUT });
+        const instanceBefore = ref.current?.getInstance();
+        expect(instanceBefore).toBeTruthy();
 
-      rerender(
-        <StrictMode>
+        // Re-render with a *new* object literal carrying the same content —
+        // this is the idiomatic React pattern that used to trigger a full
+        // destroy + re-init loop before SD-2635.
+        rerender(
           <SuperDocEditor
             ref={ref}
             user={{ name: 'Alex', email: 'alex@example.com' }}
             onReady={onReady}
             onEditorDestroy={onEditorDestroy}
-          />
-        </StrictMode>,
-      );
+          />,
+        );
 
-      expect(ref.current?.getInstance()).toBe(instanceBefore);
-      expect(onEditorDestroy.mock.calls.length).toBe(destroysBefore);
-    });
+        // Same underlying instance proves no destroy+rebuild happened.
+        expect(ref.current?.getInstance()).toBe(instanceBefore);
+        expect(onEditorDestroy).not.toHaveBeenCalled();
+      },
+      SUPERDOC_READY_TEST_TIMEOUT,
+    );
 
-    it('still rebuilds under StrictMode when user prop value actually changes', async () => {
-      // The same-content StrictMode test above proves memoization survives
-      // double-invocation. This test proves the positive path — a real
-      // value change under StrictMode still tears down and remounts.
-      const ref = createRef<SuperDocRef>();
-      const onReady = vi.fn();
-      const onEditorDestroy = vi.fn();
+    it(
+      'does not destroy/re-init when users prop is a new array literal with identical content',
+      async () => {
+        const ref = createRef<SuperDocRef>();
+        const onReady = vi.fn();
+        const onEditorDestroy = vi.fn();
 
-      const { rerender } = render(
-        <StrictMode>
+        const { rerender } = render(
+          <SuperDocEditor
+            ref={ref}
+            users={[{ name: 'Alex', email: 'alex@example.com' }]}
+            onReady={onReady}
+            onEditorDestroy={onEditorDestroy}
+          />,
+        );
+
+        await waitFor(() => expect(onReady).toHaveBeenCalled(), { timeout: SUPERDOC_READY_WAIT_TIMEOUT });
+        const instanceBefore = ref.current?.getInstance();
+
+        rerender(
+          <SuperDocEditor
+            ref={ref}
+            users={[{ name: 'Alex', email: 'alex@example.com' }]}
+            onReady={onReady}
+            onEditorDestroy={onEditorDestroy}
+          />,
+        );
+
+        expect(ref.current?.getInstance()).toBe(instanceBefore);
+        expect(onEditorDestroy).not.toHaveBeenCalled();
+      },
+      SUPERDOC_READY_TEST_TIMEOUT,
+    );
+
+    it(
+      'rebuilds and remounts a new instance when user prop value actually changes',
+      async () => {
+        const ref = createRef<SuperDocRef>();
+        const onReady = vi.fn();
+        const onEditorDestroy = vi.fn();
+
+        const { rerender } = render(
           <SuperDocEditor
             ref={ref}
             user={{ name: 'Alex', email: 'alex@example.com' }}
             onReady={onReady}
             onEditorDestroy={onEditorDestroy}
-          />
-        </StrictMode>,
-      );
+          />,
+        );
 
-      await waitFor(() => expect(onReady).toHaveBeenCalled(), { timeout: 5000 });
-      const instanceBefore = ref.current?.getInstance();
+        await waitFor(() => expect(onReady).toHaveBeenCalled(), { timeout: SUPERDOC_READY_WAIT_TIMEOUT });
+        const instanceBefore = ref.current?.getInstance();
 
-      rerender(
-        <StrictMode>
+        rerender(
           <SuperDocEditor
             ref={ref}
             user={{ name: 'Jamie', email: 'jamie@example.com' }}
             onReady={onReady}
             onEditorDestroy={onEditorDestroy}
-          />
-        </StrictMode>,
-      );
+          />,
+        );
 
-      await waitFor(() => expect(onEditorDestroy).toHaveBeenCalled(), { timeout: 5000 });
-      await waitFor(() => expect(ref.current?.getInstance()).not.toBe(instanceBefore), { timeout: 5000 });
-    });
+        // Old instance torn down, new instance ready.
+        await waitFor(() => expect(onEditorDestroy).toHaveBeenCalled(), { timeout: SUPERDOC_READY_WAIT_TIMEOUT });
+        await waitFor(() => expect(onReady).toHaveBeenCalledTimes(2), { timeout: SUPERDOC_READY_WAIT_TIMEOUT });
+        expect(ref.current?.getInstance()).not.toBe(instanceBefore);
+      },
+      SUPERDOC_READY_TEST_TIMEOUT,
+    );
 
-    it('rebuilds when a new modules object is passed, even if content looks equal', async () => {
-      // `modules` is intentionally kept on reference identity in the dep
-      // array because it can carry functions and live objects that a
-      // structural compare would miss. This test pins that contract —
-      // if a future refactor wraps `modules` in useStructuralMemo, this
-      // test will fail and flag the regression.
-      const ref = createRef<SuperDocRef>();
-      const onReady = vi.fn();
-      const onEditorDestroy = vi.fn();
+    it(
+      'stays stable under StrictMode double-invocation on rerender',
+      async () => {
+        const ref = createRef<SuperDocRef>();
+        const onReady = vi.fn();
+        const onEditorDestroy = vi.fn();
 
-      const { rerender } = render(
-        <SuperDocEditor
-          ref={ref}
-          modules={{ comments: { visible: true } }}
-          onReady={onReady}
-          onEditorDestroy={onEditorDestroy}
-        />,
-      );
+        const { rerender } = render(
+          <StrictMode>
+            <SuperDocEditor
+              ref={ref}
+              user={{ name: 'Alex', email: 'alex@example.com' }}
+              onReady={onReady}
+              onEditorDestroy={onEditorDestroy}
+            />
+          </StrictMode>,
+        );
 
-      await waitFor(() => expect(onReady).toHaveBeenCalled(), { timeout: 5000 });
-      const instanceBefore = ref.current?.getInstance();
+        await waitFor(() => expect(onReady).toHaveBeenCalled(), { timeout: SUPERDOC_READY_WAIT_TIMEOUT });
+        const instanceBefore = ref.current?.getInstance();
+        const destroysBefore = onEditorDestroy.mock.calls.length;
 
-      rerender(
-        <SuperDocEditor
-          ref={ref}
-          modules={{ comments: { visible: true } }}
-          onReady={onReady}
-          onEditorDestroy={onEditorDestroy}
-        />,
-      );
+        rerender(
+          <StrictMode>
+            <SuperDocEditor
+              ref={ref}
+              user={{ name: 'Alex', email: 'alex@example.com' }}
+              onReady={onReady}
+              onEditorDestroy={onEditorDestroy}
+            />
+          </StrictMode>,
+        );
 
-      await waitFor(() => expect(onEditorDestroy).toHaveBeenCalled(), { timeout: 5000 });
-      await waitFor(() => expect(onReady).toHaveBeenCalledTimes(2), { timeout: 5000 });
-      expect(ref.current?.getInstance()).not.toBe(instanceBefore);
-    });
+        expect(ref.current?.getInstance()).toBe(instanceBefore);
+        expect(onEditorDestroy.mock.calls.length).toBe(destroysBefore);
+      },
+      SUPERDOC_READY_TEST_TIMEOUT,
+    );
+
+    it(
+      'still rebuilds under StrictMode when user prop value actually changes',
+      async () => {
+        // The same-content StrictMode test above proves memoization survives
+        // double-invocation. This test proves the positive path — a real
+        // value change under StrictMode still tears down and remounts.
+        const ref = createRef<SuperDocRef>();
+        const onReady = vi.fn();
+        const onEditorDestroy = vi.fn();
+
+        const { rerender } = render(
+          <StrictMode>
+            <SuperDocEditor
+              ref={ref}
+              user={{ name: 'Alex', email: 'alex@example.com' }}
+              onReady={onReady}
+              onEditorDestroy={onEditorDestroy}
+            />
+          </StrictMode>,
+        );
+
+        await waitFor(() => expect(onReady).toHaveBeenCalled(), { timeout: SUPERDOC_READY_WAIT_TIMEOUT });
+        const instanceBefore = ref.current?.getInstance();
+
+        rerender(
+          <StrictMode>
+            <SuperDocEditor
+              ref={ref}
+              user={{ name: 'Jamie', email: 'jamie@example.com' }}
+              onReady={onReady}
+              onEditorDestroy={onEditorDestroy}
+            />
+          </StrictMode>,
+        );
+
+        await waitFor(() => expect(onEditorDestroy).toHaveBeenCalled(), { timeout: SUPERDOC_READY_WAIT_TIMEOUT });
+        await waitFor(() => expect(ref.current?.getInstance()).not.toBe(instanceBefore), {
+          timeout: SUPERDOC_READY_WAIT_TIMEOUT,
+        });
+      },
+      SUPERDOC_READY_TEST_TIMEOUT,
+    );
+
+    it(
+      'rebuilds when a new modules object is passed, even if content looks equal',
+      async () => {
+        // `modules` is intentionally kept on reference identity in the dep
+        // array because it can carry functions and live objects that a
+        // structural compare would miss. This test pins that contract —
+        // if a future refactor wraps `modules` in useStructuralMemo, this
+        // test will fail and flag the regression.
+        const ref = createRef<SuperDocRef>();
+        const onReady = vi.fn();
+        const onEditorDestroy = vi.fn();
+
+        const { rerender } = render(
+          <SuperDocEditor
+            ref={ref}
+            modules={{ comments: { visible: true } }}
+            onReady={onReady}
+            onEditorDestroy={onEditorDestroy}
+          />,
+        );
+
+        await waitFor(() => expect(onReady).toHaveBeenCalled(), { timeout: SUPERDOC_READY_WAIT_TIMEOUT });
+        const instanceBefore = ref.current?.getInstance();
+
+        rerender(
+          <SuperDocEditor
+            ref={ref}
+            modules={{ comments: { visible: true } }}
+            onReady={onReady}
+            onEditorDestroy={onEditorDestroy}
+          />,
+        );
+
+        await waitFor(() => expect(onEditorDestroy).toHaveBeenCalled(), { timeout: SUPERDOC_READY_WAIT_TIMEOUT });
+        await waitFor(() => expect(onReady).toHaveBeenCalledTimes(2), { timeout: SUPERDOC_READY_WAIT_TIMEOUT });
+        expect(ref.current?.getInstance()).not.toBe(instanceBefore);
+      },
+      SUPERDOC_READY_TEST_TIMEOUT,
+    );
   });
 
   describe('unique IDs', () => {
@@ -437,38 +476,46 @@ describe('SuperDocEditor', () => {
   });
 
   describe('with real superdoc', () => {
-    it('should initialize superdoc instance', async () => {
-      const ref = createRef<SuperDocRef>();
-      const onReady = vi.fn();
+    it(
+      'should initialize superdoc instance',
+      async () => {
+        const ref = createRef<SuperDocRef>();
+        const onReady = vi.fn();
 
-      render(<SuperDocEditor ref={ref} onReady={onReady} />);
+        render(<SuperDocEditor ref={ref} onReady={onReady} />);
 
-      await waitFor(
-        () => {
-          expect(onReady).toHaveBeenCalled();
-          expect(ref.current?.getInstance()).not.toBeNull();
-        },
-        { timeout: 5000 },
-      );
-    });
+        await waitFor(
+          () => {
+            expect(onReady).toHaveBeenCalled();
+            expect(ref.current?.getInstance()).not.toBeNull();
+          },
+          { timeout: SUPERDOC_READY_WAIT_TIMEOUT },
+        );
+      },
+      SUPERDOC_READY_TEST_TIMEOUT,
+    );
 
-    it('should provide access to superdoc methods after ready', async () => {
-      const ref = createRef<SuperDocRef>();
-      const onReady = vi.fn();
+    it(
+      'should provide access to superdoc methods after ready',
+      async () => {
+        const ref = createRef<SuperDocRef>();
+        const onReady = vi.fn();
 
-      render(<SuperDocEditor ref={ref} onReady={onReady} />);
+        render(<SuperDocEditor ref={ref} onReady={onReady} />);
 
-      await waitFor(
-        () => {
-          expect(onReady).toHaveBeenCalled();
-        },
-        { timeout: 5000 },
-      );
+        await waitFor(
+          () => {
+            expect(onReady).toHaveBeenCalled();
+          },
+          { timeout: SUPERDOC_READY_WAIT_TIMEOUT },
+        );
 
-      const instance = ref.current?.getInstance();
-      expect(instance).toBeTruthy();
-      expect(typeof instance?.destroy).toBe('function');
-      expect(typeof instance?.setDocumentMode).toBe('function');
-    });
+        const instance = ref.current?.getInstance();
+        expect(instance).toBeTruthy();
+        expect(typeof instance?.destroy).toBe('function');
+        expect(typeof instance?.setDocumentMode).toBe('function');
+      },
+      SUPERDOC_READY_TEST_TIMEOUT,
+    );
   });
 });

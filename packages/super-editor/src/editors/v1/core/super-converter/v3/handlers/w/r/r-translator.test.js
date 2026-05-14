@@ -535,6 +535,41 @@ describe('w:r r-translator decode (export only inline run properties)', () => {
     expect(names).toContain('w:iCs');
   });
 
+  it('exports complex-script companions when newly formatted complex-script text has base bold/italic', () => {
+    const params = runWithContent({
+      runProperties: { bold: true, italic: true },
+      runPropertiesInlineKeys: ['bold', 'italic'],
+      runPropertiesStyleKeys: [],
+    });
+    params.node.content[0].text = 'مرحبا';
+
+    const result = translator.decode(params);
+    const rPr = result?.elements?.find((el) => el?.name === 'w:rPr');
+    expect(rPr).toBeDefined();
+    const names = (rPr.elements ?? []).map((e) => e.name);
+    expect(names).toContain('w:b');
+    expect(names).toContain('w:bCs');
+    expect(names).toContain('w:i');
+    expect(names).toContain('w:iCs');
+  });
+
+  it('does not synthesize complex-script companions for latin-only text', () => {
+    const params = runWithContent({
+      runProperties: { bold: true, italic: true },
+      runPropertiesInlineKeys: ['bold', 'italic'],
+      runPropertiesStyleKeys: [],
+    });
+
+    const result = translator.decode(params);
+    const rPr = result?.elements?.find((el) => el?.name === 'w:rPr');
+    expect(rPr).toBeDefined();
+    const names = (rPr.elements ?? []).map((e) => e.name);
+    expect(names).toContain('w:b');
+    expect(names).toContain('w:i');
+    expect(names).not.toContain('w:bCs');
+    expect(names).not.toContain('w:iCs');
+  });
+
   it('exports w:iCs from legacy runProperties.iCs payloads', () => {
     const params = runWithContent({
       runProperties: { italic: true, iCs: true },

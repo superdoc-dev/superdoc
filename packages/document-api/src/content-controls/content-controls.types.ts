@@ -13,9 +13,16 @@ import type { ReceiptFailure } from '../types/receipt.js';
 // Enums and constants
 // ---------------------------------------------------------------------------
 
-/** Semantic SDT subtype derived from `w:sdtPr` children. */
+/**
+ * Semantic SDT subtype derived from `w:sdtPr` children.
+ *
+ * `richText` covers both explicit `<w:richText/>` and the OOXML default for
+ * sdtPr with no type child (ECMA-376 §17.5.2.26: typeless SDT shall be of
+ * type richText). `unknown` means an unsupported or unrecognized type child.
+ */
 export type ContentControlType =
   | 'text'
+  | 'richText'
   | 'date'
   | 'checkbox'
   | 'comboBox'
@@ -27,6 +34,7 @@ export type ContentControlType =
 
 export const CONTENT_CONTROL_TYPES = [
   'text',
+  'richText',
   'date',
   'checkbox',
   'comboBox',
@@ -116,10 +124,39 @@ export interface RepeatingSectionControlProperties {
 export interface ContentControlProperties {
   tag?: string;
   alias?: string;
+  /**
+   * Visual chrome behavior (`<w15:appearance w15:val="…">`).
+   *
+   * Returned verbatim from the imported XML. When the source omits
+   * the element, this field is `undefined` — NOT silently set to
+   * `boundingBox`. Word's effective default when the element is
+   * absent is `boundingBox`, but consumers building UI on top of
+   * appearance (e.g. deciding whether to draw chrome) must apply
+   * that default themselves; the API does not fabricate it.
+   *
+   * Contract:
+   *   - `'boundingBox'` → explicit; show chrome
+   *   - `'tags'`        → explicit; show tag markers
+   *   - `'hidden'`      → explicit; render transparently
+   *   - `undefined`     → source XML omitted the element; treat as
+   *                       Word's effective default (`'boundingBox'`).
+   */
   appearance?: ContentControlAppearance;
   color?: string;
   placeholder?: string;
   showingPlaceholder?: boolean;
+  /**
+   * `<w:temporary/>` toggle (ECMA-376 §17.5.2.43).
+   *
+   * When enabled, Word treats the content control as temporary and may
+   * remove the SDT wrapper after the user edits/fills the control.
+   *
+   * Returned verbatim from the imported XML:
+   *   - `true`      → element present (`<w:temporary/>` or `w:val="true"`/`"1"`)
+   *   - `false`     → element present with `w:val="false"`/`"0"`
+   *   - `undefined` → element absent in source; treat as Word's
+   *                   effective default (`false`).
+   */
   temporary?: boolean;
   tabIndex?: number;
 

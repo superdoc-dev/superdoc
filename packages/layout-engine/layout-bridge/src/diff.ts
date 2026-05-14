@@ -20,6 +20,7 @@ import type {
   DropCapDescriptor,
   ParagraphFrame,
 } from '@superdoc/contracts';
+import { getParagraphInlineDirection } from '@superdoc/contracts';
 import { fieldAnnotationKey } from './field-annotation-key.js';
 import { hashRunVisualMarks } from './run-visual-marks.js';
 import { hasTrackedChange, resolveTrackedChangesEnabled } from './tracked-changes-utils.js';
@@ -369,7 +370,7 @@ const paragraphAttrsEqual = (a?: ParagraphAttrs, b?: ParagraphAttrs): boolean =>
     a.tabIntervalTwips !== b.tabIntervalTwips ||
     a.keepNext !== b.keepNext ||
     a.keepLines !== b.keepLines ||
-    a.direction !== b.direction ||
+    getParagraphInlineDirection(a) !== getParagraphInlineDirection(b) ||
     a.floatAlignment !== b.floatAlignment
   ) {
     return false;

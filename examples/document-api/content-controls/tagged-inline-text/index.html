@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SuperDoc: tagged inline text</title>
+  </head>
+  <body>
+    <div class="app">
+      <section class="editor-area">
+        <div id="editor"></div>
+      </section>
+      <aside class="sidebar">
+        <section class="panel">
+          <h2>Tagged inline text</h2>
+          <p class="hint">One inline content control wraps the word <code>Acme</code> in the paragraph. The tag is <code>customer</code>. Edit the value and apply.</p>
+          <label>
+            <span>Customer</span>
+            <input id="value" />
+          </label>
+          <button class="btn primary" id="apply" type="button">Apply</button>
+        </section>
+        <p class="status" id="status">Loading</p>
+      </aside>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

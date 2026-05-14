@@ -154,3 +154,14 @@ describe('ButtonGroup button argument forwarding', () => {
     expect(wrapper.emitted('command')).toBeUndefined();
   });
 });
+
+describe('ButtonGroup dropdown keyboard activation', () => {
+  it.each(['Enter', ' ', 'Spacebar'])('opens a dropdown item with %s', async (key) => {
+    const item = createDropdownItem('plain-match');
+    const wrapper = mountWithItem(item);
+
+    await wrapper.find('.toolbar-item-ctn').trigger('keydown', { key });
+
+    expect(item.expand.value).toBe(true);
+  });
+});

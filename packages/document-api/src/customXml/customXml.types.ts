@@ -70,9 +70,20 @@ export interface CustomXmlPartsCreateInput {
   content: string;
   /**
    * Optional list of XML schema target namespaces to declare in the
-   * Properties Part (`<ds:schemaRef ds:uri>`). When omitted or empty, the
-   * Properties Part is still emitted with a fresh itemID and an empty
-   * `<ds:schemaRefs/>` so `id` is always discoverable on readback.
+   * Properties Part (`<ds:schemaRef ds:uri>`).
+   *
+   * Per ECMA-376 §22.5.2.3, three states are distinct:
+   *   - omitted (`undefined`)  → no `<ds:schemaRefs>` element emitted;
+   *                              consumers may infer the schema from the
+   *                              content's namespace.
+   *   - empty array (`[]`)     → `<ds:schemaRefs/>` is emitted explicitly,
+   *                              meaning "no schemas should be used to
+   *                              validate this part."
+   *   - populated array        → `<ds:schemaRefs>` with one `<ds:schemaRef>`
+   *                              per URI.
+   *
+   * The Properties Part itself is always emitted (with a fresh itemID),
+   * so `id` is discoverable on readback regardless of `schemaRefs`.
    */
   schemaRefs?: string[];
 }
@@ -83,7 +94,9 @@ export interface CustomXmlPartsPatchInput {
   content?: string;
   /**
    * Replace the Properties Part's `<ds:schemaRefs>` set with this list.
-   * Pass `[]` to clear all schemaRefs.
+   * Pass `[]` to write an explicit empty `<ds:schemaRefs/>` (ECMA-376
+   * §22.5.2.3 "no schemas should be used"). Omit the field entirely to
+   * leave the existing schemaRefs untouched.
    */
   schemaRefs?: string[];
 }

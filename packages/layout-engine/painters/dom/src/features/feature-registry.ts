@@ -33,8 +33,9 @@ export const RENDERING_FEATURES = {
   },
 
   // ─── Inline Direction ──────────────────────────────────────────
-  // Paragraph + run inline-direction axis. NOT table visual direction
-  // (w:bidiVisual, §17.4.1), NOT writing mode (w:textDirection, §17.18.93).
+  // Paragraph/run inline bidi handling. NOT table visual direction
+  // (w:bidiVisual, §17.4.1), NOT writing mode (w:textDirection,
+  // §17.3.1.41 paragraph / §17.4.72 cell; values in §17.18.93).
   // @spec ECMA-376 §17.3.1.1 (bidi), §17.3.2.30 (rtl)
   'w:bidi': {
     feature: 'inline-direction',

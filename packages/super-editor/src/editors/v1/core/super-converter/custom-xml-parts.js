@@ -77,11 +77,12 @@ export function isCustomXmlStoragePartName(partName) {
  *
  * AIDEV-NOTE: v1 scope is Word-style filenames (`customXml/itemN.xml`).
  * ECMA-376 §15.2.5 allows arbitrary filenames identified by relationship
- * + content type, but every real producer (Word, Google Docs, LibreOffice,
- * pandoc) uses the Word convention. Supporting truly foreign-named
- * storage parts is intentionally deferred — it requires broadening the
- * partName safety filter (currently `isCustomXmlStoragePartName`) and
- * the rels-path computation in `findPropsPartFor` to be path-agnostic.
+ * + content type. The Word-compatible producers we target use this
+ * convention; truly foreign-named Storage Parts are out of scope for v1.
+ * Lifting this requires broadening the partName safety filter
+ * (currently `isCustomXmlStoragePartName`) and the rels-path computation
+ * in `findPropsPartFor` to be path-agnostic.
+ *
  * Foreign-named *Properties Parts* paired via rels ARE supported (see
  * `findPropsPartFor`); only the Storage Part filename is constrained.
  *

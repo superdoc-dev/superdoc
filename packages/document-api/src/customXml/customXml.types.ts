@@ -25,6 +25,12 @@ export type CustomXmlPartId = string;
  * variant exists for Storage Parts that have no Properties Part — those
  * have no itemID and can only be addressed by their file path inside
  * the OOXML package.
+ *
+ * Scope: `partName` accepts Word-style Storage Part paths only —
+ * `customXml/itemN.xml` for integer `N`. Foreign-named Storage Parts
+ * (which ECMA-376 §15.2.5 permits) are not in v1; see the implementation
+ * note on the converter's `listCustomXmlStoragePartNames`. Foreign-named
+ * *Properties Parts* paired via rels are fully supported on the read side.
  */
 export type CustomXmlPartTarget = { id: CustomXmlPartId } | { partName: string };
 
@@ -98,7 +104,10 @@ export interface CustomXmlPartsRemoveInput {
 export interface CustomXmlPartSummary {
   /** itemID GUID; absent when no Properties Part exists. */
   id?: CustomXmlPartId;
-  /** Package-relative path of the Storage Part, e.g. `"customXml/item1.xml"`. */
+  /**
+   * Package-relative path of the Storage Part, e.g. `"customXml/item1.xml"`.
+   * v1 scope: Word-style `customXml/itemN.xml` only.
+   */
   partName: string;
   /** Package-relative path of the Properties Part, when present. */
   propsPartName?: string;

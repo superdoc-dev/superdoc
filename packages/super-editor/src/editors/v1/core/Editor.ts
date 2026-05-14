@@ -3331,6 +3331,24 @@ export class Editor extends EventEmitter<EditorEventMap> {
         }
       }
 
+      // Emit ZIP tombstones for custom XML parts that were removed via the
+      // Document API but originated in the imported DOCX. Without this,
+      // the exporter would copy the original zip entry through, and the
+      // removed part would reappear on the next import.
+      // AIDEV-NOTE: `removedCustomXmlPaths` is set by `removeCustomXmlPart`
+      // (super-converter/custom-xml-parts.js) on the converter instance.
+      // Typed via cast rather than on SuperConverter.d.ts because adding
+      // an explicit field there triggers weak-type errors against
+      // ConverterWithDocumentSettings / ConverterLike structural types in
+      // sibling files that don't reference this field.
+      const removedCustomXmlPaths = (this.converter as unknown as { removedCustomXmlPaths?: Set<string> })
+        .removedCustomXmlPaths;
+      if (removedCustomXmlPaths instanceof Set) {
+        for (const path of removedCustomXmlPaths) {
+          updatedDocs[path] = null;
+        }
+      }
+
       const zipper = new DocxZipper();
 
       if (getUpdatedDocs) {

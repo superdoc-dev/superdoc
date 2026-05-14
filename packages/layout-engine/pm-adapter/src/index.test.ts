@@ -3188,7 +3188,7 @@ describe('toFlowBlocks', () => {
       expect(blocks).toHaveLength(1);
       const paragraph = blocks[0];
       expect(paragraph.kind).toBe('paragraph');
-      expect(paragraph.attrs?.direction).toBe('rtl');
+      expect(paragraph.attrs?.directionContext?.inlineDirection).toBe('rtl');
       expect(paragraph.attrs?.indent?.left).toBe(12);
       expect(paragraph.attrs?.indent?.right).toBe(24);
     });
@@ -3214,7 +3214,7 @@ describe('toFlowBlocks', () => {
       expect(blocks).toHaveLength(1);
       const paragraph = blocks[0];
       expect(paragraph.kind).toBe('paragraph');
-      expect(paragraph.attrs?.direction).toBe('ltr');
+      expect(paragraph.attrs?.directionContext?.inlineDirection).toBe('ltr');
     });
 
     it('does NOT inherit paragraph inline direction from body sectPr w:bidi (§17.6.1)', () => {
@@ -3247,7 +3247,7 @@ describe('toFlowBlocks', () => {
       expect(paragraph.kind).toBe('paragraph');
       // Paragraph inline direction stays undefined; the browser applies UBA via
       // the missing dir attribute. Section pageDirection is preserved separately.
-      expect(paragraph.attrs?.direction).toBeUndefined();
+      expect(paragraph.attrs?.directionContext?.inlineDirection).toBeUndefined();
     });
 
     it('section bidi=0 also does not affect paragraph inline direction', () => {
@@ -3275,7 +3275,7 @@ describe('toFlowBlocks', () => {
       expect(blocks).toHaveLength(1);
       const paragraph = blocks[0];
       expect(paragraph.kind).toBe('paragraph');
-      expect(paragraph.attrs?.direction).toBeUndefined();
+      expect(paragraph.attrs?.directionContext?.inlineDirection).toBeUndefined();
     });
 
     it('handles multiple page breaks', () => {
@@ -4620,7 +4620,7 @@ describe('toFlowBlocks', () => {
       const { blocks } = toFlowBlocks(pmDoc);
 
       expect(blocks).toHaveLength(1);
-      expect(blocks[0].attrs?.direction).toBe('rtl');
+      expect(blocks[0].attrs?.directionContext?.inlineDirection).toBe('rtl');
       expect(blocks[0].attrs?.alignment).toBeUndefined();
     });
 
@@ -4649,7 +4649,7 @@ describe('toFlowBlocks', () => {
       const { blocks } = toFlowBlocks(pmDoc);
 
       expect(blocks).toHaveLength(1);
-      expect(blocks[0].attrs?.direction).toBe('rtl');
+      expect(blocks[0].attrs?.directionContext?.inlineDirection).toBe('rtl');
       expect(blocks[0].attrs).toMatchObject({
         alignment: 'center',
       });
@@ -4681,7 +4681,7 @@ describe('toFlowBlocks', () => {
       const { blocks } = toFlowBlocks(pmDoc);
 
       expect(blocks).toHaveLength(1);
-      expect(blocks[0].attrs?.direction).toBe('rtl');
+      expect(blocks[0].attrs?.directionContext?.inlineDirection).toBe('rtl');
       expect(blocks[0].attrs).toMatchObject({
         alignment: 'right',
       });
@@ -4712,7 +4712,7 @@ describe('toFlowBlocks', () => {
       const { blocks } = toFlowBlocks(pmDoc);
 
       expect(blocks).toHaveLength(1);
-      expect(blocks[0].attrs?.direction).toBe('rtl');
+      expect(blocks[0].attrs?.directionContext?.inlineDirection).toBe('rtl');
       expect(blocks[0].attrs).toMatchObject({
         alignment: 'left',
       });
@@ -4776,7 +4776,7 @@ describe('toFlowBlocks', () => {
 
       for (const jc of ['both', 'distribute', 'numTab', 'thaiDistribute']) {
         const { blocks } = toFlowBlocks(makeDoc(jc));
-        expect(blocks[0].attrs?.direction).toBe('rtl');
+        expect(blocks[0].attrs?.directionContext?.inlineDirection).toBe('rtl');
         expect(blocks[0].attrs).toMatchObject({ alignment: 'justify' });
       }
     });

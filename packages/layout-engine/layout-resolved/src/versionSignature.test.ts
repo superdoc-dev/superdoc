@@ -33,7 +33,7 @@ describe('deriveBlockVersion - bidi', () => {
   const makeParagraph = (bidi?: TextRun['bidi']): FlowBlock => ({
     kind: 'paragraph',
     id: 'p1',
-    attrs: { direction: 'rtl' },
+    attrs: { directionContext: { inlineDirection: 'rtl', writingMode: 'horizontal-tb' } },
     runs: [
       {
         text: '23.03.2026',

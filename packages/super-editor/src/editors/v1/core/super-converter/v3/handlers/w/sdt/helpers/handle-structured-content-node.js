@@ -1,4 +1,5 @@
 import { parseAnnotationMarks } from './handle-annotation-node';
+import { parseStrictStOnOff } from '../../../utils.js';
 
 /**
  * Detect the semantic control type from sdtPr child elements.
@@ -57,6 +58,24 @@ function extractPlaceholder(sdtPr) {
 }
 
 /**
+ * Extract the `<w:temporary/>` toggle from sdtPr (ECMA-376 §17.5.2.43).
+ *
+ * Delegates to `parseStrictStOnOff` so token recognition matches the
+ * project's shared ST_OnOff convention (`true`/`1`/`on` → true;
+ * `false`/`0`/`off` → false). Returns `undefined` when the element is
+ * absent or carries an invalid token, preserving the "absent vs explicit
+ * false" distinction at the Document API surface.
+ *
+ * @param {Object|null} sdtPr
+ * @returns {boolean|undefined}
+ */
+function extractTemporary(sdtPr) {
+  const el = sdtPr?.elements?.find((e) => e.name === 'w:temporary');
+  if (!el) return undefined;
+  return parseStrictStOnOff(el.attributes?.['w:val'], 'temporary', 'w:temporary');
+}
+
+/**
  * @param {Object} params
  * @returns {Object|null}
  */
@@ -84,9 +103,10 @@ export function handleStructuredContentNode(params) {
   // Control type detection from sdtPr children
   const controlType = detectControlType(sdtPr);
 
-  // Appearance and placeholder
+  // Appearance, placeholder, and temporary toggle
   const appearance = extractAppearance(sdtPr);
   const placeholder = extractPlaceholder(sdtPr);
+  const temporary = extractTemporary(sdtPr);
 
   if (!sdtContent) {
     return null;
@@ -117,6 +137,10 @@ export function handleStructuredContentNode(params) {
       type: controlType,
       appearance,
       placeholder,
+      // `temporary` is only set when the XML carries `<w:temporary/>`;
+      // omitted attrs stay undefined so consumers can distinguish
+      // "absent from source" from explicit false.
+      ...(temporary !== undefined ? { temporary } : {}),
       sdtPr,
     },
   };

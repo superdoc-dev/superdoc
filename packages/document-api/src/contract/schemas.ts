@@ -2583,6 +2583,36 @@ const bookmarkAddressSchema: JsonSchema = objectSchema(
 
 const bookmarkMutation = refMutationSchemas({ bookmark: bookmarkAddressSchema }, ['bookmark']);
 
+// --- Custom XML part schemas ---
+const customXmlPartTargetSchema: JsonSchema = {
+  oneOf: [
+    // Empty strings are runtime-rejected (target validator requires
+    // non-zero length); reflect that in the contract so generated SDKs
+    // and tool callers see the same constraint.
+    objectSchema({ id: { type: 'string', minLength: 1 } }, ['id']),
+    objectSchema({ partName: { type: 'string', minLength: 1 } }, ['partName']),
+  ],
+};
+
+const customXmlPartMutation = refMutationSchemas(
+  {
+    target: customXmlPartTargetSchema,
+    // Optional: surfaced when patch resolves or mints an itemID. See
+    // CustomXmlPartsMutationSuccess JSDoc for the patch-foreign-part case.
+    id: { type: 'string', minLength: 1 },
+  },
+  ['target'],
+);
+
+const customXmlPartCreateMutation = refMutationSchemas(
+  {
+    id: { type: 'string' },
+    partName: { type: 'string' },
+    propsPartName: { type: 'string' },
+  },
+  ['id', 'partName', 'propsPartName'],
+);
+
 // --- Footnote schemas ---
 const footnoteAddressSchema: JsonSchema = objectSchema(
   { kind: { const: 'entity' }, entityType: { const: 'footnote' }, noteId: { type: 'string' } },
@@ -7627,6 +7657,50 @@ const operationSchemas: Record<OperationId, OperationSchemaSet> = {
     output: { type: 'object' },
     success: { type: 'object' },
     failure: { type: 'object' },
+  },
+
+  // --- customXml.parts.* ---
+  'customXml.parts.list': {
+    input: objectSchema({
+      ...refListQueryProperties,
+      rootNamespace: { type: 'string' },
+      schemaRef: { type: 'string' },
+    }),
+    output: discoveryOutputSchema,
+  },
+  'customXml.parts.get': {
+    input: objectSchema({ target: customXmlPartTargetSchema }, ['target']),
+    output: { oneOf: [{ type: 'object' }, { type: 'null' }] },
+  },
+  'customXml.parts.create': {
+    input: objectSchema(
+      {
+        content: { type: 'string', minLength: 1 },
+        schemaRefs: { type: 'array', items: { type: 'string', minLength: 1 } },
+      },
+      ['content'],
+    ),
+    ...customXmlPartCreateMutation,
+  },
+  'customXml.parts.patch': {
+    // `target` is required; `content` and `schemaRefs` are both optional
+    // but at least one MUST be present. Encoded via JSON Schema's `anyOf`.
+    input: {
+      type: 'object',
+      properties: {
+        target: customXmlPartTargetSchema,
+        content: { type: 'string', minLength: 1 },
+        schemaRefs: { type: 'array', items: { type: 'string', minLength: 1 } },
+      },
+      required: ['target'],
+      anyOf: [{ required: ['content'] }, { required: ['schemaRefs'] }],
+      additionalProperties: false,
+    },
+    ...customXmlPartMutation,
+  },
+  'customXml.parts.remove': {
+    input: objectSchema({ target: customXmlPartTargetSchema }, ['target']),
+    ...customXmlPartMutation,
   },
 };
 

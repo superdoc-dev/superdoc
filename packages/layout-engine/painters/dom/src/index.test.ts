@@ -5087,7 +5087,7 @@ describe('DomPainter', () => {
         ],
         attrs: {
           alignment: 'center',
-          direction: 'rtl',
+          directionContext: { inlineDirection: 'rtl', writingMode: 'horizontal-tb' },
         },
       };
       const footerMeasure: Measure = {
@@ -6153,7 +6153,7 @@ describe('DomPainter', () => {
         kind: 'paragraph',
         id: 'resolved-rtl-marker',
         runs: [{ text: 'RTL nested item', fontFamily: 'Arial', fontSize: 12, pmStart: 1, pmEnd: 16 }],
-        attrs: { direction: 'rtl' as const },
+        attrs: { directionContext: { inlineDirection: 'rtl', writingMode: 'horizontal-tb' } },
       };
 
       const paragraphMeasure: Measure = {
@@ -8617,7 +8617,7 @@ describe('DomPainter', () => {
       kind: 'paragraph',
       id: 'rtl-block',
       runs: [{ text: 'مرحبا', fontFamily: 'Arial', fontSize: 16 }],
-      attrs: { direction: 'rtl' as const, ...attrs },
+      attrs: { directionContext: { inlineDirection: 'rtl', writingMode: 'horizontal-tb' }, ...attrs },
     });
 
     const rtlMeasure: Measure = {
@@ -8672,7 +8672,7 @@ describe('DomPainter', () => {
           { kind: 'tab', width: 40, fontFamily: 'Arial', fontSize: 16 } as any,
           { text: 'عالم', fontFamily: 'Arial', fontSize: 16 },
         ],
-        attrs: { direction: 'rtl' as const },
+        attrs: { directionContext: { inlineDirection: 'rtl', writingMode: 'horizontal-tb' } },
       };
 
       const tabMeasure: Measure = {

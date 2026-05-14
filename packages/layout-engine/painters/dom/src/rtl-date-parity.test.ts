@@ -25,7 +25,7 @@ describe('RTL date parity', () => {
     const block: FlowBlock = {
       kind: 'paragraph',
       id: blockId,
-      attrs: { direction: 'rtl' },
+      attrs: { directionContext: { inlineDirection: 'rtl', writingMode: 'horizontal-tb' } },
       runs: [
         {
           text: runText,
@@ -54,7 +54,7 @@ describe('RTL date parity', () => {
     const block: FlowBlock = {
       kind: 'paragraph',
       id: blockId,
-      attrs: { direction: 'rtl' },
+      attrs: { directionContext: { inlineDirection: 'rtl', writingMode: 'horizontal-tb' } },
       runs: [{ text: runText, fontFamily: 'David, sans-serif', fontSize: 16, pmStart: 1, pmEnd: 7 }],
     };
 
@@ -78,7 +78,7 @@ describe('RTL date parity', () => {
     const block: FlowBlock = {
       kind: 'paragraph',
       id: blockId,
-      attrs: { direction: 'rtl' },
+      attrs: { directionContext: { inlineDirection: 'rtl', writingMode: 'horizontal-tb' } },
       runs: [
         { text: ltrText, fontFamily: 'David, sans-serif', fontSize: 16, pmStart: 1, pmEnd: 7 },
         { text: rtlText, fontFamily: 'David, sans-serif', fontSize: 16, bidi: { rtl: true }, pmStart: 7, pmEnd: 11 },
@@ -122,7 +122,7 @@ describe('RTL date parity', () => {
     const block: FlowBlock = {
       kind: 'paragraph',
       id: blockId,
-      attrs: { direction: 'rtl' },
+      attrs: { directionContext: { inlineDirection: 'rtl', writingMode: 'horizontal-tb' } },
       runs: [
         { text: runText, fontFamily: 'David, sans-serif', fontSize: 16, bidi: { rtl: true }, pmStart: 1, pmEnd: 5 },
       ],
@@ -147,7 +147,7 @@ describe('RTL date parity', () => {
     const block: FlowBlock = {
       kind: 'paragraph',
       id: blockId,
-      attrs: { direction: 'rtl' },
+      attrs: { directionContext: { inlineDirection: 'rtl', writingMode: 'horizontal-tb' } },
       runs: [{ text: runText, fontFamily: 'David, sans-serif', fontSize: 16, pmStart: 1, pmEnd: 12 }],
     };
 

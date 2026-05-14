@@ -263,6 +263,18 @@ import type {
 } from '../bookmarks/bookmarks.types.js';
 
 import type {
+  CustomXmlPartsListInput,
+  CustomXmlPartsListResult,
+  CustomXmlPartsGetInput,
+  CustomXmlPartInfo,
+  CustomXmlPartsCreateInput,
+  CustomXmlPartsCreateResult,
+  CustomXmlPartsPatchInput,
+  CustomXmlPartsRemoveInput,
+  CustomXmlPartsMutationResult,
+} from '../customXml/customXml.types.js';
+
+import type {
   FootnoteListInput,
   FootnotesListResult,
   FootnoteGetInput,
@@ -1543,6 +1555,33 @@ export interface OperationRegistry extends FormatInlineAliasOperationRegistry {
     input: PermissionRangesUpdatePrincipalInput;
     options: MutationOptions;
     output: PermissionRangeMutationResult;
+  };
+
+  // --- customXml.parts.* ---
+  'customXml.parts.list': {
+    input: CustomXmlPartsListInput | undefined;
+    options: never;
+    output: CustomXmlPartsListResult;
+  };
+  'customXml.parts.get': {
+    input: CustomXmlPartsGetInput;
+    options: never;
+    output: CustomXmlPartInfo | null;
+  };
+  'customXml.parts.create': {
+    input: CustomXmlPartsCreateInput;
+    options: MutationOptions;
+    output: CustomXmlPartsCreateResult;
+  };
+  'customXml.parts.patch': {
+    input: CustomXmlPartsPatchInput;
+    options: MutationOptions;
+    output: CustomXmlPartsMutationResult;
+  };
+  'customXml.parts.remove': {
+    input: CustomXmlPartsRemoveInput;
+    options: MutationOptions;
+    output: CustomXmlPartsMutationResult;
   };
 }
 

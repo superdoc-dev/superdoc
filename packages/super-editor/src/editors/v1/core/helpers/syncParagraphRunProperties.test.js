@@ -50,7 +50,8 @@ describe('syncParagraphRunProperties', () => {
       italic: true,
       styleId: 'Heading1Char',
       bold: true,
-      boldCs: true,
+      // SD-2912: `boldCs` is no longer auto-propagated from the bold mark — see
+      // `decodeRPrFromMarks` in super-converter/styles.js.
     });
   });
 

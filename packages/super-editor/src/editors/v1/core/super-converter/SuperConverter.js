@@ -1424,18 +1424,19 @@ class SuperConverter {
 
   #exportNumberingFile() {
     const numberingPath = 'word/numbering.xml';
+    // SD-2911: source presence must be captured before the baseNumbering fallback —
+    // the importer fills `this.numbering` from baseNumbering when the source had no
+    // numbering part, so it can't be inferred from `this.numbering` at write time.
+    const sourceHadNumberingXml = Boolean(this.convertedXml[numberingPath]);
     let numberingXml = this.convertedXml[numberingPath];
 
     if (!numberingXml) numberingXml = baseNumbering;
     const currentNumberingXml = numberingXml.elements[0];
 
-    // SD-2911: emit every abstractNum / num the importer captured. The previous
-    // implementation pruned definitions whose numId wasn't referenced from the
-    // exported document parts, but that couldn't distinguish "user just deleted a
-    // list in this session" from "definition was always unused in the source file"
-    // (Word's tentative numbering). Both arrived here with no referencing paragraph,
-    // and both were dropped — silently lossy on round-trip. Word tolerates unused
-    // definitions, so the safe default is to preserve.
+    if (!sourceHadNumberingXml && !hasBodyNumberingReferences(this.convertedXml['word/document.xml'])) {
+      return;
+    }
+
     if (this.numbering?.definitions && this.numbering?.abstracts) {
       const abstracts = Object.values(this.numbering.abstracts);
       const definitions = Object.values(this.numbering.definitions);
@@ -1444,7 +1445,6 @@ class SuperConverter {
       currentNumberingXml.elements = [];
     }
 
-    // Update the numbering file
     this.convertedXml[numberingPath] = numberingXml;
   }
 
@@ -1737,4 +1737,17 @@ function generateCustomXml() {
   return DEFAULT_CUSTOM_XML;
 }
 
-export { SuperConverter };
+/** @returns {boolean} True if any descendant of `documentXml` is a `w:numPr` element. */
+function hasBodyNumberingReferences(documentXml) {
+  if (!documentXml || typeof documentXml !== 'object') return false;
+  const stack = Array.isArray(documentXml.elements) ? [...documentXml.elements] : [];
+  while (stack.length) {
+    const node = stack.pop();
+    if (!node || typeof node !== 'object') continue;
+    if (node.name === 'w:numPr') return true;
+    if (Array.isArray(node.elements)) stack.push(...node.elements);
+  }
+  return false;
+}
+
+export { SuperConverter, hasBodyNumberingReferences };

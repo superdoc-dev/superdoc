@@ -3248,7 +3248,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
       });
 
       const numberingData = this.converter.convertedXml['word/numbering.xml'];
-      const numbering = this.converter.schemaToXml(numberingData.elements[0]);
+      const numbering = numberingData?.elements?.[0] ? this.converter.schemaToXml(numberingData.elements[0]) : null;
 
       const appXmlData = this.converter.convertedXml['docProps/app.xml'];
       const appXml = appXmlData?.elements?.[0] ? this.converter.schemaToXml(appXmlData.elements[0]) : null;
@@ -3262,7 +3262,7 @@ export class Editor extends EventEmitter<EditorEventMap> {
         'word/document.xml': String(documentXml),
         'docProps/custom.xml': String(customXml),
         'word/_rels/document.xml.rels': String(rels),
-        'word/numbering.xml': String(numbering),
+        ...(numbering ? { 'word/numbering.xml': String(numbering) } : {}),
         'word/styles.xml': String(styles),
         ...updatedHeadersFooters,
         ...(appXml ? { 'docProps/app.xml': String(appXml) } : {}),

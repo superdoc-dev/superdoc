@@ -1526,19 +1526,34 @@ export class SuperDoc extends EventEmitter {
     // paragraph to find the first descendant that has actual text
     // content (skipping bookmark markers, comment-range markers, etc.)
     // and target that position instead.
+    let resolved = null;
     if (foundNode && foundNode.content?.size > 0) {
-      let textInsidePos = null;
       foundNode.descendants((child, offset) => {
-        if (textInsidePos !== null) return false;
+        if (resolved !== null) return false;
         if (child.isText && child.text && child.text.length > 0) {
           // Position inside the paragraph = paragraph-start (foundPos+1)
           // + descendant offset.
-          textInsidePos = foundPos + 1 + offset;
+          resolved = foundPos + 1 + offset;
           return false;
         }
       });
-      if (textInsidePos != null) foundPos = textInsidePos;
     }
+    if (resolved == null) {
+      // The heading itself carries no text content (truly-empty
+      // paragraph, or content limited to structural markers like
+      // bookmarkStart). Walk forward in the doc for the next text-bearing
+      // position so the viewport at least lands near where the heading
+      // lives instead of returning false.
+      editor.state.doc.descendants((child, p) => {
+        if (resolved !== null) return false;
+        if (p <= foundPos) return undefined;
+        if (child.isText && child.text && child.text.length > 0) {
+          resolved = p;
+          return false;
+        }
+      });
+    }
+    if (resolved != null) foundPos = resolved;
 
     // Same dispatch as scrollToElement: presentation if available, else
     // body-editor + DOM scrollIntoView.

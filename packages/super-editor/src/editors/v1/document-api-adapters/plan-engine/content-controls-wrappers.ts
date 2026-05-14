@@ -493,8 +493,18 @@ function wrapWrapper(
     const nodeType = editor.schema.nodes[nodeTypeName];
     if (!nodeType) return false;
 
+    // ECMA-376 §17.5.2.26: typeless sdtPr resolves to richText. Default here so
+    // the wrapper classifies the same in-session and after reimport.
     const wrapperNode = nodeType.create(
-      { id, tag: input.tag, alias: input.alias, lockMode: input.lockMode ?? 'unlocked' },
+      {
+        id,
+        tag: input.tag,
+        alias: input.alias,
+        lockMode: input.lockMode ?? 'unlocked',
+        controlType: 'richText',
+        type: 'richText',
+        sdtPr: buildDefaultSdtPr('richText'),
+      },
       resolved.node,
     );
     const { tr } = editor.state;
@@ -626,6 +636,7 @@ function setLockModeWrapper(
 /** Maps control types to their sdtPr element name. Types not listed have no element. */
 const CONTROL_TYPE_SDT_PR_ELEMENTS: Record<string, string> = {
   text: 'w:text',
+  richText: 'w:richText',
   date: 'w:date',
   checkbox: 'w14:checkbox',
   comboBox: 'w:comboBox',
@@ -785,6 +796,8 @@ function buildDefaultTypeSdtPrElement(controlType: string | undefined): SdtPrEle
   switch (controlType) {
     case 'text':
       return { name: 'w:text', type: 'element' };
+    case 'richText':
+      return { name: 'w:richText', type: 'element' };
     case 'date':
       return {
         name: 'w:date',
@@ -1806,15 +1819,18 @@ function createWrapper(
   }
 
   return executeSdtMutation(editor, target, options, () => {
+    // ECMA-376 §17.5.2.26: typeless sdtPr resolves to richText. 'unknown' is for
+    // unsupported/unrecognized type children, not a default for new controls.
+    const controlType = input.controlType ?? 'richText';
     const attrs: Record<string, unknown> = {
       id,
       tag: input.tag,
       alias: input.alias,
       lockMode: input.lockMode ?? 'unlocked',
-      controlType: input.controlType ?? 'unknown',
-      type: input.controlType ?? 'unknown',
+      controlType,
+      type: controlType,
     };
-    const defaultSdtPr = buildDefaultSdtPr(input.controlType ?? 'unknown');
+    const defaultSdtPr = buildDefaultSdtPr(controlType);
     const isDateCreate = input.controlType === 'date' && input.content == null;
     const dateDefaults = isDateCreate ? buildDateControlDefaults() : null;
     const sdtPrWithDateDefaults = dateDefaults ? applyDateDefaultsToSdtPr(defaultSdtPr, dateDefaults) : defaultSdtPr;

@@ -4,10 +4,17 @@ A document editing and rendering library for the web.
 
 ## Architecture: Rendering
 
-SuperDoc uses its own rendering pipeline — **ProseMirror is NOT used for visual output**.
+SuperDoc uses its own rendering pipeline. ProseMirror stores document state;
+it is not the visual renderer.
 
 ```
-PM Doc (hidden) → pm-adapter → FlowBlock[] → layout-engine → Layout[] → DomPainter → DOM
+.docx
+  → super-converter parses OOXML into the hidden PM doc
+  → pm-adapter reads PM state and resolved styles
+  → FlowBlock[]
+  → layout-engine paginates
+  → ResolvedLayout
+  → DomPainter paints DOM
 ```
 
 - `PresentationEditor` wraps a hidden ProseMirror `Editor` instance for document state and editing commands
@@ -15,15 +22,37 @@ PM Doc (hidden) → pm-adapter → FlowBlock[] → layout-engine → Layout[] �
 - **DomPainter** (`layout-engine/painters/dom/`) owns all visual rendering
 - Style-resolved properties (backgrounds, fonts, borders, etc.) must flow through `pm-adapter` → DomPainter, not through PM decorations
 
-### Where visual changes go
+### Where To Put Your Change
 
-| Change | Where |
-|--------|-------|
-| How something looks | `pm-adapter/` (data) + `painters/dom/` (rendering) |
-| Style resolution | `style-engine/` |
-| Editing behavior | `super-editor/src/editors/v1/extensions/` |
+| Concern | Where | Rule |
+|---------|-------|------|
+| DOCX import/export | `super-editor/src/editors/v1/core/super-converter/` | Parse and preserve OOXML, style refs, and inline properties. Do not bake inherited or style-resolved formatting into direct attrs. |
+| Style cascade | `layout-engine/style-engine/` | Own defaults, styles, conditional formatting, and inline override resolution. |
+| Static document visuals | `pm-adapter/` data + `layout-engine/painters/dom/` rendering | Feed typed data into DomPainter. Do not style static document content with PM decorations. |
+| Direction-aware properties | One layer makes the flip; pm-adapter stores logical sides LTR-default | For `w:bidiVisual` table-visual properties, DomPainter mirrors once at paint time. Pre-mirroring upstream is a double-swap. Full taxonomy: `pm-adapter/src/direction/README.md`. |
+| Editing behavior | `super-editor/src/editors/v1/extensions/` | Commands, keybindings, editor plugins, and active interaction state live here. Do not duplicate cascade logic or render document visuals here. |
+| Ephemeral editor UI | `PresentationEditor` post-paint pipeline + overlay components | Selections, active comments, proofing marks, search highlights, resize handles, and other overlays. PM decorations are bridged to painted DOM only for eligible plugins; comments use `CommentHighlightDecorator` (painter metadata), search is excluded from the bridge, resize handles are Vue overlay components. When adding a plugin that emits decorations, decide whether to bridge (default) or stay PM-side (add a prefix to `EXCLUDED_PLUGIN_KEY_PREFIXES` in `DecorationBridge.ts`). |
+| Interaction mapping | `layout-engine/layout-bridge/` | Map clicks, selections, resize handles, and visual coordinates back to document positions. RTL-aware as an inverse mapping (visual → logical), not a pre-mirror. |
+| Geometry and pagination | `layout-engine/layout-engine/` | Compute layout from `FlowBlock[]`; do not read rendered DOM to recover missing data. |
+| Final DOM rendering | `layout-engine/painters/dom/` | Render `ResolvedLayout`. Paint-time visual transforms, such as the `w:bidiVisual` mirror, belong here. |
+| Presentation state bridge | `PresentationEditor.ts` | Bridge editor events into layout and paint state. Do not resolve OOXML semantics here. |
+| New document-API operation | `packages/document-api/src/contract/operation-definitions.ts` | Contract-first; touches 4 files — see `packages/document-api/README.md`. |
+| New consumer SDK / CLI surface | `apps/cli/src/` + regenerate SDK | Run `pnpm run generate:all` after. |
 
-**Do NOT** add ProseMirror decoration plugins for visual styling — DomPainter handles rendering.
+### Quick Boundary Checks
+
+Use these searches before adding a new visual or direction-aware path:
+
+```bash
+# Painter should not import upstream packages.
+rg "@superdoc/(pm-adapter|style-engine|layout-bridge|layout-resolved)" packages/layout-engine/painters/dom/src
+
+# pm-adapter should not do DOM work.
+rg "getBoundingClientRect|clientWidth|offsetWidth|document\\.|window\\." packages/layout-engine/pm-adapter/src
+
+# Import should not bake style cascade into direct attrs.
+rg "referencedStyles|resolve.*Properties|resolve.*Style" packages/super-editor/src/editors/v1/core/super-converter
+```
 
 ### State Communication
 
@@ -76,7 +105,7 @@ tests/visual/        Visual regression tests (Playwright + R2 baselines)
 
 **The importer stores raw OOXML properties. The style-engine resolves them at render time.**
 
-- The converter (`super-converter/`) should only parse and store what is explicitly in the XML (inline properties, style references). It must NOT resolve style cascades, conditional formatting, or inherited properties.
+- The converter (`super-converter/`) should only parse and store what is explicitly in the XML (inline properties, style references). It must not resolve style cascades, conditional formatting, or inherited properties.
 - The style-engine (`layout-engine/style-engine/`) is the single source of truth for cascade logic. All style resolution (defaults → table style → conditional formatting → inline overrides) happens here.
 - Both rendering systems call the style-engine to compute final visual properties.
 
@@ -99,7 +128,7 @@ The `packages/document-api/` package uses a contract-first pattern with a single
 
 Adding a new operation touches 4 files: `operation-definitions.ts`, `operation-registry.ts`, `invoke.ts` (dispatch table), and the implementation. See `packages/document-api/README.md` for the full guide.
 
-Do NOT hand-edit `COMMAND_CATALOG`, `OPERATION_MEMBER_PATH_MAP`, `OPERATION_REFERENCE_DOC_PATH_MAP`, or `REFERENCE_OPERATION_GROUPS` — they are derived from `OPERATION_DEFINITIONS`.
+Do not hand-edit `COMMAND_CATALOG`, `OPERATION_MEMBER_PATH_MAP`, `OPERATION_REFERENCE_DOC_PATH_MAP`, or `REFERENCE_OPERATION_GROUPS` — they are derived from `OPERATION_DEFINITIONS`.
 
 ## JSDoc types
 

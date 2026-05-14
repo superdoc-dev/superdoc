@@ -224,4 +224,70 @@ describe('handleStructuredContentNode', () => {
       expect(result.attrs.lockMode).toBe('unlocked');
     });
   });
+
+  describe('controlType detection', () => {
+    const detectFrom = (sdtPrElements) => {
+      const node = createNode(sdtPrElements, [{ name: 'w:r', text: 'content' }]);
+      const params = { nodes: [node], nodeListHandler: mockNodeListHandler };
+      parseAnnotationMarks.mockReturnValue({ marks: [] });
+      return handleStructuredContentNode(params).attrs.controlType;
+    };
+
+    it('detects explicit <w:text/> as "text"', () => {
+      expect(detectFrom([{ name: 'w:text' }])).toBe('text');
+    });
+
+    it('detects explicit <w:richText/> as "richText"', () => {
+      expect(detectFrom([{ name: 'w:richText' }])).toBe('richText');
+    });
+
+    it('resolves typeless sdtPr (only property children) as "richText" per ECMA-376 §17.5.2.26', () => {
+      // Real-world case: Word emits this for ContentControls.Add(0, range) and
+      // ContentControls.Add($null, range). The sdtPr carries only properties
+      // (alias/tag/id/placeholder), no type-axis child.
+      const propsOnly = [
+        { name: 'w:alias', attributes: { 'w:val': 'Field' } },
+        { name: 'w:tag', attributes: { 'w:val': 'x' } },
+        { name: 'w:id', attributes: { 'w:val': '123' } },
+        { name: 'w:placeholder', elements: [{ name: 'w:docPart', attributes: { 'w:val': 'default' } }] },
+      ];
+      expect(detectFrom(propsOnly)).toBe('richText');
+    });
+
+    it('detects <w:date/> as "date"', () => {
+      expect(detectFrom([{ name: 'w:date' }])).toBe('date');
+    });
+
+    it('detects <w14:checkbox/> as "checkbox"', () => {
+      expect(detectFrom([{ name: 'w14:checkbox' }])).toBe('checkbox');
+    });
+
+    it('detects <w:comboBox/> as "comboBox"', () => {
+      expect(detectFrom([{ name: 'w:comboBox' }])).toBe('comboBox');
+    });
+
+    it('detects <w:dropDownList/> as "dropDownList"', () => {
+      expect(detectFrom([{ name: 'w:dropDownList' }])).toBe('dropDownList');
+    });
+
+    it('detects <w15:repeatingSection/> as "repeatingSection"', () => {
+      expect(detectFrom([{ name: 'w15:repeatingSection' }])).toBe('repeatingSection');
+    });
+
+    it('detects <w:group/> as "group"', () => {
+      expect(detectFrom([{ name: 'w:group' }])).toBe('group');
+    });
+
+    it('returns null for unmodeled type children so resolveControlType coerces to "unknown"', () => {
+      // detectControlType returns null for unmodeled type elements; resolveControlType
+      // (in sdt-info-builder.ts) coerces null → 'unknown' downstream. Verifies that
+      // 'unknown' keeps its semantics: "unsupported or unrecognized type child",
+      // not "typeless rich-text control".
+      expect(detectFrom([{ name: 'w:bibliography' }])).toBeNull();
+      expect(detectFrom([{ name: 'w:citation' }])).toBeNull();
+      expect(detectFrom([{ name: 'w:equation' }])).toBeNull();
+      expect(detectFrom([{ name: 'w:picture' }])).toBeNull();
+      expect(detectFrom([{ name: 'w:docPartList' }])).toBeNull();
+    });
+  });
 });

@@ -712,7 +712,11 @@ export class SuperToolbar extends EventEmitter {
       return;
     }
 
-    this.toolbarItems.forEach((item) => {
+    // Overflow items still appear in the overflow popup and need their
+    // active-state highlight (e.g., bold pressed, direction matched) to
+    // reflect the current selection. Iterating only `toolbarItems` left
+    // them frozen in their last-rendered state.
+    [...this.toolbarItems, ...this.overflowItems].forEach((item) => {
       item.resetDisabled();
       this.#applyHeadlessState(item);
     });

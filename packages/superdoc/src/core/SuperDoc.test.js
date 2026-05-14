@@ -475,6 +475,51 @@ describe('SuperDoc core', () => {
     );
   });
 
+  it('scrollToElement matches paraId even when sdBlockId is also present', async () => {
+    const { superdocStore } = createAppHarness();
+    superdocStore.documents = [{ getPresentationEditor: vi.fn(() => ({ scrollToElement: vi.fn(async () => false) })) }];
+
+    const scrollIntoView = vi.fn();
+    const targetEl = { scrollIntoView };
+    const setCursorById = vi.fn(() => false);
+
+    // A paragraph carrying BOTH a long sdBlockId and a short paraId.
+    // The walk must match against each attr independently — picking
+    // the first non-null and comparing would let sdBlockId mask paraId.
+    const node = {
+      attrs: {
+        sdBlockId: '3496bf7f-b408-489d-9d1d-7a6854c09e70',
+        paraId: '00000001',
+      },
+    };
+    const descendants = (cb) => {
+      cb(node, 7);
+    };
+
+    const instance = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: { comments: {}, toolbar: {} },
+      onException: vi.fn(),
+    });
+    await flushMicrotasks();
+
+    Object.defineProperty(instance, 'activeEditor', {
+      configurable: true,
+      get: () => ({
+        state: { doc: { descendants, content: { size: 100 } }, selection: { from: null } },
+        commands: { setCursorById },
+        getElementAtPos: vi.fn(() => targetEl),
+      }),
+    });
+
+    await expect(instance.scrollToElement('00000001')).resolves.toBe(true);
+    expect(scrollIntoView).toHaveBeenCalledWith(
+      expect.objectContaining({ block: expect.any(String), inline: 'nearest' }),
+    );
+  });
+
   it('scrollToHeading walks for the Nth heading at the given level and scrolls', async () => {
     const { superdocStore } = createAppHarness();
     // Mock doc with three Heading1 paragraphs at known positions.

@@ -1438,13 +1438,18 @@ export class SuperDoc extends EventEmitter {
     }
 
     // 2. Fall back to a single PM walk looking for matching block-level
-    //    id attributes (nodeId / sdBlockId / id / paraId).
+    //    id attributes. Block nodes can carry multiple ID-shaped attrs
+    //    at once — e.g. paragraphs from a `.docx` carry both `paraId`
+    //    (the OOXML `w14:paraId`) and `sdBlockId` (minted by SuperDoc
+    //    on import). We must compare against each independently rather
+    //    than picking the first non-null and comparing, because the
+    //    caller may have a handle on any one of them and consumers
+    //    shouldn't have to know which ID type a given block carries.
     if (pos == null || !Number.isFinite(pos)) {
       editor.state.doc.descendants((node, p) => {
         if (pos != null) return false;
         const a = node.attrs || {};
-        const candidate = a.nodeId ?? a.sdBlockId ?? a.id ?? a.paraId;
-        if (candidate && candidate === elementId) {
+        if (a.nodeId === elementId || a.sdBlockId === elementId || a.id === elementId || a.paraId === elementId) {
           pos = p;
           return false;
         }

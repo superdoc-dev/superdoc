@@ -2,6 +2,10 @@
 
 import * as React from 'react';
 
+type ReactWithUseId = typeof React & {
+  useId?: () => string;
+};
+
 /**
  * Polyfill for React.useId() for React versions < 18.
  * Uses useRef to generate a stable random ID once per component instance.
@@ -23,8 +27,8 @@ function useIdPolyfill(): string {
  * - React 18+: useId() returns ":r0:" → "superdoc:r0:"
  * - Polyfill: returns "-1707345123456-abc1d2e" → "superdoc-1707345123456-abc1d2e"
  */
-export const useStableId: () => string =
-  typeof (React as any).useId === 'function' ? (React as any).useId : useIdPolyfill;
+const reactUseId = (React as ReactWithUseId).useId;
+export const useStableId: () => string = typeof reactUseId === 'function' ? reactUseId : useIdPolyfill;
 
 /**
  * Returns a reference-stable version of `value` — identity only changes

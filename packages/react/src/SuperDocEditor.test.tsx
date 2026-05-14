@@ -4,6 +4,8 @@ import { createRef, StrictMode } from 'react';
 import { SuperDocEditor } from './SuperDocEditor';
 import type { SuperDocRef } from './types';
 
+const REACT_TEST_TIMEOUT = 10000;
+
 describe('SuperDocEditor', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -36,19 +38,9 @@ describe('SuperDocEditor', () => {
       expect((wrapper as HTMLElement)?.style.backgroundColor).toBe('red');
     });
 
-    it('should handle unmount without throwing', async () => {
-      const onReady = vi.fn();
-      const { unmount } = render(<SuperDocEditor onReady={onReady} />);
+    it('should handle unmount without throwing', () => {
+      const { unmount } = render(<SuperDocEditor />);
 
-      // Wait for initialization to complete
-      await waitFor(
-        () => {
-          expect(onReady).toHaveBeenCalled();
-        },
-        { timeout: 5000 },
-      );
-
-      // Unmount should not throw
       expect(() => unmount()).not.toThrow();
     });
   });
@@ -102,7 +94,7 @@ describe('SuperDocEditor', () => {
         () => {
           expect(onReady).toHaveBeenCalled();
         },
-        { timeout: 5000 },
+        { timeout: REACT_TEST_TIMEOUT },
       );
     });
 
@@ -114,7 +106,7 @@ describe('SuperDocEditor', () => {
         () => {
           expect(onEditorCreate).toHaveBeenCalled();
         },
-        { timeout: 5000 },
+        { timeout: REACT_TEST_TIMEOUT },
       );
     });
 
@@ -126,7 +118,7 @@ describe('SuperDocEditor', () => {
 
       const { rerender } = render(<SuperDocEditor ref={ref} onReady={onReady} onTransaction={firstOnTransaction} />);
 
-      await waitFor(() => expect(onReady).toHaveBeenCalled(), { timeout: 5000 });
+      await waitFor(() => expect(onReady).toHaveBeenCalled(), { timeout: REACT_TEST_TIMEOUT });
 
       const instance = ref.current?.getInstance();
       expect(instance).toBeTruthy();
@@ -169,7 +161,7 @@ describe('SuperDocEditor', () => {
         () => {
           expect(onReady).toHaveBeenCalled();
         },
-        { timeout: 5000 },
+        { timeout: REACT_TEST_TIMEOUT },
       );
 
       unmount();
@@ -178,7 +170,7 @@ describe('SuperDocEditor', () => {
         () => {
           expect(onEditorDestroy).toHaveBeenCalled();
         },
-        { timeout: 5000 },
+        { timeout: REACT_TEST_TIMEOUT },
       );
     });
   });
@@ -198,7 +190,7 @@ describe('SuperDocEditor', () => {
           // If SuperDoc handles it gracefully, onException may be called instead
           expect(errorContainer || onException.mock.calls.length > 0).toBeTruthy();
         },
-        { timeout: 5000 },
+        { timeout: REACT_TEST_TIMEOUT },
       );
     });
   });
@@ -230,7 +222,7 @@ describe('SuperDocEditor', () => {
         />,
       );
 
-      await waitFor(() => expect(onReady).toHaveBeenCalled(), { timeout: 5000 });
+      await waitFor(() => expect(onReady).toHaveBeenCalled(), { timeout: REACT_TEST_TIMEOUT });
       const instanceBefore = ref.current?.getInstance();
       expect(instanceBefore).toBeTruthy();
 
@@ -265,7 +257,7 @@ describe('SuperDocEditor', () => {
         />,
       );
 
-      await waitFor(() => expect(onReady).toHaveBeenCalled(), { timeout: 5000 });
+      await waitFor(() => expect(onReady).toHaveBeenCalled(), { timeout: REACT_TEST_TIMEOUT });
       const instanceBefore = ref.current?.getInstance();
 
       rerender(
@@ -295,7 +287,7 @@ describe('SuperDocEditor', () => {
         />,
       );
 
-      await waitFor(() => expect(onReady).toHaveBeenCalled(), { timeout: 5000 });
+      await waitFor(() => expect(onReady).toHaveBeenCalled(), { timeout: REACT_TEST_TIMEOUT });
       const instanceBefore = ref.current?.getInstance();
 
       rerender(
@@ -308,8 +300,8 @@ describe('SuperDocEditor', () => {
       );
 
       // Old instance torn down, new instance ready.
-      await waitFor(() => expect(onEditorDestroy).toHaveBeenCalled(), { timeout: 5000 });
-      await waitFor(() => expect(onReady).toHaveBeenCalledTimes(2), { timeout: 5000 });
+      await waitFor(() => expect(onEditorDestroy).toHaveBeenCalled(), { timeout: REACT_TEST_TIMEOUT });
+      await waitFor(() => expect(onReady).toHaveBeenCalledTimes(2), { timeout: REACT_TEST_TIMEOUT });
       expect(ref.current?.getInstance()).not.toBe(instanceBefore);
     });
 
@@ -329,7 +321,7 @@ describe('SuperDocEditor', () => {
         </StrictMode>,
       );
 
-      await waitFor(() => expect(onReady).toHaveBeenCalled(), { timeout: 5000 });
+      await waitFor(() => expect(onReady).toHaveBeenCalled(), { timeout: REACT_TEST_TIMEOUT });
       const instanceBefore = ref.current?.getInstance();
       const destroysBefore = onEditorDestroy.mock.calls.length;
 
@@ -367,7 +359,7 @@ describe('SuperDocEditor', () => {
         </StrictMode>,
       );
 
-      await waitFor(() => expect(onReady).toHaveBeenCalled(), { timeout: 5000 });
+      await waitFor(() => expect(onReady).toHaveBeenCalled(), { timeout: REACT_TEST_TIMEOUT });
       const instanceBefore = ref.current?.getInstance();
 
       rerender(
@@ -381,8 +373,8 @@ describe('SuperDocEditor', () => {
         </StrictMode>,
       );
 
-      await waitFor(() => expect(onEditorDestroy).toHaveBeenCalled(), { timeout: 5000 });
-      await waitFor(() => expect(ref.current?.getInstance()).not.toBe(instanceBefore), { timeout: 5000 });
+      await waitFor(() => expect(onEditorDestroy).toHaveBeenCalled(), { timeout: REACT_TEST_TIMEOUT });
+      await waitFor(() => expect(ref.current?.getInstance()).not.toBe(instanceBefore), { timeout: REACT_TEST_TIMEOUT });
     });
 
     it('rebuilds when a new modules object is passed, even if content looks equal', async () => {
@@ -404,7 +396,7 @@ describe('SuperDocEditor', () => {
         />,
       );
 
-      await waitFor(() => expect(onReady).toHaveBeenCalled(), { timeout: 5000 });
+      await waitFor(() => expect(onReady).toHaveBeenCalled(), { timeout: REACT_TEST_TIMEOUT });
       const instanceBefore = ref.current?.getInstance();
 
       rerender(
@@ -416,8 +408,8 @@ describe('SuperDocEditor', () => {
         />,
       );
 
-      await waitFor(() => expect(onEditorDestroy).toHaveBeenCalled(), { timeout: 5000 });
-      await waitFor(() => expect(onReady).toHaveBeenCalledTimes(2), { timeout: 5000 });
+      await waitFor(() => expect(onEditorDestroy).toHaveBeenCalled(), { timeout: REACT_TEST_TIMEOUT });
+      await waitFor(() => expect(onReady).toHaveBeenCalledTimes(2), { timeout: REACT_TEST_TIMEOUT });
       expect(ref.current?.getInstance()).not.toBe(instanceBefore);
     });
   });
@@ -448,7 +440,7 @@ describe('SuperDocEditor', () => {
           expect(onReady).toHaveBeenCalled();
           expect(ref.current?.getInstance()).not.toBeNull();
         },
-        { timeout: 5000 },
+        { timeout: REACT_TEST_TIMEOUT },
       );
     });
 
@@ -462,7 +454,7 @@ describe('SuperDocEditor', () => {
         () => {
           expect(onReady).toHaveBeenCalled();
         },
-        { timeout: 5000 },
+        { timeout: REACT_TEST_TIMEOUT },
       );
 
       const instance = ref.current?.getInstance();

@@ -1,11 +1,11 @@
-# @superdoc-dev/react
+# @superdoc-dev/solid
 
-Official React wrapper for [SuperDoc](https://www.superdoc.dev).
+Official Solid wrapper for [SuperDoc](https://www.superdoc.dev).
 
 ## Installation
 
 ```bash
-npm install @superdoc-dev/react
+npm install @superdoc-dev/solid
 ```
 
 > `superdoc` is included as a dependency - no need to install it separately.
@@ -41,11 +41,11 @@ Then run your package manager install command again.
 ## Quick Start
 
 ```tsx
-import { SuperDocEditor } from '@superdoc-dev/react';
-import '@superdoc-dev/react/style.css';
+import { SuperDocEditor } from '@superdoc-dev/Solid';
+import '@superdoc-dev/solid/style.css';
 
 function App() {
-  return <SuperDocEditor document={file} />;
+  return <SuperDocEditor document={file()} />;
 }
 ```
 
@@ -55,13 +55,13 @@ Just update the `documentMode` prop - the component handles it efficiently (no r
 
 ```tsx
 function App() {
-  const [mode, setMode] = useState<DocumentMode>('editing');
+  const [mode, setMode] = createSignal<DocumentMode>('editing');
 
   return (
     <>
       <button onClick={() => setMode('viewing')}>View</button>
       <button onClick={() => setMode('editing')}>Edit</button>
-      <SuperDocEditor document={file} documentMode={mode} />
+      <SuperDocEditor document={file()} documentMode={mode()} />
     </>
   );
 }
@@ -72,19 +72,18 @@ function App() {
 Access SuperDoc methods via `getInstance()`:
 
 ```tsx
-import { useRef } from 'react';
-import { SuperDocEditor, SuperDocRef } from '@superdoc-dev/react';
+import { SuperDocEditor, SuperDocRef } from '@superdoc-dev/solid';
 
 function App() {
-  const ref = useRef<SuperDocRef>(null);
+  let ref: SuperDocRef | null = null;
 
   const handleExport = async () => {
-    await ref.current?.getInstance()?.export({ triggerDownload: true });
+    await ref?.getInstance()?.export({ triggerDownload: true });
   };
 
   return (
     <>
-      <SuperDocEditor ref={ref} document={file} />
+      <SuperDocEditor ref={ref} document={file()} />
       <button onClick={handleExport}>Export</button>
     </>
   );
@@ -98,10 +97,12 @@ All [SuperDoc config options](https://docs.superdoc.dev) are available as props,
 | Prop | Type | Description |
 |------|------|-------------|
 | `id` | `string` | Custom container ID (auto-generated if not provided) |
-| `renderLoading` | `() => ReactNode` | Loading UI |
+| `ref` | `Ref<SuperDocRef>` | Ref to the SuperDoc instance |
+| `renderLoading` | `() => JSX.Element` | Loading UI |
 | `hideToolbar` | `boolean` | Hide toolbar (default: false) |
-| `className` | `string` | Wrapper CSS class |
-| `style` | `CSSProperties` | Wrapper inline styles |
+| `contained` | `boolean` | Mode for fixed-height container embedding. When true, SuperDoc fits within its parent's height and scrolls internally (default: false) |
+| `class` | `string` | Wrapper CSS class |
+| `style` | `JSX.CSSProperties` | Wrapper inline styles |
 
 ### Props That Trigger Rebuilds
 
@@ -125,14 +126,14 @@ These props are applied without rebuilding:
 Other SuperDoc options (`rulers`, `pagination`, etc.) are applied only on initialization. To change them at runtime, use `getInstance()`:
 
 ```tsx
-ref.current?.getInstance()?.toggleRuler();
+ref?.getInstance()?.toggleRuler();
 ```
 
 ### Common Props
 
 ```tsx
 <SuperDocEditor
-  document={file}              // File, Blob, URL, or config object
+  document={file()}            // File, Blob, URL, or config object
   documentMode="editing"       // 'editing' | 'viewing' | 'suggesting'
   role="editor"                // 'editor' | 'viewer' | 'suggester'
   user={{ name: 'John', email: 'john@example.com' }}
@@ -147,7 +148,7 @@ ref.current?.getInstance()?.toggleRuler();
 
 ```tsx
 <SuperDocEditor
-  document={file}
+  document={file()}
   documentMode="viewing"
   hideToolbar
 />
@@ -157,12 +158,14 @@ ref.current?.getInstance()?.toggleRuler();
 
 ```tsx
 function Editor() {
-  const [file, setFile] = useState<File | null>(null);
+  const [file, setFile] = createSignal<File | null>(null);
 
   return (
     <>
       <input type="file" accept=".docx" onChange={(e) => setFile(e.target.files?.[0] || null)} />
-      {file && <SuperDocEditor document={file} />}
+      <Show when={file()}>
+        {resolvedFile => <SuperDocEditor document={resolvedFile()} />}
+      </Show>
     </>
   );
 }
@@ -172,23 +175,21 @@ function Editor() {
 
 ```tsx
 <SuperDocEditor
-  document={file}
+  document={file()}
   modules={{
     collaboration: { ydoc, provider },
   }}
 />
 ```
 
-## Next.js
+## SolidStart
 
 ```tsx
-'use client';
+import { clientOnly } from "@solidjs/start";
 
-import dynamic from 'next/dynamic';
-
-const SuperDocEditor = dynamic(
-  () => import('@superdoc-dev/react').then((m) => m.SuperDocEditor),
-  { ssr: false }
+const SuperDocEditor = clientOnly(
+  () => import('@superdoc-dev/solid').then((m) => m.SuperDocEditor),
+  { lazy: true }
 );
 ```
 
@@ -201,7 +202,7 @@ import type {
   DocumentMode,
   UserRole,
   SuperDocUser,
-} from '@superdoc-dev/react';
+} from '@superdoc-dev/solid';
 ```
 
 Types are extracted from the `superdoc` package, ensuring they stay in sync.

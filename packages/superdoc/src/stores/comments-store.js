@@ -686,13 +686,25 @@ export const useCommentsStore = defineStore('comments', () => {
       // microtask so the cascading resolveComment doesn't dispatch into a
       // still-running acceptTrackedChangeById/rejectTrackedChangeById loop and
       // collide with its mutable `tr`.
+      //
+      // AIDEV-NOTE: SD-2528 P2 #1. Mirror `findTrackedChangeById`'s
+      // documentId scope (see line 591-596). In multi-document sessions
+      // tracked-change ids can collide across documents (each imported file
+      // has its own w:id space); without this filter, accepting a change in
+      // document A would cascade-resolve comments anchored on document B
+      // that happen to share the same id. Single-document callers (no
+      // documentId on the event) keep the legacy global behaviour.
       if (normalizedChangeId) {
         const linkedToResolve = commentsList.value.filter((linkedComment) => {
           if (!linkedComment || linkedComment === existingTrackedChange) return false;
           if (linkedComment.resolvedTime) return false;
           const linkedParentId =
             linkedComment.trackedChangeParentId != null ? String(linkedComment.trackedChangeParentId) : null;
-          return linkedParentId === normalizedChangeId;
+          if (linkedParentId !== normalizedChangeId) return false;
+          if (normalizedDocumentId) {
+            return belongsToTrackedChangeSyncDocument(linkedComment, normalizedDocumentId);
+          }
+          return true;
         });
         if (linkedToResolve.length) {
           Promise.resolve().then(() => {

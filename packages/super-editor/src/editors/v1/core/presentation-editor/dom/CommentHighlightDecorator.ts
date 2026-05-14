@@ -171,19 +171,31 @@ export class CommentHighlightDecorator {
       // Determine if primary (first) comment is internal — used for uniform/faded colors.
       const primaryIsInternal = internalIds.has(ids[0]);
 
-      // SD-2528: a comment anchored on tracked-change text already shows the
-      // TC's own background (green for trackInsert, red for trackDelete via
-      // `.track-insert-dec.highlighted` / `.track-delete-dec.highlighted`). The
-      // comment highlight stacking on top of that paints pink/green over the
-      // TC color, making an "insert" look pink after re-import. Leave the
-      // background alone when the element is also a TC decoration so the TC
-      // color wins (matches Word — comments anchored on a redline don't recolor
-      // the redline). Hover/focus affordances still come from the TC's own
-      // `.track-change-focused` class.
+      // SD-2528: a comment anchored on tracked-change text shows the TC's
+      // own background (green for trackInsert, red for trackDelete) via
+      // `.track-insert-dec.highlighted` / `.track-delete-dec.highlighted`.
+      // The comment highlight stacking on top of that paints pink/green
+      // over the TC color, making an "insert" look pink after re-import.
+      // Leave the background alone in that case so the TC color wins
+      // (matches Word — comments anchored on a redline don't recolor the
+      // redline).
+      //
+      // AIDEV-NOTE: SD-2528 P2 #2. Suppress comment fill ONLY when the TC
+      // is actually painting a competing background. Per layout-engine
+      // styles.ts:270-294, that requires both:
+      //   - the base class `track-insert-dec` or `track-delete-dec` (not
+      //     `track-format-dec`, which only paints a `border-bottom`);
+      //   - the `.highlighted` modifier — only applied in "review" / All
+      //     Markup mode per renderer.ts:909-928. In Original/Final modes
+      //     the modifier is `hidden` / `normal` / `before` and no
+      //     background is painted.
+      // Without this narrower gate the comment highlight was cleared with
+      // nothing to replace it, making the bubble invisible in Original /
+      // Final modes and on format-only changes. Hover/focus affordances
+      // still come from the TC's own `.track-change-focused` class.
       const isTrackedChangeAnchored =
-        el.classList.contains('track-insert-dec') ||
-        el.classList.contains('track-delete-dec') ||
-        el.classList.contains('track-format-dec');
+        el.classList.contains('highlighted') &&
+        (el.classList.contains('track-insert-dec') || el.classList.contains('track-delete-dec'));
 
       if (activeId == null) {
         // No active comment → uniform light highlight

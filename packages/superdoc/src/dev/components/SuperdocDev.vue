@@ -16,6 +16,8 @@ import * as pdfjsLib from 'pdfjs-dist/build/pdf.mjs';
 import SidebarSearch from './sidebar/SidebarSearch.vue';
 import SidebarFieldAnnotations from './sidebar/SidebarFieldAnnotations.vue';
 import SidebarLayout from './sidebar/SidebarLayout.vue';
+import SidebarStableIds from './sidebar/SidebarStableIds.vue';
+import SidebarCitations from './sidebar/SidebarCitations.vue';
 import { WebsocketProvider } from 'y-websocket';
 import * as Y from 'yjs';
 
@@ -50,7 +52,7 @@ const useWebLayout = ref(urlParams.get('view') === 'web');
 const trackChangesReplacements = ref(urlParams.get('replacements') === 'independent' ? 'independent' : 'paired');
 const useCollaboration = urlParams.get('collab') === '1';
 const collabRoom = urlParams.get('room') || 'superdoc-dev-room';
-const collabUrl = 'ws://localhost:8081/v1/collaboration';
+const collabUrl = 'ws://localhost:8082/v1/collaboration';
 const useWordOverlay = ref(urlParams.get('wordOverlay') !== '0');
 const wordOverlayOpacity = ref(Number.isFinite(overlayOpacityFromUrl) ? clampOpacity(overlayOpacityFromUrl) : 0.45);
 const wordOverlayBlendMode = ref(urlParams.get('wordOverlayBlend') || 'difference');
@@ -89,8 +91,10 @@ const applyDevTheme = (theme) => {
   if (theme !== 'default') html.classList.add(`sd-theme-${theme}`);
 };
 
-// URL loading
-const documentUrl = ref('');
+// URL loading - pre-populate with default test document for SD-3115
+// Note: Space in filename must be URL-encoded for fetch to work
+const DEFAULT_TEST_DOCUMENT = '/Users/mattconndev/Documents/DOCX/sdpr%20(4).docx';
+const documentUrl = ref(DEFAULT_TEST_DOCUMENT);
 const isLoadingUrl = ref(false);
 
 const handleLoadFromUrl = async () => {
@@ -640,6 +644,10 @@ const init = async () => {
   superdoc.value = null;
   activeEditor.value = null;
 
+  // Reset mode tracking for normal init
+  isViewModeTest.value = false;
+  currentDocumentMode.value = useCollaboration ? 'suggesting' : 'editing';
+
   let testId = 'document-123';
 
   // eslint-disable-next-line no-unused-vars
@@ -669,7 +677,7 @@ const init = async () => {
     toolbar: 'toolbar',
     toolbarGroups: ['center'],
     role: userRole,
-    documentMode: 'editing',
+    documentMode: useCollaboration ? 'suggesting' : 'editing', // Match customer's collab setup
     licenseKey: 'public_license_key_superdocinternal_ad7035140c4b',
     telemetry: {
       enabled: true,
@@ -706,13 +714,12 @@ const init = async () => {
       { name: 'Eric Doversberger', email: 'eric@harbourshare.com', access: 'external' },
     ],
     // Only pass document config if a file was uploaded, otherwise SuperDoc creates blank
-    ...(documentConfig ? { document: documentConfig } : {}),
-    // documents: [
-    //   {
-    //     data: currentFile.value,
-    //     id: testId,
-    //   },
-    // ],
+    // Use documents array when collaboration is enabled to match customer's pattern
+    ...(documentConfig
+      ? useCollaboration
+        ? { documents: [{ id: testId, type: 'docx', data: currentFile.value }] }
+        : { document: documentConfig }
+      : {}),
     // cspNonce: 'testnonce123',
     modules: {
       comments: {
@@ -910,7 +917,33 @@ const init = async () => {
     currentZoom.value = zoom;
   });
 
+  // Track document mode changes for SD-3115 testing
+  superdoc.value?.on('document-mode-change', ({ documentMode }) => {
+    currentDocumentMode.value = documentMode;
+    console.log('[SD-3115 Test] Document mode changed to:', documentMode);
+  });
+
   window.superdoc = superdoc.value;
+
+  // Debug handler for tracking comment state through lifecycle
+  const debugComments = (event, extra = {}) => {
+    const store = superdoc.value?.commentsStore;
+    console.log(`[debugComments:${event}]`, {
+      commentsList: store?.commentsList?.length ?? 0,
+      floatingComments: store?.floatingComments?.length ?? 0,
+      trackedChangeComments: store?.commentsList?.filter((c) => c.trackedChange)?.length ?? 0,
+      hasSyncedCollab: store?.hasSyncedCollaborationComments,
+      ...extra,
+    });
+  };
+
+  // Attach debug handler to all lifecycle events
+  ['ready', 'collaboration-ready', 'editor-create', 'editor-update', 'comments-update'].forEach((event) =>
+    superdoc.value?.on(event, (payload) => debugComments(event, { payload })),
+  );
+
+  // Expose for console access
+  window.debugComments = () => debugComments('manual-check');
 
   // const ydoc = superdoc.value.ydoc;
   // const metaMap = ydoc.getMap('meta');
@@ -924,7 +957,9 @@ const init = async () => {
   // });
 };
 
-const onCommentsUpdate = () => {};
+const onCommentsUpdate = (payload) => {
+  console.log('[onCommentsUpdate]', payload);
+};
 
 const onContentError = ({ editor, error, documentId, file }) => {
   console.debug('Content error on', documentId, error);
@@ -1091,6 +1126,10 @@ const onEditorCreate = ({ editor }) => {
   window.editor = editor;
   bindWordOverlayListener(editor);
 
+  editor.on('commentsUpdate', (payload) => {
+    console.log('[editor.commentsUpdate]', payload);
+  });
+
   editor.on('fieldAnnotationClicked', (params) => {
     console.log('fieldAnnotationClicked', { params });
   });
@@ -1170,8 +1209,12 @@ onMounted(async () => {
     console.log(`[collab] Provider ready (${collabUrl}/${collabRoom}), initializing SuperDoc`);
   }
 
-  // Initialize SuperDoc - it will automatically create a blank document
-  init();
+  // Load default test document if URL is pre-populated, otherwise create blank
+  if (documentUrl.value.trim()) {
+    await handleLoadFromUrl();
+  } else {
+    init();
+  }
 });
 
 onBeforeUnmount(() => {
@@ -1275,6 +1318,16 @@ const sidebarOptions = [
     label: 'Layout',
     component: SidebarLayout,
   },
+  {
+    id: 'stable-ids',
+    label: 'Stable IDs',
+    component: SidebarStableIds,
+  },
+  {
+    id: 'citations',
+    label: 'Citations',
+    component: SidebarCitations,
+  },
 ];
 const activeSidebarId = ref('off');
 const activeSidebar = computed(
@@ -1324,6 +1377,178 @@ const toggleScrollTestMode = () => {
   const url = new URL(window.location.href);
   url.searchParams.set('scrolltest', scrollTestMode.value ? '0' : '1');
   window.location.href = url.toString();
+};
+
+// SD-3115 testing: View mode with readOnly comments
+const isViewModeTest = ref(false);
+const currentDocumentMode = ref('editing');
+
+/**
+ * Reinitialize the editor in view mode with readOnly comments.
+ * This simulates the customer's "view document without checkout" flow.
+ */
+const reinitInViewMode = async () => {
+  isViewModeTest.value = true;
+  currentDocumentMode.value = 'viewing';
+
+  // Destroy current instance
+  superdoc.value?.destroy?.();
+  superdoc.value = null;
+  activeEditor.value = null;
+
+  // Reinitialize with view mode config
+  await initWithMode('viewing', true);
+};
+
+/**
+ * Switch from view mode to editing mode using setDocumentMode().
+ * This simulates the customer's "check out to edit" flow.
+ */
+const switchToEditingMode = () => {
+  if (!superdoc.value) return;
+  currentDocumentMode.value = 'editing';
+  superdoc.value.setDocumentMode('editing');
+  console.log('[SD-3115 Test] Switched to editing mode via setDocumentMode()');
+};
+
+/**
+ * Initialize SuperDoc with a specific mode and optional readOnly comments.
+ * Used for testing the SD-3115 customer flow.
+ */
+const initWithMode = async (mode = 'editing', commentsReadOnly = false) => {
+  // If the dev shell re-initializes, tear down the previous instance first.
+  detachWordOverlayListener();
+  removeWordOverlay();
+  superdoc.value?.destroy?.();
+  superdoc.value = null;
+  activeEditor.value = null;
+
+  let testId = 'document-123';
+
+  // Prepare document config only if a file was uploaded
+  let documentConfig = null;
+  if (currentFile.value) {
+    documentConfig = {
+      data: currentFile.value,
+      id: testId,
+    };
+
+    if (currentFile.value.markdownContent) {
+      documentConfig.markdown = currentFile.value.markdownContent;
+    }
+    if (currentFile.value.htmlContent) {
+      documentConfig.html = currentFile.value.htmlContent;
+    }
+  }
+
+  const config = {
+    superdocId: 'superdoc-dev',
+    selector: '#superdoc',
+    toolbar: 'toolbar',
+    toolbarGroups: ['center'],
+    role: userRole,
+    documentMode: mode, // Use the specified mode
+    licenseKey: 'public_license_key_superdocinternal_ad7035140c4b',
+    telemetry: {
+      enabled: true,
+      metadata: {
+        source: 'superdoc-dev',
+      },
+    },
+    comments: {
+      visible: true,
+    },
+    trackChanges: {
+      visible: true,
+    },
+    toolbarGroups: ['left', 'center', 'right'],
+    pagination: useLayoutEngine.value && !useWebLayout.value,
+    viewOptions: { layout: useWebLayout.value ? 'web' : 'print' },
+    useLayoutEngine: useLayoutEngine.value,
+    layoutEngineOptions: {
+      flowMode: useWebLayout.value ? 'semantic' : 'paginated',
+      ...(useWebLayout.value ? { semanticOptions: { marginsMode: 'none' } } : {}),
+      showBookmarks: showBookmarks.value,
+    },
+    rulers: true,
+    rulerContainer: '#ruler-container',
+    annotations: true,
+    isInternal,
+    user,
+    title: 'Test document',
+    users: [
+      { name: 'Nick Bernal', email: 'nick@harbourshare.com', access: 'internal' },
+      { name: 'Eric Doversberger', email: 'eric@harbourshare.com', access: 'external' },
+    ],
+    ...(documentConfig
+      ? useCollaboration
+        ? { documents: [{ id: testId, type: 'docx', data: currentFile.value }] }
+        : { document: documentConfig }
+      : {}),
+    modules: {
+      comments: {
+        permissionResolver: commentPermissionResolver,
+        // SD-3115: Set readOnly when in view mode
+        ...(commentsReadOnly ? { readOnly: true } : {}),
+      },
+      trackChanges: {
+        visible: true,
+        replacements: trackChangesReplacements.value,
+        // SD-3115: Set readOnly when in view mode
+        ...(commentsReadOnly ? { readOnly: true } : {}),
+      },
+      toolbar: {
+        selector: 'toolbar',
+        toolbarGroups: ['left', 'center', 'right'],
+        excludeItems: [],
+      },
+      surfaces: {
+        findReplace: true,
+      },
+      contextMenu: {},
+      ...(useCollaboration && ydocRef.value && providerRef.value
+        ? {
+            collaboration: {
+              ydoc: ydocRef.value,
+              provider: providerRef.value,
+            },
+          }
+        : {}),
+      ai: {},
+      pdf: {
+        pdfLib: pdfjsLib,
+        setWorker: false,
+      },
+    },
+    onEditorCreate,
+    onContentError,
+    toolbarIcons: {},
+    onCommentsUpdate,
+    onCommentsListChange: ({ isRendered }) => {
+      isCommentsListOpen.value = isRendered;
+    },
+  };
+
+  superdoc.value = new SuperDoc(config);
+  superdoc.value?.on('ready', () => {
+    superdoc.value.addCommentsList(commentsPanel.value);
+    console.log(`[SD-3115 Test] SuperDoc ready in ${mode} mode, comments readOnly: ${commentsReadOnly}`);
+  });
+  superdoc.value?.on('exception', (error) => {
+    console.error('SuperDoc exception:', error);
+  });
+
+  superdoc.value?.on('zoomChange', ({ zoom }) => {
+    currentZoom.value = zoom;
+  });
+
+  // Track document mode changes for SD-3115 testing
+  superdoc.value?.on('document-mode-change', ({ documentMode }) => {
+    currentDocumentMode.value = documentMode;
+    console.log('[SD-3115 Test] Document mode changed to:', documentMode);
+  });
+
+  window.superdoc = superdoc.value;
 };
 
 // Debug: Track all scroll changes when in scroll test mode
@@ -1513,6 +1738,23 @@ if (scrollTestMode.value) {
             </button>
             <button class="dev-app__header-export-btn" @click="toggleLayoutEngine">
               Turn Layout Engine {{ useLayoutEngine ? 'off' : 'on' }} (reloads)
+            </button>
+          </div>
+          <!-- SD-3115 Testing Controls -->
+          <div class="dev-app__header-buttons dev-app__sd3115-controls">
+            <span class="dev-app__sd3115-label">SD-3115 Test:</span>
+            <span class="badge" :class="{ 'badge--collab': currentDocumentMode === 'viewing' }">
+              Mode: {{ currentDocumentMode }}
+            </span>
+            <button class="dev-app__header-export-btn dev-app__sd3115-btn" @click="reinitInViewMode">
+              Reinit View Mode
+            </button>
+            <button
+              class="dev-app__header-export-btn dev-app__sd3115-btn"
+              :disabled="currentDocumentMode !== 'viewing'"
+              @click="switchToEditingMode"
+            >
+              Switch to Edit
             </button>
           </div>
         </div>
@@ -2236,6 +2478,32 @@ if (scrollTestMode.value) {
   font-size: 14px;
   line-height: 1.5;
   color: #fde68a;
+}
+
+/* SD-3115 Test Controls */
+.dev-app__sd3115-controls {
+  background: rgba(59, 130, 246, 0.15);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  border-radius: 10px;
+  padding: 8px 12px;
+  margin-top: 8px;
+}
+
+.dev-app__sd3115-label {
+  color: #93c5fd;
+  font-weight: 600;
+  font-size: 12px;
+  margin-right: 8px;
+}
+
+.dev-app__sd3115-btn {
+  background: rgba(59, 130, 246, 0.2) !important;
+  border-color: rgba(59, 130, 246, 0.4) !important;
+}
+
+.dev-app__sd3115-btn:hover:not(:disabled) {
+  background: rgba(59, 130, 246, 0.3) !important;
+  border-color: rgba(59, 130, 246, 0.5) !important;
 }
 
 /* Mobile responsive styles */

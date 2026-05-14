@@ -4179,6 +4179,144 @@ describe('renderTableCell', () => {
       expect(tableChrome?.dataset.sdtContainerEnd).toBe('true');
       expect(tableChrome?.querySelector('.superdoc-structured-content__label')).toBeFalsy();
     });
+
+    it('should continue SDT boundaries across partial nested table renders', () => {
+      const nestedTableSdt: SdtMetadata = {
+        type: 'structuredContent',
+        scope: 'block',
+        id: 'partial-nested-table-sdt',
+        alias: 'Partial Nested Table',
+      };
+      const nestedTable: TableBlock = {
+        kind: 'table',
+        id: 'partial-nested-table',
+        attrs: { sdt: nestedTableSdt },
+        rows: [
+          {
+            id: 'partial-nested-row-1',
+            cells: [
+              {
+                id: 'partial-nested-cell-1',
+                blocks: [
+                  {
+                    kind: 'paragraph',
+                    id: 'partial-nested-para-1',
+                    runs: [{ text: 'One', fontFamily: 'Arial', fontSize: 16 }],
+                  },
+                ],
+              },
+            ],
+          },
+          {
+            id: 'partial-nested-row-2',
+            cells: [
+              {
+                id: 'partial-nested-cell-2',
+                blocks: [
+                  {
+                    kind: 'paragraph',
+                    id: 'partial-nested-para-2',
+                    runs: [{ text: 'Two', fontFamily: 'Arial', fontSize: 16 }],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+      const nestedMeasure: TableMeasure = {
+        kind: 'table',
+        rows: [
+          {
+            height: 20,
+            cells: [
+              {
+                width: 80,
+                height: 20,
+                gridColumnStart: 0,
+                colSpan: 1,
+                rowSpan: 1,
+                blocks: [
+                  {
+                    kind: 'paragraph',
+                    lines: [
+                      {
+                        fromRun: 0,
+                        fromChar: 0,
+                        toRun: 0,
+                        toChar: 3,
+                        width: 30,
+                        ascent: 12,
+                        descent: 4,
+                        lineHeight: 20,
+                      },
+                    ],
+                    totalHeight: 20,
+                  },
+                ],
+              },
+            ],
+          },
+          {
+            height: 20,
+            cells: [
+              {
+                width: 80,
+                height: 20,
+                gridColumnStart: 0,
+                colSpan: 1,
+                rowSpan: 1,
+                blocks: [
+                  {
+                    kind: 'paragraph',
+                    lines: [
+                      {
+                        fromRun: 0,
+                        fromChar: 0,
+                        toRun: 0,
+                        toChar: 3,
+                        width: 30,
+                        ascent: 12,
+                        descent: 4,
+                        lineHeight: 20,
+                      },
+                    ],
+                    totalHeight: 20,
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+        columnWidths: [80],
+        totalWidth: 80,
+        totalHeight: 40,
+      };
+
+      const { cellElement } = renderTableCell({
+        ...createBaseDeps(),
+        cellMeasure: {
+          blocks: [nestedMeasure],
+          width: 120,
+          height: 20,
+          gridColumnStart: 0,
+          colSpan: 1,
+          rowSpan: 1,
+        },
+        cell: {
+          id: 'cell-partial-nested-table-sdt',
+          blocks: [nestedTable],
+          attrs: {},
+        },
+        fromLine: 1,
+        toLine: 2,
+      });
+
+      const tableChrome = cellElement.querySelector('[data-block-id="partial-nested-table"]') as HTMLElement;
+      expect(tableChrome?.dataset.sdtContainerStart).toBe('false');
+      expect(tableChrome?.dataset.sdtContainerEnd).toBe('true');
+      expect(tableChrome?.querySelector('.superdoc-structured-content__label')).toBeFalsy();
+    });
   });
 });
 

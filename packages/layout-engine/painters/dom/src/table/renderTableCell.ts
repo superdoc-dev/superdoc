@@ -450,6 +450,14 @@ function renderPartialEmbeddedTable(params: {
   }
 
   const visibleHeight = computeVisibleHeight(tableMeasure.rows, embeddedFromRow, embeddedToRow, partialRowInfo);
+  const effectiveSdtBoundary = sdtBoundary
+    ? {
+        ...sdtBoundary,
+        isStart: (sdtBoundary.isStart ?? true) && localFrom === 0,
+        isEnd: (sdtBoundary.isEnd ?? true) && localTo >= totalTableSegments,
+        showLabel: sdtBoundary.showLabel === undefined ? undefined : sdtBoundary.showLabel && localFrom === 0,
+      }
+    : undefined;
 
   const tableWrapper = doc.createElement('div');
   tableWrapper.style.position = 'relative';
@@ -471,7 +479,7 @@ function renderPartialEmbeddedTable(params: {
     fromRow: embeddedFromRow,
     toRow: embeddedToRow,
     partialRow: partialRowInfo,
-    sdtBoundary,
+    sdtBoundary: effectiveSdtBoundary,
     ancestorContainerKey,
     ancestorContainerSdt,
   });

@@ -253,6 +253,20 @@ describe('handleStructuredContentNode', () => {
       expect(parseTemporary([{ name: 'w:temporary', attributes: { 'w:val': '0' } }])).toBe(false);
     });
 
+    it('reads <w:temporary w:val="on"/> as true (ST_OnOff alias)', () => {
+      expect(parseTemporary([{ name: 'w:temporary', attributes: { 'w:val': 'on' } }])).toBe(true);
+    });
+
+    it('reads <w:temporary w:val="off"/> as false (ST_OnOff alias)', () => {
+      // Without going through the shared ST_OnOff set this would
+      // incorrectly fall through to true. See utils.js parseStrictStOnOff.
+      expect(parseTemporary([{ name: 'w:temporary', attributes: { 'w:val': 'off' } }])).toBe(false);
+    });
+
+    it('returns undefined for invalid w:val tokens (parser rejects unknown tokens)', () => {
+      expect(parseTemporary([{ name: 'w:temporary', attributes: { 'w:val': 'banana' } }])).toBeUndefined();
+    });
+
     it('returns undefined (not false) when <w:temporary> is absent', () => {
       // Spec contract: absent in source XML stays undefined so consumers
       // can distinguish "Word's effective default" from "explicit false".

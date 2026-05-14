@@ -1,4 +1,5 @@
 import { parseAnnotationMarks } from './handle-annotation-node';
+import { parseStrictStOnOff } from '../../../utils.js';
 
 /**
  * Detect the semantic control type from sdtPr child elements.
@@ -59,12 +60,11 @@ function extractPlaceholder(sdtPr) {
 /**
  * Extract the `<w:temporary/>` toggle from sdtPr (ECMA-376 §17.5.2.43).
  *
- * Word's toggle conventions apply: an empty element means `true`; an
- * element with `w:val="false"` or `w:val="0"` means `false`. The element
- * being absent means the property was not specified — we return
- * `undefined` so the Document API surfaces "absent" rather than fabricating
- * the spec default. Consumers reading the property MUST treat undefined
- * as "use the application default" (which for Word is `false`).
+ * Delegates to `parseStrictStOnOff` so token recognition matches the
+ * project's shared ST_OnOff convention (`true`/`1`/`on` → true;
+ * `false`/`0`/`off` → false). Returns `undefined` when the element is
+ * absent or carries an invalid token, preserving the "absent vs explicit
+ * false" distinction at the Document API surface.
  *
  * @param {Object|null} sdtPr
  * @returns {boolean|undefined}
@@ -72,9 +72,7 @@ function extractPlaceholder(sdtPr) {
 function extractTemporary(sdtPr) {
   const el = sdtPr?.elements?.find((e) => e.name === 'w:temporary');
   if (!el) return undefined;
-  const val = el.attributes?.['w:val'];
-  if (val == null) return true;
-  return val !== '0' && val !== 'false';
+  return parseStrictStOnOff(el.attributes?.['w:val'], 'temporary', 'w:temporary');
 }
 
 /**

@@ -156,6 +156,17 @@ export interface CustomXmlPartsMutationSuccess {
   success: true;
   /** Identifier the operation acted on (mirrors the resolved input target). */
   target: CustomXmlPartTarget;
+  /**
+   * The resolved itemID GUID of the affected part, when one exists.
+   *
+   * `patch` may need to mint a fresh GUID — e.g. when `schemaRefs` is
+   * patched onto a Storage Part that didn't previously have a Properties
+   * Part. In that case the caller targeted by `partName` but now has an
+   * id they can use for subsequent operations; this field surfaces it.
+   *
+   * For `remove`, the field is omitted because the part is gone.
+   */
+  id?: CustomXmlPartId;
 }
 
 export type CustomXmlPartsMutationResult = CustomXmlPartsMutationSuccess | AdapterMutationFailure;

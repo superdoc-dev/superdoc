@@ -195,7 +195,7 @@ export function customXmlPartsPatchWrapper(
   options?: MutationOptions,
 ): CustomXmlPartsMutationResult {
   rejectTrackedMode('customXml.parts.patch', options);
-  const outcome = executeOutOfBandMutation<WriteOutcome<true>>(
+  const outcome = executeOutOfBandMutation<WriteOutcome<{ id: string | null }>>(
     editor,
     (dryRun) => {
       if (dryRun) {
@@ -205,7 +205,7 @@ export function customXmlPartsPatchWrapper(
           const probe = safeValidate(() => createCustomXmlPart({}, { content: input.content, schemaRefs: undefined }));
           if (isWriteFailure(probe)) return { changed: false, payload: probe };
         }
-        return { changed: false, payload: { ok: true, payload: true } };
+        return { changed: false, payload: { ok: true, payload: { id: null } } };
       }
       // Resolve first so a missing target doesn't get reported as INVALID_INPUT.
       const partName = resolveTargetPartName(getConvertedXml(editor), input.target);
@@ -220,12 +220,14 @@ export function customXmlPartsPatchWrapper(
       );
       if (isWriteFailure(probe)) return { changed: false, payload: probe };
       if (!probe.payload) return { changed: false, payload: targetNotFound() };
-      return { changed: true, payload: { ok: true, payload: true } };
+      return { changed: true, payload: { ok: true, payload: { id: probe.payload.id ?? null } } };
     },
     { dryRun: options?.dryRun === true, expectedRevision: options?.expectedRevision },
   );
   if (isWriteFailure(outcome)) return failure(outcome.code, outcome.message);
-  return { success: true, target: input.target };
+  const result: CustomXmlPartsMutationResult = { success: true, target: input.target };
+  if (outcome.payload.id) result.id = outcome.payload.id;
+  return result;
 }
 
 export function customXmlPartsRemoveWrapper(

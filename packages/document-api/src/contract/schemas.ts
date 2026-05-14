@@ -2597,6 +2597,9 @@ const customXmlPartTargetSchema: JsonSchema = {
 const customXmlPartMutation = refMutationSchemas(
   {
     target: customXmlPartTargetSchema,
+    // Optional: surfaced when patch resolves or mints an itemID. See
+    // CustomXmlPartsMutationSuccess JSDoc for the patch-foreign-part case.
+    id: { type: 'string', minLength: 1 },
   },
   ['target'],
 );

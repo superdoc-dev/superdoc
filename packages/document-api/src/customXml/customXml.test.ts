@@ -203,8 +203,8 @@ describe('customXml.parts.patch validation', () => {
     expect(() => executeCustomXmlPartsPatch(adapter, { target })).toThrow(DocumentApiValidationError);
   });
 
-  it('rejects patch with empty schemaRefs cleared but valid content', () => {
-    // Empty schemaRefs is allowed (means "clear them"), content also valid.
+  it('accepts patch with empty schemaRefs alongside valid content', () => {
+    // Empty schemaRefs is allowed (means "clear them"); content also valid.
     const adapter = makeAdapter();
     expect(() => executeCustomXmlPartsPatch(adapter, { target, content: VALID_XML, schemaRefs: [] })).not.toThrow();
   });

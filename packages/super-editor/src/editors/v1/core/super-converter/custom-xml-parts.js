@@ -487,15 +487,20 @@ export function createCustomXmlPart(convertedXml, { content, schemaRefs }, conve
 
 /**
  * Replaces the content and/or schemaRefs of an existing part. Preserves
- * the existing itemID and package part names.
+ * the existing itemID when present; generates a new one when the patch
+ * forces creation of a Properties Part on a foreign storage part that
+ * didn't have one.
  *
  * When `converter` is provided and the patched part is the cached
  * bibliography part, the bibliographyPart cache is invalidated so the
  * exporter's `syncBibliographyPartToPackage` doesn't overwrite the
  * patched content with stale sources.
  *
- * Returns `{ partName }` of the part that was patched, or `null` when
- * the target couldn't be resolved.
+ * Returns `{ partName, id }` where `id` is the resolved itemID GUID
+ * (existing or freshly minted), or `null` when the target couldn't be
+ * resolved. `id` is omitted only when no Properties Part exists or was
+ * created — i.e. when `schemaRefs` wasn't patched and the part already
+ * lacked props.
  *
  * @throws {Error} when content is provided but not well-formed.
  */
@@ -509,11 +514,12 @@ export function patchCustomXmlPart(convertedXml, target, { content, schemaRefs }
     convertedXml[partName] = createXmlDocument(root, existingDecl);
   }
 
+  let resolvedId = null;
+
   if (schemaRefs !== undefined) {
     let propsPartName = findPropsPartFor(convertedXml, partName);
-    let itemId = null;
     if (propsPartName) {
-      itemId = parsePropsPart(convertedXml[propsPartName])?.itemId ?? null;
+      resolvedId = parsePropsPart(convertedXml[propsPartName])?.itemId ?? null;
     }
     if (!propsPartName) {
       // Foreign part had no Properties Part; create one now so the
@@ -522,19 +528,26 @@ export function patchCustomXmlPart(convertedXml, target, { content, schemaRefs }
       if (idx == null) return null;
       propsPartName = propsPartNameFromIndex(idx);
       const itemRelsPath = `customXml/_rels/item${idx}.xml.rels`;
-      itemId = `{${uuidv4().toUpperCase()}}`;
+      resolvedId = `{${uuidv4().toUpperCase()}}`;
       convertedXml[itemRelsPath] = createXmlDocument(buildItemRelsRoot(`itemProps${idx}.xml`));
     }
-    if (!itemId) itemId = `{${uuidv4().toUpperCase()}}`;
+    if (!resolvedId) resolvedId = `{${uuidv4().toUpperCase()}}`;
     const existingDecl = convertedXml[propsPartName]?.declaration;
-    convertedXml[propsPartName] = createXmlDocument(buildItemPropsRoot(itemId, schemaRefs), existingDecl);
+    convertedXml[propsPartName] = createXmlDocument(buildItemPropsRoot(resolvedId, schemaRefs), existingDecl);
+  } else {
+    // schemaRefs wasn't touched — read the existing id, if any, so the
+    // caller always learns the id when one exists.
+    const propsPartName = findPropsPartFor(convertedXml, partName);
+    if (propsPartName) {
+      resolvedId = parsePropsPart(convertedXml[propsPartName])?.itemId ?? null;
+    }
   }
 
   // If we just patched the bibliography part, invalidate the cache so
   // the exporter doesn't overwrite our content from converter.bibliographyPart.
   if (converter) invalidateConverterCachesForPath(converter, partName);
 
-  return { partName };
+  return resolvedId ? { partName, id: resolvedId } : { partName };
 }
 
 /**

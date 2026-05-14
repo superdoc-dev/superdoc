@@ -573,6 +573,39 @@ describe('customXml.parts write-side', () => {
     editor.destroy();
   });
 
+  it('surfaces the fresh itemID when patch creates a Properties Part on a foreign Storage Part', async () => {
+    // Seed: a Storage Part with no Properties Part (foreign producer
+    // case). The caller targets it by partName since there's no id.
+    const editor = await createEditorWithEmptyPackage();
+    const converted = (editor as unknown as { converter: { convertedXml: Record<string, unknown> } }).converter
+      .convertedXml;
+    converted[PART_NAME] = makeStorageDoc();
+    // No Properties Part exists for PART_NAME.
+
+    // Before patch, get returns the part with no itemID (no Properties Part exists).
+    const beforePatch = editor.doc.customXml.parts.get({ target: { partName: PART_NAME } });
+    expect(beforePatch).not.toBeNull();
+    expect(beforePatch!.id, 'no Properties Part means no itemID').toBeUndefined();
+
+    // Patch schemaRefs — this mints a fresh GUID and writes a new
+    // Properties Part. Caller should learn the new id from the result.
+    const patched = editor.doc.customXml.parts.patch({
+      target: { partName: PART_NAME },
+      schemaRefs: ['urn:foreign'],
+    });
+    expect(patched.success).toBe(true);
+    if (!patched.success) return;
+    expect(patched.id, 'patch should surface the new itemID').toBeDefined();
+    expect(patched.id).toMatch(/^\{[0-9A-F-]+\}$/);
+
+    // Caller can now address the part by id.
+    const info = editor.doc.customXml.parts.get({ target: { id: patched.id! } });
+    expect(info).not.toBeNull();
+    expect(info!.schemaRefs).toEqual(['urn:foreign']);
+
+    editor.destroy();
+  });
+
   it('removing the bibliography part does not resurrect it via syncBibliographyPartToPackage on export', async () => {
     // Seed: simulate a doc with a bibliography custom XML part already
     // loaded. The converter's bibliographyPart cache will hold sources.

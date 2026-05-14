@@ -79,7 +79,7 @@ import {
 import { applyAlphaToSVG, applyGradientToSVG, validateHexColor } from './svg-utils.js';
 import { renderTableFragment as renderTableFragmentElement } from './table/renderTableFragment.js';
 import { applyImageClipPath } from './utils/image-clip-path.js';
-import { applySdtContainerStyling, shouldRebuildForSdtBoundary, type SdtBoundaryOptions } from './utils/sdt-helpers.js';
+import { shouldRebuildForSdtBoundary, type SdtBoundaryOptions } from './sdt/container.js';
 import { computeBetweenBorderFlags, type BetweenBorderInfo } from './paragraph/borders/index.js';
 import { deriveParagraphBlockVersion, hashParagraphBlockForTableVersion } from './paragraph/block-version.js';
 import { applyParagraphFragmentPmAttributes } from './paragraph/frame.js';

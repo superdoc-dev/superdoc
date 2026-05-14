@@ -6,7 +6,9 @@ import type {
   ParagraphMeasure,
   TableCell,
   TableCellMeasure,
+  TableBlock,
   TableMeasure,
+  SdtMetadata,
   ImageBlock,
   DrawingBlock,
   DrawingMeasure,
@@ -3692,12 +3694,18 @@ describe('renderTableCell', () => {
       expect(cellElement.style.overflow).toBe('hidden');
     });
 
-    it('should not apply SDT container styling when block SDT matches tableSdt', () => {
-      const tableSdt = {
+    it('should not apply SDT container styling when block SDT key matches ancestor table SDT key', () => {
+      const tableSdt: SdtMetadata = {
         type: 'structuredContent' as const,
         scope: 'block' as const,
         id: 'table-sdt',
         alias: 'Table Container',
+      };
+      const blockSdt: SdtMetadata = {
+        type: 'structuredContent' as const,
+        scope: 'block' as const,
+        id: 'table-sdt',
+        alias: 'Cell Container',
       };
 
       const para: ParagraphBlock = {
@@ -3705,7 +3713,7 @@ describe('renderTableCell', () => {
         id: 'para-same-sdt',
         runs: [{ text: 'Content in table SDT', fontFamily: 'Arial', fontSize: 16 }],
         attrs: {
-          sdt: tableSdt, // Same reference as tableSdt
+          sdt: blockSdt,
         },
       };
 
@@ -3745,12 +3753,11 @@ describe('renderTableCell', () => {
         ...createBaseDeps(),
         cellMeasure,
         cell,
-        tableSdt, // Pass the same SDT as the table level
+        ancestorTableSdtKey: 'structuredContent:table-sdt',
       });
 
-      // Cell should keep overflow:hidden because block SDT matches tableSdt
-      // (no duplicate container styling needed)
       expect(cellElement.style.overflow).toBe('hidden');
+      expect(cellElement.querySelector('.superdoc-structured-content-block')).toBeFalsy();
     });
 
     it('should keep overflow:hidden for inline scope structuredContent (not a block container)', () => {
@@ -3808,6 +3815,103 @@ describe('renderTableCell', () => {
 
       // Inline SDTs don't get container styling, so overflow stays hidden
       expect(cellElement.style.overflow).toBe('hidden');
+      expect(cellElement.querySelector('.superdoc-structured-content-block')).toBeFalsy();
+      expect(cellElement.querySelector('.superdoc-structured-content__label')).toBeFalsy();
+    });
+
+    it('should set overflow:visible and render chrome when cell contains nested table SDT', () => {
+      const nestedParagraph: ParagraphBlock = {
+        kind: 'paragraph',
+        id: 'nested-sdt-para',
+        runs: [{ text: 'Nested', fontFamily: 'Arial', fontSize: 16 }],
+        attrs: {},
+      };
+      const nestedTable: TableBlock = {
+        kind: 'table',
+        id: 'nested-sdt-table',
+        attrs: {
+          sdt: {
+            type: 'structuredContent',
+            scope: 'block',
+            id: 'nested-table-sdt',
+            alias: 'Nested Table',
+          },
+        },
+        rows: [
+          {
+            id: 'nested-row',
+            cells: [
+              {
+                id: 'nested-cell',
+                blocks: [nestedParagraph],
+                attrs: {},
+              },
+            ],
+          },
+        ],
+      };
+      const nestedMeasure: TableMeasure = {
+        kind: 'table',
+        rows: [
+          {
+            height: 24,
+            cells: [
+              {
+                width: 80,
+                height: 24,
+                gridColumnStart: 0,
+                colSpan: 1,
+                rowSpan: 1,
+                blocks: [
+                  {
+                    kind: 'paragraph',
+                    lines: [
+                      {
+                        fromRun: 0,
+                        fromChar: 0,
+                        toRun: 0,
+                        toChar: 6,
+                        width: 60,
+                        ascent: 12,
+                        descent: 4,
+                        lineHeight: 20,
+                      },
+                    ],
+                    totalHeight: 20,
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+        columnWidths: [80],
+        totalWidth: 80,
+        totalHeight: 24,
+      };
+      const cellMeasure: TableCellMeasure = {
+        blocks: [nestedMeasure],
+        width: 120,
+        height: 40,
+        gridColumnStart: 0,
+        colSpan: 1,
+        rowSpan: 1,
+      };
+      const cell: TableCell = {
+        id: 'cell-nested-table-sdt',
+        blocks: [nestedTable],
+        attrs: {},
+      };
+
+      const { cellElement } = renderTableCell({
+        ...createBaseDeps(),
+        cellMeasure,
+        cell,
+      });
+
+      expect(cellElement.style.overflow).toBe('visible');
+      const tableChrome = cellElement.querySelector('[data-block-id="nested-sdt-table"]') as HTMLElement;
+      expect(tableChrome?.classList.contains('superdoc-structured-content-block')).toBe(true);
+      expect(tableChrome?.querySelector('.superdoc-structured-content__label')?.textContent).toBe('Nested Table');
     });
   });
 });

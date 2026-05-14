@@ -9,7 +9,7 @@ import type {
 import { isMinimalWordLayout as isMinimalWordLayoutShared } from '@superdoc/common/list-marker-utils';
 import type { MinimalWordLayout } from '@superdoc/common/list-marker-utils';
 import { CLASS_NAMES, fragmentStyles } from '../styles.js';
-import type { SdtBoundaryOptions } from '../utils/sdt-helpers.js';
+import { shouldRenderSdtContainerChrome, type SdtBoundaryOptions } from '../sdt/container.js';
 import type { BetweenBorderInfo } from './borders/index.js';
 import { renderParagraphContent, type ParagraphRenderLineInput } from './renderParagraphContent.js';
 
@@ -75,11 +75,7 @@ export const renderParagraphFragment = (params: RenderParagraphFragmentParams): 
 
     const isTocEntry = block.attrs?.isTocEntry;
     const hasMarker = !paraContinuesFromPrev && paraMarkerWidth && wordLayout?.marker;
-    const hasSdtContainer =
-      block.attrs?.sdt?.type === 'documentSection' ||
-      block.attrs?.sdt?.type === 'structuredContent' ||
-      block.attrs?.containerSdt?.type === 'documentSection' ||
-      block.attrs?.containerSdt?.type === 'structuredContent';
+    const hasSdtContainer = shouldRenderSdtContainerChrome(block.attrs?.sdt, block.attrs?.containerSdt);
     const paraIndentForOverflow = block.attrs?.indent;
     const hasNegativeIndent = (paraIndentForOverflow?.left ?? 0) < 0 || (paraIndentForOverflow?.right ?? 0) < 0;
     const styles = isTocEntry

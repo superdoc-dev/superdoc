@@ -21,7 +21,12 @@ import type { MinimalWordLayout } from '@superdoc/common/list-marker-utils';
 import type { FragmentRenderContext, RenderedLineInfo } from '../renderer.js';
 import { applySquareWrapExclusionsToLines } from '../utils/anchor-helpers';
 import { applyImageClipPath } from '../utils/image-clip-path.js';
-import { getSdtContainerConfig, getSdtContainerKey, type SdtBoundaryOptions } from '../utils/sdt-helpers.js';
+import {
+  getSdtContainerKeyForBlock,
+  getSdtSiblingBoundaries,
+  shouldRenderSdtContainerChrome,
+  type SdtBoundaryOptions,
+} from '../sdt/container.js';
 import { applyCellBorders } from './border-utils.js';
 import { renderTableFragment as renderTableFragmentElement } from './renderTableFragment.js';
 import { renderParagraphContent } from '../paragraph/renderParagraphContent.js';
@@ -504,8 +509,8 @@ type TableCellRenderDependencies = {
   context: FragmentRenderContext;
   /** Function to apply SDT metadata as data attributes */
   applySdtDataset: (el: HTMLElement | null, metadata?: SdtMetadata | null) => void;
-  /** Table-level SDT metadata for suppressing duplicate container styling in cells */
-  tableSdt?: SdtMetadata | null;
+  /** Table-level SDT container key for suppressing duplicate container styling in cells */
+  ancestorTableSdtKey?: string | null;
   /** Table indent in pixels (applied to table fragment positioning) */
   tableIndent?: number;
   /** Whether the table is visually right-to-left (w:bidiVisual, ECMA-376 §17.4.1) */
@@ -596,7 +601,7 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
     renderDrawingContent,
     context,
     applySdtDataset,
-    tableSdt,
+    ancestorTableSdtKey,
     tableIndent,
     isRtl,
     cellWidth,
@@ -640,46 +645,17 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
   // Support multi-block cells with backward compatibility
   const cellBlocks = cell?.blocks ?? (cell?.paragraph ? [cell.paragraph] : []);
   const blockMeasures = cellMeasure?.blocks ?? (cellMeasure?.paragraph ? [cellMeasure.paragraph] : []);
-  const sdtContainerKeys = cellBlocks.map((block) => {
-    if (block.kind !== 'paragraph') {
-      return null;
-    }
-    const attrs = (block as { attrs?: { sdt?: SdtMetadata; containerSdt?: SdtMetadata } }).attrs;
-    return getSdtContainerKey(attrs?.sdt, attrs?.containerSdt);
-  });
-
-  const sdtBoundaries = sdtContainerKeys.map((key, index): SdtBoundaryOptions | undefined => {
-    if (!key) return undefined;
-    const prev = index > 0 ? sdtContainerKeys[index - 1] : null;
-    const next = index < sdtContainerKeys.length - 1 ? sdtContainerKeys[index + 1] : null;
-    return { isStart: key !== prev, isEnd: key !== next };
-  });
-  /**
-   * Determines if SDT container styling should be applied to a block.
-   *
-   * We skip styling when the block's SDT matches the table's SDT to prevent
-   * duplicate visual containers - the table already has the SDT container styling,
-   * so individual paragraphs inside it shouldn't also show container borders.
-   *
-   * @param sdt - The block's direct SDT metadata
-   * @param containerSdt - The block's inherited container SDT metadata
-   * @returns True if container styling should be applied
-   */
-  const tableSdtKey = tableSdt ? getSdtContainerKey(tableSdt, null) : null;
+  const sdtContainerKeys = cellBlocks.map((block) => getSdtContainerKeyForBlock(block));
+  const sdtBoundaries = getSdtSiblingBoundaries(sdtContainerKeys);
   const shouldApplySdtContainerStyling = (
     sdt?: SdtMetadata | null,
     containerSdt?: SdtMetadata | null,
     blockKey?: string | null,
   ): boolean => {
-    const resolvedKey = blockKey ?? getSdtContainerKey(sdt, containerSdt);
-    // Skip if this SDT is the same as the table's SDT (already styled at table level)
-    if (tableSdtKey && resolvedKey && tableSdtKey === resolvedKey) {
-      return false;
-    }
-    if (tableSdt && (sdt === tableSdt || containerSdt === tableSdt)) {
-      return false;
-    }
-    return Boolean(getSdtContainerConfig(sdt) || getSdtContainerConfig(containerSdt));
+    return shouldRenderSdtContainerChrome(sdt, containerSdt, {
+      ancestorContainerKey: ancestorTableSdtKey,
+      containerKey: blockKey,
+    });
   };
 
   // Check if any block in the cell has SDT container styling

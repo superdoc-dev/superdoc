@@ -14,7 +14,7 @@ import {
   getParagraphInlineDirection,
 } from '@superdoc/contracts';
 import { resolveMarkerIndent, type MinimalWordLayout } from '@superdoc/common/list-marker-utils';
-import { applySdtContainerStyling, type SdtBoundaryOptions } from '../utils/sdt-helpers.js';
+import { applySdtContainerChrome, type SdtBoundaryOptions } from '../sdt/container.js';
 import { createParagraphDecorationLayers, stampBetweenBorderDataset, type BetweenBorderInfo } from './borders/index.js';
 import {
   applyParagraphLineIndentation,
@@ -137,7 +137,7 @@ export const renderParagraphContent = (params: RenderParagraphContentParams): Re
 
   const applySdtChrome = shouldApplySdtContainerStyling?.(block.attrs?.sdt, block.attrs?.containerSdt) ?? true;
   if (applySdtChrome) {
-    applySdtContainerStyling(doc, frameEl, block.attrs?.sdt, block.attrs?.containerSdt, sdtBoundary);
+    applySdtContainerChrome(doc, frameEl, block.attrs?.sdt, block.attrs?.containerSdt, sdtBoundary);
   }
 
   renderParagraphDropCap({

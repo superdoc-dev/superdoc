@@ -665,9 +665,15 @@ const SDT_CONTAINER_STYLES = `
  * Hover adds background highlight and z-index boost.
  * Block SDTs use .sdt-group-hover class (event delegation for multi-fragment coordination).
  * Inline SDTs use :hover (single element, no coordination needed).
- * Hover is suppressed when the node is selected (SD-1584). */
+ * Hover is suppressed when the node is selected (SD-1584).
+ *
+ * Inline SDTs with appearance=hidden are excluded: this selector has
+ * higher specificity than the hidden-appearance rule above (its
+ * :not(.ProseMirror-selectednode) adds a class to the specificity tuple),
+ * so without the exclusion it would re-introduce the lock-hover blue
+ * background on hover and contradict the "visually transparent" intent. */
 .superdoc-structured-content-block[data-lock-mode].sdt-group-hover:not(.ProseMirror-selectednode),
-.superdoc-structured-content-inline[data-lock-mode]:hover:not(.ProseMirror-selectednode) {
+.superdoc-structured-content-inline[data-lock-mode]:hover:not(.ProseMirror-selectednode):not([data-appearance='hidden']) {
   background-color: var(--sd-content-controls-lock-hover-bg, rgba(98, 155, 231, 0.08));
   z-index: 9999999;
 }

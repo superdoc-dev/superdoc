@@ -89,6 +89,37 @@ test.describe('inline SDT appearance=hidden (SD-3110)', () => {
     }
   });
 
+  test('hovering a hidden wrapper does not paint the lock-hover background or boost z-index', async ({ superdoc }) => {
+    // Regression guard for the CSS specificity bug caught in PR review:
+    // the lock-hover rule
+    //   .superdoc-structured-content-inline[data-lock-mode]:hover:not(.ProseMirror-selectednode)
+    // has (0,4,0) specificity vs (0,3,0) for the hidden-appearance hover
+    // rule, so without an explicit :not([data-appearance='hidden']) it
+    // re-introduces the lock-hover blue background + z-index 9999999 on
+    // hover, contradicting "visually transparent".
+    // Painter may emit more than one wrapper for the same SDT when the run
+    // is split across lines/fragments — each fragment carries the same
+    // data-sdt-id. Scope to the painter class and take `.first()`: the
+    // CSS specificity bug is per-element, so a single wrapper is enough.
+    const wrapper = superdoc.page
+      .locator('.superdoc-structured-content-inline[data-sdt-id="1001"]')
+      .first();
+    await wrapper.hover();
+    await superdoc.waitForStable();
+
+    const styles = await wrapper.evaluate((el) => {
+      const cs = getComputedStyle(el);
+      return { backgroundColor: cs.backgroundColor, zIndex: cs.zIndex };
+    });
+
+    // Default backgrounds on most browsers are transparent / rgba(0, 0, 0, 0);
+    // the regression value is rgba(98, 155, 231, 0.08).
+    expect(styles.backgroundColor).not.toContain('98, 155, 231');
+    // The lock-hover rule sets z-index 9999999 on top of any default — if
+    // it slipped through, the hidden wrapper would jump above siblings.
+    expect(styles.zIndex).not.toBe('9999999');
+  });
+
   test('selecting a hidden wrapper copies only the wrapped phrase', async ({ superdoc }) => {
     const selectionText = await superdoc.page.evaluate(() => {
       const wrapper = document.querySelector('[data-sdt-id="1001"]');

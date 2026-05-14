@@ -3967,6 +3967,100 @@ describe('renderTableCell', () => {
       expect(tableChrome?.querySelector('.superdoc-structured-content__label')?.textContent).toBe('Nested Table');
     });
 
+    it('should not apply nested table chrome when its SDT key matches the ancestor table SDT key', () => {
+      const sharedSdt: SdtMetadata = {
+        type: 'structuredContent',
+        scope: 'block',
+        id: 'ancestor-table-sdt',
+        alias: 'Ancestor Table',
+      };
+      const nestedParagraph: ParagraphBlock = {
+        kind: 'paragraph',
+        id: 'nested-ancestor-sdt-para',
+        runs: [{ text: 'Nested', fontFamily: 'Arial', fontSize: 16 }],
+        attrs: {},
+      };
+      const nestedTable: TableBlock = {
+        kind: 'table',
+        id: 'nested-ancestor-sdt-table',
+        attrs: { sdt: sharedSdt },
+        rows: [
+          {
+            id: 'nested-ancestor-row',
+            cells: [
+              {
+                id: 'nested-ancestor-cell',
+                blocks: [nestedParagraph],
+                attrs: {},
+              },
+            ],
+          },
+        ],
+      };
+      const nestedMeasure: TableMeasure = {
+        kind: 'table',
+        rows: [
+          {
+            height: 24,
+            cells: [
+              {
+                width: 80,
+                height: 24,
+                gridColumnStart: 0,
+                colSpan: 1,
+                rowSpan: 1,
+                blocks: [
+                  {
+                    kind: 'paragraph',
+                    lines: [
+                      {
+                        fromRun: 0,
+                        fromChar: 0,
+                        toRun: 0,
+                        toChar: 6,
+                        width: 60,
+                        ascent: 12,
+                        descent: 4,
+                        lineHeight: 20,
+                      },
+                    ],
+                    totalHeight: 20,
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+        columnWidths: [80],
+        totalWidth: 80,
+        totalHeight: 24,
+      };
+
+      const { cellElement } = renderTableCell({
+        ...createBaseDeps(),
+        cellMeasure: {
+          blocks: [nestedMeasure],
+          width: 120,
+          height: 40,
+          gridColumnStart: 0,
+          colSpan: 1,
+          rowSpan: 1,
+        },
+        cell: {
+          id: 'cell-nested-ancestor-sdt-table',
+          blocks: [nestedTable],
+          attrs: {},
+        },
+        ancestorTableSdtKey: 'structuredContent:ancestor-table-sdt',
+        ancestorTableSdt: sharedSdt,
+      });
+
+      const tableElement = cellElement.querySelector('[data-block-id="nested-ancestor-sdt-table"]') as HTMLElement;
+      expect(cellElement.style.overflow).toBe('hidden');
+      expect(tableElement?.classList.contains('superdoc-structured-content-block')).toBe(false);
+      expect(tableElement?.querySelector('.superdoc-structured-content__label')).toBeFalsy();
+    });
+
     it('should continue SDT boundaries across adjacent paragraph and nested table blocks', () => {
       const sharedSdt: SdtMetadata = {
         type: 'structuredContent',

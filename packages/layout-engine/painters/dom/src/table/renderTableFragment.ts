@@ -46,6 +46,10 @@ export type TableRenderDependencies = {
   effectiveColumnWidths: number[];
   /** Optional SDT boundary overrides for container styling */
   sdtBoundary?: SdtBoundaryOptions;
+  /** Ancestor SDT key used to suppress duplicate container chrome in nested tables */
+  ancestorContainerKey?: string | null;
+  /** Ancestor SDT metadata used to suppress duplicate id-less container chrome in nested tables */
+  ancestorContainerSdt?: SdtMetadata | null;
   /** Function to render a line of paragraph content */
   renderLine: (
     block: ParagraphBlock,
@@ -148,6 +152,8 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
     effectiveColumnWidths,
     context,
     sdtBoundary,
+    ancestorContainerKey,
+    ancestorContainerSdt,
     renderLine,
     captureLineSnapshot,
     renderDrawingContent,
@@ -207,7 +213,10 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
   const contentTop = tableBorderWidths?.top ?? 0;
 
   // Apply SDT container styling (document sections, structured content blocks)
-  applySdtContainerChrome(doc, container, block.attrs?.sdt, block.attrs?.containerSdt, sdtBoundary);
+  applySdtContainerChrome(doc, container, block.attrs?.sdt, block.attrs?.containerSdt, sdtBoundary, {
+    ancestorContainerKey,
+    ancestorContainerSdt,
+  });
   const tableContainerSdt = getSdtContainerMetadata(block.attrs?.sdt, block.attrs?.containerSdt);
 
   // Add table-specific class for resize overlay targeting and click mapping

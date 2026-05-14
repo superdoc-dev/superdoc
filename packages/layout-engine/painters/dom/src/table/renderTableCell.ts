@@ -229,6 +229,10 @@ type EmbeddedTableRenderParams = {
   partialRow?: PartialRowInfo;
   /** Optional SDT boundary overrides for container styling */
   sdtBoundary?: SdtBoundaryOptions;
+  /** Ancestor SDT key used to suppress duplicate container chrome in nested tables */
+  ancestorContainerKey?: string | null;
+  /** Ancestor SDT metadata used to suppress duplicate id-less container chrome in nested tables */
+  ancestorContainerSdt?: SdtMetadata | null;
 };
 
 /**
@@ -274,6 +278,8 @@ const renderEmbeddedTable = (params: EmbeddedTableRenderParams): HTMLElement => 
     toRow: paramToRow,
     partialRow: paramPartialRow,
     sdtBoundary,
+    ancestorContainerKey,
+    ancestorContainerSdt,
   } = params;
 
   const effectiveFromRow = paramFromRow ?? 0;
@@ -324,6 +330,8 @@ const renderEmbeddedTable = (params: EmbeddedTableRenderParams): HTMLElement => 
     applySdtDataset,
     applyStyles: applyInlineStyles,
     sdtBoundary,
+    ancestorContainerKey,
+    ancestorContainerSdt,
   });
 };
 
@@ -348,6 +356,8 @@ function renderPartialEmbeddedTable(params: {
   renderDrawingContent?: EmbeddedTableRenderParams['renderDrawingContent'];
   applySdtDataset: EmbeddedTableRenderParams['applySdtDataset'];
   sdtBoundary?: SdtBoundaryOptions;
+  ancestorContainerKey?: string | null;
+  ancestorContainerSdt?: SdtMetadata | null;
 }): { element: HTMLElement | null; height: number; nextCumulativeLineCount: number } {
   const {
     doc,
@@ -363,6 +373,8 @@ function renderPartialEmbeddedTable(params: {
     renderDrawingContent,
     applySdtDataset,
     sdtBoundary,
+    ancestorContainerKey,
+    ancestorContainerSdt,
   } = params;
 
   // Compute per-row segment counts (recursive, matching getCellLines/getEmbeddedRowLines).
@@ -460,6 +472,8 @@ function renderPartialEmbeddedTable(params: {
     toRow: embeddedToRow,
     partialRow: partialRowInfo,
     sdtBoundary,
+    ancestorContainerKey,
+    ancestorContainerSdt,
   });
   tableWrapper.appendChild(tableEl);
 
@@ -761,6 +775,8 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
           renderDrawingContent,
           applySdtDataset,
           sdtBoundary: sdtBoundaries[i],
+          ancestorContainerKey: ancestorTableSdtKey,
+          ancestorContainerSdt: ancestorTableSdt,
         });
         cumulativeLineCount = result.nextCumulativeLineCount;
         if (result.element) {

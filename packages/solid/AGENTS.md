@@ -1,6 +1,6 @@
-# @superdoc-dev/react
+# @superdoc-dev/solid
 
-React wrapper for SuperDoc.
+Solid wrapper for SuperDoc.
 
 ## Files
 
@@ -8,7 +8,6 @@ React wrapper for SuperDoc.
 |------|---------|
 | `src/SuperDocEditor.tsx` | Main component |
 | `src/types.ts` | TypeScript types (extracted from superdoc) |
-| `src/utils.ts` | ID generation |
 | `src/index.ts` | Public exports |
 
 ## Type System
@@ -25,34 +24,35 @@ export type SuperDocModules = NonNullable<SuperDocConstructorConfig['modules']>;
 export type SuperDocConfig = SuperDocConstructorConfig;
 export type SuperDocInstance = InstanceType<typeof SuperDoc>;
 
-// Props = SuperDocConfig (minus internal) + React-specific
+// Props = SuperDocConfig (minus internal) + Solid-specific
 type InternalProps = 'selector';  // managed by component
 type OptionalInReact = 'documentMode';  // defaults to 'editing'
 
 export interface SuperDocEditorProps
-  extends Omit<SuperDocConfig, InternalProps | OptionalInReact>,
-    Partial<Pick<SuperDocConfig, OptionalInReact>>,
-    ReactProps {}
+  extends Omit<SuperDocConfig, InternalProps | OptionalInSolid>,
+    Partial<Pick<SuperDocConfig, OptionalInSolid>>,
+    SolidProps {}
 ```
 
-## React-Specific Props
+## Solid-Specific Props
 
 | Prop | Type | Default | Description |
 |------|------|---------|-------------|
-| `id` | `string` | auto-generated | Custom container ID |
-| `renderLoading` | `() => ReactNode` | - | Loading UI during init |
-| `hideToolbar` | `boolean` | `false` | Hide the toolbar |
-| `className` | `string` | - | Wrapper CSS class |
-| `style` | `CSSProperties` | - | Wrapper inline styles |
+| `id` | `string` | Custom container ID (auto-generated if not provided) |
+| `ref` | `Ref<SuperDocRef>` | Ref to the SuperDoc instance |
+| `renderLoading` | `() => JSX.Element` | Loading UI |
+| `hideToolbar` | `boolean` | Hide toolbar (default: false) |
+| `class` | `string` | Wrapper CSS class |
+| `style` | `JSX.CSSProperties` | Wrapper inline styles |
 
 ## Fixed-height container embedding
 
 Pass `contained` to scroll inside a fixed-height parent. The wrapper must have a definite height.
 
 ```tsx
-<div style={{ height: 500 }}>
+<div style={{ height: '500px' }}>
   <SuperDocEditor
-    document={file}
+    document={file()}
     documentMode="viewing"
     contained
     style={{ height: '100%' }}
@@ -64,16 +64,16 @@ Pass `contained` to scroll inside a fixed-height parent. The wrapper must have a
 
 - Container divs are always rendered (hidden with `display: none` until initialized)
 - No `isClient` state or extra rerender — containers exist from first render
-- SuperDoc initializes in `useEffect` (client-side only) and mounts into the existing containers
+- SuperDoc initializes in `createEffect` (client-side only) and mounts into the existing containers
 - `renderLoading()` shown alongside hidden containers until initialization completes
 
 ## Ref API
 
 ```typescript
-const editorRef = useRef<SuperDocRef>(null);
+let editorRef: SuperDocRef | null = null;
 
 // Access SuperDoc instance
-const instance = editorRef.current?.getInstance();
+const instance = editorRef?.getInstance();
 
 // Call methods
 instance?.setDocumentMode('viewing');
@@ -96,6 +96,6 @@ Other props like `documentMode` and callbacks are handled without rebuild.
 ## Commands
 
 ```bash
-pnpm --filter @superdoc-dev/react build
-pnpm --filter @superdoc-dev/react test
+pnpm --filter @superdoc-dev/solid build
+pnpm --filter @superdoc-dev/solid test
 ```

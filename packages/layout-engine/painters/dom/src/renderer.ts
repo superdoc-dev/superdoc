@@ -7308,12 +7308,29 @@ export class DomPainter {
   /**
    * Create an inline SDT wrapper `<span>` with className, layoutEpoch, dataset, and label.
    * Shared by both the geometry and run-based rendering paths.
+   *
+   * When the SDT's `appearance` is `'hidden'` (matching ECMA-376
+   * `<w15:appearance w15:val="hidden"/>`), the wrapper is rendered
+   * transparently: chrome is suppressed via `data-appearance="hidden"`
+   * (see styles.ts) and the alias label is omitted entirely. Without the
+   * latter, the alias text leaks into the rendered DOM `textContent`
+   * (copy-paste includes it) and screen readers announce it.
    */
   private createInlineSdtWrapper(sdt: SdtMetadata): HTMLElement {
     const wrapper = this.doc!.createElement('span');
     wrapper.className = DOM_CLASS_NAMES.INLINE_SDT_WRAPPER;
     wrapper.dataset.layoutEpoch = String(this.layoutEpoch);
     this.applySdtDataset(wrapper, sdt);
+
+    const appearance =
+      sdt.type === 'structuredContent' ? (sdt as { appearance?: string }).appearance : undefined;
+    if (appearance === 'hidden') {
+      wrapper.dataset.appearance = 'hidden';
+      // No alias label and no chrome: see CSS rule keyed off
+      // `[data-appearance="hidden"]`.
+      return wrapper;
+    }
+
     const alias = (sdt as { alias?: string })?.alias || 'Inline content';
     const labelEl = this.doc!.createElement('span');
     labelEl.className = `${DOM_CLASS_NAMES.INLINE_SDT_WRAPPER}__label`;

@@ -87,6 +87,35 @@ describe('resolveSdtMetadata', () => {
     });
   });
 
+  it('carries appearance through for inline structured content (SD-3110)', () => {
+    const metadata = resolveSdtMetadata({
+      nodeType: 'structuredContent',
+      attrs: { id: '7', tag: 'citation', alias: 'Harvey citation', appearance: 'hidden' },
+    });
+    expect(metadata).toMatchObject({
+      type: 'structuredContent',
+      scope: 'inline',
+      appearance: 'hidden',
+    });
+  });
+
+  it('drops unknown appearance values rather than letting them flow to the renderer', () => {
+    const metadata = resolveSdtMetadata({
+      nodeType: 'structuredContent',
+      attrs: { id: '8', tag: 'x', appearance: 'malformed' },
+    });
+    expect(metadata).toMatchObject({ type: 'structuredContent', scope: 'inline' });
+    expect((metadata as { appearance?: string }).appearance).toBeUndefined();
+  });
+
+  it('omits appearance when the source attr is missing', () => {
+    const metadata = resolveSdtMetadata({
+      nodeType: 'structuredContent',
+      attrs: { id: '9', tag: 'x' },
+    });
+    expect((metadata as { appearance?: string }).appearance).toBeUndefined();
+  });
+
   it('normalizes document section metadata', () => {
     const metadata = resolveSdtMetadata({
       nodeType: 'documentSection',

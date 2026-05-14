@@ -642,6 +642,25 @@ const SDT_CONTAINER_STYLES = `
   display: none;
 }
 
+/* Hidden appearance per ECMA-376 (w15:appearance val="hidden"). SDT
+ * exists in the document for anchoring but is visually transparent: no
+ * padding, no border, no hover background, no selected outline. The
+ * alias label is not emitted into the DOM at all (see renderer.ts), so
+ * there is nothing to hide from copy-paste or screen readers. */
+.superdoc-structured-content-inline[data-appearance='hidden'] {
+  padding: 0;
+  border: none;
+  border-radius: 0;
+}
+.superdoc-structured-content-inline[data-appearance='hidden']:hover {
+  background-color: transparent;
+  border: none;
+}
+.superdoc-structured-content-inline[data-appearance='hidden'].ProseMirror-selectednode {
+  border-color: transparent;
+  background-color: transparent;
+}
+
 /* Hover highlight for SDT containers.
  * Hover adds background highlight and z-index boost.
  * Block SDTs use .sdt-group-hover class (event delegation for multi-fragment coordination).

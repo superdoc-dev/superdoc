@@ -11,7 +11,12 @@ import type {
   ParagraphMeasure,
   ParagraphBlock,
 } from '@superdoc/contracts';
-import { OOXML_PCT_DIVISOR, rescaleColumnWidths, resolveTableWidthAttr } from '@superdoc/contracts';
+import {
+  OOXML_PCT_DIVISOR,
+  rescaleColumnWidths,
+  resolveTableWidthAttr,
+  getTableVisualDirection,
+} from '@superdoc/contracts';
 import type { PageState } from './paginator.js';
 import { computeFragmentPmRange, extractBlockPmRange } from './layout-utils.js';
 import { describeCellRenderBlocks, createCellSliceCursor, computeFullCellContentHeight } from './table-cell-slice.js';
@@ -181,16 +186,24 @@ export function resolveTableFrame(
   attrs: TableBlock['attrs'],
 ): { x: number; width: number } {
   const width = resolveRenderedTableWidth(columnWidth, tableWidth, attrs);
-  const justification = typeof attrs?.justification === 'string' ? attrs.justification : undefined;
+  const explicitJustification = typeof attrs?.justification === 'string' ? attrs.justification : undefined;
+  const isRtlTable = getTableVisualDirection(attrs) === 'rtl';
+  const effectiveJustification = explicitJustification ?? (isRtlTable ? 'end' : undefined);
+  const tableIndent = getTableIndentWidth(attrs);
 
-  if (justification === 'center') {
+  if (effectiveJustification === 'center') {
     return { x: baseX + (columnWidth - width) / 2, width };
   }
-  if (justification === 'right' || justification === 'end') {
-    return { x: baseX + (columnWidth - width), width };
+  if (effectiveJustification === 'right' || effectiveJustification === 'end') {
+    const rightAlignedX = baseX + (columnWidth - width);
+    // In bidiVisual tables with no explicit jc, Word keeps right alignment
+    // and applies tblInd from the right edge.
+    if (explicitJustification == null && isRtlTable && tableIndent !== 0) {
+      return { x: rightAlignedX - tableIndent, width };
+    }
+    return { x: rightAlignedX, width };
   }
 
-  const tableIndent = getTableIndentWidth(attrs);
   return applyTableIndent(baseX, width, tableIndent, columnWidth);
 }
 

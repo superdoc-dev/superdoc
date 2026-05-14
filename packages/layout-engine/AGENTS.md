@@ -20,12 +20,12 @@ ProseMirror Doc → pm-adapter → FlowBlock[] → layout-engine → Layout[] �
 | `style-engine/` | OOXML style resolution | `src/index.ts` |
 | `geometry-utils/` | Math utilities for layout | `src/index.ts` |
 
-## Key Insight: DomPainter is "Dumb"
+## Key Insight: DomPainter Receives Paint-Ready Data
 
 DomPainter receives a single paint-ready input — `ResolvedLayout` — and
-renders the result to DOM. It does NOT do layout logic, measurement, or
-PM-adapter conversion (that's upstream in `layout-engine/` /
-`layout-resolved/` / `pm-adapter/`).
+renders it to DOM. It does not do layout logic, measurement, or pm-adapter
+conversion. Those decisions happen upstream in `layout-engine/`,
+`layout-resolved/`, and `pm-adapter/`.
 
 This is enforced as two hard invariants, not aspirational language:
 
@@ -74,7 +74,7 @@ When adding style resolution for a new property type (e.g., `tableCellProperties
 3. Cascade using `combineProperties()` (low → high priority)
 4. Inline properties always win last
 
-See root CLAUDE.md "Style Resolution Boundary" for why this must NOT be done in the importer.
+See root CLAUDE.md "Style Resolution Boundary" for why this must not be done in the importer.
 
 ## Important Patterns
 
@@ -138,12 +138,23 @@ Rendering logic for specific OOXML features is extracted into **feature modules*
 - `layout-bridge/src/incrementalLayout.ts` - Layout orchestration (called by PresentationEditor)
 - `pm-adapter/src/internal.ts` - PM → FlowBlock conversion
 
-## Rendering Ownership
+## Layer Ownership
 
-**DomPainter owns ALL visual rendering.** ProseMirror is hidden — its DOM is never shown to the user.
+See root `CLAUDE.md` for the full placement map. This package owns the
+layout and rendering pipeline.
 
-- Style-resolved properties flow through: `style-engine` → `pm-adapter` (sets attrs on FlowBlocks) → `DomPainter` (renders to DOM)
-- Do NOT add ProseMirror decoration plugins for visual styling — that bypasses the rendering pipeline
-- Editing behavior (commands, keybindings) stays in `super-editor/src/editors/v1/extensions/`
+- Style-resolved properties flow through `style-engine` → `pm-adapter` →
+  DomPainter.
+- Static document visuals belong in layout data plus DomPainter rendering, not
+  ProseMirror decorations.
+- Editing behavior, including commands and keybindings, stays in
+  `super-editor/src/editors/v1/extensions/`.
+- `PresentationEditor` bridges editor state into layout and paint state. It
+  should not resolve OOXML semantics.
+- Direction work keeps OOXML axes separate. `style-engine` resolves cascades,
+  `pm-adapter` writes typed direction/table attrs, and DomPainter owns
+  paint-time visual mirroring. For `w:bidiVisual`, upstream layers keep table
+  sides in LTR-default form and DomPainter mirrors once.
 
-See root CLAUDE.md for full architecture.
+For the full direction taxonomy, see
+`pm-adapter/src/direction/README.md`.

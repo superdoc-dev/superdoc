@@ -11,7 +11,7 @@ import { reconcileDocumentRelationships, MANAGED_DOCUMENT_PARTS } from './opc/re
 const IMAGE_EXTS = new Set(['png', 'jpg', 'jpeg', 'gif', 'bmp', 'tiff', 'tif', 'emf', 'wmf', 'svg', 'webp']);
 
 /** Map file extensions to correct MIME sub-types where they differ. */
-const MIME_TYPE_FOR_EXT = { tif: 'tiff', jpg: 'jpeg' };
+const MIME_TYPE_FOR_EXT = { tif: 'tiff', jpg: 'jpeg', svg: 'svg+xml' };
 const CUSTOM_XML_ITEM_PROPS_CONTENT_TYPE = 'application/vnd.openxmlformats-officedocument.customXmlProperties+xml';
 
 /** OOXML content types for embedded font file extensions. */

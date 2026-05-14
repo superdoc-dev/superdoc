@@ -13,9 +13,16 @@ import type { ReceiptFailure } from '../types/receipt.js';
 // Enums and constants
 // ---------------------------------------------------------------------------
 
-/** Semantic SDT subtype derived from `w:sdtPr` children. */
+/**
+ * Semantic SDT subtype derived from `w:sdtPr` children.
+ *
+ * `richText` covers both explicit `<w:richText/>` and the OOXML default for
+ * sdtPr with no type child (ECMA-376 §17.5.2.26: typeless SDT shall be of
+ * type richText). `unknown` means an unsupported or unrecognized type child.
+ */
 export type ContentControlType =
   | 'text'
+  | 'richText'
   | 'date'
   | 'checkbox'
   | 'comboBox'
@@ -27,6 +34,7 @@ export type ContentControlType =
 
 export const CONTENT_CONTROL_TYPES = [
   'text',
+  'richText',
   'date',
   'checkbox',
   'comboBox',

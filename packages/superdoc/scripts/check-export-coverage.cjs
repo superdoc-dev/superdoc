@@ -33,14 +33,14 @@ function entryAllowlistedAsset(value) {
 }
 
 function entryHasTypes(value) {
-  if (typeof value === 'string') return false;
-  if (typeof value !== 'object' || value === null) return false;
-  return typeof value.types === 'string';
+  return collectTypesTargets(value).length > 0;
 }
 
-function typesTargetExists(value) {
-  if (!entryHasTypes(value)) return false;
-  return fs.existsSync(path.resolve(packageRoot, value.types));
+function collectTypesTargets(value) {
+  if (typeof value !== 'object' || value === null) return [];
+  if (typeof value.types === 'string') return [value.types];
+  if (typeof value.types !== 'object' || value.types === null) return [];
+  return Object.values(value.types).filter((target) => typeof target === 'string');
 }
 
 const violations = [];
@@ -53,8 +53,10 @@ for (const [subpath, value] of Object.entries(packageJson.exports || {})) {
     violations.push({ subpath, reason: 'missing `types` field in conditional exports' });
     continue;
   }
-  if (!typesTargetExists(value)) {
-    violations.push({ subpath, reason: `\`types\` target does not exist: ${value.types}` });
+  for (const target of collectTypesTargets(value)) {
+    if (!fs.existsSync(path.resolve(packageRoot, target))) {
+      violations.push({ subpath, reason: `\`types\` target does not exist: ${target}` });
+    }
   }
 }
 

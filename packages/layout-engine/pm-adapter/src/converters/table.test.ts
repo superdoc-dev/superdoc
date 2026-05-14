@@ -973,6 +973,171 @@ describe('table converter', () => {
       expect(result.rows[0].cells[0].attrs?.borders).toBeUndefined();
     });
 
+    it('maps legacy cell border start/end as LTR-default regardless of table direction (painter mirrors for RTL)', () => {
+      const node: PMNode = {
+        type: 'table',
+        attrs: {
+          tableProperties: {
+            rightToLeft: true,
+          },
+        },
+        content: [
+          {
+            type: 'tableRow',
+            content: [
+              {
+                type: 'tableCell',
+                attrs: {
+                  borders: {
+                    start: { val: 'single', size: 2, color: 'FF0000' },
+                    end: { val: 'single', size: 3, color: '0000FF' },
+                  },
+                },
+                content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Cell' }] }],
+              },
+            ],
+          },
+        ],
+      };
+
+      const result = tableNodeToBlock(
+        node,
+        mockBlockIdGenerator,
+        mockPositionMap,
+        'Arial',
+        16,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        mockParagraphConverter,
+      ) as TableBlock;
+
+      // Per §17.4.12/33, start/end visual side flips with table direction,
+      // but renderTableRow.swapCellBordersLR is the single source of that
+      // mirror. pm-adapter pre-swapping here would double-mirror.
+      expect(result.rows[0].cells[0].attrs?.borders?.left).toMatchObject({
+        style: 'single',
+        width: 2,
+        color: '#FF0000',
+      });
+      expect(result.rows[0].cells[0].attrs?.borders?.right).toMatchObject({
+        style: 'single',
+        width: 3,
+        color: '#0000FF',
+      });
+    });
+
+    it('normalizes legacy cell border style aliases (dotdash, doublewave, etc.) to canonical BorderStyle', () => {
+      // Pre-migration persisted docs sometimes store border `val` as lowercase
+      // or alias forms (`dot`, `dotdash`, `dotdotdash`, `doublewave`). The
+      // canonical BorderStyle enum is camelCase. Pin that the legacy fallback
+      // path normalizes - otherwise the painter receives a non-canonical
+      // string and the border style doesn't render correctly.
+      const cases: Array<{ input: string; expected: string }> = [
+        { input: 'dot', expected: 'dotted' },
+        { input: 'dotdash', expected: 'dotDash' },
+        { input: 'dotdotdash', expected: 'dotDotDash' },
+        { input: 'doublewave', expected: 'doubleWave' },
+        { input: 'NIL', expected: 'none' },
+        { input: ' Single ', expected: 'single' },
+      ];
+
+      for (const { input, expected } of cases) {
+        const node: PMNode = {
+          type: 'table',
+          attrs: {},
+          content: [
+            {
+              type: 'tableRow',
+              content: [
+                {
+                  type: 'tableCell',
+                  attrs: {
+                    borders: {
+                      top: { val: input, size: 2, color: '000000' },
+                    },
+                  },
+                  content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Cell' }] }],
+                },
+              ],
+            },
+          ],
+        };
+
+        const result = tableNodeToBlock(
+          node,
+          mockBlockIdGenerator,
+          mockPositionMap,
+          'Arial',
+          16,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          mockParagraphConverter,
+        ) as TableBlock;
+
+        const topBorder = result.rows[0].cells[0].attrs?.borders?.top;
+        expect(topBorder?.style).toBe(expected);
+      }
+    });
+
+    it('maps resolved tableCellProperties borders start/end as LTR-default regardless of table direction (painter mirrors for RTL)', () => {
+      const node: PMNode = {
+        type: 'table',
+        attrs: {
+          tableProperties: {
+            rightToLeft: true,
+          },
+        },
+        content: [
+          {
+            type: 'tableRow',
+            content: [
+              {
+                type: 'tableCell',
+                attrs: {
+                  tableCellProperties: {
+                    borders: {
+                      start: { val: 'single', size: 8, color: 'FF0000' },
+                      end: { val: 'single', size: 8, color: '0000FF' },
+                    },
+                  },
+                },
+                content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Cell' }] }],
+              },
+            ],
+          },
+        ],
+      };
+
+      const result = tableNodeToBlock(
+        node,
+        mockBlockIdGenerator,
+        mockPositionMap,
+        'Arial',
+        16,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        mockParagraphConverter,
+      ) as TableBlock;
+
+      // pm-adapter keeps start/end as LTR-default. Painter swaps for RTL.
+      expect(result.rows[0].cells[0].attrs?.borders?.left).toMatchObject({
+        style: 'single',
+        width: expect.any(Number),
+        color: '#FF0000',
+      });
+      expect(result.rows[0].cells[0].attrs?.borders?.right).toMatchObject({
+        style: 'single',
+        width: expect.any(Number),
+        color: '#0000FF',
+      });
+    });
+
     it('extracts cell padding when present', () => {
       const node: PMNode = {
         type: 'table',

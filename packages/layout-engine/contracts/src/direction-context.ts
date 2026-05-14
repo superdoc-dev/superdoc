@@ -156,3 +156,75 @@ export type RunScriptContext = {
     eastAsian?: string;
   };
 };
+
+/**
+ * Read a paragraph's inline base direction from its attributes.
+ *
+ * Prefers the resolved {@link ParagraphDirectionContext} (SD-2776) when
+ * present, then falls back to the legacy scalar fields (`direction`,
+ * `dir`, `rtl`, `paragraphProperties.rightToLeft`) for compatibility
+ * until SD-2778 collapses the duplicates.
+ *
+ * Consumers should call this instead of inspecting attrs ad hoc so the
+ * direction source check stays in one place.
+ */
+export function getParagraphInlineDirection(
+  attrs:
+    | {
+        directionContext?: { inlineDirection?: BaseDirection | null } | null;
+        direction?: string | null;
+        dir?: string | null;
+        rtl?: boolean | null;
+        paragraphProperties?: { rightToLeft?: boolean | null } | null;
+      }
+    | null
+    | undefined,
+): BaseDirection | undefined {
+  const fromContext = attrs?.directionContext?.inlineDirection;
+  if (fromContext != null) return fromContext;
+  // AIDEV-NOTE: compat-fallback - used when ParagraphAttrs.directionContext.inlineDirection is absent.
+  // Retire once SD-2778 collapses the duplicate scalar fields onto directionContext.
+  const ppRtl = attrs?.paragraphProperties?.rightToLeft;
+  if (attrs?.direction === 'rtl' || attrs?.dir === 'rtl' || attrs?.rtl === true || ppRtl === true) {
+    return 'rtl';
+  }
+  if (attrs?.direction === 'ltr' || attrs?.dir === 'ltr' || attrs?.rtl === false || ppRtl === false) {
+    return 'ltr';
+  }
+  return undefined;
+}
+
+/**
+ * Read a table's visual direction (cell ordering axis) from its attributes.
+ *
+ * Prefers the resolved {@link TableDirectionContext} when present, falls
+ * back to the legacy `tableProperties.rightToLeft` (or `bidiVisual` alias)
+ * for compatibility. The AIDEV-NOTE on the fallback branch names the
+ * retirement signal.
+ *
+ * Per ECMA-376 §17.4.1, `w:bidiVisual` affects only cell ordering and
+ * table-visual properties. Cell paragraph inline direction is independent;
+ * use {@link getParagraphInlineDirection} for that axis.
+ *
+ * Consumers should call this instead of reading `tableProperties.rightToLeft`
+ * directly so the source check stays in one place and the resolver can take
+ * over once pm-adapter populates `tableDirectionContext` everywhere.
+ */
+export function getTableVisualDirection(
+  attrs:
+    | {
+        tableDirectionContext?: { visualDirection?: BaseDirection | null } | null;
+        tableProperties?: { rightToLeft?: boolean | null; bidiVisual?: boolean | null } | null;
+      }
+    | null
+    | undefined,
+): BaseDirection | undefined {
+  const fromContext = attrs?.tableDirectionContext?.visualDirection;
+  if (fromContext != null) return fromContext;
+  // AIDEV-NOTE: compat-fallback - used when TableAttrs.tableDirectionContext is absent.
+  // Retire once pm-adapter writes the resolved context onto every TableAttrs site.
+  const tp = attrs?.tableProperties;
+  if (tp?.rightToLeft === true || tp?.bidiVisual === true) return 'rtl';
+  if (tp?.rightToLeft === false || tp?.bidiVisual === false) return 'ltr';
+  return undefined;
+}

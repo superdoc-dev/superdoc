@@ -12,11 +12,18 @@ import {
   getTrackedChangeIndex,
   makeTrackedChangeAnchorKey,
   resolveTrackedChangeInStory,
-  shallowEqual,
 } from '@superdoc/super-editor';
 import useComment from '@superdoc/components/CommentsLayer/use-comment';
 import { groupChanges } from '../helpers/group-changes.js';
 import { buildFloatingCommentInstances } from './helpers/floating-comment-instances.js';
+
+const isShallowEqual = (a, b) => {
+  if (Object.is(a, b)) return true;
+  if (!a || !b || typeof a !== 'object' || typeof b !== 'object') return false;
+  const keysA = Object.keys(a);
+  const keysB = Object.keys(b);
+  return keysA.length === keysB.length && keysA.every((key) => Object.is(a[key], b[key]));
+};
 
 export const useCommentsStore = defineStore('comments', () => {
   const BODY_TRACKED_CHANGE_STORY = { kind: 'story', storyType: 'body' };
@@ -612,13 +619,7 @@ export const useCommentsStore = defineStore('comments', () => {
       debounceEmit(changeId, event, superdoc);
     };
 
-    const valuesMatch = (currentValue, nextValue) => {
-      if (currentValue === nextValue) return true;
-      if (!currentValue || !nextValue || typeof currentValue !== 'object' || typeof nextValue !== 'object') {
-        return false;
-      }
-      return shallowEqual(currentValue, nextValue);
-    };
+    const valuesMatch = (currentValue, nextValue) => isShallowEqual(currentValue, nextValue);
 
     const setIfChanged = (target, key, value) => {
       if (!target || valuesMatch(target[key], value)) return false;

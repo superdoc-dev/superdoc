@@ -110,13 +110,6 @@ vi.mock('@superdoc/super-editor', () => {
     getRichTextExtensions: vi.fn(() => []),
     getTrackedChangeIndex,
     makeTrackedChangeAnchorKey,
-    shallowEqual: vi.fn((a, b) => {
-      if (Object.is(a, b)) return true;
-      if (!a || !b || typeof a !== 'object' || typeof b !== 'object') return false;
-      const keysA = Object.keys(a);
-      const keysB = Object.keys(b);
-      return keysA.length === keysB.length && keysA.every((key) => Object.is(a[key], b[key]));
-    }),
   };
 });
 

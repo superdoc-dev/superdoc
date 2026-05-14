@@ -59,10 +59,7 @@ function toSummary(record: ReturnType<typeof listCustomXmlParts>[number]): Custo
   return summary;
 }
 
-export function customXmlPartsListWrapper(
-  editor: Editor,
-  query?: CustomXmlPartsListInput,
-): CustomXmlPartsListResult {
+export function customXmlPartsListWrapper(editor: Editor, query?: CustomXmlPartsListInput): CustomXmlPartsListResult {
   const revision = getRevision(editor);
   const all = listCustomXmlParts(getConvertedXml(editor));
 
@@ -97,10 +94,7 @@ export function customXmlPartsListWrapper(
   });
 }
 
-export function customXmlPartsGetWrapper(
-  editor: Editor,
-  input: CustomXmlPartsGetInput,
-): CustomXmlPartInfo | null {
+export function customXmlPartsGetWrapper(editor: Editor, input: CustomXmlPartsGetInput): CustomXmlPartInfo | null {
   const record = readCustomXmlPart(getConvertedXml(editor), input.target);
   if (!record) return null;
   // Normalize null fields to match CustomXmlPartInfo shape (optional, not null).
@@ -128,7 +122,12 @@ function failure(
   return { success: false, failure: { code, message } };
 }
 
-type WriteOutcome<T> = { ok: true; payload: T } | { ok: false; code: FailureCode; message: string };
+type WriteFailure = { ok: false; code: FailureCode; message: string };
+type WriteOutcome<T> = { ok: true; payload: T } | WriteFailure;
+
+function isWriteFailure<T>(outcome: WriteOutcome<T>): outcome is WriteFailure {
+  return outcome.ok === false;
+}
 
 function targetNotFound(): WriteOutcome<never> {
   return { ok: false, code: 'TARGET_NOT_FOUND', message: 'No custom XML part matched the supplied target.' };
@@ -155,9 +154,7 @@ export function customXmlPartsCreateWrapper(
   options?: MutationOptions,
 ): CustomXmlPartsCreateResult {
   rejectTrackedMode('customXml.parts.create', options);
-  const outcome = executeOutOfBandMutation<
-    WriteOutcome<{ id: string; partName: string; propsPartName: string }>
-  >(
+  const outcome = executeOutOfBandMutation<WriteOutcome<{ id: string; partName: string; propsPartName: string }>>(
     editor,
     (dryRun) => {
       if (dryRun) {
@@ -165,7 +162,7 @@ export function customXmlPartsCreateWrapper(
         const probe = safeValidate(() =>
           createCustomXmlPart({}, { content: input.content, schemaRefs: input.schemaRefs }),
         );
-        if (!probe.ok) return { changed: false, payload: probe };
+        if (isWriteFailure(probe)) return { changed: false, payload: probe };
         return {
           changed: false,
           payload: { ok: true, payload: { id: '{DRY-RUN}', partName: '', propsPartName: '' } },
@@ -178,12 +175,12 @@ export function customXmlPartsCreateWrapper(
           getConverter(editor),
         ),
       );
-      if (!probe.ok) return { changed: false, payload: probe };
+      if (isWriteFailure(probe)) return { changed: false, payload: probe };
       return { changed: true, payload: { ok: true, payload: probe.payload } };
     },
     { dryRun: options?.dryRun === true, expectedRevision: options?.expectedRevision },
   );
-  if (!outcome.ok) return failure(outcome.code, outcome.message);
+  if (isWriteFailure(outcome)) return failure(outcome.code, outcome.message);
   return {
     success: true,
     id: outcome.payload.id,
@@ -205,10 +202,8 @@ export function customXmlPartsPatchWrapper(
         const partName = resolveTargetPartName(getConvertedXml(editor), input.target);
         if (!partName) return { changed: false, payload: targetNotFound() };
         if (input.content !== undefined) {
-          const probe = safeValidate(() =>
-            createCustomXmlPart({}, { content: input.content, schemaRefs: undefined }),
-          );
-          if (!probe.ok) return { changed: false, payload: probe };
+          const probe = safeValidate(() => createCustomXmlPart({}, { content: input.content, schemaRefs: undefined }));
+          if (isWriteFailure(probe)) return { changed: false, payload: probe };
         }
         return { changed: false, payload: { ok: true, payload: true } };
       }
@@ -223,13 +218,13 @@ export function customXmlPartsPatchWrapper(
           getConverter(editor),
         ),
       );
-      if (!probe.ok) return { changed: false, payload: probe };
+      if (isWriteFailure(probe)) return { changed: false, payload: probe };
       if (!probe.payload) return { changed: false, payload: targetNotFound() };
       return { changed: true, payload: { ok: true, payload: true } };
     },
     { dryRun: options?.dryRun === true, expectedRevision: options?.expectedRevision },
   );
-  if (!outcome.ok) return failure(outcome.code, outcome.message);
+  if (isWriteFailure(outcome)) return failure(outcome.code, outcome.message);
   return { success: true, target: input.target };
 }
 
@@ -254,7 +249,7 @@ export function customXmlPartsRemoveWrapper(
     },
     { dryRun: options?.dryRun === true, expectedRevision: options?.expectedRevision },
   );
-  if (!outcome.ok) return failure(outcome.code, outcome.message);
+  if (isWriteFailure(outcome)) return failure(outcome.code, outcome.message);
   return { success: true, target: input.target };
 }
 

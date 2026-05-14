@@ -1,6 +1,8 @@
 # SuperDoc Yjs collaboration library
 
-`@superdoc-dev/superdoc-yjs-collaboration` is a library for integrating Yjs-based real-time collaborative editing into any Node.js WebSocket-enabled server framework. It is designed to work out-of-the-box for **SuperDoc**.
+`@superdoc-dev/superdoc-yjs-collaboration` is a minimal Yjs WebSocket server for SuperDoc, shipped as a reference implementation for prototypes and local development.
+
+> **Not production infrastructure.** No built-in auth, persistence, scaling, or observability beyond what you wire into the hooks. For production self-hosted collaboration, use [Hocuspocus](https://tiptap.dev/docs/hocuspocus) (recommended default) or [YHub](https://github.com/yjs/yhub) (when attribution and revision history are central). SuperDoc's collaboration contract is provider-agnostic: pass `{ ydoc, provider }` to `modules.collaboration` on the client and the server choice is yours.
 
 It provides:
 
@@ -66,7 +68,7 @@ Below is an example using Fastify, but you can adapt it to any server framework.
 import Fastify from 'fastify';
 import websocket from '@fastify/websocket';
 import { v4 as uuidv4 } from 'uuid';
-import SuperDocCollaboration from '@superdoc-dev/superdoc-yjs-collaboration';
+import { CollaborationBuilder } from '@superdoc-dev/superdoc-yjs-collaboration';
 
 const app = Fastify();
 app.register(websocket);
@@ -79,7 +81,7 @@ const onLoad = (params) => {}; // Load your document from persistence (ie: S3)
 const onAutoSave = (params) => {}; // Debounced onChange hook based on 'withDebounce' setting. Save to persistence.
 const onChange = (params) => {}; // On change hook. This gets triggered a lot!
 
-const service = new SuperDocCollaboration()
+const service = new CollaborationBuilder()
   .withName(`sdc-${uuidv4()}`)
   .withDebounce(500)
   .onAuthenticate(onAuthenticate)

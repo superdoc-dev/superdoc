@@ -227,6 +227,8 @@ type EmbeddedTableRenderParams = {
   toRow?: number;
   /** Partial row info for mid-row splits within the embedded table */
   partialRow?: PartialRowInfo;
+  /** Optional SDT boundary overrides for container styling */
+  sdtBoundary?: SdtBoundaryOptions;
 };
 
 /**
@@ -271,6 +273,7 @@ const renderEmbeddedTable = (params: EmbeddedTableRenderParams): HTMLElement => 
     fromRow: paramFromRow,
     toRow: paramToRow,
     partialRow: paramPartialRow,
+    sdtBoundary,
   } = params;
 
   const effectiveFromRow = paramFromRow ?? 0;
@@ -320,6 +323,7 @@ const renderEmbeddedTable = (params: EmbeddedTableRenderParams): HTMLElement => 
     applyFragmentFrame,
     applySdtDataset,
     applyStyles: applyInlineStyles,
+    sdtBoundary,
   });
 };
 
@@ -343,6 +347,7 @@ function renderPartialEmbeddedTable(params: {
   captureLineSnapshot?: EmbeddedTableRenderParams['captureLineSnapshot'];
   renderDrawingContent?: EmbeddedTableRenderParams['renderDrawingContent'];
   applySdtDataset: EmbeddedTableRenderParams['applySdtDataset'];
+  sdtBoundary?: SdtBoundaryOptions;
 }): { element: HTMLElement | null; height: number; nextCumulativeLineCount: number } {
   const {
     doc,
@@ -357,6 +362,7 @@ function renderPartialEmbeddedTable(params: {
     captureLineSnapshot,
     renderDrawingContent,
     applySdtDataset,
+    sdtBoundary,
   } = params;
 
   // Compute per-row segment counts (recursive, matching getCellLines/getEmbeddedRowLines).
@@ -453,6 +459,7 @@ function renderPartialEmbeddedTable(params: {
     fromRow: embeddedFromRow,
     toRow: embeddedToRow,
     partialRow: partialRowInfo,
+    sdtBoundary,
   });
   tableWrapper.appendChild(tableEl);
 
@@ -749,6 +756,7 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
           captureLineSnapshot,
           renderDrawingContent,
           applySdtDataset,
+          sdtBoundary: sdtBoundaries[i],
         });
         cumulativeLineCount = result.nextCumulativeLineCount;
         if (result.element) {

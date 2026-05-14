@@ -3913,6 +3913,125 @@ describe('renderTableCell', () => {
       expect(tableChrome?.classList.contains('superdoc-structured-content-block')).toBe(true);
       expect(tableChrome?.querySelector('.superdoc-structured-content__label')?.textContent).toBe('Nested Table');
     });
+
+    it('should continue SDT boundaries across adjacent paragraph and nested table blocks', () => {
+      const sharedSdt: SdtMetadata = {
+        type: 'structuredContent',
+        scope: 'block',
+        id: 'shared-block-sdt',
+        alias: 'Shared Block',
+      };
+      const paragraph: ParagraphBlock = {
+        kind: 'paragraph',
+        id: 'sdt-paragraph-before-table',
+        runs: [{ text: 'Before', fontFamily: 'Arial', fontSize: 16 }],
+        attrs: { sdt: sharedSdt },
+      };
+      const nestedParagraph: ParagraphBlock = {
+        kind: 'paragraph',
+        id: 'nested-shared-sdt-para',
+        runs: [{ text: 'Nested', fontFamily: 'Arial', fontSize: 16 }],
+        attrs: {},
+      };
+      const nestedTable: TableBlock = {
+        kind: 'table',
+        id: 'nested-shared-sdt-table',
+        attrs: { sdt: sharedSdt },
+        rows: [
+          {
+            id: 'nested-shared-row',
+            cells: [
+              {
+                id: 'nested-shared-cell',
+                blocks: [nestedParagraph],
+                attrs: {},
+              },
+            ],
+          },
+        ],
+      };
+      const paragraphMeasure: ParagraphMeasure = {
+        kind: 'paragraph',
+        lines: [
+          {
+            fromRun: 0,
+            fromChar: 0,
+            toRun: 0,
+            toChar: 6,
+            width: 60,
+            ascent: 12,
+            descent: 4,
+            lineHeight: 20,
+          },
+        ],
+        totalHeight: 20,
+      };
+      const nestedMeasure: TableMeasure = {
+        kind: 'table',
+        rows: [
+          {
+            height: 24,
+            cells: [
+              {
+                width: 80,
+                height: 24,
+                gridColumnStart: 0,
+                colSpan: 1,
+                rowSpan: 1,
+                blocks: [
+                  {
+                    kind: 'paragraph',
+                    lines: [
+                      {
+                        fromRun: 0,
+                        fromChar: 0,
+                        toRun: 0,
+                        toChar: 6,
+                        width: 60,
+                        ascent: 12,
+                        descent: 4,
+                        lineHeight: 20,
+                      },
+                    ],
+                    totalHeight: 20,
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+        columnWidths: [80],
+        totalWidth: 80,
+        totalHeight: 24,
+      };
+
+      const { cellElement } = renderTableCell({
+        ...createBaseDeps(),
+        cellMeasure: {
+          blocks: [paragraphMeasure, nestedMeasure],
+          width: 120,
+          height: 44,
+          gridColumnStart: 0,
+          colSpan: 1,
+          rowSpan: 1,
+        },
+        cell: {
+          id: 'cell-shared-sdt-paragraph-table',
+          blocks: [paragraph, nestedTable],
+          attrs: {},
+        },
+      });
+
+      const chromeElements = cellElement.querySelectorAll<HTMLElement>('.superdoc-structured-content-block');
+      const paragraphChrome = chromeElements[0];
+      const tableChrome = cellElement.querySelector('[data-block-id="nested-shared-sdt-table"]') as HTMLElement;
+      expect(chromeElements).toHaveLength(2);
+      expect(paragraphChrome?.dataset.sdtContainerStart).toBe('true');
+      expect(paragraphChrome?.dataset.sdtContainerEnd).toBe('false');
+      expect(tableChrome?.dataset.sdtContainerStart).toBe('false');
+      expect(tableChrome?.dataset.sdtContainerEnd).toBe('true');
+      expect(tableChrome?.querySelector('.superdoc-structured-content__label')).toBeFalsy();
+    });
   });
 });
 

@@ -139,4 +139,133 @@ describe('FindReplaceSurface — keyboard focus (SD-3045)', () => {
     expect(event.defaultPrevented).toBe(true);
     wrapper.unmount();
   });
+
+  // SD-3045 follow-up (Luccas's PR review comment on #3240): pressing Enter
+  // when the next match is on a different page must not undo the
+  // PresentationEditor.scrollToPosition that goNext just performed. The
+  // surface is rendered in the normal document flow, so the browser's
+  // default "scroll input into view" behaviour on .focus() snaps the
+  // document back to wherever the find input is, hiding the new match. The
+  // fix is to restore focus with { preventScroll: true } so the document
+  // scroll stays where goNext placed it.
+  it('restores focus without scrolling the document back to the find input', async () => {
+    const stealTarget = document.createElement('div');
+    stealTarget.tabIndex = -1;
+    document.body.appendChild(stealTarget);
+
+    try {
+      const handle = createHandle({ stealFocusInto: stealTarget });
+      const wrapper = mountSurface(handle);
+      const input = wrapper.find('.sd-find-replace__input').element;
+
+      const focusSpy = vi.spyOn(input, 'focus');
+      input.focus();
+
+      await wrapper.find('.sd-find-replace__input').trigger('keydown', { key: 'Enter' });
+      await nextTick();
+
+      // After Enter, the surface restores focus to the input. That focus call
+      // must pass preventScroll so the browser does not scroll the document
+      // back to the input — otherwise the goNext scroll is undone for any
+      // match on a different page.
+      const calls = focusSpy.mock.calls;
+      expect(calls.length).toBeGreaterThan(0);
+      const restoreCall = calls[calls.length - 1];
+      expect(restoreCall[0]).toEqual(expect.objectContaining({ preventScroll: true }));
+
+      focusSpy.mockRestore();
+      wrapper.unmount();
+    } finally {
+      stealTarget.remove();
+    }
+  });
+
+  it('uses preventScroll on Shift+Enter focus restore too', async () => {
+    const stealTarget = document.createElement('div');
+    stealTarget.tabIndex = -1;
+    document.body.appendChild(stealTarget);
+
+    try {
+      const handle = createHandle({ stealFocusInto: stealTarget });
+      const wrapper = mountSurface(handle);
+      const input = wrapper.find('.sd-find-replace__input').element;
+
+      const focusSpy = vi.spyOn(input, 'focus');
+      input.focus();
+
+      await wrapper.find('.sd-find-replace__input').trigger('keydown', { key: 'Enter', shiftKey: true });
+      await nextTick();
+
+      const calls = focusSpy.mock.calls;
+      const restoreCall = calls[calls.length - 1];
+      expect(restoreCall[0]).toEqual(expect.objectContaining({ preventScroll: true }));
+
+      focusSpy.mockRestore();
+      wrapper.unmount();
+    } finally {
+      stealTarget.remove();
+    }
+  });
+
+  // SD-3045 holistic: clicking the next/prev buttons must also restore focus to
+  // the input — otherwise the button receives focus and the browser scrolls
+  // the document back to the (off-screen) find bar, undoing the goNext scroll
+  // exactly the same way pressing Enter without focus restore did.
+  it('restores focus to the find input after clicking the next-match button', async () => {
+    const stealTarget = document.createElement('div');
+    stealTarget.tabIndex = -1;
+    document.body.appendChild(stealTarget);
+
+    try {
+      const handle = createHandle({ stealFocusInto: stealTarget });
+      const wrapper = mountSurface(handle);
+      const input = wrapper.find('.sd-find-replace__input').element;
+      const focusSpy = vi.spyOn(input, 'focus');
+
+      const buttons = wrapper.findAll('.sd-find-replace__btn--icon');
+      // First two icon buttons are prev (▲) and next (▼); third is close.
+      const nextBtn = buttons[1];
+      expect(nextBtn.exists()).toBe(true);
+
+      await nextBtn.trigger('click');
+      await nextTick();
+
+      expect(handle.goNext).toHaveBeenCalledTimes(1);
+      const focusCall = focusSpy.mock.calls.find((args) => args[0]?.preventScroll === true);
+      expect(focusCall).toBeDefined();
+
+      focusSpy.mockRestore();
+      wrapper.unmount();
+    } finally {
+      stealTarget.remove();
+    }
+  });
+
+  it('restores focus to the find input after clicking the previous-match button', async () => {
+    const stealTarget = document.createElement('div');
+    stealTarget.tabIndex = -1;
+    document.body.appendChild(stealTarget);
+
+    try {
+      const handle = createHandle({ stealFocusInto: stealTarget });
+      const wrapper = mountSurface(handle);
+      const input = wrapper.find('.sd-find-replace__input').element;
+      const focusSpy = vi.spyOn(input, 'focus');
+
+      const buttons = wrapper.findAll('.sd-find-replace__btn--icon');
+      const prevBtn = buttons[0];
+
+      await prevBtn.trigger('click');
+      await nextTick();
+
+      expect(handle.goPrev).toHaveBeenCalledTimes(1);
+      const focusCall = focusSpy.mock.calls.find((args) => args[0]?.preventScroll === true);
+      expect(focusCall).toBeDefined();
+
+      focusSpy.mockRestore();
+      wrapper.unmount();
+    } finally {
+      stealTarget.remove();
+    }
+  });
 });

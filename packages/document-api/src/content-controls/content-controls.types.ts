@@ -146,8 +146,10 @@ export interface ContentControlProperties {
   placeholder?: string;
   showingPlaceholder?: boolean;
   /**
-   * `<w:temporary/>` toggle (ECMA-376 §17.5.2.43). Word removes the
-   * SDT once the user fills it in.
+   * `<w:temporary/>` toggle (ECMA-376 §17.5.2.43).
+   *
+   * When enabled, Word treats the content control as temporary and may
+   * remove the SDT wrapper after the user edits/fills the control.
    *
    * Returned verbatim from the imported XML:
    *   - `true`      → element present (`<w:temporary/>` or `w:val="true"`/`"1"`)

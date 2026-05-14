@@ -13,6 +13,9 @@ encyclopedias of the codebase.
   Loaded only when an agent reads files in that package.
 - **`.claude/rules/<topic>.md`** with `paths:` frontmatter: rules that only
   apply to matching files (e.g. JSDoc rules for `**/*.js`).
+- **Symlink pairs**: when both `AGENTS.md` and `CLAUDE.md` exist with the same
+  content, make `AGENTS.md` canonical and symlink `CLAUDE.md` to it. Allowlist
+  intentional audience-specific pairs that must differ.
 - **Hooks or scripts**: anything that must be enforced rather than advised.
   Doc-level "always do X" rules that have a deterministic check belong in CI,
   not in agent docs.

@@ -28,6 +28,7 @@ export const CONFIG = {
     'tests/consumer-typecheck/node_modules',
   ],
   intentionalDifferentPairs: ['packages/superdoc/AGENTS.md:packages/superdoc/CLAUDE.md'],
+  canonicalSymlinkTarget: 'AGENTS.md',
   knownCommands: [
     'pnpm test',
     'pnpm test:behavior',
@@ -285,9 +286,15 @@ function classifyPairs(files) {
       pairs.push({ dir, classification: 'intentional-different', detail: `allowlisted: ${a.lineCount}L vs ${c.lineCount}L` });
       continue;
     }
-    const linked = (a.isSymlink && a.symlinkTarget === c.absPath) || (c.isSymlink && c.symlinkTarget === a.absPath);
-    if (linked) {
-      pairs.push({ dir, classification: 'linked', detail: `canonical: ${a.isSymlink ? 'CLAUDE.md' : 'AGENTS.md'}` });
+    const agentsPointsToClaude = a.isSymlink && a.symlinkTarget === c.absPath;
+    const claudePointsToAgents = c.isSymlink && c.symlinkTarget === a.absPath;
+    if (agentsPointsToClaude || claudePointsToAgents) {
+      const canonical = agentsPointsToClaude ? 'CLAUDE.md' : 'AGENTS.md';
+      const classification = canonical === CONFIG.canonicalSymlinkTarget ? 'linked' : 'linked-inverted';
+      const detail = canonical === CONFIG.canonicalSymlinkTarget
+        ? `canonical: ${canonical}`
+        : `canonical: ${canonical}; expected ${CONFIG.canonicalSymlinkTarget}`;
+      pairs.push({ dir, classification, detail });
       continue;
     }
     // Either side might be a broken symlink we already flagged; if so we
@@ -333,6 +340,12 @@ export function computeFlags(file) {
   if (file.brokenImports.length > 0) reasons.push(`${file.brokenImports.length} broken @import(s)`);
   if (file.unresolvedCommands.length > 0) reasons.push(`${file.unresolvedCommands.length} unresolved command(s)`);
   return reasons;
+}
+
+function pairFlaggedForReview(pair) {
+  if (pair.classification === 'linked-inverted') return true;
+  if (pair.classification === 'unexpected-duplicate') return true;
+  return false;
 }
 
 // L2/L3 gating: stricter than computeFlags. A single-broken-ref doc still
@@ -392,9 +405,14 @@ export function renderL1Markdown(scan) {
     findingsByFile.push({ file: f, reasons });
   }
   lines.push('\n## Deterministic findings\n');
-  if (findingsByFile.length === 0) {
+  const pairFindings = scan.pairs.filter(pairFlaggedForReview);
+  if (findingsByFile.length === 0 && pairFindings.length === 0) {
     lines.push('None.\n');
   } else {
+    for (const pair of pairFindings) {
+      lines.push(`### \`${pair.dir || '(root)'}\`\n`);
+      lines.push(`- ${pair.classification}: ${pair.detail}\n`);
+    }
     for (const { file, reasons } of findingsByFile) {
       lines.push(`### \`${file.relPath}\`\n`);
       lines.push(reasons.map((r) => `- ${r}`).join('\n'));

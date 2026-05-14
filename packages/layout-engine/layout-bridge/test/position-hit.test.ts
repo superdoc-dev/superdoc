@@ -61,4 +61,13 @@ describe('isRtlBlock', () => {
       ),
     ).toBe(true);
   });
+
+  // SD-2778: switching to getParagraphInlineDirection is strictly broader on
+  // fallback than the prior inline read. Specifically, the helper picks up
+  // paragraphProperties.rightToLeft when neither directionContext nor the legacy
+  // scalar field is present. Pin that case so the broader fallback is intentional.
+  it('falls back to paragraphProperties.rightToLeft when no other direction signal is present', () => {
+    expect(isRtlBlock(paragraph({ paragraphProperties: { rightToLeft: true } }))).toBe(true);
+    expect(isRtlBlock(paragraph({ paragraphProperties: { rightToLeft: false } }))).toBe(false);
+  });
 });

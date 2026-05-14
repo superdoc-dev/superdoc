@@ -1777,7 +1777,12 @@ describe('resolveLayout', () => {
         id,
         runs: [{ kind: 'text', text: 'RTL list item' }],
         attrs: {
-          direction: 'rtl',
+          // SD-2778: use directionContext so this test only passes through the
+          // new helper-driven typed path. The pre-migration code read
+          // attrs.direction directly, so the prior `direction: 'rtl'` fixture
+          // would have passed against the old implementation too and didn't
+          // actually prove the migration.
+          directionContext: { inlineDirection: 'rtl', writingMode: 'horizontal-tb' },
           indent: { right, hanging: -24 },
           wordLayout: {
             marker: {

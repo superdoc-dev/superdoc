@@ -626,6 +626,7 @@ function setLockModeWrapper(
 /** Maps control types to their sdtPr element name. Types not listed have no element. */
 const CONTROL_TYPE_SDT_PR_ELEMENTS: Record<string, string> = {
   text: 'w:text',
+  richText: 'w:richText',
   date: 'w:date',
   checkbox: 'w14:checkbox',
   comboBox: 'w:comboBox',
@@ -785,6 +786,8 @@ function buildDefaultTypeSdtPrElement(controlType: string | undefined): SdtPrEle
   switch (controlType) {
     case 'text':
       return { name: 'w:text', type: 'element' };
+    case 'richText':
+      return { name: 'w:richText', type: 'element' };
     case 'date':
       return {
         name: 'w:date',

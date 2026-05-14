@@ -20,9 +20,7 @@ describe('normalizePgMarTwipsInTree', () => {
   it('leaves a tree without any w:pgMar element unchanged', () => {
     const tree = {
       name: 'w:document',
-      elements: [
-        { name: 'w:body', elements: [{ name: 'w:p', elements: [] }] },
-      ],
+      elements: [{ name: 'w:body', elements: [{ name: 'w:p', elements: [] }] }],
     };
     const before = JSON.stringify(tree);
     normalizePgMarTwipsInTree(tree);
@@ -54,6 +52,27 @@ describe('normalizePgMarTwipsInTree', () => {
       'w:left': '352',
       'w:right': '664',
       'w:gutter': '0',
+      'w:header': '720',
+    });
+  });
+
+  it('canonicalizes decimal pgMar tokens even when the numeric value is integral', () => {
+    const tree = {
+      name: 'w:pgMar',
+      attributes: {
+        'w:top': '168.0',
+        'w:left': '352.000000',
+        'w:right': '663.9990234375',
+        'w:header': '720',
+      },
+    };
+
+    normalizePgMarTwipsInTree(tree);
+
+    expect(tree.attributes).toEqual({
+      'w:top': '168',
+      'w:left': '352',
+      'w:right': '664',
       'w:header': '720',
     });
   });

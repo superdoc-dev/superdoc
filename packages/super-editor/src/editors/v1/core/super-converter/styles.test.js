@@ -515,6 +515,12 @@ describe('decodeRPrFromMarks', () => {
     const rPr = decodeRPrFromMarks(marks);
     expect(rPr.highlight).toBeUndefined();
   });
+
+  it('preserves imported explicit highlight none clears (SD-2912)', () => {
+    const marks = [{ type: 'highlight', attrs: { color: 'transparent', ooxmlHighlightClear: true } }];
+    const rPr = decodeRPrFromMarks(marks);
+    expect(rPr.highlight).toEqual({ 'w:val': 'none' });
+  });
 });
 
 describe('marks encoding/decoding round-trip', () => {
@@ -564,6 +570,18 @@ describe('marks encoding/decoding round-trip', () => {
     const marks2 = encodeMarksFromRPr(rPrShading, {});
     const finalRPr2 = decodeRPrFromMarks(marks2);
     expect(finalRPr2).toEqual({ highlight: { 'w:val': '#FFA500' } });
+  });
+
+  it('distinguishes explicit highlight none from transparent shading on round-trip', () => {
+    const explicitClearMarks = encodeMarksFromRPr({ highlight: { 'w:val': 'none' } }, {});
+    expect(explicitClearMarks).toEqual([
+      { type: 'highlight', attrs: { color: 'transparent', ooxmlHighlightClear: true } },
+    ]);
+    expect(decodeRPrFromMarks(explicitClearMarks)).toEqual({ highlight: { 'w:val': 'none' } });
+
+    const transparentShadingMarks = encodeMarksFromRPr({ shading: { val: 'clear', fill: 'auto' } }, {});
+    expect(transparentShadingMarks).toEqual([{ type: 'highlight', attrs: { color: 'transparent' } }]);
+    expect(decodeRPrFromMarks(transparentShadingMarks)).toEqual({});
   });
 
   it('should show asymmetry in textTransform/caps round-trip', () => {

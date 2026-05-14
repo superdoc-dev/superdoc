@@ -45,7 +45,8 @@ export function encodeMarksFromRPr(runProperties, docx) {
 
   const marks = [];
   const textStyleAttrs = {};
-  let highlightColor = null;
+  /** @type {{ color: string, ooxmlHighlightClear?: boolean } | null} */
+  let highlightAttrs = null;
   let hasHighlightTag = false;
   Object.keys(runProperties).forEach((key) => {
     const value = runProperties[key];
@@ -134,7 +135,10 @@ export function encodeMarksFromRPr(runProperties, docx) {
         const color = getHighLightValue(value);
         if (color) {
           hasHighlightTag = true;
-          highlightColor = color;
+          highlightAttrs = { color };
+          if (color.toLowerCase() === 'transparent' && String(value?.['w:val']).toLowerCase() === 'none') {
+            highlightAttrs.ooxmlHighlightClear = true;
+          }
         }
         break;
       case 'shading': {
@@ -144,11 +148,11 @@ export function encodeMarksFromRPr(runProperties, docx) {
         const fill = value['fill'];
         const shdVal = value['val'];
         if (fill && String(fill).toLowerCase() !== 'auto') {
-          highlightColor = `#${String(fill).replace('#', '')}`;
+          highlightAttrs = { color: `#${String(fill).replace('#', '')}` };
         } else if (typeof shdVal === 'string') {
           const normalized = shdVal.toLowerCase();
           if (normalized === 'clear' || normalized === 'nil' || normalized === 'none') {
-            highlightColor = 'transparent';
+            highlightAttrs = { color: 'transparent' };
           }
         }
         break;
@@ -175,8 +179,8 @@ export function encodeMarksFromRPr(runProperties, docx) {
     marks.push({ type: 'textStyle', attrs: textStyleAttrs });
   }
 
-  if (highlightColor) {
-    marks.push({ type: 'highlight', attrs: { color: highlightColor } });
+  if (highlightAttrs) {
+    marks.push({ type: 'highlight', attrs: highlightAttrs });
   }
 
   return marks;
@@ -569,13 +573,12 @@ export function decodeRPrFromMarks(marks) {
         break;
       }
       case 'highlight':
-        if (mark.attrs.color && mark.attrs.color.toLowerCase() !== 'transparent') {
-          // SD-2912: the "transparent" highlight mark is synthesized from `<w:shd val="clear"
-          // fill="auto"/>` shading on import (see encodeMarksFromRPr's shading case). Emitting
-          // an explicit `<w:highlight w:val="none"/>` for it injects a new element on every
-          // run that wasn't in the source. The shading itself round-trips independently via
-          // its own `<w:shd>` element, so no information is lost by skipping the highlight
-          // emit for the transparent case.
+        if (!mark.attrs.color) break;
+        if (mark.attrs.color.toLowerCase() === 'transparent') {
+          if (mark.attrs.ooxmlHighlightClear) {
+            runProperties.highlight = { 'w:val': 'none' };
+          }
+        } else {
           runProperties.highlight = { 'w:val': mark.attrs.color };
         }
         break;

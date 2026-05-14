@@ -118,6 +118,8 @@ export type HighlightColor = string;
 export interface HighlightAttrs {
   /** Highlight color */
   color?: HighlightColor | null;
+  /** @internal Imported explicit OOXML highlight clear marker */
+  ooxmlHighlightClear?: boolean | null;
 }
 
 // ============================================

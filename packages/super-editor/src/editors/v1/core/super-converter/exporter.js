@@ -131,8 +131,10 @@ export const normalizePgMarTwipsInTree = (node) => {
     for (const key of Object.keys(node.attributes)) {
       const value = node.attributes[key];
       if (value == null) continue;
-      const num = Number(value);
-      if (Number.isFinite(num) && !Number.isInteger(num)) {
+      const serialized = String(value).trim();
+      if (!serialized) continue;
+      const num = Number(serialized);
+      if (Number.isFinite(num) && !/^-?\d+$/.test(serialized)) {
         node.attributes[key] = String(Math.round(num));
       }
     }

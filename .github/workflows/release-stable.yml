@@ -124,6 +124,9 @@ jobs:
       - name: Package shape gates
         run: node tests/consumer-typecheck/package-shape-gate.mjs
 
+      - name: Public facade doc drift (SD-2966)
+        run: node tests/consumer-typecheck/render-facade-doc.mjs --check
+
       - name: Release stable packages (orchestrator)
         id: stable_release
         env:

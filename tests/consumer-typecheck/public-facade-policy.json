@@ -1,0 +1,1233 @@
+{
+  "$schema_version": "1",
+  "metadata": {
+    "ticket": "SD-2966",
+    "status": "Draft",
+    "owner": "Caio Pizzol",
+    "last_updated": "2026-05-14"
+  },
+  "tiers": [
+    {
+      "id": "public",
+      "label": "public",
+      "summary": "Supported and documented. Stable contract; breaking changes require a deprecation window and a major or signposted minor release."
+    },
+    {
+      "id": "beta",
+      "label": "beta",
+      "summary": "Available from a public path but explicitly scoped to evolve. May change shape or be removed with notice; not yet documented as a stable contract."
+    },
+    {
+      "id": "legacy-root",
+      "label": "legacy-root",
+      "summary": "Re-exported from the root `superdoc` facade for backward compatibility. Migration target exists. Not advertised in new docs. No-growth: new exports are not added through this classification."
+    },
+    {
+      "id": "internal",
+      "label": "internal",
+      "summary": "Reachable through some path today but not part of the contract. Must move behind the facade or be excluded from emitted declarations before strict gates can turn on."
+    }
+  ],
+  "import_paths": [
+    {
+      "path": "superdoc",
+      "kind": "canonical-facade",
+      "tier_for_new_exports": "public",
+      "decision": "Canonical entry. New docs and support guidance point here. New runtime values and types are added through this facade unless they belong to a dedicated subpath."
+    },
+    {
+      "path": "superdoc/types",
+      "kind": "type-only-facade",
+      "tier_for_new_exports": "public",
+      "decision": "Type-only entry for extension/schema authors. No runtime values."
+    },
+    {
+      "path": "superdoc/ui",
+      "kind": "public-subpath",
+      "tier_for_new_exports": "public",
+      "decision": "Browser UI controller surface. Owns UI controller types; root re-exports only what top-level consumers need."
+    },
+    {
+      "path": "superdoc/ui/react",
+      "kind": "public-subpath",
+      "tier_for_new_exports": "public",
+      "decision": "React bindings for `superdoc/ui`."
+    },
+    {
+      "path": "superdoc/headless-toolbar",
+      "kind": "public-subpath",
+      "tier_for_new_exports": "public",
+      "decision": "Headless toolbar controller; owns toolbar contract types."
+    },
+    {
+      "path": "superdoc/headless-toolbar/react",
+      "kind": "public-subpath",
+      "tier_for_new_exports": "public",
+      "decision": "React helper for the headless toolbar."
+    },
+    {
+      "path": "superdoc/headless-toolbar/vue",
+      "kind": "public-subpath",
+      "tier_for_new_exports": "public",
+      "decision": "Vue helper for the headless toolbar."
+    },
+    {
+      "path": "superdoc/style.css",
+      "kind": "asset",
+      "tier_for_new_exports": "public",
+      "decision": "Asset export. No type contract."
+    },
+    {
+      "path": "superdoc/super-editor",
+      "kind": "legacy-compat-subpath",
+      "tier_for_new_exports": "legacy-root",
+      "decision": "Legacy public compatibility surface per `package-boundaries.md` Decision 1. Keep compiling. No new exports added here. Migration target for new code is `superdoc`."
+    },
+    {
+      "path": "superdoc/converter",
+      "kind": "legacy-compat-subpath",
+      "tier_for_new_exports": "legacy-root",
+      "decision": "Legacy compatibility after SD-2953. Migrate to `SuperConverter` from `superdoc`."
+    },
+    {
+      "path": "superdoc/docx-zipper",
+      "kind": "legacy-compat-subpath",
+      "tier_for_new_exports": "legacy-root",
+      "decision": "Legacy compatibility after SD-2953. Migrate to `DocxZipper` from `superdoc`."
+    },
+    {
+      "path": "superdoc/file-zipper",
+      "kind": "legacy-compat-subpath",
+      "tier_for_new_exports": "legacy-root",
+      "decision": "Legacy compatibility after SD-2953. Migrate to `createZip` from `superdoc`."
+    }
+  ],
+  "legacy_super_editor_facade": {
+    "rules": [
+      "Existing exports keep compiling.",
+      "No new export is added through `superdoc/super-editor` unless there is no supported replacement.",
+      "New docs avoid this path except migration and advanced pages.",
+      "Each symbol kept here has a migration target: usually `superdoc`, `superdoc/ui`, or Document API.",
+      "A no-growth audit (future) snapshots this subpath; new names appearing on it fail CI."
+    ],
+    "known_symbol_decisions": [
+      {
+        "symbols": ["Editor", "PresentationEditor", "SuperConverter", "DocxZipper", "createZip"],
+        "current_use": "Headless and conversion workflows.",
+        "proposed_target": "Already available from `superdoc`."
+      },
+      {
+        "symbols": [
+          "getStarterExtensions",
+          "getRichTextExtensions",
+          "Extensions",
+          "defineNode",
+          "defineMark",
+          "isNodeType",
+          "assertNodeType",
+          "isMarkType"
+        ],
+        "current_use": "Extension authoring.",
+        "proposed_target": "Already available from `superdoc`."
+      },
+      {
+        "symbols": ["Extension", "Node", "Mark", "Attribute", "Plugin", "PluginKey"],
+        "current_use": "Advanced custom extension docs.",
+        "proposed_target": "Decide whether to promote to `superdoc` or keep legacy-only (Open Decision 1)."
+      },
+      {
+        "symbols": ["resolveSelectionTarget", "resolveDefaultInsertTarget"],
+        "current_use": "CLI and internal Document API bridge.",
+        "proposed_target": "Keep internal or expose a documented Document API helper home."
+      },
+      {
+        "symbols": ["trackChangesHelpers", "fieldAnnotationHelpers", "SectionHelpers"],
+        "current_use": "Existing advanced integrations.",
+        "proposed_target": "Keep typed as legacy-supported. Do not expand."
+      }
+    ]
+  },
+  "implementation_shape": {
+    "source_layout": [
+      "packages/superdoc/src/public/",
+      "  index.ts                 # canonical top-level value + type facade",
+      "  types.ts                 # type-only facade for superdoc/types",
+      "  super-editor-compat.ts   # legacy compatibility facade",
+      "  ui.ts                    # superdoc/ui facade",
+      "  ui-react.ts              # superdoc/ui/react facade",
+      "  headless-toolbar.ts      # toolbar facade",
+      "  headless-toolbar-react.ts",
+      "  headless-toolbar-vue.ts"
+    ],
+    "notes": [
+      "Existing entry files can stay as thin wrappers during migration.",
+      "Public exports are explicit lists, not `export *` from implementation barrels.",
+      "Each exported name carries one tier classification recorded in `public-facade-policy.json`. Source-side annotations (TSDoc tags) are normalized in PR 2 to match the policy."
+    ]
+  },
+  "audit_consumption": {
+    "summary": "The audit (`deep-type-audit.mjs`) reads `public-facade-policy.json` as the authoritative classification source. Source JSDoc tags are normalized in PR 2 but are not the contract.",
+    "rationale": [
+      "TSDoc release tags (`@public`, `@beta`, `@internal`) do not survive `.d.ts` emission in our current pipeline. The audit walks emitted declarations and cannot recover tags from them.",
+      "Source files today carry malformed JSDoc (multi-typedef blocks, missing `replaceWith`/`removeIn` on `@deprecated`). Treating source as the authority would freeze that malformed shape into CI.",
+      "JSON is reviewable in a single PR, diffable, and exposes intent. Source annotations follow in PR 2 once the policy is the established contract."
+    ],
+    "future_state": [
+      "PR 2 normalizes source JSDoc to match the policy.",
+      "PR 3 wires `deep-type-audit.mjs` to read the policy: each tier gets a strict gate appropriate to its level (public must not collapse to `any`; legacy-root tolerated; internal must not be reachable from a public path).",
+      "If API Extractor or a similar tool starts preserving TSDoc tags in emitted declarations later, the audit can prefer source tags and use the JSON only for legacy-root and internal classifications."
+    ]
+  },
+  "ci_gates": [
+    {
+      "id": 1,
+      "name": "No wildcard public re-exports",
+      "description": "Files under `packages/superdoc/src/public/**` must not use `export *`. Compatibility files (`super-editor-compat.ts`) are explicitly allowlisted."
+    },
+    {
+      "id": 2,
+      "name": "No-growth snapshot for `superdoc/super-editor`",
+      "description": "Snapshot of names exported through the legacy subpath. New names appearing fail CI."
+    },
+    {
+      "id": 3,
+      "name": "Public type snapshot",
+      "description": "Top-level `superdoc` supported names tracked against a snapshot. Additions are intentional (PR adds the row to the policy)."
+    },
+    {
+      "id": 4,
+      "name": "Reachability ratio gate",
+      "description": "After rollup or curated-emit path is in place: emitted declarations reachable only through declared public paths."
+    },
+    {
+      "id": 5,
+      "name": "Consumer matrix authoritative",
+      "description": "Pack-and-install consumer typecheck across `bundler`, `node16`, `nodenext` with `skipLibCheck: false`. Unchanged from SD-2828."
+    }
+  ],
+  "sequencing": [
+    "Land this policy + renderer + reconciled RFC (PR 1).",
+    "Normalize source JSDoc to match the policy: split multi-typedef blocks, standard tags only, complete `@deprecated replaceWith=X removeIn=Y` per `comment-policy.md` (PR 2).",
+    "Implement explicit facade files under `packages/superdoc/src/public/` without changing runtime behavior.",
+    "Update docs and examples to point new code at `superdoc`, `superdoc/ui`, and `superdoc/headless-toolbar`.",
+    "Wire the audit to read the policy JSON; turn on per-tier strict gates (PR 3, sibling of SD-3046).",
+    "Retry declaration rollup against the facade input.",
+    "Migrate public-contract files to TypeScript only where the facade or rollup still needs cleaner input."
+  ],
+  "open_decisions": [
+    {
+      "id": 1,
+      "question": "Promote `Extension`, `Node`, `Mark`, `Attribute` classes to top-level `superdoc` extension-authoring surface?",
+      "default_if_unresolved": "Keep legacy-only. Extension authoring proceeds through the existing factory functions."
+    },
+    {
+      "id": 2,
+      "question": "Are layout types (`FlowBlock`, `Layout`, `PaintSnapshot`) customer-supported, or internal/debug-only?",
+      "default_if_unresolved": "Internal. Layout is owned by `layout-engine/` and is not part of the public contract today."
+    },
+    {
+      "id": 3,
+      "question": "Promote helper namespaces (`superEditorHelpers`, `trackChangesHelpers`, `fieldAnnotationHelpers`, `SectionHelpers`) to documented stable, or keep as legacy?",
+      "default_if_unresolved": "Legacy-root. Keep typed; do not expand. Document API is the strategic path."
+    },
+    {
+      "id": 4,
+      "question": "Should `registeredHandlers` remain exported at all?",
+      "default_if_unresolved": "Internal. Move behind the facade unless a consumer surfaces a real use case."
+    },
+    {
+      "id": 5,
+      "question": "Deprecation window length for `superdoc/super-editor` once migration docs are complete?",
+      "default_if_unresolved": "Compat-indefinitely. Per `package-boundaries.md` Decision 1: keep compiling, do not advertise. No removal date until usage data justifies one."
+    }
+  ],
+  "rfc_reconciliation": [
+    {
+      "file": "docs/architecture/package-boundaries.md",
+      "anchor_line": 228,
+      "issue": "Calls `superdoc/super-editor` a 'supported facade'; Decision 1 (line 144) classifies it as legacy public compatibility surface.",
+      "current_text": "Surgical TypeScript migration of the public contract files: configuration, command surfaces, toolbar/UI types, the supported `superdoc/super-editor` facade.",
+      "proposed_text": "Surgical TypeScript migration of the public contract files: configuration, command surfaces, toolbar/UI types, and the legacy `superdoc/super-editor` compatibility facade.",
+      "rationale": "Decision 1 is the single source of truth for the classification. The migration item should describe the facade by its actual tier so the policy in this document and the RFC say the same thing.",
+      "source_of_truth": "package-boundaries.md Decision 1 (line 144-148)."
+    }
+  ],
+  "narrative": {
+    "purpose": [
+      "SD-2828 made the published TypeScript surface compile for consumers. The remaining problem is that the surface is still implicit: public types are whatever the current entry barrels re-export, plus whatever those types reference transitively.",
+      "That implicit surface is why declaration rollup failed in SD-2965. Both tested bundlers could close the graph, but API Extractor surfaced forgotten exports, mixed local and exported declarations, and unresolved public names. The package is bundleable in principle; it is not yet curated enough to bundle safely.",
+      "This document, generated from `tests/consumer-typecheck/public-facade-policy.json`, defines the facade that should exist before retrying declaration rollup or doing broad TypeScript migration."
+    ],
+    "goals": [
+      "Make `superdoc` the canonical import path for new customer code.",
+      "Keep legacy public paths compiling without growing them.",
+      "Give every supported public type a stable name and owner.",
+      "Stop treating internal implementation types as public just because they are reachable.",
+      "Make future declaration rollup a packaging change, not an API discovery exercise."
+    ],
+    "non_goals": [
+      "Removing `superdoc/super-editor` now.",
+      "Publishing internal packages like `@superdoc/contracts`.",
+      "Migrating the whole repository to TypeScript.",
+      "Hiding existing legacy names in a patch or minor release."
+    ]
+  },
+  "source_annotation_mapping": [
+    {
+      "tier": "public",
+      "source_form": "@public",
+      "notes": "Supported stable contract. This is a real TSDoc release tag."
+    },
+    {
+      "tier": "beta",
+      "source_form": "@beta",
+      "notes": "Supported preview contract. This is a real TSDoc release tag."
+    },
+    {
+      "tier": "legacy-root",
+      "source_form": "@deprecated replaceWith=<target> removeIn=<version> or compat-indefinitely",
+      "notes": "`legacy-root` is a policy tier, not a TSDoc tag. Source annotations use the repository deprecation convention from comment-policy.md."
+    },
+    {
+      "tier": "internal",
+      "source_form": "@internal",
+      "notes": "Not part of the supported customer contract. This is a real TSDoc release tag."
+    }
+  ],
+  "symbols": [
+    {
+      "name": "SuperDoc",
+      "kind": "runtime_value",
+      "group": "Core document UI",
+      "tier": "public",
+      "import_path": "superdoc",
+      "notes": "Primary browser editor entry.",
+      "evidence": "Classified by SD-2966 as part of the supported customer facade; covered by consumer typecheck fixtures or existing package-boundary policy."
+    },
+    {
+      "name": "Editor",
+      "kind": "runtime_value",
+      "group": "Headless editor",
+      "tier": "public",
+      "import_path": "superdoc",
+      "notes": "Headless and server-side workflows. Prefer Document API for state mutation.",
+      "evidence": "Classified by SD-2966 as part of the supported customer facade; covered by consumer typecheck fixtures or existing package-boundary policy."
+    },
+    {
+      "name": "PresentationEditor",
+      "kind": "runtime_value",
+      "group": "Headless editor",
+      "tier": "public",
+      "import_path": "superdoc",
+      "notes": "Bridges editor events into layout/paint state.",
+      "evidence": "Classified by SD-2966 as part of the supported customer facade; covered by consumer typecheck fixtures or existing package-boundary policy."
+    },
+    {
+      "name": "SuperConverter",
+      "kind": "runtime_value",
+      "group": "Import and export",
+      "tier": "public",
+      "import_path": "superdoc",
+      "evidence": "Classified by SD-2966 as part of the supported customer facade; covered by consumer typecheck fixtures or existing package-boundary policy."
+    },
+    {
+      "name": "DocxZipper",
+      "kind": "runtime_value",
+      "group": "Import and export",
+      "tier": "public",
+      "import_path": "superdoc",
+      "evidence": "Classified by SD-2966 as part of the supported customer facade; covered by consumer typecheck fixtures or existing package-boundary policy."
+    },
+    {
+      "name": "createZip",
+      "kind": "runtime_value",
+      "group": "Import and export",
+      "tier": "public",
+      "import_path": "superdoc",
+      "evidence": "Classified by SD-2966 as part of the supported customer facade; covered by consumer typecheck fixtures or existing package-boundary policy."
+    },
+    {
+      "name": "BlankDOCX",
+      "kind": "runtime_value",
+      "group": "Import and export",
+      "tier": "public",
+      "import_path": "superdoc",
+      "evidence": "Classified by SD-2966 as part of the supported customer facade; covered by consumer typecheck fixtures or existing package-boundary policy."
+    },
+    {
+      "name": "DOCX",
+      "kind": "runtime_value",
+      "group": "Import and export",
+      "tier": "public",
+      "import_path": "superdoc",
+      "evidence": "Classified by SD-2966 as part of the supported customer facade; covered by consumer typecheck fixtures or existing package-boundary policy."
+    },
+    {
+      "name": "PDF",
+      "kind": "runtime_value",
+      "group": "Import and export",
+      "tier": "public",
+      "import_path": "superdoc",
+      "evidence": "Classified by SD-2966 as part of the supported customer facade; covered by consumer typecheck fixtures or existing package-boundary policy."
+    },
+    {
+      "name": "HTML",
+      "kind": "runtime_value",
+      "group": "Import and export",
+      "tier": "public",
+      "import_path": "superdoc",
+      "evidence": "Classified by SD-2966 as part of the supported customer facade; covered by consumer typecheck fixtures or existing package-boundary policy."
+    },
+    {
+      "name": "getFileObject",
+      "kind": "runtime_value",
+      "group": "Import and export",
+      "tier": "public",
+      "import_path": "superdoc",
+      "evidence": "Classified by SD-2966 as part of the supported customer facade; covered by consumer typecheck fixtures or existing package-boundary policy."
+    },
+    {
+      "name": "Extensions",
+      "kind": "runtime_value",
+      "group": "Extension authoring",
+      "tier": "public",
+      "import_path": "superdoc",
+      "evidence": "Classified by SD-2966 as part of the supported customer facade; covered by consumer typecheck fixtures or existing package-boundary policy."
+    },
+    {
+      "name": "getStarterExtensions",
+      "kind": "runtime_value",
+      "group": "Extension authoring",
+      "tier": "public",
+      "import_path": "superdoc",
+      "evidence": "Classified by SD-2966 as part of the supported customer facade; covered by consumer typecheck fixtures or existing package-boundary policy."
+    },
+    {
+      "name": "getRichTextExtensions",
+      "kind": "runtime_value",
+      "group": "Extension authoring",
+      "tier": "public",
+      "import_path": "superdoc",
+      "evidence": "Classified by SD-2966 as part of the supported customer facade; covered by consumer typecheck fixtures or existing package-boundary policy."
+    },
+    {
+      "name": "defineNode",
+      "kind": "runtime_value",
+      "group": "Extension authoring",
+      "tier": "public",
+      "import_path": "superdoc",
+      "evidence": "Classified by SD-2966 as part of the supported customer facade; covered by consumer typecheck fixtures or existing package-boundary policy."
+    },
+    {
+      "name": "defineMark",
+      "kind": "runtime_value",
+      "group": "Extension authoring",
+      "tier": "public",
+      "import_path": "superdoc",
+      "evidence": "Classified by SD-2966 as part of the supported customer facade; covered by consumer typecheck fixtures or existing package-boundary policy."
+    },
+    {
+      "name": "isNodeType",
+      "kind": "runtime_value",
+      "group": "Extension authoring",
+      "tier": "public",
+      "import_path": "superdoc",
+      "evidence": "Classified by SD-2966 as part of the supported customer facade; covered by consumer typecheck fixtures or existing package-boundary policy."
+    },
+    {
+      "name": "assertNodeType",
+      "kind": "runtime_value",
+      "group": "Extension authoring",
+      "tier": "public",
+      "import_path": "superdoc",
+      "evidence": "Classified by SD-2966 as part of the supported customer facade; covered by consumer typecheck fixtures or existing package-boundary policy."
+    },
+    {
+      "name": "isMarkType",
+      "kind": "runtime_value",
+      "group": "Extension authoring",
+      "tier": "public",
+      "import_path": "superdoc",
+      "evidence": "Classified by SD-2966 as part of the supported customer facade; covered by consumer typecheck fixtures or existing package-boundary policy."
+    },
+    {
+      "name": "createTheme",
+      "kind": "runtime_value",
+      "group": "Theming",
+      "tier": "public",
+      "import_path": "superdoc",
+      "evidence": "Classified by SD-2966 as part of the supported customer facade; covered by consumer typecheck fixtures or existing package-boundary policy."
+    },
+    {
+      "name": "buildTheme",
+      "kind": "runtime_value",
+      "group": "Theming",
+      "tier": "public",
+      "import_path": "superdoc",
+      "evidence": "Classified by SD-2966 as part of the supported customer facade; covered by consumer typecheck fixtures or existing package-boundary policy."
+    },
+    {
+      "name": "SuperEditor",
+      "kind": "runtime_value",
+      "group": "UI components",
+      "tier": "public",
+      "import_path": "superdoc",
+      "evidence": "Classified by SD-2966 as part of the supported customer facade; covered by consumer typecheck fixtures or existing package-boundary policy."
+    },
+    {
+      "name": "Toolbar",
+      "kind": "runtime_value",
+      "group": "UI components",
+      "tier": "public",
+      "import_path": "superdoc",
+      "evidence": "Classified by SD-2966 as part of the supported customer facade; covered by consumer typecheck fixtures or existing package-boundary policy."
+    },
+    {
+      "name": "ContextMenu",
+      "kind": "runtime_value",
+      "group": "UI components",
+      "tier": "public",
+      "import_path": "superdoc",
+      "evidence": "Classified by SD-2966 as part of the supported customer facade; covered by consumer typecheck fixtures or existing package-boundary policy."
+    },
+    {
+      "name": "SlashMenu",
+      "kind": "runtime_value",
+      "group": "UI components",
+      "tier": "legacy-root",
+      "import_path": "superdoc",
+      "notes": "Deprecated alias; do not advertise in new docs.",
+      "migration_target": "ContextMenu from `superdoc`.",
+      "removal_posture": "compat-indefinitely until a major release with migration notes.",
+      "evidence": "Deprecated alias in packages/super-editor/src/editors/v1/index.js:34; kept for existing root consumers."
+    },
+    {
+      "name": "AIWriter",
+      "kind": "runtime_value",
+      "group": "UI components",
+      "tier": "public",
+      "import_path": "superdoc",
+      "evidence": "Classified by SD-2966 as part of the supported customer facade; covered by consumer typecheck fixtures or existing package-boundary policy."
+    },
+    {
+      "name": "SuperToolbar",
+      "kind": "runtime_value",
+      "group": "UI components",
+      "tier": "public",
+      "import_path": "superdoc",
+      "evidence": "Direct consumer fixture instantiates `new SuperToolbar(...)` in tests/consumer-typecheck/src/customer-scenario.ts:661 and asserts assignability at line 671.",
+      "notes": "Supported direct-instantiation surface; keep in the root facade with real constructor/config types."
+    },
+    {
+      "name": "fieldAnnotationHelpers",
+      "kind": "runtime_value",
+      "group": "Helpers",
+      "tier": "legacy-root",
+      "import_path": "superdoc",
+      "migration_target": "superdoc Document API or dedicated helper subpath (TBD)",
+      "removal_posture": "compat-indefinitely (pending Open Decision 3)"
+    },
+    {
+      "name": "trackChangesHelpers",
+      "kind": "runtime_value",
+      "group": "Helpers",
+      "tier": "legacy-root",
+      "import_path": "superdoc",
+      "migration_target": "superdoc Document API or dedicated helper subpath (TBD)",
+      "removal_posture": "compat-indefinitely (pending Open Decision 3)"
+    },
+    {
+      "name": "SectionHelpers",
+      "kind": "runtime_value",
+      "group": "Helpers",
+      "tier": "legacy-root",
+      "import_path": "superdoc",
+      "migration_target": "superdoc Document API or dedicated helper subpath (TBD)",
+      "removal_posture": "compat-indefinitely (pending Open Decision 3)"
+    },
+    {
+      "name": "superEditorHelpers",
+      "kind": "runtime_value",
+      "group": "Helpers",
+      "tier": "legacy-root",
+      "import_path": "superdoc",
+      "migration_target": "superdoc Document API or dedicated helper subpath (TBD)",
+      "removal_posture": "compat-indefinitely (pending Open Decision 3)"
+    },
+    {
+      "name": "TrackChangesBasePluginKey",
+      "kind": "runtime_value",
+      "group": "Plugin keys",
+      "tier": "legacy-root",
+      "import_path": "superdoc",
+      "notes": "ProseMirror integration escape hatch.",
+      "migration_target": "Document API or UI controller (Comments/TrackChanges slices)",
+      "removal_posture": "compat-indefinitely"
+    },
+    {
+      "name": "CommentsPluginKey",
+      "kind": "runtime_value",
+      "group": "Plugin keys",
+      "tier": "legacy-root",
+      "import_path": "superdoc",
+      "notes": "ProseMirror integration escape hatch.",
+      "migration_target": "Document API or UI controller (Comments/TrackChanges slices)",
+      "removal_posture": "compat-indefinitely"
+    },
+    {
+      "name": "getMarksFromSelection",
+      "kind": "runtime_value",
+      "group": "Low-level editor helpers",
+      "tier": "legacy-root",
+      "import_path": "superdoc",
+      "migration_target": "Document API",
+      "removal_posture": "compat-indefinitely"
+    },
+    {
+      "name": "getActiveFormatting",
+      "kind": "runtime_value",
+      "group": "Low-level editor helpers",
+      "tier": "legacy-root",
+      "import_path": "superdoc",
+      "migration_target": "Document API",
+      "removal_posture": "compat-indefinitely"
+    },
+    {
+      "name": "getAllowedImageDimensions",
+      "kind": "runtime_value",
+      "group": "Low-level editor helpers",
+      "tier": "legacy-root",
+      "import_path": "superdoc",
+      "migration_target": "Document API",
+      "removal_posture": "compat-indefinitely"
+    },
+    {
+      "name": "registeredHandlers",
+      "kind": "runtime_value",
+      "group": "Converter internals",
+      "tier": "internal",
+      "import_path": "superdoc",
+      "notes": "Move behind facade unless an existing consumer is identified (Open Decision 4).",
+      "evidence": "Currently reachable; not documented; no known consumer use case."
+    },
+    {
+      "name": "AnnotatorHelpers",
+      "kind": "runtime_value",
+      "group": "Annotator helpers",
+      "tier": "legacy-root",
+      "import_path": "superdoc",
+      "notes": "Avoid new docs.",
+      "migration_target": "Document API or Annotator-specific subpath (TBD)",
+      "removal_posture": "compat-indefinitely"
+    },
+    {
+      "name": "Config",
+      "kind": "type",
+      "group": "Configuration",
+      "tier": "public",
+      "import_path": "superdoc",
+      "evidence": "Classified by SD-2966 as part of the supported customer facade; covered by consumer typecheck fixtures or existing package-boundary policy."
+    },
+    {
+      "name": "Modules",
+      "kind": "type",
+      "group": "Configuration",
+      "tier": "public",
+      "import_path": "superdoc",
+      "evidence": "Classified by SD-2966 as part of the supported customer facade; covered by consumer typecheck fixtures or existing package-boundary policy."
+    },
+    {
+      "name": "User",
+      "kind": "type",
+      "group": "Configuration",
+      "tier": "public",
+      "import_path": "superdoc",
+      "evidence": "Classified by SD-2966 as part of the supported customer facade; covered by consumer typecheck fixtures or existing package-boundary policy."
+    },
+    {
+      "name": "Document",
+      "kind": "type",
+      "group": "Configuration",
+      "tier": "public",
+      "import_path": "superdoc",
+      "evidence": "Classified by SD-2966 as part of the supported customer facade; covered by consumer typecheck fixtures or existing package-boundary policy."
+    },
+    {
+      "name": "CollaborationConfig",
+      "kind": "type",
+      "group": "Configuration",
+      "tier": "public",
+      "import_path": "superdoc",
+      "evidence": "Classified by SD-2966 as part of the supported customer facade; covered by consumer typecheck fixtures or existing package-boundary policy."
+    },
+    {
+      "name": "SuperDocTelemetryConfig",
+      "kind": "type",
+      "group": "Configuration",
+      "tier": "public",
+      "import_path": "superdoc",
+      "evidence": "Classified by SD-2966 as part of the supported customer facade; covered by consumer typecheck fixtures or existing package-boundary policy."
+    },
+    {
+      "name": "AwarenessState",
+      "kind": "type",
+      "group": "Configuration",
+      "tier": "public",
+      "import_path": "superdoc",
+      "notes": "Added in SD-2834.",
+      "evidence": "Classified by SD-2966 as part of the supported customer facade; covered by consumer typecheck fixtures or existing package-boundary policy."
+    },
+    {
+      "name": "DocumentApi",
+      "kind": "type",
+      "group": "Document API",
+      "tier": "public",
+      "import_path": "superdoc",
+      "evidence": "Classified by SD-2966 as part of the supported customer facade; covered by consumer typecheck fixtures or existing package-boundary policy."
+    },
+    {
+      "name": "SelectionApi",
+      "kind": "type",
+      "group": "Document API",
+      "tier": "public",
+      "import_path": "superdoc",
+      "evidence": "Classified by SD-2966 as part of the supported customer facade; covered by consumer typecheck fixtures or existing package-boundary policy."
+    },
+    {
+      "name": "SelectionInfo",
+      "kind": "type",
+      "group": "Document API",
+      "tier": "public",
+      "import_path": "superdoc",
+      "evidence": "Classified by SD-2966 as part of the supported customer facade; covered by consumer typecheck fixtures or existing package-boundary policy."
+    },
+    {
+      "name": "TextTarget",
+      "kind": "type",
+      "group": "Document API",
+      "tier": "public",
+      "import_path": "superdoc",
+      "evidence": "Classified by SD-2966 as part of the supported customer facade; covered by consumer typecheck fixtures or existing package-boundary policy."
+    },
+    {
+      "name": "TextAddress",
+      "kind": "type",
+      "group": "Document API",
+      "tier": "public",
+      "import_path": "superdoc",
+      "evidence": "Classified by SD-2966 as part of the supported customer facade; covered by consumer typecheck fixtures or existing package-boundary policy."
+    },
+    {
+      "name": "EntityAddress",
+      "kind": "type",
+      "group": "Document API",
+      "tier": "public",
+      "import_path": "superdoc",
+      "evidence": "Classified by SD-2966 as part of the supported customer facade; covered by consumer typecheck fixtures or existing package-boundary policy."
+    },
+    {
+      "name": "BlocksListResult",
+      "kind": "type",
+      "group": "Document API",
+      "tier": "public",
+      "import_path": "superdoc",
+      "evidence": "Classified by SD-2966 as part of the supported customer facade; covered by consumer typecheck fixtures or existing package-boundary policy."
+    },
+    {
+      "name": "BookmarkInfo",
+      "kind": "type",
+      "group": "Document API",
+      "tier": "public",
+      "import_path": "superdoc",
+      "evidence": "Classified by SD-2966 as part of the supported customer facade; covered by consumer typecheck fixtures or existing package-boundary policy."
+    },
+    {
+      "name": "EditorOptions",
+      "kind": "type",
+      "group": "Editor lifecycle",
+      "tier": "public",
+      "import_path": "superdoc",
+      "evidence": "Classified by SD-2966 as part of the supported customer facade; covered by consumer typecheck fixtures or existing package-boundary policy."
+    },
+    {
+      "name": "EditorLifecycleState",
+      "kind": "type",
+      "group": "Editor lifecycle",
+      "tier": "public",
+      "import_path": "superdoc",
+      "evidence": "Classified by SD-2966 as part of the supported customer facade; covered by consumer typecheck fixtures or existing package-boundary policy."
+    },
+    {
+      "name": "OpenOptions",
+      "kind": "type",
+      "group": "Editor lifecycle",
+      "tier": "public",
+      "import_path": "superdoc",
+      "evidence": "Classified by SD-2966 as part of the supported customer facade; covered by consumer typecheck fixtures or existing package-boundary policy."
+    },
+    {
+      "name": "SaveOptions",
+      "kind": "type",
+      "group": "Editor lifecycle",
+      "tier": "public",
+      "import_path": "superdoc",
+      "evidence": "Classified by SD-2966 as part of the supported customer facade; covered by consumer typecheck fixtures or existing package-boundary policy."
+    },
+    {
+      "name": "ExportOptions",
+      "kind": "type",
+      "group": "Editor lifecycle",
+      "tier": "public",
+      "import_path": "superdoc",
+      "evidence": "Classified by SD-2966 as part of the supported customer facade; covered by consumer typecheck fixtures or existing package-boundary policy."
+    },
+    {
+      "name": "ExportDocxParams",
+      "kind": "type",
+      "group": "Editor lifecycle",
+      "tier": "public",
+      "import_path": "superdoc",
+      "evidence": "Classified by SD-2966 as part of the supported customer facade; covered by consumer typecheck fixtures or existing package-boundary policy."
+    },
+    {
+      "name": "EditorEventMap",
+      "kind": "type",
+      "group": "Editor lifecycle",
+      "tier": "public",
+      "import_path": "superdoc",
+      "evidence": "Classified by SD-2966 as part of the supported customer facade; covered by consumer typecheck fixtures or existing package-boundary policy."
+    },
+    {
+      "name": "EditorTransactionEvent",
+      "kind": "type",
+      "group": "Editor lifecycle",
+      "tier": "public",
+      "import_path": "superdoc",
+      "notes": "Transaction field narrowed to real `Transaction` in SD-2834.",
+      "evidence": "Classified by SD-2966 as part of the supported customer facade; covered by consumer typecheck fixtures or existing package-boundary policy."
+    },
+    {
+      "name": "Comment",
+      "kind": "type",
+      "group": "Comments and track changes",
+      "tier": "public",
+      "import_path": "superdoc",
+      "evidence": "Classified by SD-2966 as part of the supported customer facade; covered by consumer typecheck fixtures or existing package-boundary policy."
+    },
+    {
+      "name": "CommentElement",
+      "kind": "type",
+      "group": "Comments and track changes",
+      "tier": "public",
+      "import_path": "superdoc",
+      "evidence": "Classified by SD-2966 as part of the supported customer facade; covered by consumer typecheck fixtures or existing package-boundary policy."
+    },
+    {
+      "name": "CommentsPayload",
+      "kind": "type",
+      "group": "Comments and track changes",
+      "tier": "public",
+      "import_path": "superdoc",
+      "evidence": "Classified by SD-2966 as part of the supported customer facade; covered by consumer typecheck fixtures or existing package-boundary policy."
+    },
+    {
+      "name": "TrackChangesModuleConfig",
+      "kind": "type",
+      "group": "Comments and track changes",
+      "tier": "public",
+      "import_path": "superdoc",
+      "evidence": "Classified by SD-2966 as part of the supported customer facade; covered by consumer typecheck fixtures or existing package-boundary policy."
+    },
+    {
+      "name": "SuperDocUI",
+      "kind": "type",
+      "group": "UI controller",
+      "tier": "public",
+      "import_path": "superdoc/ui",
+      "evidence": "Classified by SD-2966 as part of the supported customer facade; covered by consumer typecheck fixtures or existing package-boundary policy."
+    },
+    {
+      "name": "SuperDocUIOptions",
+      "kind": "type",
+      "group": "UI controller",
+      "tier": "public",
+      "import_path": "superdoc/ui",
+      "evidence": "Classified by SD-2966 as part of the supported customer facade; covered by consumer typecheck fixtures or existing package-boundary policy."
+    },
+    {
+      "name": "SuperDocUIState",
+      "kind": "type",
+      "group": "UI controller",
+      "tier": "public",
+      "import_path": "superdoc/ui",
+      "evidence": "Classified by SD-2966 as part of the supported customer facade; covered by consumer typecheck fixtures or existing package-boundary policy."
+    },
+    {
+      "name": "SelectionSlice",
+      "kind": "type",
+      "group": "UI controller",
+      "tier": "public",
+      "import_path": "superdoc/ui",
+      "evidence": "Classified by SD-2966 as part of the supported customer facade; covered by consumer typecheck fixtures or existing package-boundary policy."
+    },
+    {
+      "name": "CommentsSlice",
+      "kind": "type",
+      "group": "UI controller",
+      "tier": "public",
+      "import_path": "superdoc/ui",
+      "evidence": "Classified by SD-2966 as part of the supported customer facade; covered by consumer typecheck fixtures or existing package-boundary policy."
+    },
+    {
+      "name": "TrackChangesSlice",
+      "kind": "type",
+      "group": "UI controller",
+      "tier": "public",
+      "import_path": "superdoc/ui",
+      "evidence": "Classified by SD-2966 as part of the supported customer facade; covered by consumer typecheck fixtures or existing package-boundary policy."
+    },
+    {
+      "name": "ViewportHandle",
+      "kind": "type",
+      "group": "UI controller",
+      "tier": "public",
+      "import_path": "superdoc/ui",
+      "evidence": "Classified by SD-2966 as part of the supported customer facade; covered by consumer typecheck fixtures or existing package-boundary policy."
+    },
+    {
+      "name": "DocumentHandle",
+      "kind": "type",
+      "group": "UI controller",
+      "tier": "public",
+      "import_path": "superdoc/ui",
+      "evidence": "Classified by SD-2966 as part of the supported customer facade; covered by consumer typecheck fixtures or existing package-boundary policy."
+    },
+    {
+      "name": "CreateHeadlessToolbarOptions",
+      "kind": "type",
+      "group": "Toolbar",
+      "tier": "public",
+      "import_path": "superdoc/headless-toolbar",
+      "evidence": "Classified by SD-2966 as part of the supported customer facade; covered by consumer typecheck fixtures or existing package-boundary policy."
+    },
+    {
+      "name": "HeadlessToolbarController",
+      "kind": "type",
+      "group": "Toolbar",
+      "tier": "public",
+      "import_path": "superdoc/headless-toolbar",
+      "evidence": "Classified by SD-2966 as part of the supported customer facade; covered by consumer typecheck fixtures or existing package-boundary policy."
+    },
+    {
+      "name": "PublicToolbarItemId",
+      "kind": "type",
+      "group": "Toolbar",
+      "tier": "public",
+      "import_path": "superdoc/headless-toolbar",
+      "evidence": "Classified by SD-2966 as part of the supported customer facade; covered by consumer typecheck fixtures or existing package-boundary policy."
+    },
+    {
+      "name": "ToolbarSnapshot",
+      "kind": "type",
+      "group": "Toolbar",
+      "tier": "public",
+      "import_path": "superdoc/headless-toolbar",
+      "evidence": "Classified by SD-2966 as part of the supported customer facade; covered by consumer typecheck fixtures or existing package-boundary policy."
+    },
+    {
+      "name": "ProofingProvider",
+      "kind": "type",
+      "group": "Proofing",
+      "tier": "public",
+      "import_path": "superdoc",
+      "evidence": "Classified by SD-2966 as part of the supported customer facade; covered by consumer typecheck fixtures or existing package-boundary policy."
+    },
+    {
+      "name": "ProofingCheckRequest",
+      "kind": "type",
+      "group": "Proofing",
+      "tier": "public",
+      "import_path": "superdoc",
+      "evidence": "Classified by SD-2966 as part of the supported customer facade; covered by consumer typecheck fixtures or existing package-boundary policy."
+    },
+    {
+      "name": "ProofingCheckResult",
+      "kind": "type",
+      "group": "Proofing",
+      "tier": "public",
+      "import_path": "superdoc",
+      "evidence": "Classified by SD-2966 as part of the supported customer facade; covered by consumer typecheck fixtures or existing package-boundary policy."
+    },
+    {
+      "name": "ProofingIssue",
+      "kind": "type",
+      "group": "Proofing",
+      "tier": "public",
+      "import_path": "superdoc",
+      "evidence": "Classified by SD-2966 as part of the supported customer facade; covered by consumer typecheck fixtures or existing package-boundary policy."
+    },
+    {
+      "name": "ProofingConfig",
+      "kind": "type",
+      "group": "Proofing",
+      "tier": "public",
+      "import_path": "superdoc",
+      "evidence": "Classified by SD-2966 as part of the supported customer facade; covered by consumer typecheck fixtures or existing package-boundary policy."
+    },
+    {
+      "name": "ProofingError",
+      "kind": "type",
+      "group": "Proofing",
+      "tier": "public",
+      "import_path": "superdoc",
+      "notes": "`cause` field narrowed from `any` to `unknown` in SD-2834.",
+      "evidence": "Classified by SD-2966 as part of the supported customer facade; covered by consumer typecheck fixtures or existing package-boundary policy."
+    },
+    {
+      "name": "ContextMenuConfig",
+      "kind": "type",
+      "group": "Theming and surfaces",
+      "tier": "public",
+      "import_path": "superdoc",
+      "evidence": "Classified by SD-2966 as part of the supported customer facade; covered by consumer typecheck fixtures or existing package-boundary policy."
+    },
+    {
+      "name": "SurfaceResolver",
+      "kind": "type",
+      "group": "Theming and surfaces",
+      "tier": "public",
+      "import_path": "superdoc",
+      "evidence": "Classified by SD-2966 as part of the supported customer facade; covered by consumer typecheck fixtures or existing package-boundary policy."
+    },
+    {
+      "name": "SurfaceHandle",
+      "kind": "type",
+      "group": "Theming and surfaces",
+      "tier": "public",
+      "import_path": "superdoc",
+      "evidence": "Classified by SD-2966 as part of the supported customer facade; covered by consumer typecheck fixtures or existing package-boundary policy."
+    },
+    {
+      "name": "EditorExtension",
+      "kind": "type",
+      "group": "Extension authoring (types)",
+      "tier": "public",
+      "import_path": "superdoc/types",
+      "evidence": "Classified by SD-2966 as part of the supported customer facade; covered by consumer typecheck fixtures or existing package-boundary policy."
+    },
+    {
+      "name": "NodeName",
+      "kind": "type",
+      "group": "Extension authoring (types)",
+      "tier": "public",
+      "import_path": "superdoc/types",
+      "evidence": "Classified by SD-2966 as part of the supported customer facade; covered by consumer typecheck fixtures or existing package-boundary policy."
+    },
+    {
+      "name": "NodeAttrs",
+      "kind": "type",
+      "group": "Extension authoring (types)",
+      "tier": "public",
+      "import_path": "superdoc/types",
+      "evidence": "Classified by SD-2966 as part of the supported customer facade; covered by consumer typecheck fixtures or existing package-boundary policy."
+    },
+    {
+      "name": "MarkName",
+      "kind": "type",
+      "group": "Extension authoring (types)",
+      "tier": "public",
+      "import_path": "superdoc/types",
+      "evidence": "Classified by SD-2966 as part of the supported customer facade; covered by consumer typecheck fixtures or existing package-boundary policy."
+    },
+    {
+      "name": "MarkAttrs",
+      "kind": "type",
+      "group": "Extension authoring (types)",
+      "tier": "public",
+      "import_path": "superdoc/types",
+      "evidence": "Classified by SD-2966 as part of the supported customer facade; covered by consumer typecheck fixtures or existing package-boundary policy."
+    },
+    {
+      "name": "EditorState",
+      "kind": "type",
+      "group": "ProseMirror primitives",
+      "tier": "legacy-root",
+      "import_path": "superdoc",
+      "migration_target": "Document API for state mutation. ProseMirror types remain accessible for advanced consumers that explicitly need them.",
+      "removal_posture": "compat-indefinitely while advanced consumers depend on them"
+    },
+    {
+      "name": "Transaction",
+      "kind": "type",
+      "group": "ProseMirror primitives",
+      "tier": "legacy-root",
+      "import_path": "superdoc",
+      "migration_target": "Document API for state mutation. ProseMirror types remain accessible for advanced consumers that explicitly need them.",
+      "removal_posture": "compat-indefinitely while advanced consumers depend on them"
+    },
+    {
+      "name": "Schema",
+      "kind": "type",
+      "group": "ProseMirror primitives",
+      "tier": "legacy-root",
+      "import_path": "superdoc",
+      "migration_target": "Document API for state mutation. ProseMirror types remain accessible for advanced consumers that explicitly need them.",
+      "removal_posture": "compat-indefinitely while advanced consumers depend on them"
+    },
+    {
+      "name": "EditorView",
+      "kind": "type",
+      "group": "ProseMirror primitives",
+      "tier": "legacy-root",
+      "import_path": "superdoc",
+      "migration_target": "Document API for state mutation. ProseMirror types remain accessible for advanced consumers that explicitly need them.",
+      "removal_posture": "compat-indefinitely while advanced consumers depend on them"
+    },
+    {
+      "name": "ProseMirrorJSON",
+      "kind": "type",
+      "group": "ProseMirror primitives",
+      "tier": "legacy-root",
+      "import_path": "superdoc",
+      "migration_target": "Document API for state mutation. ProseMirror types remain accessible for advanced consumers that explicitly need them.",
+      "removal_posture": "compat-indefinitely while advanced consumers depend on them"
+    },
+    {
+      "name": "EditorCommands",
+      "kind": "type",
+      "group": "Command internals",
+      "tier": "legacy-root",
+      "import_path": "superdoc",
+      "migration_target": "Document API or UI command controller",
+      "removal_posture": "compat-indefinitely"
+    },
+    {
+      "name": "CommandProps",
+      "kind": "type",
+      "group": "Command internals",
+      "tier": "legacy-root",
+      "import_path": "superdoc",
+      "migration_target": "Document API or UI command controller",
+      "removal_posture": "compat-indefinitely"
+    },
+    {
+      "name": "Command",
+      "kind": "type",
+      "group": "Command internals",
+      "tier": "legacy-root",
+      "import_path": "superdoc",
+      "migration_target": "Document API or UI command controller",
+      "removal_posture": "compat-indefinitely"
+    },
+    {
+      "name": "ChainedCommand",
+      "kind": "type",
+      "group": "Command internals",
+      "tier": "legacy-root",
+      "import_path": "superdoc",
+      "migration_target": "Document API or UI command controller",
+      "removal_posture": "compat-indefinitely"
+    },
+    {
+      "name": "CoreCommandMap",
+      "kind": "type",
+      "group": "Command internals",
+      "tier": "legacy-root",
+      "import_path": "superdoc",
+      "migration_target": "Document API or UI command controller",
+      "removal_posture": "compat-indefinitely"
+    },
+    {
+      "name": "ExtensionCommandMap",
+      "kind": "type",
+      "group": "Command internals",
+      "tier": "legacy-root",
+      "import_path": "superdoc",
+      "migration_target": "Document API or UI command controller",
+      "removal_posture": "compat-indefinitely"
+    },
+    {
+      "name": "FlowBlock",
+      "kind": "type",
+      "group": "Layout internals",
+      "tier": "internal",
+      "import_path": "superdoc",
+      "notes": "Open Decision 2: keep as inspection/debug type or promote to public.",
+      "evidence": "Reachable but not documented for consumer use; layout is a paint-time concern owned by `layout-engine/`."
+    },
+    {
+      "name": "Layout",
+      "kind": "type",
+      "group": "Layout internals",
+      "tier": "internal",
+      "import_path": "superdoc",
+      "evidence": "Reachable but not documented for consumer use; layout is a paint-time concern owned by `layout-engine/`."
+    },
+    {
+      "name": "LayoutPage",
+      "kind": "type",
+      "group": "Layout internals",
+      "tier": "internal",
+      "import_path": "superdoc",
+      "evidence": "Reachable but not documented for consumer use; layout is a paint-time concern owned by `layout-engine/`."
+    },
+    {
+      "name": "LayoutFragment",
+      "kind": "type",
+      "group": "Layout internals",
+      "tier": "internal",
+      "import_path": "superdoc",
+      "evidence": "Reachable but not documented for consumer use; layout is a paint-time concern owned by `layout-engine/`."
+    },
+    {
+      "name": "Measure",
+      "kind": "type",
+      "group": "Layout internals",
+      "tier": "internal",
+      "import_path": "superdoc",
+      "evidence": "Reachable but not documented for consumer use; layout is a paint-time concern owned by `layout-engine/`."
+    },
+    {
+      "name": "SectionMetadata",
+      "kind": "type",
+      "group": "Layout internals",
+      "tier": "internal",
+      "import_path": "superdoc",
+      "evidence": "Reachable but not documented for consumer use; layout is a paint-time concern owned by `layout-engine/`."
+    },
+    {
+      "name": "PaintSnapshot",
+      "kind": "type",
+      "group": "Layout internals",
+      "tier": "internal",
+      "import_path": "superdoc",
+      "evidence": "Reachable but not documented for consumer use; layout is a paint-time concern owned by `layout-engine/`."
+    },
+    {
+      "name": "PositionHit",
+      "kind": "type",
+      "group": "Layout internals",
+      "tier": "internal",
+      "import_path": "superdoc",
+      "evidence": "Reachable but not documented for consumer use; layout is a paint-time concern owned by `layout-engine/`."
+    },
+    {
+      "name": "TrackChangesBasePluginKey",
+      "kind": "type",
+      "group": "Plugin key types",
+      "tier": "legacy-root",
+      "import_path": "superdoc",
+      "migration_target": "Document API or UI controller",
+      "removal_posture": "compat-indefinitely (paired with the value re-exports)"
+    },
+    {
+      "name": "CommentsPluginKey",
+      "kind": "type",
+      "group": "Plugin key types",
+      "tier": "legacy-root",
+      "import_path": "superdoc",
+      "migration_target": "Document API or UI controller",
+      "removal_posture": "compat-indefinitely (paired with the value re-exports)"
+    }
+  ]
+}

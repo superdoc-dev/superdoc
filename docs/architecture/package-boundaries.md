@@ -12,6 +12,8 @@ The fix is not "convert the whole repo to TypeScript." Recent spike work (SD-283
 
 This document is that taxonomy.
 
+Related follow-up: [SuperDoc Public Type Facade](./public-type-facade.md) (SD-2966) defines the explicit facade the package should implement before retrying declaration rollup.
+
 ## Tier definitions
 
 Every workspace package and every `superdoc` subpath export sits in exactly one of these tiers.
@@ -223,7 +225,7 @@ The order in which the work lands matters. The RFC and the gate tickets are usef
 **Future work:**
 
 4. **Folder reorganization** (SD-2835). The structural change becomes lower risk after step 3 because the gates catch any regression that the move might introduce. See SD-2835 for the proposed shape.
-5. **Surgical TypeScript migration** of the public contract files: configuration, command surfaces, toolbar/UI types, the supported `superdoc/super-editor` facade. Do not start with a 1,800-file repo-wide migration; that is expensive and would not on its own guarantee the published artifact works.
+5. **Surgical TypeScript migration** of the public contract files: configuration, command surfaces, toolbar/UI types, and the legacy `superdoc/super-editor` compatibility facade (classified under Decision 1; see also the [Public Type Facade design](./public-type-facade.md) (SD-2966) for the per-symbol policy). Do not start with a 1,800-file repo-wide migration; that is expensive and would not on its own guarantee the published artifact works.
 6. **Long-tail TypeScript migration** opportunistically, where new work touches a file or `checkJs` surfaces real drift between JSDoc and implementation.
 
 Step 4 should wait for at least one release running with strict gates, so the team has confidence the boundary holds before moving files. Steps 5-6 run on their own cadence, evidence-driven rather than calendar-driven.

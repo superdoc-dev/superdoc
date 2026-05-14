@@ -6,7 +6,9 @@
     "typecheck": "tsc --noEmit",
     "typecheck:matrix": "node typecheck-matrix.mjs",
     "check:types": "node check-public-types.mjs",
-    "check:types:write": "node check-public-types.mjs --write"
+    "check:types:write": "node check-public-types.mjs --write",
+    "check:facade-doc": "node render-facade-doc.mjs --check",
+    "check:facade-doc:write": "node render-facade-doc.mjs --write"
   },
   "dependencies": {
     "superdoc": "file:../../packages/superdoc/superdoc.tgz"

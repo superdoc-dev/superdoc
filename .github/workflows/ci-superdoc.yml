@@ -154,6 +154,13 @@ jobs:
         # ESM, missing CDN files, unpublished `source` paths.
         run: node tests/consumer-typecheck/package-shape-gate.mjs
 
+      - name: Public facade doc drift (SD-2966)
+        # docs/architecture/public-type-facade.md is generated from
+        # tests/consumer-typecheck/public-facade-policy.json. The policy
+        # is the source of truth; this step fails if the committed doc
+        # drifts from what the renderer produces.
+        run: node tests/consumer-typecheck/render-facade-doc.mjs --check
+
   unit-tests:
     needs: build
     runs-on: ubuntu-latest

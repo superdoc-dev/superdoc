@@ -6279,7 +6279,9 @@ export const OPERATION_DEFINITIONS = {
   },
   'customXml.parts.get': {
     memberPath: 'customXml.parts.get',
-    description: 'Get a single Custom XML Data Storage Part by itemID or package part name, including its full content.',
+    description:
+      'Get a single Custom XML Data Storage Part by itemID or package part name, including its full content. ' +
+      'v1 partName targeting is limited to Word-style customXml/itemN.xml paths.',
     expectedResult: 'Returns a CustomXmlPartInfo with id, partName, namespaces, schemaRefs, and content; or null if not found.',
     requiresDocumentContext: true,
     metadata: readOperation({
@@ -6305,7 +6307,10 @@ export const OPERATION_DEFINITIONS = {
   },
   'customXml.parts.patch': {
     memberPath: 'customXml.parts.patch',
-    description: 'Replace the content and/or schemaRefs of an existing Custom XML Data Storage Part. At least one of content or schemaRefs is required.',
+    description:
+      'Replace the content and/or schemaRefs of an existing Custom XML Data Storage Part. ' +
+      'At least one of content or schemaRefs is required. ' +
+      'v1 partName targeting is limited to Word-style customXml/itemN.xml paths.',
     expectedResult: 'Returns a CustomXmlPartsMutationResult indicating success with the resolved target or a failure.',
     requiresDocumentContext: true,
     metadata: mutationOperation({
@@ -6320,7 +6325,9 @@ export const OPERATION_DEFINITIONS = {
   },
   'customXml.parts.remove': {
     memberPath: 'customXml.parts.remove',
-    description: 'Remove a Custom XML Data Storage Part and clean up all linked package files (item, props, rels, content-types entry).',
+    description:
+      'Remove a Custom XML Data Storage Part and clean up all linked package files (item, props, rels, content-types entry). ' +
+      'v1 partName targeting is limited to Word-style customXml/itemN.xml paths.',
     expectedResult: 'Returns a CustomXmlPartsMutationResult indicating success or a failure.',
     requiresDocumentContext: true,
     metadata: mutationOperation({

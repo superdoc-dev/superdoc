@@ -7,7 +7,7 @@ keywords: "yhub, yjs collaboration, revision history, attribution, self-hosted c
 [YHub](https://github.com/yjs/yhub) is a Yjs backend for teams that need attribution, activity, revision-history, or rollback workflows.
 
 <Warning>
-YHub is in beta and requires Node.js 22+. Validate licensing (AGPL or proprietary) and infrastructure requirements (Redis + Postgres) before production use. The bundled local server in our example is intentionally local-only and is not production infrastructure.
+YHub is in beta and requires Node.js 22+. Validate licensing (AGPL or proprietary) and infrastructure requirements before production use. Production YHub typically pairs Redis with Postgres and an object store (S3 or MinIO) for persisted update blobs; see [YHub's setup docs](https://github.com/yjs/yhub) for the exact architecture. The bundled local server in our example is intentionally local-only (Redis + Postgres, no object store) and is not production infrastructure.
 </Warning>
 
 ## When to choose YHub
@@ -49,9 +49,11 @@ const provider = new WebsocketProvider(
   },
 );
 
+// Guard against the `sync` event firing on reconnect after a network drop.
+let superdoc;
 provider.on("sync", (isSynced) => {
-  if (!isSynced) return;
-  new SuperDoc({
+  if (!isSynced || superdoc) return;
+  superdoc = new SuperDoc({
     selector: "#editor",
     user: { name: "User 123", email: "user-123@example.com" },
     modules: {

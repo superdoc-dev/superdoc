@@ -37,6 +37,8 @@ import {
   createLinkedStyleStateDeriver,
   createListStateDeriver,
   createOrderedListExecute,
+  createParagraphDirectionExecute,
+  createParagraphDirectionStateDeriver,
   createTextAlignStateDeriver,
 } from './helpers/paragraph.js';
 import { createDirectCommandExecute, createDisabledStateDeriver } from './helpers/general.js';
@@ -142,6 +144,18 @@ export const createToolbarRegistry = (): Partial<Record<PublicToolbarItemId, Bui
       id: 'indent-decrease',
       state: createDisabledStateDeriver(),
       execute: createIndentDecreaseExecute(),
+    },
+    'direction-ltr': {
+      id: 'direction-ltr',
+      directCommandName: 'setParagraphDirection',
+      state: createParagraphDirectionStateDeriver('ltr'),
+      execute: createParagraphDirectionExecute('ltr'),
+    },
+    'direction-rtl': {
+      id: 'direction-rtl',
+      directCommandName: 'setParagraphDirection',
+      state: createParagraphDirectionStateDeriver('rtl'),
+      execute: createParagraphDirectionExecute('rtl'),
     },
 
     // History/document-level items

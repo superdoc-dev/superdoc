@@ -399,6 +399,46 @@ describe('SD-2343 - no double conversion for pre-converted px widths', () => {
     const result = convertBorderSpec({ val: 'single', size: 8 }, { unit: 'eighthPoints' });
     expect(result?.width).toBeCloseTo(1.3333, 4);
   });
+
+  it('maps logical start/end to left/right in LTR when physical sides are missing', () => {
+    const input = {
+      start: { val: 'single', size: 2, color: 'FF0000' },
+      end: { val: 'double', size: 3, color: '0000FF' },
+    };
+
+    const result = extractTableBorders(input, { isRtl: false });
+    expect(result?.left?.style).toBe('single');
+    expect((result?.left as { color?: string })?.color).toBe('#FF0000');
+    expect(result?.right?.style).toBe('double');
+    expect((result?.right as { color?: string })?.color).toBe('#0000FF');
+  });
+
+  it('maps logical start/end as LTR-default regardless of isRtl flag (painter handles RTL mirror)', () => {
+    const input = {
+      start: { val: 'single', size: 2, color: 'FF0000' },
+      end: { val: 'double', size: 3, color: '0000FF' },
+    };
+
+    // Per §17.4.12 + §17.4.33 the visual side flips with table direction,
+    // but the painter's swapTableBordersLR does that mirror once. pm-adapter
+    // pre-swapping would double-mirror, so isRtl is no longer read here.
+    const result = extractTableBorders(input, { isRtl: true });
+    expect(result?.left?.style).toBe('single');
+    expect((result?.left as { color?: string })?.color).toBe('#FF0000');
+    expect(result?.right?.style).toBe('double');
+    expect((result?.right as { color?: string })?.color).toBe('#0000FF');
+  });
+
+  it('keeps explicit physical sides over logical start/end', () => {
+    const input = {
+      left: { val: 'single', size: 1, color: '00AA00' },
+      start: { val: 'double', size: 5, color: 'FF0000' },
+    };
+
+    const result = extractTableBorders(input, { isRtl: false });
+    expect(result?.left?.style).toBe('single');
+    expect((result?.left as { color?: string })?.color).toBe('#00AA00');
+  });
 });
 
 describe('extractCellBorders', () => {
@@ -451,6 +491,47 @@ describe('extractCellBorders', () => {
       const result = extractCellBorders(input);
       expect(result?.top).toBeDefined();
       expect(result?.bottom).toEqual({ style: 'none', width: 0 });
+    });
+
+    it('maps start/end to left/right in LTR when physical sides are missing', () => {
+      const input = {
+        borders: {
+          start: { val: 'single', size: 2, color: 'FF0000' },
+          end: { val: 'single', size: 3, color: '0000FF' },
+        },
+      };
+      const result = extractCellBorders(input, { isRtl: false });
+      expect(result?.left).toMatchObject({ style: 'single', width: 2, color: '#FF0000' });
+      expect(result?.right).toMatchObject({ style: 'single', width: 3, color: '#0000FF' });
+    });
+
+    it('maps start/end as LTR-default regardless of isRtl flag (painter handles RTL mirror)', () => {
+      const input = {
+        borders: {
+          start: { val: 'single', size: 2, color: 'FF0000' },
+          end: { val: 'single', size: 3, color: '0000FF' },
+        },
+      };
+      // Per §17.4.12/33, end/start visual side flips with table direction, but
+      // the painter's swapCellBordersLR is the single source of that mirror.
+      // pm-adapter pre-swapping would double-mirror.
+      const result = extractCellBorders(input, { isRtl: true });
+      expect(result?.left).toMatchObject({ style: 'single', width: 2, color: '#FF0000' });
+      expect(result?.right).toMatchObject({ style: 'single', width: 3, color: '#0000FF' });
+    });
+
+    it('keeps explicit physical left/right over logical start/end', () => {
+      const input = {
+        borders: {
+          left: { val: 'single', size: 7, color: '00FF00' },
+          right: { val: 'single', size: 8, color: 'FFFF00' },
+          start: { val: 'single', size: 2, color: 'FF0000' },
+          end: { val: 'single', size: 3, color: '0000FF' },
+        },
+      };
+      const result = extractCellBorders(input, { isRtl: true });
+      expect(result?.left).toMatchObject({ style: 'single', width: 7, color: '#00FF00' });
+      expect(result?.right).toMatchObject({ style: 'single', width: 8, color: '#FFFF00' });
     });
   });
 
@@ -534,6 +615,54 @@ describe('extractCellPadding', () => {
       expect(result).toEqual({
         top: 10.5,
         left: 12.75,
+      });
+    });
+
+    it('maps marginStart/marginEnd to left/right in LTR when physical sides are missing', () => {
+      const input = {
+        cellMargins: {
+          marginStart: 11,
+          marginEnd: 22,
+        },
+      };
+      const result = extractCellPadding(input, { isRtl: false });
+      expect(result).toEqual({
+        left: 11,
+        right: 22,
+      });
+    });
+
+    it('maps marginStart/marginEnd as LTR-default regardless of isRtl flag (painter handles RTL mirror)', () => {
+      const input = {
+        cellMargins: {
+          marginStart: 11,
+          marginEnd: 22,
+        },
+      };
+      // renderTableCell.ts mirrors paddingLeft <-> paddingRight when the
+      // table is bidiVisual. pm-adapter must therefore keep marginStart/End
+      // mapped to LTR-default (start->left, end->right) - otherwise the
+      // painter double-mirrors and start padding lands on the visual left.
+      const result = extractCellPadding(input, { isRtl: true });
+      expect(result).toEqual({
+        left: 11,
+        right: 22,
+      });
+    });
+
+    it('keeps explicit physical left/right over logical marginStart/marginEnd', () => {
+      const input = {
+        cellMargins: {
+          left: 33,
+          right: 44,
+          marginStart: 11,
+          marginEnd: 22,
+        },
+      };
+      const result = extractCellPadding(input, { isRtl: true });
+      expect(result).toEqual({
+        left: 33,
+        right: 44,
       });
     });
   });

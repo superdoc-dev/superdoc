@@ -15,6 +15,35 @@ const getCurrentParagraphJustification = (context: ToolbarContext | null) => {
   return mapStoredJustificationToDisplayAlignment(justification, isRtl);
 };
 
+export const createParagraphDirectionStateDeriver =
+  (direction: 'ltr' | 'rtl') =>
+  ({ context }: { context: ToolbarContext | null }): ToolbarCommandState => {
+    const isDisabled = isCommandDisabled(context);
+    if (isDisabled) return { active: false, disabled: true, value: null };
+
+    const rightToLeft = getCurrentResolvedParagraphProperties(context)?.rightToLeft;
+    const current: 'ltr' | 'rtl' = rightToLeft ? 'rtl' : 'ltr';
+
+    return {
+      active: current === direction,
+      disabled: false,
+      value: current,
+    };
+  };
+
+// AIDEV-NOTE: The direction-ltr / direction-rtl registry entries must encode the
+// direction here rather than delegating to createDirectCommandExecute. Without it,
+// a no-payload invocation (`controller.execute('direction-rtl')`) bottoms out at
+// `editor.commands.setParagraphDirection()` — which silently falls through to LTR.
+export const createParagraphDirectionExecute =
+  (direction: 'ltr' | 'rtl') =>
+  ({ context }: { context: ToolbarContext | null }) => {
+    const editor = resolveStateEditor(context);
+    const command = editor?.commands.setParagraphDirection;
+    if (typeof command !== 'function') return false;
+    return Boolean(command({ direction, alignmentPolicy: 'matchDirection' }));
+  };
+
 export const createTextAlignStateDeriver =
   () =>
   ({ context }: { context: ToolbarContext | null }): ToolbarCommandState => {

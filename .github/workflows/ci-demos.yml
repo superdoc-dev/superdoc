@@ -56,6 +56,7 @@ jobs:
       fail-fast: false
       matrix:
         demo:
+          - contract-templates
           - custom-ui
           - docx-from-html
           - docxtemplater
@@ -76,6 +77,8 @@ jobs:
             .
             ~/.cache/ms-playwright
           key: demos-workspace-${{ github.sha }}
+
+      - uses: pnpm/action-setup@v4
 
       - name: Run smoke test
         working-directory: demos/__tests__

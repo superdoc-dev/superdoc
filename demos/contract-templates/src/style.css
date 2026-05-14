@@ -6,7 +6,8 @@
   --demo-text-muted: var(--sd-ui-text-muted, var(--sd-color-gray-700, #666));
   --demo-accent: var(--sd-ui-action, var(--sd-color-blue-500, #1355ff));
   --demo-accent-hover: var(--sd-ui-action-hover, var(--sd-color-blue-600, #0f44cc));
-  --demo-accent-soft: var(--sd-color-blue-50, #ebf0ff);
+  --demo-accent-soft: color-mix(in srgb, var(--demo-accent) 12%, transparent);
+  --demo-stale-soft: color-mix(in srgb, var(--demo-accent) 6%, transparent);
 }
 
 * { box-sizing: border-box; }
@@ -27,43 +28,83 @@ code {
 button, input { font: inherit; }
 button { cursor: pointer; }
 
+/* -----------------------------------------------------------------------
+   Layout
+   ----------------------------------------------------------------------- */
+
 .app { display: grid; grid-template-columns: 1fr 360px; height: 100vh; }
-.editor-area { overflow: auto; padding: 12px; }
+.editor-area { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.editor-area #editor { flex: 1; overflow: auto; padding: 12px; }
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--demo-border);
+  background: var(--demo-bg);
+}
+.summary {
+  font-size: var(--sd-font-size-300, 13px);
+  color: var(--demo-text-muted);
+}
+.toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
 .sidebar {
   background: var(--demo-bg);
   border-left: 1px solid var(--demo-border);
   overflow-y: auto;
   display: flex;
   flex-direction: column;
+  min-height: 0;
 }
 
-.panel { padding: 14px 16px; border-bottom: 1px solid var(--demo-border); }
-.panel h2 {
+.tabs {
+  display: flex;
+  border-bottom: 1px solid var(--demo-border);
+  background: var(--demo-bg);
+}
+.tab {
+  flex: 1;
+  height: 40px;
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  color: var(--demo-text-muted);
   font-size: var(--sd-font-size-300, 13px);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: var(--demo-text-muted);
-  margin: 0 0 8px;
 }
-.panel .hint {
-  font-size: var(--sd-font-size-200, 12px);
-  color: var(--demo-text-muted);
-  margin: 0 0 12px;
-  line-height: 1.5;
+.tab.active {
+  color: var(--demo-text);
+  border-bottom-color: var(--demo-accent);
 }
+.tab:disabled { cursor: not-allowed; opacity: 0.5; }
 
-label { display: block; margin-bottom: 8px; }
-label span {
+.panel { padding: 14px 16px; }
+.panel.hidden { display: none; }
+
+/* -----------------------------------------------------------------------
+   Forms and buttons
+   ----------------------------------------------------------------------- */
+
+.row { display: block; margin-bottom: 10px; }
+.row-label {
   display: block;
   font-size: var(--sd-font-size-200, 12px);
   color: var(--demo-text-muted);
   margin-bottom: 4px;
 }
-
 input {
   width: 100%;
-  height: 30px;
+  height: 32px;
   padding: 0 10px;
   border: 1px solid var(--demo-border);
   border-radius: var(--sd-radius-50, 4px);
@@ -77,45 +118,115 @@ input:focus {
 }
 
 .btn {
-  height: 30px;
+  height: 32px;
   padding: 0 14px;
   background: transparent;
   border: 1px solid var(--demo-border);
   border-radius: var(--sd-radius-50, 4px);
   color: var(--demo-text);
-  width: 100%;
   margin-top: 4px;
 }
-.btn:hover:not(:disabled) { border-color: var(--demo-accent); color: var(--demo-accent); }
-.btn:disabled { color: var(--demo-text-muted); cursor: not-allowed; opacity: 0.5; }
 .btn.primary { background: var(--demo-accent); border-color: var(--demo-accent); color: var(--sd-ui-action-text, #fff); }
 .btn.primary:hover:not(:disabled) {
   background: var(--demo-accent-hover);
   border-color: var(--demo-accent-hover);
-  color: var(--sd-ui-action-text, #fff);
 }
+.btn:disabled { color: var(--demo-text-muted); cursor: not-allowed; opacity: 0.55; }
 
-.meta {
+#fields-panel .btn { width: 100%; margin-top: 12px; }
+
+/* -----------------------------------------------------------------------
+   Clauses panel
+   ----------------------------------------------------------------------- */
+
+.clause {
+  border: 1px solid var(--demo-border);
+  border-radius: var(--sd-radius-100, 6px);
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  background: var(--demo-bg);
+}
+.clause.current {
+  background: transparent;
+  border-color: var(--demo-border);
+}
+.clause.stale {
+  background: var(--demo-stale-soft);
+  border-color: var(--demo-accent);
+}
+.clause-header {
   display: flex;
-  justify-content: space-between;
   align-items: baseline;
-  padding: 4px 0;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.clause-label {
+  margin: 0;
+  font-size: var(--sd-font-size-300, 13px);
+  font-weight: 600;
+  color: var(--demo-text);
+}
+.clause-status {
+  font-size: var(--sd-font-size-200, 11px);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--demo-accent);
+}
+.clause-status.muted { color: var(--demo-text-muted); }
+.clause-summary {
+  margin: 0 0 6px;
+  font-size: var(--sd-font-size-300, 13px);
+  color: var(--demo-text);
+  line-height: 1.4;
+}
+.clause-meta {
+  margin: 0 0 8px;
   font-size: var(--sd-font-size-200, 12px);
   color: var(--demo-text-muted);
 }
-.meta strong { color: var(--demo-text); font-weight: 600; }
-
-.banner {
+.clause .btn { width: 100%; }
+.clause-review-panel {
   margin-top: 10px;
-  padding: 10px 12px;
-  border: 1px solid var(--demo-accent);
-  background: var(--demo-accent-soft);
-  border-radius: var(--sd-radius-100, 6px);
+  padding-top: 10px;
+  border-top: 1px solid var(--demo-accent);
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
-.banner-text { font-size: var(--sd-font-size-200, 12px); color: var(--demo-text); }
+.review-label {
+  font-size: var(--sd-font-size-200, 11px);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--demo-text-muted);
+}
+.clause-preview {
+  margin: 0;
+  padding: 10px 12px;
+  background: var(--demo-bg);
+  border: 1px solid var(--demo-border);
+  border-radius: var(--sd-radius-50, 4px);
+  font-size: var(--sd-font-size-300, 13px);
+  line-height: 1.5;
+  color: var(--demo-text);
+}
+.clause-preview ins {
+  background: color-mix(in srgb, #15803d 18%, transparent);
+  color: var(--demo-text);
+  text-decoration: none;
+  padding: 0 2px;
+  border-radius: 2px;
+}
+.clause-preview del {
+  color: var(--demo-text-muted);
+  text-decoration: line-through;
+  text-decoration-color: #d92e2e;
+  background: color-mix(in srgb, #d92e2e 12%, transparent);
+  padding: 0 2px;
+  border-radius: 2px;
+}
 
 .status {
   margin: 0;
@@ -124,4 +235,35 @@ input:focus {
   color: var(--demo-text-muted);
   border-top: 1px solid var(--demo-border);
   margin-top: auto;
+}
+
+/* -----------------------------------------------------------------------
+   In-editor SDT chrome (visible DomPainter classes only)
+   The painter renders block SDTs with `position: absolute` and explicit
+   coordinates, so the rules below color the existing 1px border slot and
+   add background only. They never change padding, margin, or box size.
+   ----------------------------------------------------------------------- */
+
+/* Inline smart fields: blue pill */
+.superdoc-structured-content-inline[data-sdt-tag*='smartField'] {
+  border-color: var(--demo-accent);
+  background-color: var(--demo-accent-soft);
+}
+
+/* Block clauses: visible bordered card with soft background */
+.superdoc-structured-content-block[data-sdt-tag*='reusableSection'] {
+  border-color: var(--demo-border);
+  background-color: var(--demo-bg);
+}
+.superdoc-structured-content-block[data-sdt-tag*='reusableSection'][data-lock-mode='unlocked'] {
+  background-color: var(--demo-bg);
+}
+
+/* Existing painter-provided label gets a typographic tune */
+.superdoc-structured-content-block__label {
+  font-size: var(--sd-font-size-200, 11px);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--demo-text-muted);
+  font-weight: 600;
 }

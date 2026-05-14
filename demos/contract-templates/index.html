@@ -3,49 +3,27 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>SuperDoc: content controls</title>
+    <title>SuperDoc: contract templates</title>
   </head>
   <body>
     <div class="app">
       <section class="editor-area">
+        <header class="toolbar">
+          <span class="summary" id="summary">Loading</span>
+          <div class="toolbar-actions">
+            <button class="btn" id="export-raw" type="button">Export raw DOCX</button>
+            <button class="btn primary" id="export-clean" type="button">Export clean DOCX</button>
+          </div>
+        </header>
         <div id="editor"></div>
       </section>
       <aside class="sidebar">
-        <section class="panel">
-          <h2>Smart fields</h2>
-          <p class="hint">Tagged inline content controls. <code>selectByTag</code> + <code>text.setValue</code> fan one value to every occurrence.</p>
-          <label>
-            <span>Customer</span>
-            <input id="field-customerName" />
-          </label>
-          <label>
-            <span>Jurisdiction</span>
-            <input id="field-jurisdiction" />
-          </label>
-          <label>
-            <span>Effective date</span>
-            <input id="field-effectiveDate" />
-          </label>
-          <button class="btn primary" id="apply-fields" type="button">Apply fields</button>
-        </section>
-
-        <section class="panel">
-          <h2>Reusable section</h2>
-          <p class="hint">Block content control with <code>{sectionId, version}</code> in its tag. <code>replaceContent</code> + <code>patch</code> swap the content and the version.</p>
-          <div class="meta">
-            <span>In document</span>
-            <strong id="section-version">v1</strong>
-          </div>
-          <div class="meta">
-            <span>Library</span>
-            <strong>v2</strong>
-          </div>
-          <div class="banner" id="update-banner" hidden>
-            <span class="banner-text">Update available.</span>
-            <button class="btn primary" id="apply-update" type="button">Apply v2</button>
-          </div>
-        </section>
-
+        <nav class="tabs" role="tablist">
+          <button class="tab active" data-tab="fields" type="button" role="tab">Fields</button>
+          <button class="tab" data-tab="clauses" type="button" role="tab">Clauses</button>
+        </nav>
+        <section class="panel" data-panel="fields" id="fields-panel"></section>
+        <section class="panel hidden" data-panel="clauses" id="clauses-panel"></section>
         <p class="status" id="status">Loading</p>
       </aside>
     </div>

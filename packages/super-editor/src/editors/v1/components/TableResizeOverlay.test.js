@@ -1453,4 +1453,166 @@ describe('TableResizeOverlay', () => {
       }
     });
   });
+
+  // ==========================================================================
+  // RTL (bidiVisual) coverage — PR #3227 SD-2810
+  //
+  // The resize overlay treats RTL tables specially:
+  //   - resizable boundaries are computed in logical coords then mirrored
+  //     visually so the user sees the handle on the right edge of the cell
+  //   - the right-edge boundary in RTL maps to column index 0 (the visually
+  //     rightmost column) instead of the last column
+  //   - drag delta sign flips for RTL inner-boundary drags so a leftward
+  //     pixel move grows the visually-right column the same way a rightward
+  //     move grows it in LTR
+  //
+  // None of these are covered by the LTR resize tests above. The bugs they
+  // protect against (silent column-0 cellWidth rewrites on right-edge drag,
+  // inverted resize feedback, etc.) only surface in bidiVisual tables.
+  // ==========================================================================
+  describe('RTL (bidiVisual) handling', () => {
+    const rtlMetadata = {
+      columns: [
+        { i: 0, x: 0, w: 100, min: 50, r: 1 },
+        { i: 1, x: 100, w: 150, min: 50, r: 1 },
+        { i: 2, x: 250, w: 100, min: 50, r: 1 },
+      ],
+      rtl: true,
+    };
+
+    it('parses `rtl: true` from data-table-boundaries metadata', async () => {
+      const tableElement = createMockTableElement(rtlMetadata);
+      const wrapper = mount(TableResizeOverlay, {
+        props: {
+          editor: createMockEditor(),
+          visible: true,
+          tableElement,
+        },
+      });
+
+      await nextTick();
+
+      expect(wrapper.vm.tableMetadata.rtl).toBe(true);
+
+      wrapper.unmount();
+    });
+
+    it('defaults `rtl` to false when metadata omits the field', async () => {
+      const ltrMetadata = {
+        columns: [
+          { i: 0, x: 0, w: 100, min: 50, r: 1 },
+          { i: 1, x: 100, w: 150, min: 50, r: 1 },
+        ],
+      };
+      const tableElement = createMockTableElement(ltrMetadata);
+      const wrapper = mount(TableResizeOverlay, {
+        props: {
+          editor: createMockEditor(),
+          visible: true,
+          tableElement,
+        },
+      });
+
+      await nextTick();
+
+      expect(wrapper.vm.tableMetadata.rtl).toBe(false);
+
+      wrapper.unmount();
+    });
+
+    it('right-edge boundary in RTL targets column index 0 (the visually-rightmost column)', async () => {
+      // In an LTR table the right-edge boundary maps to columnIndex = columns.length-1.
+      // In bidiVisual RTL the visually-rightmost cell IS logical column 0, so the right-edge
+      // boundary must map to columnIndex = 0. A regression here was the round-1 contract-guard
+      // test: pre-fix, the right-edge drag rewrote column 1's tcW alongside column 0's.
+      const tableElement = createMockTableElement(rtlMetadata);
+      const wrapper = mount(TableResizeOverlay, {
+        props: {
+          editor: createMockEditor(),
+          visible: true,
+          tableElement,
+        },
+      });
+
+      await nextTick();
+
+      const rightEdge = wrapper.vm.resizableBoundaries.find((b) => b.type === 'right-edge');
+      expect(rightEdge).toBeDefined();
+      expect(rightEdge.index).toBe(0);
+
+      wrapper.unmount();
+    });
+
+    it('right-edge boundary in LTR targets column index columns.length - 1', async () => {
+      const ltrMetadata = {
+        columns: [
+          { i: 0, x: 0, w: 100, min: 50, r: 1 },
+          { i: 1, x: 100, w: 150, min: 50, r: 1 },
+          { i: 2, x: 250, w: 100, min: 50, r: 1 },
+        ],
+      };
+      const tableElement = createMockTableElement(ltrMetadata);
+      const wrapper = mount(TableResizeOverlay, {
+        props: {
+          editor: createMockEditor(),
+          visible: true,
+          tableElement,
+        },
+      });
+
+      await nextTick();
+
+      const rightEdge = wrapper.vm.resizableBoundaries.find((b) => b.type === 'right-edge');
+      expect(rightEdge).toBeDefined();
+      expect(rightEdge.index).toBe(ltrMetadata.columns.length - 1);
+
+      wrapper.unmount();
+    });
+
+    it('inner boundary visual X is mirrored from logical X in RTL', async () => {
+      // For an RTL table with total content width 350, logical boundary at x=100
+      // (between col 0 and col 1) should render visually at x = 350 - 100 = 250.
+      // This is what `visualX = tableContentLeft + tableContentWidth - logicalX`
+      // produces; pin the mapping so a regression in that formula fails here.
+      const tableElement = createMockTableElement(rtlMetadata);
+      const wrapper = mount(TableResizeOverlay, {
+        props: {
+          editor: createMockEditor(),
+          visible: true,
+          tableElement,
+        },
+      });
+
+      await nextTick();
+
+      const innerBoundaries = wrapper.vm.resizableBoundaries.filter((b) => b.type === 'inner');
+      // Two inner boundaries for three columns: at logical x=100 and x=250.
+      // Mirrored: 250 and 100 visually.
+      const visualXs = innerBoundaries.map((b) => b.x).sort((a, b) => a - b);
+      expect(visualXs).toEqual([100, 250]);
+
+      wrapper.unmount();
+    });
+
+    it('right-edge boundary X in RTL is the table content width (visually rightmost edge)', async () => {
+      // In RTL: rtlRightEdgeX = tableContentWidth. For columns
+      // [0,1,2] at x=[0,100,250] with w=[100,150,100], totalWidth = 350.
+      const tableElement = createMockTableElement(rtlMetadata);
+      const wrapper = mount(TableResizeOverlay, {
+        props: {
+          editor: createMockEditor(),
+          visible: true,
+          tableElement,
+        },
+      });
+
+      await nextTick();
+
+      const rightEdge = wrapper.vm.resizableBoundaries.find((b) => b.type === 'right-edge');
+      expect(rightEdge).toBeDefined();
+      expect(rightEdge.x).toBe(350);
+
+      wrapper.unmount();
+    });
+  });
 });

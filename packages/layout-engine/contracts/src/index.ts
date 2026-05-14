@@ -16,7 +16,7 @@ export type {
   RunBidiContext,
   RunScriptContext,
 } from './direction-context.js';
-export { getParagraphInlineDirection } from './direction-context.js';
+export { getParagraphInlineDirection, getTableVisualDirection } from './direction-context.js';
 import type { ParagraphDirectionContext, RunBidiContext, RunScriptContext } from './direction-context.js';
 
 // Export table contracts
@@ -620,10 +620,16 @@ export type TableCellAttrs = {
   tableCellProperties?: Record<string, unknown>;
 };
 
+export type TablePropertiesAttrs = {
+  rightToLeft?: boolean;
+  [key: string]: unknown;
+};
+
 export type TableAttrs = {
   borders?: TableBorders;
   borderCollapse?: 'collapse' | 'separate';
   cellSpacing?: CellSpacing;
+  tableProperties?: TablePropertiesAttrs;
   sdt?: SdtMetadata;
   containerSdt?: SdtMetadata;
   [key: string]: unknown;

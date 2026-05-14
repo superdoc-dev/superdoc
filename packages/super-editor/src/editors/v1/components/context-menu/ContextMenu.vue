@@ -223,18 +223,27 @@ const cleanupCustomItems = () => {
 };
 
 const handleGlobalKeyDown = (event) => {
-  // SD-2747: ESCAPE dismisses the menu and inserts a literal `/` at the original anchor —
-  // the slash was preventDefault'd when the menu opened, so we re-insert it here so the
-  // user's typed character is preserved when they decline to pick a command. Matches Google
-  // Docs' trigger-menu behavior.
-  if (event.key === 'Escape' && isOpen.value) {
+  // SD-2747: ESCAPE / ArrowLeft dismiss the menu. When the menu was opened by the
+  // slash hotkey the original `/` was preventDefault'd, so we reinsert it at the
+  // anchor — matches Google Docs' trigger-menu behavior. When the menu was
+  // opened by right-click no keystroke was suppressed and dismissal must NOT
+  // mutate the document.
+  //
+  // AIDEV-NOTE: SD-2747 P2. The gate is `pluginState.trigger === 'slash'`; without
+  // this, pressing Escape on a right-click context menu inserts an unwanted `/`
+  // at the click position. ArrowLeft is included here because the hidden search
+  // input owns focus while the menu is open, so the PM plugin's matching branch
+  // never fires in practice — every dismissal in the live flow comes through
+  // this handler.
+  if ((event.key === 'Escape' || event.key === 'ArrowLeft') && isOpen.value) {
     event.preventDefault();
     event.stopPropagation();
     const pluginState = ContextMenuPluginKey.getState(props.editor?.state);
     const anchorPos = pluginState?.anchorPos;
+    const trigger = pluginState?.trigger;
     closeMenu({ restoreCursor: false });
 
-    if (props.editor && anchorPos !== null && anchorPos !== undefined) {
+    if (trigger === 'slash' && props.editor && anchorPos !== null && anchorPos !== undefined) {
       const tr = props.editor.state.tr.insertText('/', anchorPos);
       const insertedAt = anchorPos + 1;
       tr.setSelection(props.editor.state.selection.constructor.near(tr.doc.resolve(insertedAt)));

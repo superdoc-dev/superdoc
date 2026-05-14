@@ -300,6 +300,110 @@ describe('ContextMenu extension', () => {
     });
   });
 
+  // SD-2747 P2: the menu can be opened two ways — by typing `/` (the slash
+  // keystroke is preventDefault'd, so the menu owes the user a literal `/`
+  // when they dismiss without picking) and by right-click (no slash was
+  // suppressed, so dismissal must NOT mutate the document). The plugin must
+  // record which trigger fired and every dismissal path (PM and Vue) must
+  // gate the slash-reinsert on that flag.
+  describe('open-trigger source tracking (SD-2747 P2)', () => {
+    const makeView = (initial) => {
+      let state = initial;
+      const view = {
+        get state() {
+          return state;
+        },
+        dispatch: vi.fn((tr) => {
+          state = state.apply(tr);
+        }),
+        focus: vi.fn(),
+        dom: { getBoundingClientRect: () => ({ left: 0, top: 0 }) },
+        coordsAtPos: () => ({ left: 20, top: 30 }),
+      };
+      return view;
+    };
+
+    it('records trigger="slash" when the menu opens via the keyboard hotkey', () => {
+      const baseDoc = doc(p());
+      const selection = TextSelection.create(baseDoc, 1);
+      const editor = { options: {}, emit: vi.fn(), view: null };
+      const [plugin] = ContextMenu.config.addPmPlugins.call({ editor });
+      const view = makeView(EditorState.create({ schema, doc: baseDoc, selection, plugins: [plugin] }));
+      editor.view = view;
+
+      plugin.props.handleKeyDown.call(plugin, view, { key: '/', preventDefault: vi.fn() });
+
+      expect(ContextMenuPluginKey.getState(view.state).trigger).toBe('slash');
+    });
+
+    it('records trigger="rightClick" when the menu opens via clientX/clientY', () => {
+      const baseDoc = doc(p());
+      const selection = TextSelection.create(baseDoc, 1);
+      const editor = { options: {}, emit: vi.fn(), view: null };
+      const [plugin] = ContextMenu.config.addPmPlugins.call({ editor });
+      const view = makeView(EditorState.create({ schema, doc: baseDoc, selection, plugins: [plugin] }));
+      editor.view = view;
+
+      view.dispatch(
+        view.state.tr.setMeta(ContextMenuPluginKey, {
+          type: 'open',
+          pos: 1,
+          clientX: 100,
+          clientY: 50,
+        }),
+      );
+
+      expect(ContextMenuPluginKey.getState(view.state).trigger).toBe('rightClick');
+    });
+
+    it('clears trigger on close', () => {
+      const baseDoc = doc(p());
+      const selection = TextSelection.create(baseDoc, 1);
+      const editor = { options: {}, emit: vi.fn(), view: null };
+      const [plugin] = ContextMenu.config.addPmPlugins.call({ editor });
+      const view = makeView(EditorState.create({ schema, doc: baseDoc, selection, plugins: [plugin] }));
+      editor.view = view;
+      plugin.props.handleKeyDown.call(plugin, view, { key: '/', preventDefault: vi.fn() });
+      view.dispatch(view.state.tr.setMeta(ContextMenuPluginKey, { type: 'close' }));
+
+      expect(ContextMenuPluginKey.getState(view.state).trigger).toBe(null);
+    });
+
+    it('Escape on a right-click-opened menu closes the menu without inserting a slash', () => {
+      // Bug A from Luccas's review: pressing Escape on a context menu that
+      // was opened via right-click previously inserted `/` at the click
+      // position, mutating the document. The dismissal must be a no-op
+      // beyond closing.
+      const baseDoc = doc(p());
+      const selection = TextSelection.create(baseDoc, 1);
+      const editor = { options: {}, emit: vi.fn(), view: null };
+      const [plugin] = ContextMenu.config.addPmPlugins.call({ editor });
+      const view = makeView(EditorState.create({ schema, doc: baseDoc, selection, plugins: [plugin] }));
+      editor.view = view;
+      view.dispatch(view.state.tr.setMeta(ContextMenuPluginKey, { type: 'open', pos: 1, clientX: 100, clientY: 50 }));
+
+      plugin.props.handleKeyDown.call(plugin, view, { key: 'Escape', preventDefault: vi.fn() });
+
+      expect(ContextMenuPluginKey.getState(view.state).open).toBe(false);
+      expect(view.state.doc.textContent).toBe('');
+    });
+
+    it('ArrowLeft on a right-click-opened menu closes the menu without inserting a slash', () => {
+      const baseDoc = doc(p());
+      const selection = TextSelection.create(baseDoc, 1);
+      const editor = { options: {}, emit: vi.fn(), view: null };
+      const [plugin] = ContextMenu.config.addPmPlugins.call({ editor });
+      const view = makeView(EditorState.create({ schema, doc: baseDoc, selection, plugins: [plugin] }));
+      editor.view = view;
+      view.dispatch(view.state.tr.setMeta(ContextMenuPluginKey, { type: 'open', pos: 1, clientX: 100, clientY: 50 }));
+
+      plugin.props.handleKeyDown.call(plugin, view, { key: 'ArrowLeft', preventDefault: vi.fn() });
+
+      expect(ContextMenuPluginKey.getState(view.state).open).toBe(false);
+      expect(view.state.doc.textContent).toBe('');
+    });
+  });
+
   describe('menu positioning', () => {
     it('positions menu at clientX/clientY for context menu', () => {
       const baseDoc = doc(p());

@@ -96,6 +96,11 @@ export function findContainingBlockAncestor(element) {
  * @property {string} [menuPosition.left] - Left position in pixels (e.g., "100px")
  * @property {string} [menuPosition.top] - Top position in pixels (e.g., "28px")
  * @property {boolean} disabled - Whether the menu functionality is disabled
+ * @property {'slash'|'rightClick'|null} trigger - SD-2747: which gesture opened the menu.
+ *   The slash-keystroke open path preventDefaults `/`, so dismissal owes the user a
+ *   literal `/` at anchorPos. The right-click path suppresses no keystroke, so
+ *   dismissal must NOT mutate the document. Every dismissal branch (PM + Vue) reads
+ *   this field to decide whether to reinsert.
  */
 
 /**
@@ -161,6 +166,7 @@ export const ContextMenu = Extension.create({
       anchorPos: null,
       menuPosition: null,
       disabled: isMenuDisabled(),
+      trigger: null,
       ...value,
     });
 
@@ -301,12 +307,17 @@ export const ContextMenu = Extension.create({
                 top: `${top + offsetY}px`,
               };
 
-              // Update state
+              // Update state. SD-2747 P2: `trigger` distinguishes slash-keystroke
+              // opens (dismissal reinserts `/`) from right-click opens (dismissal
+              // is non-mutating). `isRightClick` was computed above from the
+              // presence of clientX/clientY in the meta payload — the same
+              // signal the positioning code uses.
               const newState = {
                 ...value,
                 open: true,
                 anchorPos: meta.pos,
                 menuPosition,
+                trigger: isRightClick ? 'rightClick' : 'slash',
               };
 
               // Emit event after state update
@@ -321,7 +332,7 @@ export const ContextMenu = Extension.create({
 
             case 'close': {
               editor.emit('contextMenu:close');
-              return ensureStateShape({ ...value, open: false, anchorPos: null });
+              return ensureStateShape({ ...value, open: false, anchorPos: null, trigger: null });
             }
 
             default:
@@ -415,15 +426,18 @@ export const ContextMenu = Extension.create({
             return true;
           }
 
-          // SD-2747: Escape (or ArrowLeft) closes the menu and inserts a literal `/` at the
-          // anchor position — matches Google Docs, where the slash stays visible when the
-          // user dismisses the menu without picking an item.
+          // SD-2747: Escape (or ArrowLeft) closes the menu. For slash-triggered opens
+          // we reinsert a literal `/` at the anchor — matches Google Docs, where the
+          // slash stays visible when the user dismisses the menu without picking an
+          // item. For right-click opens no slash was suppressed, so dismissal must
+          // NOT mutate the document. The `trigger` field on the plugin state
+          // disambiguates the two paths (SD-2747 P2).
           if (event.key === 'Escape' || event.key === 'ArrowLeft') {
-            const { anchorPos } = pluginState;
+            const { anchorPos, trigger } = pluginState;
             event.preventDefault();
             view.dispatch(view.state.tr.setMeta(ContextMenuPluginKey, { type: 'close' }));
 
-            if (anchorPos !== null) {
+            if (trigger === 'slash' && anchorPos !== null) {
               const insertTr = view.state.tr.insertText('/', anchorPos);
               const insertedAt = anchorPos + 1;
               insertTr.setSelection(view.state.selection.constructor.near(insertTr.doc.resolve(insertedAt)));

@@ -5,16 +5,16 @@ const {
 } = require('../../scripts/semantic-release/strict-breaking-parser.cjs');
 
 /*
- * Commit filter: react declares `superdoc` in dependencies (not
+ * Commit filter: solid declares `superdoc` in dependencies (not
  * peerDependencies), so existing consumers with lockfiles won't pick up a
- * new core version until react republishes. Expand commit analysis into
- * core paths so semantic-release triggers a react release on core changes.
+ * new core version until solid republishes. Expand commit analysis into
+ * core paths so semantic-release triggers a solid release on core changes.
  *
- * When react migrates `superdoc` to peerDependencies, narrow this to
- * packages/react only. See .github/package-impact-map.md.
+ * When solid migrates `superdoc` to peerDependencies, narrow this to
+ * packages/solid only. See .github/package-impact-map.md.
  */
 require('../../scripts/semantic-release/patch-commit-filter.cjs')([
-  'packages/react',
+  'packages/solid',
   'packages/superdoc',
   'packages/super-editor',
   'packages/layout-engine',
@@ -38,11 +38,11 @@ const notesPlugin = isPrerelease ? createReleaseNotesGenerator() : ['semantic-re
 
 const config = {
   branches,
-  tagFormat: 'react-v${version}',
+  tagFormat: 'solid-v${version}',
   plugins: [
     createCommitAnalyzer({
-      // Cap at minor — react declares superdoc in dependencies, so
-      // upstream breaking changes don't break react's own public API.
+      // Cap at minor — solid declares superdoc in dependencies, so
+      // upstream breaking changes don't break solid's own public API.
       // Prevents accidental major bumps from superdoc feat!/BREAKING CHANGE commits.
       releaseRules: [
         { breaking: true, release: 'minor' },
@@ -54,7 +54,7 @@ const config = {
     }),
     notesPlugin,
     ['semantic-release-pnpm', { npmPublish: false }],
-    '../../scripts/publish-react.cjs',
+    '../../scripts/publish-solid.cjs',
   ],
 };
 
@@ -63,19 +63,19 @@ if (!isPrerelease) {
     '@semantic-release/git',
     {
       assets: ['package.json'],
-      message: 'chore(react): ${nextRelease.version} [skip ci]\n\n${nextRelease.notes}',
+      message: 'chore(solid): ${nextRelease.version} [skip ci]\n\n${nextRelease.notes}',
     },
   ]);
 }
 
 // Linear integration - labels issues with version on release
-config.plugins.push(['semantic-release-linear-app', { teamKeys: ['SD'], addComment: true, packageName: 'react' }]);
+config.plugins.push(['semantic-release-linear-app', { teamKeys: ['SD'], addComment: true, packageName: 'solid' }]);
 
 config.plugins.push([
   '@semantic-release/github',
   {
     successComment:
-      ':tada: This ${issue.pull_request ? "PR" : "issue"} is included in **@superdoc-dev/react** v${nextRelease.version}\n\nThe release is available on [GitHub release](https://github.com/superdoc-dev/superdoc/releases/tag/${nextRelease.gitTag})',
+      ':tada: This ${issue.pull_request ? "PR" : "issue"} is included in **@superdoc-dev/solid** v${nextRelease.version}\n\nThe release is available on [GitHub release](https://github.com/superdoc-dev/superdoc/releases/tag/${nextRelease.gitTag})',
   },
 ]);
 

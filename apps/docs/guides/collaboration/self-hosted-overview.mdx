@@ -40,13 +40,19 @@ SuperDoc's integration contract is provider-agnostic: pass `{ ydoc, provider }` 
 
 | Option | Notes | Setup Time |
 |--------|-------|------------|
-| YHub | Advanced Yjs backend for attribution, activity, and revision-history workflows. Beta; validate licensing and infrastructure requirements. | 1+ hour |
+| [YHub](https://github.com/superdoc-dev/superdoc/tree/main/examples/editor/collaboration/providers/yhub) | Advanced Yjs backend for attribution, activity, and revision-history workflows. Beta; validate licensing and infrastructure requirements. | 1+ hour |
 | [Hocuspocus](/guides/collaboration/hocuspocus) | Mature self-hosted Yjs server with auth, persistence, and scaling hooks. | 30 mins |
 | [SuperDoc Yjs](/guides/collaboration/superdoc-yjs) | Minimal reference server for prototypes and local development. Not production infrastructure. | 30 mins |
 
 ## At a glance
 
 <Tabs>
+  <Tab title="YHub">
+    Advanced Yjs backend for attribution, activity, and revision-history workflows. Redis + Postgres backing. Beta; validate licensing and infrastructure requirements.
+
+    [See the example](https://github.com/superdoc-dev/superdoc/tree/main/examples/editor/collaboration/providers/yhub)
+  </Tab>
+
   <Tab title="Hocuspocus">
     Mature self-hosted Yjs server with auth, persistence, and scaling hooks.
 
@@ -131,6 +137,14 @@ new SuperDoc({
 ## Next steps
 
 <CardGroup cols={2}>
+  <Card
+    title="YHub example"
+    icon="layers"
+    href="https://github.com/superdoc-dev/superdoc/tree/main/examples/editor/collaboration/providers/yhub"
+  >
+    Attribution and revision-history workflows (beta)
+  </Card>
+
   <Card
     title="Hocuspocus setup"
     icon="server"

@@ -619,10 +619,8 @@ export const useCommentsStore = defineStore('comments', () => {
       debounceEmit(changeId, event, superdoc);
     };
 
-    const valuesMatch = (currentValue, nextValue) => isShallowEqual(currentValue, nextValue);
-
     const setIfChanged = (target, key, value) => {
-      if (!target || valuesMatch(target[key], value)) return false;
+      if (!target || isShallowEqual(target[key], value)) return false;
       target[key] = value;
       return true;
     };
@@ -639,10 +637,12 @@ export const useCommentsStore = defineStore('comments', () => {
       if (normalizedTrackedChangeStoryLabel !== '') fields.trackedChangeStoryLabel = normalizedTrackedChangeStoryLabel;
       if (normalizedTrackedChangeAnchorKey != null) fields.trackedChangeAnchorKey = normalizedTrackedChangeAnchorKey;
 
-      return Object.entries(fields).reduce(
-        (didChange, [key, value]) => setIfChanged(target, key, value) || didChange,
-        false,
-      );
+      // If values match
+      let didChange = false;
+      for (const [key, value] of Object.entries(fields)) {
+        if (setIfChanged(target, key, value)) didChange = true;
+      }
+      return didChange;
     };
 
     const updateExistingTrackedChange = (trackedComment) => {

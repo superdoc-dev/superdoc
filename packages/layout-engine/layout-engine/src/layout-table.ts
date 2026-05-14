@@ -11,7 +11,12 @@ import type {
   ParagraphMeasure,
   ParagraphBlock,
 } from '@superdoc/contracts';
-import { OOXML_PCT_DIVISOR, rescaleColumnWidths, resolveTableWidthAttr } from '@superdoc/contracts';
+import {
+  OOXML_PCT_DIVISOR,
+  rescaleColumnWidths,
+  resolveTableWidthAttr,
+  getTableVisualDirection,
+} from '@superdoc/contracts';
 import type { PageState } from './paginator.js';
 import { computeFragmentPmRange, extractBlockPmRange } from './layout-utils.js';
 import { describeCellRenderBlocks, createCellSliceCursor, computeFullCellContentHeight } from './table-cell-slice.js';
@@ -182,7 +187,7 @@ export function resolveTableFrame(
 ): { x: number; width: number } {
   const width = resolveRenderedTableWidth(columnWidth, tableWidth, attrs);
   const explicitJustification = typeof attrs?.justification === 'string' ? attrs.justification : undefined;
-  const isRtlTable = attrs?.tableProperties?.rightToLeft === true;
+  const isRtlTable = getTableVisualDirection(attrs) === 'rtl';
   const effectiveJustification = explicitJustification ?? (isRtlTable ? 'end' : undefined);
   const tableIndent = getTableIndentWidth(attrs);
 

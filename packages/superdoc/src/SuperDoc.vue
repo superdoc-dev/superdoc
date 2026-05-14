@@ -33,7 +33,13 @@ import { useSuperdocStore } from '@superdoc/stores/superdoc-store';
 import { useCommentsStore } from '@superdoc/stores/comments-store';
 
 import { DOCX, PDF, HTML } from '@superdoc/common';
-import { SuperEditor, AIWriter, PresentationEditor, getTrackedChangeIndex } from '@superdoc/super-editor';
+import {
+  SuperEditor,
+  AIWriter,
+  PresentationEditor,
+  getTrackedChangeIndex,
+  TrackChangesBasePluginKey,
+} from '@superdoc/super-editor';
 import { ySyncPluginKey } from 'y-prosemirror';
 import HtmlViewer from './components/HtmlViewer/HtmlViewer.vue';
 import useComment from './components/CommentsLayer/use-comment';
@@ -116,6 +122,7 @@ const {
   showAddComment,
   handleEditorLocationsUpdate,
   handleTrackedChangeUpdate,
+  refreshTrackedChangeCommentsByIds,
   syncTrackedChangePositionsWithDocument,
   syncTrackedChangeComments,
   addComment,
@@ -258,18 +265,31 @@ const flushQueuedTrackedChangeCommentResync = () => {
   queuedTrackedChangeCommentResync = null;
   if (!pendingResync?.editor) return;
 
-  syncTrackedChangeComments({
+  if (pendingResync.fullResync) {
+    syncTrackedChangeComments({
+      superdoc: proxy.$superdoc,
+      editor: pendingResync.editor,
+      broadcastChanges: pendingResync.broadcastChanges,
+    });
+    return;
+  }
+
+  refreshTrackedChangeCommentsByIds({
     superdoc: proxy.$superdoc,
     editor: pendingResync.editor,
+    changeIds: Array.from(pendingResync.changeIds ?? []),
     broadcastChanges: pendingResync.broadcastChanges,
   });
 };
 
-const queueTrackedChangeCommentResync = ({ editor, broadcastChanges = true } = {}) => {
-  if (!editor) return;
+const queueTrackedChangeCommentResync = ({ editor, changeIds = null, broadcastChanges = true } = {}) => {
+  if (!editor || (changeIds && !changeIds.size)) return;
 
+  const existingChangeIds = queuedTrackedChangeCommentResync?.changeIds ?? new Set();
   queuedTrackedChangeCommentResync = {
     editor,
+    fullResync: !changeIds || Boolean(queuedTrackedChangeCommentResync?.fullResync),
+    changeIds: changeIds ? new Set([...existingChangeIds, ...changeIds]) : existingChangeIds,
     broadcastChanges: Boolean(queuedTrackedChangeCommentResync?.broadcastChanges) || Boolean(broadcastChanges),
   };
 
@@ -1159,6 +1179,35 @@ const shouldResyncTrackedChangeThreads = (transaction, ySyncMeta = transaction?.
   return isLocalHistoryUndoRedo || isLocalCollabUndoRedo || isCollaborationReplayTransaction(transaction, ySyncMeta);
 };
 
+const collectTouchedTrackedChangeIds = (transaction) => {
+  const ids = new Set();
+  const addMarkId = (mark) => {
+    const id = mark?.attrs?.id;
+    if (id != null) ids.add(String(id));
+  };
+
+  const meta = transaction?.getMeta?.(TrackChangesBasePluginKey);
+  [meta?.insertedMark, meta?.deletionMark, meta?.formatMark].forEach(addMarkId);
+
+  if (!transaction?.docChanged || !transaction?.doc || !transaction?.mapping?.maps?.length) return ids;
+
+  transaction.mapping.maps.forEach((stepMap) => {
+    stepMap.forEach((oldStart, oldEnd, newStart, newEnd) => {
+      const from = Math.max(0, newStart - 1);
+      const to = Math.min(transaction.doc.content.size, newEnd + 1);
+
+      transaction.doc.nodesBetween(from, to, (node) => {
+        node.marks?.forEach((mark) => {
+          const markName = mark.type?.name;
+          if (markName === 'trackInsert' || markName === 'trackDelete' || markName === 'trackFormat') addMarkId(mark);
+        });
+      });
+    });
+  });
+
+  return ids;
+};
+
 const onEditorTransaction = (payload = {}) => {
   const { editor, transaction } = payload;
   const ySyncMeta = transaction?.getMeta?.(ySyncPluginKey);
@@ -1173,6 +1222,11 @@ const onEditorTransaction = (payload = {}) => {
       // Remote replay should rebuild only local sidebar state. The authoritative
       // collaboration comment update is already shared through the comments ydoc.
       broadcastChanges: !isPeerCollaborationReplayTransaction(transaction, ySyncMeta),
+    });
+  } else {
+    queueTrackedChangeCommentResync({
+      editor,
+      changeIds: collectTouchedTrackedChangeIds(transaction),
     });
   }
 

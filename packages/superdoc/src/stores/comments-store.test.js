@@ -110,6 +110,13 @@ vi.mock('@superdoc/super-editor', () => {
     getRichTextExtensions: vi.fn(() => []),
     getTrackedChangeIndex,
     makeTrackedChangeAnchorKey,
+    shallowEqual: vi.fn((a, b) => {
+      if (Object.is(a, b)) return true;
+      if (!a || !b || typeof a !== 'object' || typeof b !== 'object') return false;
+      const keysA = Object.keys(a);
+      const keysB = Object.keys(b);
+      return keysA.length === keysB.length && keysA.every((key) => Object.is(a[key], b[key]));
+    }),
   };
 });
 
@@ -817,6 +824,7 @@ describe('comments-store', () => {
       trackedChangeText: 'Old text',
       trackedChangeType: 'trackInsert',
       deletedText: null,
+      fileId: 'doc-1',
       getValues: vi.fn(() => ({ commentId: 'story-change-2' })),
     };
 
@@ -1253,6 +1261,97 @@ describe('comments-store', () => {
     expect(existingComment.trackedChangeText).toBe('tracked-tc-live');
     expect(tr.setMeta).toHaveBeenCalledWith('CommentsPluginKey', { type: 'force' });
     expect(editorDispatch).toHaveBeenCalledWith(tr);
+  });
+
+  it('refreshes only requested tracked-change comments by id', () => {
+    const superdoc = { emit: vi.fn() };
+    const editor = { state: {}, options: { documentId: 'doc-1' } };
+    const mark = (type, id) => ({ type: { name: type }, attrs: { id } });
+    const trackedChangesById = {
+      'tc-insert': [{ mark: mark('trackInsert', 'tc-insert'), from: 1, to: 4 }],
+      'tc-replacement': [
+        { mark: mark('trackInsert', 'tc-replacement'), from: 5, to: 8 },
+        { mark: mark('trackDelete', 'tc-replacement'), from: 9, to: 12 },
+      ],
+      'tc-delete': [{ mark: mark('trackDelete', 'tc-delete'), from: 13, to: 16 }],
+    };
+
+    trackChangesHelpersMock.getTrackChanges.mockImplementation((state, id) => trackedChangesById[id] ?? []);
+
+    createOrUpdateTrackedChangeCommentMock.mockImplementation(({ event, marks, trackedChangesForId }) => {
+      const changeId = marks?.insertedMark?.attrs?.id ?? marks?.deletionMark?.attrs?.id ?? marks?.formatMark?.attrs?.id;
+      return {
+        event,
+        changeId,
+        trackedChangeText: `updated-${changeId}`,
+        trackedChangeType: marks.insertedMark && marks.deletionMark ? 'both' : marks.deletionMark ? 'delete' : 'insert',
+        deletedText: marks.deletionMark ? `deleted-${changeId}` : null,
+        documentId: 'doc-1',
+        trackedChangesForId,
+      };
+    });
+
+    store.commentsList = Object.keys(trackedChangesById).map((commentId) => ({
+      commentId,
+      trackedChange: true,
+      trackedChangeText: 'old',
+      fileId: 'doc-1',
+    }));
+
+    store.refreshTrackedChangeCommentsByIds({
+      superdoc,
+      editor,
+      changeIds: ['tc-insert', 'tc-replacement', 'tc-delete', 'missing'],
+    });
+
+    expect(createOrUpdateTrackedChangeCommentMock).toHaveBeenCalledTimes(3);
+    expect(createOrUpdateTrackedChangeCommentMock.mock.calls.map(([call]) => call.marks)).toEqual([
+      { insertedMark: trackedChangesById['tc-insert'][0].mark, deletionMark: null, formatMark: null },
+      {
+        insertedMark: trackedChangesById['tc-replacement'][0].mark,
+        deletionMark: trackedChangesById['tc-replacement'][1].mark,
+        formatMark: null,
+      },
+      { insertedMark: null, deletionMark: trackedChangesById['tc-delete'][0].mark, formatMark: null },
+    ]);
+    expect(store.getComment('tc-insert').trackedChangeText).toBe('updated-tc-insert');
+    expect(store.getComment('tc-replacement').deletedText).toBe('deleted-tc-replacement');
+    expect(store.getComment('tc-delete').trackedChangeType).toBe('delete');
+  });
+
+  it('does not emit tracked-change comment updates when refreshed fields are unchanged', () => {
+    const superdoc = { emit: vi.fn() };
+    const existingComment = {
+      commentId: 'tc-live',
+      trackedChange: true,
+      trackedChangeText: 'tracked-tc-live',
+      trackedChangeType: 'insert',
+      trackedChangeDisplayType: null,
+      deletedText: null,
+      trackedChangeStory: { kind: 'story', storyType: 'body' },
+      trackedChangeStoryKind: 'body',
+      trackedChangeStoryLabel: '',
+      trackedChangeAnchorKey: 'tc::body::tc-live',
+      fileId: 'doc-1',
+      getValues: vi.fn(() => ({ commentId: 'tc-live' })),
+    };
+    store.commentsList = [existingComment];
+
+    store.handleTrackedChangeUpdate({
+      superdoc,
+      params: {
+        event: 'update',
+        changeId: 'tc-live',
+        trackedChangeText: 'tracked-tc-live',
+        trackedChangeType: 'insert',
+        trackedChangeDisplayType: null,
+        deletedText: null,
+        documentId: 'doc-1',
+      },
+    });
+
+    expect(syncCommentsToClientsMock).not.toHaveBeenCalled();
+    expect(superdoc.emit).not.toHaveBeenCalled();
   });
 
   it('keeps imported resolved tracked-change comments resolved during initial tracked-change rebuild', async () => {

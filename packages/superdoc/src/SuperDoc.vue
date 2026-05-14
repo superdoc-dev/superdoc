@@ -1186,6 +1186,9 @@ const collectTouchedTrackedChangeIds = (transaction) => {
     if (id != null) ids.add(String(id));
   };
 
+  // AIDEV-NOTE: Existing tracked-change edits can update the live mark text
+  // without reporting that mark in TrackChangesBasePluginKey metadata. Keep
+  // the changed-range scan so the sidebar bubble refreshes for those edits.
   const meta = transaction?.getMeta?.(TrackChangesBasePluginKey);
   [meta?.insertedMark, meta?.deletionMark, meta?.formatMark].forEach(addMarkId);
 

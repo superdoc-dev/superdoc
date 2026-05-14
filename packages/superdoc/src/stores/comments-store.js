@@ -649,6 +649,9 @@ export const useCommentsStore = defineStore('comments', () => {
         trackedComment.resolvedTime || trackedComment.resolvedByEmail || trackedComment.resolvedByName,
       );
       if (wasResolved) clearResolvedMetadata(trackedComment);
+      // AIDEV-NOTE: Targeted tracked-change refresh runs during body typing.
+      // Emit only when the recomputed comment payload changed, otherwise every
+      // keystroke in an unchanged mark can rebroadcast and rerender the sidebar.
       return applyChangedFields(trackedComment) || wasResolved;
     };
 

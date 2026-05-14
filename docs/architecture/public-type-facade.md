@@ -55,22 +55,34 @@ Source annotations are normalized in a follow-up PR. The policy tier remains the
 | legacy-root | @deprecated replaceWith=<target> removeIn=<version> or compat-indefinitely | `legacy-root` is a policy tier, not a TSDoc tag. Source annotations use the repository deprecation convention from comment-policy.md. |
 | internal | @internal | Not part of the supported customer contract. This is a real TSDoc release tag. |
 
+## Classification status
+
+Each `import_paths[]` entry carries a `classification_status` that bounds how the audit may use `symbols[]`.
+
+| Status | Meaning |
+| --- | --- |
+| fully-classified | Every export through this path appears in `symbols[]`. Strict audit may treat `symbols[]` as the closed contract for this path. |
+| partially-classified | Path is public, but `symbols[]` covers only a subset of exports. Strict audit must NOT treat missing symbols as policy gaps until the path is promoted to `fully-classified`. |
+| pending-classification | Path is public but no symbols are enumerated yet. Same audit posture as `partially-classified`. Tracks intent to enumerate in a follow-up. |
+| legacy-frozen | Legacy compatibility path. Existing consumers keep compiling; `symbols[]` intentionally does not enumerate the full surface. Future enforcement is a no-growth export snapshot, not deep per-symbol classification. Strict audit must NOT interpret missing symbols as policy gaps. |
+| asset | Non-code asset entry (e.g. CSS). No symbol policy applies. |
+
 ## Import Path Policy
 
-| Import path | Kind | Tier for new exports | Decision |
-| --- | --- | --- | --- |
-| `superdoc` | canonical-facade | public | Canonical entry. New docs and support guidance point here. New runtime values and types are added through this facade unless they belong to a dedicated subpath. |
-| `superdoc/types` | type-only-facade | public | Type-only entry for extension/schema authors. No runtime values. |
-| `superdoc/ui` | public-subpath | public | Browser UI controller surface. Owns UI controller types; root re-exports only what top-level consumers need. |
-| `superdoc/ui/react` | public-subpath | public | React bindings for `superdoc/ui`. |
-| `superdoc/headless-toolbar` | public-subpath | public | Headless toolbar controller; owns toolbar contract types. |
-| `superdoc/headless-toolbar/react` | public-subpath | public | React helper for the headless toolbar. |
-| `superdoc/headless-toolbar/vue` | public-subpath | public | Vue helper for the headless toolbar. |
-| `superdoc/style.css` | asset | public | Asset export. No type contract. |
-| `superdoc/super-editor` | legacy-compat-subpath | legacy-root | Legacy public compatibility surface per `package-boundaries.md` Decision 1. Keep compiling. No new exports added here. Migration target for new code is `superdoc`. |
-| `superdoc/converter` | legacy-compat-subpath | legacy-root | Legacy compatibility after SD-2953. Migrate to `SuperConverter` from `superdoc`. |
-| `superdoc/docx-zipper` | legacy-compat-subpath | legacy-root | Legacy compatibility after SD-2953. Migrate to `DocxZipper` from `superdoc`. |
-| `superdoc/file-zipper` | legacy-compat-subpath | legacy-root | Legacy compatibility after SD-2953. Migrate to `createZip` from `superdoc`. |
+| Import path | Kind | Tier for new exports | Classification status | Decision |
+| --- | --- | --- | --- | --- |
+| `superdoc` | canonical-facade | public | partially-classified | Canonical entry. New docs and support guidance point here. New runtime values and types are added through this facade unless they belong to a dedicated subpath. |
+| `superdoc/types` | type-only-facade | public | partially-classified | Type-only entry for extension/schema authors. No runtime values. `symbols[]` covers the headline schema-helper types; the full re-export from `@superdoc/super-editor/types` is not yet enumerated. |
+| `superdoc/ui` | public-subpath | public | partially-classified | Browser UI controller surface. Owns UI controller types; root re-exports only what top-level consumers need. `symbols[]` covers the controller headline types; ~60 supporting types from `@superdoc/super-editor/ui` are not yet enumerated. |
+| `superdoc/ui/react` | public-subpath | public | pending-classification | React bindings for `superdoc/ui`. Eleven hooks/components exported; none yet enumerated in `symbols[]`. |
+| `superdoc/headless-toolbar` | public-subpath | public | partially-classified | Headless toolbar controller; owns toolbar contract types. `symbols[]` covers the headline controller types; the full 16-name surface is not yet enumerated. |
+| `superdoc/headless-toolbar/react` | public-subpath | public | pending-classification | React helper for the headless toolbar (`useHeadlessToolbar`). Not yet enumerated in `symbols[]`. |
+| `superdoc/headless-toolbar/vue` | public-subpath | public | pending-classification | Vue helper for the headless toolbar (`useHeadlessToolbar`). Not yet enumerated in `symbols[]`. |
+| `superdoc/style.css` | asset | public | asset | Asset export. No type contract. |
+| `superdoc/super-editor` | legacy-compat-subpath | legacy-root | legacy-frozen | Legacy public compatibility surface per `package-boundaries.md` Decision 1. Keep compiling. No new exports added here. Migration target for new code is `superdoc`. |
+| `superdoc/converter` | legacy-compat-subpath | legacy-root | legacy-frozen | Legacy compatibility after SD-2953. Migrate to `SuperConverter` from `superdoc`. |
+| `superdoc/docx-zipper` | legacy-compat-subpath | legacy-root | legacy-frozen | Legacy compatibility after SD-2953. Migrate to `DocxZipper` from `superdoc`. |
+| `superdoc/file-zipper` | legacy-compat-subpath | legacy-root | legacy-frozen | Legacy compatibility after SD-2953. Migrate to `createZip` from `superdoc`. |
 
 No other `superdoc/*` subpath should be added without updating `public-facade-policy.json`, `package.json` exports, the export-coverage audit, and the consumer matrix in the same PR.
 
@@ -83,21 +95,20 @@ No other `superdoc/*` subpath should be added without updating `public-facade-po
 | Import and export | `SuperConverter`, `DocxZipper`, `createZip`, `BlankDOCX`, `DOCX`, `PDF`, `HTML`, `getFileObject` | Imported from `superdoc`. |
 | Extension authoring | `Extensions`, `getStarterExtensions`, `getRichTextExtensions`, `defineNode`, `defineMark`, `isNodeType`, `assertNodeType`, `isMarkType` | Imported from `superdoc`. |
 | Theming | `createTheme`, `buildTheme` | Imported from `superdoc`. |
-| UI components | `SuperEditor`, `Toolbar`, `ContextMenu`, `AIWriter` | Imported from `superdoc`. |
-| UI components | `SuperToolbar` | Imported from `superdoc`. `SuperToolbar` - Supported direct-instantiation surface; keep in the root facade with real constructor/config types. |
+| UI components | `SuperEditor`, `Toolbar`, `ContextMenu`, `AIWriter`, `SuperToolbar` | Imported from `superdoc`. `SuperToolbar` - Supported direct-instantiation surface; keep in the root facade with real constructor/config types. |
 
 ## Legacy and internal runtime values
 
 These currently appear or are reachable but are not part of the supported contract.
 
-| Group | Tier | Names | Migration / evidence |
+| Group | Tier | Names | Migration / evidence / removal |
 | --- | --- | --- | --- |
-| UI components | legacy-root | `SlashMenu` | Migration target: ContextMenu from `superdoc`. |
-| Helpers | legacy-root | `fieldAnnotationHelpers`, `trackChangesHelpers`, `SectionHelpers`, `superEditorHelpers` | Migration target: superdoc Document API or dedicated helper subpath (TBD) |
-| Plugin keys | legacy-root | `TrackChangesBasePluginKey`, `CommentsPluginKey` | Migration target: Document API or UI controller (Comments/TrackChanges slices) |
-| Low-level editor helpers | legacy-root | `getMarksFromSelection`, `getActiveFormatting`, `getAllowedImageDimensions` | Migration target: Document API |
-| Converter internals | internal | `registeredHandlers` | Currently reachable; not documented; no known consumer use case. |
-| Annotator helpers | legacy-root | `AnnotatorHelpers` | Migration target: Document API or Annotator-specific subpath (TBD) |
+| UI components | legacy-root | `SlashMenu` | Migration target: ContextMenu from `superdoc`. `SlashMenu` - Deprecated alias; do not advertise in new docs. Removal: compat-indefinitely until a major release with migration notes. |
+| Helpers | legacy-root | `fieldAnnotationHelpers`, `trackChangesHelpers`, `SectionHelpers`, `superEditorHelpers` | Migration target: superdoc Document API or dedicated helper subpath (TBD) Removal: compat-indefinitely (pending Open Decision 3) |
+| Plugin keys | legacy-root | `TrackChangesBasePluginKey`, `CommentsPluginKey` | Migration target: Document API or UI controller (Comments/TrackChanges slices) `TrackChangesBasePluginKey` - ProseMirror integration escape hatch.; `CommentsPluginKey` - ProseMirror integration escape hatch. Removal: compat-indefinitely |
+| Low-level editor helpers | legacy-root | `getMarksFromSelection`, `getActiveFormatting`, `getAllowedImageDimensions` | Migration target: Document API Removal: compat-indefinitely |
+| Converter internals | internal | `registeredHandlers` | Currently reachable; not documented; no known consumer use case. `registeredHandlers` - Move behind facade unless an existing consumer is identified (Open Decision 4). |
+| Annotator helpers | legacy-root | `AnnotatorHelpers` | Migration target: Document API or Annotator-specific subpath (TBD) `AnnotatorHelpers` - Avoid new docs. Removal: compat-indefinitely |
 
 ## Public type groups
 
@@ -119,18 +130,18 @@ Public types are named from the customer workflow they support, not from the int
 
 Exported for compatibility or reachable as implementation detail. Not part of the supported contract.
 
-| Group | Tier | Names | Migration / evidence |
+| Group | Tier | Names | Migration / evidence / removal |
 | --- | --- | --- | --- |
-| ProseMirror primitives | legacy-root | `EditorState`, `Transaction`, `Schema`, `EditorView`, `ProseMirrorJSON` | Migration target: Document API for state mutation. ProseMirror types remain accessible for advanced consumers that explicitly need them. |
-| Command internals | legacy-root | `EditorCommands`, `CommandProps`, `Command`, `ChainedCommand`, `CoreCommandMap`, `ExtensionCommandMap` | Migration target: Document API or UI command controller |
-| Layout internals | internal | `FlowBlock`, `Layout`, `LayoutPage`, `LayoutFragment`, `Measure`, `SectionMetadata`, `PaintSnapshot`, `PositionHit` | Reachable but not documented for consumer use; layout is a paint-time concern owned by `layout-engine/`. |
-| Plugin key types | legacy-root | `TrackChangesBasePluginKey`, `CommentsPluginKey` | Migration target: Document API or UI controller |
+| ProseMirror primitives | legacy-root | `EditorState`, `Transaction`, `Schema`, `EditorView`, `ProseMirrorJSON` | Migration target: Document API for state mutation. ProseMirror types remain accessible for advanced consumers that explicitly need them. Removal: compat-indefinitely while advanced consumers depend on them |
+| Command internals | legacy-root | `EditorCommands`, `CommandProps`, `Command`, `ChainedCommand`, `CoreCommandMap`, `ExtensionCommandMap` | Migration target: Document API or UI command controller Removal: compat-indefinitely |
+| Layout internals | internal | `FlowBlock`, `Layout`, `LayoutPage`, `LayoutFragment`, `Measure`, `SectionMetadata`, `PaintSnapshot`, `PositionHit` | Reachable but not documented for consumer use; layout is a paint-time concern owned by `layout-engine/`. `FlowBlock` - Open Decision 2: keep as inspection/debug type or promote to public. |
+| Plugin key types | legacy-root | `TrackChangesBasePluginKey`, `CommentsPluginKey` | Migration target: Document API or UI controller Removal: compat-indefinitely (paired with the value re-exports) |
 
 ## Symbol policy
 
-This flat list is the machine-readable contract the audit will consume. Grouped sections above are for review ergonomics.
+This flat list is the machine-readable record reviewed in this PR. **Strict audit may consume `symbols[]` only for `import_paths` whose `classification_status` is `fully-classified`.** For partial paths, the table records reviewed symbols and known direction; it cannot drive strict gating until the path is promoted. Grouped sections above are for review ergonomics.
 
-| Symbol | Kind | Group | Tier | Import path | Migration / evidence |
+| Symbol | Kind | Group | Tier | Import path | Migration / evidence / removal |
 | --- | --- | --- | --- | --- | --- |
 | `SuperDoc` | runtime_value | Core document UI | public | `superdoc` | Classified by SD-2966 as part of the supported customer facade; covered by consumer typecheck fixtures or existing package-boundary policy. |
 | `Editor` | runtime_value | Headless editor | public | `superdoc` | Classified by SD-2966 as part of the supported customer facade; covered by consumer typecheck fixtures or existing package-boundary policy. |
@@ -156,20 +167,20 @@ This flat list is the machine-readable contract the audit will consume. Grouped 
 | `SuperEditor` | runtime_value | UI components | public | `superdoc` | Classified by SD-2966 as part of the supported customer facade; covered by consumer typecheck fixtures or existing package-boundary policy. |
 | `Toolbar` | runtime_value | UI components | public | `superdoc` | Classified by SD-2966 as part of the supported customer facade; covered by consumer typecheck fixtures or existing package-boundary policy. |
 | `ContextMenu` | runtime_value | UI components | public | `superdoc` | Classified by SD-2966 as part of the supported customer facade; covered by consumer typecheck fixtures or existing package-boundary policy. |
-| `SlashMenu` | runtime_value | UI components | legacy-root | `superdoc` | Migration target: ContextMenu from `superdoc`. |
+| `SlashMenu` | runtime_value | UI components | legacy-root | `superdoc` | Migration target: ContextMenu from `superdoc`. Removal: compat-indefinitely until a major release with migration notes. |
 | `AIWriter` | runtime_value | UI components | public | `superdoc` | Classified by SD-2966 as part of the supported customer facade; covered by consumer typecheck fixtures or existing package-boundary policy. |
 | `SuperToolbar` | runtime_value | UI components | public | `superdoc` | Direct consumer fixture instantiates `new SuperToolbar(...)` in tests/consumer-typecheck/src/customer-scenario.ts:661 and asserts assignability at line 671. |
-| `fieldAnnotationHelpers` | runtime_value | Helpers | legacy-root | `superdoc` | Migration target: superdoc Document API or dedicated helper subpath (TBD) |
-| `trackChangesHelpers` | runtime_value | Helpers | legacy-root | `superdoc` | Migration target: superdoc Document API or dedicated helper subpath (TBD) |
-| `SectionHelpers` | runtime_value | Helpers | legacy-root | `superdoc` | Migration target: superdoc Document API or dedicated helper subpath (TBD) |
-| `superEditorHelpers` | runtime_value | Helpers | legacy-root | `superdoc` | Migration target: superdoc Document API or dedicated helper subpath (TBD) |
-| `TrackChangesBasePluginKey` | runtime_value | Plugin keys | legacy-root | `superdoc` | Migration target: Document API or UI controller (Comments/TrackChanges slices) |
-| `CommentsPluginKey` | runtime_value | Plugin keys | legacy-root | `superdoc` | Migration target: Document API or UI controller (Comments/TrackChanges slices) |
-| `getMarksFromSelection` | runtime_value | Low-level editor helpers | legacy-root | `superdoc` | Migration target: Document API |
-| `getActiveFormatting` | runtime_value | Low-level editor helpers | legacy-root | `superdoc` | Migration target: Document API |
-| `getAllowedImageDimensions` | runtime_value | Low-level editor helpers | legacy-root | `superdoc` | Migration target: Document API |
+| `fieldAnnotationHelpers` | runtime_value | Helpers | legacy-root | `superdoc` | Migration target: superdoc Document API or dedicated helper subpath (TBD) Removal: compat-indefinitely (pending Open Decision 3). |
+| `trackChangesHelpers` | runtime_value | Helpers | legacy-root | `superdoc` | Migration target: superdoc Document API or dedicated helper subpath (TBD) Removal: compat-indefinitely (pending Open Decision 3). |
+| `SectionHelpers` | runtime_value | Helpers | legacy-root | `superdoc` | Migration target: superdoc Document API or dedicated helper subpath (TBD) Removal: compat-indefinitely (pending Open Decision 3). |
+| `superEditorHelpers` | runtime_value | Helpers | legacy-root | `superdoc` | Migration target: superdoc Document API or dedicated helper subpath (TBD) Removal: compat-indefinitely (pending Open Decision 3). |
+| `TrackChangesBasePluginKey` | runtime_value | Plugin keys | legacy-root | `superdoc` | Migration target: Document API or UI controller (Comments/TrackChanges slices) Removal: compat-indefinitely. |
+| `CommentsPluginKey` | runtime_value | Plugin keys | legacy-root | `superdoc` | Migration target: Document API or UI controller (Comments/TrackChanges slices) Removal: compat-indefinitely. |
+| `getMarksFromSelection` | runtime_value | Low-level editor helpers | legacy-root | `superdoc` | Migration target: Document API Removal: compat-indefinitely. |
+| `getActiveFormatting` | runtime_value | Low-level editor helpers | legacy-root | `superdoc` | Migration target: Document API Removal: compat-indefinitely. |
+| `getAllowedImageDimensions` | runtime_value | Low-level editor helpers | legacy-root | `superdoc` | Migration target: Document API Removal: compat-indefinitely. |
 | `registeredHandlers` | runtime_value | Converter internals | internal | `superdoc` | Currently reachable; not documented; no known consumer use case. |
-| `AnnotatorHelpers` | runtime_value | Annotator helpers | legacy-root | `superdoc` | Migration target: Document API or Annotator-specific subpath (TBD) |
+| `AnnotatorHelpers` | runtime_value | Annotator helpers | legacy-root | `superdoc` | Migration target: Document API or Annotator-specific subpath (TBD) Removal: compat-indefinitely. |
 | `Config` | type | Configuration | public | `superdoc` | Classified by SD-2966 as part of the supported customer facade; covered by consumer typecheck fixtures or existing package-boundary policy. |
 | `Modules` | type | Configuration | public | `superdoc` | Classified by SD-2966 as part of the supported customer facade; covered by consumer typecheck fixtures or existing package-boundary policy. |
 | `User` | type | Configuration | public | `superdoc` | Classified by SD-2966 as part of the supported customer facade; covered by consumer typecheck fixtures or existing package-boundary policy. |
@@ -223,17 +234,17 @@ This flat list is the machine-readable contract the audit will consume. Grouped 
 | `NodeAttrs` | type | Extension authoring (types) | public | `superdoc/types` | Classified by SD-2966 as part of the supported customer facade; covered by consumer typecheck fixtures or existing package-boundary policy. |
 | `MarkName` | type | Extension authoring (types) | public | `superdoc/types` | Classified by SD-2966 as part of the supported customer facade; covered by consumer typecheck fixtures or existing package-boundary policy. |
 | `MarkAttrs` | type | Extension authoring (types) | public | `superdoc/types` | Classified by SD-2966 as part of the supported customer facade; covered by consumer typecheck fixtures or existing package-boundary policy. |
-| `EditorState` | type | ProseMirror primitives | legacy-root | `superdoc` | Migration target: Document API for state mutation. ProseMirror types remain accessible for advanced consumers that explicitly need them. |
-| `Transaction` | type | ProseMirror primitives | legacy-root | `superdoc` | Migration target: Document API for state mutation. ProseMirror types remain accessible for advanced consumers that explicitly need them. |
-| `Schema` | type | ProseMirror primitives | legacy-root | `superdoc` | Migration target: Document API for state mutation. ProseMirror types remain accessible for advanced consumers that explicitly need them. |
-| `EditorView` | type | ProseMirror primitives | legacy-root | `superdoc` | Migration target: Document API for state mutation. ProseMirror types remain accessible for advanced consumers that explicitly need them. |
-| `ProseMirrorJSON` | type | ProseMirror primitives | legacy-root | `superdoc` | Migration target: Document API for state mutation. ProseMirror types remain accessible for advanced consumers that explicitly need them. |
-| `EditorCommands` | type | Command internals | legacy-root | `superdoc` | Migration target: Document API or UI command controller |
-| `CommandProps` | type | Command internals | legacy-root | `superdoc` | Migration target: Document API or UI command controller |
-| `Command` | type | Command internals | legacy-root | `superdoc` | Migration target: Document API or UI command controller |
-| `ChainedCommand` | type | Command internals | legacy-root | `superdoc` | Migration target: Document API or UI command controller |
-| `CoreCommandMap` | type | Command internals | legacy-root | `superdoc` | Migration target: Document API or UI command controller |
-| `ExtensionCommandMap` | type | Command internals | legacy-root | `superdoc` | Migration target: Document API or UI command controller |
+| `EditorState` | type | ProseMirror primitives | legacy-root | `superdoc` | Migration target: Document API for state mutation. ProseMirror types remain accessible for advanced consumers that explicitly need them. Removal: compat-indefinitely while advanced consumers depend on them. |
+| `Transaction` | type | ProseMirror primitives | legacy-root | `superdoc` | Migration target: Document API for state mutation. ProseMirror types remain accessible for advanced consumers that explicitly need them. Removal: compat-indefinitely while advanced consumers depend on them. |
+| `Schema` | type | ProseMirror primitives | legacy-root | `superdoc` | Migration target: Document API for state mutation. ProseMirror types remain accessible for advanced consumers that explicitly need them. Removal: compat-indefinitely while advanced consumers depend on them. |
+| `EditorView` | type | ProseMirror primitives | legacy-root | `superdoc` | Migration target: Document API for state mutation. ProseMirror types remain accessible for advanced consumers that explicitly need them. Removal: compat-indefinitely while advanced consumers depend on them. |
+| `ProseMirrorJSON` | type | ProseMirror primitives | legacy-root | `superdoc` | Migration target: Document API for state mutation. ProseMirror types remain accessible for advanced consumers that explicitly need them. Removal: compat-indefinitely while advanced consumers depend on them. |
+| `EditorCommands` | type | Command internals | legacy-root | `superdoc` | Migration target: Document API or UI command controller Removal: compat-indefinitely. |
+| `CommandProps` | type | Command internals | legacy-root | `superdoc` | Migration target: Document API or UI command controller Removal: compat-indefinitely. |
+| `Command` | type | Command internals | legacy-root | `superdoc` | Migration target: Document API or UI command controller Removal: compat-indefinitely. |
+| `ChainedCommand` | type | Command internals | legacy-root | `superdoc` | Migration target: Document API or UI command controller Removal: compat-indefinitely. |
+| `CoreCommandMap` | type | Command internals | legacy-root | `superdoc` | Migration target: Document API or UI command controller Removal: compat-indefinitely. |
+| `ExtensionCommandMap` | type | Command internals | legacy-root | `superdoc` | Migration target: Document API or UI command controller Removal: compat-indefinitely. |
 | `FlowBlock` | type | Layout internals | internal | `superdoc` | Reachable but not documented for consumer use; layout is a paint-time concern owned by `layout-engine/`. |
 | `Layout` | type | Layout internals | internal | `superdoc` | Reachable but not documented for consumer use; layout is a paint-time concern owned by `layout-engine/`. |
 | `LayoutPage` | type | Layout internals | internal | `superdoc` | Reachable but not documented for consumer use; layout is a paint-time concern owned by `layout-engine/`. |
@@ -242,8 +253,8 @@ This flat list is the machine-readable contract the audit will consume. Grouped 
 | `SectionMetadata` | type | Layout internals | internal | `superdoc` | Reachable but not documented for consumer use; layout is a paint-time concern owned by `layout-engine/`. |
 | `PaintSnapshot` | type | Layout internals | internal | `superdoc` | Reachable but not documented for consumer use; layout is a paint-time concern owned by `layout-engine/`. |
 | `PositionHit` | type | Layout internals | internal | `superdoc` | Reachable but not documented for consumer use; layout is a paint-time concern owned by `layout-engine/`. |
-| `TrackChangesBasePluginKey` | type | Plugin key types | legacy-root | `superdoc` | Migration target: Document API or UI controller |
-| `CommentsPluginKey` | type | Plugin key types | legacy-root | `superdoc` | Migration target: Document API or UI controller |
+| `TrackChangesBasePluginKey` | type | Plugin key types | legacy-root | `superdoc` | Migration target: Document API or UI controller Removal: compat-indefinitely (paired with the value re-exports). |
+| `CommentsPluginKey` | type | Plugin key types | legacy-root | `superdoc` | Migration target: Document API or UI controller Removal: compat-indefinitely (paired with the value re-exports). |
 
 ## Legacy `superdoc/super-editor` facade
 
@@ -287,18 +298,20 @@ packages/superdoc/src/public/
 
 ## Audit consumption
 
-The audit (`deep-type-audit.mjs`) reads `public-facade-policy.json` as the authoritative classification source. Source JSDoc tags are normalized in PR 2 but are not the contract.
+The audit (`deep-type-audit.mjs`) reads `public-facade-policy.json` as the authoritative classification source. Strict gating applies only to `import_paths` whose `classification_status` is `fully-classified`. For partial paths, `symbols[]` records reviewed names but cannot drive enforcement.
 
 **Rationale.**
 
 - TSDoc release tags (`@public`, `@beta`, `@internal`) do not survive `.d.ts` emission in our current pipeline. The audit walks emitted declarations and cannot recover tags from them.
 - Source files today carry malformed JSDoc (multi-typedef blocks, missing `replaceWith`/`removeIn` on `@deprecated`). Treating source as the authority would freeze that malformed shape into CI.
 - JSON is reviewable in a single PR, diffable, and exposes intent. Source annotations follow in PR 2 once the policy is the established contract.
+- `classification_status` keeps the audit honest about partial coverage. Marking a path `partially-classified` records intent without falsely advertising completeness; the audit treats missing symbols on those paths as out-of-scope rather than as policy gaps.
 
 **Future state.**
 
+- Promote `superdoc/ui`, `superdoc/ui/react`, `superdoc/headless-toolbar`, `/react`, `/vue`, and `superdoc/types` from partial/pending to `fully-classified` (tracked as a follow-up; blocks SD-3046 strict gate).
 - PR 2 normalizes source JSDoc to match the policy.
-- PR 3 wires `deep-type-audit.mjs` to read the policy: each tier gets a strict gate appropriate to its level (public must not collapse to `any`; legacy-root tolerated; internal must not be reachable from a public path).
+- PR 3 wires `deep-type-audit.mjs` to read the policy: each tier gets a strict gate appropriate to its level (public must not collapse to `any`; legacy-root tolerated; internal must not be reachable from a public path). Strict mode keys on `classification_status: fully-classified`.
 - If API Extractor or a similar tool starts preserving TSDoc tags in emitted declarations later, the audit can prefer source tags and use the JSON only for legacy-root and internal classifications.
 
 ## CI gates after the facade exists

@@ -28,77 +28,112 @@
       "summary": "Reachable through some path today but not part of the contract. Must move behind the facade or be excluded from emitted declarations before strict gates can turn on."
     }
   ],
+  "classification_statuses": [
+    {
+      "id": "fully-classified",
+      "summary": "Every export through this path appears in `symbols[]`. Strict audit may treat `symbols[]` as the closed contract for this path."
+    },
+    {
+      "id": "partially-classified",
+      "summary": "Path is public, but `symbols[]` covers only a subset of exports. Strict audit must NOT treat missing symbols as policy gaps until the path is promoted to `fully-classified`."
+    },
+    {
+      "id": "pending-classification",
+      "summary": "Path is public but no symbols are enumerated yet. Same audit posture as `partially-classified`. Tracks intent to enumerate in a follow-up."
+    },
+    {
+      "id": "legacy-frozen",
+      "summary": "Legacy compatibility path. Existing consumers keep compiling; `symbols[]` intentionally does not enumerate the full surface. Future enforcement is a no-growth export snapshot, not deep per-symbol classification. Strict audit must NOT interpret missing symbols as policy gaps."
+    },
+    {
+      "id": "asset",
+      "summary": "Non-code asset entry (e.g. CSS). No symbol policy applies."
+    }
+  ],
+
   "import_paths": [
     {
       "path": "superdoc",
       "kind": "canonical-facade",
       "tier_for_new_exports": "public",
+      "classification_status": "partially-classified",
       "decision": "Canonical entry. New docs and support guidance point here. New runtime values and types are added through this facade unless they belong to a dedicated subpath."
     },
     {
       "path": "superdoc/types",
       "kind": "type-only-facade",
       "tier_for_new_exports": "public",
-      "decision": "Type-only entry for extension/schema authors. No runtime values."
+      "classification_status": "partially-classified",
+      "decision": "Type-only entry for extension/schema authors. No runtime values. `symbols[]` covers the headline schema-helper types; the full re-export from `@superdoc/super-editor/types` is not yet enumerated."
     },
     {
       "path": "superdoc/ui",
       "kind": "public-subpath",
       "tier_for_new_exports": "public",
-      "decision": "Browser UI controller surface. Owns UI controller types; root re-exports only what top-level consumers need."
+      "classification_status": "partially-classified",
+      "decision": "Browser UI controller surface. Owns UI controller types; root re-exports only what top-level consumers need. `symbols[]` covers the controller headline types; ~60 supporting types from `@superdoc/super-editor/ui` are not yet enumerated."
     },
     {
       "path": "superdoc/ui/react",
       "kind": "public-subpath",
       "tier_for_new_exports": "public",
-      "decision": "React bindings for `superdoc/ui`."
+      "classification_status": "pending-classification",
+      "decision": "React bindings for `superdoc/ui`. Eleven hooks/components exported; none yet enumerated in `symbols[]`."
     },
     {
       "path": "superdoc/headless-toolbar",
       "kind": "public-subpath",
       "tier_for_new_exports": "public",
-      "decision": "Headless toolbar controller; owns toolbar contract types."
+      "classification_status": "partially-classified",
+      "decision": "Headless toolbar controller; owns toolbar contract types. `symbols[]` covers the headline controller types; the full 16-name surface is not yet enumerated."
     },
     {
       "path": "superdoc/headless-toolbar/react",
       "kind": "public-subpath",
       "tier_for_new_exports": "public",
-      "decision": "React helper for the headless toolbar."
+      "classification_status": "pending-classification",
+      "decision": "React helper for the headless toolbar (`useHeadlessToolbar`). Not yet enumerated in `symbols[]`."
     },
     {
       "path": "superdoc/headless-toolbar/vue",
       "kind": "public-subpath",
       "tier_for_new_exports": "public",
-      "decision": "Vue helper for the headless toolbar."
+      "classification_status": "pending-classification",
+      "decision": "Vue helper for the headless toolbar (`useHeadlessToolbar`). Not yet enumerated in `symbols[]`."
     },
     {
       "path": "superdoc/style.css",
       "kind": "asset",
       "tier_for_new_exports": "public",
+      "classification_status": "asset",
       "decision": "Asset export. No type contract."
     },
     {
       "path": "superdoc/super-editor",
       "kind": "legacy-compat-subpath",
       "tier_for_new_exports": "legacy-root",
+      "classification_status": "legacy-frozen",
       "decision": "Legacy public compatibility surface per `package-boundaries.md` Decision 1. Keep compiling. No new exports added here. Migration target for new code is `superdoc`."
     },
     {
       "path": "superdoc/converter",
       "kind": "legacy-compat-subpath",
       "tier_for_new_exports": "legacy-root",
+      "classification_status": "legacy-frozen",
       "decision": "Legacy compatibility after SD-2953. Migrate to `SuperConverter` from `superdoc`."
     },
     {
       "path": "superdoc/docx-zipper",
       "kind": "legacy-compat-subpath",
       "tier_for_new_exports": "legacy-root",
+      "classification_status": "legacy-frozen",
       "decision": "Legacy compatibility after SD-2953. Migrate to `DocxZipper` from `superdoc`."
     },
     {
       "path": "superdoc/file-zipper",
       "kind": "legacy-compat-subpath",
       "tier_for_new_exports": "legacy-root",
+      "classification_status": "legacy-frozen",
       "decision": "Legacy compatibility after SD-2953. Migrate to `createZip` from `superdoc`."
     }
   ],
@@ -166,15 +201,17 @@
     ]
   },
   "audit_consumption": {
-    "summary": "The audit (`deep-type-audit.mjs`) reads `public-facade-policy.json` as the authoritative classification source. Source JSDoc tags are normalized in PR 2 but are not the contract.",
+    "summary": "The audit (`deep-type-audit.mjs`) reads `public-facade-policy.json` as the authoritative classification source. Strict gating applies only to `import_paths` whose `classification_status` is `fully-classified`. For partial paths, `symbols[]` records reviewed names but cannot drive enforcement.",
     "rationale": [
       "TSDoc release tags (`@public`, `@beta`, `@internal`) do not survive `.d.ts` emission in our current pipeline. The audit walks emitted declarations and cannot recover tags from them.",
       "Source files today carry malformed JSDoc (multi-typedef blocks, missing `replaceWith`/`removeIn` on `@deprecated`). Treating source as the authority would freeze that malformed shape into CI.",
-      "JSON is reviewable in a single PR, diffable, and exposes intent. Source annotations follow in PR 2 once the policy is the established contract."
+      "JSON is reviewable in a single PR, diffable, and exposes intent. Source annotations follow in PR 2 once the policy is the established contract.",
+      "`classification_status` keeps the audit honest about partial coverage. Marking a path `partially-classified` records intent without falsely advertising completeness; the audit treats missing symbols on those paths as out-of-scope rather than as policy gaps."
     ],
     "future_state": [
+      "Promote `superdoc/ui`, `superdoc/ui/react`, `superdoc/headless-toolbar`, `/react`, `/vue`, and `superdoc/types` from partial/pending to `fully-classified` (tracked as a follow-up; blocks SD-3046 strict gate).",
       "PR 2 normalizes source JSDoc to match the policy.",
-      "PR 3 wires `deep-type-audit.mjs` to read the policy: each tier gets a strict gate appropriate to its level (public must not collapse to `any`; legacy-root tolerated; internal must not be reachable from a public path).",
+      "PR 3 wires `deep-type-audit.mjs` to read the policy: each tier gets a strict gate appropriate to its level (public must not collapse to `any`; legacy-root tolerated; internal must not be reachable from a public path). Strict mode keys on `classification_status: fully-classified`.",
       "If API Extractor or a similar tool starts preserving TSDoc tags in emitted declarations later, the audit can prefer source tags and use the JSON only for legacy-root and internal classifications."
     ]
   },

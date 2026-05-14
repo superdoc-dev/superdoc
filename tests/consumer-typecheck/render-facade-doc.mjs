@@ -21,9 +21,12 @@ const POLICY = JSON.parse(readFileSync(POLICY_PATH, 'utf8'));
 
 const tierById = Object.fromEntries(POLICY.tiers.map((t) => [t.id, t]));
 
+const ALLOWED_KINDS = new Set(['runtime_value', 'type']);
+
 function validatePolicy() {
   const tierIds = new Set(POLICY.tiers.map((t) => t.id));
-  const seen = new Set();
+  const importPathIds = new Set(POLICY.import_paths.map((p) => p.path));
+  const statusIds = new Set((POLICY.classification_statuses || []).map((s) => s.id));
 
   for (const tier of POLICY.tiers) {
     if (tier.id === 'legacy-root' && tier.label.startsWith('@')) {
@@ -31,6 +34,22 @@ function validatePolicy() {
     }
   }
 
+  for (const ip of POLICY.import_paths) {
+    if (!tierIds.has(ip.tier_for_new_exports)) {
+      throw new Error(`Unknown tier_for_new_exports "${ip.tier_for_new_exports}" on import_path ${ip.path}`);
+    }
+    if (!ip.classification_status || !statusIds.has(ip.classification_status)) {
+      throw new Error(`Unknown classification_status "${ip.classification_status}" on import_path ${ip.path}`);
+    }
+  }
+
+  for (const m of POLICY.source_annotation_mapping || []) {
+    if (!tierIds.has(m.tier)) {
+      throw new Error(`Unknown tier "${m.tier}" in source_annotation_mapping`);
+    }
+  }
+
+  const seen = new Set();
   for (const symbol of POLICY.symbols) {
     const key = `${symbol.kind}|${symbol.import_path}|${symbol.name}`;
     if (seen.has(key)) {
@@ -38,6 +57,12 @@ function validatePolicy() {
     }
     seen.add(key);
 
+    if (!ALLOWED_KINDS.has(symbol.kind)) {
+      throw new Error(`Unknown kind "${symbol.kind}" for ${key}; expected one of ${[...ALLOWED_KINDS].join(', ')}`);
+    }
+    if (!importPathIds.has(symbol.import_path)) {
+      throw new Error(`Unknown import_path "${symbol.import_path}" for ${key}`);
+    }
     if (!tierIds.has(symbol.tier)) {
       throw new Error(`Unknown tier "${symbol.tier}" for ${key}`);
     }
@@ -66,20 +91,13 @@ function symbolsBy(kind, tiers) {
 function groupedSymbols(symbols) {
   const groups = new Map();
   for (const symbol of symbols) {
-    const key = [
-      symbol.group,
-      symbol.tier,
-      symbol.import_path,
-      symbol.migration_target || '',
-      symbol.evidence || '',
-    ].join('\0');
+    const key = [symbol.group, symbol.tier, symbol.import_path].join('\0');
     if (!groups.has(key)) {
       groups.set(key, {
         group: symbol.group,
         tier: symbol.tier,
         import_path: symbol.import_path,
         migration_target: symbol.migration_target,
-        evidence: symbol.evidence,
         members: [],
       });
     }
@@ -179,51 +197,77 @@ function renderSourceAnnotationMapping() {
   );
 }
 
+function renderClassificationStatuses() {
+  const statuses = POLICY.classification_statuses || [];
+  if (statuses.length === 0) return '';
+  const rows = statuses.map((s) => [s.id, s.summary]);
+  return section(
+    'Classification status',
+    [
+      'Each `import_paths[]` entry carries a `classification_status` that bounds how the audit may use `symbols[]`.',
+      '',
+      table(['Status', 'Meaning'], rows),
+    ].join('\n'),
+  );
+}
+
 function renderImportPaths() {
   const rows = POLICY.import_paths.map((p) => [
     `\`${p.path}\``,
     p.kind,
     tierLabel(p.tier_for_new_exports),
+    p.classification_status || '',
     p.decision,
   ]);
   return section(
     'Import Path Policy',
     [
-      table(['Import path', 'Kind', 'Tier for new exports', 'Decision'], rows),
+      table(['Import path', 'Kind', 'Tier for new exports', 'Classification status', 'Decision'], rows),
       '',
       'No other `superdoc/*` subpath should be added without updating `public-facade-policy.json`, `package.json` exports, the export-coverage audit, and the consumer matrix in the same PR.',
     ].join('\n'),
   );
 }
 
+function uniqueRemovalPostures(members) {
+  const set = new Set();
+  for (const m of members) if (m.removal_posture) set.add(m.removal_posture);
+  return [...set].join('; ');
+}
+
+function buildSupportedRow(g) {
+  const names = joinNames(g.members);
+  const notes = memberNotes(g.members) || '';
+  return [g.group, names, `Imported from \`${g.import_path}\`. ${notes}`.trim()];
+}
+
+function buildOtherRow(g) {
+  const names = joinNames(g.members);
+  const migrationOrEvidence = g.migration_target
+    ? `Migration target: ${g.migration_target}`
+    : (g.members[0]?.evidence || '');
+  const notes = memberNotes(g.members) || '';
+  const removal = uniqueRemovalPostures(g.members);
+  const trailing = [notes, removal && `Removal: ${removal}`].filter(Boolean).join(' ');
+  const cell = trailing ? `${migrationOrEvidence} ${trailing}`.trim() : migrationOrEvidence;
+  return [g.group, tierLabel(g.tier), names, cell];
+}
+
 function renderRuntimeValues() {
   const supported = groupedSymbols(symbolsBy('runtime_value', ['public', 'beta']));
   const other = groupedSymbols(symbolsBy('runtime_value', ['legacy-root', 'internal']));
 
-  const supportedRows = supported.map((g) => {
-    const names = joinNames(g.members);
-    const notes = memberNotes(g.members) || '';
-    return [g.group, names, `Imported from \`${g.import_path}\`. ${notes}`.trim()];
-  });
-
-  const otherRows = other.map((g) => [
-    g.group,
-    tierLabel(g.tier),
-    joinNames(g.members),
-    g.migration_target ? `Migration target: ${g.migration_target}` : (g.evidence || ''),
-  ]);
-
   return [
     section(
       'Supported runtime values',
-      table(['Group', 'Names', 'Notes'], supportedRows),
+      table(['Group', 'Names', 'Notes'], supported.map(buildSupportedRow)),
     ),
     section(
       'Legacy and internal runtime values',
       [
         'These currently appear or are reachable but are not part of the supported contract.',
         '',
-        table(['Group', 'Tier', 'Names', 'Migration / evidence'], otherRows),
+        table(['Group', 'Tier', 'Names', 'Migration / evidence / removal'], other.map(buildOtherRow)),
       ].join('\n'),
     ),
   ].join('\n');
@@ -233,26 +277,13 @@ function renderTypes() {
   const supported = groupedSymbols(symbolsBy('type', ['public', 'beta']));
   const other = groupedSymbols(symbolsBy('type', ['legacy-root', 'internal']));
 
-  const supportedRows = supported.map((g) => {
-    const names = joinNames(g.members);
-    const notes = memberNotes(g.members) || '';
-    return [g.group, names, `Imported from \`${g.import_path}\`. ${notes}`.trim()];
-  });
-
-  const otherRows = other.map((g) => [
-    g.group,
-    tierLabel(g.tier),
-    joinNames(g.members),
-    g.migration_target ? `Migration target: ${g.migration_target}` : (g.evidence || ''),
-  ]);
-
   return [
     section(
       'Public type groups',
       [
         'Public types are named from the customer workflow they support, not from the internal package that happens to define them.',
         '',
-        table(['Group', 'Names', 'Notes'], supportedRows),
+        table(['Group', 'Names', 'Notes'], supported.map(buildSupportedRow)),
       ].join('\n'),
     ),
     section(
@@ -260,7 +291,7 @@ function renderTypes() {
       [
         'Exported for compatibility or reachable as implementation detail. Not part of the supported contract.',
         '',
-        table(['Group', 'Tier', 'Names', 'Migration / evidence'], otherRows),
+        table(['Group', 'Tier', 'Names', 'Migration / evidence / removal'], other.map(buildOtherRow)),
       ].join('\n'),
     ),
   ].join('\n');
@@ -271,22 +302,23 @@ function renderSymbolPolicy() {
     const migrationOrEvidence = s.migration_target
       ? `Migration target: ${s.migration_target}`
       : (s.evidence || '');
+    const removal = s.removal_posture ? ` Removal: ${s.removal_posture.replace(/\.$/, '')}.` : '';
     return [
       `\`${s.name}\``,
       s.kind,
       s.group,
       tierLabel(s.tier),
       `\`${s.import_path}\``,
-      migrationOrEvidence,
+      `${migrationOrEvidence}${removal}`.trim(),
     ];
   });
 
   return section(
     'Symbol policy',
     [
-      'This flat list is the machine-readable contract the audit will consume. Grouped sections above are for review ergonomics.',
+      'This flat list is the machine-readable record reviewed in this PR. **Strict audit may consume `symbols[]` only for `import_paths` whose `classification_status` is `fully-classified`.** For partial paths, the table records reviewed symbols and known direction; it cannot drive strict gating until the path is promoted. Grouped sections above are for review ergonomics.',
       '',
-      table(['Symbol', 'Kind', 'Group', 'Tier', 'Import path', 'Migration / evidence'], rows),
+      table(['Symbol', 'Kind', 'Group', 'Tier', 'Import path', 'Migration / evidence / removal'], rows),
     ].join('\n'),
   );
 }
@@ -409,6 +441,7 @@ function render() {
     renderNonGoals(),
     renderTiers(),
     renderSourceAnnotationMapping(),
+    renderClassificationStatuses(),
     renderImportPaths(),
     renderRuntimeValues(),
     renderTypes(),

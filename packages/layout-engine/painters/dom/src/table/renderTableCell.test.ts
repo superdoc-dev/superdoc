@@ -4250,6 +4250,113 @@ describe('renderTableCell', () => {
       expect(cellElement.querySelector('.superdoc-structured-content__label')?.textContent).toBe('Descendant');
     });
 
+    it('should keep overflow hidden when descendant SDT chrome is outside the rendered nested table range', () => {
+      const descendantSdt: SdtMetadata = {
+        type: 'structuredContent',
+        scope: 'block',
+        id: 'unrendered-descendant-sdt',
+        alias: 'Unrendered',
+      };
+      const firstParagraph: ParagraphBlock = {
+        kind: 'paragraph',
+        id: 'visible-nested-para',
+        runs: [{ text: 'Visible', fontFamily: 'Arial', fontSize: 16 }],
+        attrs: {},
+      };
+      const secondParagraph: ParagraphBlock = {
+        kind: 'paragraph',
+        id: 'unrendered-nested-sdt-para',
+        runs: [{ text: 'Hidden', fontFamily: 'Arial', fontSize: 16 }],
+        attrs: { sdt: descendantSdt },
+      };
+      const nestedTable: TableBlock = {
+        kind: 'table',
+        id: 'partial-nested-table-with-unrendered-sdt',
+        rows: [
+          {
+            id: 'visible-nested-row',
+            cells: [{ id: 'visible-nested-cell', blocks: [firstParagraph], attrs: {} }],
+          },
+          {
+            id: 'unrendered-nested-row',
+            cells: [{ id: 'unrendered-nested-cell', blocks: [secondParagraph], attrs: {} }],
+          },
+        ],
+      };
+      const paragraphMeasure: ParagraphMeasure = {
+        kind: 'paragraph',
+        lines: [
+          {
+            fromRun: 0,
+            fromChar: 0,
+            toRun: 0,
+            toChar: 7,
+            width: 60,
+            ascent: 12,
+            descent: 4,
+            lineHeight: 20,
+          },
+        ],
+        totalHeight: 20,
+      };
+      const nestedMeasure: TableMeasure = {
+        kind: 'table',
+        rows: [
+          {
+            height: 20,
+            cells: [
+              {
+                width: 80,
+                height: 20,
+                gridColumnStart: 0,
+                colSpan: 1,
+                rowSpan: 1,
+                blocks: [paragraphMeasure],
+              },
+            ],
+          },
+          {
+            height: 20,
+            cells: [
+              {
+                width: 80,
+                height: 20,
+                gridColumnStart: 0,
+                colSpan: 1,
+                rowSpan: 1,
+                blocks: [paragraphMeasure],
+              },
+            ],
+          },
+        ],
+        columnWidths: [80],
+        totalWidth: 80,
+        totalHeight: 40,
+      };
+
+      const { cellElement } = renderTableCell({
+        ...createBaseDeps(),
+        cellMeasure: {
+          blocks: [nestedMeasure],
+          width: 120,
+          height: 20,
+          gridColumnStart: 0,
+          colSpan: 1,
+          rowSpan: 1,
+        },
+        cell: {
+          id: 'cell-partial-nested-unrendered-sdt',
+          blocks: [nestedTable],
+          attrs: {},
+        },
+        fromLine: 0,
+        toLine: 1,
+      });
+
+      expect(cellElement.style.overflow).toBe('hidden');
+      expect(cellElement.querySelector('.superdoc-structured-content__label')).toBeFalsy();
+    });
+
     it('should continue SDT boundaries across adjacent paragraph and nested table blocks', () => {
       const sharedSdt: SdtMetadata = {
         type: 'structuredContent',

@@ -10,7 +10,7 @@
     "react": "^19.2.1",
     "react-dom": "^19.2.1",
     "superdoc": "latest",
-    "y-websocket": "^2.0.4",
+    "y-websocket": "2.1.0",
     "yjs": "13.6.19"
   },
   "devDependencies": {

@@ -25,6 +25,12 @@ pnpm run dev          # YHub on ws://127.0.0.1:8081/v1/collaboration
 
 Requires Docker and Node.js 22+. See that directory's README for details.
 
+**Postgres port conflict.** The bundled `docker-compose.yml` maps Postgres to `5432`. If that's already in use locally (other dev databases, system Postgres), edit the compose file to use another port and override the server's connection string:
+
+```bash
+POSTGRES_URL=postgres://postgres:postgres@127.0.0.1:5436/yhub pnpm run dev
+```
+
 ### 2. Start the SuperDoc client
 
 ```bash
@@ -33,6 +39,12 @@ npm run dev
 ```
 
 Open http://localhost:3000 in two browser tabs to see real-time collaboration.
+
+**Vite port conflict.** If `3000` is in use, pass `--port`:
+
+```bash
+npm run dev -- --port 3001
+```
 
 ## Configuration
 

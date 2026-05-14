@@ -28,7 +28,7 @@ export default function App() {
         modules: {
           collaboration: { ydoc, provider },
         },
-        onAwarenessUpdate: ({ states }: any) => setUsers(states.filter((s: any) => s.user)),
+        onAwarenessUpdate: ({ states }: any) => setUsers(states),
       });
     };
 
@@ -47,8 +47,8 @@ export default function App() {
         <h1>SuperDoc + YHub</h1>
         <div className="users">
           {users.map((u, i) => (
-            <span key={i} className="user" style={{ background: u.user?.color || '#666' }}>
-              {u.user?.name}
+            <span key={u.clientId ?? i} className="user" style={{ background: u.color || '#666' }}>
+              {u.name}
             </span>
           ))}
         </div>

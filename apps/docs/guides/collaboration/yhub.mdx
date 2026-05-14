@@ -24,6 +24,8 @@ For most teams without those requirements, [Hocuspocus](/guides/collaboration/ho
 
 YHub speaks the standard y-websocket protocol, so the SuperDoc client uses `WebsocketProvider` from `y-websocket`. No YHub-specific provider class is needed.
 
+The snippet below connects to the bundled local SuperDoc example server. Production YHub deployments may use a different URL and auth parameter shape (for example, yauth JWT params and `/ws/{org}/{docid}` style paths). Check your deployment's docs.
+
 ```bash
 npm install yjs y-websocket
 ```
@@ -59,7 +61,7 @@ provider.on("sync", (isSynced) => {
 });
 ```
 
-The `params.token` is the shared secret the server validates; `params.userId` is the identifier YHub records on each update for attribution.
+For the bundled local server, `params.token` is the shared secret and `params.userId` is the identifier recorded for attribution. In production, use the auth flow configured for your YHub deployment.
 
 ## Server
 

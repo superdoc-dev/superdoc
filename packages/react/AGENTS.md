@@ -99,3 +99,9 @@ Other props like `documentMode` and callbacks are handled without rebuild.
 pnpm --filter @superdoc-dev/react build
 pnpm --filter @superdoc-dev/react test
 ```
+
+## Testing the audit (do not merge)
+
+See `packages/nonexistent/foo.ts` for the bridge layer.
+
+@./does-not-exist.md

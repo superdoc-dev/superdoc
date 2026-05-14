@@ -125,7 +125,7 @@ import {
   stampBetweenBorderDataset,
   type BetweenBorderInfo,
 } from './features/paragraph-borders/index.js';
-import { applyRtlStyles, shouldUseSegmentPositioning } from './features/rtl-paragraph/index.js';
+import { applyRtlStyles, shouldUseSegmentPositioning } from './features/inline-direction/index.js';
 import { convertOmmlToMathml } from './features/math/index.js';
 
 /**

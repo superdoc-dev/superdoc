@@ -7,7 +7,7 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, relative, resolve } from 'node:path';
 import { computeFlags, pairFlaggedForReview, runL1Scan } from './agent-docs-l1.mjs';
@@ -17,7 +17,17 @@ const PR = process.env.PR_NUMBER;
 const REPO = process.env.REPO ?? 'superdoc-dev/superdoc';
 const REPO_ROOT = resolve(process.env.REPO_ROOT ?? process.cwd());
 const SHA = process.env.GITHUB_SHA ?? 'unknown-sha';
+const GATE_RESULT_PATH = process.env.GATE_RESULT_PATH || '/tmp/agent-docs-gate.json';
 const DRY_RUN = process.argv.includes('--dry-run');
+
+function readGateResult() {
+  try {
+    if (!existsSync(GATE_RESULT_PATH)) return null;
+    return JSON.parse(readFileSync(GATE_RESULT_PATH, 'utf-8'));
+  } catch {
+    return null;
+  }
+}
 
 if (!PR && !DRY_RUN) {
   console.log('PR_NUMBER not set; not in a PR context. Skipping.');
@@ -123,14 +133,26 @@ function formatPairFinding(finding) {
   ].join('\n');
 }
 
+function formatGateFinding(f) {
+  if (f.type === 'broken-import') return `broken \`@import\` in \`${f.relPath}\`: \`${f.importPath}\``;
+  if (f.type === 'broken-symlink') return `broken symlink \`${f.relPath}\` -> \`${f.target}\``;
+  if (f.type === 'pair') return `pair drift in \`${f.dir}\`: ${f.classification} (${f.detail})`;
+  if (f.type === 'pair-to-single') return `pair-to-single regression in \`${f.dir}\` (was ${f.wasClassification}): ${f.detail}`;
+  return JSON.stringify(f);
+}
+
 function buildFindingsBody(findings) {
-  const lines = [
-    MARKER,
-    '## Agent docs audit',
-    '',
-    `Found deterministic findings on ${findings.length} changed agent-doc item(s).`,
-    '',
-  ];
+  const gate = readGateResult();
+  const lines = [MARKER, '## Agent docs audit', ''];
+  if (gate?.blocking) {
+    lines.push(
+      `**Blocking**: this PR introduces ${gate.newFindings.length} new high-confidence finding(s). CI will fail until resolved.`,
+    );
+    for (const f of gate.newFindings) lines.push(`- ${formatGateFinding(f)}`);
+    lines.push('');
+  }
+  lines.push(`Found deterministic findings on ${findings.length} changed agent-doc item(s).`);
+  lines.push('');
 
   for (const finding of findings) {
     lines.push(finding.type === 'pair' ? formatPairFinding(finding) : formatFileFinding(finding));
@@ -143,15 +165,20 @@ function buildFindingsBody(findings) {
 }
 
 function buildResolvedBody(changed) {
+  const gate = readGateResult();
+  const lines = [MARKER, '## Agent docs audit', ''];
+  if (gate?.blocking) {
+    lines.push(
+      `**Blocking**: this PR introduces ${gate.newFindings.length} new high-confidence finding(s). CI will fail until resolved.`,
+    );
+    for (const f of gate.newFindings) lines.push(`- ${formatGateFinding(f)}`);
+    lines.push('');
+  }
+  lines.push(`All changed agent-doc files are clean (in-file checks) as of \`${SHA.slice(0, 12)}\`.`);
+  lines.push('');
   const files = changed.map((path) => `\`${path}\``).join(', ');
-  return [
-    MARKER,
-    '## Agent docs audit',
-    '',
-    `All changed agent-doc files are clean as of \`${SHA.slice(0, 12)}\`.`,
-    '',
-    files ? `Checked: ${files}` : 'No changed agent-doc files detected.',
-  ].join('\n');
+  lines.push(files ? `Checked: ${files}` : 'No changed agent-doc files detected.');
+  return lines.join('\n');
 }
 
 function getExistingCommentId() {
@@ -207,10 +234,10 @@ if (DRY_RUN) {
   process.exit(0);
 }
 
-if (findings.length === 0) {
+if (findings.length === 0 && !readGateResult()?.blocking) {
   const existing = getExistingCommentId();
   if (!existing) {
-    console.log('No L1 findings and no previous sticky comment. Skipping comment.');
+    console.log('No L1 findings, gate not blocking, and no previous sticky comment. Skipping comment.');
     process.exit(0);
   }
 }

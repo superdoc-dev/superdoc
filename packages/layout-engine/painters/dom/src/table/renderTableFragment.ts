@@ -218,6 +218,9 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
     ancestorContainerSdt,
   });
   const tableContainerSdt = getSdtContainerMetadata(block.attrs?.sdt, block.attrs?.containerSdt);
+  const tableContainerKey = getSdtContainerKey(block.attrs?.sdt, block.attrs?.containerSdt);
+  const rowAncestorContainerKey = tableContainerSdt ? tableContainerKey : ancestorContainerKey;
+  const rowAncestorContainerSdt = tableContainerSdt ?? ancestorContainerSdt;
 
   // Add table-specific class for resize overlay targeting and click mapping
   container.classList.add(DOM_CLASS_NAMES.TABLE_FRAGMENT);
@@ -400,8 +403,8 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
         captureLineSnapshot,
         renderDrawingContent,
         applySdtDataset,
-        ancestorTableSdtKey: getSdtContainerKey(block.attrs?.sdt, block.attrs?.containerSdt),
-        ancestorTableSdt: tableContainerSdt,
+        ancestorTableSdtKey: rowAncestorContainerKey,
+        ancestorTableSdt: rowAncestorContainerSdt,
         // Headers are always rendered as-is (no border suppression)
         continuesFromPrev: false,
         continuesOnNext: false,
@@ -563,8 +566,8 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
       captureLineSnapshot,
       renderDrawingContent,
       applySdtDataset,
-      ancestorTableSdtKey: getSdtContainerKey(block.attrs?.sdt, block.attrs?.containerSdt),
-      ancestorTableSdt: tableContainerSdt,
+      ancestorTableSdtKey: rowAncestorContainerKey,
+      ancestorTableSdt: rowAncestorContainerSdt,
       // Draw top border if table continues from previous fragment (MS Word behavior)
       continuesFromPrev: isFirstRenderedBodyRow && fragment.continuesFromPrev === true,
       // Draw bottom border if table continues on next fragment (MS Word behavior)

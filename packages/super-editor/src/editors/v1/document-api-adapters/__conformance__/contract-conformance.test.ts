@@ -627,6 +627,7 @@ function makeTextEditor(
     addMark: vi.fn(),
     removeMark: vi.fn(),
     replaceWith: vi.fn(),
+    setNodeAttribute: vi.fn().mockReturnThis(),
     insert: vi.fn(),
     setMeta: vi.fn(),
     mapping: { map: (pos: number) => pos },
@@ -1294,6 +1295,7 @@ function makeTableEditor(
     delete: vi.fn().mockReturnThis(),
     setNodeMarkup: vi.fn().mockReturnThis(),
     replaceWith: vi.fn().mockReturnThis(),
+    setNodeAttribute: vi.fn().mockReturnThis(),
     insert: vi.fn().mockReturnThis(),
     setMeta: vi.fn().mockReturnThis(),
     mapping: {
@@ -1638,15 +1640,26 @@ const NON_RECEIPT_MUTATION_OPS: ReadonlySet<OperationId> = new Set([
 ] as OperationId[]);
 
 /**
- * Content-control operations whose handlers always return `true` because they
- * build and dispatch their own ProseMirror transaction directly (via
- * `editor.view!.dispatch(tr)`) rather than delegating to an editor command whose
- * boolean result propagates to the domain-command executor.
+ * Content-control operations excluded from the structured-failure conformance
+ * check because they have no synthetic-failure path that
+ * `makeNoOpSdtEditor` can simulate.
  *
- * Because the handler always returns `true`, the `domain.command` executor marks
- * the step effect as `'changed'` and `executeSdtMutation` returns success.
- * There is no code path that produces the `NO_OP` structured failure for these
- * operations, so they are excluded from the failureCase conformance check.
+ * The originals (wrap, unwrap, copy, move, insertBefore, insertAfter, group
+ * wrap/ungroup, repeatingSection insertItem/cloneItem/deleteItem) build and
+ * dispatch their own PM transaction directly via `editor.view!.dispatch(tr)`
+ * rather than delegating to an editor command whose boolean result propagates
+ * back through the executor. The SD-3123 additions (patch, setLockMode,
+ * setType, setBinding, clearBinding, patchRawProperties, text.setMultiline,
+ * the date family, the checkbox family, the choiceList family, and
+ * repeatingSection.setAllowInsertDelete) no longer route through
+ * `editor.commands.updateStructuredContentById`; the synthetic
+ * `updateStructuredContentById = vi.fn(() => false)` mock that previously
+ * drove the failure case has no effect on the AttrStep / inner-range write
+ * path.
+ *
+ * In both groups, the operations can still fail in production (missing target,
+ * lock violation, schema invalidation in PM dispatch). They just don't have a
+ * clean synthetic failure mode reachable from the mock editor.
  */
 const CC_DIRECT_DISPATCH_OPS: ReadonlySet<OperationId> = new Set([
   'contentControls.wrap',
@@ -1661,6 +1674,28 @@ const CC_DIRECT_DISPATCH_OPS: ReadonlySet<OperationId> = new Set([
   'contentControls.repeatingSection.insertItemAfter',
   'contentControls.repeatingSection.cloneItem',
   'contentControls.repeatingSection.deleteItem',
+  // SD-3123: synthetic noop-mock failure (updateStructuredContentById=false)
+  // no longer applies — these now write via tr.setNodeAttribute (metadata)
+  // or tr.replaceWith on the SDT inner range (content).
+  'contentControls.patch',
+  'contentControls.patchRawProperties',
+  'contentControls.setLockMode',
+  'contentControls.setType',
+  'contentControls.setBinding',
+  'contentControls.clearBinding',
+  'contentControls.text.setMultiline',
+  'contentControls.date.setValue',
+  'contentControls.date.clearValue',
+  'contentControls.date.setDisplayFormat',
+  'contentControls.date.setDisplayLocale',
+  'contentControls.date.setStorageFormat',
+  'contentControls.date.setCalendar',
+  'contentControls.checkbox.setState',
+  'contentControls.checkbox.toggle',
+  'contentControls.checkbox.setSymbolPair',
+  'contentControls.choiceList.setItems',
+  'contentControls.choiceList.setSelected',
+  'contentControls.repeatingSection.setAllowInsertDelete',
 ] as OperationId[]);
 
 const HAS_STRUCTURED_FAILURE_RESULT = (operationId: OperationId): boolean =>
@@ -2367,6 +2402,7 @@ function makeTocEditor(commandOverrides: Record<string, unknown> = {}): Editor {
     insert: vi.fn().mockReturnThis(),
     setNodeMarkup: vi.fn().mockReturnThis(),
     replaceWith: vi.fn().mockReturnThis(),
+    setNodeAttribute: vi.fn().mockReturnThis(),
     setMeta: vi.fn().mockReturnThis(),
     mapping: { map: (pos: number) => pos },
     docChanged: true,
@@ -2439,6 +2475,7 @@ function makeImageEditor(): Editor {
     insert: vi.fn().mockReturnThis(),
     setNodeMarkup: vi.fn().mockReturnThis(),
     replaceWith: vi.fn().mockReturnThis(),
+    setNodeAttribute: vi.fn().mockReturnThis(),
     setMeta: vi.fn().mockReturnThis(),
     mapping: { map: (pos: number) => pos },
     docChanged: true,
@@ -2513,6 +2550,7 @@ function makeMultiBlockImageEditor(): Editor {
     insert: vi.fn().mockReturnThis(),
     setNodeMarkup: vi.fn().mockReturnThis(),
     replaceWith: vi.fn().mockReturnThis(),
+    setNodeAttribute: vi.fn().mockReturnThis(),
     setMeta: vi.fn().mockReturnThis(),
     mapping: { map: (pos: number) => pos },
     docChanged: true,
@@ -2675,6 +2713,7 @@ function makeSdtEditor(overrideAttrs: Record<string, unknown> = {}, textContent 
     addMark: vi.fn().mockReturnThis(),
     removeMark: vi.fn().mockReturnThis(),
     replaceWith: vi.fn().mockReturnThis(),
+    setNodeAttribute: vi.fn().mockReturnThis(),
     insert: vi.fn().mockReturnThis(),
     setMeta: vi.fn().mockReturnThis(),
     mapping: { map: (pos: number) => pos },
@@ -2769,6 +2808,7 @@ function makeSdtEditorWithRepeatingSectionItems(): Editor {
     addMark: vi.fn().mockReturnThis(),
     removeMark: vi.fn().mockReturnThis(),
     replaceWith: vi.fn().mockReturnThis(),
+    setNodeAttribute: vi.fn().mockReturnThis(),
     insert: vi.fn().mockReturnThis(),
     setMeta: vi.fn().mockReturnThis(),
     mapping: { map: (pos: number) => pos },
@@ -2888,6 +2928,7 @@ function makeCaptionImageEditor(
     insert: vi.fn().mockReturnThis(),
     delete: vi.fn().mockReturnThis(),
     replaceWith: vi.fn().mockReturnThis(),
+    setNodeAttribute: vi.fn().mockReturnThis(),
     setNodeMarkup: vi.fn().mockReturnThis(),
     setMeta: vi.fn().mockReturnThis(),
     mapping: { map: (pos: number) => pos },
@@ -2953,6 +2994,7 @@ function makeRefEditor(
     addMark: vi.fn().mockReturnThis(),
     removeMark: vi.fn().mockReturnThis(),
     replaceWith: vi.fn().mockReturnThis(),
+    setNodeAttribute: vi.fn().mockReturnThis(),
     insert: vi.fn().mockReturnThis(),
     setMeta: vi.fn().mockReturnThis(),
     setNodeMarkup: vi.fn().mockReturnThis(),
@@ -11984,6 +12026,7 @@ describe('document-api adapter conformance', () => {
         insert: vi.fn().mockReturnThis(),
         setNodeMarkup: vi.fn().mockReturnThis(),
         replaceWith: vi.fn().mockReturnThis(),
+        setNodeAttribute: vi.fn().mockReturnThis(),
         setMeta: vi.fn().mockReturnThis(),
         mapping: { map: (pos: number) => pos },
         docChanged: true,

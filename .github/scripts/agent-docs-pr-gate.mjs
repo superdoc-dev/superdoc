@@ -127,30 +127,53 @@ console.log(`Changed agent-doc files: ${changed.join(', ')}`);
 const headScan = runL1Scan(REPO_ROOT);
 const headFindings = highConfidenceFindings(headScan);
 
-let baseFindings = [];
+let baseScan = null;
 let baseDir = null;
 try {
   if (DRY_RUN) {
     const baseFromFlag = process.argv.indexOf('--base-root');
     if (baseFromFlag >= 0 && process.argv[baseFromFlag + 1]) {
-      baseFindings = highConfidenceFindings(runL1Scan(resolve(process.argv[baseFromFlag + 1])));
+      baseScan = runL1Scan(resolve(process.argv[baseFromFlag + 1]));
     }
   } else {
     baseDir = prepareBaseSnapshot();
-    baseFindings = highConfidenceFindings(runL1Scan(baseDir));
+    baseScan = runL1Scan(baseDir);
   }
 } finally {
   if (baseDir) cleanupBaseSnapshot(baseDir);
 }
 
+const baseFindings = baseScan ? highConfidenceFindings(baseScan) : [];
 const baseIds = new Set(baseFindings.map((f) => f.id));
 const newFindings = headFindings.filter((f) => !baseIds.has(f.id));
+
+// Pair-to-single regression: base had a paired classification (linked,
+// linked-inverted, unexpected-duplicate, intentional-different), head has
+// 'single' in the same dir. Bare 'single' is legitimate for fresh packages,
+// so this is meaningful only as a delta.
+if (baseScan) {
+  const baseDirHadPair = new Map();
+  for (const pair of baseScan.pairs) {
+    if (pair.classification !== 'single') baseDirHadPair.set(pair.dir, pair.classification);
+  }
+  for (const pair of headScan.pairs) {
+    if (pair.classification !== 'single') continue;
+    if (!baseDirHadPair.has(pair.dir)) continue;
+    newFindings.push({
+      type: 'pair-to-single',
+      dir: pair.dir,
+      detail: pair.detail,
+      wasClassification: baseDirHadPair.get(pair.dir),
+      id: `pair-to-single:${pair.dir}`,
+    });
+  }
+}
 
 const changedSet = new Set(changed);
 const dirSet = changedPairDirs(changed);
 
 const scoped = newFindings.filter((f) => {
-  if (f.type === 'pair') return dirSet.has(f.dir);
+  if (f.type === 'pair' || f.type === 'pair-to-single') return dirSet.has(f.dir);
   return changedSet.has(f.relPath);
 });
 
@@ -161,8 +184,9 @@ if (result.blocking) {
   console.log('\nBlocking — new high-confidence findings introduced by this PR:');
   for (const f of scoped) {
     if (f.type === 'broken-import') console.log(`  - broken @import in ${f.relPath}: ${f.importPath}`);
-    else if (f.type === 'broken-symlink') console.log(`  - broken symlink ${f.relPath} → ${f.target}`);
+    else if (f.type === 'broken-symlink') console.log(`  - broken symlink ${f.relPath} -> ${f.target}`);
     else if (f.type === 'pair') console.log(`  - pair ${f.dir} ${f.classification}: ${f.detail}`);
+    else if (f.type === 'pair-to-single') console.log(`  - pair-to-single in ${f.dir} (was ${f.wasClassification}): ${f.detail}`);
   }
   console.log(`\nWrote ${RESULT_PATH}`);
   process.exit(1);

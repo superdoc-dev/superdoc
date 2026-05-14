@@ -133,6 +133,14 @@ function formatPairFinding(finding) {
   ].join('\n');
 }
 
+function formatGateFinding(f) {
+  if (f.type === 'broken-import') return `broken \`@import\` in \`${f.relPath}\`: \`${f.importPath}\``;
+  if (f.type === 'broken-symlink') return `broken symlink \`${f.relPath}\` -> \`${f.target}\``;
+  if (f.type === 'pair') return `pair drift in \`${f.dir}\`: ${f.classification} (${f.detail})`;
+  if (f.type === 'pair-to-single') return `pair-to-single regression in \`${f.dir}\` (was ${f.wasClassification}): ${f.detail}`;
+  return JSON.stringify(f);
+}
+
 function buildFindingsBody(findings) {
   const gate = readGateResult();
   const lines = [MARKER, '## Agent docs audit', ''];
@@ -140,6 +148,7 @@ function buildFindingsBody(findings) {
     lines.push(
       `**Blocking**: this PR introduces ${gate.newFindings.length} new high-confidence finding(s). CI will fail until resolved.`,
     );
+    for (const f of gate.newFindings) lines.push(`- ${formatGateFinding(f)}`);
     lines.push('');
   }
   lines.push(`Found deterministic findings on ${findings.length} changed agent-doc item(s).`);
@@ -156,15 +165,20 @@ function buildFindingsBody(findings) {
 }
 
 function buildResolvedBody(changed) {
+  const gate = readGateResult();
+  const lines = [MARKER, '## Agent docs audit', ''];
+  if (gate?.blocking) {
+    lines.push(
+      `**Blocking**: this PR introduces ${gate.newFindings.length} new high-confidence finding(s). CI will fail until resolved.`,
+    );
+    for (const f of gate.newFindings) lines.push(`- ${formatGateFinding(f)}`);
+    lines.push('');
+  }
+  lines.push(`All changed agent-doc files are clean (in-file checks) as of \`${SHA.slice(0, 12)}\`.`);
+  lines.push('');
   const files = changed.map((path) => `\`${path}\``).join(', ');
-  return [
-    MARKER,
-    '## Agent docs audit',
-    '',
-    `All changed agent-doc files are clean as of \`${SHA.slice(0, 12)}\`.`,
-    '',
-    files ? `Checked: ${files}` : 'No changed agent-doc files detected.',
-  ].join('\n');
+  lines.push(files ? `Checked: ${files}` : 'No changed agent-doc files detected.');
+  return lines.join('\n');
 }
 
 function getExistingCommentId() {
@@ -220,10 +234,10 @@ if (DRY_RUN) {
   process.exit(0);
 }
 
-if (findings.length === 0) {
+if (findings.length === 0 && !readGateResult()?.blocking) {
   const existing = getExistingCommentId();
   if (!existing) {
-    console.log('No L1 findings and no previous sticky comment. Skipping comment.');
+    console.log('No L1 findings, gate not blocking, and no previous sticky comment. Skipping comment.');
     process.exit(0);
   }
 }

@@ -113,6 +113,15 @@ export interface SuperDocEditorLike {
       decide?(input: unknown, options?: unknown): unknown;
     };
     /**
+     * Content-controls (SDT) member on the Document API. Used by
+     * `ui.contentControls.*` for the snapshot list. List signature is
+     * loose to mirror comments / trackChanges; the controller asserts
+     * the concrete `ContentControlsListResult` shape after calling.
+     */
+    contentControls?: {
+      list?(query?: unknown): unknown;
+    };
+    /**
      * Insert content at a positional target. Surfaces the typed
      * doc-API signature so custom commands can call
      * `editor.doc.insert(...)` without a structural cast. The control
@@ -246,6 +255,13 @@ export interface SuperDocUIState {
    * slice; refreshes on tracked-change events.
    */
   trackChanges: TrackChangesSlice;
+  /**
+   * Content-controls slice (SD-3157). Same cache + refresh posture as
+   * `comments` and `trackChanges`: items source from
+   * `editor.doc.contentControls.list()`, cached and refreshed on
+   * document transactions; `activeIds` derives from the selection.
+   */
+  contentControls: ContentControlsSlice;
 }
 
 /**
@@ -371,6 +387,84 @@ export interface SelectionSlice {
  * that contract see no shape mismatch. `activeIds` is a denormalized
  * convenience driven by `selection.current().activeCommentIds`.
  */
+/**
+ * Content-controls slice exposed on `state.contentControls`.
+ *
+ * Items source from `editor.doc.contentControls.list()` and are
+ * cached at the controller level — the list refreshes on document
+ * transactions, not on every selection update, so typing through
+ * unrelated content doesn't churn the slice.
+ *
+ * `activeIds` and `activeId` track which content controls contain
+ * the caret / selection anchor. Nested SDTs are real (a block SDT
+ * can wrap an inline SDT), so we expose the chain rather than
+ * picking one — consumers can switch on `activeIds[0]` for the
+ * tightest match or walk the chain for context-aware UI.
+ */
+export interface ContentControlsSlice {
+  /** Total count from the list result (before pagination, if any). */
+  total: number;
+  /** Items from `editor.doc.contentControls.list()`. Empty array on error or no editor. */
+  items: import('@superdoc/document-api').ContentControlsListResult['items'];
+  /**
+   * Content control ids whose painted wrapper contains the current
+   * selection anchor, innermost first. A caret inside an inline SDT
+   * nested in a block SDT surfaces both ids with the inline-SDT id
+   * first. Empty array when the cursor is not inside any SDT.
+   */
+  activeIds: string[];
+  /**
+   * Convenience for the common case of "what is the tightest active
+   * content control?". Always equal to `activeIds[0] ?? null`.
+   * Derived, not a separate source of truth — use `activeIds` when
+   * the chain matters.
+   */
+  activeId: string | null;
+}
+
+/**
+ * Content-controls domain handle exposed on `ui.contentControls`.
+ * Read / observe / look-up only — there are no mutation methods in
+ * v1. Consumers run all mutations through `editor.doc.contentControls.*`
+ * directly, matching the architectural rule that this handle is a UI
+ * surface, not a parallel mutation contract.
+ *
+ * The handle does not include `scrollIntoView` in v1: that path
+ * widens `ui.viewport.scrollIntoView` and is a separate slice from
+ * `ui.viewport.getRect` (SD-3156).
+ */
+export interface ContentControlsHandle {
+  /** Snapshot the current content-controls slice synchronously. */
+  getSnapshot(): ContentControlsSlice;
+  /**
+   * Subscribe to slice changes. Listener fires once synchronously with
+   * the current snapshot, then again whenever `items`, `activeIds`,
+   * `activeId`, or `total` change (shallow equality). Returns an
+   * unsubscribe.
+   */
+  subscribe(listener: (event: { snapshot: ContentControlsSlice }) => void): () => void;
+  /**
+   * Value-shaped alias of {@link subscribe}: listener receives the
+   * snapshot directly.
+   */
+  observe(listener: (snapshot: ContentControlsSlice) => void): () => void;
+  /**
+   * Look up a single content control by id. Reads from the cached
+   * slice (not a fresh Document API call), so the returned record is
+   * always consistent with what subscribers last saw on the same
+   * snapshot. Returns `null` when the id isn't in the current list.
+   */
+  get(input: { id: string }): import('@superdoc/document-api').ContentControlInfo | null;
+  /**
+   * Painter rect for the content control identified by `id`. Sugar
+   * over {@link ViewportHandle.getRect} with a UI-local
+   * `ContentControlViewportAddress` target. Returns the same shape as
+   * the underlying `getRect` (success + `rect` + `rects`, or a
+   * failure reason).
+   */
+  getRect(input: { id: string }): ViewportRectResult;
+}
+
 export interface CommentsSlice {
   /** Total count from the list result (before pagination, if any). */
   total: number;
@@ -472,6 +566,16 @@ export interface SuperDocUI {
    * `ui.comments.items` and `ui.trackChanges.items` themselves.
    */
   trackChanges: TrackChangesHandle;
+
+  /**
+   * Content-controls (SDT) domain — single subscription + read
+   * surface for chip overlays, citation popovers, and field-aware
+   * side panels. Subscribe to receive snapshot updates (items +
+   * activeIds + total); call `get` / `getRect` for synchronous
+   * lookups. v1 has no mutation methods — `editor.doc.contentControls.*`
+   * is the mutation contract.
+   */
+  contentControls: ContentControlsHandle;
 
   /**
    * Selection domain — single subscription + read surface for

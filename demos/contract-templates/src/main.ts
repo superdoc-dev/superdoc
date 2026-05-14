@@ -38,8 +38,10 @@
  */
 
 import { SuperDoc } from 'superdoc';
+import { createSuperDocUI } from 'superdoc/ui';
 import 'superdoc/style.css';
 import './style.css';
+import { attachFieldChip } from './field-chip.js';
 
 type NodeKind = 'block' | 'inline';
 type LockMode = 'unlocked' | 'sdtLocked' | 'contentLocked' | 'sdtContentLocked';
@@ -197,6 +199,10 @@ const state = {
   values: {} as Record<FieldKey, string>,
   versions: {} as Record<ClauseId, string>,
   expandedClause: null as ClauseId | null,
+  /** UI controller; created in `initialize`, disposed by `teardown`. */
+  ui: null as ReturnType<typeof createSuperDocUI> | null,
+  /** Field-chip detach handle; created in `initialize`, called by `teardown`. */
+  fieldChipTeardown: null as (() => void) | null,
 };
 
 const statusEl = qs<HTMLElement>('#status');
@@ -256,6 +262,24 @@ async function initialize(instance: DemoSuperDoc): Promise<void> {
   readStateFromDocument();
   renderPanels();
   refreshSummary();
+
+  // Contextual smart-field chip (SD-3157). Plain TS — uses the
+  // public `superdoc/ui` controller directly, no framework. The chip
+  // anchors over the active smart-field SDT and shows the field's
+  // label + current value tracked in `state.values`. See
+  // `field-chip.ts` for the scope cut and follow-up notes.
+  //
+  // Both the UI controller and the chip teardown are stashed on
+  // `state` so the module-level `teardown()` handler can dispose them
+  // on page unload / Vite HMR. Without that, every hot reload would
+  // leave the previous controller's scroll/resize listeners attached
+  // to `window` and the previous chip element in the DOM.
+  state.ui = createSuperDocUI({ superdoc: instance });
+  state.fieldChipTeardown = attachFieldChip(state.ui, {
+    labelFor: (key) => FIELDS.find((f) => f.key === (key as FieldKey))?.label ?? key,
+    valueFor: (key) => state.values[key as FieldKey],
+  });
+
   setStatus('Ready');
   setBusy(false);
 }
@@ -498,6 +522,24 @@ function escapeAttr(s: string): string {
   doc: () => state.editor?.doc ?? null,
 };
 
-const teardown = () => superdoc.destroy();
+const teardown = () => {
+  // Order matters: detach the field chip first (it relies on the UI
+  // controller for `getRect`), then destroy the UI controller, then
+  // the SuperDoc instance. Each step is best-effort so a late error in
+  // one branch doesn't strand the others.
+  try {
+    state.fieldChipTeardown?.();
+  } catch {
+    /* best-effort teardown */
+  }
+  state.fieldChipTeardown = null;
+  try {
+    state.ui?.destroy();
+  } catch {
+    /* best-effort teardown */
+  }
+  state.ui = null;
+  superdoc.destroy();
+};
 window.addEventListener('beforeunload', teardown);
 if (import.meta.hot) import.meta.hot.dispose(teardown);

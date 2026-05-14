@@ -9,6 +9,8 @@ import type {
 } from '../headless-toolbar/types.js';
 import type {
   CommentsListResult,
+  ContentControlInfo,
+  ContentControlsListResult,
   Receipt,
   ScrollIntoViewInput,
   ScrollIntoViewOutput,
@@ -28,6 +30,8 @@ import type {
   CommandHandle,
   CommandsHandle,
   CommentsHandle,
+  ContentControlsHandle,
+  ContentControlsSlice,
   ContextMenuItem,
   DocumentExportInput,
   DocumentHandle,
@@ -482,6 +486,82 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
   };
   refreshTrackChangesListCache();
 
+  // Content-controls slice cache (SD-3157). Same posture as comments
+  // and tracked changes: list reads are O(N), so cache the list and
+  // refresh on document-changing events. `activeIds` derives from the
+  // selection inside `computeState()` (cheap walk over the cached
+  // items) so it stays current without a separate refresh trigger.
+  const EMPTY_CONTENT_CONTROLS_LIST: ContentControlsListResult = {
+    items: [],
+    total: 0,
+  };
+  let contentControlsListCache: ContentControlsListResult = EMPTY_CONTENT_CONTROLS_LIST;
+  const refreshContentControlsListCache = () => {
+    const editor = resolveRoutedEditor(superdoc);
+    const list = editor?.doc?.contentControls?.list;
+    if (typeof list !== 'function') {
+      contentControlsListCache = EMPTY_CONTENT_CONTROLS_LIST;
+      return;
+    }
+    try {
+      const result = list.call(editor.doc!.contentControls, undefined) as
+        | ContentControlsListResult
+        | undefined;
+      contentControlsListCache = result ?? EMPTY_CONTENT_CONTROLS_LIST;
+    } catch {
+      // See refreshCommentsListCache: prefer empty over leaking the
+      // previous document's controls on swap.
+      contentControlsListCache = EMPTY_CONTENT_CONTROLS_LIST;
+    }
+  };
+  refreshContentControlsListCache();
+
+  /**
+   * Memoized content-controls slice. Items array reference stays
+   * stable when neither the list cache nor the `activeIds` derived
+   * from selection changes — without this, every selection update
+   * would mismatch shallowEqual on `state.contentControls` and
+   * re-fire every subscriber.
+   */
+  const EMPTY_ACTIVE_CONTENT_CONTROL_IDS: readonly string[] = Object.freeze<string[]>([]);
+  let lastContentControlsListItems: ContentControlsListResult['items'] | null = null;
+  let lastActiveContentControlIds: readonly string[] = EMPTY_ACTIVE_CONTENT_CONTROL_IDS;
+  let memoContentControlsSlice: ContentControlsSlice | null = null;
+
+  /**
+   * Compute the innermost-first chain of content-control ids that
+   * contain the current selection anchor. Walks the PM selection up
+   * to find every SDT node ancestor and maps each to its `nodeId`.
+   * Intersect with the list cache so subscribers don't see ids that
+   * aren't in `items` (transient state during a doc swap).
+   */
+  const computeActiveContentControlIds = (validIds: ReadonlySet<string>): readonly string[] => {
+    const editor = resolveRoutedEditor(superdoc) as unknown as {
+      state?: { selection?: { $anchor?: { depth?: number; node?: (depth: number) => unknown } } };
+      view?: { state?: { selection?: { $anchor?: { depth?: number; node?: (depth: number) => unknown } } } };
+    };
+    const pmState = editor?.state ?? editor?.view?.state;
+    const anchor = pmState?.selection?.$anchor;
+    if (!anchor || typeof anchor.depth !== 'number' || typeof anchor.node !== 'function') {
+      return EMPTY_ACTIVE_CONTENT_CONTROL_IDS;
+    }
+    const ids: string[] = [];
+    for (let d = anchor.depth; d >= 0; d -= 1) {
+      const node = anchor.node(d) as
+        | { type?: { name?: string }; attrs?: { id?: unknown } }
+        | null
+        | undefined;
+      const typeName = node?.type?.name;
+      if (typeName !== 'sdt' && typeName !== 'structuredContent' && typeName !== 'structuredContentBlock') continue;
+      const id = node?.attrs?.id;
+      if (typeof id !== 'string' || id.length === 0) continue;
+      if (!validIds.has(id)) continue;
+      ids.push(id);
+    }
+    if (ids.length === 0) return EMPTY_ACTIVE_CONTENT_CONTROL_IDS;
+    return Object.freeze(ids);
+  };
+
   /**
    * Internal `activeTrackChangeId`. Mirrors selection-driven activity
    * when the user moves the cursor onto a tracked change, and is
@@ -759,6 +839,35 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
         activeIds: selectionSlice.activeCommentIds,
       },
       trackChanges: trackChangesSlice,
+      contentControls: (() => {
+        const items = contentControlsListCache.items;
+        const total = contentControlsListCache.total;
+        // Build the id-set once so the activeIds walk doesn't do a
+        // linear scan per ancestor depth.
+        const validIds = new Set<string>(items.map((it) => it.id));
+        const nextActive = computeActiveContentControlIds(validIds);
+        // Reuse the prior frozen array reference when the active set
+        // hasn't changed (by length + element equality) so
+        // shallowEqual on `state.contentControls` stays stable.
+        const activeIdsSame =
+          nextActive === lastActiveContentControlIds ||
+          (nextActive.length === lastActiveContentControlIds.length &&
+            nextActive.every((id, i) => id === lastActiveContentControlIds[i]));
+        const activeIds = activeIdsSame ? lastActiveContentControlIds : nextActive;
+        const itemsSame = items === lastContentControlsListItems;
+        if (memoContentControlsSlice && itemsSame && activeIdsSame) {
+          return memoContentControlsSlice;
+        }
+        lastContentControlsListItems = items;
+        lastActiveContentControlIds = activeIds;
+        memoContentControlsSlice = {
+          total,
+          items,
+          activeIds: activeIds as string[],
+          activeId: activeIds[0] ?? null,
+        };
+        return memoContentControlsSlice;
+      })(),
     };
 
     const customCommandStates = customCommandsRegistry.computeStates(partial);
@@ -795,7 +904,25 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
   const refreshAndNotify = () => {
     refreshCommentsListCache();
     refreshTrackChangesListCache();
+    refreshContentControlsListCache();
     scheduleNotify();
+  };
+
+  /**
+   * Content-controls list refreshes on document-changing transactions
+   * (insertions / deletions of SDTs). Separate from `refreshAndNotify`
+   * so the comments / track-changes path stays unchanged — the editor
+   * fires `commentsUpdate` for those, and the doc transactions are
+   * the right signal for SDTs.
+   */
+  const refreshContentControlsAndNotify = () => {
+    refreshContentControlsListCache();
+    scheduleNotify();
+  };
+
+  const onDocChangedForContentControls = (payload: unknown) => {
+    const tr = (payload as { transaction?: { docChanged?: unknown } } | undefined)?.transaction;
+    if (tr && tr.docChanged === true) refreshContentControlsAndNotify();
   };
 
   /**
@@ -842,15 +969,21 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     // 'transaction' (kept separate so `dirty` reads the transaction
     // payload before the snapshot is recomputed).
     next.on?.('transaction', onTransaction);
+    // Content-controls list refresh on doc-changing transactions. Same
+    // 'transaction' event as the dirty-flag listener, separate handler
+    // so the doc-changed gating stays explicit.
+    next.on?.('transaction', onDocChangedForContentControls);
     currentEditorTeardown = () => {
       EDITOR_EVENTS.forEach((name) => next.off?.(name, scheduleNotify));
       LIST_REFRESH_EVENTS.forEach((name) => next.off?.(name, refreshAndNotify));
       next.off?.('transaction', onTransaction);
+      next.off?.('transaction', onDocChangedForContentControls);
     };
     // The set of source events changed and the routed editor swapped
-    // — refresh the comments cache for the new editor and recompute
-    // state so subscribers see the new selection.
+    // — refresh the comments + content-controls caches for the new
+    // editor and recompute state so subscribers see the new selection.
     refreshCommentsListCache();
+    refreshContentControlsListCache();
     scheduleNotify();
   };
 
@@ -2007,6 +2140,38 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     });
   };
 
+  const contentControls: ContentControlsHandle = {
+    getSnapshot: () => computeState().contentControls,
+    observe(listener) {
+      return select((state) => state.contentControls, shallowEqual).subscribe((snapshot) => {
+        try {
+          listener(snapshot);
+        } catch {
+          // see scheduleNotify
+        }
+      });
+    },
+    subscribe(listener) {
+      return contentControls.observe((snapshot) => listener({ snapshot }));
+    },
+    get({ id }: { id: string }): ContentControlInfo | null {
+      // Read from the cached slice so the returned record matches what
+      // the most recent subscriber saw on the same snapshot. Avoids a
+      // fresh Document API call (and the risk of a different view of
+      // the world if the cache hasn't refreshed yet on the same tick).
+      const items = contentControlsListCache.items;
+      for (const item of items) {
+        if (item.id === id) return item;
+      }
+      return null;
+    },
+    getRect({ id }: { id: string }) {
+      return viewport.getRect({
+        target: { kind: 'entity', entityType: 'contentControl', entityId: id },
+      });
+    },
+  };
+
   const destroy = () => {
     if (destroyed) return;
     destroyed = true;
@@ -2042,6 +2207,7 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
     commands,
     comments,
     trackChanges,
+    contentControls,
     selection,
     viewport,
     document,

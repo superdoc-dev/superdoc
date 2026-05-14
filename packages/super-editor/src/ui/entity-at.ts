@@ -53,6 +53,31 @@ export function collectEntityHitsFromChain(start: Element | null): ViewportEntit
         }
       }
     }
+    // Content controls (Structured Document Tags). The painter stamps
+    // `data-sdt-id` and `data-sdt-type` on every SDT wrapper; only
+    // `structuredContent` maps to the Document API's `contentControls.*`
+    // namespace, so the walk filters explicitly on that. Other
+    // `data-sdt-type` values (`fieldAnnotation`, `documentSection`,
+    // `docPartObject`) intentionally do not surface here. Nested SDTs
+    // surface innermost-first so a switch on `hits[0]` picks the
+    // tightest control.
+    const sdtType = node.getAttribute('data-sdt-type');
+    const sdtId = node.getAttribute('data-sdt-id');
+    if (sdtId && sdtType === 'structuredContent') {
+      const key = `contentControl:${sdtId}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        const scopeAttr = node.getAttribute('data-sdt-scope');
+        const tag = node.getAttribute('data-sdt-tag');
+        const hit: { type: 'contentControl'; id: string; scope?: 'block' | 'inline'; tag?: string } = {
+          type: 'contentControl',
+          id: sdtId,
+        };
+        if (scopeAttr === 'block' || scopeAttr === 'inline') hit.scope = scopeAttr;
+        if (tag) hit.tag = tag;
+        hits.push(hit);
+      }
+    }
     el = el.parentElement;
   }
   return hits;

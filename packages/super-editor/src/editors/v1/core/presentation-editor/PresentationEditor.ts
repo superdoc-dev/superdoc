@@ -55,6 +55,7 @@ import { createHiddenHost } from './dom/HiddenHost.js';
 import {
   elementsToRangeRects,
   findRenderedCommentElements,
+  findRenderedContentControlElements,
   findRenderedTrackedChangeElementsStrict,
 } from './dom/EntityRectFinder.js';
 import { RemoteCursorManager, type RenderDependencies } from './remote-cursors/RemoteCursorManager.js';
@@ -2206,6 +2207,13 @@ export class PresentationEditor extends EventEmitter {
       elements = findRenderedTrackedChangeElementsStrict(host, entityId, escapeAttrValue, storyKey);
     } else if (entityType === 'comment') {
       elements = findRenderedCommentElements(host, entityId, storyKey);
+    } else if (entityType === 'contentControl') {
+      // SDT wrappers do not currently stamp `data-story-key`, so this
+      // helper accepts `storyKey` for signature parity but returns all
+      // painted occurrences regardless. v1 is body-only; an SDT in a
+      // header / footer will still match. See JSDoc on
+      // `findRenderedContentControlElements`.
+      elements = findRenderedContentControlElements(host, entityId, escapeAttrValue, storyKey);
     } else {
       return [];
     }

@@ -4,6 +4,8 @@ import { getMarksFromSelection } from '@core/helpers/getMarksFromSelection.js';
 import { toggleMarkCascade } from '@core/commands/toggleMarkCascade.js';
 
 const FORMAT_PAINTER_DOUBLE_CLICK_MS = 500;
+const FORMAT_PAINTER_UI_SELECTOR =
+  '[data-editor-ui-surface], .toolbar-dropdown-menu, .sd-toolbar-dropdown-menu, .sd-tooltip-content';
 
 /**
  * Stored format style
@@ -42,6 +44,8 @@ export const FormatCommands = Extension.create({
       persistent: false,
       lastCopyFormatClickAt: 0,
       releaseCleanup: null,
+      pointerSelecting: false,
+      keyboardSelecting: false,
     };
   },
 
@@ -152,7 +156,9 @@ export const FormatCommands = Extension.create({
 
     const currentSelection = getSelectionRange(editor.state);
     if (editor.state.selection.empty || isSameSelection(currentSelection, sourceSelection)) return;
-    if (!this.storage.releaseCleanup) editor.commands.applyStoredFormat();
+    if (this.storage.pointerSelecting || this.storage.keyboardSelecting) return;
+
+    editor.commands.applyStoredFormat();
   },
 
   onDestroy() {
@@ -183,15 +189,19 @@ function clearFormatPainterStorage(storage) {
   storage.persistent = false;
   storage.lastCopyFormatClickAt = 0;
   storage.releaseCleanup = null;
+  storage.pointerSelecting = false;
+  storage.keyboardSelecting = false;
 }
 
 function armFormatPainterRelease({ storage, editor }) {
   if (storage.releaseCleanup) return;
   if (typeof document === 'undefined' || !document?.addEventListener) return;
 
-  const eventName = typeof PointerEvent === 'undefined' ? 'mouseup' : 'pointerup';
-  const handleRelease = (event) => {
-    if (event?.target?.closest?.('[data-editor-ui-surface]')) return;
+  const pointerDownEventName = typeof PointerEvent === 'undefined' ? 'mousedown' : 'pointerdown';
+  const pointerUpEventName = typeof PointerEvent === 'undefined' ? 'mouseup' : 'pointerup';
+  const isToolbarEvent = (event) => event?.target?.closest?.(FORMAT_PAINTER_UI_SELECTOR);
+
+  const applyIfTargetSelected = () => {
     if (!storage.storedStyle) return;
     const selection = editor.state.selection;
     const currentSelection = getSelectionRange(editor.state);
@@ -200,10 +210,49 @@ function armFormatPainterRelease({ storage, editor }) {
     editor.commands.applyStoredFormat();
   };
 
-  document.addEventListener(eventName, handleRelease, true);
-  storage.releaseCleanup = () => {
-    document.removeEventListener(eventName, handleRelease, true);
+  const handlePointerDown = (event) => {
+    if (isToolbarEvent(event)) {
+      storage.pointerSelecting = false;
+      return;
+    }
+    storage.pointerSelecting = true;
   };
+
+  const handleRelease = (event) => {
+    if (isToolbarEvent(event)) {
+      storage.pointerSelecting = false;
+      return;
+    }
+    storage.pointerSelecting = false;
+    applyIfTargetSelected();
+  };
+
+  const handleKeyDown = (event) => {
+    if (isToolbarEvent(event)) return;
+    if (isFormatPainterSelectionKey(event)) storage.keyboardSelecting = true;
+  };
+
+  const handleKeyUp = () => {
+    if (!storage.keyboardSelecting) return;
+    storage.keyboardSelecting = false;
+    applyIfTargetSelected();
+  };
+
+  document.addEventListener(pointerDownEventName, handlePointerDown, true);
+  document.addEventListener(pointerUpEventName, handleRelease, true);
+  document.addEventListener('keydown', handleKeyDown, true);
+  document.addEventListener('keyup', handleKeyUp, true);
+  storage.releaseCleanup = () => {
+    document.removeEventListener(pointerDownEventName, handlePointerDown, true);
+    document.removeEventListener(pointerUpEventName, handleRelease, true);
+    document.removeEventListener('keydown', handleKeyDown, true);
+    document.removeEventListener('keyup', handleKeyUp, true);
+  };
+}
+
+function isFormatPainterSelectionKey(event) {
+  if (!event?.shiftKey) return false;
+  return ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'PageUp', 'PageDown'].includes(event.key);
 }
 
 function applyStoredFormat({ chain, storage }) {
@@ -255,7 +304,6 @@ function applyStoredFormat({ chain, storage }) {
       result = result[cmd.command](cmd.argument);
     });
 
-    if (!shouldStayActive) clearFormatPainterStorage(storage);
     return result;
   } finally {
     if (!shouldStayActive) clearFormatPainterStorage(storage);

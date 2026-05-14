@@ -38,9 +38,22 @@ function selectRange(editor, range) {
   editor.view.dispatch(editor.state.tr.setSelection(TextSelection.create(editor.state.doc, range.from, range.to)));
 }
 
+function pressPointer() {
+  const eventName = typeof PointerEvent === 'undefined' ? 'mousedown' : 'pointerdown';
+  document.dispatchEvent(new Event(eventName, { bubbles: true }));
+}
+
 function releasePointer() {
   const eventName = typeof PointerEvent === 'undefined' ? 'mouseup' : 'pointerup';
   document.dispatchEvent(new Event(eventName, { bubbles: true }));
+}
+
+function pressSelectionKey() {
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', shiftKey: true, bubbles: true }));
+}
+
+function releaseSelectionKey() {
+  document.dispatchEvent(new KeyboardEvent('keyup', { key: 'ArrowRight', shiftKey: false, bubbles: true }));
 }
 
 function releasePointerFromToolbar() {
@@ -48,9 +61,22 @@ function releasePointerFromToolbar() {
   toolbar.setAttribute('data-editor-ui-surface', '');
   document.body.appendChild(toolbar);
 
-  const eventName = typeof PointerEvent === 'undefined' ? 'mouseup' : 'pointerup';
-  toolbar.dispatchEvent(new Event(eventName, { bubbles: true }));
+  releasePointerFromElement(toolbar);
   toolbar.remove();
+}
+
+function releasePointerFromDropdownMenu(className = 'toolbar-dropdown-menu') {
+  const menu = document.createElement('div');
+  menu.className = className;
+  document.body.appendChild(menu);
+
+  releasePointerFromElement(menu);
+  menu.remove();
+}
+
+function releasePointerFromElement(element) {
+  const eventName = typeof PointerEvent === 'undefined' ? 'mouseup' : 'pointerup';
+  element.dispatchEvent(new Event(eventName, { bubbles: true }));
 }
 
 function getFirstTextMarks(editor, range) {
@@ -95,6 +121,7 @@ describe('format painter', () => {
     selectRange(editor, ranges.source);
     editor.commands.copyFormat();
 
+    pressPointer();
     selectRange(editor, ranges.target);
 
     expect(getMark(editor, ranges.target, 'bold')).toBeUndefined();
@@ -116,8 +143,10 @@ describe('format painter', () => {
     editor.commands.copyFormat();
     editor.commands.copyFormat();
 
+    pressPointer();
     selectRange(editor, ranges.target);
     releasePointer();
+    pressPointer();
     selectRange(editor, ranges.other);
     releasePointer();
 
@@ -148,12 +177,28 @@ describe('format painter', () => {
     expect(editor.storage.formatCommands.storedStyle).toBeNull();
   });
 
+  it('does not apply formatting when pointer is released over a teleported toolbar dropdown', () => {
+    ({ editor } = initTestEditor({ loadFromSchema: true, content: structuredClone(doc) }));
+
+    selectRange(editor, ranges.source);
+    editor.commands.copyFormat();
+
+    pressPointer();
+    selectRange(editor, ranges.target);
+    releasePointerFromDropdownMenu();
+
+    expect(getMark(editor, ranges.target, 'bold')).toBeUndefined();
+    expect(editor.storage.formatCommands.storedStyle).not.toBeNull();
+    expect(editor.storage.formatCommands.pointerSelecting).toBe(false);
+  });
+
   it('waits for a drag selection to settle before applying copied formatting', () => {
     ({ editor } = initTestEditor({ loadFromSchema: true, content: structuredClone(doc) }));
 
     selectRange(editor, ranges.source);
     editor.commands.copyFormat();
 
+    pressPointer();
     selectRange(editor, ranges.partialTarget);
     expect(getMark(editor, ranges.partialTarget, 'bold')).toBeUndefined();
 
@@ -161,6 +206,23 @@ describe('format painter', () => {
     releasePointer();
 
     expect(allTextInRangeHasMark(editor, ranges.partialTarget, 'bold')).toBe(true);
+    expect(allTextInRangeHasMark(editor, ranges.target, 'bold')).toBe(true);
+    expect(editor.storage.formatCommands.storedStyle).toBeNull();
+  });
+
+  it('applies copied formatting when keyboard target selection completes', () => {
+    ({ editor } = initTestEditor({ loadFromSchema: true, content: structuredClone(doc) }));
+
+    selectRange(editor, ranges.source);
+    editor.commands.copyFormat();
+
+    pressSelectionKey();
+    selectRange(editor, ranges.target);
+
+    expect(getMark(editor, ranges.target, 'bold')).toBeUndefined();
+
+    releaseSelectionKey();
+
     expect(allTextInRangeHasMark(editor, ranges.target, 'bold')).toBe(true);
     expect(editor.storage.formatCommands.storedStyle).toBeNull();
   });

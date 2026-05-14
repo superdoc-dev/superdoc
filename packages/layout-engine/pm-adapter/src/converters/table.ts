@@ -55,10 +55,12 @@ import {
 import {
   TableProperties,
   resolveTableCellProperties,
+  resolveTableProperties,
   resolveExistingTableEffectiveStyleId,
   type TableInfo,
 } from '@superdoc/style-engine/ooxml';
 import { resolveThemeColorValue } from '../marks/theme-color.js';
+import { resolveTableDirection, resolveSectionDirection } from '../direction/index.js';
 
 /**
  * Normalizes tableCellSpacing from PM node to CellSpacing object format.
@@ -1020,6 +1022,34 @@ export function tableNodeToBlock(
   if (tableProperties && typeof tableProperties === 'object') {
     tableAttrs.tableProperties = tableProperties as Record<string, unknown>;
   }
+
+  // SD-3138 Phase 1B: resolve the table direction context from cascade-resolved
+  // table properties so downstream consumers (painter, layout-engine, editor
+  // navigation) read a typed `TableDirectionContext` instead of inspecting raw
+  // tableProperties.rightToLeft. Inline `w:bidiVisual` wins over the style
+  // cascade; explicit `false` overrides a cascade `true` per §17.4.1 + §17.17.4
+  // (the resolver handles the explicit-false case via SD-3141).
+  const styleResolvedTableProps =
+    effectiveStyleId && converterContext?.translatedLinkedStyles
+      ? resolveTableProperties(effectiveStyleId, converterContext.translatedLinkedStyles)
+      : undefined;
+  // Normalize the rightToLeft / bidiVisual aliases to a single signal PER LAYER
+  // before layering inline over style. Otherwise an inline `bidiVisual: false`
+  // paired with a style `rightToLeft: true` would resolve RTL because the two
+  // aliases get layered independently (inline-false on bidiVisual loses to
+  // style-true on rightToLeft). The importer normalizes w:bidiVisual to
+  // `rightToLeft` so this matters most when style-engine emits raw OOXML keys.
+  const inlineProps = rawTableProperties as { rightToLeft?: boolean; bidiVisual?: boolean } | undefined;
+  const styleProps = styleResolvedTableProps as { rightToLeft?: boolean; bidiVisual?: boolean } | undefined;
+  const inlineVisual = inlineProps?.rightToLeft ?? inlineProps?.bidiVisual;
+  const styleVisual = styleProps?.rightToLeft ?? styleProps?.bidiVisual;
+  // `??` treats null/undefined as missing but preserves an explicit `false`,
+  // so an inline `<w:bidiVisual w:val="0"/>` correctly overrides a style true.
+  const effectiveForDirection = {
+    rightToLeft: inlineVisual ?? styleVisual,
+  };
+  const sectionContext = converterContext?.sectionDirectionContext ?? resolveSectionDirection(undefined);
+  tableAttrs.tableDirectionContext = resolveTableDirection(effectiveForDirection, sectionContext);
 
   let columnWidths: number[] | undefined = undefined;
 

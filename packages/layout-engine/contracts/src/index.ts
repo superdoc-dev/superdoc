@@ -17,7 +17,12 @@ export type {
   RunScriptContext,
 } from './direction-context.js';
 export { getParagraphInlineDirection, getTableVisualDirection } from './direction-context.js';
-import type { ParagraphDirectionContext, RunBidiContext, RunScriptContext } from './direction-context.js';
+import type {
+  ParagraphDirectionContext,
+  RunBidiContext,
+  RunScriptContext,
+  TableDirectionContext,
+} from './direction-context.js';
 
 // Export table contracts
 export {
@@ -630,6 +635,18 @@ export type TableAttrs = {
   borderCollapse?: 'collapse' | 'separate';
   cellSpacing?: CellSpacing;
   tableProperties?: TablePropertiesAttrs;
+  /**
+   * Resolved table direction context (SD-3138). Populated by pm-adapter from
+   * cascade-resolved table properties via `resolveTableDirection`. Consumers
+   * should call `getTableVisualDirection(attrs)` instead of reading
+   * `tableProperties.rightToLeft` directly — the helper prefers this field
+   * and falls back to the legacy raw read for compatibility.
+   *
+   * Per ECMA-376 §17.4.1, `w:bidiVisual` affects cell ordering and
+   * table-visual properties only; it does NOT propagate to cell paragraphs
+   * as inline direction.
+   */
+  tableDirectionContext?: TableDirectionContext;
   sdt?: SdtMetadata;
   containerSdt?: SdtMetadata;
   [key: string]: unknown;

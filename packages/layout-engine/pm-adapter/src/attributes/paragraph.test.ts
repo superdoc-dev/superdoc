@@ -370,6 +370,11 @@ describe('computeParagraphAttrs', () => {
         const { paragraphAttrs } = computeParagraphAttrs(paragraph as never);
 
         expect(paragraphAttrs.directionContext?.inlineDirection).toBe(expected);
+        // Pin the producer contract: pm-adapter must not emit the legacy
+        // scalar `direction` field. A future accidental spread that
+        // re-introduced it would slip past the TypeScript check (since
+        // index signatures permit extra keys) but fail this runtime guard.
+        expect(Object.hasOwn(paragraphAttrs, 'direction')).toBe(false);
       });
     }
   });

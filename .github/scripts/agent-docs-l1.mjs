@@ -330,10 +330,10 @@ export function runL1Scan(repoRoot) {
 // (so PR-mode reports surface single-finding issues) and as input to the
 // L2/L3 gating below.
 export function computeFlags(file) {
-  if (file.isSymlink) return [];
-  const isRoot = !file.relPath.includes('/');
   const reasons = [];
   if (file.brokenSymlinkTarget) reasons.push(`broken symlink target: ${file.brokenSymlinkTarget}`);
+  if (file.isSymlink) return reasons;
+  const isRoot = !file.relPath.includes('/');
   if (isRoot && file.lineCount > CONFIG.budgets.root) reasons.push(`over root budget (${file.lineCount} > ${CONFIG.budgets.root})`);
   if (!isRoot && file.lineCount > CONFIG.budgets.nestedWarn) reasons.push(`over nested-warn (${file.lineCount} > ${CONFIG.budgets.nestedWarn})`);
   if (file.brokenPathRefs.length > 0) reasons.push(`${file.brokenPathRefs.length} broken path ref(s)`);
@@ -342,7 +342,7 @@ export function computeFlags(file) {
   return reasons;
 }
 
-function pairFlaggedForReview(pair) {
+export function pairFlaggedForReview(pair) {
   if (pair.classification === 'linked-inverted') return true;
   if (pair.classification === 'unexpected-duplicate') return true;
   return false;

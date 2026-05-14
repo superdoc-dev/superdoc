@@ -35,10 +35,14 @@ on:
       - 'agent-docs-policy.md'
       - '.github/scripts/agent-docs-audit*'
       - '.github/scripts/agent-docs-l1*'
+      - '.github/scripts/agent-docs-pr-comment*'
       - '.github/workflows/agent-docs-audit.yml'
 
 permissions:
   contents: read
+  # Needed for the pull_request sticky comment. This matches existing
+  # PR-comment workflows such as visual-test.yml.
+  pull-requests: write
 
 concurrency:
   group: agent-docs-audit-${{ github.event.pull_request.number || github.ref }}
@@ -120,3 +124,15 @@ jobs:
             /tmp/agent-docs-audit-l1.md
           if-no-files-found: warn
           retention-days: 30
+
+      # Diff-scoped sticky PR comment. Pull_request runs are L1-only; this
+      # surfaces deterministic findings only for agent-doc files touched by the
+      # PR. No AI, no Bash, no secrets.
+      - name: Post sticky PR comment with L1 findings
+        if: github.event_name == 'pull_request'
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+          REPO_ROOT: ${{ github.workspace }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node .github/scripts/agent-docs-pr-comment.mjs

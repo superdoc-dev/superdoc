@@ -171,9 +171,27 @@ export class CommentHighlightDecorator {
       // Determine if primary (first) comment is internal — used for uniform/faded colors.
       const primaryIsInternal = internalIds.has(ids[0]);
 
+      // SD-2528: a comment anchored on tracked-change text already shows the
+      // TC's own background (green for trackInsert, red for trackDelete via
+      // `.track-insert-dec.highlighted` / `.track-delete-dec.highlighted`). The
+      // comment highlight stacking on top of that paints pink/green over the
+      // TC color, making an "insert" look pink after re-import. Leave the
+      // background alone when the element is also a TC decoration so the TC
+      // color wins (matches Word — comments anchored on a redline don't recolor
+      // the redline). Hover/focus affordances still come from the TC's own
+      // `.track-change-focused` class.
+      const isTrackedChangeAnchored =
+        el.classList.contains('track-insert-dec') ||
+        el.classList.contains('track-delete-dec') ||
+        el.classList.contains('track-format-dec');
+
       if (activeId == null) {
         // No active comment → uniform light highlight
-        applyBgColor(el, primaryIsInternal ? H.INT : H.EXT);
+        if (!isTrackedChangeAnchored) {
+          applyBgColor(el, primaryIsInternal ? H.INT : H.EXT);
+        } else {
+          el.style.backgroundColor = '';
+        }
         el.style.boxShadow = '';
         continue;
       }
@@ -184,7 +202,11 @@ export class CommentHighlightDecorator {
       if (matchedId != null) {
         // This element belongs to the active comment → bright highlight
         const matchIsInternal = internalIds.has(matchedId);
-        applyBgColor(el, matchIsInternal ? H.INT_ACTIVE : H.EXT_ACTIVE);
+        if (!isTrackedChangeAnchored) {
+          applyBgColor(el, matchIsInternal ? H.INT_ACTIVE : H.EXT_ACTIVE);
+        } else {
+          el.style.backgroundColor = '';
+        }
 
         // Nested comments: other IDs besides the active one
         const hasNested = ids.length > 1;
@@ -195,7 +217,11 @@ export class CommentHighlightDecorator {
         }
       } else {
         // Active comment is set but doesn't match this element → faded
-        applyBgColor(el, primaryIsInternal ? H.INT_FADED : H.EXT_FADED);
+        if (!isTrackedChangeAnchored) {
+          applyBgColor(el, primaryIsInternal ? H.INT_FADED : H.EXT_FADED);
+        } else {
+          el.style.backgroundColor = '';
+        }
         el.style.boxShadow = '';
       }
     }

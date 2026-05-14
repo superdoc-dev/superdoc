@@ -57,6 +57,27 @@ function extractPlaceholder(sdtPr) {
 }
 
 /**
+ * Extract the `<w:temporary/>` toggle from sdtPr (ECMA-376 §17.5.2.43).
+ *
+ * Word's toggle conventions apply: an empty element means `true`; an
+ * element with `w:val="false"` or `w:val="0"` means `false`. The element
+ * being absent means the property was not specified — we return
+ * `undefined` so the Document API surfaces "absent" rather than fabricating
+ * the spec default. Consumers reading the property MUST treat undefined
+ * as "use the application default" (which for Word is `false`).
+ *
+ * @param {Object|null} sdtPr
+ * @returns {boolean|undefined}
+ */
+function extractTemporary(sdtPr) {
+  const el = sdtPr?.elements?.find((e) => e.name === 'w:temporary');
+  if (!el) return undefined;
+  const val = el.attributes?.['w:val'];
+  if (val == null) return true;
+  return val !== '0' && val !== 'false';
+}
+
+/**
  * @param {Object} params
  * @returns {Object|null}
  */
@@ -84,9 +105,10 @@ export function handleStructuredContentNode(params) {
   // Control type detection from sdtPr children
   const controlType = detectControlType(sdtPr);
 
-  // Appearance and placeholder
+  // Appearance, placeholder, and temporary toggle
   const appearance = extractAppearance(sdtPr);
   const placeholder = extractPlaceholder(sdtPr);
+  const temporary = extractTemporary(sdtPr);
 
   if (!sdtContent) {
     return null;
@@ -117,6 +139,10 @@ export function handleStructuredContentNode(params) {
       type: controlType,
       appearance,
       placeholder,
+      // `temporary` is only set when the XML carries `<w:temporary/>`;
+      // omitted attrs stay undefined so consumers can distinguish
+      // "absent from source" from explicit false.
+      ...(temporary !== undefined ? { temporary } : {}),
       sdtPr,
     },
   };

@@ -13,7 +13,12 @@ import { CLASS_NAMES, fragmentStyles } from '../styles.js';
 import { DOM_CLASS_NAMES } from '../constants.js';
 import type { FragmentRenderContext } from '../renderer.js';
 import { renderTableRow } from './renderTableRow.js';
-import { applySdtContainerChrome, getSdtContainerKey, type SdtBoundaryOptions } from '../sdt/container.js';
+import {
+  applySdtContainerChrome,
+  getSdtContainerKey,
+  getSdtContainerMetadata,
+  type SdtBoundaryOptions,
+} from '../sdt/container.js';
 import { applyBorder, borderValueToSpec, hasExplicitCellBorders } from './border-utils.js';
 import { getTableCellGridBounds } from './grid-geometry.js';
 
@@ -203,6 +208,7 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
 
   // Apply SDT container styling (document sections, structured content blocks)
   applySdtContainerChrome(doc, container, block.attrs?.sdt, block.attrs?.containerSdt, sdtBoundary);
+  const tableContainerSdt = getSdtContainerMetadata(block.attrs?.sdt, block.attrs?.containerSdt);
 
   // Add table-specific class for resize overlay targeting and click mapping
   container.classList.add(DOM_CLASS_NAMES.TABLE_FRAGMENT);
@@ -386,7 +392,7 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
         renderDrawingContent,
         applySdtDataset,
         ancestorTableSdtKey: getSdtContainerKey(block.attrs?.sdt, block.attrs?.containerSdt),
-        ancestorTableSdt: block.attrs?.sdt ?? null,
+        ancestorTableSdt: tableContainerSdt,
         // Headers are always rendered as-is (no border suppression)
         continuesFromPrev: false,
         continuesOnNext: false,
@@ -549,7 +555,7 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
       renderDrawingContent,
       applySdtDataset,
       ancestorTableSdtKey: getSdtContainerKey(block.attrs?.sdt, block.attrs?.containerSdt),
-      ancestorTableSdt: block.attrs?.sdt ?? null,
+      ancestorTableSdt: tableContainerSdt,
       // Draw top border if table continues from previous fragment (MS Word behavior)
       continuesFromPrev: isFirstRenderedBodyRow && fragment.continuesFromPrev === true,
       // Draw bottom border if table continues on next fragment (MS Word behavior)

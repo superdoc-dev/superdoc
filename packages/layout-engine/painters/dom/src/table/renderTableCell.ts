@@ -900,6 +900,7 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
           position: 'relative',
           flexShrink: '0',
           renderDrawingContent,
+          buildImageHyperlinkAnchor: buildTableImageHyperlinkAnchor,
           applySdtDataset,
         });
         content.appendChild(drawingWrapper);
@@ -1073,6 +1074,7 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
           top,
           zIndex,
           renderDrawingContent,
+          buildImageHyperlinkAnchor: buildTableImageHyperlinkAnchor,
           applySdtDataset,
         });
         content.appendChild(drawingWrapper);

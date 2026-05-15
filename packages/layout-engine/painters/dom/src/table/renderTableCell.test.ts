@@ -682,6 +682,68 @@ describe('renderTableCell', () => {
     expect(drawingWrapper?.style.top).toBe('7px');
   });
 
+  it('renders image drawing blocks inside table cells without a drawing callback', () => {
+    const para: ParagraphBlock = {
+      kind: 'paragraph',
+      id: 'para-drawing-image-anchor',
+      runs: [{ text: 'Anchor', fontFamily: 'Arial', fontSize: 16 }],
+    };
+
+    const flowingDrawing: DrawingBlock = {
+      kind: 'drawing',
+      id: 'drawing-image-flow',
+      drawingKind: 'image',
+      src: 'data:image/png;base64,AAA',
+    } as DrawingBlock;
+
+    const anchoredDrawing: DrawingBlock = {
+      kind: 'drawing',
+      id: 'drawing-image-anchor',
+      drawingKind: 'image',
+      src: 'data:image/png;base64,BBB',
+      anchor: { isAnchored: true, alignH: 'left', offsetH: 12, vRelativeFrom: 'paragraph', offsetV: 7 },
+      wrap: { type: 'None' },
+      attrs: { anchorParagraphId: 'para-drawing-image-anchor' },
+    } as DrawingBlock;
+
+    const drawingMeasure: DrawingMeasure = {
+      kind: 'drawing',
+      drawingKind: 'image',
+      width: 30,
+      height: 15,
+      scale: 1,
+      naturalWidth: 30,
+      naturalHeight: 15,
+    };
+
+    const cellMeasure: TableCellMeasure = {
+      blocks: [paragraphMeasure, drawingMeasure, drawingMeasure],
+      width: 100,
+      height: 50,
+      gridColumnStart: 0,
+      colSpan: 1,
+      rowSpan: 1,
+    };
+
+    const cell: TableCell = {
+      id: 'cell-with-drawing-images',
+      blocks: [para, flowingDrawing, anchoredDrawing],
+      attrs: {},
+    };
+
+    const { cellElement } = renderTableCell({
+      ...createBaseDeps(),
+      cellMeasure,
+      cell,
+    });
+
+    const drawingImages = cellElement.querySelectorAll('img.superdoc-drawing-image');
+    expect(drawingImages).toHaveLength(2);
+    expect((drawingImages[0] as HTMLImageElement).src).toBe('data:image/png;base64,AAA');
+    expect((drawingImages[1] as HTMLImageElement).src).toBe('data:image/png;base64,BBB');
+    expect(drawingImages[1]?.parentElement?.parentElement?.style.position).toBe('absolute');
+  });
+
   it('pushes text away from wrapSquare anchored images in table cells', () => {
     const para: ParagraphBlock = {
       kind: 'paragraph',

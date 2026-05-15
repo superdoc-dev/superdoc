@@ -5,7 +5,6 @@ import type {
   DrawingBlock,
   DrawingFragment,
   DrawingGeometry,
-  DropCapDescriptor,
   FlowBlock,
   FlowMode,
   Fragment,
@@ -14,14 +13,11 @@ import type {
   ImageDrawing,
   ImageFragment,
   ImageHyperlink,
-  ImageRun,
   Line,
   LineSegment,
   PageMargins,
   ParaFragment,
-  ParagraphAttrs,
   ParagraphBlock,
-  ParagraphMeasure,
   PositionedDrawingGeometry,
   Run,
   SdtMetadata,
@@ -53,7 +49,6 @@ import {
   buildLayoutSourceIdentityForFragment,
   expandRunsForInlineNewlines,
   getCellSpacingPx,
-  getParagraphInlineDirection,
   normalizeColumnLayout,
 } from '@superdoc/contracts';
 import { DATASET_KEYS, decodeLayoutStoryDataset, encodeLayoutStoryDataset } from '@superdoc/dom-contract';
@@ -61,8 +56,7 @@ import { getPresetShapeSvg } from '@superdoc/preset-geometry';
 import { encodeTooltip, sanitizeHref } from '@superdoc/url-validation';
 import { DOM_CLASS_NAMES } from './constants.js';
 import { createChartElement as renderChartToElement } from './chart-renderer.js';
-import { hashCellBorders, hashParagraphBorders, hashTableBorders } from './paragraph-hash-utils.js';
-import { assertFragmentPmPositions } from './pm-position-validation.js';
+import { hashCellBorders, hashTableBorders } from './paragraph-hash-utils.js';
 import { createRulerElement, ensureRulerStyles, generateRulerDefinitionFromPx } from './ruler/index.js';
 import {
   BROWSER_DEFAULT_FONT_SIZE,
@@ -85,22 +79,13 @@ import {
 import { applyAlphaToSVG, applyGradientToSVG, validateHexColor } from './svg-utils.js';
 import { renderTableFragment as renderTableFragmentElement } from './table/renderTableFragment.js';
 import { applyImageClipPath } from './utils/image-clip-path.js';
-import {
-  isMinimalWordLayout as isMinimalWordLayoutShared,
-  type MinimalWordLayout,
-} from '@superdoc/common/list-marker-utils';
 import { applySdtContainerStyling, shouldRebuildForSdtBoundary, type SdtBoundaryOptions } from './utils/sdt-helpers.js';
 import { computeBetweenBorderFlags, type BetweenBorderInfo } from './paragraph/borders/index.js';
-import { renderParagraphContent } from './paragraph/renderParagraphContent.js';
+import { deriveParagraphBlockVersion, hashParagraphBlockForTableVersion } from './paragraph/block-version.js';
+import { applyParagraphFragmentPmAttributes } from './paragraph/frame.js';
+import { renderParagraphFragment as renderParagraphFragmentElement } from './paragraph/renderParagraphFragment.js';
 import { renderLine as renderRunLine } from './runs/render-line.js';
 import type { RunRenderContext } from './runs/types.js';
-import {
-  getRunBooleanProp,
-  getRunNumberProp,
-  getRunStringProp,
-  getRunUnderlineColor,
-  getRunUnderlineStyle,
-} from './runs/hash.js';
 import { buildImageFilters } from './runs/image-run.js';
 import { applyTrackedChangeDecorations, resolveTrackedChangesConfig } from './runs/tracked-changes.js';
 
@@ -126,14 +111,6 @@ type VectorShapeDrawingWithEffects = VectorShapeDrawing & {
   lineEnds?: LineEnds;
   effectExtent?: EffectExtent;
 };
-
-/**
- * Type guard narrowing to the shared word layout contract type.
- * Delegates structural validation to the shared isMinimalWordLayout guard.
- */
-function isMinimalWordLayout(value: unknown): value is MinimalWordLayout {
-  return isMinimalWordLayoutShared(value);
-}
 
 /**
  * Layout mode for document rendering.
@@ -2606,91 +2583,33 @@ export class DomPainter {
     betweenInfo?: BetweenBorderInfo,
     resolvedItem?: ResolvedFragmentItem,
   ): HTMLElement {
-    try {
-      if (!this.doc) {
-        throw new Error('DomPainter: document is not available');
-      }
-
-      // Pre-extracted block/measure from the resolved item.
-      if (resolvedItem?.block?.kind !== 'paragraph' || resolvedItem?.measure?.kind !== 'paragraph') {
-        throw new Error(`DomPainter: missing resolved paragraph block/measure for fragment ${fragment.blockId}`);
-      }
-      const block = resolvedItem.block as ParagraphBlock;
-      const measure = resolvedItem.measure as ParagraphMeasure;
-      const wordLayout = isMinimalWordLayout(block.attrs?.wordLayout) ? block.attrs.wordLayout : undefined;
-      const content = resolvedItem?.content;
-
-      // Prefer resolved item metadata over legacy fragment reads
-      const paraContinuesFromPrev = resolvedItem?.continuesFromPrev;
-      const paraContinuesOnNext = resolvedItem?.continuesOnNext;
-      const paraMarkerWidth = resolvedItem?.markerWidth;
-
-      const fragmentEl = this.doc.createElement('div');
-      fragmentEl.classList.add(CLASS_NAMES.fragment);
-
-      // For TOC entries, override white-space to prevent wrapping
-      const isTocEntry = block.attrs?.isTocEntry;
-      // For fragments with markers, allow overflow to show markers positioned at negative left
-      const hasMarker = !paraContinuesFromPrev && paraMarkerWidth && wordLayout?.marker;
-      // SDT containers need overflow visible for tooltips/labels positioned above
-      const hasSdtContainer =
-        block.attrs?.sdt?.type === 'documentSection' ||
-        block.attrs?.sdt?.type === 'structuredContent' ||
-        block.attrs?.containerSdt?.type === 'documentSection' ||
-        block.attrs?.containerSdt?.type === 'structuredContent';
-      // Negative indents extend text into the margin area, requiring overflow:visible
-      const paraIndentForOverflow = block.attrs?.indent;
-      const hasNegativeIndent = (paraIndentForOverflow?.left ?? 0) < 0 || (paraIndentForOverflow?.right ?? 0) < 0;
-      const styles = isTocEntry
-        ? { ...fragmentStyles, whiteSpace: 'nowrap' }
-        : hasMarker || hasSdtContainer || hasNegativeIndent
-          ? { ...fragmentStyles, overflow: 'visible' }
-          : fragmentStyles;
-      applyStyles(fragmentEl, styles);
-      if (resolvedItem) {
-        this.applyResolvedFragmentFrame(fragmentEl, resolvedItem, fragment, context.section, context.story);
-      } else {
-        this.applyFragmentFrame(fragmentEl, fragment, context.section, context.story);
-      }
-
-      // Add TOC-specific styling class
-      if (isTocEntry) {
-        fragmentEl.classList.add('superdoc-toc-entry');
-      }
-
-      if (paraContinuesFromPrev) {
-        fragmentEl.dataset.continuesFromPrev = 'true';
-      }
-      if (paraContinuesOnNext) {
-        fragmentEl.dataset.continuesOnNext = 'true';
-      }
-
-      const lines = fragment.lines ?? measure.lines.slice(fragment.fromLine, fragment.toLine);
-      renderParagraphContent({
-        doc: this.doc,
-        frameEl: fragmentEl,
+    return renderParagraphFragmentElement({
+      doc: this.doc,
+      fragment,
+      sdtBoundary,
+      betweenInfo,
+      resolvedItem,
+      applyStyles,
+      applyResolvedFragmentFrame: (el, item, paraFragment) =>
+        this.applyResolvedFragmentFrame(el, item, paraFragment, context.section, context.story),
+      applyFragmentFrame: (el, paraFragment) => this.applyFragmentFrame(el, paraFragment, context.section, context.story),
+      applySdtDataset: this.applySdtDataset.bind(this),
+      applyContainerSdtDataset: this.applyContainerSdtDataset.bind(this),
+      renderLine: ({
         block,
-        measure,
-        containerKind: 'body-fragment',
-        width: fragment.width,
-        localStartLine: 0,
-        localEndLine: lines.length,
-        lineIndexOffset: fragment.fromLine,
-        linesOverride: lines,
-        continuesFromPrev: paraContinuesFromPrev,
-        continuesOnNext: paraContinuesOnNext,
-        markerWidth: paraMarkerWidth,
-        markerTextWidth: fragment.markerTextWidth,
-        wordLayout,
-        resolvedContent: content,
-        betweenInfo,
-        sdtBoundary,
-        applySdtDataset: this.applySdtDataset.bind(this),
-        applyContainerSdtDataset: this.applyContainerSdtDataset.bind(this),
-        renderDropCap: this.renderDropCap.bind(this),
-        renderLine: ({
+        line,
+        availableWidth,
+        lineIndex,
+        skipJustify,
+        preExpandedRuns,
+        resolvedListTextStartPx,
+        indentOffsetOverride,
+        paragraphMarkLeftOffsetOverride,
+      }) =>
+        this.renderLine(
           block,
           line,
+          context,
           availableWidth,
           lineIndex,
           skipJustify,
@@ -2698,35 +2617,17 @@ export class DomPainter {
           resolvedListTextStartPx,
           indentOffsetOverride,
           paragraphMarkLeftOffsetOverride,
-        }) =>
-          this.renderLine(
-            block,
-            line,
-            context,
-            availableWidth,
-            lineIndex,
-            skipJustify,
-            preExpandedRuns,
-            resolvedListTextStartPx,
-            indentOffsetOverride,
-            paragraphMarkLeftOffsetOverride,
-          ),
-        captureLineSnapshot: (lineEl, options) => {
-          this.capturePaintSnapshotLine(lineEl, context, {
-            inTableFragment: false,
-            inTableParagraph: false,
-            wrapperEl: fragmentEl,
-            sourceAnchor: options?.sourceAnchor,
-          });
-        },
-        sourceAnchor: resolvedItem?.sourceAnchor,
-      });
-
-      return fragmentEl;
-    } catch (error) {
-      console.error('[DomPainter] Fragment rendering failed:', { fragment, error });
-      return this.createErrorPlaceholder(fragment.blockId, error);
-    }
+        ),
+      captureLineSnapshot: (lineEl, options) => {
+        this.capturePaintSnapshotLine(lineEl, context, {
+          inTableFragment: false,
+          inTableParagraph: false,
+          wrapperEl: options?.wrapperEl,
+          sourceAnchor: options?.sourceAnchor,
+        });
+      },
+      createErrorPlaceholder: this.createErrorPlaceholder.bind(this),
+    });
   }
 
   /**
@@ -2755,66 +2656,6 @@ export class DomPainter {
       el.title = error.message;
     }
     return el;
-  }
-
-  /**
-   * Renders a drop cap element as a floated span at the start of a paragraph.
-   *
-   * Drop caps are large initial letters that span multiple lines of text.
-   * This method creates a floated element with the drop cap letter styled
-   * according to the descriptor's run properties.
-   *
-   * @param descriptor - The drop cap descriptor with text and styling info
-   * @param measure - The measured dimensions of the drop cap
-   * @returns HTMLElement containing the rendered drop cap
-   */
-  private renderDropCap(descriptor: DropCapDescriptor, measure: ParagraphMeasure['dropCap']): HTMLElement {
-    const doc = this.doc!;
-    const { run, mode } = descriptor;
-
-    const dropCapEl = doc.createElement('span');
-    dropCapEl.classList.add('superdoc-drop-cap');
-    dropCapEl.textContent = run.text;
-
-    // Apply styling from the run
-    dropCapEl.style.fontFamily = run.fontFamily;
-    dropCapEl.style.fontSize = `${run.fontSize}px`;
-    if (run.bold) {
-      dropCapEl.style.fontWeight = 'bold';
-    }
-    if (run.italic) {
-      dropCapEl.style.fontStyle = 'italic';
-    }
-    if (run.color) {
-      dropCapEl.style.color = run.color;
-    }
-
-    // Position the drop cap based on mode
-    if (mode === 'drop') {
-      // Float left so text wraps around it
-      dropCapEl.style.float = 'left';
-      dropCapEl.style.marginRight = '4px'; // Small gap between drop cap and text
-      dropCapEl.style.lineHeight = '1'; // Prevent extra line height from affecting layout
-    } else if (mode === 'margin') {
-      // Position in the margin (left of the text area)
-      dropCapEl.style.position = 'absolute';
-      dropCapEl.style.left = '0';
-      dropCapEl.style.lineHeight = '1';
-    }
-
-    // Apply vertical position offset if specified
-    if (run.position && run.position !== 0) {
-      dropCapEl.style.position = dropCapEl.style.position || 'relative';
-      dropCapEl.style.top = `${run.position}px`;
-    }
-
-    // Set dimensions from measurement
-    if (measure) {
-      dropCapEl.style.width = `${measure.width}px`;
-      dropCapEl.style.height = `${measure.height}px`;
-    }
-
-    return dropCapEl;
   }
 
   private renderImageFragment(
@@ -4258,7 +4099,6 @@ export class DomPainter {
 
   /**
    * Applies fragment positioning, dimensions, and metadata to an HTML element.
-   * Sets CSS positioning, block ID, and PM position data attributes for paragraph fragments.
    *
    * @param el - The HTMLElement to apply fragment properties to
    * @param fragment - The fragment data containing position, dimensions, and PM position information
@@ -4288,33 +4128,7 @@ export class DomPainter {
     }
 
     if (fragment.kind === 'para') {
-      // Assert PM positions are present for paragraph fragments
-      // Only validate for body sections - header/footer fragments have their own PM coordinate space
-      // Note: undefined section defaults to body section behavior (validation enabled)
-      if (section === 'body' || section === undefined) {
-        assertFragmentPmPositions(fragment, 'paragraph fragment');
-      }
-
-      if (fragment.pmStart != null) {
-        el.dataset.pmStart = String(fragment.pmStart);
-      } else {
-        delete el.dataset.pmStart;
-      }
-      if (fragment.pmEnd != null) {
-        el.dataset.pmEnd = String(fragment.pmEnd);
-      } else {
-        delete el.dataset.pmEnd;
-      }
-      if (fragment.continuesFromPrev) {
-        el.dataset.continuesFromPrev = 'true';
-      } else {
-        delete el.dataset.continuesFromPrev;
-      }
-      if (fragment.continuesOnNext) {
-        el.dataset.continuesOnNext = 'true';
-      } else {
-        delete el.dataset.continuesOnNext;
-      }
+      applyParagraphFragmentPmAttributes(el, fragment, section);
     }
   }
 
@@ -4335,36 +4149,7 @@ export class DomPainter {
     }
 
     if (fragment.kind === 'para') {
-      if (section === 'body' || section === undefined) {
-        assertFragmentPmPositions(fragment, 'paragraph fragment');
-      }
-      // Narrow to ResolvedFragmentItem to access para-specific resolved fields.
-      // resolveLayout copies pmStart/pmEnd/continuesFromPrev/continuesOnNext from the
-      // source paragraph onto the resolved item when present, so reading off the
-      // back-pointer would be redundant (SD-2957).
-      const resolvedFrag = resolvedItem as ResolvedFragmentItem | undefined;
-      const pmStart = resolvedFrag?.pmStart;
-      if (pmStart != null) {
-        el.dataset.pmStart = String(pmStart);
-      } else {
-        delete el.dataset.pmStart;
-      }
-      const pmEnd = resolvedFrag?.pmEnd;
-      if (pmEnd != null) {
-        el.dataset.pmEnd = String(pmEnd);
-      } else {
-        delete el.dataset.pmEnd;
-      }
-      if (resolvedFrag?.continuesFromPrev) {
-        el.dataset.continuesFromPrev = 'true';
-      } else {
-        delete el.dataset.continuesFromPrev;
-      }
-      if (resolvedFrag?.continuesOnNext) {
-        el.dataset.continuesOnNext = 'true';
-      } else {
-        delete el.dataset.continuesOnNext;
-      }
+      applyParagraphFragmentPmAttributes(el, fragment, section, resolvedItem as ResolvedFragmentItem | undefined);
     }
   }
 
@@ -4812,54 +4597,6 @@ const getSdtMetadataVersion = (metadata: SdtMetadata | null | undefined): string
 };
 
 /**
- * Type guard to validate list marker attributes structure.
- *
- * @param attrs - The paragraph attributes to validate
- * @returns True if the attrs contain valid list marker properties
- */
-const hasListMarkerProperties = (
-  attrs: unknown,
-): attrs is {
-  numberingProperties: { numId?: number | string; ilvl?: number };
-  wordLayout?: { marker?: { markerText?: string } };
-} => {
-  if (!attrs || typeof attrs !== 'object') return false;
-  const obj = attrs as Record<string, unknown>;
-
-  if (!obj.numberingProperties || typeof obj.numberingProperties !== 'object') return false;
-  const numProps = obj.numberingProperties as Record<string, unknown>;
-
-  // Validate numId is number or string if present
-  if ('numId' in numProps) {
-    const numId = numProps.numId;
-    if (typeof numId !== 'number' && typeof numId !== 'string') return false;
-  }
-
-  // Validate ilvl is number if present
-  if ('ilvl' in numProps) {
-    const ilvl = numProps.ilvl;
-    if (typeof ilvl !== 'number') return false;
-  }
-
-  // Validate wordLayout structure if present
-  if ('wordLayout' in obj && obj.wordLayout !== undefined) {
-    if (typeof obj.wordLayout !== 'object' || obj.wordLayout === null) return false;
-    const wordLayout = obj.wordLayout as Record<string, unknown>;
-
-    if ('marker' in wordLayout && wordLayout.marker !== undefined) {
-      if (typeof wordLayout.marker !== 'object' || wordLayout.marker === null) return false;
-      const marker = wordLayout.marker as Record<string, unknown>;
-
-      if ('markerText' in marker && marker.markerText !== undefined) {
-        if (typeof marker.markerText !== 'string') return false;
-      }
-    }
-  }
-
-  return true;
-};
-
-/**
  * Derives a version string for a flow block based on its content and styling properties.
  *
  * This version string is used for cache invalidation - when any visual property of the block
@@ -4890,144 +4627,7 @@ const hasListMarkerProperties = (
  */
 const deriveBlockVersion = (block: FlowBlock): string => {
   if (block.kind === 'paragraph') {
-    // Include list marker info in version to detect indent/marker changes
-    const markerVersion = hasListMarkerProperties(block.attrs)
-      ? `marker:${block.attrs.numberingProperties.numId ?? ''}:${block.attrs.numberingProperties.ilvl ?? 0}:${block.attrs.wordLayout?.marker?.markerText ?? ''}`
-      : '';
-
-    const runsVersion = block.runs
-      .map((run) => {
-        // Handle ImageRun
-        if (run.kind === 'image') {
-          const imgRun = run as ImageRun;
-          return [
-            'img',
-            imgRun.src,
-            imgRun.width,
-            imgRun.height,
-            imgRun.alt ?? '',
-            imgRun.title ?? '',
-            imgRun.clipPath ?? '',
-            imgRun.distTop ?? '',
-            imgRun.distBottom ?? '',
-            imgRun.distLeft ?? '',
-            imgRun.distRight ?? '',
-            readClipPathValue((imgRun as { clipPath?: unknown }).clipPath),
-            // Note: pmStart/pmEnd intentionally excluded to prevent O(n) change detection
-          ].join(',');
-        }
-
-        // Handle LineBreakRun
-        if (run.kind === 'lineBreak') {
-          // Note: pmStart/pmEnd intentionally excluded to prevent O(n) change detection
-          return 'linebreak';
-        }
-
-        // Handle TabRun
-        if (run.kind === 'tab') {
-          // Note: pmStart/pmEnd intentionally excluded to prevent O(n) change detection
-          return [run.text ?? '', 'tab'].join(',');
-        }
-
-        // Handle FieldAnnotationRun
-        if (run.kind === 'fieldAnnotation') {
-          const size = run.size ? `${run.size.width ?? ''}x${run.size.height ?? ''}` : '';
-          const highlighted = run.highlighted !== false ? 1 : 0;
-          return [
-            'field',
-            run.variant ?? '',
-            run.displayLabel ?? '',
-            run.fieldColor ?? '',
-            run.borderColor ?? '',
-            highlighted,
-            run.hidden ? 1 : 0,
-            run.visibility ?? '',
-            run.imageSrc ?? '',
-            run.linkUrl ?? '',
-            run.rawHtml ?? '',
-            size,
-            run.fontFamily ?? '',
-            run.fontSize ?? '',
-            run.textColor ?? '',
-            run.textHighlight ?? '',
-            run.bold ? 1 : 0,
-            run.italic ? 1 : 0,
-            run.underline ? 1 : 0,
-            run.fieldId ?? '',
-            run.fieldType ?? '',
-          ].join(',');
-        }
-
-        // Handle TextRun (kind is 'text' or undefined)
-        const textRun = run as TextRun;
-        const trackedChangeVersion = textRun.trackedChange
-          ? [
-              textRun.trackedChange.kind ?? '',
-              textRun.trackedChange.id ?? '',
-              textRun.trackedChange.storyKey ?? '',
-              textRun.trackedChange.author ?? '',
-              textRun.trackedChange.authorEmail ?? '',
-              textRun.trackedChange.authorImage ?? '',
-              textRun.trackedChange.date ?? '',
-              textRun.trackedChange.before ? JSON.stringify(textRun.trackedChange.before) : '',
-              textRun.trackedChange.after ? JSON.stringify(textRun.trackedChange.after) : '',
-            ].join(':')
-          : '';
-        return [
-          textRun.text ?? '',
-          textRun.fontFamily,
-          textRun.fontSize,
-          textRun.bold ? 1 : 0,
-          textRun.italic ? 1 : 0,
-          textRun.color ?? '',
-          // Text decorations - ensures DOM updates when decoration properties change.
-          textRun.underline?.style ?? '',
-          textRun.underline?.color ?? '',
-          textRun.strike ? 1 : 0,
-          textRun.highlight ?? '',
-          textRun.letterSpacing != null ? textRun.letterSpacing : '',
-          textRun.vertAlign ?? '',
-          textRun.baselineShift != null ? textRun.baselineShift : '',
-          // Note: pmStart/pmEnd intentionally excluded to prevent O(n) change detection
-          textRun.token ?? '',
-          // Tracked changes - force re-render when any rendered tracked-change metadata changes.
-          trackedChangeVersion,
-          // Comment annotations - force re-render when comments are enabled/disabled
-          textRun.comments?.length ?? 0,
-        ].join(',');
-      })
-      .join('|');
-
-    // Include paragraph-level attributes that affect rendering (alignment, spacing, indent, etc.)
-    // This ensures DOM updates when toolbar commands like "align center" change these properties.
-    const attrs = block.attrs as ParagraphAttrs | undefined;
-
-    const paragraphAttrsVersion = attrs
-      ? [
-          attrs.alignment ?? '',
-          attrs.spacing?.before ?? '',
-          attrs.spacing?.after ?? '',
-          attrs.spacing?.line ?? '',
-          attrs.spacing?.lineRule ?? '',
-          attrs.indent?.left ?? '',
-          attrs.indent?.right ?? '',
-          attrs.indent?.firstLine ?? '',
-          attrs.indent?.hanging ?? '',
-          attrs.borders ? hashParagraphBorders(attrs.borders) : '',
-          attrs.shading?.fill ?? '',
-          attrs.shading?.color ?? '',
-          getParagraphInlineDirection(attrs) ?? '',
-          attrs.tabs?.length ? JSON.stringify(attrs.tabs) : '',
-        ].join(':')
-      : '';
-
-    // Include SDT metadata so lock-mode (and other SDT property) changes invalidate the cache.
-    const sdtAttrs = (block.attrs as ParagraphAttrs | undefined)?.sdt;
-    const sdtVersion = getSdtMetadataVersion(sdtAttrs);
-
-    // Combine marker version, runs version, paragraph attrs version, and SDT version
-    const parts = [markerVersion, runsVersion, paragraphAttrsVersion, sdtVersion].filter(Boolean);
-    return parts.join('|');
+    return deriveParagraphBlockVersion(block, getSdtMetadataVersion, readClipPathValue);
   }
 
   if (block.kind === 'image') {
@@ -5178,54 +4778,7 @@ const deriveBlockVersion = (block: FlowBlock): string => {
         for (const cellBlock of cellBlocks) {
           hash = hashString(hash, cellBlock?.kind ?? 'unknown');
           if (cellBlock?.kind === 'paragraph') {
-            const paragraphBlock = cellBlock as ParagraphBlock;
-            const runs = paragraphBlock.runs ?? [];
-            hash = hashNumber(hash, runs.length);
-
-            // Include paragraph-level attributes that affect rendering
-            // (alignment, spacing, indent, etc.) - fixes toolbar commands not updating tables
-            const attrs = paragraphBlock.attrs as ParagraphAttrs | undefined;
-
-            if (attrs) {
-              hash = hashString(hash, attrs.alignment ?? '');
-              hash = hashNumber(hash, attrs.spacing?.before ?? 0);
-              hash = hashNumber(hash, attrs.spacing?.after ?? 0);
-              hash = hashNumber(hash, attrs.spacing?.line ?? 0);
-              hash = hashString(hash, attrs.spacing?.lineRule ?? '');
-              hash = hashNumber(hash, attrs.indent?.left ?? 0);
-              hash = hashNumber(hash, attrs.indent?.right ?? 0);
-              hash = hashNumber(hash, attrs.indent?.firstLine ?? 0);
-              hash = hashNumber(hash, attrs.indent?.hanging ?? 0);
-              hash = hashString(hash, attrs.shading?.fill ?? '');
-              hash = hashString(hash, attrs.shading?.color ?? '');
-              hash = hashString(hash, getParagraphInlineDirection(attrs) ?? '');
-              if (attrs.borders) {
-                hash = hashString(hash, hashParagraphBorders(attrs.borders));
-              }
-            }
-
-            for (const run of runs) {
-              // Only text runs have .text property; ImageRun does not
-              if ('text' in run && typeof run.text === 'string') {
-                hash = hashString(hash, run.text);
-              }
-              hash = hashNumber(hash, run.pmStart ?? -1);
-              hash = hashNumber(hash, run.pmEnd ?? -1);
-
-              // Include run formatting properties that affect rendering
-              // (color, highlight, bold, italic, etc.) - fixes toolbar commands not updating tables
-              hash = hashString(hash, getRunStringProp(run, 'color'));
-              hash = hashString(hash, getRunStringProp(run, 'highlight'));
-              hash = hashString(hash, getRunBooleanProp(run, 'bold') ? '1' : '');
-              hash = hashString(hash, getRunBooleanProp(run, 'italic') ? '1' : '');
-              hash = hashNumber(hash, getRunNumberProp(run, 'fontSize'));
-              hash = hashString(hash, getRunStringProp(run, 'fontFamily'));
-              hash = hashString(hash, getRunUnderlineStyle(run));
-              hash = hashString(hash, getRunUnderlineColor(run));
-              hash = hashString(hash, getRunBooleanProp(run, 'strike') ? '1' : '');
-              hash = hashString(hash, getRunStringProp(run, 'vertAlign'));
-              hash = hashNumber(hash, getRunNumberProp(run, 'baselineShift'));
-            }
+            hash = hashParagraphBlockForTableVersion(hash, cellBlock as ParagraphBlock, { hashString, hashNumber });
           } else if (cellBlock?.kind) {
             // Non-paragraph cell blocks participate in the parent table version
             // through their own block-level signatures. layout-bridge/cache.ts

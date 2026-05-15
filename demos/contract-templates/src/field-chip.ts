@@ -18,7 +18,7 @@
  * label, border, hover background) by design: this demo demonstrates
  * the API's ability to add contextual UI on top of the document, not
  * to replace the editor's default visuals. Suppressing the built-in
- * chrome is filed as SD-3159 (`contentControls.chrome: 'default' | 'none'`).
+ * chrome is filed as SD-3159 (`modules.contentControls.chrome: 'default' | 'none'`).
  */
 import type { SuperDocUI } from 'superdoc/ui';
 
@@ -49,17 +49,33 @@ export function attachFieldChip(ui: SuperDocUI, lookup: SmartFieldLookup): () =>
   let currentId: string | null = null;
   let currentKey: string | null = null;
 
-  const hide = () => {
+  /**
+   * Clear the active control entirely. Use ONLY when the controller
+   * tells us "no active SDT" — i.e. the observe callback fires with
+   * `activeId: null` or the active control isn't a smart field. Do
+   * NOT call this from the positioning loop on a transient rect miss
+   * (a reflow can drop the rect for one tick; clearing here would
+   * leave the chip hidden until the user clicks away and back).
+   */
+  const clearActive = () => {
     chipEl.style.visibility = 'hidden';
     currentId = null;
     currentKey = null;
+  };
+
+  /** Hide visually but keep the active state, so the next tick can re-anchor. */
+  const hideVisually = () => {
+    chipEl.style.visibility = 'hidden';
   };
 
   const positionChip = () => {
     if (!currentId) return;
     const rect = ui.contentControls.getRect({ id: currentId });
     if (!rect.success) {
-      hide();
+      // Transient miss — keep the active state so the next scroll /
+      // resize / observe tick can re-anchor without requiring the
+      // user to click away.
+      hideVisually();
       return;
     }
     // Position the chip above the wrapper. Falls below if there's no
@@ -88,7 +104,7 @@ export function attachFieldChip(ui: SuperDocUI, lookup: SmartFieldLookup): () =>
 
   const update = () => {
     if (!currentId || !currentKey) {
-      hide();
+      clearActive();
       return;
     }
     renderChip(lookup.labelFor(currentKey), lookup.valueFor(currentKey) ?? '');
@@ -103,24 +119,24 @@ export function attachFieldChip(ui: SuperDocUI, lookup: SmartFieldLookup): () =>
     // chip on them would compete with that flow.
     const activeId = snapshot.activeId;
     if (!activeId) {
-      hide();
+      clearActive();
       return;
     }
     const info = ui.contentControls.get({ id: activeId });
     const tagStr = info?.properties?.tag;
     if (!tagStr) {
-      hide();
+      clearActive();
       return;
     }
     let parsed: { kind?: unknown; key?: unknown } | null = null;
     try {
       parsed = JSON.parse(tagStr);
     } catch {
-      hide();
+      clearActive();
       return;
     }
     if (!parsed || parsed.kind !== 'smartField' || typeof parsed.key !== 'string') {
-      hide();
+      clearActive();
       return;
     }
     currentId = activeId;

@@ -530,33 +530,77 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
 
   /**
    * Compute the innermost-first chain of content-control ids that
-   * contain the current selection anchor. Walks the PM selection up
-   * to find every SDT node ancestor and maps each to its `nodeId`.
-   * Intersect with the list cache so subscribers don't see ids that
-   * aren't in `items` (transient state during a doc swap).
+   * contain the current selection. Two cases:
+   *
+   *   1. TextSelection: walk the `$anchor` up from leaf to root and
+   *      collect every `structuredContent` / `structuredContentBlock`
+   *      ancestor's `nodeId`.
+   *   2. NodeSelection on the SDT wrapper itself (drag-handle click,
+   *      Esc-promotes-to-node, paste-replaces-control): `$anchor` is
+   *      positioned BEFORE the node, so the ancestor walk above never
+   *      visits the selected node. Read `selection.node` first; if it
+   *      IS a content control, prepend its id so the chip stays active.
+   *
+   * Intersect with the items cache so transient ghost ids during a
+   * doc swap don't leak through.
    */
   const computeActiveContentControlIds = (validIds: ReadonlySet<string>): readonly string[] => {
     const editor = resolveRoutedEditor(superdoc) as unknown as {
-      state?: { selection?: { $anchor?: { depth?: number; node?: (depth: number) => unknown } } };
-      view?: { state?: { selection?: { $anchor?: { depth?: number; node?: (depth: number) => unknown } } } };
+      state?: {
+        selection?: {
+          $anchor?: { depth?: number; node?: (depth: number) => unknown };
+          node?: { type?: { name?: string }; attrs?: { id?: unknown } };
+        };
+      };
+      view?: {
+        state?: {
+          selection?: {
+            $anchor?: { depth?: number; node?: (depth: number) => unknown };
+            node?: { type?: { name?: string }; attrs?: { id?: unknown } };
+          };
+        };
+      };
     };
     const pmState = editor?.state ?? editor?.view?.state;
-    const anchor = pmState?.selection?.$anchor;
-    if (!anchor || typeof anchor.depth !== 'number' || typeof anchor.node !== 'function') {
-      return EMPTY_ACTIVE_CONTENT_CONTROL_IDS;
-    }
+    const selection = pmState?.selection;
+    if (!selection) return EMPTY_ACTIVE_CONTENT_CONTROL_IDS;
     const ids: string[] = [];
-    for (let d = anchor.depth; d >= 0; d -= 1) {
-      const node = anchor.node(d) as
-        | { type?: { name?: string }; attrs?: { id?: unknown } }
-        | null
-        | undefined;
-      const typeName = node?.type?.name;
-      if (typeName !== 'sdt' && typeName !== 'structuredContent' && typeName !== 'structuredContentBlock') continue;
-      const id = node?.attrs?.id;
-      if (typeof id !== 'string' || id.length === 0) continue;
-      if (!validIds.has(id)) continue;
-      ids.push(id);
+
+    // NodeSelection branch: the selected node itself is a content
+    // control. PM `NodeSelection` exposes `selection.node`; other
+    // selection kinds either lack the property or carry an
+    // unselected node. Duck-typed to keep this module free of the
+    // `prosemirror-state` import (the existing `$anchor` walk does
+    // the same).
+    const selectedNode = selection.node;
+    if (
+      selectedNode &&
+      (selectedNode.type?.name === 'structuredContent' ||
+        selectedNode.type?.name === 'structuredContentBlock')
+    ) {
+      const id = selectedNode.attrs?.id;
+      if (typeof id === 'string' && id.length > 0 && validIds.has(id)) {
+        ids.push(id);
+      }
+    }
+
+    // Ancestor walk: TextSelection inside an SDT, or NodeSelection
+    // whose ancestor chain also contains SDTs (nested case).
+    const anchor = selection.$anchor;
+    if (anchor && typeof anchor.depth === 'number' && typeof anchor.node === 'function') {
+      for (let d = anchor.depth; d >= 0; d -= 1) {
+        const node = anchor.node(d) as
+          | { type?: { name?: string }; attrs?: { id?: unknown } }
+          | null
+          | undefined;
+        const typeName = node?.type?.name;
+        if (typeName !== 'structuredContent' && typeName !== 'structuredContentBlock') continue;
+        const id = node?.attrs?.id;
+        if (typeof id !== 'string' || id.length === 0) continue;
+        if (!validIds.has(id)) continue;
+        if (ids.includes(id)) continue; // dedupe NodeSelection + ancestor overlap
+        ids.push(id);
+      }
     }
     if (ids.length === 0) return EMPTY_ACTIVE_CONTENT_CONTROL_IDS;
     return Object.freeze(ids);
@@ -904,16 +948,17 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
   const refreshAndNotify = () => {
     refreshCommentsListCache();
     refreshTrackChangesListCache();
-    refreshContentControlsListCache();
     scheduleNotify();
   };
 
   /**
    * Content-controls list refreshes on document-changing transactions
-   * (insertions / deletions of SDTs). Separate from `refreshAndNotify`
-   * so the comments / track-changes path stays unchanged — the editor
-   * fires `commentsUpdate` for those, and the doc transactions are
-   * the right signal for SDTs.
+   * (insertions / deletions of SDTs). Deliberately NOT part of
+   * `refreshAndNotify` above — that helper runs on `commentsUpdate` /
+   * `commentsLoaded` / `tracked-changes-changed`, none of which can
+   * add or remove SDTs. Bundling them in would waste an O(N) list
+   * walk on every comment / tracked-change event on the editing hot
+   * path.
    */
   const refreshContentControlsAndNotify = () => {
     refreshContentControlsListCache();

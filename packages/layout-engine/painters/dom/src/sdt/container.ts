@@ -149,10 +149,8 @@ export function applySdtContainerChrome(
 ): void {
   if (!shouldRenderSdtContainerChrome(sdt, containerSdt, options)) return;
 
-  let config = getSdtContainerConfig(sdt);
-  if (!config && containerSdt) {
-    config = getSdtContainerConfig(containerSdt);
-  }
+  const metadata = getSdtContainerMetadata(sdt, containerSdt);
+  const config = getSdtContainerConfig(metadata);
   if (!config) return;
 
   const isStart = boundaryOptions?.isStart ?? config.isStart;
@@ -163,10 +161,8 @@ export function applySdtContainerChrome(
   container.dataset.sdtContainerEnd = String(isEnd);
   container.style.overflow = 'visible';
 
-  if (isStructuredContentMetadata(sdt)) {
-    container.dataset.lockMode = sdt.lockMode || 'unlocked';
-  } else if (isStructuredContentMetadata(containerSdt)) {
-    container.dataset.lockMode = containerSdt.lockMode || 'unlocked';
+  if (isStructuredContentMetadata(metadata)) {
+    container.dataset.lockMode = metadata.lockMode || 'unlocked';
   }
 
   if (boundaryOptions?.widthOverride != null) {

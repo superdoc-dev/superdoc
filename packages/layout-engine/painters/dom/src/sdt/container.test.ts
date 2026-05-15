@@ -70,6 +70,33 @@ describe('SDT container chrome', () => {
     expect(el.querySelector('.superdoc-structured-content__label')?.textContent).toBe('Container');
   });
 
+  it('uses the rendered container metadata for lock mode', () => {
+    const doc = document.implementation.createHTMLDocument('sdt-container');
+    const el = doc.createElement('div');
+
+    applySdtContainerChrome(
+      doc,
+      el,
+      {
+        type: 'structuredContent',
+        scope: 'inline',
+        id: 'inline-sdt',
+        alias: 'Inline',
+        lockMode: 'contentLocked',
+      },
+      {
+        type: 'structuredContent',
+        scope: 'block',
+        id: 'container-sdt',
+        alias: 'Container',
+        lockMode: 'sdtLocked',
+      },
+    );
+
+    expect(el.classList.contains('superdoc-structured-content-block')).toBe(true);
+    expect(el.dataset.lockMode).toBe('sdtLocked');
+  });
+
   it('suppresses same-key ancestor chrome', () => {
     const childSdt: SdtMetadata = {
       type: 'structuredContent',

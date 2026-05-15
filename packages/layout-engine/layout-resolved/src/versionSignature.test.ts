@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { deriveBlockVersion, sourceAnchorSignature } from './versionSignature.js';
-import type { FlowBlock, ImageBlock, SourceAnchor, TableBlock, TextRun } from '@superdoc/contracts';
+import type { FlowBlock, ImageBlock, ImageRun, SourceAnchor, TableBlock, TextRun } from '@superdoc/contracts';
 
 describe('sourceAnchorSignature', () => {
   it('is stable for equivalent source anchors with different object key order', () => {
@@ -109,5 +109,72 @@ describe('deriveBlockVersion - table image content', () => {
     );
 
     expect(linked).not.toBe(unlinked);
+  });
+});
+
+describe('deriveBlockVersion - inline image runs', () => {
+  const baseImageRun: ImageRun = {
+    kind: 'image',
+    src: 'data:image/png;base64,AAA',
+    width: 40,
+    height: 20,
+  };
+
+  const makeParagraphWithImageRun = (image: ImageRun): FlowBlock => ({
+    kind: 'paragraph',
+    id: 'paragraph-with-image-run',
+    runs: [image],
+  });
+
+  const makeTableWithImageRun = (image: ImageRun): TableBlock => ({
+    kind: 'table',
+    id: 'table-with-inline-image-run',
+    rows: [
+      {
+        id: 'row-1',
+        cells: [
+          {
+            id: 'cell-1',
+            blocks: [makeParagraphWithImageRun(image)],
+          },
+        ],
+      },
+    ],
+  });
+
+  it('changes when an inline image filter changes', () => {
+    const plain = deriveBlockVersion(makeParagraphWithImageRun(baseImageRun));
+    const filtered = deriveBlockVersion(
+      makeParagraphWithImageRun({ ...baseImageRun, grayscale: true, lum: { bright: 25000 } }),
+    );
+
+    expect(filtered).not.toBe(plain);
+  });
+
+  it('changes when an inline image transform changes', () => {
+    const plain = deriveBlockVersion(makeParagraphWithImageRun(baseImageRun));
+    const transformed = deriveBlockVersion(makeParagraphWithImageRun({ ...baseImageRun, rotation: 45, flipH: true }));
+
+    expect(transformed).not.toBe(plain);
+  });
+
+  it('changes when an inline image hyperlink changes', () => {
+    const unlinked = deriveBlockVersion(makeParagraphWithImageRun(baseImageRun));
+    const linked = deriveBlockVersion(
+      makeParagraphWithImageRun({ ...baseImageRun, hyperlink: { url: 'https://example.com/inline-image' } }),
+    );
+
+    expect(linked).not.toBe(unlinked);
+  });
+
+  it('changes when a table-cell inline image visual property changes', () => {
+    const plain = deriveBlockVersion(makeTableWithImageRun(baseImageRun));
+    const filtered = deriveBlockVersion(makeTableWithImageRun({ ...baseImageRun, grayscale: true }));
+    const linked = deriveBlockVersion(
+      makeTableWithImageRun({ ...baseImageRun, hyperlink: { url: 'https://example.com/table-inline-image' } }),
+    );
+
+    expect(filtered).not.toBe(plain);
+    expect(linked).not.toBe(plain);
   });
 });

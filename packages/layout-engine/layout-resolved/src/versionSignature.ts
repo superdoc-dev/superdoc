@@ -111,6 +111,30 @@ const renderedBlockImageVersion = (image: ImageBlock | ImageDrawing): string =>
     resolveBlockClipPath(image),
   ].join('|');
 
+const renderedInlineImageRunVersion = (image: ImageRun): string =>
+  [
+    'img',
+    image.src ?? '',
+    image.width ?? '',
+    image.height ?? '',
+    image.alt ?? '',
+    image.title ?? '',
+    readClipPathValue(image.clipPath),
+    image.distTop ?? '',
+    image.distBottom ?? '',
+    image.distLeft ?? '',
+    image.distRight ?? '',
+    image.verticalAlign ?? '',
+    image.gain ?? '',
+    image.blacklevel ?? '',
+    image.grayscale ? 1 : 0,
+    imageLuminanceVersion(image.lum),
+    image.rotation ?? '',
+    image.flipH ? 1 : 0,
+    image.flipV ? 1 : 0,
+    imageHyperlinkVersion(image.hyperlink),
+  ].join('|');
+
 // ---------------------------------------------------------------------------
 // List marker validation
 // ---------------------------------------------------------------------------
@@ -246,21 +270,7 @@ export const deriveBlockVersion = (block: FlowBlock): string => {
     const runsVersion = block.runs
       .map((run) => {
         if (run.kind === 'image') {
-          const imgRun = run as ImageRun;
-          return [
-            'img',
-            imgRun.src,
-            imgRun.width,
-            imgRun.height,
-            imgRun.alt ?? '',
-            imgRun.title ?? '',
-            imgRun.clipPath ?? '',
-            imgRun.distTop ?? '',
-            imgRun.distBottom ?? '',
-            imgRun.distLeft ?? '',
-            imgRun.distRight ?? '',
-            readClipPathValue((imgRun as { clipPath?: unknown }).clipPath),
-          ].join(',');
+          return renderedInlineImageRunVersion(run as ImageRun);
         }
 
         if (run.kind === 'lineBreak') {
@@ -476,6 +486,13 @@ export const deriveBlockVersion = (block: FlowBlock): string => {
             }
 
             for (const run of runs) {
+              if (run.kind === 'image') {
+                hash = hashString(hash, renderedInlineImageRunVersion(run as ImageRun));
+                hash = hashNumber(hash, run.pmStart ?? -1);
+                hash = hashNumber(hash, run.pmEnd ?? -1);
+                continue;
+              }
+
               if ('text' in run && typeof run.text === 'string') {
                 hash = hashString(hash, run.text);
               }

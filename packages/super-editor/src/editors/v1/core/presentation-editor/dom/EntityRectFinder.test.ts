@@ -5,8 +5,10 @@ import { describe, expect, it } from 'vitest';
 import {
   elementsToRangeRects,
   findRenderedCommentElements,
+  findRenderedContentControlElements,
   findRenderedTrackedChangeElementsStrict,
 } from './EntityRectFinder.js';
+import { DOM_CLASS_NAMES } from '@superdoc/dom-contract';
 
 const BODY_STORY_KEY = 'body';
 
@@ -206,5 +208,179 @@ describe('elementsToRangeRects', () => {
 
     const [rect] = elementsToRangeRects([run]);
     expect(rect.pageIndex).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// findRenderedContentControlElements
+// ---------------------------------------------------------------------------
+
+function escapeAttr(value: string): string {
+  // Test stub mirroring the shape of `CSS.escape` for attribute selectors;
+  // production code passes the platform shim owned by PresentationEditor.
+  return value.replace(/(["\\])/g, '\\$1');
+}
+
+function paintSdtWrapper(
+  host: HTMLElement,
+  id: string,
+  opts: { type?: string; scope?: 'block' | 'inline'; pageIndex?: number; className?: string | null } = {},
+): HTMLElement {
+  const page = document.createElement('div');
+  page.className = 'superdoc-page';
+  page.dataset.pageIndex = String(opts.pageIndex ?? 0);
+  const wrapper = document.createElement('span');
+  // Mirror the painter: inline SDT wrappers carry the
+  // INLINE_SDT_WRAPPER class, block SDT wrappers carry BLOCK_SDT.
+  // Tests that intentionally exercise the "wrapper missing class"
+  // path can pass className: null to skip this.
+  if (opts.className !== null) {
+    // Drive the helper from the shared dom-contract constants so a
+    // future rename of INLINE_SDT_WRAPPER / BLOCK_SDT can't silently
+    // de-sync the test from production. (Mixed convention elsewhere
+    // in the painter tests: see painters/dom/src/index.test.ts which
+    // hardcodes these strings. Prefer the constant here.)
+    wrapper.className =
+      opts.className ??
+      (opts.scope === 'block' ? DOM_CLASS_NAMES.BLOCK_SDT : DOM_CLASS_NAMES.INLINE_SDT_WRAPPER);
+  }
+  wrapper.dataset.sdtId = id;
+  wrapper.dataset.sdtType = opts.type ?? 'structuredContent';
+  if (opts.scope) wrapper.dataset.sdtScope = opts.scope;
+  page.appendChild(wrapper);
+  host.appendChild(page);
+  return wrapper;
+}
+
+describe('findRenderedContentControlElements', () => {
+  it('returns the painted wrapper whose data-sdt-id matches', () => {
+    const host = makeHost();
+    const a = paintSdtWrapper(host, 'sdt-1', { scope: 'inline' });
+    const b = paintSdtWrapper(host, 'sdt-2', { scope: 'inline' });
+
+    const matches = findRenderedContentControlElements(host, 'sdt-1', escapeAttr);
+    expect(matches).toEqual([a]);
+    expect(matches).not.toContain(b);
+  });
+
+  it('returns multiple wrappers when a block SDT spans pages', () => {
+    const host = makeHost();
+    const fragment1 = paintSdtWrapper(host, 'sdt-block', { scope: 'block', pageIndex: 0 });
+    const fragment2 = paintSdtWrapper(host, 'sdt-block', { scope: 'block', pageIndex: 1 });
+
+    const matches = findRenderedContentControlElements(host, 'sdt-block', escapeAttr);
+    expect(matches).toHaveLength(2);
+    expect(matches).toContain(fragment1);
+    expect(matches).toContain(fragment2);
+  });
+
+  it('ignores SDT wrappers whose data-sdt-type is not structuredContent', () => {
+    const host = makeHost();
+    paintSdtWrapper(host, 'sdt-3', { type: 'fieldAnnotation' });
+    paintSdtWrapper(host, 'sdt-3', { type: 'documentSection' });
+    paintSdtWrapper(host, 'sdt-3', { type: 'docPartObject' });
+
+    expect(findRenderedContentControlElements(host, 'sdt-3', escapeAttr)).toEqual([]);
+  });
+
+  it('returns [] when the host or id is empty', () => {
+    expect(findRenderedContentControlElements(null as unknown as HTMLElement, 'sdt-1', escapeAttr)).toEqual([]);
+    expect(findRenderedContentControlElements(makeHost(), '', escapeAttr)).toEqual([]);
+  });
+
+  it('escapes attribute-special characters in the id', () => {
+    const host = makeHost();
+    const tricky = paintSdtWrapper(host, 'sdt"with"quotes', { scope: 'inline' });
+    expect(findRenderedContentControlElements(host, 'sdt"with"quotes', escapeAttr)).toEqual([tricky]);
+  });
+
+  it('ignores SDT-tagged elements that lack the wrapper class', () => {
+    // Defensive: a plain text-run span gets `data-sdt-id` /
+    // `data-sdt-type` stamped by the painter too, but it does NOT get
+    // a wrapper class. The finder must reject it so child runs don't
+    // surface as their own painted occurrence.
+    const host = makeHost();
+    paintSdtWrapper(host, 'sdt-classless', { scope: 'inline', className: null });
+
+    expect(findRenderedContentControlElements(host, 'sdt-classless', escapeAttr)).toEqual([]);
+  });
+
+  it('matches across stories when the same id is painted in body and header (v1 deferred behavior)', () => {
+    // Codifies the documented v1 limitation: SDT wrappers don't stamp
+    // `data-story-key` today, so a content control with the same id
+    // painted in both body and header will surface as two matches even
+    // when the caller passes a body-only storyKey. The fix (strict
+    // story filtering for content controls) lands when the painter
+    // adds `data-story-key` to SDT wrappers — see the JSDoc on
+    // `findRenderedContentControlElements`. This test exists so a
+    // future change can't silently *narrow* the helper (e.g. by adding
+    // a strict story filter that breaks consumers who relied on the
+    // cross-story match) without a deliberate test update.
+    const host = makeHost();
+    // Two pages: one in body, one whose ancestor declares
+    // data-story-key="story:headerFooterPart:rId1". Body wrapper has
+    // no story marker (legacy / default).
+    const bodyWrapper = paintSdtWrapper(host, 'sdt-shared', { scope: 'inline', pageIndex: 0 });
+    const headerArea = document.createElement('div');
+    headerArea.dataset.storyKey = 'story:headerFooterPart:rId1';
+    const headerPage = document.createElement('div');
+    headerPage.className = 'superdoc-page';
+    headerPage.dataset.pageIndex = '1';
+    const headerWrapper = document.createElement('span');
+    headerWrapper.className = DOM_CLASS_NAMES.INLINE_SDT_WRAPPER;
+    headerWrapper.dataset.sdtId = 'sdt-shared';
+    headerWrapper.dataset.sdtType = 'structuredContent';
+    headerWrapper.dataset.sdtScope = 'inline';
+    headerPage.appendChild(headerWrapper);
+    headerArea.appendChild(headerPage);
+    host.appendChild(headerArea);
+
+    // No storyKey → both match (the only mode the helper supports today).
+    const allMatches = findRenderedContentControlElements(host, 'sdt-shared', escapeAttr);
+    expect(allMatches).toHaveLength(2);
+    expect(allMatches).toContain(bodyWrapper);
+    expect(allMatches).toContain(headerWrapper);
+
+    // storyKey supplied → ignored, both still match. This is the
+    // deferred behavior: signature parity with comment / tracked-change
+    // finders, but the filter is a no-op until the painter stamps
+    // `data-story-key`.
+    const bodyOnly = findRenderedContentControlElements(host, 'sdt-shared', escapeAttr, BODY_STORY_KEY);
+    expect(bodyOnly).toHaveLength(2);
+    expect(bodyOnly).toContain(bodyWrapper);
+    expect(bodyOnly).toContain(headerWrapper);
+  });
+
+  it('returns only the wrapper when child runs also carry the SDT metadata attrs', () => {
+    // Regression: applySdtDataset in the painter stamps `data-sdt-id` /
+    // `data-sdt-type` on the inline wrapper AND on every child text-run
+    // element. A naive `[data-sdt-id][data-sdt-type=structuredContent]`
+    // selector matches wrapper + every run, polluting the
+    // single-wrapper-per-occurrence contract `rects` promises.
+    const host = makeHost();
+    const page = document.createElement('div');
+    page.className = 'superdoc-page';
+    page.dataset.pageIndex = '0';
+    const wrapper = document.createElement('span');
+    wrapper.className = 'superdoc-structured-content-inline';
+    wrapper.dataset.sdtId = 'sdt-with-children';
+    wrapper.dataset.sdtType = 'structuredContent';
+    wrapper.dataset.sdtScope = 'inline';
+    // Two child text runs that the painter also stamps the SDT metadata on.
+    const run1 = document.createElement('span');
+    run1.dataset.sdtId = 'sdt-with-children';
+    run1.dataset.sdtType = 'structuredContent';
+    const run2 = document.createElement('span');
+    run2.dataset.sdtId = 'sdt-with-children';
+    run2.dataset.sdtType = 'structuredContent';
+    wrapper.appendChild(run1);
+    wrapper.appendChild(run2);
+    page.appendChild(wrapper);
+    host.appendChild(page);
+
+    const matches = findRenderedContentControlElements(host, 'sdt-with-children', escapeAttr);
+    expect(matches).toEqual([wrapper]);
+    expect(matches).not.toContain(run1);
+    expect(matches).not.toContain(run2);
   });
 });

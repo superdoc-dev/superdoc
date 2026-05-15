@@ -121,6 +121,18 @@ export type FieldAnnotationMetadata = {
 
 export type StructuredContentLockMode = 'unlocked' | 'sdtLocked' | 'contentLocked' | 'sdtContentLocked';
 
+/**
+ * Visual chrome / labelling behavior of an SDT, mirroring
+ * `<w15:appearance w15:val="…">` (ECMA-376 §17.5.2.6 / OOXML 2010+).
+ *
+ *   - `'boundingBox'` (default): visible chrome around the SDT content.
+ *   - `'tags'`: tags-only mode (start/end markers).
+ *   - `'hidden'`: no chrome at all; the SDT exists in the document but is
+ *     visually transparent. The alias label MUST NOT leak into the rendered
+ *     DOM textContent (a11y / copy-paste behavior).
+ */
+export type StructuredContentAppearance = 'boundingBox' | 'tags' | 'hidden';
+
 export type StructuredContentMetadata = {
   type: 'structuredContent';
   scope: 'inline' | 'block';
@@ -128,6 +140,8 @@ export type StructuredContentMetadata = {
   tag?: string | null;
   alias?: string | null;
   lockMode?: StructuredContentLockMode;
+  /** Appearance from the SDT's `<w15:appearance>` element, when present. */
+  appearance?: StructuredContentAppearance;
   sdtPr?: unknown;
 };
 

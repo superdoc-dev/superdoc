@@ -48,7 +48,6 @@ import {
   ensurePrintStyles,
   ensureSdtContainerStyles,
   ensureTrackChangeStyles,
-  fragmentStyles,
   pageStyles,
   spreadStyles,
   type PageStyles,
@@ -79,6 +78,10 @@ import { applyStyles } from './utils/apply-styles.js';
 import { applyTrackedChangeDecorations, resolveTrackedChangesConfig } from './runs/tracked-changes.js';
 import { applySourceAnchorDataset } from './utils/source-anchor.js';
 import { renderDrawingContent as renderSharedDrawingContent } from './drawings/renderDrawingContent.js';
+import {
+  isHeaderWordArtWatermark,
+  renderDrawingFragment as renderDrawingFragmentElement,
+} from './drawings/renderDrawingFragment.js';
 
 export type {
   PaintSnapshotStructuredContentBlockEntity,
@@ -2607,69 +2610,18 @@ export class DomPainter {
     context: FragmentRenderContext,
     resolvedItem?: ResolvedDrawingItem,
   ): HTMLElement {
-    try {
-      // Pre-extracted block from the resolved item.
-      if (resolvedItem?.block?.kind !== 'drawing') {
-        throw new Error(`DomPainter: missing resolved drawing block for fragment ${fragment.blockId}`);
-      }
-      const block = resolvedItem.block as DrawingBlock;
-      if (!this.doc) {
-        throw new Error('DomPainter: document is not available');
-      }
-      const fragmentEl = this.doc.createElement('div');
-      fragmentEl.classList.add(CLASS_NAMES.fragment, 'superdoc-drawing-fragment');
-      applyStyles(fragmentEl, fragmentStyles);
-      if (resolvedItem) {
-        this.applyResolvedFragmentFrame(fragmentEl, resolvedItem, fragment, context.section, context.story);
-      } else {
-        this.applyFragmentFrame(fragmentEl, fragment, context.section, context.story);
-        fragmentEl.style.height = `${fragment.height}px`;
-        this.applyFragmentWrapperZIndex(fragmentEl, fragment);
-      }
-      fragmentEl.style.position = 'absolute';
-      fragmentEl.style.overflow = 'hidden';
-
-      const innerWrapper = this.doc.createElement('div');
-      innerWrapper.classList.add('superdoc-drawing-inner');
-      innerWrapper.style.position = 'absolute';
-      innerWrapper.style.left = '50%';
-      innerWrapper.style.top = '50%';
-      innerWrapper.style.width = `${fragment.geometry.width}px`;
-      innerWrapper.style.height = `${fragment.geometry.height}px`;
-      innerWrapper.style.transformOrigin = 'center';
-
-      const scale = fragment.scale ?? 1;
-      const transforms: string[] = ['translate(-50%, -50%)'];
-      transforms.push(`rotate(${fragment.geometry.rotation ?? 0}deg)`);
-      transforms.push(`scaleX(${fragment.geometry.flipH ? -1 : 1})`);
-      transforms.push(`scaleY(${fragment.geometry.flipV ? -1 : 1})`);
-      transforms.push(`scale(${scale})`);
-      innerWrapper.style.transform = transforms.join(' ');
-
-      innerWrapper.appendChild(this.renderDrawingContent(block, fragment, context));
-      fragmentEl.appendChild(innerWrapper);
-
-      return fragmentEl;
-    } catch (error) {
-      console.error('[DomPainter] Drawing fragment rendering failed:', { fragment, error });
-      return this.createErrorPlaceholder(fragment.blockId, error);
-    }
-  }
-
-  private renderDrawingContent(
-    block: DrawingBlock,
-    fragment: DrawingFragment,
-    context?: FragmentRenderContext,
-  ): HTMLElement {
-    if (!this.doc) {
-      throw new Error('DomPainter: document is not available');
-    }
-    return renderSharedDrawingContent({
+    return renderDrawingFragmentElement({
       doc: this.doc,
-      block,
-      geometry: fragment.geometry,
+      fragment,
       context,
+      resolvedItem,
+      applyResolvedFragmentFrame: (el, item, drawingFragment, section) =>
+        this.applyResolvedFragmentFrame(el, item, drawingFragment, section, context.story),
+      applyFragmentFrame: (el, drawingFragment, section) =>
+        this.applyFragmentFrame(el, drawingFragment, section, context.story),
+      applyFragmentWrapperZIndex: this.applyFragmentWrapperZIndex.bind(this),
       buildImageHyperlinkAnchor: this.buildImageHyperlinkAnchor.bind(this),
+      createErrorPlaceholder: this.createErrorPlaceholder.bind(this),
     });
   }
 
@@ -2966,28 +2918,7 @@ export class DomPainter {
       return true;
     }
 
-    return section === 'header' && fragment.kind === 'drawing' && this.isHeaderWordArtWatermark(resolvedItem?.block);
-  }
-
-  private isHeaderWordArtWatermark(block: DrawingBlock | undefined): boolean {
-    if (!block || block.kind !== 'drawing' || block.drawingKind !== 'vectorShape') {
-      return false;
-    }
-
-    const attrs = (block.attrs as Record<string, unknown> | undefined) ?? {};
-    const hasTextContent = Array.isArray(block.textContent?.parts) && block.textContent.parts.length > 0;
-
-    return (
-      attrs.isWordArt === true &&
-      attrs.isTextBox === true &&
-      hasTextContent &&
-      block.anchor?.isAnchored === true &&
-      block.anchor.hRelativeFrom === 'page' &&
-      block.anchor.alignH === 'center' &&
-      block.anchor.vRelativeFrom === 'page' &&
-      block.anchor.alignV === 'center' &&
-      block.wrap?.type === 'None'
-    );
+    return section === 'header' && fragment.kind === 'drawing' && isHeaderWordArtWatermark(resolvedItem?.block);
   }
 
   /**

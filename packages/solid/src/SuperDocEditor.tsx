@@ -139,10 +139,10 @@ export function SuperDocEditor(props: SuperDocEditorProps) {
         containerIdResolved,
         toolbarIdResolved,
         role,
-        documentMode,
         contained,
         hideToolbar,
         modules,
+        documentMode,
       ]) => {
         batch(() => {
           // Reset states when document changes

@@ -4,6 +4,21 @@ const normalizeAttrs = (attrs = {}) => {
   return Object.fromEntries(Object.entries(attrs).filter(([, value]) => value !== null && value !== undefined));
 };
 
+const stripUnsetInternalSnapshotAttrs = (attrs = {}) => {
+  const nextAttrs = { ...attrs };
+  if (nextAttrs.ooxmlHighlightClear === null || nextAttrs.ooxmlHighlightClear === undefined) {
+    delete nextAttrs.ooxmlHighlightClear;
+  }
+  return nextAttrs;
+};
+
+export const createMarkSnapshot = (type, attrs = {}) => {
+  return {
+    type,
+    attrs: stripUnsetInternalSnapshotAttrs(attrs),
+  };
+};
+
 /**
  * Attribute values that are semantically equivalent to "not set" for tracking purposes.
  * These represent the default visual state and should not count as a change.
@@ -96,11 +111,11 @@ export const upsertMarkSnapshotByType = (snapshots, incoming) => {
   if (existing) {
     const merged = {
       ...existing,
-      attrs: { ...existing.attrs, ...incoming.attrs },
+      attrs: stripUnsetInternalSnapshotAttrs({ ...existing.attrs, ...incoming.attrs }),
     };
     return snapshots.map((mark) => (mark === existing ? merged : mark));
   }
-  return [...snapshots, incoming];
+  return [...snapshots, createMarkSnapshot(incoming.type, incoming.attrs)];
 };
 
 const markMatchesSnapshot = (mark, snapshot, exact = true) => {

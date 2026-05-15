@@ -40,6 +40,7 @@ export function translateStructuredContent(params) {
 /** Maps control types to their sdtPr element names for OOXML export. */
 const CONTROL_TYPE_ELEMENT_MAP = {
   text: 'w:text',
+  richText: 'w:richText',
   date: 'w:date',
   checkbox: 'w14:checkbox',
   comboBox: 'w:comboBox',

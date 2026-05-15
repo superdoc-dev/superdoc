@@ -34,6 +34,18 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  // When true, Enter does not stopPropagation at this button - the event
+  // bubbles up to whatever parent listens for keyboard activation (e.g.
+  // ButtonGroup's roving-tabindex handler when this button is the visual
+  // trigger inside a ToolbarDropdown). Plain-button uses keep the default
+  // (false) so the parent does not double-fire the command emission.
+  // Note: split buttons stop propagation internally inside
+  // handleSplitMainClick, so this prop has no effect for them - Enter still
+  // runs the main command on a split button regardless.
+  allowEnterPropagation: {
+    type: Boolean,
+    default: false,
+  },
 });
 
 const {
@@ -89,6 +101,11 @@ const handleOuterEnter = (event) => {
   handleClick();
 };
 
+const onEnterKeydown = (event) => {
+  if (!props.allowEnterPropagation) event.stopPropagation();
+  handleOuterEnter(event);
+};
+
 const handleInputSubmit = () => {
   const value = inlineTextInput.value;
   const cleanValue = value.match(/^\d+(\.5)?$/) ? value : Math.floor(parseFloat(value)).toString();
@@ -120,7 +137,7 @@ const caretIcon = computed(() => {
     :role="isOverflowItem ? 'menuitem' : 'button'"
     :aria-label="attributes.ariaLabel"
     @click="handleOuterClick"
-    @keydown.enter.stop="handleOuterEnter($event)"
+    @keydown.enter="onEnterKeydown($event)"
     tabindex="0"
   >
     <div

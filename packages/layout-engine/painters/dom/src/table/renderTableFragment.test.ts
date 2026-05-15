@@ -135,6 +135,40 @@ describe('renderTableFragment', () => {
     expect(element.dataset.pmEnd).toBe('34');
   });
 
+  it('applies outer left/right borders in separate mode even when cellSpacing is unset or zero', () => {
+    const block = createTestTableBlock();
+    block.attrs = {
+      borderCollapse: 'separate',
+      borders: {
+        left: { style: 'single', width: 2, color: '#ff0000' },
+        right: { style: 'single', width: 3, color: '#0000ff' },
+      },
+    };
+
+    const element = renderTableFragment({
+      doc,
+      fragment: createTestTableFragment(),
+      context,
+      block,
+      measure: createTestTableMeasure(),
+      cellSpacingPx: 0,
+      effectiveColumnWidths: [100],
+      renderLine: () => doc.createElement('div'),
+      applyFragmentFrame: () => {
+        // Intentionally empty for test mock
+      },
+      applySdtDataset: () => {
+        // Intentionally empty for test mock
+      },
+      applyStyles: () => {
+        // Intentionally empty for test mock
+      },
+    });
+
+    expect(element.style.borderLeftWidth).toBe('2px');
+    expect(element.style.borderRightWidth).toBe('3px');
+  });
+
   describe('merged-cell border ownership', () => {
     it('renders the outer right border for a merged header cell in collapsed mode', () => {
       const block: TableBlock = {

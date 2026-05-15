@@ -8,15 +8,16 @@ import {
   pmPosToCharOffset,
   extractParagraphIndent,
 } from '@superdoc/layout-bridge';
-import type {
-  FlowBlock,
-  Layout,
-  Line,
-  Measure,
-  ParaFragment,
-  TableBlock,
-  TableFragment,
-  TableMeasure,
+import {
+  getParagraphInlineDirection,
+  type FlowBlock,
+  type Layout,
+  type Line,
+  type Measure,
+  type ParaFragment,
+  type TableBlock,
+  type TableFragment,
+  type TableMeasure,
 } from '@superdoc/contracts';
 import { computeTableCaretLayoutRectFromDom } from '../tables/TableCaretDomGeometry.js';
 import { getPageElementByIndex } from '../../../dom-observer/PageDom.js';
@@ -196,7 +197,7 @@ export function computeCaretLayoutRectGeometry(
 
   const availableWidth = Math.max(0, fragment.width - (indentAdjust + indent.right));
   const charX = measureCharacterX(block, line, pmOffset, availableWidth);
-  const isRtlParagraph = block.attrs?.direction === 'rtl';
+  const isRtlParagraph = getParagraphInlineDirection(block.attrs) === 'rtl';
   const resolvedCharX = isRtlParagraph ? Math.max(0, availableWidth - charX) : charX;
   const localX = fragment.x + indentAdjust + resolvedCharX;
   const lineOffset = lineHeightBeforeIndex(measure.lines, fragment.fromLine, index);

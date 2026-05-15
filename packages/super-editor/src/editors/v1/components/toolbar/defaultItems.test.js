@@ -95,3 +95,25 @@ describe('makeDefaultItems LG compact styles', () => {
     expect(linkedStyles.attributes.value.className).not.toContain('toolbar-item--linked-styles-compact');
   });
 });
+
+// PR #3226: direction buttons (directionLtr / directionRtl) are intentionally
+// NOT in the default toolbar. The command (`setParagraphDirection`) and the
+// headless toolbar ids (`direction-ltr` / `direction-rtl`) stay available;
+// customers wire them into their own UI via the headless toolbar API or by
+// calling the command directly. Pin "not in default" here so a future
+// re-add in makeDefaultItems fails this test instead of silently shipping.
+describe('makeDefaultItems direction buttons not in default toolbar', () => {
+  function getItem(defaultItems, overflowItems, name) {
+    return [...defaultItems, ...overflowItems].find((item) => item.name.value === name);
+  }
+
+  it('directionLtr is not in the default toolbar items', () => {
+    const { defaultItems, overflowItems } = buildItems(2000);
+    expect(getItem(defaultItems, overflowItems, 'directionLtr')).toBeUndefined();
+  });
+
+  it('directionRtl is not in the default toolbar items', () => {
+    const { defaultItems, overflowItems } = buildItems(2000);
+    expect(getItem(defaultItems, overflowItems, 'directionRtl')).toBeUndefined();
+  });
+});

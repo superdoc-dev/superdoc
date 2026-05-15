@@ -642,13 +642,38 @@ const SDT_CONTAINER_STYLES = `
   display: none;
 }
 
+/* Hidden appearance per ECMA-376 (w15:appearance val="hidden"). SDT
+ * exists in the document for anchoring but is visually transparent: no
+ * padding, no border, no hover background, no selected outline. The
+ * alias label is not emitted into the DOM at all (see renderer.ts), so
+ * there is nothing to hide from copy-paste or screen readers. */
+.superdoc-structured-content-inline[data-appearance='hidden'] {
+  padding: 0;
+  border: none;
+  border-radius: 0;
+}
+.superdoc-structured-content-inline[data-appearance='hidden']:hover {
+  background-color: transparent;
+  border: none;
+}
+.superdoc-structured-content-inline[data-appearance='hidden'].ProseMirror-selectednode {
+  border-color: transparent;
+  background-color: transparent;
+}
+
 /* Hover highlight for SDT containers.
  * Hover adds background highlight and z-index boost.
  * Block SDTs use .sdt-group-hover class (event delegation for multi-fragment coordination).
  * Inline SDTs use :hover (single element, no coordination needed).
- * Hover is suppressed when the node is selected (SD-1584). */
+ * Hover is suppressed when the node is selected (SD-1584).
+ *
+ * Inline SDTs with appearance=hidden are excluded via the same :not()
+ * that handles selection. Both predicates live in one :not(a, b) so the
+ * selector keeps (0,4,0) specificity. A second chained :not() would push
+ * it to (0,5,0) and beat the viewing-mode suppression rule below, which
+ * also sits at (0,4,0). */
 .superdoc-structured-content-block[data-lock-mode].sdt-group-hover:not(.ProseMirror-selectednode),
-.superdoc-structured-content-inline[data-lock-mode]:hover:not(.ProseMirror-selectednode) {
+.superdoc-structured-content-inline[data-lock-mode]:hover:not(.ProseMirror-selectednode, [data-appearance='hidden']) {
   background-color: var(--sd-content-controls-lock-hover-bg, rgba(98, 155, 231, 0.08));
   z-index: 9999999;
 }

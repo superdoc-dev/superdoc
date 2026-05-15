@@ -27,8 +27,14 @@ export const resolveTableDirection = (
   parentSection: SectionDirectionContext,
 ): TableDirectionContext => {
   let visualDirection: BaseDirection | undefined;
+  // Mirror the paragraph resolver shape (resolveParagraphDirection): explicit
+  // false is a real signal and must be distinguished from "no signal." Per
+  // ECMA-376 §17.4.1 + §17.17.4, w:bidiVisual w:val="0" is an explicit-false
+  // that can override a style-cascade true. SD-3141.
   if (tableProperties?.rightToLeft === true || tableProperties?.bidiVisual === true) {
     visualDirection = 'rtl';
+  } else if (tableProperties?.rightToLeft === false || tableProperties?.bidiVisual === false) {
+    visualDirection = 'ltr';
   }
   return { visualDirection, parentSection };
 };

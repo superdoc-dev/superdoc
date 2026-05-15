@@ -44,6 +44,8 @@ import { findBlockByIdStrict, type BlockCandidate } from '../helpers/node-addres
 import { DocumentApiAdapterError } from '../errors.js';
 import { rejectTrackedMode } from '../helpers/mutation-helpers.js';
 import { executeDomainCommand } from './plan-wrappers.js';
+import { mapDisplayAlignmentToStoredJustification } from '../../core/helpers/paragraph-alignment.js';
+import { calculateResolvedParagraphProperties } from '../../extensions/paragraph/resolvedPropertiesCache.js';
 
 // ---------------------------------------------------------------------------
 // Paragraph block types accepted by this adapter
@@ -194,7 +196,7 @@ function mutateParagraphProperties(
   candidate: BlockCandidate,
   operation: string,
   target: ParagraphTarget,
-  transform: (pPr: PPr) => PPr,
+  transform: (pPr: PPr, node: any, pos: number) => PPr,
   options?: MutationOptions,
   extras?: {
     clearDirectFormatting?: boolean;
@@ -209,7 +211,7 @@ function mutateParagraphProperties(
       if (!node) return false;
 
       const existing = (node.attrs as { paragraphProperties?: PPr }).paragraphProperties ?? {};
-      const updated = transform({ ...existing });
+      const updated = transform({ ...existing }, node, candidate.pos);
 
       if (JSON.stringify(existing) === JSON.stringify(updated)) return false;
 
@@ -238,12 +240,9 @@ function mutateParagraphProperties(
 // Alignment mapping — external API → OOXML justification value
 // ---------------------------------------------------------------------------
 
-export const ALIGNMENT_TO_JUSTIFICATION: Record<ParagraphAlignment, string> = {
-  left: 'left',
-  center: 'center',
-  right: 'right',
-  justify: 'both',
-};
+export function mapAlignmentToJustificationForParagraph(alignment: ParagraphAlignment, isRtl?: boolean): string {
+  return mapDisplayAlignmentToStoredJustification(alignment, isRtl);
+}
 
 // ---------------------------------------------------------------------------
 // Property helpers
@@ -384,10 +383,14 @@ export function paragraphsSetAlignmentWrapper(
     candidate,
     'format.paragraph.setAlignment',
     input.target,
-    (pPr) => ({
-      ...pPr,
-      justification: ALIGNMENT_TO_JUSTIFICATION[input.alignment],
-    }),
+    (pPr, node, pos) => {
+      const paragraphPos = typeof editor.state.doc.resolve === 'function' ? editor.state.doc.resolve(pos) : null;
+      const resolved = calculateResolvedParagraphProperties(editor, node, paragraphPos as any);
+      return {
+        ...pPr,
+        justification: mapAlignmentToJustificationForParagraph(input.alignment, resolved?.rightToLeft === true),
+      };
+    },
     options,
   );
 }

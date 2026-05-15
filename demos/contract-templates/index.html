@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SuperDoc: contract templates</title>
+  </head>
+  <body>
+    <div class="app">
+      <section class="editor-area">
+        <header class="toolbar">
+          <span class="summary" id="summary">Loading</span>
+          <div class="toolbar-actions">
+            <button class="btn" id="export-raw" type="button">Export raw DOCX</button>
+            <button class="btn primary" id="export-clean" type="button">Export clean DOCX</button>
+          </div>
+        </header>
+        <div id="editor"></div>
+      </section>
+      <aside class="sidebar">
+        <nav class="tabs" role="tablist">
+          <button class="tab active" data-tab="fields" type="button" role="tab">Fields</button>
+          <button class="tab" data-tab="clauses" type="button" role="tab">Clauses</button>
+        </nav>
+        <section class="panel" data-panel="fields" id="fields-panel"></section>
+        <section class="panel hidden" data-panel="clauses" id="clauses-panel"></section>
+        <p class="status" id="status">Loading</p>
+      </aside>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

@@ -127,6 +127,45 @@ const scenarios = [
     files: ['src/imports-main.ts'],
     mustPass: true,
   },
+  // SD-2978: the package advertises CJS runtime conditions for these
+  // entries. CommonJS TypeScript consumers must resolve `.d.cts` declarations
+  // through the require branch under Node16/NodeNext.
+  {
+    name: 'node16 / CJS require entries / strict / skipLibCheck=false',
+    module: 'Node16',
+    moduleResolution: 'node16',
+    skipLibCheck: false,
+    strict: true,
+    files: ['src/imports-cjs.cts'],
+    mustPass: true,
+  },
+  {
+    name: 'node16 / CJS require entries / loose / skipLibCheck=false',
+    module: 'Node16',
+    moduleResolution: 'node16',
+    skipLibCheck: false,
+    strict: false,
+    files: ['src/imports-cjs.cts'],
+    mustPass: true,
+  },
+  {
+    name: 'nodenext / CJS require entries / strict / skipLibCheck=false',
+    module: 'NodeNext',
+    moduleResolution: 'nodenext',
+    skipLibCheck: false,
+    strict: true,
+    files: ['src/imports-cjs.cts'],
+    mustPass: true,
+  },
+  {
+    name: 'nodenext / CJS require entries / loose / skipLibCheck=false',
+    module: 'NodeNext',
+    moduleResolution: 'nodenext',
+    skipLibCheck: false,
+    strict: false,
+    files: ['src/imports-cjs.cts'],
+    mustPass: true,
+  },
   {
     name: 'bundler / headless Node.js',
     module: 'ESNext',

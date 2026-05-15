@@ -102,13 +102,16 @@ describe('w:tblCellMar translator', () => {
   });
 
   describe('decode', () => {
-    it('decodes a cellMargins object by calling its property translators', () => {
+    it('decodes a cellMargins object in CT_TblCellMar sequence order', () => {
+      // CT_TblCellMar has identical sequence to CT_TcMar per ECMA-376 §A.1:
+      // top, start, left, bottom, end, right. Insertion order is scrambled
+      // here to prove the decoder sorts rather than emitting in attr order.
       const params = {
         node: {
           attrs: {
             cellMargins: {
-              marginTop: { value: 100 },
               marginRight: { value: 120 },
+              marginTop: { value: 100 },
               marginBottom: { value: 140 },
             },
           },
@@ -118,7 +121,29 @@ describe('w:tblCellMar translator', () => {
       const result = translator.decode(params);
 
       expect(result.name).toBe('w:tblCellMar');
-      expect(result.elements).toEqual([{ name: 'w:top' }, { name: 'w:right' }, { name: 'w:bottom' }]);
+      // Sequence: top (0), bottom (3), right (5). Position-by-position.
+      expect(result.elements).toEqual([{ name: 'w:top' }, { name: 'w:bottom' }, { name: 'w:right' }]);
+    });
+
+    it('emits all six children in CT_TblCellMar sequence order when present', () => {
+      const params = {
+        node: {
+          attrs: {
+            cellMargins: {
+              marginEnd: { value: 60 },
+              marginRight: { value: 70 },
+              marginBottom: { value: 40 },
+              marginLeft: { value: 30 },
+              marginStart: { value: 20 },
+              marginTop: { value: 10 },
+            },
+          },
+        },
+      };
+
+      const result = translator.decode(params);
+      const names = result.elements.map((el) => el.name);
+      expect(names).toEqual(['w:top', 'w:start', 'w:left', 'w:bottom', 'w:end', 'w:right']);
     });
 
     it('returns undefined for an empty cellMargins object', () => {

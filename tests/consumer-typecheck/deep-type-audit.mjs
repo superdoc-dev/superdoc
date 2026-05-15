@@ -82,10 +82,24 @@ if (!existsSync(installedPkgPath)) {
 const installedPkg = JSON.parse(readFileSync(installedPkgPath, 'utf8'));
 
 // -- Collect public entry points -------------------------------------------
+// `types` can be either a string (single ESM .d.ts) or, after SD-2978,
+// a nested condition object `{ import: '...d.ts', require: '...d.cts' }`
+// for entries that publish CJS as well. Walk the ESM target when both are
+// present (the .d.cts is a generated shim of the same surface, so the
+// inventory reads the same shape from either side).
+function pickTypesEntry(types) {
+  if (typeof types === 'string') return types;
+  if (types && typeof types === 'object') {
+    return types.import ?? types.default ?? types.require ?? null;
+  }
+  return null;
+}
 const roots = [];
 for (const [subpath, entry] of Object.entries(installedPkg.exports ?? {})) {
   if (typeof entry !== 'object' || !entry.types) continue;
-  const abs = resolve(installedRoot, entry.types);
+  const typesPath = pickTypesEntry(entry.types);
+  if (!typesPath) continue;
+  const abs = resolve(installedRoot, typesPath);
   if (!existsSync(abs)) {
     console.error(`[audit] Missing types entry for ${subpath}: ${abs}`);
     process.exit(3);

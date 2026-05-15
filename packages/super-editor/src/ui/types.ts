@@ -1521,19 +1521,42 @@ export interface ViewportRect {
   pageIndex: number;
 }
 
+/**
+ * UI-local address for a content control (SDT) target. Not part of
+ * the Document API's `EntityAddress` union because content controls
+ * are not a Document API navigation primitive (no
+ * `editor.doc.contentControls.navigateTo`). The viewport rect surface
+ * is purely a presentation-layer concern, so the type lives here next
+ * to {@link ViewportGetRectInput}.
+ */
+export type ContentControlViewportAddress = {
+  kind: 'entity';
+  entityType: 'contentControl';
+  entityId: string;
+};
+
+/**
+ * Targets accepted by {@link ViewportHandle.getRect}. Extends the
+ * Document API's `EntityAddress` (comment / tracked change) with the
+ * UI-local content-control address.
+ */
+export type ViewportEntityAddress =
+  | import('@superdoc/document-api').EntityAddress
+  | ContentControlViewportAddress;
+
 export interface ViewportGetRectInput {
   /**
-   * Entity to look up — comment or tracked change by id. Today
-   * `getRect` resolves rects via the painter's data attributes
-   * (`data-comment-ids`, `data-track-change-id`) which only stamp
-   * entity addresses, not text-anchored ranges. Text targets
-   * (`TextAddress` / `TextTarget`) are intentionally not in the
-   * union: surface should match real behavior so a typed call site
-   * isn't lying about what works at runtime. They land via a
-   * follow-up that adds story-aware text resolution to the rect
-   * helper.
+   * Entity to look up — comment, tracked change, or content control
+   * (SDT) by id. Today `getRect` resolves rects via the painter's
+   * data attributes (`data-comment-ids`, `data-track-change-id`,
+   * `data-sdt-id`) which only stamp entity addresses, not
+   * text-anchored ranges. Text targets (`TextAddress` / `TextTarget`)
+   * are intentionally not in the union: surface should match real
+   * behavior so a typed call site isn't lying about what works at
+   * runtime. They land via a follow-up that adds story-aware text
+   * resolution to the rect helper.
    */
-  target: import('@superdoc/document-api').EntityAddress;
+  target: ViewportEntityAddress;
 }
 
 export type ViewportRectResult =
@@ -1803,9 +1826,19 @@ export interface ViewportEntityAtInput {
 /**
  * One hit returned by {@link ViewportHandle.entityAt}.
  *
- * The union is intentionally narrow today (`comment` /
- * `trackedChange`); other entity types land via additive union
- * members so a `switch` on `hit.type` with a default branch stays
- * forward compatible.
+ * Each entity type lands as its own union member so a `switch` on
+ * `hit.type` with a default branch stays forward compatible.
+ *
+ * `contentControl` hits carry only the fields already stamped on the
+ * painted DOM today: `id`, `scope` (block vs inline), and `tag` (the
+ * ECMA-376 SDT tag). Full property data (alias, controlType, lockMode,
+ * etc.) is not in the hit by design — call the Document API with a
+ * `ContentControlTarget` (`{ kind, nodeType: 'sdt', nodeId }`) when
+ * needed; `nodeId` is the `id` returned in this hit. Keeping the hit
+ * minimal avoids gating viewport reads on metadata plumbing that does
+ * not exist on every property yet.
  */
-export type ViewportEntityHit = { type: 'comment'; id: string } | { type: 'trackedChange'; id: string };
+export type ViewportEntityHit =
+  | { type: 'comment'; id: string }
+  | { type: 'trackedChange'; id: string }
+  | { type: 'contentControl'; id: string; scope?: 'block' | 'inline'; tag?: string };

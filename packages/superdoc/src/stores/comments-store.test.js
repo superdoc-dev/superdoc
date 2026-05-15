@@ -649,6 +649,180 @@ describe('comments-store', () => {
     );
   });
 
+  it('cascades resolve to user comments anchored to the same tracked change (SD-2528)', async () => {
+    const superdoc = {
+      emit: vi.fn(),
+      user: { email: 'reviewer@example.com', name: 'Reviewer' },
+    };
+
+    const trackedChangeComment = {
+      commentId: 'tc-1',
+      trackedChange: true,
+      resolvedTime: null,
+      getValues: vi.fn(() => ({ commentId: 'tc-1' })),
+      resolveComment: vi.fn(function () {
+        this.resolvedTime = Date.now();
+      }),
+    };
+
+    const linkedUserComment = {
+      commentId: 'user-comment-1',
+      trackedChange: false,
+      trackedChangeParentId: 'tc-1',
+      resolvedTime: null,
+      getValues: vi.fn(() => ({ commentId: 'user-comment-1' })),
+      resolveComment: vi.fn(function () {
+        this.resolvedTime = Date.now();
+      }),
+    };
+
+    const unrelatedUserComment = {
+      commentId: 'user-comment-2',
+      trackedChange: false,
+      trackedChangeParentId: 'tc-99',
+      resolvedTime: null,
+      getValues: vi.fn(() => ({ commentId: 'user-comment-2' })),
+      resolveComment: vi.fn(),
+    };
+
+    store.commentsList = [trackedChangeComment, linkedUserComment, unrelatedUserComment];
+
+    store.handleTrackedChangeUpdate({
+      superdoc,
+      params: { event: 'resolve', changeId: 'tc-1' },
+    });
+
+    expect(trackedChangeComment.resolveComment).toHaveBeenCalledTimes(1);
+    // Cascading runs in a microtask so we wait one turn before asserting.
+    await Promise.resolve();
+    expect(linkedUserComment.resolveComment).toHaveBeenCalledTimes(1);
+    expect(linkedUserComment.resolveComment).toHaveBeenCalledWith({
+      email: 'reviewer@example.com',
+      name: 'Reviewer',
+      superdoc,
+    });
+    expect(unrelatedUserComment.resolveComment).not.toHaveBeenCalled();
+  });
+
+  // SD-2528 P2 #1 — when the resolve event carries an explicit `documentId`,
+  // the cascade must filter linked comments by that document. `findTrackedChangeById`
+  // does this for the primary comment; the cascade scan one level down was
+  // missing the same guard. In multi-document sessions where imported TC ids
+  // happen to collide, accepting/rejecting a change in one document must not
+  // resolve comments anchored on a different document.
+  it('scopes cascade resolve to the active document when documentId is provided', async () => {
+    const superdoc = { emit: vi.fn(), user: { email: 'reviewer@example.com', name: 'Reviewer' } };
+    __mockSuperdoc.documents.value = [
+      { id: 'doc-A', type: 'docx' },
+      { id: 'doc-B', type: 'docx' },
+    ];
+
+    const trackedChangeOnDocA = {
+      commentId: 'tc-shared',
+      trackedChange: true,
+      resolvedTime: null,
+      fileId: 'doc-A',
+      trackedChangeAnchorKey: 'tc::body::tc-shared',
+      getValues: vi.fn(() => ({ commentId: 'tc-shared' })),
+      resolveComment: vi.fn(function () {
+        this.resolvedTime = Date.now();
+      }),
+    };
+    const linkedOnDocA = {
+      commentId: 'user-on-A',
+      trackedChange: false,
+      trackedChangeParentId: 'tc-shared',
+      resolvedTime: null,
+      fileId: 'doc-A',
+      getValues: vi.fn(() => ({})),
+      resolveComment: vi.fn(),
+    };
+    const linkedOnDocB = {
+      commentId: 'user-on-B',
+      trackedChange: false,
+      trackedChangeParentId: 'tc-shared',
+      resolvedTime: null,
+      fileId: 'doc-B',
+      getValues: vi.fn(() => ({})),
+      resolveComment: vi.fn(),
+    };
+
+    store.commentsList = [trackedChangeOnDocA, linkedOnDocA, linkedOnDocB];
+
+    store.handleTrackedChangeUpdate({
+      superdoc,
+      params: { event: 'resolve', changeId: 'tc-shared', documentId: 'doc-A' },
+    });
+
+    await Promise.resolve();
+    expect(linkedOnDocA.resolveComment).toHaveBeenCalledTimes(1);
+    expect(linkedOnDocB.resolveComment).not.toHaveBeenCalled();
+  });
+
+  // Regression: when no documentId is passed, single-document behaviour is
+  // unchanged. Mirrors the legacy `cascades resolve` test contract.
+  it('cascades to every doc-anchored linked comment when no documentId is provided (single-doc)', async () => {
+    const superdoc = { emit: vi.fn(), user: { email: 'r@e', name: 'R' } };
+
+    const trackedChangeComment = {
+      commentId: 'tc-nodoc',
+      trackedChange: true,
+      resolvedTime: null,
+      getValues: vi.fn(() => ({})),
+      resolveComment: vi.fn(function () {
+        this.resolvedTime = Date.now();
+      }),
+    };
+    const linkedNoFileId = {
+      commentId: 'user-nodoc',
+      trackedChange: false,
+      trackedChangeParentId: 'tc-nodoc',
+      resolvedTime: null,
+      getValues: vi.fn(() => ({})),
+      resolveComment: vi.fn(),
+    };
+
+    store.commentsList = [trackedChangeComment, linkedNoFileId];
+
+    store.handleTrackedChangeUpdate({
+      superdoc,
+      params: { event: 'resolve', changeId: 'tc-nodoc' },
+    });
+
+    await Promise.resolve();
+    expect(linkedNoFileId.resolveComment).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not re-resolve already-resolved linked user comments', async () => {
+    const superdoc = { emit: vi.fn(), user: { email: 'a@a', name: 'A' } };
+
+    const trackedChangeComment = {
+      commentId: 'tc-2',
+      trackedChange: true,
+      resolvedTime: null,
+      getValues: vi.fn(() => ({})),
+      resolveComment: vi.fn(function () {
+        this.resolvedTime = Date.now();
+      }),
+    };
+
+    const alreadyResolvedLinked = {
+      commentId: 'user-2',
+      trackedChange: false,
+      trackedChangeParentId: 'tc-2',
+      resolvedTime: 1234,
+      getValues: vi.fn(() => ({})),
+      resolveComment: vi.fn(),
+    };
+
+    store.commentsList = [trackedChangeComment, alreadyResolvedLinked];
+
+    store.handleTrackedChangeUpdate({ superdoc, params: { event: 'resolve', changeId: 'tc-2' } });
+
+    await Promise.resolve();
+    expect(alreadyResolvedLinked.resolveComment).not.toHaveBeenCalled();
+  });
+
   it('syncs and emits an update when add event dedupes an existing tracked change', () => {
     const superdoc = {
       emit: vi.fn(),

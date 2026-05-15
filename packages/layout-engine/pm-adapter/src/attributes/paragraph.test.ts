@@ -324,7 +324,7 @@ describe('computeParagraphAttrs', () => {
 
     const { paragraphAttrs } = computeParagraphAttrs(paragraph as never);
 
-    expect(paragraphAttrs.direction).toBe('rtl');
+    expect(paragraphAttrs.directionContext?.inlineDirection).toBe('rtl');
   });
 
   it('does NOT inherit section direction for paragraph inline direction (§17.6.1)', () => {
@@ -345,7 +345,38 @@ describe('computeParagraphAttrs', () => {
     };
 
     const { paragraphAttrs } = computeParagraphAttrs(paragraph as never, converterContext as never);
-    expect(paragraphAttrs.direction).toBeUndefined();
+    expect(paragraphAttrs.directionContext?.inlineDirection).toBeUndefined();
+  });
+
+  // SD-2778: pm-adapter writes inline direction onto `directionContext.inlineDirection`
+  // as the single source of truth. The legacy scalar `attrs.direction` field has been
+  // removed; `getParagraphInlineDirection` reads `directionContext` directly.
+  describe('SD-2778: directionContext.inlineDirection mirrors paragraphProperties.rightToLeft', () => {
+    const cases: Array<{ name: string; rightToLeft: boolean | undefined; expected: 'rtl' | 'ltr' | undefined }> = [
+      { name: 'rightToLeft=true', rightToLeft: true, expected: 'rtl' },
+      { name: 'rightToLeft=false', rightToLeft: false, expected: 'ltr' },
+      { name: 'rightToLeft=undefined', rightToLeft: undefined, expected: undefined },
+    ];
+
+    for (const { name, rightToLeft, expected } of cases) {
+      it(`${name}: directionContext.inlineDirection === ${String(expected)}`, () => {
+        const paragraph: PMNode = {
+          type: { name: 'paragraph' },
+          attrs: {
+            paragraphProperties: rightToLeft === undefined ? {} : { rightToLeft },
+          },
+        };
+
+        const { paragraphAttrs } = computeParagraphAttrs(paragraph as never);
+
+        expect(paragraphAttrs.directionContext?.inlineDirection).toBe(expected);
+        // Pin the producer contract: pm-adapter must not emit the legacy
+        // scalar `direction` field. A future accidental spread that
+        // re-introduced it would slip past the TypeScript check (since
+        // index signatures permit extra keys) but fail this runtime guard.
+        expect(Object.hasOwn(paragraphAttrs, 'direction')).toBe(false);
+      });
+    }
   });
 
   it('inherits writing mode from body section context (§17.3.1.41)', () => {

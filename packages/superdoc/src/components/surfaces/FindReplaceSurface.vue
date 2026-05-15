@@ -17,20 +17,70 @@ const findInputRef = ref(null);
 function handleFindKeydown(e) {
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault();
-    props.findReplace.goNext();
+    handleGoNext();
   } else if (e.key === 'Enter' && e.shiftKey) {
     e.preventDefault();
-    props.findReplace.goPrev();
+    handleGoPrev();
   }
+}
+
+// Single path for advancing a match. Both the Enter key and the next/prev
+// buttons must route through here so the focus restore — which preserves the
+// goNext / PresentationEditor.scrollToPosition we just performed — runs in
+// every navigation case. Clicking a button without restoring focus lets the
+// button keep focus, and the browser scrolls the (off-screen) find bar back
+// into view, undoing the navigation scroll on cross-page matches.
+function handleGoNext() {
+  props.findReplace.goNext();
+  focusFindInput();
+}
+
+function handleGoPrev() {
+  props.findReplace.goPrev();
+  focusFindInput();
 }
 
 function handleClose() {
   props.findReplace.close('user-closed');
 }
 
+function collectScrollableAncestors(element) {
+  const result = [];
+  let cur = element?.parentElement ?? null;
+  while (cur) {
+    const style = cur.ownerDocument?.defaultView?.getComputedStyle?.(cur);
+    if (style) {
+      const overflow = `${style.overflowY} ${style.overflowX}`;
+      if (overflow.includes('auto') || overflow.includes('scroll')) {
+        result.push(cur);
+      }
+    }
+    cur = cur.parentElement;
+  }
+  const root = element?.ownerDocument?.scrollingElement;
+  if (root && !result.includes(root)) result.push(root);
+  return result;
+}
+
 function focusFindInput() {
-  findInputRef.value?.focus();
-  findInputRef.value?.select();
+  // The surface lives in the document's normal flow. After goNext, the
+  // PresentationEditor has scrolled the SuperDoc container to the active
+  // match — which can be on a different page. Anything that gives focus to a
+  // descendant of the (now off-screen) find bar can trigger the browser's
+  // "scroll element into view" behaviour and snap that scroll back, hiding
+  // the match. `preventScroll: true` covers `.focus()`; we additionally pin
+  // every scrollable ancestor's scroll position across the call as a belt
+  // for `.focus()` implementations or related side effects that ignore
+  // preventScroll (SD-3045 review — match on different page never appeared).
+  const input = findInputRef.value;
+  if (!input) return;
+  const scrollables = collectScrollableAncestors(input);
+  const saved = scrollables.map((el) => ({ el, top: el.scrollTop, left: el.scrollLeft }));
+  input.focus({ preventScroll: true });
+  for (const { el, top, left } of saved) {
+    if (el.scrollTop !== top) el.scrollTop = top;
+    if (el.scrollLeft !== left) el.scrollLeft = left;
+  }
 }
 
 onMounted(() => {
@@ -66,7 +116,7 @@ onMounted(() => {
           :disabled="!findReplace.hasMatches.value"
           :title="findReplace.texts.previousMatchLabel"
           :aria-label="findReplace.texts.previousMatchAriaLabel"
-          @click="findReplace.goPrev()"
+          @click="handleGoPrev()"
         >
           &#x25B2;
         </button>
@@ -76,7 +126,7 @@ onMounted(() => {
           :disabled="!findReplace.hasMatches.value"
           :title="findReplace.texts.nextMatchLabel"
           :aria-label="findReplace.texts.nextMatchAriaLabel"
-          @click="findReplace.goNext()"
+          @click="handleGoNext()"
         >
           &#x25BC;
         </button>

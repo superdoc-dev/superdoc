@@ -186,6 +186,7 @@ import { getSchemaIntrospection } from './helpers/schema-introspection.js';
  * @typedef {import('./core/types/index.js').CommentAddress} CommentAddress
  * @typedef {import('./core/types/index.js').TrackedChangeAddress} TrackedChangeAddress
  * @typedef {import('./core/types/index.js').NavigableAddress} NavigableAddress
+ * @typedef {import('./core/types/index.js').AwarenessState} AwarenessState
  *
  * @typedef {import('./core/types/index.js').Config} Config
  * @typedef {import('./core/types/index.js').Modules} Modules

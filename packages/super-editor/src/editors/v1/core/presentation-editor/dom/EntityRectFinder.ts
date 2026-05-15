@@ -1,5 +1,6 @@
 import type { RangeRect } from '../types.js';
 import { BODY_STORY_KEY } from '../../../document-api-adapters/story-runtime/story-key.js';
+import { DOM_CLASS_NAMES } from '@superdoc/dom-contract';
 
 /**
  * Pure DOM helpers shared by `PresentationEditor.getEntityRects` and
@@ -74,6 +75,55 @@ export function findRenderedTrackedChangeElementsStrict(
   }
   const storySelector = `${baseSelector}[data-story-key="${escapeAttrValue(storyKey)}"]`;
   return Array.from(host.querySelectorAll<HTMLElement>(storySelector));
+}
+
+/**
+ * Find painted content-control (SDT) wrapper elements by id.
+ *
+ * The painter stamps `data-sdt-id` on every structured-content wrapper
+ * AND on every child text-run element inside that wrapper (via
+ * `applySdtDataset` in renderer.ts) so SDT metadata can be read off
+ * runs during click-to-position routing. A naive `[data-sdt-id]`
+ * selector therefore returns wrapper + every child run, which would
+ * pollute `rect` / `rects` on the viewport surface with intra-wrapper
+ * fragments.
+ *
+ * Restrict the selector to the two wrapper classes
+ * (`.superdoc-structured-content-inline` and
+ * `.superdoc-structured-content-block`) so each painted SDT
+ * occurrence produces exactly one match. Block SDTs that span pages
+ * still paint multiple wrappers (one per fragment), and those are the
+ * matches the multi-fragment `rects` contract expects.
+ *
+ * Filters explicitly to `data-sdt-type="structuredContent"` so other
+ * SDT-flavoured nodes (field annotations, document sections, doc-part
+ * objects) don't surface through the `contentControls.*` viewport API.
+ *
+ * Story routing: v1 is body-only. SDTs do exist in headers/footers,
+ * but the existing painted DOM doesn't carry a story-key attribute on
+ * the SDT wrapper itself, so a strict header/footer rect lookup would
+ * over-match. When a `storyKey` is supplied, this helper falls back to
+ * "all matches" — surface that limitation in JSDoc on the caller until
+ * the painter stamps `data-story-key` on SDT wrappers (separate work).
+ */
+export function findRenderedContentControlElements(
+  host: HTMLElement,
+  entityId: string,
+  escapeAttrValue: (value: string) => string,
+  // `storyKey` is accepted for signature parity with comment / tracked
+  // change finders so a future cross-story filter slots in without an
+  // API change. Currently unused: SDT wrappers don't stamp
+  // `data-story-key` yet. Follow-up tracked under SD-3155 (umbrella);
+  // file a dedicated sub-issue when a customer needs strict header /
+  // footer routing for content controls.
+  _storyKey?: string,
+): HTMLElement[] {
+  if (!host || !entityId) return [];
+  const id = escapeAttrValue(entityId);
+  const selector =
+    `.${DOM_CLASS_NAMES.INLINE_SDT_WRAPPER}[data-sdt-id="${id}"][data-sdt-type="structuredContent"],` +
+    `.${DOM_CLASS_NAMES.BLOCK_SDT}[data-sdt-id="${id}"][data-sdt-type="structuredContent"]`;
+  return Array.from(host.querySelectorAll<HTMLElement>(selector));
 }
 
 /**

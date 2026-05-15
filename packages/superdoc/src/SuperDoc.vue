@@ -51,6 +51,7 @@ import { getVisibleThreadAnchorClientY } from './helpers/comment-focus.js';
 import { useUiFontFamily } from './composables/useUiFontFamily.js';
 import { usePasswordPrompt } from './composables/use-password-prompt.js';
 import { useFindReplace } from './composables/use-find-replace.js';
+import { collectTouchedTrackedChangeIds } from './helpers/collect-touched-tracked-change-ids.js';
 import SurfaceHost from './components/surfaces/SurfaceHost.vue';
 
 const PdfViewer = defineAsyncComponent(() => import('./components/PdfViewer/PdfViewer.vue'));
@@ -1179,36 +1180,8 @@ const shouldResyncTrackedChangeThreads = (transaction, ySyncMeta = transaction?.
   return isLocalHistoryUndoRedo || isLocalCollabUndoRedo || isCollaborationReplayTransaction(transaction, ySyncMeta);
 };
 
-const collectTouchedTrackedChangeIds = (transaction) => {
-  const ids = new Set();
-  const addMarkId = (mark) => {
-    const id = mark?.attrs?.id;
-    if (id != null) ids.add(String(id));
-  };
-
-  // AIDEV-NOTE: Existing tracked-change edits can update the live mark text
-  // without reporting that mark in TrackChangesBasePluginKey metadata. Keep
-  // the changed-range scan so the sidebar bubble refreshes for those edits.
-  const meta = transaction?.getMeta?.(TrackChangesBasePluginKey);
-  [meta?.insertedMark, meta?.deletionMark, meta?.formatMark].forEach(addMarkId);
-
-  if (!transaction?.docChanged || !transaction?.doc || !transaction?.mapping?.maps?.length) return ids;
-
-  transaction.mapping.maps.forEach((stepMap) => {
-    stepMap.forEach((oldStart, oldEnd, newStart, newEnd) => {
-      const from = Math.max(0, newStart - 1);
-      const to = Math.min(transaction.doc.content.size, newEnd + 1);
-
-      transaction.doc.nodesBetween(from, to, (node) => {
-        node.marks?.forEach((mark) => {
-          const markName = mark.type?.name;
-          if (markName === 'trackInsert' || markName === 'trackDelete' || markName === 'trackFormat') addMarkId(mark);
-        });
-      });
-    });
-  });
-
-  return ids;
+const collectTouchedChangeIds = (transaction) => {
+  return collectTouchedTrackedChangeIds(transaction, { trackChangesPluginKey: TrackChangesBasePluginKey });
 };
 
 const onEditorTransaction = (payload = {}) => {
@@ -1229,7 +1202,7 @@ const onEditorTransaction = (payload = {}) => {
   } else {
     queueTrackedChangeCommentResync({
       editor,
-      changeIds: collectTouchedTrackedChangeIds(transaction),
+      changeIds: collectTouchedChangeIds(transaction),
     });
   }
 

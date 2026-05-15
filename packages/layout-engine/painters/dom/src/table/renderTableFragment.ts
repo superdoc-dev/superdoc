@@ -17,6 +17,7 @@ import {
   applySdtContainerChrome,
   getSdtContainerKey,
   getSdtContainerMetadata,
+  hasExplicitSdtContainerKey,
   type SdtBoundaryOptions,
 } from '../sdt/container.js';
 import { applyBorder, borderValueToSpec, hasExplicitCellBorders } from './border-utils.js';
@@ -220,7 +221,9 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
   const tableContainerSdt = getSdtContainerMetadata(block.attrs?.sdt, block.attrs?.containerSdt);
   const tableContainerKey = getSdtContainerKey(block.attrs?.sdt, block.attrs?.containerSdt);
   const rowAncestorContainerKey = tableContainerSdt
-    ? (tableContainerKey ?? ancestorContainerKey)
+    ? hasExplicitSdtContainerKey(block.attrs?.sdt, block.attrs?.containerSdt)
+      ? tableContainerKey
+      : ancestorContainerKey
     : ancestorContainerKey;
   const rowAncestorContainerSdt = tableContainerSdt ?? ancestorContainerSdt;
 

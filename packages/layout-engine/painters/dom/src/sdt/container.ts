@@ -23,6 +23,21 @@ export type SdtBoundaryOptions = {
   showLabel?: boolean;
 };
 
+const idlessSdtContainerKeys = new WeakMap<SdtMetadata, string>();
+let nextIdlessSdtContainerKey = 0;
+
+function getIdlessSdtContainerKey(metadata: SdtMetadata): string {
+  const existingKey = idlessSdtContainerKeys.get(metadata);
+  if (existingKey) return existingKey;
+
+  // AIDEV-NOTE: Id-less SDT grouping relies on pm-adapter sharing the same
+  // SdtMetadata object across sibling blocks in one container. Do not replace
+  // this with alias/title matching; separate controls can share display text.
+  const key = `idlessSdt:${++nextIdlessSdtContainerKey}`;
+  idlessSdtContainerKeys.set(metadata, key);
+  return key;
+}
+
 export function isStructuredContentMetadata(sdt: SdtMetadata | null | undefined): sdt is {
   type: 'structuredContent';
   scope: 'inline' | 'block';
@@ -81,21 +96,36 @@ export function getSdtContainerKey(sdt?: SdtMetadata | null, containerSdt?: SdtM
 
   if (metadata.type === 'structuredContent') {
     if (metadata.scope !== 'block') return null;
-    if (!metadata.id) return null;
-    return `structuredContent:${metadata.id}`;
+    if (metadata.id) return `structuredContent:${metadata.id}`;
+    return getIdlessSdtContainerKey(metadata);
   }
 
   if (metadata.type === 'documentSection') {
     const sectionId = metadata.id ?? metadata.sdBlockId;
-    if (!sectionId) return null;
-    return `documentSection:${sectionId}`;
+    if (sectionId) return `documentSection:${sectionId}`;
+    return getIdlessSdtContainerKey(metadata);
   }
 
   return null;
 }
 
+export function hasExplicitSdtContainerKey(sdt?: SdtMetadata | null, containerSdt?: SdtMetadata | null): boolean {
+  const metadata = getSdtContainerMetadata(sdt, containerSdt);
+  if (!metadata) return false;
+
+  if (metadata.type === 'structuredContent') {
+    return metadata.scope === 'block' && Boolean(metadata.id);
+  }
+
+  if (metadata.type === 'documentSection') {
+    return Boolean(metadata.id ?? metadata.sdBlockId);
+  }
+
+  return false;
+}
+
 export function getSdtContainerKeyForBlock(block?: SdtBlockCandidate | null): string | null {
-  if (!block || (block.kind !== 'paragraph' && block.kind !== 'table')) return null;
+  if (!block) return null;
   return getSdtContainerKey(block.attrs?.sdt, block.attrs?.containerSdt);
 }
 

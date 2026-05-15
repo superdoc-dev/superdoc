@@ -3,6 +3,7 @@ import type { SdtMetadata } from '@superdoc/contracts';
 import {
   applySdtContainerChrome,
   getSdtContainerKey,
+  getSdtContainerKeyForBlock,
   getSdtSiblingBoundaries,
   shouldRenderSdtContainerChrome,
 } from './container.js';
@@ -152,5 +153,32 @@ describe('SDT container chrome', () => {
       undefined,
       { isStart: true, isEnd: true },
     ]);
+  });
+
+  it('computes merged boundaries for shared id-less sibling metadata', () => {
+    const sharedSdt: SdtMetadata = {
+      type: 'structuredContent',
+      scope: 'block',
+      alias: 'Shared',
+    };
+
+    expect(getSdtSiblingBoundaries([getSdtContainerKey(sharedSdt), getSdtContainerKey(sharedSdt)])).toEqual([
+      { isStart: true, isEnd: false },
+      { isStart: false, isEnd: true },
+    ]);
+  });
+
+  it('gets container keys for image and drawing blocks', () => {
+    const sdt: SdtMetadata = {
+      type: 'structuredContent',
+      scope: 'block',
+      id: 'media-sdt',
+      alias: 'Media',
+    };
+
+    expect(getSdtContainerKeyForBlock({ kind: 'image', attrs: { sdt } })).toBe('structuredContent:media-sdt');
+    expect(getSdtContainerKeyForBlock({ kind: 'drawing', attrs: { containerSdt: sdt } })).toBe(
+      'structuredContent:media-sdt',
+    );
   });
 });

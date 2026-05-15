@@ -83,7 +83,7 @@ const resolveBlockClipPath = (block: unknown): string => {
 
 const imageHyperlinkVersion = (hyperlink: ImageBlock['hyperlink'] | undefined): string => {
   if (!hyperlink) return '';
-  return [hyperlink.url ?? '', hyperlink.tooltip ?? ''].join(':');
+  return JSON.stringify([hyperlink.url ?? '', hyperlink.tooltip ?? '']);
 };
 
 const imageLuminanceVersion = (lum: ImageBlock['lum'] | undefined): string => {

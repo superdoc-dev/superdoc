@@ -110,6 +110,23 @@ describe('deriveBlockVersion - table image content', () => {
 
     expect(linked).not.toBe(unlinked);
   });
+
+  it('does not collide when image hyperlink URL and tooltip contain separators', () => {
+    const first = deriveBlockVersion(
+      makeTableWithImage({
+        ...baseImage,
+        hyperlink: { url: 'https://example.com/a', tooltip: 'b:c' },
+      }),
+    );
+    const second = deriveBlockVersion(
+      makeTableWithImage({
+        ...baseImage,
+        hyperlink: { url: 'https://example.com/a:b', tooltip: 'c' },
+      }),
+    );
+
+    expect(second).not.toBe(first);
+  });
 });
 
 describe('deriveBlockVersion - inline image runs', () => {

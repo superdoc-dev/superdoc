@@ -2,7 +2,12 @@ import { v4 as uuidv4 } from 'uuid';
 import { TrackDeleteMarkName, TrackFormatMarkName, TrackedFormatMarkNames } from '../constants.js';
 import { TrackChangesBasePluginKey } from '../plugins/trackChangesBasePlugin.js';
 import { CommentsPluginKey } from '../../comment/comments-plugin.js';
-import { hasMatchingMark, markSnapshotMatchesStepMark, upsertMarkSnapshotByType } from './markSnapshotHelpers.js';
+import {
+  createMarkSnapshot,
+  hasMatchingMark,
+  markSnapshotMatchesStepMark,
+  upsertMarkSnapshotByType,
+} from './markSnapshotHelpers.js';
 import { getLiveInlineMarksInRange } from './getLiveInlineMarksInRange.js';
 
 /**
@@ -74,19 +79,14 @@ export const removeMarkStep = ({ state, step, newTr, doc, user, date }) => {
           after = [...formatChangeMark.attrs.after];
           before = upsertMarkSnapshotByType(formatChangeMark.attrs.before, {
             type: step.mark.type.name,
-            attrs: { ...step.mark.attrs },
+            attrs: step.mark.attrs,
           });
         }
       } else {
         after = [];
         let existingMark = node.marks.find((mark) => mark.type === step.mark.type);
         if (existingMark) {
-          before = [
-            {
-              type: step.mark.type.name,
-              attrs: { ...existingMark.attrs },
-            },
-          ];
+          before = [createMarkSnapshot(step.mark.type.name, existingMark.attrs)];
         } else {
           before = [];
         }

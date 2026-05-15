@@ -23,7 +23,12 @@ import type {
   ParagraphBlock,
   ParagraphMeasure,
 } from '@superdoc/contracts';
-import { adjustAvailableWidthForTextIndent, computeLinePmRange, getFirstLineIndentOffset } from '@superdoc/contracts';
+import {
+  adjustAvailableWidthForTextIndent,
+  computeLinePmRange,
+  getFirstLineIndentOffset,
+  getParagraphInlineDirection,
+} from '@superdoc/contracts';
 import { charOffsetToPm, findCharacterAtX } from './text-measurement.js';
 import type { PageGeometryHelper } from './page-geometry-helper.js';
 
@@ -120,13 +125,9 @@ export const getAtomicPmRange = (fragment: AtomicFragment, block: FlowBlock): { 
 
 export const isRtlBlock = (block: FlowBlock): boolean => {
   if (block.kind !== 'paragraph') return false;
-  const attrs = block.attrs as Record<string, unknown> | undefined;
-  if (!attrs) return false;
-  const directionAttr = attrs.direction ?? attrs.dir ?? attrs.textDirection;
-  if (typeof directionAttr === 'string' && directionAttr.toLowerCase() === 'rtl') {
-    return true;
-  }
-  return false;
+  // Do NOT consult attrs.textDirection here: that's writing-mode (ECMA §17.18.93,
+  // values lrTb/tbRl/btLr/lrTbV/tbRlV/tbLrV) which is a separate axis from inline RTL.
+  return getParagraphInlineDirection(block.attrs) === 'rtl';
 };
 
 export const determineColumn = (layout: Layout, fragmentX: number): number => {

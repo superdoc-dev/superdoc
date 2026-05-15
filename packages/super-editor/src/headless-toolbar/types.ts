@@ -39,6 +39,8 @@ export const BUILT_IN_COMMAND_IDS = [
   'numbered-list',
   'indent-increase',
   'indent-decrease',
+  'direction-ltr',
+  'direction-rtl',
   'undo',
   'redo',
   'ruler',
@@ -87,6 +89,11 @@ export type ToolbarPayloadMap = {
   'numbered-list': never;
   'indent-increase': never;
   'indent-decrease': never;
+  // Direction + alignmentPolicy are baked into createParagraphDirectionExecute
+  // (see headless-toolbar/helpers/paragraph.ts). Headless callers can't
+  // override either — payload is `never` so TS catches misuse at the call site.
+  'direction-ltr': never;
+  'direction-rtl': never;
   undo: never;
   redo: never;
   ruler: never;
@@ -133,6 +140,8 @@ export type ToolbarValueMap = {
   'numbered-list': undefined;
   'indent-increase': undefined;
   'indent-decrease': undefined;
+  'direction-ltr': 'ltr' | 'rtl';
+  'direction-rtl': 'ltr' | 'rtl';
   undo: undefined;
   redo: undefined;
   ruler: undefined;

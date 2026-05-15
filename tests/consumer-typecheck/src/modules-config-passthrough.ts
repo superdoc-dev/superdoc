@@ -17,7 +17,7 @@
  *   - SD-2869 review pass flagged `onAwarenessUpdate.states` narrowed from
  *     JSDoc `Array` (= `any[]`) to `unknown[]`.
  */
-import type { Config } from 'superdoc';
+import type { Config, AwarenessState } from 'superdoc';
 
 // A realistic config with the documented fields plus the pass-through extras
 // the runtime accepts. If any of these stops compiling under strict mode,
@@ -121,17 +121,26 @@ const config: Config = {
     whiteboard: false, // disable sentinel — must compile
   },
 
-  // Awareness handler reads concrete fields off each state. The JSDoc
-  // original typed `states` as `Array` (= `any[]`); the conversion
-  // preserved that. If a future change narrows to `unknown[]`, this access
-  // breaks under strict mode.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  onAwarenessUpdate: ({ states }: { states: any[] }) => {
+  // Awareness handler reads concrete fields off each state. SD-2834
+  // promoted `states` from `any[]` to a public `AwarenessState` type
+  // (which extends `User`, since the runtime helper
+  // `awarenessStatesToArray` spreads user fields at the top level via
+  // `{ clientId, ...value.user, color }`). Consumers get IntelliSense
+  // on the flattened fields (`name`, `email`, `clientId`, `color`)
+  // without giving up the pass-through index signature for
+  // application-specific keys.
+  onAwarenessUpdate: ({ states }: { states: AwarenessState[] }) => {
     for (const state of states) {
-      const userId = state?.user?.id;
-      const clientId = state?.clientId;
-      void userId;
+      const userName = state.name;
+      const userEmail = state.email;
+      const clientId = state.clientId;
+      const userColor = state.color;
+      const customField = state['customField']; // index signature still works
+      void userName;
+      void userEmail;
       void clientId;
+      void userColor;
+      void customField;
     }
   },
 };

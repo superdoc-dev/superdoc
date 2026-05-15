@@ -1,8 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { EditorState, TextSelection } from 'prosemirror-state';
+import { EditorState, NodeSelection, TextSelection } from 'prosemirror-state';
 import { Slice } from 'prosemirror-model';
 import { ySyncPluginKey } from 'y-prosemirror';
 import { initTestEditor } from '@tests/helpers/helpers.js';
+import { STRUCTURED_CONTENT_LOCK_KEY } from './structured-content-lock-plugin.js';
 
 /**
  * Test suite for StructuredContentLockPlugin
@@ -409,6 +410,202 @@ describe('StructuredContentLockPlugin', () => {
       const result = state.applyTransaction(tr);
 
       expect(result.state.doc.textContent).toContain('Snapshot exit');
+    });
+  });
+
+  describe('Word-style deletion via keyboard (SD-2678)', () => {
+    // Drive the lock plugin's handleKeyDown directly so tests check the
+    // plugin's own decision (block vs let through) without other plugins
+    // (e.g. the keymap plugin) running real Backspace commands and mutating
+    // the document mid-test.
+    function invokeLockHandleKeyDown(key, { metaKey = false, ctrlKey = false } = {}) {
+      const view = editor.view;
+      const lockPlugin = view.state.plugins.find((p) => p.spec.key === STRUCTURED_CONTENT_LOCK_KEY);
+      let prevented = false;
+      const event = {
+        key,
+        metaKey,
+        ctrlKey,
+        preventDefault() {
+          prevented = true;
+        },
+      };
+      const handled = lockPlugin?.props?.handleKeyDown?.(view, event) === true;
+      return { handled, prevented };
+    }
+
+    // Build a fresh state with the desired selection without going through
+    // applyTransaction — this bypasses other plugins' appendTransaction (e.g.
+    // the select-plugin's first-click select-all and ZWSP-slot adjustments)
+    // so each test can pin the exact selection it wants to exercise. Use
+    // editor.setState so both editor._state and view.state stay in sync —
+    // editor._state is what subsequent dispatchTransaction calls read.
+    function setSelection(state, selection) {
+      const newState = EditorState.create({
+        schema,
+        doc: state.doc,
+        selection,
+        plugins: state.plugins,
+      });
+      editor.setState(newState);
+      return newState;
+    }
+
+    function placeCaretAt(state, pos) {
+      return setSelection(state, TextSelection.create(state.doc, pos));
+    }
+
+    describe('Path 2 — caret immediately adjacent to inline SDT', () => {
+      const adjacencyCases = [
+        // [lockMode, key, shouldConsume, description]
+        ['unlocked', 'Backspace', false, 'unlocked + Backspace at trailing boundary: lets PM run (selectNodeBackward)'],
+        ['contentLocked', 'Backspace', false, 'contentLocked + Backspace at trailing boundary: lets PM run'],
+        ['sdtLocked', 'Backspace', true, 'sdtLocked + Backspace at trailing boundary: blocked'],
+        ['sdtContentLocked', 'Backspace', true, 'sdtContentLocked + Backspace at trailing boundary: blocked'],
+        ['unlocked', 'Delete', false, 'unlocked + Delete at leading boundary: lets PM run (selectNodeForward)'],
+        ['contentLocked', 'Delete', false, 'contentLocked + Delete at leading boundary: lets PM run'],
+        ['sdtLocked', 'Delete', true, 'sdtLocked + Delete at leading boundary: blocked'],
+        ['sdtContentLocked', 'Delete', true, 'sdtContentLocked + Delete at leading boundary: blocked'],
+      ];
+
+      it.each(adjacencyCases)('%s + %s', (lockMode, key, shouldConsume) => {
+        const doc = createDocWithSDTAndSurroundingText(lockMode, 'structuredContent');
+        const state = applyDocToEditor(doc);
+        const sdtInfo = findSDTNode(state.doc, 'structuredContent');
+        const caretPos = key === 'Backspace' ? sdtInfo.end : sdtInfo.pos;
+
+        placeCaretAt(state, caretPos);
+
+        const { handled, prevented } = invokeLockHandleKeyDown(key);
+
+        expect(handled).toBe(shouldConsume);
+        expect(prevented).toBe(shouldConsume);
+      });
+
+      it('contentLocked + Backspace then Backspace deletes the SDT (two-stage Word UX)', () => {
+        const doc = createDocWithSDTAndSurroundingText('contentLocked', 'structuredContent');
+        const initialState = applyDocToEditor(doc);
+        const sdtInfo = findSDTNode(initialState.doc, 'structuredContent');
+
+        // Stage 1: caret at trailing boundary, Backspace lets PM run.
+        placeCaretAt(initialState, sdtInfo.end);
+        const stage1 = invokeLockHandleKeyDown('Backspace');
+        expect(stage1.handled).toBe(false);
+
+        // Simulate PM's selectNodeBackward outcome (it's what the keymap
+        // chain produces for an isolating inline node before the caret).
+        const afterSelectState = setSelection(editor.state, NodeSelection.create(editor.state.doc, sdtInfo.pos));
+
+        // Stage 2: NodeSelection on the wrapper, Backspace deletes it.
+        const stage2 = invokeLockHandleKeyDown('Backspace');
+        expect(stage2.handled).toBe(false);
+
+        const deletionTr = afterSelectState.tr.delete(sdtInfo.pos, sdtInfo.end);
+        const finalState = afterSelectState.apply(deletionTr);
+        expect(sdtNodeExists(finalState.doc, 'structuredContent')).toBe(false);
+      });
+    });
+
+    describe('Path 1 — selection covers SDT content (triple-click / first-click select-all)', () => {
+      const selectAllCases = [
+        // [lockMode, shouldPromote, description]
+        ['unlocked', true, 'unlocked: promotes content selection to NodeSelection on wrapper'],
+        ['contentLocked', true, 'contentLocked: promotes content selection to NodeSelection on wrapper'],
+        ['sdtLocked', false, 'sdtLocked: leaves selection alone (content edit allowed by sdtLocked semantics)'],
+        ['sdtContentLocked', false, 'sdtContentLocked: leaves selection alone (and original block path applies)'],
+      ];
+
+      it.each(selectAllCases)('%s — Backspace on (contentFrom, contentTo)', (lockMode, shouldPromote) => {
+        const doc = createDocWithSDTAndSurroundingText(lockMode, 'structuredContent');
+        const state = applyDocToEditor(doc);
+        const sdtInfo = findSDTNode(state.doc, 'structuredContent');
+
+        const contentFrom = sdtInfo.pos + 1;
+        const contentTo = sdtInfo.end - 1;
+        setSelection(state, TextSelection.create(state.doc, contentFrom, contentTo));
+
+        const { handled, prevented } = invokeLockHandleKeyDown('Backspace');
+
+        if (shouldPromote) {
+          expect(handled).toBe(true);
+          expect(prevented).toBe(true);
+          // The plugin promoted to a NodeSelection covering the wrapper.
+          const sel = editor.state.selection;
+          expect(sel).toBeInstanceOf(NodeSelection);
+          expect(sel.from).toBe(sdtInfo.pos);
+          expect(sel.to).toBe(sdtInfo.end);
+        } else {
+          // No promotion: selection unchanged.
+          const sel = editor.state.selection;
+          expect(sel).not.toBeInstanceOf(NodeSelection);
+          expect(sel.from).toBe(contentFrom);
+          expect(sel.to).toBe(contentTo);
+        }
+      });
+
+      it('contentLocked: select-all then Backspace twice deletes the wrapper', () => {
+        const doc = createDocWithSDTAndSurroundingText('contentLocked', 'structuredContent');
+        const state = applyDocToEditor(doc);
+        const sdtInfo = findSDTNode(state.doc, 'structuredContent');
+
+        // Stage 1: select-all-content + Backspace promotes to NodeSelection.
+        setSelection(state, TextSelection.create(state.doc, sdtInfo.pos + 1, sdtInfo.end - 1));
+        expect(invokeLockHandleKeyDown('Backspace').handled).toBe(true);
+        expect(editor.state.selection).toBeInstanceOf(NodeSelection);
+
+        // Stage 2: NodeSelection + Backspace lets PM delete the wrapper.
+        expect(invokeLockHandleKeyDown('Backspace').handled).toBe(false);
+
+        // Apply the corresponding delete (what PM's deleteSelection would do).
+        const tr = editor.state.tr.delete(sdtInfo.pos, sdtInfo.end);
+        const finalState = editor.state.apply(tr);
+        expect(sdtNodeExists(finalState.doc, 'structuredContent')).toBe(false);
+      });
+
+      it.each([['unlocked'], ['contentLocked']])(
+        '%s: select-all + Cmd+X promotes to NodeSelection in one keystroke (no preventDefault)',
+        (lockMode) => {
+          const doc = createDocWithSDTAndSurroundingText(lockMode, 'structuredContent');
+          const state = applyDocToEditor(doc);
+          const sdtInfo = findSDTNode(state.doc, 'structuredContent');
+
+          setSelection(state, TextSelection.create(state.doc, sdtInfo.pos + 1, sdtInfo.end - 1));
+
+          // Cut must NOT be consumed by handleKeyDown — PM's clipboard handler
+          // needs to run after the promotion so the wrapper is cut on the first
+          // press (vs Backspace/Delete which require a confirming second press).
+          const result = invokeLockHandleKeyDown('x', { metaKey: true });
+          expect(result.handled).toBe(false);
+          expect(result.prevented).toBe(false);
+
+          // The selection has been promoted to a NodeSelection on the wrapper,
+          // ready for PM to serialize and replace.
+          const sel = editor.state.selection;
+          expect(sel).toBeInstanceOf(NodeSelection);
+          expect(sel.from).toBe(sdtInfo.pos);
+          expect(sel.to).toBe(sdtInfo.end);
+        },
+      );
+
+      it('sdtLocked: select-all + Backspace still allows content deletion (no promotion)', () => {
+        const doc = createDocWithSDTAndSurroundingText('sdtLocked', 'structuredContent');
+        const state = applyDocToEditor(doc);
+        const sdtInfo = findSDTNode(state.doc, 'structuredContent');
+        const originalContent = state.doc.textContent;
+
+        const contentFrom = sdtInfo.pos + 1;
+        const contentTo = sdtInfo.end - 1;
+        setSelection(state, TextSelection.create(state.doc, contentFrom, contentTo));
+
+        // Plugin does not promote and does not block — content edit is allowed.
+        expect(invokeLockHandleKeyDown('Backspace').handled).toBe(false);
+
+        // The corresponding deletion goes through filterTransaction unchanged.
+        const tr = editor.state.tr.delete(contentFrom, contentTo);
+        const finalState = editor.state.apply(tr);
+        expect(finalState.doc.textContent).not.toBe(originalContent);
+        expect(sdtNodeExists(finalState.doc, 'structuredContent')).toBe(true);
+      });
     });
   });
 

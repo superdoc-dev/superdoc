@@ -14,7 +14,8 @@ import {
   type ParagraphIndent,
   type DropCapDescriptor,
   type DropCapRun,
-  type ParagraphFrame, ParagraphDirectionContext 
+  type ParagraphFrame,
+  ParagraphDirectionContext,
 } from '@superdoc/contracts';
 import type { PMNode, ParagraphFont } from '../types.js';
 import type { ResolvedRunProperties } from '@superdoc/word-layout';
@@ -322,12 +323,17 @@ export const computeParagraphAttrs = (
   // Inputs:
   //  - resolvedParagraphProperties.rightToLeft already reflects the style cascade
   //    including docDefaults/pPrDefault/pPr/bidi (style-engine §17.7.2 cascade).
-  //  - The section context provides writing-mode inheritance only.
+  //  - The section context provides writing-mode inheritance per ECMA §17.3.1.41
+  //    when the paragraph omits w:textDirection. Pulled from converterContext when
+  //    available, defaulted otherwise so this function works in test contexts.
   //
   // The resolver intentionally does NOT consume sectionDirection or run content as
   // fallbacks for inline direction. Per ECMA §17.6.1 section bidi affects section
   // chrome only, and run rtl is per-run script formatting, not paragraph state.
-  const sectionContext = resolveSectionDirection(undefined);
+  //
+  // Cell direction context (paragraphs in vertical table cells) and per-paragraph
+  // sectPr variation are not yet plumbed through - SD-2777 closes that gap.
+  const sectionContext = converterContext?.sectionDirectionContext ?? resolveSectionDirection(undefined);
   const directionContext: ParagraphDirectionContext = resolveParagraphDirection(
     resolvedParagraphProperties,
     sectionContext,
@@ -382,7 +388,6 @@ export const computeParagraphAttrs = (
     keepLines: resolvedParagraphProperties.keepLines,
     floatAlignment: floatAlignment,
     pageBreakBefore: resolvedParagraphProperties.pageBreakBefore,
-    ...(normalizedDirection ? { direction: normalizedDirection } : {}),
     directionContext,
   };
 

@@ -249,6 +249,46 @@ const handlePointerDown = (event) => {
   close();
 };
 
+const TRIGGER_FOCUS_SELECTOR =
+  'button, [href], input, select, textarea, [role="button"], [tabindex]:not([tabindex="-1"])';
+const triggerFocusTargetRef = ref(null);
+const rememberTriggerFocusTarget = () => {
+  const trigger = triggerRef.value;
+  const active = document.activeElement;
+
+  // Dropdown options are teleported to <body> and receive focus while open.
+  // Remember the opener before focus moves so Escape can restore it later.
+  if (trigger && active instanceof HTMLElement && trigger.contains(active)) {
+    triggerFocusTargetRef.value = active;
+    return;
+  }
+
+  triggerFocusTargetRef.value = trigger?.matches?.(TRIGGER_FOCUS_SELECTOR)
+    ? trigger
+    : trigger?.querySelector(TRIGGER_FOCUS_SELECTOR);
+};
+
+const focusTrigger = () => {
+  const remembered = triggerFocusTargetRef.value;
+  if (remembered instanceof HTMLElement && document.contains(remembered)) {
+    remembered.focus();
+    return;
+  }
+
+  const trigger = triggerRef.value;
+  if (!trigger) return;
+
+  const fallback = trigger.matches?.(TRIGGER_FOCUS_SELECTOR) ? trigger : trigger.querySelector(TRIGGER_FOCUS_SELECTOR);
+
+  if (fallback instanceof HTMLElement) {
+    fallback.focus();
+    return;
+  }
+
+  trigger.setAttribute('tabindex', '-1');
+  trigger.focus();
+};
+
 const handleKeyDown = (event) => {
   if (!isOpen.value) return;
 
@@ -257,7 +297,12 @@ const handleKeyDown = (event) => {
   if (!supportedKeys.includes(key)) return;
 
   if (key === 'Escape') {
+    event.preventDefault();
     close();
+    nextTick(() => {
+      // Wait one frame so the focused teleported option is gone before restoring focus.
+      requestAnimationFrame(focusTrigger);
+    });
     return;
   }
 
@@ -291,6 +336,7 @@ watch(
       return;
     }
 
+    rememberTriggerFocusTarget();
     await nextTick();
     updateMenuPosition();
 

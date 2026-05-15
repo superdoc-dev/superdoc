@@ -1061,6 +1061,36 @@ function extractTextFromTextBox(textBoxContent, bodyPr, params = {}) {
       } else if (el.name === 'sd:totalPageNumber') {
         hasText = true;
         appendFieldPart('NUMPAGES', el, paragraphProperties);
+      } else if (el.name === 'w:drawing') {
+        // SD-2804 / ECMA-376 §20.4.2.38: a textbox can hold body-level
+        // content, including runs with inline w:drawing images. Defer to
+        // the existing v3 wp drawing handler for rId → src + size resolution
+        // so this branch behaves identically to body inline images. Anchored
+        // drawings inside textboxes are out of scope (the wrap / position /
+        // transform metadata isn't carried into the text-parts model);
+        // confine support to wp:inline.
+        const inline = el.elements?.find((child) => child?.name === 'wp:inline');
+        if (inline) {
+          const imagePm = handleImageNode(inline, { ...params, nodes: [el] }, false);
+          // Skip hidden drawings (wp:docPr hidden="1") to match the body-level
+          // pipeline — handleImageNode flags them via attrs.hidden, and image
+          // parts bypass the top-level filtering that drops them elsewhere.
+          if (imagePm?.attrs?.src && imagePm.attrs.hidden !== true) {
+            hasText = true;
+            const sizeAttr = imagePm.attrs.size || imagePm.attrs;
+            textParts.push({
+              text: '',
+              formatting,
+              kind: 'image',
+              src: imagePm.attrs.src,
+              extension: imagePm.attrs.extension,
+              rId: imagePm.attrs.rId,
+              width: typeof sizeAttr?.width === 'number' ? sizeAttr.width : undefined,
+              height: typeof sizeAttr?.height === 'number' ? sizeAttr.height : undefined,
+              alt: imagePm.attrs.alt || '',
+            });
+          }
+        }
       }
     });
 

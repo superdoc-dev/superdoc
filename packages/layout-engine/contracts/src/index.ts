@@ -16,7 +16,13 @@ export type {
   RunBidiContext,
   RunScriptContext,
 } from './direction-context.js';
-import type { ParagraphDirectionContext } from './direction-context.js';
+export { getParagraphInlineDirection, getTableVisualDirection } from './direction-context.js';
+import type {
+  ParagraphDirectionContext,
+  RunBidiContext,
+  RunScriptContext,
+  TableDirectionContext,
+} from './direction-context.js';
 
 // Export table contracts
 export {
@@ -115,6 +121,18 @@ export type FieldAnnotationMetadata = {
 
 export type StructuredContentLockMode = 'unlocked' | 'sdtLocked' | 'contentLocked' | 'sdtContentLocked';
 
+/**
+ * Visual chrome / labelling behavior of an SDT, mirroring
+ * `<w15:appearance w15:val="…">` (ECMA-376 §17.5.2.6 / OOXML 2010+).
+ *
+ *   - `'boundingBox'` (default): visible chrome around the SDT content.
+ *   - `'tags'`: tags-only mode (start/end markers).
+ *   - `'hidden'`: no chrome at all; the SDT exists in the document but is
+ *     visually transparent. The alias label MUST NOT leak into the rendered
+ *     DOM textContent (a11y / copy-paste behavior).
+ */
+export type StructuredContentAppearance = 'boundingBox' | 'tags' | 'hidden';
+
 export type StructuredContentMetadata = {
   type: 'structuredContent';
   scope: 'inline' | 'block';
@@ -122,6 +140,8 @@ export type StructuredContentMetadata = {
   tag?: string | null;
   alias?: string | null;
   lockMode?: StructuredContentLockMode;
+  /** Appearance from the SDT's `<w15:appearance>` element, when present. */
+  appearance?: StructuredContentAppearance;
   sdtPr?: unknown;
 };
 
@@ -315,6 +335,19 @@ export type TextRun = RunMarks & {
   };
   /** Tracked-change metadata from ProseMirror marks. */
   trackedChange?: TrackedChangeMeta;
+  /**
+   * Run-level bidi signals preserved from the source DOCX (run rtl flag,
+   * embedding/override directions). Direction-only - script formatting lives
+   * on `script`. Populated by pm-adapter from raw run properties; not yet
+   * rendered (Wave 1c consumes embedding/override).
+   */
+  bidi?: RunBidiContext;
+  /**
+   * Run-level script context preserved from the source DOCX (complex-script
+   * flag, per-script language metadata). Wave 1b uses `complexScript` to gate
+   * the formatting-stack selection (Latin variants vs CS variants).
+   */
+  script?: RunScriptContext;
 };
 
 export type TabRun = RunMarks & {
@@ -606,10 +639,28 @@ export type TableCellAttrs = {
   tableCellProperties?: Record<string, unknown>;
 };
 
+export type TablePropertiesAttrs = {
+  rightToLeft?: boolean;
+  [key: string]: unknown;
+};
+
 export type TableAttrs = {
   borders?: TableBorders;
   borderCollapse?: 'collapse' | 'separate';
   cellSpacing?: CellSpacing;
+  tableProperties?: TablePropertiesAttrs;
+  /**
+   * Resolved table direction context (SD-3138). Populated by pm-adapter from
+   * cascade-resolved table properties via `resolveTableDirection`. Consumers
+   * should call `getTableVisualDirection(attrs)` instead of reading
+   * `tableProperties.rightToLeft` directly — the helper prefers this field
+   * and falls back to the legacy raw read for compatibility.
+   *
+   * Per ECMA-376 §17.4.1, `w:bidiVisual` affects cell ordering and
+   * table-visual properties only; it does NOT propagate to cell paragraphs
+   * as inline direction.
+   */
+  tableDirectionContext?: TableDirectionContext;
   sdt?: SdtMetadata;
   containerSdt?: SdtMetadata;
   [key: string]: unknown;
@@ -806,6 +857,22 @@ export type TextPart = {
   isLineBreak?: boolean;
   /** Indicates this line break follows an empty paragraph (creates extra spacing). */
   isEmptyParagraph?: boolean;
+  /**
+   * SD-2804: ECMA-376 §20.4.2.38 lets a textbox hold full body-level
+   * content, including paragraphs whose runs carry inline w:drawing
+   * images. When the importer encounters such a drawing it appends a
+   * part with `kind: 'image'` carrying the raw media path; pm-adapter's
+   * hydrateImageBlocks resolves it to a data URI alongside ImageRuns so
+   * binary (Y.js) and string (zip) media files share the same path
+   * candidates and Uint8Array decoding.
+   */
+  kind?: 'image';
+  src?: string;
+  extension?: string;
+  rId?: string;
+  width?: number;
+  height?: number;
+  alt?: string;
 };
 
 /** Text content configuration for shapes. */
@@ -1481,17 +1548,12 @@ export type ParagraphAttrs = {
   /** Marks an empty paragraph that only exists to carry section properties. */
   sectPrMarker?: boolean;
   /**
-   * Resolved paragraph inline base direction. Populated from `directionContext.inlineDirection`
-   * during pm-adapter conversion; left undefined when no explicit bidi is set so the browser
-   * can apply UBA via missing `dir` attribute.
-   *
-   * Prefer reading `directionContext` (typed, complete) over this scalar field. The scalar
-   * remains for backwards compatibility with consumers that only need inline direction.
-   */
-  direction?: 'ltr' | 'rtl';
-  /**
    * Resolved direction context for the paragraph (inline direction + writing mode).
    * Single source of truth for paragraph direction-aware rendering decisions.
+   *
+   * Read via `getParagraphInlineDirection(attrs)` rather than inspecting this
+   * field directly so the helper can normalize `null` vs `undefined` and fall
+   * back to `paragraphProperties.rightToLeft` for PM-node / editor paths.
    *
    * See `@superdoc/contracts/direction-context` for axis semantics.
    */

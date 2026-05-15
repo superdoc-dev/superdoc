@@ -375,6 +375,25 @@ export function getItems(context, customItems = [], includeDefaultItems = true) 
             return context.trigger === TRIGGERS.click && (context.isCellSelection || context.isInTable);
           },
         },
+        {
+          id: 'update-table-of-contents',
+          label: TEXTS.updateTableOfContents,
+          icon: ICONS.updateTableOfContents,
+          isDefault: true,
+          action: (editor, context) => {
+            const sdBlockId = context.tocAncestor?.sdBlockId;
+            if (!sdBlockId) return;
+            try {
+              editor.doc?.toc?.update?.({
+                target: { kind: 'block', nodeType: 'tableOfContents', nodeId: sdBlockId },
+                mode: 'all',
+              });
+            } catch (error) {
+              console.warn('[ContextMenu] toc.update failed:', error);
+            }
+          },
+          showWhen: (context) => context.trigger === TRIGGERS.click && !!context.tocAncestor?.sdBlockId,
+        },
       ],
     },
     {

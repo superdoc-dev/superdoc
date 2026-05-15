@@ -149,7 +149,8 @@
       "@superdoc-dev/react": "workspace:*",
       "@superdoc-dev/superdoc-yjs-collaboration": "workspace:*",
       "@superdoc-dev/sdk": "workspace:*",
-      "openapi-types": "12.1.3"
+      "openapi-types": "12.1.3",
+      "@types/minimatch": "5.1.2"
     },
     "ignoredBuiltDependencies": [
       "@parcel/watcher",

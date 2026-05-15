@@ -44,6 +44,7 @@ export * from './insertSectionBreakAtSelection.js';
 // Paragraph
 export * from './textIndent.js';
 export * from './lineHeight.js';
+export * from './paragraphDirection.js';
 
 // Run
 export * from './backspaceEmptyRunParagraph.js';
@@ -51,6 +52,7 @@ export * from './backspaceSkipEmptyRun.js';
 export * from './backspaceNextToRun.js';
 export * from './backspaceAcrossRuns.js';
 export * from './backspaceAtomBefore.js';
+export * from './deleteBlockSdtAtTextBlockStart.js';
 export * from './deleteSkipEmptyRun.js';
 export * from './deleteNextToRun.js';
 export * from './deleteAtomAfter.js';

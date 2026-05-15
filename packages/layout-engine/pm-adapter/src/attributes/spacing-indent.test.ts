@@ -114,9 +114,9 @@ describe('normalizeAlignment', () => {
     expect(normalizeAlignment('end', true)).toBe('left');
   });
 
-  it('does not flip explicit left/right/center/justify in RTL', () => {
-    expect(normalizeAlignment('left', true)).toBe('left');
-    expect(normalizeAlignment('right', true)).toBe('right');
+  it('maps explicit left/right to logical start/end in RTL', () => {
+    expect(normalizeAlignment('left', true)).toBe('right');
+    expect(normalizeAlignment('right', true)).toBe('left');
     expect(normalizeAlignment('center', true)).toBe('center');
     expect(normalizeAlignment('justify', true)).toBe('justify');
   });
@@ -125,6 +125,22 @@ describe('normalizeAlignment', () => {
     expect(normalizeAlignment('lowKashida')).toBe('justify');
     expect(normalizeAlignment('mediumKashida')).toBe('justify');
     expect(normalizeAlignment('highKashida')).toBe('justify');
+  });
+
+  // SD-3093: both/distribute/numTab/thaiDistribute collapse to justify regardless
+  // of direction. They must not flip under RTL like `left`/`right` do.
+  it('maps both/distribute/numTab/thaiDistribute to justify in LTR', () => {
+    expect(normalizeAlignment('both', false)).toBe('justify');
+    expect(normalizeAlignment('distribute', false)).toBe('justify');
+    expect(normalizeAlignment('numTab', false)).toBe('justify');
+    expect(normalizeAlignment('thaiDistribute', false)).toBe('justify');
+  });
+
+  it('maps both/distribute/numTab/thaiDistribute to justify in RTL (no flip)', () => {
+    expect(normalizeAlignment('both', true)).toBe('justify');
+    expect(normalizeAlignment('distribute', true)).toBe('justify');
+    expect(normalizeAlignment('numTab', true)).toBe('justify');
+    expect(normalizeAlignment('thaiDistribute', true)).toBe('justify');
   });
 
   it('returns undefined for invalid values', () => {

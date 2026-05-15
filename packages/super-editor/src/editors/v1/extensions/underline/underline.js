@@ -84,6 +84,11 @@ export const Underline = Mark.create({
       underlineThemeShade: {
         default: null,
       },
+      // Internal flag to distinguish system-added underline.
+      autoAdded: {
+        default: false,
+        rendered: false,
+      },
     };
   },
 

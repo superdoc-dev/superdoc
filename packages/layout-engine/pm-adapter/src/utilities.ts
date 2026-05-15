@@ -15,6 +15,8 @@ import type {
   ShapeGroupDrawing,
   ShapeGroupImageChild,
   ShapeGroupTransform,
+  TextPart,
+  VectorShapeDrawing,
   FlowBlock,
   ImageRun,
   ParagraphBlock,
@@ -1174,6 +1176,37 @@ export function hydrateImageBlocks(blocks: FlowBlock[], mediaFiles?: Record<stri
       // Handle DrawingBlocks with shapeGroup kind (contain image children)
       if (blk.kind === 'drawing') {
         const drawingBlock = blk as DrawingBlock;
+
+        // SD-2804: vectorShape blocks carry inline image parts in their
+        // textContent.parts array (importer stamps part.kind === 'image'
+        // for w:drawing inside textbox runs). Hydrate the same way as
+        // ImageRuns so Uint8Array (Y.js binary) and string (zip) media
+        // alike resolve to a data URI.
+        if (drawingBlock.drawingKind === 'vectorShape') {
+          const parts = (drawingBlock as VectorShapeDrawing).textContent?.parts;
+          if (!parts || parts.length === 0) return blk;
+          let partsChanged = false;
+          const hydratedParts = parts.map((part: TextPart) => {
+            if (part?.kind !== 'image' || !part.src || part.src.startsWith('data:')) {
+              return part;
+            }
+            const resolvedSrc = resolveImageSrc(part.src, part.rId, undefined, part.extension);
+            if (resolvedSrc) {
+              partsChanged = true;
+              return { ...part, src: resolvedSrc };
+            }
+            return part;
+          });
+          if (partsChanged) {
+            const vectorShapeBlock = drawingBlock as VectorShapeDrawing;
+            return {
+              ...vectorShapeBlock,
+              textContent: { ...vectorShapeBlock.textContent, parts: hydratedParts },
+            };
+          }
+          return blk;
+        }
+
         if (drawingBlock.drawingKind !== 'shapeGroup') {
           return blk;
         }

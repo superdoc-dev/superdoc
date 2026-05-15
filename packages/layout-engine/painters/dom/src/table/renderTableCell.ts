@@ -750,7 +750,6 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
     const blockLineCounts: number[] = [];
     for (let i = 0; i < Math.min(blockMeasures.length, cellBlocks.length); i++) {
       const bm = blockMeasures[i];
-      const blk = cellBlocks[i];
       if (bm.kind === 'paragraph') {
         blockLineCounts.push((bm as ParagraphMeasure).lines?.length || 0);
       } else if (bm.kind === 'table') {

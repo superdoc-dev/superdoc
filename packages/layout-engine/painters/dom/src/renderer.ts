@@ -5,7 +5,6 @@ import type {
   DrawingBlock,
   DrawingFragment,
   DrawingGeometry,
-  FlowBlock,
   FlowMode,
   Fragment,
   GradientFill,
@@ -25,9 +24,7 @@ import type {
   ShapeTextContent,
   SolidFillWithAlpha,
   SourceAnchor,
-  TableAttrs,
   TableBlock,
-  TableCellAttrs,
   TableFragment,
   TableMeasure,
   VectorShapeDrawing,
@@ -53,7 +50,6 @@ import { DATASET_KEYS, decodeLayoutStoryDataset, encodeLayoutStoryDataset } from
 import { getPresetShapeSvg } from '@superdoc/preset-geometry';
 import { DOM_CLASS_NAMES } from './constants.js';
 import { createChartElement as renderChartToElement } from './chart-renderer.js';
-import { hashCellBorders, hashTableBorders } from './paragraph-hash-utils.js';
 import { createRulerElement, ensureRulerStyles, generateRulerDefinitionFromPx } from './ruler/index.js';
 import {
   CLASS_NAMES,
@@ -77,13 +73,7 @@ import { renderTableFragment as renderTableFragmentElement } from './table/rende
 import { applyImageClipPath } from './utils/image-clip-path.js';
 import { computeSdtBoundaries } from './sdt/boundaries.js';
 import { shouldRebuildForSdtBoundary, type SdtBoundaryOptions } from './sdt/container.js';
-import {
-  applyContainerSdtDataset,
-  applySdtDataset,
-  getSdtMetadataId,
-  getSdtMetadataLockMode,
-  getSdtMetadataVersion,
-} from './sdt/dataset.js';
+import { applyContainerSdtDataset, applySdtDataset } from './sdt/dataset.js';
 import {
   createInlineSdtWrapper,
   expandSdtWrapperPmRange,
@@ -96,12 +86,11 @@ import {
   type PaintSnapshotStructuredContentInlineEntity,
 } from './sdt/snapshot.js';
 import { computeBetweenBorderFlags, type BetweenBorderInfo } from './paragraph/borders/index.js';
-import { deriveParagraphBlockVersion, hashParagraphBlockForTableVersion } from './paragraph/block-version.js';
 import { applyParagraphFragmentPmAttributes } from './paragraph/frame.js';
 import { renderParagraphFragment as renderParagraphFragmentElement } from './paragraph/renderParagraphFragment.js';
 import { renderLine as renderRunLine } from './runs/render-line.js';
 import type { RunRenderContext } from './runs/types.js';
-import { createBlockImageContent, readImageClipPathValue, renderedBlockImageVersion } from './images/image-block.js';
+import { createBlockImageContent } from './images/image-block.js';
 import { buildImageHyperlinkAnchor as buildSharedImageHyperlinkAnchor } from './images/hyperlink.js';
 import { applyTrackedChangeDecorations, resolveTrackedChangesConfig } from './runs/tracked-changes.js';
 import { applySourceAnchorDataset } from './utils/source-anchor.js';
@@ -4188,220 +4177,6 @@ const isNonBodyStoryBlockId = (blockId: string | undefined): boolean =>
     blockId.startsWith('endnote-') ||
     blockId.startsWith('__sd_semantic_footnote-') ||
     blockId.startsWith('__sd_semantic_endnote-'));
-
-/**
- * Derives a version string for a flow block based on its content and styling properties.
- *
- * This version string is used for cache invalidation - when any visual property of the block
- * changes, the version string changes, triggering a DOM rebuild instead of reusing cached elements.
- *
- * The version includes all properties that affect visual rendering:
- * - Text content
- * - Font properties (family, size, bold, italic)
- * - Text decorations (underline style/color, strike, highlight)
- * - Spacing (letterSpacing)
- * - Position markers (pmStart, pmEnd)
- * - Special tokens (page numbers, etc.)
- * - List marker properties (numId, ilvl, markerText) - for list indent changes
- * - Paragraph attributes (alignment, spacing, indent, borders, shading, direction, tabs)
- * - Table cell content and paragraph formatting within cells
- *
- * For table blocks, a deep hash is computed across all rows and cells, including:
- * - Cell block content (paragraph runs, text, formatting)
- * - Paragraph-level attributes in cells (alignment, spacing, line height, indent, borders, shading)
- * - Run-level formatting (color, highlight, bold, italic, fontSize, fontFamily, underline, strike)
- *
- * This ensures toolbar commands that modify paragraph or run formatting within tables
- * trigger proper DOM updates.
- *
- * @param block - The flow block to generate a version string for
- * @returns A pipe-delimited string representing all visual properties of the block.
- *          Changes to any included property will change the version string.
- */
-const deriveBlockVersion = (block: FlowBlock): string => {
-  if (block.kind === 'paragraph') {
-    return deriveParagraphBlockVersion(block, getSdtMetadataVersion, readImageClipPathValue);
-  }
-
-  if (block.kind === 'image') {
-    const imgSdt = (block as ImageBlock).attrs?.sdt;
-    const imgSdtVersion = getSdtMetadataVersion(imgSdt);
-    return [renderedBlockImageVersion(block), imgSdtVersion].join('|');
-  }
-
-  if (block.kind === 'drawing') {
-    if (block.drawingKind === 'image') {
-      // Type narrowing: block is ImageDrawing (not ImageBlock)
-      const imageLike = block as ImageDrawing;
-      return ['drawing:image', renderedBlockImageVersion(imageLike)].join('|');
-    }
-    if (block.drawingKind === 'vectorShape') {
-      const vector = block as VectorShapeDrawing;
-      return [
-        'drawing:vector',
-        vector.shapeKind ?? '',
-        vector.fillColor ?? '',
-        vector.strokeColor ?? '',
-        vector.strokeWidth ?? '',
-        vector.geometry.width,
-        vector.geometry.height,
-        vector.geometry.rotation ?? 0,
-        vector.geometry.flipH ? 1 : 0,
-        vector.geometry.flipV ? 1 : 0,
-      ].join('|');
-    }
-    if (block.drawingKind === 'shapeGroup') {
-      const group = block as ShapeGroupDrawing;
-      const childSignature = group.shapes
-        .map((child) => `${child.shapeType}:${JSON.stringify(child.attrs ?? {})}`)
-        .join(';');
-      return [
-        'drawing:group',
-        group.geometry.width,
-        group.geometry.height,
-        group.groupTransform ? JSON.stringify(group.groupTransform) : '',
-        childSignature,
-      ].join('|');
-    }
-    if (block.drawingKind === 'chart') {
-      return [
-        'drawing:chart',
-        block.chartData?.chartType ?? '',
-        block.chartData?.series?.length ?? 0,
-        block.geometry.width,
-        block.geometry.height,
-        block.chartRelId ?? '',
-      ].join('|');
-    }
-    // Exhaustiveness check: if a new drawingKind is added, TypeScript will error here
-    const _exhaustive: never = block;
-    return `drawing:unknown:${(block as DrawingBlock).id}`;
-  }
-
-  if (block.kind === 'table') {
-    const tableBlock = block as TableBlock;
-    /**
-     * Local hash function for strings using FNV-1a algorithm.
-     * Used to create a robust hash across all table rows/cells so deep edits invalidate version.
-     *
-     * @param seed - Initial hash value
-     * @param value - String value to hash
-     * @returns Updated hash value
-     */
-    const hashString = (seed: number, value: string): number => {
-      let hash = seed >>> 0;
-      for (let i = 0; i < value.length; i++) {
-        hash ^= value.charCodeAt(i);
-        hash = Math.imul(hash, 16777619); // FNV-style mix
-      }
-      return hash >>> 0;
-    };
-
-    /**
-     * Local hash function for numbers.
-     * Handles undefined/null values safely by treating them as 0.
-     *
-     * @param seed - Initial hash value
-     * @param value - Number value to hash (or undefined/null)
-     * @returns Updated hash value
-     */
-    const hashNumber = (seed: number, value: number | undefined | null): number => {
-      const n = Number.isFinite(value) ? (value as number) : 0;
-      let hash = seed ^ n;
-      hash = Math.imul(hash, 16777619);
-      hash ^= hash >>> 13;
-      return hash >>> 0;
-    };
-
-    let hash = 2166136261;
-    hash = hashString(hash, block.id);
-    hash = hashNumber(hash, tableBlock.rows.length);
-    hash = (tableBlock.columnWidths ?? []).reduce((acc, width) => hashNumber(acc, Math.round(width * 1000)), hash);
-
-    // Defensive guards: ensure rows array exists and iterate safely
-    const rows = tableBlock.rows ?? [];
-    for (const row of rows) {
-      if (!row || !Array.isArray(row.cells)) continue;
-      hash = hashNumber(hash, row.cells.length);
-      for (const cell of row.cells) {
-        if (!cell) continue;
-        const cellBlocks = cell.blocks ?? (cell.paragraph ? [cell.paragraph] : []);
-        hash = hashNumber(hash, cellBlocks.length);
-        // Include cell attributes that affect rendering (rowSpan, colSpan, borders, etc.)
-        hash = hashNumber(hash, cell.rowSpan ?? 1);
-        hash = hashNumber(hash, cell.colSpan ?? 1);
-
-        // Include cell-level attributes (borders, padding, background) that affect rendering
-        // This ensures cache invalidation when cell formatting changes (e.g., remove borders).
-        if (cell.attrs) {
-          const cellAttrs = cell.attrs as TableCellAttrs;
-          if (cellAttrs.borders) {
-            hash = hashString(hash, hashCellBorders(cellAttrs.borders));
-          }
-          if (cellAttrs.padding) {
-            const p = cellAttrs.padding;
-            hash = hashNumber(hash, p.top ?? 0);
-            hash = hashNumber(hash, p.right ?? 0);
-            hash = hashNumber(hash, p.bottom ?? 0);
-            hash = hashNumber(hash, p.left ?? 0);
-          }
-          if (cellAttrs.verticalAlign) {
-            hash = hashString(hash, cellAttrs.verticalAlign);
-          }
-          if (cellAttrs.background) {
-            hash = hashString(hash, cellAttrs.background);
-          }
-        }
-
-        for (const cellBlock of cellBlocks) {
-          hash = hashString(hash, cellBlock?.kind ?? 'unknown');
-          if (cellBlock?.kind === 'paragraph') {
-            hash = hashParagraphBlockForTableVersion(hash, cellBlock as ParagraphBlock, { hashString, hashNumber });
-          } else if (cellBlock?.kind) {
-            // Non-paragraph cell blocks participate in the parent table version
-            // through their own block-level signatures. layout-bridge/cache.ts
-            // mirrors this policy so repaint and remeasure stay aligned for
-            // nested tables, images, drawings, and other embedded cell content.
-            hash = hashString(hash, deriveBlockVersion(cellBlock as FlowBlock));
-          }
-        }
-      }
-    }
-
-    // Include table-level attributes (borders, etc.) that affect rendering
-    // This ensures cache invalidation when table formatting changes (e.g., remove borders).
-    if (tableBlock.attrs) {
-      const tblAttrs = tableBlock.attrs as TableAttrs;
-      if (tblAttrs.borders) {
-        hash = hashString(hash, hashTableBorders(tblAttrs.borders));
-      }
-      if (tblAttrs.borderCollapse) {
-        hash = hashString(hash, tblAttrs.borderCollapse);
-      }
-      if (tblAttrs.cellSpacing !== undefined) {
-        const cs = tblAttrs.cellSpacing;
-        if (typeof cs === 'number') {
-          hash = hashNumber(hash, cs);
-        } else {
-          // Stable key: value and type only (avoid JSON.stringify key-order variance)
-          const v = (cs as { value?: number; type?: string }).value ?? 0;
-          const t = (cs as { value?: number; type?: string }).type ?? 'px';
-          hash = hashString(hash, `cs:${v}:${t}`);
-        }
-      }
-      // Include SDT metadata so lock-mode changes invalidate the cache.
-      if (tblAttrs.sdt) {
-        hash = hashString(hash, tblAttrs.sdt.type);
-        hash = hashString(hash, getSdtMetadataLockMode(tblAttrs.sdt));
-        hash = hashString(hash, getSdtMetadataId(tblAttrs.sdt));
-      }
-    }
-
-    return [block.id, tableBlock.rows.length, hash.toString(16)].join('|');
-  }
-
-  return block.id;
-};
 
 const applyStyles = (el: HTMLElement, styles: Partial<CSSStyleDeclaration>): void => {
   Object.entries(styles).forEach(([key, value]) => {

@@ -42,36 +42,6 @@ export const resolveBlockImageClipPath = (block: unknown): string => {
   return readImageClipPathValue(record.clipPath) || resolveClipPathFromAttrs(record.attrs);
 };
 
-const imageHyperlinkVersion = (hyperlink: ImageHyperlink | undefined): string => {
-  if (!hyperlink) return '';
-  return [hyperlink.url ?? '', hyperlink.tooltip ?? ''].join(':');
-};
-
-const imageLuminanceVersion = (lum: ImageBlock['lum'] | undefined): string => {
-  if (!lum) return '';
-  return [lum.bright ?? '', lum.contrast ?? ''].join(':');
-};
-
-export const renderedBlockImageVersion = (image: BlockImageSource): string =>
-  [
-    image.src ?? '',
-    image.width ?? '',
-    image.height ?? '',
-    image.alt ?? '',
-    image.title ?? '',
-    image.objectFit ?? '',
-    image.display ?? '',
-    image.gain ?? '',
-    image.blacklevel ?? '',
-    image.grayscale ? 1 : 0,
-    imageLuminanceVersion(image.lum),
-    image.rotation ?? '',
-    image.flipH ? 1 : 0,
-    image.flipV ? 1 : 0,
-    imageHyperlinkVersion(image.hyperlink),
-    resolveBlockImageClipPath(image),
-  ].join('|');
-
 export const createBlockImageContent = ({
   doc,
   block,

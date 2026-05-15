@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { renderTableCell, getCellSegmentCount } from './renderTableCell.js';
 import { getCellLines } from '@superdoc/layout-engine';
 import type {
@@ -682,7 +682,7 @@ describe('renderTableCell', () => {
     expect(drawingWrapper?.style.top).toBe('7px');
   });
 
-  it('renders image drawing blocks inside table cells without a drawing callback', () => {
+  it('renders image drawing blocks inside table cells without using a drawing callback', () => {
     const para: ParagraphBlock = {
       kind: 'paragraph',
       id: 'para-drawing-image-anchor',
@@ -730,11 +730,17 @@ describe('renderTableCell', () => {
       blocks: [para, flowingDrawing, anchoredDrawing],
       attrs: {},
     };
+    const renderDrawingContent = vi.fn(() => {
+      const placeholder = doc.createElement('div');
+      placeholder.classList.add('unexpected-drawing-callback');
+      return placeholder;
+    });
 
     const { cellElement } = renderTableCell({
       ...createBaseDeps(),
       cellMeasure,
       cell,
+      renderDrawingContent,
     });
 
     const drawingImages = cellElement.querySelectorAll('img.superdoc-drawing-image');
@@ -742,6 +748,7 @@ describe('renderTableCell', () => {
     expect((drawingImages[0] as HTMLImageElement).src).toBe('data:image/png;base64,AAA');
     expect((drawingImages[1] as HTMLImageElement).src).toBe('data:image/png;base64,BBB');
     expect(drawingImages[1]?.parentElement?.parentElement?.style.position).toBe('absolute');
+    expect(renderDrawingContent).not.toHaveBeenCalled();
   });
 
   it('pushes text away from wrapSquare anchored images in table cells', () => {

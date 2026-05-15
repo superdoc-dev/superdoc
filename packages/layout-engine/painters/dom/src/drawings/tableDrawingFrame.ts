@@ -62,10 +62,9 @@ export const renderTableDrawingFrame = ({
   drawingInner.style.overflow = 'hidden';
 
   const drawingContent =
-    renderDrawingContent?.(block, { clipContainer: drawingInner }) ??
-    (block.drawingKind === 'image'
+    block.drawingKind === 'image'
       ? createDrawingImageElement(doc, block, buildImageHyperlinkAnchor, drawingInner)
-      : createDrawingPlaceholder(doc));
+      : (renderDrawingContent?.(block, { clipContainer: drawingInner }) ?? createDrawingPlaceholder(doc));
   drawingContent.style.width = '100%';
   drawingContent.style.height = '100%';
   drawingInner.appendChild(drawingContent);

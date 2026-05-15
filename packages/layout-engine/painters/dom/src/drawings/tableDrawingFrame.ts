@@ -1,7 +1,5 @@
 import type { DrawingBlock, SdtMetadata } from '@superdoc/contracts';
-import { createDrawingImageElement } from '../images/drawing-image.js';
-import type { BuildImageHyperlinkAnchor } from '../images/types.js';
-import { createDrawingPlaceholder } from './renderDrawingContent.js';
+import { createDrawingPlaceholder } from './placeholder.js';
 
 export type RenderTableDrawingFrameParams = {
   doc: Document;
@@ -14,7 +12,6 @@ export type RenderTableDrawingFrameParams = {
   zIndex?: number;
   flexShrink?: string;
   renderDrawingContent?: (block: DrawingBlock, options?: { clipContainer?: HTMLElement }) => HTMLElement;
-  buildImageHyperlinkAnchor: BuildImageHyperlinkAnchor;
   applySdtDataset: (el: HTMLElement | null, metadata?: SdtMetadata | null) => void;
 };
 
@@ -29,7 +26,6 @@ export const renderTableDrawingFrame = ({
   zIndex,
   flexShrink,
   renderDrawingContent,
-  buildImageHyperlinkAnchor,
   applySdtDataset,
 }: RenderTableDrawingFrameParams): HTMLElement => {
   const drawingWrapper = doc.createElement('div');
@@ -62,11 +58,7 @@ export const renderTableDrawingFrame = ({
   drawingInner.style.overflow = 'hidden';
 
   const drawingContent =
-    block.drawingKind === 'image'
-      ? block.src
-        ? createDrawingImageElement(doc, block, buildImageHyperlinkAnchor, drawingInner)
-        : createDrawingPlaceholder(doc)
-      : (renderDrawingContent?.(block, { clipContainer: drawingInner }) ?? createDrawingPlaceholder(doc));
+    renderDrawingContent?.(block, { clipContainer: drawingInner }) ?? createDrawingPlaceholder(doc);
   drawingContent.style.width = '100%';
   drawingContent.style.height = '100%';
   drawingInner.appendChild(drawingContent);

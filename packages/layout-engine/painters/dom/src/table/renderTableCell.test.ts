@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { renderTableCell, getCellSegmentCount } from './renderTableCell.js';
 import { getCellLines } from '@superdoc/layout-engine';
 import type {
@@ -682,7 +682,7 @@ describe('renderTableCell', () => {
     expect(drawingWrapper?.style.top).toBe('7px');
   });
 
-  it('renders image drawing blocks inside table cells without using a drawing callback', () => {
+  it('renders image drawing blocks inside table cells through the shared drawing renderer', () => {
     const para: ParagraphBlock = {
       kind: 'paragraph',
       id: 'para-drawing-image-anchor',
@@ -731,17 +731,11 @@ describe('renderTableCell', () => {
       blocks: [para, flowingDrawing, anchoredDrawing],
       attrs: {},
     };
-    const renderDrawingContent = vi.fn(() => {
-      const placeholder = doc.createElement('div');
-      placeholder.classList.add('unexpected-drawing-callback');
-      return placeholder;
-    });
 
     const { cellElement } = renderTableCell({
       ...createBaseDeps(),
       cellMeasure,
       cell,
-      renderDrawingContent,
     });
 
     const drawingImages = cellElement.querySelectorAll('img.superdoc-drawing-image');
@@ -756,7 +750,6 @@ describe('renderTableCell', () => {
     expect(anchor?.style.width).toBe('100%');
     expect(anchor?.style.height).toBe('100%');
     expect(anchor?.parentElement?.parentElement?.style.position).toBe('absolute');
-    expect(renderDrawingContent).not.toHaveBeenCalled();
   });
 
   it('renders a placeholder for image drawing blocks without a source', () => {
@@ -789,16 +782,53 @@ describe('renderTableCell', () => {
       ...createBaseDeps(),
       cellMeasure,
       cell: { id: 'cell-with-empty-drawing-image', blocks: [drawingWithoutSrc], attrs: {} },
+    });
+
+    expect(cellElement.querySelector('img.superdoc-drawing-image')).toBeFalsy();
+    expect(cellElement.querySelector('.superdoc-drawing-placeholder')).toBeTruthy();
+  });
+
+  it('uses the drawing content callback for image drawing blocks inside table cells', () => {
+    const drawing: DrawingBlock = {
+      kind: 'drawing',
+      id: 'drawing-image-callback',
+      drawingKind: 'image',
+      src: 'data:image/png;base64,AAA',
+    } as DrawingBlock;
+
+    let callbackCount = 0;
+    const { cellElement } = renderTableCell({
+      ...createBaseDeps(),
+      cellMeasure: {
+        blocks: [
+          {
+            kind: 'drawing',
+            drawingKind: 'image',
+            width: 30,
+            height: 15,
+            scale: 1,
+            naturalWidth: 30,
+            naturalHeight: 15,
+          },
+        ],
+        width: 100,
+        height: 30,
+        gridColumnStart: 0,
+        colSpan: 1,
+        rowSpan: 1,
+      },
+      cell: { id: 'cell-with-callback-drawing-image', blocks: [drawing], attrs: {} },
       renderDrawingContent: () => {
-        const el = doc.createElement('img');
-        el.classList.add('unexpected-drawing-image');
+        callbackCount += 1;
+        const el = doc.createElement('div');
+        el.classList.add('callback-drawing-image');
         return el;
       },
     });
 
+    expect(callbackCount).toBe(1);
+    expect(cellElement.querySelector('.callback-drawing-image')).toBeTruthy();
     expect(cellElement.querySelector('img.superdoc-drawing-image')).toBeFalsy();
-    expect(cellElement.querySelector('.unexpected-drawing-image')).toBeFalsy();
-    expect(cellElement.querySelector('.superdoc-drawing-placeholder')).toBeTruthy();
   });
 
   it('pushes text away from wrapSquare anchored images in table cells', () => {
@@ -3705,7 +3735,7 @@ describe('renderTableCell', () => {
       expect(vectorShapeEl.style.height).toBe('100%');
     });
 
-    it('should use placeholder fallback when callback is undefined', () => {
+    it('should use the shared drawing renderer when callback is undefined', () => {
       const shapeGroupBlock = {
         kind: 'drawing' as const,
         id: 'drawing-3',
@@ -3742,14 +3772,12 @@ describe('renderTableCell', () => {
         // renderDrawingContent is undefined
       });
 
-      // Should render placeholder with diagonal stripes pattern
       const drawingWrapper = cellElement.querySelector('.superdoc-table-drawing') as HTMLElement;
       expect(drawingWrapper).toBeTruthy();
 
-      const placeholder = drawingWrapper.firstChild as HTMLElement;
-      expect(placeholder).toBeTruthy();
-      expect(placeholder.classList.contains('superdoc-drawing-placeholder')).toBe(true);
-      expect(placeholder.style.border).toContain('dashed');
+      const shapeGroup = drawingWrapper.firstChild as HTMLElement;
+      expect(shapeGroup).toBeTruthy();
+      expect(shapeGroup.classList.contains('superdoc-shape-group')).toBe(true);
     });
 
     it('should pass correct DrawingBlock parameter to callback', () => {

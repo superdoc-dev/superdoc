@@ -33,6 +33,7 @@ import { applyCellBorders } from './border-utils.js';
 import { renderTableFragment as renderTableFragmentElement } from './renderTableFragment.js';
 import { renderParagraphContent } from '../paragraph/renderParagraphContent.js';
 import { renderTableDrawingFrame } from '../drawings/tableDrawingFrame.js';
+import { renderDrawingContent as renderSharedDrawingContent } from '../drawings/renderDrawingContent.js';
 
 type TableRowMeasure = TableMeasure['rows'][number];
 type TableCellMeasure = TableRowMeasure['cells'][number];
@@ -694,6 +695,17 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
     hyperlink: ImageHyperlink | undefined,
     display: 'block' | 'inline-block',
   ): HTMLElement => buildImageHyperlinkAnchor(doc, imageEl, hyperlink, display);
+  const renderTableCellDrawingContent =
+    renderDrawingContent ??
+    ((block: DrawingBlock, options?: { clipContainer?: HTMLElement }): HTMLElement =>
+      renderSharedDrawingContent({
+        doc,
+        block,
+        geometry: 'geometry' in block ? block.geometry : undefined,
+        context,
+        clipContainer: options?.clipContainer,
+        buildImageHyperlinkAnchor: buildTableImageHyperlinkAnchor,
+      }));
 
   // RTL: swap left↔right cell margins (ECMA-376 Part 4 §14.3.3–14.3.4, §14.3.7–14.3.8)
   const paddingLeft = isRtl ? (padding.right ?? 4) : (padding.left ?? 4);
@@ -899,8 +911,7 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
           height: blockMeasure.height,
           position: 'relative',
           flexShrink: '0',
-          renderDrawingContent,
-          buildImageHyperlinkAnchor: buildTableImageHyperlinkAnchor,
+          renderDrawingContent: renderTableCellDrawingContent,
           applySdtDataset,
         });
         content.appendChild(drawingWrapper);
@@ -1073,8 +1084,7 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
           left,
           top,
           zIndex,
-          renderDrawingContent,
-          buildImageHyperlinkAnchor: buildTableImageHyperlinkAnchor,
+          renderDrawingContent: renderTableCellDrawingContent,
           applySdtDataset,
         });
         content.appendChild(drawingWrapper);

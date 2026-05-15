@@ -4788,6 +4788,82 @@ describe('renderTableCell', () => {
       );
     });
 
+    it('should continue SDT paragraph boundaries across split table-cell fragments', () => {
+      const paragraphSdt: SdtMetadata = {
+        type: 'structuredContent',
+        scope: 'block',
+        id: 'split-paragraph-sdt',
+        alias: 'Split Paragraph',
+      };
+      const paragraph: ParagraphBlock = {
+        kind: 'paragraph',
+        id: 'split-sdt-paragraph',
+        runs: [{ text: 'Split paragraph', fontFamily: 'Arial', fontSize: 16 }],
+        attrs: { sdt: paragraphSdt },
+      };
+      const measure: ParagraphMeasure = {
+        kind: 'paragraph',
+        lines: [
+          {
+            fromRun: 0,
+            fromChar: 0,
+            toRun: 0,
+            toChar: 5,
+            width: 60,
+            ascent: 12,
+            descent: 4,
+            lineHeight: 20,
+          },
+          {
+            fromRun: 0,
+            fromChar: 6,
+            toRun: 0,
+            toChar: 15,
+            width: 80,
+            ascent: 12,
+            descent: 4,
+            lineHeight: 20,
+          },
+        ],
+        totalHeight: 40,
+      };
+      const cellMeasure: TableCellMeasure = {
+        blocks: [measure],
+        width: 120,
+        height: 20,
+        gridColumnStart: 0,
+        colSpan: 1,
+        rowSpan: 1,
+      };
+      const cell: TableCell = {
+        id: 'cell-split-sdt-paragraph',
+        blocks: [paragraph],
+        attrs: {},
+      };
+
+      const firstFragment = renderTableCell({
+        ...createBaseDeps(),
+        cellMeasure,
+        cell,
+        fromLine: 0,
+        toLine: 1,
+      }).cellElement.querySelector<HTMLElement>('.superdoc-structured-content-block');
+      const continuationFragment = renderTableCell({
+        ...createBaseDeps(),
+        cellMeasure,
+        cell,
+        fromLine: 1,
+        toLine: 2,
+      }).cellElement.querySelector<HTMLElement>('.superdoc-structured-content-block');
+
+      expect(firstFragment?.dataset.sdtContainerStart).toBe('true');
+      expect(firstFragment?.dataset.sdtContainerEnd).toBe('false');
+      expect(firstFragment?.querySelector('.superdoc-structured-content__label')?.textContent).toBe('Split Paragraph');
+      expect(continuationFragment?.dataset.sdtContainerStart).toBe('false');
+      expect(continuationFragment?.dataset.sdtContainerEnd).toBe('true');
+      expect(continuationFragment?.querySelector('.superdoc-structured-content__label')).toBeFalsy();
+    });
+
     it('should continue SDT boundaries across partial nested table renders', () => {
       const nestedTableSdt: SdtMetadata = {
         type: 'structuredContent',

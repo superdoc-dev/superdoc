@@ -980,7 +980,16 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
         paraWrapper.style.position = 'relative';
         paraWrapper.style.left = '0';
         paraWrapper.style.width = '100%';
-        const sdtBoundary = sdtBoundaries[i];
+        const baseSdtBoundary = sdtBoundaries[i];
+        const sdtBoundary = baseSdtBoundary
+          ? {
+              ...baseSdtBoundary,
+              isStart: (baseSdtBoundary.isStart ?? true) && localStartLine === 0,
+              isEnd: (baseSdtBoundary.isEnd ?? true) && localEndLine >= blockLineCount,
+              showLabel:
+                baseSdtBoundary.showLabel === undefined ? undefined : baseSdtBoundary.showLabel && localStartLine === 0,
+            }
+          : undefined;
 
         content.appendChild(paraWrapper);
         const result = renderParagraphContent({

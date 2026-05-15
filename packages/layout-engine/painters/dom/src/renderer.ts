@@ -2743,10 +2743,12 @@ export class DomPainter {
         );
       };
 
-      /**
-       * Renders drawing content that lives inside a table cell.
-       * Table-cell vector shapes intentionally skip outer geometry transforms.
-       */
+      const buildTableImageHyperlinkAnchor = (
+        imageEl: HTMLElement,
+        hyperlink: ImageHyperlink | undefined,
+        display: 'block' | 'inline-block',
+      ): HTMLElement => buildSharedImageHyperlinkAnchor(this.doc!, imageEl, hyperlink, display);
+
       const renderDrawingContentForTableCell = (
         block: DrawingBlock,
         options?: { clipContainer?: HTMLElement },
@@ -2757,7 +2759,7 @@ export class DomPainter {
           geometry: 'geometry' in block ? block.geometry : undefined,
           context,
           clipContainer: options?.clipContainer,
-          buildImageHyperlinkAnchor: this.buildImageHyperlinkAnchor.bind(this),
+          buildImageHyperlinkAnchor: buildTableImageHyperlinkAnchor,
         });
 
       const tableRenderData = this.resolveTableRenderData(fragment, resolvedItem);

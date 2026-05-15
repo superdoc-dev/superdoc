@@ -63,7 +63,9 @@ export const renderTableDrawingFrame = ({
 
   const drawingContent =
     block.drawingKind === 'image'
-      ? createDrawingImageElement(doc, block, buildImageHyperlinkAnchor, drawingInner)
+      ? block.src
+        ? createDrawingImageElement(doc, block, buildImageHyperlinkAnchor, drawingInner)
+        : createDrawingPlaceholder(doc)
       : (renderDrawingContent?.(block, { clipContainer: drawingInner }) ?? createDrawingPlaceholder(doc));
   drawingContent.style.width = '100%';
   drawingContent.style.height = '100%';

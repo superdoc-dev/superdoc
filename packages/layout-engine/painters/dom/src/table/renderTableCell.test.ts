@@ -701,6 +701,7 @@ describe('renderTableCell', () => {
       id: 'drawing-image-anchor',
       drawingKind: 'image',
       src: 'data:image/png;base64,BBB',
+      hyperlink: { url: 'https://example.com/table-drawing', tooltip: 'Open drawing' },
       anchor: { isAnchored: true, alignH: 'left', offsetH: 12, vRelativeFrom: 'paragraph', offsetV: 7 },
       wrap: { type: 'None' },
       attrs: { anchorParagraphId: 'para-drawing-image-anchor' },
@@ -747,8 +748,57 @@ describe('renderTableCell', () => {
     expect(drawingImages).toHaveLength(2);
     expect((drawingImages[0] as HTMLImageElement).src).toBe('data:image/png;base64,AAA');
     expect((drawingImages[1] as HTMLImageElement).src).toBe('data:image/png;base64,BBB');
-    expect(drawingImages[1]?.parentElement?.parentElement?.style.position).toBe('absolute');
+    const anchor = drawingImages[1]?.parentElement as HTMLAnchorElement | null;
+    expect(anchor?.tagName).toBe('A');
+    expect(anchor?.classList.contains('superdoc-link')).toBe(true);
+    expect(anchor?.href).toBe('https://example.com/table-drawing');
+    expect(anchor?.style.display).toBe('block');
+    expect(anchor?.style.width).toBe('100%');
+    expect(anchor?.style.height).toBe('100%');
+    expect(anchor?.parentElement?.parentElement?.style.position).toBe('absolute');
     expect(renderDrawingContent).not.toHaveBeenCalled();
+  });
+
+  it('renders a placeholder for image drawing blocks without a source', () => {
+    const drawingWithoutSrc: DrawingBlock = {
+      kind: 'drawing',
+      id: 'drawing-image-without-src',
+      drawingKind: 'image',
+    } as DrawingBlock;
+
+    const cellMeasure: TableCellMeasure = {
+      blocks: [
+        {
+          kind: 'drawing',
+          drawingKind: 'image',
+          width: 30,
+          height: 15,
+          scale: 1,
+          naturalWidth: 30,
+          naturalHeight: 15,
+        },
+      ],
+      width: 100,
+      height: 30,
+      gridColumnStart: 0,
+      colSpan: 1,
+      rowSpan: 1,
+    };
+
+    const { cellElement } = renderTableCell({
+      ...createBaseDeps(),
+      cellMeasure,
+      cell: { id: 'cell-with-empty-drawing-image', blocks: [drawingWithoutSrc], attrs: {} },
+      renderDrawingContent: () => {
+        const el = doc.createElement('img');
+        el.classList.add('unexpected-drawing-image');
+        return el;
+      },
+    });
+
+    expect(cellElement.querySelector('img.superdoc-drawing-image')).toBeFalsy();
+    expect(cellElement.querySelector('.unexpected-drawing-image')).toBeFalsy();
+    expect(cellElement.querySelector('.superdoc-drawing-placeholder')).toBeTruthy();
   });
 
   it('pushes text away from wrapSquare anchored images in table cells', () => {

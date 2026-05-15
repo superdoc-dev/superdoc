@@ -509,13 +509,15 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
   }
 
   let fromLine = 0;
-  // SD-3049: total measured footnote body height of all refs anchored in this
-  // block. Charged once to the page that receives this block's first fragment.
-  // Cross-page blocks (refs in lines that land on a later page) are handled
-  // conservatively here: full demand charged to the first landing page. SD-3050
-  // refines this with continuation-aware accounting.
+  // SD-3049: charged to the page that receives the block's first committed
+  // fragment. `demandChargedPageNumber` tracks where the (tentative) charge
+  // currently lives so we can re-target it after `advanceColumn`. Once a
+  // fragment is committed (`demandLocked`), the charge stays put — re-charging
+  // on later page transitions would phantom-shrink continuation pages where
+  // the footnote ref does not land.
   const blockFootnoteDemand = ctx.getFootnoteDemandForBlockId?.(block.id) ?? 0;
   let demandChargedPageNumber: number | null = null;
+  let demandLocked = false;
   const attrs = getParagraphAttrs(block);
   const spacing = attrs?.spacing ?? {};
   const spacingExplicit = attrs?.spacingExplicit;
@@ -837,7 +839,7 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
     // advanceColumn) and cap additionalDemand to leave room for at least one body line
     // so an oversized footnote can't deadlock the paginator.
     const chargeAndComputeEffectiveBottom = (): number => {
-      if (blockFootnoteDemand > 0 && demandChargedPageNumber !== state.page.number) {
+      if (blockFootnoteDemand > 0 && !demandLocked && demandChargedPageNumber !== state.page.number) {
         state.footnoteDemandThisPage += blockFootnoteDemand;
         demandChargedPageNumber = state.page.number;
       }
@@ -947,6 +949,7 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
       }
     }
     state.page.fragments.push(fragment);
+    demandLocked = true;
 
     state.cursorY += borderExpansion.top + fragmentHeight + borderExpansion.bottom;
     state.maxCursorY = Math.max(state.maxCursorY, state.cursorY);

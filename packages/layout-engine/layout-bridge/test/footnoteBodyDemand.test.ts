@@ -343,6 +343,54 @@ describe('SD-3049: body break consults anchored footnote demand', () => {
     expect(gap).toBeGreaterThanOrEqual(0);
   });
 
+  it('does not re-charge block demand on continuation pages of a multi-page paragraph', async () => {
+    // A single long paragraph carries one footnote ref. The footnote band
+    // only renders on the page that holds the ref's line — continuation pages
+    // must not get the demand subtracted from their effective body region, or
+    // they pack 13–15 lines instead of 20 and the document ends up with
+    // unnecessary extra pages.
+
+    const PARAGRAPH_LINES = 50;
+    const LINE_H = 20;
+    const FOOTNOTE_LINES = 5;
+    const FOOTNOTE_LINE_H = 20;
+
+    const block: FlowBlock = {
+      kind: 'paragraph',
+      id: 'long-para',
+      runs: [{ text: 'x'.repeat(100), fontFamily: 'Arial', fontSize: 12, pmStart: 0, pmEnd: 100 }],
+    };
+    const ftBlock = makeParagraph('footnote-1-0-paragraph', 'Footnote body.', 0);
+
+    const measureBlock = vi.fn(async (b: FlowBlock) => {
+      if (b.id.startsWith('footnote-')) return makeMeasure(FOOTNOTE_LINE_H, FOOTNOTE_LINES);
+      return makeMeasure(LINE_H, PARAGRAPH_LINES);
+    });
+
+    const margins = { top: 100, right: 100, bottom: 100, left: 100 };
+    const result = await incrementalLayout(
+      [],
+      null,
+      [block],
+      {
+        pageSize: { w: 612, h: 600 },
+        margins,
+        footnotes: {
+          refs: [{ id: '1', pos: 5 }],
+          blocksById: new Map([['1', [ftBlock]]]),
+          topPadding: 6,
+          dividerHeight: 6,
+        },
+      },
+      measureBlock,
+    );
+
+    // 50 lines × 20 = 1000px. Body region per page = 400px. Footnote band on
+    // page 1 reduces P1 capacity; P2+ are unconstrained. Expected: 3 pages.
+    // With per-page-recharge: 4 pages.
+    expect(result.layout.pages.length).toBe(3);
+  });
+
   it('does not change layout when document has no footnotes (no-op invariant)', async () => {
     // Regression guard: the new code path must not affect layouts without footnotes.
     const BODY_LINES = 50;

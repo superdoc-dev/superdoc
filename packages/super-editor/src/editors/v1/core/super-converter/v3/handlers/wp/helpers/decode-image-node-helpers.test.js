@@ -130,6 +130,32 @@ describe('translateImageNode', () => {
     expect(baseParams.relationships[0].attributes.Id).toBe('rId123');
   });
 
+  it('should reuse header/footer existingRelationships for image rIds', () => {
+    baseParams.isHeaderFooter = true;
+    baseParams.node.attrs.rId = 'rIdHeaderImage';
+    baseParams.existingRelationships = [
+      {
+        type: 'element',
+        name: 'Relationship',
+        attributes: {
+          Id: 'rIdHeaderImage',
+          Type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/image',
+          Target: 'media/test.png',
+        },
+      },
+    ];
+
+    const result = translateImageNode(baseParams);
+
+    const blip = result.elements
+      .find((e) => e.name === 'a:graphic')
+      .elements[0].elements[0].elements.find((e) => e.name === 'pic:blipFill')
+      .elements.find((e) => e.name === 'a:blip');
+
+    expect(blip.attributes['r:embed']).toBe('rIdHeaderImage');
+    expect(baseParams.relationships).toHaveLength(0);
+  });
+
   it('should call prepareTextAnnotation for fieldAnnotation without type', () => {
     const params = {
       ...baseParams,

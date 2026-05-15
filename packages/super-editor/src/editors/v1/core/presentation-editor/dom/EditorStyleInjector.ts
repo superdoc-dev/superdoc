@@ -111,6 +111,16 @@ const MOVABLE_OBJECT_INTERACTION_STYLES = `
   cursor: grabbing;
 }
 
+/* Header/footer decoration containers are pointer-events:none; keep images targetable for hover/resize. */
+.superdoc-layout .superdoc-page-header .superdoc-image-fragment,
+.superdoc-layout .superdoc-page-footer .superdoc-image-fragment,
+.superdoc-layout .superdoc-page-header .superdoc-inline-image-clip-wrapper,
+.superdoc-layout .superdoc-page-footer .superdoc-inline-image-clip-wrapper,
+.superdoc-layout .superdoc-page-header .superdoc-inline-image,
+.superdoc-layout .superdoc-page-footer .superdoc-inline-image {
+  pointer-events: auto;
+}
+
 /* Keep the active drag source from selecting text while dragging */
 .superdoc-layout .superdoc-structured-content__label,
 .superdoc-layout .superdoc-structured-content-inline__label,

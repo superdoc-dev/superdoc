@@ -12,6 +12,7 @@
 
 import type { SectionHeaderFooterKind, SectionHeaderFooterVariant } from '@superdoc/document-api';
 import type { Editor } from '../../core/Editor.js';
+import { getWordPartRelsPath } from '../../core/helpers/word-part-path.js';
 import type { SectionProjection } from './sections-resolver.js';
 import { resolveSectionProjections } from './sections-resolver.js';
 import { readTargetSectPr } from './section-projection-access.js';
@@ -64,7 +65,7 @@ function cleanupCreatedPart(editor: Editor, partPath: string): void {
   const partId = partPath as PartId;
   if (hasPart(editor, partId)) removePart(editor, partId);
   removeInvalidationHandler(partId);
-  const relsPath = `word/_rels/${partPath.split('/').pop()}.rels` as PartId;
+  const relsPath = getWordPartRelsPath(partPath) as PartId;
   if (hasPart(editor, relsPath)) removePart(editor, relsPath);
 }
 

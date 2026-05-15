@@ -219,7 +219,9 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
   });
   const tableContainerSdt = getSdtContainerMetadata(block.attrs?.sdt, block.attrs?.containerSdt);
   const tableContainerKey = getSdtContainerKey(block.attrs?.sdt, block.attrs?.containerSdt);
-  const rowAncestorContainerKey = tableContainerSdt ? tableContainerKey : ancestorContainerKey;
+  const rowAncestorContainerKey = tableContainerSdt
+    ? (tableContainerKey ?? ancestorContainerKey)
+    : ancestorContainerKey;
   const rowAncestorContainerSdt = tableContainerSdt ?? ancestorContainerSdt;
 
   // Add table-specific class for resize overlay targeting and click mapping

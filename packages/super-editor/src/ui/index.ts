@@ -123,9 +123,15 @@ export type {
   TrackChangesItem,
   TrackChangesSlice,
 
+  // Content controls (SD-3157)
+  ContentControlsHandle,
+  ContentControlsSlice,
+
   // Viewport
+  ContentControlViewportAddress,
   ViewportContext,
   ViewportContextAtInput,
+  ViewportEntityAddress,
   ViewportEntityAtInput,
   ViewportEntityHit,
   ViewportGetRectInput,

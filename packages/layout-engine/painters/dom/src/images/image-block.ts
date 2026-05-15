@@ -1,6 +1,6 @@
 import type { ImageBlock, ImageDrawing } from '@superdoc/contracts';
 import { buildImageFilters } from '../runs/image-run.js';
-import { applyImageClipPath, readImageClipPathValue } from '../utils/image-clip-path.js';
+import { applyImageClipPath, readImageClipPathValue } from './image-clip-path.js';
 import type { BuildImageHyperlinkAnchor } from './types.js';
 
 type BlockImageSource = ImageBlock | ImageDrawing;

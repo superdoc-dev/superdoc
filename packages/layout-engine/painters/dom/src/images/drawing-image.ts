@@ -5,7 +5,7 @@ import type {
   ShapeGroupChild,
   TextPart,
 } from '@superdoc/contracts';
-import { applyImageClipPath } from '../utils/image-clip-path.js';
+import { applyImageClipPath } from './image-clip-path.js';
 import { createBlockImageContent } from './image-block.js';
 import type { BuildImageHyperlinkAnchor } from './types.js';
 

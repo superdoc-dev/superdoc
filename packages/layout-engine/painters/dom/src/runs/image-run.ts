@@ -1,7 +1,7 @@
 import type { ImageBlock, ImageRun } from '@superdoc/contracts';
 import { DOM_CLASS_NAMES } from '../constants.js';
 import { assertPmPositions } from '../pm-position-validation.js';
-import { applyImageClipPath, readImageClipPathValue } from '../utils/image-clip-path.js';
+import { applyImageClipPath, readImageClipPathValue } from '../images/image-clip-path.js';
 import type { RunRenderContext } from './types.js';
 import { applyRunDataAttributes } from './hash.js';
 import { sanitizeUrl } from './links.js';

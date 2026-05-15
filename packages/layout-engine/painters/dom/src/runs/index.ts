@@ -14,5 +14,5 @@ export {
   createInlineSdtWrapper,
   syncInlineSdtWrapperTypography,
   expandSdtWrapperPmRange,
-} from './sdt.js';
+} from '../sdt/inline.js';
 export type { RenderedLineInfo, RenderLineParams, RunRenderContext, TrackedChangesRenderConfig } from './types.js';

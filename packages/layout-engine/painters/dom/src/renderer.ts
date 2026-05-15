@@ -20,7 +20,6 @@ import type {
   ParagraphBlock,
   PositionedDrawingGeometry,
   Run,
-  SdtMetadata,
   ShapeGroupChild,
   ShapeGroupDrawing,
   ShapeTextContent,
@@ -31,7 +30,6 @@ import type {
   TableCellAttrs,
   TableFragment,
   TableMeasure,
-  TextRun,
   VectorShapeDrawing,
   VectorShapeStyle,
   ResolvedLayout,
@@ -59,7 +57,6 @@ import { createChartElement as renderChartToElement } from './chart-renderer.js'
 import { hashCellBorders, hashTableBorders } from './paragraph-hash-utils.js';
 import { createRulerElement, ensureRulerStyles, generateRulerDefinitionFromPx } from './ruler/index.js';
 import {
-  BROWSER_DEFAULT_FONT_SIZE,
   CLASS_NAMES,
   containerStyles,
   containerStylesHorizontal,
@@ -79,7 +76,26 @@ import {
 import { applyAlphaToSVG, applyGradientToSVG, validateHexColor } from './svg-utils.js';
 import { renderTableFragment as renderTableFragmentElement } from './table/renderTableFragment.js';
 import { applyImageClipPath } from './utils/image-clip-path.js';
+import { computeSdtBoundaries } from './sdt/boundaries.js';
 import { shouldRebuildForSdtBoundary, type SdtBoundaryOptions } from './sdt/container.js';
+import {
+  applyContainerSdtDataset,
+  applySdtDataset,
+  getSdtMetadataId,
+  getSdtMetadataLockMode,
+  getSdtMetadataVersion,
+} from './sdt/dataset.js';
+import {
+  createInlineSdtWrapper,
+  expandSdtWrapperPmRange,
+  resolveRunSdtId,
+  syncInlineSdtWrapperTypography,
+} from './sdt/inline.js';
+import {
+  collectSdtSnapshotEntitiesFromDomRoot,
+  type PaintSnapshotStructuredContentBlockEntity,
+  type PaintSnapshotStructuredContentInlineEntity,
+} from './sdt/snapshot.js';
 import { computeBetweenBorderFlags, type BetweenBorderInfo } from './paragraph/borders/index.js';
 import { deriveParagraphBlockVersion, hashParagraphBlockForTableVersion } from './paragraph/block-version.js';
 import { applyParagraphFragmentPmAttributes } from './paragraph/frame.js';
@@ -89,6 +105,11 @@ import type { RunRenderContext } from './runs/types.js';
 import { buildImageFilters } from './runs/image-run.js';
 import { applyTrackedChangeDecorations, resolveTrackedChangesConfig } from './runs/tracked-changes.js';
 import { applySourceAnchorDataset } from './utils/source-anchor.js';
+
+export type {
+  PaintSnapshotStructuredContentBlockEntity,
+  PaintSnapshotStructuredContentInlineEntity,
+} from './sdt/snapshot.js';
 
 type LineEnd = {
   type?: string;
@@ -300,24 +321,6 @@ export type PaintSnapshotAnnotationEntity = {
   fieldId?: string;
   fieldType?: string;
   type?: string;
-  layoutSourceIdentity?: LayoutSourceIdentity;
-};
-
-export type PaintSnapshotStructuredContentBlockEntity = {
-  element: HTMLElement;
-  pageIndex: number;
-  sdtId: string;
-  pmStart?: number;
-  pmEnd?: number;
-  layoutSourceIdentity?: LayoutSourceIdentity;
-};
-
-export type PaintSnapshotStructuredContentInlineEntity = {
-  element: HTMLElement;
-  pageIndex: number;
-  sdtId: string;
-  pmStart?: number;
-  pmEnd?: number;
   layoutSourceIdentity?: LayoutSourceIdentity;
 };
 
@@ -572,45 +575,14 @@ function collectPaintSnapshotEntitiesFromDomRoot(rootEl: HTMLElement): PaintSnap
     );
   }
 
-  const blockSdtElements = Array.from(
-    rootEl.querySelectorAll<HTMLElement>(`.${DOM_CLASS_NAMES.BLOCK_SDT}[data-sdt-id]`),
-  );
-  for (const element of blockSdtElements) {
-    const pageIndex = resolveSnapshotPageIndex(element);
-    const sdtId = element.dataset.sdtId;
-    if (pageIndex == null || !sdtId) continue;
-
-    entities.structuredContentBlocks.push(
-      compactSnapshotObject({
-        element,
-        pageIndex,
-        sdtId,
-        pmStart: readSnapshotDatasetNumber(element.dataset.pmStart),
-        pmEnd: readSnapshotDatasetNumber(element.dataset.pmEnd),
-        layoutSourceIdentity: readNearestLayoutSourceIdentity(element),
-      }) as PaintSnapshotStructuredContentBlockEntity,
-    );
-  }
-
-  const inlineSdtElements = Array.from(
-    rootEl.querySelectorAll<HTMLElement>(`.${DOM_CLASS_NAMES.INLINE_SDT_WRAPPER}[data-sdt-id]`),
-  );
-  for (const element of inlineSdtElements) {
-    const pageIndex = resolveSnapshotPageIndex(element);
-    const sdtId = element.dataset.sdtId;
-    if (pageIndex == null || !sdtId) continue;
-
-    entities.structuredContentInlines.push(
-      compactSnapshotObject({
-        element,
-        pageIndex,
-        sdtId,
-        pmStart: readSnapshotDatasetNumber(element.dataset.pmStart),
-        pmEnd: readSnapshotDatasetNumber(element.dataset.pmEnd),
-        layoutSourceIdentity: readNearestLayoutSourceIdentity(element),
-      }) as PaintSnapshotStructuredContentInlineEntity,
-    );
-  }
+  const sdtEntities = collectSdtSnapshotEntitiesFromDomRoot(rootEl, {
+    resolvePageIndex: resolveSnapshotPageIndex,
+    readDatasetNumber: readSnapshotDatasetNumber,
+    readLayoutSourceIdentity: readNearestLayoutSourceIdentity,
+    compactObject: compactSnapshotObject,
+  });
+  entities.structuredContentBlocks.push(...sdtEntities.structuredContentBlocks);
+  entities.structuredContentInlines.push(...sdtEntities.structuredContentInlines);
 
   const inlineImageElements = Array.from(
     rootEl.querySelectorAll<HTMLElement>(
@@ -2569,8 +2541,8 @@ export class DomPainter {
       applyResolvedFragmentFrame: (el, item, paraFragment) =>
         this.applyResolvedFragmentFrame(el, item, paraFragment, context.section, context.story),
       applyFragmentFrame: (el, paraFragment) => this.applyFragmentFrame(el, paraFragment, context.section, context.story),
-      applySdtDataset: this.applySdtDataset.bind(this),
-      applyContainerSdtDataset: this.applyContainerSdtDataset.bind(this),
+      applySdtDataset,
+      applyContainerSdtDataset,
       renderLine: ({
         block,
         line,
@@ -2660,8 +2632,8 @@ export class DomPainter {
         fragmentEl.style.height = `${fragment.height}px`;
         this.applyFragmentWrapperZIndex(fragmentEl, fragment);
       }
-      this.applySdtDataset(fragmentEl, block.attrs?.sdt);
-      this.applyContainerSdtDataset(fragmentEl, block.attrs?.containerSdt);
+      applySdtDataset(fragmentEl, block.attrs?.sdt);
+      applyContainerSdtDataset(fragmentEl, block.attrs?.containerSdt);
 
       // Add block ID for PM transaction targeting
       if (block.id) {
@@ -3964,8 +3936,8 @@ export class DomPainter {
         },
         renderDrawingContent: renderDrawingContentForTableCell,
         applyFragmentFrame: applyFragmentFrameWithSection,
-        applySdtDataset: this.applySdtDataset.bind(this),
-        applyContainerSdtDataset: this.applyContainerSdtDataset.bind(this),
+        applySdtDataset,
+        applyContainerSdtDataset,
         applyStyles,
       });
 
@@ -4023,23 +3995,24 @@ export class DomPainter {
       throw new Error('DomPainter: document is not available');
     }
 
-    return {
+    const runContext: RunRenderContext = {
       doc: this.doc,
       layoutEpoch: this.layoutEpoch,
       showFormattingMarks: this.showFormattingMarks,
       pendingTooltips: this.pendingTooltips,
       getNextLinkId: () => `superdoc-link-${++this.linkIdCounter}`,
-      applySdtDataset: this.applySdtDataset.bind(this),
+      applySdtDataset,
       buildImageHyperlinkAnchor: this.buildImageHyperlinkAnchor.bind(
         this,
       ) as RunRenderContext['buildImageHyperlinkAnchor'],
       resolveTrackedChangesConfig,
       applyTrackedChangeDecorations,
-      resolveRunSdtId: this.resolveRunSdtId.bind(this),
-      createInlineSdtWrapper: this.createInlineSdtWrapper.bind(this),
-      syncInlineSdtWrapperTypography: this.syncInlineSdtWrapperTypography.bind(this),
-      expandSdtWrapperPmRange: this.expandSdtWrapperPmRange.bind(this),
+      resolveRunSdtId,
+      createInlineSdtWrapper: (sdt) => createInlineSdtWrapper(sdt, runContext),
+      syncInlineSdtWrapperTypography,
+      expandSdtWrapperPmRange,
     };
+    return runContext;
   }
 
   /**
@@ -4239,278 +4212,7 @@ export class DomPainter {
     }
     return 0;
   }
-
-  /**
-   * All dataset keys used for SDT metadata.
-   * Shared between applySdtDataset and clearSdtDataset to ensure consistency.
-   */
-  private static readonly SDT_DATASET_KEYS = [
-    'sdtType',
-    'sdtId',
-    'sdtFieldId',
-    'sdtFieldType',
-    'sdtFieldVariant',
-    'sdtFieldVisibility',
-    'sdtFieldHidden',
-    'sdtFieldLocked',
-    'sdtScope',
-    'sdtTag',
-    'sdtAlias',
-    'lockMode',
-    'sdtSectionTitle',
-    'sdtSectionType',
-    'sdtSectionLocked',
-    'sdtDocpartGallery',
-    'sdtDocpartId',
-    'sdtDocpartInstruction',
-  ] as const;
-
-  /**
-   * Helper to set a string dataset attribute if the value is truthy.
-   */
-  private setDatasetString(el: HTMLElement, key: string, value: string | null | undefined): void {
-    if (value) {
-      el.dataset[key] = value;
-    }
-  }
-
-  /**
-   * Helper to set a boolean dataset attribute if the value is not null/undefined.
-   */
-  private setDatasetBoolean(el: HTMLElement, key: string, value: boolean | null | undefined): void {
-    if (value != null) {
-      el.dataset[key] = String(value);
-    }
-  }
-
-  /**
-   * Resolve the inline SDT id from a run, or null if the run is not inside an inline SDT.
-   */
-  private resolveRunSdtId(run: Run): { sdtId: string; sdt: SdtMetadata } | null {
-    const sdt = (run as TextRun).sdt;
-    if (sdt?.type === 'structuredContent' && sdt?.scope === 'inline' && sdt?.id) {
-      return { sdtId: String(sdt.id), sdt };
-    }
-    return null;
-  }
-
-  /**
-   * Create an inline SDT wrapper `<span>` with className, layoutEpoch, dataset, and label.
-   * Shared by both the geometry and run-based rendering paths.
-   *
-   * When the SDT's `appearance` is `'hidden'` (matching ECMA-376
-   * `<w15:appearance w15:val="hidden"/>`), the wrapper is rendered
-   * transparently: chrome is suppressed via `data-appearance="hidden"`
-   * (see styles.ts) and the alias label is omitted entirely. Without the
-   * latter, the alias text leaks into the rendered DOM `textContent`
-   * (copy-paste includes it) and screen readers announce it.
-   */
-  private createInlineSdtWrapper(sdt: SdtMetadata): HTMLElement {
-    const wrapper = this.doc!.createElement('span');
-    wrapper.className = DOM_CLASS_NAMES.INLINE_SDT_WRAPPER;
-    wrapper.dataset.layoutEpoch = String(this.layoutEpoch);
-    this.applySdtDataset(wrapper, sdt);
-
-    const appearance = sdt.type === 'structuredContent' ? (sdt as { appearance?: string }).appearance : undefined;
-    if (appearance === 'hidden') {
-      wrapper.dataset.appearance = 'hidden';
-      // No alias label and no chrome: see CSS rule keyed off
-      // `[data-appearance="hidden"]`.
-      return wrapper;
-    }
-
-    const alias = (sdt as { alias?: string })?.alias || 'Inline content';
-    const labelEl = this.doc!.createElement('span');
-    labelEl.className = `${DOM_CLASS_NAMES.INLINE_SDT_WRAPPER}__label`;
-    labelEl.textContent = alias;
-    wrapper.appendChild(labelEl);
-    return wrapper;
-  }
-
-  private syncInlineSdtWrapperTypography(wrapper: HTMLElement, runForSizing?: Run): void {
-    // The line container sets fontSize:0 (strut fix). Keep wrapper typography
-    // synced with the current run so border height tracks text-size edits.
-    const runFontSize =
-      runForSizing && 'fontSize' in runForSizing && typeof runForSizing.fontSize === 'number'
-        ? `${runForSizing.fontSize}px`
-        : BROWSER_DEFAULT_FONT_SIZE;
-    wrapper.style.fontSize = runFontSize;
-    wrapper.style.lineHeight = 'normal';
-  }
-
-  /**
-   * Expand the PM position range tracked on an SDT wrapper to include a new run's range.
-   */
-  private expandSdtWrapperPmRange(wrapper: HTMLElement, pmStart?: number | null, pmEnd?: number | null): void {
-    if (pmStart != null) {
-      const cur = wrapper.dataset.pmStart;
-      if (!cur || pmStart < parseInt(cur, 10)) {
-        wrapper.dataset.pmStart = String(pmStart);
-      }
-    }
-    if (pmEnd != null) {
-      const cur = wrapper.dataset.pmEnd;
-      if (!cur || pmEnd > parseInt(cur, 10)) {
-        wrapper.dataset.pmEnd = String(pmEnd);
-      }
-    }
-  }
-
-  /**
-   * Applies SDT (Structured Document Tag) metadata to an element's dataset as data-sdt-* attributes.
-   * Supports field annotations, structured content, document sections, and doc parts.
-   * Clears existing SDT metadata before applying new values.
-   *
-   * @param el - The HTML element to annotate
-   * @param metadata - The SDT metadata to render as data attributes
-   */
-  private applySdtDataset(el: HTMLElement | null, metadata?: SdtMetadata | null): void {
-    if (!el?.dataset) return;
-    this.clearSdtDataset(el);
-    if (!metadata) return;
-
-    el.dataset.sdtType = metadata.type;
-
-    if ('id' in metadata && metadata.id != null) {
-      el.dataset.sdtId = String(metadata.id);
-    }
-
-    if (metadata.type === 'fieldAnnotation') {
-      this.setDatasetString(el, 'sdtFieldId', metadata.fieldId);
-      this.setDatasetString(el, 'sdtFieldType', metadata.fieldType);
-      this.setDatasetString(el, 'sdtFieldVariant', metadata.variant);
-      this.setDatasetString(el, 'sdtFieldVisibility', metadata.visibility);
-      this.setDatasetBoolean(el, 'sdtFieldHidden', metadata.hidden);
-      this.setDatasetBoolean(el, 'sdtFieldLocked', metadata.isLocked);
-    } else if (metadata.type === 'structuredContent') {
-      this.setDatasetString(el, 'sdtScope', metadata.scope);
-      this.setDatasetString(el, 'sdtTag', metadata.tag);
-      this.setDatasetString(el, 'sdtAlias', metadata.alias);
-      // Always set lockMode (defaulting to 'unlocked') so CSS can target all SDTs uniformly.
-      this.setDatasetString(el, 'lockMode', metadata.lockMode || 'unlocked');
-    } else if (metadata.type === 'documentSection') {
-      this.setDatasetString(el, 'sdtSectionTitle', metadata.title);
-      this.setDatasetString(el, 'sdtSectionType', metadata.sectionType);
-      this.setDatasetBoolean(el, 'sdtSectionLocked', metadata.isLocked);
-    } else if (metadata.type === 'docPartObject') {
-      this.setDatasetString(el, 'sdtDocpartGallery', metadata.gallery);
-      this.setDatasetString(el, 'sdtDocpartId', metadata.uniqueId);
-      this.setDatasetString(el, 'sdtDocpartInstruction', metadata.instruction);
-    }
-  }
-
-  private clearSdtDataset(el: HTMLElement): void {
-    DomPainter.SDT_DATASET_KEYS.forEach((key) => {
-      delete el.dataset[key];
-    });
-  }
-
-  /**
-   * Applies container SDT metadata to an element's dataset (data-sdt-container-* attributes).
-   * Used when a block has both primary SDT metadata (e.g., docPartObject) and container
-   * metadata (e.g., documentSection). The container metadata is rendered with a "Container"
-   * prefix to distinguish it from the primary SDT metadata.
-   *
-   * @param el - The HTML element to annotate
-   * @param metadata - The container SDT metadata (typically documentSection)
-   */
-  private applyContainerSdtDataset(el: HTMLElement | null, metadata?: SdtMetadata | null): void {
-    if (!el?.dataset) return;
-    if (!metadata) return;
-
-    el.dataset.sdtContainerType = metadata.type;
-
-    if ('id' in metadata && metadata.id != null) {
-      el.dataset.sdtContainerId = String(metadata.id);
-    }
-
-    if (metadata.type === 'documentSection') {
-      this.setDatasetString(el, 'sdtContainerSectionTitle', metadata.title);
-      this.setDatasetString(el, 'sdtContainerSectionType', metadata.sectionType);
-      this.setDatasetBoolean(el, 'sdtContainerSectionLocked', metadata.isLocked);
-    }
-    // Other container types can be added here if needed
-  }
 }
-
-const computeSdtBoundaries = (
-  resolvedItems: readonly ResolvedPaintItem[],
-  sdtLabelsRendered: Set<string>,
-): Map<number, SdtBoundaryOptions> => {
-  const boundaries = new Map<number, SdtBoundaryOptions>();
-  const containerKeys: (string | null)[] = resolvedItems.map((item) => {
-    if (item && 'sdtContainerKey' in item) {
-      const key = (item as { sdtContainerKey?: string | null }).sdtContainerKey;
-      return key ?? null;
-    }
-    return null;
-  });
-
-  const fragmentOf = (idx: number): Fragment | null => {
-    const item = resolvedItems[idx];
-    return item && item.kind === 'fragment' ? item.fragment : null;
-  };
-
-  let i = 0;
-  while (i < resolvedItems.length) {
-    const currentKey = containerKeys[i];
-    const startFrag = fragmentOf(i);
-    if (!currentKey || !startFrag) {
-      i += 1;
-      continue;
-    }
-
-    let groupRight = startFrag.x + startFrag.width;
-    let j = i;
-
-    while (j + 1 < resolvedItems.length && containerKeys[j + 1] === currentKey) {
-      j += 1;
-      const nextFrag = fragmentOf(j);
-      if (!nextFrag) break;
-      const fragmentRight = nextFrag.x + nextFrag.width;
-      if (fragmentRight > groupRight) {
-        groupRight = fragmentRight;
-      }
-    }
-
-    for (let k = i; k <= j; k += 1) {
-      const fragment = fragmentOf(k);
-      if (!fragment) continue;
-      const isStart = k === i;
-      const isEnd = k === j;
-
-      let paddingBottomOverride: number | undefined;
-      if (!isEnd) {
-        const nextFragment = fragmentOf(k + 1);
-        const currentHeight = (resolvedItems[k] as { height?: number } | undefined)?.height ?? 0;
-        const currentBottom = fragment.y + currentHeight;
-        if (nextFragment) {
-          const gapToNext = nextFragment.y - currentBottom;
-          if (gapToNext > 0) {
-            paddingBottomOverride = gapToNext;
-          }
-        }
-      }
-
-      const showLabel = isStart && !sdtLabelsRendered.has(currentKey);
-      if (showLabel) {
-        sdtLabelsRendered.add(currentKey);
-      }
-
-      boundaries.set(k, {
-        isStart,
-        isEnd,
-        widthOverride: groupRight - fragment.x,
-        paddingBottomOverride,
-        showLabel,
-      });
-    }
-
-    i = j + 1;
-  }
-
-  return boundaries;
-};
 
 const fragmentKey = (fragment: Fragment): string => {
   switch (fragment.kind) {
@@ -4553,24 +4255,6 @@ const isNonBodyStoryBlockId = (blockId: string | undefined): boolean =>
     blockId.startsWith('endnote-') ||
     blockId.startsWith('__sd_semantic_footnote-') ||
     blockId.startsWith('__sd_semantic_endnote-'));
-
-const getSdtMetadataId = (metadata: SdtMetadata | null | undefined): string => {
-  if (!metadata) return '';
-  if ('id' in metadata && metadata.id != null) {
-    return String(metadata.id);
-  }
-  return '';
-};
-
-const getSdtMetadataLockMode = (metadata: SdtMetadata | null | undefined): string => {
-  if (!metadata) return '';
-  return metadata.type === 'structuredContent' ? (metadata.lockMode ?? '') : '';
-};
-
-const getSdtMetadataVersion = (metadata: SdtMetadata | null | undefined): string => {
-  if (!metadata) return '';
-  return [metadata.type, getSdtMetadataLockMode(metadata), getSdtMetadataId(metadata)].join(':');
-};
 
 /**
  * Derives a version string for a flow block based on its content and styling properties.

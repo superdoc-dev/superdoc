@@ -51,7 +51,6 @@ import {
 } from '@superdoc/contracts';
 import { DATASET_KEYS, decodeLayoutStoryDataset, encodeLayoutStoryDataset } from '@superdoc/dom-contract';
 import { getPresetShapeSvg } from '@superdoc/preset-geometry';
-import { encodeTooltip, sanitizeHref } from '@superdoc/url-validation';
 import { DOM_CLASS_NAMES } from './constants.js';
 import { createChartElement as renderChartToElement } from './chart-renderer.js';
 import { hashCellBorders, hashTableBorders } from './paragraph-hash-utils.js';
@@ -102,7 +101,8 @@ import { applyParagraphFragmentPmAttributes } from './paragraph/frame.js';
 import { renderParagraphFragment as renderParagraphFragmentElement } from './paragraph/renderParagraphFragment.js';
 import { renderLine as renderRunLine } from './runs/render-line.js';
 import type { RunRenderContext } from './runs/types.js';
-import { buildImageFilters } from './runs/image-run.js';
+import { createBlockImageContent, readImageClipPathValue, resolveBlockImageClipPath } from './images/image-block.js';
+import { buildImageHyperlinkAnchor as buildSharedImageHyperlinkAnchor } from './images/hyperlink.js';
 import { applyTrackedChangeDecorations, resolveTrackedChangesConfig } from './runs/tracked-changes.js';
 import { applySourceAnchorDataset } from './utils/source-anchor.js';
 
@@ -2658,22 +2658,6 @@ export class DomPainter {
 
       // behindDoc images are supported via z-index; suppress noisy debug logs
 
-      const img = this.doc.createElement('img');
-      if (block.src) {
-        img.src = block.src;
-      }
-      img.alt = block.alt ?? '';
-      img.style.width = '100%';
-      img.style.height = '100%';
-      img.style.objectFit = block.objectFit ?? 'contain';
-      // MS Word anchors stretched images to top-left, clipping from right/bottom
-      if (block.objectFit === 'cover') {
-        img.style.objectPosition = 'left top';
-      }
-      const imageClipPath = resolveBlockClipPath(block);
-      applyImageClipPath(img, imageClipPath, { clipContainer: fragmentEl });
-      img.style.display = block.display === 'inline' ? 'inline-block' : 'block';
-
       // Keep srcRect crop/zoom transforms on the image element. Apply geometry transforms
       // on the fragment wrapper so rotation/flip do not overwrite clip-path scaling.
       this.applyImageGeometryTransform(fragmentEl, {
@@ -2684,13 +2668,12 @@ export class DomPainter {
         flipV: block.flipV,
       });
 
-      const filters = buildImageFilters(block);
-      if (filters.length > 0) {
-        img.style.filter = filters.join(' ');
-      }
-
-      // Wrap in anchor when block has a DrawingML hyperlink (a:hlinkClick)
-      const imageChild = this.buildImageHyperlinkAnchor(img, block.hyperlink, 'block');
+      const imageChild = createBlockImageContent({
+        doc: this.doc,
+        block,
+        clipContainer: fragmentEl,
+        buildImageHyperlinkAnchor: this.buildImageHyperlinkAnchor.bind(this),
+      });
       fragmentEl.appendChild(imageChild);
 
       return fragmentEl;
@@ -2765,47 +2748,8 @@ export class DomPainter {
     hyperlink: ImageHyperlink | undefined,
     display: 'block' | 'inline-block',
   ): HTMLElement {
-    if (!hyperlink?.url || !this.doc) return imageEl;
-
-    const sanitized = sanitizeHref(hyperlink.url);
-    if (!sanitized?.href) return imageEl;
-
-    const anchor = this.doc.createElement('a');
-    anchor.href = sanitized.href;
-    anchor.classList.add('superdoc-link');
-
-    if (sanitized.protocol === 'http' || sanitized.protocol === 'https') {
-      anchor.target = '_blank';
-      anchor.rel = 'noopener noreferrer';
-    }
-
-    const tooltipSource =
-      typeof hyperlink.tooltip === 'string' && hyperlink.tooltip.trim().length > 0 ? hyperlink.tooltip : hyperlink.url;
-    const tooltipResult = encodeTooltip(tooltipSource);
-    if (tooltipResult?.text) {
-      anchor.title = tooltipResult.text;
-    }
-
-    for (const titledElement of [imageEl, ...Array.from(imageEl.querySelectorAll('[title]'))]) {
-      titledElement.removeAttribute('title');
-    }
-
-    // Accessibility: explicit role and keyboard focus (mirrors applyLinkAttributes for text links)
-    anchor.setAttribute('role', 'link');
-    anchor.setAttribute('tabindex', '0');
-
-    if (display === 'block') {
-      anchor.style.cssText = 'display: block; width: 100%; height: 100%; cursor: pointer;';
-    } else {
-      // inline-block preserves the image's layout box inside a paragraph line
-      anchor.style.display = 'inline-block';
-      anchor.style.lineHeight = '0';
-      anchor.style.cursor = 'pointer';
-      anchor.style.verticalAlign = imageEl.style.verticalAlign || 'bottom';
-    }
-
-    anchor.appendChild(imageEl);
-    return anchor;
+    if (!this.doc) return imageEl;
+    return buildSharedImageHyperlinkAnchor(this.doc, imageEl, hyperlink, display);
   }
 
   private renderDrawingFragment(
@@ -2887,23 +2831,12 @@ export class DomPainter {
 
   private createDrawingImageElement(block: DrawingBlock): HTMLElement {
     const drawing = block as ImageDrawing;
-    const img = this.doc!.createElement('img');
-    img.classList.add('superdoc-drawing-image');
-    if (drawing.src) {
-      img.src = drawing.src;
-    }
-    img.alt = drawing.alt ?? '';
-    img.style.width = '100%';
-    img.style.height = '100%';
-    img.style.objectFit = drawing.objectFit ?? 'contain';
-    // MS Word anchors stretched images to top-left, clipping from right/bottom
-    if (drawing.objectFit === 'cover') {
-      img.style.objectPosition = 'left top';
-    }
-    const imageClipPath = resolveBlockClipPath(drawing);
-    applyImageClipPath(img, imageClipPath);
-    img.style.display = 'block';
-    return img;
+    return createBlockImageContent({
+      doc: this.doc!,
+      block: drawing,
+      className: 'superdoc-drawing-image',
+      buildImageHyperlinkAnchor: this.buildImageHyperlinkAnchor.bind(this),
+    });
   }
 
   private createVectorShapeElement(
@@ -4287,7 +4220,7 @@ const isNonBodyStoryBlockId = (blockId: string | undefined): boolean =>
  */
 const deriveBlockVersion = (block: FlowBlock): string => {
   if (block.kind === 'paragraph') {
-    return deriveParagraphBlockVersion(block, getSdtMetadataVersion, readClipPathValue);
+    return deriveParagraphBlockVersion(block, getSdtMetadataVersion, readImageClipPathValue);
   }
 
   if (block.kind === 'image') {
@@ -4299,7 +4232,7 @@ const deriveBlockVersion = (block: FlowBlock): string => {
       block.height ?? '',
       block.alt ?? '',
       block.title ?? '',
-      resolveBlockClipPath(block),
+      resolveBlockImageClipPath(block),
       imgSdtVersion,
     ].join('|');
   }
@@ -4314,7 +4247,7 @@ const deriveBlockVersion = (block: FlowBlock): string => {
         imageLike.width ?? '',
         imageLike.height ?? '',
         imageLike.alt ?? '',
-        resolveBlockClipPath(imageLike),
+        resolveBlockImageClipPath(imageLike),
       ].join('|');
     }
     if (block.drawingKind === 'vectorShape') {
@@ -4483,29 +4416,6 @@ const deriveBlockVersion = (block: FlowBlock): string => {
   }
 
   return block.id;
-};
-
-const CLIP_PATH_PREFIXES = ['inset(', 'polygon(', 'circle(', 'ellipse(', 'path(', 'rect('];
-
-const readClipPathValue = (value: unknown): string => {
-  if (typeof value !== 'string') return '';
-  const normalized = value.trim();
-  if (normalized.length === 0) return '';
-  const lower = normalized.toLowerCase();
-  if (!CLIP_PATH_PREFIXES.some((prefix) => lower.startsWith(prefix))) return '';
-  return normalized;
-};
-
-const resolveClipPathFromAttrs = (attrs: unknown): string => {
-  if (!attrs || typeof attrs !== 'object') return '';
-  const record = attrs as Record<string, unknown>;
-  return readClipPathValue(record.clipPath);
-};
-
-const resolveBlockClipPath = (block: unknown): string => {
-  if (!block || typeof block !== 'object') return '';
-  const record = block as Record<string, unknown>;
-  return readClipPathValue(record.clipPath) || resolveClipPathFromAttrs(record.attrs);
 };
 
 const applyStyles = (el: HTMLElement, styles: Partial<CSSStyleDeclaration>): void => {

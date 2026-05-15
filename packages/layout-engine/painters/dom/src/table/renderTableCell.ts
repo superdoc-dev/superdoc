@@ -24,7 +24,6 @@ import { applyImageClipPath } from '../utils/image-clip-path.js';
 import {
   getSdtContainerKeyForBlock,
   getSdtSiblingBoundaries,
-  shouldRenderSdtContainerChrome,
   type SdtAncestorOptions,
   type SdtBoundaryOptions,
 } from '../sdt/container.js';
@@ -726,22 +725,6 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
   );
   const sdtBoundaries = getSdtSiblingBoundaries(sdtContainerKeys);
 
-  const hasSdtContainer = cellBlocks.some((block) => {
-    const attrs = (block as { attrs?: { sdt?: SdtMetadata; containerSdt?: SdtMetadata } }).attrs;
-    return shouldRenderSdtContainerChrome(attrs?.sdt, attrs?.containerSdt, {
-      ancestorContainerKey,
-      ancestorContainerSdt,
-      ancestorContainerKeys,
-      ancestorContainerSdts,
-    });
-  });
-
-  // SDT containers display labels that extend above the content boundary.
-  // Change overflow to 'visible' so these labels aren't clipped by the cell.
-  if (hasSdtContainer) {
-    cellEl.style.overflow = 'visible';
-    onSdtContainerChrome?.();
-  }
   if (cellBlocks.length > 0 && blockMeasures.length > 0) {
     // Content is a child of the cell, positioned relative to it
     // Cell's overflow:hidden handles clipping, no explicit width needed

@@ -4432,6 +4432,70 @@ describe('renderTableCell', () => {
       expect(labels[0]?.textContent).toBe('Nested Table');
     });
 
+    it('should keep overflow hidden when top-level SDT chrome is outside the rendered cell range', () => {
+      const hiddenSdt: SdtMetadata = {
+        type: 'structuredContent',
+        scope: 'block',
+        id: 'hidden-top-level-sdt',
+        alias: 'Hidden',
+      };
+      const firstParagraph: ParagraphBlock = {
+        kind: 'paragraph',
+        id: 'visible-top-level-para',
+        runs: [{ text: 'Visible', fontFamily: 'Arial', fontSize: 16 }],
+        attrs: {},
+      };
+      const secondParagraph: ParagraphBlock = {
+        kind: 'paragraph',
+        id: 'hidden-top-level-sdt-para',
+        runs: [{ text: 'Hidden', fontFamily: 'Arial', fontSize: 16 }],
+        attrs: { sdt: hiddenSdt },
+      };
+      const paragraphMeasure: ParagraphMeasure = {
+        kind: 'paragraph',
+        lines: [
+          {
+            fromRun: 0,
+            fromChar: 0,
+            toRun: 0,
+            toChar: 7,
+            width: 60,
+            ascent: 12,
+            descent: 4,
+            lineHeight: 20,
+          },
+        ],
+        totalHeight: 20,
+      };
+      let chromeNotifications = 0;
+
+      const { cellElement } = renderTableCell({
+        ...createBaseDeps(),
+        cellMeasure: {
+          blocks: [paragraphMeasure, paragraphMeasure],
+          width: 120,
+          height: 20,
+          gridColumnStart: 0,
+          colSpan: 1,
+          rowSpan: 1,
+        },
+        cell: {
+          id: 'cell-partial-top-level-hidden-sdt',
+          blocks: [firstParagraph, secondParagraph],
+          attrs: {},
+        },
+        fromLine: 0,
+        toLine: 1,
+        onSdtContainerChrome: () => {
+          chromeNotifications += 1;
+        },
+      });
+
+      expect(cellElement.style.overflow).toBe('hidden');
+      expect(cellElement.querySelector('.superdoc-structured-content__label')).toBeFalsy();
+      expect(chromeNotifications).toBe(0);
+    });
+
     it('should keep overflow hidden when descendant SDT chrome is outside the rendered nested table range', () => {
       const descendantSdt: SdtMetadata = {
         type: 'structuredContent',

@@ -393,6 +393,7 @@ onBeforeUnmount(() => {
               <ToolbarButton
                 :toolbar-item="item"
                 :disabled="item.disabled.value"
+                :allow-enter-propagation="true"
                 @textSubmit="handleToolbarButtonTextSubmit(item, $event)"
                 @mainClick="handleSplitButtonMainClick(item)"
               />

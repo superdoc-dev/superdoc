@@ -4,6 +4,7 @@ import { h, defineComponent, ref, shallowRef, reactive, nextTick } from 'vue';
 import { DOCX } from '@superdoc/common';
 import { Schema } from 'prosemirror-model';
 import { EditorState, TextSelection } from 'prosemirror-state';
+import { Mapping, StepMap } from 'prosemirror-transform';
 import { ySyncPluginKey } from 'y-prosemirror';
 import { Extension } from '../../super-editor/src/editors/v1/core/Extension.js';
 import {
@@ -1053,9 +1054,7 @@ describe('SuperDoc.vue', () => {
         content: { size: 20 },
         nodesBetween: vi.fn((from, to, visitor) => visitor(trackedNode)),
       },
-      mapping: {
-        maps: [{ forEach: vi.fn((visitor) => visitor(2, 2, 4, 5)) }],
-      },
+      mapping: new Mapping([new StepMap([4, 0, 1])]),
       getMeta: vi.fn(() => undefined),
     };
 

@@ -101,7 +101,7 @@ import { applyParagraphFragmentPmAttributes } from './paragraph/frame.js';
 import { renderParagraphFragment as renderParagraphFragmentElement } from './paragraph/renderParagraphFragment.js';
 import { renderLine as renderRunLine } from './runs/render-line.js';
 import type { RunRenderContext } from './runs/types.js';
-import { createBlockImageContent, readImageClipPathValue, resolveBlockImageClipPath } from './images/image-block.js';
+import { createBlockImageContent, readImageClipPathValue, renderedBlockImageVersion } from './images/image-block.js';
 import { buildImageHyperlinkAnchor as buildSharedImageHyperlinkAnchor } from './images/hyperlink.js';
 import { applyTrackedChangeDecorations, resolveTrackedChangesConfig } from './runs/tracked-changes.js';
 import { applySourceAnchorDataset } from './utils/source-anchor.js';
@@ -4226,29 +4226,14 @@ const deriveBlockVersion = (block: FlowBlock): string => {
   if (block.kind === 'image') {
     const imgSdt = (block as ImageBlock).attrs?.sdt;
     const imgSdtVersion = getSdtMetadataVersion(imgSdt);
-    return [
-      block.src ?? '',
-      block.width ?? '',
-      block.height ?? '',
-      block.alt ?? '',
-      block.title ?? '',
-      resolveBlockImageClipPath(block),
-      imgSdtVersion,
-    ].join('|');
+    return [renderedBlockImageVersion(block), imgSdtVersion].join('|');
   }
 
   if (block.kind === 'drawing') {
     if (block.drawingKind === 'image') {
       // Type narrowing: block is ImageDrawing (not ImageBlock)
       const imageLike = block as ImageDrawing;
-      return [
-        'drawing:image',
-        imageLike.src ?? '',
-        imageLike.width ?? '',
-        imageLike.height ?? '',
-        imageLike.alt ?? '',
-        resolveBlockImageClipPath(imageLike),
-      ].join('|');
+      return ['drawing:image', renderedBlockImageVersion(imageLike)].join('|');
     }
     if (block.drawingKind === 'vectorShape') {
       const vector = block as VectorShapeDrawing;

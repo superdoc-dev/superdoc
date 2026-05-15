@@ -81,6 +81,36 @@ const resolveBlockClipPath = (block: unknown): string => {
   return readClipPathValue(record.clipPath) || resolveClipPathFromAttrs(record.attrs);
 };
 
+const imageHyperlinkVersion = (hyperlink: ImageBlock['hyperlink'] | undefined): string => {
+  if (!hyperlink) return '';
+  return [hyperlink.url ?? '', hyperlink.tooltip ?? ''].join(':');
+};
+
+const imageLuminanceVersion = (lum: ImageBlock['lum'] | undefined): string => {
+  if (!lum) return '';
+  return [lum.bright ?? '', lum.contrast ?? ''].join(':');
+};
+
+const renderedBlockImageVersion = (image: ImageBlock | ImageDrawing): string =>
+  [
+    image.src ?? '',
+    image.width ?? '',
+    image.height ?? '',
+    image.alt ?? '',
+    image.title ?? '',
+    image.objectFit ?? '',
+    image.display ?? '',
+    image.gain ?? '',
+    image.blacklevel ?? '',
+    image.grayscale ? 1 : 0,
+    imageLuminanceVersion(image.lum),
+    image.rotation ?? '',
+    image.flipH ? 1 : 0,
+    image.flipV ? 1 : 0,
+    imageHyperlinkVersion(image.hyperlink),
+    resolveBlockClipPath(image),
+  ].join('|');
+
 // ---------------------------------------------------------------------------
 // List marker validation
 // ---------------------------------------------------------------------------
@@ -329,28 +359,13 @@ export const deriveBlockVersion = (block: FlowBlock): string => {
   if (block.kind === 'image') {
     const imgSdt = (block as ImageBlock).attrs?.sdt;
     const imgSdtVersion = getSdtMetadataVersion(imgSdt);
-    return [
-      block.src ?? '',
-      block.width ?? '',
-      block.height ?? '',
-      block.alt ?? '',
-      block.title ?? '',
-      resolveBlockClipPath(block),
-      imgSdtVersion,
-    ].join('|');
+    return [renderedBlockImageVersion(block), imgSdtVersion].join('|');
   }
 
   if (block.kind === 'drawing') {
     if (block.drawingKind === 'image') {
       const imageLike = block as ImageDrawing;
-      return [
-        'drawing:image',
-        imageLike.src ?? '',
-        imageLike.width ?? '',
-        imageLike.height ?? '',
-        imageLike.alt ?? '',
-        resolveBlockClipPath(imageLike),
-      ].join('|');
+      return ['drawing:image', renderedBlockImageVersion(imageLike)].join('|');
     }
     if (block.drawingKind === 'vectorShape') {
       const vector = block as VectorShapeDrawing;
@@ -482,6 +497,8 @@ export const deriveBlockVersion = (block: FlowBlock): string => {
               const bidi = (run as { bidi?: unknown }).bidi;
               hash = hashString(hash, bidi ? JSON.stringify(bidi) : '');
             }
+          } else if (cellBlock?.kind) {
+            hash = hashString(hash, deriveBlockVersion(cellBlock as FlowBlock));
           }
         }
       }

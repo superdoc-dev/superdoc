@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { deriveBlockVersion, sourceAnchorSignature } from './versionSignature.js';
-import type { FlowBlock, SourceAnchor, TextRun } from '@superdoc/contracts';
+import type { FlowBlock, ImageBlock, SourceAnchor, TableBlock, TextRun } from '@superdoc/contracts';
 
 describe('sourceAnchorSignature', () => {
   it('is stable for equivalent source anchors with different object key order', () => {
@@ -64,5 +64,50 @@ describe('deriveBlockVersion - bidi', () => {
     const a = deriveBlockVersion(makeParagraph({ rtl: true }));
     const b = deriveBlockVersion(makeParagraph({ rtl: true }));
     expect(a).toBe(b);
+  });
+});
+
+describe('deriveBlockVersion - table image content', () => {
+  const makeTableWithImage = (image: ImageBlock): TableBlock => ({
+    kind: 'table',
+    id: 'table-with-image',
+    rows: [
+      {
+        id: 'row-1',
+        cells: [
+          {
+            id: 'cell-1',
+            blocks: [image],
+          },
+        ],
+      },
+    ],
+  });
+
+  const baseImage: ImageBlock = {
+    kind: 'image',
+    id: 'image-1',
+    src: 'data:image/png;base64,AAA',
+    width: 40,
+    height: 20,
+  };
+
+  it('changes when a table image filter changes', () => {
+    const plain = deriveBlockVersion(makeTableWithImage(baseImage));
+    const filtered = deriveBlockVersion(makeTableWithImage({ ...baseImage, grayscale: true }));
+
+    expect(filtered).not.toBe(plain);
+  });
+
+  it('changes when a table image hyperlink changes', () => {
+    const unlinked = deriveBlockVersion(makeTableWithImage(baseImage));
+    const linked = deriveBlockVersion(
+      makeTableWithImage({
+        ...baseImage,
+        hyperlink: { url: 'https://example.com/image', tooltip: 'Open image' },
+      }),
+    );
+
+    expect(linked).not.toBe(unlinked);
   });
 });

@@ -3,14 +3,18 @@
  *
  * The document is a Mutual NDA (`public/nda-template.docx`)
  * with content controls already in place:
- *   - Seven inline plain-text SDTs across five field keys (disclosing
- *     party, receiving party, effective date, purpose, term length).
+ *   - Seven inline plain-text content controls across five field keys
+ *     (disclosing party, receiving party, effective date, purpose, term
+ *     length). Authored via Word's `ContentControls.Add(1, range)`, so their
+ *     `w:sdtPr` carries `<w:text/>` and they resolve as `controlType: 'text'`.
  *     Receiving party and Purpose each appear twice: once in the header
  *     sentence and once nested inside the Permitted Use block clause.
- *   - Six block plain-text SDTs (Preamble, Confidentiality, Permitted Use,
- *     Term and Termination, Governing Law, Limitation of Liability). Each
- *     block carries `{ kind: 'reusableSection', sectionId, version }` in
- *     its tag.
+ *   - Six block rich-text content controls (Preamble, Confidentiality,
+ *     Permitted Use, Term and Termination, Governing Law, Limitation of
+ *     Liability). Authored via `ContentControls.Add(0, range)`, which
+ *     produces typeless sdtPr that resolves as `controlType: 'richText'`
+ *     per ECMA-376 §17.5.2.26. Each block carries
+ *     `{ kind: 'reusableSection', sectionId, version }` in its tag.
  *
  * The app:
  *   1. Loads the fixture as its starting document.
@@ -18,7 +22,8 @@
  *   3. Compares clause versions against the local library and surfaces a
  *      Review CTA on every stale clause with a one-line summary of the change.
  *   4. Field inputs are reactive: typing in a value debounces by ~250ms and
- *      fans the new text to every occurrence via `selectByTag` + `replaceContent`.
+ *      fans the new text to every occurrence via `selectByTag` + per-occurrence
+ *      `text.setValue` (the typed API path for plain-text controls).
  *   5. Review expands a card showing the in-document clause alongside the
  *      library version. Replace with library clause swaps body via
  *      `replaceContent` and bumps the tag version via `patch`.
@@ -58,6 +63,9 @@ type DocumentApi = {
     selectByTag(input: { tag: string }): { items: ContentControlInfo[]; total: number };
     patch(input: { target: ContentControlTarget; tag?: string; alias?: string }): MutationResult;
     replaceContent(input: { target: ContentControlTarget; content: string; format?: 'text' }): MutationResult;
+    text: {
+      setValue(input: { target: ContentControlTarget; value: string }): MutationResult;
+    };
   };
 };
 
@@ -276,11 +284,7 @@ function applyField(key: FieldKey, value: string): void {
   state.values[key] = value;
   const { items } = state.editor.doc.contentControls.selectByTag({ tag: fieldTag(key) });
   for (const ctrl of items) {
-    state.editor.doc.contentControls.replaceContent({
-      target: ctrl.target,
-      content: value,
-      format: 'text',
-    });
+    state.editor.doc.contentControls.text.setValue({ target: ctrl.target, value });
   }
 }
 

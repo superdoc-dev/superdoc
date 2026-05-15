@@ -66,7 +66,8 @@ export type ReferenceGroupKey =
   | 'selection'
   | 'diff'
   | 'protection'
-  | 'permissionRanges';
+  | 'permissionRanges'
+  | 'customXml';
 
 // ---------------------------------------------------------------------------
 // Entry shape
@@ -6258,6 +6259,86 @@ export const OPERATION_DEFINITIONS = {
     referenceDocPath: 'permission-ranges/update-principal.mdx',
     referenceGroup: 'permissionRanges',
     skipAsATool: true,
+  },
+
+  // -------------------------------------------------------------------------
+  // Custom XML Parts (ECMA-376 Part 1 §15.2.5, §15.2.6, §22.5)
+  // -------------------------------------------------------------------------
+
+  'customXml.parts.list': {
+    memberPath: 'customXml.parts.list',
+    description: 'List Custom XML Data Storage Parts in the document, optionally filtered by root namespace or schema reference.',
+    expectedResult: 'Returns a CustomXmlPartsListResult with summary entries (no content); fetch content via get.',
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      idempotency: 'idempotent',
+      throws: T_REF_READ_LIST,
+    }),
+    referenceDocPath: 'custom-xml/parts/list.mdx',
+    referenceGroup: 'customXml',
+  },
+  'customXml.parts.get': {
+    memberPath: 'customXml.parts.get',
+    description:
+      'Get a single Custom XML Data Storage Part by itemID or package part name, including its full content. ' +
+      'v1 partName targeting is limited to Word-style customXml/itemN.xml paths.',
+    expectedResult: 'Returns a CustomXmlPartInfo with id, partName, namespaces, schemaRefs, and content; or null if not found.',
+    requiresDocumentContext: true,
+    metadata: readOperation({
+      throws: T_NOT_FOUND_CAPABLE,
+    }),
+    referenceDocPath: 'custom-xml/parts/get.mdx',
+    referenceGroup: 'customXml',
+  },
+  'customXml.parts.create': {
+    memberPath: 'customXml.parts.create',
+    description: 'Add a new Custom XML Data Storage Part to the document. Generates a fresh itemID GUID and emits the Properties Part.',
+    expectedResult: 'Returns a CustomXmlPartsCreateResult with the generated id and package part names on success.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['INVALID_INPUT'],
+      throws: T_REF_INSERT,
+    }),
+    referenceDocPath: 'custom-xml/parts/create.mdx',
+    referenceGroup: 'customXml',
+  },
+  'customXml.parts.patch': {
+    memberPath: 'customXml.parts.patch',
+    description:
+      'Replace the content and/or schemaRefs of an existing Custom XML Data Storage Part. ' +
+      'At least one of content or schemaRefs is required. ' +
+      'v1 partName targeting is limited to Word-style customXml/itemN.xml paths.',
+    expectedResult: 'Returns a CustomXmlPartsMutationResult indicating success with the resolved target or a failure.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'idempotent',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['TARGET_NOT_FOUND', 'INVALID_INPUT'],
+      throws: T_REF_MUTATION,
+    }),
+    referenceDocPath: 'custom-xml/parts/patch.mdx',
+    referenceGroup: 'customXml',
+  },
+  'customXml.parts.remove': {
+    memberPath: 'customXml.parts.remove',
+    description:
+      'Remove a Custom XML Data Storage Part and clean up all linked package files (item, props, rels, content-types entry). ' +
+      'v1 partName targeting is limited to Word-style customXml/itemN.xml paths.',
+    expectedResult: 'Returns a CustomXmlPartsMutationResult indicating success or a failure.',
+    requiresDocumentContext: true,
+    metadata: mutationOperation({
+      idempotency: 'non-idempotent',
+      supportsDryRun: true,
+      supportsTrackedMode: false,
+      possibleFailureCodes: ['TARGET_NOT_FOUND'],
+      throws: T_REF_MUTATION_REMOVE,
+    }),
+    referenceDocPath: 'custom-xml/parts/remove.mdx',
+    referenceGroup: 'customXml',
   },
 } as const satisfies Record<string, OperationDefinitionEntry>;
 

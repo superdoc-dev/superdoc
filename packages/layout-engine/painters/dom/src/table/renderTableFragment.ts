@@ -8,6 +8,7 @@ import type {
   TableFragment,
   TableMeasure,
 } from '@superdoc/contracts';
+import { getTableVisualDirection } from '@superdoc/contracts';
 import { CLASS_NAMES, fragmentStyles } from '../styles.js';
 import { DOM_CLASS_NAMES } from '../constants.js';
 import type { FragmentRenderContext } from '../renderer.js';
@@ -173,8 +174,7 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
 
   // RTL table: w:bidiVisual (ECMA-376 §17.4.1) — cells displayed right-to-left,
   // table-level properties (borders, margins, indent) are mirrored.
-  const tableProperties = block.attrs?.tableProperties as Record<string, unknown> | undefined;
-  const isRtl = tableProperties?.rightToLeft === true;
+  const isRtl = getTableVisualDirection(block.attrs) === 'rtl';
   // Note: We don't use createTableBorderOverlay because we implement single-owner
   // border model where cells handle all borders (including outer table borders)
   // to prevent double borders when rendering with absolutely-positioned divs.

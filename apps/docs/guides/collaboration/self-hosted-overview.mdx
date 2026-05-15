@@ -36,68 +36,50 @@ flowchart TB
 
 ## Choose your approach
 
-| Option | Best For | Setup Time |
-|--------|----------|------------|
-| [SuperDoc Yjs](/guides/collaboration/superdoc-yjs) | New projects, recommended | 30 mins |
-| [Hocuspocus](/guides/collaboration/hocuspocus) | TipTap ecosystem users | 30 mins |
+SuperDoc's integration contract is provider-agnostic: pass `{ ydoc, provider }` to `modules.collaboration` and the server choice is yours. Any Yjs-compatible server works.
 
-## Quick comparison
+| Option | Notes | Setup Time |
+|--------|-------|------------|
+| [YHub](/guides/collaboration/yhub) | Advanced Yjs backend for attribution, activity, and revision-history workflows. Beta; validate licensing and infrastructure requirements. | 1+ hour |
+| [Hocuspocus](/guides/collaboration/hocuspocus) | Mature self-hosted Yjs server with auth, persistence, and scaling hooks. | 30 mins |
+| [SuperDoc Yjs](/guides/collaboration/superdoc-yjs) | Minimal reference server for prototypes and local development. Not production infrastructure. | 30 mins |
+
+## At a glance
 
 <Tabs>
-  <Tab title="SuperDoc Yjs">
-    **The official collaboration package**
+  <Tab title="YHub">
+    Advanced Yjs backend for attribution, activity, and revision-history workflows. Redis + Postgres backing. Beta; validate licensing and infrastructure requirements.
 
-    - Purpose-built for SuperDoc
-    - Builder pattern API
-    - Auto-save with debounce
-    - Memory management
+    [Setup guide](/guides/collaboration/yhub)
+  </Tab>
+
+  <Tab title="Hocuspocus">
+    Mature self-hosted Yjs server with auth, persistence, and scaling hooks.
+
+    ```bash
+    npm install @hocuspocus/server @hocuspocus/provider
+    ```
+
+    [Setup guide](/guides/collaboration/hocuspocus)
+  </Tab>
+
+  <Tab title="SuperDoc Yjs">
+    A small Yjs WebSocket server we ship for prototypes and local development. Not production infrastructure: no built-in auth, persistence, scaling, or observability.
 
     ```bash
     npm install @superdoc-dev/superdoc-yjs-collaboration
     ```
 
-    [Get Started](/guides/collaboration/superdoc-yjs)
-  </Tab>
-
-  <Tab title="Hocuspocus">
-    **TipTap's Yjs server**
-
-    - Mature, battle-tested
-    - Rich extension ecosystem
-    - Good if already using TipTap
-
-    ```bash
-    npm install @hocuspocus/server
-    ```
-
-    [Get Started](/guides/collaboration/hocuspocus)
+    [Reference](/guides/collaboration/superdoc-yjs)
   </Tab>
 
   </Tabs>
 
 ## Client connection options
 
-When self-hosting, you have two ways to connect SuperDoc:
+The supported contract is provider-agnostic: you create the Yjs provider, SuperDoc plugs into it.
 
-### Option 1: URL-based (SuperDoc manages provider)
-
-SuperDoc creates and manages the WebSocket connection:
-
-```javascript
-new SuperDoc({
-  selector: '#editor',
-  modules: {
-    collaboration: {
-      url: 'wss://your-server.com/doc',
-      token: 'auth-token'
-    }
-  }
-});
-```
-
-### Option 2: Provider-agnostic (You manage provider)
-
-You create the Yjs provider yourself:
+### Provider-agnostic (recommended)
 
 ```javascript
 import { HocuspocusProvider } from '@hocuspocus/provider';
@@ -118,9 +100,25 @@ new SuperDoc({
 });
 ```
 
-<Note>
-The provider-agnostic approach gives you more control but requires managing the provider lifecycle yourself.
-</Note>
+This shape works with any Yjs provider: `HocuspocusProvider`, `WebsocketProvider` from `y-websocket` (compatible with YHub and SuperDoc Yjs), `LiveblocksYjsProvider`, or your own.
+
+### URL-based (deprecated)
+
+<Warning>
+This path is deprecated. SuperDoc creates the provider internally and emits a console warning. Use the provider-agnostic shape above for new code.
+</Warning>
+
+```javascript
+new SuperDoc({
+  selector: '#editor',
+  modules: {
+    collaboration: {
+      url: 'wss://your-server.com/doc',
+      token: 'auth-token'
+    }
+  }
+});
+```
 
 ## Requirements
 
@@ -140,19 +138,27 @@ The provider-agnostic approach gives you more control but requires managing the 
 
 <CardGroup cols={2}>
   <Card
-    title="SuperDoc Yjs"
-    icon="rocket"
-    href="/guides/collaboration/superdoc-yjs"
+    title="YHub setup"
+    icon="layers"
+    href="/guides/collaboration/yhub"
   >
-    Recommended - the official package
+    Attribution and revision-history workflows (beta)
   </Card>
 
   <Card
-    title="Hocuspocus"
+    title="Hocuspocus setup"
     icon="server"
     href="/guides/collaboration/hocuspocus"
   >
-    Alternative using TipTap's server
+    Mature self-hosted Yjs server
+  </Card>
+
+  <Card
+    title="SuperDoc Yjs reference"
+    icon="flask-conical"
+    href="/guides/collaboration/superdoc-yjs"
+  >
+    Minimal server for prototypes and local development
   </Card>
 
   <Card

@@ -66,7 +66,7 @@ jobs:
         # detect gate above. When the suite does run, exercise all 3 browsers
         # so cross-browser regressions are caught at PR time.
         browser: [chromium, firefox, webkit]
-        shard: [1, 2, 3, 4]
+        shard: [1, 2, 3, 4, 5]
     steps:
       - uses: actions/checkout@v6
 
@@ -105,8 +105,8 @@ jobs:
         run: pnpm exec playwright install-deps ${{ matrix.browser }}
         working-directory: tests/behavior
 
-      - name: Run behavior tests (${{ matrix.browser }} shard ${{ matrix.shard }}/4)
-        run: pnpm exec playwright test --project=${{ matrix.browser }} --shard=${{ matrix.shard }}/4
+      - name: Run behavior tests (${{ matrix.browser }} shard ${{ matrix.shard }}/5)
+        run: pnpm exec playwright test --project=${{ matrix.browser }} --shard=${{ matrix.shard }}/5
         working-directory: tests/behavior
 
   validate:

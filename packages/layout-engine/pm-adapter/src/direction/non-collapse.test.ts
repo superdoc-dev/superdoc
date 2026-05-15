@@ -72,6 +72,37 @@ describe('Non-collapse rule 2: table w:bidiVisual MUST NOT make cell paragraphs 
     const paragraphContext = resolveParagraphDirection({}, sectionContext, cellContext);
     expect(paragraphContext.inlineDirection).toBeUndefined();
   });
+
+  // SD-3141: explicit `w:bidiVisual w:val="0"` is a real signal per §17.4.1 +
+  // §17.17.4 and can override a style-cascade `true`. The resolver must
+  // distinguish "no signal" (undefined) from "explicit false" (ltr), mirroring
+  // the paragraph resolver's handling of `w:bidi w:val="0"`.
+
+  it('table with explicit rightToLeft:false → visualDirection is ltr', () => {
+    const sectionContext = resolveSectionDirection(undefined);
+    const tableContext = resolveTableDirection({ rightToLeft: false }, sectionContext);
+    expect(tableContext.visualDirection).toBe('ltr');
+  });
+
+  it('table with explicit bidiVisual:false → visualDirection is ltr', () => {
+    const sectionContext = resolveSectionDirection(undefined);
+    const tableContext = resolveTableDirection({ bidiVisual: false }, sectionContext);
+    expect(tableContext.visualDirection).toBe('ltr');
+  });
+
+  it('table with no signal → visualDirection stays undefined', () => {
+    const sectionContext = resolveSectionDirection(undefined);
+    const tableContext = resolveTableDirection({}, sectionContext);
+    expect(tableContext.visualDirection).toBeUndefined();
+  });
+
+  it('table with rightToLeft:true wins when both signals present', () => {
+    // Mixed shape (one true, one false) should NOT happen in practice but
+    // the rtl branch is checked first to keep this case explicit. SD-3141.
+    const sectionContext = resolveSectionDirection(undefined);
+    const tableContext = resolveTableDirection({ rightToLeft: true, bidiVisual: false }, sectionContext);
+    expect(tableContext.visualDirection).toBe('rtl');
+  });
 });
 
 describe('Non-collapse rule 3: run-level w:rtl MUST NOT bubble up to paragraph', () => {

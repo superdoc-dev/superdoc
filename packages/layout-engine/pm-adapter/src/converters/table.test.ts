@@ -2526,4 +2526,161 @@ describe('tableCellNodeToBlock — SD-2516: documentPartObject children', () => 
     expect(cellBlocks[0].kind).toBe('paragraph');
     expect((cellBlocks[0] as ParagraphBlock).runs[0].text).toBe('Inner DPO');
   });
+
+  describe('tableDirectionContext (SD-3138 Phase 1B)', () => {
+    const mockBlockIdGenerator: BlockIdGenerator = vi.fn((kind) => `test-${kind}`);
+    const mockPositionMap: PositionMap = new Map();
+    const mockParagraphConverter = vi.fn(() => [
+      { kind: 'paragraph', id: 'p1', runs: [{ text: 'cell', fontFamily: 'Arial', fontSize: 12 }] } as ParagraphBlock,
+    ]);
+
+    const buildTableNode = (tableProperties?: Record<string, unknown>, tableStyleId?: string): PMNode => ({
+      type: 'table',
+      attrs: { ...(tableStyleId ? { tableStyleId } : {}), ...(tableProperties ? { tableProperties } : {}) },
+      content: [
+        {
+          type: 'tableRow',
+          content: [{ type: 'tableCell', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'cell' }] }] }],
+        },
+      ],
+    });
+
+    const contextWithStyle = (styleId: string, styleTableProps: Record<string, unknown>): ConverterContext =>
+      ({
+        translatedNumbering: {},
+        translatedLinkedStyles: {
+          docDefaults: {},
+          latentStyles: {},
+          styles: {
+            [styleId]: {
+              type: 'table',
+              tableProperties: styleTableProps,
+            },
+          },
+        },
+      }) as ConverterContext;
+
+    it('inline rightToLeft=true produces visualDirection=rtl', () => {
+      const result = tableNodeToBlock(
+        buildTableNode({ rightToLeft: true }),
+        mockBlockIdGenerator,
+        mockPositionMap,
+        'Arial',
+        16,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        mockParagraphConverter,
+      ) as TableBlock;
+      expect(result?.attrs?.tableDirectionContext?.visualDirection).toBe('rtl');
+    });
+
+    it('style cascade rightToLeft=true produces visualDirection=rtl', () => {
+      const result = tableNodeToBlock(
+        buildTableNode(undefined, 'RtlStyle'),
+        mockBlockIdGenerator,
+        mockPositionMap,
+        'Arial',
+        16,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        mockParagraphConverter,
+        contextWithStyle('RtlStyle', { rightToLeft: true }),
+      ) as TableBlock;
+      expect(result?.attrs?.tableDirectionContext?.visualDirection).toBe('rtl');
+    });
+
+    it('inline rightToLeft=false overrides style cascade rightToLeft=true (visualDirection=ltr)', () => {
+      const result = tableNodeToBlock(
+        buildTableNode({ rightToLeft: false }, 'RtlStyle'),
+        mockBlockIdGenerator,
+        mockPositionMap,
+        'Arial',
+        16,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        mockParagraphConverter,
+        contextWithStyle('RtlStyle', { rightToLeft: true }),
+      ) as TableBlock;
+      expect(result?.attrs?.tableDirectionContext?.visualDirection).toBe('ltr');
+    });
+
+    it('inline bidiVisual=false overrides style cascade rightToLeft=true (alias-mixed override)', () => {
+      // Importer normalizes w:bidiVisual to `rightToLeft` so this shape is rare
+      // in practice, but the resolver must treat the two aliases as one signal
+      // per layer or an inline-false override against a style-true silently
+      // resolves to RTL.
+      const result = tableNodeToBlock(
+        buildTableNode({ bidiVisual: false }, 'RtlStyle'),
+        mockBlockIdGenerator,
+        mockPositionMap,
+        'Arial',
+        16,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        mockParagraphConverter,
+        contextWithStyle('RtlStyle', { rightToLeft: true }),
+      ) as TableBlock;
+      expect(result?.attrs?.tableDirectionContext?.visualDirection).toBe('ltr');
+    });
+
+    it('no signal anywhere leaves visualDirection undefined', () => {
+      const result = tableNodeToBlock(
+        buildTableNode(),
+        mockBlockIdGenerator,
+        mockPositionMap,
+        'Arial',
+        16,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        mockParagraphConverter,
+      ) as TableBlock;
+      expect(result?.attrs?.tableDirectionContext).toBeDefined();
+      expect(result?.attrs?.tableDirectionContext?.visualDirection).toBeUndefined();
+    });
+
+    it('tableDirectionContext.parentSection propagates from converterContext.sectionDirectionContext', () => {
+      // The full TableDirectionContext shape is { visualDirection, parentSection }.
+      // Existing tests pin visualDirection; this one pins the section pass-through
+      // so a future regression that drops the sectionContext arg is caught here
+      // instead of by a runtime consumer reading parentSection.
+      const customSectionContext = {
+        pageDirection: 'rtl' as const,
+        writingMode: 'horizontal-tb' as const,
+        rtlGutter: true,
+      };
+      const contextWithSection: ConverterContext = {
+        translatedNumbering: {},
+        translatedLinkedStyles: {
+          docDefaults: {},
+          latentStyles: {},
+          styles: {},
+        },
+        sectionDirectionContext: customSectionContext,
+      };
+      const result = tableNodeToBlock(
+        buildTableNode({ rightToLeft: true }),
+        mockBlockIdGenerator,
+        mockPositionMap,
+        'Arial',
+        16,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        mockParagraphConverter,
+        contextWithSection,
+      ) as TableBlock;
+      expect(result?.attrs?.tableDirectionContext?.parentSection).toBe(customSectionContext);
+    });
+  });
 });

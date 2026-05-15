@@ -55,6 +55,7 @@ import { createHiddenHost } from './dom/HiddenHost.js';
 import {
   elementsToRangeRects,
   findRenderedCommentElements,
+  findRenderedContentControlElements,
   findRenderedTrackedChangeElementsStrict,
 } from './dom/EntityRectFinder.js';
 import { RemoteCursorManager, type RenderDependencies } from './remote-cursors/RemoteCursorManager.js';
@@ -2206,6 +2207,13 @@ export class PresentationEditor extends EventEmitter {
       elements = findRenderedTrackedChangeElementsStrict(host, entityId, escapeAttrValue, storyKey);
     } else if (entityType === 'comment') {
       elements = findRenderedCommentElements(host, entityId, storyKey);
+    } else if (entityType === 'contentControl') {
+      // SDT wrappers do not currently stamp `data-story-key`, so this
+      // helper accepts `storyKey` for signature parity but returns all
+      // painted occurrences regardless. v1 is body-only; an SDT in a
+      // header / footer will still match. See JSDoc on
+      // `findRenderedContentControlElements`.
+      elements = findRenderedContentControlElements(host, entityId, escapeAttrValue, storyKey);
     } else {
       return [];
     }
@@ -3534,7 +3542,37 @@ export class PresentationEditor extends EventEmitter {
         if (pageEl) {
           // Find the specific element containing this position for precise centering
           const targetEl = this.#findElementAtPosition(pageEl, clampedPos);
-          (targetEl ?? pageEl).scrollIntoView({ block, inline: 'nearest', behavior });
+          const elToScroll = targetEl ?? pageEl;
+          elToScroll.scrollIntoView({ block, inline: 'nearest', behavior });
+          // AIDEV-NOTE: SD-3045. Search nav (and any other caller of
+          // scrollToPosition) places the viewport intentionally — usually
+          // centring the match. The next #updateSelection that runs as part
+          // of the dispatched setSelection transaction would otherwise call
+          // #scrollActiveEndIntoView and re-scroll the caret to its minimal
+          // visible position (often the top of the viewport), undoing our
+          // centring. Consume the pending scroll-into-view request so that
+          // selection sync renders the caret overlay without moving the
+          // scroll back. Other selection updates (Shift+Arrow, typing) re-set
+          // this flag themselves before they need scroll, so this consume is
+          // safe.
+          this.#shouldScrollSelectionIntoView = false;
+          // Re-assert the scroll on the next animation frame. The flag we
+          // cleared above defends against handleSelection that has already
+          // run, but a *later* selectionUpdate (e.g. focus blur fired when
+          // the user moves focus back to the find input) re-sets the flag to
+          // true before the RAF-scheduled #updateSelection fires, and that
+          // pass scrolls the caret to its minimal-visibility position —
+          // visibly snapping the match out of view. Re-running scrollIntoView
+          // on the same element a frame later overrides that snap; the no-op
+          // case (no late scroll happened) just re-centres the same element
+          // and is cheap.
+          const win = this.#visibleHost.ownerDocument?.defaultView;
+          if (win) {
+            win.requestAnimationFrame(() => {
+              elToScroll.scrollIntoView({ block, inline: 'nearest', behavior });
+              this.#shouldScrollSelectionIntoView = false;
+            });
+          }
           return true;
         }
       }

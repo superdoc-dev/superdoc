@@ -14,7 +14,12 @@ import {
   getParagraphInlineDirection,
 } from '@superdoc/contracts';
 import { resolveMarkerIndent, type MinimalWordLayout } from '@superdoc/common/list-marker-utils';
-import { applySdtContainerChrome, shouldRenderSdtContainerChrome, type SdtBoundaryOptions } from '../sdt/container.js';
+import {
+  applySdtContainerChrome,
+  shouldRenderSdtContainerChrome,
+  type SdtAncestorOptions,
+  type SdtBoundaryOptions,
+} from '../sdt/container.js';
 import { createParagraphDecorationLayers, stampBetweenBorderDataset, type BetweenBorderInfo } from './borders/index.js';
 import {
   applyParagraphLineIndentation,
@@ -80,6 +85,8 @@ export type RenderParagraphContentParams = {
   spacingPolicy?: ParagraphSpacingPolicy;
   ancestorContainerKey?: string | null;
   ancestorContainerSdt?: SdtMetadata | null;
+  ancestorContainerKeys?: SdtAncestorOptions['ancestorContainerKeys'];
+  ancestorContainerSdts?: SdtAncestorOptions['ancestorContainerSdts'];
   onSdtContainerChrome?: () => void;
   applySdtDataset: (el: HTMLElement | null, metadata?: SdtMetadata | null) => void;
   applyContainerSdtDataset?: (el: HTMLElement | null, metadata?: SdtMetadata | null) => void;
@@ -119,6 +126,8 @@ export const renderParagraphContent = (params: RenderParagraphContentParams): Re
     spacingPolicy,
     ancestorContainerKey,
     ancestorContainerSdt,
+    ancestorContainerKeys,
+    ancestorContainerSdts,
     onSdtContainerChrome,
     applySdtDataset,
     applyContainerSdtDataset,
@@ -142,6 +151,8 @@ export const renderParagraphContent = (params: RenderParagraphContentParams): Re
   const applySdtChrome = shouldRenderSdtContainerChrome(block.attrs?.sdt, block.attrs?.containerSdt, {
     ancestorContainerKey,
     ancestorContainerSdt,
+    ancestorContainerKeys,
+    ancestorContainerSdts,
   });
   if (applySdtChrome) {
     if (applySdtContainerChrome(doc, frameEl, block.attrs?.sdt, block.attrs?.containerSdt, sdtBoundary)) {

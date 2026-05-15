@@ -4339,6 +4339,99 @@ describe('renderTableCell', () => {
       expect(cellElement.querySelector('.superdoc-structured-content__label')?.textContent).toBe('Descendant');
     });
 
+    it('should preserve outer ancestor suppression when a nested table has distinct SDT chrome', () => {
+      const ancestorSdt: SdtMetadata = {
+        type: 'structuredContent',
+        scope: 'block',
+        id: 'outer-table-sdt',
+        alias: 'Outer Table',
+      };
+      const nestedTableSdt: SdtMetadata = {
+        type: 'structuredContent',
+        scope: 'block',
+        id: 'nested-table-sdt',
+        alias: 'Nested Table',
+      };
+      const nestedParagraph: ParagraphBlock = {
+        kind: 'paragraph',
+        id: 'nested-inherited-outer-sdt-para',
+        runs: [{ text: 'Nested', fontFamily: 'Arial', fontSize: 16 }],
+        attrs: { containerSdt: ancestorSdt },
+      };
+      const nestedTable: TableBlock = {
+        kind: 'table',
+        id: 'nested-distinct-table-with-outer-child',
+        attrs: { sdt: nestedTableSdt },
+        rows: [
+          {
+            id: 'nested-outer-child-row',
+            cells: [{ id: 'nested-outer-child-cell', blocks: [nestedParagraph], attrs: {} }],
+          },
+        ],
+      };
+      const nestedMeasure: TableMeasure = {
+        kind: 'table',
+        rows: [
+          {
+            height: 24,
+            cells: [
+              {
+                width: 80,
+                height: 24,
+                gridColumnStart: 0,
+                colSpan: 1,
+                rowSpan: 1,
+                blocks: [
+                  {
+                    kind: 'paragraph',
+                    lines: [
+                      {
+                        fromRun: 0,
+                        fromChar: 0,
+                        toRun: 0,
+                        toChar: 6,
+                        width: 60,
+                        ascent: 12,
+                        descent: 4,
+                        lineHeight: 20,
+                      },
+                    ],
+                    totalHeight: 20,
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+        columnWidths: [80],
+        totalWidth: 80,
+        totalHeight: 24,
+      };
+
+      const { cellElement } = renderTableCell({
+        ...createBaseDeps(),
+        cellMeasure: {
+          blocks: [nestedMeasure],
+          width: 120,
+          height: 40,
+          gridColumnStart: 0,
+          colSpan: 1,
+          rowSpan: 1,
+        },
+        cell: {
+          id: 'cell-nested-distinct-table-with-outer-child',
+          blocks: [nestedTable],
+          attrs: {},
+        },
+        ancestorContainerKey: 'structuredContent:outer-table-sdt',
+        ancestorContainerSdt: ancestorSdt,
+      });
+
+      const labels = cellElement.querySelectorAll<HTMLElement>('.superdoc-structured-content__label');
+      expect(labels).toHaveLength(1);
+      expect(labels[0]?.textContent).toBe('Nested Table');
+    });
+
     it('should keep overflow hidden when descendant SDT chrome is outside the rendered nested table range', () => {
       const descendantSdt: SdtMetadata = {
         type: 'structuredContent',

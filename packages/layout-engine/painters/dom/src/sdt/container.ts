@@ -23,6 +23,13 @@ export type SdtBoundaryOptions = {
   showLabel?: boolean;
 };
 
+export type SdtAncestorOptions = {
+  ancestorContainerKey?: string | null;
+  ancestorContainerSdt?: SdtMetadata | null;
+  ancestorContainerKeys?: readonly (string | null | undefined)[];
+  ancestorContainerSdts?: readonly (SdtMetadata | null | undefined)[];
+};
+
 export function isStructuredContentMetadata(sdt: SdtMetadata | null | undefined): sdt is {
   type: 'structuredContent';
   scope: 'inline' | 'block';
@@ -69,21 +76,19 @@ export function getSdtContainerConfig(sdt: SdtMetadata | null | undefined): SdtC
 export function shouldRenderSdtContainerChrome(
   sdt?: SdtMetadata | null,
   containerSdt?: SdtMetadata | null,
-  options?: {
-    ancestorContainerKey?: string | null;
-    ancestorContainerSdt?: SdtMetadata | null;
-  },
+  options?: SdtAncestorOptions,
 ): boolean {
   const metadata = getSdtContainerMetadata(sdt, containerSdt);
   if (!metadata) return false;
 
   const containerKey = getSdtContainerKey(sdt, containerSdt);
-  if (containerKey && options?.ancestorContainerKey && containerKey === options.ancestorContainerKey) {
+  const ancestorKeys = [options?.ancestorContainerKey, ...(options?.ancestorContainerKeys ?? [])];
+  if (containerKey && ancestorKeys.includes(containerKey)) {
     return false;
   }
 
-  const ancestorContainerSdt = options?.ancestorContainerSdt;
-  if (ancestorContainerSdt && metadata === ancestorContainerSdt) {
+  const ancestorSdts = [options?.ancestorContainerSdt, ...(options?.ancestorContainerSdts ?? [])];
+  if (ancestorSdts.includes(metadata)) {
     return false;
   }
 
@@ -107,10 +112,7 @@ export function applySdtContainerChrome(
   sdt: SdtMetadata | null | undefined,
   containerSdt?: SdtMetadata | null | undefined,
   boundaryOptions?: SdtBoundaryOptions,
-  options?: {
-    ancestorContainerKey?: string | null;
-    ancestorContainerSdt?: SdtMetadata | null;
-  },
+  options?: SdtAncestorOptions,
 ): boolean {
   if (!shouldRenderSdtContainerChrome(sdt, containerSdt, options)) return false;
 

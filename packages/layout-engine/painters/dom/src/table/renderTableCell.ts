@@ -25,6 +25,7 @@ import {
   getSdtContainerKeyForBlock,
   getSdtSiblingBoundaries,
   shouldRenderSdtContainerChrome,
+  type SdtAncestorOptions,
   type SdtBoundaryOptions,
 } from '../sdt/container.js';
 import { applyCellBorders } from './border-utils.js';
@@ -233,6 +234,10 @@ type EmbeddedTableRenderParams = {
   ancestorContainerKey?: string | null;
   /** Ancestor SDT metadata used to suppress duplicate id-less container chrome in nested tables */
   ancestorContainerSdt?: SdtMetadata | null;
+  /** Ancestor SDT keys used to suppress duplicate container chrome in nested tables */
+  ancestorContainerKeys?: SdtAncestorOptions['ancestorContainerKeys'];
+  /** Ancestor SDT metadata chain used to suppress duplicate id-less container chrome in nested tables */
+  ancestorContainerSdts?: SdtAncestorOptions['ancestorContainerSdts'];
   /** Receives notification when this embedded table or its descendants render SDT chrome */
   onSdtContainerChrome?: () => void;
 };
@@ -284,6 +289,8 @@ const renderEmbeddedTable = (
     sdtBoundary,
     ancestorContainerKey,
     ancestorContainerSdt,
+    ancestorContainerKeys,
+    ancestorContainerSdts,
     onSdtContainerChrome,
   } = params;
 
@@ -338,6 +345,8 @@ const renderEmbeddedTable = (
     sdtBoundary,
     ancestorContainerKey,
     ancestorContainerSdt,
+    ancestorContainerKeys,
+    ancestorContainerSdts,
     onSdtContainerChrome: () => {
       hasSdtContainerChrome = true;
       onSdtContainerChrome?.();
@@ -370,6 +379,8 @@ function renderPartialEmbeddedTable(params: {
   sdtBoundary?: SdtBoundaryOptions;
   ancestorContainerKey?: string | null;
   ancestorContainerSdt?: SdtMetadata | null;
+  ancestorContainerKeys?: SdtAncestorOptions['ancestorContainerKeys'];
+  ancestorContainerSdts?: SdtAncestorOptions['ancestorContainerSdts'];
   onSdtContainerChrome?: () => void;
 }): { element: HTMLElement | null; height: number; nextCumulativeLineCount: number; hasSdtContainerChrome: boolean } {
   const {
@@ -388,6 +399,8 @@ function renderPartialEmbeddedTable(params: {
     sdtBoundary,
     ancestorContainerKey,
     ancestorContainerSdt,
+    ancestorContainerKeys,
+    ancestorContainerSdts,
     onSdtContainerChrome,
   } = params;
 
@@ -496,6 +509,8 @@ function renderPartialEmbeddedTable(params: {
     sdtBoundary: effectiveSdtBoundary,
     ancestorContainerKey,
     ancestorContainerSdt,
+    ancestorContainerKeys,
+    ancestorContainerSdts,
     onSdtContainerChrome,
   });
   tableWrapper.appendChild(tableResult.element);
@@ -562,6 +577,10 @@ type TableCellRenderDependencies = {
   ancestorContainerKey?: string | null;
   /** Ancestor SDT metadata for suppressing duplicate id-less container styling in cells */
   ancestorContainerSdt?: SdtMetadata | null;
+  /** Ancestor SDT keys for suppressing duplicate container styling in cells */
+  ancestorContainerKeys?: SdtAncestorOptions['ancestorContainerKeys'];
+  /** Ancestor SDT metadata chain for suppressing duplicate id-less container styling in cells */
+  ancestorContainerSdts?: SdtAncestorOptions['ancestorContainerSdts'];
   /** Receives notification when this cell or descendants render SDT container chrome */
   onSdtContainerChrome?: () => void;
   /** Table indent in pixels (applied to table fragment positioning) */
@@ -656,6 +675,8 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
     applySdtDataset,
     ancestorContainerKey,
     ancestorContainerSdt,
+    ancestorContainerKeys,
+    ancestorContainerSdts,
     onSdtContainerChrome,
     tableIndent,
     isRtl,
@@ -710,6 +731,8 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
     return shouldRenderSdtContainerChrome(attrs?.sdt, attrs?.containerSdt, {
       ancestorContainerKey,
       ancestorContainerSdt,
+      ancestorContainerKeys,
+      ancestorContainerSdts,
     });
   });
 
@@ -800,6 +823,8 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
           sdtBoundary: sdtBoundaries[i],
           ancestorContainerKey,
           ancestorContainerSdt,
+          ancestorContainerKeys,
+          ancestorContainerSdts,
           onSdtContainerChrome,
         });
         cumulativeLineCount = result.nextCumulativeLineCount;
@@ -993,6 +1018,8 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
           sdtBoundary,
           ancestorContainerKey,
           ancestorContainerSdt,
+          ancestorContainerKeys,
+          ancestorContainerSdts,
           onSdtContainerChrome: () => {
             cellEl.style.overflow = 'visible';
             onSdtContainerChrome?.();

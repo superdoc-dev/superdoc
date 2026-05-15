@@ -19,6 +19,7 @@ import {
 } from './border-utils.js';
 import { getTableCellGridBounds, type TableCellGridPosition } from './grid-geometry.js';
 import type { FragmentRenderContext } from '../renderer.js';
+import type { SdtAncestorOptions } from '../sdt/container.js';
 
 type TableRowMeasure = TableMeasure['rows'][number];
 type TableRow = TableBlock['rows'][number];
@@ -177,6 +178,10 @@ type TableRowRenderDependencies = {
   ancestorContainerKey?: string | null;
   /** Ancestor SDT metadata for suppressing duplicate id-less container styling in cells */
   ancestorContainerSdt?: SdtMetadata | null;
+  /** Ancestor SDT keys for suppressing duplicate container styling in cells */
+  ancestorContainerKeys?: SdtAncestorOptions['ancestorContainerKeys'];
+  /** Ancestor SDT metadata chain for suppressing duplicate id-less container styling in cells */
+  ancestorContainerSdts?: SdtAncestorOptions['ancestorContainerSdts'];
   /** Receives notification when cells render SDT container chrome */
   onSdtContainerChrome?: () => void;
   /**
@@ -260,6 +265,8 @@ export const renderTableRow = (deps: TableRowRenderDependencies): void => {
     applySdtDataset,
     ancestorContainerKey,
     ancestorContainerSdt,
+    ancestorContainerKeys,
+    ancestorContainerSdts,
     onSdtContainerChrome,
     continuesFromPrev,
     continuesOnNext,
@@ -434,6 +441,8 @@ export const renderTableRow = (deps: TableRowRenderDependencies): void => {
       applySdtDataset,
       ancestorContainerKey,
       ancestorContainerSdt,
+      ancestorContainerKeys,
+      ancestorContainerSdts,
       onSdtContainerChrome,
       fromLine,
       toLine,

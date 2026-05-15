@@ -208,9 +208,6 @@ const generateCommentsWithExtendedData = ({ docx, comments, converter, threading
       }
     }
 
-    // Track the tracked change association but don't use it as parentCommentId
-    // This keeps comments and tracked changes as separate bubbles in the UI
-    // while preserving the relationship for export and visual purposes
     const trackedChangeParentId = isInsideTrackedChange ? trackedChangeParent.trackedChangeId : undefined;
 
     // Only use range-based parenting as fallback when:

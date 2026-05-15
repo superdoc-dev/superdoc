@@ -34,11 +34,6 @@ import {
   syncBibliographyPartToPackage,
   getBibliographyPartExportPaths,
 } from './citation-sources.js';
-import {
-  collectReferencedNumIds,
-  filterOrphanedNumberingDefinitions,
-} from './export-helpers/strip-orphaned-numbering.js';
-
 const FONT_FAMILY_FALLBACKS = Object.freeze({
   swiss: 'Arial, sans-serif',
   roman: 'Times New Roman, serif',
@@ -1429,23 +1424,27 @@ class SuperConverter {
 
   #exportNumberingFile() {
     const numberingPath = 'word/numbering.xml';
+    // SD-2911: source presence must be captured before the baseNumbering fallback —
+    // the importer fills `this.numbering` from baseNumbering when the source had no
+    // numbering part, so it can't be inferred from `this.numbering` at write time.
+    const sourceHadNumberingXml = Boolean(this.convertedXml[numberingPath]);
     let numberingXml = this.convertedXml[numberingPath];
 
     if (!numberingXml) numberingXml = baseNumbering;
     const currentNumberingXml = numberingXml.elements[0];
 
-    // D7: Strip orphaned numbering definitions (entries not referenced by any
-    // paragraph in the exported document parts).
-    const referencedNumIds = collectReferencedNumIds(this.convertedXml);
+    if (!sourceHadNumberingXml && !hasBodyNumberingReferences(this.convertedXml['word/document.xml'])) {
+      return;
+    }
 
     if (this.numbering?.definitions && this.numbering?.abstracts) {
-      const { liveAbstracts, liveDefinitions } = filterOrphanedNumberingDefinitions(this.numbering, referencedNumIds);
-      currentNumberingXml.elements = [...liveAbstracts, ...liveDefinitions];
+      const abstracts = Object.values(this.numbering.abstracts);
+      const definitions = Object.values(this.numbering.definitions);
+      currentNumberingXml.elements = [...abstracts, ...definitions];
     } else {
       currentNumberingXml.elements = [];
     }
 
-    // Update the numbering file
     this.convertedXml[numberingPath] = numberingXml;
   }
 
@@ -1738,4 +1737,17 @@ function generateCustomXml() {
   return DEFAULT_CUSTOM_XML;
 }
 
-export { SuperConverter };
+/** @returns {boolean} True if any descendant of `documentXml` is a `w:numPr` element. */
+function hasBodyNumberingReferences(documentXml) {
+  if (!documentXml || typeof documentXml !== 'object') return false;
+  const stack = Array.isArray(documentXml.elements) ? [...documentXml.elements] : [];
+  while (stack.length) {
+    const node = stack.pop();
+    if (!node || typeof node !== 'object') continue;
+    if (node.name === 'w:numPr') return true;
+    if (Array.isArray(node.elements)) stack.push(...node.elements);
+  }
+  return false;
+}
+
+export { SuperConverter, hasBodyNumberingReferences };

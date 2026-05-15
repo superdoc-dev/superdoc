@@ -119,6 +119,10 @@
   --sd-ui-menu-item-hover-bg: var(--sd-ui-hover-bg);
   --sd-ui-menu-item-active-bg: var(--sd-ui-active-bg);
   --sd-ui-menu-item-active-text: var(--sd-ui-action);
+  /* SD-2747: context menu's slash-filter search header + empty-state styling */
+  --sd-ui-menu-header-bg: #fafafa;
+  --sd-ui-menu-text-muted: #888;
+  --sd-ui-font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
 
   /* UI: tools */
   --sd-ui-tools-gap: 6px;

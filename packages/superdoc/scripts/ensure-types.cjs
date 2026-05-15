@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
 
 // SD-2864: canonical taxonomy for the published type surface. Mirrors
@@ -71,21 +72,36 @@ const SHARED_COMMON_DTS_TARGETS = typeSurface.sharedCommonDtsTargets;
   const sharedCommonDistDir = path.join(distRoot, 'shared/common');
   fs.mkdirSync(sharedCommonDistDir, { recursive: true });
   const sources = SHARED_COMMON_DTS_TARGETS.map((f) => path.join(repoRoot, 'shared/common', f));
-  const tscResult = _spawnSync(
-    tscBin,
-    [
-      '--declaration',
-      '--emitDeclarationOnly',
-      '--skipLibCheck',
-      '--target', 'ES2022',
-      '--module', 'ESNext',
-      '--moduleResolution', 'bundler',
-      '--outDir', sharedCommonDistDir,
-      '--rootDir', path.join(repoRoot, 'shared/common'),
-      ...sources,
-    ],
-    { stdio: 'inherit' },
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'superdoc-ensure-types-'));
+  const tempTsconfig = path.join(tempDir, 'tsconfig.shared-common.json');
+  // Keep this packaging-only emit independent of whichever @types packages pnpm hoists.
+  fs.writeFileSync(
+    tempTsconfig,
+    `${JSON.stringify(
+      {
+        compilerOptions: {
+          declaration: true,
+          emitDeclarationOnly: true,
+          skipLibCheck: true,
+          target: 'ES2022',
+          module: 'ESNext',
+          moduleResolution: 'bundler',
+          types: [],
+          outDir: sharedCommonDistDir,
+          rootDir: path.join(repoRoot, 'shared/common'),
+        },
+        files: sources,
+      },
+      null,
+      2,
+    )}\n`,
   );
+  let tscResult;
+  try {
+    tscResult = _spawnSync(tscBin, ['-p', tempTsconfig], { stdio: 'inherit' });
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
   if (tscResult.status !== 0) {
     console.error('[ensure-types] tsc failed emitting shared/common declarations');
     process.exit(1);

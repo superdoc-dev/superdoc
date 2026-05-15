@@ -324,7 +324,7 @@ describe('computeParagraphAttrs', () => {
 
     const { paragraphAttrs } = computeParagraphAttrs(paragraph as never);
 
-    expect(paragraphAttrs.direction).toBe('rtl');
+    expect(paragraphAttrs.directionContext?.inlineDirection).toBe('rtl');
   });
 
   it('does NOT inherit section direction for paragraph inline direction (§17.6.1)', () => {
@@ -345,17 +345,13 @@ describe('computeParagraphAttrs', () => {
     };
 
     const { paragraphAttrs } = computeParagraphAttrs(paragraph as never, converterContext as never);
-    expect(paragraphAttrs.direction).toBeUndefined();
+    expect(paragraphAttrs.directionContext?.inlineDirection).toBeUndefined();
   });
 
-  // SD-2777 invariant: pm-adapter must keep `direction` and
-  // `directionContext.inlineDirection` aligned (or both absent). This is the
-  // load-bearing property that lets `getParagraphInlineDirection` produce a
-  // hash byte-identical to the legacy `attrs.direction` read across the
-  // entire R2 corpus. If this breaks, the helper-based hash sites in
-  // layout-bridge / layout-resolved / painter-dom will drift from the
-  // pre-migration output.
-  describe('SD-2777: direction and directionContext.inlineDirection are paired', () => {
+  // SD-2778: pm-adapter writes inline direction onto `directionContext.inlineDirection`
+  // as the single source of truth. The legacy scalar `attrs.direction` field has been
+  // removed; `getParagraphInlineDirection` reads `directionContext` directly.
+  describe('SD-2778: directionContext.inlineDirection mirrors paragraphProperties.rightToLeft', () => {
     const cases: Array<{ name: string; rightToLeft: boolean | undefined; expected: 'rtl' | 'ltr' | undefined }> = [
       { name: 'rightToLeft=true', rightToLeft: true, expected: 'rtl' },
       { name: 'rightToLeft=false', rightToLeft: false, expected: 'ltr' },
@@ -363,7 +359,7 @@ describe('computeParagraphAttrs', () => {
     ];
 
     for (const { name, rightToLeft, expected } of cases) {
-      it(`${name}: attrs.direction === directionContext.inlineDirection (${String(expected)})`, () => {
+      it(`${name}: directionContext.inlineDirection === ${String(expected)}`, () => {
         const paragraph: PMNode = {
           type: { name: 'paragraph' },
           attrs: {
@@ -373,8 +369,12 @@ describe('computeParagraphAttrs', () => {
 
         const { paragraphAttrs } = computeParagraphAttrs(paragraph as never);
 
-        expect(paragraphAttrs.direction).toBe(expected);
         expect(paragraphAttrs.directionContext?.inlineDirection).toBe(expected);
+        // Pin the producer contract: pm-adapter must not emit the legacy
+        // scalar `direction` field. A future accidental spread that
+        // re-introduced it would slip past the TypeScript check (since
+        // index signatures permit extra keys) but fail this runtime guard.
+        expect(Object.hasOwn(paragraphAttrs, 'direction')).toBe(false);
       });
     }
   });

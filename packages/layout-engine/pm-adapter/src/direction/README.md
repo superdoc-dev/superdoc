@@ -75,8 +75,10 @@ const inline = block.attrs.directionContext?.inlineDirection;
 const writingMode = block.attrs.directionContext?.writingMode;
 ```
 
-`ParagraphAttrs.direction` is also populated for consumers that only need the
-inline-direction scalar.
+Consumers that only need the inline-direction scalar should call
+`getParagraphInlineDirection(attrs)` from `@superdoc/contracts`. The helper
+prefers `directionContext.inlineDirection` and falls back to
+`paragraphProperties.rightToLeft` for PM-node / editor paths.
 
 ## Logical-to-Physical Helpers
 

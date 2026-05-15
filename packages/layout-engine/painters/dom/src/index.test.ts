@@ -2694,6 +2694,87 @@ describe('DomPainter', () => {
     expect(wrapper.textContent).toContain('controlled text');
   });
 
+  it('omits chrome and alias label when inline SDT appearance is hidden (SD-3110)', () => {
+    // ECMA-376 `<w15:appearance w15:val="hidden"/>` should render the
+    // SDT transparently: no padding/border/label, and the alias text
+    // MUST NOT appear in DOM textContent (copy-paste / screen reader
+    // leak otherwise).
+    const block: FlowBlock = {
+      kind: 'paragraph',
+      id: 'inline-sc-hidden',
+      runs: [
+        { text: 'See ', fontFamily: 'Arial', fontSize: 16, pmStart: 0, pmEnd: 4 },
+        {
+          text: 'Alpha Corp v. SEC',
+          fontFamily: 'Arial',
+          fontSize: 16,
+          pmStart: 4,
+          pmEnd: 21,
+          sdt: {
+            type: 'structuredContent',
+            scope: 'inline',
+            id: 'sc-hidden-1',
+            tag: 'citation',
+            alias: 'Harvey citation',
+            appearance: 'hidden',
+          },
+        },
+        { text: ' today.', fontFamily: 'Arial', fontSize: 16, pmStart: 21, pmEnd: 28 },
+      ],
+      attrs: {},
+    };
+
+    const measure: Measure = {
+      kind: 'paragraph',
+      lines: [
+        { fromRun: 0, fromChar: 0, toRun: 2, toChar: 7, width: 200, ascent: 12, descent: 4, lineHeight: 20 },
+      ],
+      totalHeight: 20,
+    };
+
+    const layout: Layout = {
+      pageSize: { w: 612, h: 792 },
+      pages: [
+        {
+          number: 1,
+          fragments: [
+            {
+              kind: 'para',
+              blockId: 'inline-sc-hidden',
+              fromLine: 0,
+              toLine: 1,
+              x: 30,
+              y: 40,
+              width: 552,
+              pmStart: 0,
+              pmEnd: 28,
+            },
+          ],
+        },
+      ],
+    };
+
+    const painter = createTestPainter({ blocks: [block], measures: [measure] });
+    painter.paint(layout, mount);
+
+    const wrapper = mount.querySelector(
+      '.superdoc-structured-content-inline[data-sdt-id="sc-hidden-1"]',
+    ) as HTMLElement | null;
+    expect(wrapper).toBeTruthy();
+    if (!wrapper) return;
+
+    // data-appearance="hidden" is the hook CSS uses to drop chrome.
+    expect(wrapper.dataset.appearance).toBe('hidden');
+
+    // No alias label child — must not be in the DOM at all.
+    expect(wrapper.querySelector('.superdoc-structured-content-inline__label')).toBeNull();
+
+    // textContent of the wrapper must equal exactly the wrapped phrase,
+    // with no alias text leaked in.
+    expect(wrapper.textContent).toBe('Alpha Corp v. SEC');
+    expect(wrapper.textContent).not.toContain('Harvey citation');
+  });
+
   it('keeps inline SDT wrapper font-size in sync when run font-size changes', () => {
     const block: FlowBlock = {
       kind: 'paragraph',
@@ -5006,7 +5087,7 @@ describe('DomPainter', () => {
         ],
         attrs: {
           alignment: 'center',
-          direction: 'rtl',
+          directionContext: { inlineDirection: 'rtl', writingMode: 'horizontal-tb' },
         },
       };
       const footerMeasure: Measure = {
@@ -6072,7 +6153,7 @@ describe('DomPainter', () => {
         kind: 'paragraph',
         id: 'resolved-rtl-marker',
         runs: [{ text: 'RTL nested item', fontFamily: 'Arial', fontSize: 12, pmStart: 1, pmEnd: 16 }],
-        attrs: { direction: 'rtl' as const },
+        attrs: { directionContext: { inlineDirection: 'rtl', writingMode: 'horizontal-tb' } },
       };
 
       const paragraphMeasure: Measure = {
@@ -8536,7 +8617,7 @@ describe('DomPainter', () => {
       kind: 'paragraph',
       id: 'rtl-block',
       runs: [{ text: 'مرحبا', fontFamily: 'Arial', fontSize: 16 }],
-      attrs: { direction: 'rtl' as const, ...attrs },
+      attrs: { directionContext: { inlineDirection: 'rtl', writingMode: 'horizontal-tb' }, ...attrs },
     });
 
     const rtlMeasure: Measure = {
@@ -8591,7 +8672,7 @@ describe('DomPainter', () => {
           { kind: 'tab', width: 40, fontFamily: 'Arial', fontSize: 16 } as any,
           { text: 'عالم', fontFamily: 'Arial', fontSize: 16 },
         ],
-        attrs: { direction: 'rtl' as const },
+        attrs: { directionContext: { inlineDirection: 'rtl', writingMode: 'horizontal-tb' } },
       };
 
       const tabMeasure: Measure = {

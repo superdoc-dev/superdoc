@@ -12,18 +12,11 @@ import {
   getTrackedChangeIndex,
   makeTrackedChangeAnchorKey,
   resolveTrackedChangeInStory,
+  shallowEqual,
 } from '@superdoc/super-editor';
 import useComment from '@superdoc/components/CommentsLayer/use-comment';
 import { groupChanges } from '../helpers/group-changes.js';
 import { buildFloatingCommentInstances } from './helpers/floating-comment-instances.js';
-
-const isShallowEqual = (a, b) => {
-  if (Object.is(a, b)) return true;
-  if (!a || !b || typeof a !== 'object' || typeof b !== 'object') return false;
-  const keysA = Object.keys(a);
-  const keysB = Object.keys(b);
-  return keysA.length === keysB.length && keysA.every((key) => Object.is(a[key], b[key]));
-};
 
 export const useCommentsStore = defineStore('comments', () => {
   const BODY_TRACKED_CHANGE_STORY = { kind: 'story', storyType: 'body' };
@@ -620,7 +613,7 @@ export const useCommentsStore = defineStore('comments', () => {
     };
 
     const setIfChanged = (target, key, value) => {
-      if (!target || isShallowEqual(target[key], value)) return false;
+      if (!target || shallowEqual(target[key], value)) return false;
       target[key] = value;
       return true;
     };

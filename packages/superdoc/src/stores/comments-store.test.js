@@ -58,7 +58,8 @@ vi.mock('../helpers/group-changes.js', () => ({
   groupChanges: vi.fn(() => []),
 }));
 
-vi.mock('@superdoc/super-editor', () => {
+vi.mock('@superdoc/super-editor', async () => {
+  const actual = await vi.importActual('@superdoc/super-editor');
   const getTrackedChangeIndex = vi.fn(() => ({
     get: vi.fn(() => []),
     getAll: vi.fn(() => []),
@@ -110,6 +111,7 @@ vi.mock('@superdoc/super-editor', () => {
     getRichTextExtensions: vi.fn(() => []),
     getTrackedChangeIndex,
     makeTrackedChangeAnchorKey,
+    shallowEqual: actual.shallowEqual,
   };
 });
 

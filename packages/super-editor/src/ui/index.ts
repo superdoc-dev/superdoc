@@ -124,8 +124,10 @@ export type {
   TrackChangesSlice,
 
   // Viewport
+  ContentControlViewportAddress,
   ViewportContext,
   ViewportContextAtInput,
+  ViewportEntityAddress,
   ViewportEntityAtInput,
   ViewportEntityHit,
   ViewportGetRectInput,

@@ -1,15 +1,10 @@
-import type { ImageBlock, ImageFragment, ImageHyperlink, ResolvedImageItem, SdtMetadata } from '@superdoc/contracts';
+import type { ImageBlock, ImageFragment, ResolvedImageItem, SdtMetadata } from '@superdoc/contracts';
 import { DOM_CLASS_NAMES } from '../constants.js';
 import type { FragmentRenderContext } from '../renderer.js';
 import { CLASS_NAMES, fragmentStyles } from '../styles.js';
 import { applyStyles } from '../utils/apply-styles.js';
 import { createBlockImageContent } from './image-block.js';
-
-type BuildImageHyperlinkAnchor = (
-  imageEl: HTMLElement,
-  hyperlink: ImageHyperlink | undefined,
-  display: 'block' | 'inline-block',
-) => HTMLElement;
+import type { BuildImageHyperlinkAnchor } from './types.js';
 
 type RenderImageFragmentOptions = {
   doc: Document | null;

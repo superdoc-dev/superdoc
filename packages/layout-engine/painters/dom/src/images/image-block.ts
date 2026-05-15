@@ -1,14 +1,9 @@
-import type { ImageBlock, ImageDrawing, ImageHyperlink } from '@superdoc/contracts';
+import type { ImageBlock, ImageDrawing } from '@superdoc/contracts';
 import { buildImageFilters } from '../runs/image-run.js';
 import { applyImageClipPath, readImageClipPathValue } from '../utils/image-clip-path.js';
+import type { BuildImageHyperlinkAnchor } from './types.js';
 
 type BlockImageSource = ImageBlock | ImageDrawing;
-
-type BuildImageHyperlinkAnchor = (
-  imageEl: HTMLElement,
-  hyperlink: ImageHyperlink | undefined,
-  display: 'block' | 'inline-block',
-) => HTMLElement;
 
 export type CreateBlockImageContentOptions = {
   doc: Document;

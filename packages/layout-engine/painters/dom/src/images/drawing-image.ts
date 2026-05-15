@@ -1,19 +1,13 @@
 import type {
   DrawingBlock,
   ImageDrawing,
-  ImageHyperlink,
   PositionedDrawingGeometry,
   ShapeGroupChild,
   TextPart,
 } from '@superdoc/contracts';
 import { applyImageClipPath } from '../utils/image-clip-path.js';
 import { createBlockImageContent } from './image-block.js';
-
-type BuildImageHyperlinkAnchor = (
-  imageEl: HTMLElement,
-  hyperlink: ImageHyperlink | undefined,
-  display: 'block' | 'inline-block',
-) => HTMLElement;
+import type { BuildImageHyperlinkAnchor } from './types.js';
 
 export const createDrawingImageElement = (
   doc: Document,

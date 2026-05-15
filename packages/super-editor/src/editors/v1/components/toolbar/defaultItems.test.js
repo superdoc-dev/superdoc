@@ -20,9 +20,22 @@ function getItemNames(list) {
   return list.map((item) => item.name.value);
 }
 
-function buildItems(availableWidth) {
+function getItem(defaultItems, overflowItems, name) {
+  return [...defaultItems, ...overflowItems].find((item) => item.name.value === name);
+}
+
+function buildItems(availableWidth, superToolbarOverrides = {}) {
+  const toolbar = {
+    ...superToolbar,
+    ...superToolbarOverrides,
+    config: {
+      ...superToolbar.config,
+      ...superToolbarOverrides.config,
+    },
+  };
+
   return makeDefaultItems({
-    superToolbar,
+    superToolbar: toolbar,
     toolbarIcons: stubProxy,
     toolbarTexts: stubProxy,
     toolbarFonts: [],
@@ -30,6 +43,32 @@ function buildItems(availableWidth) {
     availableWidth,
   });
 }
+
+describe('makeDefaultItems formatting marks button opt-in', () => {
+  it('does not include formattingMarks in the default toolbar items', () => {
+    const { defaultItems, overflowItems } = buildItems(2000);
+    expect(getItem(defaultItems, overflowItems, 'formattingMarks')).toBeUndefined();
+  });
+
+  it('includes formattingMarks when showFormattingMarksButton is true', () => {
+    const { defaultItems, overflowItems } = buildItems(2000, {
+      config: { showFormattingMarksButton: true },
+    });
+    const formattingMarks = getItem(defaultItems, overflowItems, 'formattingMarks');
+
+    expect(formattingMarks).toBeDefined();
+    expect(formattingMarks.command).toBe('toggleFormattingMarks');
+  });
+
+  it('includes formattingMarks in non-docx mode when showFormattingMarksButton is true', () => {
+    const { defaultItems, overflowItems } = buildItems(2000, {
+      config: { mode: 'html', showFormattingMarksButton: true },
+    });
+    const formattingMarks = getItem(defaultItems, overflowItems, 'formattingMarks');
+
+    expect(formattingMarks).toBeDefined();
+  });
+});
 
 describe('makeDefaultItems XL overflow boundary (SD-2328)', () => {
   const XL_OVERFLOW_SAFETY_BUFFER = 20;

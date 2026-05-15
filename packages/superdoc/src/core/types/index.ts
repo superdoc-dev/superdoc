@@ -1095,6 +1095,12 @@ export interface Modules {
      * already pass through `modules.toolbar.customButtons`.
      */
     customButtons?: Array<Record<string, unknown>>;
+    /**
+     * Show the formatting marks (pilcrow) button in the toolbar. Off by
+     * default. Distinct from `layoutEngineOptions.showFormattingMarks`, which
+     * controls whether the marks render in the document.
+     */
+    showFormattingMarksButton?: boolean;
   } & Record<string, unknown>;
   /** Link click popover configuration. */
   links?: {

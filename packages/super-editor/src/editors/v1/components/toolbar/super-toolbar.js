@@ -180,6 +180,7 @@ export class SuperToolbar extends EventEmitter {
     aiApiKey: null,
     aiEndpoint: null,
     customButtons: [],
+    showFormattingMarksButton: false,
   };
 
   /**

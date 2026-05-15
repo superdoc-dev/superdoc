@@ -40,6 +40,8 @@ concurrency:
 
 jobs:
   release:
+    # Stable publishes must go through release-stable.yml; PR previews are still allowed.
+    if: ${{ github.event_name != 'workflow_dispatch' || github.ref_name != 'stable' || inputs.pr_number }}
     runs-on: ubuntu-24.04
     steps:
       - name: Generate token

@@ -49,6 +49,7 @@ describe('superdoc/ui public barrel (SD-3156)', () => {
     expect(BARREL_TEXT).toMatch(/type\s+ViewportGetRectInput\b/);
   });
 });
+<<<<<<< HEAD
 
 describe('superdoc/ui public barrel (SD-3157)', () => {
   it('re-exports ContentControlsSlice', () => {
@@ -59,3 +60,5 @@ describe('superdoc/ui public barrel (SD-3157)', () => {
     expect(BARREL_TEXT).toMatch(/type\s+ContentControlsHandle\b/);
   });
 });
+=======
+>>>>>>> origin/stable

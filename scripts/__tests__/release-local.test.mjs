@@ -13,6 +13,7 @@ import {
   inferDryRunWouldRelease,
   splitPreviewArgs,
 } from '../release-local.mjs';
+import { shouldRecoverPackageRelease } from '../release-recovery-state.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '../../');
@@ -317,6 +318,63 @@ test('stable recovery filters prerelease tags so *-next.* never resumes as @late
   assert.ok(
     content.includes("expectedBranch === 'stable'") && content.includes('listStableMergedTags(pkg.tagPattern, branchRef)'),
     'scripts/release-local-stable.mjs: stable recovery must consult the prerelease-filtered list',
+  );
+});
+
+test('stable recovery ignores PyPI gaps when SDK PyPI publishing is disabled', async () => {
+  assert.equal(
+    shouldRecoverPackageRelease({
+      publishComplete: true,
+      githubComplete: true,
+      pythonPublished: false,
+      hasPythonPackages: false,
+      tagAtHead: false,
+    }),
+    false,
+    'missing PyPI packages must not trigger recovery when the descriptor is not tracking Python packages',
+  );
+  assert.equal(
+    shouldRecoverPackageRelease({
+      publishComplete: true,
+      githubComplete: true,
+      pythonPublished: false,
+      hasPythonPackages: true,
+      tagAtHead: false,
+    }),
+    true,
+    'missing PyPI packages must trigger recovery once SDK PyPI tracking is restored',
+  );
+  assert.equal(
+    shouldRecoverPackageRelease({
+      publishComplete: false,
+      githubComplete: true,
+      pythonPublished: false,
+      hasPythonPackages: false,
+      tagAtHead: false,
+    }),
+    true,
+    'npm publish gaps must still trigger recovery while SDK PyPI publishing is disabled',
+  );
+  assert.equal(
+    shouldRecoverPackageRelease({
+      publishComplete: true,
+      githubComplete: false,
+      pythonPublished: false,
+      hasPythonPackages: false,
+      tagAtHead: false,
+    }),
+    true,
+    'GitHub release gaps must still trigger recovery while SDK PyPI publishing is disabled',
+  );
+
+  const content = await readRepoFile('scripts/release-local-stable.mjs');
+  assert.ok(
+    content.includes('const SDK_PYPI_ENABLED = false'),
+    'scripts/release-local-stable.mjs: must keep the SDK PyPI disabled state next to the recovery decision',
+  );
+  assert.ok(
+    /name: 'sdk'[\s\S]*\.\.\.\(SDK_PYPI_ENABLED[\s\S]*pythonPackages: SDK_PYTHON_PACKAGES[\s\S]*preparePythonSnapshot: prepareSdkPythonSnapshot/.test(content),
+    'scripts/release-local-stable.mjs: SDK Python tracking and snapshot recovery must move together behind SDK_PYPI_ENABLED',
   );
 });
 

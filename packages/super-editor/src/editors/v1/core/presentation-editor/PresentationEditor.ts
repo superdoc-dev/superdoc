@@ -6080,9 +6080,9 @@ export class PresentationEditor extends EventEmitter {
             console.warn('[PresentationEditor] Failed to compute footnote numbering:', e);
           }
         }
-        // Invalidate flow block cache when footnote order changes, since footnote
-        // numbers are embedded in cached blocks and must be recomputed.
-        const footnoteSignature = footnoteOrder.join('|');
+        // Invalidate flow block cache when footnote order, numFmt, or numStart changes
+        // (all three are baked into cached reference runs).
+        const footnoteSignature = `${footnoteNumberStart}|${footnoteNumberFormat ?? ''}|${footnoteOrder.join('|')}`;
         if (footnoteSignature !== this.#footnoteNumberSignature) {
           this.#flowBlockCache.clear();
           this.#footnoteNumberSignature = footnoteSignature;
@@ -6109,7 +6109,7 @@ export class PresentationEditor extends EventEmitter {
             console.warn('[PresentationEditor] Failed to compute endnote numbering:', e);
           }
         }
-        const endnoteSignature = endnoteOrder.join('|');
+        const endnoteSignature = `${endnoteNumberStart}|${endnoteNumberFormat ?? ''}|${endnoteOrder.join('|')}`;
         if (endnoteSignature !== this.#endnoteNumberSignature) {
           this.#flowBlockCache.clear();
           this.#endnoteNumberSignature = endnoteSignature;

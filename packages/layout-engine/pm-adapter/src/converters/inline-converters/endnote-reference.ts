@@ -1,16 +1,26 @@
 import type { TextRun } from '@superdoc/contracts';
 import { buildReferenceMarkerRun } from './reference-marker.js';
+import { formatFootnoteCardinal } from '../../footnote-formatting.js';
 import type { InlineConverterParams } from './common.js';
 
 export function endnoteReferenceToBlock(params: InlineConverterParams): TextRun {
   const { node, converterContext } = params;
   const id = (node.attrs as Record<string, unknown> | undefined)?.id;
-  const displayId = resolveEndnoteDisplayNumber(id, converterContext.endnoteNumberById) ?? id ?? '*';
+  const cardinal = resolveEndnoteDisplayNumber(id, converterContext.endnoteNumberById);
+  const displayText =
+    cardinal != null
+      ? formatFootnoteCardinal(cardinal, converterContext.endnoteNumberFormat)
+      : id != null
+        ? String(id)
+        : '*';
 
-  return buildReferenceMarkerRun(String(displayId), params);
+  return buildReferenceMarkerRun(displayText, params);
 }
 
-const resolveEndnoteDisplayNumber = (id: unknown, endnoteNumberById: Record<string, number> | undefined): unknown => {
+const resolveEndnoteDisplayNumber = (
+  id: unknown,
+  endnoteNumberById: Record<string, number> | undefined,
+): number | null => {
   const key = id == null ? null : String(id);
   if (!key) return null;
   const mapped = endnoteNumberById?.[key];

@@ -1815,9 +1815,7 @@ export async function incrementalLayout(
         return { columns, idsByColumn };
       };
 
-      // SD-3049: per-footnote total body height, refreshed after each
-      // `measureFootnoteBlocks` call. Drives block-aware breaks in the body
-      // paginator via `options.footnotes.bodyHeightById`.
+      // SD-3049: per-footnote total body height; accounting mirrors `computeFootnoteLayoutPlan`.
       let bodyHeightById = new Map<string, number>();
       const refreshBodyHeights = (measures: Map<string, Measure>) => {
         const map = new Map<string, number>();
@@ -1826,14 +1824,20 @@ export async function incrementalLayout(
           for (const block of blocks) {
             const measure = measures.get(block.id);
             if (!measure) continue;
-            const measureH = (measure as { totalHeight?: number }).totalHeight;
-            if (typeof measureH === 'number' && Number.isFinite(measureH)) total += measureH;
-            // Add per-paragraph spacingAfter if present (matches what
-            // `computeFootnoteLayoutPlan` accounts for in `rangesHeight`).
-            const spacing = (block as { attrs?: { spacing?: { after?: number; lineSpaceAfter?: number } } }).attrs
-              ?.spacing;
-            const after = spacing?.after ?? spacing?.lineSpaceAfter;
-            if (typeof after === 'number' && Number.isFinite(after) && after > 0) total += after;
+            if (measure.kind === 'paragraph') {
+              const measureH = (measure as { totalHeight?: number }).totalHeight;
+              if (typeof measureH === 'number' && Number.isFinite(measureH)) total += measureH;
+              const spacing = (block as { attrs?: { spacing?: { after?: number; lineSpaceAfter?: number } } }).attrs
+                ?.spacing;
+              const after = spacing?.after ?? spacing?.lineSpaceAfter;
+              if (typeof after === 'number' && Number.isFinite(after) && after > 0) total += after;
+            } else if (measure.kind === 'image' || measure.kind === 'drawing') {
+              const measureH = (measure as { height?: number }).height;
+              if (typeof measureH === 'number' && Number.isFinite(measureH)) total += measureH;
+            } else if (measure.kind === 'table') {
+              const measureH = (measure as { totalHeight?: number }).totalHeight;
+              if (typeof measureH === 'number' && Number.isFinite(measureH)) total += measureH;
+            }
           }
           if (total > 0) map.set(footnoteId, total);
         });

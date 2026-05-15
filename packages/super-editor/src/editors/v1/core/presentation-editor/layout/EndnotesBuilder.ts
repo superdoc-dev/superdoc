@@ -3,6 +3,7 @@ import type { FlowBlock, Run as LayoutRun, TextRun } from '@superdoc/contracts';
 import { toFlowBlocks } from '@superdoc/pm-adapter';
 import type { ConverterContext } from '@superdoc/pm-adapter/converter-context.js';
 import { SUBSCRIPT_SUPERSCRIPT_SCALE } from '@superdoc/pm-adapter/constants.js';
+import { formatFootnoteCardinal } from '@superdoc/pm-adapter/footnote-formatting.js';
 
 import type { ProseMirrorJSON } from '../../types/EditorTypes.js';
 import { findNoteEntryById } from '../../../document-api-adapters/helpers/note-entry-lookup.js';
@@ -33,6 +34,7 @@ export function buildEndnoteBlocks(
   if (!editorState) return [];
 
   const endnoteNumberById = converterContext?.endnoteNumberById;
+  const endnoteNumberFormat = converterContext?.endnoteNumberFormat;
   const importedEndnotes = Array.isArray(converter?.endnotes) ? converter.endnotes : [];
   if (importedEndnotes.length === 0) return [];
 
@@ -67,7 +69,7 @@ export function buildEndnoteBlocks(
       });
 
       if (result?.blocks?.length) {
-        ensureEndnoteMarker(result.blocks, id, endnoteNumberById);
+        ensureEndnoteMarker(result.blocks, id, endnoteNumberById, endnoteNumberFormat);
         blocks.push(...result.blocks);
       }
     } catch {}
@@ -176,6 +178,7 @@ function ensureEndnoteMarker(
   blocks: FlowBlock[],
   id: string,
   endnoteNumberById: Record<string, number> | undefined,
+  endnoteNumberFormat: string | undefined,
 ): void {
   const firstParagraph = blocks.find((block): block is ParagraphBlock => block.kind === 'paragraph');
   if (!firstParagraph) return;
@@ -186,7 +189,8 @@ function ensureEndnoteMarker(
   const firstTextRun = runs.find(
     (run): run is TextRun => isTextRun(run) && !isEndnoteMarker(run) && run.text.length > 0,
   );
-  const markerRun = buildMarkerRun(String(resolveDisplayNumber(id, endnoteNumberById)), firstTextRun);
+  const markerText = formatFootnoteCardinal(resolveDisplayNumber(id, endnoteNumberById), endnoteNumberFormat);
+  const markerRun = buildMarkerRun(markerText, firstTextRun);
 
   if (runs[0] && isTextRun(runs[0]) && isEndnoteMarker(runs[0])) {
     syncMarkerRun(runs[0], markerRun);

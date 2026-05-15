@@ -833,47 +833,38 @@ export function layoutParagraphBlock(ctx: ParagraphLayoutContext, anchors?: Para
     } else {
       state.trailingSpacing = 0;
     }
-    // SD-3049: charge this block's footnote demand to the current page (once),
-    // so the break decisions below see the demand and pack body tighter. When
-    // `advanceColumn` lands us on a new page, `state.footnoteDemandThisPage`
-    // has been reset to 0 by the paginator and `demandChargedPageNumber` no
-    // longer matches — we re-charge so the new page also reflects the demand.
-    if (blockFootnoteDemand > 0 && demandChargedPageNumber !== state.page.number) {
-      state.footnoteDemandThisPage += blockFootnoteDemand;
-      demandChargedPageNumber = state.page.number;
-    }
+    // SD-3049/SD-3050: charge the block's demand once per page (re-fires after every
+    // advanceColumn) and cap additionalDemand to leave room for at least one body line
+    // so an oversized footnote can't deadlock the paginator.
+    const chargeAndComputeEffectiveBottom = (): number => {
+      if (blockFootnoteDemand > 0 && demandChargedPageNumber !== state.page.number) {
+        state.footnoteDemandThisPage += blockFootnoteDemand;
+        demandChargedPageNumber = state.page.number;
+      }
+      const rawAdditional = Math.max(0, state.footnoteDemandThisPage - state.pageFootnoteReserve);
+      const minBodyLineHeight = lines[fromLine]?.lineHeight ?? 0;
+      const maxAdditional = Math.max(0, state.contentBottom - state.topMargin - minBodyLineHeight);
+      return state.contentBottom - Math.min(rawAdditional, maxAdditional);
+    };
 
-    // SD-3049: only the demand exceeding the page-level reserve already in
-    // `contentBottom` further constrains the body. Once the convergence loop
-    // has set the reserve, this is a no-op; on the first pass it provides
-    // the tight-packing signal that prevents post-hoc reserve relayouts from
-    // leaving visible blank space above the footnote separator.
-    //
-    // SD-3050: cap `additionalDemand` so the effective body region always
-    // fits at least one line of body content. Without this guard, a footnote
-    // larger than the page body area would push `effectiveBottom` below
-    // `cursorY + lineHeight` for every page, infinite-looping the paginator.
-    // The footnote will overflow safely (PR #2881's plan-side cap and
-    // continuation logic catches it); the paginator must not deadlock.
-    const rawAdditional = Math.max(0, state.footnoteDemandThisPage - state.pageFootnoteReserve);
-    const minBodyLineHeight = lines[fromLine]?.lineHeight ?? 0;
-    const maxAdditional = Math.max(0, state.contentBottom - state.topMargin - minBodyLineHeight);
-    const additionalDemand = Math.min(rawAdditional, maxAdditional);
-    const effectiveBottom = state.contentBottom - additionalDemand;
+    let effectiveBottom = chargeAndComputeEffectiveBottom();
 
     if (state.cursorY >= effectiveBottom) {
       state = advanceColumn(state);
+      effectiveBottom = chargeAndComputeEffectiveBottom();
     }
 
     const availableHeight = effectiveBottom - state.cursorY;
     if (availableHeight <= 0) {
       state = advanceColumn(state);
+      effectiveBottom = chargeAndComputeEffectiveBottom();
     }
 
     const nextLineHeight = lines[fromLine].lineHeight || 0;
     const remainingHeight = effectiveBottom - state.cursorY;
     if (state.page.fragments.length > 0 && remainingHeight < nextLineHeight) {
       state = advanceColumn(state);
+      effectiveBottom = chargeAndComputeEffectiveBottom();
     }
 
     // Use the narrowest width and offset if we remeasured

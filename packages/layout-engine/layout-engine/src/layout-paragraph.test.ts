@@ -1446,3 +1446,52 @@ describe('layoutParagraphBlock - keepLines', () => {
     expect(advanceColumn).not.toHaveBeenCalled();
   });
 });
+
+describe('SD-3049: footnote demand survives advanceColumn within one iteration', () => {
+  it('charges the block demand onto the page advanceColumn lands on', () => {
+    const block: ParagraphBlock = {
+      kind: 'paragraph',
+      id: 'block-x',
+      runs: [{ text: 'Spilled block.', fontFamily: 'Arial', fontSize: 12 }],
+    };
+    // 3 lines that easily fit on the next page; the block only spills because
+    // the starting cursor is near the page bottom on P.
+    const measure = makeMeasure([
+      { width: 100, lineHeight: 20, maxWidth: 200 },
+      { width: 100, lineHeight: 20, maxWidth: 200 },
+      { width: 100, lineHeight: 20, maxWidth: 200 },
+    ]);
+
+    // P starts near the bottom so the first break decision must advance.
+    const pageP: PageState = {
+      ...makePageState(),
+      page: { number: 1, fragments: [] },
+      cursorY: 600,
+      contentBottom: 620,
+    };
+
+    // Mirror the paginator: a fresh page Q with demand reset to 0 and cursor
+    // back at topMargin. Hold a reference so the test can read final state.
+    const pageQ: PageState = {
+      ...makePageState(),
+      page: { number: 2, fragments: [] },
+      cursorY: 50,
+      contentBottom: 620,
+    };
+
+    const BLOCK_DEMAND = 100;
+
+    layoutParagraphBlock({
+      block,
+      measure,
+      columnWidth: 200,
+      ensurePage: mock(() => pageP),
+      advanceColumn: mock(() => pageQ),
+      columnX: mock(() => 50),
+      floatManager: makeFloatManager(),
+      getFootnoteDemandForBlockId: (blockId) => (blockId === 'block-x' ? BLOCK_DEMAND : 0),
+    });
+
+    expect(pageQ.footnoteDemandThisPage).toBe(BLOCK_DEMAND);
+  });
+});

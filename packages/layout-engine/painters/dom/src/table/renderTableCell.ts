@@ -864,6 +864,7 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
             block,
             className: 'superdoc-table-image',
             clipContainer: imageWrapper,
+            imageDisplay: 'block',
             buildImageHyperlinkAnchor: buildTableImageHyperlinkAnchor,
           }),
         );
@@ -916,6 +917,7 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
               block: block as ImageDrawing,
               className: 'superdoc-drawing-image',
               clipContainer: drawingInner,
+              imageDisplay: 'block',
               buildImageHyperlinkAnchor: buildTableImageHyperlinkAnchor,
             }),
           );
@@ -1096,6 +1098,7 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
             block: anchoredBlock,
             className: 'superdoc-table-image',
             clipContainer: imageWrapper,
+            imageDisplay: 'block',
             buildImageHyperlinkAnchor: buildTableImageHyperlinkAnchor,
           }),
         );
@@ -1128,6 +1131,7 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
               block: anchoredBlock as ImageDrawing,
               className: 'superdoc-drawing-image',
               clipContainer: drawingInner,
+              imageDisplay: 'block',
               buildImageHyperlinkAnchor: buildTableImageHyperlinkAnchor,
             }),
           );

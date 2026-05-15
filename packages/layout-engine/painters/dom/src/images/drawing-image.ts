@@ -25,6 +25,7 @@ export const createDrawingImageElement = (
     doc,
     block: drawing,
     className: 'superdoc-drawing-image',
+    imageDisplay: 'block',
     buildImageHyperlinkAnchor,
   });
 };

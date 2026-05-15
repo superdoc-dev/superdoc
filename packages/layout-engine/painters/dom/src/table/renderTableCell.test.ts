@@ -241,6 +241,31 @@ describe('renderTableCell', () => {
     expect(imgEl?.parentElement?.style.height).toBe('40px');
   });
 
+  it('forces flowing image blocks to block display inside table cells', () => {
+    const imageBlock: ImageBlock = {
+      kind: 'image',
+      id: 'img-inline-display',
+      src: 'data:image/png;base64,AAA',
+      display: 'inline',
+    };
+
+    const { cellElement } = renderTableCell({
+      ...createBaseDeps(),
+      cellMeasure: {
+        blocks: [{ kind: 'image' as const, width: 50, height: 40 }],
+        width: 80,
+        height: 40,
+        gridColumnStart: 0,
+        colSpan: 1,
+        rowSpan: 1,
+      },
+      cell: { id: 'cell-inline-display-image', blocks: [imageBlock], attrs: {} },
+    });
+
+    const imgEl = cellElement.querySelector('img.superdoc-table-image') as HTMLImageElement | null;
+    expect(imgEl?.style.display).toBe('block');
+  });
+
   it('applies top-level clipPath to flowing image blocks inside table cells', () => {
     const imageBlock = {
       kind: 'image',

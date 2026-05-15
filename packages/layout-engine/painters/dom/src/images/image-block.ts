@@ -15,6 +15,7 @@ export type CreateBlockImageContentOptions = {
   block: BlockImageSource;
   className?: string;
   clipContainer?: HTMLElement;
+  imageDisplay?: 'block' | 'inline-block';
   hyperlinkDisplay?: 'block' | 'inline-block';
   buildImageHyperlinkAnchor?: BuildImageHyperlinkAnchor;
 };
@@ -47,6 +48,7 @@ export const createBlockImageContent = ({
   block,
   className,
   clipContainer,
+  imageDisplay,
   hyperlinkDisplay = 'block',
   buildImageHyperlinkAnchor,
 }: CreateBlockImageContentOptions): HTMLElement => {
@@ -65,7 +67,7 @@ export const createBlockImageContent = ({
     img.style.objectPosition = 'left top';
   }
   applyImageClipPath(img, resolveBlockImageClipPath(block), clipContainer ? { clipContainer } : undefined);
-  img.style.display = block.display === 'inline' ? 'inline-block' : 'block';
+  img.style.display = imageDisplay ?? (block.display === 'inline' ? 'inline-block' : 'block');
 
   const filters = buildImageFilters(block);
   if (filters.length > 0) {

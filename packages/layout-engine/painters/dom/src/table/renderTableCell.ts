@@ -700,7 +700,9 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
   // Support multi-block cells with backward compatibility
   const cellBlocks = cell?.blocks ?? (cell?.paragraph ? [cell.paragraph] : []);
   const blockMeasures = cellMeasure?.blocks ?? (cellMeasure?.paragraph ? [cellMeasure.paragraph] : []);
-  const sdtContainerKeys = cellBlocks.map((block) => getSdtContainerKeyForBlock(block));
+  const sdtContainerKeys = cellBlocks.map((block) =>
+    block.kind === 'paragraph' || block.kind === 'table' ? getSdtContainerKeyForBlock(block) : null,
+  );
   const sdtBoundaries = getSdtSiblingBoundaries(sdtContainerKeys);
 
   const hasSdtContainer = cellBlocks.some((block) => {

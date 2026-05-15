@@ -4565,6 +4565,72 @@ describe('renderTableCell', () => {
       expect(tableChrome?.querySelector('.superdoc-structured-content__label')).toBeFalsy();
     });
 
+    it('should not let media-only blocks consume SDT container start boundaries', () => {
+      const sharedSdt: SdtMetadata = {
+        type: 'structuredContent',
+        scope: 'block',
+        id: 'media-before-paragraph-sdt',
+        alias: 'Media Container',
+      };
+      const imageBlock: ImageBlock = {
+        kind: 'image',
+        id: 'sdt-image-before-paragraph',
+        src: 'data:image/png;base64,AAA',
+        attrs: { sdt: sharedSdt },
+      };
+      const paragraph: ParagraphBlock = {
+        kind: 'paragraph',
+        id: 'sdt-paragraph-after-image',
+        runs: [{ text: 'After image', fontFamily: 'Arial', fontSize: 16 }],
+        attrs: { sdt: sharedSdt },
+      };
+      const imageMeasure = {
+        kind: 'image' as const,
+        width: 40,
+        height: 20,
+      };
+      const paragraphMeasure: ParagraphMeasure = {
+        kind: 'paragraph',
+        lines: [
+          {
+            fromRun: 0,
+            fromChar: 0,
+            toRun: 0,
+            toChar: 11,
+            width: 70,
+            ascent: 12,
+            descent: 4,
+            lineHeight: 20,
+          },
+        ],
+        totalHeight: 20,
+      };
+
+      const { cellElement } = renderTableCell({
+        ...createBaseDeps(),
+        cellMeasure: {
+          blocks: [imageMeasure, paragraphMeasure],
+          width: 120,
+          height: 40,
+          gridColumnStart: 0,
+          colSpan: 1,
+          rowSpan: 1,
+        },
+        cell: {
+          id: 'cell-media-before-sdt-paragraph',
+          blocks: [imageBlock, paragraph],
+          attrs: {},
+        },
+      });
+
+      const paragraphChrome = cellElement.querySelector<HTMLElement>('.superdoc-structured-content-block');
+      expect(paragraphChrome?.dataset.sdtContainerStart).toBe('true');
+      expect(paragraphChrome?.dataset.sdtContainerEnd).toBe('true');
+      expect(paragraphChrome?.querySelector('.superdoc-structured-content__label')?.textContent).toBe(
+        'Media Container',
+      );
+    });
+
     it('should continue SDT boundaries across partial nested table renders', () => {
       const nestedTableSdt: SdtMetadata = {
         type: 'structuredContent',

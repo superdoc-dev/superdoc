@@ -38,10 +38,15 @@
  */
 
 import { SuperDoc } from 'superdoc';
+<<<<<<< HEAD
 import { createSuperDocUI } from 'superdoc/ui';
 import 'superdoc/style.css';
 import './style.css';
 import { attachFieldChip } from './field-chip.js';
+=======
+import 'superdoc/style.css';
+import './style.css';
+>>>>>>> origin/stable
 
 type NodeKind = 'block' | 'inline';
 type LockMode = 'unlocked' | 'sdtLocked' | 'contentLocked' | 'sdtContentLocked';
@@ -199,10 +204,13 @@ const state = {
   values: {} as Record<FieldKey, string>,
   versions: {} as Record<ClauseId, string>,
   expandedClause: null as ClauseId | null,
+<<<<<<< HEAD
   /** UI controller; created in `initialize`, disposed by `teardown`. */
   ui: null as ReturnType<typeof createSuperDocUI> | null,
   /** Field-chip detach handle; created in `initialize`, called by `teardown`. */
   fieldChipTeardown: null as (() => void) | null,
+=======
+>>>>>>> origin/stable
 };
 
 const statusEl = qs<HTMLElement>('#status');
@@ -262,6 +270,7 @@ async function initialize(instance: DemoSuperDoc): Promise<void> {
   readStateFromDocument();
   renderPanels();
   refreshSummary();
+<<<<<<< HEAD
 
   // Contextual smart-field chip (SD-3157). Plain TS — uses the
   // public `superdoc/ui` controller directly, no framework. The chip
@@ -280,6 +289,8 @@ async function initialize(instance: DemoSuperDoc): Promise<void> {
     valueFor: (key) => state.values[key as FieldKey],
   });
 
+=======
+>>>>>>> origin/stable
   setStatus('Ready');
   setBusy(false);
 }
@@ -522,6 +533,7 @@ function escapeAttr(s: string): string {
   doc: () => state.editor?.doc ?? null,
 };
 
+<<<<<<< HEAD
 const teardown = () => {
   // Order matters: detach the field chip first (it relies on the UI
   // controller for `getRect`), then destroy the UI controller, then
@@ -541,5 +553,8 @@ const teardown = () => {
   state.ui = null;
   superdoc.destroy();
 };
+=======
+const teardown = () => superdoc.destroy();
+>>>>>>> origin/stable
 window.addEventListener('beforeunload', teardown);
 if (import.meta.hot) import.meta.hot.dispose(teardown);

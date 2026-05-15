@@ -492,6 +492,32 @@ describe('buildFootnotesInput', () => {
       expect(result).toBeNull(); // No valid refs found
     });
 
+    it('does not inject a leading marker run when the ref has customMarkFollows', () => {
+      // SD-2658: a customMark footnote's body has no w:footnoteRef in OOXML —
+      // the literal symbol in the document body is the entire identification.
+      const editorState = {
+        doc: {
+          content: { size: 100 },
+          descendants: (callback: (node: unknown, pos: number) => boolean | void) => {
+            callback({ type: { name: 'footnoteReference' }, attrs: { id: '1', customMarkFollows: '1' } }, 10);
+            return false;
+          },
+        },
+      } as unknown as EditorState;
+      const converter = createMockConverter([
+        { id: '1', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Note' }] }] },
+      ]);
+      const context = createMockConverterContext({ '1': 1 });
+
+      const result = buildFootnotesInput(editorState, converter, context, undefined);
+
+      const blocks = result?.blocksById.get('1');
+      const firstRun = (blocks?.[0] as { runs?: Array<{ text?: string; dataAttrs?: Record<string, string> }> })
+        ?.runs?.[0];
+      expect(firstRun?.dataAttrs?.['data-sd-footnote-number']).toBeUndefined();
+      expect(firstRun?.text).toBe('Footnote 1 text');
+    });
+
     it('clamps pos to doc content size', () => {
       const editorState = {
         doc: {

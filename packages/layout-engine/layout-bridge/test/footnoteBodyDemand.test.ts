@@ -188,6 +188,94 @@ describe('SD-3049: body break consults anchored footnote demand', () => {
     expect(gap).toBeGreaterThanOrEqual(0);
   });
 
+  it('produces a tight body→separator gap for a list-only footnote', async () => {
+    const BODY_LINES = 25;
+    const LINE_H = 20;
+    const ITEM_LINE_H = 12;
+    const ITEMS = 8;
+
+    let pos = 0;
+    const blocks: FlowBlock[] = [];
+    for (let i = 0; i < BODY_LINES; i += 1) {
+      const text = `Body line ${i + 1}.`;
+      blocks.push(makeParagraph(`body-${i}`, text, pos));
+      pos += text.length + 1;
+    }
+    const refBlockIdx = 4;
+    const refBlock = blocks[refBlockIdx];
+    const refPos = (refBlock.kind === 'paragraph' ? (refBlock.runs?.[0]?.pmStart ?? 0) : 0) + 2;
+
+    const ftItemPara = (itemId: string): FlowBlock => ({
+      kind: 'paragraph',
+      id: `${itemId}-p`,
+      runs: [{ text: 'item', fontFamily: 'Arial', fontSize: 10, pmStart: 0, pmEnd: 4 }],
+    });
+    const ftList: FlowBlock = {
+      kind: 'list',
+      id: 'footnote-1-0-list',
+      listType: 'bullet',
+      items: Array.from({ length: ITEMS }, (_, i) => ({
+        id: `footnote-1-0-list-item-${i}`,
+        marker: { text: '•', font: { family: 'Arial', size: 10 } } as never,
+        paragraph: ftItemPara(`footnote-1-0-list-item-${i}`) as never,
+      })),
+    };
+
+    const measureBlock = vi.fn(async (b: FlowBlock) => {
+      if (b.kind === 'list') {
+        return {
+          kind: 'list' as const,
+          items: b.items.map((it) => ({
+            itemId: it.id,
+            markerWidth: 10,
+            markerTextWidth: 6,
+            indentLeft: 0,
+            paragraph: makeMeasure(ITEM_LINE_H, 1) as never,
+          })),
+          totalHeight: ITEMS * ITEM_LINE_H,
+        };
+      }
+      return makeMeasure(LINE_H, 1);
+    });
+
+    const margins = { top: 72, right: 72, bottom: 72, left: 72 };
+    const result = await incrementalLayout(
+      [],
+      null,
+      blocks,
+      {
+        pageSize: { w: 612, h: 600 + margins.top + margins.bottom },
+        margins,
+        footnotes: {
+          refs: [{ id: '1', pos: refPos }],
+          blocksById: new Map([['1', [ftList]]]),
+          topPadding: 6,
+          dividerHeight: 6,
+        },
+      },
+      measureBlock,
+    );
+
+    const page1 = result.layout.pages[0];
+    expect(page1).toBeTruthy();
+
+    const bodyMaxBottom = page1.fragments
+      .filter((f) => !String(f.blockId).startsWith('footnote-'))
+      .reduce((max, f) => {
+        const y = (f as { y?: number }).y ?? 0;
+        const fromLine = (f as { fromLine?: number }).fromLine ?? 0;
+        const toLine = (f as { toLine?: number }).toLine ?? fromLine + 1;
+        const lineCount = Math.max(1, toLine - fromLine);
+        return Math.max(max, y + lineCount * LINE_H);
+      }, 0);
+    const sepFrag = page1.fragments.find((f) => String(f.blockId).startsWith('footnote-separator'));
+    const sepTop = (sepFrag as { y?: number } | undefined)?.y ?? Infinity;
+
+    const gap = sepTop - bodyMaxBottom;
+    expect(gap).toBeLessThanOrEqual(28);
+    expect(gap).toBeGreaterThanOrEqual(0);
+  });
+
   it('does not change layout when document has no footnotes (no-op invariant)', async () => {
     // Regression guard: the new code path must not affect layouts without footnotes.
     const BODY_LINES = 50;

@@ -112,6 +112,8 @@ export function buildFootnotesInput(
   // Find footnote references in the document
   const refs: FootnoteReference[] = [];
   const idsInUse = new Set<string>();
+  // SD-2658: customMark footnotes have no w:footnoteRef in note content — skip injection.
+  const customMarkIds = new Set<string>();
 
   editorState.doc.descendants((node, pos) => {
     if (node.type?.name !== 'footnoteReference') return;
@@ -123,6 +125,7 @@ export function buildFootnotesInput(
     const insidePos = Math.min(pos + 1, editorState.doc.content.size);
     refs.push({ id: key, pos: insidePos });
     idsInUse.add(key);
+    if (isCustomMarkFollows(node.attrs?.customMarkFollows)) customMarkIds.add(key);
   });
 
   if (refs.length === 0) return null;
@@ -144,7 +147,9 @@ export function buildFootnotesInput(
       });
 
       if (result?.blocks?.length) {
-        ensureFootnoteMarker(result.blocks, id, footnoteNumberById, footnoteNumberFormat);
+        if (!customMarkIds.has(id)) {
+          ensureFootnoteMarker(result.blocks, id, footnoteNumberById, footnoteNumberFormat);
+        }
         blocksById.set(id, result.blocks);
       }
     } catch (_) {
@@ -175,6 +180,14 @@ export function buildFootnotesInput(
  */
 function isFootnoteMarker(run: Run): boolean {
   return Boolean(run.dataAttrs?.[FOOTNOTE_MARKER_DATA_ATTR]);
+}
+
+// SD-2658: OOXML on/off — matches footnote-reference.ts's tolerant parse.
+function isCustomMarkFollows(value: unknown): boolean {
+  if (value === true || value === 1) return true;
+  if (typeof value !== 'string') return false;
+  const v = value.trim().toLowerCase();
+  return v === '1' || v === 'true' || v === 'on';
 }
 
 /**

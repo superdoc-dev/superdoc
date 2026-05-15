@@ -1837,6 +1837,13 @@ export async function incrementalLayout(
             } else if (measure.kind === 'table') {
               const measureH = (measure as { totalHeight?: number }).totalHeight;
               if (typeof measureH === 'number' && Number.isFinite(measureH)) total += measureH;
+            } else if (measure.kind === 'list' && block.kind === 'list') {
+              for (const item of block.items) {
+                const itemMeasure = measure.items.find((entry) => entry.itemId === item.id);
+                if (!itemMeasure?.paragraph?.lines) continue;
+                for (const line of itemMeasure.paragraph.lines) total += line.lineHeight ?? 0;
+                total += getParagraphSpacingAfter(item.paragraph);
+              }
             }
           }
           if (total > 0) map.set(footnoteId, total);

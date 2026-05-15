@@ -8,8 +8,6 @@ import type {
   FlowMode,
   Fragment,
   GradientFill,
-  ImageBlock,
-  ImageDrawing,
   ImageFragment,
   ImageHyperlink,
   Line,
@@ -70,7 +68,6 @@ import {
 } from './styles.js';
 import { applyAlphaToSVG, applyGradientToSVG, validateHexColor } from './svg-utils.js';
 import { renderTableFragment as renderTableFragmentElement } from './table/renderTableFragment.js';
-import { applyImageClipPath } from './utils/image-clip-path.js';
 import { computeSdtBoundaries } from './sdt/boundaries.js';
 import { shouldRebuildForSdtBoundary, type SdtBoundaryOptions } from './sdt/container.js';
 import { applyContainerSdtDataset, applySdtDataset } from './sdt/dataset.js';
@@ -90,7 +87,12 @@ import { applyParagraphFragmentPmAttributes } from './paragraph/frame.js';
 import { renderParagraphFragment as renderParagraphFragmentElement } from './paragraph/renderParagraphFragment.js';
 import { renderLine as renderRunLine } from './runs/render-line.js';
 import type { RunRenderContext } from './runs/types.js';
-import { createBlockImageContent } from './images/image-block.js';
+import {
+  createDrawingImageElement,
+  createShapeGroupImageElement,
+  createShapeTextImageElement,
+} from './images/drawing-image.js';
+import { renderImageFragment as renderImageFragmentElement } from './images/image-fragment.js';
 import { buildImageHyperlinkAnchor as buildSharedImageHyperlinkAnchor } from './images/hyperlink.js';
 import { applyTrackedChangeDecorations, resolveTrackedChangesConfig } from './runs/tracked-changes.js';
 import { applySourceAnchorDataset } from './utils/source-anchor.js';
@@ -2600,120 +2602,21 @@ export class DomPainter {
     context: FragmentRenderContext,
     resolvedItem?: ResolvedImageItem,
   ): HTMLElement {
-    try {
-      // Pre-extracted block from the resolved item.
-      if (resolvedItem?.block?.kind !== 'image') {
-        throw new Error(`DomPainter: missing resolved image block for fragment ${fragment.blockId}`);
-      }
-      const block = resolvedItem.block as ImageBlock;
-
-      if (!this.doc) {
-        throw new Error('DomPainter: document is not available');
-      }
-
-      const fragmentEl = this.doc.createElement('div');
-      fragmentEl.classList.add(CLASS_NAMES.fragment, DOM_CLASS_NAMES.IMAGE_FRAGMENT);
-      applyStyles(fragmentEl, fragmentStyles);
-      if (resolvedItem) {
-        this.applyResolvedFragmentFrame(fragmentEl, resolvedItem, fragment, context.section, context.story);
-      } else {
-        this.applyFragmentFrame(fragmentEl, fragment, context.section, context.story);
-        fragmentEl.style.height = `${fragment.height}px`;
-        this.applyFragmentWrapperZIndex(fragmentEl, fragment);
-      }
-      applySdtDataset(fragmentEl, block.attrs?.sdt);
-      applyContainerSdtDataset(fragmentEl, block.attrs?.containerSdt);
-
-      // Add block ID for PM transaction targeting
-      if (block.id) {
-        fragmentEl.setAttribute('data-sd-block-id', block.id);
-      }
-
-      // Add PM position markers for transaction targeting
-      const imgPmStart = resolvedItem?.pmStart;
-      if (imgPmStart != null) {
-        fragmentEl.dataset.pmStart = String(imgPmStart);
-      }
-      const imgPmEnd = resolvedItem?.pmEnd;
-      if (imgPmEnd != null) {
-        fragmentEl.dataset.pmEnd = String(imgPmEnd);
-      }
-
-      // Add metadata for interactive image resizing (skip watermarks - they should not be interactive)
-      const imgMetadata = resolvedItem?.metadata;
-      if (imgMetadata && !block.attrs?.vmlWatermark) {
-        fragmentEl.setAttribute('data-image-metadata', JSON.stringify(imgMetadata));
-      }
-
-      // behindDoc images are supported via z-index; suppress noisy debug logs
-
-      // Keep srcRect crop/zoom transforms on the image element. Apply geometry transforms
-      // on the fragment wrapper so rotation/flip do not overwrite clip-path scaling.
-      this.applyImageGeometryTransform(fragmentEl, {
-        width: block.width ?? fragment.width,
-        height: block.height ?? fragment.height,
-        rotation: block.rotation,
-        flipH: block.flipH,
-        flipV: block.flipV,
-      });
-
-      const imageChild = createBlockImageContent({
-        doc: this.doc,
-        block,
-        clipContainer: fragmentEl,
-        buildImageHyperlinkAnchor: this.buildImageHyperlinkAnchor.bind(this),
-      });
-      fragmentEl.appendChild(imageChild);
-
-      return fragmentEl;
-    } catch (error) {
-      console.error('[DomPainter] Image fragment rendering failed:', { fragment, error });
-      return this.createErrorPlaceholder(fragment.blockId, error);
-    }
-  }
-
-  private buildImageGeometryTransform(attrs: {
-    width: number;
-    height: number;
-    rotation?: number;
-    flipH?: boolean;
-    flipV?: boolean;
-  }): string {
-    const transforms: string[] = [];
-    if (attrs.rotation != null && attrs.rotation !== 0) {
-      const angleRad = (attrs.rotation * Math.PI) / 180;
-      const cosA = Math.cos(angleRad);
-      const sinA = Math.sin(angleRad);
-      const newTopLeftX = (attrs.width / 2) * (1 - cosA) + (attrs.height / 2) * sinA;
-      const newTopLeftY = (attrs.width / 2) * sinA + (attrs.height / 2) * (1 - cosA);
-      transforms.push(`translate(${-newTopLeftX}px, ${-newTopLeftY}px)`);
-      transforms.push(`rotate(${attrs.rotation}deg)`);
-    }
-    if (attrs.flipH) {
-      transforms.push('scaleX(-1)');
-    }
-    if (attrs.flipV) {
-      transforms.push('scaleY(-1)');
-    }
-    return transforms.join(' ');
-  }
-
-  private applyImageGeometryTransform(
-    target: HTMLElement,
-    attrs: {
-      width: number;
-      height: number;
-      rotation?: number;
-      flipH?: boolean;
-      flipV?: boolean;
-    },
-  ): void {
-    const transform = this.buildImageGeometryTransform(attrs);
-    if (!transform) {
-      return;
-    }
-    target.style.transform = transform;
-    target.style.transformOrigin = 'center';
+    return renderImageFragmentElement({
+      doc: this.doc,
+      fragment,
+      context,
+      resolvedItem,
+      applyResolvedFragmentFrame: (el, item, imageFragment, section) =>
+        this.applyResolvedFragmentFrame(el, item, imageFragment, section, context.story),
+      applyFragmentFrame: (el, imageFragment, section) =>
+        this.applyFragmentFrame(el, imageFragment, section, context.story),
+      applyFragmentWrapperZIndex: this.applyFragmentWrapperZIndex.bind(this),
+      applySdtDataset,
+      applyContainerSdtDataset,
+      buildImageHyperlinkAnchor: this.buildImageHyperlinkAnchor.bind(this),
+      createErrorPlaceholder: this.createErrorPlaceholder.bind(this),
+    });
   }
 
   /**
@@ -2804,7 +2707,7 @@ export class DomPainter {
       throw new Error('DomPainter: document is not available');
     }
     if (block.drawingKind === 'image') {
-      return this.createDrawingImageElement(block);
+      return createDrawingImageElement(this.doc, block, this.buildImageHyperlinkAnchor.bind(this));
     }
     if (block.drawingKind === 'vectorShape') {
       return this.createVectorShapeElement(block, fragment.geometry, false, 1, 1, context);
@@ -2816,16 +2719,6 @@ export class DomPainter {
       return this.createChartElement(block);
     }
     return this.createDrawingPlaceholder();
-  }
-
-  private createDrawingImageElement(block: DrawingBlock): HTMLElement {
-    const drawing = block as ImageDrawing;
-    return createBlockImageContent({
-      doc: this.doc!,
-      block: drawing,
-      className: 'superdoc-drawing-image',
-      buildImageHyperlinkAnchor: this.buildImageHyperlinkAnchor.bind(this),
-    });
   }
 
   private createVectorShapeElement(
@@ -3226,20 +3119,7 @@ export class DomPainter {
           currentParagraph.style.minHeight = '1em';
         }
       } else if (part.kind === 'image' && part.src) {
-        // SD-2804: image part produced by the textbox importer for an
-        // inline w:drawing inside a textbox run. Render as <img> alongside
-        // sibling text spans so layout matches Word's inline flow. Match
-        // body inline images' baseline default (`vertical-align: bottom`)
-        // so an image and adjacent text line up the same way inside a
-        // textbox as outside.
-        const img = this.doc!.createElement('img');
-        img.src = part.src;
-        img.alt = part.alt ?? '';
-        if (typeof part.width === 'number') img.style.width = `${part.width}px`;
-        if (typeof part.height === 'number') img.style.height = `${part.height}px`;
-        img.style.display = 'inline-block';
-        img.style.verticalAlign = 'bottom';
-        currentParagraph.appendChild(img);
+        currentParagraph.appendChild(createShapeTextImageElement(this.doc!, part));
       } else {
         const span = this.doc!.createElement('span');
         span.textContent = this.resolveShapeTextPartText(part, context);
@@ -3707,19 +3587,7 @@ export class DomPainter {
       return this.createVectorShapeElement(vectorChild, childGeometry, false, groupScaleX, groupScaleY, context);
     }
     if (child.shapeType === 'image' && 'src' in child.attrs) {
-      // After this check, child should be ShapeGroupImageChild
-      const attrs = child.attrs as PositionedDrawingGeometry & {
-        src: string;
-        alt?: string;
-        clipPath?: string;
-      };
-      const img = this.doc!.createElement('img');
-      img.src = attrs.src;
-      img.alt = attrs.alt ?? '';
-      img.style.objectFit = 'contain';
-      img.style.display = 'block';
-      applyImageClipPath(img, attrs.clipPath);
-      return img;
+      return createShapeGroupImageElement(this.doc!, child);
     }
     return this.createDrawingPlaceholder();
   }
@@ -3823,7 +3691,7 @@ export class DomPainter {
        */
       const renderDrawingContentForTableCell = (block: DrawingBlock): HTMLElement => {
         if (block.drawingKind === 'image') {
-          return this.createDrawingImageElement(block);
+          return createDrawingImageElement(this.doc!, block, this.buildImageHyperlinkAnchor.bind(this));
         }
         if (block.drawingKind === 'shapeGroup') {
           return this.createShapeGroupElement(block, context);

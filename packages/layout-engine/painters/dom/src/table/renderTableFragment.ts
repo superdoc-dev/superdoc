@@ -51,6 +51,8 @@ export type TableRenderDependencies = {
   ancestorContainerKey?: string | null;
   /** Ancestor SDT metadata used to suppress duplicate id-less container chrome in nested tables */
   ancestorContainerSdt?: SdtMetadata | null;
+  /** Receives notification when this table fragment or descendants render SDT container chrome */
+  onSdtContainerChrome?: () => void;
   /** Function to render a line of paragraph content */
   renderLine: (
     block: ParagraphBlock,
@@ -155,6 +157,7 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
     sdtBoundary,
     ancestorContainerKey,
     ancestorContainerSdt,
+    onSdtContainerChrome,
     renderLine,
     captureLineSnapshot,
     renderDrawingContent,
@@ -214,18 +217,22 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
   const contentTop = tableBorderWidths?.top ?? 0;
 
   // Apply SDT container styling (document sections, structured content blocks)
-  applySdtContainerChrome(doc, container, block.attrs?.sdt, block.attrs?.containerSdt, sdtBoundary, {
-    ancestorContainerKey,
-    ancestorContainerSdt,
-  });
+  if (
+    applySdtContainerChrome(doc, container, block.attrs?.sdt, block.attrs?.containerSdt, sdtBoundary, {
+      ancestorContainerKey,
+      ancestorContainerSdt,
+    })
+  ) {
+    onSdtContainerChrome?.();
+  }
   const tableContainerSdt = getSdtContainerMetadata(block.attrs?.sdt, block.attrs?.containerSdt);
   const tableContainerKey = getSdtContainerKey(block.attrs?.sdt, block.attrs?.containerSdt);
-  const rowAncestorContainerKey = tableContainerSdt
+  const nextAncestorContainerKey = tableContainerSdt
     ? hasExplicitSdtContainerKey(block.attrs?.sdt, block.attrs?.containerSdt)
       ? tableContainerKey
       : ancestorContainerKey
     : ancestorContainerKey;
-  const rowAncestorContainerSdt = tableContainerSdt ?? ancestorContainerSdt;
+  const nextAncestorContainerSdt = tableContainerSdt ?? ancestorContainerSdt;
 
   // Add table-specific class for resize overlay targeting and click mapping
   container.classList.add(DOM_CLASS_NAMES.TABLE_FRAGMENT);
@@ -408,8 +415,9 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
         captureLineSnapshot,
         renderDrawingContent,
         applySdtDataset,
-        ancestorTableSdtKey: rowAncestorContainerKey,
-        ancestorTableSdt: rowAncestorContainerSdt,
+        ancestorContainerKey: nextAncestorContainerKey,
+        ancestorContainerSdt: nextAncestorContainerSdt,
+        onSdtContainerChrome,
         // Headers are always rendered as-is (no border suppression)
         continuesFromPrev: false,
         continuesOnNext: false,
@@ -571,8 +579,9 @@ export const renderTableFragment = (deps: TableRenderDependencies): HTMLElement 
       captureLineSnapshot,
       renderDrawingContent,
       applySdtDataset,
-      ancestorTableSdtKey: rowAncestorContainerKey,
-      ancestorTableSdt: rowAncestorContainerSdt,
+      ancestorContainerKey: nextAncestorContainerKey,
+      ancestorContainerSdt: nextAncestorContainerSdt,
+      onSdtContainerChrome,
       // Draw top border if table continues from previous fragment (MS Word behavior)
       continuesFromPrev: isFirstRenderedBodyRow && fragment.continuesFromPrev === true,
       // Draw bottom border if table continues on next fragment (MS Word behavior)

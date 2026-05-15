@@ -1,11 +1,11 @@
-import type { FlowBlock, SdtMetadata, StructuredContentLockMode } from '@superdoc/contracts';
-
-type SdtBlockCandidate = Pick<FlowBlock, 'kind'> & {
-  attrs?: {
-    sdt?: SdtMetadata | null;
-    containerSdt?: SdtMetadata | null;
-  } | null;
-};
+import type { SdtMetadata, StructuredContentLockMode } from '@superdoc/contracts';
+export {
+  getSdtContainerKey,
+  getSdtContainerKeyForBlock,
+  getSdtContainerMetadata,
+  hasExplicitSdtContainerKey,
+} from '@superdoc/contracts';
+import { getSdtContainerKey, getSdtContainerMetadata } from '@superdoc/contracts';
 
 export type SdtContainerConfig = {
   className: string;
@@ -22,21 +22,6 @@ export type SdtBoundaryOptions = {
   paddingBottomOverride?: number;
   showLabel?: boolean;
 };
-
-const idlessSdtContainerKeys = new WeakMap<SdtMetadata, string>();
-let nextIdlessSdtContainerKey = 0;
-
-function getIdlessSdtContainerKey(metadata: SdtMetadata): string {
-  const existingKey = idlessSdtContainerKeys.get(metadata);
-  if (existingKey) return existingKey;
-
-  // AIDEV-NOTE: Id-less SDT grouping relies on pm-adapter sharing the same
-  // SdtMetadata object across sibling blocks in one container. Do not replace
-  // this with alias/title matching; separate controls can share display text.
-  const key = `idlessSdt:${++nextIdlessSdtContainerKey}`;
-  idlessSdtContainerKeys.set(metadata, key);
-  return key;
-}
 
 export function isStructuredContentMetadata(sdt: SdtMetadata | null | undefined): sdt is {
   type: 'structuredContent';
@@ -81,67 +66,18 @@ export function getSdtContainerConfig(sdt: SdtMetadata | null | undefined): SdtC
   return null;
 }
 
-export function getSdtContainerMetadata(
-  sdt?: SdtMetadata | null,
-  containerSdt?: SdtMetadata | null,
-): SdtMetadata | null {
-  if (getSdtContainerConfig(sdt)) return sdt ?? null;
-  if (getSdtContainerConfig(containerSdt)) return containerSdt ?? null;
-  return null;
-}
-
-export function getSdtContainerKey(sdt?: SdtMetadata | null, containerSdt?: SdtMetadata | null): string | null {
-  const metadata = getSdtContainerMetadata(sdt, containerSdt);
-  if (!metadata) return null;
-
-  if (metadata.type === 'structuredContent') {
-    if (metadata.scope !== 'block') return null;
-    if (metadata.id) return `structuredContent:${metadata.id}`;
-    return getIdlessSdtContainerKey(metadata);
-  }
-
-  if (metadata.type === 'documentSection') {
-    const sectionId = metadata.id ?? metadata.sdBlockId;
-    if (sectionId) return `documentSection:${sectionId}`;
-    return getIdlessSdtContainerKey(metadata);
-  }
-
-  return null;
-}
-
-export function hasExplicitSdtContainerKey(sdt?: SdtMetadata | null, containerSdt?: SdtMetadata | null): boolean {
-  const metadata = getSdtContainerMetadata(sdt, containerSdt);
-  if (!metadata) return false;
-
-  if (metadata.type === 'structuredContent') {
-    return metadata.scope === 'block' && Boolean(metadata.id);
-  }
-
-  if (metadata.type === 'documentSection') {
-    return Boolean(metadata.id ?? metadata.sdBlockId);
-  }
-
-  return false;
-}
-
-export function getSdtContainerKeyForBlock(block?: SdtBlockCandidate | null): string | null {
-  if (!block) return null;
-  return getSdtContainerKey(block.attrs?.sdt, block.attrs?.containerSdt);
-}
-
 export function shouldRenderSdtContainerChrome(
   sdt?: SdtMetadata | null,
   containerSdt?: SdtMetadata | null,
   options?: {
     ancestorContainerKey?: string | null;
     ancestorContainerSdt?: SdtMetadata | null;
-    containerKey?: string | null;
   },
 ): boolean {
   const metadata = getSdtContainerMetadata(sdt, containerSdt);
   if (!metadata) return false;
 
-  const containerKey = options?.containerKey ?? getSdtContainerKey(sdt, containerSdt);
+  const containerKey = getSdtContainerKey(sdt, containerSdt);
   if (containerKey && options?.ancestorContainerKey && containerKey === options.ancestorContainerKey) {
     return false;
   }
@@ -174,14 +110,13 @@ export function applySdtContainerChrome(
   options?: {
     ancestorContainerKey?: string | null;
     ancestorContainerSdt?: SdtMetadata | null;
-    containerKey?: string | null;
   },
-): void {
-  if (!shouldRenderSdtContainerChrome(sdt, containerSdt, options)) return;
+): boolean {
+  if (!shouldRenderSdtContainerChrome(sdt, containerSdt, options)) return false;
 
   const metadata = getSdtContainerMetadata(sdt, containerSdt);
   const config = getSdtContainerConfig(metadata);
-  if (!config) return;
+  if (!config) return false;
 
   const isStart = boundaryOptions?.isStart ?? config.isStart;
   const isEnd = boundaryOptions?.isEnd ?? config.isEnd;
@@ -213,6 +148,8 @@ export function applySdtContainerChrome(
     labelEl.appendChild(labelText);
     container.appendChild(labelEl);
   }
+
+  return true;
 }
 
 export function shouldRebuildForSdtBoundary(element: HTMLElement, boundary: SdtBoundaryOptions | undefined): boolean {

@@ -173,10 +173,12 @@ type TableRowRenderDependencies = {
   renderDrawingContent?: (block: DrawingBlock) => HTMLElement;
   /** Function to apply SDT metadata as data attributes */
   applySdtDataset: (el: HTMLElement | null, metadata?: SdtMetadata | null) => void;
-  /** Table-level SDT container key for suppressing duplicate container styling in cells */
-  ancestorTableSdtKey?: string | null;
-  /** Table-level SDT metadata for suppressing duplicate container styling in cells */
-  ancestorTableSdt?: SdtMetadata | null;
+  /** Ancestor SDT container key for suppressing duplicate container styling in cells */
+  ancestorContainerKey?: string | null;
+  /** Ancestor SDT metadata for suppressing duplicate id-less container styling in cells */
+  ancestorContainerSdt?: SdtMetadata | null;
+  /** Receives notification when cells render SDT container chrome */
+  onSdtContainerChrome?: () => void;
   /**
    * If true, this row is the first body row of a continuation fragment.
    * MS Word draws borders at split points to visually close the table on each page,
@@ -256,8 +258,9 @@ export const renderTableRow = (deps: TableRowRenderDependencies): void => {
     captureLineSnapshot,
     renderDrawingContent,
     applySdtDataset,
-    ancestorTableSdtKey,
-    ancestorTableSdt,
+    ancestorContainerKey,
+    ancestorContainerSdt,
+    onSdtContainerChrome,
     continuesFromPrev,
     continuesOnNext,
     partialRow,
@@ -429,8 +432,9 @@ export const renderTableRow = (deps: TableRowRenderDependencies): void => {
       renderDrawingContent,
       context,
       applySdtDataset,
-      ancestorTableSdtKey,
-      ancestorTableSdt,
+      ancestorContainerKey,
+      ancestorContainerSdt,
+      onSdtContainerChrome,
       fromLine,
       toLine,
       tableIndent,

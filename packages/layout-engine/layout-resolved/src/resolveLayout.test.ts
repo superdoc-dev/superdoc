@@ -2793,7 +2793,7 @@ describe('resolveLayout', () => {
       expect(drItem.sdtContainerKey).toBeUndefined();
     });
 
-    it('returns null (omits key) for structuredContent block scope with no id', () => {
+    it('sets an object-stable key for structuredContent block scope with no id', () => {
       const layout: Layout = {
         pageSize: { w: 612, h: 792 },
         pages: [
@@ -2815,10 +2815,10 @@ describe('resolveLayout', () => {
 
       const result = resolveLayout({ layout, flowMode: 'paginated', blocks, measures });
       const item = result.pages[0].items[0] as import('@superdoc/contracts').ResolvedFragmentItem;
-      expect(item.sdtContainerKey).toBeUndefined();
+      expect(item.sdtContainerKey).toMatch(/^idlessSdt:/);
     });
 
-    it('returns null (omits key) for documentSection with no id or sdBlockId', () => {
+    it('sets an object-stable key for documentSection with no id or sdBlockId', () => {
       const layout: Layout = {
         pageSize: { w: 612, h: 792 },
         pages: [
@@ -2840,7 +2840,7 @@ describe('resolveLayout', () => {
 
       const result = resolveLayout({ layout, flowMode: 'paginated', blocks, measures });
       const item = result.pages[0].items[0] as import('@superdoc/contracts').ResolvedFragmentItem;
-      expect(item.sdtContainerKey).toBeUndefined();
+      expect(item.sdtContainerKey).toMatch(/^idlessSdt:/);
     });
   });
 

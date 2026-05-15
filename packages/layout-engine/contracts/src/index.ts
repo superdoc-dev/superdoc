@@ -101,6 +101,13 @@ export type {
 import type { LayoutSourceIdentity } from './layout-identity.js';
 export { cloneColumnLayout, normalizeColumnLayout, widthsEqual } from './column-layout.js';
 export type { NormalizedColumnLayout } from './column-layout.js';
+export {
+  getSdtContainerKey,
+  getSdtContainerKeyForBlock,
+  getSdtContainerMetadata,
+  hasExplicitSdtContainerKey,
+  isSdtContainerMetadata,
+} from './sdt-container.js';
 /** Inline field annotation metadata extracted from w:sdt nodes. */
 export type FieldAnnotationMetadata = {
   type: 'fieldAnnotation';

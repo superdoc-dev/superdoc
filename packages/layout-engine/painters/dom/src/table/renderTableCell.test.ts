@@ -3753,7 +3753,7 @@ describe('renderTableCell', () => {
         ...createBaseDeps(),
         cellMeasure,
         cell,
-        ancestorTableSdtKey: 'structuredContent:table-sdt',
+        ancestorContainerKey: 'structuredContent:table-sdt',
       });
 
       expect(cellElement.style.overflow).toBe('hidden');
@@ -3806,7 +3806,7 @@ describe('renderTableCell', () => {
           blocks: [para],
           attrs: {},
         },
-        ancestorTableSdt: sharedSdt,
+        ancestorContainerSdt: sharedSdt,
       });
 
       expect(cellElement.style.overflow).toBe('hidden');
@@ -4140,8 +4140,8 @@ describe('renderTableCell', () => {
           blocks: [nestedTable],
           attrs: {},
         },
-        ancestorTableSdtKey: 'structuredContent:ancestor-table-sdt',
-        ancestorTableSdt: sharedSdt,
+        ancestorContainerKey: 'structuredContent:ancestor-table-sdt',
+        ancestorContainerSdt: sharedSdt,
       });
 
       const tableElement = cellElement.querySelector('[data-block-id="nested-ancestor-sdt-table"]') as HTMLElement;
@@ -4233,8 +4233,8 @@ describe('renderTableCell', () => {
           blocks: [nestedTable],
           attrs: {},
         },
-        ancestorTableSdtKey: 'structuredContent:outer-table-sdt',
-        ancestorTableSdt: sharedSdt,
+        ancestorContainerKey: 'structuredContent:outer-table-sdt',
+        ancestorContainerSdt: sharedSdt,
       });
 
       expect(cellElement.querySelector('.superdoc-structured-content-block')).toBeFalsy();
@@ -4331,8 +4331,8 @@ describe('renderTableCell', () => {
           blocks: [nestedTable],
           attrs: {},
         },
-        ancestorTableSdtKey: 'structuredContent:outer-table-sdt',
-        ancestorTableSdt: ancestorSdt,
+        ancestorContainerKey: 'structuredContent:outer-table-sdt',
+        ancestorContainerSdt: ancestorSdt,
       });
 
       expect(cellElement.style.overflow).toBe('visible');

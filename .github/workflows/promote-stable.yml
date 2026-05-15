@@ -31,6 +31,9 @@ jobs:
         with:
           app-id: ${{ secrets.APP_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+          permission-workflows: write
 
       - uses: actions/checkout@v6
         with:
@@ -68,6 +71,7 @@ jobs:
           if git merge --no-ff --no-edit "origin/${SOURCE_BRANCH}"; then
             MERGE_STATUS="clean"
           else
+<<<<<<< HEAD
             normalize_json_without_keys() {
               python3 -c 'import json, sys; data = json.load(sys.stdin); [data.pop(key, None) for key in sys.argv[1:]]; sys.stdout.write(json.dumps(data, sort_keys=True, separators=(",", ":")))' "$@"
             }
@@ -122,6 +126,21 @@ jobs:
                   ;;
               esac
             done < <(git diff --name-only --diff-filter=U)
+=======
+            # Auto-resolve release artifact conflicts: keep stable's version.
+            # npm/PyPI already have stable's published version; downgrading to
+            # main's track would break the next stable release. Mirrors the
+            # auto-resolve in sync-patches.yml, biased the other direction.
+            git diff --name-only --diff-filter=U | while read -r f; do
+              case "$f" in
+                package.json|*/package.json|pyproject.toml|*/pyproject.toml|version.json|*/version.json)
+                  echo "  Auto-resolving $f (keeping stable's version)"
+                  git checkout --ours "$f"
+                  git add "$f"
+                  ;;
+              esac
+            done
+>>>>>>> origin/main
 
             if [ -z "$(git diff --name-only --diff-filter=U)" ]; then
               MERGE_STATUS="auto_resolved"
@@ -179,7 +198,11 @@ jobs:
 
           - creates \`${BRANCH_NAME}\` from \`${BASE_BRANCH}\`
           - merges \`${SOURCE_BRANCH}\` into the candidate branch
+<<<<<<< HEAD
           - version-only release artifact conflicts (package.json, pyproject.toml, version.json) auto-resolved to keep stable's published version
+=======
+          - release artifact conflicts (package.json, pyproject.toml, version.json) auto-resolved to keep stable's published version
+>>>>>>> origin/main
 
           ---
           _Auto-created by promote-stable workflow._

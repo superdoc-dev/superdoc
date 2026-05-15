@@ -41,10 +41,18 @@ export const TextAlign = Extension.create({
        */
       setTextAlign:
         (alignment) =>
+<<<<<<< HEAD
         ({ commands, state, tr, dispatch }) => {
+=======
+        ({ commands, state }) => {
+>>>>>>> origin/main
           const containsAlignment = this.options.alignments.includes(alignment);
           if (!containsAlignment) return false;
+          const $from = state?.selection?.$from;
+          let paragraphNode = null;
+          let paragraphDepth = -1;
 
+<<<<<<< HEAD
           if (!state?.doc || !state?.selection || !tr) {
             const paragraphProperties = getSelectionParagraphProperties(this.editor, state);
             const storedAlignment = mapDisplayAlignmentToStoredJustification(
@@ -96,6 +104,29 @@ export const TextAlign = Extension.create({
 
           if (touched && dispatch) dispatch(tr);
           return true;
+=======
+          if ($from) {
+            for (let depth = $from.depth; depth >= 0; depth--) {
+              const nodeAtDepth = $from.node(depth);
+              if (nodeAtDepth?.type?.name === 'paragraph') {
+                paragraphNode = nodeAtDepth;
+                paragraphDepth = depth;
+                break;
+              }
+            }
+          }
+
+          let paragraphProperties = paragraphNode?.attrs?.paragraphProperties ?? {};
+
+          if (this.editor && $from && paragraphNode && paragraphDepth > 0) {
+            const paragraphStartPos = $from.before(paragraphDepth);
+            const paragraphPos = state.doc.resolve(paragraphStartPos);
+            paragraphProperties = calculateResolvedParagraphProperties(this.editor, paragraphNode, paragraphPos);
+          }
+
+          const storedAlignment = mapDisplayAlignmentToStoredJustification(alignment, paragraphProperties?.rightToLeft);
+          return commands.updateAttributes('paragraph', { 'paragraphProperties.justification': storedAlignment });
+>>>>>>> origin/main
         },
 
       /**

@@ -94,6 +94,7 @@ import {
 } from './images/drawing-image.js';
 import { renderImageFragment as renderImageFragmentElement } from './images/image-fragment.js';
 import { buildImageHyperlinkAnchor as buildSharedImageHyperlinkAnchor } from './images/hyperlink.js';
+import { applyStyles } from './utils/apply-styles.js';
 import { applyTrackedChangeDecorations, resolveTrackedChangesConfig } from './runs/tracked-changes.js';
 import { applySourceAnchorDataset } from './utils/source-anchor.js';
 
@@ -4045,11 +4046,3 @@ const isNonBodyStoryBlockId = (blockId: string | undefined): boolean =>
     blockId.startsWith('endnote-') ||
     blockId.startsWith('__sd_semantic_footnote-') ||
     blockId.startsWith('__sd_semantic_endnote-'));
-
-const applyStyles = (el: HTMLElement, styles: Partial<CSSStyleDeclaration>): void => {
-  Object.entries(styles).forEach(([key, value]) => {
-    if (value != null && value !== '' && key in el.style) {
-      (el.style as unknown as Record<string, string>)[key] = String(value);
-    }
-  });
-};

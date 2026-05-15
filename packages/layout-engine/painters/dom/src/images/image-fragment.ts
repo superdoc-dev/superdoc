@@ -2,6 +2,7 @@ import type { ImageBlock, ImageFragment, ImageHyperlink, ResolvedImageItem, SdtM
 import { DOM_CLASS_NAMES } from '../constants.js';
 import type { FragmentRenderContext } from '../renderer.js';
 import { CLASS_NAMES, fragmentStyles } from '../styles.js';
+import { applyStyles } from '../utils/apply-styles.js';
 import { createBlockImageContent } from './image-block.js';
 
 type BuildImageHyperlinkAnchor = (
@@ -27,14 +28,6 @@ type RenderImageFragmentOptions = {
   applyContainerSdtDataset: (el: HTMLElement | null, metadata?: SdtMetadata | null) => void;
   buildImageHyperlinkAnchor: BuildImageHyperlinkAnchor;
   createErrorPlaceholder: (blockId: string, error: unknown) => HTMLElement;
-};
-
-const applyStyles = (el: HTMLElement, styles: Partial<CSSStyleDeclaration>): void => {
-  Object.entries(styles).forEach(([key, value]) => {
-    if (value != null && value !== '' && key in el.style) {
-      (el.style as unknown as Record<string, string>)[key] = String(value);
-    }
-  });
 };
 
 export const buildImageGeometryTransform = (attrs: {

@@ -301,6 +301,43 @@ test('stable release workflows serialize on the shared release-stable concurrenc
   }
 });
 
+test('stable-to-main sync waits for stable release completion', async () => {
+  const workflow = await readRepoFile('.github/workflows/sync-patches.yml');
+
+  assert.ok(
+    workflow.includes('workflow_run:'),
+    '.github/workflows/sync-patches.yml: must trigger from release workflow completion, not directly from stable pushes',
+  );
+  assert.ok(
+    /workflows:\s*\n\s*-\s*"📦 Release stable tooling \(CLI\/SDK\/MCP\)"/.test(workflow),
+    '.github/workflows/sync-patches.yml: must trigger after the stable release orchestrator completes',
+  );
+  assert.equal(
+    /push:\s*\n\s*branches:\s*\n\s*-\s*stable/.test(workflow),
+    false,
+    '.github/workflows/sync-patches.yml: must not fire immediately on stable branch pushes',
+  );
+  assert.ok(
+    workflow.includes("github.event.workflow_run.head_branch == 'stable'"),
+    '.github/workflows/sync-patches.yml: must scope automatic syncs to stable release runs',
+  );
+  assert.ok(
+    workflow.includes("github.event.workflow_run.conclusion == 'success'") &&
+      workflow.includes("github.event.workflow_run.conclusion == 'failure'"),
+    '.github/workflows/sync-patches.yml: must wait for release completion while still surfacing failed-release sync PRs for review',
+  );
+  assert.ok(
+    workflow.includes('actions: read'),
+    '.github/workflows/sync-patches.yml: must be able to inspect release workflow runs before syncing',
+  );
+  assert.ok(
+    workflow.includes('Wait for stable release lane to drain') &&
+      workflow.includes('"📦 Release esign"') &&
+      workflow.includes('"📦 Release template-builder"'),
+    '.github/workflows/sync-patches.yml: must wait for the remaining stable release workflows before syncing origin/stable',
+  );
+});
+
 test('MCP releaserc builds the package before publish so the tarball ships dist/', async () => {
   const content = await readRepoFile('apps/mcp/.releaserc.cjs');
   assert.ok(

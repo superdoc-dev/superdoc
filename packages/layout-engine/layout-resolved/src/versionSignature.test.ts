@@ -167,6 +167,16 @@ describe('deriveBlockVersion - inline image runs', () => {
     expect(linked).not.toBe(unlinked);
   });
 
+  it('changes when an inline image raw clip path changes', () => {
+    const clipA = { ...baseImageRun, clipPath: 'url(#clip-a)' };
+    const clipB = { ...baseImageRun, clipPath: 'url(#clip-b)' };
+
+    expect(deriveBlockVersion(makeParagraphWithImageRun(clipA))).not.toBe(
+      deriveBlockVersion(makeParagraphWithImageRun(clipB)),
+    );
+    expect(deriveBlockVersion(makeTableWithImageRun(clipA))).not.toBe(deriveBlockVersion(makeTableWithImageRun(clipB)));
+  });
+
   it('changes when a table-cell inline image visual property changes', () => {
     const plain = deriveBlockVersion(makeTableWithImageRun(baseImageRun));
     const filtered = deriveBlockVersion(makeTableWithImageRun({ ...baseImageRun, grayscale: true }));

@@ -119,7 +119,7 @@ const renderedInlineImageRunVersion = (image: ImageRun): string =>
     image.height ?? '',
     image.alt ?? '',
     image.title ?? '',
-    readClipPathValue(image.clipPath),
+    typeof image.clipPath === 'string' ? image.clipPath.trim() : '',
     image.distTop ?? '',
     image.distBottom ?? '',
     image.distLeft ?? '',

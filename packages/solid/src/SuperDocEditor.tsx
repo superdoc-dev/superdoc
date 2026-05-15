@@ -128,10 +128,10 @@ export function SuperDocEditor(props: SuperDocEditorProps) {
         containerId,
         toolbarId,
         () => restProps.role,
-        () => restProps.documentMode,
         () => solidProps.contained,
         () => solidProps.hideToolbar,
         () => rebuildTriggeringProps.modules,
+        () => rebuildTriggeringProps.document,
       ],
       ([
         userResolved,

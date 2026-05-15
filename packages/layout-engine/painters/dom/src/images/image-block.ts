@@ -1,6 +1,6 @@
 import type { ImageBlock, ImageDrawing, ImageHyperlink } from '@superdoc/contracts';
 import { buildImageFilters } from '../runs/image-run.js';
-import { applyImageClipPath } from '../utils/image-clip-path.js';
+import { applyImageClipPath, readImageClipPathValue } from '../utils/image-clip-path.js';
 
 type BlockImageSource = ImageBlock | ImageDrawing;
 
@@ -18,17 +18,6 @@ export type CreateBlockImageContentOptions = {
   imageDisplay?: 'block' | 'inline-block';
   hyperlinkDisplay?: 'block' | 'inline-block';
   buildImageHyperlinkAnchor?: BuildImageHyperlinkAnchor;
-};
-
-const CLIP_PATH_PREFIXES = ['inset(', 'polygon(', 'circle(', 'ellipse(', 'path(', 'rect('];
-
-export const readImageClipPathValue = (value: unknown): string => {
-  if (typeof value !== 'string') return '';
-  const normalized = value.trim();
-  if (normalized.length === 0) return '';
-  const lower = normalized.toLowerCase();
-  if (!CLIP_PATH_PREFIXES.some((prefix) => lower.startsWith(prefix))) return '';
-  return normalized;
 };
 
 const resolveClipPathFromAttrs = (attrs: unknown): string => {

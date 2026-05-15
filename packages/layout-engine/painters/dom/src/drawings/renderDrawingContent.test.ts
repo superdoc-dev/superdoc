@@ -62,7 +62,8 @@ describe('renderDrawingContent', () => {
     expect(groupEl.classList.contains('superdoc-shape-group')).toBe(true);
     expect(groupEl.querySelector('img')).toBeTruthy();
     expect(chartEl.classList.contains('superdoc-chart')).toBe(true);
-    expect(chartEl.textContent).toContain('No chart data');
+    expect(chartEl.querySelector('svg')).toBeFalsy();
+    expect(chartEl.style.display).toBe('flex');
   });
 
   it('renders fallback placeholders through the shared drawing content path', () => {

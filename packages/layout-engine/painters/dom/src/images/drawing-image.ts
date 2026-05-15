@@ -13,12 +13,14 @@ export const createDrawingImageElement = (
   doc: Document,
   block: DrawingBlock,
   buildImageHyperlinkAnchor: BuildImageHyperlinkAnchor,
+  clipContainer?: HTMLElement,
 ): HTMLElement => {
   const drawing = block as ImageDrawing;
   return createBlockImageContent({
     doc,
     block: drawing,
     className: 'superdoc-drawing-image',
+    clipContainer,
     imageDisplay: 'block',
     buildImageHyperlinkAnchor,
   });

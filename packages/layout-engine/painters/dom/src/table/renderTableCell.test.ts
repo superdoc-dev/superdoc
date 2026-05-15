@@ -3689,6 +3689,107 @@ describe('renderTableCell', () => {
       expect(capturedBlock.shapes.length).toBe(1);
     });
 
+    it('passes the table drawing inner wrapper as the clip container', () => {
+      const vectorShapeBlock = {
+        kind: 'drawing' as const,
+        id: 'drawing-clip-container',
+        drawingKind: 'vectorShape' as const,
+        geometry: { width: 100, height: 100, rotation: 0, flipH: false, flipV: false },
+        shapeKind: 'rect' as const,
+      };
+
+      const drawingMeasure = {
+        kind: 'drawing' as const,
+        width: 100,
+        height: 100,
+      };
+
+      let capturedClipContainer: HTMLElement | undefined;
+      const mockRenderDrawingContent = (
+        _block: DrawingBlock,
+        options?: { clipContainer?: HTMLElement },
+      ): HTMLElement => {
+        capturedClipContainer = options?.clipContainer;
+        const div = doc.createElement('div');
+        div.classList.add('test-drawing-element');
+        return div;
+      };
+
+      const { cellElement } = renderTableCell({
+        ...createBaseDeps(),
+        cellMeasure: {
+          blocks: [drawingMeasure],
+          width: 120,
+          height: 120,
+          gridColumnStart: 0,
+          colSpan: 1,
+          rowSpan: 1,
+        },
+        cell: {
+          id: 'cell-drawing-clip-container',
+          blocks: [vectorShapeBlock],
+          attrs: {},
+        },
+        renderDrawingContent: mockRenderDrawingContent,
+      });
+
+      const drawingInner = cellElement.querySelector('.superdoc-table-drawing') as HTMLElement | null;
+      expect(capturedClipContainer).toBe(drawingInner);
+      expect(drawingInner?.style.overflow).toBe('hidden');
+    });
+
+    it('applies drawing SDT metadata from attrs.sdt only', () => {
+      const sdt: SdtMetadata = {
+        id: 'drawing-sdt',
+        tag: 'Drawing SDT',
+        alias: 'Drawing',
+      };
+      const vectorShapeBlock = {
+        kind: 'drawing' as const,
+        id: 'drawing-sdt-block',
+        drawingKind: 'vectorShape' as const,
+        geometry: { width: 100, height: 100, rotation: 0, flipH: false, flipV: false },
+        shapeKind: 'rect' as const,
+        attrs: {
+          sdt,
+          unrelated: 'must-not-be-treated-as-sdt',
+        },
+      };
+
+      const drawingMeasure = {
+        kind: 'drawing' as const,
+        width: 100,
+        height: 100,
+      };
+
+      const appliedMetadata: Array<SdtMetadata | null | undefined> = [];
+      const { cellElement } = renderTableCell({
+        ...createBaseDeps(),
+        cellMeasure: {
+          blocks: [drawingMeasure],
+          width: 120,
+          height: 120,
+          gridColumnStart: 0,
+          colSpan: 1,
+          rowSpan: 1,
+        },
+        cell: {
+          id: 'cell-drawing-sdt',
+          blocks: [vectorShapeBlock],
+          attrs: {},
+        },
+        renderDrawingContent: () => doc.createElement('div'),
+        applySdtDataset: (_el, metadata) => {
+          appliedMetadata.push(metadata);
+        },
+      });
+
+      const drawingWrapper = cellElement.querySelector('.superdoc-table-drawing')?.parentElement as HTMLElement | null;
+      expect(drawingWrapper).toBeTruthy();
+      expect(appliedMetadata).toContain(sdt);
+      expect(appliedMetadata).not.toContain(vectorShapeBlock.attrs as unknown as SdtMetadata);
+    });
+
     it('should apply width and height styles to returned element', () => {
       const vectorShapeBlock = {
         kind: 'drawing' as const,

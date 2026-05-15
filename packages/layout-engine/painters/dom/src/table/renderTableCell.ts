@@ -1,7 +1,6 @@
 import type {
   CellBorders,
   DrawingBlock,
-  ImageDrawing,
   DrawingMeasure,
   Fragment,
   ImageBlock,
@@ -33,6 +32,7 @@ import {
 import { applyCellBorders } from './border-utils.js';
 import { renderTableFragment as renderTableFragmentElement } from './renderTableFragment.js';
 import { renderParagraphContent } from '../paragraph/renderParagraphContent.js';
+import { renderTableDrawingFrame } from '../drawings/tableDrawingFrame.js';
 
 type TableRowMeasure = TableMeasure['rows'][number];
 type TableCellMeasure = TableRowMeasure['cells'][number];
@@ -221,7 +221,7 @@ type EmbeddedTableRenderParams = {
     options?: { inTableParagraph?: boolean; wrapperEl?: HTMLElement },
   ) => void;
   /** Optional callback to render drawing content (shapes, etc.) */
-  renderDrawingContent?: (block: DrawingBlock) => HTMLElement;
+  renderDrawingContent?: (block: DrawingBlock, options?: { clipContainer?: HTMLElement }) => HTMLElement;
   /** Function to apply SDT metadata as data attributes */
   applySdtDataset: (el: HTMLElement | null, metadata?: SdtMetadata | null) => void;
   /** Starting row index for partial rendering (inclusive, default 0) */
@@ -570,7 +570,7 @@ type TableCellRenderDependencies = {
    * The returned element will have width: 100% and height: 100% styles applied automatically.
    * If undefined, a placeholder element with diagonal stripes pattern is rendered instead.
    */
-  renderDrawingContent?: (block: DrawingBlock) => HTMLElement;
+  renderDrawingContent?: (block: DrawingBlock, options?: { clipContainer?: HTMLElement }) => HTMLElement;
   /** Rendering context */
   context: FragmentRenderContext;
   /** Function to apply SDT metadata as data attributes */
@@ -892,57 +892,16 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
           continue;
         }
 
-        const drawingWrapper = doc.createElement('div');
-        drawingWrapper.style.position = 'relative';
-        drawingWrapper.style.width = `${blockMeasure.width}px`;
-        drawingWrapper.style.height = `${blockMeasure.height}px`;
-        drawingWrapper.style.flexShrink = '0';
-        drawingWrapper.style.maxWidth = '100%';
-        drawingWrapper.style.boxSizing = 'border-box';
-        applySdtDataset(drawingWrapper, (block as DrawingBlock).attrs as SdtMetadata | undefined);
-
-        const drawingInner = doc.createElement('div');
-        drawingInner.classList.add('superdoc-table-drawing');
-        drawingInner.style.width = '100%';
-        drawingInner.style.height = '100%';
-        drawingInner.style.display = 'flex';
-        drawingInner.style.alignItems = 'center';
-        drawingInner.style.justifyContent = 'center';
-        drawingInner.style.overflow = 'hidden';
-
-        if (block.drawingKind === 'image' && 'src' in block && block.src) {
-          drawingInner.appendChild(
-            createBlockImageContent({
-              doc,
-              block: block as ImageDrawing,
-              className: 'superdoc-drawing-image',
-              clipContainer: drawingInner,
-              imageDisplay: 'block',
-              buildImageHyperlinkAnchor: buildTableImageHyperlinkAnchor,
-            }),
-          );
-        } else if (renderDrawingContent) {
-          // Use the callback for other drawing types (vectorShape, shapeGroup, etc.)
-          const drawingContent = renderDrawingContent(block as DrawingBlock);
-          drawingContent.style.width = '100%';
-          drawingContent.style.height = '100%';
-          drawingInner.appendChild(drawingContent);
-        } else {
-          // Fallback placeholder when no rendering callback is provided
-          const placeholder = doc.createElement('div');
-          placeholder.classList.add('superdoc-drawing-placeholder');
-          placeholder.style.width = '100%';
-          placeholder.style.height = '100%';
-          const stripePattern =
-            'repeating-linear-gradient(45deg, rgba(15,23,42,0.1), rgba(15,23,42,0.1) 6px, rgba(15,23,42,0.2) 6px, rgba(15,23,42,0.2) 12px)';
-          // Set both shorthand and longhand to handle partial CSS property support in test DOMs.
-          placeholder.style.background = stripePattern;
-          placeholder.style.backgroundImage = stripePattern;
-          placeholder.style.border = '1px dashed rgba(15, 23, 42, 0.3)';
-          drawingInner.appendChild(placeholder);
-        }
-
-        drawingWrapper.appendChild(drawingInner);
+        const drawingWrapper = renderTableDrawingFrame({
+          doc,
+          block,
+          width: blockMeasure.width,
+          height: blockMeasure.height,
+          position: 'relative',
+          flexShrink: '0',
+          renderDrawingContent,
+          applySdtDataset,
+        });
         content.appendChild(drawingWrapper);
         flowCursorY += blockMeasure.height;
         continue;
@@ -1104,57 +1063,18 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
         );
         content.appendChild(imageWrapper);
       } else {
-        const drawingWrapper = doc.createElement('div');
-        drawingWrapper.style.position = 'absolute';
-        drawingWrapper.style.left = `${left}px`;
-        drawingWrapper.style.top = `${top}px`;
-        drawingWrapper.style.width = `${objectWidth}px`;
-        drawingWrapper.style.height = `${objectHeight}px`;
-        drawingWrapper.style.maxWidth = '100%';
-        drawingWrapper.style.boxSizing = 'border-box';
-        drawingWrapper.style.zIndex = String(zIndex);
-        applySdtDataset(drawingWrapper, anchoredBlock.attrs as SdtMetadata | undefined);
-
-        const drawingInner = doc.createElement('div');
-        drawingInner.classList.add('superdoc-table-drawing');
-        drawingInner.style.width = '100%';
-        drawingInner.style.height = '100%';
-        drawingInner.style.display = 'flex';
-        drawingInner.style.alignItems = 'center';
-        drawingInner.style.justifyContent = 'center';
-        drawingInner.style.overflow = 'hidden';
-
-        if (anchoredBlock.drawingKind === 'image' && 'src' in anchoredBlock && anchoredBlock.src) {
-          drawingInner.appendChild(
-            createBlockImageContent({
-              doc,
-              block: anchoredBlock as ImageDrawing,
-              className: 'superdoc-drawing-image',
-              clipContainer: drawingInner,
-              imageDisplay: 'block',
-              buildImageHyperlinkAnchor: buildTableImageHyperlinkAnchor,
-            }),
-          );
-        } else if (renderDrawingContent) {
-          const drawingContent = renderDrawingContent(anchoredBlock as DrawingBlock);
-          drawingContent.style.width = '100%';
-          drawingContent.style.height = '100%';
-          drawingInner.appendChild(drawingContent);
-        } else {
-          const placeholder = doc.createElement('div');
-          placeholder.classList.add('superdoc-drawing-placeholder');
-          placeholder.style.width = '100%';
-          placeholder.style.height = '100%';
-          const stripePattern =
-            'repeating-linear-gradient(45deg, rgba(15,23,42,0.1), rgba(15,23,42,0.1) 6px, rgba(15,23,42,0.2) 6px, rgba(15,23,42,0.2) 12px)';
-          // Set both shorthand and longhand to handle partial CSS property support in test DOMs.
-          placeholder.style.background = stripePattern;
-          placeholder.style.backgroundImage = stripePattern;
-          placeholder.style.border = '1px dashed rgba(15, 23, 42, 0.3)';
-          drawingInner.appendChild(placeholder);
-        }
-
-        drawingWrapper.appendChild(drawingInner);
+        const drawingWrapper = renderTableDrawingFrame({
+          doc,
+          block: anchoredBlock,
+          width: objectWidth,
+          height: objectHeight,
+          position: 'absolute',
+          left,
+          top,
+          zIndex,
+          renderDrawingContent,
+          applySdtDataset,
+        });
         content.appendChild(drawingWrapper);
       }
     }

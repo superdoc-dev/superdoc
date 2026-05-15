@@ -346,28 +346,40 @@ function alreadyMatchesPlainTextReplacement(
   return isCanonicalPlainTextParagraph(getOnlyChild(sdt.node), expectedText);
 }
 
+/**
+ * Replace the text content of an SDT, operating on the inner content range
+ * (pos+1 to pos+nodeSize-1) instead of rewriting the whole wrapper. This
+ * keeps the wrapper node intact so the structured-content lock plugin's
+ * filterTransaction doesn't read the change as wrapper damage on `sdtLocked`
+ * controls, which would silently no-op (spec: sdtLocked protects the wrapper
+ * but the content is editable).
+ *
+ * Callers that need to enforce content-lock semantics (`contentLocked` and
+ * `sdtContentLocked`) must call `assertNotContentLocked` before reaching
+ * here; this helper trusts that guard and emits a content-range step.
+ */
 function replaceSdtTextContent(editor: Editor, target: ContentControlTarget, text: string): boolean {
   const resolved = resolveSdtByTarget(editor.state.doc, target);
+  const { tr } = editor.state;
+  const innerFrom = resolved.pos + 1;
+  const innerTo = resolved.pos + resolved.node.nodeSize - 1;
 
   if (resolved.kind === 'inline') {
-    const updateCmd = editor.commands?.updateStructuredContentById;
     if (text.length > 0) {
-      return Boolean(updateCmd?.(target.nodeId, { text }));
+      const textNode = editor.schema.text(text);
+      tr.replaceWith(innerFrom, innerTo, textNode);
+    } else {
+      tr.delete(innerFrom, innerTo);
     }
-
-    const updatedNode = resolved.node.type.create({ ...resolved.node.attrs }, null, resolved.node.marks);
-    const { tr } = editor.state;
-    tr.replaceWith(resolved.pos, resolved.pos + resolved.node.nodeSize, updatedNode);
     dispatchTransaction(editor, tr);
     return true;
   }
 
   const paragraph = buildEmptyBlockContent(editor, resolved.node);
+  if (!paragraph) return false;
   const paragraphText = text.length > 0 ? buildTextWithTabs(editor.schema, text, undefined) : null;
-  const updatedParagraph = paragraph?.type.create(paragraph.attrs ?? null, paragraphText, paragraph.marks) ?? null;
-  const updatedNode = resolved.node.type.create({ ...resolved.node.attrs }, updatedParagraph, resolved.node.marks);
-  const { tr } = editor.state;
-  tr.replaceWith(resolved.pos, resolved.pos + resolved.node.nodeSize, updatedNode);
+  const updatedParagraph = paragraph.type.create(paragraph.attrs ?? null, paragraphText, paragraph.marks);
+  tr.replaceWith(innerFrom, innerTo, updatedParagraph);
   dispatchTransaction(editor, tr);
   return true;
 }

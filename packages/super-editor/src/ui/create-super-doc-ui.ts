@@ -1690,7 +1690,11 @@ export function createSuperDocUI(options: SuperDocUIOptions): SuperDocUI {
       // retrying / scroll-and-retry loops for a target shape we don't
       // handle. Keep this list aligned with the supported branches in
       // `PresentationEditor.getEntityRects`.
-      if (entity.entityType !== 'comment' && entity.entityType !== 'trackedChange') {
+      if (
+        entity.entityType !== 'comment' &&
+        entity.entityType !== 'trackedChange' &&
+        entity.entityType !== 'contentControl'
+      ) {
         return { success: false, reason: 'invalid-target' };
       }
 

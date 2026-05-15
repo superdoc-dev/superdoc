@@ -57,8 +57,12 @@ const generallyAllowed = computed(() => {
 const allowResolve = computed(() => {
   if (!generallyAllowed.value) return false;
 
-  // Do not allow child comments to resolve
+  // Do not allow child comments to resolve. A reply anchored to a tracked
+  // change keeps the linkage via trackedChangeParentId (no parentCommentId),
+  // so treat it as a child too — otherwise re-imported TC replies render an
+  // extra resolve affordance that the live pre-export state doesn't (SD-2528).
   if (props.comment.parentCommentId) return false;
+  if (props.comment.trackedChangeParentId) return false;
 
   const context = {
     comment: props.comment,
@@ -134,8 +138,15 @@ const handleSelect = (value) => emit('overflow-select', value);
 
 // Imported comments have `origin` set (e.g. 'word'); imported tracked changes
 // don't carry `origin` but do carry `importedAuthor` from the mark attributes.
+// SD-2528: suppress the IMPORTED tag when the current user is the author —
+// re-opening your own exported file shouldn't relabel your own comments as
+// "imported"; that visual churn is what made round-tripping look broken.
 const isImported = computed(() => {
-  return props.comment.origin != null || !!props.comment.importedAuthor?.name;
+  const hasImportOrigin = props.comment.origin != null || !!props.comment.importedAuthor?.name;
+  if (!hasImportOrigin) return false;
+  const currentUserEmail = proxy.$superdoc.config.user?.email;
+  if (currentUserEmail && props.comment.creatorEmail === currentUserEmail) return false;
+  return true;
 });
 
 const getCurrentUser = computed(() => {

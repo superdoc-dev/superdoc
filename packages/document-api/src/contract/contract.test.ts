@@ -391,6 +391,7 @@ describe('document-api contract catalog', () => {
       'diff',
       'protection',
       'permissionRanges',
+      'customXml',
     ];
     for (const id of OPERATION_IDS) {
       expect(validGroups, `${id} has invalid referenceGroup`).toContain(OPERATION_DEFINITIONS[id].referenceGroup);

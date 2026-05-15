@@ -680,6 +680,26 @@ import type {
   BookmarkMutationResult,
 } from './bookmarks/bookmarks.types.js';
 
+import type { CustomXmlApi, CustomXmlAdapter } from './customXml/customXml.js';
+import {
+  executeCustomXmlPartsList,
+  executeCustomXmlPartsGet,
+  executeCustomXmlPartsCreate,
+  executeCustomXmlPartsPatch,
+  executeCustomXmlPartsRemove,
+} from './customXml/customXml.js';
+import type {
+  CustomXmlPartsListInput,
+  CustomXmlPartsListResult,
+  CustomXmlPartsGetInput,
+  CustomXmlPartInfo,
+  CustomXmlPartsCreateInput,
+  CustomXmlPartsCreateResult,
+  CustomXmlPartsPatchInput,
+  CustomXmlPartsRemoveInput,
+  CustomXmlPartsMutationResult,
+} from './customXml/customXml.types.js';
+
 import type { ProtectionApi, ProtectionAdapter } from './protection/protection.js';
 import {
   executeProtectionGet,
@@ -1034,6 +1054,12 @@ export type {
 } from './images/images.types.js';
 export type { TocApi, TocAdapter } from './toc/toc.js';
 export type { BookmarksApi, BookmarksAdapter } from './bookmarks/bookmarks.js';
+export type {
+  CustomXmlApi,
+  CustomXmlAdapter,
+  CustomXmlPartsApi,
+  CustomXmlPartsAdapter,
+} from './customXml/customXml.js';
 
 export type { ProtectionApi, ProtectionAdapter } from './protection/protection.js';
 export * from './protection/protection.types.js';
@@ -1201,6 +1227,7 @@ export type {
   HyperlinksRemoveInput,
 } from './hyperlinks/hyperlinks.types.js';
 export type * from './bookmarks/bookmarks.types.js';
+export type * from './customXml/customXml.types.js';
 
 export type * from './footnotes/footnotes.types.js';
 export type * from './cross-refs/cross-refs.types.js';
@@ -1705,6 +1732,11 @@ export interface DocumentApi {
    */
   permissionRanges: PermissionRangesApi;
   /**
+   * Custom XML Data Storage Part operations (ECMA-376 §15.2.5, §15.2.6).
+   * Read and write raw custom XML parts in the OOXML package.
+   */
+  customXml: CustomXmlApi;
+  /**
    * Runtime capability introspection.
    *
    * Callable directly (`capabilities()`) or via `.get()`.
@@ -1776,6 +1808,8 @@ export interface DocumentApiAdapters {
   history: HistoryAdapter;
   protection: ProtectionAdapter;
   permissionRanges: PermissionRangesAdapter;
+  /** Custom XML Data Storage Part operations. Optional; not all engines support custom XML. */
+  customXml?: CustomXmlAdapter;
 }
 
 /**
@@ -3264,6 +3298,25 @@ export function createDocumentApi(adapters: DocumentApiAdapters): DocumentApi {
         options?: MutationOptions,
       ): PermissionRangeMutationResult {
         return executePermissionRangesUpdatePrincipal(adapters.permissionRanges, input, options);
+      },
+    },
+    customXml: {
+      parts: {
+        list(input?: CustomXmlPartsListInput): CustomXmlPartsListResult {
+          return executeCustomXmlPartsList(requireAdapter(adapters.customXml, 'customXml').parts, input);
+        },
+        get(input: CustomXmlPartsGetInput): CustomXmlPartInfo | null {
+          return executeCustomXmlPartsGet(requireAdapter(adapters.customXml, 'customXml').parts, input);
+        },
+        create(input: CustomXmlPartsCreateInput, options?: MutationOptions): CustomXmlPartsCreateResult {
+          return executeCustomXmlPartsCreate(requireAdapter(adapters.customXml, 'customXml').parts, input, options);
+        },
+        patch(input: CustomXmlPartsPatchInput, options?: MutationOptions): CustomXmlPartsMutationResult {
+          return executeCustomXmlPartsPatch(requireAdapter(adapters.customXml, 'customXml').parts, input, options);
+        },
+        remove(input: CustomXmlPartsRemoveInput, options?: MutationOptions): CustomXmlPartsMutationResult {
+          return executeCustomXmlPartsRemove(requireAdapter(adapters.customXml, 'customXml').parts, input, options);
+        },
       },
     },
     invoke(request: DynamicInvokeRequest): unknown {

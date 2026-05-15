@@ -225,6 +225,64 @@ describe('handleStructuredContentNode', () => {
     });
   });
 
+  describe('w:temporary parsing (SD-3111)', () => {
+    const parseTemporary = (sdtPrElements) => {
+      const node = createNode(sdtPrElements, [{ name: 'w:r', text: 'content' }]);
+      const params = { nodes: [node], nodeListHandler: mockNodeListHandler };
+      parseAnnotationMarks.mockReturnValue({ marks: [] });
+      return handleStructuredContentNode(params).attrs.temporary;
+    };
+
+    it('reads <w:temporary/> as true (empty toggle)', () => {
+      expect(parseTemporary([{ name: 'w:temporary' }])).toBe(true);
+    });
+
+    it('reads <w:temporary w:val="true"/> as true', () => {
+      expect(parseTemporary([{ name: 'w:temporary', attributes: { 'w:val': 'true' } }])).toBe(true);
+    });
+
+    it('reads <w:temporary w:val="1"/> as true', () => {
+      expect(parseTemporary([{ name: 'w:temporary', attributes: { 'w:val': '1' } }])).toBe(true);
+    });
+
+    it('reads <w:temporary w:val="false"/> as false', () => {
+      expect(parseTemporary([{ name: 'w:temporary', attributes: { 'w:val': 'false' } }])).toBe(false);
+    });
+
+    it('reads <w:temporary w:val="0"/> as false', () => {
+      expect(parseTemporary([{ name: 'w:temporary', attributes: { 'w:val': '0' } }])).toBe(false);
+    });
+
+    it('reads <w:temporary w:val="on"/> as true (ST_OnOff alias)', () => {
+      expect(parseTemporary([{ name: 'w:temporary', attributes: { 'w:val': 'on' } }])).toBe(true);
+    });
+
+    it('reads <w:temporary w:val="off"/> as false (ST_OnOff alias)', () => {
+      // Without going through the shared ST_OnOff set this would
+      // incorrectly fall through to true. See utils.js parseStrictStOnOff.
+      expect(parseTemporary([{ name: 'w:temporary', attributes: { 'w:val': 'off' } }])).toBe(false);
+    });
+
+    it('returns undefined for invalid w:val tokens (parser rejects unknown tokens)', () => {
+      expect(parseTemporary([{ name: 'w:temporary', attributes: { 'w:val': 'banana' } }])).toBeUndefined();
+    });
+
+    it('returns undefined (not false) when <w:temporary> is absent', () => {
+      // Spec contract: absent in source XML stays undefined so consumers
+      // can distinguish "Word's effective default" from "explicit false".
+      expect(parseTemporary([])).toBeUndefined();
+      expect(parseTemporary([{ name: 'w:tag', attributes: { 'w:val': 'unrelated' } }])).toBeUndefined();
+    });
+
+    it('does not stamp temporary on attrs when absent (preserves "undefined" semantics)', () => {
+      const node = createNode([], [{ name: 'w:r', text: 'content' }]);
+      const params = { nodes: [node], nodeListHandler: mockNodeListHandler };
+      parseAnnotationMarks.mockReturnValue({ marks: [] });
+      const result = handleStructuredContentNode(params);
+      expect('temporary' in result.attrs).toBe(false);
+    });
+  });
+
   describe('controlType detection', () => {
     const detectFrom = (sdtPrElements) => {
       const node = createNode(sdtPrElements, [{ name: 'w:r', text: 'content' }]);

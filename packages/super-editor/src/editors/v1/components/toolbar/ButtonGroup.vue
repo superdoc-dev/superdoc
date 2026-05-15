@@ -227,6 +227,17 @@ const moveToPreviousButtonGroup = (e) => {
   }
 };
 
+const activateToolbarItem = (item) => {
+  if (item.disabled.value) return;
+
+  if (isDropdown(item)) {
+    handleDropdownUpdateShowForItem(!getExpanded(item), item);
+    return;
+  }
+
+  handleToolbarButtonClick(item, null, false);
+};
+
 // Implement keyboard navigation using Roving Tabindex
 // https://www.w3.org/WAI/ARIA/apg/practices/keyboard-interface/#kbd_roving_tabindex
 // Set tabindex to 0 for the current focused button
@@ -239,11 +250,16 @@ const handleKeyDown = (e, item) => {
   if (isTypingField && isTypingToolbarItem) {
     return;
   }
+
+  const handledKeys = ['Enter', ' ', 'Spacebar', 'Escape', 'ArrowRight', 'ArrowLeft', 'Tab'];
+  if (!handledKeys.includes(e.key)) return;
   e.preventDefault();
 
   switch (e.key) {
     case 'Enter':
-      handleToolbarButtonClick(item, null, false);
+    case ' ':
+    case 'Spacebar':
+      activateToolbarItem(item);
       break;
     case 'Escape':
       closeDropdowns();
@@ -377,6 +393,7 @@ onBeforeUnmount(() => {
               <ToolbarButton
                 :toolbar-item="item"
                 :disabled="item.disabled.value"
+                :allow-enter-propagation="true"
                 @textSubmit="handleToolbarButtonTextSubmit(item, $event)"
                 @mainClick="handleSplitButtonMainClick(item)"
               />

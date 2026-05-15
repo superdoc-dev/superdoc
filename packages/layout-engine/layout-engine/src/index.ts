@@ -1256,8 +1256,17 @@ export function layoutDocument(blocks: FlowBlock[], measures: Measure[], options
      * cell.paragraph; demand is attributed to the *table* block, not the cell,
      * because the table is the unit the body paginator places on a page.
      */
+    // Dedupe refs by footnote id: the rendered footnote band only carries each id
+    // once per page, so charging body demand once is the matching accounting.
+    // Keeping the first ref position is sufficient — block-aware breaks only care
+    // that the demand lands on *some* containing block.
     const refByPos = new Map<number, string>();
-    for (const ref of refs) refByPos.set(ref.pos, ref.id);
+    const seenIds = new Set<string>();
+    for (const ref of refs) {
+      if (seenIds.has(ref.id)) continue;
+      seenIds.add(ref.id);
+      refByPos.set(ref.pos, ref.id);
+    }
 
     const recordIfHit = (range: { pmStart: number; pmEnd: number }, topLevelId: string): void => {
       for (const [pos, refId] of refByPos.entries()) {

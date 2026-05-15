@@ -276,6 +276,73 @@ describe('SD-3049: body break consults anchored footnote demand', () => {
     expect(gap).toBeGreaterThanOrEqual(0);
   });
 
+  it('does not double-count demand when the same footnote id is referenced twice on a page', async () => {
+    // Two refs to footnote id `1` on the same page must contribute its body
+    // height once — the rendered footnote band dedupes per page, so the body
+    // paginator must too. Otherwise the page reserves 2× the real demand and
+    // leaves phantom whitespace above the separator.
+
+    const BODY_LINES = 25;
+    const LINE_H = 20;
+    const FOOTNOTE_LINES = 5;
+    const FOOTNOTE_LINE_H = 12;
+
+    let pos = 0;
+    const blocks: FlowBlock[] = [];
+    for (let i = 0; i < BODY_LINES; i += 1) {
+      const text = `Body line ${i + 1}.`;
+      blocks.push(makeParagraph(`body-${i}`, text, pos));
+      pos += text.length + 1;
+    }
+    const firstRefBlock = blocks[4];
+    const secondRefBlock = blocks[19];
+    const firstRefPos = (firstRefBlock.kind === 'paragraph' ? (firstRefBlock.runs?.[0]?.pmStart ?? 0) : 0) + 2;
+    const secondRefPos = (secondRefBlock.kind === 'paragraph' ? (secondRefBlock.runs?.[0]?.pmStart ?? 0) : 0) + 2;
+    const ftBlock = makeParagraph('footnote-1-0-paragraph', 'Footnote body.', 0);
+
+    const measureBlock = vi.fn(async (b: FlowBlock) => {
+      if (b.id.startsWith('footnote-')) return makeMeasure(FOOTNOTE_LINE_H, FOOTNOTE_LINES);
+      return makeMeasure(LINE_H, 1);
+    });
+
+    const margins = { top: 72, right: 72, bottom: 72, left: 72 };
+    const result = await incrementalLayout(
+      [],
+      null,
+      blocks,
+      {
+        pageSize: { w: 612, h: 600 + margins.top + margins.bottom },
+        margins,
+        footnotes: {
+          refs: [
+            { id: '1', pos: firstRefPos },
+            { id: '1', pos: secondRefPos },
+          ],
+          blocksById: new Map([['1', [ftBlock]]]),
+          topPadding: 6,
+          dividerHeight: 6,
+        },
+      },
+      measureBlock,
+    );
+
+    const page1 = result.layout.pages[0];
+    const bodyMaxBottom = page1.fragments
+      .filter((f) => !String(f.blockId).startsWith('footnote-'))
+      .reduce((max, f) => {
+        const y = (f as { y?: number }).y ?? 0;
+        const fromLine = (f as { fromLine?: number }).fromLine ?? 0;
+        const toLine = (f as { toLine?: number }).toLine ?? fromLine + 1;
+        return Math.max(max, y + Math.max(1, toLine - fromLine) * LINE_H);
+      }, 0);
+    const sepFrag = page1.fragments.find((f) => String(f.blockId).startsWith('footnote-separator'));
+    const sepTop = (sepFrag as { y?: number } | undefined)?.y ?? Infinity;
+
+    const gap = sepTop - bodyMaxBottom;
+    expect(gap).toBeLessThanOrEqual(28);
+    expect(gap).toBeGreaterThanOrEqual(0);
+  });
+
   it('does not change layout when document has no footnotes (no-op invariant)', async () => {
     // Regression guard: the new code path must not affect layouts without footnotes.
     const BODY_LINES = 50;

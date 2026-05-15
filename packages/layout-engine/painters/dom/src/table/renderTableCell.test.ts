@@ -3967,6 +3967,95 @@ describe('renderTableCell', () => {
       expect(tableChrome?.querySelector('.superdoc-structured-content__label')?.textContent).toBe('Nested Table');
     });
 
+    it('should set overflow:visible when only rendered nested descendants have SDT chrome', () => {
+      const descendantSdt: SdtMetadata = {
+        type: 'structuredContent',
+        scope: 'block',
+        id: 'nested-descendant-sdt',
+        alias: 'Nested Descendant',
+      };
+      const nestedParagraph: ParagraphBlock = {
+        kind: 'paragraph',
+        id: 'nested-descendant-sdt-para',
+        runs: [{ text: 'Nested', fontFamily: 'Arial', fontSize: 16 }],
+        attrs: { sdt: descendantSdt },
+      };
+      const nestedTable: TableBlock = {
+        kind: 'table',
+        id: 'nested-table-with-descendant-sdt',
+        rows: [
+          {
+            id: 'nested-descendant-row',
+            cells: [
+              {
+                id: 'nested-descendant-cell',
+                blocks: [nestedParagraph],
+                attrs: {},
+              },
+            ],
+          },
+        ],
+      };
+      const nestedMeasure: TableMeasure = {
+        kind: 'table',
+        rows: [
+          {
+            height: 24,
+            cells: [
+              {
+                width: 80,
+                height: 24,
+                gridColumnStart: 0,
+                colSpan: 1,
+                rowSpan: 1,
+                blocks: [
+                  {
+                    kind: 'paragraph',
+                    lines: [
+                      {
+                        fromRun: 0,
+                        fromChar: 0,
+                        toRun: 0,
+                        toChar: 6,
+                        width: 60,
+                        ascent: 12,
+                        descent: 4,
+                        lineHeight: 20,
+                      },
+                    ],
+                    totalHeight: 20,
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+        columnWidths: [80],
+        totalWidth: 80,
+        totalHeight: 24,
+      };
+
+      const { cellElement } = renderTableCell({
+        ...createBaseDeps(),
+        cellMeasure: {
+          blocks: [nestedMeasure],
+          width: 120,
+          height: 40,
+          gridColumnStart: 0,
+          colSpan: 1,
+          rowSpan: 1,
+        },
+        cell: {
+          id: 'cell-nested-descendant-sdt',
+          blocks: [nestedTable],
+          attrs: {},
+        },
+      });
+
+      expect(cellElement.style.overflow).toBe('visible');
+      expect(cellElement.querySelector('.superdoc-structured-content__label')?.textContent).toBe('Nested Descendant');
+    });
+
     it('should not apply nested table chrome when its SDT key matches the ancestor table SDT key', () => {
       const sharedSdt: SdtMetadata = {
         type: 'structuredContent',

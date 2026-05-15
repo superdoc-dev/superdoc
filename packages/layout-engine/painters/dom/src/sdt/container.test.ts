@@ -65,10 +65,12 @@ describe('SDT container chrome', () => {
       scope: 'block',
       id: 'container-sdt',
       alias: 'Container',
+      lockMode: 'contentLocked',
     });
 
     expect(el.classList.contains('superdoc-structured-content-block')).toBe(true);
     expect(el.querySelector('.superdoc-structured-content__label')?.textContent).toBe('Container');
+    expect(el.dataset.lockMode).toBe('contentLocked');
   });
 
   it('uses the rendered container metadata for lock mode', () => {
@@ -143,6 +145,20 @@ describe('SDT container chrome', () => {
         ancestorContainerSdt: ancestorSdt,
       }),
     ).toBe(true);
+  });
+
+  it('suppresses pure id-less container metadata by reference', () => {
+    const sharedSdt: SdtMetadata = {
+      type: 'structuredContent',
+      scope: 'block',
+      alias: 'Shared',
+    };
+
+    expect(
+      shouldRenderSdtContainerChrome(null, sharedSdt, {
+        ancestorContainerSdt: sharedSdt,
+      }),
+    ).toBe(false);
   });
 
   it('computes stable sibling start and end boundaries', () => {

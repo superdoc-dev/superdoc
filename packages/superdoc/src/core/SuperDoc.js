@@ -1323,27 +1323,29 @@ export class SuperDoc extends EventEmitter {
   /**
    * Scroll the document to a given comment by id.
    *
+   * Delegates to {@link scrollToElement} so it works in both flow and
+   * paginated layouts. The previous implementation looked up the highlight
+   * span via `[data-comment-ids*=...]` and called `scrollIntoView()` on it
+   * directly — that fails in paginated/print mode (the painter virtualises
+   * pages so the highlight may not be in the DOM) and also fails for marks
+   * SuperDoc didn't emit a visible highlight for (e.g. two marks sharing a
+   * single position). The unified path walks the ProseMirror doc for the
+   * mark and dispatches to the presentation editor where available,
+   * falling back to the body editor in flow mode.
+   *
    * @param {string} commentId The comment id
    * @param {{ behavior?: ScrollBehavior, block?: ScrollLogicalPosition }} [options]
-   * @returns {boolean} Whether a matching element was found
+   * @returns {Promise<boolean>} Whether the comment was found and scrolled to
    */
-  scrollToComment(commentId, options = {}) {
+  async scrollToComment(commentId, options = {}) {
     const commentsConfig = this.config?.modules?.comments;
-    // `commentsConfig` can be `false | object | undefined`; `!commentsConfig`
-    // already covers both `false` and `undefined`, so the secondary
-    // `=== false` check below is redundant.
     if (!commentsConfig) return false;
     if (!commentId || typeof commentId !== 'string') return false;
 
-    const root = this.element || document;
-    const escaped = globalThis.CSS?.escape ? globalThis.CSS.escape(commentId) : commentId.replace(/"/g, '\\"');
-    const element = root.querySelector(`[data-comment-ids*="${escaped}"]`);
-    if (!element) return false;
-
-    const { behavior = 'smooth', block = 'start' } = options ?? {};
-    element.scrollIntoView({ behavior, block });
+    // Activate the thread in the side panel for visual continuity even if
+    // the scroll path subsequently bails.
     this.commentsStore?.setActiveComment?.(this, commentId);
-    return true;
+    return this.scrollToElement(commentId, options);
   }
 
   /**
@@ -1371,7 +1373,13 @@ export class SuperDoc extends EventEmitter {
    * change entityId. The method resolves the element type automatically
    * and scrolls to it.
    *
+   * In paginated (presentation) layouts this delegates to the
+   * presentation editor's `scrollToElement`. In flow / web layouts the
+   * presentation editor doesn't apply, so we fall back to walking the
+   * ProseMirror doc directly and scrolling the body editor's view.
+   *
    * @param {string} elementId - The element's stable ID.
+   * @param {{ behavior?: ScrollBehavior, block?: ScrollLogicalPosition }} [options]
    * @returns {Promise<boolean>} Whether the element was found and scrolled to.
    *
    * @example
@@ -1381,13 +1389,207 @@ export class SuperDoc extends EventEmitter {
    * // Navigate to a comment by its entityId
    * await superdoc.scrollToElement('imported-25def254');
    */
-  async scrollToElement(elementId) {
+  async scrollToElement(elementId, options = {}) {
+    if (!elementId) return false;
     /** @type {RuntimeDocument[] | undefined} */
     const storeDocs = this.superdocStore?.documents;
     if (!storeDocs?.length) return false;
+
     const presentationEditor = storeDocs[0].getPresentationEditor?.();
-    if (!presentationEditor?.scrollToElement) return false;
-    return presentationEditor.scrollToElement(elementId);
+    if (presentationEditor?.scrollToElement) {
+      const ok = await presentationEditor.scrollToElement(elementId);
+      if (ok) return true;
+      // Otherwise: presentationEditor may have returned false because layout
+      // state isn't active (flow/web mode masquerading as presentation). Fall
+      // through to the body-editor path.
+    }
+
+    return this._scrollToElementInBodyEditor(elementId, options);
+  }
+
+  /**
+   * Flow-layout fallback for {@link scrollToElement}.
+   *
+   * The body editor IS the visible view in flow mode, so we walk PM for the
+   * target position and use the editor's own DOM-by-position helper, then
+   * scroll the resulting element into view. Tries comment / tracked-change
+   * marks (via the existing `setCursorById` command) first, then falls back
+   * to block-level node IDs (paragraphs, headings, tables) by attribute
+   * matching.
+   *
+   * @param {string} elementId
+   * @param {{ behavior?: ScrollBehavior, block?: ScrollLogicalPosition }} [options]
+   * @returns {Promise<boolean>}
+   * @private
+   */
+  async _scrollToElementInBodyEditor(elementId, options = {}) {
+    const editor = this.activeEditor;
+    if (!editor?.state?.doc) return false;
+
+    let pos = null;
+
+    // 1. Try the comments-plugin command — handles commentMark, tracked
+    //    change marks, and commentRangeStart/End nodes uniformly.
+    const setCursorById = editor.commands?.setCursorById;
+    if (typeof setCursorById === 'function') {
+      if (setCursorById(elementId, { preferredActiveThreadId: elementId })) {
+        pos = editor.state.selection?.from;
+      }
+    }
+
+    // 2. Fall back to a single PM walk looking for matching block-level
+    //    id attributes. Block nodes can carry multiple ID-shaped attrs
+    //    at once — e.g. paragraphs from a `.docx` carry both `paraId`
+    //    (the OOXML `w14:paraId`) and `sdBlockId` (minted by SuperDoc
+    //    on import). We must compare against each independently rather
+    //    than picking the first non-null and comparing, because the
+    //    caller may have a handle on any one of them and consumers
+    //    shouldn't have to know which ID type a given block carries.
+    if (pos == null || !Number.isFinite(pos)) {
+      editor.state.doc.descendants((node, p) => {
+        if (pos != null) return false;
+        const a = node.attrs || {};
+        if (a.nodeId === elementId || a.sdBlockId === elementId || a.id === elementId || a.paraId === elementId) {
+          pos = p;
+          return false;
+        }
+      });
+    }
+
+    if (pos == null || !Number.isFinite(pos)) return false;
+
+    const targetEl = typeof editor.getElementAtPos === 'function' ? editor.getElementAtPos(pos) : null;
+    if (!targetEl?.scrollIntoView) return false;
+
+    const { behavior = 'smooth', block = 'center' } = options;
+    try {
+      targetEl.scrollIntoView({ behavior, block, inline: 'nearest' });
+    } catch {
+      // Ignore scroll failures in environments with incomplete DOM APIs.
+      return false;
+    }
+    return true;
+  }
+
+  /**
+   * Scroll to the Nth heading of a given level (1..6).
+   *
+   * In OOXML headings are paragraphs whose `paragraphProperties.styleId` is
+   * `Heading1`..`Heading6` (the schema also accepts a `heading` node type
+   * with a `level` attr for editor-native callers). This walks the doc in
+   * order, counts headings whose level matches, and scrolls to the
+   * 1-based `ordinal`-th one.
+   *
+   * @param {number} level    1..6
+   * @param {number} [ordinal=1]  1-based index among headings of that level
+   * @param {{ behavior?: ScrollBehavior, block?: ScrollLogicalPosition, timeoutMs?: number }} [options]
+   *        Pass `timeoutMs` to override the default 2 s page-mount wait
+   *        in paginated layout. Useful when jumping far from the current
+   *        viewport on long docs where the painter takes longer to
+   *        mount the target page.
+   * @returns {Promise<boolean>} Whether a matching heading was found and scrolled to
+   *
+   * @example
+   * // Scroll to the third top-level heading (a.k.a. chapter 3)
+   * await superdoc.scrollToHeading(1, 3);
+   */
+  async scrollToHeading(level, ordinal = 1, options = {}) {
+    if (!Number.isInteger(level) || level < 1 || level > 6) return false;
+    if (!Number.isInteger(ordinal) || ordinal < 1) return false;
+
+    const editor = this.activeEditor;
+    if (!editor?.state?.doc) return false;
+
+    let count = 0;
+    let foundPos = null;
+    let foundNode = null;
+    editor.state.doc.descendants((node, p) => {
+      if (foundPos !== null) return false;
+      const t = node.type?.name;
+      let nodeLevel = null;
+      if (t === 'heading' && node.attrs?.level) {
+        nodeLevel = Number(node.attrs.level);
+      } else if (t === 'paragraph') {
+        const styleId = node.attrs?.paragraphProperties?.styleId ?? node.attrs?.styleId ?? null;
+        if (typeof styleId === 'string') {
+          const m = styleId.match(/^Heading(\d)$/);
+          if (m) nodeLevel = Number(m[1]);
+        }
+      }
+      if (nodeLevel === level) {
+        count += 1;
+        if (count === ordinal) {
+          foundPos = p;
+          foundNode = node;
+          return false;
+        }
+      }
+    });
+
+    if (foundPos === null) return false;
+
+    // The position from descendants() is the doc-level boundary just
+    // BEFORE the heading paragraph. The presentation editor's
+    // layout-fragment index only covers positions INSIDE text content,
+    // so a doc-boundary position misses every fragment. Walk into the
+    // paragraph to find the first descendant that has actual text
+    // content (skipping bookmark markers, comment-range markers, etc.)
+    // and target that position instead.
+    let resolved = null;
+    if (foundNode && foundNode.content?.size > 0) {
+      foundNode.descendants((child, offset) => {
+        if (resolved !== null) return false;
+        if (child.isText && child.text && child.text.length > 0) {
+          // Position inside the paragraph = paragraph-start (foundPos+1)
+          // + descendant offset.
+          resolved = foundPos + 1 + offset;
+          return false;
+        }
+      });
+    }
+    if (resolved == null) {
+      // The heading itself carries no text content (truly-empty
+      // paragraph, or content limited to structural markers like
+      // bookmarkStart). Walk forward in the doc for the next text-bearing
+      // position so the viewport at least lands near where the heading
+      // lives instead of returning false.
+      editor.state.doc.descendants((child, p) => {
+        if (resolved !== null) return false;
+        if (p <= foundPos) return undefined;
+        if (child.isText && child.text && child.text.length > 0) {
+          resolved = p;
+          return false;
+        }
+      });
+    }
+    if (resolved != null) foundPos = resolved;
+
+    // Same dispatch as scrollToElement: presentation if available, else
+    // body-editor + DOM scrollIntoView.
+    const storeDocs = this.superdocStore?.documents;
+    const presentationEditor = storeDocs?.[0]?.getPresentationEditor?.();
+    if (typeof presentationEditor?.scrollToPositionAsync === 'function') {
+      const ok = await presentationEditor.scrollToPositionAsync(foundPos, {
+        behavior: options.behavior ?? 'auto',
+        block: options.block ?? 'center',
+        // Pass-through so callers can extend the page-mount wait on
+        // long docs without reaching into PresentationEditor directly.
+        ...(Number.isFinite(options.timeoutMs) ? { timeoutMs: options.timeoutMs } : {}),
+      });
+      if (ok) return true;
+      // Fall through to body-editor path on layout-state miss.
+    }
+
+    const targetEl = typeof editor.getElementAtPos === 'function' ? editor.getElementAtPos(foundPos) : null;
+    if (!targetEl?.scrollIntoView) return false;
+
+    const { behavior = 'smooth', block = 'center' } = options;
+    try {
+      targetEl.scrollIntoView({ behavior, block, inline: 'nearest' });
+    } catch {
+      return false;
+    }
+    return true;
   }
 
   /**

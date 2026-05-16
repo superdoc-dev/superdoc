@@ -1718,11 +1718,30 @@ export class Editor extends EventEmitter<EditorEventMap> {
     const clampedPos = Math.max(0, Math.min(pos, maxPos));
 
     try {
-      const { node } = this.view.domAtPos(clampedPos);
-      if (node && node.nodeType === 1) {
-        return node as HTMLElement;
+      // ProseMirror's domAtPos returns either:
+      //   - { node: <text>, offset: <chars into text> }, or
+      //   - { node: <element>, offset: <child index> } when the position is
+      //     between block children.
+      // The previous version returned the parent in the second case, which
+      // for the editor root means the entire document — scrolling that into
+      // view always lands at the top. Resolve to the actual child element
+      // when the returned node is an element parent.
+      const { node, offset } = this.view.domAtPos(clampedPos);
+      if (!node) return null;
+
+      if (node.nodeType === 1) {
+        const parent = node as Element;
+        if (parent.childNodes?.length) {
+          const idx = Math.min(Math.max(0, offset), parent.childNodes.length - 1);
+          const child = parent.childNodes[idx];
+          if (child) {
+            if (child.nodeType === 1) return child as HTMLElement;
+            if (child.nodeType === 3) return (child as Node).parentElement;
+          }
+        }
+        return parent as HTMLElement;
       }
-      if (node && node.nodeType === 3) {
+      if (node.nodeType === 3) {
         return node.parentElement;
       }
       return node?.parentElement ?? null;

@@ -34,9 +34,13 @@ permissions:
 concurrency:
   # Stable releases share the `release-stable` group so @semantic-release/git
   # pushes to `stable` serialize across workflows; per-workflow groups would
-  # let releases race on `git push origin stable`.
+  # let releases race on `git push origin stable`. queue: max keeps GitHub
+  # from dropping older pending stable releases when a stable push touches
+  # multiple wrapper packages; default queue: single only allows one pending.
+  # queue: max requires cancel-in-progress: false (cannot be combined with true).
   group: ${{ github.ref_name == 'stable' && 'release-stable' || format('{0}-{1}', github.workflow, github.ref) }}
-  cancel-in-progress: ${{ github.ref_name != 'stable' }}
+  cancel-in-progress: false
+  queue: max
 
 jobs:
   release:
@@ -66,8 +70,12 @@ jobs:
           ref: ${{ steps.pr.outputs.sha || '' }}
           token: ${{ steps.generate_token.outputs.token }}
 
-      - name: Refresh stable branch head
-        if: github.ref_name == 'stable' && !inputs.pr_number
+      - name: Refresh branch head
+        # Queued release runs may start against a stale checkout (queue: max
+        # plus cancel-in-progress: false). Refresh to the current branch head
+        # so @semantic-release/git pushes fast-forward; semantic-release no-ops
+        # if no new commits were added since the previous queued run released.
+        if: ${{ !inputs.pr_number }}
         run: |
           git fetch origin "${{ github.ref_name }}" --tags
           git checkout -B "${{ github.ref_name }}" "origin/${{ github.ref_name }}"

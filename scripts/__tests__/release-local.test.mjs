@@ -301,6 +301,63 @@ test('stable release workflows serialize on the shared release-stable concurrenc
   }
 });
 
+test('release workflows queue (do not cancel) and use queue: max so multi-package stable pushes do not drop runs', async () => {
+  // GitHub Actions default concurrency queue allows one running + one
+  // pending per group. With three release workflows joining the shared
+  // `release-stable` group on a stable push that touches multiple
+  // wrapper packages, the third arrival is silently cancelled. queue: max
+  // raises the pending limit; cancel-in-progress: false ensures release
+  // runs are never cancelled by a newer release run (each merge is a
+  // release-worthy state). queue: max cannot be combined with
+  // cancel-in-progress: true (validation error).
+  const releaseWorkflows = [
+    '.github/workflows/release-cli.yml',
+    '.github/workflows/release-create.yml',
+    '.github/workflows/release-esign.yml',
+    '.github/workflows/release-mcp.yml',
+    '.github/workflows/release-react.yml',
+    '.github/workflows/release-sdk.yml',
+    '.github/workflows/release-stable.yml',
+    '.github/workflows/release-superdoc.yml',
+    '.github/workflows/release-template-builder.yml',
+    '.github/workflows/release-vscode-ext.yml',
+  ];
+
+  for (const file of releaseWorkflows) {
+    const content = await readRepoFile(file);
+    assert.ok(
+      /\n {2}cancel-in-progress: false\b/.test(content),
+      `${file}: cancel-in-progress must be the literal \`false\` (not a branch-conditional expression) so release runs never get cancelled by newer release runs`,
+    );
+    assert.equal(
+      /cancel-in-progress: \$\{\{/.test(content),
+      false,
+      `${file}: cancel-in-progress must not be a conditional expression; queue: max forbids cancel-in-progress: true on any branch`,
+    );
+    assert.ok(
+      /\n {2}queue: max\b/.test(content),
+      `${file}: must set queue: max so GitHub does not silently drop older pending stable releases when multiple release workflows fire on the same push`,
+    );
+
+    // Queued release runs may start against a stale checkout. Each workflow must
+    // refresh to the current branch head before semantic-release runs, otherwise
+    // @semantic-release/git push fails non-fast-forward against a branch that
+    // moved while the run was queued. The stable-only refresh that predates
+    // queue: max would leave main-firing queued runs against stale SHAs.
+    assert.equal(
+      /if: github\.ref_name == 'stable'\s*\n\s*run: \|\s*\n\s*git fetch origin/.test(content),
+      false,
+      `${file}: refresh step must not be gated on stable-only; queued main runs also need to refresh to avoid stale-checkout pushes`,
+    );
+    assert.ok(
+      /git fetch origin "\$\{\{ github\.ref_name \}\}" --tags\s*\n\s*git checkout -B "\$\{\{ github\.ref_name \}\}" "origin\/\$\{\{ github\.ref_name \}\}"/.test(content) ||
+        // release-stable.yml is stable-only and refreshes against the literal `stable` ref.
+        /git fetch origin stable --tags\s*\n\s*git checkout -B stable origin\/stable/.test(content),
+      `${file}: must refresh to the current branch head before semantic-release runs`,
+    );
+  }
+});
+
 test('stable-to-main sync waits for stable release completion', async () => {
   const workflow = await readRepoFile('.github/workflows/sync-patches.yml');
 

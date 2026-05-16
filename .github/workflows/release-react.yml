@@ -36,6 +36,8 @@ concurrency:
 
 jobs:
   release:
+    # Stable publishes must go through release-stable.yml.
+    if: ${{ github.event_name != 'workflow_dispatch' || github.ref_name != 'stable' }}
     runs-on: ubuntu-24.04
     steps:
       - name: Generate token

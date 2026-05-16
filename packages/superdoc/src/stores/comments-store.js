@@ -718,6 +718,7 @@ export const useCommentsStore = defineStore('comments', () => {
           });
         }
       }
+<<<<<<< HEAD
     }
   };
 
@@ -752,6 +753,8 @@ export const useCommentsStore = defineStore('comments', () => {
       params.trackedChangeStoryLabel = '';
       params.trackedChangeAnchorKey = buildBodyTrackedChangeAnchorKey(params.changeId ?? changeId);
       handleTrackedChangeUpdate({ superdoc, params, broadcastChanges });
+=======
+>>>>>>> origin/stable
     }
   };
 

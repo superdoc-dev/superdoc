@@ -299,6 +299,7 @@ test('stable release workflows serialize on the shared release-stable concurrenc
       `${file}: stable releases are driven by release-stable.yml; this workflow only fires on main`,
     );
   }
+<<<<<<< HEAD
 });
 
 test('stable-to-main sync waits for stable release completion', async () => {
@@ -336,6 +337,8 @@ test('stable-to-main sync waits for stable release completion', async () => {
       workflow.includes('"📦 Release template-builder"'),
     '.github/workflows/sync-patches.yml: must wait for the remaining stable release workflows before syncing origin/stable',
   );
+=======
+>>>>>>> origin/stable
 });
 
 test('MCP releaserc builds the package before publish so the tarball ships dist/', async () => {

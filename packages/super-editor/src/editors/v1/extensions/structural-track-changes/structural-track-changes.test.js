@@ -58,8 +58,8 @@ describe('StructuralTrackChanges extension', () => {
     expect(getBlockTrackedChanges(editor.state)).toHaveLength(0);
   });
 
-  it('is NOT registered in default starter extensions (opt-in only)', () => {
+  it('is registered in default starter extensions', () => {
     const names = getStarterExtensions().map((e) => e.name);
-    expect(names).not.toContain('structuralTrackChanges');
+    expect(names).toContain('structuralTrackChanges');
   });
 });

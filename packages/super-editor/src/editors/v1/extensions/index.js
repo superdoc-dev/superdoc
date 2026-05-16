@@ -94,6 +94,7 @@ import { PermEnd, PermEndBlock } from './perm-end/index.js';
 
 // Helpers
 import { Diffing } from './diffing/index.js';
+import { StructuralTrackChanges } from './structural-track-changes/index.js';
 
 const getRichTextExtensions = () => {
   return [
@@ -243,6 +244,7 @@ const getStarterExtensions = () => {
     PassthroughInline,
     PassthroughBlock,
     Diffing,
+    StructuralTrackChanges,
   ];
 };
 
@@ -307,6 +309,7 @@ export {
   getStarterExtensions,
   getRichTextExtensions,
   Diffing,
+  StructuralTrackChanges,
   AiMark,
   AiAnimationMark,
   AiLoaderNode,

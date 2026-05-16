@@ -338,6 +338,40 @@ test('stable-to-main sync waits for stable release completion', async () => {
   );
 });
 
+test('stable-to-main sync preserves stable release ancestry', async () => {
+  const workflow = await readRepoFile('.github/workflows/sync-patches.yml');
+
+  assert.equal(
+    workflow.includes('git merge --squash'),
+    false,
+    '.github/workflows/sync-patches.yml: stable-to-main sync must not squash because semantic-release needs stable tags reachable from main',
+  );
+  assert.ok(
+    workflow.includes('git merge --no-ff --no-edit origin/stable'),
+    '.github/workflows/sync-patches.yml: stable-to-main sync must create a real merge commit',
+  );
+  assert.ok(
+    workflow.includes('git merge-base --is-ancestor origin/stable origin/main') &&
+      workflow.includes('git merge-base --is-ancestor origin/stable HEAD'),
+    '.github/workflows/sync-patches.yml: sync must guard on and verify stable ancestry',
+  );
+  assert.ok(
+    workflow.includes('release_artifact_only_conflict') &&
+      workflow.includes('version-only') &&
+      workflow.includes('git checkout --theirs "$f"'),
+    '.github/workflows/sync-patches.yml: release artifact conflicts must resolve to stable only when the conflict is version-only',
+  );
+  assert.equal(
+    workflow.includes('git add -A'),
+    false,
+    '.github/workflows/sync-patches.yml: sync must not commit unresolved conflict markers into review PRs',
+  );
+  assert.ok(
+    workflow.includes("This PR must be merged with GitHub's merge-commit option"),
+    '.github/workflows/sync-patches.yml: generated PRs must warn reviewers not to squash away stable ancestry',
+  );
+});
+
 test('MCP releaserc builds the package before publish so the tarball ships dist/', async () => {
   const content = await readRepoFile('apps/mcp/.releaserc.cjs');
   assert.ok(

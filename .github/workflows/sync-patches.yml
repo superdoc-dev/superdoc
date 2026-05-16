@@ -87,117 +87,134 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.generate_token.outputs.token }}
         run: |
+          set -euo pipefail
+
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git fetch origin main stable --tags --prune
 
           SYNC_BRANCH="sync/stable-to-main-$(date +%Y%m%d-%H%M%S)"
           git checkout -b "$SYNC_BRANCH" origin/main
 
-          # Squash-merge stable into the branch so the sync PR has a single commit
-          # (avoids triggering semantic-release comments on every accumulated commit)
-          if git merge --squash origin/stable; then
-            # Check if there are actually new commits to sync
-            if git diff --cached --quiet; then
-              echo "No changes to sync — stable and main are already in sync."
-              exit 0
-            fi
+          if git merge-base --is-ancestor origin/stable origin/main; then
+            echo "No changes to sync - stable is already in main's ancestry."
+            exit 0
+          fi
 
-            git commit -m "chore: merge stable into main"
+          PR_TITLE="🔄 Sync stable → main"
+          MERGE_STATUS="clean"
 
-            git push origin "$SYNC_BRANCH"
+          normalize_json_without_keys() {
+            python3 -c 'import json, sys; data = json.load(sys.stdin); [data.pop(key, None) for key in sys.argv[1:]]; sys.stdout.write(json.dumps(data, sort_keys=True, separators=(",", ":")))' "$@"
+          }
 
-            # Check for existing open sync PR
-            EXISTING=$(gh pr list --base main --head "$SYNC_BRANCH" --state open --json number -q '.[0].number' 2>/dev/null || true)
-            if [ -n "$EXISTING" ]; then
-              echo "Sync PR #$EXISTING already exists."
-              exit 0
-            fi
+          release_artifact_only_conflict() {
+            local f="$1"
+            local tmpdir
+            local status
+            tmpdir="$(mktemp -d)"
 
-            gh pr create \
-              --base main \
-              --head "$SYNC_BRANCH" \
-              --title "🔄 Sync stable → main" \
-              --body "$(cat <<'EOF'
-          ## Summary
-          Merges latest stable patches into main to keep branches in sync.
+            case "$f" in
+              package.json|*/package.json)
+                git show ":2:${f}" | normalize_json_without_keys version > "${tmpdir}/ours" || { rm -rf "${tmpdir}"; return 1; }
+                git show ":3:${f}" | normalize_json_without_keys version > "${tmpdir}/theirs" || { rm -rf "${tmpdir}"; return 1; }
+                ;;
+              pyproject.toml|*/pyproject.toml)
+                git show ":2:${f}" | sed -E '/^[[:space:]]*version[[:space:]]*=/d' > "${tmpdir}/ours" || { rm -rf "${tmpdir}"; return 1; }
+                git show ":3:${f}" | sed -E '/^[[:space:]]*version[[:space:]]*=/d' > "${tmpdir}/theirs" || { rm -rf "${tmpdir}"; return 1; }
+                ;;
+              version.json|*/version.json)
+                git show ":2:${f}" | normalize_json_without_keys version sdkVersion > "${tmpdir}/ours" || { rm -rf "${tmpdir}"; return 1; }
+                git show ":3:${f}" | normalize_json_without_keys version sdkVersion > "${tmpdir}/theirs" || { rm -rf "${tmpdir}"; return 1; }
+                ;;
+              *)
+                rm -rf "${tmpdir}"
+                return 1
+                ;;
+            esac
 
-          This ensures `@next` prereleases stay ahead of `@latest` releases.
+            cmp -s "${tmpdir}/ours" "${tmpdir}/theirs"
+            status=$?
+            rm -rf "${tmpdir}"
+            return "${status}"
+          }
 
-          ---
-          _Auto-created by sync-patches workflow._
-          EOF
-              )" \
-              --label "patch-sync"
-
-            echo "✅ Created sync PR"
+          # Use a real merge, not a squash, so stable release tags become
+          # reachable from main. semantic-release uses reachable tags as the
+          # version floor for @next prereleases.
+          if git merge --no-ff --no-edit origin/stable; then
+            MERGE_STATUS="clean"
           else
             echo "Merge conflict — attempting auto-resolution of release artifacts..."
 
-            # Auto-resolve expected conflicts: version files managed by semantic-release.
-            # For these files, keep main's version (semantic-release manages them per-branch).
-            git diff --name-only --diff-filter=U | while read -r f; do
+            # Auto-resolve release artifact conflicts only when the conflict is
+            # version-only: keep stable's already-published version, but never
+            # drop dependency, script, export, or package metadata changes.
+            while read -r f; do
               case "$f" in
-                */package.json|*/pyproject.toml|*/version.json)
-                  echo "  Auto-resolving $f (keeping main's version)"
-                  git checkout --ours "$f"
-                  git add "$f"
+                package.json|*/package.json|pyproject.toml|*/pyproject.toml|version.json|*/version.json)
+                  if release_artifact_only_conflict "$f"; then
+                    echo "  Auto-resolving $f (version-only; keeping stable's published version)"
+                    git checkout --theirs "$f"
+                    git add "$f"
+                  else
+                    echo "  Leaving $f unresolved (contains non-version changes)"
+                  fi
                   ;;
               esac
-            done
+            done < <(git diff --name-only --diff-filter=U)
 
-            # Check if all conflicts are resolved
             if [ -z "$(git diff --name-only --diff-filter=U)" ]; then
-              # If every conflict was auto-resolved to main's version, the index
-              # may now be clean (nothing to sync). Same guard as the no-conflict path.
-              if git diff --cached --quiet; then
-                echo "No changes to sync - auto-resolution kept main's version for everything."
-                exit 0
-              fi
-
+              MERGE_STATUS="auto_resolved"
               git commit -m "chore: merge stable into main (release conflicts auto-resolved)"
-              git push origin "$SYNC_BRANCH"
-
-              gh pr create \
-                --base main \
-                --head "$SYNC_BRANCH" \
-                --title "🔄 Sync stable → main" \
-                --body "$(cat <<'EOF'
-          ## Summary
-          Merges latest stable patches into main to keep branches in sync.
-
-          Release artifact conflicts (package.json version, CHANGELOG.md) were auto-resolved.
-
-          ---
-          _Auto-created by sync-patches workflow._
-          EOF
-                )" \
-                --label "patch-sync"
-
-              echo "✅ Created sync PR (release conflicts auto-resolved)"
             else
-              echo "⚠️ Unresolved conflicts remain — creating PR for manual resolution."
-
-              # Commit with conflict markers so the PR is reviewable
-              git add -A
-              git commit -m "chore: merge stable into main (conflicts need resolution)"
-              git push origin "$SYNC_BRANCH"
-
-              gh pr create \
-                --base main \
-                --head "$SYNC_BRANCH" \
-                --title "🔄 Sync stable → main (conflicts)" \
-                --body "$(cat <<'EOF'
-          ## Summary
-          Merges latest stable patches into main. **Has merge conflicts that need manual resolution.**
-
-          Release artifact conflicts were auto-resolved, but other conflicts remain.
-
-          ---
-          _Auto-created by sync-patches workflow._
-          EOF
-                )" \
-                --label "patch-sync"
-
-              echo "⚠️ Created sync PR with conflicts"
+              echo "Unresolved conflicts remain after version-only release artifact auto-resolution."
+              echo "Resolve stable -> main manually; this workflow will not commit conflict markers."
+              git diff --name-only --diff-filter=U
+              exit 1
             fi
           fi
+
+          if ! git merge-base --is-ancestor origin/stable HEAD; then
+            echo "Stable is still not in the sync branch ancestry after merge."
+            exit 1
+          fi
+
+          git push origin "$SYNC_BRANCH"
+
+          # Check for existing open sync PR
+          EXISTING=$(gh pr list --base main --head "$SYNC_BRANCH" --state open --json number -q '.[0].number' 2>/dev/null || true)
+          if [ -n "$EXISTING" ]; then
+            echo "Sync PR #$EXISTING already exists."
+            exit 0
+          fi
+
+          gh pr create \
+            --base main \
+            --head "$SYNC_BRANCH" \
+            --title "$PR_TITLE" \
+            --body "$(cat <<EOF
+          ## Summary
+
+          Merges latest stable patches into main with a real merge commit so stable release tags remain reachable from main.
+
+          This keeps \`@next\` prerelease version calculation ahead of the latest published stable release.
+
+          ## Merge requirement
+
+          This PR must be merged with GitHub's merge-commit option. Squash or rebase merging will discard stable ancestry and break \`@next\` version calculation again.
+
+          ## Conflict handling
+
+          Merge status: \`${MERGE_STATUS}\`.
+
+          Version-only release artifact conflicts are auto-resolved to keep stable's already-published versions. Non-version conflicts fail this workflow instead of committing conflict markers.
+
+          ---
+          _Auto-created by sync-patches workflow._
+          EOF
+            )" \
+            --label "patch-sync"
+
+          echo "✅ Created sync PR"

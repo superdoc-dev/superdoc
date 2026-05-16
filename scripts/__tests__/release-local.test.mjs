@@ -415,6 +415,53 @@ test('stable recovery ignores PyPI gaps when SDK PyPI publishing is disabled', a
   );
 });
 
+test('release configs suppress per-PR comment spam on prereleases', async () => {
+  const releasercPaths = [
+    'packages/superdoc/.releaserc.cjs',
+    'packages/react/.releaserc.cjs',
+    'packages/sdk/.releaserc.cjs',
+    'packages/template-builder/.releaserc.cjs',
+    'packages/esign/.releaserc.cjs',
+    'apps/cli/.releaserc.cjs',
+    'apps/mcp/.releaserc.cjs',
+    'apps/vscode-ext/.releaserc.cjs',
+    'apps/create/.releaserc.cjs',
+  ];
+
+  for (const releasercPath of releasercPaths) {
+    const content = await readRepoFile(releasercPath);
+
+    const usesGithubPlugin = content.includes("'@semantic-release/github'");
+    const usesLinearPlugin = content.includes("'semantic-release-linear-app'");
+
+    if (!usesGithubPlugin && !usesLinearPlugin) continue;
+
+    assert.ok(
+      content.includes('const shouldCommentOnRelease = !isPrerelease'),
+      `${releasercPath}: must define shouldCommentOnRelease = !isPrerelease so the prerelease comment gate is consistent across configs`,
+    );
+
+    if (usesGithubPlugin) {
+      assert.ok(
+        content.includes('successCommentCondition: shouldCommentOnRelease ? undefined : false'),
+        `${releasercPath}: @semantic-release/github must gate successCommentCondition through shouldCommentOnRelease so prereleases don't re-comment on every PR after a stable -> main sync`,
+      );
+    }
+
+    if (usesLinearPlugin) {
+      assert.ok(
+        content.includes('addComment: shouldCommentOnRelease'),
+        `${releasercPath}: semantic-release-linear-app addComment must be gated through shouldCommentOnRelease so prereleases don't post duplicate Linear comments after a stable -> main sync`,
+      );
+      assert.equal(
+        content.includes('addComment: true'),
+        false,
+        `${releasercPath}: semantic-release-linear-app must not hardcode addComment: true`,
+      );
+    }
+  }
+});
+
 test('release-state probes wrap fetch in bounded retry to absorb transient blips', async () => {
   const content = await readRepoFile('scripts/release-local-stable.mjs');
   assert.ok(

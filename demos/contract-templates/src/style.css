@@ -267,6 +267,7 @@ input:focus {
   color: var(--demo-text-muted);
   font-weight: 600;
 }
+<<<<<<< HEAD
 
 /*
  * Contextual smart-field chip (SD-3157). Floats over the active smart-
@@ -301,3 +302,5 @@ input:focus {
   color: var(--demo-text, #18181b);
   font-weight: 400;
 }
+=======
+>>>>>>> origin/stable

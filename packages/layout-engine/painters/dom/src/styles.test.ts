@@ -484,4 +484,19 @@ describe('ensureTrackChangeStyles', () => {
     );
     expect(cssText).not.toMatch(/track-format-dec\.highlighted\.track-change-focused\s*\{[\s\S]*border-bottom-width:/);
   });
+
+  it('block-level tracked-change rules are scoped to .superdoc-layout, not bare selectors', () => {
+    ensureTrackChangeStyles(document);
+
+    const styleEl = document.querySelector('[data-superdoc-track-change-styles="true"]');
+    const cssText = styleEl?.textContent ?? '';
+
+    // Scoped selectors present
+    expect(cssText).toContain(".superdoc-layout [data-track-change='delete']");
+    expect(cssText).toContain(".superdoc-layout [data-track-change='insert']");
+
+    // No bare `[data-track-change=...] {` selector — would leak to PM mirror
+    // and any host page that uses the same attribute name.
+    expect(cssText).not.toMatch(/^\s*\[data-track-change=/m);
+  });
 });

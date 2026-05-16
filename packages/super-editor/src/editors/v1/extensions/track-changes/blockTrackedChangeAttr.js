@@ -20,7 +20,14 @@ export const blockTrackedChangeAttrSpec = {
     },
     renderDOM: (attrs) => {
       const tc = attrs?.trackChange;
-      return tc ? { 'data-track-change': tc.kind } : {};
+      if (!tc) return {};
+      const out = { 'data-track-change': tc.kind };
+      // Emit id + operationId so HTML round-trips (clipboard, getHTML/setContent,
+      // collaboration patches) preserve enough to resolve the change via
+      // getBlockTrackedChanges and accept/reject it.
+      if (tc.id) out['data-track-change-id'] = tc.id;
+      if (tc.operationId) out['data-track-change-operation'] = tc.operationId;
+      return out;
     },
   },
 };

@@ -583,10 +583,16 @@ export const CommentsPlugin = Extension.create({
                 isBlockLevel: true,
               };
             }
-            // Merge: keep existing inline entries, add block-level entries.
-            // Block-level keys (operationId / row-id) shouldn't collide with
-            // inline ones (mark-id), but if they ever do, inline wins.
-            pluginState.trackedChanges = { ...blockTracked, ...pluginState.trackedChanges };
+            // Drop stale block-level entries from the previous state first.
+            // getBlockTrackedChanges is the source of truth for block-level
+            // tracking, so anything no longer in the doc (accepted/rejected)
+            // must not leak back via the merge. Inline entries are owned by
+            // handleTrackedChangeTransaction and are kept as-is.
+            const previousInline = {};
+            for (const [k, v] of Object.entries(pluginState.trackedChanges || {})) {
+              if (!v?.isBlockLevel) previousInline[k] = v;
+            }
+            pluginState.trackedChanges = { ...previousInline, ...blockTracked };
           }
 
           // Check for changes in the actively selected comment

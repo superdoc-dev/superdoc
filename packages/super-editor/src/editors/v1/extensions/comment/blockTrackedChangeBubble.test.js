@@ -50,4 +50,31 @@ describe('comments-plugin — block-level tracked-change registration', () => {
     expect(tracked['OP1']).toBeUndefined();
     expect(tracked['r1']).toBeUndefined();
   });
+
+  it('drops a block-level entry once its row is no longer tracked (resolved op)', () => {
+    const table = schema.nodes.table.create({ sdBlockId: 't1' }, [makeRow('delete', 'r1', 'OP1')]);
+    installDoc([table]);
+    expect(CommentsPluginKey.getState(editor.state).trackedChanges['OP1']).toBeDefined();
+
+    // Walk the doc to find the tracked row, then clear its trackChange attr
+    // through a transaction. This exercises the apply() reducer's stale-entry
+    // pruning rather than recomputing state from init().
+    let rowPos = null;
+    let rowNode = null;
+    editor.state.doc.descendants((node, pos) => {
+      if (node.type.name === 'tableRow' && node.attrs.trackChange) {
+        rowPos = pos;
+        rowNode = node;
+        return false;
+      }
+      return true;
+    });
+    expect(rowPos).not.toBeNull();
+
+    const tr = editor.state.tr.setNodeMarkup(rowPos, undefined, { ...rowNode.attrs, trackChange: null });
+    editor.view.dispatch(tr);
+
+    const pluginState = CommentsPluginKey.getState(editor.state);
+    expect(pluginState.trackedChanges['OP1']).toBeUndefined();
+  });
 });

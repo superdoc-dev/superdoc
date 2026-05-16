@@ -144,6 +144,7 @@ describe('TextAlign extension', () => {
     });
   });
 
+<<<<<<< HEAD
   it('maps alignment per paragraph for mixed LTR/RTL selections', () => {
     const ltrParagraph = {
       type: { name: 'paragraph' },
@@ -190,6 +191,8 @@ describe('TextAlign extension', () => {
     expect(dispatch).toHaveBeenCalledWith(tr);
   });
 
+=======
+>>>>>>> origin/main
   it('returns false for unsupported alignment values', () => {
     const updateAttributes = vi.fn(() => true);
 

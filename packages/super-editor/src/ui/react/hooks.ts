@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { shallowEqual } from '../equality.js';
 import type {
   CommentsSlice,
+  ContentControlsSlice,
   DocumentSlice,
   TrackChangesSlice,
   SelectionSlice,
@@ -23,6 +24,8 @@ const EMPTY_SELECTION: SelectionSlice = {
 const EMPTY_COMMENTS: CommentsSlice = { items: [], activeIds: [], total: 0 };
 
 const EMPTY_TRACK_CHANGES: TrackChangesSlice = { items: [], total: 0, activeId: null };
+
+const EMPTY_CONTENT_CONTROLS: ContentControlsSlice = { items: [], activeIds: [], activeId: null, total: 0 };
 
 const EMPTY_TOOLBAR: ToolbarSnapshotSlice = { context: null, commands: {} };
 
@@ -48,6 +51,28 @@ export function useSuperDocComments(): CommentsSlice {
 /** Subscribe to the tracked-changes slice (items, total, activeId). */
 export function useSuperDocTrackChanges(): TrackChangesSlice {
   return useSuperDocSlice((ui) => ui.select((state) => state.trackChanges, shallowEqual), EMPTY_TRACK_CHANGES);
+}
+
+/**
+ * Subscribe to the content-controls (SDT) slice (items, activeIds,
+ * activeId, total). Pair with `ui.contentControls.getRect({ id })` to
+ * anchor custom field chips, citation popovers, or property panels to
+ * the painted wrapper of the active control.
+ *
+ * ```tsx
+ * const { activeId } = useSuperDocContentControls();
+ * const ui = useSuperDocUI();
+ * if (!activeId || !ui) return null;
+ * const r = ui.contentControls.getRect({ id: activeId });
+ * if (!r.success) return null;
+ * return <Popover style={{ position: 'fixed', left: r.rect.left, top: r.rect.top }} />;
+ * ```
+ */
+export function useSuperDocContentControls(): ContentControlsSlice {
+  return useSuperDocSlice(
+    (ui) => ui.select((state) => state.contentControls, shallowEqual),
+    EMPTY_CONTENT_CONTROLS,
+  );
 }
 
 /** Subscribe to the full toolbar snapshot (context + per-command states). */

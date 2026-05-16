@@ -51,6 +51,29 @@ describe('comments-plugin — block-level tracked-change registration', () => {
     expect(tracked['r1']).toBeUndefined();
   });
 
+  it('hasBlockChanges starts false on a doc without tracked rows and stays false through typing', () => {
+    installDoc([schema.nodes.paragraph.create(null, schema.text('hello'))]);
+    expect(CommentsPluginKey.getState(editor.state).hasBlockChanges).toBe(false);
+
+    // Simulate a typing transaction; the gate should keep the block walk
+    // skipped so trackedChanges remains an empty stable reference.
+    const before = CommentsPluginKey.getState(editor.state).trackedChanges;
+    const tr = editor.state.tr.insertText('!', editor.state.doc.content.size - 1);
+    editor.view.dispatch(tr);
+    const after = CommentsPluginKey.getState(editor.state);
+    expect(after.hasBlockChanges).toBe(false);
+    expect(after.trackedChanges).toEqual(before);
+  });
+
+  it('hasBlockChanges flips to true once a tracked row appears', () => {
+    installDoc([schema.nodes.paragraph.create(null, schema.text('x'))]);
+    expect(CommentsPluginKey.getState(editor.state).hasBlockChanges).toBe(false);
+
+    const table = schema.nodes.table.create({ sdBlockId: 't1' }, [makeRow('delete', 'r1', 'OP1')]);
+    installDoc([table]);
+    expect(CommentsPluginKey.getState(editor.state).hasBlockChanges).toBe(true);
+  });
+
   it('drops a block-level entry once its row is no longer tracked (resolved op)', () => {
     const table = schema.nodes.table.create({ sdBlockId: 't1' }, [makeRow('delete', 'r1', 'OP1')]);
     installDoc([table]);

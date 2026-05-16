@@ -487,6 +487,7 @@ export const CommentsPlugin = Extension.create({
           // initial doc (e.g. when a docx is loaded with pre-marked rows or
           // when EditorState is reconstructed via setState during tests).
           const trackedChanges = {};
+          let hasBlockChanges = false;
           if (editorState?.doc) {
             const blockEntries = getBlockTrackedChanges(editorState);
             const seenOperations = new Set();
@@ -501,6 +502,7 @@ export const CommentsPlugin = Extension.create({
                 range: { from: entry.from, to: entry.to },
                 isBlockLevel: true,
               };
+              hasBlockChanges = true;
             }
           }
           return {
@@ -511,6 +513,7 @@ export const CommentsPlugin = Extension.create({
             allCommentPositions: {},
             allCommentIds: [],
             trackedChanges,
+            hasBlockChanges,
           };
         },
 
@@ -550,24 +553,39 @@ export const CommentsPlugin = Extension.create({
             };
           }
 
-          // If this is a tracked change transaction, handle separately
+          // If this is a tracked change transaction, handle separately.
+          // Compute the next trackedChanges value without mutating prev state;
+          // ProseMirror plugin state must be treated as immutable across apply().
           const trackedChangeMeta = tr.getMeta(TrackChangesBasePluginKey);
-          const currentTrackedChanges = pluginState.trackedChanges;
+          let nextTrackedChanges = pluginState.trackedChanges;
+          let nextHasBlockChanges = pluginState.hasBlockChanges;
           if (trackedChangeMeta) {
-            pluginState.trackedChanges = handleTrackedChangeTransaction(
+            nextTrackedChanges = handleTrackedChangeTransaction(
               trackedChangeMeta,
-              currentTrackedChanges,
+              pluginState.trackedChanges,
               newEditorState,
               editor,
             );
           }
 
-          // Block-level tracked changes don't fire TrackChangesBasePluginKey meta
-          // (they're applied as PM node attrs via setNodeMarkup). On any doc
-          // change, refresh the block-level entries in trackedChanges. Rows that
-          // share an operationId collapse into a single entry so a multi-row
-          // delete surfaces as one bubble.
-          if (tr.docChanged || trackedChangeMeta) {
+          // Block-level tracked changes don't fire TrackChangesBasePluginKey
+          // meta (they're applied as PM node attrs via setNodeMarkup). When the
+          // doc changes we may need to refresh the block-level entries. But we
+          // only walk the doc when:
+          //   - the previous state already had block changes (so they may have
+          //     been resolved or shifted), or
+          //   - this transaction is a structural change stamping new rows
+          //     (applyHunks / accept-reject row commands set
+          //     inputType='acceptReject').
+          // Skipping the walk on every typing transaction in a doc with no
+          // block-level changes avoids re-creating trackedChanges references
+          // and triggering downstream view rebuilds that can re-sync DOM
+          // selection.
+          const inputTypeMeta = tr.getMeta('inputType');
+          const isBlockStampingTr = inputTypeMeta === 'acceptReject';
+          const shouldWalkBlock =
+            (tr.docChanged || trackedChangeMeta) && (pluginState.hasBlockChanges || isBlockStampingTr);
+          if (shouldWalkBlock) {
             const blockEntries = getBlockTrackedChanges(newEditorState);
             const blockTracked = {};
             const seenOperations = new Set();
@@ -589,13 +607,15 @@ export const CommentsPlugin = Extension.create({
             // must not leak back via the merge. Inline entries are owned by
             // handleTrackedChangeTransaction and are kept as-is.
             const previousInline = {};
-            for (const [k, v] of Object.entries(pluginState.trackedChanges || {})) {
+            for (const [k, v] of Object.entries(nextTrackedChanges || {})) {
               if (!v?.isBlockLevel) previousInline[k] = v;
             }
-            pluginState.trackedChanges = { ...previousInline, ...blockTracked };
+            nextTrackedChanges = { ...previousInline, ...blockTracked };
+            nextHasBlockChanges = Object.keys(blockTracked).length > 0;
           }
 
           // Check for changes in the actively selected comment
+          let nextActiveThreadId = pluginState.activeThreadId;
           if (!tr.docChanged && tr.selectionSet) {
             const { selection } = tr;
 
@@ -623,8 +643,7 @@ export const CommentsPlugin = Extension.create({
             const isNonCollapsedClear =
               currentActiveThread == null && selection && selection.$from.pos !== selection.$to.pos;
             if (previousSelectionId !== currentActiveThread && !isNonCollapsedClear) {
-              // Update both the plugin state and the local variable
-              pluginState.activeThreadId = currentActiveThread;
+              nextActiveThreadId = currentActiveThread;
               const update = {
                 type: comments_module_events.SELECTED,
                 activeCommentId: currentActiveThread ? currentActiveThread : null,
@@ -635,7 +654,12 @@ export const CommentsPlugin = Extension.create({
             }
           }
 
-          return { ...pluginState };
+          return {
+            ...pluginState,
+            trackedChanges: nextTrackedChanges,
+            hasBlockChanges: nextHasBlockChanges,
+            activeThreadId: nextActiveThreadId,
+          };
         },
       },
     };

@@ -6,10 +6,10 @@ const {
 
 /*
  * Release narrow: esign externalizes `superdoc` in its build, so a core
- * change does not alter the published esign tarball (consumers get the new
- * core via their own peerDependencies install). Only commits touching
- * packages/esign/** should trigger a release. See
- * .github/package-impact-map.md.
+ * change inside the declared dependency/peer range does not alter the
+ * published esign tarball. Consumers pick up eligible core versions through
+ * package manager resolution. Only commits touching packages/esign/** should
+ * trigger a release. See .github/package-impact-map.md.
  */
 
 const branch = process.env.GITHUB_REF_NAME || process.env.CI_COMMIT_BRANCH;

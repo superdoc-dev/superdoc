@@ -6,10 +6,11 @@ const {
 
 /*
  * Release narrow: template-builder externalizes `superdoc` in its build, so a
- * core change does not alter the published template-builder tarball
- * (consumers get the new core via their own peerDependencies install). Only
- * commits touching packages/template-builder/** should trigger a release.
- * See .github/package-impact-map.md.
+ * core change inside the declared dependency/peer range does not alter the
+ * published template-builder tarball. Consumers pick up eligible core versions
+ * through package manager resolution. Only commits touching
+ * packages/template-builder/** should trigger a release. See
+ * .github/package-impact-map.md.
  */
 
 const branch = process.env.GITHUB_REF_NAME || process.env.CI_COMMIT_BRANCH;

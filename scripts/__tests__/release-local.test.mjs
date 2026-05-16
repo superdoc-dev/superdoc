@@ -299,6 +299,7 @@ test('stable release workflows serialize on the shared release-stable concurrenc
       `${file}: stable releases are driven by release-stable.yml; this workflow only fires on main`,
     );
   }
+<<<<<<< HEAD
 });
 
 test('stable-to-main sync waits for stable release completion', async () => {
@@ -370,6 +371,8 @@ test('stable-to-main sync preserves stable release ancestry', async () => {
     workflow.includes("This PR must be merged with GitHub's merge-commit option"),
     '.github/workflows/sync-patches.yml: generated PRs must warn reviewers not to squash away stable ancestry',
   );
+=======
+>>>>>>> origin/stable
 });
 
 test('MCP releaserc builds the package before publish so the tarball ships dist/', async () => {

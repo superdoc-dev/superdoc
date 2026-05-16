@@ -10,8 +10,11 @@ export {
   type CommentsListQuery,
   type CommentsListResult,
   type CommentsSlice,
+<<<<<<< HEAD
   type ContentControlsHandle,
   type ContentControlsSlice,
+=======
+>>>>>>> origin/stable
   type ContentControlViewportAddress,
   type ContextMenuContribution,
   type ContextMenuItem,

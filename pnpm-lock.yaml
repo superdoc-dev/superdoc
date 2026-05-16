@@ -1847,7 +1847,7 @@ importers:
     dependencies:
       '@y/hub':
         specifier: ^0.2.8
-        version: 0.2.18
+        version: 0.2.15
       '@y/y':
         specifier: ^14.0.0-rc.1
         version: 14.0.0-rc.7
@@ -2398,6 +2398,10 @@ importers:
         version: 3.2.4(@emnapi/core@1.9.1)(@emnapi/runtime@1.9.1)(@types/debug@4.1.13)(@types/node@25.6.0)(esbuild@0.27.7)(happy-dom@20.4.0)(jiti@2.6.1)(jsdom@27.3.0(canvas@3.2.3))(less@4.4.2)(sass@1.97.3)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3)
 
   packages/esign:
+    dependencies:
+      superdoc:
+        specifier: workspace:*
+        version: link:../superdoc
     devDependencies:
       '@testing-library/jest-dom':
         specifier: 'catalog:'
@@ -2432,9 +2436,6 @@ importers:
       react-dom:
         specifier: 'catalog:'
         version: 19.2.4(react@19.2.4)
-      superdoc:
-        specifier: workspace:*
-        version: link:../superdoc
       typescript:
         specifier: 'catalog:'
         version: 5.9.3
@@ -3161,6 +3162,10 @@ importers:
         version: 14.2.6
 
   packages/template-builder:
+    dependencies:
+      superdoc:
+        specifier: workspace:*
+        version: link:../superdoc
     devDependencies:
       '@testing-library/jest-dom':
         specifier: 'catalog:'
@@ -3195,9 +3200,6 @@ importers:
       react-dom:
         specifier: 'catalog:'
         version: 19.2.4(react@19.2.4)
-      superdoc:
-        specifier: workspace:*
-        version: link:../superdoc
       typescript:
         specifier: 'catalog:'
         version: 5.9.3
@@ -11525,8 +11527,8 @@ packages:
   '@xtuc/long@4.2.2':
     resolution: {integrity: sha512-NuHqBY1PB/D8xU6s/thBgOAiAP7HOYDQ32+BFZILJ8ivkUkAHQnWfn6WhL79Owj1qmUnoN/YPhktdIoucipkAQ==}
 
-  '@y/hub@0.2.18':
-    resolution: {integrity: sha512-eVVPsSpZHzh7UcT8Abzac2BakJiOIbXaXbkc0OG66MfrAUVVPsisy/ACKui1uMh7HSGbuV9Lt9newMa+sJL3lA==}
+  '@y/hub@0.2.15':
+    resolution: {integrity: sha512-T7EpmyMIP2houhHBqx2AcZhz7jXsT55EHD7K/zhtupNtfSja3FEmycQ6Pyfoo826W7DVCQZg7ETm3BRdI1qzzQ==}
     engines: {node: '>=22.0.0', npm: '>=8.0.0'}
     hasBin: true
 
@@ -11536,8 +11538,8 @@ packages:
     peerDependencies:
       '@y/y': '*'
 
-  '@y/y@14.0.0-rc.13':
-    resolution: {integrity: sha512-9wlH/0aooyHGtzeMdWydzzNV59bXW0YaFn31UM1t62nBHM4nXeE9zmH6pruV3qSVn2mS1Z7lGsqArHTr8kP+BQ==}
+  '@y/y@14.0.0-rc.10':
+    resolution: {integrity: sha512-4WtOOBDy74iJX5whMoFcCP5sxAYwoLOt74lVt/sFVXGROAPKiaOHN6kemkg3Ye81anXoFPtdqZ0oZT5J1nWEZw==}
     engines: {node: '>=22.0.0', npm: '>=8.0.0'}
 
   '@y/y@14.0.0-rc.7':
@@ -16520,8 +16522,8 @@ packages:
     engines: {node: '>=16'}
     hasBin: true
 
-  lib0@1.0.0-rc.12:
-    resolution: {integrity: sha512-zCJU7AuEdpWEFCKXjbX5iWmHgUSc9xlIOehMfW/RrPxf27yZ7VxflAVMhBAkmwhci78MANpJkcHGcXW1pB23iQ==}
+  lib0@1.0.0-rc.10:
+    resolution: {integrity: sha512-kvtB8XIFzhTK4uKswr2dZjn2HvH8hIgv7LR8FHM6nD4SSAHXAApBe6g7pv3AW86FCItQtjD8Jjs3tSNWjPB8ew==}
     engines: {node: '>=16'}
     hasBin: true
 
@@ -20167,7 +20169,6 @@ packages:
   rolldown-vite@7.3.1:
     resolution: {integrity: sha512-LYzdNAjRHhF2yA4JUQm/QyARyi216N2rpJ0lJZb8E9FU2y5v6Vk+xq/U4XBOxMefpWixT5H3TslmAHm1rqIq2w==}
     engines: {node: ^20.19.0 || >=22.12.0}
-    deprecated: Use this package to migrate from Vite 7 to Vite 8. For the most recent updates, migrate to Vite 8 once you're ready.
     hasBin: true
     peerDependencies:
       '@types/node': ^20.19.0 || >=22.12.0
@@ -33901,11 +33902,11 @@ snapshots:
 
   '@xtuc/long@4.2.2': {}
 
-  '@y/hub@0.2.18':
+  '@y/hub@0.2.15':
     dependencies:
-      '@y/protocols': 1.0.6-rc.1(@y/y@14.0.0-rc.13)
-      '@y/y': 14.0.0-rc.13
-      lib0: 1.0.0-rc.12
+      '@y/protocols': 1.0.6-rc.1(@y/y@14.0.0-rc.10)
+      '@y/y': 14.0.0-rc.10
+      lib0: 1.0.0-rc.10
       minio: 8.0.7
       pino: 10.3.1
       postgres: 3.4.8
@@ -33914,18 +33915,18 @@ snapshots:
     transitivePeerDependencies:
       - '@node-rs/xxhash'
 
-  '@y/protocols@1.0.6-rc.1(@y/y@14.0.0-rc.13)':
+  '@y/protocols@1.0.6-rc.1(@y/y@14.0.0-rc.10)':
     dependencies:
-      '@y/y': 14.0.0-rc.13
-      lib0: 1.0.0-rc.12
+      '@y/y': 14.0.0-rc.10
+      lib0: 1.0.0-rc.10
 
-  '@y/y@14.0.0-rc.13':
+  '@y/y@14.0.0-rc.10':
     dependencies:
-      lib0: 1.0.0-rc.12
+      lib0: 1.0.0-rc.10
 
   '@y/y@14.0.0-rc.7':
     dependencies:
-      lib0: 1.0.0-rc.12
+      lib0: 1.0.0-rc.10
 
   '@yarnpkg/lockfile@1.1.0': {}
 
@@ -39956,7 +39957,7 @@ snapshots:
     dependencies:
       isomorphic.js: 0.2.5
 
-  lib0@1.0.0-rc.12: {}
+  lib0@1.0.0-rc.10: {}
 
   license-webpack-plugin@4.0.2(webpack@5.105.2(esbuild@0.27.3)):
     dependencies:
@@ -46418,7 +46419,7 @@ snapshots:
       lines-and-columns: 1.2.4
       mz: 2.7.0
       pirates: 4.0.7
-      tinyglobby: 0.2.15
+      tinyglobby: 0.2.16
       ts-interface-checker: 0.1.13
 
   super-regex@1.1.0:

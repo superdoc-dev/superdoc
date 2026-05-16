@@ -799,12 +799,44 @@ const parseTableRow = (args: ParseTableRowArgs): TableRow | null => {
   // The PM table-row extension has both cantSplit as a top-level attr AND within tableRowProperties
   // For layout engine, we only need to read from tableRowProperties.cantSplit
 
-  return {
+  const row: TableRow = {
     id: context.nextBlockId(`row-${rowIndex}`),
     cells,
     attrs,
     sourceAnchor: sourceAnchorFromNode(rowNode),
   };
+
+  // Row-level tracked change (block-level diff replay sets this on the PM node).
+  // See packages/super-editor/src/editors/v1/extensions/track-changes/blockTrackedChangeAttr.js
+  const trackChangeAttr = rowNode.attrs?.trackChange as
+    | {
+        kind?: 'insert' | 'delete';
+        id?: string;
+        operationId?: string;
+        author?: string;
+        authorEmail?: string;
+        date?: string;
+        storyKey?: string;
+      }
+    | null
+    | undefined;
+  if (
+    trackChangeAttr &&
+    (trackChangeAttr.kind === 'insert' || trackChangeAttr.kind === 'delete') &&
+    trackChangeAttr.id
+  ) {
+    row.trackedChange = {
+      kind: trackChangeAttr.kind,
+      id: trackChangeAttr.id,
+      operationId: trackChangeAttr.operationId,
+      author: trackChangeAttr.author,
+      authorEmail: trackChangeAttr.authorEmail,
+      date: trackChangeAttr.date,
+      storyKey: trackChangeAttr.storyKey,
+    };
+  }
+
+  return row;
 };
 
 /**

@@ -18,6 +18,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { TrackDeleteMarkName, TrackFormatMarkName, TrackInsertMarkName } from '../track-changes/constants.js';
 import { TrackChangesBasePluginKey } from '../track-changes/plugins/index.js';
 import { getTrackChanges } from '../track-changes/trackChangesHelpers/getTrackChanges.js';
+import { getBlockTrackedChanges } from '../track-changes/trackChangesHelpers/getBlockTrackedChanges.js';
 import { normalizeCommentEventPayload, updatePosition } from './helpers/index.js';
 
 const TRACK_CHANGE_MARKS = [TrackInsertMarkName, TrackDeleteMarkName, TrackFormatMarkName];
@@ -480,8 +481,28 @@ export const CommentsPlugin = Extension.create({
       key: CommentsPluginKey,
 
       state: {
-        init() {
+        init(_config, editorState) {
           const highlightColors = editor.options.comments?.highlightColors || {};
+          // Pick up any block-level tracked changes already present in the
+          // initial doc (e.g. when a docx is loaded with pre-marked rows or
+          // when EditorState is reconstructed via setState during tests).
+          const trackedChanges = {};
+          if (editorState?.doc) {
+            const blockEntries = getBlockTrackedChanges(editorState);
+            const seenOperations = new Set();
+            for (const entry of blockEntries) {
+              const key = entry.operationId || entry.id;
+              if (entry.operationId) {
+                if (seenOperations.has(entry.operationId)) continue;
+                seenOperations.add(entry.operationId);
+              }
+              trackedChanges[key] = {
+                type: entry.kind === 'insert' ? 'trackedInsert' : 'trackedDelete',
+                range: { from: entry.from, to: entry.to },
+                isBlockLevel: true,
+              };
+            }
+          }
           return {
             activeThreadId: null,
             externalColor: highlightColors.external ?? '#B1124B',
@@ -489,7 +510,7 @@ export const CommentsPlugin = Extension.create({
             decorations: DecorationSet.empty,
             allCommentPositions: {},
             allCommentIds: [],
-            trackedChanges: {},
+            trackedChanges,
           };
         },
 
@@ -539,6 +560,33 @@ export const CommentsPlugin = Extension.create({
               newEditorState,
               editor,
             );
+          }
+
+          // Block-level tracked changes don't fire TrackChangesBasePluginKey meta
+          // (they're applied as PM node attrs via setNodeMarkup). On any doc
+          // change, refresh the block-level entries in trackedChanges. Rows that
+          // share an operationId collapse into a single entry so a multi-row
+          // delete surfaces as one bubble.
+          if (tr.docChanged || trackedChangeMeta) {
+            const blockEntries = getBlockTrackedChanges(newEditorState);
+            const blockTracked = {};
+            const seenOperations = new Set();
+            for (const entry of blockEntries) {
+              const key = entry.operationId || entry.id;
+              if (entry.operationId) {
+                if (seenOperations.has(entry.operationId)) continue;
+                seenOperations.add(entry.operationId);
+              }
+              blockTracked[key] = {
+                type: entry.kind === 'insert' ? 'trackedInsert' : 'trackedDelete',
+                range: { from: entry.from, to: entry.to },
+                isBlockLevel: true,
+              };
+            }
+            // Merge: keep existing inline entries, add block-level entries.
+            // Block-level keys (operationId / row-id) shouldn't collide with
+            // inline ones (mark-id), but if they ever do, inline wins.
+            pluginState.trackedChanges = { ...blockTracked, ...pluginState.trackedChanges };
           }
 
           // Check for changes in the actively selected comment
@@ -721,6 +769,36 @@ export const CommentsPlugin = Extension.create({
                   });
 
                   decorations.push(trackedChangeDeco);
+                }
+              }
+
+              // Block-level tracked changes (e.g. tableRow with trackChange attr).
+              // Surface the same bubble UX inline tracked changes have. Rows that
+              // share an operationId collapse to one entry (one bubble per
+              // operation, not per row).
+              const blockTrackChange = node?.attrs?.trackChange;
+              if (
+                blockTrackChange &&
+                (blockTrackChange.kind === 'insert' || blockTrackChange.kind === 'delete') &&
+                blockTrackChange.id
+              ) {
+                const threadId = blockTrackChange.operationId || blockTrackChange.id;
+                if (!onlyActiveThreadChanged) {
+                  let currentBounds;
+                  try {
+                    currentBounds = view.coordsAtPos(pos);
+                  } catch {
+                    currentBounds = null;
+                  }
+                  if (currentBounds && !allCommentPositions[threadId]) {
+                    updatePosition({
+                      allCommentPositions,
+                      threadId,
+                      pos,
+                      currentBounds,
+                      node,
+                    });
+                  }
                 }
               }
             });

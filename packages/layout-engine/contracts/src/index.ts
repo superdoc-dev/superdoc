@@ -367,6 +367,12 @@ export type TrackedChangeMeta = {
   overlapParentId?: string;
   relationship?: 'parent' | 'child' | 'standalone';
   /**
+   * Optional grouping key. Tracked changes sharing a non-empty `operationId`
+   * are resolved together — e.g. every row of a deleted table shares one
+   * `operationId` and the review surface collapses them into one entry.
+   */
+  operationId?: string;
+  /**
    * Internal story key identifying which content story owns this tracked
    * change (`'body'`, `'hf:part:…'`, `'fn:…'`, `'en:…'`).
    *
@@ -926,6 +932,12 @@ export type TableRow = {
   cells: TableCell[];
   attrs?: TableRowAttrs;
   sourceAnchor?: SourceAnchor;
+  /**
+   * Row-level tracked-change metadata. Populated by pm-adapter from the
+   * ProseMirror `trackChange` node attribute. The painter reads this and
+   * stamps `data-track-change*` on the cell DOM elements.
+   */
+  trackedChange?: TrackedChangeMeta;
 };
 
 export type TableBlock = {

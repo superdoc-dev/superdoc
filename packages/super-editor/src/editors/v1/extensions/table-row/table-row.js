@@ -3,6 +3,7 @@ import { Node } from '@core/Node.js';
 import { Attribute } from '@core/Attribute.js';
 import { pixelsToTwips } from '@core/super-converter/helpers.js';
 import { parseRowHeight } from './helpers/parseRowHeight.js';
+import { blockTrackedChangeAttrSpec } from '../track-changes/blockTrackedChangeAttr.js';
 
 /**
  * @typedef {Object} CnfStyle
@@ -119,6 +120,8 @@ export const TableRow = Node.create({
           return attrs.sdBlockId ? { 'data-sd-block-id': attrs.sdBlockId } : {};
         },
       },
+
+      ...blockTrackedChangeAttrSpec,
 
       rowHeight: {
         renderDOM({ rowHeight }) {

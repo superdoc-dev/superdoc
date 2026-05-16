@@ -362,6 +362,30 @@ const getPendingDeadKeyPlaceholder = ({ tr, newTr, user }) => {
 };
 
 /**
+ * Detects whether a ReplaceStep's slice already carries block-level
+ * `trackChange` metadata via PM node attributes (e.g. a table whose rows
+ * have `trackChange.insert` stamped by `applyHunks`). When true, the slice
+ * should be applied as-is — wrapping its inline content with `trackInsert`
+ * marks would double-track.
+ *
+ * @param {import('prosemirror-model').Slice} slice
+ * @returns {boolean}
+ */
+const sliceContainsPreMarkedBlockTrackedChange = (slice) => {
+  if (!slice || !slice.content || slice.content.size === 0) return false;
+  let found = false;
+  slice.content.descendants((node) => {
+    if (found) return false;
+    if (node?.attrs?.trackChange?.kind) {
+      found = true;
+      return false;
+    }
+    return undefined;
+  });
+  return found;
+};
+
+/**
  * Process a transaction through the track-changes pipeline and return
  * a modified transaction with tracked-change marks applied (or the
  * original transaction unchanged when track-changes is bypassed, e.g.
@@ -432,6 +456,15 @@ export const trackedTransaction = ({ tr, state, user, replacements = 'paired' })
     }
 
     step = normalizeCompositionInsertStep({ step, doc, tr, user, pendingDeadKeyPlaceholder });
+
+    // Block-level tracked-change replay path: the inserted slice already
+    // carries row-level tracked metadata via PM node attrs (see applyHunks).
+    // Wrapping the inner cell content with inline trackInsert marks would
+    // double-track. Apply such steps as-is.
+    if (step instanceof ReplaceStep && sliceContainsPreMarkedBlockTrackedChange(step.slice)) {
+      newTr.step(step);
+      return;
+    }
 
     if (step instanceof ReplaceStep) {
       replaceStep({

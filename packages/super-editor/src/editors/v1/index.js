@@ -41,6 +41,7 @@ import AIWriter from './components/toolbar/AIWriter.vue';
 import * as fieldAnnotationHelpers from './extensions/field-annotation/fieldAnnotationHelpers/index.js';
 import * as trackChangesHelpers from './extensions/track-changes/trackChangesHelpers/index.js';
 import { TrackChangesBasePluginKey } from './extensions/track-changes/plugins/index.js';
+import { StructuralTrackChanges, computeStructuralDiff } from './extensions/structural-track-changes/index.js';
 import { CommentsPluginKey, createOrUpdateTrackedChangeComment } from './extensions/comment/comments-plugin.js';
 import { AnnotatorHelpers } from '@helpers/annotator.js';
 import { SectionHelpers } from '@extensions/structured-content/document-section/index.js';
@@ -109,6 +110,9 @@ export {
   helpers,
   fieldAnnotationHelpers,
   trackChangesHelpers,
+  // Structural (block-level) tracked changes (opt-in; not in starter extensions)
+  StructuralTrackChanges,
+  computeStructuralDiff,
   /** @internal */
   AnnotatorHelpers,
   SectionHelpers,

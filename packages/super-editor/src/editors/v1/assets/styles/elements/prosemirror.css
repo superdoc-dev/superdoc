@@ -306,6 +306,39 @@ https://github.com/ProseMirror/prosemirror-tables/blob/master/demo/index.html
 }
 /* Track changes - end */
 
+/*
+ * Block-level tracked changes (row granularity for v1).
+ *
+ * The `data-track-change` attribute is stamped in two places:
+ *   1. ProseMirror's contenteditable <tr> via the schema's renderDOM
+ *      (hidden in layout-engine mode but kept consistent).
+ *   2. The DomPainter's per-cell <div> elements (no <tr> exists in layout
+ *      mode; cells are absolutely positioned). Every cell of a tracked row
+ *      carries the attribute → a continuous red/green strip across the row.
+ *
+ * Selectors are intentionally minimal so the rule applies wherever the painter
+ * places the cell — across re-renders and table-fragment boundaries.
+ */
+[data-track-change='delete'] {
+  background-color: var(--sd-block-tracked-deleted-bg, rgba(203, 14, 71, 0.18)) !important;
+  outline: var(--sd-block-tracked-deleted-outline-width, 2px) dashed var(--sd-block-tracked-deleted-outline, #cb0e47) !important;
+  outline-offset: var(--sd-block-tracked-deleted-outline-offset, -1px) !important;
+}
+
+.sd-editor-scoped .ProseMirror tr[data-track-change='delete'] td,
+.sd-editor-scoped .ProseMirror tr[data-track-change='delete'] th,
+.superdoc-table-fragment [data-track-change='delete'] {
+  text-decoration: line-through;
+  text-decoration-color: var(--sd-block-tracked-deleted-outline, #cb0e47);
+}
+
+[data-track-change='insert'] {
+  background-color: var(--sd-block-tracked-inserted-bg, rgba(57, 156, 114, 0.18)) !important;
+  outline: var(--sd-block-tracked-inserted-outline-width, 2px) dashed var(--sd-block-tracked-inserted-outline, #00853d) !important;
+  outline-offset: var(--sd-block-tracked-inserted-outline-offset, -1px) !important;
+}
+/* Block-level tracked changes - end */
+
 /* Collaboration cursors */
 .sd-editor-scoped .ProseMirror > .ProseMirror-yjs-cursor:first-child {
   margin-top: 16px;

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { cloneColumnLayout, extractHeaderFooterSpace, normalizeColumnLayout, widthsEqual } from './index.js';
-import type { FlowBlock, Layout } from './index.js';
+import type { FlowBlock, Layout, TableRow, TrackedChangeMeta } from './index.js';
 
 describe('contracts', () => {
   it('accepts a basic FlowBlock structure', () => {
@@ -84,5 +84,19 @@ describe('contracts', () => {
       widths: [72, 144],
     });
     expect(normalizeColumnLayout({ count: 2, gap: 24 }, 624).widths).toEqual([300, 300]);
+  });
+
+  it('TrackedChangeMeta accepts an optional operationId', () => {
+    const meta: TrackedChangeMeta = { kind: 'delete', id: 'r1', operationId: 'op-table-1' };
+    expect(meta.operationId).toBe('op-table-1');
+  });
+
+  it('TableRow accepts an optional trackedChange field carrying row-level metadata', () => {
+    const row: TableRow = {
+      id: 'row-1',
+      cells: [],
+      trackedChange: { kind: 'insert', id: 'r1', operationId: 'op-table-1' },
+    };
+    expect(row.trackedChange?.kind).toBe('insert');
   });
 });

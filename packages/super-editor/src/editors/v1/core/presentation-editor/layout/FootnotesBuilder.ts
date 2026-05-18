@@ -24,6 +24,7 @@ import { toFlowBlocks } from '@superdoc/pm-adapter';
 import type { ConverterContext } from '@superdoc/pm-adapter/converter-context.js';
 import { SUBSCRIPT_SUPERSCRIPT_SCALE } from '@superdoc/pm-adapter/constants.js';
 import { formatFootnoteCardinal } from '@superdoc/pm-adapter/footnote-formatting.js';
+import { isCustomMarkFollows } from './computeNoteNumbering.js';
 
 import type { ProseMirrorJSON } from '../../types/EditorTypes.js';
 import type { FootnoteReference, FootnotesLayoutInput } from '../types.js';
@@ -180,14 +181,6 @@ export function buildFootnotesInput(
  */
 function isFootnoteMarker(run: Run): boolean {
   return Boolean(run.dataAttrs?.[FOOTNOTE_MARKER_DATA_ATTR]);
-}
-
-// SD-2658: OOXML on/off — matches footnote-reference.ts's tolerant parse.
-function isCustomMarkFollows(value: unknown): boolean {
-  if (value === true || value === 1) return true;
-  if (typeof value !== 'string') return false;
-  const v = value.trim().toLowerCase();
-  return v === '1' || v === 'true' || v === 'on';
 }
 
 /**

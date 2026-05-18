@@ -4,6 +4,7 @@ import { toFlowBlocks } from '@superdoc/pm-adapter';
 import type { ConverterContext } from '@superdoc/pm-adapter/converter-context.js';
 import { SUBSCRIPT_SUPERSCRIPT_SCALE } from '@superdoc/pm-adapter/constants.js';
 import { formatFootnoteCardinal } from '@superdoc/pm-adapter/footnote-formatting.js';
+import { isCustomMarkFollows } from './computeNoteNumbering.js';
 
 import type { ProseMirrorJSON } from '../../types/EditorTypes.js';
 import { findNoteEntryById } from '../../../document-api-adapters/helpers/note-entry-lookup.js';
@@ -40,6 +41,8 @@ export function buildEndnoteBlocks(
 
   const orderedEndnoteIds: string[] = [];
   const seen = new Set<string>();
+  // §17.11.14 — customMarkFollows refs render the literal symbol in body; no body marker.
+  const customMarkIds = new Set<string>();
 
   editorState.doc.descendants((node) => {
     if (node.type?.name !== 'endnoteReference') return;
@@ -49,6 +52,7 @@ export function buildEndnoteBlocks(
     if (!key || seen.has(key)) return;
     seen.add(key);
     orderedEndnoteIds.push(key);
+    if (isCustomMarkFollows(node.attrs?.customMarkFollows)) customMarkIds.add(key);
   });
 
   if (orderedEndnoteIds.length === 0) return [];
@@ -69,7 +73,9 @@ export function buildEndnoteBlocks(
       });
 
       if (result?.blocks?.length) {
-        ensureEndnoteMarker(result.blocks, id, endnoteNumberById, endnoteNumberFormat);
+        if (!customMarkIds.has(id)) {
+          ensureEndnoteMarker(result.blocks, id, endnoteNumberById, endnoteNumberFormat);
+        }
         blocks.push(...result.blocks);
       }
     } catch {}

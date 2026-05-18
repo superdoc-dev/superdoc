@@ -1,5 +1,5 @@
 import type { DrawingBlock, SdtMetadata } from '@superdoc/contracts';
-import { createDrawingPlaceholder } from './placeholder.js';
+import { renderDrawingFrame, type RenderDrawingContentForPlacement } from './drawingFrame.js';
 
 export type RenderTableDrawingFrameParams = {
   doc: Document;
@@ -11,7 +11,7 @@ export type RenderTableDrawingFrameParams = {
   top?: number;
   zIndex?: number;
   flexShrink?: string;
-  renderDrawingContent?: (block: DrawingBlock, options?: { clipContainer?: HTMLElement }) => HTMLElement;
+  renderDrawingContent?: RenderDrawingContentForPlacement;
   applySdtDataset: (el: HTMLElement | null, metadata?: SdtMetadata | null) => void;
 };
 
@@ -28,41 +28,20 @@ export const renderTableDrawingFrame = ({
   renderDrawingContent,
   applySdtDataset,
 }: RenderTableDrawingFrameParams): HTMLElement => {
-  const drawingWrapper = doc.createElement('div');
-  drawingWrapper.style.position = position;
-  if (left != null) {
-    drawingWrapper.style.left = `${left}px`;
-  }
-  if (top != null) {
-    drawingWrapper.style.top = `${top}px`;
-  }
-  drawingWrapper.style.width = `${width}px`;
-  drawingWrapper.style.height = `${height}px`;
-  if (flexShrink != null) {
-    drawingWrapper.style.flexShrink = flexShrink;
-  }
-  drawingWrapper.style.maxWidth = '100%';
-  drawingWrapper.style.boxSizing = 'border-box';
-  if (zIndex != null) {
-    drawingWrapper.style.zIndex = String(zIndex);
-  }
-  applySdtDataset(drawingWrapper, block.attrs?.sdt as SdtMetadata | undefined);
-
-  const drawingInner = doc.createElement('div');
-  drawingInner.classList.add('superdoc-table-drawing');
-  drawingInner.style.width = '100%';
-  drawingInner.style.height = '100%';
-  drawingInner.style.display = 'flex';
-  drawingInner.style.alignItems = 'center';
-  drawingInner.style.justifyContent = 'center';
-  drawingInner.style.overflow = 'hidden';
-
-  const drawingContent =
-    renderDrawingContent?.(block, { clipContainer: drawingInner }) ?? createDrawingPlaceholder(doc);
-  drawingContent.style.width = '100%';
-  drawingContent.style.height = '100%';
-  drawingInner.appendChild(drawingContent);
-
-  drawingWrapper.appendChild(drawingInner);
-  return drawingWrapper;
+  return renderDrawingFrame({
+    doc,
+    block,
+    width,
+    height,
+    placement:
+      position === 'absolute'
+        ? { mode: 'anchored-table-cell', left: left ?? 0, top: top ?? 0, zIndex }
+        : { mode: 'flowing-table-cell', flexShrink },
+    className: 'superdoc-table-drawing',
+    suppressTransforms: true,
+    renderDrawingContent,
+    applySdtDataset,
+  });
 };
+
+export type { RenderDrawingContentForPlacement };

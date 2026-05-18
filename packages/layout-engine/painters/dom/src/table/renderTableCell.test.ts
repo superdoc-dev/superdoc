@@ -758,6 +758,7 @@ describe('renderTableCell', () => {
     expect(drawingWrapper?.style.position).toBe('absolute');
     expect(drawingWrapper?.style.left).toBe('12px');
     expect(drawingWrapper?.style.top).toBe('7px');
+    expect(drawingWrapper?.style.maxWidth).toBe('100%');
   });
 
   it('renders image drawing blocks inside table cells through the shared drawing renderer', () => {

@@ -59,6 +59,9 @@ export const renderDrawingFrame = ({
   wrapper.style.height = `${height}px`;
   wrapper.style.boxSizing = 'border-box';
   wrapper.style.overflow = 'hidden';
+  if (placement.mode === 'anchored-table-cell' || placement.mode === 'flowing-table-cell') {
+    wrapper.style.maxWidth = '100%';
+  }
   if (placement.mode === 'anchored-table-cell') {
     wrapper.style.left = `${placement.left}px`;
     wrapper.style.top = `${placement.top}px`;
@@ -66,7 +69,6 @@ export const renderDrawingFrame = ({
       wrapper.style.zIndex = String(placement.zIndex);
     }
   } else if (placement.mode === 'flowing-table-cell') {
-    wrapper.style.maxWidth = '100%';
     if (placement.flexShrink != null) {
       wrapper.style.flexShrink = placement.flexShrink;
     }

@@ -1,6 +1,7 @@
 import type { PartialRowInfo, TableBlock, TableMeasure, TableRow } from '@superdoc/contracts';
 import {
   computeCellSliceContentHeight,
+  computeTableFragmentHeight,
   describeCellRenderBlocks,
   getCellLines,
   getCellSpacingPx,
@@ -31,30 +32,18 @@ export function computeRenderedTableFragmentHeight(params: {
   repeatHeaderCount?: number;
 }): number {
   const { block, measure, fromRow, toRow, partialRow, repeatHeaderCount = 0 } = params;
-  let height = 0;
-  let rowCount = 0;
-
-  for (let r = 0; r < repeatHeaderCount && r < measure.rows.length; r += 1) {
-    height += measure.rows[r].height;
-    rowCount += 1;
-  }
-
-  for (let r = fromRow; r < toRow && r < measure.rows.length; r += 1) {
-    height += partialRow?.rowIndex === r ? partialRow.partialHeight : measure.rows[r].height;
-    rowCount += 1;
-  }
-
   const cellSpacingPx = measure.cellSpacingPx ?? getCellSpacingPx(block.attrs?.cellSpacing);
-  if (rowCount > 0 && cellSpacingPx > 0) {
-    height += (rowCount + 1) * cellSpacingPx;
-  }
-
   const borderCollapse = block.attrs?.borderCollapse ?? (block.attrs?.cellSpacing != null ? 'separate' : 'collapse');
-  if (rowCount > 0 && borderCollapse === 'separate' && measure.tableBorderWidths) {
-    height += measure.tableBorderWidths.top + measure.tableBorderWidths.bottom;
-  }
 
-  return height;
+  return computeTableFragmentHeight({
+    measure,
+    fromRow,
+    toRow,
+    repeatHeaderCount,
+    borderCollapse,
+    partialRow,
+    cellSpacingPx,
+  });
 }
 
 export function createEmbeddedTableFragment(params: {

@@ -33,6 +33,7 @@ export {
 } from './engines/tables.js';
 
 export { effectiveTableCellSpacing } from './table-cell-spacing.js';
+export { computeTableFragmentHeight } from './table-fragment-height.js';
 export {
   computeCellSliceContentHeight,
   computeFullCellContentHeight,

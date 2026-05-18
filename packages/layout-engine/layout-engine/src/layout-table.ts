@@ -13,6 +13,7 @@ import type {
 } from '@superdoc/contracts';
 import {
   OOXML_PCT_DIVISOR,
+  computeTableFragmentHeight,
   describeCellRenderBlocks,
   createCellSliceCursor,
   computeFullCellContentHeight,
@@ -444,37 +445,7 @@ function computeFragmentHeight(
   borderCollapse?: 'collapse' | 'separate',
   partialRow?: PartialRowInfo | null,
 ): number {
-  let height = 0;
-  let rowCount = 0;
-
-  // Repeated headers
-  if (repeatHeaderCount > 0) {
-    height += sumRowHeights(measure.rows, 0, repeatHeaderCount);
-    rowCount += repeatHeaderCount;
-  }
-
-  // Body rows — substitute partialRow height when applicable
-  for (let i = fromRow; i < toRow && i < measure.rows.length; i++) {
-    if (partialRow && partialRow.rowIndex === i) {
-      height += partialRow.partialHeight;
-    } else {
-      height += measure.rows[i].height;
-    }
-    rowCount++;
-  }
-
-  // Cell spacing: gaps before first row, between rows, and after last row
-  const cellSpacingPx = measure.cellSpacingPx ?? 0;
-  if (rowCount > 0 && cellSpacingPx > 0) {
-    height += (rowCount + 1) * cellSpacingPx;
-  }
-
-  // Outer border height when border-collapse is separate
-  if (rowCount > 0 && measure.tableBorderWidths && borderCollapse === 'separate') {
-    height += measure.tableBorderWidths.top + measure.tableBorderWidths.bottom;
-  }
-
-  return height;
+  return computeTableFragmentHeight({ measure, fromRow, toRow, repeatHeaderCount, borderCollapse, partialRow });
 }
 
 type SplitPointResult = {

@@ -1,7 +1,7 @@
-import { shouldApplyPainterReadOnly } from './story.js';
+import { shouldApplyPlainFootnotePainterReadOnly } from './story.js';
 
 export const applyNoteStoryFrameAttributes = (el: HTMLElement, blockId: string | undefined): void => {
-  if (shouldApplyPainterReadOnly(blockId)) {
+  if (shouldApplyPlainFootnotePainterReadOnly(blockId)) {
     el.setAttribute('contenteditable', 'false');
   }
 };

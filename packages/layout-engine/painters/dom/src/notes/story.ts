@@ -23,5 +23,8 @@ export const getNoteStoryKind = (blockId: string | undefined): NoteStoryKind | u
 
 export const isNonBodyStoryBlockId = (blockId: string | undefined): boolean => getNoteStoryKind(blockId) !== undefined;
 
-export const shouldApplyPainterReadOnly = (blockId: string | undefined): boolean =>
+// AIDEV-NOTE: FootnotesBuilder emits `footnote-{id}-` blocks into the body painter.
+// Endnote and semantic note blocks have dedicated editing sessions, so only plain
+// footnote story frames are locked at the painter layer.
+export const shouldApplyPlainFootnotePainterReadOnly = (blockId: string | undefined): boolean =>
   getNoteStoryKind(blockId) === 'footnote';

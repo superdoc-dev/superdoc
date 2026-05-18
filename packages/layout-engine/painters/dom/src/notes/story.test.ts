@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getNoteStoryKind, isNonBodyStoryBlockId, shouldApplyPainterReadOnly } from './story.js';
+import { getNoteStoryKind, isNonBodyStoryBlockId, shouldApplyPlainFootnotePainterReadOnly } from './story.js';
 
 describe('note story block ids', () => {
   it.each([
@@ -26,6 +26,6 @@ describe('note story block ids', () => {
     ['__sd_semantic_footnote-1-abc', false],
     ['__sd_semantic_endnote-1-abc', false],
   ] as const)('applies painter read-only for %s: %s', (blockId, expected) => {
-    expect(shouldApplyPainterReadOnly(blockId)).toBe(expected);
+    expect(shouldApplyPlainFootnotePainterReadOnly(blockId)).toBe(expected);
   });
 });

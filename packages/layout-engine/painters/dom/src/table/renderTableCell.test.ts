@@ -2604,6 +2604,11 @@ describe('renderTableCell', () => {
 
       const { cellElement } = renderTableCell({
         ...createBaseDeps(),
+        renderLine: (block) => {
+          const line = doc.createElement('div');
+          line.dataset.blockId = (block as ParagraphBlock).id;
+          return line;
+        },
         cellMeasure: {
           blocks: [paragraphMeasure, paragraphMeasure],
           width: 120,
@@ -2615,10 +2620,13 @@ describe('renderTableCell', () => {
         cell: { id: 'cell-between-borders', blocks: [para1, para2], attrs: {} },
       });
 
-      const wrappers = Array.from(cellElement.querySelectorAll<HTMLElement>(':scope > div > div'));
-      expect(wrappers[0]?.dataset.betweenBorder).toBe('true');
-      expect(wrappers[1]?.dataset.suppressTopBorder).toBe('true');
-      const firstBorder = getParagraphBorderLayer(wrappers[0]!);
+      const firstWrapper = cellElement.querySelector<HTMLElement>('[data-block-id="cell-between-1"]')
+        ?.parentElement as HTMLElement | null;
+      const secondWrapper = cellElement.querySelector<HTMLElement>('[data-block-id="cell-between-2"]')
+        ?.parentElement as HTMLElement | null;
+      expect(firstWrapper?.dataset.betweenBorder).toBe('true');
+      expect(secondWrapper?.dataset.suppressTopBorder).toBe('true');
+      const firstBorder = getParagraphBorderLayer(firstWrapper!);
       expect(firstBorder.style.borderBottomStyle).toBe('dashed');
       expect(firstBorder.style.borderBottomWidth).toBe('2px');
     });
@@ -2708,6 +2716,11 @@ describe('renderTableCell', () => {
 
       const { cellElement } = renderTableCell({
         ...createBaseDeps(),
+        renderLine: (block) => {
+          const line = doc.createElement('div');
+          line.dataset.blockId = (block as ParagraphBlock).id;
+          return line;
+        },
         cellMeasure: {
           blocks: [paragraphMeasure, paragraphMeasure],
           width: 120,
@@ -2719,9 +2732,12 @@ describe('renderTableCell', () => {
         cell: { id: 'cell-between-break', blocks: [para1, para2], attrs: {} },
       });
 
-      const wrappers = Array.from(cellElement.querySelectorAll<HTMLElement>(':scope > div > div'));
-      expect(wrappers[0]?.dataset.betweenBorder).toBeUndefined();
-      expect(wrappers[1]?.dataset.suppressTopBorder).toBeUndefined();
+      const firstWrapper = cellElement.querySelector<HTMLElement>('[data-block-id="cell-between-break-1"]')
+        ?.parentElement as HTMLElement | null;
+      const secondWrapper = cellElement.querySelector<HTMLElement>('[data-block-id="cell-between-break-2"]')
+        ?.parentElement as HTMLElement | null;
+      expect(firstWrapper?.dataset.betweenBorder).toBeUndefined();
+      expect(secondWrapper?.dataset.suppressTopBorder).toBeUndefined();
     });
 
     it('should not apply borders when paragraph has no borders attribute', () => {

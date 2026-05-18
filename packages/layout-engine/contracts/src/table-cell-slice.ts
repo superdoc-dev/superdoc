@@ -123,7 +123,7 @@ export function describeCellRenderBlocks(
         globalStartLine: startLine,
         globalEndLine: globalLine,
         lineHeights,
-        totalHeight: sumLines,
+        totalHeight: tableMeasure.totalHeight ?? sumLines,
         visibleHeight: sumLines,
         isFirstBlock,
         isLastBlock,
@@ -179,6 +179,12 @@ export function computeCellSliceContentHeight(blocks: CellRenderBlock[], fromLin
         height += sliceLineSum;
       }
     } else if (block.visibleHeight > 0) {
+      const sliceLineSum = sumArray(block.lineHeights.slice(localStart, localEnd));
+      if (block.kind === 'table' && rendersEntireBlock) {
+        height += Math.max(sliceLineSum, block.totalHeight);
+        continue;
+      }
+
       for (let i = localStart; i < localEnd; i += 1) {
         height += block.lineHeights[i] ?? 0;
       }
@@ -230,8 +236,10 @@ export function createCellSliceCursor(blocks: CellRenderBlock[], startLine: numb
       blockLineSum += lineHeight;
 
       const isBlockComplete = localLine === block.lineHeights.length - 1;
-      if (isBlockComplete && startedFromLine0 && block.kind === 'paragraph') {
+      if (isBlockComplete && startedFromLine0 && (block.kind === 'paragraph' || block.kind === 'table')) {
         cost += Math.max(0, block.totalHeight - blockLineSum);
+      }
+      if (isBlockComplete && startedFromLine0 && block.kind === 'paragraph') {
         cost += block.spacingAfter;
       }
       if (isBlockComplete) {
@@ -257,8 +265,10 @@ export function createCellSliceCursor(blocks: CellRenderBlock[], startLine: numb
       if (block.kind === 'paragraph' || block.visibleHeight > 0) {
         cost += lineHeight;
       }
-      if (block.lineHeights.length === 1 && block.kind === 'paragraph') {
+      if (block.lineHeights.length === 1 && (block.kind === 'paragraph' || block.kind === 'table')) {
         cost += Math.max(0, block.totalHeight - lineHeight);
+      }
+      if (block.lineHeights.length === 1 && block.kind === 'paragraph') {
         cost += block.spacingAfter;
       }
 
@@ -306,9 +316,7 @@ export function computeFullCellContentHeight(
       }
     } else if (measure.kind === 'table') {
       const table = measure as TableMeasure;
-      for (const row of table.rows) {
-        height += row.height;
-      }
+      height += table.totalHeight;
     } else {
       const blockHeight = 'height' in measure ? (measure as { height: number }).height : 0;
       if (blockHeight > 0 && !isAnchoredOutOfFlow(data)) {

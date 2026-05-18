@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import type { ParagraphMeasure, TableCellMeasure, TableMeasure } from './index.js';
-import { getCellLines } from './table-cell-slice.js';
+import {
+  computeCellSliceContentHeight,
+  computeFullCellContentHeight,
+  createCellSliceCursor,
+  describeCellRenderBlocks,
+  getCellLines,
+} from './table-cell-slice.js';
 
 describe('table cell segment mapping', () => {
   const makeParagraph = (lineCount: number): ParagraphMeasure => ({
@@ -76,5 +82,27 @@ describe('table cell segment mapping', () => {
     };
 
     expect(getCellLines(cell)).toHaveLength(2);
+  });
+
+  it('uses embedded table total height for full table slices', () => {
+    const nestedTable: TableMeasure = {
+      kind: 'table',
+      rows: [{ cells: [{ blocks: [makeParagraph(1)], width: 80, height: 20 }], height: 20 }],
+      columnWidths: [80],
+      totalWidth: 80,
+      totalHeight: 24,
+      cellSpacingPx: 2,
+    };
+    const cell: TableCellMeasure = {
+      blocks: [nestedTable],
+      width: 100,
+      height: 24,
+    };
+    const blocks = describeCellRenderBlocks(cell, undefined, { top: 0, bottom: 0 });
+
+    expect(computeCellSliceContentHeight(blocks, 0, 1)).toBe(24);
+    expect(computeFullCellContentHeight(cell, undefined, { top: 0, bottom: 0 })).toBe(24);
+    expect(createCellSliceCursor(blocks, 0).advanceLine(0)).toBe(24);
+    expect(createCellSliceCursor(blocks, 0).minSegmentCost(0)).toBe(24);
   });
 });

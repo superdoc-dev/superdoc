@@ -1,5 +1,5 @@
 import OpenAI from 'openai';
-import { dispatchSuperDocTool, loadSystemPrompt, loadTools } from './tools.js';
+import { dispatchTool, loadSystemPrompt, loadTools } from './tools.js';
 
 const MAX_TURNS = 50;
 
@@ -178,7 +178,7 @@ export async function* executeRun(params: RunParams): AsyncGenerator<RunEvent> {
         result = tc.parseError;
       } else {
         try {
-          result = await dispatchSuperDocTool(documentHandle, tc.name, tc.args);
+          result = await dispatchTool(documentHandle, tc.name, tc.args);
         } catch (err: any) {
           result = { ok: false, error: err?.message ?? String(err) };
         }

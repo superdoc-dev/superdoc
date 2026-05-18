@@ -50,6 +50,7 @@ import { getPageElementByIndex } from '../../dom-observer/PageDom.js';
 import { inchesToPx, parseColumns } from './layout/LayoutOptionParsing.js';
 import { createLayoutMetrics as createLayoutMetricsFromHelper } from './layout/PresentationLayoutMetrics.js';
 import { buildFootnotesInput, type NoteRenderOverride } from './layout/FootnotesBuilder.js';
+import { computeNoteNumbering } from './layout/computeNoteNumbering.js';
 import { safeCleanup } from './utils/SafeCleanup.js';
 import { createHiddenHost } from './dom/HiddenHost.js';
 import {
@@ -6064,30 +6065,12 @@ export class PresentationEditor extends EventEmitter {
           }
         }
 
-        // Compute visible footnote numbering (1-based) by first appearance in the document.
-        // This matches Word behavior even when OOXML ids are non-contiguous or start at 0.
-        const footnoteNumberById: Record<string, number> = {};
-        const footnoteOrder: string[] = [];
-        try {
-          const seen = new Set<string>();
-          let counter = footnoteNumberStart;
-          this.#editor?.state?.doc?.descendants?.((node: any) => {
-            if (node?.type?.name !== 'footnoteReference') return;
-            const rawId = node?.attrs?.id;
-            if (rawId == null) return;
-            const key = String(rawId);
-            if (!key || seen.has(key)) return;
-            seen.add(key);
-            footnoteNumberById[key] = counter;
-            footnoteOrder.push(key);
-            counter += 1;
-          });
-        } catch (e) {
-          // Log traversal errors - footnote numbering may be incorrect if this fails
-          if (typeof console !== 'undefined' && console.warn) {
-            console.warn('[PresentationEditor] Failed to compute footnote numbering:', e);
-          }
-        }
+        // §17.11.14 / §17.11.20 — first-appearance numbering; customMarkFollows refs skip ordinal.
+        const { numberById: footnoteNumberById, order: footnoteOrder } = computeNoteNumbering(
+          this.#editor?.state,
+          'footnoteReference',
+          footnoteNumberStart,
+        );
         // Invalidate flow block cache when footnote order, numFmt, or numStart changes
         // (all three are baked into cached reference runs).
         const footnoteSignature = `${footnoteNumberStart}|${footnoteNumberFormat ?? ''}|${footnoteOrder.join('|')}`;
@@ -6095,28 +6078,11 @@ export class PresentationEditor extends EventEmitter {
           this.#flowBlockCache.clear();
           this.#footnoteNumberSignature = footnoteSignature;
         }
-        // Compute visible endnote numbering (same approach as footnotes).
-        const endnoteNumberById: Record<string, number> = {};
-        const endnoteOrder: string[] = [];
-        try {
-          const seen = new Set<string>();
-          let counter = endnoteNumberStart;
-          this.#editor?.state?.doc?.descendants?.((node: any) => {
-            if (node?.type?.name !== 'endnoteReference') return;
-            const rawId = node?.attrs?.id;
-            if (rawId == null) return;
-            const key = String(rawId);
-            if (!key || seen.has(key)) return;
-            seen.add(key);
-            endnoteNumberById[key] = counter;
-            endnoteOrder.push(key);
-            counter += 1;
-          });
-        } catch (e) {
-          if (typeof console !== 'undefined' && console.warn) {
-            console.warn('[PresentationEditor] Failed to compute endnote numbering:', e);
-          }
-        }
+        const { numberById: endnoteNumberById, order: endnoteOrder } = computeNoteNumbering(
+          this.#editor?.state,
+          'endnoteReference',
+          endnoteNumberStart,
+        );
         const endnoteSignature = `${endnoteNumberStart}|${endnoteNumberFormat ?? ''}|${endnoteOrder.join('|')}`;
         if (endnoteSignature !== this.#endnoteNumberSignature) {
           this.#flowBlockCache.clear();

@@ -219,7 +219,7 @@ describe('buildFootnotesInput', () => {
 
       const firstRun = (blocks?.[0] as { runs?: Array<{ text?: string; dataAttrs?: Record<string, string> }> })
         ?.runs?.[0];
-      expect(firstRun?.text).toBe('1');
+      expect(firstRun?.text).toBe('1\u00A0');
       expect(firstRun?.dataAttrs?.['data-sd-footnote-number']).toBe('true');
       expect(firstRun).not.toHaveProperty('pmStart');
       expect(firstRun).not.toHaveProperty('pmEnd');
@@ -348,7 +348,7 @@ describe('buildFootnotesInput', () => {
         }
       )?.runs?.[0];
 
-      expect(firstRun?.text).toBe('1');
+      expect(firstRun?.text).toBe('1\u00A0');
       expect(firstRun?.fontSize).toBe(12 * SUBSCRIPT_SUPERSCRIPT_SCALE);
       expect(firstRun?.vertAlign).toBe('superscript');
     });
@@ -364,7 +364,7 @@ describe('buildFootnotesInput', () => {
 
       const blocks = result?.blocksById.get('5');
       const firstRun = (blocks?.[0] as { runs?: Array<{ text?: string }> })?.runs?.[0];
-      expect(firstRun?.text).toBe('3');
+      expect(firstRun?.text).toBe('3\u00A0');
     });
 
     it('handles multi-digit display numbers', () => {
@@ -378,7 +378,7 @@ describe('buildFootnotesInput', () => {
 
       const blocks = result?.blocksById.get('1');
       const firstRun = (blocks?.[0] as { runs?: Array<{ text?: string }> })?.runs?.[0];
-      expect(firstRun?.text).toBe('123');
+      expect(firstRun?.text).toBe('123\u00A0');
     });
 
     it('defaults to 1 when footnoteNumberById is missing entry', () => {
@@ -392,7 +392,7 @@ describe('buildFootnotesInput', () => {
 
       const blocks = result?.blocksById.get('99');
       const firstRun = (blocks?.[0] as { runs?: Array<{ text?: string }> })?.runs?.[0];
-      expect(firstRun?.text).toBe('1');
+      expect(firstRun?.text).toBe('1\u00A0');
     });
 
     it('defaults to 1 when converterContext is undefined', () => {
@@ -405,7 +405,53 @@ describe('buildFootnotesInput', () => {
 
       const blocks = result?.blocksById.get('1');
       const firstRun = (blocks?.[0] as { runs?: Array<{ text?: string }> })?.runs?.[0];
-      expect(firstRun?.text).toBe('1');
+      expect(firstRun?.text).toBe('1\u00A0');
+    });
+
+    // SD-2656: Word's FootnoteReference rStyle is independent of the body run's
+    // formatting. The marker must NOT inherit bold/italic/letterSpacing even when
+    // the first body text run is bold (e.g. ³**NTD**). Inheriting bold renders
+    // the marker as bold too — visibly wrong vs Word.
+    it('does NOT inherit bold/italic/letterSpacing from a bold first text run', () => {
+      const editorState = createMockEditorState([{ id: '1', pos: 10 }]);
+      const converter = createMockConverter([
+        { id: '1', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'NTD' }] }] },
+      ]);
+      const context = createMockConverterContext({ '1': 1 });
+
+      (toFlowBlocks as ReturnType<typeof vi.fn>).mockImplementationOnce(() => ({
+        blocks: [
+          {
+            kind: 'paragraph',
+            runs: [
+              {
+                kind: 'text',
+                text: 'NTD',
+                bold: true,
+                italic: true,
+                letterSpacing: 5,
+                fontFamily: 'Times New Roman',
+                fontSize: 12,
+                pmStart: 0,
+                pmEnd: 3,
+              },
+            ],
+          },
+        ],
+        bookmarks: new Map(),
+      }));
+
+      const result = buildFootnotesInput(editorState, converter, context, undefined);
+
+      const firstRun = (
+        blocksFromResult(result)?.[0] as {
+          runs?: Array<{ text?: string; bold?: boolean; italic?: boolean; letterSpacing?: number }>;
+        }
+      )?.runs?.[0];
+      expect(firstRun?.text).toBe('1\u00A0');
+      expect(firstRun?.bold).toBeUndefined();
+      expect(firstRun?.italic).toBeUndefined();
+      expect(firstRun?.letterSpacing).toBeUndefined();
     });
   });
 

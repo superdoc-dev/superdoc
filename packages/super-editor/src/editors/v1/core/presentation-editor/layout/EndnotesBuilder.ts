@@ -119,20 +119,18 @@ function resolveMarkerBaseFontSize(firstTextRun: TextRun | undefined): number {
 }
 
 function buildMarkerRun(markerText: string, firstTextRun: TextRun | undefined): TextRun {
+  // EndnoteReference rStyle is independent of the first body run's formatting,
+  // matching FootnotesBuilder. Trailing NBSP mirrors the literal space run Word
+  // emits between <w:endnoteRef/> and body text.
   const markerRun: TextRun = {
     kind: 'text',
-    text: markerText,
+    text: `${markerText}\u00A0`,
     dataAttrs: { [ENDNOTE_MARKER_DATA_ATTR]: 'true' },
     fontFamily: resolveMarkerFontFamily(firstTextRun),
     fontSize: resolveMarkerBaseFontSize(firstTextRun) * SUBSCRIPT_SUPERSCRIPT_SCALE,
     vertAlign: 'superscript',
   };
 
-  if (typeof firstTextRun?.bold === 'boolean') markerRun.bold = firstTextRun.bold;
-  if (typeof firstTextRun?.italic === 'boolean') markerRun.italic = firstTextRun.italic;
-  if (typeof firstTextRun?.letterSpacing === 'number' && Number.isFinite(firstTextRun.letterSpacing)) {
-    markerRun.letterSpacing = firstTextRun.letterSpacing;
-  }
   if (firstTextRun?.color != null) markerRun.color = firstTextRun.color;
 
   return markerRun;

@@ -218,20 +218,20 @@ function resolveMarkerBaseFontSize(firstTextRun: Run | undefined): number {
 }
 
 function buildMarkerRun(markerText: string, firstTextRun: Run | undefined): Run {
+  // Word renders the FootnoteReference rStyle as a plain superscript, independent
+  // of the following run's formatting. Inheriting bold/italic/letterSpacing from
+  // the first body text run would render "³**NTD**" with a bold marker — visibly
+  // wrong vs Word. Trailing NBSP mirrors the literal " " run Word's source emits
+  // between <w:footnoteRef/> and the first body text run.
   const markerRun: Run = {
     kind: 'text',
-    text: markerText,
+    text: `${markerText}\u00A0`,
     dataAttrs: { [FOOTNOTE_MARKER_DATA_ATTR]: 'true' },
     fontFamily: resolveMarkerFontFamily(firstTextRun),
     fontSize: resolveMarkerBaseFontSize(firstTextRun) * SUBSCRIPT_SUPERSCRIPT_SCALE,
     vertAlign: 'superscript',
   };
 
-  if (typeof firstTextRun?.bold === 'boolean') markerRun.bold = firstTextRun.bold;
-  if (typeof firstTextRun?.italic === 'boolean') markerRun.italic = firstTextRun.italic;
-  if (typeof firstTextRun?.letterSpacing === 'number' && Number.isFinite(firstTextRun.letterSpacing)) {
-    markerRun.letterSpacing = firstTextRun.letterSpacing;
-  }
   if (firstTextRun?.color != null) markerRun.color = firstTextRun.color;
 
   return markerRun;

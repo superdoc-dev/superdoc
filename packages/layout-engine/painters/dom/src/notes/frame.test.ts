@@ -7,7 +7,7 @@ describe('applyNoteStoryFrameAttributes', () => {
     ['endnote-1-abc', null],
     ['__sd_semantic_footnote-1-abc', null],
     ['__sd_semantic_endnote-1-abc', null],
-  ] as const)('applies painter frame attributes for %s', (blockId, expected) => {
+  ] as const)('sets frame contenteditable for %s to %s', (blockId, expected) => {
     const el = document.createElement('div');
 
     applyNoteStoryFrameAttributes(el, blockId);

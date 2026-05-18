@@ -38,7 +38,6 @@ export const renderTableDrawingFrame = ({
         ? { mode: 'anchored-table-cell', left: left ?? 0, top: top ?? 0, zIndex }
         : { mode: 'flowing-table-cell', flexShrink },
     className: 'superdoc-table-drawing',
-    suppressTransforms: true,
     renderDrawingContent,
     applySdtDataset,
   });

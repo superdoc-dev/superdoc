@@ -1318,7 +1318,9 @@ export async function incrementalLayout(
     const safeTopPadding = Math.max(0, topPadding);
     const safeDividerHeight = Math.max(0, dividerHeight);
     const continuationDividerHeight = safeDividerHeight;
-    const continuationDividerWidthFactor = 0.3;
+    // §17.11.23 w:separator — "spans part of the width text extents"
+    // §17.11.1  w:continuationSeparator — "spans the width of the main story's text extents"
+    const SEPARATOR_DEFAULT_WIDTH_FACTOR = 0.5;
 
     const footnoteWidth = resolveFootnoteMeasurementWidth(options, currentBlocks);
     if (footnoteWidth > 0) {
@@ -1634,8 +1636,8 @@ export async function incrementalLayout(
             let cursorY = bandTopY + Math.max(0, plan.separatorSpacingBefore);
             const separatorHeight = isContinuation ? continuationDividerHeight : safeDividerHeight;
             const separatorWidth = isContinuation
-              ? Math.max(0, contentWidth * continuationDividerWidthFactor)
-              : contentWidth;
+              ? contentWidth
+              : Math.max(0, contentWidth * SEPARATOR_DEFAULT_WIDTH_FACTOR);
             if (separatorHeight > 0 && separatorWidth > 0) {
               const separatorId = isContinuation
                 ? `footnote-continuation-separator-page-${page.number}-col-${columnIndex}`

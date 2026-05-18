@@ -2472,9 +2472,6 @@ export class DomPainter {
         applyResolvedFragmentFrame: (el, item, tableFragment, section) =>
           this.applyResolvedFragmentFrame(el, item, tableFragment, section, context.story),
         createErrorPlaceholder: this.createErrorPlaceholder.bind(this),
-        applySdtDataset,
-        applyContainerSdtDataset,
-        applyStyles,
       });
     }
     throw new Error(`DomPainter: unsupported fragment kind ${(fragment as Fragment).kind}`);

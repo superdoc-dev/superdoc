@@ -15,8 +15,8 @@ import { renderDrawingContent as renderSharedDrawingContent } from '../drawings/
 import { buildImageHyperlinkAnchor as buildSharedImageHyperlinkAnchor } from '../images/hyperlink.js';
 import type { FragmentRenderContext } from '../renderer.js';
 import type { SdtBoundaryOptions } from '../sdt/container.js';
-import type { applyContainerSdtDataset, applySdtDataset } from '../sdt/dataset.js';
-import type { applyStyles } from '../utils/apply-styles.js';
+import { applyContainerSdtDataset, applySdtDataset } from '../sdt/dataset.js';
+import { applyStyles } from '../utils/apply-styles.js';
 import { renderTableFragment } from './renderTableFragment.js';
 
 type TableRenderData = {
@@ -55,9 +55,6 @@ export type RenderResolvedTableFragmentDeps = {
     section?: 'body' | 'header' | 'footer',
   ) => void;
   createErrorPlaceholder: (blockId: string, error: unknown) => HTMLElement;
-  applySdtDataset: typeof applySdtDataset;
-  applyContainerSdtDataset: typeof applyContainerSdtDataset;
-  applyStyles: typeof applyStyles;
 };
 
 const resolveTableRenderData = (fragment: TableFragment, resolvedItem?: ResolvedTableItem): TableRenderData => {
@@ -83,9 +80,6 @@ export const renderResolvedTableFragment = ({
   applyFragmentFrame,
   applyResolvedFragmentFrame,
   createErrorPlaceholder,
-  applySdtDataset,
-  applyContainerSdtDataset,
-  applyStyles,
 }: RenderResolvedTableFragmentDeps): HTMLElement => {
   try {
     if (!doc) {

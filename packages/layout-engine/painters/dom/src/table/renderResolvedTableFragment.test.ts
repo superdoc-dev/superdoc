@@ -8,8 +8,6 @@ import type {
   TableFragment,
   TableMeasure,
 } from '@superdoc/contracts';
-import { applyContainerSdtDataset, applySdtDataset } from '../sdt/dataset.js';
-import { applyStyles } from '../utils/apply-styles.js';
 import type { FragmentRenderContext } from '../renderer.js';
 import { renderDrawingContent } from '../drawings/renderDrawingContent.js';
 import { renderResolvedTableFragment } from './renderResolvedTableFragment.js';
@@ -102,9 +100,6 @@ function createDeps(overrides: Partial<Parameters<typeof renderResolvedTableFrag
       if (error instanceof Error) el.title = error.message;
       return el;
     }),
-    applySdtDataset,
-    applyContainerSdtDataset,
-    applyStyles,
     ...overrides,
   };
 }

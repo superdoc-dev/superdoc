@@ -552,6 +552,8 @@ const renderTableCellParagraphBlock = ({
     },
     betweenInfo,
     sdtBoundary: sliceSdtBoundaryForParagraph(sdtBoundary, localStartLine, localEndLine, blockLineCount),
+    continuesFromPrev: localStartLine > 0,
+    continuesOnNext: localEndLine < blockLineCount,
     ancestorContainerKey,
     ancestorContainerSdt,
     ancestorContainerKeys,
@@ -780,10 +782,14 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
     const contentWidthPx = Math.max(0, effectiveCellWidth - paddingLeft - paddingRight);
     const contentHeightPx = Math.max(0, rowHeight - paddingTop - paddingBottom);
     let paragraphContextY = 0;
+    let borderContextSegmentStart = 0;
     const betweenEntryBlockIndexes: number[] = [];
     const betweenInfoByBlockIndex = computeBetweenBorderContext(
       cellBlocks.slice(0, Math.min(blockMeasures.length, cellBlocks.length)).flatMap((block, index) => {
         const measure = blockMeasures[index];
+        const blockStartGlobal = borderContextSegmentStart;
+        const blockLineCount = blockLineCounts[index] ?? 0;
+        borderContextSegmentStart += blockLineCount;
         if (isAnchoredMediaBlock(block, measure)) {
           return [];
         }
@@ -809,6 +815,8 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
             height,
             borders: block.attrs.borders,
             borderHash: hashParagraphBorders(block.attrs.borders),
+            continuesFromPrev: blockStartGlobal < globalFromLine,
+            continuesOnNext: blockStartGlobal + blockLineCount > globalToLine,
           },
         ];
       }),

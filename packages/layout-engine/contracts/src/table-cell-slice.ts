@@ -36,6 +36,7 @@ type TableRenderRow = {
   lineHeights: number[];
 };
 
+/** @internal */
 export function getEmbeddedRowLines(row: TableRowMeasure): Array<{ lineHeight: number }> {
   const hasNestedTable = row.cells.some((cell) => cell.blocks?.some((block) => block.kind === 'table'));
 
@@ -54,6 +55,7 @@ export function getEmbeddedRowLines(row: TableRowMeasure): Array<{ lineHeight: n
   return tallestLines.length > 0 ? tallestLines : [{ lineHeight: row.height || 0 }];
 }
 
+/** @internal */
 export function getCellLines(cell: TableCellMeasure): Array<{ lineHeight: number }> {
   if (cell.blocks && cell.blocks.length > 0) {
     const allLines: Array<{ lineHeight: number }> = [];

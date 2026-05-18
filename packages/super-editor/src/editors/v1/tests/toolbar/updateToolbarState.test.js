@@ -877,38 +877,6 @@ describe('updateToolbarState', () => {
       expect(item.activate).toHaveBeenCalledWith({}, true);
     });
 
-    it('activates copyFormat when the editor has stored format painter state', () => {
-      const item = buildItem('copyFormat');
-      mockEditor.storage = { formatCommands: { storedStyle: [{ type: { name: 'bold' }, attrs: {} }] } };
-      toolbar.toolbarItems = [item];
-      toolbar.snapshot = {
-        commands: {
-          'document-mode': { value: 'editing' },
-          'copy-format': { active: false, disabled: false },
-        },
-      };
-
-      toolbar.updateToolbarState();
-      expect(item.activate).toHaveBeenCalled();
-      expect(item.deactivate).not.toHaveBeenCalled();
-    });
-
-    it('deactivates copyFormat when stored format painter state is cleared', () => {
-      const item = buildItem('copyFormat');
-      mockEditor.storage = { formatCommands: { storedStyle: null } };
-      toolbar.toolbarItems = [item];
-      toolbar.snapshot = {
-        commands: {
-          'document-mode': { value: 'editing' },
-          'copy-format': { active: false, disabled: false },
-        },
-      };
-
-      toolbar.updateToolbarState();
-      expect(item.activate).not.toHaveBeenCalled();
-      expect(item.deactivate).toHaveBeenCalled();
-    });
-
     it('disables tableActions when every table command is disabled', () => {
       const item = buildItem('tableActions', { disabled: { value: false } });
       toolbar.toolbarItems = [item];

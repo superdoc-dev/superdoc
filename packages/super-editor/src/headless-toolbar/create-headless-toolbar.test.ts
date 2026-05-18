@@ -948,6 +948,31 @@ describe('createHeadlessToolbar', () => {
     controller.destroy();
   });
 
+  it('includes copy-format active state in the headless snapshot', () => {
+    const superdoc = createActiveEditorHost({
+      commands: {},
+      extra: {
+        storage: {
+          formatCommands: {
+            storedStyle: [{ type: { name: 'bold' }, attrs: {} }],
+          },
+        },
+      },
+    });
+
+    const controller = createHeadlessToolbar({
+      superdoc,
+      commands: ['copy-format'],
+    });
+
+    expect(controller.getSnapshot().commands['copy-format']).toEqual({
+      active: true,
+      disabled: false,
+    });
+
+    controller.destroy();
+  });
+
   it.each([
     { id: 'clear-formatting', commandName: 'clearFormat' },
     { id: 'copy-format', commandName: 'copyFormat' },

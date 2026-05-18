@@ -634,11 +634,6 @@ export class SuperToolbar extends EventEmitter {
         if (commandState?.value != null) item.activate({ styleId: commandState.value });
         else item.label.value = this.config.texts?.formatText || 'Format text';
       },
-      copyFormat: () => {
-        const hasStoredFormat = Boolean(this.activeEditor?.storage?.formatCommands?.storedStyle);
-        if (hasStoredFormat || commandState?.active) item.activate();
-        else item.deactivate();
-      },
       list: () => {
         if (commandState?.active) {
           item.activate();

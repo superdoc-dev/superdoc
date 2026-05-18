@@ -12,6 +12,7 @@ import {
 import {
   createBoldStateDeriver,
   createBoldExecute,
+  createCopyFormatStateDeriver,
   createFontFamilyExecute,
   createFontFamilyStateDeriver,
   createFontSizeExecute,
@@ -199,7 +200,7 @@ export const createToolbarRegistry = (): Partial<Record<PublicToolbarItemId, Bui
     'copy-format': {
       id: 'copy-format',
       directCommandName: 'copyFormat',
-      state: createDisabledStateDeriver(),
+      state: createCopyFormatStateDeriver(),
     },
     'track-changes-accept-selection': {
       id: 'track-changes-accept-selection',

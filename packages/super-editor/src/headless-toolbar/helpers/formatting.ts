@@ -158,6 +158,15 @@ export const createStrikethroughStateDeriver =
     };
   };
 
+export const createCopyFormatStateDeriver =
+  () =>
+  ({ context }: { context: ToolbarContext | null }) => {
+    return {
+      active: Boolean(resolveStateEditor(context)?.storage?.formatCommands?.storedStyle),
+      disabled: isCommandDisabled(context),
+    };
+  };
+
 export const createFontSizeStateDeriver =
   () =>
   ({ context }: { context: ToolbarContext | null }) => {

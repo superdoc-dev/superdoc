@@ -124,10 +124,15 @@ if (sizeFailed) {
 // chunk that holds the `superdoc` entry — historically `chunks/src-*.es.js`.
 //
 // SD-2803: the dedicated `@superdoc/super-editor/ui` entry removed this
-// dependency. Guard against regression by checking the emitted `ui.es.js`.
-const uiBundlePath = path.join(distRoot, 'ui.es.js');
-if (fs.existsSync(uiBundlePath)) {
-  const uiSource = fs.readFileSync(uiBundlePath, 'utf8');
+// dependency. Guard against regression by checking the emitted bundles.
+// SD-3183: extended the same check to the path-as-contract facade artifact
+// at `dist/public/ui.es.js`. Phase 4 will eventually flip
+// `package.json#exports./ui` to this facade; we cannot let the curated
+// surface regress the bundle shape that made SD-2803 possible.
+function auditUiBundleShape(bundlePath, sourcePointer, ticket) {
+  if (!fs.existsSync(bundlePath)) return;
+  const relativePath = path.relative(distRoot, bundlePath);
+  const uiSource = fs.readFileSync(bundlePath, 'utf8');
   const importRegex = /import\s+(?:[^"']*\s+from\s+)?["']([^"']+)["']/g;
   const violations = [];
   let match;
@@ -142,14 +147,24 @@ if (fs.existsSync(uiBundlePath)) {
   }
   if (violations.length > 0) {
     console.error(
-      '[audit-bundle] ✗ ui.es.js side-effect-imports forbidden chunks (regression of SD-2803):',
+      `[audit-bundle] ✗ ${relativePath} side-effect-imports forbidden chunks (regression of SD-2803${ticket ? ` / ${ticket}` : ''}):`,
     );
     for (const v of violations) console.error(`    ${v}`);
     console.error(
-      '    The `superdoc/ui` sub-entry must route through `@superdoc/super-editor/ui`,',
+      `    Re-export source must route through \`@superdoc/super-editor/ui\`,`,
     );
-    console.error('    not the package root barrel. See packages/superdoc/src/ui.js.');
+    console.error(`    not the package root barrel. See ${sourcePointer}.`);
     process.exit(1);
   }
-  console.log('[audit-bundle] ✓ ui.es.js does not pull in the editor main barrel');
+  console.log(`[audit-bundle] ✓ ${relativePath} does not pull in the editor main barrel`);
 }
+
+auditUiBundleShape(
+  path.join(distRoot, 'ui.es.js'),
+  'packages/superdoc/src/ui.js',
+);
+auditUiBundleShape(
+  path.join(distRoot, 'public', 'ui.es.js'),
+  'packages/superdoc/src/public/ui.ts',
+  'SD-3183',
+);

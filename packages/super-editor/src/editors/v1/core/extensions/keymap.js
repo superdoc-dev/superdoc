@@ -43,6 +43,7 @@ export const handleBackspace = (editor) => {
     () => commands.backspaceAtomBefore(),
     () => commands.backspaceNextToRun(),
     () => commands.backspaceAcrossRuns(),
+    () => commands.mixedBidiBackspace?.() ?? false,
     () => commands.deleteSelection(),
     () => commands.removeNumberingProperties(),
     () => commands.joinBackward(),

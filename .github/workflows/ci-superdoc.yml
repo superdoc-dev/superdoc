@@ -154,6 +154,15 @@ jobs:
         # ESM, missing CDN files, unpublished `source` paths.
         run: node tests/consumer-typecheck/package-shape-gate.mjs
 
+      - name: Legacy public no-growth gates (SD-3176)
+        # No-growth snapshots for the legacy public compatibility surfaces.
+        # See tests/consumer-typecheck/snapshots/README.md for the policy.
+        # Runs after the matrix step so the packed-and-installed fixture
+        # is available for Snapshot B (resolved named exports).
+        run: |
+          node tests/consumer-typecheck/snapshot-super-editor-package-exports.mjs --check
+          node tests/consumer-typecheck/snapshot-superdoc-legacy-exports.mjs --check
+
   unit-tests:
     needs: build
     runs-on: ubuntu-latest

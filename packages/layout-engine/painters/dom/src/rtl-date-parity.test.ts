@@ -68,9 +68,10 @@ describe('RTL date parity', () => {
     expect(span?.textContent).toBe(runText);
   });
 
-  // SD-3098: mixed runs on the same line - the bidiCompatible merge guard keeps
-  // them as separate spans, so each can carry its own dir attribute.
-  it('paints mixed rtl + ltr runs on the same line as separate spans with distinct dir attrs', () => {
+  // Mixed runs remain separate spans. In RTL paragraphs we now avoid forcing
+  // per-run dir="rtl" for plain Latin/digit tokens, so numeric rtl-tagged runs
+  // can inherit paragraph direction without isolated run reordering.
+  it('paints mixed rtl + ltr runs on the same line as separate spans with date-only ltr override', () => {
     const blockId = 'mixed';
     const ltrText = '-03-23';
     const rtlText = '2026';
@@ -110,13 +111,13 @@ describe('RTL date parity', () => {
     expect(spans.length).toBe(2);
     expect(spans[0].getAttribute('dir')).toBe('ltr');
     expect(spans[0].textContent).toBe(ltrText);
-    expect(spans[1].getAttribute('dir')).toBe('rtl');
+    expect(spans[1].getAttribute('dir')).toBeNull();
     expect(spans[1].textContent).toBe(rtlText);
   });
 
-  // SD-3098: rtl-tagged runs that are NOT date-like keep dir="rtl" but get no
-  // RLM injection. Plain integers (`2026`) don't match the date regex.
-  it('does not inject RLM into rtl runs whose text is not date-like', () => {
+  // Rtl-tagged numeric runs in RTL paragraphs do not force dir="rtl" anymore.
+  // This avoids undesired token inversion in mixed header/footer runs like "copy 2".
+  it('does not force per-run rtl dir for non-date numeric runs in RTL paragraphs', () => {
     const blockId = 'rtl-numeric';
     const runText = '2026';
     const block: FlowBlock = {
@@ -133,7 +134,7 @@ describe('RTL date parity', () => {
     painter.paint(makeLayout(blockId), mount);
 
     const span = mount.querySelector('.superdoc-line span');
-    expect(span?.getAttribute('dir')).toBe('rtl');
+    expect(span?.getAttribute('dir')).toBeNull();
     expect(span?.textContent).toBe(runText);
     expect(span?.textContent).not.toContain('\u200F');
   });

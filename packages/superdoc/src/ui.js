@@ -2,11 +2,17 @@
  * Public sub-entry: `superdoc/ui`
  *
  * Re-exports the browser-only UI controller from the dedicated
- * `@superdoc/super-editor/ui` sub-export. This sub-export points at
- * `packages/super-editor/src/ui/index.ts` directly, so consumers
- * pull only the UI controller and its types — not the editor core,
- * SuperConverter, jszip, xml-js, headless-toolbar, etc. that the
- * package's main entry transitively imports.
+ * `@superdoc/super-editor/ui` sub-export. The narrow subpath points at
+ * `packages/super-editor/src/ui/index.ts` directly so consumers do not
+ * drag the editor root/main barrel — Vue components, the SuperDoc app
+ * shell, and other top-level UI infrastructure. The bundle still pulls
+ * SuperConverter, jszip, xml-js, and similar shared chunks because the
+ * UI controller depends on them transitively (verified against the
+ * emitted `dist/ui.es.js`); what the narrow path avoids is the
+ * app-shell chunk specifically.
+ *
+ * `packages/superdoc/scripts/audit-bundle.cjs` enforces the shape on
+ * the emitted bundle.
  *
  * Source: `packages/super-editor/src/ui/`
  */

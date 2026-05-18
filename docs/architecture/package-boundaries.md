@@ -109,9 +109,9 @@ The `superdoc` package currently exposes the following entries via `package.json
 | `./super-editor` | Yes | Legacy public compatibility surface | `imports-sub-export.ts` | Was effectively public when no other headless path existed. `Editor`, `PresentationEditor`, `getStarterExtensions`, `Extensions`, `SuperToolbar`, `SuperConverter`, `DocxZipper` and most of the surface are now exported from `superdoc` itself. Kept exported, not advertised, migration target is `superdoc`. See Decision 1. |
 | `./ui` | Yes | Public subpath | `imports-ui.ts` | Stays |
 | `./ui/react` | Yes | Public subpath | `imports-ui-react.ts` | Stays |
-| `./headless-toolbar` | Yes | Public subpath | `imports-headless-toolbar.ts` | Stays |
-| `./headless-toolbar/react` | Yes | Public subpath | `imports-headless-toolbar-react.ts` | Stays |
-| `./headless-toolbar/vue` | Yes | Public subpath | `imports-headless-toolbar-vue.ts` | Stays |
+| `./headless-toolbar` | Yes | Legacy public compatibility surface | `imports-headless-toolbar.ts` | Kept exported, not advertised. New custom UI integrations should use `superdoc/ui`. See Decision 4. |
+| `./headless-toolbar/react` | Yes | Legacy public compatibility surface | `imports-headless-toolbar-react.ts` | Framework helper for the legacy headless toolbar. Migration target is `superdoc/ui/react`. See Decision 4. |
+| `./headless-toolbar/vue` | Yes | Legacy public compatibility surface | `imports-headless-toolbar-vue.ts` | Framework helper for the legacy headless toolbar. New work that needs a Vue UI controller should track that as a separate decision; the legacy entry is kept compiling. See Decision 4. |
 | `./converter` | Yes (SD-2953) | Legacy public compatibility surface | `imports-converter.ts` | DOCX conversion is also reachable through `Editor.open` / `Editor.loadXmlData` / `SuperConverter` exported from `superdoc`. Kept exported, not advertised, migration target is `superdoc`. Types added in SD-2953 to satisfy strict-mode consumers. |
 | `./docx-zipper` | Yes (SD-2953) | Legacy public compatibility surface | `imports-docx-zipper.ts` | `DocxZipper` is exported from `superdoc`. Kept exported, not advertised, migration target is `superdoc`. Types added in SD-2953. |
 | `./file-zipper` | Yes (SD-2953) | Legacy public compatibility surface | `imports-file-zipper.ts` | `createZip` is exported from `superdoc`. Kept exported, not advertised, migration target is `superdoc`. Types added in SD-2953. |
@@ -182,7 +182,20 @@ The relocation pattern is what `superdoc` currently uses for several internal-bu
 
 **Context.** `./converter`, `./docx-zipper`, `./file-zipper` are exported subpaths whose functionality (DOCX conversion, zipping) is also reachable through `superdoc`'s main entry: `Editor.open`, `Editor.loadXmlData`, `SuperConverter`, `DocxZipper`, `createZip` are all exported from `superdoc`.
 
-**Decision.** All three subpaths are classified as **legacy public compatibility surface**. Migration target is `superdoc` itself (the symbols already exist there). We keep them exported, stop advertising them, and point new use at `superdoc`. SD-2953 added `types` fields and matrix fixtures so strict-mode consumers no longer hit TS7016; the export-coverage audit (`check-export-coverage.cjs`) now enforces that every `package.json` exports entry carries types, an asset classification, or a documented runtime-only allowlist entry.
+`./headless-toolbar` is the same shape with a different migration target: the next-generation custom UI story is `superdoc/ui` and `superdoc/ui/react` (the typed UI controller). Existing consumers of the headless-toolbar surface keep compiling; new integrations should use the UI controller entries.
+
+**Decision.** `./converter`, `./docx-zipper`, `./file-zipper`, and the `./headless-toolbar` family (`./headless-toolbar`, `./headless-toolbar/react`, `./headless-toolbar/vue`) are classified as **legacy public compatibility surface**.
+
+| Subpath | Migration target |
+| --- | --- |
+| `./converter` | `SuperConverter` from `superdoc` |
+| `./docx-zipper` | `DocxZipper` from `superdoc` |
+| `./file-zipper` | `createZip` from `superdoc` |
+| `./headless-toolbar` | `superdoc/ui` |
+| `./headless-toolbar/react` | `superdoc/ui/react` |
+| `./headless-toolbar/vue` | Track a Vue UI controller as a separate decision; the legacy entry is kept compiling. |
+
+We keep them exported, stop advertising them, and point new use at the migration target. SD-2953 added `types` fields and matrix fixtures so strict-mode consumers no longer hit TS7016; the export-coverage audit (`check-export-coverage.cjs`) now enforces that every `package.json` exports entry carries types, an asset classification, or a documented runtime-only allowlist entry. SD-3179 lands the source-side facade for `./headless-toolbar` under `packages/superdoc/src/public/legacy/` and extends SD-3176's no-growth snapshot list to cover `./headless-toolbar`, `./headless-toolbar/react`, and `./headless-toolbar/vue` so these subpaths cannot expand silently.
 
 ## Deliverables
 

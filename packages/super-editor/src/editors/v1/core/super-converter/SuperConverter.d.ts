@@ -5,3 +5,7 @@ export class SuperConverter {
   static extractDocumentGuid(...args: any[]): string | null;
   [key: string]: any;
 }
+
+export function hasBodyNumberingReferences(
+  documentXml: { name?: string; elements?: readonly unknown[] } | null | undefined,
+): boolean;

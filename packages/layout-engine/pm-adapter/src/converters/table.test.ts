@@ -2527,7 +2527,7 @@ describe('tableCellNodeToBlock — SD-2516: documentPartObject children', () => 
     expect((cellBlocks[0] as ParagraphBlock).runs[0].text).toBe('Inner DPO');
   });
 
-  describe('tableDirectionContext (SD-3138 Phase 1B)', () => {
+  describe('tableDirectionContext (SD-3138 Phase 1B + SD-3171 inline-only visual direction)', () => {
     const mockBlockIdGenerator: BlockIdGenerator = vi.fn((kind) => `test-${kind}`);
     const mockPositionMap: PositionMap = new Map();
     const mockParagraphConverter = vi.fn(() => [
@@ -2576,7 +2576,11 @@ describe('tableCellNodeToBlock — SD-2516: documentPartObject children', () => 
       expect(result?.attrs?.tableDirectionContext?.visualDirection).toBe('rtl');
     });
 
-    it('style cascade rightToLeft=true produces visualDirection=rtl', () => {
+    // SD-3171: Word-parity contract. `w:bidiVisual` on a style does NOT visually
+    // flip cells - Word reports the table as wdTableDirectionLtr and renders
+    // cells in logical order despite the style cascade. SuperDoc must match.
+    // Style-cascade rightToLeft alone leaves visualDirection undefined.
+    it('style cascade rightToLeft=true alone leaves visualDirection undefined (SD-3171 Word-parity)', () => {
       const result = tableNodeToBlock(
         buildTableNode(undefined, 'RtlStyle'),
         mockBlockIdGenerator,
@@ -2590,10 +2594,14 @@ describe('tableCellNodeToBlock — SD-2516: documentPartObject children', () => 
         mockParagraphConverter,
         contextWithStyle('RtlStyle', { rightToLeft: true }),
       ) as TableBlock;
-      expect(result?.attrs?.tableDirectionContext?.visualDirection).toBe('rtl');
+      expect(result?.attrs?.tableDirectionContext).toBeDefined();
+      expect(result?.attrs?.tableDirectionContext?.visualDirection).toBeUndefined();
     });
 
-    it('inline rightToLeft=false overrides style cascade rightToLeft=true (visualDirection=ltr)', () => {
+    // SD-3171: even when style says RTL, inline-false still produces ltr - the
+    // inline layer is the only source we consult for visualDirection, and
+    // explicit `false` is honored.
+    it('inline rightToLeft=false produces visualDirection=ltr (style cascade ignored)', () => {
       const result = tableNodeToBlock(
         buildTableNode({ rightToLeft: false }, 'RtlStyle'),
         mockBlockIdGenerator,
@@ -2610,11 +2618,10 @@ describe('tableCellNodeToBlock — SD-2516: documentPartObject children', () => 
       expect(result?.attrs?.tableDirectionContext?.visualDirection).toBe('ltr');
     });
 
-    it('inline bidiVisual=false overrides style cascade rightToLeft=true (alias-mixed override)', () => {
+    it('inline bidiVisual=false produces visualDirection=ltr (alias normalized, style cascade ignored)', () => {
       // Importer normalizes w:bidiVisual to `rightToLeft` so this shape is rare
-      // in practice, but the resolver must treat the two aliases as one signal
-      // per layer or an inline-false override against a style-true silently
-      // resolves to RTL.
+      // in practice. SD-3171: style cascade is ignored regardless; the assertion
+      // is that inline `false` on the bidiVisual alias is still honored.
       const result = tableNodeToBlock(
         buildTableNode({ bidiVisual: false }, 'RtlStyle'),
         mockBlockIdGenerator,

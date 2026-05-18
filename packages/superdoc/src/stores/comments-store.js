@@ -12,6 +12,7 @@ import {
   getTrackedChangeIndex,
   makeTrackedChangeAnchorKey,
   resolveTrackedChangeInStory,
+  shallowEqual,
 } from '@superdoc/super-editor';
 import useComment from '@superdoc/components/CommentsLayer/use-comment';
 import { groupChanges } from '../helpers/group-changes.js';
@@ -604,37 +605,63 @@ export const useCommentsStore = defineStore('comments', () => {
       debounceEmit(changeId, event, superdoc);
     };
 
+    const setIfChanged = (target, key, value) => {
+      if (!target || shallowEqual(target[key], value)) return false;
+      target[key] = value;
+      return true;
+    };
+
     const applyStoryMetadata = (target) => {
-      if (!target) return;
+      if (!target) return false;
+      let didChange = false;
       if (normalizedTrackedChangeStory !== undefined && normalizedTrackedChangeStory !== null) {
-        target.trackedChangeStory = normalizedTrackedChangeStory;
+        didChange = setIfChanged(target, 'trackedChangeStory', normalizedTrackedChangeStory) || didChange;
       }
       if (normalizedTrackedChangeStoryKind !== undefined && normalizedTrackedChangeStoryKind !== null) {
-        target.trackedChangeStoryKind = normalizedTrackedChangeStoryKind;
+        didChange =
+          setIfChanged(target, 'trackedChangeStoryKind', normalizedTrackedChangeStoryKind) || didChange;
       }
       if (normalizedTrackedChangeStoryLabel !== undefined && normalizedTrackedChangeStoryLabel !== '') {
-        target.trackedChangeStoryLabel = normalizedTrackedChangeStoryLabel;
+        didChange =
+          setIfChanged(target, 'trackedChangeStoryLabel', normalizedTrackedChangeStoryLabel) || didChange;
       }
       if (normalizedTrackedChangeAnchorKey !== undefined && normalizedTrackedChangeAnchorKey !== null) {
-        target.trackedChangeAnchorKey = normalizedTrackedChangeAnchorKey;
+        didChange =
+          setIfChanged(target, 'trackedChangeAnchorKey', normalizedTrackedChangeAnchorKey) || didChange;
       }
+      return didChange;
+    };
+
+    const applyChangedFields = (target) => {
+      const fields = {
+        trackedChangeText: trackedChangeText ?? null,
+        trackedChangeType: trackedChangeType ?? null,
+        trackedChangeDisplayType: trackedChangeDisplayType ?? null,
+        deletedText: deletedText ?? null,
+      };
+
+      let didChange = false;
+      for (const [key, value] of Object.entries(fields)) {
+        didChange = setIfChanged(target, key, value) || didChange;
+      }
+      return applyStoryMetadata(target) || didChange;
+    };
+
+    const updateExistingTrackedChange = (trackedComment) => {
+      const wasResolved = Boolean(
+        trackedComment.resolvedTime || trackedComment.resolvedByEmail || trackedComment.resolvedByName,
+      );
+      if (wasResolved) clearResolvedMetadata(trackedComment);
+      // AIDEV-NOTE: Targeted tracked-change refresh runs during body typing.
+      // Emit only when the recomputed comment payload changed, otherwise every
+      // keystroke in an unchanged mark can rebroadcast and rerender the sidebar.
+      return applyChangedFields(trackedComment) || wasResolved;
     };
 
     if (event === 'add') {
       const existing = findTrackedChangeById();
       if (existing) {
-        // Undo/redo after accept/reject can rematerialize a previously resolved
-        // tracked change. Reopen the thread so the bubble is actionable again.
-        if (existing.resolvedTime) clearResolvedMetadata(existing);
-
-        // Already exists (e.g. created during batch import) — update instead of duplicating
-        // Partial resolution can turn a replacement into insert-only/delete-only, so
-        // clear fields explicitly when the updated payload no longer includes them.
-        existing.trackedChangeText = trackedChangeText ?? null;
-        existing.trackedChangeType = trackedChangeType ?? null;
-        existing.trackedChangeDisplayType = trackedChangeDisplayType ?? null;
-        existing.deletedText = deletedText ?? null;
-        applyStoryMetadata(existing);
+        if (!updateExistingTrackedChange(existing)) return;
 
         const emitData = {
           type: COMMENT_EVENTS.UPDATE,
@@ -649,15 +676,7 @@ export const useCommentsStore = defineStore('comments', () => {
       // If we have an update event, simply update the composable comment
       const existingTrackedChange = findTrackedChangeById();
       if (!existingTrackedChange) return;
-      if (existingTrackedChange.resolvedTime) clearResolvedMetadata(existingTrackedChange);
-
-      // Partial resolution can turn a replacement into insert-only/delete-only, so
-      // clear fields explicitly when the updated payload no longer includes them.
-      existingTrackedChange.trackedChangeText = trackedChangeText ?? null;
-      existingTrackedChange.trackedChangeType = trackedChangeType ?? null;
-      existingTrackedChange.trackedChangeDisplayType = trackedChangeDisplayType ?? null;
-      existingTrackedChange.deletedText = deletedText ?? null;
-      applyStoryMetadata(existingTrackedChange);
+      if (!updateExistingTrackedChange(existingTrackedChange)) return;
 
       const emitData = {
         type: COMMENT_EVENTS.UPDATE,
@@ -715,6 +734,40 @@ export const useCommentsStore = defineStore('comments', () => {
           });
         }
       }
+    }
+  };
+
+  const collectTrackedChangeMarksByType = (trackedChanges = []) => ({
+    insertedMark: trackedChanges.find(({ mark }) => mark?.type?.name === 'trackInsert')?.mark ?? null,
+    deletionMark: trackedChanges.find(({ mark }) => mark?.type?.name === 'trackDelete')?.mark ?? null,
+    formatMark: trackedChanges.find(({ mark }) => mark?.type?.name === 'trackFormat')?.mark ?? null,
+  });
+
+  const refreshTrackedChangeCommentsByIds = ({ superdoc, editor, changeIds, broadcastChanges = true }) => {
+    if (!superdoc || !editor?.state || !Array.isArray(changeIds) || !changeIds.length) return;
+    const documentId = editor?.options?.documentId != null ? String(editor.options.documentId) : null;
+    if (!documentId) return;
+
+    for (const changeId of new Set(changeIds.map((id) => (id != null ? String(id) : null)).filter(Boolean))) {
+      const trackedChangesForId = trackChangesHelpers.getTrackChanges(editor.state, changeId);
+      if (!trackedChangesForId.length) continue;
+
+      const marks = collectTrackedChangeMarksByType(trackedChangesForId);
+      const params = createOrUpdateTrackedChangeComment({
+        event: 'update',
+        marks,
+        nodes: [],
+        newEditorState: editor.state,
+        documentId,
+        trackedChangesForId,
+      });
+
+      if (!params) continue;
+      params.trackedChangeStory = BODY_TRACKED_CHANGE_STORY;
+      params.trackedChangeStoryKind = 'body';
+      params.trackedChangeStoryLabel = '';
+      params.trackedChangeAnchorKey = buildBodyTrackedChangeAnchorKey(params.changeId ?? changeId);
+      handleTrackedChangeUpdate({ superdoc, params, broadcastChanges });
     }
   };
 
@@ -1579,11 +1632,7 @@ export const useCommentsStore = defineStore('comments', () => {
       trackedChangesForId = [];
     }
 
-    const marks = {
-      insertedMark: trackedChangesForId.find(({ mark }) => mark?.type?.name === 'trackInsert')?.mark ?? null,
-      deletionMark: trackedChangesForId.find(({ mark }) => mark?.type?.name === 'trackDelete')?.mark ?? null,
-      formatMark: trackedChangesForId.find(({ mark }) => mark?.type?.name === 'trackFormat')?.mark ?? null,
-    };
+    const marks = collectTrackedChangeMarksByType(trackedChangesForId);
 
     const resolvedParams = createOrUpdateTrackedChangeComment({
       event,
@@ -1943,6 +1992,7 @@ export const useCommentsStore = defineStore('comments', () => {
     handleEditorLocationsUpdate,
     clearEditorCommentPositions,
     handleTrackedChangeUpdate,
+    refreshTrackedChangeCommentsByIds,
     syncTrackedChangePositionsWithDocument,
     setActiveFloatingCommentInstance,
     requestInstantSidebarAlignment,

@@ -125,7 +125,12 @@ import {
   stampBetweenBorderDataset,
   type BetweenBorderInfo,
 } from './features/paragraph-borders/index.js';
-import { applyRtlStyles, shouldUseSegmentPositioning } from './features/inline-direction/index.js';
+import {
+  applyRtlStyles,
+  shouldUseSegmentPositioning,
+  resolveRunDirectionAttribute,
+  normalizeRtlDateTokenForWordParity,
+} from './features/inline-direction/index.js';
 import { convertOmmlToMathml } from './features/math/index.js';
 
 /**
@@ -5597,12 +5602,16 @@ export class DomPainter {
 
     // Pass isLink flag to skip applying inline color/decoration styles for links
     applyRunStyles(elem as HTMLElement, run, isActiveLink);
-    // SD-3098 Word-parity: rtl-tagged runs get dir="rtl" so per-run bidi is isolated;
-    // non-rtl date-like runs in RTL context get dir="ltr" to prevent separator drift.
-    if (textRun.bidi?.rtl === true) {
-      elem.setAttribute('dir', 'rtl');
-    } else if (typeof textRun.text === 'string' && RTL_DATE_LIKE_TOKEN_RE.test(textRun.text)) {
-      elem.setAttribute('dir', 'ltr');
+    // SD-3098 Word-parity: run-level dir attribute decision lives in the
+    // inline-direction feature. See resolveRunDirectionAttribute for the
+    // decision table (rtl-tagged + content classification + date-like).
+    const dirAttr = resolveRunDirectionAttribute({
+      runText: textRun.text,
+      effectiveText,
+      isRtlTagged: textRun.bidi?.rtl === true,
+    });
+    if (dirAttr) {
+      elem.setAttribute('dir', dirAttr);
     }
     const commentAnnotations = textRun.comments;
     const hasAnyComment = !!commentAnnotations?.length;
@@ -7322,8 +7331,7 @@ export class DomPainter {
     wrapper.dataset.layoutEpoch = String(this.layoutEpoch);
     this.applySdtDataset(wrapper, sdt);
 
-    const appearance =
-      sdt.type === 'structuredContent' ? (sdt as { appearance?: string }).appearance : undefined;
+    const appearance = sdt.type === 'structuredContent' ? (sdt as { appearance?: string }).appearance : undefined;
     if (appearance === 'hidden') {
       wrapper.dataset.appearance = 'hidden';
       // No alias label and no chrome: see CSS rule keyed off
@@ -8293,19 +8301,4 @@ const resolveRunText = (run: Run, context: FragmentRenderContext): string => {
     return context.totalPages ? String(context.totalPages) : (run.text ?? '');
   }
   return run.text ?? '';
-};
-
-const RTL_DATE_LIKE_TOKEN_RE = /^-?\d+(?:[./-]\d+)+$/;
-const RLM = '\u200F';
-
-// AIDEV-NOTE: SD-3098 Word-parity workaround for RTL date-like tokens. We inject
-// RLM around separators at paint time only (DOM text), never into PM/model/export.
-// Word reorders numerics inside RTL date strings via internal RLM treatment; the
-// browser's UBA does not. This is intentionally narrow - only matches date-like
-// numeric patterns - so non-date numeric content is unaffected.
-const normalizeRtlDateTokenForWordParity = (text: string): string => {
-  if (!RTL_DATE_LIKE_TOKEN_RE.test(text)) {
-    return text;
-  }
-  return text.replace(/[./-]/g, (separator) => `${RLM}${separator}${RLM}`);
 };

@@ -114,7 +114,23 @@ export type ParagraphDirectionContext = {
  * w:bdo (§17.3.2.3 override).
  */
 export type RunBidiContext = {
-  /** w:rPr/w:rtl. Forces complex-script formatting; see RunScriptContext. */
+  /**
+   * w:rPr/w:rtl. Preserves the source OOXML signal that the run carries
+   * the `w:rtl` flag. Per §17.3.2.30, `w:rtl` does two things at the model
+   * level:
+   *   1. Forces the complex-script formatting stack (bCs, iCs, szCs,
+   *      rFonts/@cs). See RunScriptContext for the formatting half.
+   *   2. Acts as a Character Directionality Override for weak/neutral
+   *      characters in the run (NOT a forced visual flip of strong-LTR text;
+   *      §17.3.2.30 explicitly says behavior on strong-LTR is unspecified).
+   *
+   * `rtl: true` is the source signal, NOT a directive that every consumer
+   * must project to `dir="rtl"` in the rendered DOM. The painter decides
+   * the DOM projection per its Word-parity rules (see
+   * `features/inline-direction/resolveRunDirectionAttribute`). Exporters
+   * must preserve `rtl: true` on round-trip regardless of paint decisions,
+   * since dropping it would lose the source `w:rPr/w:rtl` semantics.
+   */
   rtl: boolean;
   /** w:dir; bidi embedding direction (RLE/LRE). Wave 1c. */
   embedding?: BaseDirection;

@@ -7,7 +7,7 @@
  * `source` condition for local development while the packed manifest strips it.
  */
 
-import { execFileSync, execSync } from 'node:child_process';
+import { execFileSync, execSync, spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -16,6 +16,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(here, '..', '..');
 const tarballPath = join(repoRoot, 'packages', 'superdoc', 'superdoc.tgz');
 const doPack = process.argv.includes('--pack');
+const knownAttwInternalCrash = "Cannot read properties of undefined (reading 'filename')";
 
 function run(command) {
   execSync(command, {
@@ -29,6 +30,31 @@ function runArgs(command, args) {
     cwd: repoRoot,
     stdio: 'inherit',
   });
+}
+
+function runAttw(args) {
+  const result = spawnSync('pnpm', args, {
+    cwd: repoRoot,
+    encoding: 'utf8',
+  });
+
+  if (result.stdout) process.stdout.write(result.stdout);
+  if (result.stderr) process.stderr.write(result.stderr);
+
+  if (result.status === 0) return true;
+
+  if (result.error) {
+    throw result.error;
+  }
+
+  const output = `${result.stdout ?? ''}\n${result.stderr ?? ''}`;
+  if (result.status === 3 && output.includes(knownAttwInternalCrash)) {
+    console.warn(`[package-shape] WARN: arethetypeswrong crashed with a known internal error: ${knownAttwInternalCrash}`);
+    console.warn('[package-shape] WARN: continuing after packed-manifest checks and publint passed.');
+    return false;
+  }
+
+  throw new Error(`Command failed: pnpm ${args.join(' ')}`);
 }
 
 function readPackedManifest() {
@@ -91,6 +117,10 @@ console.log('[package-shape] Running publint against packed tarball');
 run(`pnpm dlx publint run ${tarballPath} --strict`);
 
 console.log(`[package-shape] Running arethetypeswrong for CJS entrypoints: ${cjsEntrypoints.join(', ')}`);
-runArgs('pnpm', ['dlx', '@arethetypeswrong/cli', tarballPath, '--entrypoints', ...cjsEntrypoints, '--format', 'table']);
+const attwPassed = runAttw(['dlx', '@arethetypeswrong/cli', tarballPath, '--entrypoints', ...cjsEntrypoints, '--format', 'table']);
 
-console.log('[package-shape] ✓ Packed package shape is valid');
+if (attwPassed) {
+  console.log('[package-shape] ✓ Packed package shape is valid');
+} else {
+  console.log('[package-shape] ✓ Packed manifest and publint gates passed; ATTW skipped after known internal crash');
+}

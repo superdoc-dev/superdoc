@@ -76,7 +76,8 @@ import {
   isHeaderWordArtWatermark,
   renderDrawingFragment as renderDrawingFragmentElement,
 } from './drawings/renderDrawingFragment.js';
-import { isNonBodyStoryBlockId, shouldApplyPainterReadOnly } from './notes/story.js';
+import { applyNoteStoryFrameAttributes } from './notes/frame.js';
+import { isNonBodyStoryBlockId } from './notes/story.js';
 
 export type {
   PaintSnapshotStructuredContentBlockEntity,
@@ -2748,9 +2749,7 @@ export class DomPainter {
     applySourceAnchorDataset(el, fragment.sourceAnchor);
     applyLayoutIdentityDataset(el, resolveOrBuildFragmentIdentity(fragment, story ?? resolveSectionStory(section)));
 
-    if (shouldApplyPainterReadOnly(fragment.blockId)) {
-      el.setAttribute('contenteditable', 'false');
-    }
+    applyNoteStoryFrameAttributes(el, fragment.blockId);
 
     if (fragment.kind === 'para') {
       applyParagraphFragmentPmAttributes(el, fragment, section);
@@ -2768,9 +2767,7 @@ export class DomPainter {
     section?: 'body' | 'header' | 'footer',
     resolvedItem?: ResolvedFragmentItem | ResolvedTablePaintItem | ResolvedImageItem | ResolvedDrawingItem,
   ): void {
-    if (shouldApplyPainterReadOnly(fragment.blockId)) {
-      el.setAttribute('contenteditable', 'false');
-    }
+    applyNoteStoryFrameAttributes(el, fragment.blockId);
 
     if (fragment.kind === 'para') {
       applyParagraphFragmentPmAttributes(el, fragment, section, resolvedItem as ResolvedFragmentItem | undefined);

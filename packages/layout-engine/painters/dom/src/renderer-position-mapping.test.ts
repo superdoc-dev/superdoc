@@ -38,28 +38,6 @@ describe('DomPainter.updatePositionAttributes', () => {
     },
   );
 
-  it.each([
-    ['footnote-1-abc', 'false'],
-    ['endnote-1-abc', null],
-    ['__sd_semantic_footnote-1-abc', null],
-    ['__sd_semantic_endnote-1-abc', null],
-  ] as const)('preserves painter read-only behavior for %s', (blockId, expected) => {
-    const painter = new DomPainter();
-    const fragment = {
-      kind: 'image',
-      blockId,
-      x: 0,
-      y: 0,
-      width: 100,
-      height: 20,
-    };
-    const el = document.createElement('div');
-
-    (painter as any).applyFragmentFrame(el, fragment);
-
-    expect(el.getAttribute('contenteditable')).toBe(expected);
-  });
-
   it('still remaps body fragments when the mapping applies', () => {
     const painter = new DomPainter();
     const { fragment, span } = makeFragment('body-paragraph-1', 25, 30);

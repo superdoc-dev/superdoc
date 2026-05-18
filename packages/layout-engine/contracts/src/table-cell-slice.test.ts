@@ -105,4 +105,28 @@ describe('table cell segment mapping', () => {
     expect(createCellSliceCursor(blocks, 0).advanceLine(0)).toBe(24);
     expect(createCellSliceCursor(blocks, 0).minSegmentCost(0)).toBe(24);
   });
+
+  it('includes embedded table fragment spacing for partial row-boundary slices', () => {
+    const nestedTable: TableMeasure = {
+      kind: 'table',
+      rows: [
+        { cells: [{ blocks: [makeParagraph(1)], width: 80, height: 20 }], height: 20 },
+        { cells: [{ blocks: [makeParagraph(1)], width: 80, height: 20 }], height: 20 },
+      ],
+      columnWidths: [80],
+      totalWidth: 80,
+      totalHeight: 46,
+      cellSpacingPx: 2,
+    };
+    const cell: TableCellMeasure = {
+      blocks: [nestedTable],
+      width: 100,
+      height: 46,
+    };
+    const blocks = describeCellRenderBlocks(cell, undefined, { top: 0, bottom: 0 });
+
+    expect(computeCellSliceContentHeight(blocks, 0, 1)).toBe(24);
+    expect(createCellSliceCursor(blocks, 0).advanceLine(0)).toBe(24);
+    expect(createCellSliceCursor(blocks, 0).minSegmentCost(0)).toBe(24);
+  });
 });

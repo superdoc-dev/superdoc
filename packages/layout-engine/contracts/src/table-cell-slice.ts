@@ -12,12 +12,22 @@ export type CellRenderBlock = {
   isLastBlock: boolean;
   spacingBefore: number;
   spacingAfter: number;
+  tableRows?: TableRenderRow[];
+  cellSpacingPx?: number;
+  tableBorderVerticalPx?: number;
 };
 
 export interface CellSliceCursor {
   advanceLine(globalLineIndex: number): number;
   minSegmentCost(globalLineIndex: number): number;
 }
+
+type TableRenderRow = {
+  localStartLine: number;
+  localEndLine: number;
+  height: number;
+  lineHeights: number[];
+};
 
 export function getEmbeddedRowLines(row: TableRowMeasure): Array<{ lineHeight: number }> {
   const hasNestedTable = row.cells.some((cell) => cell.blocks?.some((block) => block.kind === 'table'));
@@ -108,15 +118,33 @@ export function describeCellRenderBlocks(
     } else if (measure.kind === 'table') {
       const tableMeasure = measure as TableMeasure;
       const lineHeights: number[] = [];
+      const tableRows: TableRenderRow[] = [];
+      let tableLocalLine = 0;
       for (const row of tableMeasure.rows) {
+        const rowLineHeights: number[] = [];
         for (const segment of getEmbeddedRowLines(row)) {
-          lineHeights.push(segment.lineHeight);
+          rowLineHeights.push(segment.lineHeight);
         }
+        lineHeights.push(...rowLineHeights);
+        tableRows.push({
+          localStartLine: tableLocalLine,
+          localEndLine: tableLocalLine + rowLineHeights.length,
+          height: row.height,
+          lineHeights: rowLineHeights,
+        });
+        tableLocalLine += rowLineHeights.length;
       }
 
       const startLine = globalLine;
       globalLine += lineHeights.length;
       const sumLines = sumArray(lineHeights);
+      const tableData = data?.kind === 'table' ? data : undefined;
+      const borderCollapse =
+        tableData?.attrs?.borderCollapse ?? (tableData?.attrs?.cellSpacing != null ? 'separate' : 'collapse');
+      const tableBorderVerticalPx =
+        borderCollapse === 'separate' && tableMeasure.tableBorderWidths
+          ? tableMeasure.tableBorderWidths.top + tableMeasure.tableBorderWidths.bottom
+          : 0;
 
       result.push({
         kind: 'table',
@@ -129,6 +157,9 @@ export function describeCellRenderBlocks(
         isLastBlock,
         spacingBefore: 0,
         spacingAfter: 0,
+        tableRows,
+        cellSpacingPx: tableMeasure.cellSpacingPx ?? 0,
+        tableBorderVerticalPx,
       });
     } else {
       const blockHeight = 'height' in measure ? (measure as { height: number }).height : 0;
@@ -179,9 +210,13 @@ export function computeCellSliceContentHeight(blocks: CellRenderBlock[], fromLin
         height += sliceLineSum;
       }
     } else if (block.visibleHeight > 0) {
-      const sliceLineSum = sumArray(block.lineHeights.slice(localStart, localEnd));
-      if (block.kind === 'table' && rendersEntireBlock) {
-        height += Math.max(sliceLineSum, block.totalHeight);
+      if (block.kind === 'table') {
+        const tableSliceHeight = computeTableBlockSliceHeight(block, localStart, localEnd);
+        if (rendersEntireBlock) {
+          height += Math.max(tableSliceHeight, block.totalHeight);
+        } else {
+          height += tableSliceHeight;
+        }
         continue;
       }
 
@@ -198,6 +233,8 @@ export function createCellSliceCursor(blocks: CellRenderBlock[], startLine: numb
   let blockIdx = 0;
   let startedFromLine0 = false;
   let blockLineSum = 0;
+  let tableSliceStartLocal = 0;
+  let tableSliceHeight = 0;
 
   while (blockIdx < blocks.length && blocks[blockIdx].globalEndLine <= startLine) {
     blockIdx += 1;
@@ -205,6 +242,7 @@ export function createCellSliceCursor(blocks: CellRenderBlock[], startLine: numb
   if (blockIdx < blocks.length) {
     const block = blocks[blockIdx];
     startedFromLine0 = startLine <= block.globalStartLine;
+    tableSliceStartLocal = Math.max(0, startLine - block.globalStartLine);
     if (!startedFromLine0) {
       for (let li = 0; li < startLine - block.globalStartLine; li += 1) {
         blockLineSum += block.lineHeights[li] ?? 0;
@@ -218,6 +256,8 @@ export function createCellSliceCursor(blocks: CellRenderBlock[], startLine: numb
         blockIdx += 1;
         startedFromLine0 = true;
         blockLineSum = 0;
+        tableSliceStartLocal = 0;
+        tableSliceHeight = 0;
       }
       if (blockIdx >= blocks.length) return 0;
 
@@ -225,6 +265,26 @@ export function createCellSliceCursor(blocks: CellRenderBlock[], startLine: numb
       const localLine = globalLineIndex - block.globalStartLine;
       const lineHeight = block.lineHeights[localLine] ?? 0;
       let cost = 0;
+
+      if (block.kind === 'table') {
+        const nextTableSliceHeight = computeTableBlockSliceHeight(block, tableSliceStartLocal, localLine + 1);
+        cost = Math.max(0, nextTableSliceHeight - tableSliceHeight);
+        tableSliceHeight = nextTableSliceHeight;
+
+        const isBlockComplete = localLine === block.lineHeights.length - 1;
+        if (isBlockComplete) {
+          if (startedFromLine0) {
+            cost += Math.max(0, block.totalHeight - tableSliceHeight);
+          }
+          blockIdx += 1;
+          startedFromLine0 = true;
+          blockLineSum = 0;
+          tableSliceStartLocal = 0;
+          tableSliceHeight = 0;
+        }
+
+        return cost;
+      }
 
       if (localLine === 0 && startedFromLine0 && block.kind === 'paragraph') {
         cost += block.spacingBefore;
@@ -236,7 +296,7 @@ export function createCellSliceCursor(blocks: CellRenderBlock[], startLine: numb
       blockLineSum += lineHeight;
 
       const isBlockComplete = localLine === block.lineHeights.length - 1;
-      if (isBlockComplete && startedFromLine0 && (block.kind === 'paragraph' || block.kind === 'table')) {
+      if (isBlockComplete && startedFromLine0 && block.kind === 'paragraph') {
         cost += Math.max(0, block.totalHeight - blockLineSum);
       }
       if (isBlockComplete && startedFromLine0 && block.kind === 'paragraph') {
@@ -246,6 +306,8 @@ export function createCellSliceCursor(blocks: CellRenderBlock[], startLine: numb
         blockIdx += 1;
         startedFromLine0 = true;
         blockLineSum = 0;
+        tableSliceStartLocal = 0;
+        tableSliceHeight = 0;
       }
 
       return cost;
@@ -265,7 +327,10 @@ export function createCellSliceCursor(blocks: CellRenderBlock[], startLine: numb
       if (block.kind === 'paragraph' || block.visibleHeight > 0) {
         cost += lineHeight;
       }
-      if (block.lineHeights.length === 1 && (block.kind === 'paragraph' || block.kind === 'table')) {
+      if (block.kind === 'table') {
+        return computeTableBlockSliceHeight(block, localLine, localLine + 1);
+      }
+      if (block.lineHeights.length === 1 && block.kind === 'paragraph') {
         cost += Math.max(0, block.totalHeight - lineHeight);
       }
       if (block.lineHeights.length === 1 && block.kind === 'paragraph') {
@@ -371,6 +436,37 @@ function isAnchoredOutOfFlow(block: unknown): boolean {
 
 function findBlockForLine(blocks: CellRenderBlock[], globalLineIndex: number): CellRenderBlock | undefined {
   return blocks.find((block) => globalLineIndex >= block.globalStartLine && globalLineIndex < block.globalEndLine);
+}
+
+function computeTableBlockSliceHeight(block: CellRenderBlock, localStart: number, localEnd: number): number {
+  if (!block.tableRows) {
+    return sumArray(block.lineHeights.slice(localStart, localEnd));
+  }
+
+  let height = 0;
+  let rowCount = 0;
+
+  for (const row of block.tableRows) {
+    if (row.localEndLine <= localStart || row.localStartLine >= localEnd) continue;
+
+    rowCount += 1;
+    const rowLocalStart = Math.max(0, localStart - row.localStartLine);
+    const rowLocalEnd = Math.min(row.lineHeights.length, localEnd - row.localStartLine);
+    const rendersFullRow = rowLocalStart === 0 && rowLocalEnd >= row.lineHeights.length;
+
+    if (rendersFullRow) {
+      height += row.height;
+    } else {
+      height += sumArray(row.lineHeights.slice(rowLocalStart, rowLocalEnd));
+    }
+  }
+
+  if (rowCount > 0) {
+    height += (rowCount + 1) * (block.cellSpacingPx ?? 0);
+    height += block.tableBorderVerticalPx ?? 0;
+  }
+
+  return height;
 }
 
 function sumArray(arr: number[]): number {

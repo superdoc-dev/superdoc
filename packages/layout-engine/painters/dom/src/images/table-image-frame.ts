@@ -63,14 +63,24 @@ export const renderTableImageFrame = ({
   buildImageHyperlinkAnchor,
 }: RenderTableImageFrameParams): HTMLElement => {
   const wrapper = doc.createElement('div');
-  wrapper.classList.add(DOM_CLASS_NAMES.IMAGE_FRAGMENT);
   wrapper.style.position = placement.mode === 'anchored' ? 'absolute' : 'relative';
   wrapper.style.width = `${measure.width}px`;
   wrapper.style.height = `${measure.height}px`;
   wrapper.style.maxWidth = '100%';
   wrapper.style.boxSizing = 'border-box';
   if (placement.mode === 'flowing') {
+    wrapper.classList.add(DOM_CLASS_NAMES.IMAGE_FRAGMENT);
     wrapper.style.flexShrink = '0';
+    wrapper.setAttribute('data-sd-block-id', block.id);
+    const pmRange = readPmRange(block);
+    if (pmRange.pmStart != null) wrapper.dataset.pmStart = String(pmRange.pmStart);
+    if (pmRange.pmEnd != null) wrapper.dataset.pmEnd = String(pmRange.pmEnd);
+    if (!block.attrs?.vmlWatermark) {
+      wrapper.setAttribute(
+        'data-image-metadata',
+        JSON.stringify(buildTableImageMetadata(block, measure, contentMaxWidth, contentMaxHeight)),
+      );
+    }
   } else {
     wrapper.style.left = `${placement.left}px`;
     wrapper.style.top = `${placement.top}px`;
@@ -79,16 +89,6 @@ export const renderTableImageFrame = ({
     }
   }
 
-  wrapper.setAttribute('data-sd-block-id', block.id);
-  const pmRange = readPmRange(block);
-  if (pmRange.pmStart != null) wrapper.dataset.pmStart = String(pmRange.pmStart);
-  if (pmRange.pmEnd != null) wrapper.dataset.pmEnd = String(pmRange.pmEnd);
-  if (!block.attrs?.vmlWatermark) {
-    wrapper.setAttribute(
-      'data-image-metadata',
-      JSON.stringify(buildTableImageMetadata(block, measure, contentMaxWidth, contentMaxHeight)),
-    );
-  }
   applySdtDataset(wrapper, block.attrs?.sdt);
 
   wrapper.appendChild(

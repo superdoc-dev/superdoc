@@ -434,7 +434,7 @@ describe('renderTableCell', () => {
     expect(imgEl?.parentElement?.style.top).toBe('5px');
   });
 
-  it('stamps interaction metadata on anchored image wrappers inside table cells', () => {
+  it('does not stamp interaction metadata on anchored image wrappers inside table cells', () => {
     const para: ParagraphBlock = {
       kind: 'paragraph',
       id: 'para-anchor-interactive',
@@ -465,14 +465,17 @@ describe('renderTableCell', () => {
       cell: { id: 'cell-anchored-interactive-image', blocks: [para, anchoredImage], attrs: {} },
     });
 
-    const wrapper = cellElement.querySelector('.superdoc-image-fragment') as HTMLElement | null;
+    const image = cellElement.querySelector('img.superdoc-table-image') as HTMLElement | null;
+    const wrapper = image?.parentElement as HTMLElement | null;
     expect(wrapper).toBeTruthy();
     expect(wrapper?.style.position).toBe('absolute');
     expect(wrapper?.style.left).toBe('10px');
     expect(wrapper?.style.top).toBe('5px');
-    expect(wrapper?.dataset.pmStart).toBe('30');
-    expect(wrapper?.dataset.pmEnd).toBe('31');
-    expect(wrapper?.getAttribute('data-image-metadata')).toContain('"originalWidth":20');
+    expect(wrapper?.classList.contains('superdoc-image-fragment')).toBe(false);
+    expect(wrapper?.dataset.pmStart).toBeUndefined();
+    expect(wrapper?.dataset.pmEnd).toBeUndefined();
+    expect(wrapper?.getAttribute('data-sd-block-id')).toBeNull();
+    expect(wrapper?.getAttribute('data-image-metadata')).toBeNull();
   });
 
   it('applies top-level clipPath to anchored image blocks inside table cells', () => {

@@ -72,10 +72,8 @@ import { buildImageHyperlinkAnchor as buildSharedImageHyperlinkAnchor } from './
 import { applyStyles } from './utils/apply-styles.js';
 import { applyTrackedChangeDecorations, resolveTrackedChangesConfig } from './runs/tracked-changes.js';
 import { applySourceAnchorDataset } from './utils/source-anchor.js';
-import {
-  isHeaderWordArtWatermark,
-  renderDrawingFragment as renderDrawingFragmentElement,
-} from './drawings/renderDrawingFragment.js';
+import { renderDrawingFragment as renderDrawingFragmentElement } from './drawings/renderDrawingFragment.js';
+import { isWordArtTextboxWatermarkBlock } from './textbox/wordArtWatermark.js';
 import { applyNoteStoryFrameAttributes } from './notes/frame.js';
 import { isNonBodyStoryBlockId } from './notes/story.js';
 
@@ -2791,7 +2789,7 @@ export class DomPainter {
       return true;
     }
 
-    return section === 'header' && fragment.kind === 'drawing' && isHeaderWordArtWatermark(resolvedItem?.block);
+    return section === 'header' && fragment.kind === 'drawing' && isWordArtTextboxWatermarkBlock(resolvedItem?.block);
   }
 
   /**

@@ -15,9 +15,9 @@ import type { PartId } from '../types.js';
 import { mutatePart } from '../mutation/mutate-part.js';
 import { hasPart } from '../store/part-store.js';
 import { RELATIONSHIP_TYPES } from '../../super-converter/docx-helpers/docx-constants.js';
+import { createRelationshipsPart, getRelationshipsRoot } from '../../helpers/rels-part-helpers.js';
 
 const RELS_PART_ID = 'word/_rels/document.xml.rels' as const;
-const RELS_XMLNS = 'http://schemas.openxmlformats.org/package/2006/relationships';
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -36,7 +36,7 @@ interface RelsXml {
 }
 
 function getRelationshipsTag(part: RelsXml): { name: string; elements: RelElement[] } | undefined {
-  const tag = part?.elements?.find((el) => el.name === 'Relationships');
+  const tag = getRelationshipsRoot(part);
   if (tag && !tag.elements) tag.elements = [];
   return tag as { name: string; elements: RelElement[] } | undefined;
 }
@@ -73,21 +73,6 @@ function createRelationshipElement(id: string, mappedType: string, target: strin
   }
 
   return rel;
-}
-
-function createRelationshipsPart(elements: RelElement[] = []): RelsXml {
-  return {
-    type: 'element',
-    name: 'document',
-    elements: [
-      {
-        type: 'element',
-        name: 'Relationships',
-        attributes: { xmlns: RELS_XMLNS },
-        elements,
-      },
-    ],
-  };
 }
 
 function findExistingRelationship(elements: RelElement[], target: string, normalized: string, mappedType: string) {

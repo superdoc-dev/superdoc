@@ -521,7 +521,9 @@ function getDocumentRelationships(params) {
 function findImageRelationship(relationships = [], { id, target }) {
   return relationships.find((rel) => {
     if (rel?.attributes?.Type !== IMAGE_REL_TYPE) return false;
-    return rel.attributes.Id === id || rel.attributes.Target === target;
+    if (id) return rel.attributes.Id === id;
+    if (target) return rel.attributes.Target === target;
+    return false;
   });
 }
 

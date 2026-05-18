@@ -167,7 +167,7 @@ export async function uploadAndInsertImage({ editor, view, file, size, id }) {
 export function addImageRelationship({ editor, path }) {
   if (editor.options.isHeaderOrFooter) {
     const parentEditor = editor.options.parentEditor;
-    const headerFooterRefId = editor.options.headerFooterRefId || editor.options.documentId;
+    const headerFooterRefId = editor.options.headerFooterRefId;
     if (!parentEditor || !headerFooterRefId) return null;
 
     const relsPartId = resolveHeaderFooterRelsPartIdFromRefId(parentEditor, headerFooterRefId);

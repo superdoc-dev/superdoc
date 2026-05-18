@@ -15,6 +15,7 @@ import {
   isHeaderFooterPartId,
   SOURCE_HEADER_FOOTER_LOCAL,
 } from './header-footer-part-descriptor.js';
+import { getRelationshipsRoot } from '../../helpers/rels-part-helpers.js';
 import { getWordPartRelsPath, normalizeWordPartPath } from '../../helpers/word-part-path.js';
 
 // ---------------------------------------------------------------------------
@@ -82,8 +83,7 @@ function getHeaderFooterRelsPartId(partId: PartId): PartId {
 }
 
 function getRelationshipElements(part: unknown): unknown[] {
-  const relsPart = part as XmlElement | undefined;
-  return relsPart?.elements?.find((el) => el.name === 'Relationships')?.elements ?? [];
+  return getRelationshipsRoot(part as XmlElement)?.elements ?? [];
 }
 
 /**

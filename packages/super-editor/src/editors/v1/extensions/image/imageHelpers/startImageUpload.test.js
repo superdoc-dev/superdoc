@@ -278,9 +278,7 @@ describe('image upload helpers integration', () => {
       type: 'image',
       partId: 'word/_rels/header1.xml.rels',
     });
-    expect(
-      parentEditor.converter.convertedXml['word/_rels/header1.xml.rels'].elements[0].elements[0].attributes,
-    ).toMatchObject({
+    expect(parentEditor.converter.convertedXml['word/_rels/header1.xml.rels'].elements[0].attributes).toMatchObject({
       Id: 'rId1',
       Type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/image',
       Target: 'media/header-logo.png',

@@ -5404,6 +5404,7 @@ export class PresentationEditor extends EventEmitter {
     const { runtime, hostElement, activationOptions } = input;
     const editorContext = activationOptions.editorContext ?? {};
     const pmJson = runtime.editor.getJSON() as unknown as Record<string, unknown>;
+    const headerFooterRefId = runtime.locator.storyType === 'headerFooterPart' ? runtime.locator.refId : undefined;
     const fresh = createStoryEditor(this.#editor, pmJson, {
       documentId: runtime.storyKey,
       isHeaderOrFooter: runtime.kind === 'headerFooter',
@@ -5411,6 +5412,7 @@ export class PresentationEditor extends EventEmitter {
       element: hostElement,
       currentPageNumber: editorContext.currentPageNumber,
       totalPageCount: editorContext.totalPageCount,
+      editorOptions: headerFooterRefId ? { headerFooterRefId } : undefined,
     });
 
     return {

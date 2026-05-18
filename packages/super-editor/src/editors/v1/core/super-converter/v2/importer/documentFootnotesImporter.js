@@ -82,9 +82,11 @@ function importNoteEntries({
     // Get the footnote type (separator, continuationSeparator, or undefined for regular)
     const type = el?.attributes?.['w:type'] || null;
 
-    // Preserve separator/continuationSeparator footnotes as-is for roundtrip fidelity.
-    // These are special Word constructs that shouldn't be converted to SuperDoc content.
-    if (type === 'separator' || type === 'continuationSeparator') {
+    // §17.18.33 ST_FtnEdn — special typed records (separator, continuationSeparator,
+    // continuationNotice) are preserved wholesale for round-trip fidelity. Their
+    // visible rendering (when they contain explicit non-default content) is handled
+    // downstream from `originalXml`.
+    if (type === 'separator' || type === 'continuationSeparator' || type === 'continuationNotice') {
       results.push({
         id,
         type,

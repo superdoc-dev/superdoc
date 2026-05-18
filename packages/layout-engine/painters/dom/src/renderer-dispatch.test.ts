@@ -9,7 +9,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createTestPainter as createDomPainter } from './_test-utils.js';
 import { DomPainter } from './renderer.js';
+import { renderResolvedTableFragment } from './table/renderResolvedTableFragment.js';
 import type { FlowBlock, Measure, Layout } from '@superdoc/contracts';
+
+vi.mock('./table/renderResolvedTableFragment.js', () => ({
+  renderResolvedTableFragment: vi.fn(),
+}));
 
 // ---------------------------------------------------------------------------
 // Minimal fixtures per fragment kind
@@ -309,14 +314,14 @@ describe('renderFragment dispatch', () => {
     expect(spy.mock.calls[0]![0].drawingKind).toBe('chart');
   });
 
-  it('routes table fragment to renderTableFragment', () => {
+  it('routes table fragment to table-owned renderResolvedTableFragment', () => {
     const dummyDiv = document.createElement('div');
-    const spy = vi.spyOn(DomPainter.prototype as any, 'renderTableFragment').mockReturnValue(dummyDiv);
+    vi.mocked(renderResolvedTableFragment).mockReturnValue(dummyDiv);
     const { blocks, measures, layout } = tableFixtures();
     const painter = createDomPainter({ blocks, measures });
     painter.paint(layout, container);
-    expect(spy).toHaveBeenCalledTimes(1);
-    expect(spy.mock.calls[0]![0].kind).toBe('table');
+    expect(renderResolvedTableFragment).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(renderResolvedTableFragment).mock.calls[0]![0].fragment.kind).toBe('table');
   });
 
   it('throws for unknown fragment kind', () => {

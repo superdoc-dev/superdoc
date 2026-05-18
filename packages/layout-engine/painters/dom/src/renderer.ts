@@ -1,6 +1,5 @@
 import type {
   ColumnLayout,
-  DrawingBlock,
   DrawingFragment,
   FlowMode,
   Fragment,
@@ -13,14 +12,10 @@ import type {
   ParagraphBlock,
   Run,
   SourceAnchor,
-  TableBlock,
-  TableFragment,
-  TableMeasure,
   ResolvedLayout,
   ResolvedFragmentItem,
   ResolvedPage,
   ResolvedPaintItem,
-  ResolvedTableItem,
   ResolvedImageItem,
   ResolvedDrawingItem,
   LayoutSourceIdentity,
@@ -29,8 +24,6 @@ import type {
 import {
   LAYOUT_BOUNDARY_SCHEMA,
   buildLayoutSourceIdentityForFragment,
-  expandRunsForInlineNewlines,
-  getCellSpacingPx,
   normalizeColumnLayout,
 } from '@superdoc/contracts';
 import { DATASET_KEYS, decodeLayoutStoryDataset, encodeLayoutStoryDataset } from '@superdoc/dom-contract';
@@ -52,7 +45,9 @@ import {
   spreadStyles,
   type PageStyles,
 } from './styles.js';
-import { renderTableFragment as renderTableFragmentElement } from './table/renderTableFragment.js';
+import { renderResolvedTableFragment } from './table/renderResolvedTableFragment.js';
+import { tableFragmentKey } from './table/fragmentKey.js';
+import { getTableSnapshotFlags } from './table/snapshot.js';
 import { computeSdtBoundaries } from './sdt/boundaries.js';
 import { shouldRebuildForSdtBoundary, type SdtBoundaryOptions } from './sdt/container.js';
 import { applyContainerSdtDataset, applySdtDataset } from './sdt/dataset.js';
@@ -77,7 +72,6 @@ import { buildImageHyperlinkAnchor as buildSharedImageHyperlinkAnchor } from './
 import { applyStyles } from './utils/apply-styles.js';
 import { applyTrackedChangeDecorations, resolveTrackedChangesConfig } from './runs/tracked-changes.js';
 import { applySourceAnchorDataset } from './utils/source-anchor.js';
-import { renderDrawingContent as renderSharedDrawingContent } from './drawings/renderDrawingContent.js';
 import {
   isHeaderWordArtWatermark,
   renderDrawingFragment as renderDrawingFragmentElement,
@@ -345,6 +339,8 @@ type PaintSnapshotCaptureOptions = {
   wrapperEl?: HTMLElement;
   sourceAnchor?: SourceAnchor;
 };
+
+type ResolvedTablePaintItem = Extract<ResolvedPaintItem, { fragmentKind: 'table' }>;
 
 function roundSnapshotMetric(value: number): number | null {
   if (!Number.isFinite(value)) return null;
@@ -1055,11 +1051,12 @@ export class DomPainter {
         tabCount += tabs.length;
         lineCount += 1;
 
+        const tableFlags = getTableSnapshotFlags(lineEl);
         lines.push(
           compactSnapshotObject({
             index: lineIndex,
-            inTableFragment: Boolean(lineEl.closest('.superdoc-table-fragment')),
-            inTableParagraph: Boolean(lineEl.closest('.superdoc-table-paragraph')),
+            inTableFragment: tableFlags.inTableFragment,
+            inTableParagraph: tableFlags.inTableParagraph,
             style: snapshotLineStyleFromElement(lineEl),
             markers,
             tabs,
@@ -2462,7 +2459,23 @@ export class DomPainter {
       return this.renderDrawingFragment(fragment, context, resolvedItem as ResolvedDrawingItem | undefined);
     }
     if (fragment.kind === 'table') {
-      return this.renderTableFragment(fragment, context, sdtBoundary, resolvedItem as ResolvedTableItem | undefined);
+      return renderResolvedTableFragment({
+        doc: this.doc,
+        fragment,
+        context,
+        sdtBoundary,
+        resolvedItem: resolvedItem as ResolvedTablePaintItem | undefined,
+        renderLine: this.renderLine.bind(this),
+        capturePaintSnapshotLine: this.capturePaintSnapshotLine.bind(this),
+        applyFragmentFrame: (el, tableFragment, section) =>
+          this.applyFragmentFrame(el, tableFragment, section, context.story),
+        applyResolvedFragmentFrame: (el, item, tableFragment, section) =>
+          this.applyResolvedFragmentFrame(el, item, tableFragment, section, context.story),
+        createErrorPlaceholder: this.createErrorPlaceholder.bind(this),
+        applySdtDataset,
+        applyContainerSdtDataset,
+        applyStyles,
+      });
     }
     throw new Error(`DomPainter: unsupported fragment kind ${(fragment as Fragment).kind}`);
   }
@@ -2625,139 +2638,6 @@ export class DomPainter {
     });
   }
 
-  private resolveTableRenderData(
-    fragment: TableFragment,
-    resolvedItem?: ResolvedTableItem,
-  ): {
-    block: TableBlock;
-    measure: TableMeasure;
-    cellSpacingPx: number;
-    effectiveColumnWidths: number[];
-  } {
-    if (!resolvedItem) {
-      throw new Error(`DomPainter: missing resolved table item for fragment ${fragment.blockId}`);
-    }
-    return {
-      block: resolvedItem.block,
-      measure: resolvedItem.measure,
-      cellSpacingPx: resolvedItem.cellSpacingPx,
-      effectiveColumnWidths: resolvedItem.effectiveColumnWidths,
-    };
-  }
-
-  private renderTableFragment(
-    fragment: TableFragment,
-    context: FragmentRenderContext,
-    sdtBoundary?: SdtBoundaryOptions,
-    resolvedItem?: ResolvedTableItem,
-  ): HTMLElement {
-    try {
-      if (!this.doc) {
-        throw new Error('DomPainter: document is not available');
-      }
-
-      // Wrap applyFragmentFrame to capture section from context.
-      // Table cell inner fragments always stay on the legacy frame path for now.
-      const applyFragmentFrameWithSection = (el: HTMLElement, frag: Fragment): void => {
-        this.applyFragmentFrame(el, frag, context.section, context.story);
-      };
-
-      // Word justifies text inside table cells, but not the final line unless the
-      // paragraph ends with an explicit line break.
-      const tableCellExpandedRunsCache = new WeakMap<ParagraphBlock, Run[]>();
-      const renderLineForTableCell = (
-        block: ParagraphBlock,
-        line: Line,
-        ctx: FragmentRenderContext,
-        lineIndex: number,
-        isLastLine: boolean,
-        resolvedListTextStartPx?: number,
-      ): HTMLElement => {
-        const lastRun = block.runs.length > 0 ? block.runs[block.runs.length - 1] : null;
-        const paragraphEndsWithLineBreak = lastRun?.kind === 'lineBreak';
-        const shouldSkipJustify = isLastLine && !paragraphEndsWithLineBreak;
-
-        let expandedRuns = tableCellExpandedRunsCache.get(block);
-        if (!expandedRuns) {
-          expandedRuns = expandRunsForInlineNewlines(block.runs);
-          tableCellExpandedRunsCache.set(block, expandedRuns);
-        }
-
-        return this.renderLine(
-          block,
-          line,
-          ctx,
-          undefined,
-          lineIndex,
-          shouldSkipJustify,
-          expandedRuns,
-          resolvedListTextStartPx,
-        );
-      };
-
-      const buildTableImageHyperlinkAnchor = (
-        imageEl: HTMLElement,
-        hyperlink: ImageHyperlink | undefined,
-        display: 'block' | 'inline-block',
-      ): HTMLElement => buildSharedImageHyperlinkAnchor(this.doc!, imageEl, hyperlink, display);
-
-      const renderDrawingContentForTableCell = (
-        block: DrawingBlock,
-        options?: { clipContainer?: HTMLElement },
-      ): HTMLElement =>
-        renderSharedDrawingContent({
-          doc: this.doc!,
-          block,
-          geometry: 'geometry' in block ? block.geometry : undefined,
-          context,
-          clipContainer: options?.clipContainer,
-          buildImageHyperlinkAnchor: buildTableImageHyperlinkAnchor,
-        });
-
-      const tableRenderData = this.resolveTableRenderData(fragment, resolvedItem);
-
-      const el = renderTableFragmentElement({
-        doc: this.doc,
-        fragment,
-        context,
-        block: tableRenderData.block,
-        measure: tableRenderData.measure,
-        cellSpacingPx: tableRenderData.cellSpacingPx,
-        effectiveColumnWidths: tableRenderData.effectiveColumnWidths,
-        sdtBoundary,
-        renderLine: renderLineForTableCell,
-        captureLineSnapshot: (lineEl, lineContext, options) => {
-          this.capturePaintSnapshotLine(lineEl, lineContext, {
-            inTableFragment: true,
-            inTableParagraph: options?.inTableParagraph ?? false,
-            wrapperEl: options?.wrapperEl,
-          });
-        },
-        renderDrawingContent: renderDrawingContentForTableCell,
-        applyFragmentFrame: applyFragmentFrameWithSection,
-        applySdtDataset,
-        applyContainerSdtDataset,
-        applyStyles,
-      });
-
-      // Override outer wrapper positioning with resolved data when available.
-      // Inner cell fragments still use legacy applyFragmentFrame via deps closure.
-      if (resolvedItem) {
-        this.applyResolvedFragmentFrame(el, resolvedItem, fragment, context.section, context.story);
-        // Re-apply the SDT group width override after the resolved frame, so block-SDT
-        // containers can stretch table fragments to match sibling paragraph widths.
-        if (sdtBoundary?.widthOverride != null) {
-          el.style.width = `${sdtBoundary.widthOverride}px`;
-        }
-      }
-
-      return el;
-    } catch (error) {
-      console.error('[DomPainter] Table fragment rendering failed:', { fragment, error });
-      return this.createErrorPlaceholder(fragment.blockId, error);
-    }
-  }
-
   private renderLine(
     block: ParagraphBlock,
     line: Line,
@@ -2889,7 +2769,7 @@ export class DomPainter {
     el: HTMLElement,
     fragment: Fragment,
     section?: 'body' | 'header' | 'footer',
-    resolvedItem?: ResolvedFragmentItem | ResolvedTableItem | ResolvedImageItem | ResolvedDrawingItem,
+    resolvedItem?: ResolvedFragmentItem | ResolvedTablePaintItem | ResolvedImageItem | ResolvedDrawingItem,
   ): void {
     // Footnote content is read-only: prevent cursor placement and typing
     if (typeof fragment.blockId === 'string' && fragment.blockId.startsWith('footnote-')) {
@@ -2940,7 +2820,7 @@ export class DomPainter {
 
   private applyResolvedFragmentFrame(
     el: HTMLElement,
-    item: ResolvedFragmentItem | ResolvedTableItem | ResolvedImageItem | ResolvedDrawingItem,
+    item: ResolvedFragmentItem | ResolvedTablePaintItem | ResolvedImageItem | ResolvedDrawingItem,
     fragment: Fragment,
     section?: 'body' | 'header' | 'footer',
     story?: LayoutStoryLocator,
@@ -3002,14 +2882,8 @@ const fragmentKey = (fragment: Fragment): string => {
       return `image:${fragment.blockId}:${fragment.x}:${fragment.y}`;
     case 'drawing':
       return `drawing:${fragment.blockId}:${fragment.x}:${fragment.y}`;
-    case 'table': {
-      // Include row range and partial row info to uniquely identify table fragments
-      // This is critical for mid-row splitting where multiple fragments can exist for the same table
-      const partialKey = fragment.partialRow
-        ? `:${fragment.partialRow.fromLineByCell.join(',')}-${fragment.partialRow.toLineByCell.join(',')}`
-        : '';
-      return `table:${fragment.blockId}:${fragment.fromRow}:${fragment.toRow}${partialKey}`;
-    }
+    case 'table':
+      return tableFragmentKey(fragment);
     default: {
       const _exhaustiveCheck: never = fragment;
       return _exhaustiveCheck;

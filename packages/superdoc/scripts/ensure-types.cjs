@@ -146,13 +146,27 @@ const cjsDeclarationShims = [
     source: path.join(distRoot, 'superdoc/src/public/legacy/headless-toolbar.d.ts'),
     target: './headless-toolbar.js',
   },
+  // SD-3184: types facade — type-only entry. The existing `./types`
+  // subpath has split types.import/types.require declarations, so the
+  // facade needs a real .d.cts shim. `typeOnly: true` forces the shim
+  // to re-export every name with `export type`, never `export declare
+  // const`, even for names that have value origins upstream (defineNode,
+  // defineMark, isNodeType, assertNodeType, isMarkType). This matches
+  // the ESM .d.ts which uses `export type { ... }` for the same names
+  // and the runtime contract (`dist/public/types.es.js` is empty).
+  {
+    file: path.join(distRoot, 'superdoc/src/public/types.d.cts'),
+    source: path.join(distRoot, 'superdoc/src/public/types.d.ts'),
+    target: './types.js',
+    typeOnly: true,
+  },
 ];
 
 function isValidIdentifier(name) {
   return /^[$A-Z_a-z][$\w]*$/.test(name);
 }
 
-function emitCjsDeclarationShim({ file, source, target }) {
+function emitCjsDeclarationShim({ file, source, target, typeOnly = false }) {
   const ts = require('typescript');
   const program = ts.createProgram([source], {
     target: ts.ScriptTarget.ES2022,
@@ -183,6 +197,19 @@ function emitCjsDeclarationShim({ file, source, target }) {
     const resolved = (symbol.flags & ts.SymbolFlags.Alias) ? checker.getAliasedSymbol(symbol) : symbol;
     const hasValue = Boolean(resolved.flags & ts.SymbolFlags.Value);
     const hasType = Boolean(resolved.flags & ts.SymbolFlags.Type);
+
+    // typeOnly: re-export every name as a type, regardless of upstream
+    // origin. SD-3184: `superdoc/types` is contracted as type-only, so
+    // value-origin names (defineNode, defineMark, isNodeType,
+    // assertNodeType, isMarkType) must NOT appear as `export declare
+    // const` in the CJS shim — that would advertise a runtime value
+    // the empty runtime bundle does not provide.
+    if (typeOnly) {
+      const typeAlias = `__Cjs_${name}`;
+      importLines.push(`import type { ${name} as ${typeAlias} } from '${target}' with { "resolution-mode": "import" };`);
+      exportLines.push(`export type { ${typeAlias} as ${name} };`);
+      continue;
+    }
 
     if (hasType) {
       const typeAlias = `__Cjs_${name}`;

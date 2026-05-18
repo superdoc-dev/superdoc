@@ -253,6 +253,154 @@ const FACADE_ENTRIES = [
     runsCommandSignatureProbe: false,
     ticket: 'SD-3183',
   },
+  // SD-3184: types facade — type-only entry. 116 names from the
+  // existing superdoc/types declaration surface, all exported as
+  // `export type { ... }`. Five names are value-origin upstream
+  // (defineNode, defineMark, isNodeType, assertNodeType, isMarkType)
+  // but kept type-only here to match today's contract.
+  //
+  // SD-3147 classification (corrected, see SD-3185): 26 public + 90
+  // legacy/public-compat. Command-augmentation infrastructure
+  // (CoreCommandMap, ExtensionCommandMap, EditorCommands, etc.) is
+  // legacy/public-compat — typed for backward compat, kept compiling,
+  // not advertised — per the @deprecated tags on `editor.commands` in
+  // Editor.ts and AGENTS.md's "use editor.doc" guidance. All 116 names
+  // remain in the facade; only the tier label changes.
+  //
+  // The existing `./types` package.json#exports entry uses split
+  // types.import/types.require, so this facade has a real .d.cts shim
+  // and the verifier exercises ESM/CJS parity.
+  {
+    name: 'types',
+    esm: path.join(PUBLIC_DIST, 'types.d.ts'),
+    cjs: path.join(PUBLIC_DIST, 'types.d.cts'),
+    // SD-3184: superdoc/types is contracted type-only. The CJS shim
+    // must not emit `export declare const` for any name (would
+    // advertise a runtime value the empty runtime bundle does not
+    // provide). The verifier scans the emitted .d.cts and fails on
+    // value declarations.
+    typeOnly: true,
+    expectedNames: [
+      "BlockNodeAttributes",
+      "BoldAttrs",
+      "BookmarkEndAttrs",
+      "BookmarkStartAttrs",
+      "BorderSpec",
+      "CanCommand",
+      "CanObject",
+      "CellMargins",
+      "ChainableCommandObject",
+      "ChainedCommand",
+      "Command",
+      "CommandProps",
+      "CommentMarkAttrs",
+      "CommentRangeEndAttrs",
+      "CommentRangeStartAttrs",
+      "CommentReferenceAttrs",
+      "ContentBlockAttrs",
+      "ContentBlockMarginOffset",
+      "ContentBlockSize",
+      "CoreCommandMap",
+      "CoreCommands",
+      "DocumentAttrs",
+      "DocumentPartObjectAttrs",
+      "DocumentSectionAttrs",
+      "EditorCommands",
+      "ExtensionCommandMap",
+      "ExtensionCommands",
+      "FieldAnnotationAttrs",
+      "FieldAnnotationSize",
+      "HardBreakAttrs",
+      "HighlightAttrs",
+      "HighlightColor",
+      "ImageAttrs",
+      "ImagePadding",
+      "ImageSize",
+      "ImageTransformData",
+      "ImageWrap",
+      "IndentationProperties",
+      "InlineNodeAttributes",
+      "ItalicAttrs",
+      "LineBreakAttrs",
+      "LinkAttrs",
+      "ListRendering",
+      "MarkAttributesMap",
+      "MarkAttrs",
+      "MarkConfig",
+      "MarkName",
+      "MentionAttrs",
+      "NodeAttributesMap",
+      "NodeAttrs",
+      "NodeConfig",
+      "NodeName",
+      "NumberingProperties",
+      "OxmlNodeAttributes",
+      "OxmlNodeConfig",
+      "PageNumberAttrs",
+      "PageReferenceAttrs",
+      "ParagraphAttrs",
+      "ParagraphProperties",
+      "PassthroughBlockAttrs",
+      "PassthroughInlineAttrs",
+      "PermEndAttrs",
+      "PermStartAttrs",
+      "ProseMirrorJSON",
+      "ProseMirrorJSONMark",
+      "ProseMirrorJSONNode",
+      "RunAttrs",
+      "RunProperties",
+      "SectionMargins",
+      "ShadingProperties",
+      "ShapeContainerAttrs",
+      "ShapeGroupAttrs",
+      "ShapeGroupMarginOffset",
+      "ShapeGroupPadding",
+      "ShapeGroupSize",
+      "ShapeNodeAttributes",
+      "ShapeTextboxAttrs",
+      "SpacingProperties",
+      "StrikeAttrs",
+      "StructuredContentAttrs",
+      "StructuredContentBlockAttrs",
+      "TabAttrs",
+      "TableAttrs",
+      "TableBorders",
+      "TableCellAttrs",
+      "TableCellProperties",
+      "TableGrid",
+      "TableHeaderAttrs",
+      "TableLook",
+      "TableMeasurement",
+      "TableNodeAttributes",
+      "TableOfContentsAttrs",
+      "TableProperties",
+      "TableRowAttrs",
+      "TableRowProperties",
+      "TargetFrameOption",
+      "TextAttrs",
+      "TextContainerAttributes",
+      "TextStyleAttrs",
+      "ThemeColor",
+      "TotalPageCountAttrs",
+      "TrackDeleteAttrs",
+      "TrackFormatAttrs",
+      "TrackFormatEntry",
+      "TrackInsertAttrs",
+      "TypedMark",
+      "TypedNode",
+      "UnderlineAttrs",
+      "UnderlineStyle",
+      "VectorShapeAttrs",
+      "VectorShapeTextInsets",
+      "assertNodeType",
+      "defineMark",
+      "defineNode",
+      "isMarkType",
+      "isNodeType",
+    ],
+    runsCommandSignatureProbe: false,
+    ticket: 'SD-3184',
+  },
 ];
 
 function loadFile(file) {
@@ -423,6 +571,23 @@ function checkLeaks(entry) {
 let failed = false;
 const summaryLines = [];
 
+function checkTypeOnlyShape(entry) {
+  if (!entry.typeOnly || !entry.cjs) return true;
+  if (!fs.existsSync(entry.cjs)) return true;
+  const content = fs.readFileSync(entry.cjs, 'utf8');
+  // `export declare const NAME` (or `let`/`var`) in a typeOnly entry's
+  // shim means the generator emitted a value declaration despite the
+  // type-only contract. The empty runtime bundle would not back it.
+  const valueDecls = content.match(/^\s*export\s+declare\s+(?:const|let|var)\s+\w+/gm);
+  if (!valueDecls || valueDecls.length === 0) return true;
+  console.error(`[verify-public-facade-emit] ${entry.name}: typeOnly entry shim contains value declarations.`);
+  for (const decl of valueDecls.slice(0, 10)) {
+    console.error('  - ' + decl.trim());
+  }
+  console.error('  Fix `emitCjsDeclarationShim` in `packages/superdoc/scripts/ensure-types.cjs` so the typeOnly branch emits `export type` for every name.');
+  return false;
+}
+
 for (const entry of FACADE_ENTRIES) {
   const symbolResult = checkSymbolSet(entry);
   if (!symbolResult.ok) failed = true;
@@ -437,6 +602,7 @@ for (const entry of FACADE_ENTRIES) {
   }
 
   if (!checkLeaks(entry)) failed = true;
+  if (!checkTypeOnlyShape(entry)) failed = true;
 
   summaryLines.push(`${entry.name}: ${symbolResult.actual.length} exports`);
 }

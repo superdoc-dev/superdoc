@@ -33,7 +33,6 @@ import { applyCellBorders } from './border-utils.js';
 import { renderTableFragment as renderTableFragmentElement } from './renderTableFragment.js';
 import { renderParagraphContent } from '../paragraph/renderParagraphContent.js';
 import { computeBetweenBorderContext, type BetweenBorderInfo } from '../paragraph/borders/index.js';
-import { hashParagraphBorders } from '../paragraph-hash-utils.js';
 import { renderTableDrawingFrame } from '../drawings/tableDrawingFrame.js';
 import { renderDrawingContent as renderSharedDrawingContent } from '../drawings/renderDrawingContent.js';
 import {
@@ -814,7 +813,6 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
             y,
             height,
             borders: block.attrs.borders,
-            borderHash: hashParagraphBorders(block.attrs.borders),
             continuesFromPrev: blockStartGlobal < globalFromLine,
             continuesOnNext: blockStartGlobal + blockLineCount > globalToLine,
           },

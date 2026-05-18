@@ -101,6 +101,8 @@ export function mapEmbeddedTableRowSlice(params: {
     toRow = r + 1;
 
     if (rowSegmentCount > 1 && (rowStart < localFrom || rowEnd > localTo)) {
+      // AIDEV-NOTE: TableFragment supports one partialRow, so a slice that clips
+      // multiple multi-segment rows keeps the last partial row's metadata.
       partialRow = buildPartialRowInfo({
         blockRow: block.rows[r],
         row: measure.rows[r],

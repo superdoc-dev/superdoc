@@ -614,3 +614,145 @@ button {
   margin: 4px 0;
   background: var(--border);
 }
+
+/* Citations demo — SD-3104 metadata.* */
+
+.sidebar-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+}
+.sidebar-tab {
+  flex: 1;
+  padding: 8px 12px;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  font-size: 13px;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.sidebar-tab.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+  font-weight: 600;
+}
+.sidebar-tab:hover {
+  color: var(--text);
+}
+
+.citations-panel {
+  padding: 12px;
+}
+.citations-empty {
+  font-size: 13px;
+  color: var(--text-muted);
+  text-align: center;
+  padding: 24px 8px;
+}
+.citation-card {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  background: var(--bg);
+  box-shadow: var(--shadow);
+}
+.citation-card-header {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 6px;
+}
+.citation-source {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+.citation-locator {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: 'SF Mono', Menlo, monospace;
+}
+.citation-meta {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+.citation-actions {
+  display: flex;
+  gap: 6px;
+}
+.citation-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+}
+.citation-editor .composer-input {
+  font-size: 12px;
+  padding: 4px 6px;
+}
+.citation-actions button {
+  font-size: 11px;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text);
+  cursor: pointer;
+}
+.citation-actions button:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.composer-error {
+  font-size: 12px;
+  color: var(--danger);
+  padding: 4px 0;
+}
+
+/* Highlight overlay for cited spans. Pointer-events disabled so the
+   user can still select text and the painter receives the events. */
+.citation-highlights {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 5;
+}
+.citation-highlight {
+  background: var(--accent-soft);
+  border-bottom: 2px solid var(--accent);
+  pointer-events: none;
+  border-radius: 2px;
+}
+
+/* Hover popover for cited spans. Light-themed to match the rest of
+   the demo's surfaces (context menu, selection popover) instead of
+   the dark tooltip pattern. */
+.citation-popover {
+  background: var(--bg);
+  color: var(--text);
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 12px;
+  max-width: 280px;
+  box-shadow: var(--shadow);
+  z-index: 30;
+}
+.citation-popover-source {
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+.citation-popover-locator {
+  color: var(--text-muted);
+  font-family: 'SF Mono', Menlo, monospace;
+  font-size: 11px;
+}
+.citation-popover-meta {
+  color: var(--text-muted);
+  font-size: 10px;
+  margin-top: 4px;
+}

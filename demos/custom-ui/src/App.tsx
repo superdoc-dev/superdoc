@@ -7,6 +7,9 @@ import { SelectionPopover } from './components/SelectionPopover';
 import { ContextMenu } from './components/ContextMenu';
 import { ContextMenuRegistrations } from './components/ContextMenuRegistrations';
 import { useDecidedChanges } from './components/useDecidedChanges';
+import { CitationsPanel } from './components/CitationsPanel';
+import { CitationHighlights } from './components/CitationHighlights';
+import { CitationPopover } from './components/CitationPopover';
 
 export function App() {
   return (
@@ -29,6 +32,8 @@ function AppInner() {
   // the simplest path; a real product might dispatch through a state
   // store, but the example keeps the wiring obvious.
   const [composeOpen, setComposeOpen] = useState(false);
+  const [citationComposeOpen, setCitationComposeOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<'activity' | 'citations'>('activity');
   // Shared decided-changes store. Both ActivitySidebar (per-card
   // accept/reject buttons) and the right-click context menu route
   // through `decided.decideChange` so the Resolved audit row shows
@@ -43,6 +48,11 @@ function AppInner() {
   // every consumer that follows the pattern.
   const openComposer = useCallback(() => setComposeOpen(true), []);
   const closeComposer = useCallback(() => setComposeOpen(false), []);
+  const openCitationComposer = useCallback(() => {
+    setCitationComposeOpen(true);
+    setActiveTab('citations');
+  }, []);
+  const closeCitationComposer = useCallback(() => setCitationComposeOpen(false), []);
 
   return (
     <div className="app">
@@ -61,19 +71,42 @@ function AppInner() {
                 <EditorMount />
               </div>
             </div>
-            <SelectionPopover onComposeComment={openComposer} />
+            <SelectionPopover onComposeComment={openComposer} onComposeCitation={openCitationComposer} />
             <ContextMenu />
             <ContextMenuRegistrations decided={decided} onComposeComment={openComposer} />
+            <CitationHighlights />
+            <CitationPopover />
           </section>
 
           <aside className="sidebar">
-            <div className="sidebar-header">Activity</div>
+            <div className="sidebar-tabs">
+              <button
+                className={`sidebar-tab ${activeTab === 'activity' ? 'active' : ''}`}
+                onClick={() => setActiveTab('activity')}
+              >
+                Activity
+              </button>
+              <button
+                className={`sidebar-tab ${activeTab === 'citations' ? 'active' : ''}`}
+                onClick={() => setActiveTab('citations')}
+              >
+                Citations
+              </button>
+            </div>
             <div className="sidebar-panel">
-              <ActivitySidebar
-                composeOpen={composeOpen}
-                onCloseComposer={closeComposer}
-                decided={decided}
-              />
+              {activeTab === 'activity' && (
+                <ActivitySidebar
+                  composeOpen={composeOpen}
+                  onCloseComposer={closeComposer}
+                  decided={decided}
+                />
+              )}
+              {activeTab === 'citations' && (
+                <CitationsPanel
+                  composeOpen={citationComposeOpen}
+                  onCloseComposer={closeCitationComposer}
+                />
+              )}
             </div>
           </aside>
         </div>

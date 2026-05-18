@@ -5,6 +5,8 @@ import { useSuperDocSelection, useSuperDocUI } from 'superdoc/ui/react';
 interface Props {
   /** Open the comment composer with the captured selection. */
   onComposeComment(): void;
+  /** Open the citation composer with the captured selection. */
+  onComposeCitation(): void;
 }
 
 const VIEWPORT_MARGIN = 8;
@@ -23,7 +25,7 @@ const ANCHOR_GAP = 8;
  * so the anchor stays glued through layout shifts; the rect is
  * viewport-relative so `position: fixed` is enough.
  */
-export function SelectionPopover({ onComposeComment }: Props) {
+export function SelectionPopover({ onComposeComment, onComposeCitation }: Props) {
   const ui = useSuperDocUI();
   const selection = useSuperDocSelection();
   const [rect, setRect] = useState<ViewportRect | null>(null);
@@ -109,6 +111,9 @@ export function SelectionPopover({ onComposeComment }: Props) {
       </button>
       <button className="tb-btn" title="Comment on selection" onClick={onComposeComment}>
         Comment
+      </button>
+      <button className="tb-btn" title="Cite this selection" onClick={onComposeCitation}>
+        Cite
       </button>
     </div>
   );

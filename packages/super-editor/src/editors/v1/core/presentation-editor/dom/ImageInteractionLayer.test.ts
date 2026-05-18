@@ -77,6 +77,32 @@ describe('ImageInteractionLayer', () => {
     expect(block.dataset.displayLabel).toBe('Block image');
   });
 
+  it('marks table-cell block image wrappers as draggable block images', () => {
+    container.innerHTML = `
+      <div class="superdoc-table-fragment">
+        <div
+          class="superdoc-image-fragment"
+          data-pm-start="40"
+          data-pm-end="41"
+          data-sd-block-id="table-image-block"
+          data-image-metadata='{"originalWidth":100}'
+        >
+          <img class="superdoc-table-image" alt="Table image" />
+        </div>
+      </div>
+    `;
+
+    layer.apply(7);
+
+    const image = container.querySelector(`.${DOM_CLASS_NAMES.IMAGE_FRAGMENT}`) as HTMLElement;
+    expect(image.draggable).toBe(true);
+    expect(image.dataset.dragSourceKind).toBe('existingImage');
+    expect(image.dataset.imageKind).toBe('block');
+    expect(image.dataset.displayLabel).toBe('Table image');
+    expect(image.dataset.pmStart).toBe('40');
+    expect(image.dataset.pmEnd).toBe('41');
+  });
+
   it('skips elements without PM position metadata', () => {
     container.innerHTML = `
       <div class="superdoc-image-fragment">

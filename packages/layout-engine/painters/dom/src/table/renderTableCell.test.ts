@@ -241,6 +241,43 @@ describe('renderTableCell', () => {
     expect(imgEl?.parentElement?.style.height).toBe('40px');
   });
 
+  it('stamps interaction metadata on flowing image wrappers inside table cells', () => {
+    const imageBlock: ImageBlock = {
+      kind: 'image',
+      id: 'img-flowing-interactive',
+      src: 'data:image/png;base64,AAA',
+      width: 100,
+      height: 80,
+      alt: 'Flowing table image',
+      attrs: { pmStart: 10, pmEnd: 11, sdt: { id: 'sdt-image', type: 'structuredContent' } as SdtMetadata },
+    };
+
+    const { cellElement } = renderTableCell({
+      ...createBaseDeps(),
+      applySdtDataset: (el, metadata) => {
+        if (el && metadata?.id) el.dataset.sdtId = metadata.id;
+      },
+      cellMeasure: {
+        blocks: [{ kind: 'image' as const, width: 50, height: 40 }],
+        width: 80,
+        height: 40,
+        gridColumnStart: 0,
+        colSpan: 1,
+        rowSpan: 1,
+      },
+      cell: { id: 'cell-flowing-interactive-image', blocks: [imageBlock], attrs: {} },
+    });
+
+    const wrapper = cellElement.querySelector('.superdoc-image-fragment') as HTMLElement | null;
+    expect(wrapper).toBeTruthy();
+    expect(wrapper?.dataset.pmStart).toBe('10');
+    expect(wrapper?.dataset.pmEnd).toBe('11');
+    expect(wrapper?.getAttribute('data-sd-block-id')).toBe('img-flowing-interactive');
+    expect(wrapper?.getAttribute('data-image-metadata')).toContain('"originalWidth":100');
+    expect(wrapper?.dataset.sdtId).toBe('sdt-image');
+    expect(wrapper?.querySelector('img.superdoc-table-image')?.getAttribute('alt')).toBe('Flowing table image');
+  });
+
   it('forces flowing image blocks to block display inside table cells', () => {
     const imageBlock: ImageBlock = {
       kind: 'image',
@@ -395,6 +432,47 @@ describe('renderTableCell', () => {
     expect(imgEl?.parentElement?.style.position).toBe('absolute');
     expect(imgEl?.parentElement?.style.left).toBe('10px');
     expect(imgEl?.parentElement?.style.top).toBe('5px');
+  });
+
+  it('stamps interaction metadata on anchored image wrappers inside table cells', () => {
+    const para: ParagraphBlock = {
+      kind: 'paragraph',
+      id: 'para-anchor-interactive',
+      runs: [{ text: 'Anchor', fontFamily: 'Arial', fontSize: 16 }],
+    };
+    const anchoredImage: ImageBlock = {
+      kind: 'image',
+      id: 'img-anchored-interactive',
+      src: 'data:image/png;base64,AAA',
+      width: 20,
+      height: 10,
+      alt: 'Anchored table image',
+      anchor: { isAnchored: true, alignH: 'left', offsetH: 10, vRelativeFrom: 'paragraph', offsetV: 5 },
+      wrap: { type: 'None' },
+      attrs: { anchorParagraphId: 'para-anchor-interactive', pmStart: 30, pmEnd: 31 },
+    };
+
+    const { cellElement } = renderTableCell({
+      ...createBaseDeps(),
+      cellMeasure: {
+        blocks: [paragraphMeasure, { kind: 'image' as const, width: 20, height: 10 }],
+        width: 80,
+        height: 30,
+        gridColumnStart: 0,
+        colSpan: 1,
+        rowSpan: 1,
+      },
+      cell: { id: 'cell-anchored-interactive-image', blocks: [para, anchoredImage], attrs: {} },
+    });
+
+    const wrapper = cellElement.querySelector('.superdoc-image-fragment') as HTMLElement | null;
+    expect(wrapper).toBeTruthy();
+    expect(wrapper?.style.position).toBe('absolute');
+    expect(wrapper?.style.left).toBe('10px');
+    expect(wrapper?.style.top).toBe('5px');
+    expect(wrapper?.dataset.pmStart).toBe('30');
+    expect(wrapper?.dataset.pmEnd).toBe('31');
+    expect(wrapper?.getAttribute('data-image-metadata')).toContain('"originalWidth":20');
   });
 
   it('applies top-level clipPath to anchored image blocks inside table cells', () => {
@@ -2499,6 +2577,90 @@ describe('renderTableCell', () => {
       expect(borderLayer2.style.borderTopWidth).toBe('1px');
       expect(borderLayer2.style.borderTopStyle).toBe('dashed');
       expectCssColor(borderLayer2.style.borderTopColor, '#0000ff');
+    });
+
+    it('applies between-border context to consecutive table-cell paragraphs', () => {
+      const borders = {
+        top: { width: 1, style: 'solid' as const, color: '#111111' },
+        bottom: { width: 1, style: 'solid' as const, color: '#111111' },
+        between: { width: 2, style: 'dashed' as const, color: '#222222' },
+      };
+      const para1: ParagraphBlock = {
+        kind: 'paragraph',
+        id: 'cell-between-1',
+        runs: [{ text: 'First', fontFamily: 'Arial', fontSize: 16 }],
+        attrs: { borders },
+      };
+      const para2: ParagraphBlock = {
+        kind: 'paragraph',
+        id: 'cell-between-2',
+        runs: [{ text: 'Second', fontFamily: 'Arial', fontSize: 16 }],
+        attrs: { borders: { ...borders } },
+      };
+
+      const { cellElement } = renderTableCell({
+        ...createBaseDeps(),
+        cellMeasure: {
+          blocks: [paragraphMeasure, paragraphMeasure],
+          width: 120,
+          height: 60,
+          gridColumnStart: 0,
+          colSpan: 1,
+          rowSpan: 1,
+        },
+        cell: { id: 'cell-between-borders', blocks: [para1, para2], attrs: {} },
+      });
+
+      const wrappers = Array.from(cellElement.querySelectorAll<HTMLElement>(':scope > div > div'));
+      expect(wrappers[0]?.dataset.betweenBorder).toBe('true');
+      expect(wrappers[1]?.dataset.suppressTopBorder).toBe('true');
+      const firstBorder = getParagraphBorderLayer(wrappers[0]!);
+      expect(firstBorder.style.borderBottomStyle).toBe('dashed');
+      expect(firstBorder.style.borderBottomWidth).toBe('2px');
+    });
+
+    it('breaks table-cell between-border groups when between borders differ', () => {
+      const para1: ParagraphBlock = {
+        kind: 'paragraph',
+        id: 'cell-between-break-1',
+        runs: [{ text: 'First', fontFamily: 'Arial', fontSize: 16 }],
+        attrs: {
+          borders: {
+            top: { width: 1, style: 'solid', color: '#111111' },
+            bottom: { width: 1, style: 'solid', color: '#111111' },
+            between: { width: 1, style: 'none', color: '#111111' },
+          },
+        },
+      };
+      const para2: ParagraphBlock = {
+        kind: 'paragraph',
+        id: 'cell-between-break-2',
+        runs: [{ text: 'Second', fontFamily: 'Arial', fontSize: 16 }],
+        attrs: {
+          borders: {
+            top: { width: 1, style: 'solid', color: '#111111' },
+            bottom: { width: 1, style: 'solid', color: '#111111' },
+            between: { width: 1, style: 'dashed', color: '#111111' },
+          },
+        },
+      };
+
+      const { cellElement } = renderTableCell({
+        ...createBaseDeps(),
+        cellMeasure: {
+          blocks: [paragraphMeasure, paragraphMeasure],
+          width: 120,
+          height: 60,
+          gridColumnStart: 0,
+          colSpan: 1,
+          rowSpan: 1,
+        },
+        cell: { id: 'cell-between-break', blocks: [para1, para2], attrs: {} },
+      });
+
+      const wrappers = Array.from(cellElement.querySelectorAll<HTMLElement>(':scope > div > div'));
+      expect(wrappers[0]?.dataset.betweenBorder).toBeUndefined();
+      expect(wrappers[1]?.dataset.suppressTopBorder).toBeUndefined();
     });
 
     it('should not apply borders when paragraph has no borders attribute', () => {

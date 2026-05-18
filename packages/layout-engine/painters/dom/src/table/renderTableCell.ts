@@ -7,6 +7,7 @@ import type {
   ImageHyperlink,
   ImageMeasure,
   Line,
+  Measure,
   ParagraphBlock,
   ParagraphMeasure,
   PartialRowInfo,
@@ -20,7 +21,7 @@ import { getCellLines, normalizeZIndex } from '@superdoc/contracts';
 import type { MinimalWordLayout } from '@superdoc/common/list-marker-utils';
 import type { FragmentRenderContext, RenderedLineInfo } from '../renderer.js';
 import { applySquareWrapExclusionsToLines } from '../utils/anchor-helpers';
-import { createBlockImageContent } from '../images/image-block.js';
+import { renderTableImageFrame } from '../images/table-image-frame.js';
 import { buildImageHyperlinkAnchor } from '../images/hyperlink.js';
 import {
   getSdtContainerKeyForBlock,
@@ -31,6 +32,8 @@ import {
 import { applyCellBorders } from './border-utils.js';
 import { renderTableFragment as renderTableFragmentElement } from './renderTableFragment.js';
 import { renderParagraphContent } from '../paragraph/renderParagraphContent.js';
+import { computeBetweenBorderContext, type BetweenBorderInfo } from '../paragraph/borders/index.js';
+import { hashParagraphBorders } from '../paragraph-hash-utils.js';
 import { renderTableDrawingFrame } from '../drawings/tableDrawingFrame.js';
 import { renderDrawingContent as renderSharedDrawingContent } from '../drawings/renderDrawingContent.js';
 import {
@@ -421,6 +424,148 @@ export type TableCellRenderResult = {
   cellElement: HTMLElement;
 };
 
+type TableCellParagraphRenderParams = {
+  doc: Document;
+  content: HTMLElement;
+  cellEl: HTMLElement;
+  block: ParagraphBlock;
+  paragraphMeasure: ParagraphMeasure;
+  blockIndex: number;
+  blockCount: number;
+  cumulativeLineCount: number;
+  globalFromLine: number;
+  globalToLine: number;
+  contentWidthPx: number;
+  paddingTop: number;
+  flowCursorY: number;
+  sdtBoundary?: SdtBoundaryOptions;
+  betweenInfo?: BetweenBorderInfo;
+  context: FragmentRenderContext;
+  renderLine: TableCellRenderDependencies['renderLine'];
+  applySdtDataset: TableCellRenderDependencies['applySdtDataset'];
+  ancestorContainerKey?: string | null;
+  ancestorContainerSdt?: SdtMetadata | null;
+  ancestorContainerKeys?: SdtAncestorOptions['ancestorContainerKeys'];
+  ancestorContainerSdts?: SdtAncestorOptions['ancestorContainerSdts'];
+  onSdtContainerChrome?: () => void;
+};
+
+type TableCellParagraphRenderResult = {
+  nextCumulativeLineCount: number;
+  renderedHeight: number;
+  renderedLines: RenderedLineInfo[];
+};
+
+const getMeasuredBlockHeight = (measure: Measure | undefined): number => {
+  if (!measure) return 0;
+  if (measure.kind === 'paragraph') {
+    return (
+      (measure as ParagraphMeasure).totalHeight ??
+      ((measure as ParagraphMeasure).lines ?? []).reduce((sum, line) => sum + line.lineHeight, 0)
+    );
+  }
+  return 'height' in measure && typeof measure.height === 'number' ? measure.height : 0;
+};
+
+const sliceSdtBoundaryForParagraph = (
+  baseBoundary: SdtBoundaryOptions | undefined,
+  localStartLine: number,
+  localEndLine: number,
+  blockLineCount: number,
+): SdtBoundaryOptions | undefined =>
+  baseBoundary
+    ? {
+        ...baseBoundary,
+        isStart: (baseBoundary.isStart ?? true) && localStartLine === 0,
+        isEnd: (baseBoundary.isEnd ?? true) && localEndLine >= blockLineCount,
+        showLabel: baseBoundary.showLabel === undefined ? undefined : baseBoundary.showLabel && localStartLine === 0,
+      }
+    : undefined;
+
+const renderTableCellParagraphBlock = ({
+  doc,
+  content,
+  cellEl,
+  block,
+  paragraphMeasure,
+  blockIndex,
+  blockCount,
+  cumulativeLineCount,
+  globalFromLine,
+  globalToLine,
+  contentWidthPx,
+  paddingTop,
+  flowCursorY,
+  sdtBoundary,
+  betweenInfo,
+  context,
+  renderLine,
+  applySdtDataset,
+  ancestorContainerKey,
+  ancestorContainerSdt,
+  ancestorContainerKeys,
+  ancestorContainerSdts,
+  onSdtContainerChrome,
+}: TableCellParagraphRenderParams): TableCellParagraphRenderResult => {
+  const lines = paragraphMeasure.lines;
+  const blockLineCount = lines?.length || 0;
+  const blockStartGlobal = cumulativeLineCount;
+  const blockEndGlobal = cumulativeLineCount + blockLineCount;
+  const nextCumulativeLineCount = blockEndGlobal;
+
+  if (blockEndGlobal <= globalFromLine || blockStartGlobal >= globalToLine) {
+    return { nextCumulativeLineCount, renderedHeight: 0, renderedLines: [] };
+  }
+
+  const localStartLine = Math.max(0, globalFromLine - blockStartGlobal);
+  const localEndLine = Math.min(blockLineCount, globalToLine - blockStartGlobal);
+  const paraWrapper = doc.createElement('div');
+  paraWrapper.style.position = 'relative';
+  paraWrapper.style.left = '0';
+  paraWrapper.style.width = '100%';
+  content.appendChild(paraWrapper);
+
+  const wordLayout = (block.attrs?.wordLayout ?? null) as MinimalWordLayout | null;
+  const isLastBlockInCell = blockIndex === blockCount - 1;
+  const result = renderParagraphContent({
+    doc,
+    frameEl: paraWrapper,
+    block,
+    measure: paragraphMeasure,
+    containerKind: 'table-cell',
+    width: contentWidthPx,
+    localStartLine,
+    localEndLine,
+    wordLayout: wordLayout ?? undefined,
+    spacingPolicy: {
+      isFirstBlock: blockIndex === 0,
+      isLastBlock: isLastBlockInCell,
+      paddingTop,
+    },
+    betweenInfo,
+    sdtBoundary: sliceSdtBoundaryForParagraph(sdtBoundary, localStartLine, localEndLine, blockLineCount),
+    ancestorContainerKey,
+    ancestorContainerSdt,
+    ancestorContainerKeys,
+    ancestorContainerSdts,
+    onSdtContainerChrome: () => {
+      cellEl.style.overflow = 'visible';
+      onSdtContainerChrome?.();
+    },
+    applySdtDataset,
+    renderLine: ({ block, line, lineIndex, isLastLine, resolvedListTextStartPx }) =>
+      renderLine(block, line, context, lineIndex, isLastLine, resolvedListTextStartPx),
+    convertFinalParagraphMark: isLastBlockInCell,
+    lineTopOffset: flowCursorY,
+  });
+
+  return {
+    nextCumulativeLineCount,
+    renderedHeight: result.totalHeight,
+    renderedLines: result.renderedLines,
+  };
+};
+
 /**
  * Renders a table cell as a DOM element.
  *
@@ -626,6 +771,31 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
     const effectiveCellWidth = cellWidth ?? cellMeasure.width;
     const contentWidthPx = Math.max(0, effectiveCellWidth - paddingLeft - paddingRight);
     const contentHeightPx = Math.max(0, rowHeight - paddingTop - paddingBottom);
+    let paragraphContextY = 0;
+    const betweenInfoByBlockIndex = computeBetweenBorderContext(
+      cellBlocks.slice(0, Math.min(blockMeasures.length, cellBlocks.length)).map((block, index) => {
+        const measure = blockMeasures[index];
+        const y = paragraphContextY;
+        const height = getMeasuredBlockHeight(measure);
+        paragraphContextY += height;
+        if (block?.kind !== 'paragraph' || measure?.kind !== 'paragraph' || !block.attrs?.borders) {
+          return {
+            blockId: block?.id ?? `cell-block:${index}`,
+            x: 0,
+            y,
+            height,
+          };
+        }
+        return {
+          blockId: block.id,
+          x: 0,
+          y,
+          height,
+          borders: block.attrs.borders,
+          borderHash: hashParagraphBorders(block.attrs.borders),
+        };
+      }),
+    );
     let flowCursorY = 0;
     const anchoredBlocks: Array<{ block: ImageBlock | DrawingBlock; measure: ImageMeasure | DrawingMeasure }> = [];
     const renderedLines: RenderedLineInfo[] = [];
@@ -686,25 +856,16 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
           continue;
         }
 
-        const imageWrapper = doc.createElement('div');
-        imageWrapper.style.position = 'relative';
-        imageWrapper.style.width = `${blockMeasure.width}px`;
-        imageWrapper.style.height = `${blockMeasure.height}px`;
-        imageWrapper.style.flexShrink = '0';
-        imageWrapper.style.maxWidth = '100%';
-        imageWrapper.style.boxSizing = 'border-box';
-        applySdtDataset(imageWrapper, (block as ImageBlock).attrs?.sdt);
-
-        imageWrapper.appendChild(
-          createBlockImageContent({
-            doc,
-            block,
-            className: 'superdoc-table-image',
-            clipContainer: imageWrapper,
-            imageDisplay: 'block',
-            buildImageHyperlinkAnchor: buildTableImageHyperlinkAnchor,
-          }),
-        );
+        const imageWrapper = renderTableImageFrame({
+          doc,
+          block,
+          measure: blockMeasure as ImageMeasure,
+          placement: { mode: 'flowing' },
+          contentMaxWidth: contentWidthPx,
+          contentMaxHeight: contentHeightPx,
+          applySdtDataset,
+          buildImageHyperlinkAnchor: buildTableImageHyperlinkAnchor,
+        });
         content.appendChild(imageWrapper);
         flowCursorY += blockMeasure.height;
         continue;
@@ -745,82 +906,34 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
       }
 
       if (blockMeasure.kind === 'paragraph' && block?.kind === 'paragraph') {
-        const paragraphMeasure = blockMeasure as ParagraphMeasure;
-        const lines = paragraphMeasure.lines;
-        const blockLineCount = lines?.length || 0;
-        const isLastBlockInCell = i === Math.min(blockMeasures.length, cellBlocks.length) - 1;
-        const wordLayout = (block.attrs?.wordLayout ?? null) as MinimalWordLayout | null;
-
-        // Calculate the global line indices for this block
-        const blockStartGlobal = cumulativeLineCount;
-        const blockEndGlobal = cumulativeLineCount + blockLineCount;
-
-        // Skip blocks entirely before/after the global range
-        if (blockEndGlobal <= globalFromLine) {
-          cumulativeLineCount += blockLineCount;
-          continue;
-        }
-        if (blockStartGlobal >= globalToLine) {
-          cumulativeLineCount += blockLineCount;
-          continue;
-        }
-
-        // Calculate local line indices within this block
-        const localStartLine = Math.max(0, globalFromLine - blockStartGlobal);
-        const localEndLine = Math.min(blockLineCount, globalToLine - blockStartGlobal);
-
-        // Create wrapper for this paragraph's SDT metadata
-        // Use absolute positioning within the content container to stack blocks vertically
-        const paraWrapper = doc.createElement('div');
-        paraWrapper.style.position = 'relative';
-        paraWrapper.style.left = '0';
-        paraWrapper.style.width = '100%';
-        const baseSdtBoundary = sdtBoundaries[i];
-        const sdtBoundary = baseSdtBoundary
-          ? {
-              ...baseSdtBoundary,
-              isStart: (baseSdtBoundary.isStart ?? true) && localStartLine === 0,
-              isEnd: (baseSdtBoundary.isEnd ?? true) && localEndLine >= blockLineCount,
-              showLabel:
-                baseSdtBoundary.showLabel === undefined ? undefined : baseSdtBoundary.showLabel && localStartLine === 0,
-            }
-          : undefined;
-
-        content.appendChild(paraWrapper);
-        const result = renderParagraphContent({
+        const result = renderTableCellParagraphBlock({
           doc,
-          frameEl: paraWrapper,
+          content,
+          cellEl,
           block: block as ParagraphBlock,
-          measure: paragraphMeasure,
-          containerKind: 'table-cell',
-          width: contentWidthPx,
-          localStartLine,
-          localEndLine,
-          wordLayout: wordLayout ?? undefined,
-          spacingPolicy: {
-            isFirstBlock: i === 0,
-            isLastBlock: isLastBlockInCell,
-            paddingTop,
-          },
-          sdtBoundary,
+          paragraphMeasure: blockMeasure as ParagraphMeasure,
+          blockIndex: i,
+          blockCount: Math.min(blockMeasures.length, cellBlocks.length),
+          cumulativeLineCount,
+          globalFromLine,
+          globalToLine,
+          contentWidthPx,
+          paddingTop,
+          flowCursorY,
+          sdtBoundary: sdtBoundaries[i],
+          betweenInfo: betweenInfoByBlockIndex.get(i),
+          context,
+          renderLine,
+          applySdtDataset,
           ancestorContainerKey,
           ancestorContainerSdt,
           ancestorContainerKeys,
           ancestorContainerSdts,
-          onSdtContainerChrome: () => {
-            cellEl.style.overflow = 'visible';
-            onSdtContainerChrome?.();
-          },
-          applySdtDataset,
-          renderLine: ({ block, line, lineIndex, isLastLine, resolvedListTextStartPx }) =>
-            renderLine(block, line, context, lineIndex, isLastLine, resolvedListTextStartPx),
-          convertFinalParagraphMark: isLastBlockInCell,
-          lineTopOffset: flowCursorY,
+          onSdtContainerChrome,
         });
         renderedLines.push(...result.renderedLines);
-        flowCursorY += result.totalHeight;
-
-        cumulativeLineCount += blockLineCount;
+        flowCursorY += result.renderedHeight;
+        cumulativeLineCount = result.nextCumulativeLineCount;
       }
       // Unsupported block types are skipped (no line count contribution)
       // TODO: Handle other block types (list) if needed
@@ -877,27 +990,16 @@ export const renderTableCell = (deps: TableCellRenderDependencies): TableCellRen
       }
 
       if (anchoredBlock.kind === 'image') {
-        const imageWrapper = doc.createElement('div');
-        imageWrapper.style.position = 'absolute';
-        imageWrapper.style.left = `${left}px`;
-        imageWrapper.style.top = `${top}px`;
-        imageWrapper.style.width = `${objectWidth}px`;
-        imageWrapper.style.height = `${objectHeight}px`;
-        imageWrapper.style.maxWidth = '100%';
-        imageWrapper.style.boxSizing = 'border-box';
-        imageWrapper.style.zIndex = String(zIndex);
-        applySdtDataset(imageWrapper, anchoredBlock.attrs?.sdt);
-
-        imageWrapper.appendChild(
-          createBlockImageContent({
-            doc,
-            block: anchoredBlock,
-            className: 'superdoc-table-image',
-            clipContainer: imageWrapper,
-            imageDisplay: 'block',
-            buildImageHyperlinkAnchor: buildTableImageHyperlinkAnchor,
-          }),
-        );
+        const imageWrapper = renderTableImageFrame({
+          doc,
+          block: anchoredBlock,
+          measure: anchoredMeasure as ImageMeasure,
+          placement: { mode: 'anchored', left, top, zIndex },
+          contentMaxWidth: contentWidthPx,
+          contentMaxHeight: contentHeightPx,
+          applySdtDataset,
+          buildImageHyperlinkAnchor: buildTableImageHyperlinkAnchor,
+        });
         content.appendChild(imageWrapper);
       } else {
         const drawingWrapper = renderTableDrawingFrame({

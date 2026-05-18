@@ -267,6 +267,11 @@ export default defineConfig(({ mode, command }) => {
           // `@superdoc/super-editor/ui` (narrow), not the root barrel —
           // `audit-bundle.cjs` enforces shape on `dist/public/ui.es.js`.
           'public/ui': 'src/public/ui.ts',
+          // SD-3184: types facade — type-only entry. 116 names, all
+          // `export type { ... }`. The existing `./types` subpath has
+          // split types.import/types.require declarations, so this
+          // facade adds a `public/types.d.cts` shim via ensure-types.cjs.
+          'public/types': 'src/public/types.ts',
         },
         external: [
           'yjs',

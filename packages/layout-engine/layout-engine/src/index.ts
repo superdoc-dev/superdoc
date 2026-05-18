@@ -3410,7 +3410,5 @@ export type { NumberingContext, ResolvePageTokensResult } from './resolvePageTok
 
 // Table utilities consumed by layout-bridge and cross-package sync tests
 export { resolveTableFrame, resolveRenderedTableWidth } from './layout-table.js';
-export { describeCellRenderBlocks, computeCellSliceContentHeight } from './table-cell-slice.js';
-export { getCellLines, getEmbeddedRowLines } from '@superdoc/contracts';
 
 export { SINGLE_COLUMN_DEFAULT } from './section-breaks.js';

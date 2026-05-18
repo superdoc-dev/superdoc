@@ -12,6 +12,8 @@ import {
   readEndnoteNumberStart,
   readFootnoteNumberRestart,
   readEndnoteNumberRestart,
+  readFootnotePosition,
+  readEndnotePosition,
   readSectionNoteConfigs,
   type ConverterWithDocumentSettings,
 } from './document-settings.ts';
@@ -328,6 +330,50 @@ describe('readFootnoteNumberRestart / readEndnoteNumberRestart', () => {
     ]);
     expect(readEndnoteNumberRestart(readSettingsRoot(conv)!)).toBe('eachSect');
     expect(readFootnoteNumberRestart(readSettingsRoot(conv)!)).toBeNull();
+  });
+});
+
+// §17.11.21 / ST_FtnPos §17.18.34 — footnote / endnote placement
+describe('readFootnotePosition / readEndnotePosition (§17.11.21)', () => {
+  it('returns each of the 4 ST_FtnPos values when set', () => {
+    for (const v of ['pageBottom', 'beneathText', 'sectEnd', 'docEnd'] as const) {
+      const conv = makeConverter([
+        {
+          type: 'element',
+          name: 'w:footnotePr',
+          elements: [{ type: 'element', name: 'w:pos', attributes: { 'w:val': v } }],
+        },
+      ]);
+      expect(readFootnotePosition(readSettingsRoot(conv)!)).toBe(v);
+    }
+  });
+
+  it('returns null when w:pos absent', () => {
+    const conv = makeConverter([{ type: 'element', name: 'w:footnotePr', elements: [] }]);
+    expect(readFootnotePosition(readSettingsRoot(conv)!)).toBeNull();
+  });
+
+  it('rejects unknown values per ST_FtnPos', () => {
+    const conv = makeConverter([
+      {
+        type: 'element',
+        name: 'w:footnotePr',
+        elements: [{ type: 'element', name: 'w:pos', attributes: { 'w:val': 'chickenLetters' } }],
+      },
+    ]);
+    expect(readFootnotePosition(readSettingsRoot(conv)!)).toBeNull();
+  });
+
+  it('endnote variant reads w:endnotePr/w:pos only', () => {
+    const conv = makeConverter([
+      {
+        type: 'element',
+        name: 'w:endnotePr',
+        elements: [{ type: 'element', name: 'w:pos', attributes: { 'w:val': 'docEnd' } }],
+      },
+    ]);
+    expect(readEndnotePosition(readSettingsRoot(conv)!)).toBe('docEnd');
+    expect(readFootnotePosition(readSettingsRoot(conv)!)).toBeNull();
   });
 });
 

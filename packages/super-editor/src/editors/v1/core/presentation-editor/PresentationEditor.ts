@@ -129,6 +129,8 @@ import {
   readEndnoteNumberStart,
   readFootnoteNumberRestart,
   readEndnoteNumberRestart,
+  readFootnotePosition,
+  readEndnotePosition,
   readSectionNoteConfigs,
 } from '../../document-api-adapters/document-settings.js';
 import {
@@ -6068,6 +6070,8 @@ export class PresentationEditor extends EventEmitter {
         let endnoteNumberStart = 1;
         let footnoteNumberRestart: 'continuous' | 'eachPage' | 'eachSect' | undefined;
         let endnoteNumberRestart: 'continuous' | 'eachPage' | 'eachSect' | undefined;
+        let footnotePosition: 'pageBottom' | 'beneathText' | 'sectEnd' | 'docEnd' | undefined;
+        let endnotePosition: 'pageBottom' | 'beneathText' | 'sectEnd' | 'docEnd' | undefined;
         let footnoteSectionConfigs = new Map<number, SectionNoteConfig>();
         let endnoteSectionConfigs = new Map<number, SectionNoteConfig>();
         if (converter) {
@@ -6080,6 +6084,9 @@ export class PresentationEditor extends EventEmitter {
             endnoteNumberStart = readEndnoteNumberStart(settingsRoot) ?? 1;
             footnoteNumberRestart = readFootnoteNumberRestart(settingsRoot) ?? undefined;
             endnoteNumberRestart = readEndnoteNumberRestart(settingsRoot) ?? undefined;
+            // §17.11.21 — document-level only; section-level pos is ignored.
+            footnotePosition = readFootnotePosition(settingsRoot) ?? undefined;
+            endnotePosition = readEndnotePosition(settingsRoot) ?? undefined;
           }
           const documentPart = (converter.convertedXml as Record<string, unknown> | undefined)?.['word/document.xml'];
           if (documentPart) {
@@ -6136,6 +6143,8 @@ export class PresentationEditor extends EventEmitter {
               ...(endnoteNumberFormat ? { endnoteNumberFormat } : {}),
               ...(footnoteFormatById && Object.keys(footnoteFormatById).length ? { footnoteFormatById } : {}),
               ...(endnoteFormatById && Object.keys(endnoteFormatById).length ? { endnoteFormatById } : {}),
+              ...(footnotePosition ? { footnotePosition } : {}),
+              ...(endnotePosition ? { endnotePosition } : {}),
               translatedLinkedStyles: converter.translatedLinkedStyles,
               translatedNumbering: converter.translatedNumbering,
               ...(defaultTableStyleId ? { defaultTableStyleId } : {}),

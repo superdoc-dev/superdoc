@@ -69,6 +69,14 @@ export type ConverterContext = {
   /** §17.11.11 — same as `footnoteFormatById` but for endnotes. */
   endnoteFormatById?: Record<string, string>;
   /**
+   * §17.11.21 — document-wide footnote placement (`w:pos`). Section-level
+   * is ignored per spec. Default `'pageBottom'`. `'sectEnd'` and `'docEnd'`
+   * currently fall back to `'pageBottom'` rendering (deferred).
+   */
+  footnotePosition?: 'pageBottom' | 'beneathText' | 'sectEnd' | 'docEnd';
+  /** §17.11.22 — endnote placement counterpart. */
+  endnotePosition?: 'pageBottom' | 'beneathText' | 'sectEnd' | 'docEnd';
+  /**
    * Paragraph properties inherited from the containing table's style.
    * Per OOXML spec, table styles can define pPr that applies to all
    * paragraphs within the table. This is set by the table converter

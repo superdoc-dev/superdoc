@@ -163,6 +163,34 @@ function readNoteNumberStart(settingsRoot: XmlElement, containerName: 'w:footnot
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
+// w:footnotePr / w:endnotePr  — w:pos (§17.11.21, ST_FtnPos §17.18.34)
+// Document-level only — section-level pos shall be ignored per §17.11.21.
+// ──────────────────────────────────────────────────────────────────────────────
+
+export type FootnotePosition = 'pageBottom' | 'beneathText' | 'sectEnd' | 'docEnd';
+
+export function readFootnotePosition(settingsRoot: XmlElement): FootnotePosition | null {
+  return readNotePosition(settingsRoot, 'w:footnotePr');
+}
+
+export function readEndnotePosition(settingsRoot: XmlElement): FootnotePosition | null {
+  return readNotePosition(settingsRoot, 'w:endnotePr');
+}
+
+function readNotePosition(
+  settingsRoot: XmlElement,
+  containerName: 'w:footnotePr' | 'w:endnotePr',
+): FootnotePosition | null {
+  const container = settingsRoot.elements?.find((entry) => entry.name === containerName);
+  if (!container || !Array.isArray(container.elements)) return null;
+  const el = container.elements.find((entry) => entry.name === 'w:pos');
+  if (!el) return null;
+  const val = (el.attributes as Record<string, unknown> | undefined)?.['w:val'];
+  if (val === 'pageBottom' || val === 'beneathText' || val === 'sectEnd' || val === 'docEnd') return val;
+  return null;
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
 // w:footnotePr / w:endnotePr  — w:numRestart (§17.11.19, ST_RestartNumber §17.18.74)
 // ──────────────────────────────────────────────────────────────────────────────
 

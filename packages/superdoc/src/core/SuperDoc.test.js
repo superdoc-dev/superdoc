@@ -260,6 +260,54 @@ describe('SuperDoc core', () => {
     expect(commentsStore.init).toHaveBeenCalledWith({});
   });
 
+  it('keeps valid compact comments policy fields', async () => {
+    createAppHarness();
+    const instance = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: {
+        comments: {
+          displayMode: 'inline',
+          compactBreakpointPx: 760,
+          compactMeasurementSelector: '  #shell-main  ',
+        },
+        toolbar: {},
+      },
+      onException: vi.fn(),
+    });
+    await flushMicrotasks();
+
+    expect(instance.config.modules.comments).toMatchObject({
+      displayMode: 'inline',
+      compactBreakpointPx: 760,
+      compactMeasurementSelector: '#shell-main',
+    });
+  });
+
+  it('normalizes invalid compact comments policy fields', async () => {
+    createAppHarness();
+    const instance = new SuperDoc({
+      selector: '#host',
+      document: 'https://example.com/doc.docx',
+      documents: [],
+      modules: {
+        comments: {
+          displayMode: 'unexpected-mode',
+          compactBreakpointPx: -10,
+          compactMeasurementSelector: '   ',
+        },
+        toolbar: {},
+      },
+      onException: vi.fn(),
+    });
+    await flushMicrotasks();
+
+    expect(instance.config.modules.comments.displayMode).toBeUndefined();
+    expect(instance.config.modules.comments.compactBreakpointPx).toBeUndefined();
+    expect(instance.config.modules.comments.compactMeasurementSelector).toBeUndefined();
+  });
+
   it('creates a default user when none is provided', async () => {
     createAppHarness();
 
